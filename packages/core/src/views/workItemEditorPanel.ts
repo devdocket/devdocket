@@ -8,6 +8,7 @@ export class WorkItemEditorPanel {
   private readonly workGraph: WorkGraph;
   private readonly itemId: string;
   private disposed = false;
+  private readonly messageSubscription: vscode.Disposable;
 
   static open(
     context: vscode.ExtensionContext,
@@ -36,7 +37,7 @@ export class WorkItemEditorPanel {
 
     this.update();
 
-    this.panel.webview.onDidReceiveMessage(async (msg) => {
+    this.messageSubscription = this.panel.webview.onDidReceiveMessage(async (msg) => {
       try {
         if (msg.type === 'autosave') {
           await this.saveData(msg.data);
@@ -212,6 +213,7 @@ export class WorkItemEditorPanel {
 
   dispose(): void {
     if (!this.disposed) {
+      this.messageSubscription.dispose();
       this.panel.dispose();
     }
   }
