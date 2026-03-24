@@ -142,8 +142,14 @@ export class SourcesTreeProvider implements vscode.TreeDataProvider<SourcesEleme
 
   private buildItemTooltip(item: SourceItemNode): vscode.MarkdownString {
     const md = new vscode.MarkdownString();
-    md.appendMarkdown(`**${item.title}**\n\n`);
-    if (item.description) { md.appendMarkdown(`${item.description}\n\n`); }
+    md.appendMarkdown(`**Title:** `);
+    md.appendText(item.title);
+    md.appendMarkdown(`\n\n`);
+    if (item.description) {
+      md.appendMarkdown(`**Description:** `);
+      md.appendText(item.description);
+      md.appendMarkdown(`\n\n`);
+    }
     return md;
   }
 
