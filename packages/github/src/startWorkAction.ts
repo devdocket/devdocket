@@ -46,7 +46,7 @@ export class StartWorkAction implements WorkCenterAction {
 
     const workspaceFolders = vscode.workspace.workspaceFolders;
     if (!workspaceFolders || workspaceFolders.length === 0) {
-      vscode.window.showErrorMessage('No workspace folder open. Open a repository first.');
+      vscode.window.showErrorMessage('WorkCenter: No workspace folder open. Open a repository first.');
       return;
     }
 
@@ -63,7 +63,7 @@ export class StartWorkAction implements WorkCenterAction {
       // Check if branch already exists
       const { stdout: branchList } = await execFileAsync('git', ['branch', '--list', branchName], { cwd: repoPath });
       if (branchList.trim()) {
-        vscode.window.showErrorMessage(`Branch "${branchName}" already exists.`);
+        vscode.window.showErrorMessage(`WorkCenter: Branch "${branchName}" already exists.`);
         return;
       }
 
@@ -89,7 +89,7 @@ export class StartWorkAction implements WorkCenterAction {
       // Check if worktree directory already exists
       if (fs.existsSync(worktreePath)) {
         await execFileAsync('git', ['branch', '-D', branchName], { cwd: repoPath });
-        vscode.window.showErrorMessage(`Directory "${worktreePath}" already exists.`);
+        vscode.window.showErrorMessage(`WorkCenter: Directory "${worktreePath}" already exists.`);
         return;
       }
 
