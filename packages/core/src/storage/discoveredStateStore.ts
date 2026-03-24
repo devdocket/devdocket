@@ -16,6 +16,7 @@ export class DiscoveredStateStore {
   private readonly _onDidChange = new vscode.EventEmitter<void>();
   readonly onDidChange = this._onDidChange.event;
   private writeQueue: Promise<void> = Promise.resolve();
+  private loaded = false;
 
   constructor(storagePath: string) {
     this.filePath = path.join(storagePath, 'discovered-state.json');
@@ -30,6 +31,9 @@ export class DiscoveredStateStore {
   }
 
   async setState(providerId: string, externalId: string, state: InboxState): Promise<void> {
+    if (!this.loaded) {
+      await this.load();
+    }
     const k = this.key(providerId, externalId);
     this.cache.set(k, { providerId, externalId, inboxState: state });
     await this.enqueue(() => this.writeFile());
@@ -37,6 +41,9 @@ export class DiscoveredStateStore {
   }
 
   async setStates(items: Array<{ providerId: string; externalId: string; state: InboxState }>): Promise<void> {
+    if (!this.loaded) {
+      await this.load();
+    }
     for (const item of items) {
       const k = this.key(item.providerId, item.externalId);
       this.cache.set(k, { providerId: item.providerId, externalId: item.externalId, inboxState: item.state });
@@ -58,9 +65,11 @@ export class DiscoveredStateStore {
       for (const record of records) {
         this.cache.set(this.key(record.providerId, record.externalId), record);
       }
+      this.loaded = true;
     } catch (err: unknown) {
       if (isNodeError(err) && err.code === 'ENOENT') {
         this.cache.clear();
+        this.loaded = true;
         return;
       }
       throw err;
