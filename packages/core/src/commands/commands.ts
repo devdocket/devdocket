@@ -80,7 +80,12 @@ export function registerCommands(
         { title: item.title, description: item.description },
         { providerId: item.providerId, externalId: item.externalId, url: item.url },
       );
-      await stateStore.setState(item.providerId, item.externalId, 'accepted');
+      try {
+        await stateStore.setState(item.providerId, item.externalId, 'accepted');
+      } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : String(err);
+        vscode.window.showErrorMessage(`WorkCenter: Failed to update state — ${message}`);
+      }
     }),
     vscode.commands.registerCommand('workcenter.dismissFromInbox', async (item: InboxItem) => {
       await stateStore.setState(item.providerId, item.externalId, 'dismissed');
