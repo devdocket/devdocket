@@ -86,15 +86,15 @@ jobs:
               });
 
             if (forbidden.length === 0) {
-              core.info('✅ No forbidden paths found in PR — all clear.');
+              core.info('✅ No forbidden paths found — all clear.');
               return;
             }
 
             // Build a clear, actionable error message
             const lines = [
-              '## 🚫 Forbidden files detected in PR to main',
+              '## 🚫 Forbidden files detected in protected branch',
               '',
-              'The following files must NOT be merged into `main`.',
+              'The following files must NOT be merged into protected branches (main, preview, insider).',
               '`.ai-team/` and `.squad/` are runtime team state — they belong on dev branches only.',
               '`.ai-team-templates/` is Squad\'s internal planning — it belongs on dev branches only.',
               '`team-docs/` is internal team content — it belongs on dev branches only.',
