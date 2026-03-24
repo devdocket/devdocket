@@ -67,8 +67,21 @@ export class StartWorkAction implements WorkCenterAction {
         return;
       }
 
-      // Create branch from origin/dev (remote tracking branch)
-      await execFileAsync('git', ['branch', branchName, 'origin/dev'], { cwd: repoPath });
+      // Create branch from remote tracking branch (prefer origin/dev, fallback to origin/main or default)
+      let baseBranch = 'origin/dev';
+      try {
+        await execFileAsync('git', ['rev-parse', '--verify', 'origin/dev'], { cwd: repoPath });
+      } catch {
+        // origin/dev doesn't exist, try origin/main
+        try {
+          await execFileAsync('git', ['rev-parse', '--verify', 'origin/main'], { cwd: repoPath });
+          baseBranch = 'origin/main';
+        } catch {
+          // Fall back to current HEAD
+          baseBranch = 'HEAD';
+        }
+      }
+      await execFileAsync('git', ['branch', branchName, baseBranch], { cwd: repoPath });
 
       // Create worktree
       const worktreePath = path.join(path.dirname(repoPath), branchName);
