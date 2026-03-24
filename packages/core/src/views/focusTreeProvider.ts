@@ -66,12 +66,16 @@ export class FocusTreeProvider implements vscode.TreeDataProvider<WorkItem> {
 
   private buildTooltip(item: WorkItem): vscode.MarkdownString {
     const md = new vscode.MarkdownString();
-    md.appendMarkdown(`**${item.title}**\n\n`);
+    md.appendMarkdown(`**Title:** `);
+    md.appendText(item.title);
+    md.appendMarkdown(`\n\n`);
     if (item.description) {
-      md.appendMarkdown(`${item.description}\n\n`);
+      md.appendMarkdown(`**Description:** `);
+      md.appendText(item.description);
+      md.appendMarkdown(`\n\n`);
     }
-    md.appendMarkdown(`State: ${item.state}\n\n`);
-    md.appendMarkdown(`Created: ${new Date(item.createdAt).toLocaleString()}`);
+    md.appendMarkdown(`**State:** ${item.state}\n\n`);
+    md.appendMarkdown(`**Created:** ${new Date(item.createdAt).toLocaleString()}`);
     return md;
   }
 
