@@ -58,6 +58,9 @@ export class DiscoveredStateStore {
   }
 
   async load(): Promise<void> {
+    if (this.loaded) {
+      return;
+    }
     try {
       const data = await fs.readFile(this.filePath, 'utf-8');
       const records = JSON.parse(data) as DiscoveredStateRecord[];
