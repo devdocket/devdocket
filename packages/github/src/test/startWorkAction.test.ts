@@ -50,8 +50,10 @@ describe('StartWorkAction', () => {
       cb(null, { stdout: '', stderr: '' }, '');
     }) as any);
 
-    // Reset fs.existsSync to return false (directory doesn't exist)
-    vi.mocked(fs.existsSync).mockReturnValue(false);
+    // Reset fs.existsSync to return false for worktree directories, true for .git
+    vi.mocked(fs.existsSync).mockImplementation((path: any) => {
+      return path.toString().endsWith('.git');
+    });
   });
 
   describe('canRun', () => {

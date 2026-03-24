@@ -50,7 +50,14 @@ export class StartWorkAction implements WorkCenterAction {
       return;
     }
 
-    const repoPath = workspaceFolders[0].uri.fsPath;
+    let repoPath: string;
+    try {
+      repoPath = await this.selectRepository(workspaceFolders);
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err);
+      vscode.window.showErrorMessage(`WorkCenter: ${message}`);
+      return;
+    }
 
     try {
       // Check if branch already exists
@@ -105,6 +112,40 @@ export class StartWorkAction implements WorkCenterAction {
     // externalId format: "owner/repo#123"
     const match = externalId.match(/#(\d+)$/);
     return match ? match[1] : undefined;
+  }
+
+  private async selectRepository(workspaceFolders: readonly vscode.WorkspaceFolder[]): Promise<string> {
+    // Find all folders with .git directories
+    const gitFolders = workspaceFolders.filter(folder => {
+      const gitPath = path.join(folder.uri.fsPath, '.git');
+      return fs.existsSync(gitPath);
+    });
+
+    if (gitFolders.length === 0) {
+      throw new Error('No git repository found in workspace folders.');
+    }
+
+    if (gitFolders.length === 1) {
+      return gitFolders[0].uri.fsPath;
+    }
+
+    // Multiple git repos: show quick pick
+    const selected = await vscode.window.showQuickPick(
+      gitFolders.map(folder => ({
+        label: folder.name,
+        detail: folder.uri.fsPath,
+        folder,
+      })),
+      {
+        placeHolder: 'Select repository to create work branch',
+      }
+    );
+
+    if (!selected) {
+      throw new Error('No repository selected.');
+    }
+
+    return selected.folder.uri.fsPath;
   }
 
   private generateBranchName(issueNumber: string, title: string): string {
