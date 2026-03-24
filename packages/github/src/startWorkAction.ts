@@ -128,9 +128,10 @@ export class StartWorkAction implements WorkCenterAction {
   }
 
   private async selectRepository(workspaceFolders: readonly vscode.WorkspaceFolder[]): Promise<string> {
-    // Find all folders with .git directories
+    // Find all folders with .git (directory or file for worktrees)
     const gitFolders = workspaceFolders.filter(folder => {
       const gitPath = path.join(folder.uri.fsPath, '.git');
+      // existsSync returns true for both files and directories
       return fs.existsSync(gitPath);
     });
 
