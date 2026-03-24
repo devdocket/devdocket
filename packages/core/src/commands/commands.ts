@@ -81,6 +81,13 @@ export function registerCommands(
       await stateStore.setState(item.providerId, item.externalId, 'dismissed');
     }),
     vscode.commands.registerCommand('workcenter.acceptFromSources', async (item: SourceItemNode) => {
+      const existing = workGraph.findItemByProvenance(item.providerId, item.externalId);
+      if (existing) {
+        vscode.window.showInformationMessage(
+          `WorkCenter: Item already accepted as "${existing.title}"`
+        );
+        return;
+      }
       await workGraph.createItem(
         { title: item.title, description: item.description },
         { providerId: item.providerId, externalId: item.externalId, url: item.url },

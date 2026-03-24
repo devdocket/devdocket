@@ -29,6 +29,12 @@ export class WorkGraph {
     return this.items.get(id);
   }
 
+  findItemByProvenance(providerId: string, externalId: string): WorkItem | undefined {
+    return this.getAll().find(
+      (item) => item.providerId === providerId && item.externalId === externalId
+    );
+  }
+
   async createItem(
     input: WorkItemInput,
     provenance?: { providerId: string; externalId: string; url?: string },
