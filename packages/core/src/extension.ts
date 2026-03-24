@@ -24,16 +24,26 @@ export async function activate(context: vscode.ExtensionContext): Promise<WorkCe
   await stateStore.load();
 
   // Migration: mark existing provider-backed items as accepted
+  const itemsToMigrate: Array<{ providerId: string; externalId: string; state: 'accepted' }> = [];
+  
   for (const item of workGraph.getAll()) {
     if (item.providerId && item.externalId) {
       const existing = stateStore.getState(item.providerId, item.externalId);
       if (existing === undefined) {
-        try {
-          await stateStore.setState(item.providerId, item.externalId, 'accepted');
-        } catch (err) {
-          console.error(`WorkCenter: migration failed for item ${item.id}:`, err);
-        }
+        itemsToMigrate.push({
+          providerId: item.providerId,
+          externalId: item.externalId,
+          state: 'accepted',
+        });
       }
+    }
+  }
+
+  if (itemsToMigrate.length > 0) {
+    try {
+      await stateStore.setStates(itemsToMigrate);
+    } catch (err) {
+      console.error('WorkCenter: migration failed:', err);
     }
   }
 
