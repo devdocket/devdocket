@@ -64,7 +64,12 @@ export function registerCommands(
       if (selected) {
         const action = actionRegistry.getAction(selected.actionId);
         if (action) {
-          await action.run(workItem);
+          try {
+            await action.run(workItem);
+          } catch (err: unknown) {
+            const message = err instanceof Error ? err.message : String(err);
+            vscode.window.showErrorMessage(`WorkCenter: Action "${selected.label}" failed — ${message}`);
+          }
         }
       }
     }),
