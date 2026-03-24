@@ -11,10 +11,10 @@ export class ProviderRegistry {
   readonly onDidChangeDiscoveredItems = this._onDidChangeDiscoveredItems.event;
   private readonly _onDidRegisterProvider = new vscode.EventEmitter<void>();
   readonly onDidRegisterProvider = this._onDidRegisterProvider.event;
-  private _loading = false;
+  private readonly _loadingProviders = new Set<string>();
 
   get loading(): boolean {
-    return this._loading;
+    return this._loadingProviders.size > 0;
   }
 
   get hasProviders(): boolean {
@@ -42,12 +42,12 @@ export class ProviderRegistry {
     });
     this.subscriptions.set(provider.id, sub);
 
-    this._loading = true;
+    this._loadingProviders.add(provider.id);
     this._onDidChangeDiscoveredItems.fire();
     provider.refresh()
       .catch((err) => {
         console.error(`WorkCenter: provider "${provider.id}" refresh failed:`, err);
-        this._loading = false;
+        this._loadingProviders.delete(provider.id);
         this._onDidChangeDiscoveredItems.fire();
       });
 
@@ -93,7 +93,7 @@ export class ProviderRegistry {
         });
       }
     }
-    this._loading = false;
+    this._loadingProviders.delete(providerId);
     this._onDidChangeDiscoveredItems.fire();
   }
 
