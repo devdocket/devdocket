@@ -36,7 +36,7 @@ export class StartWorkAction implements WorkCenterAction {
   }
 
   async run(item: WorkItem): Promise<void> {
-    const issueNumber = this.extractIssueNumber(item.title);
+    const issueNumber = this.extractIssueNumber(item.externalId);
     if (!issueNumber) {
       vscode.window.showErrorMessage('Could not determine issue number.');
       return;
@@ -98,8 +98,12 @@ export class StartWorkAction implements WorkCenterAction {
     }
   }
 
-  private extractIssueNumber(title: string): string | undefined {
-    const match = title.match(/#(\d+)/);
+  private extractIssueNumber(externalId: string | undefined): string | undefined {
+    if (!externalId) {
+      return undefined;
+    }
+    // externalId format: "owner/repo#123"
+    const match = externalId.match(/#(\d+)$/);
     return match ? match[1] : undefined;
   }
 
