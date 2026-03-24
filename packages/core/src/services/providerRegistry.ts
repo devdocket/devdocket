@@ -87,13 +87,17 @@ export class ProviderRegistry {
 
   private async handleDiscoveredItems(providerId: string, items: DiscoveredItem[]): Promise<void> {
     this.discoveredItems.set(providerId, items);
+    const newItems: Array<{ providerId: string; externalId: string; state: 'unseen' }> = [];
     for (const item of items) {
       const existing = this.stateStore.getState(providerId, item.externalId);
       if (existing === undefined) {
-        await this.stateStore.setState(providerId, item.externalId, 'unseen').catch((err) => {
-          console.error('WorkCenter: failed to persist discovered state:', err);
-        });
+        newItems.push({ providerId, externalId: item.externalId, state: 'unseen' });
       }
+    }
+    if (newItems.length > 0) {
+      await this.stateStore.setStates(newItems).catch((err) => {
+        console.error('WorkCenter: failed to persist discovered states:', err);
+      });
     }
     this._onDidChangeDiscoveredItems.fire();
   }

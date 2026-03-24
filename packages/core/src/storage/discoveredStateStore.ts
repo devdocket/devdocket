@@ -36,6 +36,15 @@ export class DiscoveredStateStore {
     this._onDidChange.fire();
   }
 
+  async setStates(items: Array<{ providerId: string; externalId: string; state: InboxState }>): Promise<void> {
+    for (const item of items) {
+      const k = this.key(item.providerId, item.externalId);
+      this.cache.set(k, { providerId: item.providerId, externalId: item.externalId, inboxState: item.state });
+    }
+    await this.enqueue(() => this.writeFile());
+    this._onDidChange.fire();
+  }
+
   async loadAll(): Promise<DiscoveredStateRecord[]> {
     await this.load();
     return Array.from(this.cache.values());
