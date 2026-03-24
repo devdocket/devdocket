@@ -59,7 +59,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<WorkCe
       inboxTreeView.message = 'No new items';
     } else {
       // Providers loaded — show empty messages only if views have no content
-      const hasDiscoveredItems = providerRegistry.getAllDiscoveredItems().size > 0;
+      const hasDiscoveredItems = [...providerRegistry.getAllDiscoveredItems().values()].some(items => items.length > 0);
       sourcesTreeView.message = hasDiscoveredItems ? undefined : 'No items found';
 
       const hasInboxItems = inboxProvider.getChildren().length > 0;
