@@ -115,6 +115,6 @@ export class StartWorkAction implements WorkCenterAction {
       .replace(/[^a-z0-9]+/g, '-')
       .replace(/^-|-$/g, '')
       .slice(0, 40);
-    return `issue-${issueNumber}-${slug}`;
+    return slug ? `issue-${issueNumber}-${slug}` : `issue-${issueNumber}`;
   }
 }
