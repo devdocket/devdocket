@@ -47,6 +47,8 @@ export class ProviderRegistry {
     provider.refresh()
       .catch((err) => {
         console.error(`WorkCenter: provider "${provider.id}" refresh failed:`, err);
+      })
+      .finally(() => {
         this._loadingProviders.delete(provider.id);
         this._onDidChangeDiscoveredItems.fire();
       });
@@ -93,7 +95,6 @@ export class ProviderRegistry {
         });
       }
     }
-    this._loadingProviders.delete(providerId);
     this._onDidChangeDiscoveredItems.fire();
   }
 
