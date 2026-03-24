@@ -98,3 +98,34 @@ Key files:
 - Migration logic (`runMigration()`) extracted from extension.ts to standalone function for easier testing
 - Migration must run before tree providers are registered, ensuring no race conditions on cold start
 - Items with providerId but missing externalId are correctly skipped (malformed records from manual creation)
+
+### Test Updates After Code Review Fixes (2026-03-25)
+
+**Fixed 7 failing tests after Fenster's Critical and Important fixes:**
+
+1. **providerRegistry.test.ts** — "fires onDidChangeDiscoveredItems" 
+   - Issue: `handleDiscoveredItems` is async, test wasn't waiting
+   - Fix: Used `vi.waitFor()` to wait for async settling
+   - Learned: Async event handlers require waitFor in tests, even if they fire events synchronously
+
+2. **githubProvider.test.ts** — "falls back to /issues?filter=assigned"
+   - Issue: `externalId` format changed from `github-issue-<url>` to `owner/repo#number`
+   - Fix: Updated expected values to match stable format
+   
+3. **githubProvider.test.ts** — "fires onDidDiscoverItems with correctly mapped"
+   - Issue: Same externalId format change
+   - Fix: Updated expected `externalId` to `owner/repo#10` format
+
+4-7. **startWorkAction.test.ts** — 4 tests for branch/worktree creation
+   - Issue: Production code now checks branch existence, uses path.join, checks fs.existsSync, rollback on failure
+   - Fix: Added fs mock, updated git call count (3 instead of 2), used Windows path separators
+   - Learned: Windows path.join produces backslashes — tests must match OS-specific paths
+   - Added 3 new test cases: branch exists check, worktree dir exists check, rollback on failure
+
+**Key patterns:**
+- Windows path separators: Always use `\\` in test assertions on Windows (path.join behavior)
+- Async event handlers: Use `vi.waitFor()` when testing async handlers that fire sync events
+- Mock fs for filesystem checks: `vi.mock('fs')` with `existsSync` for directory existence tests
+- Rollback testing: Verify cleanup actions (like branch deletion) when operations fail mid-process
+
+**Test suite: 124 tests passing (98 core + 26 GitHub)** — 3 tests added for new production behavior.
