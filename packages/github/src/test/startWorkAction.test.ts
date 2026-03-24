@@ -180,7 +180,7 @@ describe('StartWorkAction', () => {
       await action.run(item);
 
       expect(window.showErrorMessage).toHaveBeenCalledWith(
-        'No workspace folder open. Open a repository first.',
+        'WorkCenter: No workspace folder open. Open a repository first.',
       );
       expect(execFile).not.toHaveBeenCalled();
     });
@@ -191,7 +191,7 @@ describe('StartWorkAction', () => {
       await action.run(item);
 
       expect(window.showErrorMessage).toHaveBeenCalledWith(
-        'No workspace folder open. Open a repository first.',
+        'WorkCenter: No workspace folder open. Open a repository first.',
       );
     });
 
@@ -222,7 +222,7 @@ describe('StartWorkAction', () => {
       await action.run(item);
 
       expect(window.showErrorMessage).toHaveBeenCalledWith(
-        'Branch "issue-123-fix-bug" already exists.',
+        'WorkCenter: Branch "issue-123-fix-bug" already exists.',
       );
       // Should not attempt to create branch or worktree
       expect(execFile).toHaveBeenCalledTimes(1);
@@ -236,7 +236,7 @@ describe('StartWorkAction', () => {
       await action.run(item);
 
       expect(window.showErrorMessage).toHaveBeenCalledWith(
-        `Directory "${path.join('/mock', 'issue-123-fix-bug')}" already exists.`,
+        `WorkCenter: Directory "${path.join('/mock', 'issue-123-fix-bug')}" already exists.`,
       );
       // Should delete the branch (I6 rollback fix)
       expect(execFile).toHaveBeenCalledWith(
