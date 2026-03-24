@@ -50,6 +50,7 @@ export class WorkItemEditorPanel {
 
     this.panel.onDidDispose(() => {
       this.disposed = true;
+      this.messageSubscription.dispose();
     });
   }
 
