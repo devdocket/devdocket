@@ -57,6 +57,9 @@ export class ProviderRegistry {
       this.providers.delete(provider.id);
       this.subscriptions.get(provider.id)?.dispose();
       this.subscriptions.delete(provider.id);
+      this.discoveredItems.delete(provider.id);
+      this._loadingProviders.delete(provider.id);
+      this._onDidChangeDiscoveredItems.fire();
     });
   }
 
