@@ -25,7 +25,7 @@ function createWorkItem(overrides: Partial<any> = {}) {
     description: 'Some description',
     state: 'New',
     providerId: 'github',
-    externalId: 'github-issue-123',
+    externalId: 'owner/repo#123',
     url: 'https://github.com/owner/repo/issues/123',
     createdAt: Date.now(),
     updatedAt: Date.now(),
@@ -112,7 +112,7 @@ describe('StartWorkAction', () => {
     });
 
     it('generates slug from title correctly', async () => {
-      const item = createWorkItem({ title: '#456: Add User Authentication!!' });
+      const item = createWorkItem({ title: '#456: Add User Authentication!!', externalId: 'owner/repo#456' });
       await action.run(item);
 
       // Second call is the branch creation (first is branch check)
@@ -123,6 +123,7 @@ describe('StartWorkAction', () => {
     it('truncates slug to 40 chars', async () => {
       const item = createWorkItem({
         title: '#789: This is a very long title that should be truncated to forty characters maximum',
+        externalId: 'owner/repo#789',
       });
       await action.run(item);
 
@@ -156,7 +157,7 @@ describe('StartWorkAction', () => {
     });
 
     it('shows error when issue number cannot be extracted', async () => {
-      const item = createWorkItem({ title: 'No issue number here' });
+      const item = createWorkItem({ title: 'No issue number here', externalId: 'invalid-format' });
       await action.run(item);
 
       expect(window.showErrorMessage).toHaveBeenCalledWith(
