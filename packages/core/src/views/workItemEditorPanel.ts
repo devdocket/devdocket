@@ -49,8 +49,10 @@ export class WorkItemEditorPanel {
     });
 
     this.panel.onDidDispose(() => {
-      this.disposed = true;
-      this.messageSubscription.dispose();
+      if (!this.disposed) {
+        this.disposed = true;
+        this.messageSubscription.dispose();
+      }
     });
   }
 
@@ -214,6 +216,7 @@ export class WorkItemEditorPanel {
 
   dispose(): void {
     if (!this.disposed) {
+      this.disposed = true;
       this.messageSubscription.dispose();
       this.panel.dispose();
     }
