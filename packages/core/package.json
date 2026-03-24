@@ -11,7 +11,12 @@
   "categories": [
     "Other"
   ],
-  "activationEvents": [],
+  "activationEvents": [
+    "onView:workcenter.inbox",
+    "onView:workcenter.queue",
+    "onView:workcenter.focus",
+    "onView:workcenter.sources"
+  ],
   "main": "./dist/extension.js",
   "contributes": {
     "viewsContainers": {
