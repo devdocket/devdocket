@@ -52,7 +52,7 @@ export class GitHubIssueProvider implements WorkCenterProvider {
     // Clamp to minimum of 60 seconds
     const clampedInterval = Math.max(intervalSeconds, 60);
     this.refreshTimer = setInterval(() => {
-      this.refresh().catch((err) => {
+      this.refreshInBackground().catch((err) => {
         console.error('WorkCenter GitHub: refresh failed:', err);
       });
     }, clampedInterval * 1000);
@@ -75,30 +75,50 @@ export class GitHubIssueProvider implements WorkCenterProvider {
         return;
       }
 
-      const repos = this.getConfiguredRepos();
-      const { issues, failures } = await this.fetchAssignedIssues(session.accessToken, repos);
-
-      const items: DiscoveredItem[] = issues.map((issue) => {
-        const repoName = this.parseRepo(issue);
-        return {
-          externalId: `${repoName}#${issue.number}`,
-          title: `#${issue.number}: ${issue.title}`,
-          description: issue.body?.slice(0, 200),
-          url: issue.html_url,
-          group: repoName,
-        };
-      });
-
-      this._onDidDiscoverItems.fire(items);
-
-      if (failures.length > 0) {
-        const message = failures.length === 1
-          ? `Failed to fetch issues from ${failures[0]}`
-          : `Failed to fetch issues from ${failures.length} repositories`;
-        vscode.window.showWarningMessage(`WorkCenter GitHub: ${message}`);
-      }
+      await this.fetchAndPublishIssues(session.accessToken);
     } catch (err) {
       console.error('WorkCenter GitHub: failed to fetch issues:', err);
+    }
+  }
+
+  private async refreshInBackground(): Promise<void> {
+    try {
+      const session = await vscode.authentication.getSession('github', ['repo'], {
+        createIfNone: false,
+      }).catch(() => null);
+      
+      if (!session) {
+        return;
+      }
+
+      await this.fetchAndPublishIssues(session.accessToken);
+    } catch (err) {
+      console.error('WorkCenter GitHub: failed to fetch issues:', err);
+    }
+  }
+
+  private async fetchAndPublishIssues(accessToken: string): Promise<void> {
+    const repos = this.getConfiguredRepos();
+    const { issues, failures } = await this.fetchAssignedIssues(accessToken, repos);
+
+    const items: DiscoveredItem[] = issues.map((issue) => {
+      const repoName = this.parseRepo(issue);
+      return {
+        externalId: `${repoName}#${issue.number}`,
+        title: `#${issue.number}: ${issue.title}`,
+        description: issue.body?.slice(0, 200),
+        url: issue.html_url,
+        group: repoName,
+      };
+    });
+
+    this._onDidDiscoverItems.fire(items);
+
+    if (failures.length > 0) {
+      const message = failures.length === 1
+        ? `Failed to fetch issues from ${failures[0]}`
+        : `Failed to fetch issues from ${failures.length} repositories`;
+      vscode.window.showWarningMessage(`WorkCenter GitHub: ${message}`);
     }
   }
 
