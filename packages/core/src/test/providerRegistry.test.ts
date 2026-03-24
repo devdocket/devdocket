@@ -24,6 +24,11 @@ function createMockStateStore() {
     setState: vi.fn(async (providerId: string, externalId: string, state: string) => {
       cache.set(`${providerId}::${externalId}`, state);
     }),
+    setStates: vi.fn(async (items: Array<{ providerId: string; externalId: string; state: string }>) => {
+      for (const item of items) {
+        cache.set(`${item.providerId}::${item.externalId}`, item.state);
+      }
+    }),
     load: vi.fn(async () => {}),
     loadAll: vi.fn(async () => []),
     onDidChange: vi.fn(() => ({ dispose: vi.fn() })),
@@ -183,7 +188,9 @@ describe('ProviderRegistry', () => {
       { externalId: 'issue-1', title: 'Bug fix' },
     ]);
 
-    expect(stateStore.setState).toHaveBeenCalledWith('gh', 'issue-1', 'unseen');
+    expect(stateStore.setStates).toHaveBeenCalledWith([
+      { providerId: 'gh', externalId: 'issue-1', state: 'unseen' },
+    ]);
   });
 
   it('does not overwrite existing state on re-discovery', () => {
@@ -197,8 +204,8 @@ describe('ProviderRegistry', () => {
       { externalId: 'issue-1', title: 'Bug fix' },
     ]);
 
-    // setState should not be called since state already exists
-    expect(stateStore.setState).not.toHaveBeenCalled();
+    // setStates should not be called since state already exists
+    expect(stateStore.setStates).not.toHaveBeenCalled();
   });
 
   it('returns provider label from getProviderLabel', () => {
@@ -251,9 +258,11 @@ describe('ProviderRegistry', () => {
 
     // First discovery — item gets 'unseen'
     provider.fireItems([{ externalId: 'issue-1', title: 'Bug' }]);
-    expect(stateStore.setState).toHaveBeenCalledWith('gh', 'issue-1', 'unseen');
+    expect(stateStore.setStates).toHaveBeenCalledWith([
+      { providerId: 'gh', externalId: 'issue-1', state: 'unseen' },
+    ]);
 
-    stateStore.setState.mockClear();
+    stateStore.setStates.mockClear();
     // Simulate state is now 'dismissed'
     stateStore.getState.mockReturnValue('dismissed');
 
@@ -261,7 +270,7 @@ describe('ProviderRegistry', () => {
     provider.fireItems([{ externalId: 'issue-1', title: 'Bug' }]);
 
     // Should NOT overwrite dismissed state
-    expect(stateStore.setState).not.toHaveBeenCalled();
+    expect(stateStore.setStates).not.toHaveBeenCalled();
   });
 
   it('does not create WorkItems on workGraph when provider fires', async () => {
