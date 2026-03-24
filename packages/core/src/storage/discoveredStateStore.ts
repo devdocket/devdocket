@@ -35,8 +35,19 @@ export class DiscoveredStateStore {
       await this.load();
     }
     const k = this.key(providerId, externalId);
-    this.cache.set(k, { providerId, externalId, inboxState: state });
-    await this.enqueue(() => this.writeFile());
+    const previousValue = this.cache.get(k);
+    const newRecord = { providerId, externalId, inboxState: state };
+    try {
+      this.cache.set(k, newRecord);
+      await this.enqueue(() => this.writeFile());
+    } catch (err) {
+      if (previousValue) {
+        this.cache.set(k, previousValue);
+      } else {
+        this.cache.delete(k);
+      }
+      throw err;
+    }
     this._onDidChange.fire();
   }
 
@@ -44,11 +55,24 @@ export class DiscoveredStateStore {
     if (!this.loaded) {
       await this.load();
     }
+    const rollback = new Map<string, DiscoveredStateRecord | undefined>();
     for (const item of items) {
       const k = this.key(item.providerId, item.externalId);
+      rollback.set(k, this.cache.get(k));
       this.cache.set(k, { providerId: item.providerId, externalId: item.externalId, inboxState: item.state });
     }
-    await this.enqueue(() => this.writeFile());
+    try {
+      await this.enqueue(() => this.writeFile());
+    } catch (err) {
+      for (const [k, previousValue] of rollback) {
+        if (previousValue) {
+          this.cache.set(k, previousValue);
+        } else {
+          this.cache.delete(k);
+        }
+      }
+      throw err;
+    }
     this._onDidChange.fire();
   }
 
