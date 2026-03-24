@@ -33,7 +33,7 @@
         "workcenterGithub.refreshIntervalSeconds": {
           "type": "number",
           "default": 300,
-          "description": "How often to refresh GitHub issues (in seconds)."
+          "description": "How often to refresh GitHub issues (in seconds). Minimum 60 seconds. Values below 60 are clamped."
         }
       }
     }
