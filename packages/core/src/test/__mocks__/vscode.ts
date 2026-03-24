@@ -49,6 +49,7 @@ const window = {
   showInputBox: vi.fn(),
   showInformationMessage: vi.fn(),
   showWarningMessage: vi.fn(),
+  showErrorMessage: vi.fn(),
   showQuickPick: vi.fn(),
   registerTreeDataProvider: vi.fn(() => ({ dispose: vi.fn() })),
   createTreeView: vi.fn(() => ({ dispose: vi.fn(), message: undefined })),
