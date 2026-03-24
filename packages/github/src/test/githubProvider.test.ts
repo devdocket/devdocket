@@ -213,7 +213,7 @@ describe('GitHubIssueProvider', () => {
   it('stopPeriodicRefresh clears the timer', () => {
     vi.useFakeTimers();
 
-    const refreshSpy = vi.spyOn(provider, 'refresh').mockResolvedValue();
+    const refreshSpy = vi.spyOn(provider as any, 'refreshInBackground').mockResolvedValue();
     provider.startPeriodicRefresh(60);
     provider.stopPeriodicRefresh();
 
@@ -226,7 +226,7 @@ describe('GitHubIssueProvider', () => {
   it('dispose stops periodic refresh and disposes emitter', () => {
     vi.useFakeTimers();
 
-    const refreshSpy = vi.spyOn(provider, 'refresh').mockResolvedValue();
+    const refreshSpy = vi.spyOn(provider as any, 'refreshInBackground').mockResolvedValue();
     provider.startPeriodicRefresh(60);
 
     const listener = vi.fn();
