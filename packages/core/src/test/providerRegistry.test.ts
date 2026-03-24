@@ -236,11 +236,13 @@ describe('ProviderRegistry', () => {
     registry.onDidChangeDiscoveredItems(listener);
 
     provider.fireItems([{ externalId: '1', title: 'Item' }]);
-    // handleDiscoveredItems is async, wait for it to settle (C1 fix)
-    await vi.waitFor(() => expect(listener).toHaveBeenCalledTimes(1));
+    // handleDiscoveredItems is async, wait for it to settle
+    // Event fires once for discovered items, and may fire again when loading clears
+    await vi.waitFor(() => expect(listener).toHaveBeenCalled());
+    const firstCallCount = listener.mock.calls.length;
 
     provider.fireItems([{ externalId: '2', title: 'Another' }]);
-    await vi.waitFor(() => expect(listener).toHaveBeenCalledTimes(2));
+    await vi.waitFor(() => expect(listener.mock.calls.length).toBeGreaterThan(firstCallCount));
   });
 
   it('keeps dismissed state when provider re-fires items', () => {
