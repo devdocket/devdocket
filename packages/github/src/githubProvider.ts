@@ -100,7 +100,11 @@ export class GitHubIssueProvider implements WorkCenterProvider {
 
   private parseRepo(htmlUrl: string): string {
     const match = htmlUrl.match(/github\.com\/([^/]+\/[^/]+)/);
-    return match?.[1] ?? '';
+    if (!match) {
+      console.warn(`WorkCenter GitHub: failed to parse repo from URL: ${htmlUrl}`);
+      return `unknown-repo-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    }
+    return match[1];
   }
 
   private async fetchAssignedIssues(
