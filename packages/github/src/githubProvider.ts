@@ -76,7 +76,7 @@ export class GitHubIssueProvider implements WorkCenterProvider {
       const { issues, failures } = await this.fetchAssignedIssues(session.accessToken, repos);
 
       const items: DiscoveredItem[] = issues.map((issue) => {
-        const repoName = this.parseRepo(issue.html_url);
+        const repoName = this.parseRepo(issue);
         return {
           externalId: `${repoName}#${issue.number}`,
           title: `#${issue.number}: ${issue.title}`,
@@ -104,13 +104,23 @@ export class GitHubIssueProvider implements WorkCenterProvider {
     return config.get<string[]>('repos', []);
   }
 
-  private parseRepo(htmlUrl: string): string {
-    const match = htmlUrl.match(/github\.com\/([^/]+\/[^/]+)/);
-    if (!match) {
-      console.warn(`WorkCenter GitHub: failed to parse repo from URL: ${htmlUrl}`);
-      return `unknown-repo-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+  private parseRepo(issue: GitHubIssue): string {
+    const match = issue.html_url.match(/github\.com\/([^/]+\/[^/]+)/);
+    if (match) {
+      return match[1];
     }
-    return match[1];
+    
+    // Fallback to parsing from repository_url (API URL)
+    const apiMatch = issue.repository_url.match(/repos\/([^/]+\/[^/]+)/);
+    if (apiMatch) {
+      return apiMatch[1];
+    }
+    
+    // Deterministic fallback: hash the repository_url
+    const hash = issue.repository_url.split('').reduce((acc, char) => {
+      return ((acc << 5) - acc) + char.charCodeAt(0) | 0;
+    }, 0);
+    return `unknown-repo-${Math.abs(hash).toString(36)}`;
   }
 
   private async fetchAssignedIssues(
