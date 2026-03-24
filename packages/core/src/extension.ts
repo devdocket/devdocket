@@ -28,7 +28,11 @@ export async function activate(context: vscode.ExtensionContext): Promise<WorkCe
     if (item.providerId && item.externalId) {
       const existing = stateStore.getState(item.providerId, item.externalId);
       if (existing === undefined) {
-        await stateStore.setState(item.providerId, item.externalId, 'accepted');
+        try {
+          await stateStore.setState(item.providerId, item.externalId, 'accepted');
+        } catch (err) {
+          console.error(`WorkCenter: migration failed for item ${item.id}:`, err);
+        }
       }
     }
   }
@@ -50,7 +54,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<WorkCe
     if (providerRegistry.loading) {
       sourcesTreeView.message = 'Loading…';
       inboxTreeView.message = 'Loading…';
-    } else if (!providerRegistry.hasProviders) {
+    } else if (providerRegistry.getAllDiscoveredItems().size === 0) {
       sourcesTreeView.message = 'No sources connected';
       inboxTreeView.message = 'No new items';
     } else {

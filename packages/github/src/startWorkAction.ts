@@ -1,6 +1,8 @@
 import * as vscode from 'vscode';
 import { execFile } from 'child_process';
 import { promisify } from 'util';
+import * as path from 'path';
+import * as fs from 'fs';
 
 const execFileAsync = promisify(execFile);
 
@@ -49,14 +51,35 @@ export class StartWorkAction implements WorkCenterAction {
     const repoPath = workspaceFolders[0].uri.fsPath;
 
     try {
+      // Check if branch already exists
+      const { stdout: branchList } = await execFileAsync('git', ['branch', '--list', branchName], { cwd: repoPath });
+      if (branchList.trim()) {
+        vscode.window.showErrorMessage(`Branch "${branchName}" already exists.`);
+        return;
+      }
+
       // Create branch from current HEAD
       await execFileAsync('git', ['branch', branchName], { cwd: repoPath });
 
       // Create worktree
-      const worktreePath = `${repoPath}/../${branchName}`;
-      await execFileAsync('git', ['worktree', 'add', worktreePath, branchName], {
-        cwd: repoPath,
-      });
+      const worktreePath = path.join(path.dirname(repoPath), branchName);
+      
+      // Check if worktree directory already exists
+      if (fs.existsSync(worktreePath)) {
+        await execFileAsync('git', ['branch', '-D', branchName], { cwd: repoPath });
+        vscode.window.showErrorMessage(`Directory "${worktreePath}" already exists.`);
+        return;
+      }
+
+      try {
+        await execFileAsync('git', ['worktree', 'add', worktreePath, branchName], {
+          cwd: repoPath,
+        });
+      } catch (worktreeErr) {
+        // Rollback: delete the branch we just created
+        await execFileAsync('git', ['branch', '-D', branchName], { cwd: repoPath });
+        throw worktreeErr;
+      }
 
       // Open new VS Code window at worktree
       const worktreeUri = vscode.Uri.file(worktreePath);

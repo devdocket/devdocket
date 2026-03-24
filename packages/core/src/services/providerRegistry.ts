@@ -47,7 +47,6 @@ export class ProviderRegistry {
     provider.refresh()
       .catch((err) => {
         console.error(`WorkCenter: provider "${provider.id}" refresh failed:`, err);
-        // Only clear loading on error — success clears in handleDiscoveredItems
         this._loading = false;
         this._onDidChangeDiscoveredItems.fire();
       });
@@ -84,12 +83,12 @@ export class ProviderRegistry {
     await Promise.all(promises);
   }
 
-  private handleDiscoveredItems(providerId: string, items: DiscoveredItem[]): void {
+  private async handleDiscoveredItems(providerId: string, items: DiscoveredItem[]): Promise<void> {
     this.discoveredItems.set(providerId, items);
     for (const item of items) {
       const existing = this.stateStore.getState(providerId, item.externalId);
       if (existing === undefined) {
-        this.stateStore.setState(providerId, item.externalId, 'unseen').catch((err) => {
+        await this.stateStore.setState(providerId, item.externalId, 'unseen').catch((err) => {
           console.error('WorkCenter: failed to persist discovered state:', err);
         });
       }

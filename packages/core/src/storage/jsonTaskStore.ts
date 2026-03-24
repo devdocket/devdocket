@@ -6,17 +6,24 @@ import { ITaskStore } from './taskStore';
 export class JsonTaskStore implements ITaskStore {
   private readonly filePath: string;
   private writeQueue: Promise<void> = Promise.resolve();
+  private cache: Map<string, WorkItem> | null = null;
 
   constructor(storagePath: string) {
     this.filePath = path.join(storagePath, 'workitems.json');
   }
 
   async loadAll(): Promise<WorkItem[]> {
+    if (this.cache !== null) {
+      return Array.from(this.cache.values());
+    }
     try {
       const data = await fs.readFile(this.filePath, 'utf-8');
-      return JSON.parse(data) as WorkItem[];
+      const items = JSON.parse(data) as WorkItem[];
+      this.cache = new Map(items.map((item) => [item.id, item]));
+      return items;
     } catch (err: unknown) {
       if (isNodeError(err) && err.code === 'ENOENT') {
+        this.cache = new Map();
         return [];
       }
       throw err;
@@ -25,22 +32,21 @@ export class JsonTaskStore implements ITaskStore {
 
   async save(item: WorkItem): Promise<void> {
     return this.enqueue(async () => {
-      const items = await this.loadAll();
-      const index = items.findIndex((i) => i.id === item.id);
-      if (index >= 0) {
-        items[index] = item;
-      } else {
-        items.push(item);
+      if (this.cache === null) {
+        await this.loadAll();
       }
-      await this.writeFile(items);
+      this.cache!.set(item.id, item);
+      await this.writeFile(Array.from(this.cache!.values()));
     });
   }
 
   async delete(id: string): Promise<void> {
     return this.enqueue(async () => {
-      const items = await this.loadAll();
-      const filtered = items.filter((i) => i.id !== id);
-      await this.writeFile(filtered);
+      if (this.cache === null) {
+        await this.loadAll();
+      }
+      this.cache!.delete(id);
+      await this.writeFile(Array.from(this.cache!.values()));
     });
   }
 

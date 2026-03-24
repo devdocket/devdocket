@@ -14,7 +14,7 @@ export async function activate(_context: vscode.ExtensionContext): Promise<void>
     ? coreExtension.exports
     : await coreExtension.activate();
 
-  if (!api || !api.registerProvider || !api.registerAction) {
+  if (!api || typeof api.registerProvider !== 'function' || typeof api.registerAction !== 'function') {
     console.error('WorkCenter GitHub: core extension API not available');
     return;
   }
