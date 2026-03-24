@@ -42,11 +42,17 @@ export class GitHubIssueProvider implements WorkCenterProvider {
 
   startPeriodicRefresh(intervalSeconds: number): void {
     this.stopPeriodicRefresh();
+    if (intervalSeconds <= 0) {
+      // Disable periodic refresh if interval is 0 or negative
+      return;
+    }
+    // Clamp to minimum of 60 seconds
+    const clampedInterval = Math.max(intervalSeconds, 60);
     this.refreshTimer = setInterval(() => {
       this.refresh().catch((err) => {
         console.error('WorkCenter GitHub: refresh failed:', err);
       });
-    }, intervalSeconds * 1000);
+    }, clampedInterval * 1000);
   }
 
   stopPeriodicRefresh(): void {
