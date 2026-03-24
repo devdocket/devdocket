@@ -50,6 +50,64 @@ Created `packages/github/src/test/__mocks__/vscode.ts` extending the core mock w
 
 ---
 
+### Code Review Fix Patterns (2026-03-24)
+
+**Author:** Fenster (Extension Dev)  
+**Context:** PR #1 code review by Keaton identified 7 Critical + 8 Important issues  
+**Status:** Applied
+
+Five key patterns established to prevent similar issues in future PRs:
+
+1. **In-Memory Cache for Storage Layer** — JsonTaskStore maintains `Map<string, WorkItem>` as source of truth to eliminate read-modify-write races where concurrent saves could overwrite each other. Cache checked before disk reads; disk is purely for persistence.
+
+2. **Git Operation Safety** — Always check preconditions before destructive git operations (branch existence with `git branch --list`, directory existence with `fs.existsSync`). Implement rollback for multi-step operations (delete branch if worktree creation fails).
+
+3. **Stable External IDs** — Use `owner/repo#number` format instead of `html_url` to survive issue transfers between repositories. Requires parsing from url but provides reliable long-term identity.
+
+4. **User-Facing Error Accumulation** — Accumulate failures across multiple operations and show a single user notification (e.g., "Failed to fetch from 3 repositories") instead of console-only logging.
+
+5. **Immutable Updates** — Clone items before patching in `updateItem()` using `{ ...item, ...patch }` to prevent inconsistent state if `store.save()` fails.
+
+**Implementation:** All 15 review issues (C1-C7, I1-I8) fixed by Fenster + 32 Copilot review comments addressed across 4 review rounds.
+
+**Test Coverage:** Hockney updated 7 tests and added 3 new cases to match production changes. Final suite: 124 tests passing.
+
+**References:**
+- `keaton-pr1-review.md` — detailed review findings
+- `fenster-pr1-fixes.md` — implementation details
+- `hockney-pr1-tests.md` — test update patterns
+
+---
+
+### Test Update Patterns (2026-03-25)
+
+**Author:** Hockney (Tester)  
+**Context:** 7 tests failed after Fenster's code review fixes  
+**Status:** Applied
+
+Four key test patterns identified during fix verification:
+
+1. **Async Event Handler Testing** — Use `vi.waitFor()` when testing async event handlers, even if events fire synchronously. Prevents test timing assumptions from coupling to implementation.
+
+2. **OS-Specific Path Separators** — Windows path.join produces backslashes; test assertions must match OS-specific paths. Use `\\` in test assertions on Windows rather than `/`.
+
+3. **Mock fs for Filesystem Checks** — Use `vi.mock('fs')` with stubbed `existsSync` when testing filesystem precondition checks (e.g., before creating worktree directories).
+
+4. **Git Operation Sequencing** — Test the full operation sequence including guards (precondition checks) and rollback logic, not just happy path. Updated call counts reflect guard checks.
+
+**Test Improvements:** 
+- Fixed 7 failing tests after production changes
+- Added 3 new test cases for branch/directory existence checks and rollback
+- Expanded GitHub package tests from 23 to 26
+
+**Test Suite Metrics:** 121 tests pre-fix → 124 tests post-fix, all passing (98 core + 26 GitHub).
+
+**References:**
+- `hockney-pr1-tests.md` — detailed test update walkthrough
+- Test files: `providerRegistry.test.ts`, `githubProvider.test.ts`, `startWorkAction.test.ts`
+
+---
+
 ### Phase 2 Test Strategy (2026-07-17)
 
 **Author:** Hockney (Tester)  

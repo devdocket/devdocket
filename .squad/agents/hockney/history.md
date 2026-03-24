@@ -128,4 +128,98 @@ Key files:
 - Mock fs for filesystem checks: `vi.mock('fs')` with `existsSync` for directory existence tests
 - Rollback testing: Verify cleanup actions (like branch deletion) when operations fail mid-process
 
-**Test suite: 124 tests passing (98 core + 26 GitHub)** — 3 tests added for new production behavior.
+## Test Updates After Code Review Fixes (2026-03-24)
+
+**Status:** COMPLETE — 7 tests fixed, 3 new cases added.
+
+After Fenster fixed Critical and Important issues from Keaton's code review, 7 tests were failing. The production code changes were correct — tests needed updating to match new behavior.
+
+### Test Fixes
+
+#### 1. Async Event Handler Testing Pattern
+
+**File:** `packages/core/src/test/providerRegistry.test.ts`  
+**Test:** "fires onDidChangeDiscoveredItems"  
+**Issue:** `handleDiscoveredItems` became async but tests expected synchronous behavior.  
+**Solution:** Use `vi.waitFor()` for async settling:
+```typescript
+provider.fireItems([{ externalId: '1', title: 'Item' }]);
+await vi.waitFor(() => expect(listener).toHaveBeenCalledTimes(1));
+```
+**Decision:** Always use `vi.waitFor()` when testing async event handlers, even if events fire synchronously.
+
+#### 2. Stable ExternalId Format
+
+**Files:** `packages/github/src/test/githubProvider.test.ts` (2 tests)  
+**Tests:**
+- "falls back to /issues?filter=assigned"
+- "fires onDidDiscoverItems with correctly mapped"
+
+**Issue:** GitHub provider externalId format changed from `github-issue-<url>` to `owner/repo#number`.  
+**Solution:** Updated expected values to match stable format.  
+**Impact:** More stable, human-readable, and matches GitHub's native reference format.
+
+#### 3. Windows Path Handling
+
+**File:** `packages/github/src/test/startWorkAction.test.ts` (1 test updated)  
+**Issue:** `path.join()` produces backslashes on Windows, but tests used forward slashes.  
+**Solution:** Match OS-specific path separators in test assertions:
+```typescript
+// Windows
+expect(Uri.file).toHaveBeenCalledWith('\\mock\\issue-123-fix-bug');
+
+// Production code uses path.join for platform independence
+const worktreePath = path.join(path.dirname(repoPath), branchName);
+```
+**Decision:** Test assertions must match OS-specific paths when testing path operations.
+
+#### 4. Git Operation Sequencing with Preconditions
+
+**File:** `packages/github/src/test/startWorkAction.test.ts` (4 tests)  
+**New behavior:**
+1. Check if branch exists (`git branch --list`)
+2. Create branch (`git branch`)
+3. Check if worktree directory exists (`fs.existsSync`)
+4. Create worktree (`git worktree add`)
+5. On failure: rollback by deleting branch
+
+**Tests added:**
+- Branch already exists → show error, no branch/worktree creation
+- Worktree directory exists → show error, rollback branch
+- Worktree creation fails → rollback branch deletion
+
+**Decision:** Test the full operation sequence including guards and rollback logic, not just the happy path.
+
+### Test Suite Status
+
+- **Before:** 121 tests (7 failing)
+- **After:** 124 tests (all passing)
+- **Added:** 3 new test cases for branch/directory existence checks and rollback
+- **Core tests:** 98 passing
+- **GitHub tests:** 26 passing (updated from 23)
+
+### Patterns for Future Test Updates
+
+1. **Async handlers:** Always use `vi.waitFor()` for async settling
+2. **OS paths:** Match platform-specific path separators (backslash on Windows)
+3. **Guards and rollback:** Test error conditions and cleanup logic
+4. **Mock fs:** Use `vi.mock('fs')` for filesystem existence checks
+5. **Call count:** Update expected git call counts when guards are added (2 → 3 for branch/worktree ops)
+
+### Related Files
+
+**Tests updated:**
+- `packages/core/src/test/providerRegistry.test.ts`
+- `packages/github/src/test/githubProvider.test.ts`
+- `packages/github/src/test/startWorkAction.test.ts`
+
+**Production files:**
+- `packages/core/src/services/providerRegistry.ts`
+- `packages/github/src/githubProvider.ts`
+- `packages/github/src/startWorkAction.ts`
+
+### Decision Record
+
+Test patterns documented in `.squad/decisions.md` under "Test Update Patterns" (2026-03-25).
+
+
