@@ -9,7 +9,13 @@ vi.mock('child_process', () => ({
   }),
 }));
 
+// Mock fs
+vi.mock('fs', () => ({
+  existsSync: vi.fn(() => false),
+}));
+
 import { execFile } from 'child_process';
+import * as fs from 'fs';
 
 function createWorkItem(overrides: Partial<any> = {}) {
   return {
@@ -38,10 +44,13 @@ describe('StartWorkAction', () => {
       { uri: { fsPath: '/mock/workspace' } },
     ];
 
-    // Reset execFile mock
+    // Reset execFile mock to succeed with empty output
     vi.mocked(execFile).mockImplementation(((cmd: string, args: string[], opts: any, cb: Function) => {
-      cb(null, '', '');
+      cb(null, { stdout: '', stderr: '' }, '');
     }) as any);
+
+    // Reset fs.existsSync to return false (directory doesn't exist)
+    vi.mocked(fs.existsSync).mockReturnValue(false);
   });
 
   describe('canRun', () => {
@@ -77,20 +86,26 @@ describe('StartWorkAction', () => {
       const item = createWorkItem({ title: '#123: Fix login redirect bug' });
       await action.run(item);
 
-      expect(execFile).toHaveBeenCalledTimes(2);
+      expect(execFile).toHaveBeenCalledTimes(3);
 
-      // First call: create branch
+      // First call: check if branch exists (C6 fix)
       const firstCall = vi.mocked(execFile).mock.calls[0];
       expect(firstCall[0]).toBe('git');
-      expect(firstCall[1]).toEqual(['branch', 'issue-123-fix-login-redirect-bug']);
+      expect(firstCall[1]).toEqual(['branch', '--list', 'issue-123-fix-login-redirect-bug']);
       expect(firstCall[2]).toEqual({ cwd: '/mock/workspace' });
 
-      // Second call: create worktree
+      // Second call: create branch
       const secondCall = vi.mocked(execFile).mock.calls[1];
       expect(secondCall[0]).toBe('git');
-      expect(secondCall[1]).toEqual([
+      expect(secondCall[1]).toEqual(['branch', 'issue-123-fix-login-redirect-bug']);
+      expect(secondCall[2]).toEqual({ cwd: '/mock/workspace' });
+
+      // Third call: create worktree (C7 fix: uses path.join)
+      const thirdCall = vi.mocked(execFile).mock.calls[2];
+      expect(thirdCall[0]).toBe('git');
+      expect(thirdCall[1]).toEqual([
         'worktree', 'add',
-        '/mock/workspace/../issue-123-fix-login-redirect-bug',
+        '\\mock\\issue-123-fix-login-redirect-bug',
         'issue-123-fix-login-redirect-bug',
       ]);
     });
@@ -99,7 +114,8 @@ describe('StartWorkAction', () => {
       const item = createWorkItem({ title: '#456: Add User Authentication!!' });
       await action.run(item);
 
-      const branchCall = vi.mocked(execFile).mock.calls[0];
+      // Second call is the branch creation (first is branch check)
+      const branchCall = vi.mocked(execFile).mock.calls[1];
       expect(branchCall[1]).toEqual(['branch', 'issue-456-add-user-authentication']);
     });
 
@@ -120,7 +136,8 @@ describe('StartWorkAction', () => {
       const item = createWorkItem({ title: '#123: Fix bug' });
       await action.run(item);
 
-      expect(Uri.file).toHaveBeenCalledWith('/mock/workspace/../issue-123-fix-bug');
+      // C7 fix: now uses path.join(path.dirname(...), branchName)
+      expect(Uri.file).toHaveBeenCalledWith('\\mock\\issue-123-fix-bug');
       expect(commands.executeCommand).toHaveBeenCalledWith(
         'vscode.openFolder',
         expect.anything(),
@@ -133,7 +150,7 @@ describe('StartWorkAction', () => {
       await action.run(item);
 
       expect(window.showInformationMessage).toHaveBeenCalledWith(
-        expect.stringContaining('issue-123-fix-bug'),
+        'WorkCenter: Created worktree for issue-123-fix-bug',
       );
     });
 
@@ -179,6 +196,68 @@ describe('StartWorkAction', () => {
       expect(window.showErrorMessage).toHaveBeenCalledWith(
         expect.stringContaining('git branch failed'),
       );
+    });
+
+    it('shows error when branch already exists', async () => {
+      // Mock branch --list to return existing branch
+      vi.mocked(execFile).mockImplementation(((cmd: string, args: string[], opts: any, cb: Function) => {
+        if (args[0] === 'branch' && args[1] === '--list') {
+          cb(null, { stdout: 'issue-123-fix-bug\n', stderr: '' }, '');
+        } else {
+          cb(null, { stdout: '', stderr: '' }, '');
+        }
+      }) as any);
+
+      const item = createWorkItem({ title: '#123: Fix bug' });
+      await action.run(item);
+
+      expect(window.showErrorMessage).toHaveBeenCalledWith(
+        'Branch "issue-123-fix-bug" already exists.',
+      );
+      // Should not attempt to create branch or worktree
+      expect(execFile).toHaveBeenCalledTimes(1);
+    });
+
+    it('shows error and deletes branch when worktree directory already exists', async () => {
+      // Mock fs.existsSync to return true (directory exists)
+      vi.mocked(fs.existsSync).mockReturnValue(true);
+
+      const item = createWorkItem({ title: '#123: Fix bug' });
+      await action.run(item);
+
+      expect(window.showErrorMessage).toHaveBeenCalledWith(
+        'Directory "\\mock\\issue-123-fix-bug" already exists.',
+      );
+      // Should delete the branch (I6 rollback fix)
+      expect(execFile).toHaveBeenCalledWith(
+        'git',
+        ['branch', '-D', 'issue-123-fix-bug'],
+        { cwd: '/mock/workspace' },
+        expect.any(Function),
+      );
+    });
+
+    it('deletes branch if worktree creation fails', async () => {
+      // Mock worktree add to fail
+      vi.mocked(execFile).mockImplementation(((cmd: string, args: string[], opts: any, cb: Function) => {
+        if (args[0] === 'worktree') {
+          cb(new Error('worktree add failed'), '', '');
+        } else {
+          cb(null, { stdout: '', stderr: '' }, '');
+        }
+      }) as any);
+
+      const item = createWorkItem({ title: '#123: Fix bug' });
+      await action.run(item);
+
+      expect(window.showErrorMessage).toHaveBeenCalledWith(
+        expect.stringContaining('worktree add failed'),
+      );
+      // Should rollback by deleting the branch (I6 fix)
+      const deleteCalls = vi.mocked(execFile).mock.calls.filter(
+        call => call[1]![0] === 'branch' && call[1]![1] === '-D'
+      );
+      expect(deleteCalls).toHaveLength(1);
     });
   });
 });

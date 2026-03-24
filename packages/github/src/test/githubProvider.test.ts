@@ -111,7 +111,7 @@ describe('GitHubIssueProvider', () => {
     );
     expect(listener).toHaveBeenCalledWith([
       expect.objectContaining({
-        externalId: 'github-issue-https://github.com/owner/repo/issues/42',
+        externalId: 'owner/repo#42',
         title: '#42: Global issue',
       }),
     ]);
@@ -130,7 +130,7 @@ describe('GitHubIssueProvider', () => {
     const items = listener.mock.calls[0][0];
     expect(items).toHaveLength(1);
     expect(items[0]).toEqual({
-      externalId: 'github-issue-https://github.com/owner/repo/issues/10',
+      externalId: 'owner/repo#10',
       title: '#10: My issue',
       description: 'Body for issue 10',
       url: 'https://github.com/owner/repo/issues/10',

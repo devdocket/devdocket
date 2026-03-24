@@ -228,7 +228,7 @@ describe('ProviderRegistry', () => {
     expect(all.get('jira')).toHaveLength(1);
   });
 
-  it('fires onDidChangeDiscoveredItems when provider discovers items', () => {
+  it('fires onDidChangeDiscoveredItems when provider discovers items', async () => {
     const provider = createMockProvider('gh');
     registry.register(provider);
 
@@ -236,10 +236,11 @@ describe('ProviderRegistry', () => {
     registry.onDidChangeDiscoveredItems(listener);
 
     provider.fireItems([{ externalId: '1', title: 'Item' }]);
-    expect(listener).toHaveBeenCalledTimes(1);
+    // handleDiscoveredItems is async, wait for it to settle (C1 fix)
+    await vi.waitFor(() => expect(listener).toHaveBeenCalledTimes(1));
 
     provider.fireItems([{ externalId: '2', title: 'Another' }]);
-    expect(listener).toHaveBeenCalledTimes(2);
+    await vi.waitFor(() => expect(listener).toHaveBeenCalledTimes(2));
   });
 
   it('keeps dismissed state when provider re-fires items', () => {
