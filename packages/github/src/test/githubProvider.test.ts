@@ -106,7 +106,7 @@ describe('GitHubIssueProvider', () => {
 
     expect(mockFetch).toHaveBeenCalledTimes(1);
     expect(mockFetch).toHaveBeenCalledWith(
-      'https://api.github.com/issues?filter=assigned&state=open&per_page=50',
+      'https://api.github.com/issues?filter=assigned&state=open&per_page=100',
       expect.any(Object),
     );
     expect(listener).toHaveBeenCalledWith([

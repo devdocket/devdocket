@@ -23,6 +23,7 @@ class MockThemeIcon {
 class MockMarkdownString {
   value = '';
   appendMarkdown(text: string) { this.value += text; }
+  appendText(text: string) { this.value += text; }
 }
 
 const TreeItemCollapsibleState = {
