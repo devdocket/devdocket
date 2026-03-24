@@ -29,6 +29,7 @@ interface GitHubIssue {
   body?: string;
   html_url: string;
   repository_url: string;
+  pull_request?: unknown;
 }
 
 export class GitHubIssueProvider implements WorkCenterProvider {
@@ -163,7 +164,10 @@ export class GitHubIssueProvider implements WorkCenterProvider {
       return { issues: [], failed: true };
     }
 
-    return { issues: (await response.json()) as GitHubIssue[], failed: false };
+    const items = (await response.json()) as GitHubIssue[];
+    // Filter out pull requests (GitHub /issues endpoint returns both issues and PRs)
+    const issues = items.filter(item => !item.pull_request);
+    return { issues, failed: false };
   }
 
   private async fetchAllAssignedIssues(token: string): Promise<{ issues: GitHubIssue[]; failed: boolean }> {
@@ -184,7 +188,10 @@ export class GitHubIssueProvider implements WorkCenterProvider {
       return { issues: [], failed: true };
     }
 
-    return { issues: (await response.json()) as GitHubIssue[], failed: false };
+    const items = (await response.json()) as GitHubIssue[];
+    // Filter out pull requests (GitHub /issues endpoint returns both issues and PRs)
+    const issues = items.filter(item => !item.pull_request);
+    return { issues, failed: false };
   }
 
   dispose(): void {
