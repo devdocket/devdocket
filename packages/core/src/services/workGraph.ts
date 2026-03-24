@@ -73,8 +73,8 @@ export class WorkGraph {
   }
 
   async deleteItem(id: string): Promise<void> {
-    this.items.delete(id);
     await this.store.delete(id);
+    this.items.delete(id);
     this._onDidChange.fire();
   }
 
