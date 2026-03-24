@@ -4,7 +4,6 @@ import { GitHubIssueProvider } from '../githubProvider';
 
 // Mock global fetch
 const mockFetch = vi.fn();
-vi.stubGlobal('fetch', mockFetch);
 
 function createMockIssue(number: number, title: string, repo = 'owner/repo') {
   return {
@@ -21,6 +20,7 @@ describe('GitHubIssueProvider', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.stubGlobal('fetch', mockFetch);
     provider = new GitHubIssueProvider();
 
     // Default: auth session returns a token
@@ -39,6 +39,7 @@ describe('GitHubIssueProvider', () => {
 
   afterEach(() => {
     provider.dispose();
+    vi.unstubAllGlobals();
   });
 
   it('does nothing when no auth session exists', async () => {
