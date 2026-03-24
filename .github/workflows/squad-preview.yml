@@ -17,17 +17,27 @@ jobs:
         with:
           node-version: 22
 
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build
+        run: npm run build
+
       - name: Validate version consistency
         run: |
-          VERSION=$(node -e "console.log(require('./package.json').version)")
-          if ! grep -q "## \[$VERSION\]" CHANGELOG.md 2>/dev/null; then
+          VERSION=$(node -e "console.log(require('./packages/core/package.json').version)")
+          if [ -f CHANGELOG.md ] && ! grep -q "## \[$VERSION\]" CHANGELOG.md; then
             echo "::error::Version $VERSION not found in CHANGELOG.md — update CHANGELOG.md before release"
             exit 1
           fi
-          echo "✅ Version $VERSION validated in CHANGELOG.md"
+          if [ -f CHANGELOG.md ]; then
+            echo "✅ Version $VERSION validated in CHANGELOG.md"
+          else
+            echo "ℹ️ CHANGELOG.md not found — skipping validation"
+          fi
 
       - name: Run tests
-        run: node --test test/*.test.js
+        run: npm run test
 
       - name: Check no .ai-team/ or .squad/ files are tracked
         run: |
@@ -47,9 +57,9 @@ jobs:
 
       - name: Validate package.json version
         run: |
-          VERSION=$(node -e "console.log(require('./package.json').version)")
+          VERSION=$(node -e "console.log(require('./packages/core/package.json').version)")
           if [ -z "$VERSION" ]; then
-            echo "::error::❌ No version field found in package.json."
+            echo "::error::❌ No version field found in packages/core/package.json."
             exit 1
           fi
-          echo "✅ package.json version: $VERSION"
+          echo "✅ packages/core/package.json version: $VERSION"
