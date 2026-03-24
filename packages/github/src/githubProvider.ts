@@ -146,8 +146,9 @@ export class GitHubIssueProvider implements WorkCenterProvider {
   }
 
   private async fetchRepoIssues(token: string, repo: string): Promise<{ issues: GitHubIssue[]; failed: boolean }> {
+    // GitHub API max per_page is 100; pagination for >100 items is a future enhancement
     const response = await fetch(
-      `https://api.github.com/repos/${repo}/issues?assignee=@me&state=open&per_page=50`,
+      `https://api.github.com/repos/${repo}/issues?assignee=@me&state=open&per_page=100`,
       {
         headers: {
           Authorization: `Bearer ${token}`,
@@ -166,8 +167,9 @@ export class GitHubIssueProvider implements WorkCenterProvider {
   }
 
   private async fetchAllAssignedIssues(token: string): Promise<{ issues: GitHubIssue[]; failed: boolean }> {
+    // GitHub API max per_page is 100; pagination for >100 items is a future enhancement
     const response = await fetch(
-      'https://api.github.com/issues?filter=assigned&state=open&per_page=50',
+      'https://api.github.com/issues?filter=assigned&state=open&per_page=100',
       {
         headers: {
           Authorization: `Bearer ${token}`,
