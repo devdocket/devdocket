@@ -98,7 +98,7 @@ describe('StartWorkAction', () => {
       // Second call: create branch
       const secondCall = vi.mocked(execFile).mock.calls[1];
       expect(secondCall[0]).toBe('git');
-      expect(secondCall[1]).toEqual(['branch', 'issue-123-fix-login-redirect-bug', 'dev']);
+      expect(secondCall[1]).toEqual(['branch', 'issue-123-fix-login-redirect-bug', 'origin/dev']);
       expect(secondCall[2]).toEqual({ cwd: '/mock/workspace' });
 
       // Third call: create worktree (C7 fix: uses path.join)
@@ -117,7 +117,7 @@ describe('StartWorkAction', () => {
 
       // Second call is the branch creation (first is branch check)
       const branchCall = vi.mocked(execFile).mock.calls[1];
-      expect(branchCall[1]).toEqual(['branch', 'issue-456-add-user-authentication', 'dev']);
+      expect(branchCall[1]).toEqual(['branch', 'issue-456-add-user-authentication', 'origin/dev']);
     });
 
     it('truncates slug to 40 chars', async () => {
