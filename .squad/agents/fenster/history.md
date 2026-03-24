@@ -74,3 +74,28 @@ Key files:
 - Migration logic runs on activation before tree registration to seed existing WorkItems as 'accepted'
 - Items with no persisted state default to 'unseen' — allows new providers to introduce items without re-surfacing old ones
 
+## Code Review Fixes (2026-03-24)
+
+Fixed all Critical (C1-C7) and Important (I1-I8) issues from Keaton's review for PR #1:
+
+### Critical Patterns
+- **Loading flag management**: Must clear on both success and error paths. The `handleDiscoveredItems` method now clears loading flag after firing discovery event.
+- **Async state writes**: Always `await` state store writes in loops to prevent silent failures.
+- **Migration error handling**: Wrap each iteration in try-catch to continue even if individual setState fails.
+- **API type safety**: Use `typeof api.method !== 'function'` instead of truthiness checks to validate extension APIs.
+- **In-memory cache for storage**: Maintain cache as source of truth to avoid read-modify-write races. `JsonTaskStore` now uses `Map<string, WorkItem>` cache.
+- **Git branch safety**: Check if branch exists before creation (`git branch --list <name>`). Delete branch on worktree failure for rollback.
+- **Path construction**: Use `path.join()` for cross-platform paths, never string concatenation.
+
+### Important Patterns
+- **Auth cancellation**: GitHub auth can be cancelled by user. Catch rejection with `.catch(() => null)` and guard against null session.
+- **User-facing errors**: Accumulate fetch failures and show a single notification instead of just console logging.
+- **View message timing**: Check `getAllDiscoveredItems().size > 0` instead of `hasProviders` to avoid race where providers register before items load.
+- **Immutable updates**: Clone before mutating (`{ ...item, ...patch }`) to prevent inconsistent state if save fails.
+- **Rollback patterns**: If multi-step operation fails partway (branch created but worktree fails), clean up partial state.
+- **Defensive checks**: Check `fs.existsSync()` for worktree directory before attempting creation to give better error messages.
+- **Stable external IDs**: Use format like `owner/repo#123` that survives issue transfers, not `html_url` which can change.
+
+### Skipped Issues
+- **I3 (contextValue naming)**: Pattern `item.url ? 'inboxItem.hasUrl' : 'inboxItem'` was already consistent across views. No change needed.
+
