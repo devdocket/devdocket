@@ -1,6 +1,5 @@
 import * as vscode from 'vscode';
 import { WorkCenterProvider, DiscoveredItem } from '../api/types';
-import { WorkGraph } from './workGraph';
 import { DiscoveredStateStore } from '../storage/discoveredStateStore';
 
 export class ProviderRegistry {
@@ -22,7 +21,6 @@ export class ProviderRegistry {
   }
 
   constructor(
-    private readonly workGraph: WorkGraph,
     private readonly stateStore: DiscoveredStateStore,
   ) {}
 
