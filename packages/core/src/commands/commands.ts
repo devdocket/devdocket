@@ -88,7 +88,12 @@ export function registerCommands(
       }
     }),
     vscode.commands.registerCommand('workcenter.dismissFromInbox', async (item: InboxItem) => {
-      await stateStore.setState(item.providerId, item.externalId, 'dismissed');
+      try {
+        await stateStore.setState(item.providerId, item.externalId, 'dismissed');
+      } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : String(err);
+        vscode.window.showErrorMessage(`WorkCenter: Failed to dismiss item — ${message}`);
+      }
     }),
     vscode.commands.registerCommand('workcenter.acceptFromSources', async (item: SourceItemNode) => {
       const existing = workGraph.findItemByProvenance(item.providerId, item.externalId);
