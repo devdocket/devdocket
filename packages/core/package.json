@@ -24,7 +24,7 @@
         {
           "id": "workcenter",
           "title": "WorkCenter",
-          "icon": "$(tasklist)"
+          "icon": "resources/workcenter.svg"
         }
       ]
     },
