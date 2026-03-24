@@ -35,8 +35,20 @@ export class JsonTaskStore implements ITaskStore {
       if (this.cache === null) {
         await this.loadAll();
       }
-      this.cache!.set(item.id, item);
-      await this.writeFile(Array.from(this.cache!.values()));
+      const previousValue = this.cache!.get(item.id);
+      try {
+        const items = Array.from(this.cache!.values()).filter(i => i.id !== item.id);
+        items.push(item);
+        await this.writeFile(items);
+        this.cache!.set(item.id, item);
+      } catch (err) {
+        if (previousValue) {
+          this.cache!.set(item.id, previousValue);
+        } else {
+          this.cache!.delete(item.id);
+        }
+        throw err;
+      }
     });
   }
 
