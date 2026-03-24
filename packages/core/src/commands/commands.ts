@@ -2,7 +2,6 @@ import * as vscode from 'vscode';
 import { WorkItemState } from '../models/workItem';
 import { WorkGraph } from '../services/workGraph';
 import { ActionRegistry } from '../services/actionRegistry';
-import { ProviderRegistry } from '../services/providerRegistry';
 import { DiscoveredStateStore } from '../storage/discoveredStateStore';
 import { WorkItemEditorPanel } from '../views/workItemEditorPanel';
 import { InboxItem } from '../views/inboxTreeProvider';
@@ -12,7 +11,6 @@ export function registerCommands(
   context: vscode.ExtensionContext,
   workGraph: WorkGraph,
   actionRegistry: ActionRegistry,
-  providerRegistry: ProviderRegistry,
   stateStore: DiscoveredStateStore,
 ): void {
   context.subscriptions.push(
