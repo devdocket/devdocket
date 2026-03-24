@@ -71,12 +71,14 @@ export class SourcesTreeProvider implements vscode.TreeDataProvider<SourcesEleme
     if (!element) {
       const result: SourceProviderNode[] = [];
       const allItems = this.providerRegistry.getAllDiscoveredItems();
-      for (const [providerId] of allItems) {
-        result.push({
-          kind: 'provider',
-          providerId,
-          label: this.providerRegistry.getProviderLabel(providerId),
-        });
+      for (const [providerId, items] of allItems) {
+        if (items.length > 0) {
+          result.push({
+            kind: 'provider',
+            providerId,
+            label: this.providerRegistry.getProviderLabel(providerId),
+          });
+        }
       }
       return result;
     }
