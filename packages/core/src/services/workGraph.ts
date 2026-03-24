@@ -66,9 +66,9 @@ export class WorkGraph {
     if (!item) {
       throw new Error(`Work item not found: ${id}`);
     }
-    item.state = newState;
-    item.updatedAt = Date.now();
-    await this.store.save(item);
+    const updated = { ...item, state: newState, updatedAt: Date.now() };
+    await this.store.save(updated);
+    this.items.set(id, updated);
     this._onDidChange.fire();
   }
 
