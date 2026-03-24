@@ -28,7 +28,7 @@
             "type": "string"
           },
           "default": [],
-          "description": "GitHub repositories to watch (e.g. 'owner/repo'). Leave empty to use the current workspace repo."
+          "description": "GitHub repositories to watch (e.g. 'owner/repo'). Leave empty to fetch all assigned issues across all repositories."
         },
         "workcenterGithub.refreshIntervalSeconds": {
           "type": "number",
