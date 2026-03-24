@@ -89,24 +89,30 @@ describe('StartWorkAction', () => {
       const item = createWorkItem({ title: '#123: Fix login redirect bug' });
       await action.run(item);
 
-      expect(execFile).toHaveBeenCalledTimes(3);
+      expect(execFile).toHaveBeenCalledTimes(4);
 
-      // First call: check if branch exists (C6 fix)
+      // First call: check if branch exists
       const firstCall = vi.mocked(execFile).mock.calls[0];
       expect(firstCall[0]).toBe('git');
       expect(firstCall[1]).toEqual(['branch', '--list', 'issue-123-fix-login-redirect-bug']);
       expect(firstCall[2]).toEqual({ cwd: '/mock/workspace' });
 
-      // Second call: create branch
+      // Second call: verify origin/dev exists
       const secondCall = vi.mocked(execFile).mock.calls[1];
       expect(secondCall[0]).toBe('git');
-      expect(secondCall[1]).toEqual(['branch', 'issue-123-fix-login-redirect-bug', 'origin/dev']);
+      expect(secondCall[1]).toEqual(['rev-parse', '--verify', 'origin/dev']);
       expect(secondCall[2]).toEqual({ cwd: '/mock/workspace' });
 
-      // Third call: create worktree (C7 fix: uses path.join)
+      // Third call: create branch
       const thirdCall = vi.mocked(execFile).mock.calls[2];
       expect(thirdCall[0]).toBe('git');
-      expect(thirdCall[1]).toEqual([
+      expect(thirdCall[1]).toEqual(['branch', 'issue-123-fix-login-redirect-bug', 'origin/dev']);
+      expect(thirdCall[2]).toEqual({ cwd: '/mock/workspace' });
+
+      // Fourth call: create worktree
+      const fourthCall = vi.mocked(execFile).mock.calls[3];
+      expect(fourthCall[0]).toBe('git');
+      expect(fourthCall[1]).toEqual([
         'worktree', 'add',
         path.join('/mock', 'issue-123-fix-login-redirect-bug'),
         'issue-123-fix-login-redirect-bug',
@@ -117,8 +123,8 @@ describe('StartWorkAction', () => {
       const item = createWorkItem({ title: '#456: Add User Authentication!!', externalId: 'owner/repo#456' });
       await action.run(item);
 
-      // Second call is the branch creation (first is branch check)
-      const branchCall = vi.mocked(execFile).mock.calls[1];
+      // Third call is the branch creation (first is branch check, second is origin/dev verify)
+      const branchCall = vi.mocked(execFile).mock.calls[2];
       expect(branchCall[1]).toEqual(['branch', 'issue-456-add-user-authentication', 'origin/dev']);
     });
 
