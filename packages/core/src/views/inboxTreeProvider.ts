@@ -16,9 +16,10 @@ export class InboxTreeProvider implements vscode.TreeDataProvider<WorkItem> {
 
   getTreeItem(item: WorkItem): vscode.TreeItem {
     const treeItem = new vscode.TreeItem(item.title, vscode.TreeItemCollapsibleState.None);
+    treeItem.description = item.providerId;
     treeItem.tooltip = this.buildTooltip(item);
-    treeItem.contextValue = 'inboxItem';
-    treeItem.iconPath = new vscode.ThemeIcon('circle-filled');
+    treeItem.contextValue = item.url ? 'inboxItem.hasUrl' : 'inboxItem';
+    treeItem.iconPath = new vscode.ThemeIcon(item.providerId ? 'remote' : 'circle-filled');
     return treeItem;
   }
 

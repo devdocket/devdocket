@@ -22,3 +22,10 @@ Key files:
 - `package.json` — contributes views, commands, menus
 
 ## Learnings
+
+- GitHub package (`packages/github/`) vscode mock lives at `packages/github/src/test/__mocks__/vscode.ts`, aliased in `vitest.config.ts` — mirrors core mock pattern but adds `authentication`, `workspace`, `extensions` mocks.
+- Mock includes: `authentication.getSession` (resolves with `{ accessToken: 'mock-token' }`), `workspace.getConfiguration` (returns `.get(key, default)` stub), `workspace.workspaceFolders`, `extensions.getExtension`, `commands.executeCommand`, `Uri.file`, `window.showErrorMessage`.
+- Root `npm install` handles all workspace deps via npm workspaces. Root `npm run build` runs esbuild in both packages.
+- Both packages use esbuild with `--external:vscode --format=cjs --platform=node`.
+- Core has 38 tests (4 test files). GitHub package has test infra ready but no test files yet.
+- Key github source files: `githubProvider.ts` (fetches GitHub issues via REST API), `startWorkAction.ts` (creates git branch + worktree), `extension.ts` (acquires core API, registers provider + action).

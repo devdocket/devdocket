@@ -4,8 +4,9 @@
     {
       "type": "npm",
       "script": "watch",
+      "path": "packages/core",
       "isBackground": true,
-      "label": "npm: watch",
+      "label": "npm: watch - core",
       "problemMatcher": {
         "owner": "esbuild",
         "fileLocation": "absolute",

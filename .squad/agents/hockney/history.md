@@ -23,3 +23,27 @@ Key files:
 - `src/storage/jsonTaskStore.ts` — file-per-item persistence
 
 ## Learnings
+
+### Phase 2 Test Writing (2025)
+
+**Tests added:** 42 new tests across 4 files (19 core + 23 github)
+- `packages/core/src/test/providerRegistry.test.ts` — 11 tests
+- `packages/core/src/test/actionRegistry.test.ts` — 8 tests (7 + describe grouping)
+- `packages/github/src/test/githubProvider.test.ts` — 10 tests
+- `packages/github/src/test/startWorkAction.test.ts` — 13 tests
+
+**Mock patterns:**
+- `createMockProvider()` helper using vscode EventEmitter mock — enables `fireItems()` to simulate provider discovery events synchronously
+- `vi.stubGlobal('fetch', mockFetch)` for mocking global fetch in GitHub provider tests
+- `vi.mock('child_process')` with callback-style mock for `execFile` since StartWorkAction uses `promisify(execFile)`
+- Reused `createMockStore()` pattern from workGraph.test.ts for ProviderRegistry tests
+
+**Edge cases discovered:**
+- ProviderRegistry `handleDiscoveredItems` is synchronous (calls async `createItem`/`updateItem` without awaiting) — used `vi.waitFor()` to handle async settling in tests
+- StartWorkAction slug generation strips `#NNN: ` prefix, lowercases, replaces non-alphanumeric with hyphens, trims leading/trailing hyphens, truncates to 40 chars
+- GitHubIssueProvider truncates issue body to 200 chars for description field
+- Non-ok fetch responses return empty array (don't throw), so `onDidDiscoverItems` still fires with empty/partial results
+- `workspace.workspaceFolders` can be `undefined` OR empty array — both need guarding
+
+**Timer testing:**
+- `vi.useFakeTimers()` / `vi.useRealTimers()` for periodic refresh tests — must restore real timers in each test to avoid interference

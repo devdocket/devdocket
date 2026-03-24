@@ -47,19 +47,64 @@ class MockTreeItem {
 const window = {
   showInputBox: vi.fn(),
   showInformationMessage: vi.fn(),
+  showWarningMessage: vi.fn(),
+  showErrorMessage: vi.fn(),
+  showQuickPick: vi.fn(),
   registerTreeDataProvider: vi.fn(() => ({ dispose: vi.fn() })),
+  createWebviewPanel: vi.fn(),
 };
 
 const commands = {
   registerCommand: vi.fn(() => ({ dispose: vi.fn() })),
+  executeCommand: vi.fn(),
 };
+
+const env = {
+  openExternal: vi.fn(),
+};
+
+const Uri = {
+  parse: vi.fn((s: string) => ({ toString: () => s })),
+  file: vi.fn((path: string) => ({ fsPath: path, toString: () => `file://${path}` })),
+};
+
+const authentication = {
+  getSession: vi.fn().mockResolvedValue({ accessToken: 'mock-token' }),
+};
+
+const workspace = {
+  getConfiguration: vi.fn().mockReturnValue({
+    get: vi.fn((key: string, defaultValue?: any) => defaultValue),
+  }),
+  workspaceFolders: [{ uri: { fsPath: '/mock/workspace' } }],
+};
+
+const extensions = {
+  getExtension: vi.fn().mockReturnValue({
+    isActive: true,
+    exports: {},
+    activate: vi.fn(),
+  }),
+};
+
+class MockDisposable {
+  private callback: () => void;
+  constructor(callback: () => void) { this.callback = callback; }
+  dispose() { this.callback(); }
+}
 
 export {
   MockEventEmitter as EventEmitter,
   MockThemeIcon as ThemeIcon,
   MockMarkdownString as MarkdownString,
   MockTreeItem as TreeItem,
+  MockDisposable as Disposable,
   TreeItemCollapsibleState,
   window,
   commands,
+  env,
+  Uri,
+  authentication,
+  workspace,
+  extensions,
 };

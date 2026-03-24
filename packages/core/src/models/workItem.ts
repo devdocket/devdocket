@@ -13,6 +13,9 @@ export interface WorkItem {
   title: string;
   description?: string;
   state: WorkItemState;
+  providerId?: string;
+  externalId?: string;
+  url?: string;
   createdAt: number;
   updatedAt: number;
 }

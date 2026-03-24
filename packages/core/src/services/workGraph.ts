@@ -29,12 +29,18 @@ export class WorkGraph {
     return this.items.get(id);
   }
 
-  async createItem(input: WorkItemInput): Promise<WorkItem> {
+  async createItem(
+    input: WorkItemInput,
+    provenance?: { providerId: string; externalId: string; url?: string },
+  ): Promise<WorkItem> {
     const item: WorkItem = {
       id: generateId(),
       title: input.title,
       description: input.description,
       state: WorkItemState.New,
+      providerId: provenance?.providerId,
+      externalId: provenance?.externalId,
+      url: provenance?.url,
       createdAt: Date.now(),
       updatedAt: Date.now(),
     };

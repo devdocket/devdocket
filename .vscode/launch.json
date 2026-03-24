@@ -2,12 +2,12 @@
   "version": "0.2.0",
   "configurations": [
     {
-      "name": "Run Extension",
+      "name": "Run Core Extension",
       "type": "extensionHost",
       "request": "launch",
-      "args": ["--extensionDevelopmentPath=${workspaceFolder}"],
-      "outFiles": ["${workspaceFolder}/dist/**/*.js"],
-      "preLaunchTask": "npm: watch"
+      "args": ["--extensionDevelopmentPath=${workspaceFolder}/packages/core"],
+      "outFiles": ["${workspaceFolder}/packages/core/dist/**/*.js"],
+      "preLaunchTask": "npm: watch - core"
     }
   ]
 }
