@@ -42,6 +42,7 @@ export class GitHubIssueProvider implements WorkCenterProvider {
   readonly onDidDiscoverItems = this._onDidDiscoverItems.event;
 
   private refreshTimer: ReturnType<typeof setInterval> | undefined;
+  private _isRefreshing = false;
 
   startPeriodicRefresh(intervalSeconds: number): void {
     this.stopPeriodicRefresh();
@@ -82,6 +83,11 @@ export class GitHubIssueProvider implements WorkCenterProvider {
   }
 
   private async refreshInBackground(): Promise<void> {
+    if (this._isRefreshing) {
+      return;
+    }
+
+    this._isRefreshing = true;
     try {
       const session = await vscode.authentication.getSession('github', ['repo'], {
         createIfNone: false,
@@ -94,6 +100,8 @@ export class GitHubIssueProvider implements WorkCenterProvider {
       await this.fetchAndPublishIssues(session.accessToken, false);
     } catch (err) {
       console.error('WorkCenter GitHub: failed to fetch issues:', err);
+    } finally {
+      this._isRefreshing = false;
     }
   }
 
