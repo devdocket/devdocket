@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { window, workspace, commands, Uri } from 'vscode';
 import { StartWorkAction } from '../startWorkAction';
+import * as path from 'path';
 
 // Mock child_process
 vi.mock('child_process', () => ({
@@ -105,7 +106,7 @@ describe('StartWorkAction', () => {
       expect(thirdCall[0]).toBe('git');
       expect(thirdCall[1]).toEqual([
         'worktree', 'add',
-        '\\mock\\issue-123-fix-login-redirect-bug',
+        path.join('/mock', 'issue-123-fix-login-redirect-bug'),
         'issue-123-fix-login-redirect-bug',
       ]);
     });
@@ -137,7 +138,7 @@ describe('StartWorkAction', () => {
       await action.run(item);
 
       // C7 fix: now uses path.join(path.dirname(...), branchName)
-      expect(Uri.file).toHaveBeenCalledWith('\\mock\\issue-123-fix-bug');
+      expect(Uri.file).toHaveBeenCalledWith(path.join('/mock', 'issue-123-fix-bug'));
       expect(commands.executeCommand).toHaveBeenCalledWith(
         'vscode.openFolder',
         expect.anything(),
@@ -226,7 +227,7 @@ describe('StartWorkAction', () => {
       await action.run(item);
 
       expect(window.showErrorMessage).toHaveBeenCalledWith(
-        'Directory "\\mock\\issue-123-fix-bug" already exists.',
+        `Directory "${path.join('/mock', 'issue-123-fix-bug')}" already exists.`,
       );
       // Should delete the branch (I6 rollback fix)
       expect(execFile).toHaveBeenCalledWith(
