@@ -83,11 +83,13 @@ describe('SourcesTreeProvider', () => {
       expect(children).toHaveLength(2);
     });
 
-    it('should not show provider with empty items', () => {
+    it('should show provider with empty items', () => {
       registry._setItems('gh', []);
 
       const children = provider.getChildren();
-      expect(children).toEqual([]);
+      expect(children).toHaveLength(1);
+      expect(children[0].kind).toBe('provider');
+      expect((children[0] as SourceProviderNode).providerId).toBe('gh');
     });
   });
 

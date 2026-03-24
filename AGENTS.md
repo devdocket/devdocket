@@ -68,6 +68,14 @@ Providers emit `DiscoveredItem[]` via events. Actions declare `canRun(item)` and
 
 ## Key Conventions
 
+### Default branch is `dev`
+
+All work should be based from the `dev` branch. Create feature branches from `dev` and PR back to `dev`.
+
+### Storage writes are serialized
+
+Both `JsonTaskStore` and `DiscoveredStateStore` use a `writeQueue` (promise chain) to prevent concurrent writes from corrupting JSON files. Always follow this pattern for any new store.
+
 ### vscode module is mocked for tests
 
 Tests run outside VS Code via vitest. The `vscode` import is aliased to `src/test/__mocks__/vscode.ts` in each package's `vitest.config.ts`. When adding new VS Code APIs to source code, add corresponding mocks.
