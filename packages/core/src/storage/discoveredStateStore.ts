@@ -36,22 +36,18 @@ export class DiscoveredStateStore {
     }
     const k = this.key(providerId, externalId);
     const newRecord = { providerId, externalId, inboxState: state };
-    try {
-      await this.enqueue(() => {
-        const previousValue = this.cache.get(k);
-        this.cache.set(k, newRecord);
-        return this.writeFile().catch((err) => {
-          if (previousValue) {
-            this.cache.set(k, previousValue);
-          } else {
-            this.cache.delete(k);
-          }
-          throw err;
-        });
+    await this.enqueue(() => {
+      const previousValue = this.cache.get(k);
+      this.cache.set(k, newRecord);
+      return this.writeFile().catch((err) => {
+        if (previousValue) {
+          this.cache.set(k, previousValue);
+        } else {
+          this.cache.delete(k);
+        }
+        throw err;
       });
-    } catch (err) {
-      throw err;
-    }
+    });
     this._onDidChange.fire();
   }
 
@@ -59,28 +55,24 @@ export class DiscoveredStateStore {
     if (!this.loaded) {
       await this.load();
     }
-    try {
-      await this.enqueue(() => {
-        const rollback = new Map<string, DiscoveredStateRecord | undefined>();
-        for (const item of items) {
-          const k = this.key(item.providerId, item.externalId);
-          rollback.set(k, this.cache.get(k));
-          this.cache.set(k, { providerId: item.providerId, externalId: item.externalId, inboxState: item.state });
-        }
-        return this.writeFile().catch((err) => {
-          for (const [k, previousValue] of rollback) {
-            if (previousValue) {
-              this.cache.set(k, previousValue);
-            } else {
-              this.cache.delete(k);
-            }
+    await this.enqueue(() => {
+      const rollback = new Map<string, DiscoveredStateRecord | undefined>();
+      for (const item of items) {
+        const k = this.key(item.providerId, item.externalId);
+        rollback.set(k, this.cache.get(k));
+        this.cache.set(k, { providerId: item.providerId, externalId: item.externalId, inboxState: item.state });
+      }
+      return this.writeFile().catch((err) => {
+        for (const [k, previousValue] of rollback) {
+          if (previousValue) {
+            this.cache.set(k, previousValue);
+          } else {
+            this.cache.delete(k);
           }
-          throw err;
-        });
+        }
+        throw err;
       });
-    } catch (err) {
-      throw err;
-    }
+    });
     this._onDidChange.fire();
   }
 
