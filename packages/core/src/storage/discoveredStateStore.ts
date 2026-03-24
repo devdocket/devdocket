@@ -60,6 +60,7 @@ export class DiscoveredStateStore {
       }
     } catch (err: unknown) {
       if (isNodeError(err) && err.code === 'ENOENT') {
+        this.cache.clear();
         return;
       }
       throw err;
