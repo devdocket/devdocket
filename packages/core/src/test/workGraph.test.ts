@@ -128,7 +128,6 @@ describe('WorkGraph', () => {
   it('sets description on create', async () => {
     const item = await graph.createItem({
       title: 'Detailed',
-      type: 'Bug',
       description: 'A detailed bug report',
     });
 
