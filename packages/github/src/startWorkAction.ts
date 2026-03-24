@@ -99,7 +99,12 @@ export class StartWorkAction implements WorkCenterAction {
         });
       } catch (worktreeErr) {
         // Rollback: delete the branch we just created
-        await execFileAsync('git', ['branch', '-D', branchName], { cwd: repoPath });
+        try {
+          await execFileAsync('git', ['branch', '-D', branchName], { cwd: repoPath });
+        } catch (rollbackErr) {
+          const rollbackMessage = rollbackErr instanceof Error ? rollbackErr.message : String(rollbackErr);
+          vscode.window.showWarningMessage(`WorkCenter: Failed to delete branch during rollback — ${rollbackMessage}`);
+        }
         throw worktreeErr;
       }
 
