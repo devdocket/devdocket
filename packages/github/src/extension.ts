@@ -10,9 +10,17 @@ export async function activate(_context: vscode.ExtensionContext): Promise<void>
     return;
   }
 
-  const api = coreExtension.isActive
-    ? coreExtension.exports
-    : await coreExtension.activate();
+  let api;
+  try {
+    api = coreExtension.isActive
+      ? coreExtension.exports
+      : await coreExtension.activate();
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : String(err);
+    console.error(`WorkCenter GitHub: Failed to activate core extension — ${message}`);
+    vscode.window.showErrorMessage(`WorkCenter GitHub: Failed to activate core extension — ${message}`);
+    return;
+  }
 
   if (!api || typeof api.registerProvider !== 'function' || typeof api.registerAction !== 'function') {
     console.error('WorkCenter GitHub: core extension API not available');
