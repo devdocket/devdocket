@@ -99,7 +99,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<WorkCe
     { dispose: () => actionRegistry.dispose() },
   );
 
-  registerCommands(context, workGraph, actionRegistry, providerRegistry, stateStore);
+  registerCommands(context, workGraph, actionRegistry, stateStore);
 
   return api;
 }
