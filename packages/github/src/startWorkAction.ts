@@ -6,6 +6,7 @@ import * as fs from 'fs';
 
 const execFileAsync = promisify(execFile);
 
+// Re-declared to match core API contract — separate extension cannot import core types directly
 interface WorkItem {
   id: string;
   title: string;
@@ -18,6 +19,7 @@ interface WorkItem {
   updatedAt: number;
 }
 
+// Re-declared to match core API contract — separate extension cannot import core types directly
 interface WorkCenterAction {
   readonly id: string;
   readonly label: string;
