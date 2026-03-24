@@ -13,13 +13,16 @@ export interface InboxItem {
 export class InboxTreeProvider implements vscode.TreeDataProvider<InboxItem> {
   private readonly _onDidChangeTreeData = new vscode.EventEmitter<void>();
   readonly onDidChangeTreeData = this._onDidChangeTreeData.event;
+  private readonly disposables: vscode.Disposable[] = [];
 
   constructor(
     private readonly providerRegistry: ProviderRegistry,
     private readonly stateStore: DiscoveredStateStore,
   ) {
-    providerRegistry.onDidChangeDiscoveredItems(() => this._onDidChangeTreeData.fire());
-    stateStore.onDidChange(() => this._onDidChangeTreeData.fire());
+    this.disposables.push(
+      providerRegistry.onDidChangeDiscoveredItems(() => this._onDidChangeTreeData.fire()),
+      stateStore.onDidChange(() => this._onDidChangeTreeData.fire())
+    );
   }
 
   refresh(): void { this._onDidChangeTreeData.fire(); }
@@ -60,5 +63,8 @@ export class InboxTreeProvider implements vscode.TreeDataProvider<InboxItem> {
     return md;
   }
 
-  dispose(): void { this._onDidChangeTreeData.dispose(); }
+  dispose(): void {
+    this._onDidChangeTreeData.dispose();
+    this.disposables.forEach(d => d.dispose());
+  }
 }
