@@ -155,15 +155,25 @@ export class GitHubIssueProvider implements WorkCenterProvider {
     repos: string[],
   ): Promise<{ issues: GitHubIssue[]; failures: string[] }> {
     if (repos.length > 0) {
+      const results = await Promise.allSettled(
+        repos.map(repo => this.fetchRepoIssues(token, repo))
+      );
+
       const allIssues: GitHubIssue[] = [];
       const failures: string[] = [];
-      for (const repo of repos) {
-        const { issues, failed } = await this.fetchRepoIssues(token, repo);
-        allIssues.push(...issues);
-        if (failed) {
-          failures.push(repo);
+
+      results.forEach((result, index) => {
+        if (result.status === 'fulfilled') {
+          const { issues, failed } = result.value;
+          allIssues.push(...issues);
+          if (failed) {
+            failures.push(repos[index]);
+          }
+        } else {
+          failures.push(repos[index]);
         }
-      }
+      });
+
       return { issues: allIssues, failures };
     }
 
