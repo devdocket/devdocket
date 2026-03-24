@@ -37,8 +37,13 @@ export class WorkItemEditorPanel {
     this.update();
 
     this.panel.webview.onDidReceiveMessage(async (msg) => {
-      if (msg.type === 'autosave') {
-        await this.saveData(msg.data);
+      try {
+        if (msg.type === 'autosave') {
+          await this.saveData(msg.data);
+        }
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        vscode.window.showErrorMessage(`Failed to save work item: ${message}`);
       }
     });
 
