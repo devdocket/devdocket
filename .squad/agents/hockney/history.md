@@ -24,7 +24,7 @@ Key files:
 
 ## Learnings
 
-### Phase 2 Test Writing (2025)
+### Phase 2 Test Writing (2026-03-24)
 
 **Tests added:** 42 new tests across 4 files (19 core + 23 github)
 - `packages/core/src/test/providerRegistry.test.ts` — 11 tests
@@ -47,3 +47,10 @@ Key files:
 
 **Timer testing:**
 - `vi.useFakeTimers()` / `vi.useRealTimers()` for periodic refresh tests — must restore real timers in each test to avoid interference
+
+## Phase 2 Completion (2026-03-24)
+
+**Status:** COMPLETE — Test suite expanded to 61 tests, all passing.
+- Wrote 42 new tests across 4 files (providerRegistry, actionRegistry, githubProvider, startWorkAction)
+- Total: 61 tests passing (19 existing core + 23 new core/github)
+- Covered provider discovery, action invocation, GitHub REST API, git operations, edge cases (truncation, non-ok responses, async handling)

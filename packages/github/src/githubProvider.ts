@@ -58,7 +58,7 @@ export class GitHubIssueProvider implements WorkCenterProvider {
   async refresh(): Promise<void> {
     try {
       const session = await vscode.authentication.getSession('github', ['repo'], {
-        createIfNone: false,
+        createIfNone: true,
       });
       if (!session) {
         return;

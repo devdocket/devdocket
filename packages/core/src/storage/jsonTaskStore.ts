@@ -42,9 +42,9 @@ export class JsonTaskStore implements ITaskStore {
   private async writeFile(items: WorkItem[]): Promise<void> {
     const dir = path.dirname(this.filePath);
     await fs.mkdir(dir, { recursive: true });
-    const tempPath = this.filePath + '.tmp';
-    await fs.writeFile(tempPath, JSON.stringify(items, null, 2), 'utf-8');
-    await fs.rename(tempPath, this.filePath);
+    const data = JSON.stringify(items, null, 2);
+    // Write directly — avoid temp+rename which can corrupt on Windows
+    await fs.writeFile(this.filePath, data, 'utf-8');
   }
 }
 

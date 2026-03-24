@@ -14,7 +14,9 @@
   "extensionDependencies": [
     "mthalman.workcenter"
   ],
-  "activationEvents": [],
+  "activationEvents": [
+    "onStartupFinished"
+  ],
   "main": "./dist/extension.js",
   "contributes": {
     "configuration": {
