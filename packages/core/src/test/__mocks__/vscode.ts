@@ -50,6 +50,7 @@ const window = {
   showWarningMessage: vi.fn(),
   showQuickPick: vi.fn(),
   registerTreeDataProvider: vi.fn(() => ({ dispose: vi.fn() })),
+  createTreeView: vi.fn(() => ({ dispose: vi.fn(), message: undefined })),
   createWebviewPanel: vi.fn(),
 };
 

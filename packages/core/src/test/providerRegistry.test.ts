@@ -15,6 +15,22 @@ function createMockStore(): ITaskStore {
   };
 }
 
+function createMockStateStore() {
+  const cache = new Map<string, string>();
+  return {
+    getState: vi.fn((providerId: string, externalId: string) =>
+      cache.get(`${providerId}::${externalId}`) as any,
+    ),
+    setState: vi.fn(async (providerId: string, externalId: string, state: string) => {
+      cache.set(`${providerId}::${externalId}`, state);
+    }),
+    load: vi.fn(async () => {}),
+    loadAll: vi.fn(async () => []),
+    onDidChange: vi.fn(() => ({ dispose: vi.fn() })),
+    dispose: vi.fn(),
+  };
+}
+
 function createMockProvider(id: string): WorkCenterProvider & { fireItems: (items: DiscoveredItem[]) => void } {
   const emitter = new EventEmitter<DiscoveredItem[]>();
   return {
@@ -29,13 +45,15 @@ function createMockProvider(id: string): WorkCenterProvider & { fireItems: (item
 describe('ProviderRegistry', () => {
   let store: ITaskStore;
   let graph: WorkGraph;
+  let stateStore: ReturnType<typeof createMockStateStore>;
   let registry: ProviderRegistry;
 
   beforeEach(async () => {
     store = createMockStore();
     graph = new WorkGraph(store);
     await graph.load();
-    registry = new ProviderRegistry(graph);
+    stateStore = createMockStateStore();
+    registry = new ProviderRegistry(graph, stateStore);
   });
 
   it('stores the provider and returns a Disposable on register', () => {
@@ -82,7 +100,7 @@ describe('ProviderRegistry', () => {
     expect(registry.getProvider('nonexistent')).toBeUndefined();
   });
 
-  it('creates WorkItems in the WorkGraph when provider fires onDidDiscoverItems', async () => {
+  it('stores discovered items in memory when provider fires onDidDiscoverItems', () => {
     const provider = createMockProvider('gh');
     registry.register(provider);
 
@@ -91,46 +109,30 @@ describe('ProviderRegistry', () => {
       { externalId: 'issue-2', title: 'Feature', url: 'https://github.com/issue/2' },
     ]);
 
-    // Allow async createItem calls to settle
-    await vi.waitFor(() => {
-      const items = graph.getAll();
-      expect(items).toHaveLength(2);
-    });
-
-    const items = graph.getAll();
+    const items = registry.getDiscoveredItems('gh');
+    expect(items).toHaveLength(2);
     expect(items[0].title).toBe('Bug fix');
-    expect(items[0].providerId).toBe('gh');
     expect(items[0].externalId).toBe('issue-1');
     expect(items[1].title).toBe('Feature');
   });
 
-  it('updates existing items instead of duplicating when same providerId+externalId fires again', async () => {
+  it('replaces discovered items on re-discovery', () => {
     const provider = createMockProvider('gh');
     registry.register(provider);
 
-    // First discovery
     provider.fireItems([
       { externalId: 'issue-1', title: 'Original title', description: 'Original desc' },
     ]);
 
-    await vi.waitFor(() => {
-      expect(graph.getAll()).toHaveLength(1);
-    });
+    expect(registry.getDiscoveredItems('gh')).toHaveLength(1);
 
-    const originalId = graph.getAll()[0].id;
-
-    // Second discovery with updated title
     provider.fireItems([
       { externalId: 'issue-1', title: 'Updated title', description: 'Updated desc' },
     ]);
 
-    await vi.waitFor(() => {
-      expect(graph.getAll()[0].title).toBe('Updated title');
-    });
-
-    const items = graph.getAll();
+    const items = registry.getDiscoveredItems('gh');
     expect(items).toHaveLength(1);
-    expect(items[0].id).toBe(originalId);
+    expect(items[0].title).toBe('Updated title');
     expect(items[0].description).toBe('Updated desc');
   });
 
@@ -171,5 +173,102 @@ describe('ProviderRegistry', () => {
 
     expect(registry.getProvider('p1')).toBeUndefined();
     expect(registry.getProvider('p2')).toBeUndefined();
+  });
+
+  it('sets unseen state for newly discovered items', () => {
+    const provider = createMockProvider('gh');
+    registry.register(provider);
+
+    provider.fireItems([
+      { externalId: 'issue-1', title: 'Bug fix' },
+    ]);
+
+    expect(stateStore.setState).toHaveBeenCalledWith('gh', 'issue-1', 'unseen');
+  });
+
+  it('does not overwrite existing state on re-discovery', () => {
+    const provider = createMockProvider('gh');
+    registry.register(provider);
+
+    // Simulate item already accepted
+    stateStore.getState.mockReturnValueOnce('accepted');
+
+    provider.fireItems([
+      { externalId: 'issue-1', title: 'Bug fix' },
+    ]);
+
+    // setState should not be called since state already exists
+    expect(stateStore.setState).not.toHaveBeenCalled();
+  });
+
+  it('returns provider label from getProviderLabel', () => {
+    const provider = createMockProvider('gh');
+    registry.register(provider);
+
+    expect(registry.getProviderLabel('gh')).toBe('Provider gh');
+    expect(registry.getProviderLabel('unknown')).toBe('unknown');
+  });
+
+  it('returns empty array from getDiscoveredItems for unknown provider', () => {
+    expect(registry.getDiscoveredItems('nonexistent')).toEqual([]);
+  });
+
+  it('returns full map from getAllDiscoveredItems with multiple providers', () => {
+    const p1 = createMockProvider('gh');
+    const p2 = createMockProvider('jira');
+    registry.register(p1);
+    registry.register(p2);
+
+    p1.fireItems([{ externalId: '1', title: 'GH item' }]);
+    p2.fireItems([{ externalId: '2', title: 'Jira item' }]);
+
+    const all = registry.getAllDiscoveredItems();
+    expect(all.size).toBe(2);
+    expect(all.get('gh')).toHaveLength(1);
+    expect(all.get('jira')).toHaveLength(1);
+  });
+
+  it('fires onDidChangeDiscoveredItems when provider discovers items', () => {
+    const provider = createMockProvider('gh');
+    registry.register(provider);
+
+    const listener = vi.fn();
+    registry.onDidChangeDiscoveredItems(listener);
+
+    provider.fireItems([{ externalId: '1', title: 'Item' }]);
+    expect(listener).toHaveBeenCalledTimes(1);
+
+    provider.fireItems([{ externalId: '2', title: 'Another' }]);
+    expect(listener).toHaveBeenCalledTimes(2);
+  });
+
+  it('keeps dismissed state when provider re-fires items', () => {
+    const provider = createMockProvider('gh');
+    registry.register(provider);
+
+    // First discovery — item gets 'unseen'
+    provider.fireItems([{ externalId: 'issue-1', title: 'Bug' }]);
+    expect(stateStore.setState).toHaveBeenCalledWith('gh', 'issue-1', 'unseen');
+
+    stateStore.setState.mockClear();
+    // Simulate state is now 'dismissed'
+    stateStore.getState.mockReturnValue('dismissed');
+
+    // Provider re-fires the same item
+    provider.fireItems([{ externalId: 'issue-1', title: 'Bug' }]);
+
+    // Should NOT overwrite dismissed state
+    expect(stateStore.setState).not.toHaveBeenCalled();
+  });
+
+  it('does not create WorkItems on workGraph when provider fires', async () => {
+    const createSpy = vi.spyOn(graph, 'createItem');
+    const provider = createMockProvider('gh');
+    registry.register(provider);
+
+    provider.fireItems([{ externalId: '1', title: 'Discovered' }]);
+
+    expect(createSpy).not.toHaveBeenCalled();
+    createSpy.mockRestore();
   });
 });

@@ -5,6 +5,7 @@ import { ITaskStore } from './taskStore';
 
 export class JsonTaskStore implements ITaskStore {
   private readonly filePath: string;
+  private writeQueue: Promise<void> = Promise.resolve();
 
   constructor(storagePath: string) {
     this.filePath = path.join(storagePath, 'workitems.json');
@@ -23,28 +24,37 @@ export class JsonTaskStore implements ITaskStore {
   }
 
   async save(item: WorkItem): Promise<void> {
-    const items = await this.loadAll();
-    const index = items.findIndex((i) => i.id === item.id);
-    if (index >= 0) {
-      items[index] = item;
-    } else {
-      items.push(item);
-    }
-    await this.writeFile(items);
+    return this.enqueue(async () => {
+      const items = await this.loadAll();
+      const index = items.findIndex((i) => i.id === item.id);
+      if (index >= 0) {
+        items[index] = item;
+      } else {
+        items.push(item);
+      }
+      await this.writeFile(items);
+    });
   }
 
   async delete(id: string): Promise<void> {
-    const items = await this.loadAll();
-    const filtered = items.filter((i) => i.id !== id);
-    await this.writeFile(filtered);
+    return this.enqueue(async () => {
+      const items = await this.loadAll();
+      const filtered = items.filter((i) => i.id !== id);
+      await this.writeFile(filtered);
+    });
   }
 
   private async writeFile(items: WorkItem[]): Promise<void> {
     const dir = path.dirname(this.filePath);
     await fs.mkdir(dir, { recursive: true });
     const data = JSON.stringify(items, null, 2);
-    // Write directly — avoid temp+rename which can corrupt on Windows
     await fs.writeFile(this.filePath, data, 'utf-8');
+  }
+
+  // Serialize all write operations to prevent concurrent file corruption
+  private enqueue(op: () => Promise<void>): Promise<void> {
+    this.writeQueue = this.writeQueue.then(op, op);
+    return this.writeQueue;
   }
 }
 

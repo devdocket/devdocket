@@ -2,12 +2,18 @@ import * as vscode from 'vscode';
 import { WorkItemState } from '../models/workItem';
 import { WorkGraph } from '../services/workGraph';
 import { ActionRegistry } from '../services/actionRegistry';
+import { ProviderRegistry } from '../services/providerRegistry';
+import { DiscoveredStateStore } from '../storage/discoveredStateStore';
 import { WorkItemEditorPanel } from '../views/workItemEditorPanel';
+import { InboxItem } from '../views/inboxTreeProvider';
+import { SourceItemNode } from '../views/sourcesTreeProvider';
 
 export function registerCommands(
   context: vscode.ExtensionContext,
   workGraph: WorkGraph,
   actionRegistry: ActionRegistry,
+  providerRegistry: ProviderRegistry,
+  stateStore: DiscoveredStateStore,
 ): void {
   context.subscriptions.push(
     vscode.commands.registerCommand('workcenter.createItem', () => createItem(workGraph)),
@@ -39,6 +45,8 @@ export function registerCommands(
       const workItem = workGraph.getItem(item.id);
       if (workItem?.url) {
         vscode.env.openExternal(vscode.Uri.parse(workItem.url));
+      } else if (item.url) {
+        vscode.env.openExternal(vscode.Uri.parse(item.url));
       }
     }),
     vscode.commands.registerCommand('workcenter.runAction', async (item) => {
@@ -61,6 +69,23 @@ export function registerCommands(
           await action.run(workItem);
         }
       }
+    }),
+    vscode.commands.registerCommand('workcenter.acceptFromInbox', async (item: InboxItem) => {
+      await workGraph.createItem(
+        { title: item.title, description: item.description },
+        { providerId: item.providerId, externalId: item.externalId, url: item.url },
+      );
+      await stateStore.setState(item.providerId, item.externalId, 'accepted');
+    }),
+    vscode.commands.registerCommand('workcenter.dismissFromInbox', async (item: InboxItem) => {
+      await stateStore.setState(item.providerId, item.externalId, 'dismissed');
+    }),
+    vscode.commands.registerCommand('workcenter.acceptFromSources', async (item: SourceItemNode) => {
+      await workGraph.createItem(
+        { title: item.title, description: item.description },
+        { providerId: item.providerId, externalId: item.externalId, url: item.url },
+      );
+      await stateStore.setState(item.providerId, item.externalId, 'accepted');
     }),
   );
 }

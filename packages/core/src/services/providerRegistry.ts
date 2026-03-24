@@ -1,13 +1,30 @@
 import * as vscode from 'vscode';
 import { WorkCenterProvider, DiscoveredItem } from '../api/types';
-import { WorkItem, WorkItemState } from '../models/workItem';
 import { WorkGraph } from './workGraph';
+import { DiscoveredStateStore } from '../storage/discoveredStateStore';
 
 export class ProviderRegistry {
   private readonly providers = new Map<string, WorkCenterProvider>();
   private readonly subscriptions = new Map<string, { dispose(): void }>();
+  private readonly discoveredItems = new Map<string, DiscoveredItem[]>();
+  private readonly _onDidChangeDiscoveredItems = new vscode.EventEmitter<void>();
+  readonly onDidChangeDiscoveredItems = this._onDidChangeDiscoveredItems.event;
+  private readonly _onDidRegisterProvider = new vscode.EventEmitter<void>();
+  readonly onDidRegisterProvider = this._onDidRegisterProvider.event;
+  private _loading = false;
 
-  constructor(private readonly workGraph: WorkGraph) {}
+  get loading(): boolean {
+    return this._loading;
+  }
+
+  get hasProviders(): boolean {
+    return this.providers.size > 0;
+  }
+
+  constructor(
+    private readonly workGraph: WorkGraph,
+    private readonly stateStore: DiscoveredStateStore,
+  ) {}
 
   register(provider: WorkCenterProvider): vscode.Disposable {
     if (this.providers.has(provider.id)) {
@@ -15,16 +32,25 @@ export class ProviderRegistry {
     }
 
     this.providers.set(provider.id, provider);
+    if (!this.discoveredItems.has(provider.id)) {
+      this.discoveredItems.set(provider.id, []);
+    }
+    this._onDidRegisterProvider.fire();
 
     const sub = provider.onDidDiscoverItems((items) => {
       this.handleDiscoveredItems(provider.id, items);
     });
     this.subscriptions.set(provider.id, sub);
 
-    // Trigger initial refresh
-    provider.refresh().catch((err) => {
-      console.error(`WorkCenter: provider "${provider.id}" refresh failed:`, err);
-    });
+    this._loading = true;
+    this._onDidChangeDiscoveredItems.fire();
+    provider.refresh()
+      .catch((err) => {
+        console.error(`WorkCenter: provider "${provider.id}" refresh failed:`, err);
+        // Only clear loading on error — success clears in handleDiscoveredItems
+        this._loading = false;
+        this._onDidChangeDiscoveredItems.fire();
+      });
 
     return new vscode.Disposable(() => {
       this.providers.delete(provider.id);
@@ -37,6 +63,18 @@ export class ProviderRegistry {
     return this.providers.get(id);
   }
 
+  getProviderLabel(providerId: string): string {
+    return this.providers.get(providerId)?.label ?? providerId;
+  }
+
+  getDiscoveredItems(providerId: string): DiscoveredItem[] {
+    return this.discoveredItems.get(providerId) ?? [];
+  }
+
+  getAllDiscoveredItems(): Map<string, DiscoveredItem[]> {
+    return this.discoveredItems;
+  }
+
   async refreshAll(): Promise<void> {
     const promises = Array.from(this.providers.values()).map((p) =>
       p.refresh().catch((err) => {
@@ -47,27 +85,17 @@ export class ProviderRegistry {
   }
 
   private handleDiscoveredItems(providerId: string, items: DiscoveredItem[]): void {
-    for (const discovered of items) {
-      const existing = this.findExisting(providerId, discovered.externalId);
-      if (existing) {
-        // Update title/description if changed, but don't touch state
-        this.workGraph.updateItem(existing.id, {
-          title: discovered.title,
-          description: discovered.description,
+    this.discoveredItems.set(providerId, items);
+    for (const item of items) {
+      const existing = this.stateStore.getState(providerId, item.externalId);
+      if (existing === undefined) {
+        this.stateStore.setState(providerId, item.externalId, 'unseen').catch((err) => {
+          console.error('WorkCenter: failed to persist discovered state:', err);
         });
-      } else {
-        this.workGraph.createItem(
-          { title: discovered.title, description: discovered.description },
-          { providerId, externalId: discovered.externalId, url: discovered.url },
-        );
       }
     }
-  }
-
-  private findExisting(providerId: string, externalId: string): WorkItem | undefined {
-    return this.workGraph
-      .getAll()
-      .find((item) => item.providerId === providerId && item.externalId === externalId);
+    this._loading = false;
+    this._onDidChangeDiscoveredItems.fire();
   }
 
   dispose(): void {
@@ -76,5 +104,7 @@ export class ProviderRegistry {
     }
     this.providers.clear();
     this.subscriptions.clear();
+    this._onDidChangeDiscoveredItems.dispose();
+    this._onDidRegisterProvider.dispose();
   }
 }

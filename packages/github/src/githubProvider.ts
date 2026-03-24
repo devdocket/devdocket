@@ -13,6 +13,7 @@ interface DiscoveredItem {
   title: string;
   description?: string;
   url?: string;
+  group?: string;
 }
 
 interface WorkCenterProvider {
@@ -72,6 +73,7 @@ export class GitHubIssueProvider implements WorkCenterProvider {
         title: `#${issue.number}: ${issue.title}`,
         description: issue.body?.slice(0, 200),
         url: issue.html_url,
+        group: this.parseRepo(issue.html_url),
       }));
 
       this._onDidDiscoverItems.fire(items);
@@ -83,6 +85,11 @@ export class GitHubIssueProvider implements WorkCenterProvider {
   private getConfiguredRepos(): string[] {
     const config = vscode.workspace.getConfiguration('workcenterGithub');
     return config.get<string[]>('repos', []);
+  }
+
+  private parseRepo(htmlUrl: string): string {
+    const match = htmlUrl.match(/github\.com\/([^/]+\/[^/]+)/);
+    return match?.[1] ?? '';
   }
 
   private async fetchAssignedIssues(

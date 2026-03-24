@@ -13,6 +13,7 @@ export interface DiscoveredItem {
   title: string;
   description?: string;
   url?: string;
+  group?: string;
 }
 
 export interface WorkCenterProvider {
