@@ -6,22 +6,26 @@ How to decide who handles what.
 
 | Work Type | Route To | Examples |
 |-----------|----------|----------|
-| {domain 1} | {Name} | {example tasks} |
-| {domain 2} | {Name} | {example tasks} |
-| {domain 3} | {Name} | {example tasks} |
-| Code review | {Name} | Review PRs, check quality, suggest improvements |
-| Testing | {Name} | Write tests, find edge cases, verify fixes |
-| Scope & priorities | {Name} | What to build next, trade-offs, decisions |
-| Async issue work (bugs, tests, small features) | @copilot 🤖 | Well-defined tasks matching capability profile |
+| Architecture & design | Keaton | State machine changes, new service interfaces, extension point design |
+| Code review | Keaton | Review PRs, approve/reject implementations, quality gates |
+| Scope & priorities | Keaton | What to build next, trade-offs, phase planning |
+| Feature implementation | Fenster | New commands, views, webview panels, WorkGraph changes |
+| VS Code API integration | Fenster | TreeDataProvider, WebviewPanel, commands, context menus |
+| Storage & persistence | Fenster | JsonTaskStore, new storage backends, data migration |
+| Bug fixes | Fenster | Fix broken state transitions, UI glitches, data issues |
+| Testing | Hockney | Write tests, find edge cases, verify fixes, coverage gaps |
+| Test infrastructure | Hockney | Mocks, fixtures, test utilities, vitest config |
+| Quality review | Hockney | Review implementations for testability and coverage |
 | Session logging | Scribe | Automatic — never needs routing |
 
 ## Issue Routing
 
 | Label | Action | Who |
 |-------|--------|-----|
-| `squad` | Triage: analyze issue, evaluate @copilot fit, assign `squad:{member}` label | Lead |
-| `squad:{name}` | Pick up issue and complete the work | Named member |
-| `squad:copilot` | Assign to @copilot for autonomous work (if enabled) | @copilot 🤖 |
+| `squad` | Triage: analyze issue, assign `squad:{member}` label | Keaton |
+| `squad:keaton` | Architecture review or scope decision needed | Keaton |
+| `squad:fenster` | Feature implementation or bug fix | Fenster |
+| `squad:hockney` | Test coverage or quality review | Hockney |
 
 ### How Issue Assignment Works
 
