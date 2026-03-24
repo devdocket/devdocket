@@ -75,7 +75,7 @@ export class GitHubIssueProvider implements WorkCenterProvider {
         return;
       }
 
-      await this.fetchAndPublishIssues(session.accessToken);
+      await this.fetchAndPublishIssues(session.accessToken, true);
     } catch (err) {
       console.error('WorkCenter GitHub: failed to fetch issues:', err);
     }
@@ -91,13 +91,13 @@ export class GitHubIssueProvider implements WorkCenterProvider {
         return;
       }
 
-      await this.fetchAndPublishIssues(session.accessToken);
+      await this.fetchAndPublishIssues(session.accessToken, false);
     } catch (err) {
       console.error('WorkCenter GitHub: failed to fetch issues:', err);
     }
   }
 
-  private async fetchAndPublishIssues(accessToken: string): Promise<void> {
+  private async fetchAndPublishIssues(accessToken: string, isUserTriggered: boolean = false): Promise<void> {
     const repos = this.getConfiguredRepos();
     const { issues, failures } = await this.fetchAssignedIssues(accessToken, repos);
 
@@ -118,7 +118,11 @@ export class GitHubIssueProvider implements WorkCenterProvider {
       const message = failures.length === 1
         ? `Failed to fetch issues from ${failures[0]}`
         : `Failed to fetch issues from ${failures.length} repositories`;
-      vscode.window.showWarningMessage(`WorkCenter GitHub: ${message}`);
+      if (isUserTriggered) {
+        vscode.window.showWarningMessage(`WorkCenter GitHub: ${message}`);
+      } else {
+        console.warn(`WorkCenter GitHub: ${message}`);
+      }
     }
   }
 
