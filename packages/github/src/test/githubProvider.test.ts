@@ -194,7 +194,8 @@ describe('GitHubIssueProvider', () => {
   it('startPeriodicRefresh schedules a repeating timer', () => {
     vi.useFakeTimers();
 
-    const refreshSpy = vi.spyOn(provider, 'refresh').mockResolvedValue();
+    // Spy on the private refreshInBackground method that's called by the timer
+    const refreshSpy = vi.spyOn(provider as any, 'refreshInBackground').mockResolvedValue();
     provider.startPeriodicRefresh(60);
 
     // No immediate call — only on interval
