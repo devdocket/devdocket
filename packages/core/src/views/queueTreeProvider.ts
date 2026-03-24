@@ -5,9 +5,12 @@ import { WorkGraph } from '../services/workGraph';
 export class QueueTreeProvider implements vscode.TreeDataProvider<WorkItem> {
   private readonly _onDidChangeTreeData = new vscode.EventEmitter<void>();
   readonly onDidChangeTreeData = this._onDidChangeTreeData.event;
+  private readonly disposables: vscode.Disposable[] = [];
 
   constructor(private readonly workGraph: WorkGraph) {
-    workGraph.onDidChange(() => this._onDidChangeTreeData.fire());
+    this.disposables.push(
+      workGraph.onDidChange(() => this._onDidChangeTreeData.fire())
+    );
   }
 
   refresh(): void { this._onDidChangeTreeData.fire(); }
@@ -33,5 +36,8 @@ export class QueueTreeProvider implements vscode.TreeDataProvider<WorkItem> {
     return md;
   }
 
-  dispose(): void { this._onDidChangeTreeData.dispose(); }
+  dispose(): void {
+    this._onDidChangeTreeData.dispose();
+    this.disposables.forEach(d => d.dispose());
+  }
 }
