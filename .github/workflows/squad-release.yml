@@ -19,8 +19,14 @@ jobs:
         with:
           node-version: 22
 
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build
+        run: npm run build
+
       - name: Run tests
-        run: node --test test/*.test.js
+        run: npm run test
 
       - name: Validate version consistency
         run: |
