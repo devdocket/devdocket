@@ -37,7 +37,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<WorkCe
     }
   }
 
-  const providerRegistry = new ProviderRegistry(workGraph, stateStore);
+  const providerRegistry = new ProviderRegistry(stateStore);
   const actionRegistry = new ActionRegistry();
   const api = new WorkCenterApiImpl(providerRegistry, actionRegistry);
 
