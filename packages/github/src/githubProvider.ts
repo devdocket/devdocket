@@ -1,9 +1,11 @@
 import * as vscode from 'vscode';
 
+// Re-declared to match core API contract — separate extension cannot import core types directly
 interface Disposable {
   dispose(): void;
 }
 
+// Re-declared to match core API contract — separate extension cannot import core types directly
 interface Event<T> {
   (listener: (e: T) => void): Disposable;
 }
