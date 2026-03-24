@@ -1,17 +1,17 @@
-name: Squad CI
+name: CI
 
 on:
   pull_request:
-    branches: [dev, preview, main, insider]
+    branches: [dev, main]
     types: [opened, synchronize, reopened]
   push:
-    branches: [dev, insider]
+    branches: [dev]
 
 permissions:
   contents: read
 
 jobs:
-  test:
+  build-and-test:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -20,5 +20,11 @@ jobs:
         with:
           node-version: 22
 
-      - name: Run tests
-        run: node --test test/*.test.js
+      - name: Install dependencies
+        run: npm install
+
+      - name: Build
+        run: npm run build
+
+      - name: Test
+        run: npm run test
