@@ -58,7 +58,7 @@ describe('ProviderRegistry', () => {
     graph = new WorkGraph(store);
     await graph.load();
     stateStore = createMockStateStore();
-    registry = new ProviderRegistry(graph, stateStore);
+    registry = new ProviderRegistry(stateStore);
   });
 
   it('stores the provider and returns a Disposable on register', () => {
