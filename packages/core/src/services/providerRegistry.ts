@@ -33,7 +33,6 @@ export class ProviderRegistry {
     if (!this.discoveredItems.has(provider.id)) {
       this.discoveredItems.set(provider.id, []);
     }
-    this._onDidRegisterProvider.fire();
 
     const sub = provider.onDidDiscoverItems((items) => {
       void this.handleDiscoveredItems(provider.id, items).catch(err => console.error('WorkCenter: handleDiscoveredItems failed:', err));
@@ -41,6 +40,7 @@ export class ProviderRegistry {
     this.subscriptions.set(provider.id, sub);
 
     this._loadingProviders.add(provider.id);
+    this._onDidRegisterProvider.fire();
     this._onDidChangeDiscoveredItems.fire();
     provider.refresh()
       .catch((err) => {
