@@ -76,8 +76,9 @@ jobs:
               .filter(f => {
                 // .ai-team/** and .squad/** — ALL team state files, zero exceptions
                 if (f === '.ai-team' || f.startsWith('.ai-team/') || f === '.squad' || f.startsWith('.squad/')) return true;
-                // .ai-team-templates/** — Squad's own templates, stay on dev
+                // .ai-team-templates/** and .squad-templates/** — Squad's own templates, stay on dev
                 if (f === '.ai-team-templates' || f.startsWith('.ai-team-templates/')) return true;
+                if (f === '.squad-templates' || f.startsWith('.squad-templates/')) return true;
                 // team-docs/** — ALL internal team docs, zero exceptions
                 if (f.startsWith('team-docs/')) return true;
                 // docs/proposals/** — internal design proposals, stay on dev
