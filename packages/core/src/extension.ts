@@ -80,6 +80,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<WorkCe
 
   const providerRegSub = providerRegistry.onDidRegisterProvider(updateViewMessages);
   const discoveredSub = providerRegistry.onDidChangeDiscoveredItems(updateViewMessages);
+  const stateStoreSub = stateStore.onDidChange(updateViewMessages);
 
   context.subscriptions.push(
     inboxTreeView,
@@ -88,6 +89,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<WorkCe
     sourcesTreeView,
     discoveredSub,
     providerRegSub,
+    stateStoreSub,
     workGraphSub,
     { dispose: () => workGraph.dispose() },
     { dispose: () => stateStore.dispose() },
