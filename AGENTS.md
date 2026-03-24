@@ -1,4 +1,4 @@
-# WorkCenter — Copilot Instructions
+# WorkCenter VS Code Extension Agent Instructions
 
 ## Build & Test
 
@@ -68,10 +68,6 @@ Providers emit `DiscoveredItem[]` via events. Actions declare `canRun(item)` and
 
 ## Key Conventions
 
-### Storage writes are serialized
-
-Both `JsonTaskStore` and `DiscoveredStateStore` use a `writeQueue` (promise chain) to prevent concurrent writes from corrupting JSON files. Always follow this pattern for any new store.
-
 ### vscode module is mocked for tests
 
 Tests run outside VS Code via vitest. The `vscode` import is aliased to `src/test/__mocks__/vscode.ts` in each package's `vitest.config.ts`. When adding new VS Code APIs to source code, add corresponding mocks.
@@ -79,11 +75,3 @@ Tests run outside VS Code via vitest. The `vscode` import is aliased to `src/tes
 ### Provider items are references, not copies
 
 Items in Inbox and Sources are read live from the provider's in-memory data. The only persisted state is the `inboxState` enum. This keeps data fresh and avoids stale copies.
-
-### WorkItem IDs
-
-Generated as `wc-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`.
-
-### Tree view empty states
-
-All four views use `createTreeView` (not `registerTreeDataProvider`) and set `treeView.message` for empty/loading states. Follow this pattern for new views.
