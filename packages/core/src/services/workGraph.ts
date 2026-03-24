@@ -50,8 +50,8 @@ export class WorkGraph {
       createdAt: Date.now(),
       updatedAt: Date.now(),
     };
-    this.items.set(item.id, item);
     await this.store.save(item);
+    this.items.set(item.id, item);
     this._onDidChange.fire();
     return item;
   }
