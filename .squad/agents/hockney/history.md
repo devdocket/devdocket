@@ -54,3 +54,47 @@ Key files:
 - Wrote 42 new tests across 4 files (providerRegistry, actionRegistry, githubProvider, startWorkAction)
 - Total: 61 tests passing (19 existing core + 23 new core/github)
 - Covered provider discovery, action invocation, GitHub REST API, git operations, edge cases (truncation, non-ok responses, async handling)
+
+### Four-View Model Test Suite (2026-07-25)
+
+**Tests added:** 57 new tests across 5 files (4 new + 1 extended)
+- `packages/core/src/test/discoveredStateStore.test.ts` — 11 tests (CRUD, persistence, events, error handling)
+- `packages/core/src/test/inboxTreeProvider.test.ts` — 13 tests (filtering by inboxState, treeItem rendering, refresh events)
+- `packages/core/src/test/sourcesTreeProvider.test.ts` — 21 tests (hierarchical tree, groups, icons, all-state visibility)
+- `packages/core/src/test/migration.test.ts` — 7 tests (provider-backed WorkItem migration, skip manual items, idempotency)
+- `packages/core/src/test/providerRegistry.test.ts` — 5 new tests added (event firing, dismissed sticky, no WorkItem creation, getAllDiscoveredItems)
+
+**Total suite: 121 tests passing (98 core + 23 GitHub).**
+
+**Mock patterns:**
+- Created helper mocks with `_fire()` and `_setItems()` for tree provider tests — avoids needing real ProviderRegistry/DiscoveredStateStore
+- Used real filesystem (tmpdir) for DiscoveredStateStore tests (same pattern as jsonTaskStore.test.ts) — more reliable than mocking fs/promises
+- `createMockProviderRegistry()` with backing Map<string, DiscoveredItem[]> and EventEmitter for tree provider isolation
+- `createMockStateStore()` with backing Map<string, string> and EventEmitter for testing onDidChange subscriptions
+- Migration tested by extracting the for-loop logic from extension.ts into a standalone `runMigration()` function
+
+**Edge cases found:**
+- DiscoveredStateStore: corrupted JSON on disk throws (not silently ignored) — only ENOENT is handled gracefully
+- DiscoveredStateStore: `mkdir({ recursive: true })` creates nested storage directories on first write
+- InboxTreeProvider: items with `state === undefined` AND `state === 'unseen'` both show in inbox (missing = unseen contract)
+- SourcesTreeProvider: dismissed items show with `description: 'dismissed'` text and `circle-outline` icon (not `check`)
+- SourcesTreeProvider: empty provider arrays are excluded from top-level tree (no empty provider nodes)
+- Migration: items with providerId but no externalId are correctly skipped
+- ProviderRegistry: handleDiscoveredItems does NOT call workGraph.createItem (critical design change verified)
+
+## Test Architecture Learnings (Updated 2026-03-24)
+
+### Helper Mock Patterns
+- Helper mocks with `_fire()` and `_setItems()` allow tree provider tests to run in complete isolation from ProviderRegistry/DiscoveredStateStore
+- Real filesystem (tmpdir) more reliable than fs/promises mocking for stateful store tests — reduces brittleness from mock state misalignment
+- `createMockProviderRegistry()` and `createMockStateStore()` provide minimal interfaces sufficient for their consumers
+
+### Discovered Item State Contracts
+- Missing state (undefined in store) is semantically equivalent to 'unseen' — both filter to inbox
+- Empty provider arrays are culled from top-level tree to avoid visual clutter (Sources shows only providers with items)
+- Dismissed state is non-transient — provider refresh cannot clear it, only user action can (via accept)
+
+### Migration Logic Independence
+- Migration logic (`runMigration()`) extracted from extension.ts to standalone function for easier testing
+- Migration must run before tree providers are registered, ensuring no race conditions on cold start
+- Items with providerId but missing externalId are correctly skipped (malformed records from manual creation)
