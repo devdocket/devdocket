@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
-import { authentication, workspace, window } from 'vscode';
+import { authentication, window } from 'vscode';
 import { AdoWorkItemProvider } from '../adoWorkItemProvider';
 
 const mockFetch = vi.fn();
