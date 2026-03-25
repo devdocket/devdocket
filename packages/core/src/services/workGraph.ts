@@ -171,8 +171,9 @@ export class WorkGraph {
     const target = this.items.get(targetId);
     if (!dragged || !target) { return; }
     if (dragged.state !== target.state) { return; }
+    if (draggedId === targetId) { return; }
 
-    const siblings = this.getItemsByState(dragged.state)
+    const siblings= this.getItemsByState(dragged.state)
       .sort((a, b) => (a.sortOrder ?? Number.MAX_SAFE_INTEGER) - (b.sortOrder ?? Number.MAX_SAFE_INTEGER));
 
     const draggedIndex = siblings.findIndex(s => s.id === draggedId);
