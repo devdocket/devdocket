@@ -33,20 +33,21 @@ WorkCenter is a VS Code extension that acts as a **hub** for managing work items
 Providers (GitHub, future)          User (manual)
         │                                │
         ▼                                ▼
-  ProviderRegistry ──▶ Inbox ──▶ Queue ──▶ Focus
-  (live references)    (unseen)  (accepted) (in progress)
+  ProviderRegistry ──▶ Inbox ──▶ Queue ──▶ Focus ──▶ History
+  (live references)    (unseen)  (accepted) (in progress) (done/archived)
         │
         ▼
      Sources
   (browsable library)
 ```
 
-### Four views
+### Five views
 
 1. **Inbox** — Newly discovered provider items (state: `unseen`). Accept → Queue or Dismiss.
 2. **Queue** — User's curated backlog. Manual items land here directly.
 3. **Focus** — Active work (`InProgress`, `Blocked`, `WaitingOn`).
-4. **Sources** — Everything providers know about, grouped by provider → sub-group. Always browsable.
+4. **History** — Completed and archived items (`Done`, `Archived`).
+5. **Sources** — Everything providers know about, grouped by provider → sub-group. Always browsable.
 
 ### Two data stores (both JSON files in `globalStorageUri`)
 

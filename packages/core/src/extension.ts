@@ -85,7 +85,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<WorkCe
   const updateWorkViewMessages = () => {
     queueTreeView.message = queueProvider.getChildren().length > 0 ? undefined : 'No items in queue';
     focusTreeView.message = focusProvider.getChildren().length > 0 ? undefined : 'No active work';
-    historyTreeView.message = historyProvider.getChildren().length > 0 ? undefined : 'No completed items';
+    historyTreeView.message = historyProvider.getChildren().length > 0 ? undefined : 'No history items';
   };
   updateWorkViewMessages();
   const workGraphSub = workGraph.onDidChange(updateWorkViewMessages);
