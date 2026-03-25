@@ -8,7 +8,7 @@ This document describes the WorkCenter extension API for developers building pro
 
 Your extension must declare a dependency on WorkCenter so that VS Code activates WorkCenter first:
 
-```json
+```jsonc
 // package.json
 {
   "extensionDependencies": ["mthalman.workcenter"]
