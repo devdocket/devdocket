@@ -252,7 +252,7 @@ describe('InboxTreeProvider', () => {
 
       expect(treeItem.label).toBe('Bug');
       expect(treeItem.collapsibleState).toBe(TreeItemCollapsibleState.None);
-      expect((treeItem.iconPath as any).id).toBe('circle-filled');
+      expect((treeItem.iconPath as any).id).toBe('mail');
     });
 
     it('should render seen inbox item with circle-outline icon', () => {
