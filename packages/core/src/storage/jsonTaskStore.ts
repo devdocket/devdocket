@@ -28,12 +28,17 @@ export class JsonTaskStore implements ITaskStore {
         throw new Error('Failed to parse work items file');
       }
       // Migrate legacy 'description' field to 'notes'
+      let needsMigration = false;
       for (const item of items) {
         const legacy = item as WorkItem & { description?: string };
         if (legacy.description !== undefined && item.notes === undefined) {
           item.notes = legacy.description;
           delete legacy.description;
+          needsMigration = true;
         }
+      }
+      if (needsMigration) {
+        await this.writeFile(items);
       }
       this.cache = new Map(items.map((item) => [item.id, item]));
       return items;
