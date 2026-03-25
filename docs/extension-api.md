@@ -25,15 +25,37 @@ import * as vscode from 'vscode';
 export async function activate(context: vscode.ExtensionContext): Promise<void> {
   const coreExtension = vscode.extensions.getExtension('mthalman.workcenter');
   if (!coreExtension) {
-    console.error('WorkCenter core extension not found');
+    vscode.window.showErrorMessage('WorkCenter core extension not found. Please install and enable "mthalman.workcenter".');
     return;
   }
 
-  const api = coreExtension.isActive
-    ? coreExtension.exports
-    : await coreExtension.activate();
+  let api: unknown;
+  try {
+    api = coreExtension.isActive
+      ? coreExtension.exports
+      : await coreExtension.activate();
+  } catch (error) {
+    console.error('Failed to activate WorkCenter core extension', error);
+    vscode.window.showErrorMessage('Failed to activate WorkCenter core extension. See logs for details.');
+    return;
+  }
 
-  // api is a WorkCenterApi instance — use it to register providers and actions
+  if (
+    !api ||
+    typeof (api as any).registerProvider !== 'function' ||
+    typeof (api as any).registerAction !== 'function'
+  ) {
+    console.error('WorkCenter API is not in the expected shape', api);
+    vscode.window.showErrorMessage('WorkCenter API is unavailable or invalid. Please check that "mthalman.workcenter" is up to date.');
+    return;
+  }
+
+  const workCenterApi = api as {
+    registerProvider: (provider: unknown) => vscode.Disposable;
+    registerAction: (action: unknown) => vscode.Disposable;
+  };
+
+  // workCenterApi is a WorkCenterApi instance — use it to register providers and actions
 }
 ```
 
@@ -224,7 +246,7 @@ enum WorkItemState {
 }
 ```
 
-Items transition through these states as the user interacts with them in the UI. See [WorkItemState](#workitemstate) for the full list of states and their meanings.
+Items transition through these states as the user interacts with them in the UI. See [WorkItemState](#workitemstate) for the full list of states.
 
 ## Examples
 
