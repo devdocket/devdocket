@@ -159,13 +159,22 @@ describe('InboxTreeProvider', () => {
       expect((treeItem.iconPath as any).id).toBe('plug');
     });
 
-    it('should render inbox item with mail icon', () => {
+    it('should render unseen inbox item with circle-filled icon', () => {
       const item: InboxItem = { kind: 'item', providerId: 'gh', externalId: '1', title: 'Bug' };
       const treeItem = provider.getTreeItem(item);
 
       expect(treeItem.label).toBe('Bug');
       expect(treeItem.collapsibleState).toBe(TreeItemCollapsibleState.None);
-      expect((treeItem.iconPath as any).id).toBe('mail');
+      expect((treeItem.iconPath as any).id).toBe('circle-filled');
+    });
+
+    it('should render seen inbox item with circle-outline icon', () => {
+      const item: InboxItem = { kind: 'item', providerId: 'gh', externalId: '1', title: 'Bug' };
+      provider.markSeen('gh', '1');
+      const treeItem = provider.getTreeItem(item);
+
+      expect(treeItem.label).toBe('Bug');
+      expect((treeItem.iconPath as any).id).toBe('circle-outline');
     });
 
     it('should set contextValue with hasUrl when item has url', () => {
@@ -179,12 +188,55 @@ describe('InboxTreeProvider', () => {
     });
   });
 
+  describe('markSeen', () => {
+    it('should return true for a newly seen item', () => {
+      expect(provider.markSeen('gh', '1')).toBe(true);
+    });
+
+    it('should return false if item is already seen', () => {
+      provider.markSeen('gh', '1');
+      expect(provider.markSeen('gh', '1')).toBe(false);
+    });
+  });
+
   describe('events', () => {
     it('should refresh when providerRegistry fires change event', () => {
       const listener = vi.fn();
       provider.onDidChangeTreeData(listener);
       registry._fire();
       expect(listener).toHaveBeenCalledTimes(1);
+    });
+
+    it('should retain seenItems for items still in inbox after provider refresh', () => {
+      registry._setItems('gh', [{ externalId: '1', title: 'Bug' }]);
+      const item: InboxItem = { kind: 'item', providerId: 'gh', externalId: '1', title: 'Bug' };
+      provider.markSeen('gh', '1');
+
+      // Before refresh, item should be seen (circle-outline icon)
+      expect(provider.getTreeItem(item).label).toBe('Bug');
+      expect((provider.getTreeItem(item).iconPath as any).id).toBe('circle-outline');
+
+      // Provider refresh fires → item is still in inbox, so seenItems should be retained
+      registry._fire();
+
+      // After refresh, item should still appear as seen (circle-outline icon)
+      expect(provider.getTreeItem(item).label).toBe('Bug');
+      expect((provider.getTreeItem(item).iconPath as any).id).toBe('circle-outline');
+    });
+
+    it('should prune seenItems for items no longer in inbox after provider refresh', () => {
+      registry._setItems('gh', [{ externalId: '1', title: 'Bug' }]);
+      provider.markSeen('gh', '1');
+
+      // Remove item from provider
+      registry._setItems('gh', []);
+      registry._fire();
+
+      // Re-add item — should appear as unseen (circle-filled icon)
+      registry._setItems('gh', [{ externalId: '1', title: 'Bug' }]);
+      const item: InboxItem = { kind: 'item', providerId: 'gh', externalId: '1', title: 'Bug' };
+      expect(provider.getTreeItem(item).label).toBe('Bug');
+      expect((provider.getTreeItem(item).iconPath as any).id).toBe('circle-filled');
     });
 
     it('should refresh when stateStore fires change event', () => {

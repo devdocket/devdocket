@@ -33,14 +33,14 @@ const TreeItemCollapsibleState = {
 };
 
 class MockTreeItem {
-  label: string;
+  label: string | { label: string; highlights?: [number, number][] };
   collapsibleState: number;
   id?: string;
   description?: string;
   tooltip?: any;
   contextValue?: string;
   iconPath?: any;
-  constructor(label: string, collapsibleState?: number) {
+  constructor(label: string | { label: string; highlights?: [number, number][] }, collapsibleState?: number) {
     this.label = label;
     this.collapsibleState = collapsibleState ?? 0;
   }
@@ -53,7 +53,16 @@ const window = {
   showErrorMessage: vi.fn(),
   showQuickPick: vi.fn(),
   registerTreeDataProvider: vi.fn(() => ({ dispose: vi.fn() })),
-  createTreeView: vi.fn(() => ({ dispose: vi.fn(), message: undefined })),
+  createTreeView: vi.fn(() => {
+    const selectionEmitter = new MockEventEmitter();
+    return {
+      dispose: vi.fn(),
+      message: undefined,
+      badge: undefined,
+      onDidChangeSelection: selectionEmitter.event,
+      _selectionEmitter: selectionEmitter,
+    };
+  }),
   createWebviewPanel: vi.fn(),
   createOutputChannel: vi.fn(() => ({
     appendLine: vi.fn(),
