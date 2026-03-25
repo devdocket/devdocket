@@ -1,5 +1,5 @@
 import * as vscode from 'vscode';
-import { WorkItem } from '../models/workItem';
+import { WorkItem, WorkItemInput } from '../models/workItem';
 import { WorkGraph } from '../services/workGraph';
 
 export class WorkItemEditorPanel {
@@ -60,10 +60,11 @@ export class WorkItemEditorPanel {
     if (!data.title) {
       return;
     }
-    await this.workGraph.updateItem(this.itemId, {
-      title: data.title,
-      notes: data.notes || undefined,
-    });
+    const patch: Partial<WorkItemInput> = { title: data.title };
+    if ('notes' in data) {
+      patch.notes = data.notes || undefined;
+    }
+    await this.workGraph.updateItem(this.itemId, patch);
     if (!this.disposed) {
       this.panel.title = `Edit: ${data.title}`;
     }
