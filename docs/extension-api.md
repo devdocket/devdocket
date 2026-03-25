@@ -311,8 +311,8 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   context.subscriptions.push(registration);
   context.subscriptions.push({ dispose: () => provider.dispose() });
 
-  // Trigger initial discovery
-  await provider.refresh();
+  // No need to call provider.refresh() manually — registerProvider() triggers
+  // initial discovery automatically.
 }
 ```
 
