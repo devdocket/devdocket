@@ -108,7 +108,10 @@ export class AiReviewAction implements WorkCenterAction {
 
   async analyzeWithAi(diff: string, token: vscode.CancellationToken): Promise<string | undefined> {
     try {
-      const models = await vscode.lm.selectChatModels({ family: 'gpt-4o' });
+      let models = await vscode.lm.selectChatModels({ family: 'gpt-4o' });
+      if (models.length === 0) {
+        models = await vscode.lm.selectChatModels();
+      }
       if (models.length === 0) {
         vscode.window.showWarningMessage('AI Code Review: No language model available. Install GitHub Copilot.');
         return undefined;
