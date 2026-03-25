@@ -57,15 +57,24 @@ export class WorkItemEditorPanel {
   }
 
   private async saveData(data: Record<string, string>): Promise<void> {
-    if (!data.title) {
+    const item = this.workGraph.getItem(this.itemId);
+    if (!item) {
       return;
     }
-    const patch: Partial<WorkItemInput> = { title: data.title };
+    const patch: Partial<WorkItemInput> = {};
     if ('notes' in data) {
       patch.notes = data.notes || undefined;
     }
+
+    if (!item.providerId) {
+      if (!data.title) {
+        return;
+      }
+      patch.title = data.title;
+    }
+
     await this.workGraph.updateItem(this.itemId, patch);
-    if (!this.disposed) {
+    if (!this.disposed && data.title && !item.providerId) {
       this.panel.title = `Edit: ${data.title}`;
     }
   }
@@ -172,6 +181,17 @@ export class WorkItemEditorPanel {
       color: var(--vscode-foreground);
       border: 1px solid var(--input-border);
     }
+    input[readonly] {
+      opacity: 0.7;
+      cursor: not-allowed;
+      border-style: dashed;
+    }
+    .hint {
+      font-size: 0.8em;
+      opacity: 0.6;
+      margin-top: 2px;
+      display: block;
+    }
   </style>
 </head>
 <body>
@@ -179,7 +199,8 @@ export class WorkItemEditorPanel {
   <div id="form">
     <div class="field">
       <label for="title">Title</label>
-      <input type="text" id="title" value="${escapeAttr(item.title)}" />
+      <input type="text" id="title" value="${escapeAttr(item.title)}" ${item.providerId ? 'readonly' : ''} />
+${item.providerId ? '      <span class="hint">Title is managed by the provider</span>' : ''}
     </div>
     <div class="field">
       <label for="notes">Notes</label>
@@ -208,7 +229,10 @@ export class WorkItemEditorPanel {
     }
 
     fields.forEach(f => {
-      document.getElementById(f).addEventListener('input', scheduleAutosave);
+      const el = document.getElementById(f);
+      if (!el.readOnly) {
+        el.addEventListener('input', scheduleAutosave);
+      }
     });
   </script>
 </body>
