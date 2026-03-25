@@ -289,6 +289,7 @@ describe('AdoWorkItemProvider', () => {
   });
 
   it('uses org-level WIQL when no projects are configured', async () => {
+    provider.dispose();
     provider = new AdoWorkItemProvider('myorg', []);
 
     mockFetch.mockResolvedValueOnce({
