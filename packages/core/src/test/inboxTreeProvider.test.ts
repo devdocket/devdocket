@@ -172,19 +172,13 @@ describe('InboxTreeProvider', () => {
   });
 
   describe('markSeen', () => {
-    it('should fire tree data change event', () => {
-      const listener = vi.fn();
-      provider.onDidChangeTreeData(listener);
-      provider.markSeen('gh', '1');
-      expect(listener).toHaveBeenCalledTimes(1);
+    it('should return true for a newly seen item', () => {
+      expect(provider.markSeen('gh', '1')).toBe(true);
     });
 
-    it('should not fire event if item is already seen', () => {
+    it('should return false if item is already seen', () => {
       provider.markSeen('gh', '1');
-      const listener = vi.fn();
-      provider.onDidChangeTreeData(listener);
-      provider.markSeen('gh', '1');
-      expect(listener).not.toHaveBeenCalled();
+      expect(provider.markSeen('gh', '1')).toBe(false);
     });
   });
 
@@ -196,17 +190,32 @@ describe('InboxTreeProvider', () => {
       expect(listener).toHaveBeenCalledTimes(1);
     });
 
-    it('should clear seenItems when providerRegistry fires change event', () => {
+    it('should retain seenItems for items still in inbox after provider refresh', () => {
+      registry._setItems('gh', [{ externalId: '1', title: 'Bug' }]);
       const item: InboxItem = { kind: 'item', providerId: 'gh', externalId: '1', title: 'Bug' };
       provider.markSeen('gh', '1');
 
       // Before refresh, item should be seen (plain label)
       expect(provider.getTreeItem(item).label).toBe('Bug');
 
-      // Provider refresh fires → seenItems should be cleared
+      // Provider refresh fires → item is still in inbox, so seenItems should be retained
       registry._fire();
 
-      // After refresh, item should appear highlighted again
+      // After refresh, item should still appear as seen (plain label)
+      expect(provider.getTreeItem(item).label).toBe('Bug');
+    });
+
+    it('should prune seenItems for items no longer in inbox after provider refresh', () => {
+      registry._setItems('gh', [{ externalId: '1', title: 'Bug' }]);
+      provider.markSeen('gh', '1');
+
+      // Remove item from provider
+      registry._setItems('gh', []);
+      registry._fire();
+
+      // Re-add item — should appear as unseen (highlighted)
+      registry._setItems('gh', [{ externalId: '1', title: 'Bug' }]);
+      const item: InboxItem = { kind: 'item', providerId: 'gh', externalId: '1', title: 'Bug' };
       expect(provider.getTreeItem(item).label).toEqual({ label: 'Bug', highlights: [[0, 3]] });
     });
 

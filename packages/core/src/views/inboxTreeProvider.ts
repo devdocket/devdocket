@@ -31,7 +31,21 @@ export class InboxTreeProvider implements vscode.TreeDataProvider<InboxElement> 
   ) {
     this.disposables.push(
       providerRegistry.onDidChangeDiscoveredItems(() => {
-        this.seenItems.clear();
+        // Prune seenItems to only retain keys for items still visible in the Inbox
+        const currentKeys = new Set<string>();
+        for (const [providerId, items] of this.providerRegistry.getAllDiscoveredItems()) {
+          for (const item of items) {
+            const state = this.stateStore.getState(providerId, item.externalId);
+            if (state === undefined || state === 'unseen') {
+              currentKeys.add(`${providerId}::${item.externalId}`);
+            }
+          }
+        }
+        for (const key of this.seenItems) {
+          if (!currentKeys.has(key)) {
+            this.seenItems.delete(key);
+          }
+        }
         this._onDidChangeTreeData.fire();
       }),
       stateStore.onDidChange(() => this._onDidChangeTreeData.fire())
@@ -40,12 +54,13 @@ export class InboxTreeProvider implements vscode.TreeDataProvider<InboxElement> 
 
   refresh(): void { this._onDidChangeTreeData.fire(); }
 
-  markSeen(providerId: string, externalId: string): void {
-    const key = `${providerId}:${externalId}`;
+  markSeen(providerId: string, externalId: string): boolean {
+    const key = `${providerId}::${externalId}`;
     if (!this.seenItems.has(key)) {
       this.seenItems.add(key);
-      this._onDidChangeTreeData.fire();
+      return true;
     }
+    return false;
   }
 
   getTreeItem(element: InboxElement): vscode.TreeItem {
@@ -58,7 +73,7 @@ export class InboxTreeProvider implements vscode.TreeDataProvider<InboxElement> 
       return treeItem;
     }
 
-    const key = `${element.providerId}:${element.externalId}`;
+    const key = `${element.providerId}::${element.externalId}`;
     const isSeen = this.seenItems.has(key);
 
     const treeItem = new vscode.TreeItem(
