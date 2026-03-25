@@ -10,6 +10,7 @@ import { InboxTreeProvider } from './views/inboxTreeProvider';
 import { QueueTreeProvider } from './views/queueTreeProvider';
 import { FocusTreeProvider } from './views/focusTreeProvider';
 import { SourcesTreeProvider } from './views/sourcesTreeProvider';
+import { HistoryTreeProvider } from './views/historyTreeProvider';
 import { registerCommands } from './commands/commands';
 import { initLogger, setLogLevel, logger, LogLevel } from './services/logger';
 
@@ -83,6 +84,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<WorkCe
   const queueProvider = new QueueTreeProvider(workGraph);
   const focusProvider = new FocusTreeProvider(workGraph);
   const sourcesProvider = new SourcesTreeProvider(providerRegistry, stateStore);
+  const historyProvider = new HistoryTreeProvider(workGraph);
 
   const inboxTreeView = vscode.window.createTreeView('workcenter.inbox', { treeDataProvider: inboxProvider });
   const sourcesTreeView = vscode.window.createTreeView('workcenter.sources', { treeDataProvider: sourcesProvider });
@@ -106,13 +108,15 @@ export async function activate(context: vscode.ExtensionContext): Promise<WorkCe
   };
   const queueTreeView = vscode.window.createTreeView('workcenter.queue', { treeDataProvider: queueProvider });
   const focusTreeView = vscode.window.createTreeView('workcenter.focus', { treeDataProvider: focusProvider });
+  const historyTreeView = vscode.window.createTreeView('workcenter.history', { treeDataProvider: historyProvider });
 
-  const updateQueueFocusMessages = () => {
+  const updateWorkViewMessages = () => {
     queueTreeView.message = queueProvider.getChildren().length > 0 ? undefined : 'No items in queue';
     focusTreeView.message = focusProvider.getChildren().length > 0 ? undefined : 'No active work';
+    historyTreeView.message = historyProvider.getChildren().length > 0 ? undefined : 'No history items';
   };
-  updateQueueFocusMessages();
-  const workGraphSub = workGraph.onDidChange(updateQueueFocusMessages);
+  updateWorkViewMessages();
+  const workGraphSub = workGraph.onDidChange(updateWorkViewMessages);
 
   updateViewMessages();
 
@@ -125,6 +129,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<WorkCe
     queueTreeView,
     focusTreeView,
     sourcesTreeView,
+    historyTreeView,
     discoveredSub,
     providerRegSub,
     stateStoreSub,
@@ -135,6 +140,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<WorkCe
     { dispose: () => queueProvider.dispose() },
     { dispose: () => focusProvider.dispose() },
     { dispose: () => sourcesProvider.dispose() },
+    { dispose: () => historyProvider.dispose() },
     { dispose: () => providerRegistry.dispose() },
     { dispose: () => actionRegistry.dispose() },
   );

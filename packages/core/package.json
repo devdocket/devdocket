@@ -15,7 +15,8 @@
     "onView:workcenter.inbox",
     "onView:workcenter.queue",
     "onView:workcenter.focus",
-    "onView:workcenter.sources"
+    "onView:workcenter.sources",
+    "onView:workcenter.history"
   ],
   "main": "./dist/extension.js",
   "contributes": {
@@ -52,6 +53,10 @@
         {
           "id": "workcenter.focus",
           "name": "Focus"
+        },
+        {
+          "id": "workcenter.history",
+          "name": "History"
         },
         {
           "id": "workcenter.sources",
