@@ -192,7 +192,7 @@ export class AdoPrReviewProvider implements WorkCenterProvider {
     let response: Response;
     try {
       response = await fetch(
-        `https://dev.azure.com/${encodeURIComponent(this.org)}/_apis/connectiondata?api-version=7.1`,
+        `https://dev.azure.com/${encodeURIComponent(this.org)}/_apis/connectiondata`,
         {
           headers: { Authorization: `Bearer ${token}` },
         },
@@ -205,7 +205,8 @@ export class AdoPrReviewProvider implements WorkCenterProvider {
     }
 
     if (!response.ok) {
-      logger.error(`Failed to fetch connection data: ${response.status}`);
+      const body = await response.text().catch(() => '');
+      logger.error(`Failed to fetch connection data: ${response.status} ${body}`);
       this._cachedUserId = undefined;
       this._cachedSessionAccountId = undefined;
       return undefined;
