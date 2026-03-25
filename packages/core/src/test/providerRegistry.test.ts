@@ -267,10 +267,11 @@ describe('ProviderRegistry', () => {
       { externalId: 'issue-1', title: 'Bug fix' },
     ]);
 
-    // Wait for handleDiscoveredItems to complete, then verify no fire
-    await vi.waitFor(() => {
-      expect(stateStore.setStates).not.toHaveBeenCalled();
-    });
+    // Wait for handleDiscoveredItems to complete by checking items are stored
+    await vi.waitFor(() =>
+      expect(registry.getDiscoveredItems('gh')).toHaveLength(1),
+    );
+    expect(stateStore.setStates).not.toHaveBeenCalled();
     expect(listener).not.toHaveBeenCalled();
   });
 
