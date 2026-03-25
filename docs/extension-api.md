@@ -64,13 +64,15 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 The API surface is intentionally small:
 
 ```ts
+import * as vscode from 'vscode';
+
 interface WorkCenterApi {
-  registerProvider(provider: WorkCenterProvider): Disposable;
-  registerAction(action: WorkCenterAction): Disposable;
+  registerProvider(provider: WorkCenterProvider): vscode.Disposable;
+  registerAction(action: WorkCenterAction): vscode.Disposable;
 }
 ```
 
-Both methods return a `Disposable`. Push it into `context.subscriptions` so VS Code cleans up on deactivation.
+Both methods return a `vscode.Disposable`. Push it into `context.subscriptions` so VS Code cleans up on deactivation.
 
 ## Providers
 
@@ -79,6 +81,8 @@ A provider discovers items from an external source (e.g., GitHub issues, Jira ti
 ### WorkCenterProvider Interface
 
 ```ts
+import * as vscode from 'vscode';
+
 interface WorkCenterProvider {
   /** Unique identifier for this provider (e.g., 'github', 'jira'). */
   readonly id: string;
@@ -98,7 +102,7 @@ interface WorkCenterProvider {
    * Event that fires when the provider has new items to report.
    * Each emission replaces the provider's entire item set.
    */
-  readonly onDidDiscoverItems: Event<DiscoveredItem[]>;
+  readonly onDidDiscoverItems: vscode.Event<DiscoveredItem[]>;
 
   /**
    * Called by WorkCenter during initial registration/activation (for initial
