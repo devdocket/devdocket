@@ -136,6 +136,7 @@ export class AdoPrReviewProvider implements WorkCenterProvider {
       } else {
         console.warn(`WorkCenter ADO: ${message}`);
       }
+      this._onDidDiscoverItems.fire([]);
       return;
     }
 
