@@ -82,13 +82,13 @@ export async function activate(context: vscode.ExtensionContext): Promise<WorkCe
   const focusTreeView = vscode.window.createTreeView('workcenter.focus', { treeDataProvider: focusProvider });
   const historyTreeView = vscode.window.createTreeView('workcenter.history', { treeDataProvider: historyProvider });
 
-  const updateQueueFocusMessages = () => {
+  const updateWorkViewMessages = () => {
     queueTreeView.message = queueProvider.getChildren().length > 0 ? undefined : 'No items in queue';
     focusTreeView.message = focusProvider.getChildren().length > 0 ? undefined : 'No active work';
     historyTreeView.message = historyProvider.getChildren().length > 0 ? undefined : 'No completed items';
   };
-  updateQueueFocusMessages();
-  const workGraphSub = workGraph.onDidChange(updateQueueFocusMessages);
+  updateWorkViewMessages();
+  const workGraphSub = workGraph.onDidChange(updateWorkViewMessages);
 
   updateViewMessages();
 
