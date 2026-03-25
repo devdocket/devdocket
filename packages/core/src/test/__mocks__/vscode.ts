@@ -35,6 +35,7 @@ const TreeItemCollapsibleState = {
 class MockTreeItem {
   label: string;
   collapsibleState: number;
+  id?: string;
   description?: string;
   tooltip?: any;
   contextValue?: string;

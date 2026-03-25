@@ -164,6 +164,7 @@ export class WorkGraph {
     const dragged = this.items.get(draggedId);
     const target = this.items.get(targetId);
     if (!dragged || !target) { return; }
+    if (dragged.state !== target.state) { return; }
 
     const siblings = this.getItemsByState(dragged.state)
       .sort((a, b) => (a.sortOrder ?? Number.MAX_SAFE_INTEGER) - (b.sortOrder ?? Number.MAX_SAFE_INTEGER));
@@ -187,6 +188,20 @@ export class WorkGraph {
       await this.store.saveAll(itemsToSave);
       this._onDidChange.fire();
     }
+  }
+
+  async moveToEnd(id: string): Promise<void> {
+    const item = this.items.get(id);
+    if (!item) { return; }
+
+    const siblings = this.getItemsByState(item.state)
+      .sort((a, b) => (a.sortOrder ?? Number.MAX_SAFE_INTEGER) - (b.sortOrder ?? Number.MAX_SAFE_INTEGER));
+
+    const maxOrder = siblings.length > 0 ? Math.max(...siblings.map(s => s.sortOrder ?? 0)) : 0;
+    const updated = { ...item, sortOrder: maxOrder + 1, updatedAt: Date.now() };
+    await this.store.save(updated);
+    this.items.set(id, updated);
+    this._onDidChange.fire();
   }
 
   async deleteItem(id: string): Promise<void> {

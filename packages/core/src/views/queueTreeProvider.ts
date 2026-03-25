@@ -21,6 +21,7 @@ export class QueueTreeProvider implements vscode.TreeDataProvider<WorkItem>, vsc
 
   getTreeItem(item: WorkItem): vscode.TreeItem {
     const treeItem = new vscode.TreeItem(item.title, vscode.TreeItemCollapsibleState.None);
+    treeItem.id = item.id;
     treeItem.description = item.providerId;
     treeItem.tooltip = this.buildTooltip(item);
     treeItem.contextValue = item.url ? 'queueItem.hasUrl' : 'queueItem';
@@ -47,12 +48,18 @@ export class QueueTreeProvider implements vscode.TreeDataProvider<WorkItem>, vsc
 
   async handleDrop(target: WorkItem | undefined, dataTransfer: vscode.DataTransfer): Promise<void> {
     const transferItem = dataTransfer.get(DRAG_MIME_TYPE);
-    if (!transferItem || !target) { return; }
+    if (!transferItem) { return; }
 
     const draggedIds: string[] = transferItem.value;
     if (draggedIds.length !== 1) { return; }
 
     const draggedId = draggedIds[0];
+
+    if (!target) {
+      await this.workGraph.moveToEnd(draggedId);
+      return;
+    }
+
     if (draggedId === target.id) { return; }
 
     await this.workGraph.reorderItem(draggedId, target.id);

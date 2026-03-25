@@ -269,6 +269,40 @@ describe('WorkGraph', () => {
     expect(listener).not.toHaveBeenCalled();
   });
 
+  it('moveToEnd places item at end of its state group', async () => {
+    const a = await graph.createItem({ title: 'A' });
+    const b = await graph.createItem({ title: 'B' });
+    const c = await graph.createItem({ title: 'C' });
+
+    await graph.moveToEnd(a.id);
+
+    const items = graph.getItemsByState(WorkItemState.New)
+      .sort((x, y) => (x.sortOrder ?? Infinity) - (y.sortOrder ?? Infinity));
+    expect(items.map((i) => i.title)).toEqual(['B', 'C', 'A']);
+  });
+
+  it('moveToEnd on non-existent item is a no-op', async () => {
+    const listener = vi.fn();
+    graph.onDidChange(listener);
+
+    await graph.moveToEnd('nonexistent');
+
+    expect(listener).not.toHaveBeenCalled();
+  });
+
+  it('reorder across different states is a no-op', async () => {
+    const a = await graph.createItem({ title: 'A' });
+    const b = await graph.createItem({ title: 'B' });
+    await graph.transitionState(b.id, WorkItemState.InProgress);
+
+    const listener = vi.fn();
+    graph.onDidChange(listener);
+
+    await graph.reorderItem(a.id, b.id);
+
+    expect(listener).not.toHaveBeenCalled();
+  });
+
   it('moves legacy items without sortOrder correctly', async () => {
     const legacyStore = createMockStore();
 
