@@ -100,7 +100,7 @@ An action is an operation that runs on a work item. Actions appear in the **Run 
 
 ### Building Your Own
 
-Provider and action extensions use a simple, well-defined API surface. See the [Extension API documentation](docs/extension-api.md) for the full contract, interfaces, and example implementations.
+Provider and action extensions use a simple, well-defined API surface. See the [Extension API documentation](docs/extension-api.md) for the full contract, interfaces, and example implementations. *(Added by [PR #29](https://github.com/mthalman/workcenter/pull/29).)*
 
 ## Architecture
 
