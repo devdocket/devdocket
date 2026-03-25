@@ -50,8 +50,10 @@ export class QueueTreeProvider implements vscode.TreeDataProvider<WorkItem>, vsc
     const transferItem = dataTransfer.get(DRAG_MIME_TYPE);
     if (!transferItem) { return; }
 
-    const draggedIds: string[] = transferItem.value;
-    if (draggedIds.length !== 1) { return; }
+    const rawValue: unknown = transferItem.value;
+    if (!Array.isArray(rawValue) || rawValue.length !== 1 || typeof rawValue[0] !== 'string') { return; }
+
+    const draggedIds: string[] = rawValue;
 
     const draggedId = draggedIds[0];
 
