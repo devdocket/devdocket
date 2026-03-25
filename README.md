@@ -111,7 +111,7 @@ An action is an operation that runs on a work item. Actions appear in the **Run 
 
 ### Building Your Own
 
-Provider and action extensions use a simple, well-defined API surface. See the [Extension API documentation](https://github.com/mthalman/workcenter/pull/29) for the full contract, interfaces, and example implementations. *(Added by [PR #29](https://github.com/mthalman/workcenter/pull/29); link will point to `docs/extension-api.md` once merged.)*
+Provider and action extensions use a simple, well-defined API surface. See the [Extension API documentation](https://github.com/mthalman/workcenter/pull/29) for the full contract, interfaces, and example implementations. *(Added by [PR #29](https://github.com/mthalman/workcenter/pull/29); docs file will be available at `docs/extension-api.md` once merged.)*
 
 ## Architecture
 
@@ -139,8 +139,8 @@ WorkCenter persists two JSON files in VS Code's `globalStorageUri`:
 
 ## Documentation
 
-- [UX Guide](https://github.com/mthalman/workcenter/pull/28) — The five views, data flow, work item states, available actions, and the editor panel. *(Added by [PR #28](https://github.com/mthalman/workcenter/pull/28); link will point to `docs/ux-guide.md` once merged.)*
-- [Extension API](https://github.com/mthalman/workcenter/pull/29) — Provider and action contracts, interfaces, and example implementations. *(Added by [PR #29](https://github.com/mthalman/workcenter/pull/29); link will point to `docs/extension-api.md` once merged.)*
+- [UX Guide](https://github.com/mthalman/workcenter/pull/28) — The five views, data flow, work item states, available actions, and the editor panel. *(Added by [PR #28](https://github.com/mthalman/workcenter/pull/28); docs file will be available at `docs/ux-guide.md` once merged.)*
+- [Extension API](https://github.com/mthalman/workcenter/pull/29) — Provider and action contracts, interfaces, and example implementations. *(Added by [PR #29](https://github.com/mthalman/workcenter/pull/29); docs file will be available at `docs/extension-api.md` once merged.)*
 
 ## Contributing
 
