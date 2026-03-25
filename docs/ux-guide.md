@@ -75,7 +75,7 @@ Sources is a browsable library of everything providers know about, regardless of
 
 | Action | Description |
 |--------|-------------|
-| **Accept to Queue** | Creates a work item in the Queue (or re-accepts a previously accepted item) |
+| **Accept to Queue** | If not already accepted, creates a work item in the Queue and marks the provider item as accepted; if already accepted, shows a notification and does not change its state |
 | **Open in Browser** | Opens the item's URL in your default browser (if the item has a URL) |
 
 ### History
