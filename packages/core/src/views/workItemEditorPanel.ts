@@ -204,8 +204,8 @@ export class WorkItemEditorPanel {
   <div id="form">
     <div class="field">
       <label for="title">Title</label>
-      <input type="text" id="title" value="${escapeAttr(item.title)}" ${item.providerId ? 'readonly' : ''} />
-${item.providerId ? '      <span class="hint">Title is managed by the provider</span>' : ''}
+      <input type="text" id="title" value="${escapeAttr(item.title)}" ${item.providerId ? 'readonly aria-readonly="true" aria-describedby="readonly-title-hint"' : ''} />
+${item.providerId ? '      <span id="readonly-title-hint" class="hint">Title is managed by the provider</span>' : ''}
     </div>
     <div class="field">
       <label for="notes">Notes</label>
@@ -228,7 +228,8 @@ ${item.providerId ? '      <span class="hint">Title is managed by the provider</
       if (debounceTimer) clearTimeout(debounceTimer);
       debounceTimer = setTimeout(() => {
         const data = getData();
-        if (!data.title) return;
+        const titleEl = document.getElementById('title');
+        if (!data.title && titleEl instanceof HTMLInputElement && !titleEl.readOnly) return;
         vscode.postMessage({ type: 'autosave', data });
       }, 500);
     }
