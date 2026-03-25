@@ -77,10 +77,9 @@ Providers (GitHub, etc.)          Manual creation
                                 │                        ◄──►
                                 │                      Working on
                                 │                           │
-                                │                        Mark complete
+                                │                     Mark complete
                                 ▼                           ▼
-                              History ◄──────────────── History
-                          (archived)                    (completed)
+                             History                     History
 ```
 
 > **Note:** Items in History can be restored — move them back to Queue or Focus to resume work.
