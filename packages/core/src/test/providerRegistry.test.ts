@@ -238,6 +238,42 @@ describe('ProviderRegistry', () => {
     expect(all.get('jira')).toHaveLength(1);
   });
 
+  it('fires onDidAddNewUnseenItems with count of newly unseen items', async () => {
+    const provider = createMockProvider('gh');
+    registry.register(provider);
+
+    const listener = vi.fn();
+    registry.onDidAddNewUnseenItems(listener);
+
+    provider.fireItems([
+      { externalId: 'issue-1', title: 'Bug fix' },
+      { externalId: 'issue-2', title: 'Feature' },
+    ]);
+
+    await vi.waitFor(() => expect(listener).toHaveBeenCalledWith(2));
+  });
+
+  it('does not fire onDidAddNewUnseenItems when no new unseen items', async () => {
+    const provider = createMockProvider('gh');
+    registry.register(provider);
+
+    // Simulate items already accepted
+    stateStore._set('gh', 'issue-1', 'accepted');
+
+    const listener = vi.fn();
+    registry.onDidAddNewUnseenItems(listener);
+
+    provider.fireItems([
+      { externalId: 'issue-1', title: 'Bug fix' },
+    ]);
+
+    // Wait for handleDiscoveredItems to complete, then verify no fire
+    await vi.waitFor(() => {
+      expect(stateStore.setStates).not.toHaveBeenCalled();
+    });
+    expect(listener).not.toHaveBeenCalled();
+  });
+
   it('fires onDidChangeDiscoveredItems when provider discovers items', async () => {
     const provider = createMockProvider('gh');
     registry.register(provider);

@@ -131,24 +131,11 @@ export async function activate(context: vscode.ExtensionContext): Promise<WorkCe
   updateWorkViewMessages();
   const workGraphSub = workGraph.onDidChange(updateWorkViewMessages);
 
-  let previousInboxCount = 0;
   let initialLoadComplete = false;
 
   const updateInboxBadge = () => {
     const count = getInboxUnseenCount(providerRegistry, stateStore);
     inboxTreeView.badge = count > 0 ? { value: count, tooltip: `${count} unseen item${count === 1 ? '' : 's'}` } : undefined;
-
-    if (initialLoadComplete && count > previousInboxCount) {
-      const newCount = count - previousInboxCount;
-      const config = vscode.workspace.getConfiguration('workcenter');
-      const showNotifications = config.get<boolean>('showInboxNotifications', true);
-      if (showNotifications && newCount > 0) {
-        vscode.window.showInformationMessage(
-          `WorkCenter: ${newCount} new item${newCount === 1 ? '' : 's'} in Inbox`
-        );
-      }
-    }
-    previousInboxCount = count;
   };
 
   updateViewMessages();
@@ -159,6 +146,16 @@ export async function activate(context: vscode.ExtensionContext): Promise<WorkCe
   const discoveredSub = providerRegistry.onDidChangeDiscoveredItems(() => {
     updateViewMessages();
     updateInboxBadge();
+  });
+  const newItemsSub = providerRegistry.onDidAddNewUnseenItems((newCount) => {
+    if (!initialLoadComplete) { return; }
+    const config = vscode.workspace.getConfiguration('workcenter');
+    const showNotifications = config.get<boolean>('showInboxNotifications', true);
+    if (showNotifications && newCount > 0) {
+      vscode.window.showInformationMessage(
+        `WorkCenter: ${newCount} new item${newCount === 1 ? '' : 's'} in Inbox`
+      );
+    }
   });
   const stateStoreSub = stateStore.onDidChange(() => {
     updateViewMessages();
@@ -172,6 +169,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<WorkCe
     sourcesTreeView,
     historyTreeView,
     discoveredSub,
+    newItemsSub,
     providerRegSub,
     stateStoreSub,
     workGraphSub,
