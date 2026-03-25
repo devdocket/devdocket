@@ -1,4 +1,5 @@
 import * as vscode from 'vscode';
+import { DiscoveredItem } from '../api/types';
 import { ProviderRegistry } from '../services/providerRegistry';
 import { DiscoveredStateStore } from '../storage/discoveredStateStore';
 
@@ -209,7 +210,7 @@ export class InboxTreeProvider implements vscode.TreeDataProvider<InboxElement> 
     return result.sort((a, b) => a.title.localeCompare(b.title));
   }
 
-  private toItemNode(providerId: string, item: { externalId: string; title: string; description?: string; url?: string; group?: string }): InboxItem {
+  private toItemNode(providerId: string, item: DiscoveredItem): InboxItem {
     return {
       kind: 'item',
       providerId,
