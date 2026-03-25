@@ -15,6 +15,7 @@ export interface InboxItem {
   title: string;
   description?: string;
   url?: string;
+  group?: string;
 }
 
 export type InboxElement = InboxProviderNode | InboxItem;
@@ -23,18 +24,51 @@ export class InboxTreeProvider implements vscode.TreeDataProvider<InboxElement> 
   private readonly _onDidChangeTreeData = new vscode.EventEmitter<void>();
   readonly onDidChangeTreeData = this._onDidChangeTreeData.event;
   private readonly disposables: vscode.Disposable[] = [];
+  private readonly seenItems = new Set<string>();
 
   constructor(
     private readonly providerRegistry: ProviderRegistry,
     private readonly stateStore: DiscoveredStateStore,
   ) {
     this.disposables.push(
-      providerRegistry.onDidChangeDiscoveredItems(() => this._onDidChangeTreeData.fire()),
-      stateStore.onDidChange(() => this._onDidChangeTreeData.fire())
+      providerRegistry.onDidChangeDiscoveredItems(() => {
+        this.pruneSeenItems();
+        this._onDidChangeTreeData.fire();
+      }),
+      stateStore.onDidChange(() => {
+        this.pruneSeenItems();
+        this._onDidChangeTreeData.fire();
+      })
     );
   }
 
+  private pruneSeenItems(): void {
+    const currentKeys = new Set<string>();
+    for (const [providerId, items] of this.providerRegistry.getAllDiscoveredItems()) {
+      for (const item of items) {
+        const state = this.stateStore.getState(providerId, item.externalId);
+        if (state === undefined || state === 'unseen') {
+          currentKeys.add(`${providerId}::${item.externalId}`);
+        }
+      }
+    }
+    for (const key of this.seenItems) {
+      if (!currentKeys.has(key)) {
+        this.seenItems.delete(key);
+      }
+    }
+  }
+
   refresh(): void { this._onDidChangeTreeData.fire(); }
+
+  markSeen(providerId: string, externalId: string): boolean {
+    const key = `${providerId}::${externalId}`;
+    if (!this.seenItems.has(key)) {
+      this.seenItems.add(key);
+      return true;
+    }
+    return false;
+  }
 
   getTreeItem(element: InboxElement): vscode.TreeItem {
     if (element.kind === 'provider') {
@@ -46,10 +80,13 @@ export class InboxTreeProvider implements vscode.TreeDataProvider<InboxElement> 
       return treeItem;
     }
 
+    const key = `${element.providerId}::${element.externalId}`;
+    const isSeen = this.seenItems.has(key);
+
     const treeItem = new vscode.TreeItem(element.title, vscode.TreeItemCollapsibleState.None);
     treeItem.tooltip = this.buildTooltip(element);
     treeItem.contextValue = element.url ? 'inboxItem.hasUrl' : 'inboxItem';
-    treeItem.iconPath = new vscode.ThemeIcon('mail');
+    treeItem.iconPath = new vscode.ThemeIcon(isSeen ? 'circle-outline' : 'circle-filled');
     return treeItem;
   }
 
@@ -89,6 +126,7 @@ export class InboxTreeProvider implements vscode.TreeDataProvider<InboxElement> 
           title: item.title,
           description: item.description,
           url: item.url,
+          group: item.group,
         });
       }
     }

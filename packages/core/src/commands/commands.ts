@@ -6,6 +6,13 @@ import { DiscoveredStateStore } from '../storage/discoveredStateStore';
 import { WorkItemEditorPanel } from '../views/workItemEditorPanel';
 import { InboxItem } from '../views/inboxTreeProvider';
 import { SourceItemNode } from '../views/sourcesTreeProvider';
+import { logger } from '../services/logger';
+
+/** Builds a work-item title, optionally prefixed with the provider group. */
+function formatItemTitle(item: { group?: string; title: string }): string {
+  const trimmedGroup = item.group?.trim();
+  return trimmedGroup ? `${trimmedGroup} ${item.title}` : item.title;
+}
 
 export function registerCommands(
   context: vscode.ExtensionContext,
@@ -54,6 +61,7 @@ export function registerCommands(
       }
       const actions = actionRegistry.getActionsFor(workItem);
       if (actions.length === 0) {
+        logger.warn(`No actions available for item ${workItem.id}`);
         vscode.window.showInformationMessage('No actions available for this item.');
         return;
       }
@@ -65,15 +73,32 @@ export function registerCommands(
         const action = actionRegistry.getAction(selected.actionId);
         if (action) {
           try {
+            logger.info(`Running action: ${selected.actionId} on item ${workItem.id}`);
             await action.run(workItem);
           } catch (err: unknown) {
+            logger.error('Action failed: ' + selected.label, err);
             const message = err instanceof Error ? err.message : String(err);
             vscode.window.showErrorMessage(`WorkCenter: Action "${selected.label}" failed — ${message}`);
           }
         }
       }
     }),
+    vscode.commands.registerCommand('workcenter.moveUp', (item) => {
+      if (!item?.id) {
+        vscode.window.showInformationMessage('WorkCenter: Select an item in the Queue to move.');
+        return;
+      }
+      return workGraph.moveItem(item.id, 'up');
+    }),
+    vscode.commands.registerCommand('workcenter.moveDown', (item) => {
+      if (!item?.id) {
+        vscode.window.showInformationMessage('WorkCenter: Select an item in the Queue to move.');
+        return;
+      }
+      return workGraph.moveItem(item.id, 'down');
+    }),
     vscode.commands.registerCommand('workcenter.acceptFromInbox', async (item: InboxItem) => {
+      logger.info(`Accepting inbox item: ${item.externalId} from ${item.providerId}`);
       const existing = workGraph.findItemByProvenance(item.providerId, item.externalId);
       if (existing) {
         vscode.window.showInformationMessage(
@@ -82,7 +107,7 @@ export function registerCommands(
         return;
       }
       await workGraph.createItem(
-        { title: item.title, description: item.description },
+        { title: formatItemTitle(item) },
         { providerId: item.providerId, externalId: item.externalId, url: item.url },
       );
       try {
@@ -93,6 +118,7 @@ export function registerCommands(
       }
     }),
     vscode.commands.registerCommand('workcenter.dismissFromInbox', async (item: InboxItem) => {
+      logger.info(`Dismissing inbox item: ${item.externalId}`);
       try {
         await stateStore.setState(item.providerId, item.externalId, 'dismissed');
       } catch (err: unknown) {
@@ -101,6 +127,7 @@ export function registerCommands(
       }
     }),
     vscode.commands.registerCommand('workcenter.acceptFromSources', async (item: SourceItemNode) => {
+      logger.info(`Accepting sources item: ${item.externalId}`);
       const existing = workGraph.findItemByProvenance(item.providerId, item.externalId);
       if (existing) {
         try {
@@ -116,7 +143,7 @@ export function registerCommands(
       }
       try {
         await workGraph.createItem(
-          { title: item.title, description: item.description },
+          { title: formatItemTitle(item) },
           { providerId: item.providerId, externalId: item.externalId, url: item.url },
         );
         await stateStore.setState(item.providerId, item.externalId, 'accepted');
@@ -138,6 +165,7 @@ async function createItem(workGraph: WorkGraph): Promise<void> {
     return;
   }
 
+  logger.info(`Creating new work item: ${title.trim()}`);
   await workGraph.createItem({ title: title.trim() });
   vscode.window.showInformationMessage(`WorkCenter: Created "${title.trim()}"`);
 }

@@ -52,6 +52,16 @@ const window = {
   showQuickPick: vi.fn(),
   registerTreeDataProvider: vi.fn(() => ({ dispose: vi.fn() })),
   createWebviewPanel: vi.fn(),
+  createOutputChannel: vi.fn(() => ({
+    appendLine: vi.fn(),
+    append: vi.fn(),
+    clear: vi.fn(),
+    show: vi.fn(),
+    hide: vi.fn(),
+    dispose: vi.fn(),
+    name: 'WorkCenter GitHub',
+    replace: vi.fn(),
+  })),
 };
 
 const commands = {
@@ -76,6 +86,7 @@ const workspace = {
   getConfiguration: vi.fn().mockReturnValue({
     get: vi.fn((key: string, defaultValue?: any) => defaultValue),
   }),
+  onDidChangeConfiguration: vi.fn(() => ({ dispose: vi.fn() })),
   workspaceFolders: [{ uri: { fsPath: '/mock/workspace' } }],
 };
 

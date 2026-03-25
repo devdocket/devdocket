@@ -24,6 +24,7 @@ export interface SourceItemNode {
   title: string;
   description?: string;
   url?: string;
+  group?: string;
 }
 
 export class SourcesTreeProvider implements vscode.TreeDataProvider<SourcesElement> {
@@ -145,6 +146,7 @@ export class SourcesTreeProvider implements vscode.TreeDataProvider<SourcesEleme
       title: item.title,
       description: item.description,
       url: item.url,
+      group: item.group,
     };
   }
 

@@ -2,7 +2,7 @@ import * as vscode from 'vscode';
 import { WorkItem, WorkItemState } from '../models/workItem';
 import { WorkGraph } from '../services/workGraph';
 
-export class FocusTreeProvider implements vscode.TreeDataProvider<WorkItem> {
+export class HistoryTreeProvider implements vscode.TreeDataProvider<WorkItem> {
   private readonly _onDidChangeTreeData = new vscode.EventEmitter<void>();
   readonly onDidChangeTreeData = this._onDidChangeTreeData.event;
   private readonly disposables: vscode.Disposable[] = [];
@@ -22,33 +22,23 @@ export class FocusTreeProvider implements vscode.TreeDataProvider<WorkItem> {
     treeItem.description = this.getStateLabel(item.state);
     treeItem.tooltip = this.buildTooltip(item);
     treeItem.iconPath = this.getIcon(item.state);
-
-    // contextValue controls which context menu items appear
-    if (item.state === WorkItemState.Blocked || item.state === WorkItemState.WaitingOn) {
-      treeItem.contextValue = item.url ? 'blocked.hasUrl' : 'blocked';
-    } else {
-      treeItem.contextValue = item.url ? 'active.hasUrl' : 'active';
-    }
-
+    treeItem.contextValue = item.url ? 'historyItem.hasUrl' : 'historyItem';
     return treeItem;
   }
 
   getChildren(): WorkItem[] {
     return this.workGraph.getItemsByState(
-      WorkItemState.InProgress,
-      WorkItemState.Blocked,
-      WorkItemState.WaitingOn,
-    ).sort((a, b) => a.title.localeCompare(b.title));
+      WorkItemState.Done,
+      WorkItemState.Archived,
+    ).sort((a, b) => b.updatedAt - a.updatedAt);
   }
 
   private getStateLabel(state: WorkItemState): string {
     switch (state) {
-      case WorkItemState.InProgress:
-        return 'in progress';
-      case WorkItemState.Blocked:
-        return '⛔ blocked';
-      case WorkItemState.WaitingOn:
-        return '⏳ waiting';
+      case WorkItemState.Done:
+        return '✓ done';
+      case WorkItemState.Archived:
+        return '📦 archived';
       default:
         return state;
     }
@@ -56,12 +46,10 @@ export class FocusTreeProvider implements vscode.TreeDataProvider<WorkItem> {
 
   private getIcon(state: WorkItemState): vscode.ThemeIcon {
     switch (state) {
-      case WorkItemState.InProgress:
-        return new vscode.ThemeIcon('play-circle');
-      case WorkItemState.Blocked:
-        return new vscode.ThemeIcon('circle-slash');
-      case WorkItemState.WaitingOn:
-        return new vscode.ThemeIcon('clock');
+      case WorkItemState.Done:
+        return new vscode.ThemeIcon('check');
+      case WorkItemState.Archived:
+        return new vscode.ThemeIcon('archive');
       default:
         return new vscode.ThemeIcon('circle-outline');
     }
@@ -78,7 +66,8 @@ export class FocusTreeProvider implements vscode.TreeDataProvider<WorkItem> {
       md.appendMarkdown(`\n\n`);
     }
     md.appendMarkdown(`**State:** ${item.state}\n\n`);
-    md.appendMarkdown(`**Created:** ${new Date(item.createdAt).toLocaleString()}`);
+    const timestampLabel = item.state === WorkItemState.Done ? 'Completed at' : item.state === WorkItemState.Archived ? 'Archived at' : 'Last updated';
+    md.appendMarkdown(`**${timestampLabel}:** ${new Date(item.updatedAt).toLocaleString()}`);
     return md;
   }
 

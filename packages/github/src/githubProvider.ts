@@ -1,4 +1,5 @@
 import * as vscode from 'vscode';
+import { logger } from './logger';
 
 // Re-declared to match core API contract — separate extension cannot import core types directly
 interface Disposable {
@@ -54,7 +55,7 @@ export class GitHubIssueProvider implements WorkCenterProvider {
     const clampedInterval = Math.max(intervalSeconds, 60);
     this.refreshTimer = setInterval(() => {
       this.refreshInBackground().catch((err) => {
-        console.error('WorkCenter GitHub: refresh failed:', err);
+        logger.error('Refresh failed', err);
       });
     }, clampedInterval * 1000);
   }
@@ -67,6 +68,7 @@ export class GitHubIssueProvider implements WorkCenterProvider {
   }
 
   async refresh(): Promise<void> {
+    logger.info('Fetching assigned issues...');
     try {
       const session = await vscode.authentication.getSession('github', ['repo'], {
         createIfNone: true,
@@ -78,7 +80,7 @@ export class GitHubIssueProvider implements WorkCenterProvider {
 
       await this.fetchAndPublishIssues(session.accessToken, true);
     } catch (err) {
-      console.error('WorkCenter GitHub: failed to fetch issues:', err);
+      logger.error('Failed to fetch issues', err);
     }
   }
 
@@ -99,7 +101,7 @@ export class GitHubIssueProvider implements WorkCenterProvider {
 
       await this.fetchAndPublishIssues(session.accessToken, false);
     } catch (err) {
-      console.error('WorkCenter GitHub: failed to fetch issues:', err);
+      logger.error('Failed to fetch issues', err);
     } finally {
       this._isRefreshing = false;
     }
@@ -120,6 +122,7 @@ export class GitHubIssueProvider implements WorkCenterProvider {
       };
     });
 
+    logger.info(`Discovered ${items.length} GitHub issues`);
     this._onDidDiscoverItems.fire(items);
 
     if (failures.length > 0) {
@@ -129,7 +132,7 @@ export class GitHubIssueProvider implements WorkCenterProvider {
       if (isUserTriggered) {
         vscode.window.showWarningMessage(`WorkCenter GitHub: ${message}`);
       } else {
-        console.warn(`WorkCenter GitHub: ${message}`);
+        logger.warn(message);
       }
     }
   }
@@ -191,6 +194,7 @@ export class GitHubIssueProvider implements WorkCenterProvider {
   }
 
   private async fetchRepoIssues(token: string, repo: string): Promise<{ issues: GitHubIssue[]; failed: boolean }> {
+    logger.debug(`Fetching issues for repo: ${repo}`);
     // GitHub API max per_page is 100; pagination for >100 items is a future enhancement
     const response = await fetch(
       `https://api.github.com/repos/${repo}/issues?assignee=@me&state=open&per_page=100`,
@@ -204,7 +208,7 @@ export class GitHubIssueProvider implements WorkCenterProvider {
     );
 
     if (!response.ok) {
-      console.error(`WorkCenter GitHub: failed to fetch issues for ${repo}: ${response.status}`);
+      logger.error(`Failed to fetch issues for ${repo}: ${response.status}`);
       return { issues: [], failed: true };
     }
 
@@ -228,7 +232,7 @@ export class GitHubIssueProvider implements WorkCenterProvider {
     );
 
     if (!response.ok) {
-      console.error(`WorkCenter GitHub: failed to fetch assigned issues: ${response.status}`);
+      logger.error(`Failed to fetch assigned issues: ${response.status}`);
       return { issues: [], failed: true };
     }
 
