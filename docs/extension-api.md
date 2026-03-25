@@ -251,13 +251,29 @@ enum WorkItemState {
 }
 ```
 
-Items transition through these states as the user interacts with them in the UI. See [WorkItemState](#workitemstate) for the full list of states.
+Items transition through these states as the user interacts with them in the UI.
+
+**State visibility in the UI:**
+
+| State | View | Description |
+|-------|------|-------------|
+| `New` | **Queue** | Freshly created or accepted items awaiting triage. |
+| `InProgress` | **Focus** | Work the user is actively doing. |
+| `Blocked` | **Focus** | Work that cannot proceed (shown alongside in-progress items). |
+| `WaitingOn` | **Focus** | Work paused on an external dependency. |
+| `Triaged` | *(none)* | Reserved for future use; not surfaced in any view today. |
+| `Done` | *(none)* | Completed items; not surfaced in any view today. |
+| `Archived` | *(none)* | Archived items; not surfaced in any view today. |
+
+Action authors should use this mapping when implementing `canRun()` — for example, an action that only applies to active work should target `InProgress`, `Blocked`, and `WaitingOn`.
 
 ## Examples
 
 ### Minimal Provider
 
-This example shows a provider that discovers items from a hypothetical task API:
+This example shows a provider that discovers items from a hypothetical task API.
+
+> **Note:** The `activate()` function below omits the full validation and error handling shown in [Acquiring the API](#acquiring-the-api) for brevity. Production extensions should use the robust pattern from that section.
 
 ```ts
 import * as vscode from 'vscode';
