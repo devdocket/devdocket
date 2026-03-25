@@ -37,10 +37,12 @@ export class JsonTaskStore implements ITaskStore {
           needsMigration = true;
         }
       }
-      if (needsMigration) {
-        await this.writeFile(items);
-      }
       this.cache = new Map(items.map((item) => [item.id, item]));
+      if (needsMigration) {
+        await this.enqueue(async () => {
+          await this.writeFile(items);
+        });
+      }
       return items;
     } catch (err: unknown) {
       if (isNodeError(err) && err.code === 'ENOENT') {
@@ -53,10 +55,10 @@ export class JsonTaskStore implements ITaskStore {
 
   async save(item: WorkItem): Promise<void> {
     logger.debug(`Saving work item: ${item.id}`);
+    if (this.cache === null) {
+      await this.loadAll();
+    }
     return this.enqueue(async () => {
-      if (this.cache === null) {
-        await this.loadAll();
-      }
       const previousValue = this.cache!.get(item.id);
       try {
         const items = Array.from(this.cache!.values()).filter(i => i.id !== item.id);
@@ -102,10 +104,10 @@ export class JsonTaskStore implements ITaskStore {
   }
 
   async delete(id: string): Promise<void> {
+    if (this.cache === null) {
+      await this.loadAll();
+    }
     return this.enqueue(async () => {
-      if (this.cache === null) {
-        await this.loadAll();
-      }
       const previousValue = this.cache!.get(id);
       try {
         this.cache!.delete(id);
