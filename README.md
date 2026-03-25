@@ -67,13 +67,18 @@ A browsable library of everything providers know about, organized by provider an
 Providers (GitHub, etc.)          Manual creation
         │                               │
         ▼                               ▼
-      Inbox  ────Accept────►  Queue  ───Move to Focus──►  Focus  ──Complete──►  Done  ──►  Archived
+      Inbox  ────Accept────►  Queue  ───Move to Focus──►  Focus
                                 │                           │
                               Archive                   Block/Wait
                                 │                        ◄──►
-                                ▼                      InProgress
-                             Archived
+                                │                      InProgress
+                                │                           │
+                                │                        Complete
+                                ▼                           ▼
+                          (Archived)                      (Done)
 ```
+
+> **Note:** *Done* and *Archived* are stored states, not browsable views. Completing an item from Focus or archiving from Queue removes it from all visible views.
 
 ## Plugin Ecosystem
 
