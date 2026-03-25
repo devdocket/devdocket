@@ -127,13 +127,26 @@ export async function activate(context: vscode.ExtensionContext): Promise<WorkCe
     inboxTreeView.badge = count > 0 ? { value: count, tooltip: `${count} unseen item${count === 1 ? '' : 's'}` } : undefined;
   };
 
+  // Coalesce UI updates so that when both onDidChangeDiscoveredItems and
+  // stateStore.onDidChange fire in the same microtask (e.g. during a discovery
+  // batch that calls setStates), we only run the full unseen-count scan once.
+  let uiUpdateScheduled = false;
+  const scheduleUiUpdate = () => {
+    if (uiUpdateScheduled) { return; }
+    uiUpdateScheduled = true;
+    queueMicrotask(() => {
+      uiUpdateScheduled = false;
+      updateViewMessages();
+      updateInboxBadge();
+    });
+  };
+
   updateViewMessages();
   updateInboxBadge();
 
-  const providerRegSub = providerRegistry.onDidRegisterProvider(updateViewMessages);
+  const providerRegSub = providerRegistry.onDidRegisterProvider(scheduleUiUpdate);
   const discoveredSub = providerRegistry.onDidChangeDiscoveredItems(() => {
-    updateViewMessages();
-    updateInboxBadge();
+    scheduleUiUpdate();
 
     // Mark initial load complete when loading transitions from true to false
     if (!initialLoadComplete) {
@@ -153,10 +166,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<WorkCe
       );
     }
   });
-  const stateStoreSub = stateStore.onDidChange(() => {
-    updateViewMessages();
-    updateInboxBadge();
-  });
+  const stateStoreSub = stateStore.onDidChange(scheduleUiUpdate);
 
   context.subscriptions.push(
     inboxTreeView,
