@@ -72,6 +72,10 @@ Providers emit `DiscoveredItem[]` via events. Actions declare `canRun(item)` and
 
 All work should be based from the `dev` branch. Create feature branches from `dev` and PR back to `dev`.
 
+### Use merge commits, not rebase
+
+When resolving merge conflicts or syncing with `dev`, use `git merge origin/dev` instead of `git rebase`. This preserves commit history and avoids force-push issues.
+
 ### Storage writes are serialized
 
 Both `JsonTaskStore` and `DiscoveredStateStore` use a `writeQueue` (promise chain) to prevent concurrent writes from corrupting JSON files. Always follow this pattern for any new store.
