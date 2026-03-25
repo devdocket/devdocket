@@ -61,6 +61,33 @@ export class JsonTaskStore implements ITaskStore {
     });
   }
 
+  async saveAll(items: WorkItem[]): Promise<void> {
+    return this.enqueue(async () => {
+      if (this.cache === null) {
+        await this.loadAll();
+      }
+      const previousValues = new Map(items.map(i => [i.id, this.cache!.get(i.id)]));
+      try {
+        const ids = new Set(items.map(i => i.id));
+        const remaining = Array.from(this.cache!.values()).filter(i => !ids.has(i.id));
+        remaining.push(...items);
+        await this.writeFile(remaining);
+        for (const item of items) {
+          this.cache!.set(item.id, item);
+        }
+      } catch (err) {
+        for (const [id, prev] of previousValues) {
+          if (prev) {
+            this.cache!.set(id, prev);
+          } else {
+            this.cache!.delete(id);
+          }
+        }
+        throw err;
+      }
+    });
+  }
+
   async delete(id: string): Promise<void> {
     return this.enqueue(async () => {
       if (this.cache === null) {

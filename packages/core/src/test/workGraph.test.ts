@@ -8,6 +8,7 @@ function createMockStore(): ITaskStore {
   return {
     loadAll: vi.fn(async () => Array.from(items.values())),
     save: vi.fn(async (item) => { items.set(item.id, item); }),
+    saveAll: vi.fn(async (batch) => { for (const item of batch) { items.set(item.id, item); } }),
     delete: vi.fn(async (id) => { items.delete(id); }),
   };
 }
