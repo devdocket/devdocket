@@ -6,6 +6,7 @@ import { DiscoveredStateStore } from '../storage/discoveredStateStore';
 import { WorkItemEditorPanel } from '../views/workItemEditorPanel';
 import { InboxItem } from '../views/inboxTreeProvider';
 import { SourceItemNode } from '../views/sourcesTreeProvider';
+import { logger } from '../services/logger';
 
 export function registerCommands(
   context: vscode.ExtensionContext,
@@ -54,6 +55,7 @@ export function registerCommands(
       }
       const actions = actionRegistry.getActionsFor(workItem);
       if (actions.length === 0) {
+        logger.warn(`No actions available for item ${workItem.id}`);
         vscode.window.showInformationMessage('No actions available for this item.');
         return;
       }
@@ -65,6 +67,7 @@ export function registerCommands(
         const action = actionRegistry.getAction(selected.actionId);
         if (action) {
           try {
+            logger.info(`Running action: ${selected.actionId} on item ${workItem.id}`);
             await action.run(workItem);
           } catch (err: unknown) {
             const message = err instanceof Error ? err.message : String(err);
@@ -74,6 +77,7 @@ export function registerCommands(
       }
     }),
     vscode.commands.registerCommand('workcenter.acceptFromInbox', async (item: InboxItem) => {
+      logger.info(`Accepting inbox item: ${item.externalId} from ${item.providerId}`);
       const existing = workGraph.findItemByProvenance(item.providerId, item.externalId);
       if (existing) {
         vscode.window.showInformationMessage(
@@ -93,6 +97,7 @@ export function registerCommands(
       }
     }),
     vscode.commands.registerCommand('workcenter.dismissFromInbox', async (item: InboxItem) => {
+      logger.info(`Dismissing inbox item: ${item.externalId}`);
       try {
         await stateStore.setState(item.providerId, item.externalId, 'dismissed');
       } catch (err: unknown) {
@@ -101,6 +106,7 @@ export function registerCommands(
       }
     }),
     vscode.commands.registerCommand('workcenter.acceptFromSources', async (item: SourceItemNode) => {
+      logger.info(`Accepting sources item: ${item.externalId}`);
       const existing = workGraph.findItemByProvenance(item.providerId, item.externalId);
       if (existing) {
         try {
@@ -138,6 +144,7 @@ async function createItem(workGraph: WorkGraph): Promise<void> {
     return;
   }
 
+  logger.info(`Creating new work item: ${title.trim()}`);
   await workGraph.createItem({ title: title.trim() });
   vscode.window.showInformationMessage(`WorkCenter: Created "${title.trim()}"`);
 }

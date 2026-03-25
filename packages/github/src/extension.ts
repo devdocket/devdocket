@@ -76,6 +76,8 @@ export async function activate(_context: vscode.ExtensionContext): Promise<void>
     { dispose: () => provider.dispose() },
     { dispose: () => prReviewProvider.dispose() },
   );
+
+  logger.info('WorkCenter GitHub activated, registered 2 providers');
 }
 
 export function deactivate(): void {

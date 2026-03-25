@@ -77,6 +77,7 @@ export class GitHubPrReviewProvider implements WorkCenterProvider {
     }
 
     this._isRefreshing = true;
+    logger.info('Fetching PR review requests...');
     try {
       const session = await vscode.authentication.getSession('github', ['repo'], {
         createIfNone: true,
@@ -140,6 +141,7 @@ export class GitHubPrReviewProvider implements WorkCenterProvider {
     }
 
     const data = (await response.json()) as GitHubSearchResponse;
+    logger.info(`Discovered ${data.items.length} PR review requests`);
     const items: DiscoveredItem[] = data.items.map((pr) => {
       const repoName = this.parseRepo(pr);
       return {

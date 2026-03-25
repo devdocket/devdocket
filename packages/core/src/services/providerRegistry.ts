@@ -34,6 +34,7 @@ export class ProviderRegistry {
     if (!this.discoveredItems.has(provider.id)) {
       this.discoveredItems.set(provider.id, []);
     }
+    logger.info(`Registered provider: ${provider.id} (${provider.label})`);
 
     const sub = provider.onDidDiscoverItems((items) => {
       void this.handleDiscoveredItems(provider.id, items).catch(err => logger.error('handleDiscoveredItems failed', err));
@@ -79,15 +80,17 @@ export class ProviderRegistry {
   }
 
   async refreshAll(): Promise<void> {
-    const promises = Array.from(this.providers.values()).map((p) =>
-      p.refresh().catch((err) => {
+    const promises = Array.from(this.providers.values()).map((p) => {
+      logger.debug(`Provider ${p.id} refreshing...`);
+      return p.refresh().catch((err) => {
         logger.error(`Provider "${p.id}" refresh failed`, err);
-      }),
-    );
+      });
+    });
     await Promise.all(promises);
   }
 
   private async handleDiscoveredItems(providerId: string, items: DiscoveredItem[]): Promise<void> {
+    logger.info(`Provider ${providerId} discovered ${items.length} items`);
     this.discoveredItems.set(providerId, items);
     const provider = this.providers.get(providerId);
     const resurface = provider?.resurfaceDismissed === true;

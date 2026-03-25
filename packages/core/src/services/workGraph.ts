@@ -1,6 +1,7 @@
 import * as vscode from 'vscode';
 import { WorkItem, WorkItemInput, WorkItemState } from '../models/workItem';
 import { ITaskStore } from '../storage/taskStore';
+import { logger } from './logger';
 
 export class WorkGraph {
   private items: Map<string, WorkItem> = new Map();
@@ -15,6 +16,7 @@ export class WorkGraph {
     for (const item of items) {
       this.items.set(item.id, item);
     }
+    logger.debug(`Loaded ${items.length} work items from store`);
   }
 
   getAll(): WorkItem[] {
@@ -53,6 +55,7 @@ export class WorkGraph {
     await this.store.save(item);
     this.items.set(item.id, item);
     this._onDidChange.fire();
+    logger.info(`Created work item: ${item.id}`);
     return item;
   }
 
@@ -65,6 +68,7 @@ export class WorkGraph {
     await this.store.save(updated);
     this.items.set(id, updated);
     this._onDidChange.fire();
+    logger.info(`Updated work item: ${id}`);
   }
 
   async transitionState(id: string, newState: WorkItemState): Promise<void> {
@@ -76,12 +80,14 @@ export class WorkGraph {
     await this.store.save(updated);
     this.items.set(id, updated);
     this._onDidChange.fire();
+    logger.info(`Transitioned work item ${id} to ${newState}`);
   }
 
   async deleteItem(id: string): Promise<void> {
     await this.store.delete(id);
     this.items.delete(id);
     this._onDidChange.fire();
+    logger.info(`Deleted work item: ${id}`);
   }
 
   dispose(): void {

@@ -44,9 +44,11 @@ export async function activate(context: vscode.ExtensionContext): Promise<WorkCe
   const store = new JsonTaskStore(storagePath);
   const workGraph = new WorkGraph(store);
   await workGraph.load();
+  logger.debug(`Loaded ${workGraph.getAll().length} work items`);
 
   const stateStore = new DiscoveredStateStore(storagePath);
   await stateStore.load();
+  logger.debug('Loaded discovered state');
 
   // Migration: mark existing provider-backed items as accepted
   const itemsToMigrate: Array<{ providerId: string; externalId: string; state: 'accepted' }> = [];
@@ -67,6 +69,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<WorkCe
   if (itemsToMigrate.length > 0) {
     try {
       await stateStore.setStates(itemsToMigrate);
+      logger.info(`Migrated ${itemsToMigrate.length} items to accepted state`);
     } catch (err) {
       logger.error('Migration failed', err);
     }
@@ -138,6 +141,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<WorkCe
 
   registerCommands(context, workGraph, actionRegistry, stateStore);
 
+  logger.info('WorkCenter activated');
   return api;
 }
 

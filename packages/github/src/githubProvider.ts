@@ -68,6 +68,7 @@ export class GitHubIssueProvider implements WorkCenterProvider {
   }
 
   async refresh(): Promise<void> {
+    logger.info('Fetching assigned issues...');
     try {
       const session = await vscode.authentication.getSession('github', ['repo'], {
         createIfNone: true,
@@ -121,6 +122,7 @@ export class GitHubIssueProvider implements WorkCenterProvider {
       };
     });
 
+    logger.info(`Discovered ${items.length} GitHub issues`);
     this._onDidDiscoverItems.fire(items);
 
     if (failures.length > 0) {
@@ -192,6 +194,7 @@ export class GitHubIssueProvider implements WorkCenterProvider {
   }
 
   private async fetchRepoIssues(token: string, repo: string): Promise<{ issues: GitHubIssue[]; failed: boolean }> {
+    logger.debug(`Fetching issues for repo: ${repo}`);
     // GitHub API max per_page is 100; pagination for >100 items is a future enhancement
     const response = await fetch(
       `https://api.github.com/repos/${repo}/issues?assignee=@me&state=open&per_page=100`,

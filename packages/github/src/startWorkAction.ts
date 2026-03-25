@@ -3,6 +3,7 @@ import { execFile } from 'child_process';
 import { promisify } from 'util';
 import * as path from 'path';
 import * as fs from 'fs';
+import { logger } from './logger';
 
 const execFileAsync = promisify(execFile);
 
@@ -82,6 +83,7 @@ export class StartWorkAction implements WorkCenterAction {
         }
       }
       await execFileAsync('git', ['branch', branchName, baseBranch], { cwd: repoPath });
+      logger.info(`Starting work: creating branch ${branchName}`);
 
       // Create worktree
       const worktreePath = path.join(path.dirname(repoPath), branchName);
@@ -107,6 +109,8 @@ export class StartWorkAction implements WorkCenterAction {
         }
         throw worktreeErr;
       }
+
+      logger.info(`Created worktree at ${worktreePath}`);
 
       // Open new VS Code window at worktree
       const worktreeUri = vscode.Uri.file(worktreePath);
