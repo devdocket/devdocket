@@ -20,8 +20,13 @@ function createWorkItem(overrides: Partial<Record<string, unknown>> = {}) {
 describe('AiReviewAction', () => {
   let action: AiReviewAction;
 
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.stubGlobal('fetch', vi.fn());
     action = new AiReviewAction();
 
     // Reset default mocks
@@ -95,7 +100,7 @@ describe('AiReviewAction', () => {
         ok: true,
         text: vi.fn().mockResolvedValue('diff --git a/file.ts b/file.ts\n+added line'),
       });
-      global.fetch = mockFetch;
+      vi.stubGlobal('fetch', mockFetch);
 
       const item = createWorkItem();
       await action.run(item);
@@ -119,7 +124,7 @@ describe('AiReviewAction', () => {
     });
 
     it('shows error when diff fetch fails', async () => {
-      global.fetch = vi.fn().mockResolvedValue({ ok: false });
+      vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: false }));
 
       const item = createWorkItem();
       await action.run(item);
@@ -130,10 +135,10 @@ describe('AiReviewAction', () => {
     });
 
     it('shows warning when no language model is available', async () => {
-      global.fetch = vi.fn().mockResolvedValue({
+      vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
         ok: true,
         text: vi.fn().mockResolvedValue('some diff'),
-      });
+      }));
       vi.mocked(lm.selectChatModels).mockResolvedValue([]);
 
       const item = createWorkItem();
@@ -163,10 +168,10 @@ describe('AiReviewAction', () => {
     });
 
     it('does not open document when cancelled after analysis', async () => {
-      global.fetch = vi.fn().mockResolvedValue({
+      vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
         ok: true,
         text: vi.fn().mockResolvedValue('diff content'),
-      });
+      }));
 
       vi.mocked(window.withProgress).mockImplementation(async (_options: unknown, task: Function) => {
         const progress = { report: vi.fn() };
@@ -195,7 +200,7 @@ describe('AiReviewAction', () => {
     });
 
     it('returns undefined when fetch throws', async () => {
-      global.fetch = vi.fn().mockRejectedValue(new Error('network error'));
+      vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('network error')));
 
       const result = await action.fetchDiff('https://github.com/owner/repo/pull/1');
       expect(result).toBeUndefined();
