@@ -16,7 +16,7 @@ Each provider's items are grouped under the provider name with a count of unseen
 
 | Action | Description |
 |--------|-------------|
-| **Accept to Queue** | Creates a work item in the Queue and marks the provider item as accepted |
+| **Accept to Queue** | If not already accepted, creates a work item in the Queue and marks the provider item as accepted; if already accepted, shows a notification and does not change its state |
 | **Dismiss** | Hides the item from the Inbox (it remains visible in Sources) |
 | **Open in Browser** | Opens the item's URL in your default browser (if the item has a URL) |
 
@@ -161,35 +161,37 @@ WorkCenter defines seven states for work items:
                     │   New    │  (Queue)
                     └────┬─────┘
                          │
-              ┌──────────┼──────────┐
-              │          │          │
-              ▼          │          ▼
-        ┌──────────┐     │    ┌──────────┐
-        │InProgress│     │    │ Archived │
-        └────┬─────┘     │    └──────────┘
-             │           │
-     ┌───────┼───────┐   │
-     │       │       │   │
-     ▼       ▼       │   │
-┌─────────┐ ┌──────────┐ │   │
-│ Blocked │ │WaitingOn │ │   │
-└────┬────┘ └────┬─────┘ │   │
-     │         │     │   │
-     └────┬────┘     │   │
-          │          │   │
-          ▼          │   │
-    ┌──────────┐     │   │
-    │InProgress│ ◄───┘   │
-    └────┬─────┘         │
-         │               │
-         ▼               │
-    ┌──────────┐         │
-    │   Done   │         │
-    └──────────┘         │
+              ┌──────────┼───────────────┐
+              │          │               │
+              ▼          │               │
+        ┌──────────┐     │               │
+        │InProgress│     │               │
+        └────┬─────┘     │               │
+             │           │               │
+     ┌───────┼───────┐   │               │
+     │       │       │   │               │
+     ▼       ▼       │   │               │
+┌─────────┐ ┌──────────┐ │               │
+│ Blocked │ │WaitingOn │ │               │
+└────┬────┘ └────┬─────┘ │               │
+     │         │     │   │               │
+     └────┬────┘     │   │               │
+          │          │   │               │
+          ▼          │   │               │
+    ┌──────────┐     │   │               │
+    │InProgress│ ◄───┘   │               │
+    └────┬─────┘         │               │
+         │               │               │
+         ▼               │               │
+    ┌──────────┐         │               │
+    │   Done   │         │               │
+    └────┬─────┘         │               │
+         │               │               │
+         └───────────────┼───────────────┘
                          │
-    ┌──────────┐         │
-    │ Archived │ ◄───────┘
-    └──────────┘
+                   ┌──────────┐
+                   │ Archived │
+                   └──────────┘
 ```
 
 **Valid transitions:**
