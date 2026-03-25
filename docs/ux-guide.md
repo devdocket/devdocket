@@ -1,10 +1,10 @@
 # WorkCenter UX Guide
 
-WorkCenter is a VS Code extension that provides a unified hub for managing work items from multiple sources. This guide covers the four-view model, data flow, work item lifecycle, and available actions.
+WorkCenter is a VS Code extension that provides a unified hub for managing work items from multiple sources. This guide covers the five-view model, data flow, work item lifecycle, and available actions.
 
-## The Four Views
+## The Five Views
 
-WorkCenter organizes work across four views, accessible from the WorkCenter activity bar icon.
+WorkCenter organizes work across five views, accessible from the WorkCenter activity bar icon.
 
 ### Inbox
 
@@ -78,6 +78,22 @@ Sources is a browsable library of everything providers know about, regardless of
 | **Accept to Queue** | Creates a work item in the Queue (or re-accepts a previously accepted item) |
 | **Open in Browser** | Opens the item's URL in your default browser (if the item has a URL) |
 
+### History
+
+The History view shows completed and archived items, sorted by most recently updated (newest first). This provides a record of past work without cluttering the active views.
+
+Items display a state label next to the title:
+- **✓ done** — work that was completed (shown with a $(check) icon)
+- **📦 archived** — items that were archived (shown with a $(archive) icon)
+
+**Available actions on History items:**
+
+| Action | Description |
+|--------|-------------|
+| **Open in Browser** | Opens the item's URL in your default browser (if the item has a URL) |
+
+> **Note:** History items are in terminal states, so no state-changing commands (such as Archive) are available.
+
 ## Data Flow
 
 Items flow through WorkCenter in a defined progression:
@@ -98,7 +114,7 @@ Provider discovers items
 │   [New]      │  ◄───────────────────────────┘
 └──────┬───────┘
        │ Move to Focus
-       │ (or Archive to skip)
+       │ (or Archive → History)
        ▼
 ┌──────────────┐
 │    Focus     │
@@ -108,7 +124,9 @@ Provider discovers items
        │ Complete
        ▼
 ┌──────────────┐
-│    Done      │  (terminal state — hidden from active views)
+│   History    │  (Done and Archived items, sorted by last updated)
+│ [Done]       │
+│ [Archived]   │
 └──────────────┘
 ```
 
@@ -151,8 +169,8 @@ WorkCenter defines seven states for work items:
 | **InProgress** | Focus | Item is actively being worked on |
 | **Blocked** | Focus | Work is blocked by an external dependency |
 | **WaitingOn** | Focus | Waiting on someone or something |
-| **Done** | — | Work is complete |
-| **Archived** | — | Item is archived and hidden from active views |
+| **Done** | History | Work is complete |
+| **Archived** | History | Item is archived |
 
 ### State Transition Diagram
 
@@ -197,7 +215,7 @@ WorkCenter defines seven states for work items:
 - **InProgress → Done** — "Complete" from Focus
 - **Blocked → InProgress** — "Unblock" from Focus
 - **WaitingOn → InProgress** — "Unblock" from Focus
-- **Done** — Terminal state; no further transitions are currently exposed
+- **Done** — Terminal state; no further transitions are currently exposed. Visible in History.
 
 ## Available Commands
 
