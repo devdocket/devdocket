@@ -175,11 +175,16 @@ export class WorkGraph {
     const siblings = this.getItemsByState(dragged.state)
       .sort((a, b) => (a.sortOrder ?? Number.MAX_SAFE_INTEGER) - (b.sortOrder ?? Number.MAX_SAFE_INTEGER));
 
-    const withoutDragged = siblings.filter(s => s.id !== draggedId);
-    const targetIndex = withoutDragged.findIndex(s => s.id === targetId);
-    if (targetIndex === -1) { return; }
+    const draggedIndex = siblings.findIndex(s => s.id === draggedId);
+    const targetIndex = siblings.findIndex(s => s.id === targetId);
+    if (draggedIndex === -1 || targetIndex === -1) { return; }
 
-    withoutDragged.splice(targetIndex, 0, dragged);
+    const withoutDragged = siblings.filter(s => s.id !== draggedId);
+    const newTargetIndex = withoutDragged.findIndex(s => s.id === targetId);
+
+    // Insert after target when dragging down, before target when dragging up
+    const insertIndex = draggedIndex < targetIndex ? newTargetIndex + 1 : newTargetIndex;
+    withoutDragged.splice(insertIndex, 0, dragged);
 
     const itemsToSave: WorkItem[] = [];
     withoutDragged.forEach((item, i) => {

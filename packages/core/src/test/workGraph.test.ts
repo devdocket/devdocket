@@ -222,7 +222,7 @@ describe('WorkGraph', () => {
     expect(c.sortOrder).toBe(2);
   });
 
-  it('reorders item from position 2 to position 0', async () => {
+  it('reorders item from position 2 to position 0 (drag up inserts before target)', async () => {
     const a = await graph.createItem({ title: 'A' });
     const b = await graph.createItem({ title: 'B' });
     const c = await graph.createItem({ title: 'C' });
@@ -234,7 +234,7 @@ describe('WorkGraph', () => {
     expect(items.map((i) => i.title)).toEqual(['C', 'A', 'B']);
   });
 
-  it('reorders item from position 0 to position 2', async () => {
+  it('reorders item from position 0 to position 2 (drag down inserts after target)', async () => {
     const a = await graph.createItem({ title: 'A' });
     const b = await graph.createItem({ title: 'B' });
     const c = await graph.createItem({ title: 'C' });
@@ -243,7 +243,19 @@ describe('WorkGraph', () => {
 
     const items = graph.getItemsByState(WorkItemState.New)
       .sort((x, y) => (x.sortOrder ?? Number.MAX_SAFE_INTEGER) - (y.sortOrder ?? Number.MAX_SAFE_INTEGER));
-    expect(items.map((i) => i.title)).toEqual(['B', 'A', 'C']);
+    expect(items.map((i) => i.title)).toEqual(['B', 'C', 'A']);
+  });
+
+  it('dragging first item onto last places it at the end', async () => {
+    const a = await graph.createItem({ title: 'A' });
+    const b = await graph.createItem({ title: 'B' });
+    const c = await graph.createItem({ title: 'C' });
+
+    await graph.reorderItem(a.id, c.id);
+
+    const items = graph.getItemsByState(WorkItemState.New)
+      .sort((x, y) => (x.sortOrder ?? Number.MAX_SAFE_INTEGER) - (y.sortOrder ?? Number.MAX_SAFE_INTEGER));
+    expect(items[items.length - 1].title).toBe('A');
   });
 
   it('reorder to same position is a no-op', async () => {
