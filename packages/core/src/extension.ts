@@ -132,12 +132,13 @@ export async function activate(context: vscode.ExtensionContext): Promise<WorkCe
   const workGraphSub = workGraph.onDidChange(updateWorkViewMessages);
 
   let previousInboxCount = 0;
+  let initialLoadComplete = false;
 
   const updateInboxBadge = () => {
     const count = getInboxUnseenCount(providerRegistry, stateStore);
     inboxTreeView.badge = count > 0 ? { value: count, tooltip: `${count} new item${count === 1 ? '' : 's'}` } : undefined;
 
-    if (count > previousInboxCount && previousInboxCount >= 0) {
+    if (initialLoadComplete && count > previousInboxCount) {
       const newCount = count - previousInboxCount;
       const config = vscode.workspace.getConfiguration('workcenter');
       const showNotifications = config.get<boolean>('showInboxNotifications', true);
@@ -152,6 +153,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<WorkCe
 
   updateViewMessages();
   updateInboxBadge();
+  initialLoadComplete = true;
 
   const providerRegSub = providerRegistry.onDidRegisterProvider(updateViewMessages);
   const discoveredSub = providerRegistry.onDidChangeDiscoveredItems(() => {
