@@ -187,10 +187,24 @@ export class AdoPrReviewProvider implements WorkCenterProvider {
 
     if (!response.ok) {
       console.error(`WorkCenter ADO: failed to fetch connection data: ${response.status}`);
+      this._cachedUserId = undefined;
       return undefined;
     }
 
-    const data = (await response.json()) as ConnectionData;
+    let data: ConnectionData;
+    try {
+      data = (await response.json()) as ConnectionData;
+    } catch (err) {
+      console.error('WorkCenter ADO: failed to parse connection data response:', err);
+      this._cachedUserId = undefined;
+      return undefined;
+    }
+
+    if (!data?.authenticatedUser?.id) {
+      this._cachedUserId = undefined;
+      return undefined;
+    }
+
     this._cachedUserId = data.authenticatedUser.id;
     return this._cachedUserId;
   }
@@ -200,7 +214,7 @@ export class AdoPrReviewProvider implements WorkCenterProvider {
     project: string,
     reviewerId: string,
   ): Promise<{ items: DiscoveredItem[]; failed: boolean }> {
-    const projectPath = project ? `/${project}` : '';
+    const projectPath = project ? `/${encodeURIComponent(project)}` : '';
     const url = `https://dev.azure.com/${this.org}${projectPath}/_apis/git/pullrequests?searchCriteria.reviewerId=${reviewerId}&searchCriteria.status=active&api-version=7.1`;
 
     const response = await fetch(url, {
@@ -214,8 +228,14 @@ export class AdoPrReviewProvider implements WorkCenterProvider {
       return { items: [], failed: true };
     }
 
-    const data = (await response.json()) as { value: AdoPullRequest[] };
-    const items: DiscoveredItem[] = data.value.map((pr) => {
+    let prData: { value: AdoPullRequest[] };
+    try {
+      prData = (await response.json()) as { value: AdoPullRequest[] };
+    } catch (err) {
+      console.error(`WorkCenter ADO: failed to parse PR response for project "${project}":`, err);
+      return { items: [], failed: true };
+    }
+    const items: DiscoveredItem[] = prData.value.map((pr) => {
       const projectName = pr.repository.project.name;
       const repoName = pr.repository.name;
       return {

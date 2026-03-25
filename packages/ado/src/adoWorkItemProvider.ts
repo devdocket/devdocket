@@ -83,6 +83,11 @@ export class AdoWorkItemProvider implements WorkCenterProvider {
   }
 
   async refresh(): Promise<void> {
+    if (this._isRefreshing) {
+      return;
+    }
+
+    this._isRefreshing = true;
     try {
       const session = await vscode.authentication.getSession('microsoft', [ADO_AUTH_SCOPE], {
         createIfNone: true,
@@ -95,6 +100,8 @@ export class AdoWorkItemProvider implements WorkCenterProvider {
       await this.fetchAndPublishWorkItems(session.accessToken, true);
     } catch (err) {
       console.error('WorkCenter ADO: failed to fetch work items:', err);
+    } finally {
+      this._isRefreshing = false;
     }
   }
 
@@ -160,7 +167,7 @@ export class AdoWorkItemProvider implements WorkCenterProvider {
     token: string,
     project: string,
   ): Promise<{ items: DiscoveredItem[]; failed: boolean }> {
-    const projectPath = project ? `/${project}` : '';
+    const projectPath = project ? `/${encodeURIComponent(project)}` : '';
     const wiqlUrl = `https://dev.azure.com/${this.org}${projectPath}/_apis/wit/wiql?api-version=7.1`;
 
     const wiqlQuery = `SELECT [System.Id] FROM WorkItems WHERE [System.AssignedTo] = @Me AND [System.State] <> 'Closed' AND [System.State] <> 'Removed'`;
@@ -179,7 +186,13 @@ export class AdoWorkItemProvider implements WorkCenterProvider {
       return { items: [], failed: true };
     }
 
-    const wiqlData = (await wiqlResponse.json()) as WiqlResponse;
+    let wiqlData: WiqlResponse;
+    try {
+      wiqlData = (await wiqlResponse.json()) as WiqlResponse;
+    } catch (err) {
+      console.error(`WorkCenter ADO: failed to parse WIQL response for project "${project}":`, err);
+      return { items: [], failed: true };
+    }
     if (wiqlData.workItems.length === 0) {
       return { items: [], failed: false };
     }
@@ -204,7 +217,13 @@ export class AdoWorkItemProvider implements WorkCenterProvider {
         return { items: [], failed: true };
       }
 
-      const detailData = (await detailResponse.json()) as { value: AdoWorkItem[] };
+      let detailData: { value: AdoWorkItem[] };
+      try {
+        detailData = (await detailResponse.json()) as { value: AdoWorkItem[] };
+      } catch (err) {
+        console.error('WorkCenter ADO: failed to parse work item detail response:', err);
+        return { items: [], failed: true };
+      }
       allWorkItems.push(...detailData.value);
     }
 
