@@ -30,7 +30,10 @@ export class InboxTreeProvider implements vscode.TreeDataProvider<InboxElement> 
     private readonly stateStore: DiscoveredStateStore,
   ) {
     this.disposables.push(
-      providerRegistry.onDidChangeDiscoveredItems(() => this._onDidChangeTreeData.fire()),
+      providerRegistry.onDidChangeDiscoveredItems(() => {
+        this.seenItems.clear();
+        this._onDidChangeTreeData.fire();
+      }),
       stateStore.onDidChange(() => this._onDidChangeTreeData.fire())
     );
   }

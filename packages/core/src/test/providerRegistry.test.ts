@@ -324,6 +324,26 @@ describe('ProviderRegistry', () => {
     createSpy.mockRestore();
   });
 
+  it('does not fire onDidAddNewUnseenItems when setStates fails', async () => {
+    const provider = createMockProvider('gh');
+    registry.register(provider);
+
+    stateStore.setStates.mockRejectedValueOnce(new Error('disk full'));
+
+    const listener = vi.fn();
+    registry.onDidAddNewUnseenItems(listener);
+
+    provider.fireItems([
+      { externalId: 'issue-1', title: 'Bug fix' },
+    ]);
+
+    // Wait for handleDiscoveredItems to complete
+    await vi.waitFor(() =>
+      expect(registry.getDiscoveredItems('gh')).toHaveLength(1),
+    );
+    expect(listener).not.toHaveBeenCalled();
+  });
+
   describe('resurfaceDismissed', () => {
     function createResurfaceProvider(id: string): WorkCenterProvider & { fireItems: (items: DiscoveredItem[]) => void } {
       const emitter = new EventEmitter<DiscoveredItem[]>();

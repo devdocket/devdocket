@@ -196,6 +196,20 @@ describe('InboxTreeProvider', () => {
       expect(listener).toHaveBeenCalledTimes(1);
     });
 
+    it('should clear seenItems when providerRegistry fires change event', () => {
+      const item: InboxItem = { kind: 'item', providerId: 'gh', externalId: '1', title: 'Bug' };
+      provider.markSeen('gh', '1');
+
+      // Before refresh, item should be seen (plain label)
+      expect(provider.getTreeItem(item).label).toBe('Bug');
+
+      // Provider refresh fires → seenItems should be cleared
+      registry._fire();
+
+      // After refresh, item should appear highlighted again
+      expect(provider.getTreeItem(item).label).toEqual({ label: 'Bug', highlights: [[0, 3]] });
+    });
+
     it('should refresh when stateStore fires change event', () => {
       const listener = vi.fn();
       provider.onDidChangeTreeData(listener);
