@@ -229,6 +229,12 @@ interface WorkItem {
   /** URL associated with the item (e.g., GitHub issue URL). */
   url?: string;
 
+  /**
+   * Optional ordering hint used by WorkCenter to sort items in the Queue view.
+   * Typically managed by WorkCenter; extensions generally do not need to set this.
+   */
+  sortOrder?: number;
+
   /** Timestamp (ms since epoch) when the item was created. */
   createdAt: number;
 
@@ -262,8 +268,8 @@ Items transition through these states as the user interacts with them in the UI.
 | `Blocked` | **Focus** | Work that cannot proceed (shown alongside in-progress items). |
 | `WaitingOn` | **Focus** | Work paused on an external dependency. |
 | `Triaged` | *(none)* | Reserved for future use; not surfaced in any view today. |
-| `Done` | *(none)* | Completed items; not surfaced in any view today. |
-| `Archived` | *(none)* | Archived items; not surfaced in any view today. |
+| `Done` | **History** | Completed items shown in the History view. |
+| `Archived` | **History** | Archived items shown in the History view. |
 
 Action authors should use this mapping when implementing `canRun()` — for example, an action that only applies to active work should target `InProgress`, `Blocked`, and `WaitingOn`.
 
