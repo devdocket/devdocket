@@ -82,7 +82,7 @@ export class InboxTreeProvider implements vscode.TreeDataProvider<InboxElement> 
       const count = this.getUnseenCount(element.providerId);
       const treeItem = new vscode.TreeItem(element.label, vscode.TreeItemCollapsibleState.Collapsed);
       treeItem.description = `${count}`;
-      treeItem.id = `inbox-provider-${element.providerId}`;
+      treeItem.id = `inbox::provider::${element.providerId}`;
       treeItem.contextValue = 'inboxProvider';
       treeItem.iconPath = new vscode.ThemeIcon('plug');
       return treeItem;
@@ -90,7 +90,7 @@ export class InboxTreeProvider implements vscode.TreeDataProvider<InboxElement> 
 
     if (element.kind === 'group') {
       const treeItem = new vscode.TreeItem(element.groupName, vscode.TreeItemCollapsibleState.Collapsed);
-      treeItem.id = `inbox-group-${element.providerId}-${element.groupName}`;
+      treeItem.id = `inbox::group::${element.providerId}::${element.groupName}`;
       treeItem.description = `${element.unseenCount}`;
       treeItem.contextValue = 'inboxGroup';
       treeItem.iconPath = new vscode.ThemeIcon('folder');
@@ -101,7 +101,7 @@ export class InboxTreeProvider implements vscode.TreeDataProvider<InboxElement> 
     const isSeen = this.seenItems.has(key);
 
     const treeItem = new vscode.TreeItem(element.title, vscode.TreeItemCollapsibleState.None);
-    treeItem.id = `inbox-item-${element.providerId}-${element.externalId}`;
+    treeItem.id = `inbox::item::${element.providerId}::${element.externalId}`;
     treeItem.tooltip = this.buildTooltip(element);
     treeItem.contextValue = element.url ? 'inboxItem.hasUrl' : 'inboxItem';
     treeItem.iconPath = new vscode.ThemeIcon(isSeen ? 'circle-outline' : 'circle-filled');
@@ -119,14 +119,12 @@ export class InboxTreeProvider implements vscode.TreeDataProvider<InboxElement> 
           label: this.providerRegistry.getProviderLabel(element.providerId),
         };
       case 'item': {
-        const items = this.providerRegistry.getDiscoveredItems(element.providerId);
-        const discoveredItem = items.find(i => i.externalId === element.externalId);
-        if (discoveredItem?.group) {
-          const unseenCount = this.getGroupUnseenCount(element.providerId, discoveredItem.group);
+        if (element.group) {
+          const unseenCount = this.getGroupUnseenCount(element.providerId, element.group);
           return {
             kind: 'group',
             providerId: element.providerId,
-            groupName: discoveredItem.group,
+            groupName: element.group,
             unseenCount,
           };
         }
