@@ -52,7 +52,7 @@ const window = {
   showErrorMessage: vi.fn(),
   showQuickPick: vi.fn(),
   registerTreeDataProvider: vi.fn(() => ({ dispose: vi.fn() })),
-  createTreeView: vi.fn(() => ({ dispose: vi.fn(), message: undefined })),
+  createTreeView: vi.fn(() => ({ dispose: vi.fn(), message: undefined, badge: undefined })),
   createWebviewPanel: vi.fn(),
   createOutputChannel: vi.fn(() => ({
     appendLine: vi.fn(),
@@ -76,6 +76,12 @@ const env = {
 
 const Uri = {
   parse: vi.fn((s: string) => ({ toString: () => s })),
+};
+
+const workspace = {
+  getConfiguration: vi.fn(() => ({
+    get: vi.fn((_key: string, defaultValue?: any) => defaultValue),
+  })),
 };
 
 class MockDisposable {

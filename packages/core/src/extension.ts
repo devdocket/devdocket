@@ -17,6 +17,19 @@ import { initLogger, setLogLevel, logger, LogLevel } from './services/logger';
 export type { WorkCenterApi, WorkCenterProvider, WorkCenterAction, DiscoveredItem, Disposable } from './api/types';
 export { logger } from './services/logger';
 
+export function getInboxUnseenCount(providerRegistry: ProviderRegistry, stateStore: DiscoveredStateStore): number {
+  let count = 0;
+  for (const [providerId, items] of providerRegistry.getAllDiscoveredItems()) {
+    for (const item of items) {
+      const state = stateStore.getState(providerId, item.externalId);
+      if (state === undefined || state === 'unseen') {
+        count++;
+      }
+    }
+  }
+  return count;
+}
+
 export async function activate(context: vscode.ExtensionContext): Promise<WorkCenterApi> {
   const outputChannel = vscode.window.createOutputChannel('WorkCenter');
   context.subscriptions.push(outputChannel);
@@ -118,11 +131,37 @@ export async function activate(context: vscode.ExtensionContext): Promise<WorkCe
   updateWorkViewMessages();
   const workGraphSub = workGraph.onDidChange(updateWorkViewMessages);
 
+  let previousInboxCount = 0;
+
+  const updateInboxBadge = () => {
+    const count = getInboxUnseenCount(providerRegistry, stateStore);
+    inboxTreeView.badge = count > 0 ? { value: count, tooltip: `${count} new item${count === 1 ? '' : 's'}` } : undefined;
+
+    if (count > previousInboxCount && previousInboxCount >= 0) {
+      const newCount = count - previousInboxCount;
+      const config = vscode.workspace.getConfiguration('workcenter');
+      const showNotifications = config.get<boolean>('showInboxNotifications', true);
+      if (showNotifications && newCount > 0) {
+        vscode.window.showInformationMessage(
+          `WorkCenter: ${newCount} new item${newCount === 1 ? '' : 's'} in Inbox`
+        );
+      }
+    }
+    previousInboxCount = count;
+  };
+
   updateViewMessages();
+  updateInboxBadge();
 
   const providerRegSub = providerRegistry.onDidRegisterProvider(updateViewMessages);
-  const discoveredSub = providerRegistry.onDidChangeDiscoveredItems(updateViewMessages);
-  const stateStoreSub = stateStore.onDidChange(updateViewMessages);
+  const discoveredSub = providerRegistry.onDidChangeDiscoveredItems(() => {
+    updateViewMessages();
+    updateInboxBadge();
+  });
+  const stateStoreSub = stateStore.onDidChange(() => {
+    updateViewMessages();
+    updateInboxBadge();
+  });
 
   context.subscriptions.push(
     inboxTreeView,
