@@ -122,7 +122,7 @@ export class InboxTreeProvider implements vscode.TreeDataProvider<InboxElement> 
         const items = this.providerRegistry.getDiscoveredItems(element.providerId);
         const discoveredItem = items.find(i => i.externalId === element.externalId);
         if (discoveredItem?.group) {
-          const unseenCount = this.getGroupChildren(element.providerId, discoveredItem.group).length;
+          const unseenCount = this.getGroupUnseenCount(element.providerId, discoveredItem.group);
           return {
             kind: 'group',
             providerId: element.providerId,
@@ -221,6 +221,15 @@ export class InboxTreeProvider implements vscode.TreeDataProvider<InboxElement> 
       url: item.url,
       group: item.group,
     };
+  }
+
+  private getGroupUnseenCount(providerId: string, groupName: string): number {
+    const items = this.providerRegistry.getDiscoveredItems(providerId);
+    return items.filter((item) => {
+      if (item.group !== groupName) { return false; }
+      const state = this.stateStore.getState(providerId, item.externalId);
+      return state === undefined || state === 'unseen';
+    }).length;
   }
 
   private getUnseenCount(providerId: string): number {

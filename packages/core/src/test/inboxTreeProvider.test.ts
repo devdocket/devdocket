@@ -115,7 +115,8 @@ describe('InboxTreeProvider', () => {
     it('should pass through group field from discovered item', () => {
       registry._setItems('gh', [{ externalId: 'issue-1', title: 'Bug fix', group: 'dotnet/runtime' }]);
 
-      const items = provider.getChildren(providerNode('gh'));
+      const groupNode: InboxGroupNode = { kind: 'group', providerId: 'gh', groupName: 'dotnet/runtime', unseenCount: 1 };
+      const items = provider.getChildren(groupNode);
       expect(items).toHaveLength(1);
       expect((items[0] as InboxItem).group).toBe('dotnet/runtime');
     });
@@ -297,6 +298,46 @@ describe('InboxTreeProvider', () => {
     it('should return false if item is already seen', () => {
       provider.markSeen('gh', '1');
       expect(provider.markSeen('gh', '1')).toBe(false);
+    });
+  });
+
+  describe('getParent', () => {
+    it('should return undefined for provider nodes', () => {
+      expect(provider.getParent(providerNode('gh'))).toBeUndefined();
+    });
+
+    it('should return provider node for group nodes', () => {
+      registry._setLabel('gh', 'GitHub Issues');
+      const groupNode: InboxGroupNode = { kind: 'group', providerId: 'gh', groupName: 'repo-one', unseenCount: 2 };
+      const parent = provider.getParent(groupNode);
+      expect(parent).toBeDefined();
+      expect(parent!.kind).toBe('provider');
+      expect((parent as InboxProviderNode).providerId).toBe('gh');
+      expect((parent as InboxProviderNode).label).toBe('GitHub Issues');
+    });
+
+    it('should return group node for item with group', () => {
+      registry._setItems('gh', [
+        { externalId: '1', title: 'Issue A', group: 'repo-one' },
+        { externalId: '2', title: 'Issue B', group: 'repo-one' },
+      ]);
+      const item: InboxItem = { kind: 'item', providerId: 'gh', externalId: '1', title: 'Issue A', group: 'repo-one' };
+      const parent = provider.getParent(item);
+      expect(parent).toBeDefined();
+      expect(parent!.kind).toBe('group');
+      expect((parent as InboxGroupNode).groupName).toBe('repo-one');
+      expect((parent as InboxGroupNode).unseenCount).toBe(2);
+    });
+
+    it('should return provider node for ungrouped item', () => {
+      registry._setLabel('gh', 'GitHub Issues');
+      registry._setItems('gh', [{ externalId: '1', title: 'Bug fix' }]);
+      const item: InboxItem = { kind: 'item', providerId: 'gh', externalId: '1', title: 'Bug fix' };
+      const parent = provider.getParent(item);
+      expect(parent).toBeDefined();
+      expect(parent!.kind).toBe('provider');
+      expect((parent as InboxProviderNode).providerId).toBe('gh');
+      expect((parent as InboxProviderNode).label).toBe('GitHub Issues');
     });
   });
 
