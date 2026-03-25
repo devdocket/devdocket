@@ -31,7 +31,7 @@ export class AiReviewAction implements WorkCenterAction {
 
   isPrUrl(url: string): boolean {
     // GitHub PR: https://github.com/owner/repo/pull/123
-    if (/^https?:\/\/github\.com\/[^/]+\/[^/]+\/pull\/\d+/.test(url)) return true;
+    if (/^https?:\/\/github\.com\/[^/]+\/[^/]+\/pull\/\d+(?:$|[\/?#])/.test(url)) return true;
     return false;
   }
 

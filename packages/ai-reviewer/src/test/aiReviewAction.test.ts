@@ -91,6 +91,10 @@ describe('AiReviewAction', () => {
       expect(action.isPrUrl('https://github.com/owner/repo')).toBe(false);
       expect(action.isPrUrl('https://example.com')).toBe(false);
     });
+
+    it('rejects GitHub PR URLs with non-numeric suffix', () => {
+      expect(action.isPrUrl('https://github.com/owner/repo/pull/1abc')).toBe(false);
+    });
   });
 
   describe('run', () => {
