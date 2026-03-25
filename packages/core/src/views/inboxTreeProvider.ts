@@ -66,7 +66,7 @@ export class InboxTreeProvider implements vscode.TreeDataProvider<InboxElement> 
           });
         }
       }
-      return result;
+      return result.sort((a, b) => a.label.localeCompare(b.label));
     }
 
     if (element.kind === 'provider') {
@@ -92,7 +92,7 @@ export class InboxTreeProvider implements vscode.TreeDataProvider<InboxElement> 
         });
       }
     }
-    return result;
+    return result.sort((a, b) => a.title.localeCompare(b.title));
   }
 
   private getUnseenCount(providerId: string): number {

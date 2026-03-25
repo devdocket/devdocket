@@ -83,7 +83,7 @@ export class SourcesTreeProvider implements vscode.TreeDataProvider<SourcesEleme
           });
         }
       }
-      return result;
+      return result.sort((a, b) => a.label.localeCompare(b.label));
     }
 
     if (element.kind === 'provider') {
@@ -122,14 +122,19 @@ export class SourcesTreeProvider implements vscode.TreeDataProvider<SourcesEleme
       result.push(this.toItemNode(providerId, item));
     }
 
-    return result;
+    return result.sort((a, b) => {
+      const aLabel = a.kind === 'group' ? a.groupName : a.title;
+      const bLabel = b.kind === 'group' ? b.groupName : b.title;
+      return aLabel.localeCompare(bLabel);
+    });
   }
 
   private getGroupChildren(providerId: string, groupName: string): SourceItemNode[] {
     const items = this.providerRegistry.getDiscoveredItems(providerId);
     return items
       .filter((item) => item.group === groupName)
-      .map((item) => this.toItemNode(providerId, item));
+      .map((item) => this.toItemNode(providerId, item))
+      .sort((a, b) => a.title.localeCompare(b.title));
   }
 
   private toItemNode(providerId: string, item: DiscoveredItem): SourceItemNode {

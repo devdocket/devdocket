@@ -25,7 +25,8 @@ export class QueueTreeProvider implements vscode.TreeDataProvider<WorkItem> {
   }
 
   getChildren(): WorkItem[] {
-    return this.workGraph.getItemsByState(WorkItemState.New);
+    return this.workGraph.getItemsByState(WorkItemState.New)
+      .sort((a, b) => a.title.localeCompare(b.title));
   }
 
   private buildTooltip(item: WorkItem): vscode.MarkdownString {

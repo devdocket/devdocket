@@ -124,7 +124,7 @@ describe('InboxTreeProvider', () => {
 
       const items = provider.getChildren(providerNode('gh'));
       expect(items).toHaveLength(2);
-      expect(items.map((i) => (i as InboxItem).title)).toEqual(['Unseen', 'No state']);
+      expect(items.map((i) => (i as InboxItem).title)).toEqual(['No state', 'Unseen']);
     });
   });
 

@@ -38,7 +38,7 @@ export class FocusTreeProvider implements vscode.TreeDataProvider<WorkItem> {
       WorkItemState.InProgress,
       WorkItemState.Blocked,
       WorkItemState.WaitingOn,
-    );
+    ).sort((a, b) => a.title.localeCompare(b.title));
   }
 
   private getStateLabel(state: WorkItemState): string {
