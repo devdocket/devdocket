@@ -8,6 +8,12 @@ export interface InboxProviderNode {
   label: string;
 }
 
+export interface InboxGroupNode {
+  kind: 'group';
+  providerId: string;
+  groupName: string;
+}
+
 export interface InboxItem {
   kind: 'item';
   providerId: string;
@@ -18,7 +24,7 @@ export interface InboxItem {
   group?: string;
 }
 
-export type InboxElement = InboxProviderNode | InboxItem;
+export type InboxElement = InboxProviderNode | InboxGroupNode | InboxItem;
 
 export class InboxTreeProvider implements vscode.TreeDataProvider<InboxElement> {
   private readonly _onDidChangeTreeData = new vscode.EventEmitter<void>();
@@ -80,6 +86,15 @@ export class InboxTreeProvider implements vscode.TreeDataProvider<InboxElement> 
       return treeItem;
     }
 
+    if (element.kind === 'group') {
+      const count = this.getGroupUnseenCount(element.providerId, element.groupName);
+      const treeItem = new vscode.TreeItem(element.groupName, vscode.TreeItemCollapsibleState.Expanded);
+      treeItem.description = `${count}`;
+      treeItem.contextValue = 'inboxGroup';
+      treeItem.iconPath = new vscode.ThemeIcon('folder');
+      return treeItem;
+    }
+
     const key = `${element.providerId}::${element.externalId}`;
     const isSeen = this.seenItems.has(key);
 
@@ -110,25 +125,71 @@ export class InboxTreeProvider implements vscode.TreeDataProvider<InboxElement> 
       return this.getProviderChildren(element.providerId);
     }
 
+    if (element.kind === 'group') {
+      return this.getGroupChildren(element.providerId, element.groupName);
+    }
+
     return [];
   }
 
-  private getProviderChildren(providerId: string): InboxItem[] {
+  private getProviderChildren(providerId: string): (InboxGroupNode | InboxItem)[] {
+    const items = this.providerRegistry.getDiscoveredItems(providerId);
+    const groups = new Map<string, typeof items>();
+    const ungrouped: typeof items = [];
+
+    for (const item of items) {
+      const state = this.stateStore.getState(providerId, item.externalId);
+      if (state !== undefined && state !== 'unseen') { continue; }
+
+      if (item.group) {
+        const list = groups.get(item.group) ?? [];
+        list.push(item);
+        groups.set(item.group, list);
+      } else {
+        ungrouped.push(item);
+      }
+    }
+
+    const result: (InboxGroupNode | InboxItem)[] = [];
+
+    for (const [groupName] of groups) {
+      result.push({ kind: 'group', providerId, groupName });
+    }
+
+    for (const item of ungrouped) {
+      result.push({
+        kind: 'item',
+        providerId,
+        externalId: item.externalId,
+        title: item.title,
+        description: item.description,
+        url: item.url,
+      });
+    }
+
+    return result.sort((a, b) => {
+      const aLabel = a.kind === 'group' ? a.groupName : a.title;
+      const bLabel = b.kind === 'group' ? b.groupName : b.title;
+      return aLabel.localeCompare(bLabel);
+    });
+  }
+
+  private getGroupChildren(providerId: string, groupName: string): InboxItem[] {
     const items = this.providerRegistry.getDiscoveredItems(providerId);
     const result: InboxItem[] = [];
     for (const item of items) {
+      if (item.group !== groupName) { continue; }
       const state = this.stateStore.getState(providerId, item.externalId);
-      if (state === undefined || state === 'unseen') {
-        result.push({
-          kind: 'item',
-          providerId,
-          externalId: item.externalId,
-          title: item.title,
-          description: item.description,
-          url: item.url,
-          group: item.group,
-        });
-      }
+      if (state !== undefined && state !== 'unseen') { continue; }
+      result.push({
+        kind: 'item',
+        providerId,
+        externalId: item.externalId,
+        title: item.title,
+        description: item.description,
+        url: item.url,
+        group: item.group,
+      });
     }
     return result.sort((a, b) => a.title.localeCompare(b.title));
   }
@@ -136,6 +197,15 @@ export class InboxTreeProvider implements vscode.TreeDataProvider<InboxElement> 
   private getUnseenCount(providerId: string): number {
     const items = this.providerRegistry.getDiscoveredItems(providerId);
     return items.filter((item) => {
+      const state = this.stateStore.getState(providerId, item.externalId);
+      return state === undefined || state === 'unseen';
+    }).length;
+  }
+
+  private getGroupUnseenCount(providerId: string, groupName: string): number {
+    const items = this.providerRegistry.getDiscoveredItems(providerId);
+    return items.filter((item) => {
+      if (item.group !== groupName) { return false; }
       const state = this.stateStore.getState(providerId, item.externalId);
       return state === undefined || state === 'unseen';
     }).length;
