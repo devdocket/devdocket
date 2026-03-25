@@ -40,8 +40,10 @@ export class JsonTaskStore implements ITaskStore {
       let needsMigration = false;
       for (const item of items) {
         const legacy = item as WorkItem & { description?: string };
-        if (legacy.description !== undefined && item.notes === undefined) {
-          item.notes = legacy.description;
+        if (legacy.description !== undefined) {
+          if (item.notes === undefined) {
+            item.notes = legacy.description;
+          }
           delete legacy.description;
           needsMigration = true;
         }
@@ -60,6 +62,7 @@ export class JsonTaskStore implements ITaskStore {
       }
       // Allow retry on failure
       this.loadPromise = null;
+      this.cache = null;
       throw err;
     }
   }

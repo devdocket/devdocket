@@ -11,7 +11,7 @@ const execFileAsync = promisify(execFile);
 interface WorkItem {
   id: string;
   title: string;
-  description?: string;
+  notes?: string;
   state: string;
   providerId?: string;
   externalId?: string;
