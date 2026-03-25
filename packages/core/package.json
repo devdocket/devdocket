@@ -44,12 +44,12 @@
           "name": "Focus"
         },
         {
-          "id": "workcenter.sources",
-          "name": "Sources"
-        },
-        {
           "id": "workcenter.history",
           "name": "History"
+        },
+        {
+          "id": "workcenter.sources",
+          "name": "Sources"
         }
       ]
     },
