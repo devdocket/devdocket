@@ -367,7 +367,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 
 ### Minimal Action
 
-This example shows an action that opens a work item's URL with additional context:
+This example shows an action that opens a dashboard page for a work item using its external ID:
 
 ```ts
 import * as vscode from 'vscode';
