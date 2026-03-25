@@ -79,7 +79,7 @@ export class InboxTreeProvider implements vscode.TreeDataProvider<InboxElement> 
   getTreeItem(element: InboxElement): vscode.TreeItem {
     if (element.kind === 'provider') {
       const count = this.getUnseenCount(element.providerId);
-      const treeItem = new vscode.TreeItem(element.label, vscode.TreeItemCollapsibleState.Expanded);
+      const treeItem = new vscode.TreeItem(element.label, vscode.TreeItemCollapsibleState.Collapsed);
       treeItem.description = `${count}`;
       treeItem.contextValue = 'inboxProvider';
       treeItem.iconPath = new vscode.ThemeIcon('plug');
@@ -88,7 +88,7 @@ export class InboxTreeProvider implements vscode.TreeDataProvider<InboxElement> 
 
     if (element.kind === 'group') {
       const count = this.getGroupUnseenCount(element.providerId, element.groupName);
-      const treeItem = new vscode.TreeItem(element.groupName, vscode.TreeItemCollapsibleState.Expanded);
+      const treeItem = new vscode.TreeItem(element.groupName, vscode.TreeItemCollapsibleState.Collapsed);
       treeItem.description = `${count}`;
       treeItem.contextValue = 'inboxGroup';
       treeItem.iconPath = new vscode.ThemeIcon('folder');

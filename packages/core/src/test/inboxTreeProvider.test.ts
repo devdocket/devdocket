@@ -241,7 +241,7 @@ describe('InboxTreeProvider', () => {
       const treeItem = provider.getTreeItem(providerNode('gh'));
       expect(treeItem.label).toBe('GitHub Issues');
       expect(treeItem.description).toBe('2');
-      expect(treeItem.collapsibleState).toBe(TreeItemCollapsibleState.Expanded);
+      expect(treeItem.collapsibleState).toBe(TreeItemCollapsibleState.Collapsed);
       expect((treeItem.iconPath as any).id).toBe('plug');
     });
 
@@ -273,7 +273,7 @@ describe('InboxTreeProvider', () => {
       const treeItem = provider.getTreeItem(groupNode);
       expect(treeItem.label).toBe('my-repo');
       expect(treeItem.description).toBe('2');
-      expect(treeItem.collapsibleState).toBe(TreeItemCollapsibleState.Expanded);
+      expect(treeItem.collapsibleState).toBe(TreeItemCollapsibleState.Collapsed);
       expect(treeItem.contextValue).toBe('inboxGroup');
       expect((treeItem.iconPath as any).id).toBe('folder');
     });
