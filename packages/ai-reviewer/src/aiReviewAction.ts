@@ -72,10 +72,9 @@ export class AiReviewAction implements WorkCenterAction {
 
   private async fetchGitHubDiff(repo: string, prNumber: string): Promise<string | undefined> {
     const session = await vscode.authentication.getSession('github', ['repo'], {
-      createIfNone: false,
+      createIfNone: true,
     });
     if (!session) {
-      vscode.window.showWarningMessage('AI Code Review: Please sign in to GitHub.');
       return undefined;
     }
 
