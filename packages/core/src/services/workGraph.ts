@@ -197,11 +197,28 @@ export class WorkGraph {
     const siblings = this.getItemsByState(item.state)
       .sort((a, b) => (a.sortOrder ?? Number.MAX_SAFE_INTEGER) - (b.sortOrder ?? Number.MAX_SAFE_INTEGER));
 
-    const maxOrder = siblings.length > 0 ? Math.max(...siblings.map(s => s.sortOrder ?? 0)) : 0;
-    const updated = { ...item, sortOrder: maxOrder + 1, updatedAt: Date.now() };
-    await this.store.save(updated);
-    this.items.set(id, updated);
-    this._onDidChange.fire();
+    if (siblings.length === 0) { return; }
+
+    const lastSibling = siblings[siblings.length - 1];
+    if (lastSibling.id === item.id) { return; }
+
+    // Re-index siblings with the item moved to the end to keep orders compact
+    const withoutItem = siblings.filter(s => s.id !== item.id);
+    withoutItem.push(item);
+
+    const itemsToSave: WorkItem[] = [];
+    withoutItem.forEach((sibling, index) => {
+      if (sibling.sortOrder !== index) {
+        const updated = { ...sibling, sortOrder: index, updatedAt: Date.now() };
+        this.items.set(updated.id, updated);
+        itemsToSave.push(updated);
+      }
+    });
+
+    if (itemsToSave.length > 0) {
+      await this.store.saveAll(itemsToSave);
+      this._onDidChange.fire();
+    }
   }
 
   async deleteItem(id: string): Promise<void> {
