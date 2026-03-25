@@ -17,6 +17,31 @@ export class WorkGraph {
       this.items.set(item.id, item);
     }
     logger.debug(`Loaded ${items.length} work items from store`);
+    await this.backfillSortOrder();
+  }
+
+  private async backfillSortOrder(): Promise<void> {
+    const newItems = this.getItemsByState(WorkItemState.New);
+    const unordered = newItems.filter((i) => i.sortOrder === undefined);
+    if (unordered.length === 0) {
+      return;
+    }
+
+    const maxExisting = newItems.reduce(
+      (max, i) => Math.max(max, i.sortOrder ?? -1),
+      -1,
+    );
+
+    // Sort unordered items by title for a stable initial ordering
+    unordered.sort((a, b) => a.title.localeCompare(b.title));
+
+    const toSave: WorkItem[] = [];
+    for (let i = 0; i < unordered.length; i++) {
+      const updated = { ...unordered[i], sortOrder: maxExisting + 1 + i, updatedAt: Date.now() };
+      this.items.set(updated.id, updated);
+      toSave.push(updated);
+    }
+    await this.store.saveAll(toSave);
   }
 
   getAll(): WorkItem[] {
