@@ -55,6 +55,13 @@ export class AiReviewAction implements WorkCenterAction {
 
         if (token.isCancellationRequested) return;
 
+        const proceed = await vscode.window.showWarningMessage(
+          'AI Code Review will send the PR diff to the language model for analysis. Continue?',
+          { modal: true },
+          'Continue',
+        );
+        if (proceed !== 'Continue' || token.isCancellationRequested) return;
+
         progress.report({ message: 'Analyzing changes...' });
 
         const review = await this.analyzeWithAi(diff, token);
