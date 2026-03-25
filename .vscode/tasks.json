@@ -1,0 +1,36 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "build all",
+      "type": "shell",
+      "command": "npm run build",
+      "group": "build",
+      "problemMatcher": []
+    },
+    {
+      "type": "npm",
+      "script": "watch",
+      "path": "packages/core",
+      "isBackground": true,
+      "label": "npm: watch - core",
+      "problemMatcher": {
+        "owner": "esbuild",
+        "fileLocation": "absolute",
+        "background": {
+          "activeOnStart": true,
+          "beginsPattern": ".",
+          "endsPattern": "."
+        },
+        "pattern": {
+          "regexp": "^> (.+):(\\d+):(\\d+): (error|warning): (.+)$",
+          "file": 1,
+          "line": 2,
+          "column": 3,
+          "severity": 4,
+          "message": 5
+        }
+      }
+    }
+  ]
+}

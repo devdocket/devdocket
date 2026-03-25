@@ -1,0 +1,19 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Run Extensions",
+      "type": "extensionHost",
+      "request": "launch",
+      "args": [
+        "--extensionDevelopmentPath=${workspaceFolder}/packages/core",
+        "--extensionDevelopmentPath=${workspaceFolder}/packages/github"
+      ],
+      "outFiles": [
+        "${workspaceFolder}/packages/core/dist/**/*.js",
+        "${workspaceFolder}/packages/github/dist/**/*.js"
+      ],
+      "preLaunchTask": "build all"
+    }
+  ]
+}

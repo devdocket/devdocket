@@ -1,0 +1,58 @@
+{
+  "name": "workcenter-github",
+  "displayName": "WorkCenter GitHub",
+  "description": "GitHub provider for WorkCenter — discovers assigned issues and enables Start Work (branch + worktree).",
+  "version": "0.1.0",
+  "publisher": "mthalman",
+  "license": "MIT",
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "extensionDependencies": [
+    "mthalman.workcenter"
+  ],
+  "activationEvents": [
+    "onStartupFinished"
+  ],
+  "main": "./dist/extension.js",
+  "contributes": {
+    "configuration": {
+      "title": "WorkCenter GitHub",
+      "properties": {
+        "workcenterGithub.repos": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [],
+          "description": "GitHub repositories to watch (e.g. 'owner/repo'). Leave empty to fetch all assigned issues across all repositories."
+        },
+        "workcenterGithub.refreshIntervalSeconds": {
+          "type": "number",
+          "default": 300,
+          "description": "How often to refresh GitHub issues (in seconds). Minimum 60 seconds. Values below 60 are clamped."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run build",
+    "build": "esbuild src/extension.ts --bundle --outfile=dist/extension.js --external:vscode --format=cjs --platform=node --sourcemap",
+    "watch": "esbuild src/extension.ts --bundle --outfile=dist/extension.js --external:vscode --format=cjs --platform=node --sourcemap --watch",
+    "lint": "eslint src",
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "@types/node": "^20.11.0",
+    "@types/vscode": "^1.85.0",
+    "@typescript-eslint/eslint-plugin": "^7.0.0",
+    "@typescript-eslint/parser": "^7.0.0",
+    "esbuild": "^0.20.0",
+    "eslint": "^8.56.0",
+    "typescript": "^5.3.0",
+    "vitest": "^1.2.0"
+  }
+}
