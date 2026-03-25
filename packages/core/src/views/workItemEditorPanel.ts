@@ -59,7 +59,7 @@ export class WorkItemEditorPanel {
   private async saveData(data: Record<string, string>): Promise<void> {
     const item = this.workGraph.getItem(this.itemId);
     if (!item) {
-      return;
+      throw new Error('Work item no longer exists. Your changes could not be saved.');
     }
     const patch: Partial<WorkItemInput> = {};
     if ('notes' in data) {
