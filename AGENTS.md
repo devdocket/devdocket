@@ -85,3 +85,15 @@ Tests run outside VS Code via vitest. The `vscode` import is aliased to `src/tes
 
 Items in Inbox and Sources are read live from the provider's in-memory data. The only persisted state is the `inboxState` enum. This keeps data fresh and avoids stale copies.
 
+### PR workflow — three-phase process
+
+When creating pull requests, follow this full multi-phase lifecycle. Do NOT hand-roll a simplified version. The process enforces:
+
+- **Phase 1 (Local Loop):** Rebase your feature branch on `dev`, run the full test suite (`npm test` at the repo root, or the appropriate package-level tests), perform a thorough code review (either manually or using your preferred review tooling), fix findings, re-test, and repeat until tests pass AND the code review is clean.
+- **Phase 2 (Create PR):** Push your branch and open a PR targeting `dev` (for example, using `gh pr create --base dev` or the GitHub web UI).
+- **Phase 3 (Remote Loop):** Address PR feedback and CI results: run any automated PR review tools available in your environment (e.g., GitHub code review, Copilot PR review), fix comments (ideally one focused commit per comment), verify CI, and resolve merge conflicts. Any code change in this phase triggers a re-run of Phase 1.
+
+Key rules:
+- **Never skip or shortcut the process.** Every PR goes through all phases.
+- **Any code change re-triggers the local loop** — whether from human code review, automated feedback, CI fix, or conflict resolution.
+- If your environment provides helper tools or agents for code review or PR creation, you may use them, but the expectations above still apply regardless of tooling.
