@@ -81,8 +81,9 @@ export function registerCommands(
         );
         return;
       }
+      const title = item.group ? `${item.group} ${item.title}` : item.title;
       await workGraph.createItem(
-        { title: item.title, description: item.description },
+        { title, description: item.description },
         { providerId: item.providerId, externalId: item.externalId, url: item.url },
       );
       try {
@@ -115,8 +116,9 @@ export function registerCommands(
         return;
       }
       try {
+        const title = item.group ? `${item.group} ${item.title}` : item.title;
         await workGraph.createItem(
-          { title: item.title, description: item.description },
+          { title, description: item.description },
           { providerId: item.providerId, externalId: item.externalId, url: item.url },
         );
         await stateStore.setState(item.providerId, item.externalId, 'accepted');

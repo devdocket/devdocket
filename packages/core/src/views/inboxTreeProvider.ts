@@ -15,6 +15,7 @@ export interface InboxItem {
   title: string;
   description?: string;
   url?: string;
+  group?: string;
 }
 
 export type InboxElement = InboxProviderNode | InboxItem;
@@ -89,6 +90,7 @@ export class InboxTreeProvider implements vscode.TreeDataProvider<InboxElement> 
           title: item.title,
           description: item.description,
           url: item.url,
+          group: item.group,
         });
       }
     }
