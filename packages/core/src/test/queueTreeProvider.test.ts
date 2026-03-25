@@ -62,7 +62,7 @@ describe('QueueTreeProvider', () => {
       await provider.handleDrop(a, dataTransfer);
 
       const items = graph.getItemsByState(WorkItemState.New)
-        .sort((x, y) => (x.sortOrder ?? Infinity) - (y.sortOrder ?? Infinity));
+        .sort((x, y) => (x.sortOrder ?? Number.MAX_SAFE_INTEGER) - (y.sortOrder ?? Number.MAX_SAFE_INTEGER));
       expect(items.map((i) => i.title)).toEqual(['C', 'A', 'B']);
     });
 
@@ -77,7 +77,7 @@ describe('QueueTreeProvider', () => {
       await provider.handleDrop(undefined, dataTransfer);
 
       const items = graph.getItemsByState(WorkItemState.New)
-        .sort((x, y) => (x.sortOrder ?? Infinity) - (y.sortOrder ?? Infinity));
+        .sort((x, y) => (x.sortOrder ?? Number.MAX_SAFE_INTEGER) - (y.sortOrder ?? Number.MAX_SAFE_INTEGER));
       expect(items.map((i) => i.title)).toEqual(['B', 'C', 'A']);
     });
 

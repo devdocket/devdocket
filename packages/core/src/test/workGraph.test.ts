@@ -153,7 +153,7 @@ describe('WorkGraph', () => {
     await graph.moveItem(a.id, 'down');
 
     const items = graph.getItemsByState(WorkItemState.New)
-      .sort((x, y) => (x.sortOrder ?? Infinity) - (y.sortOrder ?? Infinity));
+      .sort((x, y) => (x.sortOrder ?? Number.MAX_SAFE_INTEGER) - (y.sortOrder ?? Number.MAX_SAFE_INTEGER));
     expect(items.map((i) => i.title)).toEqual(['B', 'A', 'C']);
   });
 
@@ -165,7 +165,7 @@ describe('WorkGraph', () => {
     await graph.moveItem(c.id, 'up');
 
     const items = graph.getItemsByState(WorkItemState.New)
-      .sort((x, y) => (x.sortOrder ?? Infinity) - (y.sortOrder ?? Infinity));
+      .sort((x, y) => (x.sortOrder ?? Number.MAX_SAFE_INTEGER) - (y.sortOrder ?? Number.MAX_SAFE_INTEGER));
     expect(items.map((i) => i.title)).toEqual(['A', 'C', 'B']);
   });
 
@@ -176,7 +176,7 @@ describe('WorkGraph', () => {
     await graph.moveItem(a.id, 'up');
 
     const items = graph.getItemsByState(WorkItemState.New)
-      .sort((x, y) => (x.sortOrder ?? Infinity) - (y.sortOrder ?? Infinity));
+      .sort((x, y) => (x.sortOrder ?? Number.MAX_SAFE_INTEGER) - (y.sortOrder ?? Number.MAX_SAFE_INTEGER));
     expect(items.map((i) => i.title)).toEqual(['A', 'B']);
   });
 
@@ -187,7 +187,7 @@ describe('WorkGraph', () => {
     await graph.moveItem(b.id, 'down');
 
     const items = graph.getItemsByState(WorkItemState.New)
-      .sort((x, y) => (x.sortOrder ?? Infinity) - (y.sortOrder ?? Infinity));
+      .sort((x, y) => (x.sortOrder ?? Number.MAX_SAFE_INTEGER) - (y.sortOrder ?? Number.MAX_SAFE_INTEGER));
     expect(items.map((i) => i.title)).toEqual(['A', 'B']);
   });
 
@@ -230,7 +230,7 @@ describe('WorkGraph', () => {
     await graph.reorderItem(c.id, a.id);
 
     const items = graph.getItemsByState(WorkItemState.New)
-      .sort((x, y) => (x.sortOrder ?? Infinity) - (y.sortOrder ?? Infinity));
+      .sort((x, y) => (x.sortOrder ?? Number.MAX_SAFE_INTEGER) - (y.sortOrder ?? Number.MAX_SAFE_INTEGER));
     expect(items.map((i) => i.title)).toEqual(['C', 'A', 'B']);
   });
 
@@ -242,7 +242,7 @@ describe('WorkGraph', () => {
     await graph.reorderItem(a.id, c.id);
 
     const items = graph.getItemsByState(WorkItemState.New)
-      .sort((x, y) => (x.sortOrder ?? Infinity) - (y.sortOrder ?? Infinity));
+      .sort((x, y) => (x.sortOrder ?? Number.MAX_SAFE_INTEGER) - (y.sortOrder ?? Number.MAX_SAFE_INTEGER));
     expect(items.map((i) => i.title)).toEqual(['B', 'A', 'C']);
   });
 
@@ -277,7 +277,7 @@ describe('WorkGraph', () => {
     await graph.moveToEnd(a.id);
 
     const items = graph.getItemsByState(WorkItemState.New)
-      .sort((x, y) => (x.sortOrder ?? Infinity) - (y.sortOrder ?? Infinity));
+      .sort((x, y) => (x.sortOrder ?? Number.MAX_SAFE_INTEGER) - (y.sortOrder ?? Number.MAX_SAFE_INTEGER));
     expect(items.map((i) => i.title)).toEqual(['B', 'C', 'A']);
   });
 
@@ -330,7 +330,7 @@ describe('WorkGraph', () => {
     await legacyGraph.moveItem('legacy-a', 'down');
 
     const ordered = legacyGraph.getItemsByState(WorkItemState.New)
-      .sort((x, y) => (x.sortOrder ?? Infinity) - (y.sortOrder ?? Infinity));
+      .sort((x, y) => (x.sortOrder ?? Number.MAX_SAFE_INTEGER) - (y.sortOrder ?? Number.MAX_SAFE_INTEGER));
     expect(ordered.map((i) => i.title)).toEqual(['B', 'A', 'C']);
   });
 });
