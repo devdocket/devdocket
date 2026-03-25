@@ -83,24 +83,24 @@ describe('HistoryTreeProvider', () => {
       expect((treeItem.iconPath as any).id).toBe('archive');
     });
 
-    it('should set contextValue with hasUrl when Done item has url', () => {
+    it('should set contextValue with hasUrl when item has url', () => {
       const item = makeItem({ id: '1', title: 'X', url: 'https://example.com', state: WorkItemState.Done });
-      expect(provider.getTreeItem(item).contextValue).toBe('historyItemDone.hasUrl');
+      expect(provider.getTreeItem(item).contextValue).toBe('historyItem.hasUrl');
     });
 
-    it('should set contextValue without hasUrl when Done item lacks url', () => {
+    it('should set contextValue without hasUrl when item lacks url', () => {
       const item = makeItem({ id: '1', title: 'X', state: WorkItemState.Done });
-      expect(provider.getTreeItem(item).contextValue).toBe('historyItemDone');
+      expect(provider.getTreeItem(item).contextValue).toBe('historyItem');
     });
 
-    it('should set contextValue with Archived tag for Archived item', () => {
+    it('should set same contextValue for Archived item without url', () => {
       const item = makeItem({ id: '1', title: 'X', state: WorkItemState.Archived });
-      expect(provider.getTreeItem(item).contextValue).toBe('historyItemArchived');
+      expect(provider.getTreeItem(item).contextValue).toBe('historyItem');
     });
 
-    it('should set contextValue with Archived tag and hasUrl for Archived item with url', () => {
+    it('should set same contextValue with hasUrl for Archived item with url', () => {
       const item = makeItem({ id: '1', title: 'X', state: WorkItemState.Archived, url: 'https://example.com' });
-      expect(provider.getTreeItem(item).contextValue).toBe('historyItemArchived.hasUrl');
+      expect(provider.getTreeItem(item).contextValue).toBe('historyItem.hasUrl');
     });
 
     it('should include description in tooltip when present', () => {

@@ -22,8 +22,7 @@ export class HistoryTreeProvider implements vscode.TreeDataProvider<WorkItem> {
     treeItem.description = this.getStateLabel(item.state);
     treeItem.tooltip = this.buildTooltip(item);
     treeItem.iconPath = this.getIcon(item.state);
-    const stateTag = item.state === WorkItemState.Done ? 'Done' : 'Archived';
-    treeItem.contextValue = item.url ? `historyItem${stateTag}.hasUrl` : `historyItem${stateTag}`;
+    treeItem.contextValue = item.url ? 'historyItem.hasUrl' : 'historyItem';
     return treeItem;
   }
 

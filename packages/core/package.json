@@ -203,11 +203,6 @@
           "group": "1_actions"
         },
         {
-          "command": "workcenter.archiveItem",
-          "when": "view == workcenter.history && viewItem =~ /historyItemDone/",
-          "group": "1_actions"
-        },
-        {
           "command": "workcenter.acceptFromSources",
           "when": "view == workcenter.sources && viewItem =~ /sourceItem/",
           "group": "inline"
