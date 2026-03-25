@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { initLogger, setLogLevel, logger, LogLevel } from '../services/logger';
+import { initLogger, setLogLevel, logger, LogLevel, serializeArg } from '../services/logger';
 
 function createMockChannel() {
   return {
@@ -92,5 +92,49 @@ describe('logger', () => {
     logger.info('no args');
     const line = channel.appendLine.mock.calls[0][0] as string;
     expect(line).toMatch(/\[INFO\] no args$/);
+  });
+
+  it('should serialize Error objects with message and stack', () => {
+    const err = new Error('something broke');
+    logger.error('failure', err);
+
+    expect(channel.appendLine).toHaveBeenCalledTimes(1);
+    const line = channel.appendLine.mock.calls[0][0] as string;
+    expect(line).toContain('something broke');
+    expect(line).toContain('Error');
+  });
+
+  it('should not crash on circular references', () => {
+    const obj: any = { a: 1 };
+    obj.self = obj;
+
+    expect(() => logger.info('circular', obj)).not.toThrow();
+    expect(channel.appendLine).toHaveBeenCalledTimes(1);
+  });
+
+  describe('serializeArg', () => {
+    it('should return stack for Error with stack', () => {
+      const err = new Error('test');
+      const result = serializeArg(err);
+      expect(result).toContain('Error: test');
+    });
+
+    it('should return name+message for Error without stack', () => {
+      const err = new Error('no stack');
+      err.stack = undefined;
+      const result = serializeArg(err);
+      expect(result).toBe('Error: no stack');
+    });
+
+    it('should JSON.stringify plain objects', () => {
+      expect(serializeArg({ key: 'val' })).toBe('{"key":"val"}');
+    });
+
+    it('should fall back to String() for circular references', () => {
+      const obj: any = {};
+      obj.self = obj;
+      const result = serializeArg(obj);
+      expect(result).toBe('[object Object]');
+    });
   });
 });

@@ -21,11 +21,22 @@ export function setLogLevel(level: LogLevel): void {
   currentLevel = level;
 }
 
+export function serializeArg(arg: unknown): string {
+  if (arg instanceof Error) {
+    return arg.stack || `${arg.name}: ${arg.message}`;
+  }
+  try {
+    return JSON.stringify(arg);
+  } catch {
+    return String(arg);
+  }
+}
+
 function log(level: LogLevel, prefix: string, message: string, ...args: unknown[]): void {
   if (level < currentLevel) return;
   const timestamp = new Date().toISOString();
   const formatted = args.length > 0
-    ? `[${timestamp}] ${prefix} ${message} ${args.map(a => JSON.stringify(a)).join(' ')}`
+    ? `[${timestamp}] ${prefix} ${message} ${args.map(a => serializeArg(a)).join(' ')}`
     : `[${timestamp}] ${prefix} ${message}`;
   outputChannel?.appendLine(formatted);
 }
