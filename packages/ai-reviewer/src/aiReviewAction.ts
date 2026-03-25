@@ -11,9 +11,14 @@ export class AiReviewAction implements WorkCenterAction {
   }
 
   isPrUrl(url: string): boolean {
-    // GitHub PR: https://github.com/owner/repo/pull/123
-    if (/^https?:\/\/github\.com\/[^/]+\/[^/]+\/pull\/\d+(?:$|[\/?#])/.test(url)) return true;
-    return false;
+    return this.parseGitHubPrUrl(url) !== undefined;
+  }
+
+  /** Parse a GitHub PR URL, returning repo and PR number or undefined. */
+  parseGitHubPrUrl(url: string): { repo: string; prNumber: string } | undefined {
+    const match = url.match(/^https?:\/\/github\.com\/([^/]+\/[^/]+)\/pull\/(\d+)(?:$|[\/?#])/);
+    if (!match) return undefined;
+    return { repo: match[1], prNumber: match[2] };
   }
 
   async run(item: WorkItem): Promise<void> {
@@ -58,9 +63,9 @@ export class AiReviewAction implements WorkCenterAction {
 
   async fetchDiff(url: string): Promise<string | undefined> {
     try {
-      const githubMatch = url.match(/^https?:\/\/github\.com\/([^/]+\/[^/]+)\/pull\/(\d+)(?:$|[\/?#])/);
-      if (githubMatch) {
-        return await this.fetchGitHubDiff(githubMatch[1], githubMatch[2]);
+      const parsed = this.parseGitHubPrUrl(url);
+      if (parsed) {
+        return await this.fetchGitHubDiff(parsed.repo, parsed.prNumber);
       }
       return undefined;
     } catch (err) {
