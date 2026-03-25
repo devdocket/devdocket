@@ -51,19 +51,19 @@ Newly discovered items from providers that you haven't acted on yet. Each provid
 
 ### Queue
 
-Your curated backlog. Items arrive here when accepted from the Inbox or Sources, or when you create them manually. All Queue items are in the **New** state. From here, move items to Focus to start working, or archive them to skip.
+Your curated backlog. Items arrive here when accepted from the Inbox or Sources, or when you create them manually. From here, move items to Focus when you're ready to start working on them, or archive them to skip.
 
 ### Focus
 
-Your active work. Items here are **InProgress**, **Blocked**, or **WaitingOn**. The Focus view is designed to show only what matters right now. Complete items when done, or mark them as blocked/waiting to signal status at a glance.
+Your active work. Items here are things you're actively working on, blocked on something, or waiting on someone else. The Focus view is designed to show only what matters right now. Mark items complete when you're done, or mark them as blocked or waiting to signal status at a glance.
 
 ### History
 
-Completed and archived items. The History view gives you a record of finished work — useful for standups, status updates, and recalling what you've done. Items here are in the **Done** or **Archived** state.
+Completed and archived items. The History view gives you a record of finished work — useful for standups, status updates, and recalling what you've done.
 
 ### Sources
 
-A browsable library of everything providers know about, organized by provider and sub-group (e.g., repository name). Items show their inbox state — accepted items display a ✓ icon, dismissed items show a label. You can accept items into your Queue directly from Sources at any time.
+A browsable library of everything providers know about, organized by provider and sub-group (e.g., repository name). Items show whether you've already acted on them — accepted items display a ✓ icon, dismissed items show a label. You can accept items into your Queue directly from Sources at any time.
 
 ### Data Flow
 
@@ -75,12 +75,12 @@ Providers (GitHub, etc.)          Manual creation
                                 │                           │
                               Archive                   Block/Wait
                                 │                        ◄──►
-                                │                      InProgress
+                                │                      Working on
                                 │                           │
-                                │                        Complete
+                                │                        Mark complete
                                 ▼                           ▼
                               History ◄──────────────── History
-                          (Archived)                    (Done)
+                          (archived)                    (completed)
 ```
 
 > **Note:** Items in History can be restored — move them back to Queue or Focus to resume work.
@@ -133,8 +133,8 @@ Provider extensions depend on the core extension via `extensionDependencies` and
 
 WorkCenter persists two JSON files in VS Code's `globalStorageUri`:
 
-- **`workitems.json`** — All accepted and manual work items with their full state machine lifecycle, including a snapshot of provider fields (such as `title`, `description`, and `url`) captured at accept time. These snapshots may become stale compared to live data from the provider.
-- **`discovered-state.json`** — A thin index mapping `providerId + externalId` → inbox state (`unseen`, `accepted`, `dismissed`) for discovered items only. This file does not store provider item fields; for inbox items, provider data is read live from the provider.
+- **`workitems.json`** — All accepted and manual work items with their full lifecycle, including a snapshot of provider fields (such as `title`, `description`, and `url`) captured at accept time. These snapshots may become stale compared to live data from the provider.
+- **`discovered-state.json`** — A thin index tracking whether each discovered item has been accepted, dismissed, or not yet seen. This file does not store provider item fields; for inbox items, provider data is read live from the provider.
 
 ## Documentation
 
