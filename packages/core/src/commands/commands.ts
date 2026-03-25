@@ -9,7 +9,8 @@ import { SourceItemNode } from '../views/sourcesTreeProvider';
 
 /** Builds a work-item title, optionally prefixed with the provider group. */
 function formatItemTitle(item: { group?: string; title: string }): string {
-  return item.group?.trim() ? `${item.group.trim()} ${item.title}` : item.title;
+  const trimmedGroup = item.group?.trim();
+  return trimmedGroup ? `${trimmedGroup} ${item.title}` : item.title;
 }
 
 export function registerCommands(
