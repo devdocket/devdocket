@@ -42,7 +42,11 @@ export class WorkGraph {
     provenance?: { providerId: string; externalId: string; url?: string },
   ): Promise<WorkItem> {
     const existingItems = this.getItemsByState(WorkItemState.New);
-    const maxOrder = existingItems.reduce((max, i) => Math.max(max, i.sortOrder ?? -1), -1);
+    // Account for legacy items that may not have sortOrder assigned
+    const maxOrder = Math.max(
+      existingItems.length - 1,
+      existingItems.reduce((max, i) => Math.max(max, i.sortOrder ?? -1), -1),
+    );
     const item: WorkItem = {
       id: generateId(),
       title: input.title,
