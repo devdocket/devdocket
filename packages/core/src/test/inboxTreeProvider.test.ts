@@ -112,6 +112,22 @@ describe('InboxTreeProvider', () => {
       expect(items).toHaveLength(1);
     });
 
+    it('should pass through group field from discovered item', () => {
+      registry._setItems('gh', [{ externalId: 'issue-1', title: 'Bug fix', group: 'dotnet/runtime' }]);
+
+      const items = provider.getChildren(providerNode('gh'));
+      expect(items).toHaveLength(1);
+      expect((items[0] as InboxItem).group).toBe('dotnet/runtime');
+    });
+
+    it('should leave group undefined when discovered item has no group', () => {
+      registry._setItems('gh', [{ externalId: 'issue-1', title: 'Bug fix' }]);
+
+      const items = provider.getChildren(providerNode('gh'));
+      expect(items).toHaveLength(1);
+      expect((items[0] as InboxItem).group).toBeUndefined();
+    });
+
     it('should filter out accepted and dismissed items', () => {
       registry._setItems('gh', [
         { externalId: '1', title: 'Unseen' },

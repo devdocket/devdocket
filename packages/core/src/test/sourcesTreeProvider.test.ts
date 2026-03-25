@@ -151,6 +151,30 @@ describe('SourcesTreeProvider', () => {
       expect(children.every((c) => c.kind === 'item')).toBe(true);
       expect(children.map((c) => (c as SourceItemNode).title)).toEqual(['PR #1', 'PR #2']);
     });
+
+    it('should pass through group field on items', () => {
+      registry._setItems('gh', [
+        { externalId: '1', title: 'PR #1', group: 'dotnet/runtime' },
+      ]);
+
+      const groupNode: SourceGroupNode = { kind: 'group', providerId: 'gh', groupName: 'dotnet/runtime' };
+      const children = provider.getChildren(groupNode);
+
+      expect(children).toHaveLength(1);
+      expect((children[0] as SourceItemNode).group).toBe('dotnet/runtime');
+    });
+
+    it('should leave group undefined for ungrouped items', () => {
+      registry._setItems('gh', [
+        { externalId: '1', title: 'Item A' },
+      ]);
+
+      const providerNode: SourceProviderNode = { kind: 'provider', providerId: 'gh', label: 'GH' };
+      const children = provider.getChildren(providerNode);
+
+      expect(children).toHaveLength(1);
+      expect((children[0] as SourceItemNode).group).toBeUndefined();
+    });
   });
 
   describe('item children', () => {

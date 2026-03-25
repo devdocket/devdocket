@@ -8,6 +8,12 @@ import { InboxItem } from '../views/inboxTreeProvider';
 import { SourceItemNode } from '../views/sourcesTreeProvider';
 import { logger } from '../services/logger';
 
+/** Builds a work-item title, optionally prefixed with the provider group. */
+function formatItemTitle(item: { group?: string; title: string }): string {
+  const trimmedGroup = item.group?.trim();
+  return trimmedGroup ? `${trimmedGroup} ${item.title}` : item.title;
+}
+
 export function registerCommands(
   context: vscode.ExtensionContext,
   workGraph: WorkGraph,
@@ -101,7 +107,7 @@ export function registerCommands(
         return;
       }
       await workGraph.createItem(
-        { title: item.title, description: item.description },
+        { title: formatItemTitle(item), description: item.description },
         { providerId: item.providerId, externalId: item.externalId, url: item.url },
       );
       try {
@@ -137,7 +143,7 @@ export function registerCommands(
       }
       try {
         await workGraph.createItem(
-          { title: item.title, description: item.description },
+          { title: formatItemTitle(item), description: item.description },
           { providerId: item.providerId, externalId: item.externalId, url: item.url },
         );
         await stateStore.setState(item.providerId, item.externalId, 'accepted');
