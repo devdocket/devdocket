@@ -165,9 +165,9 @@ export class GitHubPrReviewProvider implements WorkCenterProvider {
       return apiMatch[1];
     }
 
-    // Fallback: return 'unknown' — this should not be hit for github.com URLs
+    // Fallback: use repository_url as-is to maintain unique externalId
     console.warn(`WorkCenter GitHub: could not parse repo from PR URL: ${pr.html_url}`);
-    return 'unknown';
+    return pr.repository_url;
   }
 
   dispose(): void {

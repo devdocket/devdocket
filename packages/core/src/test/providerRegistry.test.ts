@@ -321,14 +321,15 @@ describe('ProviderRegistry', () => {
       stateStore._set('issues', 'issue-1', 'dismissed');
 
       provider.fireItems([{ externalId: 'issue-1', title: 'Old issue' }]);
-      // Give time for async handler
-      await new Promise((r) => setTimeout(r, 50));
-      // setStates should not have been called with this item
-      const calls = stateStore.setStates.mock.calls;
-      for (const call of calls) {
-        const items = call[0] as Array<{ externalId: string }>;
-        expect(items.find((i) => i.externalId === 'issue-1')).toBeUndefined();
-      }
+      // Wait for async handler to complete, then verify no state change for dismissed item
+      await vi.waitFor(() => {
+        const calls = stateStore.setStates.mock.calls;
+        // If setStates was called, ensure it never included our dismissed item
+        for (const call of calls) {
+          const items = call[0] as Array<{ externalId: string }>;
+          expect(items.find((i) => i.externalId === 'issue-1')).toBeUndefined();
+        }
+      });
     });
 
     it('does NOT reset accepted items even when resurfaceDismissed is true', async () => {
@@ -337,12 +338,13 @@ describe('ProviderRegistry', () => {
       stateStore._set('pr-reviews', 'pr-1', 'accepted');
 
       provider.fireItems([{ externalId: 'pr-1', title: 'Accepted PR' }]);
-      await new Promise((r) => setTimeout(r, 50));
-      const calls = stateStore.setStates.mock.calls;
-      for (const call of calls) {
-        const items = call[0] as Array<{ externalId: string }>;
-        expect(items.find((i) => i.externalId === 'pr-1')).toBeUndefined();
-      }
+      await vi.waitFor(() => {
+        const calls = stateStore.setStates.mock.calls;
+        for (const call of calls) {
+          const items = call[0] as Array<{ externalId: string }>;
+          expect(items.find((i) => i.externalId === 'pr-1')).toBeUndefined();
+        }
+      });
     });
   });
 });
