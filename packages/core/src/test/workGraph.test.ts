@@ -222,6 +222,53 @@ describe('WorkGraph', () => {
     expect(c.sortOrder).toBe(2);
   });
 
+  it('reorders item from position 2 to position 0', async () => {
+    const a = await graph.createItem({ title: 'A' });
+    const b = await graph.createItem({ title: 'B' });
+    const c = await graph.createItem({ title: 'C' });
+
+    await graph.reorderItem(c.id, a.id);
+
+    const items = graph.getItemsByState(WorkItemState.New)
+      .sort((x, y) => (x.sortOrder ?? Infinity) - (y.sortOrder ?? Infinity));
+    expect(items.map((i) => i.title)).toEqual(['C', 'A', 'B']);
+  });
+
+  it('reorders item from position 0 to position 2', async () => {
+    const a = await graph.createItem({ title: 'A' });
+    const b = await graph.createItem({ title: 'B' });
+    const c = await graph.createItem({ title: 'C' });
+
+    await graph.reorderItem(a.id, c.id);
+
+    const items = graph.getItemsByState(WorkItemState.New)
+      .sort((x, y) => (x.sortOrder ?? Infinity) - (y.sortOrder ?? Infinity));
+    expect(items.map((i) => i.title)).toEqual(['B', 'A', 'C']);
+  });
+
+  it('reorder to same position is a no-op', async () => {
+    const a = await graph.createItem({ title: 'A' });
+    const b = await graph.createItem({ title: 'B' });
+
+    const listener = vi.fn();
+    graph.onDidChange(listener);
+
+    await graph.reorderItem(a.id, a.id);
+
+    expect(listener).not.toHaveBeenCalled();
+  });
+
+  it('reorder non-existent item is a no-op', async () => {
+    const a = await graph.createItem({ title: 'A' });
+
+    const listener = vi.fn();
+    graph.onDidChange(listener);
+
+    await graph.reorderItem('nonexistent', a.id);
+
+    expect(listener).not.toHaveBeenCalled();
+  });
+
   it('moves legacy items without sortOrder correctly', async () => {
     const legacyStore = createMockStore();
 

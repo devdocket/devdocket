@@ -104,7 +104,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<WorkCe
       inboxTreeView.message = hasInboxItems ? undefined : 'No new items';
     }
   };
-  const queueTreeView = vscode.window.createTreeView('workcenter.queue', { treeDataProvider: queueProvider });
+  const queueTreeView = vscode.window.createTreeView('workcenter.queue', { treeDataProvider: queueProvider, dragAndDropController: queueProvider });
   const focusTreeView = vscode.window.createTreeView('workcenter.focus', { treeDataProvider: focusProvider });
 
   const updateQueueFocusMessages = () => {

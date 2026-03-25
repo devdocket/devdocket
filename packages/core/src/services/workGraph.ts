@@ -160,6 +160,35 @@ export class WorkGraph {
     this._onDidChange.fire();
   }
 
+  async reorderItem(draggedId: string, targetId: string): Promise<void> {
+    const dragged = this.items.get(draggedId);
+    const target = this.items.get(targetId);
+    if (!dragged || !target) { return; }
+
+    const siblings = this.getItemsByState(dragged.state)
+      .sort((a, b) => (a.sortOrder ?? Number.MAX_SAFE_INTEGER) - (b.sortOrder ?? Number.MAX_SAFE_INTEGER));
+
+    const withoutDragged = siblings.filter(s => s.id !== draggedId);
+    const targetIndex = withoutDragged.findIndex(s => s.id === targetId);
+    if (targetIndex === -1) { return; }
+
+    withoutDragged.splice(targetIndex, 0, dragged);
+
+    const itemsToSave: WorkItem[] = [];
+    withoutDragged.forEach((item, i) => {
+      if (item.sortOrder !== i) {
+        const updated = { ...item, sortOrder: i, updatedAt: Date.now() };
+        this.items.set(updated.id, updated);
+        itemsToSave.push(updated);
+      }
+    });
+
+    if (itemsToSave.length > 0) {
+      await this.store.saveAll(itemsToSave);
+      this._onDidChange.fire();
+    }
+  }
+
   async deleteItem(id: string): Promise<void> {
     await this.store.delete(id);
     this.items.delete(id);
