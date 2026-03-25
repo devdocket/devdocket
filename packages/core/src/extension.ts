@@ -132,6 +132,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<WorkCe
   const workGraphSub = workGraph.onDidChange(updateWorkViewMessages);
 
   let initialLoadComplete = false;
+  let wasLoading = false;
 
   const updateInboxBadge = () => {
     const count = getInboxUnseenCount(providerRegistry, stateStore);
@@ -140,12 +141,19 @@ export async function activate(context: vscode.ExtensionContext): Promise<WorkCe
 
   updateViewMessages();
   updateInboxBadge();
-  initialLoadComplete = true;
 
   const providerRegSub = providerRegistry.onDidRegisterProvider(updateViewMessages);
   const discoveredSub = providerRegistry.onDidChangeDiscoveredItems(() => {
     updateViewMessages();
     updateInboxBadge();
+
+    // Mark initial load complete when loading transitions from true to false
+    if (!initialLoadComplete) {
+      if (wasLoading && !providerRegistry.loading) {
+        initialLoadComplete = true;
+      }
+      wasLoading = wasLoading || providerRegistry.loading;
+    }
   });
   const newItemsSub = providerRegistry.onDidAddNewUnseenItems((newCount) => {
     if (!initialLoadComplete) { return; }
