@@ -28,6 +28,11 @@
           "enum": ["debug", "info", "warn", "error"],
           "default": "info",
           "description": "Log level for WorkCenter output channel"
+        },
+        "workcenter.showInboxNotifications": {
+          "type": "boolean",
+          "default": true,
+          "description": "Show a notification when new items arrive in the Inbox"
         }
       }
     },
@@ -144,16 +149,6 @@
         "icon": "$(arrow-down)"
       }
     ],
-    "configuration": {
-      "title": "WorkCenter",
-      "properties": {
-        "workcenter.showInboxNotifications": {
-          "type": "boolean",
-          "default": true,
-          "description": "Show a notification when new items arrive in the Inbox"
-        }
-      }
-    },
     "menus": {
       "view/title": [
         {

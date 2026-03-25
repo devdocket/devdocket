@@ -87,12 +87,6 @@ const Uri = {
   parse: vi.fn((s: string) => ({ toString: () => s })),
 };
 
-const workspace = {
-  getConfiguration: vi.fn(() => ({
-    get: vi.fn((_key: string, defaultValue?: any) => defaultValue),
-  })),
-};
-
 class MockDisposable {
   private callback: () => void;
   constructor(callback: () => void) { this.callback = callback; }

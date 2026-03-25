@@ -106,13 +106,12 @@ export class ProviderRegistry {
       }
     }
     if (updates.length > 0) {
-      await this.stateStore.setStates(updates)
-        .then(() => {
-          this._onDidAddNewUnseenItems.fire(updates.length);
-        })
-        .catch((err) => {
-          logger.error('Failed to persist discovered states', err);
-        });
+      try {
+        await this.stateStore.setStates(updates);
+        this._onDidAddNewUnseenItems.fire(updates.length);
+      } catch (err) {
+        logger.error('Failed to persist discovered states', err);
+      }
     }
     this._onDidChangeDiscoveredItems.fire();
   }
