@@ -216,7 +216,7 @@ export class AdoPrReviewProvider implements WorkCenterProvider {
     reviewerId: string,
   ): Promise<{ items: DiscoveredItem[]; failed: boolean }> {
     const projectPath = project ? `/${encodeURIComponent(project)}` : '';
-    const url = `https://dev.azure.com/${encodeURIComponent(this.org)}${projectPath}/_apis/git/pullrequests?searchCriteria.reviewerId=${reviewerId}&searchCriteria.status=active&api-version=7.1`;
+    const url = `https://dev.azure.com/${encodeURIComponent(this.org)}${projectPath}/_apis/git/pullrequests?searchCriteria.reviewerId=${encodeURIComponent(reviewerId)}&searchCriteria.status=active&api-version=7.1`;
 
     const response = await fetch(url, {
       headers: {

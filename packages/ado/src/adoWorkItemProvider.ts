@@ -236,7 +236,7 @@ export class AdoWorkItemProvider implements WorkCenterProvider {
       return {
         externalId: `${projectName}/${wi.id}`,
         title: `${wiType} ${wi.id}: ${wi.fields['System.Title']}`,
-        description: wi.fields['System.Description']?.replace(/<[^>]*>/g, '').slice(0, 200),
+        description: wi.fields['System.Description']?.replace(/<[^>]*>/g, '')?.slice(0, 200),
         url: wi._links.html.href,
         group: projectName,
       };

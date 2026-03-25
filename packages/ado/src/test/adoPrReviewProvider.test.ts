@@ -126,8 +126,6 @@ describe('AdoPrReviewProvider', () => {
     await provider.refresh();
     expect(mockFetch).toHaveBeenCalledTimes(2);
 
-    // Reset _isRefreshing for second call
-    (provider as any)._isRefreshing = false;
     mockFetch.mockClear();
 
     // Second refresh: should skip connection data call
