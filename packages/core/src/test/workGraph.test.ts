@@ -133,4 +133,65 @@ describe('WorkGraph', () => {
 
     expect(item.description).toBe('A detailed bug report');
   });
+
+  it('assigns sortOrder on creation', async () => {
+    const a = await graph.createItem({ title: 'A' });
+    const b = await graph.createItem({ title: 'B' });
+    const c = await graph.createItem({ title: 'C' });
+
+    expect(a.sortOrder).toBe(0);
+    expect(b.sortOrder).toBe(1);
+    expect(c.sortOrder).toBe(2);
+  });
+
+  it('moves an item down', async () => {
+    const a = await graph.createItem({ title: 'A' });
+    const b = await graph.createItem({ title: 'B' });
+    const c = await graph.createItem({ title: 'C' });
+
+    await graph.moveItem(a.id, 'down');
+
+    const items = graph.getItemsByState(WorkItemState.New)
+      .sort((x, y) => (x.sortOrder ?? Infinity) - (y.sortOrder ?? Infinity));
+    expect(items.map((i) => i.title)).toEqual(['B', 'A', 'C']);
+  });
+
+  it('moves an item up', async () => {
+    const a = await graph.createItem({ title: 'A' });
+    const b = await graph.createItem({ title: 'B' });
+    const c = await graph.createItem({ title: 'C' });
+
+    await graph.moveItem(c.id, 'up');
+
+    const items = graph.getItemsByState(WorkItemState.New)
+      .sort((x, y) => (x.sortOrder ?? Infinity) - (y.sortOrder ?? Infinity));
+    expect(items.map((i) => i.title)).toEqual(['A', 'C', 'B']);
+  });
+
+  it('moving the first item up is a no-op', async () => {
+    const a = await graph.createItem({ title: 'A' });
+    const b = await graph.createItem({ title: 'B' });
+
+    await graph.moveItem(a.id, 'up');
+
+    const items = graph.getItemsByState(WorkItemState.New)
+      .sort((x, y) => (x.sortOrder ?? Infinity) - (y.sortOrder ?? Infinity));
+    expect(items.map((i) => i.title)).toEqual(['A', 'B']);
+  });
+
+  it('moving the last item down is a no-op', async () => {
+    const a = await graph.createItem({ title: 'A' });
+    const b = await graph.createItem({ title: 'B' });
+
+    await graph.moveItem(b.id, 'down');
+
+    const items = graph.getItemsByState(WorkItemState.New)
+      .sort((x, y) => (x.sortOrder ?? Infinity) - (y.sortOrder ?? Infinity));
+    expect(items.map((i) => i.title)).toEqual(['A', 'B']);
+  });
+
+  it('throws when moving unknown item', async () => {
+    await expect(graph.moveItem('nonexistent', 'up'))
+      .rejects.toThrow('Work item not found');
+  });
 });

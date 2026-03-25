@@ -41,6 +41,8 @@ export class WorkGraph {
     input: WorkItemInput,
     provenance?: { providerId: string; externalId: string; url?: string },
   ): Promise<WorkItem> {
+    const existingItems = this.getItemsByState(WorkItemState.New);
+    const maxOrder = existingItems.reduce((max, i) => Math.max(max, i.sortOrder ?? -1), -1);
     const item: WorkItem = {
       id: generateId(),
       title: input.title,
@@ -49,6 +51,7 @@ export class WorkGraph {
       providerId: provenance?.providerId,
       externalId: provenance?.externalId,
       url: provenance?.url,
+      sortOrder: maxOrder + 1,
       createdAt: Date.now(),
       updatedAt: Date.now(),
     };
@@ -81,6 +84,43 @@ export class WorkGraph {
     this.items.set(id, updated);
     this._onDidChange.fire();
     logger.info(`Transitioned work item ${id} to ${newState}`);
+  }
+
+  async moveItem(id: string, direction: 'up' | 'down'): Promise<void> {
+    const item = this.items.get(id);
+    if (!item) {
+      throw new Error(`Work item not found: ${id}`);
+    }
+
+    const siblings = this.getItemsByState(item.state)
+      .sort((a, b) => (a.sortOrder ?? Infinity) - (b.sortOrder ?? Infinity));
+
+    const index = siblings.findIndex((s) => s.id === id);
+    if (index === -1) {
+      return;
+    }
+
+    const swapIndex = direction === 'up' ? index - 1 : index + 1;
+    if (swapIndex < 0 || swapIndex >= siblings.length) {
+      return;
+    }
+
+    // Normalize sort orders before swapping
+    siblings.forEach((s, i) => {
+      s.sortOrder = i;
+    });
+
+    const temp = siblings[index].sortOrder!;
+    siblings[index].sortOrder = siblings[swapIndex].sortOrder!;
+    siblings[swapIndex].sortOrder = temp;
+
+    siblings[index].updatedAt = Date.now();
+    siblings[swapIndex].updatedAt = Date.now();
+    await this.store.save(siblings[index]);
+    await this.store.save(siblings[swapIndex]);
+    this.items.set(siblings[index].id, siblings[index]);
+    this.items.set(siblings[swapIndex].id, siblings[swapIndex]);
+    this._onDidChange.fire();
   }
 
   async deleteItem(id: string): Promise<void> {

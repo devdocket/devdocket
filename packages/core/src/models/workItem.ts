@@ -16,6 +16,7 @@ export interface WorkItem {
   providerId?: string;
   externalId?: string;
   url?: string;
+  sortOrder?: number;
   createdAt: number;
   updatedAt: number;
 }
