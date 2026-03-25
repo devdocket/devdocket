@@ -57,15 +57,29 @@ export class WorkItemEditorPanel {
   }
 
   private async saveData(data: Record<string, string>): Promise<void> {
-    if (!data.title) {
-      return;
+    const item = this.workGraph.getItem(this.itemId);
+    if (!item) {
+      throw new Error('Work item no longer exists. Your changes could not be saved.');
     }
-    const patch: Partial<WorkItemInput> = { title: data.title };
+    const patch: Partial<WorkItemInput> = {};
+
+    if (!item.providerId) {
+      if (!data.title) {
+        return;
+      }
+      patch.title = data.title;
+    }
+
     if ('notes' in data) {
       patch.notes = data.notes || undefined;
     }
+
+    if (Object.keys(patch).length === 0) {
+      return;
+    }
+
     await this.workGraph.updateItem(this.itemId, patch);
-    if (!this.disposed) {
+    if (!this.disposed && data.title && !item.providerId) {
       this.panel.title = `Edit: ${data.title}`;
     }
   }
@@ -172,6 +186,17 @@ export class WorkItemEditorPanel {
       color: var(--vscode-foreground);
       border: 1px solid var(--input-border);
     }
+    input[readonly], textarea[readonly] {
+      opacity: 0.7;
+      cursor: not-allowed;
+      border-style: dashed;
+    }
+    .hint {
+      font-size: 0.8em;
+      opacity: 0.6;
+      margin-top: 2px;
+      display: block;
+    }
   </style>
 </head>
 <body>
@@ -179,7 +204,8 @@ export class WorkItemEditorPanel {
   <div id="form">
     <div class="field">
       <label for="title">Title</label>
-      <input type="text" id="title" value="${escapeAttr(item.title)}" />
+      <input type="text" id="title" value="${escapeAttr(item.title)}" ${item.providerId ? 'readonly aria-readonly="true" aria-describedby="readonly-title-hint"' : ''} />
+${item.providerId ? '      <span id="readonly-title-hint" class="hint">Title is managed by the provider</span>' : ''}
     </div>
     <div class="field">
       <label for="notes">Notes</label>
@@ -202,13 +228,19 @@ export class WorkItemEditorPanel {
       if (debounceTimer) clearTimeout(debounceTimer);
       debounceTimer = setTimeout(() => {
         const data = getData();
-        if (!data.title) return;
+        const titleEl = document.getElementById('title');
+        if (!data.title && titleEl instanceof HTMLInputElement && !titleEl.readOnly) return;
         vscode.postMessage({ type: 'autosave', data });
       }, 500);
     }
 
     fields.forEach(f => {
-      document.getElementById(f).addEventListener('input', scheduleAutosave);
+      const el = document.getElementById(f);
+      if (el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement) {
+        if (!el.readOnly) {
+          el.addEventListener('input', scheduleAutosave);
+        }
+      }
     });
   </script>
 </body>
