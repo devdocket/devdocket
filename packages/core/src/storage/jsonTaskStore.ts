@@ -8,6 +8,7 @@ export class JsonTaskStore implements ITaskStore {
   private readonly filePath: string;
   private writeQueue: Promise<void> = Promise.resolve();
   private cache: Map<string, WorkItem> | null = null;
+  private loadPromise: Promise<WorkItem[]> | null = null;
 
   constructor(storagePath: string) {
     this.filePath = path.join(storagePath, 'workitems.json');
@@ -17,6 +18,14 @@ export class JsonTaskStore implements ITaskStore {
     if (this.cache !== null) {
       return Array.from(this.cache.values());
     }
+    // Guard against concurrent loads: reuse the same in-flight promise
+    if (this.loadPromise === null) {
+      this.loadPromise = this.doLoad();
+    }
+    return this.loadPromise;
+  }
+
+  private async doLoad(): Promise<WorkItem[]> {
     logger.debug(`Loading work items from ${this.filePath}`);
     try {
       const data = await fs.readFile(this.filePath, 'utf-8');
@@ -49,6 +58,8 @@ export class JsonTaskStore implements ITaskStore {
         this.cache = new Map();
         return [];
       }
+      // Allow retry on failure
+      this.loadPromise = null;
       throw err;
     }
   }
