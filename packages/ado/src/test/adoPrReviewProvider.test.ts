@@ -143,6 +143,51 @@ describe('AdoPrReviewProvider', () => {
     );
   });
 
+  it('invalidates cached user ID when auth account changes', async () => {
+    // First refresh with account '1'
+    mockFetch
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ authenticatedUser: { id: 'user-uuid-123' } }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ value: [] }),
+      });
+
+    await provider.refresh();
+    expect(mockFetch).toHaveBeenCalledTimes(2);
+
+    mockFetch.mockClear();
+
+    // Switch to a different account
+    vi.mocked(authentication.getSession).mockResolvedValue({
+      accessToken: 'new-token',
+      id: 'session-2',
+      scopes: ['499b84ac-1321-427f-aa17-267ca6975798/.default'],
+      account: { id: '2', label: 'otheruser' },
+    } as any);
+
+    // Second refresh: should re-fetch connection data due to account change
+    mockFetch
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ authenticatedUser: { id: 'other-user-uuid' } }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ value: [] }),
+      });
+
+    await provider.refresh();
+    // Both connection data AND PR list calls
+    expect(mockFetch).toHaveBeenCalledTimes(2);
+    expect(mockFetch).toHaveBeenCalledWith(
+      expect.stringContaining('connectiondata'),
+      expect.any(Object),
+    );
+  });
+
   it('maps multiple PRs from different repos correctly', async () => {
     mockFetch
       .mockResolvedValueOnce({

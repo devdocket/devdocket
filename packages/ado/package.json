@@ -33,7 +33,7 @@
             "type": "string"
           },
           "default": [],
-          "description": "Azure DevOps projects to monitor"
+          "description": "Azure DevOps projects to monitor. Leave empty to fetch assigned work items and PRs across the entire organization."
         },
         "workcenterAdo.refreshIntervalSeconds": {
           "type": "number",

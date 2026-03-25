@@ -55,6 +55,7 @@ export class AdoPrReviewProvider implements WorkCenterProvider {
   private refreshTimer: ReturnType<typeof setInterval> | undefined;
   private _isRefreshing = false;
   private _cachedUserId: string | undefined;
+  private _cachedSessionAccountId: string | undefined;
 
   constructor(
     private readonly org: string,
@@ -96,7 +97,7 @@ export class AdoPrReviewProvider implements WorkCenterProvider {
         return;
       }
 
-      await this.fetchAndPublishPrs(session.accessToken, true);
+      await this.fetchAndPublishPrs(session.accessToken, true, session.account.id);
     } catch (err) {
       console.error('WorkCenter ADO: failed to fetch PR reviews:', err);
     } finally {
@@ -119,7 +120,7 @@ export class AdoPrReviewProvider implements WorkCenterProvider {
         return;
       }
 
-      await this.fetchAndPublishPrs(session.accessToken, false);
+      await this.fetchAndPublishPrs(session.accessToken, false, session.account.id);
     } catch (err) {
       console.error('WorkCenter ADO: failed to fetch PR reviews:', err);
     } finally {
@@ -127,8 +128,8 @@ export class AdoPrReviewProvider implements WorkCenterProvider {
     }
   }
 
-  private async fetchAndPublishPrs(accessToken: string, isUserTriggered: boolean): Promise<void> {
-    const userId = await this.getUserId(accessToken);
+  private async fetchAndPublishPrs(accessToken: string, isUserTriggered: boolean, sessionAccountId: string): Promise<void> {
+    const userId = await this.getUserId(accessToken, sessionAccountId);
     if (!userId) {
       const message = 'Failed to determine Azure DevOps user identity';
       if (isUserTriggered) {
@@ -174,8 +175,8 @@ export class AdoPrReviewProvider implements WorkCenterProvider {
     }
   }
 
-  private async getUserId(token: string): Promise<string | undefined> {
-    if (this._cachedUserId) {
+  private async getUserId(token: string, sessionAccountId: string): Promise<string | undefined> {
+    if (this._cachedUserId && this._cachedSessionAccountId === sessionAccountId) {
       return this._cachedUserId;
     }
 
@@ -189,6 +190,7 @@ export class AdoPrReviewProvider implements WorkCenterProvider {
     if (!response.ok) {
       console.error(`WorkCenter ADO: failed to fetch connection data: ${response.status}`);
       this._cachedUserId = undefined;
+      this._cachedSessionAccountId = undefined;
       return undefined;
     }
 
@@ -198,15 +200,18 @@ export class AdoPrReviewProvider implements WorkCenterProvider {
     } catch (err) {
       console.error('WorkCenter ADO: failed to parse connection data response:', err);
       this._cachedUserId = undefined;
+      this._cachedSessionAccountId = undefined;
       return undefined;
     }
 
     if (!data?.authenticatedUser?.id) {
       this._cachedUserId = undefined;
+      this._cachedSessionAccountId = undefined;
       return undefined;
     }
 
     this._cachedUserId = data.authenticatedUser.id;
+    this._cachedSessionAccountId = sessionAccountId;
     return this._cachedUserId;
   }
 
