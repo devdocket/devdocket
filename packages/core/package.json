@@ -204,7 +204,7 @@
         },
         {
           "command": "workcenter.archiveItem",
-          "when": "view == workcenter.history && viewItem =~ /historyItem/",
+          "when": "view == workcenter.history && viewItem =~ /historyItemDone/",
           "group": "1_actions"
         },
         {
