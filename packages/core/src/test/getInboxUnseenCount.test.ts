@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { EventEmitter } from 'vscode';
 import { WorkCenterProvider, DiscoveredItem } from '../api/types';
 import { ProviderRegistry } from '../services/providerRegistry';
-import { getInboxUnseenCount } from '../extension';
+import { getInboxUnseenCount } from '../services/inboxBadge';
 
 function createMockStateStore() {
   const cache = new Map<string, string>();

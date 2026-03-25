@@ -13,22 +13,10 @@ import { SourcesTreeProvider } from './views/sourcesTreeProvider';
 import { HistoryTreeProvider } from './views/historyTreeProvider';
 import { registerCommands } from './commands/commands';
 import { initLogger, setLogLevel, logger, LogLevel } from './services/logger';
+import { getInboxUnseenCount } from './services/inboxBadge';
 
 export type { WorkCenterApi, WorkCenterProvider, WorkCenterAction, DiscoveredItem, Disposable } from './api/types';
 export { logger } from './services/logger';
-
-export function getInboxUnseenCount(providerRegistry: ProviderRegistry, stateStore: DiscoveredStateStore): number {
-  let count = 0;
-  for (const [providerId, items] of providerRegistry.getAllDiscoveredItems()) {
-    for (const item of items) {
-      const state = stateStore.getState(providerId, item.externalId);
-      if (state === undefined || state === 'unseen') {
-        count++;
-      }
-    }
-  }
-  return count;
-}
 
 export async function activate(context: vscode.ExtensionContext): Promise<WorkCenterApi> {
   const outputChannel = vscode.window.createOutputChannel('WorkCenter');
