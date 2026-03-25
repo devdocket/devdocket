@@ -43,10 +43,10 @@ All items in the Queue are in the **New** state.
 
 The Focus view shows items you are actively working on. Items here can be in one of three states: **InProgress**, **Blocked**, or **WaitingOn**.
 
-Items display a state label next to the title:
-- ▶ **in progress** — actively being worked on
-- ⛔ **blocked** — work is blocked by an external dependency
-- ⏳ **waiting** — waiting on someone or something
+Items display a state label next to the title, with icons indicating status:
+- **in progress** — actively being worked on (shown with a separate in-progress icon)
+- **blocked** — work is blocked by an external dependency (prefixed with a ⛔ icon)
+- **waiting on** — waiting on someone or something (prefixed with a ⏳ icon)
 
 **Available actions on Focus items:**
 
