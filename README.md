@@ -41,9 +41,9 @@ Leave `repos` empty to fetch all issues assigned to you across all repositories.
 
 > **Note:** The `repos` setting currently scopes **issue discovery only**. PR review requests are always discovered globally (all open PRs where your review is requested across all repositories).
 
-## The Four-View Model
+## The Five-View Model
 
-WorkCenter organizes work across four views in the sidebar:
+WorkCenter organizes work across five views in the sidebar:
 
 ### Inbox
 
@@ -56,6 +56,10 @@ Your curated backlog. Items arrive here when accepted from the Inbox or Sources,
 ### Focus
 
 Your active work. Items here are **InProgress**, **Blocked**, or **WaitingOn**. The Focus view is designed to show only what matters right now. Complete items when done, or mark them as blocked/waiting to signal status at a glance.
+
+### History
+
+Completed and archived items. The History view gives you a record of finished work — useful for standups, status updates, and recalling what you've done. Items here are in the **Done** or **Archived** state.
 
 ### Sources
 
@@ -75,10 +79,11 @@ Providers (GitHub, etc.)          Manual creation
                                 │                           │
                                 │                        Complete
                                 ▼                           ▼
-                          (Archived)                      (Done)
+                              History ◄──────────────── History
+                          (Archived)                    (Done)
 ```
 
-> **Note:** *Done* and *Archived* are stored states, not browsable views. Completing an item from Focus or archiving from Queue removes it from all visible views.
+> **Note:** Items in History can be restored — move them back to Queue or Focus to resume work.
 
 ## Plugin Ecosystem
 
@@ -119,7 +124,7 @@ packages/
 └── github/     # WorkCenter GitHub — provider for issues and PR reviews
 ```
 
-- **`packages/core`** owns the four views, work item persistence, the editor panel, and the extension API (`WorkCenterApi`).
+- **`packages/core`** owns the five views, work item persistence, the editor panel, and the extension API (`WorkCenterApi`).
 - **`packages/github`** is a provider extension that discovers GitHub issues and PR reviews, and offers a "Start Work" action.
 
 Provider extensions depend on the core extension via `extensionDependencies` and acquire the API at activation time. They do not import code from the core package directly — interfaces are re-declared to keep the extensions decoupled.
@@ -133,7 +138,7 @@ WorkCenter persists two JSON files in VS Code's `globalStorageUri`:
 
 ## Documentation
 
-- [UX Guide](https://github.com/mthalman/workcenter/pull/28) — The four views, data flow, work item states, available actions, and the editor panel. *(Added by [PR #28](https://github.com/mthalman/workcenter/pull/28); link will point to `docs/ux-guide.md` once merged.)*
+- [UX Guide](https://github.com/mthalman/workcenter/pull/28) — The five views, data flow, work item states, available actions, and the editor panel. *(Added by [PR #28](https://github.com/mthalman/workcenter/pull/28); link will point to `docs/ux-guide.md` once merged.)*
 - [Extension API](https://github.com/mthalman/workcenter/pull/29) — Provider and action contracts, interfaces, and example implementations. *(Added by [PR #29](https://github.com/mthalman/workcenter/pull/29); link will point to `docs/extension-api.md` once merged.)*
 
 ## Contributing
