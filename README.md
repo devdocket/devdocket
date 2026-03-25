@@ -27,7 +27,7 @@ WorkCenter is **not** a replacement for GitHub Issues, Jira, or any other system
 
 ### Configuring the GitHub Provider
 
-After installing WorkCenter GitHub, configure which repositories to watch:
+After installing WorkCenter GitHub, configure which repositories to watch for issues:
 
 ```json
 // settings.json
@@ -38,6 +38,8 @@ After installing WorkCenter GitHub, configure which repositories to watch:
 ```
 
 Leave `repos` empty to fetch all issues assigned to you across all repositories.
+
+> **Note:** The `repos` setting currently scopes **issue discovery only**. PR review requests are always discovered globally (all open PRs where your review is requested across all repositories).
 
 ## The Four-View Model
 
