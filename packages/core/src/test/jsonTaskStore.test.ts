@@ -153,4 +153,23 @@ describe('JsonTaskStore', () => {
     expect(parsed).toHaveLength(1);
     expect(parsed[0].id).toBe('test-1');
   });
+
+  it('migrates legacy description field to notes on load', async () => {
+    const filePath = path.join(tmpDir, 'workitems.json');
+    const legacy = [{
+      id: 'legacy-1',
+      title: 'Old item',
+      description: 'Legacy description',
+      state: 'New',
+      createdAt: 1000,
+      updatedAt: 1000,
+    }];
+    await fs.mkdir(tmpDir, { recursive: true });
+    await fs.writeFile(filePath, JSON.stringify(legacy), 'utf-8');
+
+    const items = await store.loadAll();
+    expect(items).toHaveLength(1);
+    expect(items[0].notes).toBe('Legacy description');
+    expect((items[0] as any).description).toBeUndefined();
+  });
 });

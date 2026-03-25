@@ -62,7 +62,7 @@ export class WorkItemEditorPanel {
     }
     await this.workGraph.updateItem(this.itemId, {
       title: data.title,
-      description: data.description || undefined,
+      notes: data.notes || undefined,
     });
     if (!this.disposed) {
       this.panel.title = `Edit: ${data.title}`;
@@ -181,19 +181,19 @@ export class WorkItemEditorPanel {
       <input type="text" id="title" value="${escapeAttr(item.title)}" />
     </div>
     <div class="field">
-      <label for="description">Description</label>
-      <textarea id="description">${escapeHtml(item.description ?? '')}</textarea>
+      <label for="notes">Notes</label>
+      <textarea id="notes">${escapeHtml(item.notes ?? '')}</textarea>
     </div>
   </div>
   <script nonce="${nonce}">
     const vscode = acquireVsCodeApi();
-    const fields = ['title', 'description'];
+    const fields = ['title', 'notes'];
     let debounceTimer = null;
 
     function getData() {
       return {
         title: document.getElementById('title').value.trim(),
-        description: document.getElementById('description').value.trim(),
+        notes: document.getElementById('notes').value.trim(),
       };
     }
 
