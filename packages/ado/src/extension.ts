@@ -71,6 +71,7 @@ export async function activate(_context: vscode.ExtensionContext): Promise<void>
     const projects = config.get<string[]>('projects', []);
 
     if (!org) {
+      logger.info('No organization configured — set workcenterAdo.organization to enable ADO providers');
       return;
     }
 
