@@ -2,7 +2,7 @@ import * as vscode from 'vscode';
 import { GitHubIssueProvider } from './githubProvider';
 import { GitHubPrReviewProvider } from './githubPrReviewProvider';
 import { StartWorkAction } from './startWorkAction';
-import { initLogger, logger, LogLevel } from './logger';
+import { initLogger, setLogLevel, logger, LogLevel } from './logger';
 
 export async function activate(_context: vscode.ExtensionContext): Promise<void> {
   const outputChannel = vscode.window.createOutputChannel('WorkCenter GitHub');
@@ -16,6 +16,16 @@ export async function activate(_context: vscode.ExtensionContext): Promise<void>
     error: LogLevel.Error,
   };
   initLogger(outputChannel, logLevelMap[logLevelConfig] ?? LogLevel.Info);
+
+  _context.subscriptions.push(
+    vscode.workspace.onDidChangeConfiguration(e => {
+      if (e.affectsConfiguration('workcenter.logLevel')) {
+        const newLevel = vscode.workspace.getConfiguration('workcenter').get<string>('logLevel', 'info');
+        setLogLevel(logLevelMap[newLevel] ?? LogLevel.Info);
+      }
+    }),
+  );
+
   logger.info('WorkCenter GitHub activating...');
 
   // Acquire the WorkCenter API from the core extension
