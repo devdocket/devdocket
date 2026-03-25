@@ -38,10 +38,14 @@ export class WorkGraph {
     const toSave: WorkItem[] = [];
     for (let i = 0; i < unordered.length; i++) {
       const updated = { ...unordered[i], sortOrder: maxExisting + 1 + i, updatedAt: Date.now() };
-      this.items.set(updated.id, updated);
       toSave.push(updated);
     }
+
     await this.store.saveAll(toSave);
+
+    for (const updated of toSave) {
+      this.items.set(updated.id, updated);
+    }
   }
 
   getAll(): WorkItem[] {
@@ -130,12 +134,14 @@ export class WorkGraph {
       if (siblings[i].sortOrder === undefined) {
         const normalized = { ...siblings[i], sortOrder: i, updatedAt: Date.now() };
         siblings[i] = normalized;
-        this.items.set(normalized.id, normalized);
         toNormalize.push(normalized);
       }
     }
     if (toNormalize.length > 0) {
       await this.store.saveAll(toNormalize);
+      for (const normalized of toNormalize) {
+        this.items.set(normalized.id, normalized);
+      }
     }
 
     const index = siblings.findIndex((s) => s.id === id);
@@ -179,13 +185,15 @@ export class WorkGraph {
     withoutDragged.forEach((item, i) => {
       if (item.sortOrder !== i) {
         const updated = { ...item, sortOrder: i, updatedAt: Date.now() };
-        this.items.set(updated.id, updated);
         itemsToSave.push(updated);
       }
     });
 
     if (itemsToSave.length > 0) {
       await this.store.saveAll(itemsToSave);
+      for (const updated of itemsToSave) {
+        this.items.set(updated.id, updated);
+      }
       this._onDidChange.fire();
     }
   }
@@ -210,13 +218,15 @@ export class WorkGraph {
     withoutItem.forEach((sibling, index) => {
       if (sibling.sortOrder !== index) {
         const updated = { ...sibling, sortOrder: index, updatedAt: Date.now() };
-        this.items.set(updated.id, updated);
         itemsToSave.push(updated);
       }
     });
 
     if (itemsToSave.length > 0) {
       await this.store.saveAll(itemsToSave);
+      for (const updated of itemsToSave) {
+        this.items.set(updated.id, updated);
+      }
       this._onDidChange.fire();
     }
   }
