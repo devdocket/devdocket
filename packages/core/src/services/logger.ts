@@ -26,7 +26,8 @@ export function serializeArg(arg: unknown): string {
     return arg.stack || `${arg.name}: ${arg.message}`;
   }
   try {
-    return JSON.stringify(arg);
+    const json = JSON.stringify(arg);
+    return json === undefined ? String(arg) : json;
   } catch {
     return String(arg);
   }
