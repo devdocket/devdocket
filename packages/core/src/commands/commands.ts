@@ -7,6 +7,11 @@ import { WorkItemEditorPanel } from '../views/workItemEditorPanel';
 import { InboxItem } from '../views/inboxTreeProvider';
 import { SourceItemNode } from '../views/sourcesTreeProvider';
 
+/** Builds a work-item title, optionally prefixed with the provider group. */
+function formatItemTitle(item: { group?: string; title: string }): string {
+  return item.group?.trim() ? `${item.group.trim()} ${item.title}` : item.title;
+}
+
 export function registerCommands(
   context: vscode.ExtensionContext,
   workGraph: WorkGraph,
@@ -81,9 +86,8 @@ export function registerCommands(
         );
         return;
       }
-      const title = item.group?.trim() ? `${item.group.trim()} ${item.title}` : item.title;
       await workGraph.createItem(
-        { title, description: item.description },
+        { title: formatItemTitle(item), description: item.description },
         { providerId: item.providerId, externalId: item.externalId, url: item.url },
       );
       try {
@@ -116,9 +120,8 @@ export function registerCommands(
         return;
       }
       try {
-        const title = item.group?.trim() ? `${item.group.trim()} ${item.title}` : item.title;
         await workGraph.createItem(
-          { title, description: item.description },
+          { title: formatItemTitle(item), description: item.description },
           { providerId: item.providerId, externalId: item.externalId, url: item.url },
         );
         await stateStore.setState(item.providerId, item.externalId, 'accepted');
