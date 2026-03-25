@@ -62,15 +62,15 @@ export class WorkItemEditorPanel {
       throw new Error('Work item no longer exists. Your changes could not be saved.');
     }
     const patch: Partial<WorkItemInput> = {};
-    if ('notes' in data) {
-      patch.notes = data.notes || undefined;
-    }
 
     if (!item.providerId) {
       if (!data.title) {
         return;
       }
       patch.title = data.title;
+      if ('notes' in data) {
+        patch.notes = data.notes || undefined;
+      }
     }
 
     await this.workGraph.updateItem(this.itemId, patch);
@@ -181,7 +181,7 @@ export class WorkItemEditorPanel {
       color: var(--vscode-foreground);
       border: 1px solid var(--input-border);
     }
-    input[readonly] {
+    input[readonly], textarea[readonly] {
       opacity: 0.7;
       cursor: not-allowed;
       border-style: dashed;
@@ -204,7 +204,8 @@ ${item.providerId ? '      <span class="hint">Title is managed by the provider</
     </div>
     <div class="field">
       <label for="notes">Notes</label>
-      <textarea id="notes">${escapeHtml(item.notes ?? '')}</textarea>
+      <textarea id="notes" ${item.providerId ? 'readonly' : ''}>${escapeHtml(item.notes ?? '')}</textarea>
+${item.providerId ? '      <span class="hint">Notes are managed by the provider</span>' : ''}
     </div>
   </div>
   <script nonce="${nonce}">
