@@ -11,7 +11,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     return;
   }
 
-  let api;
+  let api: WorkCenterApi | undefined;
   try {
     api = coreExtension.isActive
       ? coreExtension.exports

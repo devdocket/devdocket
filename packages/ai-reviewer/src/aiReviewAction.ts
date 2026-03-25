@@ -58,7 +58,7 @@ export class AiReviewAction implements WorkCenterAction {
 
   async fetchDiff(url: string): Promise<string | undefined> {
     try {
-      const githubMatch = url.match(/^https?:\/\/github\.com\/([^/]+\/[^/]+)\/pull\/(\d+)/);
+      const githubMatch = url.match(/^https?:\/\/github\.com\/([^/]+\/[^/]+)\/pull\/(\d+)(?:$|[\/?#])/);
       if (githubMatch) {
         return await this.fetchGitHubDiff(githubMatch[1], githubMatch[2]);
       }
