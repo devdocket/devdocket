@@ -79,7 +79,7 @@ export class WorkGraph {
     const item: WorkItem = {
       id: generateId(),
       title: input.title,
-      description: input.description,
+      notes: input.notes,
       state: WorkItemState.New,
       providerId: provenance?.providerId,
       externalId: provenance?.externalId,

@@ -28,6 +28,11 @@
           "enum": ["debug", "info", "warn", "error"],
           "default": "info",
           "description": "Log level for WorkCenter output channel"
+        },
+        "workcenter.showInboxNotifications": {
+          "type": "boolean",
+          "default": true,
+          "description": "Show a notification when new items arrive in the Inbox"
         }
       }
     },
@@ -187,17 +192,17 @@
         },
         {
           "command": "workcenter.blockItem",
-          "when": "view == workcenter.focus && viewItem == active",
+          "when": "view == workcenter.focus && viewItem =~ /^active/",
           "group": "1_actions"
         },
         {
           "command": "workcenter.unblockItem",
-          "when": "view == workcenter.focus && viewItem == blocked",
+          "when": "view == workcenter.focus && viewItem =~ /^blocked/",
           "group": "1_actions"
         },
         {
           "command": "workcenter.markWaitingOn",
-          "when": "view == workcenter.focus && viewItem == active",
+          "when": "view == workcenter.focus && viewItem =~ /^active/",
           "group": "1_actions"
         },
         {
@@ -227,12 +232,12 @@
         },
         {
           "command": "workcenter.acceptFromInbox",
-          "when": "view == workcenter.inbox",
+          "when": "view == workcenter.inbox && viewItem =~ /inboxItem/",
           "group": "inline"
         },
         {
           "command": "workcenter.dismissFromInbox",
-          "when": "view == workcenter.inbox",
+          "when": "view == workcenter.inbox && viewItem =~ /inboxItem/",
           "group": "1_actions"
         },
         {
