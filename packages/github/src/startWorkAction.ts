@@ -122,6 +122,7 @@ export class StartWorkAction implements WorkCenterAction {
         `WorkCenter: Created worktree for ${branchName}`,
       );
     } catch (err: unknown) {
+      logger.error('Failed to start work', err);
       const message = err instanceof Error ? err.message : String(err);
       vscode.window.showErrorMessage(`WorkCenter: Failed to start work — ${message}`);
     }
