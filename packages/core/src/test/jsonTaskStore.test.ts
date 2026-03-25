@@ -80,6 +80,71 @@ describe('JsonTaskStore', () => {
     expect(items).toHaveLength(1);
   });
 
+  describe('saveAll', () => {
+    it('inserts multiple items in one call', async () => {
+      const a = makeItem({ id: 'a', title: 'A' });
+      const b = makeItem({ id: 'b', title: 'B' });
+      await store.saveAll([a, b]);
+
+      const items = await store.loadAll();
+      expect(items).toHaveLength(2);
+      expect(items.map(i => i.id).sort()).toEqual(['a', 'b']);
+    });
+
+    it('updates existing items', async () => {
+      await store.save(makeItem({ id: 'a', title: 'Original A' }));
+      await store.save(makeItem({ id: 'b', title: 'Original B' }));
+
+      await store.saveAll([
+        makeItem({ id: 'a', title: 'Updated A' }),
+        makeItem({ id: 'b', title: 'Updated B' }),
+      ]);
+
+      const items = await store.loadAll();
+      expect(items).toHaveLength(2);
+      expect(items.find(i => i.id === 'a')!.title).toBe('Updated A');
+      expect(items.find(i => i.id === 'b')!.title).toBe('Updated B');
+    });
+
+    it('handles a mix of inserts and updates', async () => {
+      await store.save(makeItem({ id: 'existing', title: 'Old' }));
+
+      await store.saveAll([
+        makeItem({ id: 'existing', title: 'Updated' }),
+        makeItem({ id: 'new-item', title: 'Brand New' }),
+      ]);
+
+      const items = await store.loadAll();
+      expect(items).toHaveLength(2);
+      expect(items.find(i => i.id === 'existing')!.title).toBe('Updated');
+      expect(items.find(i => i.id === 'new-item')!.title).toBe('Brand New');
+    });
+
+    it('persists all items to disk', async () => {
+      await store.saveAll([
+        makeItem({ id: 'x', title: 'X' }),
+        makeItem({ id: 'y', title: 'Y' }),
+      ]);
+
+      const filePath = path.join(tmpDir, 'workitems.json');
+      const raw = await fs.readFile(filePath, 'utf-8');
+      const parsed = JSON.parse(raw);
+      expect(parsed).toHaveLength(2);
+      expect(parsed.map((i: WorkItem) => i.id).sort()).toEqual(['x', 'y']);
+    });
+
+    it('preserves items not included in the saveAll call', async () => {
+      await store.save(makeItem({ id: 'keep-me', title: 'Kept' }));
+
+      await store.saveAll([makeItem({ id: 'added', title: 'Added' })]);
+
+      const items = await store.loadAll();
+      expect(items).toHaveLength(2);
+      expect(items.find(i => i.id === 'keep-me')!.title).toBe('Kept');
+      expect(items.find(i => i.id === 'added')!.title).toBe('Added');
+    });
+  });
+
   it('persists data to a JSON file', async () => {
     await store.save(makeItem());
     const filePath = path.join(tmpDir, 'workitems.json');
