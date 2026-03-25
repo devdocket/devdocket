@@ -81,7 +81,7 @@ export function registerCommands(
         );
         return;
       }
-      const title = item.group ? `${item.group} ${item.title}` : item.title;
+      const title = item.group?.trim() ? `${item.group.trim()} ${item.title}` : item.title;
       await workGraph.createItem(
         { title, description: item.description },
         { providerId: item.providerId, externalId: item.externalId, url: item.url },
@@ -116,7 +116,7 @@ export function registerCommands(
         return;
       }
       try {
-        const title = item.group ? `${item.group} ${item.title}` : item.title;
+        const title = item.group?.trim() ? `${item.group.trim()} ${item.title}` : item.title;
         await workGraph.createItem(
           { title, description: item.description },
           { providerId: item.providerId, externalId: item.externalId, url: item.url },
