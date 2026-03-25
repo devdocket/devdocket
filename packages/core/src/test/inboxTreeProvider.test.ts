@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { EventEmitter, TreeItemCollapsibleState, ThemeIcon } from 'vscode';
 import { DiscoveredItem } from '../api/types';
-import { InboxTreeProvider } from '../views/inboxTreeProvider';
+import { InboxTreeProvider, InboxProviderNode, InboxItem } from '../views/inboxTreeProvider';
 
 function createMockStateStore() {
   const cache = new Map<string, string>();
@@ -17,6 +17,9 @@ function createMockStateStore() {
     loadAll: vi.fn(async () => []),
     onDidChange: emitter.event,
     dispose: vi.fn(),
+    _set: (providerId: string, externalId: string, state: string) => {
+      cache.set(`${providerId}::${externalId}`, state);
+    },
     _fire: () => emitter.fire(),
   };
 }
@@ -51,145 +54,128 @@ describe('InboxTreeProvider', () => {
     provider = new InboxTreeProvider(registry as any, stateStore as any);
   });
 
-  it('should return empty when no discovered items exist', () => {
-    const children = provider.getChildren();
-    expect(children).toEqual([]);
+  function providerNode(providerId: string): InboxProviderNode {
+    return { kind: 'provider', providerId, label: registry.getProviderLabel(providerId) };
+  }
+
+  describe('top-level (provider nodes)', () => {
+    it('should return empty when no discovered items exist', () => {
+      expect(provider.getChildren()).toEqual([]);
+    });
+
+    it('should show provider node when unseen items exist', () => {
+      registry._setItems('gh', [{ externalId: 'issue-1', title: 'Bug fix' }]);
+
+      const children = provider.getChildren();
+      expect(children).toHaveLength(1);
+      expect(children[0].kind).toBe('provider');
+      expect((children[0] as InboxProviderNode).providerId).toBe('gh');
+    });
+
+    it('should hide provider when all items are accepted', () => {
+      registry._setItems('gh', [{ externalId: 'issue-1', title: 'Accepted' }]);
+      stateStore._set('gh', 'issue-1', 'accepted');
+
+      expect(provider.getChildren()).toEqual([]);
+    });
+
+    it('should hide provider when all items are dismissed', () => {
+      registry._setItems('gh', [{ externalId: 'issue-1', title: 'Dismissed' }]);
+      stateStore._set('gh', 'issue-1', 'dismissed');
+
+      expect(provider.getChildren()).toEqual([]);
+    });
+
+    it('should show multiple provider nodes', () => {
+      registry._setItems('gh', [{ externalId: '1', title: 'GH item' }]);
+      registry._setItems('jira', [{ externalId: '1', title: 'Jira item' }]);
+
+      const children = provider.getChildren();
+      expect(children).toHaveLength(2);
+    });
   });
 
-  it('should show items with unseen state', () => {
-    registry._setItems('gh', [
-      { externalId: 'issue-1', title: 'Bug fix' },
-    ]);
-    stateStore.getState.mockReturnValue('unseen');
+  describe('provider children (inbox items)', () => {
+    it('should show unseen items under provider', () => {
+      registry._setItems('gh', [{ externalId: 'issue-1', title: 'Bug fix' }]);
 
-    const children = provider.getChildren();
-    expect(children).toHaveLength(1);
-    expect(children[0].title).toBe('Bug fix');
-    expect(children[0].externalId).toBe('issue-1');
-    expect(children[0].providerId).toBe('gh');
+      const items = provider.getChildren(providerNode('gh'));
+      expect(items).toHaveLength(1);
+      expect((items[0] as InboxItem).title).toBe('Bug fix');
+      expect((items[0] as InboxItem).externalId).toBe('issue-1');
+    });
+
+    it('should show items with no state (missing = unseen)', () => {
+      registry._setItems('gh', [{ externalId: 'issue-1', title: 'New item' }]);
+
+      const items = provider.getChildren(providerNode('gh'));
+      expect(items).toHaveLength(1);
+    });
+
+    it('should filter out accepted and dismissed items', () => {
+      registry._setItems('gh', [
+        { externalId: '1', title: 'Unseen' },
+        { externalId: '2', title: 'Accepted' },
+        { externalId: '3', title: 'No state' },
+        { externalId: '4', title: 'Dismissed' },
+      ]);
+      stateStore._set('gh', '2', 'accepted');
+      stateStore._set('gh', '4', 'dismissed');
+
+      const items = provider.getChildren(providerNode('gh'));
+      expect(items).toHaveLength(2);
+      expect(items.map((i) => (i as InboxItem).title)).toEqual(['Unseen', 'No state']);
+    });
   });
 
-  it('should show items with no state entry (missing = unseen)', () => {
-    registry._setItems('gh', [
-      { externalId: 'issue-1', title: 'New item' },
-    ]);
-    stateStore.getState.mockReturnValue(undefined);
+  describe('getTreeItem', () => {
+    it('should render provider node with plug icon and item count', () => {
+      registry._setLabel('gh', 'GitHub Issues');
+      registry._setItems('gh', [
+        { externalId: '1', title: 'A' },
+        { externalId: '2', title: 'B' },
+      ]);
 
-    const children = provider.getChildren();
-    expect(children).toHaveLength(1);
-    expect(children[0].title).toBe('New item');
+      const treeItem = provider.getTreeItem(providerNode('gh'));
+      expect(treeItem.label).toBe('GitHub Issues');
+      expect(treeItem.description).toBe('2');
+      expect(treeItem.collapsibleState).toBe(TreeItemCollapsibleState.Expanded);
+      expect((treeItem.iconPath as any).id).toBe('plug');
+    });
+
+    it('should render inbox item with mail icon', () => {
+      const item: InboxItem = { kind: 'item', providerId: 'gh', externalId: '1', title: 'Bug' };
+      const treeItem = provider.getTreeItem(item);
+
+      expect(treeItem.label).toBe('Bug');
+      expect(treeItem.collapsibleState).toBe(TreeItemCollapsibleState.None);
+      expect((treeItem.iconPath as any).id).toBe('mail');
+    });
+
+    it('should set contextValue with hasUrl when item has url', () => {
+      const item: InboxItem = { kind: 'item', providerId: 'gh', externalId: '1', title: 'X', url: 'https://example.com' };
+      expect(provider.getTreeItem(item).contextValue).toBe('inboxItem.hasUrl');
+    });
+
+    it('should set contextValue without hasUrl when item lacks url', () => {
+      const item: InboxItem = { kind: 'item', providerId: 'gh', externalId: '1', title: 'X' };
+      expect(provider.getTreeItem(item).contextValue).toBe('inboxItem');
+    });
   });
 
-  it('should hide items with accepted state', () => {
-    registry._setItems('gh', [
-      { externalId: 'issue-1', title: 'Accepted item' },
-    ]);
-    stateStore.getState.mockReturnValue('accepted');
+  describe('events', () => {
+    it('should refresh when providerRegistry fires change event', () => {
+      const listener = vi.fn();
+      provider.onDidChangeTreeData(listener);
+      registry._fire();
+      expect(listener).toHaveBeenCalledTimes(1);
+    });
 
-    const children = provider.getChildren();
-    expect(children).toEqual([]);
-  });
-
-  it('should hide items with dismissed state', () => {
-    registry._setItems('gh', [
-      { externalId: 'issue-1', title: 'Dismissed item' },
-    ]);
-    stateStore.getState.mockReturnValue('dismissed');
-
-    const children = provider.getChildren();
-    expect(children).toEqual([]);
-  });
-
-  it('should show mixed items — only unseen and undefined state', () => {
-    registry._setItems('gh', [
-      { externalId: 'issue-1', title: 'Unseen' },
-      { externalId: 'issue-2', title: 'Accepted' },
-      { externalId: 'issue-3', title: 'No state' },
-      { externalId: 'issue-4', title: 'Dismissed' },
-    ]);
-    stateStore.getState
-      .mockReturnValueOnce('unseen')
-      .mockReturnValueOnce('accepted')
-      .mockReturnValueOnce(undefined)
-      .mockReturnValueOnce('dismissed');
-
-    const children = provider.getChildren();
-    expect(children).toHaveLength(2);
-    expect(children.map((c) => c.title)).toEqual(['Unseen', 'No state']);
-  });
-
-  it('should return correct treeItem with label and description', () => {
-    registry._setLabel('gh', 'GitHub Issues');
-    registry._setItems('gh', [
-      { externalId: 'issue-1', title: 'Bug fix', description: 'Fix the bug', url: 'https://example.com' },
-    ]);
-
-    const children = provider.getChildren();
-    const treeItem = provider.getTreeItem(children[0]);
-
-    expect(treeItem.label).toBe('Bug fix');
-    expect(treeItem.description).toBe('GitHub Issues');
-    expect(treeItem.collapsibleState).toBe(TreeItemCollapsibleState.None);
-  });
-
-  it('should use mail icon for inbox items', () => {
-    registry._setItems('gh', [
-      { externalId: 'issue-1', title: 'Item' },
-    ]);
-
-    const children = provider.getChildren();
-    const treeItem = provider.getTreeItem(children[0]);
-
-    expect(treeItem.iconPath).toBeInstanceOf(ThemeIcon);
-    expect((treeItem.iconPath as any).id).toBe('mail');
-  });
-
-  it('should set contextValue with hasUrl when item has url', () => {
-    registry._setItems('gh', [
-      { externalId: 'issue-1', title: 'With URL', url: 'https://example.com' },
-    ]);
-
-    const children = provider.getChildren();
-    const treeItem = provider.getTreeItem(children[0]);
-    expect(treeItem.contextValue).toBe('inboxItem.hasUrl');
-  });
-
-  it('should set contextValue without hasUrl when item lacks url', () => {
-    registry._setItems('gh', [
-      { externalId: 'issue-1', title: 'No URL' },
-    ]);
-
-    const children = provider.getChildren();
-    const treeItem = provider.getTreeItem(children[0]);
-    expect(treeItem.contextValue).toBe('inboxItem');
-  });
-
-  it('should refresh when providerRegistry fires change event', () => {
-    const listener = vi.fn();
-    provider.onDidChangeTreeData(listener);
-
-    registry._fire();
-    expect(listener).toHaveBeenCalledTimes(1);
-  });
-
-  it('should refresh when stateStore fires change event', () => {
-    const listener = vi.fn();
-    provider.onDidChangeTreeData(listener);
-
-    stateStore._fire();
-    expect(listener).toHaveBeenCalledTimes(1);
-  });
-
-  it('should aggregate items from multiple providers', () => {
-    registry._setItems('gh', [
-      { externalId: 'issue-1', title: 'GH item' },
-    ]);
-    registry._setItems('jira', [
-      { externalId: 'task-1', title: 'Jira item' },
-    ]);
-
-    const children = provider.getChildren();
-    expect(children).toHaveLength(2);
-    expect(children.map((c) => c.providerId)).toEqual(['gh', 'jira']);
+    it('should refresh when stateStore fires change event', () => {
+      const listener = vi.fn();
+      provider.onDidChangeTreeData(listener);
+      stateStore._fire();
+      expect(listener).toHaveBeenCalledTimes(1);
+    });
   });
 });

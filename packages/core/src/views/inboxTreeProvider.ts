@@ -2,7 +2,14 @@ import * as vscode from 'vscode';
 import { ProviderRegistry } from '../services/providerRegistry';
 import { DiscoveredStateStore } from '../storage/discoveredStateStore';
 
+export interface InboxProviderNode {
+  kind: 'provider';
+  providerId: string;
+  label: string;
+}
+
 export interface InboxItem {
+  kind: 'item';
   providerId: string;
   externalId: string;
   title: string;
@@ -10,7 +17,9 @@ export interface InboxItem {
   url?: string;
 }
 
-export class InboxTreeProvider implements vscode.TreeDataProvider<InboxItem> {
+export type InboxElement = InboxProviderNode | InboxItem;
+
+export class InboxTreeProvider implements vscode.TreeDataProvider<InboxElement> {
   private readonly _onDidChangeTreeData = new vscode.EventEmitter<void>();
   readonly onDidChangeTreeData = this._onDidChangeTreeData.event;
   private readonly disposables: vscode.Disposable[] = [];
@@ -27,33 +36,71 @@ export class InboxTreeProvider implements vscode.TreeDataProvider<InboxItem> {
 
   refresh(): void { this._onDidChangeTreeData.fire(); }
 
-  getTreeItem(item: InboxItem): vscode.TreeItem {
-    const treeItem = new vscode.TreeItem(item.title, vscode.TreeItemCollapsibleState.None);
-    treeItem.description = this.providerRegistry.getProviderLabel(item.providerId);
-    treeItem.tooltip = this.buildTooltip(item);
-    treeItem.contextValue = item.url ? 'inboxItem.hasUrl' : 'inboxItem';
+  getTreeItem(element: InboxElement): vscode.TreeItem {
+    if (element.kind === 'provider') {
+      const count = this.getUnseenCount(element.providerId);
+      const treeItem = new vscode.TreeItem(element.label, vscode.TreeItemCollapsibleState.Expanded);
+      treeItem.description = `${count}`;
+      treeItem.contextValue = 'inboxProvider';
+      treeItem.iconPath = new vscode.ThemeIcon('plug');
+      return treeItem;
+    }
+
+    const treeItem = new vscode.TreeItem(element.title, vscode.TreeItemCollapsibleState.None);
+    treeItem.tooltip = this.buildTooltip(element);
+    treeItem.contextValue = element.url ? 'inboxItem.hasUrl' : 'inboxItem';
     treeItem.iconPath = new vscode.ThemeIcon('mail');
     return treeItem;
   }
 
-  getChildren(): InboxItem[] {
-    const result: InboxItem[] = [];
-    const allItems = this.providerRegistry.getAllDiscoveredItems();
-    for (const [providerId, items] of allItems) {
-      for (const item of items) {
-        const state = this.stateStore.getState(providerId, item.externalId);
-        if (state === undefined || state === 'unseen') {
+  getChildren(element?: InboxElement): InboxElement[] {
+    if (!element) {
+      const result: InboxProviderNode[] = [];
+      const allItems = this.providerRegistry.getAllDiscoveredItems();
+      for (const [providerId] of allItems) {
+        if (this.getUnseenCount(providerId) > 0) {
           result.push({
+            kind: 'provider',
             providerId,
-            externalId: item.externalId,
-            title: item.title,
-            description: item.description,
-            url: item.url,
+            label: this.providerRegistry.getProviderLabel(providerId),
           });
         }
       }
+      return result;
+    }
+
+    if (element.kind === 'provider') {
+      return this.getProviderChildren(element.providerId);
+    }
+
+    return [];
+  }
+
+  private getProviderChildren(providerId: string): InboxItem[] {
+    const items = this.providerRegistry.getDiscoveredItems(providerId);
+    const result: InboxItem[] = [];
+    for (const item of items) {
+      const state = this.stateStore.getState(providerId, item.externalId);
+      if (state === undefined || state === 'unseen') {
+        result.push({
+          kind: 'item',
+          providerId,
+          externalId: item.externalId,
+          title: item.title,
+          description: item.description,
+          url: item.url,
+        });
+      }
     }
     return result;
+  }
+
+  private getUnseenCount(providerId: string): number {
+    const items = this.providerRegistry.getDiscoveredItems(providerId);
+    return items.filter((item) => {
+      const state = this.stateStore.getState(providerId, item.externalId);
+      return state === undefined || state === 'unseen';
+    }).length;
   }
 
   private buildTooltip(item: InboxItem): vscode.MarkdownString {
