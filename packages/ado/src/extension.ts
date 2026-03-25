@@ -26,26 +26,62 @@ export async function activate(_context: vscode.ExtensionContext): Promise<void>
     return;
   }
 
-  const config = vscode.workspace.getConfiguration('workcenterAdo');
-  const org = config.get<string>('organization', '');
-  const projects = config.get<string[]>('projects', []);
+  let workItemProvider: AdoWorkItemProvider | undefined;
+  let prProvider: AdoPrReviewProvider | undefined;
+  let workItemRegistration: vscode.Disposable | undefined;
+  let prRegistration: vscode.Disposable | undefined;
 
-  if (!org) {
-    return;
-  }
+  const configureProviders = () => {
+    // Dispose existing providers and registrations before reconfiguring
+    workItemRegistration?.dispose();
+    workItemRegistration = undefined;
+    prRegistration?.dispose();
+    prRegistration = undefined;
+    workItemProvider?.dispose();
+    workItemProvider = undefined;
+    prProvider?.dispose();
+    prProvider = undefined;
 
-  const workItemProvider = new AdoWorkItemProvider(org, projects);
-  const prProvider = new AdoPrReviewProvider(org, projects);
+    const config = vscode.workspace.getConfiguration('workcenterAdo');
+    const org = config.get<string>('organization', '');
+    const projects = config.get<string[]>('projects', []);
 
-  const intervalSeconds = config.get<number>('refreshIntervalSeconds', 300);
-  workItemProvider.startPeriodicRefresh(intervalSeconds);
-  prProvider.startPeriodicRefresh(intervalSeconds);
+    if (!org) {
+      return;
+    }
+
+    const intervalSeconds = config.get<number>('refreshIntervalSeconds', 300);
+
+    workItemProvider = new AdoWorkItemProvider(org, projects);
+    prProvider = new AdoPrReviewProvider(org, projects);
+
+    workItemProvider.startPeriodicRefresh(intervalSeconds);
+    prProvider.startPeriodicRefresh(intervalSeconds);
+
+    workItemRegistration = api.registerProvider(workItemProvider);
+    prRegistration = api.registerProvider(prProvider);
+  };
+
+  configureProviders();
 
   _context.subscriptions.push(
-    api.registerProvider(workItemProvider),
-    api.registerProvider(prProvider),
-    { dispose: () => workItemProvider.dispose() },
-    { dispose: () => prProvider.dispose() },
+    vscode.workspace.onDidChangeConfiguration(e => {
+      if (
+        e.affectsConfiguration('workcenterAdo.organization') ||
+        e.affectsConfiguration('workcenterAdo.projects') ||
+        e.affectsConfiguration('workcenterAdo.refreshIntervalSeconds')
+      ) {
+        configureProviders();
+      }
+    }),
+    {
+      dispose: () => {
+        workItemRegistration?.dispose();
+        prRegistration?.dispose();
+        workItemProvider?.dispose();
+        prProvider?.dispose();
+      },
+    },
   );
 }
 

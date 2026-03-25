@@ -81,7 +81,7 @@ describe('AdoPrReviewProvider', () => {
 
     // First call: connection data to get user ID
     expect(mockFetch).toHaveBeenCalledWith(
-      'https://dev.azure.com/myorg/_apis/connectiondata',
+      'https://dev.azure.com/myorg/_apis/connectiondata?api-version=7.1',
       expect.objectContaining({
         headers: expect.objectContaining({
           Authorization: 'Bearer test-token',
@@ -325,6 +325,49 @@ describe('AdoPrReviewProvider', () => {
     expect(listener).not.toHaveBeenCalled();
 
     consoleError.mockRestore();
+  });
+
+  it('uses org-level PR URL when no projects are configured', async () => {
+    provider.dispose();
+    provider = new AdoPrReviewProvider('myorg', []);
+
+    vi.mocked(authentication.getSession).mockResolvedValue({
+      accessToken: 'test-token',
+      id: 'session-1',
+      scopes: ['499b84ac-1321-427f-aa17-267ca6975798/.default'],
+      account: { id: '1', label: 'testuser' },
+    } as any);
+
+    mockFetch
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ authenticatedUser: { id: 'user-uuid-123' } }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          value: [createMockPr(42, 'Org-wide PR')],
+        }),
+      });
+
+    const listener = vi.fn();
+    provider.onDidDiscoverItems(listener);
+    await provider.refresh();
+
+    // PR request should use org-level URL (no project path segment)
+    expect(mockFetch).toHaveBeenCalledWith(
+      'https://dev.azure.com/myorg/_apis/git/pullrequests?searchCriteria.reviewerId=user-uuid-123&searchCriteria.status=active&api-version=7.1',
+      expect.objectContaining({
+        headers: expect.objectContaining({
+          Authorization: 'Bearer test-token',
+        }),
+      }),
+    );
+
+    expect(listener).toHaveBeenCalledTimes(1);
+    const items = listener.mock.calls[0][0];
+    expect(items).toHaveLength(1);
+    expect(items[0].title).toBe('PR 42: Org-wide PR');
   });
 
   it('fires empty items when no PRs found', async () => {
