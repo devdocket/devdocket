@@ -2,12 +2,26 @@ import * as vscode from 'vscode';
 import { GitHubIssueProvider } from './githubProvider';
 import { GitHubPrReviewProvider } from './githubPrReviewProvider';
 import { StartWorkAction } from './startWorkAction';
+import { initLogger, logger, LogLevel } from './logger';
 
 export async function activate(_context: vscode.ExtensionContext): Promise<void> {
+  const outputChannel = vscode.window.createOutputChannel('WorkCenter GitHub');
+  _context.subscriptions.push(outputChannel);
+
+  const logLevelConfig = vscode.workspace.getConfiguration('workcenter').get<string>('logLevel', 'info');
+  const logLevelMap: Record<string, LogLevel> = {
+    debug: LogLevel.Debug,
+    info: LogLevel.Info,
+    warn: LogLevel.Warn,
+    error: LogLevel.Error,
+  };
+  initLogger(outputChannel, logLevelMap[logLevelConfig] ?? LogLevel.Info);
+  logger.info('WorkCenter GitHub activating...');
+
   // Acquire the WorkCenter API from the core extension
   const coreExtension = vscode.extensions.getExtension('mthalman.workcenter');
   if (!coreExtension) {
-    console.error('WorkCenter GitHub: core extension not found');
+    logger.error('Core extension not found');
     return;
   }
 
@@ -18,13 +32,13 @@ export async function activate(_context: vscode.ExtensionContext): Promise<void>
       : await coreExtension.activate();
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : String(err);
-    console.error(`WorkCenter GitHub: Failed to activate core extension — ${message}`);
+    logger.error(`Failed to activate core extension — ${message}`);
     vscode.window.showErrorMessage(`WorkCenter GitHub: Failed to activate core extension — ${message}`);
     return;
   }
 
   if (!api || typeof api.registerProvider !== 'function' || typeof api.registerAction !== 'function') {
-    console.error('WorkCenter GitHub: core extension API not available');
+    logger.error('Core extension API not available');
     return;
   }
 

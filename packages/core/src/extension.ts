@@ -11,10 +11,25 @@ import { QueueTreeProvider } from './views/queueTreeProvider';
 import { FocusTreeProvider } from './views/focusTreeProvider';
 import { SourcesTreeProvider } from './views/sourcesTreeProvider';
 import { registerCommands } from './commands/commands';
+import { initLogger, logger, LogLevel } from './services/logger';
 
 export type { WorkCenterApi, WorkCenterProvider, WorkCenterAction, DiscoveredItem, Disposable } from './api/types';
+export { logger } from './services/logger';
 
 export async function activate(context: vscode.ExtensionContext): Promise<WorkCenterApi> {
+  const outputChannel = vscode.window.createOutputChannel('WorkCenter');
+  context.subscriptions.push(outputChannel);
+
+  const logLevelConfig = vscode.workspace.getConfiguration('workcenter').get<string>('logLevel', 'info');
+  const logLevelMap: Record<string, LogLevel> = {
+    debug: LogLevel.Debug,
+    info: LogLevel.Info,
+    warn: LogLevel.Warn,
+    error: LogLevel.Error,
+  };
+  initLogger(outputChannel, logLevelMap[logLevelConfig] ?? LogLevel.Info);
+  logger.info('WorkCenter activating...');
+
   const storagePath = context.globalStorageUri.fsPath;
   const store = new JsonTaskStore(storagePath);
   const workGraph = new WorkGraph(store);
@@ -43,7 +58,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<WorkCe
     try {
       await stateStore.setStates(itemsToMigrate);
     } catch (err) {
-      console.error('WorkCenter: migration failed:', err);
+      logger.error('Migration failed', err);
     }
   }
 

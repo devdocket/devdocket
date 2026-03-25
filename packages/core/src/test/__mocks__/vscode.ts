@@ -54,6 +54,16 @@ const window = {
   registerTreeDataProvider: vi.fn(() => ({ dispose: vi.fn() })),
   createTreeView: vi.fn(() => ({ dispose: vi.fn(), message: undefined })),
   createWebviewPanel: vi.fn(),
+  createOutputChannel: vi.fn(() => ({
+    appendLine: vi.fn(),
+    append: vi.fn(),
+    clear: vi.fn(),
+    show: vi.fn(),
+    hide: vi.fn(),
+    dispose: vi.fn(),
+    name: 'WorkCenter',
+    replace: vi.fn(),
+  })),
 };
 
 const commands = {
@@ -74,6 +84,12 @@ class MockDisposable {
   dispose() { this.callback(); }
 }
 
+const workspace = {
+  getConfiguration: vi.fn().mockReturnValue({
+    get: vi.fn((key: string, defaultValue?: any) => defaultValue),
+  }),
+};
+
 export {
   MockEventEmitter as EventEmitter,
   MockThemeIcon as ThemeIcon,
@@ -85,4 +101,5 @@ export {
   commands,
   env,
   Uri,
+  workspace,
 };

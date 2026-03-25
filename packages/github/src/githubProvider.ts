@@ -1,4 +1,5 @@
 import * as vscode from 'vscode';
+import { logger } from './logger';
 
 // Re-declared to match core API contract — separate extension cannot import core types directly
 interface Disposable {
@@ -54,7 +55,7 @@ export class GitHubIssueProvider implements WorkCenterProvider {
     const clampedInterval = Math.max(intervalSeconds, 60);
     this.refreshTimer = setInterval(() => {
       this.refreshInBackground().catch((err) => {
-        console.error('WorkCenter GitHub: refresh failed:', err);
+        logger.error('Refresh failed', err);
       });
     }, clampedInterval * 1000);
   }
@@ -78,7 +79,7 @@ export class GitHubIssueProvider implements WorkCenterProvider {
 
       await this.fetchAndPublishIssues(session.accessToken, true);
     } catch (err) {
-      console.error('WorkCenter GitHub: failed to fetch issues:', err);
+      logger.error('Failed to fetch issues', err);
     }
   }
 
@@ -99,7 +100,7 @@ export class GitHubIssueProvider implements WorkCenterProvider {
 
       await this.fetchAndPublishIssues(session.accessToken, false);
     } catch (err) {
-      console.error('WorkCenter GitHub: failed to fetch issues:', err);
+      logger.error('Failed to fetch issues', err);
     } finally {
       this._isRefreshing = false;
     }
@@ -129,7 +130,7 @@ export class GitHubIssueProvider implements WorkCenterProvider {
       if (isUserTriggered) {
         vscode.window.showWarningMessage(`WorkCenter GitHub: ${message}`);
       } else {
-        console.warn(`WorkCenter GitHub: ${message}`);
+        logger.warn(message);
       }
     }
   }
@@ -204,7 +205,7 @@ export class GitHubIssueProvider implements WorkCenterProvider {
     );
 
     if (!response.ok) {
-      console.error(`WorkCenter GitHub: failed to fetch issues for ${repo}: ${response.status}`);
+      logger.error(`Failed to fetch issues for ${repo}: ${response.status}`);
       return { issues: [], failed: true };
     }
 
@@ -228,7 +229,7 @@ export class GitHubIssueProvider implements WorkCenterProvider {
     );
 
     if (!response.ok) {
-      console.error(`WorkCenter GitHub: failed to fetch assigned issues: ${response.status}`);
+      logger.error(`Failed to fetch assigned issues: ${response.status}`);
       return { issues: [], failed: true };
     }
 

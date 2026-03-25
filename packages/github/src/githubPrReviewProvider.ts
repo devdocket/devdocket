@@ -1,4 +1,5 @@
 import * as vscode from 'vscode';
+import { logger } from './logger';
 
 // Re-declared to match core API contract — separate extension cannot import core types directly
 interface Disposable {
@@ -58,7 +59,7 @@ export class GitHubPrReviewProvider implements WorkCenterProvider {
     const clampedInterval = Math.max(intervalSeconds, 60);
     this.refreshTimer = setInterval(() => {
       this.refreshInBackground().catch((err) => {
-        console.error('WorkCenter GitHub: PR review refresh failed:', err);
+        logger.error('PR review refresh failed', err);
       });
     }, clampedInterval * 1000);
   }
@@ -87,7 +88,7 @@ export class GitHubPrReviewProvider implements WorkCenterProvider {
 
       await this.fetchAndPublishPrs(session.accessToken, true);
     } catch (err) {
-      console.error('WorkCenter GitHub: failed to fetch PR reviews:', err);
+      logger.error('Failed to fetch PR reviews', err);
     } finally {
       this._isRefreshing = false;
     }
@@ -110,7 +111,7 @@ export class GitHubPrReviewProvider implements WorkCenterProvider {
 
       await this.fetchAndPublishPrs(session.accessToken, false);
     } catch (err) {
-      console.error('WorkCenter GitHub: failed to fetch PR reviews:', err);
+      logger.error('Failed to fetch PR reviews', err);
     } finally {
       this._isRefreshing = false;
     }
@@ -133,7 +134,7 @@ export class GitHubPrReviewProvider implements WorkCenterProvider {
       if (isUserTriggered) {
         vscode.window.showWarningMessage(`WorkCenter GitHub: ${message}`);
       } else {
-        console.warn(`WorkCenter GitHub: ${message}: ${response.status}`);
+        logger.warn(`${message}: ${response.status}`);
       }
       return;
     }
@@ -166,7 +167,7 @@ export class GitHubPrReviewProvider implements WorkCenterProvider {
     }
 
     // Fallback: use repository_url as-is to maintain unique externalId
-    console.warn(`WorkCenter GitHub: could not parse repo from PR URL: ${pr.html_url}`);
+    logger.warn(`Could not parse repo from PR URL: ${pr.html_url}`);
     return pr.repository_url;
   }
 
