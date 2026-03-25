@@ -128,14 +128,14 @@ describe('AiReviewAction', () => {
       expect(window.showTextDocument).toHaveBeenCalled();
     });
 
-    it('shows error when diff fetch fails', async () => {
+    it('shows warning when diff fetch fails', async () => {
       vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: false }));
 
       const item = createWorkItem();
       await action.run(item);
 
-      expect(window.showErrorMessage).toHaveBeenCalledWith(
-        'AI Code Review: Failed to fetch PR diff',
+      expect(window.showWarningMessage).toHaveBeenCalledWith(
+        expect.stringContaining('GitHub API returned'),
       );
     });
 

@@ -49,7 +49,6 @@ export class AiReviewAction implements WorkCenterAction {
 
         const diff = await this.fetchDiff(item.url!);
         if (!diff) {
-          vscode.window.showErrorMessage('AI Code Review: Failed to fetch PR diff');
           return;
         }
 
@@ -85,6 +84,7 @@ export class AiReviewAction implements WorkCenterAction {
       return undefined;
     } catch (err) {
       console.error('AI Review: failed to fetch diff:', err);
+      vscode.window.showWarningMessage('AI Code Review: Failed to fetch PR diff');
       return undefined;
     }
   }
@@ -109,7 +109,10 @@ export class AiReviewAction implements WorkCenterAction {
       },
     );
 
-    if (!response.ok) return undefined;
+    if (!response.ok) {
+      vscode.window.showWarningMessage(`AI Code Review: GitHub API returned ${response.status}`);
+      return undefined;
+    }
     return response.text();
   }
 
