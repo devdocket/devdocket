@@ -11,7 +11,7 @@ import { QueueTreeProvider } from './views/queueTreeProvider';
 import { FocusTreeProvider } from './views/focusTreeProvider';
 import { SourcesTreeProvider } from './views/sourcesTreeProvider';
 import { registerCommands } from './commands/commands';
-import { initLogger, logger, LogLevel } from './services/logger';
+import { initLogger, setLogLevel, logger, LogLevel } from './services/logger';
 
 export type { WorkCenterApi, WorkCenterProvider, WorkCenterAction, DiscoveredItem, Disposable } from './api/types';
 export { logger } from './services/logger';
@@ -28,6 +28,16 @@ export async function activate(context: vscode.ExtensionContext): Promise<WorkCe
     error: LogLevel.Error,
   };
   initLogger(outputChannel, logLevelMap[logLevelConfig] ?? LogLevel.Info);
+
+  context.subscriptions.push(
+    vscode.workspace.onDidChangeConfiguration(e => {
+      if (e.affectsConfiguration('workcenter.logLevel')) {
+        const newLevel = vscode.workspace.getConfiguration('workcenter').get<string>('logLevel', 'info');
+        setLogLevel(logLevelMap[newLevel] ?? LogLevel.Info);
+      }
+    }),
+  );
+
   logger.info('WorkCenter activating...');
 
   const storagePath = context.globalStorageUri.fsPath;

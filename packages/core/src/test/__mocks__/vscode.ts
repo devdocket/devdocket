@@ -88,6 +88,7 @@ const workspace = {
   getConfiguration: vi.fn().mockReturnValue({
     get: vi.fn((key: string, defaultValue?: any) => defaultValue),
   }),
+  onDidChangeConfiguration: vi.fn(() => ({ dispose: vi.fn() })),
 };
 
 export {
