@@ -73,6 +73,10 @@ export class WorkItemEditorPanel {
       }
     }
 
+    if (Object.keys(patch).length === 0) {
+      return;
+    }
+
     await this.workGraph.updateItem(this.itemId, patch);
     if (!this.disposed && data.title && !item.providerId) {
       this.panel.title = `Edit: ${data.title}`;
