@@ -167,7 +167,7 @@ describe('InboxTreeProvider', () => {
         { externalId: '3', title: 'Issue C', group: 'repo-two' },
       ]);
 
-      const groupNode: InboxGroupNode = { kind: 'group', providerId: 'gh', groupName: 'repo-one' };
+      const groupNode: InboxGroupNode = { kind: 'group', providerId: 'gh', groupName: 'repo-one', unseenCount: 2 };
       const items = provider.getChildren(groupNode);
       expect(items).toHaveLength(2);
       expect(items.map((i) => (i as InboxItem).title)).toEqual(['Issue A', 'Issue B']);
@@ -210,7 +210,7 @@ describe('InboxTreeProvider', () => {
       ]);
       stateStore._set('gh', '2', 'accepted');
 
-      const groupNode: InboxGroupNode = { kind: 'group', providerId: 'gh', groupName: 'repo' };
+      const groupNode: InboxGroupNode = { kind: 'group', providerId: 'gh', groupName: 'repo', unseenCount: 1 };
       const items = provider.getChildren(groupNode);
       expect(items).toHaveLength(1);
       expect((items[0] as InboxItem).title).toBe('Unseen');
@@ -269,7 +269,7 @@ describe('InboxTreeProvider', () => {
         { externalId: '2', title: 'B', group: 'my-repo' },
       ]);
 
-      const groupNode: InboxGroupNode = { kind: 'group', providerId: 'gh', groupName: 'my-repo' };
+      const groupNode: InboxGroupNode = { kind: 'group', providerId: 'gh', groupName: 'my-repo', unseenCount: 2 };
       const treeItem = provider.getTreeItem(groupNode);
       expect(treeItem.label).toBe('my-repo');
       expect(treeItem.description).toBe('2');

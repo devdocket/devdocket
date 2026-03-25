@@ -12,6 +12,7 @@ export interface InboxGroupNode {
   kind: 'group';
   providerId: string;
   groupName: string;
+  unseenCount: number;
 }
 
 export interface InboxItem {
@@ -87,9 +88,8 @@ export class InboxTreeProvider implements vscode.TreeDataProvider<InboxElement> 
     }
 
     if (element.kind === 'group') {
-      const count = this.getGroupUnseenCount(element.providerId, element.groupName);
       const treeItem = new vscode.TreeItem(element.groupName, vscode.TreeItemCollapsibleState.Collapsed);
-      treeItem.description = `${count}`;
+      treeItem.description = `${element.unseenCount}`;
       treeItem.contextValue = 'inboxGroup';
       treeItem.iconPath = new vscode.ThemeIcon('folder');
       return treeItem;
@@ -134,7 +134,7 @@ export class InboxTreeProvider implements vscode.TreeDataProvider<InboxElement> 
 
   private getProviderChildren(providerId: string): (InboxGroupNode | InboxItem)[] {
     const items = this.providerRegistry.getDiscoveredItems(providerId);
-    const groups = new Map<string, typeof items>();
+    const groupCounts = new Map<string, number>();
     const ungrouped: typeof items = [];
 
     for (const item of items) {
@@ -142,9 +142,7 @@ export class InboxTreeProvider implements vscode.TreeDataProvider<InboxElement> 
       if (state !== undefined && state !== 'unseen') { continue; }
 
       if (item.group) {
-        const list = groups.get(item.group) ?? [];
-        list.push(item);
-        groups.set(item.group, list);
+        groupCounts.set(item.group, (groupCounts.get(item.group) ?? 0) + 1);
       } else {
         ungrouped.push(item);
       }
@@ -152,8 +150,8 @@ export class InboxTreeProvider implements vscode.TreeDataProvider<InboxElement> 
 
     const result: (InboxGroupNode | InboxItem)[] = [];
 
-    for (const [groupName] of groups) {
-      result.push({ kind: 'group', providerId, groupName });
+    for (const [groupName, unseenCount] of groupCounts) {
+      result.push({ kind: 'group', providerId, groupName, unseenCount });
     }
 
     for (const item of ungrouped) {
@@ -197,15 +195,6 @@ export class InboxTreeProvider implements vscode.TreeDataProvider<InboxElement> 
   private getUnseenCount(providerId: string): number {
     const items = this.providerRegistry.getDiscoveredItems(providerId);
     return items.filter((item) => {
-      const state = this.stateStore.getState(providerId, item.externalId);
-      return state === undefined || state === 'unseen';
-    }).length;
-  }
-
-  private getGroupUnseenCount(providerId: string, groupName: string): number {
-    const items = this.providerRegistry.getDiscoveredItems(providerId);
-    return items.filter((item) => {
-      if (item.group !== groupName) { return false; }
       const state = this.stateStore.getState(providerId, item.externalId);
       return state === undefined || state === 'unseen';
     }).length;
