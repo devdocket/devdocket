@@ -220,7 +220,7 @@ enum WorkItemState {
 }
 ```
 
-Items transition through these states as the user interacts with them in the UI. See [UX Guide](./ux-guide.md) for the full state diagram.
+Items transition through these states as the user interacts with them in the UI. See [WorkItemState](#workitemstate) for the full list of states and their meanings.
 
 ## Examples
 
