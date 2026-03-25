@@ -299,7 +299,12 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     : await coreExtension.activate();
 
   const provider = new MyTaskProvider();
-  context.subscriptions.push(api.registerProvider(provider));
+  const registration = api.registerProvider(provider);
+
+  // Provider owns its own disposal — WorkCenter does not call provider.dispose().
+  // Push both the registration and provider into subscriptions for cleanup.
+  context.subscriptions.push(registration);
+  context.subscriptions.push({ dispose: () => provider.dispose() });
 
   // Trigger initial discovery
   await provider.refresh();
