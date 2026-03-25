@@ -105,21 +105,18 @@ export class WorkGraph {
       return;
     }
 
-    // Normalize sort orders before swapping
-    siblings.forEach((s, i) => {
-      s.sortOrder = i;
-    });
+    // Only swap the two items' sortOrders - don't touch others
+    const itemOrder = item.sortOrder ?? index;
+    const swapItem = siblings[swapIndex];
+    const swapOrder = swapItem.sortOrder ?? swapIndex;
 
-    const temp = siblings[index].sortOrder!;
-    siblings[index].sortOrder = siblings[swapIndex].sortOrder!;
-    siblings[swapIndex].sortOrder = temp;
+    const updatedItem = { ...item, sortOrder: swapOrder, updatedAt: Date.now() };
+    const updatedSwap = { ...swapItem, sortOrder: itemOrder, updatedAt: Date.now() };
 
-    siblings[index].updatedAt = Date.now();
-    siblings[swapIndex].updatedAt = Date.now();
-    await this.store.save(siblings[index]);
-    await this.store.save(siblings[swapIndex]);
-    this.items.set(siblings[index].id, siblings[index]);
-    this.items.set(siblings[swapIndex].id, siblings[swapIndex]);
+    await this.store.save(updatedItem);
+    await this.store.save(updatedSwap);
+    this.items.set(updatedItem.id, updatedItem);
+    this.items.set(updatedSwap.id, updatedSwap);
     this._onDidChange.fire();
   }
 
