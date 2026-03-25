@@ -83,3 +83,16 @@ Tests run outside VS Code via vitest. The `vscode` import is aliased to `src/tes
 ### Provider items are references, not copies
 
 Items in Inbox and Sources are read live from the provider's in-memory data. The only persisted state is the `inboxState` enum. This keeps data fresh and avoids stale copies.
+
+### PR workflow requires review loop
+
+When creating pull requests, always follow the full review loop before considering done:
+
+1. **Implement** — Make changes in a worktree on a feature branch
+2. **Build & test** — Run `npm run build && npm run test` and verify pass
+3. **Code review** — Run a code-review agent on the diff (`git diff dev...<branch>`)
+4. **Fix findings** — Address any bugs, logic errors, or security issues found
+5. **Create PR** — Push branch and open PR via `gh pr create --base dev`
+6. **Verify** — Confirm PR is clean; re-review if fixes were applied
+
+Never skip the code review step, even for small changes. When working on multiple issues in parallel, each issue must go through this full cycle independently.
