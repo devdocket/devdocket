@@ -97,7 +97,7 @@ export class WorkGraph {
     }
 
     const siblings = this.getItemsByState(item.state)
-      .sort((a, b) => (a.sortOrder ?? Infinity) - (b.sortOrder ?? Infinity));
+      .sort((a, b) => (a.sortOrder ?? Number.MAX_SAFE_INTEGER) - (b.sortOrder ?? Number.MAX_SAFE_INTEGER));
 
     // Normalize any missing sortOrder values so swaps are consistent
     const toNormalize: WorkItem[] = [];
