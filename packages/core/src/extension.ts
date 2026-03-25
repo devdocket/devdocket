@@ -90,6 +90,14 @@ export async function activate(context: vscode.ExtensionContext): Promise<WorkCe
   const inboxTreeView = vscode.window.createTreeView('workcenter.inbox', { treeDataProvider: inboxProvider });
   const sourcesTreeView = vscode.window.createTreeView('workcenter.sources', { treeDataProvider: sourcesProvider });
 
+  const inboxSelectionSub = inboxTreeView.onDidChangeSelection((e) => {
+    for (const item of e.selection) {
+      if (item.kind === 'item') {
+        inboxProvider.markSeen(item.providerId, item.externalId);
+      }
+    }
+  });
+
   // View message state: empty by default, loading when providers are fetching
   const updateViewMessages = () => {
     if (providerRegistry.loading) {
@@ -174,6 +182,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<WorkCe
     focusTreeView,
     sourcesTreeView,
     historyTreeView,
+    inboxSelectionSub,
     discoveredSub,
     newItemsSub,
     providerRegSub,

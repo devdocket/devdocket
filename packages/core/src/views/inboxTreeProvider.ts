@@ -23,6 +23,7 @@ export class InboxTreeProvider implements vscode.TreeDataProvider<InboxElement> 
   private readonly _onDidChangeTreeData = new vscode.EventEmitter<void>();
   readonly onDidChangeTreeData = this._onDidChangeTreeData.event;
   private readonly disposables: vscode.Disposable[] = [];
+  private readonly seenItems = new Set<string>();
 
   constructor(
     private readonly providerRegistry: ProviderRegistry,
@@ -36,6 +37,14 @@ export class InboxTreeProvider implements vscode.TreeDataProvider<InboxElement> 
 
   refresh(): void { this._onDidChangeTreeData.fire(); }
 
+  markSeen(providerId: string, externalId: string): void {
+    const key = `${providerId}:${externalId}`;
+    if (!this.seenItems.has(key)) {
+      this.seenItems.add(key);
+      this._onDidChangeTreeData.fire();
+    }
+  }
+
   getTreeItem(element: InboxElement): vscode.TreeItem {
     if (element.kind === 'provider') {
       const count = this.getUnseenCount(element.providerId);
@@ -46,7 +55,13 @@ export class InboxTreeProvider implements vscode.TreeDataProvider<InboxElement> 
       return treeItem;
     }
 
-    const treeItem = new vscode.TreeItem(element.title, vscode.TreeItemCollapsibleState.None);
+    const key = `${element.providerId}:${element.externalId}`;
+    const isSeen = this.seenItems.has(key);
+
+    const treeItem = new vscode.TreeItem(
+      isSeen ? element.title : { label: element.title, highlights: [[0, element.title.length]] },
+      vscode.TreeItemCollapsibleState.None,
+    );
     treeItem.tooltip = this.buildTooltip(element);
     treeItem.contextValue = element.url ? 'inboxItem.hasUrl' : 'inboxItem';
     treeItem.iconPath = new vscode.ThemeIcon('mail');

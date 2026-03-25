@@ -143,13 +143,21 @@ describe('InboxTreeProvider', () => {
       expect((treeItem.iconPath as any).id).toBe('plug');
     });
 
-    it('should render inbox item with mail icon', () => {
+    it('should render new inbox item with highlighted label', () => {
       const item: InboxItem = { kind: 'item', providerId: 'gh', externalId: '1', title: 'Bug' };
       const treeItem = provider.getTreeItem(item);
 
-      expect(treeItem.label).toBe('Bug');
+      expect(treeItem.label).toEqual({ label: 'Bug', highlights: [[0, 3]] });
       expect(treeItem.collapsibleState).toBe(TreeItemCollapsibleState.None);
       expect((treeItem.iconPath as any).id).toBe('mail');
+    });
+
+    it('should render seen inbox item with plain label', () => {
+      const item: InboxItem = { kind: 'item', providerId: 'gh', externalId: '1', title: 'Bug' };
+      provider.markSeen('gh', '1');
+      const treeItem = provider.getTreeItem(item);
+
+      expect(treeItem.label).toBe('Bug');
     });
 
     it('should set contextValue with hasUrl when item has url', () => {
@@ -160,6 +168,23 @@ describe('InboxTreeProvider', () => {
     it('should set contextValue without hasUrl when item lacks url', () => {
       const item: InboxItem = { kind: 'item', providerId: 'gh', externalId: '1', title: 'X' };
       expect(provider.getTreeItem(item).contextValue).toBe('inboxItem');
+    });
+  });
+
+  describe('markSeen', () => {
+    it('should fire tree data change event', () => {
+      const listener = vi.fn();
+      provider.onDidChangeTreeData(listener);
+      provider.markSeen('gh', '1');
+      expect(listener).toHaveBeenCalledTimes(1);
+    });
+
+    it('should not fire event if item is already seen', () => {
+      provider.markSeen('gh', '1');
+      const listener = vi.fn();
+      provider.onDidChangeTreeData(listener);
+      provider.markSeen('gh', '1');
+      expect(listener).not.toHaveBeenCalled();
     });
   });
 
