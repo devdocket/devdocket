@@ -66,7 +66,8 @@ export class HistoryTreeProvider implements vscode.TreeDataProvider<WorkItem> {
       md.appendMarkdown(`\n\n`);
     }
     md.appendMarkdown(`**State:** ${item.state}\n\n`);
-    md.appendMarkdown(`**Completed:** ${new Date(item.updatedAt).toLocaleString()}`);
+    const timestampLabel = item.state === WorkItemState.Done ? 'Completed at' : item.state === WorkItemState.Archived ? 'Archived at' : 'Last updated';
+    md.appendMarkdown(`**${timestampLabel}:** ${new Date(item.updatedAt).toLocaleString()}`);
     return md;
   }
 
