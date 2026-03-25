@@ -21,7 +21,7 @@ WorkCenter is **not** a replacement for GitHub Issues, Jira, or any other system
 1. **Install WorkCenter** from the VS Code marketplace (`mthalman.workcenter`).
 2. **Install a provider** — for example, WorkCenter GitHub (`mthalman.workcenter-github`) to discover GitHub issues and PR review requests.
 3. **Open the WorkCenter sidebar** by clicking the WorkCenter icon in the activity bar.
-4. **Check your Inbox** — newly discovered items from providers appear here. Accept items to add them to your Queue, or dismiss them.
+4. **Check your Inbox** — newly discovered items from providers appear here. Accept items to add them to your Queue, or dismiss them. Some providers may re-surface dismissed items if they remain relevant.
 5. **Work your Queue** — move items to Focus when you're ready to start, or create manual items with the ➕ button.
 6. **Stay focused** — the Focus view shows only what you're actively working on. Mark items as blocked, waiting, or complete as you go.
 
@@ -47,7 +47,7 @@ WorkCenter organizes work across five views in the sidebar:
 
 ### Inbox
 
-Newly discovered items from providers that you haven't acted on yet. Each provider's items are grouped under the provider name. Accept items to move them to your Queue, or dismiss them to hide them from the Inbox.
+Newly discovered items from providers that you haven't acted on yet. Each provider's items are grouped under the provider name. Accept items to move them to your Queue, or dismiss them to hide them from the Inbox; depending on the provider, dismissed items may later reappear if they are resurfaced.
 
 ### Queue
 
@@ -82,7 +82,7 @@ Providers (GitHub, etc.)          Manual creation
                              History                     History
 ```
 
-> **Note:** Items in History can be restored — move them back to Queue or Focus to resume work.
+> **Note:** Items in History are a read-only record of completed or archived work. You can open their links (when available), but they can't currently be moved back to Queue or Focus.
 
 ## Plugin Ecosystem
 
