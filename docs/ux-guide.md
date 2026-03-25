@@ -205,7 +205,7 @@ WorkCenter defines seven states for work items:
 
 ## Available Commands
 
-All commands are available from context menus in their respective views. Commands are registered under the **WorkCenter** category.
+Commands are available from context menus, inline actions, or the view title bar in their respective views. Commands are registered under the **WorkCenter** category.
 
 | Command | ID | Available In | Icon |
 |---------|----|-------------|------|
