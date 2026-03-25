@@ -141,7 +141,7 @@ Provider items (e.g., GitHub issues) follow this lifecycle:
    - `accepted` — Removed from Inbox; a corresponding work item exists in Queue/Focus.
    - `dismissed` — Removed from Inbox; still visible in Sources with a "dismissed" label.
 
-3. **Acceptance** — When you accept an item (from Inbox or Sources), WorkCenter creates a persisted work item with the provider's title, description, and URL. The provider item's data is always read live from the provider — only the inbox state mapping is persisted.
+3. **Acceptance** — When you accept an item (from Inbox or Sources), WorkCenter creates a persisted work item that stores a snapshot of the provider's title, description, and URL at that time, along with the mapping back to the provider item. Provider items shown in **Sources** are read live from the provider; both the inbox state mapping and the accepted work item are persisted.
 
 4. **Duplicate prevention** — Accepting an item that was already accepted shows a notification instead of creating a duplicate.
 
