@@ -78,7 +78,11 @@ interface WorkCenterProvider {
    */
   readonly onDidDiscoverItems: Event<DiscoveredItem[]>;
 
-  /** Called by WorkCenter when the user requests a manual refresh. */
+  /**
+   * Called by WorkCenter during initial registration/activation (for initial
+   * discovery) and whenever the user requests a manual refresh. Must be safe
+   * to call multiple times and during extension activation.
+   */
   refresh(): Promise<void>;
 }
 ```
