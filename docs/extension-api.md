@@ -149,7 +149,7 @@ interface DiscoveredItem {
 - `externalId` must be unique per provider and stable across refreshes. A good pattern is `owner/repo#123`.
 - Each `onDidDiscoverItems` emission replaces the provider's entire item set. Emit all current items, not just changes.
 - `DiscoveredItem` data is not stored as a persisted record; WorkCenter tracks only the inbox state (`unseen`, `accepted`, `dismissed`) for discovered items in `discovered-state.json`.
-- When a user accepts an item from Inbox/Sources, WorkCenter creates and persists a new `WorkItem` in `workitems.json` that includes a snapshot of the item's `title`, `url`, and `description`, along with its `providerId`/`externalId`.
+- When a user accepts an item from Inbox/Sources, WorkCenter creates and persists a new `WorkItem` in `workitems.json` that includes a snapshot of the item's `title`, along with its `providerId`/`externalId`/`url` as provenance metadata.
 - Use `group` to organize items in the Sources tree. Items with the same group value are nested under a folder.
 
 ### Registering a Provider
@@ -214,8 +214,8 @@ interface WorkItem {
   /** User-visible title. */
   title: string;
 
-  /** Optional user-added description/notes. */
-  description?: string;
+  /** Optional user-added notes. */
+  notes?: string;
 
   /** Current state in the lifecycle. */
   state: WorkItemState;
@@ -385,7 +385,7 @@ enum WorkItemState {
 interface WorkItem {
   id: string;
   title: string;
-  description?: string;
+  notes?: string;
   state: WorkItemState;
   providerId?: string;
   externalId?: string;
