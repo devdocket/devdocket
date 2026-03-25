@@ -155,14 +155,7 @@ export class InboxTreeProvider implements vscode.TreeDataProvider<InboxElement> 
     }
 
     for (const item of ungrouped) {
-      result.push({
-        kind: 'item',
-        providerId,
-        externalId: item.externalId,
-        title: item.title,
-        description: item.description,
-        url: item.url,
-      });
+      result.push(this.toItemNode(providerId, item));
     }
 
     return result.sort((a, b) => {
@@ -179,17 +172,21 @@ export class InboxTreeProvider implements vscode.TreeDataProvider<InboxElement> 
       if (item.group !== groupName) { continue; }
       const state = this.stateStore.getState(providerId, item.externalId);
       if (state !== undefined && state !== 'unseen') { continue; }
-      result.push({
-        kind: 'item',
-        providerId,
-        externalId: item.externalId,
-        title: item.title,
-        description: item.description,
-        url: item.url,
-        group: item.group,
-      });
+      result.push(this.toItemNode(providerId, item));
     }
     return result.sort((a, b) => a.title.localeCompare(b.title));
+  }
+
+  private toItemNode(providerId: string, item: { externalId: string; title: string; description?: string; url?: string; group?: string }): InboxItem {
+    return {
+      kind: 'item',
+      providerId,
+      externalId: item.externalId,
+      title: item.title,
+      description: item.description,
+      url: item.url,
+      group: item.group,
+    };
   }
 
   private getUnseenCount(providerId: string): number {
