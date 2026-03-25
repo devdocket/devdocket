@@ -115,16 +115,18 @@ Provider and action extensions use a simple, well-defined API surface. See the [
 
 ## Architecture
 
-WorkCenter is a monorepo with two VS Code extensions:
+WorkCenter is a monorepo with two VS Code extensions and a shared library:
 
 ```
 packages/
 ├── core/       # WorkCenter — the hub extension (UI, lifecycle, plugin API)
-└── github/     # WorkCenter GitHub — provider for issues and PR reviews
+├── github/     # WorkCenter GitHub — provider for issues and PR reviews
+└── shared/     # Shared library used by both extensions
 ```
 
 - **`packages/core`** owns the five views, work item persistence, the editor panel, and the extension API (`WorkCenterApi`).
 - **`packages/github`** is a provider extension that discovers GitHub issues and PR reviews, and offers a "Start Work" action.
+- **`packages/shared`** contains common utilities and types shared across both extensions.
 
 Provider extensions depend on the core extension via `extensionDependencies` and acquire the API at activation time. They do not import code from the core package directly — interfaces are re-declared to keep the extensions decoupled.
 
