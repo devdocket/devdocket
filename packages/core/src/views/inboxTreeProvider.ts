@@ -82,13 +82,10 @@ export class InboxTreeProvider implements vscode.TreeDataProvider<InboxElement> 
     const key = `${element.providerId}::${element.externalId}`;
     const isSeen = this.seenItems.has(key);
 
-    const treeItem = new vscode.TreeItem(
-      isSeen ? element.title : { label: element.title, highlights: [[0, element.title.length]] },
-      vscode.TreeItemCollapsibleState.None,
-    );
+    const treeItem = new vscode.TreeItem(element.title, vscode.TreeItemCollapsibleState.None);
     treeItem.tooltip = this.buildTooltip(element);
     treeItem.contextValue = element.url ? 'inboxItem.hasUrl' : 'inboxItem';
-    treeItem.iconPath = new vscode.ThemeIcon('mail');
+    treeItem.iconPath = new vscode.ThemeIcon(isSeen ? 'circle-outline' : 'circle-filled');
     return treeItem;
   }
 

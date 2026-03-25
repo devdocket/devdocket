@@ -143,21 +143,22 @@ describe('InboxTreeProvider', () => {
       expect((treeItem.iconPath as any).id).toBe('plug');
     });
 
-    it('should render new inbox item with highlighted label', () => {
+    it('should render unseen inbox item with circle-filled icon', () => {
       const item: InboxItem = { kind: 'item', providerId: 'gh', externalId: '1', title: 'Bug' };
       const treeItem = provider.getTreeItem(item);
 
-      expect(treeItem.label).toEqual({ label: 'Bug', highlights: [[0, 3]] });
+      expect(treeItem.label).toBe('Bug');
       expect(treeItem.collapsibleState).toBe(TreeItemCollapsibleState.None);
-      expect((treeItem.iconPath as any).id).toBe('mail');
+      expect((treeItem.iconPath as any).id).toBe('circle-filled');
     });
 
-    it('should render seen inbox item with plain label', () => {
+    it('should render seen inbox item with circle-outline icon', () => {
       const item: InboxItem = { kind: 'item', providerId: 'gh', externalId: '1', title: 'Bug' };
       provider.markSeen('gh', '1');
       const treeItem = provider.getTreeItem(item);
 
       expect(treeItem.label).toBe('Bug');
+      expect((treeItem.iconPath as any).id).toBe('circle-outline');
     });
 
     it('should set contextValue with hasUrl when item has url', () => {
@@ -195,14 +196,16 @@ describe('InboxTreeProvider', () => {
       const item: InboxItem = { kind: 'item', providerId: 'gh', externalId: '1', title: 'Bug' };
       provider.markSeen('gh', '1');
 
-      // Before refresh, item should be seen (plain label)
+      // Before refresh, item should be seen (circle-outline icon)
       expect(provider.getTreeItem(item).label).toBe('Bug');
+      expect((provider.getTreeItem(item).iconPath as any).id).toBe('circle-outline');
 
       // Provider refresh fires → item is still in inbox, so seenItems should be retained
       registry._fire();
 
-      // After refresh, item should still appear as seen (plain label)
+      // After refresh, item should still appear as seen (circle-outline icon)
       expect(provider.getTreeItem(item).label).toBe('Bug');
+      expect((provider.getTreeItem(item).iconPath as any).id).toBe('circle-outline');
     });
 
     it('should prune seenItems for items no longer in inbox after provider refresh', () => {
@@ -213,10 +216,11 @@ describe('InboxTreeProvider', () => {
       registry._setItems('gh', []);
       registry._fire();
 
-      // Re-add item — should appear as unseen (highlighted)
+      // Re-add item — should appear as unseen (circle-filled icon)
       registry._setItems('gh', [{ externalId: '1', title: 'Bug' }]);
       const item: InboxItem = { kind: 'item', providerId: 'gh', externalId: '1', title: 'Bug' };
-      expect(provider.getTreeItem(item).label).toEqual({ label: 'Bug', highlights: [[0, 3]] });
+      expect(provider.getTreeItem(item).label).toBe('Bug');
+      expect((provider.getTreeItem(item).iconPath as any).id).toBe('circle-filled');
     });
 
     it('should refresh when stateStore fires change event', () => {
