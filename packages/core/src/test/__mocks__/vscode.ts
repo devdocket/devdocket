@@ -35,6 +35,7 @@ const TreeItemCollapsibleState = {
 class MockTreeItem {
   label: string;
   collapsibleState: number;
+  id?: string;
   description?: string;
   tooltip?: any;
   contextValue?: string;
@@ -78,6 +79,16 @@ const Uri = {
   parse: vi.fn((s: string) => ({ toString: () => s })),
 };
 
+class MockDataTransferItem {
+  constructor(public value: any) {}
+}
+
+class MockDataTransfer {
+  private items = new Map<string, MockDataTransferItem>();
+  get(mimeType: string): MockDataTransferItem | undefined { return this.items.get(mimeType); }
+  set(mimeType: string, value: MockDataTransferItem): void { this.items.set(mimeType, value); }
+}
+
 class MockDisposable {
   private callback: () => void;
   constructor(callback: () => void) { this.callback = callback; }
@@ -96,6 +107,8 @@ export {
   MockThemeIcon as ThemeIcon,
   MockMarkdownString as MarkdownString,
   MockTreeItem as TreeItem,
+  MockDataTransferItem as DataTransferItem,
+  MockDataTransfer as DataTransfer,
   MockDisposable as Disposable,
   TreeItemCollapsibleState,
   window,

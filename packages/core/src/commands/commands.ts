@@ -77,6 +77,20 @@ export function registerCommands(
         }
       }
     }),
+    vscode.commands.registerCommand('workcenter.moveUp', (item) => {
+      if (!item?.id) {
+        vscode.window.showInformationMessage('WorkCenter: Select an item in the Queue to move.');
+        return;
+      }
+      return workGraph.moveItem(item.id, 'up');
+    }),
+    vscode.commands.registerCommand('workcenter.moveDown', (item) => {
+      if (!item?.id) {
+        vscode.window.showInformationMessage('WorkCenter: Select an item in the Queue to move.');
+        return;
+      }
+      return workGraph.moveItem(item.id, 'down');
+    }),
     vscode.commands.registerCommand('workcenter.acceptFromInbox', async (item: InboxItem) => {
       logger.info(`Accepting inbox item: ${item.externalId} from ${item.providerId}`);
       const existing = workGraph.findItemByProvenance(item.providerId, item.externalId);

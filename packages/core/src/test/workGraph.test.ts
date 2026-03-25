@@ -8,6 +8,7 @@ function createMockStore(): ITaskStore {
   return {
     loadAll: vi.fn(async () => Array.from(items.values())),
     save: vi.fn(async (item) => { items.set(item.id, item); }),
+    saveAll: vi.fn(async (batch) => { for (const item of batch) { items.set(item.id, item); } }),
     delete: vi.fn(async (id) => { items.delete(id); }),
   };
 }
@@ -132,5 +133,216 @@ describe('WorkGraph', () => {
     });
 
     expect(item.description).toBe('A detailed bug report');
+  });
+
+  it('assigns sortOrder on creation', async () => {
+    const a = await graph.createItem({ title: 'A' });
+    const b = await graph.createItem({ title: 'B' });
+    const c = await graph.createItem({ title: 'C' });
+
+    expect(a.sortOrder).toBe(0);
+    expect(b.sortOrder).toBe(1);
+    expect(c.sortOrder).toBe(2);
+  });
+
+  it('moves an item down', async () => {
+    const a = await graph.createItem({ title: 'A' });
+    const b = await graph.createItem({ title: 'B' });
+    const c = await graph.createItem({ title: 'C' });
+
+    await graph.moveItem(a.id, 'down');
+
+    const items = graph.getItemsByState(WorkItemState.New)
+      .sort((x, y) => (x.sortOrder ?? Number.MAX_SAFE_INTEGER) - (y.sortOrder ?? Number.MAX_SAFE_INTEGER));
+    expect(items.map((i) => i.title)).toEqual(['B', 'A', 'C']);
+  });
+
+  it('moves an item up', async () => {
+    const a = await graph.createItem({ title: 'A' });
+    const b = await graph.createItem({ title: 'B' });
+    const c = await graph.createItem({ title: 'C' });
+
+    await graph.moveItem(c.id, 'up');
+
+    const items = graph.getItemsByState(WorkItemState.New)
+      .sort((x, y) => (x.sortOrder ?? Number.MAX_SAFE_INTEGER) - (y.sortOrder ?? Number.MAX_SAFE_INTEGER));
+    expect(items.map((i) => i.title)).toEqual(['A', 'C', 'B']);
+  });
+
+  it('moving the first item up is a no-op', async () => {
+    const a = await graph.createItem({ title: 'A' });
+    const b = await graph.createItem({ title: 'B' });
+
+    await graph.moveItem(a.id, 'up');
+
+    const items = graph.getItemsByState(WorkItemState.New)
+      .sort((x, y) => (x.sortOrder ?? Number.MAX_SAFE_INTEGER) - (y.sortOrder ?? Number.MAX_SAFE_INTEGER));
+    expect(items.map((i) => i.title)).toEqual(['A', 'B']);
+  });
+
+  it('moving the last item down is a no-op', async () => {
+    const a = await graph.createItem({ title: 'A' });
+    const b = await graph.createItem({ title: 'B' });
+
+    await graph.moveItem(b.id, 'down');
+
+    const items = graph.getItemsByState(WorkItemState.New)
+      .sort((x, y) => (x.sortOrder ?? Number.MAX_SAFE_INTEGER) - (y.sortOrder ?? Number.MAX_SAFE_INTEGER));
+    expect(items.map((i) => i.title)).toEqual(['A', 'B']);
+  });
+
+  it('throws when moving unknown item', async () => {
+    await expect(graph.moveItem('nonexistent', 'up'))
+      .rejects.toThrow('Work item not found');
+  });
+
+  it('creates item after legacy items without sortOrder', async () => {
+    const legacyStore = createMockStore();
+
+    await legacyStore.save({
+      id: 'legacy-a',
+      title: 'A',
+      state: WorkItemState.New,
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+    } as any);
+
+    await legacyStore.save({
+      id: 'legacy-b',
+      title: 'B',
+      state: WorkItemState.New,
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+    } as any);
+
+    const legacyGraph = new WorkGraph(legacyStore);
+    await legacyGraph.load();
+
+    const c = await legacyGraph.createItem({ title: 'C' });
+    expect(c.sortOrder).toBe(2);
+  });
+
+  it('reorders item from position 2 to position 0 (drag up inserts before target)', async () => {
+    const a = await graph.createItem({ title: 'A' });
+    const b = await graph.createItem({ title: 'B' });
+    const c = await graph.createItem({ title: 'C' });
+
+    await graph.reorderItem(c.id, a.id);
+
+    const items = graph.getItemsByState(WorkItemState.New)
+      .sort((x, y) => (x.sortOrder ?? Number.MAX_SAFE_INTEGER) - (y.sortOrder ?? Number.MAX_SAFE_INTEGER));
+    expect(items.map((i) => i.title)).toEqual(['C', 'A', 'B']);
+  });
+
+  it('reorders item from position 0 to position 2 (drag down inserts after target)', async () => {
+    const a = await graph.createItem({ title: 'A' });
+    const b = await graph.createItem({ title: 'B' });
+    const c = await graph.createItem({ title: 'C' });
+
+    await graph.reorderItem(a.id, c.id);
+
+    const items = graph.getItemsByState(WorkItemState.New)
+      .sort((x, y) => (x.sortOrder ?? Number.MAX_SAFE_INTEGER) - (y.sortOrder ?? Number.MAX_SAFE_INTEGER));
+    expect(items.map((i) => i.title)).toEqual(['B', 'C', 'A']);
+  });
+
+  it('dragging first item onto last places it at the end', async () => {
+    const a = await graph.createItem({ title: 'A' });
+    const b = await graph.createItem({ title: 'B' });
+    const c = await graph.createItem({ title: 'C' });
+
+    await graph.reorderItem(a.id, c.id);
+
+    const items = graph.getItemsByState(WorkItemState.New)
+      .sort((x, y) => (x.sortOrder ?? Number.MAX_SAFE_INTEGER) - (y.sortOrder ?? Number.MAX_SAFE_INTEGER));
+    expect(items[items.length - 1].title).toBe('A');
+  });
+
+  it('reorder to same position is a no-op', async () => {
+    const a = await graph.createItem({ title: 'A' });
+    const b = await graph.createItem({ title: 'B' });
+
+    const listener = vi.fn();
+    graph.onDidChange(listener);
+
+    await graph.reorderItem(a.id, a.id);
+
+    expect(listener).not.toHaveBeenCalled();
+  });
+
+  it('reorder non-existent item is a no-op', async () => {
+    const a = await graph.createItem({ title: 'A' });
+
+    const listener = vi.fn();
+    graph.onDidChange(listener);
+
+    await graph.reorderItem('nonexistent', a.id);
+
+    expect(listener).not.toHaveBeenCalled();
+  });
+
+  it('moveToEnd places item at end of its state group', async () => {
+    const a = await graph.createItem({ title: 'A' });
+    const b = await graph.createItem({ title: 'B' });
+    const c = await graph.createItem({ title: 'C' });
+
+    await graph.moveToEnd(a.id);
+
+    const items = graph.getItemsByState(WorkItemState.New)
+      .sort((x, y) => (x.sortOrder ?? Number.MAX_SAFE_INTEGER) - (y.sortOrder ?? Number.MAX_SAFE_INTEGER));
+    expect(items.map((i) => i.title)).toEqual(['B', 'C', 'A']);
+  });
+
+  it('moveToEnd on non-existent item is a no-op', async () => {
+    const listener = vi.fn();
+    graph.onDidChange(listener);
+
+    await graph.moveToEnd('nonexistent');
+
+    expect(listener).not.toHaveBeenCalled();
+  });
+
+  it('reorder across different states is a no-op', async () => {
+    const a = await graph.createItem({ title: 'A' });
+    const b = await graph.createItem({ title: 'B' });
+    await graph.transitionState(b.id, WorkItemState.InProgress);
+
+    const listener = vi.fn();
+    graph.onDidChange(listener);
+
+    await graph.reorderItem(a.id, b.id);
+
+    expect(listener).not.toHaveBeenCalled();
+  });
+
+  it('moves legacy items without sortOrder correctly', async () => {
+    const legacyStore = createMockStore();
+
+    await legacyStore.save({
+      id: 'legacy-a',
+      title: 'A',
+      state: WorkItemState.New,
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+    } as any);
+
+    await legacyStore.save({
+      id: 'legacy-b',
+      title: 'B',
+      state: WorkItemState.New,
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+    } as any);
+
+    const legacyGraph = new WorkGraph(legacyStore);
+    await legacyGraph.load();
+
+    const c = await legacyGraph.createItem({ title: 'C' });
+
+    await legacyGraph.moveItem('legacy-a', 'down');
+
+    const ordered = legacyGraph.getItemsByState(WorkItemState.New)
+      .sort((x, y) => (x.sortOrder ?? Number.MAX_SAFE_INTEGER) - (y.sortOrder ?? Number.MAX_SAFE_INTEGER));
+    expect(ordered.map((i) => i.title)).toEqual(['B', 'A', 'C']);
   });
 });
