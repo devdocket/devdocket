@@ -64,10 +64,11 @@ export class AdoPrReviewProvider implements WorkCenterProvider {
 
   startPeriodicRefresh(intervalSeconds: number): void {
     this.stopPeriodicRefresh();
-    if (intervalSeconds <= 0) {
+    const interval = Number(intervalSeconds);
+    if (!Number.isFinite(interval) || interval <= 0) {
       return;
     }
-    const clampedInterval = Math.max(intervalSeconds, 60);
+    const clampedInterval = Math.max(interval, 60);
     this.refreshTimer = setInterval(() => {
       this.refreshInBackground().catch((err) => {
         console.error('WorkCenter ADO: PR review refresh failed:', err);
