@@ -126,13 +126,13 @@ describe('WorkGraph', () => {
     expect(listener).toHaveBeenCalledTimes(1);
   });
 
-  it('sets description on create', async () => {
+  it('sets notes on create', async () => {
     const item = await graph.createItem({
       title: 'Detailed',
-      description: 'A detailed bug report',
+      notes: 'A detailed bug report',
     });
 
-    expect(item.description).toBe('A detailed bug report');
+    expect(item.notes).toBe('A detailed bug report');
   });
 
   it('assigns sortOrder on creation', async () => {
