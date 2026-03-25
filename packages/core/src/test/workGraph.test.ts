@@ -195,4 +195,61 @@ describe('WorkGraph', () => {
     await expect(graph.moveItem('nonexistent', 'up'))
       .rejects.toThrow('Work item not found');
   });
+
+  it('creates item after legacy items without sortOrder', async () => {
+    const legacyStore = createMockStore();
+
+    await legacyStore.save({
+      id: 'legacy-a',
+      title: 'A',
+      state: WorkItemState.New,
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+    } as any);
+
+    await legacyStore.save({
+      id: 'legacy-b',
+      title: 'B',
+      state: WorkItemState.New,
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+    } as any);
+
+    const legacyGraph = new WorkGraph(legacyStore);
+    await legacyGraph.load();
+
+    const c = await legacyGraph.createItem({ title: 'C' });
+    expect(c.sortOrder).toBe(2);
+  });
+
+  it('moves legacy items without sortOrder correctly', async () => {
+    const legacyStore = createMockStore();
+
+    await legacyStore.save({
+      id: 'legacy-a',
+      title: 'A',
+      state: WorkItemState.New,
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+    } as any);
+
+    await legacyStore.save({
+      id: 'legacy-b',
+      title: 'B',
+      state: WorkItemState.New,
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+    } as any);
+
+    const legacyGraph = new WorkGraph(legacyStore);
+    await legacyGraph.load();
+
+    const c = await legacyGraph.createItem({ title: 'C' });
+
+    await legacyGraph.moveItem('legacy-a', 'down');
+
+    const ordered = legacyGraph.getItemsByState(WorkItemState.New)
+      .sort((x, y) => (x.sortOrder ?? Infinity) - (y.sortOrder ?? Infinity));
+    expect(ordered.map((i) => i.title)).toEqual(['B', 'A', 'C']);
+  });
 });
