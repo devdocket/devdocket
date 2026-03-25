@@ -150,7 +150,13 @@ export class AdoWorkItemProvider implements WorkCenterProvider {
           failures.push(projectList[index] || this.org);
         }
       } else {
-        failures.push(projectList[index] || this.org);
+        const failureTarget = projectList[index] || this.org;
+        failures.push(failureTarget);
+        const reason = (result as PromiseRejectedResult).reason;
+        logger.warn(
+          `Failed to fetch work items from ${failureTarget}: ` +
+          (reason instanceof Error ? reason.message : String(reason)),
+        );
       }
     });
 

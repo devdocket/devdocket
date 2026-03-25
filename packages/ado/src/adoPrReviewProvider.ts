@@ -160,7 +160,13 @@ export class AdoPrReviewProvider implements WorkCenterProvider {
           failures.push(projectList[index] || this.org);
         }
       } else {
-        failures.push(projectList[index] || this.org);
+        const target = projectList[index] || this.org;
+        failures.push(target);
+        logger.error(
+          `Failed to fetch PR reviews from ${target}: ${String(
+            (result as PromiseRejectedResult).reason,
+          )}`,
+        );
       }
     });
 

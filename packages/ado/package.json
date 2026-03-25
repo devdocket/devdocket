@@ -38,7 +38,7 @@
         "workcenterAdo.refreshIntervalSeconds": {
           "type": "number",
           "default": 300,
-          "description": "How often to refresh Azure DevOps data (in seconds). Minimum 60 seconds. Values below 60 are clamped."
+          "description": "How often to refresh Azure DevOps data (in seconds). Minimum 60 seconds for periodic refresh; positive values below 60 are clamped to 60. Set to 0 or a negative value to disable periodic refresh."
         }
       }
     }
@@ -49,6 +49,9 @@
     "watch": "esbuild src/extension.ts --bundle --outfile=dist/extension.js --external:vscode --format=cjs --platform=node --sourcemap --watch",
     "lint": "eslint src",
     "test": "vitest run"
+  },
+  "dependencies": {
+    "@workcenter/shared": "*"
   },
   "devDependencies": {
     "@types/node": "^20.11.0",
