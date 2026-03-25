@@ -10,7 +10,7 @@ interface WorkItem {
   id: string;
   title: string;
   description?: string;
-  state: string;
+  state: 'New' | 'Triaged' | 'InProgress' | 'Blocked' | 'WaitingOn' | 'Done' | 'Archived';
   providerId?: string;
   externalId?: string;
   url?: string;
