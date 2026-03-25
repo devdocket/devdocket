@@ -168,7 +168,7 @@ export class AdoWorkItemProvider implements WorkCenterProvider {
     project: string,
   ): Promise<{ items: DiscoveredItem[]; failed: boolean }> {
     const projectPath = project ? `/${encodeURIComponent(project)}` : '';
-    const wiqlUrl = `https://dev.azure.com/${this.org}${projectPath}/_apis/wit/wiql?api-version=7.1`;
+    const wiqlUrl = `https://dev.azure.com/${encodeURIComponent(this.org)}${projectPath}/_apis/wit/wiql?api-version=7.1`;
 
     const wiqlQuery = `SELECT [System.Id] FROM WorkItems WHERE [System.AssignedTo] = @Me AND [System.State] <> 'Closed' AND [System.State] <> 'Removed'`;
 
@@ -201,10 +201,11 @@ export class AdoWorkItemProvider implements WorkCenterProvider {
     const ids = wiqlData.workItems.map(wi => wi.id);
     const batchSize = 200;
     const allWorkItems: AdoWorkItem[] = [];
+    let batchFailed = false;
 
     for (let i = 0; i < ids.length; i += batchSize) {
       const batchIds = ids.slice(i, i + batchSize);
-      const detailUrl = `https://dev.azure.com/${this.org}/_apis/wit/workitems?ids=${batchIds.join(',')}&fields=System.Title,System.Description,System.TeamProject,System.WorkItemType,System.State&$expand=links&api-version=7.1`;
+      const detailUrl = `https://dev.azure.com/${encodeURIComponent(this.org)}/_apis/wit/workitems?ids=${batchIds.join(',')}&fields=System.Title,System.Description,System.TeamProject,System.WorkItemType,System.State&$expand=links&api-version=7.1`;
 
       const detailResponse = await fetch(detailUrl, {
         headers: {
@@ -214,7 +215,8 @@ export class AdoWorkItemProvider implements WorkCenterProvider {
 
       if (!detailResponse.ok) {
         console.error(`WorkCenter ADO: failed to fetch work item details: ${detailResponse.status}`);
-        return { items: [], failed: true };
+        batchFailed = true;
+        continue;
       }
 
       let detailData: { value: AdoWorkItem[] };
@@ -222,7 +224,8 @@ export class AdoWorkItemProvider implements WorkCenterProvider {
         detailData = (await detailResponse.json()) as { value: AdoWorkItem[] };
       } catch (err) {
         console.error('WorkCenter ADO: failed to parse work item detail response:', err);
-        return { items: [], failed: true };
+        batchFailed = true;
+        continue;
       }
       allWorkItems.push(...detailData.value);
     }
@@ -239,7 +242,7 @@ export class AdoWorkItemProvider implements WorkCenterProvider {
       };
     });
 
-    return { items, failed: false };
+    return { items, failed: batchFailed };
   }
 
   dispose(): void {

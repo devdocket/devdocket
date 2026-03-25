@@ -179,7 +179,7 @@ export class AdoPrReviewProvider implements WorkCenterProvider {
     }
 
     const response = await fetch(
-      `https://dev.azure.com/${this.org}/_apis/connectiondata`,
+      `https://dev.azure.com/${encodeURIComponent(this.org)}/_apis/connectiondata`,
       {
         headers: { Authorization: `Bearer ${token}` },
       },
@@ -215,7 +215,7 @@ export class AdoPrReviewProvider implements WorkCenterProvider {
     reviewerId: string,
   ): Promise<{ items: DiscoveredItem[]; failed: boolean }> {
     const projectPath = project ? `/${encodeURIComponent(project)}` : '';
-    const url = `https://dev.azure.com/${this.org}${projectPath}/_apis/git/pullrequests?searchCriteria.reviewerId=${reviewerId}&searchCriteria.status=active&api-version=7.1`;
+    const url = `https://dev.azure.com/${encodeURIComponent(this.org)}${projectPath}/_apis/git/pullrequests?searchCriteria.reviewerId=${reviewerId}&searchCriteria.status=active&api-version=7.1`;
 
     const response = await fetch(url, {
       headers: {

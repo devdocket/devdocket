@@ -47,8 +47,6 @@ export async function activate(_context: vscode.ExtensionContext): Promise<void>
     { dispose: () => workItemProvider.dispose() },
     { dispose: () => prProvider.dispose() },
   );
-
-  await Promise.all([workItemProvider.refresh(), prProvider.refresh()]);
 }
 
 export function deactivate(): void {
