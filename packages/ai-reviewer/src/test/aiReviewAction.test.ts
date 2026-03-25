@@ -151,14 +151,14 @@ describe('AiReviewAction', () => {
       expect(window.withProgress).not.toHaveBeenCalled();
     });
 
-    it('shows error when authentication session is not available', async () => {
+    it('shows warning when authentication session is not available', async () => {
       vi.mocked(authentication.getSession).mockResolvedValue(null as never);
 
       const item = createWorkItem();
       await action.run(item);
 
-      expect(window.showErrorMessage).toHaveBeenCalledWith(
-        'AI Code Review: Failed to fetch PR diff',
+      expect(window.showWarningMessage).toHaveBeenCalledWith(
+        'AI Code Review: Please sign in to GitHub.',
       );
     });
 
@@ -192,14 +192,6 @@ describe('AiReviewAction', () => {
     it('returns undefined for non-GitHub URLs', async () => {
       const result = await action.fetchDiff('https://example.com/not-a-pr');
       expect(result).toBeUndefined();
-    });
-
-    it('returns undefined and shows info message for Azure DevOps URLs', async () => {
-      const result = await action.fetchDiff('https://dev.azure.com/org/project/_git/repo/pullrequest/99');
-      expect(result).toBeUndefined();
-      expect(window.showInformationMessage).toHaveBeenCalledWith(
-        'AI Code Review: Azure DevOps PRs are not yet supported.',
-      );
     });
 
     it('returns undefined when fetch throws', async () => {

@@ -6,7 +6,7 @@
   "publisher": "mthalman",
   "license": "MIT",
   "engines": {
-    "vscode": "^1.85.0"
+    "vscode": "^1.96.0"
   },
   "categories": [
     "Other"
@@ -18,19 +18,7 @@
     "onStartupFinished"
   ],
   "main": "./dist/extension.js",
-  "contributes": {
-    "configuration": {
-      "title": "WorkCenter AI Reviewer",
-      "properties": {
-        "workcenterAiReviewer.provider": {
-          "type": "string",
-          "enum": ["copilot"],
-          "default": "copilot",
-          "description": "AI provider to use for code review"
-        }
-      }
-    }
-  },
+  "contributes": {},
   "scripts": {
     "vscode:prepublish": "npm run build",
     "build": "esbuild src/extension.ts --bundle --outfile=dist/extension.js --external:vscode --format=cjs --platform=node --sourcemap",
@@ -40,7 +28,7 @@
   },
   "devDependencies": {
     "@types/node": "^20.11.0",
-    "@types/vscode": "^1.85.0",
+    "@types/vscode": "^1.96.0",
     "@typescript-eslint/eslint-plugin": "^7.0.0",
     "@typescript-eslint/parser": "^7.0.0",
     "esbuild": "^0.20.0",

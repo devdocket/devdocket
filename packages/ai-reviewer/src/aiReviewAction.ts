@@ -31,7 +31,7 @@ export class AiReviewAction implements WorkCenterAction {
 
   isPrUrl(url: string): boolean {
     // GitHub PR: https://github.com/owner/repo/pull/123
-    if (/github\.com\/[^/]+\/[^/]+\/pull\/\d+/.test(url)) return true;
+    if (/^https?:\/\/github\.com\/[^/]+\/[^/]+\/pull\/\d+/.test(url)) return true;
     return false;
   }
 
@@ -71,13 +71,7 @@ export class AiReviewAction implements WorkCenterAction {
 
   async fetchDiff(url: string): Promise<string | undefined> {
     try {
-      const adoMatch = url.match(/dev\.azure\.com\/([^/]+)\/([^/]+)\/_git\/([^/]+)\/pullrequest\/(\d+)/);
-      if (adoMatch) {
-        vscode.window.showInformationMessage('AI Code Review: Azure DevOps PRs are not yet supported.');
-        return undefined;
-      }
-
-      const githubMatch = url.match(/github\.com\/([^/]+\/[^/]+)\/pull\/(\d+)/);
+      const githubMatch = url.match(/^https?:\/\/github\.com\/([^/]+\/[^/]+)\/pull\/(\d+)/);
       if (githubMatch) {
         return await this.fetchGitHubDiff(githubMatch[1], githubMatch[2]);
       }
@@ -92,7 +86,10 @@ export class AiReviewAction implements WorkCenterAction {
     const session = await vscode.authentication.getSession('github', ['repo'], {
       createIfNone: false,
     });
-    if (!session) return undefined;
+    if (!session) {
+      vscode.window.showWarningMessage('AI Code Review: Please sign in to GitHub.');
+      return undefined;
+    }
 
     const response = await fetch(
       `https://api.github.com/repos/${repo}/pulls/${prNumber}`,
