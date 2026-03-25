@@ -125,9 +125,9 @@ export class AiReviewAction implements WorkCenterAction {
 
 Be concise. Only flag genuine issues, not style preferences.
 
-\`\`\`diff
+\`\`\`\`diff
 ${diff.slice(0, maxDiffLength)}
-\`\`\``
+\`\`\`\``
         ),
       ];
 

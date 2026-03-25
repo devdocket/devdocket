@@ -23,7 +23,9 @@ export interface WorkCenterAction {
   run(item: WorkItem): Promise<void>;
 }
 
+export type WorkCenterProvider = unknown;
+
 export interface WorkCenterApi {
-  registerProvider(provider: unknown): Disposable;
+  registerProvider(provider: WorkCenterProvider): Disposable;
   registerAction(action: WorkCenterAction): Disposable;
 }
