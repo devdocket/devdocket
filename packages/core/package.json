@@ -19,6 +19,17 @@
   ],
   "main": "./dist/extension.js",
   "contributes": {
+    "configuration": {
+      "title": "WorkCenter",
+      "properties": {
+        "workcenter.logLevel": {
+          "type": "string",
+          "enum": ["debug", "info", "warn", "error"],
+          "default": "info",
+          "description": "Log level for WorkCenter output channel"
+        }
+      }
+    },
     "viewsContainers": {
       "activitybar": [
         {
@@ -212,6 +223,9 @@
     "lint": "eslint src",
     "test": "vitest run",
     "test:watch": "vitest"
+  },
+  "dependencies": {
+    "@workcenter/shared": "*"
   },
   "devDependencies": {
     "@types/node": "^20.11.0",

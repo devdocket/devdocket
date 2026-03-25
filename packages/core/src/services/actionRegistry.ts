@@ -1,6 +1,7 @@
 import * as vscode from 'vscode';
 import { WorkCenterAction } from '../api/types';
 import { WorkItem } from '../models/workItem';
+import { logger } from './logger';
 
 export class ActionRegistry {
   private readonly actions = new Map<string, WorkCenterAction>();
@@ -10,6 +11,7 @@ export class ActionRegistry {
       throw new Error(`Action already registered: ${action.id}`);
     }
     this.actions.set(action.id, action);
+    logger.info(`Registered action: ${action.id} (${action.label})`);
 
     return new vscode.Disposable(() => {
       this.actions.delete(action.id);
@@ -17,7 +19,9 @@ export class ActionRegistry {
   }
 
   getActionsFor(item: WorkItem): WorkCenterAction[] {
-    return Array.from(this.actions.values()).filter((a) => a.canRun(item));
+    const matching = Array.from(this.actions.values()).filter((a) => a.canRun(item));
+    logger.debug(`Found ${matching.length} actions for item ${item.id}`);
+    return matching;
   }
 
   getAction(id: string): WorkCenterAction | undefined {

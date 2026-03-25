@@ -2,6 +2,7 @@ import * as fs from 'fs/promises';
 import * as path from 'path';
 import { WorkItem } from '../models/workItem';
 import { ITaskStore } from './taskStore';
+import { logger } from '../services/logger';
 
 export class JsonTaskStore implements ITaskStore {
   private readonly filePath: string;
@@ -16,9 +17,16 @@ export class JsonTaskStore implements ITaskStore {
     if (this.cache !== null) {
       return Array.from(this.cache.values());
     }
+    logger.debug(`Loading work items from ${this.filePath}`);
     try {
       const data = await fs.readFile(this.filePath, 'utf-8');
-      const items = JSON.parse(data) as WorkItem[];
+      let items: WorkItem[];
+      try {
+        items = JSON.parse(data) as WorkItem[];
+      } catch {
+        logger.warn('Failed to parse work items file');
+        throw new Error('Failed to parse work items file');
+      }
       this.cache = new Map(items.map((item) => [item.id, item]));
       return items;
     } catch (err: unknown) {
@@ -31,6 +39,7 @@ export class JsonTaskStore implements ITaskStore {
   }
 
   async save(item: WorkItem): Promise<void> {
+    logger.debug(`Saving work item: ${item.id}`);
     return this.enqueue(async () => {
       if (this.cache === null) {
         await this.loadAll();

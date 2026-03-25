@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
 import { authentication, window } from 'vscode';
 import { GitHubPrReviewProvider } from '../githubPrReviewProvider';
+import { initLogger, LogLevel } from '../logger';
 
 const mockFetch = vi.fn();
 
@@ -17,10 +18,15 @@ function createMockPr(number: number, title: string, repo = 'owner/repo') {
 describe('GitHubPrReviewProvider', () => {
   let provider: GitHubPrReviewProvider;
 
+  let mockChannel: { appendLine: ReturnType<typeof vi.fn> };
+
   beforeEach(() => {
     vi.clearAllMocks();
     vi.stubGlobal('fetch', mockFetch);
     provider = new GitHubPrReviewProvider();
+
+    mockChannel = { appendLine: vi.fn() };
+    initLogger(mockChannel as any, LogLevel.Debug);
 
     // Default: auth session returns a token
     vi.mocked(authentication.getSession).mockResolvedValue({
@@ -180,29 +186,30 @@ describe('GitHubPrReviewProvider', () => {
   it('does not show warning on non-ok response for background refresh', async () => {
     mockFetch.mockResolvedValueOnce({ ok: false, status: 500 });
 
-    const consoleWarn = vi.spyOn(console, 'warn').mockImplementation(() => {});
-
     // Call refreshInBackground via the periodic timer mechanism
     const refreshBg = (provider as any).refreshInBackground.bind(provider);
     await refreshBg();
 
     expect(window.showWarningMessage).not.toHaveBeenCalled();
-    expect(consoleWarn).toHaveBeenCalled();
-
-    consoleWarn.mockRestore();
+    const logged = mockChannel.appendLine.mock.calls.some(
+      (call: string[]) => call[0].includes('[WARN]'),
+    );
+    expect(logged).toBe(true);
   });
 
   it('handles fetch error gracefully', async () => {
     mockFetch.mockRejectedValueOnce(new Error('Network error'));
 
-    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
     const listener = vi.fn();
     provider.onDidDiscoverItems(listener);
 
     await expect(provider.refresh()).resolves.toBeUndefined();
     expect(listener).not.toHaveBeenCalled();
 
-    consoleError.mockRestore();
+    const logged = mockChannel.appendLine.mock.calls.some(
+      (call: string[]) => call[0].includes('[ERROR]'),
+    );
+    expect(logged).toBe(true);
   });
 
   it('fires empty items array when search returns no results', async () => {

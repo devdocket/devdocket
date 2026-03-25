@@ -1,6 +1,7 @@
 import * as vscode from 'vscode';
 import * as fs from 'fs/promises';
 import * as path from 'path';
+import { logger } from '../services/logger';
 
 export type InboxState = 'unseen' | 'accepted' | 'dismissed';
 
@@ -31,6 +32,7 @@ export class DiscoveredStateStore {
   }
 
   async setState(providerId: string, externalId: string, state: InboxState): Promise<void> {
+    logger.debug(`Setting state for ${providerId}/${externalId} to ${state}`);
     if (!this.loaded) {
       await this.load();
     }
@@ -92,6 +94,7 @@ export class DiscoveredStateStore {
       for (const record of records) {
         this.cache.set(this.key(record.providerId, record.externalId), record);
       }
+      logger.debug(`Loaded discovered state: ${this.cache.size} entries`);
       this.loaded = true;
     } catch (err: unknown) {
       if (isNodeError(err) && err.code === 'ENOENT') {

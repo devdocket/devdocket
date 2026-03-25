@@ -1,6 +1,7 @@
 import * as vscode from 'vscode';
 import { WorkCenterProvider, DiscoveredItem } from '../api/types';
 import { DiscoveredStateStore } from '../storage/discoveredStateStore';
+import { logger } from './logger';
 
 export class ProviderRegistry {
   private readonly providers = new Map<string, WorkCenterProvider>();
@@ -33,9 +34,10 @@ export class ProviderRegistry {
     if (!this.discoveredItems.has(provider.id)) {
       this.discoveredItems.set(provider.id, []);
     }
+    logger.info(`Registered provider: ${provider.id} (${provider.label})`);
 
     const sub = provider.onDidDiscoverItems((items) => {
-      void this.handleDiscoveredItems(provider.id, items).catch(err => console.error('WorkCenter: handleDiscoveredItems failed:', err));
+      void this.handleDiscoveredItems(provider.id, items).catch(err => logger.error('handleDiscoveredItems failed', err));
     });
     this.subscriptions.set(provider.id, sub);
 
@@ -44,7 +46,7 @@ export class ProviderRegistry {
     this._onDidChangeDiscoveredItems.fire();
     provider.refresh()
       .catch((err) => {
-        console.error(`WorkCenter: provider "${provider.id}" refresh failed:`, err);
+        logger.error(`Provider "${provider.id}" refresh failed`, err);
       })
       .finally(() => {
         this._loadingProviders.delete(provider.id);
@@ -78,15 +80,17 @@ export class ProviderRegistry {
   }
 
   async refreshAll(): Promise<void> {
-    const promises = Array.from(this.providers.values()).map((p) =>
-      p.refresh().catch((err) => {
-        console.error(`WorkCenter: provider "${p.id}" refresh failed:`, err);
-      }),
-    );
+    const promises = Array.from(this.providers.values()).map((p) => {
+      logger.debug(`Provider ${p.id} refreshing...`);
+      return p.refresh().catch((err) => {
+        logger.error(`Provider "${p.id}" refresh failed`, err);
+      });
+    });
     await Promise.all(promises);
   }
 
   private async handleDiscoveredItems(providerId: string, items: DiscoveredItem[]): Promise<void> {
+    logger.info(`Provider ${providerId} discovered ${items.length} items`);
     this.discoveredItems.set(providerId, items);
     const provider = this.providers.get(providerId);
     const resurface = provider?.resurfaceDismissed === true;
@@ -101,7 +105,7 @@ export class ProviderRegistry {
     }
     if (updates.length > 0) {
       await this.stateStore.setStates(updates).catch((err) => {
-        console.error('WorkCenter: failed to persist discovered states:', err);
+        logger.error('Failed to persist discovered states', err);
       });
     }
     this._onDidChangeDiscoveredItems.fire();

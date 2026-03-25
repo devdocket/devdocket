@@ -11,17 +11,44 @@ import { QueueTreeProvider } from './views/queueTreeProvider';
 import { FocusTreeProvider } from './views/focusTreeProvider';
 import { SourcesTreeProvider } from './views/sourcesTreeProvider';
 import { registerCommands } from './commands/commands';
+import { initLogger, setLogLevel, logger, LogLevel } from './services/logger';
 
 export type { WorkCenterApi, WorkCenterProvider, WorkCenterAction, DiscoveredItem, Disposable } from './api/types';
+export { logger } from './services/logger';
 
 export async function activate(context: vscode.ExtensionContext): Promise<WorkCenterApi> {
+  const outputChannel = vscode.window.createOutputChannel('WorkCenter');
+  context.subscriptions.push(outputChannel);
+
+  const logLevelConfig = vscode.workspace.getConfiguration('workcenter').get<string>('logLevel', 'info');
+  const logLevelMap: Record<string, LogLevel> = {
+    debug: LogLevel.Debug,
+    info: LogLevel.Info,
+    warn: LogLevel.Warn,
+    error: LogLevel.Error,
+  };
+  initLogger(outputChannel, logLevelMap[logLevelConfig] ?? LogLevel.Info);
+
+  context.subscriptions.push(
+    vscode.workspace.onDidChangeConfiguration(e => {
+      if (e.affectsConfiguration('workcenter.logLevel')) {
+        const newLevel = vscode.workspace.getConfiguration('workcenter').get<string>('logLevel', 'info');
+        setLogLevel(logLevelMap[newLevel] ?? LogLevel.Info);
+      }
+    }),
+  );
+
+  logger.info('WorkCenter activating...');
+
   const storagePath = context.globalStorageUri.fsPath;
   const store = new JsonTaskStore(storagePath);
   const workGraph = new WorkGraph(store);
   await workGraph.load();
+  logger.debug(`Loaded ${workGraph.getAll().length} work items`);
 
   const stateStore = new DiscoveredStateStore(storagePath);
   await stateStore.load();
+  logger.debug('Loaded discovered state');
 
   // Migration: mark existing provider-backed items as accepted
   const itemsToMigrate: Array<{ providerId: string; externalId: string; state: 'accepted' }> = [];
@@ -42,8 +69,9 @@ export async function activate(context: vscode.ExtensionContext): Promise<WorkCe
   if (itemsToMigrate.length > 0) {
     try {
       await stateStore.setStates(itemsToMigrate);
+      logger.info(`Migrated ${itemsToMigrate.length} items to accepted state`);
     } catch (err) {
-      console.error('WorkCenter: migration failed:', err);
+      logger.error('Migration failed', err);
     }
   }
 
@@ -113,6 +141,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<WorkCe
 
   registerCommands(context, workGraph, actionRegistry, stateStore);
 
+  logger.info('WorkCenter activated');
   return api;
 }
 
