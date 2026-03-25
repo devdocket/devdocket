@@ -121,8 +121,8 @@ Provider extensions depend on the core extension via `extensionDependencies` and
 
 WorkCenter persists two JSON files in VS Code's `globalStorageUri`:
 
-- **`workitems.json`** — All work items with their full state machine lifecycle.
-- **`discovered-state.json`** — A thin index mapping `providerId + externalId` → inbox state (`unseen`, `accepted`, `dismissed`). Provider item data (title, description, URL) is never persisted — it is always read live from the provider.
+- **`workitems.json`** — All accepted and manual work items with their full state machine lifecycle, including a snapshot of provider fields (such as `title`, `description`, and `url`) captured at accept time. These snapshots may become stale compared to live data from the provider.
+- **`discovered-state.json`** — A thin index mapping `providerId + externalId` → inbox state (`unseen`, `accepted`, `dismissed`) for discovered items only. This file does not store provider item fields; for inbox items, provider data is read live from the provider.
 
 ## Documentation
 
