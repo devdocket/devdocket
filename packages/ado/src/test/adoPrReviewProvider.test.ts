@@ -322,7 +322,7 @@ describe('AdoPrReviewProvider', () => {
     provider.onDidDiscoverItems(listener);
 
     await expect(provider.refresh()).resolves.toBeUndefined();
-    expect(listener).not.toHaveBeenCalled();
+    expect(listener).toHaveBeenCalledWith([]);
 
     consoleError.mockRestore();
   });

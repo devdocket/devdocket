@@ -180,12 +180,20 @@ export class AdoPrReviewProvider implements WorkCenterProvider {
       return this._cachedUserId;
     }
 
-    const response = await fetch(
-      `https://dev.azure.com/${encodeURIComponent(this.org)}/_apis/connectiondata?api-version=7.1`,
-      {
-        headers: { Authorization: `Bearer ${token}` },
-      },
-    );
+    let response: Response;
+    try {
+      response = await fetch(
+        `https://dev.azure.com/${encodeURIComponent(this.org)}/_apis/connectiondata?api-version=7.1`,
+        {
+          headers: { Authorization: `Bearer ${token}` },
+        },
+      );
+    } catch (err) {
+      console.error('WorkCenter ADO: network error fetching connection data:', err);
+      this._cachedUserId = undefined;
+      this._cachedSessionAccountId = undefined;
+      return undefined;
+    }
 
     if (!response.ok) {
       console.error(`WorkCenter ADO: failed to fetch connection data: ${response.status}`);
