@@ -125,7 +125,7 @@ interface DiscoveredItem {
   /** Title displayed in the Inbox and Sources views. */
   title: string;
 
-  /** Optional description (truncated in tooltips). */
+  /** Optional description shown in tooltips (can be long). */
   description?: string;
 
   /** Optional URL for "Open in Browser" support. */
@@ -144,7 +144,8 @@ interface DiscoveredItem {
 
 - `externalId` must be unique per provider and stable across refreshes. A good pattern is `owner/repo#123`.
 - Each `onDidDiscoverItems` emission replaces the provider's entire item set. Emit all current items, not just changes.
-- Provider item data (title, description, url) is **not persisted** by WorkCenter. The core extension reads items live from the provider's in-memory data. Only the inbox state (`unseen`, `accepted`, `dismissed`) is persisted.
+- `DiscoveredItem` data is not stored as a persisted record; WorkCenter tracks only the inbox state (`unseen`, `accepted`, `dismissed`) for discovered items in `discovered-state.json`.
+- When a user accepts an item from Inbox/Sources, WorkCenter creates and persists a new `WorkItem` in `workitems.json` that includes a snapshot of the item's `title`, `description`, `url`, along with its `providerId`/`externalId`.
 - Use `group` to organize items in the Sources tree. Items with the same group value are nested under a folder.
 
 ### Registering a Provider
