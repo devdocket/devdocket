@@ -122,11 +122,12 @@ export class InboxTreeProvider implements vscode.TreeDataProvider<InboxElement> 
         const items = this.providerRegistry.getDiscoveredItems(element.providerId);
         const discoveredItem = items.find(i => i.externalId === element.externalId);
         if (discoveredItem?.group) {
+          const unseenCount = this.getGroupChildren(element.providerId, discoveredItem.group).length;
           return {
             kind: 'group',
             providerId: element.providerId,
             groupName: discoveredItem.group,
-            unseenCount: 0,
+            unseenCount,
           };
         }
         return {
