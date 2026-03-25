@@ -45,9 +45,9 @@ describe('AiReviewAction', () => {
       expect(action.canRun(item)).toBe(true);
     });
 
-    it('returns true for Azure DevOps PR URLs', () => {
+    it('returns false for Azure DevOps PR URLs (not supported)', () => {
       const item = createWorkItem({ url: 'https://dev.azure.com/org/project/_git/repo/pullrequest/99' });
-      expect(action.canRun(item)).toBe(true);
+      expect(action.canRun(item)).toBe(false);
     });
 
     it('returns false for GitHub issue URLs (not PRs)', () => {
@@ -77,8 +77,8 @@ describe('AiReviewAction', () => {
       expect(action.isPrUrl('https://github.com/my-org/my-repo/pull/12345')).toBe(true);
     });
 
-    it('matches Azure DevOps PR URLs', () => {
-      expect(action.isPrUrl('https://dev.azure.com/org/proj/_git/repo/pullrequest/7')).toBe(true);
+    it('rejects Azure DevOps PR URLs', () => {
+      expect(action.isPrUrl('https://dev.azure.com/org/proj/_git/repo/pullrequest/7')).toBe(false);
     });
 
     it('rejects non-PR URLs', () => {
@@ -161,12 +161,45 @@ describe('AiReviewAction', () => {
         'AI Code Review: Failed to fetch PR diff',
       );
     });
+
+    it('does not open document when cancelled after analysis', async () => {
+      global.fetch = vi.fn().mockResolvedValue({
+        ok: true,
+        text: vi.fn().mockResolvedValue('diff content'),
+      });
+
+      vi.mocked(window.withProgress).mockImplementation(async (_options: unknown, task: Function) => {
+        const progress = { report: vi.fn() };
+        const token = { isCancellationRequested: false, onCancellationRequested: vi.fn() };
+        // Simulate cancellation after analyzeWithAi resolves
+        const originalAnalyze = action.analyzeWithAi.bind(action);
+        vi.spyOn(action, 'analyzeWithAi').mockImplementation(async (...args) => {
+          const result = await originalAnalyze(...args);
+          token.isCancellationRequested = true;
+          return result;
+        });
+        return task(progress, token);
+      });
+
+      const item = createWorkItem();
+      await action.run(item);
+
+      expect(workspace.openTextDocument).not.toHaveBeenCalled();
+    });
   });
 
   describe('fetchDiff', () => {
     it('returns undefined for non-GitHub URLs', async () => {
       const result = await action.fetchDiff('https://example.com/not-a-pr');
       expect(result).toBeUndefined();
+    });
+
+    it('returns undefined and shows info message for Azure DevOps URLs', async () => {
+      const result = await action.fetchDiff('https://dev.azure.com/org/project/_git/repo/pullrequest/99');
+      expect(result).toBeUndefined();
+      expect(window.showInformationMessage).toHaveBeenCalledWith(
+        'AI Code Review: Azure DevOps PRs are not yet supported.',
+      );
     });
 
     it('returns undefined when fetch throws', async () => {
@@ -184,6 +217,24 @@ describe('AiReviewAction', () => {
 
       expect(result).toContain('AI Code Review');
       expect(result).toContain('Review feedback here');
+    });
+
+    it('appends truncation note when diff exceeds 50000 chars', async () => {
+      const token = { isCancellationRequested: false, onCancellationRequested: vi.fn() };
+      const largeDiff = 'x'.repeat(50001);
+      const result = await action.analyzeWithAi(largeDiff, token as never);
+
+      expect(result).toContain('AI Code Review');
+      expect(result).toContain('⚠️ **Note:** The PR diff was truncated');
+    });
+
+    it('does not append truncation note when diff is within limit', async () => {
+      const token = { isCancellationRequested: false, onCancellationRequested: vi.fn() };
+      const smallDiff = 'x'.repeat(50000);
+      const result = await action.analyzeWithAi(smallDiff, token as never);
+
+      expect(result).toContain('AI Code Review');
+      expect(result).not.toContain('truncated');
     });
 
     it('returns undefined and shows error when sendRequest throws', async () => {

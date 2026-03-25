@@ -32,8 +32,6 @@ export class AiReviewAction implements WorkCenterAction {
   isPrUrl(url: string): boolean {
     // GitHub PR: https://github.com/owner/repo/pull/123
     if (/github\.com\/[^/]+\/[^/]+\/pull\/\d+/.test(url)) return true;
-    // Azure DevOps PR: https://dev.azure.com/org/project/_git/repo/pullrequest/123
-    if (/dev\.azure\.com\/[^/]+\/[^/]+\/_git\/[^/]+\/pullrequest\/\d+/.test(url)) return true;
     return false;
   }
 
@@ -60,7 +58,7 @@ export class AiReviewAction implements WorkCenterAction {
         progress.report({ message: 'Analyzing changes...' });
 
         const review = await this.analyzeWithAi(diff, token);
-        if (!review) return;
+        if (!review || token.isCancellationRequested) return;
 
         const doc = await vscode.workspace.openTextDocument({
           content: review,
@@ -73,6 +71,12 @@ export class AiReviewAction implements WorkCenterAction {
 
   async fetchDiff(url: string): Promise<string | undefined> {
     try {
+      const adoMatch = url.match(/dev\.azure\.com\/([^/]+)\/([^/]+)\/_git\/([^/]+)\/pullrequest\/(\d+)/);
+      if (adoMatch) {
+        vscode.window.showInformationMessage('AI Code Review: Azure DevOps PRs are not yet supported.');
+        return undefined;
+      }
+
       const githubMatch = url.match(/github\.com\/([^/]+\/[^/]+)\/pull\/(\d+)/);
       if (githubMatch) {
         return await this.fetchGitHubDiff(githubMatch[1], githubMatch[2]);
@@ -113,6 +117,12 @@ export class AiReviewAction implements WorkCenterAction {
         return undefined;
       }
 
+      const maxDiffLength = 50000;
+      let truncationNote = '';
+      if (diff.length > maxDiffLength) {
+        truncationNote = '\n\n> ⚠️ **Note:** The PR diff was truncated to the first 50,000 characters. Some changes may not be covered in this review.\n';
+      }
+
       const model = models[0];
       const messages = [
         vscode.LanguageModelChatMessage.User(
@@ -125,7 +135,7 @@ export class AiReviewAction implements WorkCenterAction {
 Be concise. Only flag genuine issues, not style preferences.
 
 \`\`\`diff
-${diff.slice(0, 50000)}
+${diff.slice(0, maxDiffLength)}
 \`\`\``
         ),
       ];
@@ -136,7 +146,7 @@ ${diff.slice(0, 50000)}
       for await (const chunk of response.text) {
         result += chunk;
       }
-      return result;
+      return result + truncationNote;
     } catch (err) {
       console.error('AI Review: analysis failed:', err);
       vscode.window.showErrorMessage('AI Code Review: Analysis failed');
