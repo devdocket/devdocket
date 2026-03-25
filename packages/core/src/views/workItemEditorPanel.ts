@@ -68,9 +68,10 @@ export class WorkItemEditorPanel {
         return;
       }
       patch.title = data.title;
-      if ('notes' in data) {
-        patch.notes = data.notes || undefined;
-      }
+    }
+
+    if ('notes' in data) {
+      patch.notes = data.notes || undefined;
     }
 
     if (Object.keys(patch).length === 0) {
@@ -208,8 +209,7 @@ ${item.providerId ? '      <span class="hint">Title is managed by the provider</
     </div>
     <div class="field">
       <label for="notes">Notes</label>
-      <textarea id="notes" ${item.providerId ? 'readonly' : ''}>${escapeHtml(item.notes ?? '')}</textarea>
-${item.providerId ? '      <span class="hint">Notes are managed by the provider</span>' : ''}
+      <textarea id="notes">${escapeHtml(item.notes ?? '')}</textarea>
     </div>
   </div>
   <script nonce="${nonce}">
@@ -235,8 +235,10 @@ ${item.providerId ? '      <span class="hint">Notes are managed by the provider<
 
     fields.forEach(f => {
       const el = document.getElementById(f);
-      if (!el.readOnly) {
-        el.addEventListener('input', scheduleAutosave);
+      if (el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement) {
+        if (!el.readOnly) {
+          el.addEventListener('input', scheduleAutosave);
+        }
       }
     });
   </script>
