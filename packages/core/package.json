@@ -15,7 +15,8 @@
     "onView:workcenter.inbox",
     "onView:workcenter.queue",
     "onView:workcenter.focus",
-    "onView:workcenter.sources"
+    "onView:workcenter.sources",
+    "onView:workcenter.history"
   ],
   "main": "./dist/extension.js",
   "contributes": {
@@ -45,6 +46,10 @@
         {
           "id": "workcenter.sources",
           "name": "Sources"
+        },
+        {
+          "id": "workcenter.history",
+          "name": "History"
         }
       ]
     },
@@ -195,6 +200,11 @@
         {
           "command": "workcenter.dismissFromInbox",
           "when": "view == workcenter.inbox",
+          "group": "1_actions"
+        },
+        {
+          "command": "workcenter.archiveItem",
+          "when": "view == workcenter.history && viewItem =~ /historyItem/",
           "group": "1_actions"
         },
         {
