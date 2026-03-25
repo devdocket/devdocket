@@ -1,4 +1,5 @@
 import * as vscode from 'vscode';
+import { logger } from './logger';
 
 // Re-declared to match core API contract — separate extension cannot import core types directly
 interface Disposable {
@@ -72,7 +73,7 @@ export class AdoWorkItemProvider implements WorkCenterProvider {
     const clampedInterval = Math.max(interval, 60);
     this.refreshTimer = setInterval(() => {
       this.refreshInBackground().catch((err) => {
-        console.error('WorkCenter ADO: work item refresh failed:', err);
+        logger.error('Work item refresh failed:', err);
       });
     }, clampedInterval * 1000);
   }
@@ -91,6 +92,7 @@ export class AdoWorkItemProvider implements WorkCenterProvider {
 
     this._isRefreshing = true;
     try {
+      logger.info('Fetching assigned ADO work items...');
       const session = await vscode.authentication.getSession('microsoft', [ADO_AUTH_SCOPE], {
         createIfNone: true,
       }).catch(() => null);
@@ -101,7 +103,7 @@ export class AdoWorkItemProvider implements WorkCenterProvider {
 
       await this.fetchAndPublishWorkItems(session.accessToken, true);
     } catch (err) {
-      console.error('WorkCenter ADO: failed to fetch work items:', err);
+      logger.error('Failed to fetch work items:', err);
     } finally {
       this._isRefreshing = false;
     }
@@ -114,6 +116,7 @@ export class AdoWorkItemProvider implements WorkCenterProvider {
 
     this._isRefreshing = true;
     try {
+      logger.info('Fetching assigned ADO work items...');
       const session = await vscode.authentication.getSession('microsoft', [ADO_AUTH_SCOPE], {
         createIfNone: false,
       }).catch(() => null);
@@ -124,7 +127,7 @@ export class AdoWorkItemProvider implements WorkCenterProvider {
 
       await this.fetchAndPublishWorkItems(session.accessToken, false);
     } catch (err) {
-      console.error('WorkCenter ADO: failed to fetch work items:', err);
+      logger.error('Failed to fetch work items:', err);
     } finally {
       this._isRefreshing = false;
     }
@@ -152,6 +155,7 @@ export class AdoWorkItemProvider implements WorkCenterProvider {
     });
 
     this._onDidDiscoverItems.fire(allItems);
+    logger.info(`Discovered ${allItems.length} ADO work items`);
 
     if (failures.length > 0) {
       const message = failures.length === 1
@@ -159,9 +163,8 @@ export class AdoWorkItemProvider implements WorkCenterProvider {
         : `Failed to fetch work items from ${failures.length} projects`;
       if (isUserTriggered) {
         vscode.window.showWarningMessage(`WorkCenter ADO: ${message}`);
-      } else {
-        console.warn(`WorkCenter ADO: ${message}`);
       }
+      logger.warn(message);
     }
   }
 
@@ -169,6 +172,7 @@ export class AdoWorkItemProvider implements WorkCenterProvider {
     token: string,
     project: string,
   ): Promise<{ items: DiscoveredItem[]; failed: boolean }> {
+    logger.debug(`Fetching work items for project: ${project || this.org}`);
     const projectPath = project ? `/${encodeURIComponent(project)}` : '';
     const wiqlUrl = `https://dev.azure.com/${encodeURIComponent(this.org)}${projectPath}/_apis/wit/wiql?api-version=7.1`;
 
@@ -184,7 +188,8 @@ export class AdoWorkItemProvider implements WorkCenterProvider {
     });
 
     if (!wiqlResponse.ok) {
-      console.error(`WorkCenter ADO: WIQL query failed for project "${project}": ${wiqlResponse.status}`);
+      logger.warn(`Failed to fetch work items for project: ${project || this.org}`);
+      logger.error(`WIQL query failed for project "${project}": ${wiqlResponse.status}`);
       return { items: [], failed: true };
     }
 
@@ -192,9 +197,10 @@ export class AdoWorkItemProvider implements WorkCenterProvider {
     try {
       wiqlData = (await wiqlResponse.json()) as WiqlResponse;
     } catch (err) {
-      console.error(`WorkCenter ADO: failed to parse WIQL response for project "${project}":`, err);
+      logger.error(`Failed to parse WIQL response for project "${project}":`, err);
       return { items: [], failed: true };
     }
+    logger.debug(`WIQL returned ${wiqlData.workItems.length} work item IDs`);
     if (wiqlData.workItems.length === 0) {
       return { items: [], failed: false };
     }
@@ -216,7 +222,7 @@ export class AdoWorkItemProvider implements WorkCenterProvider {
       });
 
       if (!detailResponse.ok) {
-        console.error(`WorkCenter ADO: failed to fetch work item details: ${detailResponse.status}`);
+        logger.error(`Failed to fetch work item details: ${detailResponse.status}`);
         batchFailed = true;
         continue;
       }
@@ -225,10 +231,11 @@ export class AdoWorkItemProvider implements WorkCenterProvider {
       try {
         detailData = (await detailResponse.json()) as { value: AdoWorkItem[] };
       } catch (err) {
-        console.error('WorkCenter ADO: failed to parse work item detail response:', err);
+        logger.error('Failed to parse work item detail response:', err);
         batchFailed = true;
         continue;
       }
+      logger.debug(`Fetched ${detailData.value.length} work item details in batch`);
       allWorkItems.push(...detailData.value);
     }
 

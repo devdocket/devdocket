@@ -1,4 +1,5 @@
 import * as vscode from 'vscode';
+import { logger } from './logger';
 
 // Re-declared to match core API contract — separate extension cannot import core types directly
 interface Disposable {
@@ -71,7 +72,7 @@ export class AdoPrReviewProvider implements WorkCenterProvider {
     const clampedInterval = Math.max(interval, 60);
     this.refreshTimer = setInterval(() => {
       this.refreshInBackground().catch((err) => {
-        console.error('WorkCenter ADO: PR review refresh failed:', err);
+        logger.error('PR review refresh failed:', err);
       });
     }, clampedInterval * 1000);
   }
@@ -90,6 +91,7 @@ export class AdoPrReviewProvider implements WorkCenterProvider {
 
     this._isRefreshing = true;
     try {
+      logger.info('Fetching ADO PR reviews...');
       const session = await vscode.authentication.getSession('microsoft', [ADO_AUTH_SCOPE], {
         createIfNone: true,
       }).catch(() => null);
@@ -100,7 +102,7 @@ export class AdoPrReviewProvider implements WorkCenterProvider {
 
       await this.fetchAndPublishPrs(session.accessToken, true, session.account.id);
     } catch (err) {
-      console.error('WorkCenter ADO: failed to fetch PR reviews:', err);
+      logger.error('Failed to fetch PR reviews:', err);
     } finally {
       this._isRefreshing = false;
     }
@@ -113,6 +115,7 @@ export class AdoPrReviewProvider implements WorkCenterProvider {
 
     this._isRefreshing = true;
     try {
+      logger.info('Fetching ADO PR reviews...');
       const session = await vscode.authentication.getSession('microsoft', [ADO_AUTH_SCOPE], {
         createIfNone: false,
       }).catch(() => null);
@@ -123,7 +126,7 @@ export class AdoPrReviewProvider implements WorkCenterProvider {
 
       await this.fetchAndPublishPrs(session.accessToken, false, session.account.id);
     } catch (err) {
-      console.error('WorkCenter ADO: failed to fetch PR reviews:', err);
+      logger.error('Failed to fetch PR reviews:', err);
     } finally {
       this._isRefreshing = false;
     }
@@ -135,9 +138,8 @@ export class AdoPrReviewProvider implements WorkCenterProvider {
       const message = 'Failed to determine Azure DevOps user identity';
       if (isUserTriggered) {
         vscode.window.showWarningMessage(`WorkCenter ADO: ${message}`);
-      } else {
-        console.warn(`WorkCenter ADO: ${message}`);
       }
+      logger.warn(message);
       this._onDidDiscoverItems.fire([]);
       return;
     }
@@ -163,6 +165,7 @@ export class AdoPrReviewProvider implements WorkCenterProvider {
     });
 
     this._onDidDiscoverItems.fire(allItems);
+    logger.info(`Discovered ${allItems.length} ADO PR reviews`);
 
     if (failures.length > 0) {
       const message = failures.length === 1
@@ -170,9 +173,8 @@ export class AdoPrReviewProvider implements WorkCenterProvider {
         : `Failed to fetch PR reviews from ${failures.length} projects`;
       if (isUserTriggered) {
         vscode.window.showWarningMessage(`WorkCenter ADO: ${message}`);
-      } else {
-        console.warn(`WorkCenter ADO: ${message}`);
       }
+      logger.warn(message);
     }
   }
 
@@ -190,14 +192,14 @@ export class AdoPrReviewProvider implements WorkCenterProvider {
         },
       );
     } catch (err) {
-      console.error('WorkCenter ADO: network error fetching connection data:', err);
+      logger.error('Network error fetching connection data:', err);
       this._cachedUserId = undefined;
       this._cachedSessionAccountId = undefined;
       return undefined;
     }
 
     if (!response.ok) {
-      console.error(`WorkCenter ADO: failed to fetch connection data: ${response.status}`);
+      logger.error(`Failed to fetch connection data: ${response.status}`);
       this._cachedUserId = undefined;
       this._cachedSessionAccountId = undefined;
       return undefined;
@@ -207,7 +209,7 @@ export class AdoPrReviewProvider implements WorkCenterProvider {
     try {
       data = (await response.json()) as ConnectionData;
     } catch (err) {
-      console.error('WorkCenter ADO: failed to parse connection data response:', err);
+      logger.error('Failed to parse connection data response:', err);
       this._cachedUserId = undefined;
       this._cachedSessionAccountId = undefined;
       return undefined;
@@ -221,6 +223,7 @@ export class AdoPrReviewProvider implements WorkCenterProvider {
 
     this._cachedUserId = data.authenticatedUser.id;
     this._cachedSessionAccountId = sessionAccountId;
+    logger.debug(`Resolved user ID: ${this._cachedUserId}`);
     return this._cachedUserId;
   }
 
@@ -229,6 +232,7 @@ export class AdoPrReviewProvider implements WorkCenterProvider {
     project: string,
     reviewerId: string,
   ): Promise<{ items: DiscoveredItem[]; failed: boolean }> {
+    logger.debug(`Fetching PRs for project: ${project || this.org}`);
     const projectPath = project ? `/${encodeURIComponent(project)}` : '';
     const url = `https://dev.azure.com/${encodeURIComponent(this.org)}${projectPath}/_apis/git/pullrequests?searchCriteria.reviewerId=${encodeURIComponent(reviewerId)}&searchCriteria.status=active&api-version=7.1`;
 
@@ -239,7 +243,8 @@ export class AdoPrReviewProvider implements WorkCenterProvider {
     });
 
     if (!response.ok) {
-      console.error(`WorkCenter ADO: failed to fetch PRs for project "${project}": ${response.status}`);
+      logger.warn(`Failed to fetch PRs for project: ${project || this.org}`);
+      logger.error(`PR fetch failed for project "${project}": ${response.status}`);
       return { items: [], failed: true };
     }
 
@@ -247,7 +252,7 @@ export class AdoPrReviewProvider implements WorkCenterProvider {
     try {
       prData = (await response.json()) as { value: AdoPullRequest[] };
     } catch (err) {
-      console.error(`WorkCenter ADO: failed to parse PR response for project "${project}":`, err);
+      logger.error(`Failed to parse PR response for project "${project}":`, err);
       return { items: [], failed: true };
     }
     const items: DiscoveredItem[] = prData.value.map((pr) => {

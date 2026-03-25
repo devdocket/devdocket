@@ -188,57 +188,41 @@ describe('AdoWorkItemProvider', () => {
   it('handles WIQL query failure gracefully', async () => {
     mockFetch.mockResolvedValueOnce({ ok: false, status: 401 });
 
-    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
     const listener = vi.fn();
     provider.onDidDiscoverItems(listener);
     await provider.refresh();
 
     // Should still fire with empty items
     expect(listener).toHaveBeenCalledWith([]);
-
-    consoleError.mockRestore();
   });
 
   it('shows warning on failure for user-triggered refresh', async () => {
     mockFetch.mockResolvedValueOnce({ ok: false, status: 500 });
 
-    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
     await provider.refresh();
 
     expect(window.showWarningMessage).toHaveBeenCalledWith(
       expect.stringContaining('Failed to fetch work items'),
     );
-
-    consoleError.mockRestore();
   });
 
   it('does not show warning for background refresh failure', async () => {
     mockFetch.mockResolvedValueOnce({ ok: false, status: 500 });
 
-    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
-    const consoleWarn = vi.spyOn(console, 'warn').mockImplementation(() => {});
-
     const refreshBg = (provider as any).refreshInBackground.bind(provider);
     await refreshBg();
 
     expect(window.showWarningMessage).not.toHaveBeenCalled();
-    expect(consoleWarn).toHaveBeenCalled();
-
-    consoleError.mockRestore();
-    consoleWarn.mockRestore();
   });
 
   it('handles authentication failure gracefully', async () => {
     vi.mocked(authentication.getSession).mockRejectedValue(new Error('Auth failed'));
 
-    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
     const listener = vi.fn();
     provider.onDidDiscoverItems(listener);
 
     await expect(provider.refresh()).resolves.toBeUndefined();
     expect(listener).not.toHaveBeenCalled();
-
-    consoleError.mockRestore();
   });
 
   it('startPeriodicRefresh schedules a repeating timer', () => {

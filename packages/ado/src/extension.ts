@@ -1,11 +1,35 @@
 import * as vscode from 'vscode';
 import { AdoWorkItemProvider } from './adoWorkItemProvider';
 import { AdoPrReviewProvider } from './adoPrReviewProvider';
+import { initLogger, setLogLevel, logger, LogLevel } from './logger';
 
 export async function activate(_context: vscode.ExtensionContext): Promise<void> {
+  const outputChannel = vscode.window.createOutputChannel('WorkCenter ADO');
+  _context.subscriptions.push(outputChannel);
+
+  const logLevelConfig = vscode.workspace.getConfiguration('workcenter').get<string>('logLevel', 'info');
+  const logLevelMap: Record<string, LogLevel> = {
+    debug: LogLevel.Debug,
+    info: LogLevel.Info,
+    warn: LogLevel.Warn,
+    error: LogLevel.Error,
+  };
+  initLogger(outputChannel, logLevelMap[logLevelConfig] ?? LogLevel.Info);
+
+  _context.subscriptions.push(
+    vscode.workspace.onDidChangeConfiguration(e => {
+      if (e.affectsConfiguration('workcenter.logLevel')) {
+        const newLevel = vscode.workspace.getConfiguration('workcenter').get<string>('logLevel', 'info');
+        setLogLevel(logLevelMap[newLevel] ?? LogLevel.Info);
+      }
+    }),
+  );
+
+  logger.info('WorkCenter ADO activating...');
+
   const coreExtension = vscode.extensions.getExtension('mthalman.workcenter');
   if (!coreExtension) {
-    console.error('WorkCenter ADO: core extension not found');
+    logger.error('Core extension not found');
     return;
   }
 
@@ -16,13 +40,13 @@ export async function activate(_context: vscode.ExtensionContext): Promise<void>
       : await coreExtension.activate();
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : String(err);
-    console.error(`WorkCenter ADO: Failed to activate core extension — ${message}`);
+    logger.error(`Failed to activate core extension — ${message}`);
     vscode.window.showErrorMessage(`WorkCenter ADO: Failed to activate core extension — ${message}`);
     return;
   }
 
   if (!api || typeof api.registerProvider !== 'function') {
-    console.error('WorkCenter ADO: core extension API not available');
+    logger.error('Core extension API not available');
     return;
   }
 
@@ -49,6 +73,8 @@ export async function activate(_context: vscode.ExtensionContext): Promise<void>
     if (!org) {
       return;
     }
+
+    logger.debug(`Configuration: org=${org}, projects=[${projects.join(', ')}]`);
 
     const intervalSeconds = config.get<number>('refreshIntervalSeconds', 300);
 
@@ -83,6 +109,8 @@ export async function activate(_context: vscode.ExtensionContext): Promise<void>
       },
     },
   );
+
+  logger.info('WorkCenter ADO activated, registered 2 providers');
 }
 
 export function deactivate(): void {

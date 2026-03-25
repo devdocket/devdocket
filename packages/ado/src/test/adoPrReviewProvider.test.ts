@@ -262,14 +262,11 @@ describe('AdoPrReviewProvider', () => {
   it('handles connection data failure gracefully', async () => {
     mockFetch.mockResolvedValueOnce({ ok: false, status: 401 });
 
-    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
     await provider.refresh();
 
     expect(window.showWarningMessage).toHaveBeenCalledWith(
       expect.stringContaining('Failed to determine Azure DevOps user identity'),
     );
-
-    consoleError.mockRestore();
   });
 
   it('handles PR fetch failure gracefully', async () => {
@@ -280,7 +277,6 @@ describe('AdoPrReviewProvider', () => {
       })
       .mockResolvedValueOnce({ ok: false, status: 500 });
 
-    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
     const listener = vi.fn();
     provider.onDidDiscoverItems(listener);
     await provider.refresh();
@@ -289,8 +285,6 @@ describe('AdoPrReviewProvider', () => {
     expect(window.showWarningMessage).toHaveBeenCalledWith(
       expect.stringContaining('Failed to fetch PR reviews'),
     );
-
-    consoleError.mockRestore();
   });
 
   it('does not show warning for background refresh failure', async () => {
@@ -301,30 +295,20 @@ describe('AdoPrReviewProvider', () => {
       })
       .mockResolvedValueOnce({ ok: false, status: 500 });
 
-    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
-    const consoleWarn = vi.spyOn(console, 'warn').mockImplementation(() => {});
-
     const refreshBg = (provider as any).refreshInBackground.bind(provider);
     await refreshBg();
 
     expect(window.showWarningMessage).not.toHaveBeenCalled();
-    expect(consoleWarn).toHaveBeenCalled();
-
-    consoleError.mockRestore();
-    consoleWarn.mockRestore();
   });
 
   it('handles fetch error gracefully', async () => {
     mockFetch.mockRejectedValueOnce(new Error('Network error'));
 
-    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
     const listener = vi.fn();
     provider.onDidDiscoverItems(listener);
 
     await expect(provider.refresh()).resolves.toBeUndefined();
     expect(listener).toHaveBeenCalledWith([]);
-
-    consoleError.mockRestore();
   });
 
   it('uses org-level PR URL when no projects are configured', async () => {
