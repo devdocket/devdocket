@@ -33,6 +33,9 @@ function createMockStateStore() {
     loadAll: vi.fn(async () => []),
     onDidChange: vi.fn(() => ({ dispose: vi.fn() })),
     dispose: vi.fn(),
+    _set: (providerId: string, externalId: string, state: string) => {
+      cache.set(`${providerId}::${externalId}`, state);
+    },
   };
 }
 
@@ -282,5 +285,64 @@ describe('ProviderRegistry', () => {
 
     expect(createSpy).not.toHaveBeenCalled();
     createSpy.mockRestore();
+  });
+
+  describe('resurfaceDismissed', () => {
+    function createResurfaceProvider(id: string): WorkCenterProvider & { fireItems: (items: DiscoveredItem[]) => void } {
+      const emitter = new EventEmitter<DiscoveredItem[]>();
+      return {
+        id,
+        label: `Provider ${id}`,
+        resurfaceDismissed: true,
+        onDidDiscoverItems: emitter.event,
+        refresh: vi.fn(async () => {}),
+        fireItems: (items) => emitter.fire(items),
+      };
+    }
+
+    it('resets dismissed items to unseen when resurfaceDismissed is true', async () => {
+      const provider = createResurfaceProvider('pr-reviews');
+      registry.register(provider);
+      stateStore._set('pr-reviews', 'pr-1', 'dismissed');
+
+      provider.fireItems([{ externalId: 'pr-1', title: 'Review PR' }]);
+      await vi.waitFor(() => {
+        expect(stateStore.setStates).toHaveBeenCalledWith(
+          expect.arrayContaining([
+            expect.objectContaining({ providerId: 'pr-reviews', externalId: 'pr-1', state: 'unseen' }),
+          ]),
+        );
+      });
+    });
+
+    it('does NOT reset dismissed items when resurfaceDismissed is false', async () => {
+      const provider = createMockProvider('issues');
+      registry.register(provider);
+      stateStore._set('issues', 'issue-1', 'dismissed');
+
+      provider.fireItems([{ externalId: 'issue-1', title: 'Old issue' }]);
+      // Give time for async handler
+      await new Promise((r) => setTimeout(r, 50));
+      // setStates should not have been called with this item
+      const calls = stateStore.setStates.mock.calls;
+      for (const call of calls) {
+        const items = call[0] as Array<{ externalId: string }>;
+        expect(items.find((i) => i.externalId === 'issue-1')).toBeUndefined();
+      }
+    });
+
+    it('does NOT reset accepted items even when resurfaceDismissed is true', async () => {
+      const provider = createResurfaceProvider('pr-reviews');
+      registry.register(provider);
+      stateStore._set('pr-reviews', 'pr-1', 'accepted');
+
+      provider.fireItems([{ externalId: 'pr-1', title: 'Accepted PR' }]);
+      await new Promise((r) => setTimeout(r, 50));
+      const calls = stateStore.setStates.mock.calls;
+      for (const call of calls) {
+        const items = call[0] as Array<{ externalId: string }>;
+        expect(items.find((i) => i.externalId === 'pr-1')).toBeUndefined();
+      }
+    });
   });
 });
