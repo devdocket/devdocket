@@ -126,8 +126,8 @@ WorkCenter persists two JSON files in VS Code's `globalStorageUri`:
 
 ## Documentation
 
-- [UX Guide](docs/ux-guide.md) — The four views, data flow, work item states, available actions, and the editor panel.
-- [Extension API](docs/extension-api.md) — Provider and action contracts, interfaces, and example implementations.
+- [UX Guide](docs/ux-guide.md) — The four views, data flow, work item states, available actions, and the editor panel. *(Added by [PR #28](https://github.com/mthalman/workcenter/pull/28).)*
+- [Extension API](docs/extension-api.md) — Provider and action contracts, interfaces, and example implementations. *(Added by [PR #29](https://github.com/mthalman/workcenter/pull/29).)*
 
 ## Contributing
 
