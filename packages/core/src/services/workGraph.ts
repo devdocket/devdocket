@@ -99,6 +99,16 @@ export class WorkGraph {
     const siblings = this.getItemsByState(item.state)
       .sort((a, b) => (a.sortOrder ?? Infinity) - (b.sortOrder ?? Infinity));
 
+    // Normalize any missing sortOrder values so swaps are consistent
+    for (let i = 0; i < siblings.length; i++) {
+      if (siblings[i].sortOrder === undefined) {
+        const normalized = { ...siblings[i], sortOrder: i, updatedAt: Date.now() };
+        siblings[i] = normalized;
+        this.items.set(normalized.id, normalized);
+        await this.store.save(normalized);
+      }
+    }
+
     const index = siblings.findIndex((s) => s.id === id);
     if (index === -1) {
       return;
@@ -109,13 +119,11 @@ export class WorkGraph {
       return;
     }
 
-    // Only swap the two items' sortOrders - don't touch others
-    const itemOrder = item.sortOrder ?? index;
+    const currentItem = siblings[index];
     const swapItem = siblings[swapIndex];
-    const swapOrder = swapItem.sortOrder ?? swapIndex;
 
-    const updatedItem = { ...item, sortOrder: swapOrder, updatedAt: Date.now() };
-    const updatedSwap = { ...swapItem, sortOrder: itemOrder, updatedAt: Date.now() };
+    const updatedItem = { ...currentItem, sortOrder: swapItem.sortOrder, updatedAt: Date.now() };
+    const updatedSwap = { ...swapItem, sortOrder: currentItem.sortOrder, updatedAt: Date.now() };
 
     await this.store.save(updatedItem);
     await this.store.save(updatedSwap);
