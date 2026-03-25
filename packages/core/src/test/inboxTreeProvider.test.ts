@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { EventEmitter, TreeItemCollapsibleState, ThemeIcon } from 'vscode';
+import { EventEmitter, TreeItemCollapsibleState } from 'vscode';
 import { DiscoveredItem } from '../api/types';
 import { InboxTreeProvider, InboxProviderNode, InboxGroupNode, InboxItem } from '../views/inboxTreeProvider';
 
