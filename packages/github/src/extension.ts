@@ -1,5 +1,6 @@
 import * as vscode from 'vscode';
 import { GitHubIssueProvider } from './githubProvider';
+import { GitHubPrReviewProvider } from './githubPrReviewProvider';
 import { StartWorkAction } from './startWorkAction';
 
 export async function activate(_context: vscode.ExtensionContext): Promise<void> {
@@ -35,14 +36,21 @@ export async function activate(_context: vscode.ExtensionContext): Promise<void>
 
   const providerDisposable = api.registerProvider(provider);
 
+  // Register the GitHub PR review provider
+  const prReviewProvider = new GitHubPrReviewProvider();
+  prReviewProvider.startPeriodicRefresh(intervalSeconds);
+  const prReviewDisposable = api.registerProvider(prReviewProvider);
+
   // Register the Start Work action
   const startWorkAction = new StartWorkAction();
   const actionDisposable = api.registerAction(startWorkAction);
 
   _context.subscriptions.push(
     providerDisposable,
+    prReviewDisposable,
     actionDisposable,
     { dispose: () => provider.dispose() },
+    { dispose: () => prReviewProvider.dispose() },
   );
 }
 
