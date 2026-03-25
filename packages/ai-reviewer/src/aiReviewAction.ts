@@ -1,24 +1,5 @@
 import * as vscode from 'vscode';
-
-// Re-declared to match core API contract — separate extension cannot import core types directly
-interface WorkItem {
-  id: string;
-  title: string;
-  description?: string;
-  state: 'New' | 'Triaged' | 'InProgress' | 'Blocked' | 'WaitingOn' | 'Done' | 'Archived';
-  providerId?: string;
-  externalId?: string;
-  url?: string;
-  createdAt: number;
-  updatedAt: number;
-}
-
-interface WorkCenterAction {
-  readonly id: string;
-  readonly label: string;
-  canRun(item: WorkItem): boolean;
-  run(item: WorkItem): Promise<void>;
-}
+import type { WorkItem, WorkCenterAction } from './types';
 
 export class AiReviewAction implements WorkCenterAction {
   readonly id = 'ai-reviewer.review';

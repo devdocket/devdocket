@@ -1,39 +1,13 @@
 import * as vscode from 'vscode';
 import { AiReviewAction } from './aiReviewAction';
-
-// Re-declared to match core API contract — separate extension cannot import core types directly
-interface Disposable {
-  dispose(): void;
-}
-
-interface WorkItem {
-  id: string;
-  title: string;
-  description?: string;
-  state: 'New' | 'Triaged' | 'InProgress' | 'Blocked' | 'WaitingOn' | 'Done' | 'Archived';
-  providerId?: string;
-  externalId?: string;
-  url?: string;
-  createdAt: number;
-  updatedAt: number;
-}
-
-interface WorkCenterAction {
-  readonly id: string;
-  readonly label: string;
-  canRun(item: WorkItem): boolean;
-  run(item: WorkItem): Promise<void>;
-}
-
-interface WorkCenterApi {
-  registerProvider(provider: unknown): Disposable;
-  registerAction(action: WorkCenterAction): Disposable;
-}
+import type { WorkCenterApi } from './types';
 
 export async function activate(context: vscode.ExtensionContext): Promise<void> {
   const coreExtension = vscode.extensions.getExtension<WorkCenterApi>('mthalman.workcenter');
   if (!coreExtension) {
-    console.error('WorkCenter AI Reviewer: core extension not found');
+    const msg = 'WorkCenter AI Reviewer: core extension not found. Install the WorkCenter extension.';
+    console.error(msg);
+    vscode.window.showErrorMessage(msg);
     return;
   }
 
@@ -50,7 +24,9 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   }
 
   if (!api || typeof api.registerAction !== 'function') {
-    console.error('WorkCenter AI Reviewer: core extension API not available');
+    const msg = 'WorkCenter AI Reviewer: core extension API not available';
+    console.error(msg);
+    vscode.window.showErrorMessage(msg);
     return;
   }
 
