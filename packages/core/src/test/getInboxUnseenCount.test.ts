@@ -99,6 +99,18 @@ describe('getInboxUnseenCount', () => {
     expect(getInboxUnseenCount(registry, stateStore as any)).toBe(0);
   });
 
+  it('excludes read items', () => {
+    const provider = createMockProvider('gh');
+    registry.register(provider);
+    provider.fireItems([
+      { externalId: '1', title: 'Issue 1' },
+      { externalId: '2', title: 'Issue 2' },
+    ]);
+    stateStore._set('gh', '1', 'read');
+
+    expect(getInboxUnseenCount(registry, stateStore as any)).toBe(1);
+  });
+
   it('counts across multiple providers', () => {
     const p1 = createMockProvider('gh');
     const p2 = createMockProvider('jira');

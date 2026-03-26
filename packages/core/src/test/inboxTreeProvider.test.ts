@@ -86,6 +86,15 @@ describe('InboxTreeProvider', () => {
       expect(provider.getChildren()).toEqual([]);
     });
 
+    it('should show provider when items are read but not yet accepted/dismissed', () => {
+      registry._setItems('gh', [{ externalId: 'issue-1', title: 'Read item' }]);
+      stateStore._set('gh', 'issue-1', 'read');
+
+      const children = provider.getChildren();
+      expect(children).toHaveLength(1);
+      expect(children[0].kind).toBe('provider');
+    });
+
     it('should show multiple provider nodes', () => {
       registry._setItems('gh', [{ externalId: '1', title: 'GH item' }]);
       registry._setItems('jira', [{ externalId: '1', title: 'Jira item' }]);
@@ -142,6 +151,20 @@ describe('InboxTreeProvider', () => {
       const items = provider.getChildren(providerNode('gh'));
       expect(items).toHaveLength(2);
       expect(items.map((i) => (i as InboxItem).title)).toEqual(['No state', 'Unseen']);
+    });
+
+    it('should show read items in inbox', () => {
+      registry._setItems('gh', [
+        { externalId: '1', title: 'Unseen' },
+        { externalId: '2', title: 'Read' },
+        { externalId: '3', title: 'Accepted' },
+      ]);
+      stateStore._set('gh', '2', 'read');
+      stateStore._set('gh', '3', 'accepted');
+
+      const items = provider.getChildren(providerNode('gh'));
+      expect(items).toHaveLength(2);
+      expect(items.map((i) => (i as InboxItem).title)).toEqual(['Read', 'Unseen']);
     });
   });
 
@@ -264,6 +287,14 @@ describe('InboxTreeProvider', () => {
       expect((treeItem.iconPath as any).id).toBe('circle-outline');
     });
 
+    it('should render item with circle-outline icon when state is read in store', () => {
+      stateStore._set('gh', '1', 'read');
+      const item: InboxItem = { kind: 'item', providerId: 'gh', externalId: '1', title: 'Bug' };
+      const treeItem = provider.getTreeItem(item);
+
+      expect((treeItem.iconPath as any).id).toBe('circle-outline');
+    });
+
     it('should render group node with folder icon and unseen count', () => {
       registry._setItems('gh', [
         { externalId: '1', title: 'A', group: 'my-repo' },
@@ -298,6 +329,22 @@ describe('InboxTreeProvider', () => {
     it('should return false if item is already seen', () => {
       provider.markSeen('gh', '1');
       expect(provider.markSeen('gh', '1')).toBe(false);
+    });
+
+    it('should call stateStore.setState with read state on first mark', () => {
+      provider.markSeen('gh', '1');
+      expect(stateStore.setState).toHaveBeenCalledWith('gh', '1', 'read');
+    });
+
+    it('should return false if item is already read in the store', () => {
+      stateStore._set('gh', '1', 'read');
+      expect(provider.markSeen('gh', '1')).toBe(false);
+    });
+
+    it('should not call stateStore.setState when item is already read in store', () => {
+      stateStore._set('gh', '1', 'read');
+      provider.markSeen('gh', '1');
+      expect(stateStore.setState).not.toHaveBeenCalled();
     });
   });
 
@@ -374,11 +421,13 @@ describe('InboxTreeProvider', () => {
       registry._setItems('gh', []);
       registry._fire();
 
-      // Re-add item — should appear as unseen (circle-filled icon)
+      // Re-add item — read state is persisted to disk, so the item remains read (circle-outline)
+      // even after being temporarily removed. This differs from pre-persistence behavior where
+      // the in-memory seenItems set was pruned and the item would reappear as unseen (circle-filled).
       registry._setItems('gh', [{ externalId: '1', title: 'Bug' }]);
       const item: InboxItem = { kind: 'item', providerId: 'gh', externalId: '1', title: 'Bug' };
       expect(provider.getTreeItem(item).label).toBe('Bug');
-      expect((provider.getTreeItem(item).iconPath as any).id).toBe('circle-filled');
+      expect((provider.getTreeItem(item).iconPath as any).id).toBe('circle-outline');
     });
 
     it('should refresh when stateStore fires change event', () => {

@@ -146,7 +146,7 @@
         "command": "workcenter.acceptFromInbox",
         "title": "Accept to Queue",
         "category": "WorkCenter",
-        "icon": "$(arrow-down)"
+        "icon": "$(arrow-right)"
       },
       {
         "command": "workcenter.dismissFromInbox",

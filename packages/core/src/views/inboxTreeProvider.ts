@@ -2,6 +2,7 @@ import * as vscode from 'vscode';
 import { DiscoveredItem } from '../api/types';
 import { ProviderRegistry } from '../services/providerRegistry';
 import { DiscoveredStateStore } from '../storage/discoveredStateStore';
+import { logger } from '../services/logger';
 
 export interface InboxProviderNode {
   kind: 'provider';
@@ -55,7 +56,7 @@ export class InboxTreeProvider implements vscode.TreeDataProvider<InboxElement> 
     for (const [providerId, items] of this.providerRegistry.getAllDiscoveredItems()) {
       for (const item of items) {
         const state = this.stateStore.getState(providerId, item.externalId);
-        if (state === undefined || state === 'unseen') {
+        if (state === undefined || state === 'unseen' || state === 'read') {
           currentKeys.add(`${providerId}::${item.externalId}`);
         }
       }
@@ -71,11 +72,20 @@ export class InboxTreeProvider implements vscode.TreeDataProvider<InboxElement> 
 
   markSeen(providerId: string, externalId: string): boolean {
     const key = `${providerId}::${externalId}`;
-    if (!this.seenItems.has(key)) {
+    const alreadySeen = this.seenItems.has(key) || this.stateStore.getState(providerId, externalId) === 'read';
+    if (!alreadySeen) {
       this.seenItems.add(key);
+      this.stateStore.setState(providerId, externalId, 'read').catch((err: unknown) => {
+        logger.error(`Failed to persist read state for ${providerId}/${externalId}: ${String(err)}`);
+      });
       return true;
     }
     return false;
+  }
+
+  private isItemSeen(providerId: string, externalId: string): boolean {
+    const key = `${providerId}::${externalId}`;
+    return this.seenItems.has(key) || this.stateStore.getState(providerId, externalId) === 'read';
   }
 
   getTreeItem(element: InboxElement): vscode.TreeItem {
@@ -98,8 +108,7 @@ export class InboxTreeProvider implements vscode.TreeDataProvider<InboxElement> 
       return treeItem;
     }
 
-    const key = `${element.providerId}::${element.externalId}`;
-    const isSeen = this.seenItems.has(key);
+    const isSeen = this.isItemSeen(element.providerId, element.externalId);
 
     const treeItem = new vscode.TreeItem(element.title, vscode.TreeItemCollapsibleState.None);
     treeItem.id = `inbox::item::${element.providerId}::${element.externalId}`;
@@ -143,7 +152,7 @@ export class InboxTreeProvider implements vscode.TreeDataProvider<InboxElement> 
       const result: InboxProviderNode[] = [];
       const allItems = this.providerRegistry.getAllDiscoveredItems();
       for (const [providerId] of allItems) {
-        if (this.getUnseenCount(providerId) > 0) {
+        if (this.getInboxItemCount(providerId) > 0) {
           result.push({
             kind: 'provider',
             providerId,
@@ -167,15 +176,19 @@ export class InboxTreeProvider implements vscode.TreeDataProvider<InboxElement> 
 
   private getProviderChildren(providerId: string): (InboxGroupNode | InboxItem)[] {
     const items = this.providerRegistry.getDiscoveredItems(providerId);
-    const groupCounts = new Map<string, number>();
+    const groupInfo = new Map<string, { unseenCount: number }>();
     const ungrouped: typeof items = [];
 
     for (const item of items) {
       const state = this.stateStore.getState(providerId, item.externalId);
-      if (state !== undefined && state !== 'unseen') { continue; }
+      if (state !== undefined && state !== 'unseen' && state !== 'read') { continue; }
 
       if (item.group) {
-        groupCounts.set(item.group, (groupCounts.get(item.group) ?? 0) + 1);
+        const info = groupInfo.get(item.group) ?? { unseenCount: 0 };
+        if (state === undefined || state === 'unseen') {
+          info.unseenCount++;
+        }
+        groupInfo.set(item.group, info);
       } else {
         ungrouped.push(item);
       }
@@ -183,8 +196,8 @@ export class InboxTreeProvider implements vscode.TreeDataProvider<InboxElement> 
 
     const result: (InboxGroupNode | InboxItem)[] = [];
 
-    for (const [groupName, unseenCount] of groupCounts) {
-      result.push({ kind: 'group', providerId, groupName, unseenCount });
+    for (const [groupName, info] of groupInfo) {
+      result.push({ kind: 'group', providerId, groupName, unseenCount: info.unseenCount });
     }
 
     for (const item of ungrouped) {
@@ -204,7 +217,7 @@ export class InboxTreeProvider implements vscode.TreeDataProvider<InboxElement> 
     for (const item of items) {
       if (item.group !== groupName) { continue; }
       const state = this.stateStore.getState(providerId, item.externalId);
-      if (state !== undefined && state !== 'unseen') { continue; }
+      if (state !== undefined && state !== 'unseen' && state !== 'read') { continue; }
       result.push(this.toItemNode(providerId, item));
     }
     return result.sort((a, b) => a.title.localeCompare(b.title));
@@ -236,6 +249,14 @@ export class InboxTreeProvider implements vscode.TreeDataProvider<InboxElement> 
     return items.filter((item) => {
       const state = this.stateStore.getState(providerId, item.externalId);
       return state === undefined || state === 'unseen';
+    }).length;
+  }
+
+  private getInboxItemCount(providerId: string): number {
+    const items = this.providerRegistry.getDiscoveredItems(providerId);
+    return items.filter((item) => {
+      const state = this.stateStore.getState(providerId, item.externalId);
+      return state === undefined || state === 'unseen' || state === 'read';
     }).length;
   }
 

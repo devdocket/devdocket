@@ -3,7 +3,7 @@ import * as fs from 'fs/promises';
 import * as path from 'path';
 import { logger } from '../services/logger';
 
-export type InboxState = 'unseen' | 'accepted' | 'dismissed';
+export type InboxState = 'unseen' | 'read' | 'accepted' | 'dismissed';
 
 export interface DiscoveredStateRecord {
   providerId: string;
