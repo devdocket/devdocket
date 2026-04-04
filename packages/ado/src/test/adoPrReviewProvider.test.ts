@@ -81,7 +81,7 @@ describe('AdoPrReviewProvider', () => {
 
     // First call: connection data to get user ID
     expect(mockFetch).toHaveBeenCalledWith(
-      'https://dev.azure.com/myorg/_apis/connectiondata?api-version=7.1',
+      'https://dev.azure.com/myorg/_apis/connectiondata',
       expect.objectContaining({
         headers: expect.objectContaining({
           Authorization: 'Bearer test-token',
@@ -260,7 +260,7 @@ describe('AdoPrReviewProvider', () => {
   });
 
   it('handles connection data failure gracefully', async () => {
-    mockFetch.mockResolvedValueOnce({ ok: false, status: 401 });
+    mockFetch.mockResolvedValueOnce({ ok: false, status: 401, text: async () => 'Unauthorized' });
 
     await provider.refresh();
 
