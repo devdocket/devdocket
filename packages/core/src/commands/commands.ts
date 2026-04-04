@@ -107,7 +107,7 @@ export function registerCommands(
         return;
       }
       await workGraph.createItem(
-        { title: formatItemTitle(item), description: item.description },
+        { title: formatItemTitle(item) },
         { providerId: item.providerId, externalId: item.externalId, url: item.url },
       );
       try {
@@ -143,7 +143,7 @@ export function registerCommands(
       }
       try {
         await workGraph.createItem(
-          { title: formatItemTitle(item), description: item.description },
+          { title: formatItemTitle(item) },
           { providerId: item.providerId, externalId: item.externalId, url: item.url },
         );
         await stateStore.setState(item.providerId, item.externalId, 'accepted');

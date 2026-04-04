@@ -13,6 +13,7 @@ import { SourcesTreeProvider } from './views/sourcesTreeProvider';
 import { HistoryTreeProvider } from './views/historyTreeProvider';
 import { registerCommands } from './commands/commands';
 import { initLogger, setLogLevel, logger, LogLevel } from './services/logger';
+import { getInboxUnseenCount } from './services/inboxBadge';
 
 export type { WorkCenterApi, WorkCenterProvider, WorkCenterAction, DiscoveredItem, Disposable } from './api/types';
 export { logger } from './services/logger';
@@ -89,6 +90,18 @@ export async function activate(context: vscode.ExtensionContext): Promise<WorkCe
   const inboxTreeView = vscode.window.createTreeView('workcenter.inbox', { treeDataProvider: inboxProvider });
   const sourcesTreeView = vscode.window.createTreeView('workcenter.sources', { treeDataProvider: sourcesProvider });
 
+  const inboxSelectionSub = inboxTreeView.onDidChangeSelection((e) => {
+    let changed = false;
+    for (const item of e.selection) {
+      if (item.kind === 'item') {
+        changed = inboxProvider.markSeen(item.providerId, item.externalId) || changed;
+      }
+    }
+    if (changed) {
+      inboxProvider.refresh();
+    }
+  });
+
   // View message state: empty by default, loading when providers are fetching
   const updateViewMessages = () => {
     if (providerRegistry.loading) {
@@ -118,11 +131,54 @@ export async function activate(context: vscode.ExtensionContext): Promise<WorkCe
   updateWorkViewMessages();
   const workGraphSub = workGraph.onDidChange(updateWorkViewMessages);
 
-  updateViewMessages();
+  let initialLoadComplete = false;
+  let wasLoading = false;
 
-  const providerRegSub = providerRegistry.onDidRegisterProvider(updateViewMessages);
-  const discoveredSub = providerRegistry.onDidChangeDiscoveredItems(updateViewMessages);
-  const stateStoreSub = stateStore.onDidChange(updateViewMessages);
+  const updateInboxBadge = () => {
+    const count = getInboxUnseenCount(providerRegistry, stateStore);
+    inboxTreeView.badge = count > 0 ? { value: count, tooltip: `${count} unseen item${count === 1 ? '' : 's'}` } : undefined;
+  };
+
+  // Coalesce UI updates so that when both onDidChangeDiscoveredItems and
+  // stateStore.onDidChange fire in the same microtask (e.g. during a discovery
+  // batch that calls setStates), we only run the full unseen-count scan once.
+  let uiUpdateScheduled = false;
+  const scheduleUiUpdate = () => {
+    if (uiUpdateScheduled) { return; }
+    uiUpdateScheduled = true;
+    queueMicrotask(() => {
+      uiUpdateScheduled = false;
+      updateViewMessages();
+      updateInboxBadge();
+    });
+  };
+
+  updateViewMessages();
+  updateInboxBadge();
+
+  const providerRegSub = providerRegistry.onDidRegisterProvider(scheduleUiUpdate);
+  const discoveredSub = providerRegistry.onDidChangeDiscoveredItems(() => {
+    scheduleUiUpdate();
+
+    // Mark initial load complete when loading transitions from true to false
+    if (!initialLoadComplete) {
+      if (wasLoading && !providerRegistry.loading) {
+        initialLoadComplete = true;
+      }
+      wasLoading = wasLoading || providerRegistry.loading;
+    }
+  });
+  const newItemsSub = providerRegistry.onDidAddNewUnseenItems((newCount) => {
+    if (!initialLoadComplete) { return; }
+    const config = vscode.workspace.getConfiguration('workcenter');
+    const showNotifications = config.get<boolean>('showInboxNotifications', true);
+    if (showNotifications && newCount > 0) {
+      vscode.window.showInformationMessage(
+        `WorkCenter: ${newCount} new item${newCount === 1 ? '' : 's'} in Inbox`
+      );
+    }
+  });
+  const stateStoreSub = stateStore.onDidChange(scheduleUiUpdate);
 
   context.subscriptions.push(
     inboxTreeView,
@@ -130,7 +186,9 @@ export async function activate(context: vscode.ExtensionContext): Promise<WorkCe
     focusTreeView,
     sourcesTreeView,
     historyTreeView,
+    inboxSelectionSub,
     discoveredSub,
+    newItemsSub,
     providerRegSub,
     stateStoreSub,
     workGraphSub,

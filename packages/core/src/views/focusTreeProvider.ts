@@ -25,9 +25,9 @@ export class FocusTreeProvider implements vscode.TreeDataProvider<WorkItem> {
 
     // contextValue controls which context menu items appear
     if (item.state === WorkItemState.Blocked || item.state === WorkItemState.WaitingOn) {
-      treeItem.contextValue = 'blocked';
+      treeItem.contextValue = item.url ? 'blocked.hasUrl' : 'blocked';
     } else {
-      treeItem.contextValue = 'active';
+      treeItem.contextValue = item.url ? 'active.hasUrl' : 'active';
     }
 
     return treeItem;
@@ -72,9 +72,9 @@ export class FocusTreeProvider implements vscode.TreeDataProvider<WorkItem> {
     md.appendMarkdown(`**Title:** `);
     md.appendText(item.title);
     md.appendMarkdown(`\n\n`);
-    if (item.description) {
-      md.appendMarkdown(`**Description:** `);
-      md.appendText(item.description);
+    if (item.notes) {
+      md.appendMarkdown(`**Notes:** `);
+      md.appendText(item.notes);
       md.appendMarkdown(`\n\n`);
     }
     md.appendMarkdown(`**State:** ${item.state}\n\n`);

@@ -73,6 +73,10 @@ Providers emit `DiscoveredItem[]` via events. Actions declare `canRun(item)` and
 
 All work should be based from the `dev` branch. Create feature branches from `dev` and PR back to `dev`.
 
+### Use merge commits, not rebase
+
+When resolving merge conflicts or syncing with `dev`, use `git merge origin/dev` instead of `git rebase`. This preserves commit history and avoids force-push issues.
+
 ### Storage writes are serialized
 
 Both `JsonTaskStore` and `DiscoveredStateStore` use a `writeQueue` (promise chain) to prevent concurrent writes from corrupting JSON files. Always follow this pattern for any new store.
@@ -87,7 +91,7 @@ Items in Inbox and Sources are read live from the provider's in-memory data. The
 
 ### PR workflow — use the `create-pr` skill
 
-When creating pull requests, **always invoke the `create-pr` skill** and follow its full multi-phase lifecycle. Do NOT hand-roll a simplified version. The skill enforces:
+When creating pull requests in an environment with [GitHub Copilot CLI](https://docs.github.com/en/copilot/github-copilot-in-the-cli), **always invoke the `create-pr` skill** and follow its full multi-phase lifecycle. The `create-pr`, `copilot-pr-review`, and `superpowers:code-reviewer` references below are Copilot CLI skills and agents — they are available automatically when using Copilot CLI in this repository. Do NOT hand-roll a simplified version. The skill enforces:
 
 - **Phase 1 (Local Loop):** Rebase on `dev`, run full test suite, dispatch `superpowers:code-reviewer` agent, fix findings, re-test, and repeat until tests pass AND review is clean.
 - **Phase 2 (Create PR):** Push branch and open PR via `gh pr create --base dev`.
@@ -99,8 +103,4 @@ Key rules:
 - **Use `superpowers:code-reviewer` agent** for code review, not a generic code-review agent.
 - When working on multiple issues in parallel, each issue goes through this full cycle independently in its own worktree.
 
-> **Note:** `create-pr`, `copilot-pr-review`, and `superpowers:code-reviewer` are organization- or platform-level skills and are **not defined in this repository**. If they are not available in your environment, follow this equivalent manual process:
->
-> 1. **Phase 1 (Local Loop):** Rebase on `dev`, run `npm run test`, request code review from a designated reviewer (or any available review tooling), address findings, re-test, and repeat until tests pass and review is clean.
-> 2. **Phase 2 (Create PR):** Push your branch and open a PR against `dev` (e.g., `gh pr create --base dev`).
-> 3. **Phase 3 (Remote Loop):** Monitor CI and PR comments, fix each comment (one commit per comment where practical), re-run local tests, and resolve any merge conflicts. Any code change re-triggers Phase 1.
+> **Without Copilot CLI:** Manually rebase on `dev`, run `npm run build && npm run test`, open a PR with `gh pr create --base dev`, and request review from `copilot-pull-request-reviewer`.
