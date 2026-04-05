@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { EventEmitter, TreeItemCollapsibleState, ThemeIcon } from 'vscode';
+import { EventEmitter, TreeItemCollapsibleState } from 'vscode';
 import { DiscoveredItem } from '../api/types';
-import { InboxTreeProvider, InboxProviderNode, InboxItem } from '../views/inboxTreeProvider';
+import { InboxTreeProvider, InboxProviderNode, InboxGroupNode, InboxItem } from '../views/inboxTreeProvider';
 
 function createMockStateStore() {
   const cache = new Map<string, string>();
@@ -115,7 +115,8 @@ describe('InboxTreeProvider', () => {
     it('should pass through group field from discovered item', () => {
       registry._setItems('gh', [{ externalId: 'issue-1', title: 'Bug fix', group: 'dotnet/runtime' }]);
 
-      const items = provider.getChildren(providerNode('gh'));
+      const groupNode: InboxGroupNode = { kind: 'group', providerId: 'gh', groupName: 'dotnet/runtime', unseenCount: 1 };
+      const items = provider.getChildren(groupNode);
       expect(items).toHaveLength(1);
       expect((items[0] as InboxItem).group).toBe('dotnet/runtime');
     });
@@ -144,6 +145,92 @@ describe('InboxTreeProvider', () => {
     });
   });
 
+  describe('group sub-grouping', () => {
+    it('should group items by their group field under provider', () => {
+      registry._setItems('gh', [
+        { externalId: '1', title: 'Issue A', group: 'repo-one' },
+        { externalId: '2', title: 'Issue B', group: 'repo-one' },
+        { externalId: '3', title: 'Issue C', group: 'repo-two' },
+      ]);
+
+      const children = provider.getChildren(providerNode('gh'));
+      expect(children).toHaveLength(2);
+      expect(children[0].kind).toBe('group');
+      expect((children[0] as InboxGroupNode).groupName).toBe('repo-one');
+      expect(children[1].kind).toBe('group');
+      expect((children[1] as InboxGroupNode).groupName).toBe('repo-two');
+    });
+
+    it('should return items under a group node', () => {
+      registry._setItems('gh', [
+        { externalId: '1', title: 'Issue A', group: 'repo-one' },
+        { externalId: '2', title: 'Issue B', group: 'repo-one' },
+        { externalId: '3', title: 'Issue C', group: 'repo-two' },
+      ]);
+
+      const groupNode: InboxGroupNode = { kind: 'group', providerId: 'gh', groupName: 'repo-one', unseenCount: 2 };
+      const items = provider.getChildren(groupNode);
+      expect(items).toHaveLength(2);
+      expect(items.map((i) => (i as InboxItem).title)).toEqual(['Issue A', 'Issue B']);
+    });
+
+    it('should show ungrouped items directly under provider alongside group nodes', () => {
+      registry._setItems('gh', [
+        { externalId: '1', title: 'Grouped', group: 'repo-one' },
+        { externalId: '2', title: 'Ungrouped' },
+      ]);
+
+      const children = provider.getChildren(providerNode('gh'));
+      expect(children).toHaveLength(2);
+      const kinds = children.map((c) => c.kind);
+      expect(kinds).toContain('group');
+      expect(kinds).toContain('item');
+    });
+
+    it('should sort groups and ungrouped items alphabetically', () => {
+      registry._setItems('gh', [
+        { externalId: '1', title: 'Zebra item' },
+        { externalId: '2', title: 'Issue', group: 'beta-repo' },
+        { externalId: '3', title: 'Issue', group: 'alpha-repo' },
+      ]);
+
+      const children = provider.getChildren(providerNode('gh'));
+      expect(children).toHaveLength(3);
+      expect(children[0].kind).toBe('group');
+      expect((children[0] as InboxGroupNode).groupName).toBe('alpha-repo');
+      expect(children[1].kind).toBe('group');
+      expect((children[1] as InboxGroupNode).groupName).toBe('beta-repo');
+      expect(children[2].kind).toBe('item');
+      expect((children[2] as InboxItem).title).toBe('Zebra item');
+    });
+
+    it('should filter out accepted items from groups', () => {
+      registry._setItems('gh', [
+        { externalId: '1', title: 'Unseen', group: 'repo' },
+        { externalId: '2', title: 'Accepted', group: 'repo' },
+      ]);
+      stateStore._set('gh', '2', 'accepted');
+
+      const groupNode: InboxGroupNode = { kind: 'group', providerId: 'gh', groupName: 'repo', unseenCount: 1 };
+      const items = provider.getChildren(groupNode);
+      expect(items).toHaveLength(1);
+      expect((items[0] as InboxItem).title).toBe('Unseen');
+    });
+
+    it('should not show group node when all its items are accepted/dismissed', () => {
+      registry._setItems('gh', [
+        { externalId: '1', title: 'Accepted', group: 'repo' },
+        { externalId: '2', title: 'Ungrouped' },
+      ]);
+      stateStore._set('gh', '1', 'accepted');
+
+      const children = provider.getChildren(providerNode('gh'));
+      expect(children).toHaveLength(1);
+      expect(children[0].kind).toBe('item');
+      expect((children[0] as InboxItem).title).toBe('Ungrouped');
+    });
+  });
+
   describe('getTreeItem', () => {
     it('should render provider node with plug icon and item count', () => {
       registry._setLabel('gh', 'GitHub Issues');
@@ -155,17 +242,41 @@ describe('InboxTreeProvider', () => {
       const treeItem = provider.getTreeItem(providerNode('gh'));
       expect(treeItem.label).toBe('GitHub Issues');
       expect(treeItem.description).toBe('2');
-      expect(treeItem.collapsibleState).toBe(TreeItemCollapsibleState.Expanded);
+      expect(treeItem.collapsibleState).toBe(TreeItemCollapsibleState.Collapsed);
       expect((treeItem.iconPath as any).id).toBe('plug');
     });
 
-    it('should render inbox item with mail icon', () => {
+    it('should render unseen inbox item with circle-filled icon', () => {
       const item: InboxItem = { kind: 'item', providerId: 'gh', externalId: '1', title: 'Bug' };
       const treeItem = provider.getTreeItem(item);
 
       expect(treeItem.label).toBe('Bug');
       expect(treeItem.collapsibleState).toBe(TreeItemCollapsibleState.None);
-      expect((treeItem.iconPath as any).id).toBe('mail');
+      expect((treeItem.iconPath as any).id).toBe('circle-filled');
+    });
+
+    it('should render seen inbox item with circle-outline icon', () => {
+      const item: InboxItem = { kind: 'item', providerId: 'gh', externalId: '1', title: 'Bug' };
+      provider.markSeen('gh', '1');
+      const treeItem = provider.getTreeItem(item);
+
+      expect(treeItem.label).toBe('Bug');
+      expect((treeItem.iconPath as any).id).toBe('circle-outline');
+    });
+
+    it('should render group node with folder icon and unseen count', () => {
+      registry._setItems('gh', [
+        { externalId: '1', title: 'A', group: 'my-repo' },
+        { externalId: '2', title: 'B', group: 'my-repo' },
+      ]);
+
+      const groupNode: InboxGroupNode = { kind: 'group', providerId: 'gh', groupName: 'my-repo', unseenCount: 2 };
+      const treeItem = provider.getTreeItem(groupNode);
+      expect(treeItem.label).toBe('my-repo');
+      expect(treeItem.description).toBe('2');
+      expect(treeItem.collapsibleState).toBe(TreeItemCollapsibleState.Collapsed);
+      expect(treeItem.contextValue).toBe('inboxGroup');
+      expect((treeItem.iconPath as any).id).toBe('folder');
     });
 
     it('should set contextValue with hasUrl when item has url', () => {
@@ -179,12 +290,95 @@ describe('InboxTreeProvider', () => {
     });
   });
 
+  describe('markSeen', () => {
+    it('should return true for a newly seen item', () => {
+      expect(provider.markSeen('gh', '1')).toBe(true);
+    });
+
+    it('should return false if item is already seen', () => {
+      provider.markSeen('gh', '1');
+      expect(provider.markSeen('gh', '1')).toBe(false);
+    });
+  });
+
+  describe('getParent', () => {
+    it('should return undefined for provider nodes', () => {
+      expect(provider.getParent(providerNode('gh'))).toBeUndefined();
+    });
+
+    it('should return provider node for group nodes', () => {
+      registry._setLabel('gh', 'GitHub Issues');
+      const groupNode: InboxGroupNode = { kind: 'group', providerId: 'gh', groupName: 'repo-one', unseenCount: 2 };
+      const parent = provider.getParent(groupNode);
+      expect(parent).toBeDefined();
+      expect(parent!.kind).toBe('provider');
+      expect((parent as InboxProviderNode).providerId).toBe('gh');
+      expect((parent as InboxProviderNode).label).toBe('GitHub Issues');
+    });
+
+    it('should return group node for item with group', () => {
+      registry._setItems('gh', [
+        { externalId: '1', title: 'Issue A', group: 'repo-one' },
+        { externalId: '2', title: 'Issue B', group: 'repo-one' },
+      ]);
+      const item: InboxItem = { kind: 'item', providerId: 'gh', externalId: '1', title: 'Issue A', group: 'repo-one' };
+      const parent = provider.getParent(item);
+      expect(parent).toBeDefined();
+      expect(parent!.kind).toBe('group');
+      expect((parent as InboxGroupNode).groupName).toBe('repo-one');
+      expect((parent as InboxGroupNode).unseenCount).toBe(2);
+    });
+
+    it('should return provider node for ungrouped item', () => {
+      registry._setLabel('gh', 'GitHub Issues');
+      registry._setItems('gh', [{ externalId: '1', title: 'Bug fix' }]);
+      const item: InboxItem = { kind: 'item', providerId: 'gh', externalId: '1', title: 'Bug fix' };
+      const parent = provider.getParent(item);
+      expect(parent).toBeDefined();
+      expect(parent!.kind).toBe('provider');
+      expect((parent as InboxProviderNode).providerId).toBe('gh');
+      expect((parent as InboxProviderNode).label).toBe('GitHub Issues');
+    });
+  });
+
   describe('events', () => {
     it('should refresh when providerRegistry fires change event', () => {
       const listener = vi.fn();
       provider.onDidChangeTreeData(listener);
       registry._fire();
       expect(listener).toHaveBeenCalledTimes(1);
+    });
+
+    it('should retain seenItems for items still in inbox after provider refresh', () => {
+      registry._setItems('gh', [{ externalId: '1', title: 'Bug' }]);
+      const item: InboxItem = { kind: 'item', providerId: 'gh', externalId: '1', title: 'Bug' };
+      provider.markSeen('gh', '1');
+
+      // Before refresh, item should be seen (circle-outline icon)
+      expect(provider.getTreeItem(item).label).toBe('Bug');
+      expect((provider.getTreeItem(item).iconPath as any).id).toBe('circle-outline');
+
+      // Provider refresh fires → item is still in inbox, so seenItems should be retained
+      registry._fire();
+
+      // After refresh, item should still appear as seen (circle-outline icon)
+      expect(provider.getTreeItem(item).label).toBe('Bug');
+      expect((provider.getTreeItem(item).iconPath as any).id).toBe('circle-outline');
+    });
+
+    it('should prune seenItems for items no longer in inbox after provider refresh', () => {
+      registry._setItems('gh', [{ externalId: '1', title: 'Bug' }]);
+      provider.markSeen('gh', '1');
+
+      // Remove item from provider
+      registry._setItems('gh', []);
+      registry._fire();
+
+      // Re-add item — should appear as unseen (circle-filled icon)
+      registry._setItems('gh', [{ externalId: '1', title: 'Bug' }]);
+      const item: InboxItem = { kind: 'item', providerId: 'gh', externalId: '1', title: 'Bug' };
+      expect(provider.getTreeItem(item).label).toBe('Bug');
+      expect((provider.getTreeItem(item).iconPath as any).id).toBe('circle-filled');
     });
 
     it('should refresh when stateStore fires change event', () => {

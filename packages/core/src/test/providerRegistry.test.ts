@@ -239,6 +239,43 @@ describe('ProviderRegistry', () => {
     expect(all.get('jira')).toHaveLength(1);
   });
 
+  it('fires onDidAddNewUnseenItems with count of newly unseen items', async () => {
+    const provider = createMockProvider('gh');
+    registry.register(provider);
+
+    const listener = vi.fn();
+    registry.onDidAddNewUnseenItems(listener);
+
+    provider.fireItems([
+      { externalId: 'issue-1', title: 'Bug fix' },
+      { externalId: 'issue-2', title: 'Feature' },
+    ]);
+
+    await vi.waitFor(() => expect(listener).toHaveBeenCalledWith(2));
+  });
+
+  it('does not fire onDidAddNewUnseenItems when no new unseen items', async () => {
+    const provider = createMockProvider('gh');
+    registry.register(provider);
+
+    // Simulate items already accepted
+    stateStore._set('gh', 'issue-1', 'accepted');
+
+    const listener = vi.fn();
+    registry.onDidAddNewUnseenItems(listener);
+
+    provider.fireItems([
+      { externalId: 'issue-1', title: 'Bug fix' },
+    ]);
+
+    // Wait for handleDiscoveredItems to complete by checking items are stored
+    await vi.waitFor(() =>
+      expect(registry.getDiscoveredItems('gh')).toHaveLength(1),
+    );
+    expect(stateStore.setStates).not.toHaveBeenCalled();
+    expect(listener).not.toHaveBeenCalled();
+  });
+
   it('fires onDidChangeDiscoveredItems when provider discovers items', async () => {
     const provider = createMockProvider('gh');
     registry.register(provider);
@@ -286,6 +323,26 @@ describe('ProviderRegistry', () => {
 
     expect(createSpy).not.toHaveBeenCalled();
     createSpy.mockRestore();
+  });
+
+  it('does not fire onDidAddNewUnseenItems when setStates fails', async () => {
+    const provider = createMockProvider('gh');
+    registry.register(provider);
+
+    stateStore.setStates.mockRejectedValueOnce(new Error('disk full'));
+
+    const listener = vi.fn();
+    registry.onDidAddNewUnseenItems(listener);
+
+    provider.fireItems([
+      { externalId: 'issue-1', title: 'Bug fix' },
+    ]);
+
+    // Wait for handleDiscoveredItems to complete
+    await vi.waitFor(() =>
+      expect(registry.getDiscoveredItems('gh')).toHaveLength(1),
+    );
+    expect(listener).not.toHaveBeenCalled();
   });
 
   describe('resurfaceDismissed', () => {

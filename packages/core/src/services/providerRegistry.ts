@@ -11,6 +11,8 @@ export class ProviderRegistry {
   readonly onDidChangeDiscoveredItems = this._onDidChangeDiscoveredItems.event;
   private readonly _onDidRegisterProvider = new vscode.EventEmitter<void>();
   readonly onDidRegisterProvider = this._onDidRegisterProvider.event;
+  private readonly _onDidAddNewUnseenItems = new vscode.EventEmitter<number>();
+  readonly onDidAddNewUnseenItems = this._onDidAddNewUnseenItems.event;
   private readonly _loadingProviders = new Set<string>();
 
   get loading(): boolean {
@@ -104,9 +106,12 @@ export class ProviderRegistry {
       }
     }
     if (updates.length > 0) {
-      await this.stateStore.setStates(updates).catch((err) => {
+      try {
+        await this.stateStore.setStates(updates);
+        this._onDidAddNewUnseenItems.fire(updates.length);
+      } catch (err) {
         logger.error('Failed to persist discovered states', err);
-      });
+      }
     }
     this._onDidChangeDiscoveredItems.fire();
   }
@@ -119,5 +124,6 @@ export class ProviderRegistry {
     this.subscriptions.clear();
     this._onDidChangeDiscoveredItems.dispose();
     this._onDidRegisterProvider.dispose();
+    this._onDidAddNewUnseenItems.dispose();
   }
 }

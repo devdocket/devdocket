@@ -103,8 +103,8 @@ describe('HistoryTreeProvider', () => {
       expect(provider.getTreeItem(item).contextValue).toBe('historyItem.hasUrl');
     });
 
-    it('should include description in tooltip when present', () => {
-      const item = makeItem({ id: '1', title: 'Task', description: 'Details here' });
+    it('should include notes in tooltip when present', () => {
+      const item = makeItem({ id: '1', title: 'Task', notes: 'Details here' });
       const treeItem = provider.getTreeItem(item);
       expect((treeItem.tooltip as any).value).toContain('Details here');
     });

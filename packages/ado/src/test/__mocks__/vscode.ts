@@ -23,7 +23,6 @@ class MockThemeIcon {
 class MockMarkdownString {
   value = '';
   appendMarkdown(text: string) { this.value += text; }
-  appendText(text: string) { this.value += text; }
 }
 
 const TreeItemCollapsibleState = {
@@ -33,14 +32,13 @@ const TreeItemCollapsibleState = {
 };
 
 class MockTreeItem {
-  label: string | { label: string; highlights?: [number, number][] };
+  label: string;
   collapsibleState: number;
-  id?: string;
   description?: string;
   tooltip?: any;
   contextValue?: string;
   iconPath?: any;
-  constructor(label: string | { label: string; highlights?: [number, number][] }, collapsibleState?: number) {
+  constructor(label: string, collapsibleState?: number) {
     this.label = label;
     this.collapsibleState = collapsibleState ?? 0;
   }
@@ -53,31 +51,12 @@ const window = {
   showErrorMessage: vi.fn(),
   showQuickPick: vi.fn(),
   registerTreeDataProvider: vi.fn(() => ({ dispose: vi.fn() })),
-  createTreeView: vi.fn(() => {
-    const selectionEmitter = new MockEventEmitter();
-    return {
-      dispose: vi.fn(),
-      message: undefined,
-      badge: undefined,
-      onDidChangeSelection: selectionEmitter.event,
-      _selectionEmitter: selectionEmitter,
-    };
-  }),
   createWebviewPanel: vi.fn(),
-  createOutputChannel: vi.fn(() => ({
-    appendLine: vi.fn(),
-    append: vi.fn(),
-    clear: vi.fn(),
-    show: vi.fn(),
-    hide: vi.fn(),
-    dispose: vi.fn(),
-    name: 'WorkCenter',
-    replace: vi.fn(),
-  })),
 };
 
 const commands = {
   registerCommand: vi.fn(() => ({ dispose: vi.fn() })),
+  executeCommand: vi.fn(),
 };
 
 const env = {
@@ -86,17 +65,28 @@ const env = {
 
 const Uri = {
   parse: vi.fn((s: string) => ({ toString: () => s })),
+  file: vi.fn((path: string) => ({ fsPath: path, toString: () => `file://${path}` })),
 };
 
-class MockDataTransferItem {
-  constructor(public value: any) {}
-}
+const authentication = {
+  getSession: vi.fn().mockResolvedValue({ accessToken: 'mock-token' }),
+};
 
-class MockDataTransfer {
-  private items = new Map<string, MockDataTransferItem>();
-  get(mimeType: string): MockDataTransferItem | undefined { return this.items.get(mimeType); }
-  set(mimeType: string, value: MockDataTransferItem): void { this.items.set(mimeType, value); }
-}
+const workspace = {
+  getConfiguration: vi.fn().mockReturnValue({
+    get: vi.fn((key: string, defaultValue?: any) => defaultValue),
+  }),
+  workspaceFolders: [{ uri: { fsPath: '/mock/workspace' } }],
+  onDidChangeConfiguration: vi.fn(() => ({ dispose: vi.fn() })),
+};
+
+const extensions = {
+  getExtension: vi.fn().mockReturnValue({
+    isActive: true,
+    exports: {},
+    activate: vi.fn(),
+  }),
+};
 
 class MockDisposable {
   private callback: () => void;
@@ -104,25 +94,18 @@ class MockDisposable {
   dispose() { this.callback(); }
 }
 
-const workspace = {
-  getConfiguration: vi.fn().mockReturnValue({
-    get: vi.fn((key: string, defaultValue?: any) => defaultValue),
-  }),
-  onDidChangeConfiguration: vi.fn(() => ({ dispose: vi.fn() })),
-};
-
 export {
   MockEventEmitter as EventEmitter,
   MockThemeIcon as ThemeIcon,
   MockMarkdownString as MarkdownString,
   MockTreeItem as TreeItem,
-  MockDataTransferItem as DataTransferItem,
-  MockDataTransfer as DataTransfer,
   MockDisposable as Disposable,
   TreeItemCollapsibleState,
   window,
   commands,
   env,
   Uri,
+  authentication,
   workspace,
+  extensions,
 };
