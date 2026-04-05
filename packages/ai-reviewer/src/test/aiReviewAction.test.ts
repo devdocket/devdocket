@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { window, workspace, authentication, lm } from 'vscode';
+import { window, workspace, authentication, lm, Uri } from 'vscode';
 import { AiReviewAction } from '../aiReviewAction';
 
 function createWorkItem(overrides: Partial<Record<string, unknown>> = {}) {
@@ -43,6 +43,9 @@ describe('AiReviewAction', () => {
       }),
     }]);
     vi.mocked(window.showWarningMessage).mockResolvedValue('Continue' as never);
+    vi.mocked(workspace.getConfiguration).mockReturnValue({
+      get: vi.fn((_key: string, defaultValue?: unknown) => defaultValue),
+    } as never);
   });
 
   describe('canRun', () => {
@@ -280,6 +283,167 @@ describe('AiReviewAction', () => {
 
       expect(result).toBeUndefined();
       expect(window.showErrorMessage).toHaveBeenCalledWith('AI Code Review: Analysis failed');
+    });
+
+    it('uses custom prompt when configured', async () => {
+      const customPrompt = 'Focus only on security issues.';
+      const customPromptBytes = new TextEncoder().encode(customPrompt);
+
+      vi.mocked(workspace.getConfiguration).mockReturnValue({
+        get: vi.fn((key: string, defaultValue?: unknown) => {
+          if (key === 'customPromptPath') return '/absolute/review-prompt.md';
+          return defaultValue;
+        }),
+      } as never);
+      vi.mocked(workspace.fs.readFile).mockResolvedValue(customPromptBytes as never);
+
+      const token = { isCancellationRequested: false, onCancellationRequested: vi.fn() };
+      const sendRequest = vi.fn().mockResolvedValue({
+        text: (async function* () { yield 'Security review done'; })(),
+      });
+      vi.mocked(lm.selectChatModels).mockResolvedValue([{ sendRequest }]);
+
+      const result = await action.analyzeWithAi('diff content', token as never);
+
+      expect(result).toContain('Security review done');
+      // Verify the custom prompt was used in the message
+      const userMsg = sendRequest.mock.calls[0][0][0];
+      expect(userMsg.content).toContain('Focus only on security issues.');
+      expect(userMsg.content).toContain('diff content');
+    });
+  });
+
+  describe('getReviewPrompt', () => {
+    it('returns built-in prompt when no custom path configured', async () => {
+      const prompt = await action.getReviewPrompt();
+      expect(prompt).toContain('Bugs and logic errors');
+      expect(prompt).toContain('Security vulnerabilities');
+    });
+
+    it('returns built-in prompt when custom path is empty string', async () => {
+      vi.mocked(workspace.getConfiguration).mockReturnValue({
+        get: vi.fn((_key: string, defaultValue?: unknown) => defaultValue),
+      } as never);
+
+      const prompt = await action.getReviewPrompt();
+      expect(prompt).toContain('Bugs and logic errors');
+    });
+
+    it('returns custom prompt content when file exists', async () => {
+      const customContent = 'Review for accessibility issues only.';
+      vi.mocked(workspace.getConfiguration).mockReturnValue({
+        get: vi.fn((key: string, defaultValue?: unknown) => {
+          if (key === 'customPromptPath') return '/my/prompt.md';
+          return defaultValue;
+        }),
+      } as never);
+      vi.mocked(workspace.fs.readFile).mockResolvedValue(
+        new TextEncoder().encode(customContent) as never,
+      );
+
+      const prompt = await action.getReviewPrompt();
+      expect(prompt).toBe(customContent);
+    });
+
+    it('falls back to default and warns when file read fails', async () => {
+      vi.mocked(workspace.getConfiguration).mockReturnValue({
+        get: vi.fn((key: string, defaultValue?: unknown) => {
+          if (key === 'customPromptPath') return '/nonexistent/prompt.md';
+          return defaultValue;
+        }),
+      } as never);
+      vi.mocked(workspace.fs.readFile).mockRejectedValue(new Error('File not found'));
+
+      const prompt = await action.getReviewPrompt();
+      expect(prompt).toContain('Bugs and logic errors');
+      expect(window.showWarningMessage).toHaveBeenCalledWith(
+        expect.stringContaining('Could not read custom prompt file'),
+      );
+    });
+
+    it('falls back to default and warns when file is empty', async () => {
+      vi.mocked(workspace.getConfiguration).mockReturnValue({
+        get: vi.fn((key: string, defaultValue?: unknown) => {
+          if (key === 'customPromptPath') return '/my/empty.md';
+          return defaultValue;
+        }),
+      } as never);
+      vi.mocked(workspace.fs.readFile).mockResolvedValue(
+        new TextEncoder().encode('   \n  ') as never,
+      );
+
+      const prompt = await action.getReviewPrompt();
+      expect(prompt).toContain('Bugs and logic errors');
+      expect(window.showWarningMessage).toHaveBeenCalledWith(
+        expect.stringContaining('Custom prompt file is empty'),
+      );
+    });
+
+    it('resolves relative path against workspace folder', async () => {
+      const customContent = 'My custom review rules';
+      vi.mocked(workspace.getConfiguration).mockReturnValue({
+        get: vi.fn((key: string, defaultValue?: unknown) => {
+          if (key === 'customPromptPath') return 'prompts/review.md';
+          return defaultValue;
+        }),
+      } as never);
+      vi.mocked(workspace.fs.readFile).mockResolvedValue(
+        new TextEncoder().encode(customContent) as never,
+      );
+
+      const prompt = await action.getReviewPrompt();
+      expect(prompt).toBe(customContent);
+      expect(Uri.joinPath).toHaveBeenCalledWith(
+        workspace.workspaceFolders![0].uri,
+        'prompts/review.md',
+      );
+    });
+  });
+
+  describe('resolvePromptUri', () => {
+    it('returns file URI for absolute Unix path', () => {
+      action.resolvePromptUri('/absolute/path/prompt.md');
+      expect(Uri.file).toHaveBeenCalledWith('/absolute/path/prompt.md');
+    });
+
+    it('returns file URI for absolute Windows path', () => {
+      action.resolvePromptUri('C:\\Users\\me\\prompt.md');
+      expect(Uri.file).toHaveBeenCalledWith('C:\\Users\\me\\prompt.md');
+    });
+
+    it('joins relative path with single workspace folder', () => {
+      action.resolvePromptUri('relative/prompt.md');
+      expect(Uri.joinPath).toHaveBeenCalledWith(
+        workspace.workspaceFolders![0].uri,
+        'relative/prompt.md',
+      );
+    });
+
+    it('throws when no workspace folders and path is relative', () => {
+      const original = workspace.workspaceFolders;
+      workspace.workspaceFolders = undefined as never;
+      try {
+        expect(() => action.resolvePromptUri('relative/prompt.md')).toThrow(
+          'No workspace folder open',
+        );
+      } finally {
+        workspace.workspaceFolders = original;
+      }
+    });
+
+    it('throws when multiple workspace folders and path is relative', () => {
+      const original = workspace.workspaceFolders;
+      workspace.workspaceFolders = [
+        { uri: { fsPath: '/folder1' } },
+        { uri: { fsPath: '/folder2' } },
+      ] as never;
+      try {
+        expect(() => action.resolvePromptUri('relative/prompt.md')).toThrow(
+          'Multiple workspace folders',
+        );
+      } finally {
+        workspace.workspaceFolders = original;
+      }
     });
   });
 });

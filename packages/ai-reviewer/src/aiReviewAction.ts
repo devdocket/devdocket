@@ -1,6 +1,14 @@
 import * as vscode from 'vscode';
 import type { WorkItem, WorkCenterAction } from './types';
 
+const DEFAULT_REVIEW_PROMPT = `You are a code reviewer. Analyze this PR diff and provide a review focusing on:
+1. Bugs and logic errors
+2. Security vulnerabilities
+3. Performance issues
+4. Missing error handling
+
+Be concise. Only flag genuine issues, not style preferences.`;
+
 export class AiReviewAction implements WorkCenterAction {
   readonly id = 'ai-reviewer.review';
   readonly label = 'AI Code Review';
@@ -101,6 +109,56 @@ export class AiReviewAction implements WorkCenterAction {
     return response.text();
   }
 
+  /** Load the review prompt, using a custom file if configured, otherwise the built-in default. */
+  async getReviewPrompt(): Promise<string> {
+    const config = vscode.workspace.getConfiguration('workcenterAiReview');
+    const customPath = config.get<string>('customPromptPath', '');
+    if (!customPath) {
+      return DEFAULT_REVIEW_PROMPT;
+    }
+
+    try {
+      const uri = this.resolvePromptUri(customPath);
+      const bytes = await vscode.workspace.fs.readFile(uri);
+      const content = new TextDecoder('utf-8').decode(bytes).trim();
+      if (!content) {
+        vscode.window.showWarningMessage(
+          'AI Code Review: Custom prompt file is empty — using built-in prompt.',
+        );
+        return DEFAULT_REVIEW_PROMPT;
+      }
+      return content;
+    } catch {
+      vscode.window.showWarningMessage(
+        `AI Code Review: Could not read custom prompt file "${customPath}" — using built-in prompt.`,
+      );
+      return DEFAULT_REVIEW_PROMPT;
+    }
+  }
+
+  /** Resolve a prompt path to a URI. Absolute paths are used directly; relative paths resolve against the single workspace folder. */
+  resolvePromptUri(promptPath: string): vscode.Uri {
+    if (this.isAbsolutePath(promptPath)) {
+      return vscode.Uri.file(promptPath);
+    }
+
+    const folders = vscode.workspace.workspaceFolders;
+    if (!folders || folders.length === 0) {
+      throw new Error('No workspace folder open — cannot resolve relative prompt path.');
+    }
+    if (folders.length > 1) {
+      throw new Error(
+        'Multiple workspace folders — use an absolute path for the custom prompt.',
+      );
+    }
+    return vscode.Uri.joinPath(folders[0].uri, promptPath);
+  }
+
+  private isAbsolutePath(p: string): boolean {
+    // Unix absolute or Windows drive-letter absolute (e.g. C:\...)
+    return p.startsWith('/') || /^[a-zA-Z]:[\\/]/.test(p);
+  }
+
   async analyzeWithAi(diff: string, token: vscode.CancellationToken): Promise<string | undefined> {
     try {
       let models = await vscode.lm.selectChatModels({ family: 'gpt-4o' });
@@ -118,16 +176,12 @@ export class AiReviewAction implements WorkCenterAction {
         truncationNote = '\n\n> ⚠️ **Note:** The PR diff was truncated to the first 50,000 characters. Some changes may not be covered in this review.\n';
       }
 
+      const reviewPrompt = await this.getReviewPrompt();
+
       const model = models[0];
       const messages = [
         vscode.LanguageModelChatMessage.User(
-          `You are a code reviewer. Analyze this PR diff and provide a review focusing on:
-1. Bugs and logic errors
-2. Security vulnerabilities
-3. Performance issues
-4. Missing error handling
-
-Be concise. Only flag genuine issues, not style preferences.
+          `${reviewPrompt}
 
 \`\`\`\`diff
 ${diff.slice(0, maxDiffLength)}

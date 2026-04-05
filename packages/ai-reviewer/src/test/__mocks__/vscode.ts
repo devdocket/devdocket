@@ -78,6 +78,10 @@ const env = {
 const Uri = {
   parse: vi.fn((s: string) => ({ toString: () => s })),
   file: vi.fn((path: string) => ({ fsPath: path, toString: () => `file://${path}` })),
+  joinPath: vi.fn((base: { fsPath: string }, ...segments: string[]) => {
+    const joined = [base.fsPath, ...segments].join('/');
+    return { fsPath: joined, toString: () => `file://${joined}` };
+  }),
 };
 
 const authentication = {
@@ -90,6 +94,9 @@ const workspace = {
   }),
   workspaceFolders: [{ uri: { fsPath: '/mock/workspace' } }],
   openTextDocument: vi.fn().mockResolvedValue({ uri: 'mock-doc-uri' }),
+  fs: {
+    readFile: vi.fn().mockResolvedValue(new Uint8Array()),
+  },
 };
 
 class MockLanguageModelChatMessage {

@@ -18,7 +18,18 @@
     "onStartupFinished"
   ],
   "main": "./dist/extension.js",
-  "contributes": {},
+  "contributes": {
+    "configuration": {
+      "title": "WorkCenter AI Code Review",
+      "properties": {
+        "workcenterAiReview.customPromptPath": {
+          "type": "string",
+          "default": "",
+          "description": "Path to a custom code review prompt file. The file content replaces the built-in review instructions sent to the language model. The PR diff is always appended automatically. Supports absolute paths and paths relative to the workspace folder (single-root workspaces only)."
+        }
+      }
+    }
+  },
   "scripts": {
     "vscode:prepublish": "npm run build",
     "build": "esbuild src/extension.ts --bundle --outfile=dist/extension.js --external:vscode --format=cjs --platform=node --sourcemap",
