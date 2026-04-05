@@ -120,13 +120,15 @@ describe('JsonTaskStore concurrency', () => {
     const savePromise = store.save(item);
     await writeStartedPromise;
 
-    // While save is blocked in writeFile, cache has not yet been updated
-    // (cache.set happens after writeFile succeeds), so loadAll returns empty
-    const loaded = await store.loadAll();
-    expect(loaded).toHaveLength(0);
-
-    releaseWrite();
-    await savePromise;
+    try {
+      // While save is blocked in writeFile, cache has not yet been updated
+      // (cache.set happens after writeFile succeeds), so loadAll returns empty
+      const loaded = await store.loadAll();
+      expect(loaded).toHaveLength(0);
+    } finally {
+      releaseWrite();
+      await savePromise;
+    }
 
     // After the save completes, the item must be present
     const final = await store.loadAll();
