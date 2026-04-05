@@ -63,7 +63,8 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     return;
   }
 
-  let api: unknown;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- VS Code's exports/activate() returns any
+  let api: any;
   try {
     api = coreExtension.isActive
       ? coreExtension.exports
@@ -229,7 +230,7 @@ class JiraProvider implements WorkCenterProvider {
 ### Key Points
 
 - **EventEmitter pattern** — Use `vscode.EventEmitter<DiscoveredItem[]>` to create the event. Expose its `.event` property as the readonly `onDidDiscoverItems`.
-- **`refresh()` is called by WorkCenter** — It is invoked automatically when the provider is registered (for initial discovery) and whenever the user triggers a manual refresh. It must be safe to call multiple times.
+- **`refresh()` is called by WorkCenter** — It is invoked automatically when the provider is registered for initial discovery. It must be safe to call multiple times.
 - **`externalId` must be unique per provider** — WorkCenter uses the combination of `providerId + externalId` to track inbox state. Use a stable identifier like `owner/repo#123` or `PROJECT/TICKET-42`.
 - **`group` is optional** — When set, items with the same group value are nested under a folder node in the Inbox and Sources views.
 - **`resurfaceDismissed`** — When `true`, items the user previously dismissed will reappear in the Inbox if the provider re-emits them. This is useful for time-sensitive items (e.g., PR review requests). When `false` or `undefined` (the default), dismissed items stay dismissed.
@@ -488,7 +489,7 @@ interface WorkCenterProvider {
   readonly onDidDiscoverItems: Event<DiscoveredItem[]>;
 
   /**
-   * Called by WorkCenter on registration and on user-triggered refresh.
+   * Called by WorkCenter on registration for initial discovery.
    * Must be safe to call multiple times.
    */
   refresh(): Promise<void>;
