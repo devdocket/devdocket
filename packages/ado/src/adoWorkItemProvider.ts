@@ -201,7 +201,7 @@ export class AdoWorkItemProvider implements WorkCenterProvider {
 
     if (!wiqlResponse.ok) {
       logger.warn(`Failed to fetch work items for project: ${project || this.org}`);
-      logger.error(`WIQL query failed for project "${project}": ${wiqlResponse.status}`);
+      logger.error(`WIQL query failed for project "${project || this.org}": ${wiqlResponse.status}`);
       return { items: [], failed: true };
     }
 
@@ -235,7 +235,10 @@ export class AdoWorkItemProvider implements WorkCenterProvider {
           },
         });
       } catch (err) {
-        logger.error(`Network error fetching work item details (batch at index ${i}):`, err);
+        logger.error(
+          `Network error fetching work item details for ${project || this.org} (batch at index ${i}, ids ${batchIds[0]}-${batchIds[batchIds.length - 1]}):`,
+          err,
+        );
         batchFailed = true;
         continue;
       }
