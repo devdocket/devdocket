@@ -98,16 +98,18 @@ export class ProviderRegistry {
 
   // Note: the losing promise in Promise.race() continues running — true cancellation
   // would require adding CancellationToken to the provider refresh API.
-  private raceWithTimeout(promise: Promise<void>, providerLabel: string): Promise<void> {
-    let timeoutId: ReturnType<typeof setTimeout>;
+  private raceWithTimeout(promise: Promise<void>, providerId: string): Promise<void> {
+    let timeoutId: ReturnType<typeof setTimeout> | undefined;
     const timeoutPromise = new Promise<void>((resolve) => {
       timeoutId = setTimeout(() => {
-        logger.warn(`Provider "${providerLabel}" refresh timed out after ${ProviderRegistry.REFRESH_TIMEOUT_MS}ms`);
+        logger.warn(`Provider "${providerId}" refresh timed out after ${ProviderRegistry.REFRESH_TIMEOUT_MS}ms`);
         resolve();
       }, ProviderRegistry.REFRESH_TIMEOUT_MS);
     });
     return Promise.race([promise, timeoutPromise]).finally(() => {
-      clearTimeout(timeoutId);
+      if (timeoutId !== undefined) {
+        clearTimeout(timeoutId);
+      }
     });
   }
 
