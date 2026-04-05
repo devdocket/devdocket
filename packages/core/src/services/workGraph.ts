@@ -4,7 +4,7 @@ import { ITaskStore } from '../storage/taskStore';
 import { logger } from './logger';
 
 export class WorkGraph {
-  private items: Map<string, WorkItem> = new Map();
+  private readonly items: Map<string, WorkItem> = new Map();
   private readonly _onDidChange = new vscode.EventEmitter<void>();
   readonly onDidChange = this._onDidChange.event;
 
