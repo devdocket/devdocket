@@ -12,7 +12,7 @@ export class Registry<T extends { readonly id: string; readonly label: string }>
       throw new Error(`${this.kind} already registered: ${item.id}`);
     }
     this.items.set(item.id, item);
-    logger.info(`Registered ${this.kind}: ${item.id} (${item.label})`);
+    logger.info(`Registered ${this.kind.toLowerCase()}: ${item.id} (${item.label})`);
     return new vscode.Disposable(() => { this.items.delete(item.id); });
   }
 
