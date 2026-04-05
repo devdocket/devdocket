@@ -80,10 +80,12 @@ export class WorkGraph {
     if (states.length === 1) {
       return [...(cache.get(states[0]) ?? [])];
     }
+    const requestedStates = new Set(states);
     const result: WorkItem[] = [];
-    for (const state of states) {
-      const items = cache.get(state);
-      if (items) result.push(...items);
+    for (const item of this.items.values()) {
+      if (requestedStates.has(item.state)) {
+        result.push(item);
+      }
     }
     return result;
   }
@@ -177,6 +179,7 @@ export class WorkGraph {
       for (const normalized of toNormalize) {
         this.items.set(normalized.id, normalized);
       }
+      this.invalidateStateCache();
     }
 
     const index = siblings.findIndex((s) => s.id === id);
