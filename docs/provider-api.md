@@ -189,7 +189,10 @@ class JiraProvider implements WorkCenterProvider {
   /** Start a periodic refresh on a timer. */
   startPeriodicRefresh(intervalSeconds: number): void {
     this.stopPeriodicRefresh();
-    const interval = Math.max(intervalSeconds, 60) * 1000;
+    const safeIntervalSeconds = Number.isFinite(intervalSeconds)
+      ? intervalSeconds
+      : 60;
+    const interval = Math.max(safeIntervalSeconds, 60) * 1000;
     this.refreshTimer = setInterval(() => {
       if (this._isRefreshing) {
         return; // Skip if a refresh is already in progress
@@ -409,14 +412,14 @@ Good patterns: `owner/repo#123`, `PROJECT-42`, `ticket/12345`
 
 ### Keep refresh lightweight
 
-`refresh()` may be called frequently (on registration, on user request, on a timer). Avoid heavy processing:
+`refresh()` is called on registration, and may also run frequently if your provider schedules periodic refreshes with a timer. Avoid heavy processing:
 - Cache API responses where appropriate
 - Guard against overlapping refreshes with a boolean flag
 - Clamp periodic intervals to a reasonable minimum (≥ 60 seconds)
 
 ### Don't store provider item data
 
-WorkCenter reads `DiscoveredItem` data live from the provider. There is no need to persist item details on your side — just emit the current set on each refresh. This ensures the UI always shows the latest data.
+WorkCenter reads `DiscoveredItem` data live from the provider. There is no need to persist item details on your side — just emit the current set on each refresh. This ensures discovery views such as Inbox and Sources show the latest provider data, while accepted items in Queue, Focus, and History continue to display their persisted `WorkItem` snapshots.
 
 ### Dispose subscriptions properly
 
