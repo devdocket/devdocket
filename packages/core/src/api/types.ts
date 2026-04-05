@@ -71,8 +71,10 @@ export interface WorkCenterAction {
 /**
  * Main entry point for provider extensions.
  *
- * Acquired via `vscode.extensions.getExtension('mthalman.workcenter')` and
- * returned from the core extension's `activate()`.
+ * Obtain this API from the core extension by first getting its extension
+ * wrapper via `vscode.extensions.getExtension('mthalman.workcenter')`, then
+ * activating it with `await extension.activate()` (or reading `extension.exports`
+ * after activation). The core extension's `activate()` returns this API.
  */
 export interface WorkCenterApi {
   /** Register a provider that discovers work items from an external source. */
