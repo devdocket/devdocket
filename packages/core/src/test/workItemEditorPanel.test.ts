@@ -80,7 +80,7 @@ describe('WorkItemEditorPanel', () => {
       expect(vscode.window.createWebviewPanel).toHaveBeenCalledWith(
         'workcenter.editItem',
         `Edit: My Task`,
-        1, // ViewColumn.One
+        vscode.ViewColumn.One,
         { enableScripts: true, retainContextWhenHidden: true },
       );
     });
@@ -250,8 +250,8 @@ describe('WorkItemEditorPanel', () => {
         data: { title: '', notes: 'notes' },
       });
 
-      // Let microtask queue flush
-      await new Promise(r => setTimeout(r, 50));
+      // Let pending microtasks run without relying on a fixed delay
+      await Promise.resolve();
       expect(vi.mocked(store.save)).toHaveBeenCalledTimes(saveCountBefore);
       expect(graph.getItem(item.id)!.title).toBe('Original');
     });
@@ -322,8 +322,9 @@ describe('WorkItemEditorPanel', () => {
         data: { title: 'Provider' },
       });
 
-      await new Promise(r => setTimeout(r, 50));
-      expect(vi.mocked(store.save)).toHaveBeenCalledTimes(saveCountBefore);
+      await vi.waitFor(() => {
+        expect(vi.mocked(store.save)).toHaveBeenCalledTimes(saveCountBefore);
+      });
     });
 
     it('ignores unknown message types', async () => {
