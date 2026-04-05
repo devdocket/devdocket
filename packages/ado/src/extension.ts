@@ -87,6 +87,8 @@ export async function activate(_context: vscode.ExtensionContext): Promise<void>
 
     workItemRegistration = api.registerProvider(workItemProvider);
     prRegistration = api.registerProvider(prProvider);
+
+    logger.info('Registered 2 ADO providers');
   };
 
   configureProviders();
@@ -111,7 +113,7 @@ export async function activate(_context: vscode.ExtensionContext): Promise<void>
     },
   );
 
-  logger.info('WorkCenter ADO activated, registered 2 providers');
+  logger.info('WorkCenter ADO activated');
 }
 
 export function deactivate(): void {

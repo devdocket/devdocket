@@ -1,0 +1,21 @@
+{
+  repository(owner: "mthalman", name: "workcenter") {
+    pullRequest(number: 25) {
+      reviewThreads(first: 50) {
+        nodes {
+          id
+          isResolved
+          path
+          line
+          comments(first: 20) {
+            nodes {
+              id
+              body
+              author { login }
+            }
+          }
+        }
+      }
+    }
+  }
+}
