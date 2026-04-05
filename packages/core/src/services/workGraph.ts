@@ -5,6 +5,7 @@ import { logger } from './logger';
 
 export class WorkGraph {
   private items: Map<string, WorkItem> = new Map();
+  private stateCache: Map<WorkItemState, WorkItem[]> | null = null;
   private readonly _onDidChange = new vscode.EventEmitter<void>();
   readonly onDidChange = this._onDidChange.event;
 
@@ -16,6 +17,7 @@ export class WorkGraph {
     for (const item of items) {
       this.items.set(item.id, item);
     }
+    this.invalidateStateCache();
     logger.debug(`Loaded ${items.length} work items from store`);
     await this.backfillSortOrder();
   }
@@ -46,14 +48,44 @@ export class WorkGraph {
     for (const updated of toSave) {
       this.items.set(updated.id, updated);
     }
+    this.invalidateStateCache();
   }
 
   getAll(): WorkItem[] {
     return Array.from(this.items.values());
   }
 
+  private invalidateStateCache(): void {
+    this.stateCache = null;
+  }
+
+  private getOrBuildStateCache(): Map<WorkItemState, WorkItem[]> {
+    if (this.stateCache) return this.stateCache;
+
+    const cache = new Map<WorkItemState, WorkItem[]>();
+    for (const item of this.items.values()) {
+      const list = cache.get(item.state);
+      if (list) {
+        list.push(item);
+      } else {
+        cache.set(item.state, [item]);
+      }
+    }
+    this.stateCache = cache;
+    return cache;
+  }
+
   getItemsByState(...states: WorkItemState[]): WorkItem[] {
-    return this.getAll().filter((item) => states.includes(item.state));
+    const cache = this.getOrBuildStateCache();
+    if (states.length === 1) {
+      return [...(cache.get(states[0]) ?? [])];
+    }
+    const result: WorkItem[] = [];
+    for (const state of states) {
+      const items = cache.get(state);
+      if (items) result.push(...items);
+    }
+    return result;
   }
 
   getItem(id: string): WorkItem | undefined {
@@ -90,6 +122,7 @@ export class WorkGraph {
     };
     await this.store.save(item);
     this.items.set(item.id, item);
+    this.invalidateStateCache();
     this._onDidChange.fire();
     logger.info(`Created work item: ${item.id}`);
     return item;
@@ -103,6 +136,7 @@ export class WorkGraph {
     const updated = { ...item, ...patch, updatedAt: Date.now() };
     await this.store.save(updated);
     this.items.set(id, updated);
+    this.invalidateStateCache();
     this._onDidChange.fire();
     logger.info(`Updated work item: ${id}`);
   }
@@ -115,6 +149,7 @@ export class WorkGraph {
     const updated = { ...item, state: newState, updatedAt: Date.now() };
     await this.store.save(updated);
     this.items.set(id, updated);
+    this.invalidateStateCache();
     this._onDidChange.fire();
     logger.info(`Transitioned work item ${id} to ${newState}`);
   }
@@ -163,6 +198,7 @@ export class WorkGraph {
     await this.store.saveAll([updatedItem, updatedSwap]);
     this.items.set(updatedItem.id, updatedItem);
     this.items.set(updatedSwap.id, updatedSwap);
+    this.invalidateStateCache();
     this._onDidChange.fire();
   }
 
@@ -200,6 +236,7 @@ export class WorkGraph {
       for (const updated of itemsToSave) {
         this.items.set(updated.id, updated);
       }
+      this.invalidateStateCache();
       this._onDidChange.fire();
     }
   }
@@ -233,6 +270,7 @@ export class WorkGraph {
       for (const updated of itemsToSave) {
         this.items.set(updated.id, updated);
       }
+      this.invalidateStateCache();
       this._onDidChange.fire();
     }
   }
@@ -240,6 +278,7 @@ export class WorkGraph {
   async deleteItem(id: string): Promise<void> {
     await this.store.delete(id);
     this.items.delete(id);
+    this.invalidateStateCache();
     this._onDidChange.fire();
     logger.info(`Deleted work item: ${id}`);
   }
