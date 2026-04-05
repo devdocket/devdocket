@@ -105,6 +105,7 @@ describe('AdoWorkItemProvider', () => {
       description: 'Description for 1',
       url: 'https://dev.azure.com/myorg/MyProject/_workitems/edit/1',
       group: 'MyProject',
+      reason: 'assigned',
     });
     expect(items[1]).toEqual({
       externalId: 'MyProject/2',
@@ -112,6 +113,7 @@ describe('AdoWorkItemProvider', () => {
       description: 'Description for 2',
       url: 'https://dev.azure.com/myorg/MyProject/_workitems/edit/2',
       group: 'MyProject',
+      reason: 'assigned',
     });
   });
 

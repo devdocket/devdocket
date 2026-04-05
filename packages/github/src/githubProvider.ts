@@ -17,6 +17,7 @@ interface DiscoveredItem {
   description?: string;
   url?: string;
   group?: string;
+  reason?: string;
 }
 
 interface WorkCenterProvider {
@@ -119,6 +120,7 @@ export class GitHubIssueProvider implements WorkCenterProvider {
         description: issue.body?.slice(0, 200),
         url: issue.html_url,
         group: repoName,
+        reason: 'assigned',
       };
     });
 

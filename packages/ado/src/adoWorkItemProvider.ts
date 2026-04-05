@@ -16,6 +16,7 @@ interface DiscoveredItem {
   description?: string;
   url?: string;
   group?: string;
+  reason?: string;
 }
 
 interface WorkCenterProvider {
@@ -254,6 +255,7 @@ export class AdoWorkItemProvider implements WorkCenterProvider {
         description: wi.fields['System.Description']?.replace(/<[^>]*>/g, '')?.slice(0, 200),
         url: wi._links.html.href,
         group: projectName,
+        reason: 'assigned',
       };
     });
 

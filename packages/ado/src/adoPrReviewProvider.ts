@@ -16,6 +16,7 @@ interface DiscoveredItem {
   description?: string;
   url?: string;
   group?: string;
+  reason?: string;
 }
 
 interface WorkCenterProvider {
@@ -270,6 +271,7 @@ export class AdoPrReviewProvider implements WorkCenterProvider {
         description: pr.description?.slice(0, 200),
         url: `${pr.repository.webUrl}/pullrequest/${pr.pullRequestId}`,
         group: `${projectName}/${repoName}`,
+        reason: 'review_requested',
       };
     });
 

@@ -288,6 +288,20 @@ describe('InboxTreeProvider', () => {
       const item: InboxItem = { kind: 'item', providerId: 'gh', externalId: '1', title: 'X' };
       expect(provider.getTreeItem(item).contextValue).toBe('inboxItem');
     });
+
+    it('should include reason in tooltip when item has reason', () => {
+      const item: InboxItem = { kind: 'item', providerId: 'gh', externalId: '1', title: 'Bug', reason: 'review_requested' };
+      const treeItem = provider.getTreeItem(item);
+      const tooltip = treeItem.tooltip as any;
+      expect(tooltip.value).toContain('Reason: Review requested');
+    });
+
+    it('should not include reason in tooltip when item has no reason', () => {
+      const item: InboxItem = { kind: 'item', providerId: 'gh', externalId: '1', title: 'Bug' };
+      const treeItem = provider.getTreeItem(item);
+      const tooltip = treeItem.tooltip as any;
+      expect(tooltip.value).not.toContain('Reason');
+    });
   });
 
   describe('markSeen', () => {
