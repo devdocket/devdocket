@@ -33,6 +33,8 @@ export class InboxTreeProvider implements vscode.TreeDataProvider<InboxElement> 
   readonly onDidChangeTreeData = this._onDidChangeTreeData.event;
   private readonly disposables: vscode.Disposable[] = [];
   private readonly seenItems = new Set<string>();
+  private readonly _onDidMarkSeen = new vscode.EventEmitter<void>();
+  readonly onDidMarkSeen = this._onDidMarkSeen.event;
 
   constructor(
     private readonly providerRegistry: ProviderRegistry,
@@ -67,12 +69,15 @@ export class InboxTreeProvider implements vscode.TreeDataProvider<InboxElement> 
     }
   }
 
+  get readItems(): ReadonlySet<string> { return this.seenItems; }
+
   refresh(): void { this._onDidChangeTreeData.fire(); }
 
   markSeen(providerId: string, externalId: string): boolean {
     const key = `${providerId}::${externalId}`;
     if (!this.seenItems.has(key)) {
       this.seenItems.add(key);
+      this._onDidMarkSeen.fire();
       return true;
     }
     return false;
@@ -248,6 +253,7 @@ export class InboxTreeProvider implements vscode.TreeDataProvider<InboxElement> 
 
   dispose(): void {
     this._onDidChangeTreeData.dispose();
+    this._onDidMarkSeen.dispose();
     this.disposables.forEach(d => d.dispose());
   }
 }

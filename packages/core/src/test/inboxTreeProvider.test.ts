@@ -299,6 +299,28 @@ describe('InboxTreeProvider', () => {
       provider.markSeen('gh', '1');
       expect(provider.markSeen('gh', '1')).toBe(false);
     });
+
+    it('should fire onDidMarkSeen when a new item is marked seen', () => {
+      const listener = vi.fn();
+      provider.onDidMarkSeen(listener);
+      provider.markSeen('gh', '1');
+      expect(listener).toHaveBeenCalledTimes(1);
+    });
+
+    it('should not fire onDidMarkSeen when item is already seen', () => {
+      provider.markSeen('gh', '1');
+      const listener = vi.fn();
+      provider.onDidMarkSeen(listener);
+      provider.markSeen('gh', '1');
+      expect(listener).not.toHaveBeenCalled();
+    });
+
+    it('should expose seen items via readItems', () => {
+      expect(provider.readItems.size).toBe(0);
+      provider.markSeen('gh', '1');
+      expect(provider.readItems.has('gh::1')).toBe(true);
+      expect(provider.readItems.size).toBe(1);
+    });
   });
 
   describe('getParent', () => {
