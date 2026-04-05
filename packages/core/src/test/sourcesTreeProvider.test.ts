@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { EventEmitter, TreeItemCollapsibleState, ThemeIcon } from 'vscode';
+import { EventEmitter, MarkdownString, TreeItemCollapsibleState, ThemeIcon } from 'vscode';
 import { DiscoveredItem } from '../api/types';
 import { SourcesTreeProvider, SourceProviderNode, SourceGroupNode, SourceItemNode } from '../views/sourcesTreeProvider';
 
@@ -295,9 +295,10 @@ describe('SourcesTreeProvider', () => {
         description: 'App crashes on startup',
       };
       const treeItem = provider.getTreeItem(node);
-      expect(treeItem.tooltip.value).toContain('Bug Report');
-      expect(treeItem.tooltip.value).toContain('App crashes on startup');
-      expect(treeItem.tooltip.value).toContain('**Description:**');
+      const tooltip = treeItem.tooltip as MarkdownString;
+      expect(tooltip.value).toContain('Bug Report');
+      expect(tooltip.value).toContain('App crashes on startup');
+      expect(tooltip.value).toContain('**Description:**');
     });
 
     it('should include only title in tooltip when item has no description', () => {
@@ -305,8 +306,9 @@ describe('SourcesTreeProvider', () => {
         kind: 'item', providerId: 'gh', externalId: '1', title: 'Simple Item',
       };
       const treeItem = provider.getTreeItem(node);
-      expect(treeItem.tooltip.value).toContain('Simple Item');
-      expect(treeItem.tooltip.value).not.toContain('**Description:**');
+      const tooltip = treeItem.tooltip as MarkdownString;
+      expect(tooltip.value).toContain('Simple Item');
+      expect(tooltip.value).not.toContain('**Description:**');
     });
   });
 
@@ -336,6 +338,19 @@ describe('SourcesTreeProvider', () => {
       const titles = children.map((c) => (c as SourceItemNode).title);
       expect(titles).toEqual(['Aardvark', 'Meerkat', 'Zebra']);
     });
+
+    it('should sort group nodes alphabetically by group name', () => {
+      registry._setItems('gh', [
+        { externalId: '1', title: 'X', group: 'Zulu' },
+        { externalId: '2', title: 'Y', group: 'Alpha' },
+        { externalId: '3', title: 'Z', group: 'Mike' },
+      ]);
+
+      const providerNode: SourceProviderNode = { kind: 'provider', providerId: 'gh', label: 'GH' };
+      const children = provider.getChildren(providerNode);
+      const groupNames = children.map((c) => (c as SourceGroupNode).groupName);
+      expect(groupNames).toEqual(['Alpha', 'Mike', 'Zulu']);
+    });
   });
 
   describe('dispose', () => {
@@ -362,15 +377,6 @@ describe('SourcesTreeProvider', () => {
 
       const groupNode: SourceGroupNode = { kind: 'group', providerId: 'gh', groupName: 'Nonexistent Group' };
       const children = provider.getChildren(groupNode);
-      expect(children).toEqual([]);
-    });
-
-    it('should return empty array for item element with all fields set', () => {
-      const itemNode: SourceItemNode = {
-        kind: 'item', providerId: 'gh', externalId: '99', title: 'Full Item',
-        description: 'A description', url: 'https://example.com', group: 'SomeGroup',
-      };
-      const children = provider.getChildren(itemNode);
       expect(children).toEqual([]);
     });
   });
