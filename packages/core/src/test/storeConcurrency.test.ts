@@ -95,21 +95,40 @@ describe('JsonTaskStore concurrency', () => {
     expect(disk.find((d) => d.id === 'b')).toBeDefined();
   });
 
-  it('concurrent loadAll during save returns consistent state', async () => {
+  it('loadAll during an in-flight save returns the pre-save cached state', async () => {
     const item = makeItem({ id: 'x', title: 'Item X' });
 
-    // Start save and loadAll concurrently
-    const [, loaded] = await Promise.all([store.save(item), store.loadAll()]);
+    // Initialize the cache so loadAll() can overlap with the queued write
+    await store.loadAll();
 
-    // loadAll must return either empty (ran before save) or with the item (ran after)
-    const hasItem = loaded.some((i) => i.id === 'x');
-    if (hasItem) {
-      expect(loaded).toHaveLength(1);
-    } else {
-      expect(loaded).toHaveLength(0);
-    }
+    let releaseWrite!: () => void;
+    const writeBlocked = new Promise<void>((resolve) => {
+      releaseWrite = resolve;
+    });
+    let writeStarted!: () => void;
+    const writeStartedPromise = new Promise<void>((resolve) => {
+      writeStarted = resolve;
+    });
 
-    // After both settle, the item must be present
+    vi.spyOn(fs, 'writeFile').mockImplementation(async (...args: unknown[]) => {
+      writeStarted();
+      await writeBlocked;
+      vi.mocked(fs.writeFile).mockRestore();
+      return (fs.writeFile as Function)(...args);
+    });
+
+    const savePromise = store.save(item);
+    await writeStartedPromise;
+
+    // While save is blocked in writeFile, cache has not yet been updated
+    // (cache.set happens after writeFile succeeds), so loadAll returns empty
+    const loaded = await store.loadAll();
+    expect(loaded).toHaveLength(0);
+
+    releaseWrite();
+    await savePromise;
+
+    // After the save completes, the item must be present
     const final = await store.loadAll();
     expect(final.find((i) => i.id === 'x')).toBeDefined();
   });
