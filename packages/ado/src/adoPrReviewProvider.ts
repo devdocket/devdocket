@@ -71,7 +71,7 @@ export class AdoPrReviewProvider implements WorkCenterProvider {
     }
     const clampedInterval = Math.max(interval, 60);
     this.refreshTimer = setInterval(() => {
-      this.refreshInBackground().catch((err) => {
+      this.refreshInBackground().catch((err: unknown) => {
         logger.error('PR review refresh failed:', err);
       });
     }, clampedInterval * 1000);
@@ -101,7 +101,7 @@ export class AdoPrReviewProvider implements WorkCenterProvider {
       }
 
       await this.fetchAndPublishPrs(session.accessToken, true, session.account.id);
-    } catch (err) {
+    } catch (err: unknown) {
       logger.error('Failed to fetch PR reviews:', err);
     } finally {
       this._isRefreshing = false;
@@ -125,7 +125,7 @@ export class AdoPrReviewProvider implements WorkCenterProvider {
       }
 
       await this.fetchAndPublishPrs(session.accessToken, false, session.account.id);
-    } catch (err) {
+    } catch (err: unknown) {
       logger.error('Failed to fetch PR reviews:', err);
     } finally {
       this._isRefreshing = false;
@@ -196,7 +196,7 @@ export class AdoPrReviewProvider implements WorkCenterProvider {
           headers: { Authorization: `Bearer ${token}` },
         },
       );
-    } catch (err) {
+    } catch (err: unknown) {
       logger.error('Network error fetching connection data:', err);
       this._cachedUserId = undefined;
       this._cachedSessionAccountId = undefined;
@@ -214,7 +214,7 @@ export class AdoPrReviewProvider implements WorkCenterProvider {
     let data: ConnectionData;
     try {
       data = (await response.json()) as ConnectionData;
-    } catch (err) {
+    } catch (err: unknown) {
       logger.error('Failed to parse connection data response:', err);
       this._cachedUserId = undefined;
       this._cachedSessionAccountId = undefined;
@@ -257,7 +257,7 @@ export class AdoPrReviewProvider implements WorkCenterProvider {
     let prData: { value: AdoPullRequest[] };
     try {
       prData = (await response.json()) as { value: AdoPullRequest[] };
-    } catch (err) {
+    } catch (err: unknown) {
       logger.error(`Failed to parse PR response for project "${project}":`, err);
       return { items: [], failed: true };
     }

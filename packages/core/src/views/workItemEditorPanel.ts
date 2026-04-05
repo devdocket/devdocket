@@ -42,7 +42,7 @@ export class WorkItemEditorPanel {
         if (msg.type === 'autosave') {
           await this.saveData(msg.data);
         }
-      } catch (err) {
+      } catch (err: unknown) {
         const message = err instanceof Error ? err.message : String(err);
         vscode.window.showErrorMessage(`Failed to save work item: ${message}`);
       }

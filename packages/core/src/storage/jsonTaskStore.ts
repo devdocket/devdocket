@@ -79,7 +79,7 @@ export class JsonTaskStore implements ITaskStore {
         items.push(item);
         await this.writeFile(items);
         this.cache!.set(item.id, item);
-      } catch (err) {
+      } catch (err: unknown) {
         if (previousValue) {
           this.cache!.set(item.id, previousValue);
         } else {
@@ -104,7 +104,7 @@ export class JsonTaskStore implements ITaskStore {
         for (const item of items) {
           this.cache!.set(item.id, item);
         }
-      } catch (err) {
+      } catch (err: unknown) {
         for (const [id, prev] of previousValues) {
           if (prev) {
             this.cache!.set(id, prev);
@@ -126,7 +126,7 @@ export class JsonTaskStore implements ITaskStore {
       try {
         this.cache!.delete(id);
         await this.writeFile(Array.from(this.cache!.values()));
-      } catch (err) {
+      } catch (err: unknown) {
         if (previousValue) {
           this.cache!.set(id, previousValue);
         }

@@ -41,7 +41,7 @@ export class DiscoveredStateStore {
     await this.enqueue(() => {
       const previousValue = this.cache.get(k);
       this.cache.set(k, newRecord);
-      return this.writeFile().catch((err) => {
+      return this.writeFile().catch((err: unknown) => {
         if (previousValue) {
           this.cache.set(k, previousValue);
         } else {
@@ -64,7 +64,7 @@ export class DiscoveredStateStore {
         rollback.set(k, this.cache.get(k));
         this.cache.set(k, { providerId: item.providerId, externalId: item.externalId, inboxState: item.state });
       }
-      return this.writeFile().catch((err) => {
+      return this.writeFile().catch((err: unknown) => {
         for (const [k, previousValue] of rollback) {
           if (previousValue) {
             this.cache.set(k, previousValue);

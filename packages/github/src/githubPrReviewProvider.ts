@@ -58,7 +58,7 @@ export class GitHubPrReviewProvider implements WorkCenterProvider {
     // Clamp to minimum of 60 seconds
     const clampedInterval = Math.max(intervalSeconds, 60);
     this.refreshTimer = setInterval(() => {
-      this.refreshInBackground().catch((err) => {
+      this.refreshInBackground().catch((err: unknown) => {
         logger.error('PR review refresh failed', err);
       });
     }, clampedInterval * 1000);
@@ -88,7 +88,7 @@ export class GitHubPrReviewProvider implements WorkCenterProvider {
       }
 
       await this.fetchAndPublishPrs(session.accessToken, true);
-    } catch (err) {
+    } catch (err: unknown) {
       logger.error('Failed to fetch PR reviews', err);
     } finally {
       this._isRefreshing = false;
@@ -111,7 +111,7 @@ export class GitHubPrReviewProvider implements WorkCenterProvider {
       }
 
       await this.fetchAndPublishPrs(session.accessToken, false);
-    } catch (err) {
+    } catch (err: unknown) {
       logger.error('Failed to fetch PR reviews', err);
     } finally {
       this._isRefreshing = false;

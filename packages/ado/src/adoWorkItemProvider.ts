@@ -72,7 +72,7 @@ export class AdoWorkItemProvider implements WorkCenterProvider {
     }
     const clampedInterval = Math.max(interval, 60);
     this.refreshTimer = setInterval(() => {
-      this.refreshInBackground().catch((err) => {
+      this.refreshInBackground().catch((err: unknown) => {
         logger.error('Work item refresh failed:', err);
       });
     }, clampedInterval * 1000);
@@ -102,7 +102,7 @@ export class AdoWorkItemProvider implements WorkCenterProvider {
       }
 
       await this.fetchAndPublishWorkItems(session.accessToken, true);
-    } catch (err) {
+    } catch (err: unknown) {
       logger.error('Failed to fetch work items:', err);
     } finally {
       this._isRefreshing = false;
@@ -126,7 +126,7 @@ export class AdoWorkItemProvider implements WorkCenterProvider {
       }
 
       await this.fetchAndPublishWorkItems(session.accessToken, false);
-    } catch (err) {
+    } catch (err: unknown) {
       logger.error('Failed to fetch work items:', err);
     } finally {
       this._isRefreshing = false;
@@ -202,7 +202,7 @@ export class AdoWorkItemProvider implements WorkCenterProvider {
     let wiqlData: WiqlResponse;
     try {
       wiqlData = (await wiqlResponse.json()) as WiqlResponse;
-    } catch (err) {
+    } catch (err: unknown) {
       logger.error(`Failed to parse WIQL response for project "${project}":`, err);
       return { items: [], failed: true };
     }
@@ -236,7 +236,7 @@ export class AdoWorkItemProvider implements WorkCenterProvider {
       let detailData: { value: AdoWorkItem[] };
       try {
         detailData = (await detailResponse.json()) as { value: AdoWorkItem[] };
-      } catch (err) {
+      } catch (err: unknown) {
         logger.error('Failed to parse work item detail response:', err);
         batchFailed = true;
         continue;
