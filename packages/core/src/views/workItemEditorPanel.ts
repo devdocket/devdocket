@@ -186,10 +186,11 @@ export class WorkItemEditorPanel {
       color: var(--vscode-foreground);
       border: 1px solid var(--input-border);
     }
-    input[readonly], textarea[readonly] {
-      opacity: 0.7;
+    input:disabled, textarea:disabled {
+      opacity: 0.55;
       cursor: not-allowed;
       border-style: dashed;
+      background-color: var(--vscode-editor-inactiveSelectionBackground, rgba(128,128,128,0.15));
     }
     .hint {
       font-size: 0.8em;
@@ -201,15 +202,15 @@ export class WorkItemEditorPanel {
 </head>
 <body>
   <h2>Edit Work Item</h2>
-  <div id="form">
+  <div id="form" role="form">
     <div class="field">
       <label for="title">Title</label>
-      <input type="text" id="title" value="${escapeAttr(item.title)}" ${item.providerId ? 'readonly aria-readonly="true" aria-describedby="readonly-title-hint"' : ''} />
+      <input type="text" id="title" value="${escapeAttr(item.title)}" ${item.providerId ? 'disabled aria-disabled="true" aria-describedby="readonly-title-hint"' : ''} />
 ${item.providerId ? '      <span id="readonly-title-hint" class="hint">Title is managed by the provider</span>' : ''}
     </div>
     <div class="field">
       <label for="notes">Notes</label>
-      <textarea id="notes">${escapeHtml(item.notes ?? '')}</textarea>
+      <textarea id="notes" placeholder="Add notes...">${escapeHtml(item.notes ?? '')}</textarea>
     </div>
   </div>
   <script nonce="${nonce}">
@@ -229,7 +230,7 @@ ${item.providerId ? '      <span id="readonly-title-hint" class="hint">Title is 
       debounceTimer = setTimeout(() => {
         const data = getData();
         const titleEl = document.getElementById('title');
-        if (!data.title && titleEl instanceof HTMLInputElement && !titleEl.readOnly) return;
+        if (!data.title && titleEl instanceof HTMLInputElement && !titleEl.disabled) return;
         vscode.postMessage({ type: 'autosave', data });
       }, 500);
     }
@@ -237,7 +238,7 @@ ${item.providerId ? '      <span id="readonly-title-hint" class="hint">Title is 
     fields.forEach(f => {
       const el = document.getElementById(f);
       if (el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement) {
-        if (!el.readOnly) {
+        if (!el.disabled) {
           el.addEventListener('input', scheduleAutosave);
         }
       }
