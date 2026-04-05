@@ -104,6 +104,12 @@ export function registerCommands(
         vscode.window.showInformationMessage(
           `WorkCenter: Item already accepted as "${existing.title}"`
         );
+        try {
+          await stateStore.setState(item.providerId, item.externalId, 'accepted');
+        } catch (err: unknown) {
+          const message = err instanceof Error ? err.message : String(err);
+          vscode.window.showErrorMessage(`WorkCenter: Failed to update state — ${message}`);
+        }
         return;
       }
       try {

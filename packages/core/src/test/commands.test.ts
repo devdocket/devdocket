@@ -436,7 +436,7 @@ describe('registerCommands', () => {
       expect(window.showInformationMessage).toHaveBeenCalledWith(
         expect.stringContaining('already accepted'),
       );
-      expect(stateStore.setState).not.toHaveBeenCalled();
+      expect(stateStore.setState).toHaveBeenCalledWith('github', '42', 'accepted');
     });
 
     it('prefixes title with group when group is present', async () => {
@@ -476,6 +476,8 @@ describe('registerCommands', () => {
       expect(window.showErrorMessage).toHaveBeenCalledWith(
         expect.stringContaining('save failed'),
       );
+      expect(failGraph.getAll()).toHaveLength(0);
+      expect(stateStore.setState).not.toHaveBeenCalled();
     });
   });
 
@@ -577,6 +579,8 @@ describe('registerCommands', () => {
       expect(window.showErrorMessage).toHaveBeenCalledWith(
         expect.stringContaining('save failed'),
       );
+      expect(stateStore.setState).not.toHaveBeenCalled();
+      expect(failGraph.getAll()).toHaveLength(0);
     });
   });
 
