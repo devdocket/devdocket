@@ -18,6 +18,11 @@ import { getInboxUnseenCount } from './services/inboxBadge';
 export type { WorkCenterApi, WorkCenterProvider, WorkCenterAction, DiscoveredItem, Disposable } from './api/types';
 export { logger } from './services/logger';
 
+let providerRegistry: ProviderRegistry | undefined;
+let actionRegistry: ActionRegistry | undefined;
+let workGraph: WorkGraph | undefined;
+let stateStore: DiscoveredStateStore | undefined;
+
 export async function activate(context: vscode.ExtensionContext): Promise<WorkCenterApi> {
   const outputChannel = vscode.window.createOutputChannel('WorkCenter');
   context.subscriptions.push(outputChannel);
@@ -44,11 +49,11 @@ export async function activate(context: vscode.ExtensionContext): Promise<WorkCe
 
   const storagePath = context.globalStorageUri.fsPath;
   const store = new JsonTaskStore(storagePath);
-  const workGraph = new WorkGraph(store);
+  workGraph = new WorkGraph(store);
   await workGraph.load();
   logger.debug(`Loaded ${workGraph.getAll().length} work items`);
 
-  const stateStore = new DiscoveredStateStore(storagePath);
+  stateStore = new DiscoveredStateStore(storagePath);
   await stateStore.load();
   logger.debug('Loaded discovered state');
 
@@ -77,8 +82,8 @@ export async function activate(context: vscode.ExtensionContext): Promise<WorkCe
     }
   }
 
-  const providerRegistry = new ProviderRegistry(stateStore);
-  const actionRegistry = new ActionRegistry();
+  providerRegistry = new ProviderRegistry(stateStore);
+  actionRegistry = new ActionRegistry();
   const api = new WorkCenterApiImpl(providerRegistry, actionRegistry);
 
   const inboxProvider = new InboxTreeProvider(providerRegistry, stateStore);
@@ -210,5 +215,14 @@ export async function activate(context: vscode.ExtensionContext): Promise<WorkCe
 }
 
 export function deactivate(): void {
-  // Resources disposed via subscriptions
+  logger.info('WorkCenter deactivating...');
+  providerRegistry?.dispose();
+  actionRegistry?.dispose();
+  workGraph?.dispose();
+  stateStore?.dispose();
+  providerRegistry = undefined;
+  actionRegistry = undefined;
+  workGraph = undefined;
+  stateStore = undefined;
+  logger.info('WorkCenter deactivated');
 }

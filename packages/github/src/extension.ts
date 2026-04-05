@@ -4,6 +4,9 @@ import { GitHubPrReviewProvider } from './githubPrReviewProvider';
 import { StartWorkAction } from './startWorkAction';
 import { initLogger, setLogLevel, logger, LogLevel } from './logger';
 
+let issueProvider: GitHubIssueProvider | undefined;
+let prReviewProvider: GitHubPrReviewProvider | undefined;
+
 export async function activate(_context: vscode.ExtensionContext): Promise<void> {
   const outputChannel = vscode.window.createOutputChannel('WorkCenter GitHub');
   _context.subscriptions.push(outputChannel);
@@ -53,15 +56,15 @@ export async function activate(_context: vscode.ExtensionContext): Promise<void>
   }
 
   // Register the GitHub issue provider
-  const provider = new GitHubIssueProvider();
+  issueProvider = new GitHubIssueProvider();
   const config = vscode.workspace.getConfiguration('workcenterGithub');
   const intervalSeconds = config.get<number>('refreshIntervalSeconds', 300);
-  provider.startPeriodicRefresh(intervalSeconds);
+  issueProvider.startPeriodicRefresh(intervalSeconds);
 
-  const providerDisposable = api.registerProvider(provider);
+  const providerDisposable = api.registerProvider(issueProvider);
 
   // Register the GitHub PR review provider
-  const prReviewProvider = new GitHubPrReviewProvider();
+  prReviewProvider = new GitHubPrReviewProvider();
   prReviewProvider.startPeriodicRefresh(intervalSeconds);
   const prReviewDisposable = api.registerProvider(prReviewProvider);
 
@@ -73,13 +76,18 @@ export async function activate(_context: vscode.ExtensionContext): Promise<void>
     providerDisposable,
     prReviewDisposable,
     actionDisposable,
-    { dispose: () => provider.dispose() },
-    { dispose: () => prReviewProvider.dispose() },
+    { dispose: () => issueProvider?.dispose() },
+    { dispose: () => prReviewProvider?.dispose() },
   );
 
   logger.info('WorkCenter GitHub activated, registered 2 providers');
 }
 
 export function deactivate(): void {
-  // Resources disposed via subscriptions
+  logger.info('WorkCenter GitHub deactivating...');
+  issueProvider?.dispose();
+  prReviewProvider?.dispose();
+  issueProvider = undefined;
+  prReviewProvider = undefined;
+  logger.info('WorkCenter GitHub deactivated');
 }

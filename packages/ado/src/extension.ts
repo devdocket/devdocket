@@ -3,6 +3,11 @@ import { AdoWorkItemProvider } from './adoWorkItemProvider';
 import { AdoPrReviewProvider } from './adoPrReviewProvider';
 import { initLogger, setLogLevel, logger, LogLevel } from './logger';
 
+let workItemProvider: AdoWorkItemProvider | undefined;
+let prProvider: AdoPrReviewProvider | undefined;
+let workItemRegistration: vscode.Disposable | undefined;
+let prRegistration: vscode.Disposable | undefined;
+
 export async function activate(_context: vscode.ExtensionContext): Promise<void> {
   const outputChannel = vscode.window.createOutputChannel('WorkCenter ADO');
   _context.subscriptions.push(outputChannel);
@@ -49,11 +54,6 @@ export async function activate(_context: vscode.ExtensionContext): Promise<void>
     logger.error('Core extension API not available');
     return;
   }
-
-  let workItemProvider: AdoWorkItemProvider | undefined;
-  let prProvider: AdoPrReviewProvider | undefined;
-  let workItemRegistration: vscode.Disposable | undefined;
-  let prRegistration: vscode.Disposable | undefined;
 
   const configureProviders = () => {
     // Dispose existing providers and registrations before reconfiguring
@@ -117,5 +117,14 @@ export async function activate(_context: vscode.ExtensionContext): Promise<void>
 }
 
 export function deactivate(): void {
-  // Resources disposed via subscriptions
+  logger.info('WorkCenter ADO deactivating...');
+  workItemRegistration?.dispose();
+  prRegistration?.dispose();
+  workItemProvider?.dispose();
+  prProvider?.dispose();
+  workItemRegistration = undefined;
+  prRegistration = undefined;
+  workItemProvider = undefined;
+  prProvider = undefined;
+  logger.info('WorkCenter ADO deactivated');
 }
