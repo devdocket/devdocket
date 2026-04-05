@@ -421,8 +421,8 @@ describe('InboxTreeProvider', () => {
     it('should include title and description in tooltip', () => {
       const item: InboxItem = { kind: 'item', providerId: 'gh', externalId: '1', title: 'Bug fix', description: 'Fix the crash on startup' };
       const treeItem = provider.getTreeItem(item);
+      expect(treeItem.tooltip).toBeInstanceOf(MarkdownString);
       const tooltip = treeItem.tooltip as MarkdownString;
-      expect(tooltip).toBeDefined();
       expect(tooltip.value).toContain('Bug fix');
       expect(tooltip.value).toContain('Fix the crash on startup');
     });
@@ -430,8 +430,8 @@ describe('InboxTreeProvider', () => {
     it('should only include title when item has no description', () => {
       const item: InboxItem = { kind: 'item', providerId: 'gh', externalId: '1', title: 'Bug fix' };
       const treeItem = provider.getTreeItem(item);
+      expect(treeItem.tooltip).toBeInstanceOf(MarkdownString);
       const tooltip = treeItem.tooltip as MarkdownString;
-      expect(tooltip).toBeDefined();
       expect(tooltip.value).toContain('Bug fix');
       // Should not contain extra content beyond the title
       const afterTitle = tooltip.value.replace(/\*\*Bug fix\*\*/, '').trim();
