@@ -166,6 +166,7 @@ class JiraProvider implements WorkCenterProvider {
   readonly onDidDiscoverItems = this._onDidDiscoverItems.event;
 
   private refreshTimer: ReturnType<typeof setInterval> | undefined;
+  private _isRefreshing = false;
 
   async refresh(): Promise<void> {
     const tickets = await this.fetchTickets();
@@ -189,9 +190,13 @@ class JiraProvider implements WorkCenterProvider {
     this.stopPeriodicRefresh();
     const interval = Math.max(intervalSeconds, 60) * 1000;
     this.refreshTimer = setInterval(() => {
-      this.refresh().catch((err) =>
-        console.error('Jira refresh failed', err)
-      );
+      if (this._isRefreshing) {
+        return; // Skip if a refresh is already in progress
+      }
+      this._isRefreshing = true;
+      this.refresh()
+        .catch((err) => console.error('Jira refresh failed', err))
+        .finally(() => { this._isRefreshing = false; });
     }, interval);
   }
 
