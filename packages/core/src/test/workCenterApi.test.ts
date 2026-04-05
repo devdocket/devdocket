@@ -3,6 +3,7 @@ import { WorkCenterProvider, WorkCenterAction, DiscoveredItem } from '../api/typ
 import { ProviderRegistry } from '../services/providerRegistry';
 import { ActionRegistry } from '../services/actionRegistry';
 import * as vscode from 'vscode';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 function createMockStateStore() {
   return {
