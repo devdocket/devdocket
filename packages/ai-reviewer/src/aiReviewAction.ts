@@ -1,13 +1,6 @@
 import * as vscode from 'vscode';
 import type { WorkItem, WorkCenterAction } from './types';
-
-const DEFAULT_REVIEW_PROMPT = `You are a code reviewer. Analyze this PR diff and provide a review focusing on:
-1. Bugs and logic errors
-2. Security vulnerabilities
-3. Performance issues
-4. Missing error handling
-
-Be concise. Only flag genuine issues, not style preferences.`;
+import { DEFAULT_REVIEW_PROMPT } from './defaultPrompt';
 
 export class AiReviewAction implements WorkCenterAction {
   readonly id = 'ai-reviewer.review';

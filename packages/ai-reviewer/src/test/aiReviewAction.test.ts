@@ -316,8 +316,8 @@ describe('AiReviewAction', () => {
   describe('getReviewPrompt', () => {
     it('returns built-in prompt when no custom path configured', async () => {
       const prompt = await action.getReviewPrompt();
-      expect(prompt).toContain('Bugs and logic errors');
-      expect(prompt).toContain('Security vulnerabilities');
+      expect(prompt).toContain('Severity Classification');
+      expect(prompt).toContain('Correctness & Safety');
     });
 
     it('returns built-in prompt when custom path is empty string', async () => {
@@ -326,7 +326,7 @@ describe('AiReviewAction', () => {
       } as never);
 
       const prompt = await action.getReviewPrompt();
-      expect(prompt).toContain('Bugs and logic errors');
+      expect(prompt).toContain('Severity Classification');
     });
 
     it('returns custom prompt content when file exists', async () => {
@@ -355,7 +355,7 @@ describe('AiReviewAction', () => {
       vi.mocked(workspace.fs.readFile).mockRejectedValue(new Error('File not found'));
 
       const prompt = await action.getReviewPrompt();
-      expect(prompt).toContain('Bugs and logic errors');
+      expect(prompt).toContain('Severity Classification');
       expect(window.showWarningMessage).toHaveBeenCalledWith(
         expect.stringContaining('Could not read custom prompt file'),
       );
@@ -373,7 +373,7 @@ describe('AiReviewAction', () => {
       );
 
       const prompt = await action.getReviewPrompt();
-      expect(prompt).toContain('Bugs and logic errors');
+      expect(prompt).toContain('Severity Classification');
       expect(window.showWarningMessage).toHaveBeenCalledWith(
         expect.stringContaining('Custom prompt file is empty'),
       );
