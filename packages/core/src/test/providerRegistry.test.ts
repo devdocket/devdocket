@@ -372,6 +372,7 @@ describe('ProviderRegistry', () => {
     });
 
     it('resolves refreshAll when a provider refresh times out', async () => {
+      const warnSpy = vi.spyOn(logger, 'warn');
       const provider = createMockProvider('hanging');
       vi.mocked(provider.refresh).mockReturnValue(new Promise(() => {}));
       registry.register(provider);
@@ -382,6 +383,10 @@ describe('ProviderRegistry', () => {
       const refreshPromise = registry.refreshAll();
       await vi.advanceTimersByTimeAsync(30_000);
       await expect(refreshPromise).resolves.toBeUndefined();
+      expect(warnSpy).toHaveBeenCalledWith(
+        expect.stringContaining('Provider "hanging" refresh timed out'),
+      );
+      warnSpy.mockRestore();
     });
 
     it('clears timeout when refresh completes quickly', async () => {

@@ -15,6 +15,7 @@ export class ProviderRegistry {
   private readonly _onDidAddNewUnseenItems = new vscode.EventEmitter<number>();
   readonly onDidAddNewUnseenItems = this._onDidAddNewUnseenItems.event;
   private readonly _loadingProviders = new Set<string>();
+  private readonly _pendingTimeouts = new Set<ReturnType<typeof setTimeout>>();
 
   get loading(): boolean {
     return this._loadingProviders.size > 0;
@@ -108,10 +109,12 @@ export class ProviderRegistry {
         }
         resolve();
       }, ProviderRegistry.REFRESH_TIMEOUT_MS);
+      this._pendingTimeouts.add(timeoutId);
     });
     return Promise.race([promise, timeoutPromise]).finally(() => {
       if (timeoutId !== undefined) {
         clearTimeout(timeoutId);
+        this._pendingTimeouts.delete(timeoutId);
       }
     });
   }
@@ -142,6 +145,10 @@ export class ProviderRegistry {
   }
 
   dispose(): void {
+    for (const id of this._pendingTimeouts) {
+      clearTimeout(id);
+    }
+    this._pendingTimeouts.clear();
     for (const sub of this.subscriptions.values()) {
       sub.dispose();
     }
