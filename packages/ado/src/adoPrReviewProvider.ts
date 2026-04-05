@@ -192,7 +192,7 @@ export class AdoPrReviewProvider implements WorkCenterProvider {
     let response: Response;
     try {
       response = await fetch(
-        `https://dev.azure.com/${encodeURIComponent(this.org)}/_apis/connectiondata`,
+        `https://dev.azure.com/${encodeURIComponent(this.org)}/_apis/connectiondata?api-version=7.1`,
         {
           headers: { Authorization: `Bearer ${token}` },
         },
