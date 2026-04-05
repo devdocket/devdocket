@@ -68,6 +68,7 @@ describe('WorkItemEditorPanel', () => {
     await graph.load();
     context = createMockContext();
     mockPanel = createMockWebviewPanel();
+    vi.mocked(vscode.window.createWebviewPanel).mockReset();
     vi.mocked(vscode.window.createWebviewPanel).mockReturnValue(mockPanel as any);
     vi.mocked(vscode.window.showErrorMessage).mockReset();
   });
