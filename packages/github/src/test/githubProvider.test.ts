@@ -213,7 +213,7 @@ describe('GitHubIssueProvider', () => {
     expect(mockFetch).not.toHaveBeenCalled();
 
     const logged = mockChannel.appendLine.mock.calls.some(
-      (call: string[]) => call[0].includes('[ERROR]') && call[0].includes('Auth service unavailable'),
+      (call: string[]) => call[0].includes('[ERROR]') && call[0].includes('GitHub authentication failed'),
     );
     expect(logged).toBe(true);
   });

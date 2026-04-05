@@ -86,7 +86,7 @@ export class GitHubPrReviewProvider implements WorkCenterProvider {
         });
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
-        logger.error('GitHub authentication failed', message);
+        logger.error('GitHub authentication failed', err);
         vscode.window.showWarningMessage(`WorkCenter GitHub: Authentication failed — ${message}`);
         return;
       }
@@ -117,8 +117,7 @@ export class GitHubPrReviewProvider implements WorkCenterProvider {
           createIfNone: false,
         });
       } catch (err) {
-        const message = err instanceof Error ? err.message : String(err);
-        logger.warn('GitHub authentication failed during background refresh', message);
+        logger.warn('GitHub authentication failed during background refresh', err);
         return;
       }
 
