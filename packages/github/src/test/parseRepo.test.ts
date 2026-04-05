@@ -57,9 +57,9 @@ describe('parseRepoFromUrls', () => {
   it('rejects http:// (non-TLS) github.com URLs', () => {
     const result = parseRepoFromUrls(
       'http://github.com/owner/repo/issues/1',
-      'https://api.github.com/repos/owner/repo',
+      'https://evil.com/repos/owner/repo',
     );
-    expect(result).toBe('owner/repo');
+    expect(result).toMatch(/^unknown-repo-[0-9a-f]{12}$/);
   });
 
   it('logs warning when falling back to hash', () => {
@@ -91,8 +91,8 @@ describe('parseRepoFromUrls', () => {
 
   it('handles percent-encoded valid characters in path segments', () => {
     const result = parseRepoFromUrls(
-      'https://github.com/my-org/my-repo/issues/1',
-      'https://api.github.com/repos/my-org/my-repo',
+      'https://github.com/my%2Dorg/my%2Drepo/issues/1',
+      'https://api.github.com/repos/my%2Dorg/my%2Drepo',
     );
     expect(result).toBe('my-org/my-repo');
   });
