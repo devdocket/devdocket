@@ -64,6 +64,74 @@ describe('FocusTreeProvider', () => {
     });
   });
 
+  describe('getTreeItem description', () => {
+    it('should show "in progress" for InProgress items', () => {
+      const item = makeItem({ state: WorkItemState.InProgress });
+      expect(provider.getTreeItem(item).description).toBe('in progress');
+    });
+
+    it('should show "⛔ blocked" for Blocked items', () => {
+      const item = makeItem({ state: WorkItemState.Blocked });
+      expect(provider.getTreeItem(item).description).toBe('⛔ blocked');
+    });
+
+    it('should show "⏳ waiting" for WaitingOn items', () => {
+      const item = makeItem({ state: WorkItemState.WaitingOn });
+      expect(provider.getTreeItem(item).description).toBe('⏳ waiting');
+    });
+  });
+
+  describe('getTreeItem icon', () => {
+    it('should show play-circle icon for InProgress items', () => {
+      const item = makeItem({ state: WorkItemState.InProgress });
+      expect((provider.getTreeItem(item).iconPath as any).id).toBe('play-circle');
+    });
+
+    it('should show circle-slash icon for Blocked items', () => {
+      const item = makeItem({ state: WorkItemState.Blocked });
+      expect((provider.getTreeItem(item).iconPath as any).id).toBe('circle-slash');
+    });
+
+    it('should show clock icon for WaitingOn items', () => {
+      const item = makeItem({ state: WorkItemState.WaitingOn });
+      expect((provider.getTreeItem(item).iconPath as any).id).toBe('clock');
+    });
+  });
+
+  describe('getTreeItem tooltip', () => {
+    it('should include title in tooltip', () => {
+      const item = makeItem({ title: 'My Task' });
+      const tooltip = (provider.getTreeItem(item).tooltip as any).value;
+      expect(tooltip).toContain('My Task');
+    });
+
+    it('should include notes in tooltip when present', () => {
+      const item = makeItem({ notes: 'Some details' });
+      const tooltip = (provider.getTreeItem(item).tooltip as any).value;
+      expect(tooltip).toContain('Some details');
+    });
+
+    it('should not include notes section when notes are absent', () => {
+      const item = makeItem();
+      const tooltip = (provider.getTreeItem(item).tooltip as any).value;
+      expect(tooltip).not.toContain('**Notes:**');
+    });
+
+    it('should include state in tooltip', () => {
+      const item = makeItem({ state: WorkItemState.Blocked });
+      const tooltip = (provider.getTreeItem(item).tooltip as any).value;
+      expect(tooltip).toContain(WorkItemState.Blocked);
+    });
+
+    it('should include created timestamp in tooltip', () => {
+      const now = Date.now();
+      const item = makeItem({ createdAt: now });
+      const tooltip = (provider.getTreeItem(item).tooltip as any).value;
+      expect(tooltip).toContain('**Created:**');
+      expect(tooltip).toContain(new Date(now).toLocaleString());
+    });
+  });
+
   describe('getChildren', () => {
     it('should return items sorted by title', () => {
       const items = [
@@ -75,6 +143,21 @@ describe('FocusTreeProvider', () => {
       const children = provider.getChildren();
       expect(children.map(c => c.title)).toEqual(['Alpha', 'Zebra']);
     });
+
+    it('should request InProgress, Blocked, and WaitingOn states', () => {
+      workGraph.getItemsByState.mockReturnValue([]);
+      provider.getChildren();
+      expect(workGraph.getItemsByState).toHaveBeenCalledWith(
+        WorkItemState.InProgress,
+        WorkItemState.Blocked,
+        WorkItemState.WaitingOn,
+      );
+    });
+
+    it('should return empty array when no focus items exist', () => {
+      workGraph.getItemsByState.mockReturnValue([]);
+      expect(provider.getChildren()).toEqual([]);
+    });
   });
 
   describe('events', () => {
@@ -83,6 +166,16 @@ describe('FocusTreeProvider', () => {
       provider.onDidChangeTreeData(listener);
       workGraph._fire();
       expect(listener).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  describe('dispose', () => {
+    it('should stop firing events after dispose', () => {
+      const listener = vi.fn();
+      provider.onDidChangeTreeData(listener);
+      provider.dispose();
+      workGraph._fire();
+      expect(listener).not.toHaveBeenCalled();
     });
   });
 });

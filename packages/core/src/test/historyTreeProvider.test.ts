@@ -108,6 +108,40 @@ describe('HistoryTreeProvider', () => {
       const treeItem = provider.getTreeItem(item);
       expect((treeItem.tooltip as any).value).toContain('Details here');
     });
+
+    it('should include title in tooltip', () => {
+      const item = makeItem({ id: '1', title: 'My History Item' });
+      const tooltip = (provider.getTreeItem(item).tooltip as any).value;
+      expect(tooltip).toContain('My History Item');
+    });
+
+    it('should not include notes section when notes are absent', () => {
+      const item = makeItem({ id: '1', title: 'X' });
+      const tooltip = (provider.getTreeItem(item).tooltip as any).value;
+      expect(tooltip).not.toContain('**Notes:**');
+    });
+
+    it('should include state in tooltip', () => {
+      const item = makeItem({ id: '1', title: 'X', state: WorkItemState.Archived });
+      const tooltip = (provider.getTreeItem(item).tooltip as any).value;
+      expect(tooltip).toContain(WorkItemState.Archived);
+    });
+
+    it('should show "Completed at" timestamp label for Done items', () => {
+      const ts = 1700000000000;
+      const item = makeItem({ id: '1', title: 'X', state: WorkItemState.Done, updatedAt: ts });
+      const tooltip = (provider.getTreeItem(item).tooltip as any).value;
+      expect(tooltip).toContain('**Completed at:**');
+      expect(tooltip).toContain(new Date(ts).toLocaleString());
+    });
+
+    it('should show "Archived at" timestamp label for Archived items', () => {
+      const ts = 1700000000000;
+      const item = makeItem({ id: '1', title: 'X', state: WorkItemState.Archived, updatedAt: ts });
+      const tooltip = (provider.getTreeItem(item).tooltip as any).value;
+      expect(tooltip).toContain('**Archived at:**');
+      expect(tooltip).toContain(new Date(ts).toLocaleString());
+    });
   });
 
   describe('events', () => {
@@ -122,6 +156,14 @@ describe('HistoryTreeProvider', () => {
   describe('dispose', () => {
     it('should not throw on dispose', () => {
       expect(() => provider.dispose()).not.toThrow();
+    });
+
+    it('should stop firing events after dispose', () => {
+      const listener = vi.fn();
+      provider.onDidChangeTreeData(listener);
+      provider.dispose();
+      workGraph._fire();
+      expect(listener).not.toHaveBeenCalled();
     });
   });
 });
