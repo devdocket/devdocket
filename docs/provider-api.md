@@ -395,7 +395,7 @@ WorkCenter maintains two JSON files in its global storage:
 
 **`DiscoveredItem` fields are not persisted in `discovered-state.json`.** That file stores only inbox state keyed by `providerId + externalId`, which keeps the discovery index lightweight.
 
-When a user **accepts** an item from Inbox or Sources, WorkCenter creates a new `WorkItem` in `workitems.json` with a snapshot of provider-backed fields such as the title and URL, along with provenance metadata (`providerId`, `externalId`).
+When a user **accepts** an item from Inbox or Sources, WorkCenter creates a new `WorkItem` in `workitems.json` using provider-backed data (such as title and URL) along with provenance metadata (`providerId`, `externalId`). Some fields may be normalized during acceptance — for example, grouped items have the group name prefixed to the stored title.
 
 ---
 
