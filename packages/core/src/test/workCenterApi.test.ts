@@ -1,5 +1,5 @@
 import { WorkCenterApiImpl } from '../api/workCenterApi';
-import { WorkCenterProvider, WorkCenterAction } from '../api/types';
+import { WorkCenterProvider, WorkCenterAction, DiscoveredItem } from '../api/types';
 import { ProviderRegistry } from '../services/providerRegistry';
 import { ActionRegistry } from '../services/actionRegistry';
 import * as vscode from 'vscode';
@@ -17,7 +17,7 @@ function createMockStateStore() {
 }
 
 function createMockProvider(id: string): WorkCenterProvider {
-  const emitter = new vscode.EventEmitter<any>();
+  const emitter = new vscode.EventEmitter<DiscoveredItem[]>();
   return {
     id,
     label: `Provider ${id}`,
@@ -35,6 +35,9 @@ function createMockAction(id: string): WorkCenterAction {
   };
 }
 
+// Contract tests for the public API surface that provider extensions consume.
+// These intentionally overlap with registry-level tests to guard against
+// accidental wiring changes in WorkCenterApiImpl.
 describe('WorkCenterApiImpl', () => {
   let api: WorkCenterApiImpl;
   let providerRegistry: ProviderRegistry;
