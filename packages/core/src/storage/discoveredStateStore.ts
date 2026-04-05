@@ -111,9 +111,11 @@ export class DiscoveredStateStore {
         this.loaded = true;
         return;
       }
-      // Allow retry on failure
-      this.loadPromise = null;
       throw err;
+    } finally {
+      // Clear the in-flight promise so it doesn't retain a reference
+      // and so reload can be supported in the future
+      this.loadPromise = null;
     }
   }
 

@@ -110,11 +110,12 @@ describe('JsonTaskStore concurrency', () => {
       writeStarted = resolve;
     });
 
-    vi.spyOn(fs, 'writeFile').mockImplementation(async (...args: unknown[]) => {
+    const realWriteFile = fs.writeFile;
+    vi.spyOn(fs, 'writeFile').mockImplementation(async (...args: Parameters<typeof fs.writeFile>) => {
       writeStarted();
       await writeBlocked;
       vi.mocked(fs.writeFile).mockRestore();
-      return (fs.writeFile as Function)(...args);
+      return realWriteFile(...args);
     });
 
     const savePromise = store.save(item);
@@ -239,7 +240,9 @@ describe('DiscoveredStateStore concurrency', () => {
       expect(
         disk.find(
           (d) =>
-            d.providerId === e.providerId && d.externalId === e.externalId,
+            d.providerId === e.providerId &&
+            d.externalId === e.externalId &&
+            d.inboxState === e.state,
         ),
       ).toBeDefined();
     }
@@ -376,7 +379,9 @@ describe('DiscoveredStateStore concurrency (fresh store)', () => {
       expect(
         disk.find(
           (d) =>
-            d.providerId === e.providerId && d.externalId === e.externalId,
+            d.providerId === e.providerId &&
+            d.externalId === e.externalId &&
+            d.inboxState === e.state,
         ),
       ).toBeDefined();
     }
