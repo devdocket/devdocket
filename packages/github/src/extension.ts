@@ -75,11 +75,7 @@ export async function activate(_context: vscode.ExtensionContext): Promise<void>
   const actionDisposable = api.registerAction(startWorkAction);
 
   _context.subscriptions.push(
-    { dispose: () => providerRegistration?.dispose() },
-    { dispose: () => prReviewRegistration?.dispose() },
     actionDisposable,
-    { dispose: () => issueProvider?.dispose() },
-    { dispose: () => prReviewProvider?.dispose() },
   );
 
   logger.info('WorkCenter GitHub activated, registered 2 providers');

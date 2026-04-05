@@ -103,14 +103,6 @@ export async function activate(_context: vscode.ExtensionContext): Promise<void>
         configureProviders();
       }
     }),
-    {
-      dispose: () => {
-        workItemRegistration?.dispose();
-        prRegistration?.dispose();
-        workItemProvider?.dispose();
-        prProvider?.dispose();
-      },
-    },
   );
 
   logger.info('WorkCenter ADO activated');
