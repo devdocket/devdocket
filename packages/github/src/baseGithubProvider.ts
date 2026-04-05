@@ -76,19 +76,20 @@ export abstract class BaseGitHubProvider implements WorkCenterProvider {
     await this.doRefresh(false);
   }
 
-  private async doRefresh(createIfNone: boolean): Promise<void> {
+  private async doRefresh(isUserTriggered: boolean): Promise<void> {
     if (this._isRefreshing) {
       return;
     }
     this._isRefreshing = true;
     try {
+      const createIfNone = isUserTriggered;
       const session = await vscode.authentication.getSession('github', ['repo'], {
         createIfNone,
       }).catch(() => null);
       if (!session) {
         return;
       }
-      await this.fetchAndPublish(session.accessToken, createIfNone);
+      await this.fetchAndPublish(session.accessToken, isUserTriggered);
     } catch (err) {
       logger.error(`Failed to fetch ${this.label}`, err);
     } finally {
