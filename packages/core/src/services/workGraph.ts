@@ -10,7 +10,7 @@ import { logger } from './logger';
 export class WorkGraph {
   private items: Map<string, WorkItem> = new Map();
   private readonly _onDidChange = new vscode.EventEmitter<void>();
-  /** Fires whenever items are created, updated, reordered, or deleted. */
+  /** Fires whenever items are created, updated, reordered, state-transitioned, or deleted. */
   readonly onDidChange = this._onDidChange.event;
 
   constructor(private readonly store: ITaskStore) {}
@@ -180,7 +180,7 @@ export class WorkGraph {
     this._onDidChange.fire();
   }
 
-  /** Move a work item to the position of a target item (drag-and-drop reorder). */
+  /** Insert a work item before or after a target item (drag-and-drop reorder). */
   async reorderItem(draggedId: string, targetId: string): Promise<void> {
     const dragged = this.items.get(draggedId);
     const target = this.items.get(targetId);
