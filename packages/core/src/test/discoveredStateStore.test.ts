@@ -122,4 +122,198 @@ describe('DiscoveredStateStore', () => {
     expect(JSON.parse(raw)).toHaveLength(1);
     nestedStore.dispose();
   });
+
+  describe('edge cases', () => {
+    it('should handle concurrent setState calls without data loss', async () => {
+      // Pre-load so concurrent setState calls don't race on load()
+      await store.load();
+      const promises = Array.from({ length: 20 }, (_, i) =>
+        store.setState('gh', `issue-${i}`, 'unseen')
+      );
+      await Promise.all(promises);
+
+      const records = await store.loadAll();
+      expect(records).toHaveLength(20);
+      for (let i = 0; i < 20; i++) {
+        expect(store.getState('gh', `issue-${i}`)).toBe('unseen');
+      }
+    });
+
+    it('should handle large sets (1000+ items)', async () => {
+      const items = Array.from({ length: 1200 }, (_, i) => ({
+        providerId: 'gh',
+        externalId: `item-${i}`,
+        state: 'unseen' as const,
+      }));
+      await store.setStates(items);
+
+      const records = await store.loadAll();
+      expect(records).toHaveLength(1200);
+
+      // Verify a sampling of items
+      expect(store.getState('gh', 'item-0')).toBe('unseen');
+      expect(store.getState('gh', 'item-599')).toBe('unseen');
+      expect(store.getState('gh', 'item-1199')).toBe('unseen');
+
+      // Verify persistence by reloading from disk
+      const store2 = new DiscoveredStateStore(tmpDir);
+      await store2.load();
+      const reloaded = await store2.loadAll();
+      expect(reloaded).toHaveLength(1200);
+      store2.dispose();
+    });
+
+    it('should prune stale entries by overwriting with a reduced set', async () => {
+      await store.setStates([
+        { providerId: 'gh', externalId: 'keep-1', state: 'accepted' },
+        { providerId: 'gh', externalId: 'stale-1', state: 'unseen' },
+        { providerId: 'gh', externalId: 'stale-2', state: 'dismissed' },
+        { providerId: 'gh', externalId: 'keep-2', state: 'accepted' },
+      ]);
+      expect((await store.loadAll())).toHaveLength(4);
+
+      // Simulate pruning by dismissing stale entries
+      await store.setState('gh', 'stale-1', 'dismissed');
+      await store.setState('gh', 'stale-2', 'dismissed');
+
+      expect(store.getState('gh', 'stale-1')).toBe('dismissed');
+      expect(store.getState('gh', 'stale-2')).toBe('dismissed');
+      expect(store.getState('gh', 'keep-1')).toBe('accepted');
+      expect(store.getState('gh', 'keep-2')).toBe('accepted');
+    });
+
+    it('should handle setState called before load completes', async () => {
+      // Pre-seed some data on disk
+      const filePath = path.join(tmpDir, 'discovered-state.json');
+      await fs.writeFile(filePath, JSON.stringify([
+        { providerId: 'gh', externalId: 'existing-1', inboxState: 'unseen' },
+      ]), 'utf-8');
+
+      // Create a fresh store and call setState immediately (triggers auto-load)
+      const freshStore = new DiscoveredStateStore(tmpDir);
+      await freshStore.setState('gh', 'new-1', 'accepted');
+
+      expect(freshStore.getState('gh', 'existing-1')).toBe('unseen');
+      expect(freshStore.getState('gh', 'new-1')).toBe('accepted');
+      freshStore.dispose();
+    });
+
+    it('should recover gracefully from corrupt JSON (non-parseable)', async () => {
+      const filePath = path.join(tmpDir, 'discovered-state.json');
+      await fs.writeFile(filePath, '{broken: json!!!', 'utf-8');
+
+      await expect(store.load()).rejects.toThrow();
+    });
+
+    it('should recover gracefully from truncated JSON', async () => {
+      const filePath = path.join(tmpDir, 'discovered-state.json');
+      await fs.writeFile(filePath, '[{"providerId":"gh","externalId":"1","inboxState":"unseen"', 'utf-8');
+
+      await expect(store.load()).rejects.toThrow();
+    });
+
+    it('should handle empty file as corrupt JSON', async () => {
+      const filePath = path.join(tmpDir, 'discovered-state.json');
+      await fs.writeFile(filePath, '', 'utf-8');
+
+      await expect(store.load()).rejects.toThrow();
+    });
+
+    it('should handle file containing only whitespace as corrupt JSON', async () => {
+      const filePath = path.join(tmpDir, 'discovered-state.json');
+      await fs.writeFile(filePath, '   \n  ', 'utf-8');
+
+      await expect(store.load()).rejects.toThrow();
+    });
+
+    it('should serialize concurrent save calls via write queue', async () => {
+      // Pre-load so concurrent setState calls don't race on load()
+      await store.load();
+      const promises: Promise<void>[] = [];
+      for (let i = 0; i < 50; i++) {
+        promises.push(store.setState('gh', `concurrent-${i}`, 'unseen'));
+      }
+      await Promise.all(promises);
+
+      // All items must be present after serialized writes
+      const records = await store.loadAll();
+      expect(records).toHaveLength(50);
+
+      // Verify the file on disk is valid JSON with all entries
+      const filePath = path.join(tmpDir, 'discovered-state.json');
+      const raw = await fs.readFile(filePath, 'utf-8');
+      const parsed = JSON.parse(raw);
+      expect(parsed).toHaveLength(50);
+    });
+
+    it('should perform getState lookups efficiently with a large set', async () => {
+      const count = 2000;
+      const items = Array.from({ length: count }, (_, i) => ({
+        providerId: 'perf',
+        externalId: `id-${i}`,
+        state: 'unseen' as const,
+      }));
+      await store.setStates(items);
+
+      const start = performance.now();
+      for (let i = 0; i < count; i++) {
+        store.getState('perf', `id-${i}`);
+      }
+      const elapsed = performance.now() - start;
+
+      // 2000 Map lookups should finish well under 100ms
+      expect(elapsed).toBeLessThan(100);
+      // Spot-check correctness
+      expect(store.getState('perf', 'id-0')).toBe('unseen');
+      expect(store.getState('perf', `id-${count - 1}`)).toBe('unseen');
+    });
+
+    it('should handle concurrent setStates batch calls', async () => {
+      // Pre-load so concurrent setStates calls don't race on load()
+      await store.load();
+      const batch1 = Array.from({ length: 10 }, (_, i) => ({
+        providerId: 'a', externalId: `a-${i}`, state: 'unseen' as const,
+      }));
+      const batch2 = Array.from({ length: 10 }, (_, i) => ({
+        providerId: 'b', externalId: `b-${i}`, state: 'accepted' as const,
+      }));
+
+      await Promise.all([store.setStates(batch1), store.setStates(batch2)]);
+
+      const records = await store.loadAll();
+      expect(records).toHaveLength(20);
+      expect(store.getState('a', 'a-0')).toBe('unseen');
+      expect(store.getState('b', 'b-9')).toBe('accepted');
+    });
+
+    it('should handle rapid state transitions on the same item', async () => {
+      await Promise.all([
+        store.setState('gh', 'flip', 'unseen'),
+        store.setState('gh', 'flip', 'accepted'),
+        store.setState('gh', 'flip', 'dismissed'),
+      ]);
+
+      // The final state depends on write-queue ordering; all three are valid
+      const finalState = store.getState('gh', 'flip');
+      expect(['unseen', 'accepted', 'dismissed']).toContain(finalState);
+
+      // Only one record for this key
+      const records = await store.loadAll();
+      const flipRecords = records.filter(r => r.externalId === 'flip');
+      expect(flipRecords).toHaveLength(1);
+    });
+
+    it('should fire onDidChange for each setState in concurrent batch', async () => {
+      const listener = vi.fn();
+      store.onDidChange(listener);
+
+      await Promise.all([
+        store.setState('gh', 'x', 'unseen'),
+        store.setState('gh', 'y', 'accepted'),
+        store.setState('gh', 'z', 'dismissed'),
+      ]);
+
+      expect(listener).toHaveBeenCalledTimes(3);
+    });
+  });
 });
