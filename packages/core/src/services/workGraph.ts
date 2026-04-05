@@ -11,9 +11,10 @@ export class WorkGraph {
   private items: Map<string, WorkItem> = new Map();
   private readonly _onDidChange = new vscode.EventEmitter<void>();
   /**
-   * Fires when this graph changes through public mutation operations exposed by {@link WorkGraph}.
-   * Internal maintenance performed during load (for example, sort-order backfilling) may update items
-   * without emitting this event.
+   * Fires when this graph changes through public mutation operations exposed by {@link WorkGraph},
+   * except for internal maintenance or normalization work that may update items without emitting
+   * this event. This includes maintenance performed during load (for example, sort-order backfilling)
+   * and normalization triggered as part of a public operation when no user-visible mutation occurs.
    */
   readonly onDidChange = this._onDidChange.event;
 
