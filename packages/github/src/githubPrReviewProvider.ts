@@ -49,4 +49,20 @@ export class GitHubPrReviewProvider extends BaseGitHubProvider {
 
     this._onDidDiscoverItems.fire(items);
   }
+
+  // Override: use repository_url as-is to maintain unique externalId
+  protected override parseRepo(issue: GitHubIssue): string {
+    const match = issue.html_url.match(/github\.com\/([^/]+\/[^/]+)/);
+    if (match) {
+      return match[1];
+    }
+
+    const apiMatch = issue.repository_url.match(/repos\/([^/]+\/[^/]+)/);
+    if (apiMatch) {
+      return apiMatch[1];
+    }
+
+    logger.warn(`Could not parse repo from PR URL: ${issue.html_url}`);
+    return issue.repository_url;
+  }
 }
