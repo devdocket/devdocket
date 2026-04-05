@@ -8,7 +8,7 @@ import { logger } from './logger';
  * Provides CRUD operations, state transitions, and ordering.
  */
 export class WorkGraph {
-  private items: Map<string, WorkItem> = new Map();
+  private readonly items: Map<string, WorkItem> = new Map();
   private readonly _onDidChange = new vscode.EventEmitter<void>();
   /**
    * Fires when this graph changes through public mutation operations exposed by {@link WorkGraph},
