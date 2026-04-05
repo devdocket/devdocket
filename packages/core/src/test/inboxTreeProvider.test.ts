@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { EventEmitter, TreeItemCollapsibleState } from 'vscode';
 import { DiscoveredItem } from '../api/types';
 import { InboxTreeProvider, InboxProviderNode, InboxGroupNode, InboxItem } from '../views/inboxTreeProvider';
@@ -49,9 +49,15 @@ describe('InboxTreeProvider', () => {
   let provider: InboxTreeProvider;
 
   beforeEach(() => {
+    vi.useFakeTimers();
     stateStore = createMockStateStore();
     registry = createMockProviderRegistry();
     provider = new InboxTreeProvider(registry as any, stateStore as any);
+  });
+
+  afterEach(() => {
+    provider.dispose();
+    vi.useRealTimers();
   });
 
   function providerNode(providerId: string): InboxProviderNode {
@@ -346,6 +352,7 @@ describe('InboxTreeProvider', () => {
       const listener = vi.fn();
       provider.onDidChangeTreeData(listener);
       registry._fire();
+      vi.advanceTimersByTime(50);
       expect(listener).toHaveBeenCalledTimes(1);
     });
 
@@ -360,6 +367,7 @@ describe('InboxTreeProvider', () => {
 
       // Provider refresh fires → item is still in inbox, so seenItems should be retained
       registry._fire();
+      vi.advanceTimersByTime(50);
 
       // After refresh, item should still appear as seen (circle-outline icon)
       expect(provider.getTreeItem(item).label).toBe('Bug');
@@ -373,6 +381,7 @@ describe('InboxTreeProvider', () => {
       // Remove item from provider
       registry._setItems('gh', []);
       registry._fire();
+      vi.advanceTimersByTime(50);
 
       // Re-add item — should appear as unseen (circle-filled icon)
       registry._setItems('gh', [{ externalId: '1', title: 'Bug' }]);
@@ -385,6 +394,17 @@ describe('InboxTreeProvider', () => {
       const listener = vi.fn();
       provider.onDidChangeTreeData(listener);
       stateStore._fire();
+      vi.advanceTimersByTime(50);
+      expect(listener).toHaveBeenCalledTimes(1);
+    });
+
+    it('should coalesce multiple rapid events into a single refresh', () => {
+      const listener = vi.fn();
+      provider.onDidChangeTreeData(listener);
+      registry._fire();
+      registry._fire();
+      stateStore._fire();
+      vi.advanceTimersByTime(50);
       expect(listener).toHaveBeenCalledTimes(1);
     });
   });

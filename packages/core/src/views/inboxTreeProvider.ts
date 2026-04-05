@@ -33,21 +33,27 @@ export class InboxTreeProvider implements vscode.TreeDataProvider<InboxElement> 
   readonly onDidChangeTreeData = this._onDidChangeTreeData.event;
   private readonly disposables: vscode.Disposable[] = [];
   private readonly seenItems = new Set<string>();
+  private refreshTimer: ReturnType<typeof setTimeout> | undefined;
 
   constructor(
     private readonly providerRegistry: ProviderRegistry,
     private readonly stateStore: DiscoveredStateStore,
   ) {
     this.disposables.push(
-      providerRegistry.onDidChangeDiscoveredItems(() => {
-        this.pruneSeenItems();
-        this._onDidChangeTreeData.fire();
-      }),
-      stateStore.onDidChange(() => {
-        this.pruneSeenItems();
-        this._onDidChangeTreeData.fire();
-      })
+      providerRegistry.onDidChangeDiscoveredItems(() => this.scheduleRefresh()),
+      stateStore.onDidChange(() => this.scheduleRefresh()),
     );
+  }
+
+  private scheduleRefresh(): void {
+    if (this.refreshTimer !== undefined) {
+      clearTimeout(this.refreshTimer);
+    }
+    this.refreshTimer = setTimeout(() => {
+      this.refreshTimer = undefined;
+      this.pruneSeenItems();
+      this._onDidChangeTreeData.fire();
+    }, 50);
   }
 
   private pruneSeenItems(): void {
@@ -247,6 +253,9 @@ export class InboxTreeProvider implements vscode.TreeDataProvider<InboxElement> 
   }
 
   dispose(): void {
+    if (this.refreshTimer !== undefined) {
+      clearTimeout(this.refreshTimer);
+    }
     this._onDidChangeTreeData.dispose();
     this.disposables.forEach(d => d.dispose());
   }
