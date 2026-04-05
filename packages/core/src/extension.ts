@@ -72,7 +72,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<WorkCe
     try {
       await stateStore.setStates(itemsToMigrate);
       logger.info(`Migrated ${itemsToMigrate.length} items to accepted state`);
-    } catch (err) {
+    } catch (err: unknown) {
       logger.error('Migration failed', err);
     }
   }

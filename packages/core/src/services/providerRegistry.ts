@@ -39,7 +39,7 @@ export class ProviderRegistry {
     logger.info(`Registered provider: ${provider.id} (${provider.label})`);
 
     const sub = provider.onDidDiscoverItems((items) => {
-      void this.handleDiscoveredItems(provider.id, items).catch(err => logger.error('handleDiscoveredItems failed', err));
+      void this.handleDiscoveredItems(provider.id, items).catch((err: unknown) => logger.error('handleDiscoveredItems failed', err));
     });
     this.subscriptions.set(provider.id, sub);
 
@@ -47,7 +47,7 @@ export class ProviderRegistry {
     this._onDidRegisterProvider.fire();
     this._onDidChangeDiscoveredItems.fire();
     provider.refresh()
-      .catch((err) => {
+      .catch((err: unknown) => {
         logger.error(`Provider "${provider.id}" refresh failed`, err);
       })
       .finally(() => {
@@ -84,7 +84,7 @@ export class ProviderRegistry {
   async refreshAll(): Promise<void> {
     const promises = Array.from(this.providers.values()).map((p) => {
       logger.debug(`Provider ${p.id} refreshing...`);
-      return p.refresh().catch((err) => {
+      return p.refresh().catch((err: unknown) => {
         logger.error(`Provider "${p.id}" refresh failed`, err);
       });
     });
@@ -109,7 +109,7 @@ export class ProviderRegistry {
       try {
         await this.stateStore.setStates(updates);
         this._onDidAddNewUnseenItems.fire(updates.length);
-      } catch (err) {
+      } catch (err: unknown) {
         logger.error('Failed to persist discovered states', err);
       }
     }

@@ -54,7 +54,7 @@ export class GitHubIssueProvider implements WorkCenterProvider {
     // Clamp to minimum of 60 seconds
     const clampedInterval = Math.max(intervalSeconds, 60);
     this.refreshTimer = setInterval(() => {
-      this.refreshInBackground().catch((err) => {
+      this.refreshInBackground().catch((err: unknown) => {
         logger.error('Refresh failed', err);
       });
     }, clampedInterval * 1000);
@@ -79,7 +79,7 @@ export class GitHubIssueProvider implements WorkCenterProvider {
       }
 
       await this.fetchAndPublishIssues(session.accessToken, true);
-    } catch (err) {
+    } catch (err: unknown) {
       logger.error('Failed to fetch issues', err);
     }
   }
@@ -100,7 +100,7 @@ export class GitHubIssueProvider implements WorkCenterProvider {
       }
 
       await this.fetchAndPublishIssues(session.accessToken, false);
-    } catch (err) {
+    } catch (err: unknown) {
       logger.error('Failed to fetch issues', err);
     } finally {
       this._isRefreshing = false;
