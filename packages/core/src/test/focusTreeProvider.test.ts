@@ -17,8 +17,8 @@ function makeItem(overrides: Partial<WorkItem> = {}): WorkItem {
     id: 'item-1',
     title: 'Test item',
     state: WorkItemState.InProgress,
-    createdAt: Date.now(),
-    updatedAt: Date.now(),
+    createdAt: 1700000000000,
+    updatedAt: 1700000000000,
     ...overrides,
   };
 }
@@ -124,11 +124,11 @@ describe('FocusTreeProvider', () => {
     });
 
     it('should include created timestamp in tooltip', () => {
-      const now = Date.now();
-      const item = makeItem({ createdAt: now });
+      const ts = 1700000000000;
+      const item = makeItem({ createdAt: ts });
       const tooltip = (provider.getTreeItem(item).tooltip as any).value;
       expect(tooltip).toContain('**Created:**');
-      expect(tooltip).toContain(new Date(now).toLocaleString());
+      expect(tooltip).toContain(new Date(ts).toLocaleString());
     });
   });
 
