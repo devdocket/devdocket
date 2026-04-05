@@ -28,9 +28,9 @@ WorkCenter organizes work items through a lifecycle of views:
 | **History** | Completed and archived items |
 | **Sources** | A browsable library of everything providers know about |
 
-**Providers** feed items into this system by emitting `DiscoveredItem` arrays. WorkCenter tracks which items the user has seen, accepted, or dismissed — but the item data itself is always read live from the provider.
+**Providers** feed items into this system by emitting `DiscoveredItem` arrays. For discovery views such as **Inbox** and **Sources**, item data is read live from the provider. When a user accepts an item, WorkCenter stores a snapshot of it as a `WorkItem`, and **Queue**, **Focus**, and **History** render that persisted data instead of always reading live from the provider.
 
-**Actions** extend what users can do with work items. They appear dynamically in context menus and are filtered per-item via a `canRun()` predicate.
+**Actions** extend what users can do with work items. The context menu exposes a single `Run Action…` command, and the available actions shown in that quick pick are filtered per-item via a `canRun()` predicate.
 
 ---
 
@@ -384,9 +384,9 @@ WorkCenter maintains two JSON files in its global storage:
 | `workitems.json` | Full `WorkItem` records with state machine lifecycle |
 | `discovered-state.json` | Thin index mapping `providerId + externalId` → inbox state (`unseen`, `accepted`, `dismissed`) |
 
-**Provider item data (title, description, url) is not persisted.** It is always read live from the provider's in-memory data. This keeps data fresh and avoids stale copies.
+**`DiscoveredItem` fields are not persisted in `discovered-state.json`.** That file stores only inbox state keyed by `providerId + externalId`, which keeps the discovery index lightweight.
 
-When a user **accepts** an item from Inbox or Sources, WorkCenter creates a new `WorkItem` in `workitems.json` with a snapshot of the title and provenance metadata (`providerId`, `externalId`, `url`).
+When a user **accepts** an item from Inbox or Sources, WorkCenter creates a new `WorkItem` in `workitems.json` with a snapshot of provider-backed fields such as the title and URL, along with provenance metadata (`providerId`, `externalId`).
 
 ---
 
