@@ -133,7 +133,7 @@ export class GitHubPrReviewProvider implements WorkCenterProvider {
     if (!response.ok) {
       const message = 'Failed to fetch PR review requests';
       if (isUserTriggered) {
-        vscode.window.showWarningMessage(`WorkCenter GitHub: ${message}`);
+        void vscode.window.showWarningMessage(`WorkCenter GitHub: ${message}`);
       } else {
         logger.warn(`${message}: ${response.status}`);
       }

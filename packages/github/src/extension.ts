@@ -43,7 +43,7 @@ export async function activate(_context: vscode.ExtensionContext): Promise<void>
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : String(err);
     logger.error(`Failed to activate core extension — ${message}`);
-    vscode.window.showErrorMessage(`WorkCenter GitHub: Failed to activate core extension — ${message}`);
+    void vscode.window.showErrorMessage(`WorkCenter GitHub: Failed to activate core extension — ${message}`);
     return;
   }
 
