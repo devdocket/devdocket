@@ -68,6 +68,11 @@ export class GitHubIssueProvider implements WorkCenterProvider {
   }
 
   async refresh(token?: vscode.CancellationToken): Promise<void> {
+    if (this._isRefreshing) {
+      return;
+    }
+
+    this._isRefreshing = true;
     logger.info('Fetching assigned issues...');
     try {
       if (token?.isCancellationRequested) {
@@ -85,6 +90,8 @@ export class GitHubIssueProvider implements WorkCenterProvider {
       await this.fetchAndPublishIssues(session.accessToken, true);
     } catch (err) {
       logger.error('Failed to fetch issues', err);
+    } finally {
+      this._isRefreshing = false;
     }
   }
 
