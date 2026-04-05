@@ -15,7 +15,7 @@ export class ProviderRegistry {
   private readonly _onDidAddNewUnseenItems = new vscode.EventEmitter<number>();
   readonly onDidAddNewUnseenItems = this._onDidAddNewUnseenItems.event;
   private readonly _loadingProviders = new Set<string>();
-  private readonly _pendingCts = new Set<vscode.CancellationTokenSource>();
+  private readonly _pendingRefreshes = new Set<{ cts: vscode.CancellationTokenSource; timeoutId: ReturnType<typeof setTimeout> }>();
 
   get loading(): boolean {
     return this._loadingProviders.size > 0;
@@ -90,8 +90,9 @@ export class ProviderRegistry {
 
   private refreshWithTimeout(provider: WorkCenterProvider): Promise<void> {
     const cts = new vscode.CancellationTokenSource();
-    this._pendingCts.add(cts);
     const timeoutId = setTimeout(() => cts.cancel(), ProviderRegistry.REFRESH_TIMEOUT_MS);
+    const entry = { cts, timeoutId };
+    this._pendingRefreshes.add(entry);
     cts.token.onCancellationRequested(() => {
       if (this.providers.has(provider.id)) {
         logger.warn(`Provider "${provider.id}" refresh timed out after ${ProviderRegistry.REFRESH_TIMEOUT_MS}ms`);
@@ -110,7 +111,7 @@ export class ProviderRegistry {
     return Promise.race([refreshPromise, cancelledPromise])
       .finally(() => {
         clearTimeout(timeoutId);
-        this._pendingCts.delete(cts);
+        this._pendingRefreshes.delete(entry);
         cts.dispose();
       });
   }
@@ -141,14 +142,17 @@ export class ProviderRegistry {
   }
 
   dispose(): void {
-    for (const cts of this._pendingCts) {
+    // Clear providers first so cancellation handlers don't log spurious timeout warnings
+    this.providers.clear();
+    for (const { cts, timeoutId } of this._pendingRefreshes) {
+      clearTimeout(timeoutId);
+      cts.cancel();
       cts.dispose();
     }
-    this._pendingCts.clear();
+    this._pendingRefreshes.clear();
     for (const sub of this.subscriptions.values()) {
       sub.dispose();
     }
-    this.providers.clear();
     this.subscriptions.clear();
     this._onDidChangeDiscoveredItems.dispose();
     this._onDidRegisterProvider.dispose();
