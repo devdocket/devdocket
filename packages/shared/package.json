@@ -6,6 +6,7 @@
   "types": "src/index.ts",
   "scripts": {
     "build": "echo No build needed",
+    "build:prod": "echo No build needed",
     "test": "echo No tests yet",
     "lint": "echo No lint needed"
   }
