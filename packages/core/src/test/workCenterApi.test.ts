@@ -3,16 +3,23 @@ import { WorkCenterProvider, WorkCenterAction, DiscoveredItem } from '../api/typ
 import { ProviderRegistry } from '../services/providerRegistry';
 import { ActionRegistry } from '../services/actionRegistry';
 import * as vscode from 'vscode';
+import { InboxState } from '../storage/discoveredStateStore';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 function createMockStateStore() {
-  const cache = new Map<string, string>();
+  const cache = new Map<string, InboxState>();
   return {
     getState: vi.fn((providerId: string, externalId: string) =>
       cache.get(`${providerId}::${externalId}`),
     ),
-    setState: vi.fn(async (_providerId: string, _externalId: string, _state: string) => {}),
-    setStates: vi.fn(async (_items: Array<{ providerId: string; externalId: string; state: string }>) => {}),
+    setState: vi.fn(async (providerId: string, externalId: string, state: InboxState) => {
+      cache.set(`${providerId}::${externalId}`, state);
+    }),
+    setStates: vi.fn(async (items: Array<{ providerId: string; externalId: string; state: InboxState }>) => {
+      for (const item of items) {
+        cache.set(`${item.providerId}::${item.externalId}`, item.state);
+      }
+    }),
     load: vi.fn(async () => {}),
     loadAll: vi.fn(async () => []),
     onDidChange: vi.fn(() => ({ dispose: vi.fn() })),
