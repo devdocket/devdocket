@@ -1,30 +1,6 @@
 import * as vscode from 'vscode';
 import { logger } from './logger';
-
-// Re-declared to match core API contract — separate extension cannot import core types directly
-interface Disposable {
-  dispose(): void;
-}
-
-// Re-declared to match core API contract — separate extension cannot import core types directly
-interface Event<T> {
-  (listener: (e: T) => void): Disposable;
-}
-
-interface DiscoveredItem {
-  externalId: string;
-  title: string;
-  description?: string;
-  url?: string;
-  group?: string;
-}
-
-interface WorkCenterProvider {
-  readonly id: string;
-  readonly label: string;
-  readonly onDidDiscoverItems: Event<DiscoveredItem[]>;
-  refresh(): Promise<void>;
-}
+import type { DiscoveredItem, WorkCenterProvider } from '@workcenter/shared';
 
 interface GitHubIssue {
   number: number;
