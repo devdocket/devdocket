@@ -401,6 +401,31 @@ describe('ProviderRegistry', () => {
       expect(warnSpy).not.toHaveBeenCalled();
       warnSpy.mockRestore();
     });
+
+    it('passes CancellationToken to provider refresh', async () => {
+      const provider = createMockProvider('tokencheck');
+      registry.register(provider);
+
+      expect(provider.refresh).toHaveBeenCalledWith(
+        expect.objectContaining({ isCancellationRequested: false }),
+      );
+    });
+
+    it('cancels the token when timeout fires', async () => {
+      const provider = createMockProvider('cancel-test');
+      let receivedToken: any;
+      vi.mocked(provider.refresh).mockImplementation(async (token?: any) => {
+        receivedToken = token;
+        return new Promise(() => {});
+      });
+
+      registry.register(provider);
+      expect(receivedToken).toBeDefined();
+      expect(receivedToken.isCancellationRequested).toBe(false);
+
+      await vi.advanceTimersByTimeAsync(30_000);
+      expect(receivedToken.isCancellationRequested).toBe(true);
+    });
   });
 
   describe('resurfaceDismissed', () => {

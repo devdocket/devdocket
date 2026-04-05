@@ -4,7 +4,7 @@ import { DiscoveredStateStore } from '../storage/discoveredStateStore';
 import { logger } from './logger';
 
 export class ProviderRegistry {
-  private static readonly REFRESH_TIMEOUT_MS = 30_000;
+  static readonly REFRESH_TIMEOUT_MS = 30_000;
   private readonly providers = new Map<string, WorkCenterProvider>();
   private readonly subscriptions = new Map<string, { dispose(): void }>();
   private readonly discoveredItems = new Map<string, DiscoveredItem[]>();
@@ -15,7 +15,7 @@ export class ProviderRegistry {
   private readonly _onDidAddNewUnseenItems = new vscode.EventEmitter<number>();
   readonly onDidAddNewUnseenItems = this._onDidAddNewUnseenItems.event;
   private readonly _loadingProviders = new Set<string>();
-  private readonly _pendingTimeouts = new Set<ReturnType<typeof setTimeout>>();
+  private readonly _pendingCts = new Set<vscode.CancellationTokenSource>();
 
   get loading(): boolean {
     return this._loadingProviders.size > 0;
@@ -48,11 +48,7 @@ export class ProviderRegistry {
     this._loadingProviders.add(provider.id);
     this._onDidRegisterProvider.fire();
     this._onDidChangeDiscoveredItems.fire();
-    const refreshPromise = provider.refresh()
-      .catch((err: unknown) => {
-        logger.error(`Provider "${provider.id}" refresh failed`, err);
-      });
-    this.raceWithTimeout(refreshPromise, provider.id)
+    this.refreshWithTimeout(provider)
       .finally(() => {
         this._loadingProviders.delete(provider.id);
         this._onDidChangeDiscoveredItems.fire();
@@ -87,36 +83,36 @@ export class ProviderRegistry {
   async refreshAll(): Promise<void> {
     const promises = Array.from(this.providers.values()).map((p) => {
       logger.debug(`Provider ${p.id} refreshing...`);
-
-      const refreshPromise = p.refresh().catch((err: unknown) => {
-        logger.error(`Provider "${p.id}" refresh failed`, err);
-      });
-
-      return this.raceWithTimeout(refreshPromise, p.id);
+      return this.refreshWithTimeout(p);
     });
     await Promise.all(promises);
   }
 
-  // Note: the losing promise in Promise.race() continues running — true cancellation
-  // would require adding CancellationToken to the provider refresh API.
-  private raceWithTimeout(promise: Promise<void>, providerId: string): Promise<void> {
-    let timeoutId: ReturnType<typeof setTimeout> | undefined;
-    const timeoutPromise = new Promise<void>((resolve) => {
-      timeoutId = setTimeout(() => {
-        // Guard against logging for providers that were unregistered before the timeout fired
-        if (this.providers.has(providerId)) {
-          logger.warn(`Provider "${providerId}" refresh timed out after ${ProviderRegistry.REFRESH_TIMEOUT_MS}ms`);
-        }
-        resolve();
-      }, ProviderRegistry.REFRESH_TIMEOUT_MS);
-      this._pendingTimeouts.add(timeoutId);
-    });
-    return Promise.race([promise, timeoutPromise]).finally(() => {
-      if (timeoutId !== undefined) {
-        clearTimeout(timeoutId);
-        this._pendingTimeouts.delete(timeoutId);
+  private refreshWithTimeout(provider: WorkCenterProvider): Promise<void> {
+    const cts = new vscode.CancellationTokenSource();
+    this._pendingCts.add(cts);
+    const timeoutId = setTimeout(() => cts.cancel(), ProviderRegistry.REFRESH_TIMEOUT_MS);
+    cts.token.onCancellationRequested(() => {
+      if (this.providers.has(provider.id)) {
+        logger.warn(`Provider "${provider.id}" refresh timed out after ${ProviderRegistry.REFRESH_TIMEOUT_MS}ms`);
       }
     });
+
+    const refreshPromise = provider.refresh(cts.token)
+      .catch((err: unknown) => {
+        logger.error(`Provider "${provider.id}" refresh failed`, err);
+      });
+
+    const cancelledPromise = new Promise<void>((resolve) => {
+      cts.token.onCancellationRequested(() => resolve());
+    });
+
+    return Promise.race([refreshPromise, cancelledPromise])
+      .finally(() => {
+        clearTimeout(timeoutId);
+        this._pendingCts.delete(cts);
+        cts.dispose();
+      });
   }
 
   private async handleDiscoveredItems(providerId: string, items: DiscoveredItem[]): Promise<void> {
@@ -145,10 +141,10 @@ export class ProviderRegistry {
   }
 
   dispose(): void {
-    for (const id of this._pendingTimeouts) {
-      clearTimeout(id);
+    for (const cts of this._pendingCts) {
+      cts.dispose();
     }
-    this._pendingTimeouts.clear();
+    this._pendingCts.clear();
     for (const sub of this.subscriptions.values()) {
       sub.dispose();
     }

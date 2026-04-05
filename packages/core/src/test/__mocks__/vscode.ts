@@ -98,6 +98,28 @@ class MockDataTransfer {
   set(mimeType: string, value: MockDataTransferItem): void { this.items.set(mimeType, value); }
 }
 
+class MockCancellationTokenSource {
+  private _isCancellationRequested = false;
+  private _listeners: Function[] = [];
+  token = {
+    isCancellationRequested: false,
+    onCancellationRequested: (listener: Function) => {
+      this._listeners.push(listener);
+      return { dispose: () => { this._listeners = this._listeners.filter(l => l !== listener); } };
+    },
+  };
+  cancel() {
+    this._isCancellationRequested = true;
+    this.token.isCancellationRequested = true;
+    for (const listener of this._listeners) {
+      listener();
+    }
+  }
+  dispose() {
+    this._listeners = [];
+  }
+}
+
 class MockDisposable {
   private callback: () => void;
   constructor(callback: () => void) { this.callback = callback; }
@@ -118,6 +140,7 @@ export {
   MockTreeItem as TreeItem,
   MockDataTransferItem as DataTransferItem,
   MockDataTransfer as DataTransfer,
+  MockCancellationTokenSource as CancellationTokenSource,
   MockDisposable as Disposable,
   TreeItemCollapsibleState,
   window,

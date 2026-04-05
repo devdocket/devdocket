@@ -1,3 +1,4 @@
+import * as vscode from 'vscode';
 import { WorkItem } from '../models/workItem';
 
 export interface Disposable {
@@ -21,7 +22,7 @@ export interface WorkCenterProvider {
   readonly label: string;
   readonly resurfaceDismissed?: boolean;
   readonly onDidDiscoverItems: Event<DiscoveredItem[]>;
-  refresh(): Promise<void>;
+  refresh(token?: vscode.CancellationToken): Promise<void>;
 }
 
 export interface WorkCenterAction {
