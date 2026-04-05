@@ -101,8 +101,8 @@ export class WorkItemEditorPanel {
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src ${cspSource} 'unsafe-inline'; script-src 'nonce-${nonce}';">
-  <style>
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src ${cspSource} 'nonce-${nonce}'; script-src 'nonce-${nonce}';">
+  <style nonce="${nonce}">
     :root {
       --input-bg: var(--vscode-input-background);
       --input-fg: var(--vscode-input-foreground);
