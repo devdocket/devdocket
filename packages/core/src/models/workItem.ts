@@ -1,13 +1,14 @@
 /**
  * Lifecycle states for a {@link WorkItem}.
  *
- * Typical flow: `New` → `Triaged` → `InProgress` → `Done` → `Archived`.
- * Items may also move to `Blocked` or `WaitingOn` while in progress.
+ * Typical flow in the current UI: `New` → `InProgress` → `Done` → `Archived`.
+ * Items may also move from active work to `Blocked` or `WaitingOn`.
+ * `Triaged` is reserved for future use and is not currently used in the UI flow.
  */
 export enum WorkItemState {
   /** Freshly created or accepted from the Inbox; sits in the Queue. */
   New = 'New',
-  /** Reviewed and prioritized but not yet started. */
+  /** Reserved for future use; not currently used in the UI flow. */
   Triaged = 'Triaged',
   /** Actively being worked on; shown in the Focus view. */
   InProgress = 'InProgress',
