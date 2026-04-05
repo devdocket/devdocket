@@ -15,7 +15,8 @@ export class ProviderRegistry {
   private readonly _onDidAddNewUnseenItems = new vscode.EventEmitter<number>();
   readonly onDidAddNewUnseenItems = this._onDidAddNewUnseenItems.event;
   private readonly _loadingProviders = new Set<string>();
-  private readonly _pendingRefreshes = new Set<{ cts: vscode.CancellationTokenSource; timeoutId: ReturnType<typeof setTimeout> }>();
+  private readonly _pendingRefreshes = new Map<string, { cts: vscode.CancellationTokenSource; timeoutId: ReturnType<typeof setTimeout> }>();
+  private _disposed = false;
 
   get loading(): boolean {
     return this._loadingProviders.size > 0;
@@ -55,6 +56,7 @@ export class ProviderRegistry {
       });
 
     return new vscode.Disposable(() => {
+      this.cancelPendingRefresh(provider.id);
       this.providers.delete(provider.id);
       this.subscriptions.get(provider.id)?.dispose();
       this.subscriptions.delete(provider.id);
@@ -89,10 +91,10 @@ export class ProviderRegistry {
   }
 
   private refreshWithTimeout(provider: WorkCenterProvider): Promise<void> {
+    this.cancelPendingRefresh(provider.id);
     const cts = new vscode.CancellationTokenSource();
     const timeoutId = setTimeout(() => cts.cancel(), ProviderRegistry.REFRESH_TIMEOUT_MS);
-    const entry = { cts, timeoutId };
-    this._pendingRefreshes.add(entry);
+    this._pendingRefreshes.set(provider.id, { cts, timeoutId });
     cts.token.onCancellationRequested(() => {
       if (this.providers.has(provider.id)) {
         logger.warn(`Provider "${provider.id}" refresh timed out after ${ProviderRegistry.REFRESH_TIMEOUT_MS}ms`);
@@ -111,12 +113,25 @@ export class ProviderRegistry {
     return Promise.race([refreshPromise, cancelledPromise])
       .finally(() => {
         clearTimeout(timeoutId);
-        this._pendingRefreshes.delete(entry);
+        this._pendingRefreshes.delete(provider.id);
         cts.dispose();
       });
   }
 
+  private cancelPendingRefresh(providerId: string): void {
+    const pending = this._pendingRefreshes.get(providerId);
+    if (pending) {
+      clearTimeout(pending.timeoutId);
+      pending.cts.cancel();
+      pending.cts.dispose();
+      this._pendingRefreshes.delete(providerId);
+    }
+  }
+
   private async handleDiscoveredItems(providerId: string, items: DiscoveredItem[]): Promise<void> {
+    if (this._disposed) {
+      return;
+    }
     logger.info(`Provider ${providerId} discovered ${items.length} items`);
     this.discoveredItems.set(providerId, items);
     const provider = this.providers.get(providerId);
@@ -142,9 +157,10 @@ export class ProviderRegistry {
   }
 
   dispose(): void {
+    this._disposed = true;
     // Clear providers first so cancellation handlers don't log spurious timeout warnings
     this.providers.clear();
-    for (const { cts, timeoutId } of this._pendingRefreshes) {
+    for (const { cts, timeoutId } of this._pendingRefreshes.values()) {
       clearTimeout(timeoutId);
       cts.cancel();
       cts.dispose();
