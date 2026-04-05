@@ -40,8 +40,10 @@ export async function activate(context: vscode.ExtensionContext): Promise<WorkCe
     }),
   );
 
+  const activationStart = Date.now();
   logger.info('WorkCenter activating...');
 
+  const storeLoadStart = Date.now();
   const storagePath = context.globalStorageUri.fsPath;
   const store = new JsonTaskStore(storagePath);
   const workGraph = new WorkGraph(store);
@@ -80,7 +82,9 @@ export async function activate(context: vscode.ExtensionContext): Promise<WorkCe
   const providerRegistry = new ProviderRegistry(stateStore);
   const actionRegistry = new ActionRegistry();
   const api = new WorkCenterApiImpl(providerRegistry, actionRegistry);
+  logger.info('Store loading took ' + (Date.now() - storeLoadStart) + 'ms');
 
+  const treeViewStart = Date.now();
   const inboxProvider = new InboxTreeProvider(providerRegistry, stateStore);
   const queueProvider = new QueueTreeProvider(workGraph);
   const focusProvider = new FocusTreeProvider(workGraph);
@@ -130,7 +134,9 @@ export async function activate(context: vscode.ExtensionContext): Promise<WorkCe
   };
   updateWorkViewMessages();
   const workGraphSub = workGraph.onDidChange(updateWorkViewMessages);
+  logger.info('Tree view creation took ' + (Date.now() - treeViewStart) + 'ms');
 
+  const eventWiringStart = Date.now();
   let initialLoadComplete = false;
   let wasLoading = false;
 
@@ -179,6 +185,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<WorkCe
     }
   });
   const stateStoreSub = stateStore.onDidChange(scheduleUiUpdate);
+  logger.info('Event wiring took ' + (Date.now() - eventWiringStart) + 'ms');
 
   context.subscriptions.push(
     inboxTreeView,
@@ -203,9 +210,11 @@ export async function activate(context: vscode.ExtensionContext): Promise<WorkCe
     { dispose: () => actionRegistry.dispose() },
   );
 
+  const commandRegStart = Date.now();
   registerCommands(context, workGraph, actionRegistry, stateStore);
+  logger.info('Command registration took ' + (Date.now() - commandRegStart) + 'ms');
 
-  logger.info('WorkCenter activated');
+  logger.info('WorkCenter activated in ' + (Date.now() - activationStart) + 'ms');
   return api;
 }
 
