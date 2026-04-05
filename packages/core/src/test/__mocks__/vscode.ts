@@ -103,13 +103,22 @@ class MockCancellationTokenSource {
   token = {
     isCancellationRequested: false,
     onCancellationRequested: (listener: Function) => {
-      this._listeners.push(listener);
+      if (this.token.isCancellationRequested) {
+        listener();
+      } else {
+        this._listeners.push(listener);
+      }
       return { dispose: () => { this._listeners = this._listeners.filter(l => l !== listener); } };
     },
   };
   cancel() {
+    if (this.token.isCancellationRequested) {
+      return;
+    }
     this.token.isCancellationRequested = true;
-    for (const listener of this._listeners) {
+    const listeners = this._listeners.slice();
+    this._listeners = [];
+    for (const listener of listeners) {
       listener();
     }
   }
