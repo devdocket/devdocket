@@ -345,6 +345,176 @@ describe('ProviderRegistry', () => {
     expect(listener).not.toHaveBeenCalled();
   });
 
+  describe('loading state and registration race conditions', () => {
+    // Flushes all pending microtasks (promise .then/.catch/.finally chains)
+    function flushMicrotasks(): Promise<void> {
+      return new Promise(resolve => setTimeout(resolve, 0));
+    }
+
+    function createDeferredProvider(id: string) {
+      let resolveRefresh!: () => void;
+      let rejectRefresh!: (err: Error) => void;
+      const refreshPromise = new Promise<void>((resolve, reject) => {
+        resolveRefresh = resolve;
+        rejectRefresh = reject;
+      });
+      const emitter = new EventEmitter<DiscoveredItem[]>();
+      const provider: WorkCenterProvider & { fireItems: (items: DiscoveredItem[]) => void } = {
+        id,
+        label: `Provider ${id}`,
+        onDidDiscoverItems: emitter.event,
+        refresh: vi.fn(() => refreshPromise),
+        fireItems: (items) => emitter.fire(items),
+      };
+      return { provider, resolveRefresh, rejectRefresh };
+    }
+
+    it('loading is true immediately after register and false after sync refresh resolves', async () => {
+      const provider = createMockProvider('sync');
+      registry.register(provider);
+
+      // loading is true synchronously after register (microtask hasn't run yet)
+      expect(registry.loading).toBe(true);
+
+      // After microtasks flush, the .finally() runs and loading becomes false
+      await flushMicrotasks();
+      expect(registry.loading).toBe(false);
+    });
+
+    it('loading becomes false after refresh rejects synchronously', async () => {
+      const provider = createMockProvider('fail-sync');
+      vi.mocked(provider.refresh).mockImplementation(() => Promise.reject(new Error('boom')));
+
+      registry.register(provider);
+      expect(registry.loading).toBe(true);
+
+      await flushMicrotasks();
+      expect(registry.loading).toBe(false);
+    });
+
+    it('loading stays true during async refresh until it completes', async () => {
+      const { provider, resolveRefresh } = createDeferredProvider('async');
+      registry.register(provider);
+
+      expect(registry.loading).toBe(true);
+
+      // Even after flushing microtasks, loading remains true because refresh hasn't resolved
+      await flushMicrotasks();
+      expect(registry.loading).toBe(true);
+
+      resolveRefresh();
+      await flushMicrotasks();
+      expect(registry.loading).toBe(false);
+    });
+
+    it('loading stays true during async refresh until it rejects', async () => {
+      const { provider, rejectRefresh } = createDeferredProvider('async-fail');
+      registry.register(provider);
+
+      expect(registry.loading).toBe(true);
+
+      rejectRefresh(new Error('network error'));
+      await flushMicrotasks();
+      expect(registry.loading).toBe(false);
+    });
+
+    it('loading is true until both providers finish when two are registered simultaneously', async () => {
+      const d1 = createDeferredProvider('p1');
+      const d2 = createDeferredProvider('p2');
+
+      registry.register(d1.provider);
+      registry.register(d2.provider);
+
+      expect(registry.loading).toBe(true);
+
+      // Resolve only the first provider
+      d1.resolveRefresh();
+      await flushMicrotasks();
+      // Still loading because p2 hasn't resolved
+      expect(registry.loading).toBe(true);
+
+      // Resolve the second provider
+      d2.resolveRefresh();
+      await flushMicrotasks();
+      expect(registry.loading).toBe(false);
+    });
+
+    it('provider fires onDidChangeDiscoveredItems before refresh returns — loading is still true', async () => {
+      const { provider, resolveRefresh } = createDeferredProvider('race');
+
+      const loadingDuringEvent: boolean[] = [];
+      registry.onDidChangeDiscoveredItems(() => {
+        loadingDuringEvent.push(registry.loading);
+      });
+
+      registry.register(provider);
+
+      // Provider fires items while refresh is still pending
+      provider.fireItems([{ externalId: '1', title: 'Item' }]);
+
+      // The event fired by handleDiscoveredItems should see loading = true
+      // (registration fire + handleDiscoveredItems fire, both while refresh pending)
+      expect(loadingDuringEvent.some(v => v === true)).toBe(true);
+
+      resolveRefresh();
+      await flushMicrotasks();
+      expect(registry.loading).toBe(false);
+    });
+
+    it('onDidChangeDiscoveredItems fires when loading state transitions to false', async () => {
+      const { provider, resolveRefresh } = createDeferredProvider('notif');
+
+      const events: boolean[] = [];
+      registry.onDidChangeDiscoveredItems(() => {
+        events.push(registry.loading);
+      });
+
+      registry.register(provider);
+      // Register fires onDidChangeDiscoveredItems with loading=true
+      expect(events).toContain(true);
+
+      resolveRefresh();
+      await flushMicrotasks();
+      // The .finally() fires onDidChangeDiscoveredItems with loading=false
+      expect(events).toContain(false);
+    });
+
+    it('hasProviders is true after register and false after dispose', () => {
+      expect(registry.hasProviders).toBe(false);
+
+      const provider = createMockProvider('hp');
+      const disposable = registry.register(provider);
+      expect(registry.hasProviders).toBe(true);
+
+      disposable.dispose();
+      expect(registry.hasProviders).toBe(false);
+    });
+
+    it('hasProviders reflects multiple providers correctly', () => {
+      const d1 = registry.register(createMockProvider('a'));
+      const d2 = registry.register(createMockProvider('b'));
+
+      expect(registry.hasProviders).toBe(true);
+
+      d1.dispose();
+      expect(registry.hasProviders).toBe(true);
+
+      d2.dispose();
+      expect(registry.hasProviders).toBe(false);
+    });
+
+    it('dispose clears loading state for in-flight provider', async () => {
+      const { provider } = createDeferredProvider('inflight');
+      const disposable = registry.register(provider);
+
+      expect(registry.loading).toBe(true);
+
+      disposable.dispose();
+      expect(registry.loading).toBe(false);
+      expect(registry.hasProviders).toBe(false);
+    });
+  });
+
   describe('resurfaceDismissed', () => {
     function createResurfaceProvider(id: string): WorkCenterProvider & { fireItems: (items: DiscoveredItem[]) => void } {
       const emitter = new EventEmitter<DiscoveredItem[]>();
