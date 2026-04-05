@@ -133,7 +133,7 @@ export class ProviderRegistry {
     if (pending) {
       clearTimeout(pending.timeoutId);
       pending.cts.cancel();
-      pending.cts.dispose();
+      // CTS is disposed in refreshWithTimeout's finally block
       this._pendingRefreshes.delete(providerId);
     }
   }
@@ -173,7 +173,7 @@ export class ProviderRegistry {
     for (const { cts, timeoutId } of this._pendingRefreshes.values()) {
       clearTimeout(timeoutId);
       cts.cancel();
-      cts.dispose();
+      // CTS is disposed in refreshWithTimeout's finally block
     }
     this._pendingRefreshes.clear();
     for (const sub of this.subscriptions.values()) {
