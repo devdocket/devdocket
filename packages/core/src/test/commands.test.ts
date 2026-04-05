@@ -33,7 +33,7 @@ function createMockStore(): ITaskStore {
 function createMockStateStore() {
   return {
     setState: vi.fn(async () => {}),
-    getState: vi.fn(async () => 'unseen' as const),
+    getState: vi.fn(() => 'unseen' as const),
     load: vi.fn(async () => {}),
     onDidChange: vi.fn(() => ({ dispose: vi.fn() })),
   };
@@ -368,6 +368,35 @@ describe('registerCommands', () => {
       const other = workGraph.getItem(item2.id)!;
       expect(updated.sortOrder).toBeGreaterThan(other.sortOrder!);
     });
+
+    it('moveUp on first item is a no-op', async () => {
+      const item1 = await workGraph.createItem({ title: 'First' });
+      await workGraph.createItem({ title: 'Second' });
+      const originalOrder = workGraph.getItem(item1.id)!.sortOrder;
+      const handler = getCommandHandler('workcenter.moveUp');
+      await handler({ id: item1.id });
+
+      expect(workGraph.getItem(item1.id)!.sortOrder).toBe(originalOrder);
+    });
+
+    it('moveDown on last item is a no-op', async () => {
+      await workGraph.createItem({ title: 'First' });
+      const item2 = await workGraph.createItem({ title: 'Second' });
+      const originalOrder = workGraph.getItem(item2.id)!.sortOrder;
+      const handler = getCommandHandler('workcenter.moveDown');
+      await handler({ id: item2.id });
+
+      expect(workGraph.getItem(item2.id)!.sortOrder).toBe(originalOrder);
+    });
+
+    it('moveUp with a single item is a no-op', async () => {
+      const item = await workGraph.createItem({ title: 'Only' });
+      const originalOrder = workGraph.getItem(item.id)!.sortOrder;
+      const handler = getCommandHandler('workcenter.moveUp');
+      await handler({ id: item.id });
+
+      expect(workGraph.getItem(item.id)!.sortOrder).toBe(originalOrder);
+    });
   });
 
   // -----------------------------------------------------------------------
@@ -427,6 +456,26 @@ describe('registerCommands', () => {
 
       expect(window.showErrorMessage).toHaveBeenCalledWith(
         expect.stringContaining('write failed'),
+      );
+    });
+
+    it('shows error when createItem fails', async () => {
+      const handler = getCommandHandler('workcenter.acceptFromInbox');
+
+      const failStore = createMockStore();
+      failStore.save = vi.fn(async () => { throw new Error('save failed'); });
+      const failGraph = new WorkGraph(failStore);
+      await failGraph.load();
+
+      vi.mocked(commands.registerCommand).mockClear();
+      const ctx = createMockContext();
+      registerCommands(ctx, failGraph, actionRegistry, stateStore as any);
+
+      const newHandler = getCommandHandler('workcenter.acceptFromInbox');
+      await newHandler(inboxItem);
+
+      expect(window.showErrorMessage).toHaveBeenCalledWith(
+        expect.stringContaining('save failed'),
       );
     });
   });
@@ -512,9 +561,6 @@ describe('registerCommands', () => {
     });
 
     it('shows error when createItem fails', async () => {
-      // Make the store's save throw to simulate a failure
-      const handler = getCommandHandler('workcenter.acceptFromSources');
-
       // Create a store that fails
       const failStore = createMockStore();
       failStore.save = vi.fn(async () => { throw new Error('save failed'); });
@@ -541,7 +587,8 @@ describe('registerCommands', () => {
 
   describe('subscriptions', () => {
     it('pushes all disposables to context.subscriptions', () => {
-      expect(mockContext.subscriptions.length).toBeGreaterThan(0);
+      const registeredCount = vi.mocked(commands.registerCommand).mock.calls.length;
+      expect(mockContext.subscriptions).toHaveLength(registeredCount);
     });
   });
 });

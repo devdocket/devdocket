@@ -106,15 +106,15 @@ export function registerCommands(
         );
         return;
       }
-      await workGraph.createItem(
-        { title: formatItemTitle(item) },
-        { providerId: item.providerId, externalId: item.externalId, url: item.url },
-      );
       try {
+        await workGraph.createItem(
+          { title: formatItemTitle(item) },
+          { providerId: item.providerId, externalId: item.externalId, url: item.url },
+        );
         await stateStore.setState(item.providerId, item.externalId, 'accepted');
       } catch (err: unknown) {
         const message = err instanceof Error ? err.message : String(err);
-        vscode.window.showErrorMessage(`WorkCenter: Failed to update state — ${message}`);
+        vscode.window.showErrorMessage(`WorkCenter: Failed to accept item — ${message}`);
       }
     }),
     vscode.commands.registerCommand('workcenter.dismissFromInbox', async (item: InboxItem) => {
