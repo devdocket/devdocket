@@ -16,11 +16,17 @@ export async function activate(_context: vscode.ExtensionContext): Promise<void>
     error: LogLevel.Error,
   };
   initLogger(outputChannel, logLevelMap[logLevelConfig] ?? LogLevel.Info);
+  if (!(logLevelConfig in logLevelMap)) {
+    logger.warn(`Invalid log level '${logLevelConfig}', falling back to 'Info'`);
+  }
 
   _context.subscriptions.push(
     vscode.workspace.onDidChangeConfiguration(e => {
       if (e.affectsConfiguration('workcenter.logLevel')) {
         const newLevel = vscode.workspace.getConfiguration('workcenter').get<string>('logLevel', 'info');
+        if (!(newLevel in logLevelMap)) {
+          logger.warn(`Invalid log level '${newLevel}', falling back to 'Info'`);
+        }
         setLogLevel(logLevelMap[newLevel] ?? LogLevel.Info);
       }
     }),
