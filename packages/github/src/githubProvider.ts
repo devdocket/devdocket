@@ -143,6 +143,7 @@ export class GitHubIssueProvider implements WorkCenterProvider {
   }
 
   private parseRepo(issue: GitHubIssue): string {
+    // Only trust HTTPS URLs from known GitHub domains
     if (issue.html_url.startsWith('https://github.com/')) {
       const match = issue.html_url.match(/github\.com\/([^/]+\/[^/]+)/);
       if (match) {

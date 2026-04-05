@@ -157,20 +157,28 @@ export class GitHubPrReviewProvider implements WorkCenterProvider {
   }
 
   private parseRepo(pr: GitHubIssue): string {
-    const match = pr.html_url.match(/github\.com\/([^/]+\/[^/]+)/);
-    if (match) {
-      return match[1];
+    // Only trust HTTPS URLs from known GitHub domains
+    if (pr.html_url.startsWith('https://github.com/')) {
+      const match = pr.html_url.match(/github\.com\/([^/]+\/[^/]+)/);
+      if (match) {
+        return match[1];
+      }
     }
 
     // Fallback to parsing from repository_url (API URL)
-    const apiMatch = pr.repository_url.match(/repos\/([^/]+\/[^/]+)/);
-    if (apiMatch) {
-      return apiMatch[1];
+    if (pr.repository_url.startsWith('https://api.github.com/repos/')) {
+      const apiMatch = pr.repository_url.match(/repos\/([^/]+\/[^/]+)/);
+      if (apiMatch) {
+        return apiMatch[1];
+      }
     }
 
-    // Fallback: use repository_url as-is to maintain unique externalId
-    logger.warn(`Could not parse repo from PR URL: ${pr.html_url}`);
-    return pr.repository_url;
+    // Deterministic fallback: hash the repository_url
+    logger.warn(`Could not parse repo from URLs: html_url=${pr.html_url}, repository_url=${pr.repository_url}`);
+    const hash = pr.repository_url.split('').reduce((acc, char) => {
+      return ((acc << 5) - acc) + char.charCodeAt(0) | 0;
+    }, 0);
+    return `unknown-repo-${Math.abs(hash).toString(36)}`;
   }
 
   dispose(): void {
