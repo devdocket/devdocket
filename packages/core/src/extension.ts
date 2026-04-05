@@ -33,9 +33,13 @@ export async function activate(context: vscode.ExtensionContext): Promise<WorkCe
 
   context.subscriptions.push(
     vscode.workspace.onDidChangeConfiguration(e => {
-      if (e.affectsConfiguration('workcenter.logLevel')) {
-        const newLevel = vscode.workspace.getConfiguration('workcenter').get<string>('logLevel', 'info');
-        setLogLevel(logLevelMap[newLevel] ?? LogLevel.Info);
+      try {
+        if (e.affectsConfiguration('workcenter.logLevel')) {
+          const newLevel = vscode.workspace.getConfiguration('workcenter').get<string>('logLevel', 'info');
+          setLogLevel(logLevelMap[newLevel] ?? LogLevel.Info);
+        }
+      } catch (err) {
+        logger.error('Error handling configuration change', err);
       }
     }),
   );
@@ -91,14 +95,18 @@ export async function activate(context: vscode.ExtensionContext): Promise<WorkCe
   const sourcesTreeView = vscode.window.createTreeView('workcenter.sources', { treeDataProvider: sourcesProvider });
 
   const inboxSelectionSub = inboxTreeView.onDidChangeSelection((e) => {
-    let changed = false;
-    for (const item of e.selection) {
-      if (item.kind === 'item') {
-        changed = inboxProvider.markSeen(item.providerId, item.externalId) || changed;
+    try {
+      let changed = false;
+      for (const item of e.selection) {
+        if (item.kind === 'item') {
+          changed = inboxProvider.markSeen(item.providerId, item.externalId) || changed;
+        }
       }
-    }
-    if (changed) {
-      inboxProvider.refresh();
+      if (changed) {
+        inboxProvider.refresh();
+      }
+    } catch (err) {
+      logger.error('Error handling inbox selection change', err);
     }
   });
 
@@ -129,7 +137,13 @@ export async function activate(context: vscode.ExtensionContext): Promise<WorkCe
     historyTreeView.message = historyProvider.getChildren().length > 0 ? undefined : 'No history items';
   };
   updateWorkViewMessages();
-  const workGraphSub = workGraph.onDidChange(updateWorkViewMessages);
+  const workGraphSub = workGraph.onDidChange(() => {
+    try {
+      updateWorkViewMessages();
+    } catch (err) {
+      logger.error('Error handling work graph change', err);
+    }
+  });
 
   let initialLoadComplete = false;
   let wasLoading = false;
@@ -147,9 +161,14 @@ export async function activate(context: vscode.ExtensionContext): Promise<WorkCe
     if (uiUpdateScheduled) { return; }
     uiUpdateScheduled = true;
     queueMicrotask(() => {
-      uiUpdateScheduled = false;
-      updateViewMessages();
-      updateInboxBadge();
+      try {
+        uiUpdateScheduled = false;
+        updateViewMessages();
+        updateInboxBadge();
+      } catch (err) {
+        uiUpdateScheduled = false;
+        logger.error('Error during scheduled UI update', err);
+      }
     });
   };
 
@@ -158,24 +177,32 @@ export async function activate(context: vscode.ExtensionContext): Promise<WorkCe
 
   const providerRegSub = providerRegistry.onDidRegisterProvider(scheduleUiUpdate);
   const discoveredSub = providerRegistry.onDidChangeDiscoveredItems(() => {
-    scheduleUiUpdate();
+    try {
+      scheduleUiUpdate();
 
-    // Mark initial load complete when loading transitions from true to false
-    if (!initialLoadComplete) {
-      if (wasLoading && !providerRegistry.loading) {
-        initialLoadComplete = true;
+      // Mark initial load complete when loading transitions from true to false
+      if (!initialLoadComplete) {
+        if (wasLoading && !providerRegistry.loading) {
+          initialLoadComplete = true;
+        }
+        wasLoading = wasLoading || providerRegistry.loading;
       }
-      wasLoading = wasLoading || providerRegistry.loading;
+    } catch (err) {
+      logger.error('Error handling discovered items change', err);
     }
   });
   const newItemsSub = providerRegistry.onDidAddNewUnseenItems((newCount) => {
-    if (!initialLoadComplete) { return; }
-    const config = vscode.workspace.getConfiguration('workcenter');
-    const showNotifications = config.get<boolean>('showInboxNotifications', true);
-    if (showNotifications && newCount > 0) {
-      vscode.window.showInformationMessage(
-        `WorkCenter: ${newCount} new item${newCount === 1 ? '' : 's'} in Inbox`
-      );
+    try {
+      if (!initialLoadComplete) { return; }
+      const config = vscode.workspace.getConfiguration('workcenter');
+      const showNotifications = config.get<boolean>('showInboxNotifications', true);
+      if (showNotifications && newCount > 0) {
+        vscode.window.showInformationMessage(
+          `WorkCenter: ${newCount} new item${newCount === 1 ? '' : 's'} in Inbox`
+        );
+      }
+    } catch (err) {
+      logger.error('Error handling new unseen items notification', err);
     }
   });
   const stateStoreSub = stateStore.onDidChange(scheduleUiUpdate);
