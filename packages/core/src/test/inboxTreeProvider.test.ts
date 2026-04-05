@@ -3,6 +3,8 @@ import { EventEmitter, TreeItemCollapsibleState } from 'vscode';
 import { DiscoveredItem } from '../api/types';
 import { InboxTreeProvider, InboxProviderNode, InboxGroupNode, InboxItem } from '../views/inboxTreeProvider';
 
+const DEBOUNCE_MS = InboxTreeProvider.REFRESH_DEBOUNCE_MS;
+
 function createMockStateStore() {
   const cache = new Map<string, string>();
   const emitter = new EventEmitter<void>();
@@ -352,7 +354,7 @@ describe('InboxTreeProvider', () => {
       const listener = vi.fn();
       provider.onDidChangeTreeData(listener);
       registry._fire();
-      vi.advanceTimersByTime(50);
+      vi.advanceTimersByTime(DEBOUNCE_MS);
       expect(listener).toHaveBeenCalledTimes(1);
     });
 
@@ -367,9 +369,9 @@ describe('InboxTreeProvider', () => {
 
       // Provider refresh fires → item is still in inbox, so seenItems should be retained
       registry._fire();
-      vi.advanceTimersByTime(50);
+      vi.advanceTimersByTime(DEBOUNCE_MS);
 
-      // After refresh, item should still appear as seen (circle-outline icon)
+      // After refresh, item should still appear as seen(circle-outline icon)
       expect(provider.getTreeItem(item).label).toBe('Bug');
       expect((provider.getTreeItem(item).iconPath as any).id).toBe('circle-outline');
     });
@@ -381,9 +383,9 @@ describe('InboxTreeProvider', () => {
       // Remove item from provider
       registry._setItems('gh', []);
       registry._fire();
-      vi.advanceTimersByTime(50);
+      vi.advanceTimersByTime(DEBOUNCE_MS);
 
-      // Re-add item — should appear as unseen (circle-filled icon)
+      // Re-add item — should appear as unseen(circle-filled icon)
       registry._setItems('gh', [{ externalId: '1', title: 'Bug' }]);
       const item: InboxItem = { kind: 'item', providerId: 'gh', externalId: '1', title: 'Bug' };
       expect(provider.getTreeItem(item).label).toBe('Bug');
@@ -394,7 +396,7 @@ describe('InboxTreeProvider', () => {
       const listener = vi.fn();
       provider.onDidChangeTreeData(listener);
       stateStore._fire();
-      vi.advanceTimersByTime(50);
+      vi.advanceTimersByTime(DEBOUNCE_MS);
       expect(listener).toHaveBeenCalledTimes(1);
     });
 
@@ -404,7 +406,7 @@ describe('InboxTreeProvider', () => {
       registry._fire();
       registry._fire();
       stateStore._fire();
-      vi.advanceTimersByTime(50);
+      vi.advanceTimersByTime(DEBOUNCE_MS);
       expect(listener).toHaveBeenCalledTimes(1);
     });
   });
