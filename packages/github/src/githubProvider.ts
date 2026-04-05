@@ -203,8 +203,8 @@ export class GitHubIssueProvider implements WorkCenterProvider {
       // Filter out pull requests (GitHub /issues endpoint returns both issues and PRs)
       const issues = items.filter(item => !item.pull_request);
       return { issues, failed: false };
-    } catch {
-      logger.error(`Failed to fetch issues for ${repo}`);
+    } catch (err) {
+      logger.error(`Failed to fetch issues for ${repo}`, err);
       return { issues: [], failed: true };
     }
   }
@@ -218,8 +218,8 @@ export class GitHubIssueProvider implements WorkCenterProvider {
       // Filter out pull requests (GitHub /issues endpoint returns both issues and PRs)
       const issues = items.filter(item => !item.pull_request);
       return { issues, failed: false };
-    } catch {
-      logger.error('Failed to fetch assigned issues');
+    } catch (err) {
+      logger.error('Failed to fetch assigned issues', err);
       return { issues: [], failed: true };
     }
   }
@@ -239,6 +239,13 @@ export class GitHubIssueProvider implements WorkCenterProvider {
       });
 
       if (!response.ok) {
+        if (allItems.length > 0) {
+          logger.warn(
+            `GitHub API returned ${response.status} on page ${page + 1}. ` +
+            `Returning ${allItems.length} items from previous pages.`,
+          );
+          return allItems;
+        }
         throw new Error(`GitHub API returned ${response.status}`);
       }
 

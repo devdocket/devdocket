@@ -185,7 +185,7 @@ describe('GitHubIssueProvider', () => {
       }),
     } as any);
 
-    mockFetch.mockResolvedValueOnce({ ok: false, status: 403 });
+    mockFetch.mockResolvedValueOnce({ ok: false, status: 403, headers: { get: () => null } });
 
     const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
     const listener = vi.fn();
@@ -245,5 +245,135 @@ describe('GitHubIssueProvider', () => {
     expect(refreshSpy).not.toHaveBeenCalled();
 
     vi.useRealTimers();
+  });
+
+  it('paginates through multiple pages via Link header', async () => {
+    mockFetch
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => [createMockIssue(1, 'Page 1')],
+        headers: { get: () => '<https://api.github.com/issues?page=2>; rel="next"' },
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => [createMockIssue(2, 'Page 2')],
+        headers: { get: () => null },
+      });
+
+    const listener = vi.fn();
+    provider.onDidDiscoverItems(listener);
+    await provider.refresh();
+
+    expect(mockFetch).toHaveBeenCalledTimes(2);
+    const items = listener.mock.calls[0][0];
+    expect(items).toHaveLength(2);
+    expect(items[0]).toEqual(expect.objectContaining({ title: '#1: Page 1' }));
+    expect(items[1]).toEqual(expect.objectContaining({ title: '#2: Page 2' }));
+  });
+
+  it('parses Link header with multiple values (next + last)', async () => {
+    const linkHeader =
+      '<https://api.github.com/issues?page=2>; rel="next", ' +
+      '<https://api.github.com/issues?page=5>; rel="last"';
+
+    mockFetch
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => [createMockIssue(1, 'First')],
+        headers: { get: () => linkHeader },
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => [createMockIssue(2, 'Second')],
+        headers: { get: () => null },
+      });
+
+    const listener = vi.fn();
+    provider.onDidDiscoverItems(listener);
+    await provider.refresh();
+
+    expect(mockFetch).toHaveBeenCalledTimes(2);
+    expect(mockFetch).toHaveBeenCalledWith(
+      'https://api.github.com/issues?page=2',
+      expect.any(Object),
+    );
+  });
+
+  it('returns partial results when mid-pagination request fails', async () => {
+    vi.mocked(workspace.getConfiguration).mockReturnValue({
+      get: vi.fn((key: string, defaultValue?: any) => {
+        if (key === 'repos') { return ['owner/repo1']; }
+        return defaultValue;
+      }),
+    } as any);
+
+    const consoleWarn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+    mockFetch
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => [createMockIssue(1, 'Survived')],
+        headers: { get: () => '<https://api.github.com/repos/owner/repo1/issues?page=2>; rel="next"' },
+      })
+      .mockResolvedValueOnce({
+        ok: false,
+        status: 403,
+        headers: { get: () => null },
+      });
+
+    const listener = vi.fn();
+    provider.onDidDiscoverItems(listener);
+    await provider.refresh();
+
+    const items = listener.mock.calls[0][0];
+    expect(items).toHaveLength(1);
+    expect(items[0]).toEqual(expect.objectContaining({ title: '#1: Survived' }));
+
+    consoleWarn.mockRestore();
+  });
+
+  it('stops paginating at maxPages limit', async () => {
+    vi.mocked(workspace.getConfiguration).mockReturnValue({
+      get: vi.fn((key: string, defaultValue?: any) => {
+        if (key === 'repos') { return ['owner/repo1']; }
+        return defaultValue;
+      }),
+    } as any);
+
+    const consoleWarn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+    for (let i = 0; i < 10; i++) {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => [createMockIssue(i + 1, `Page ${i + 1}`, 'owner/repo1')],
+        headers: { get: () => `<https://api.github.com/repos/owner/repo1/issues?page=${i + 2}>; rel="next"` },
+      });
+    }
+
+    const listener = vi.fn();
+    provider.onDidDiscoverItems(listener);
+    await provider.refresh();
+
+    expect(mockFetch).toHaveBeenCalledTimes(10);
+    const items = listener.mock.calls[0][0];
+    expect(items).toHaveLength(10);
+
+    consoleWarn.mockRestore();
+  });
+
+  it('does not paginate when Link header has no next rel', async () => {
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: async () => [createMockIssue(1, 'Only page')],
+      headers: { get: () => '<https://api.github.com/issues?page=1>; rel="prev"' },
+    });
+
+    const listener = vi.fn();
+    provider.onDidDiscoverItems(listener);
+    await provider.refresh();
+
+    expect(mockFetch).toHaveBeenCalledTimes(1);
+    const items = listener.mock.calls[0][0];
+    expect(items).toHaveLength(1);
   });
 });
