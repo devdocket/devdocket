@@ -1,0 +1,125 @@
+import * as vscode from 'vscode';
+import { logger } from './logger';
+
+// Re-declared to match core API contract — separate extension cannot import core types directly
+export interface Disposable {
+  dispose(): void;
+}
+
+// Re-declared to match core API contract — separate extension cannot import core types directly
+export interface Event<T> {
+  (listener: (e: T) => void): Disposable;
+}
+
+export interface DiscoveredItem {
+  externalId: string;
+  title: string;
+  description?: string;
+  url?: string;
+  group?: string;
+}
+
+export interface WorkCenterProvider {
+  readonly id: string;
+  readonly label: string;
+  readonly resurfaceDismissed?: boolean;
+  readonly onDidDiscoverItems: Event<DiscoveredItem[]>;
+  refresh(): Promise<void>;
+}
+
+export interface GitHubIssue {
+  number: number;
+  title: string;
+  body?: string;
+  html_url: string;
+  repository_url: string;
+  pull_request?: unknown;
+}
+
+export abstract class BaseGitHubProvider implements WorkCenterProvider {
+  abstract readonly id: string;
+  abstract readonly label: string;
+  readonly resurfaceDismissed?: boolean;
+
+  protected readonly _onDidDiscoverItems = new vscode.EventEmitter<DiscoveredItem[]>();
+  readonly onDidDiscoverItems = this._onDidDiscoverItems.event;
+
+  private refreshTimer: ReturnType<typeof setInterval> | undefined;
+  private _isRefreshing = false;
+
+  startPeriodicRefresh(intervalSeconds: number): void {
+    this.stopPeriodicRefresh();
+    if (intervalSeconds <= 0) {
+      return;
+    }
+    // Clamp to minimum of 60 seconds
+    const clampedInterval = Math.max(intervalSeconds, 60);
+    this.refreshTimer = setInterval(() => {
+      this.refreshInBackground().catch((err) => {
+        logger.error(`${this.label} refresh failed`, err);
+      });
+    }, clampedInterval * 1000);
+  }
+
+  stopPeriodicRefresh(): void {
+    if (this.refreshTimer) {
+      clearInterval(this.refreshTimer);
+      this.refreshTimer = undefined;
+    }
+  }
+
+  async refresh(): Promise<void> {
+    await this.doRefresh(true);
+  }
+
+  private async refreshInBackground(): Promise<void> {
+    await this.doRefresh(false);
+  }
+
+  private async doRefresh(createIfNone: boolean): Promise<void> {
+    if (this._isRefreshing) {
+      return;
+    }
+    this._isRefreshing = true;
+    try {
+      const session = await vscode.authentication.getSession('github', ['repo'], {
+        createIfNone,
+      }).catch(() => null);
+      if (!session) {
+        return;
+      }
+      await this.fetchAndPublish(session.accessToken, createIfNone);
+    } catch (err) {
+      logger.error(`Failed to fetch ${this.label}`, err);
+    } finally {
+      this._isRefreshing = false;
+    }
+  }
+
+  protected abstract fetchAndPublish(accessToken: string, isUserTriggered: boolean): Promise<void>;
+
+  protected parseRepo(issue: GitHubIssue): string {
+    const match = issue.html_url.match(/github\.com\/([^/]+\/[^/]+)/);
+    if (match) {
+      return match[1];
+    }
+
+    // Fallback to parsing from repository_url (API URL)
+    const apiMatch = issue.repository_url.match(/repos\/([^/]+\/[^/]+)/);
+    if (apiMatch) {
+      return apiMatch[1];
+    }
+
+    // Deterministic fallback: hash the repository_url
+    logger.warn(`Could not parse repo from URL: ${issue.html_url}`);
+    const hash = issue.repository_url.split('').reduce((acc, char) => {
+      return ((acc << 5) - acc) + char.charCodeAt(0) | 0;
+    }, 0);
+    return `unknown-repo-${Math.abs(hash).toString(36)}`;
+  }
+
+  dispose(): void {
+    this.stopPeriodicRefresh();
+    this._onDidDiscoverItems.dispose();
+  }
+}

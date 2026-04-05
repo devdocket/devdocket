@@ -1,113 +1,13 @@
 import * as vscode from 'vscode';
 import { logger } from './logger';
+import { BaseGitHubProvider, DiscoveredItem, GitHubIssue } from './baseGithubProvider';
 
-// Re-declared to match core API contract — separate extension cannot import core types directly
-interface Disposable {
-  dispose(): void;
-}
-
-// Re-declared to match core API contract — separate extension cannot import core types directly
-interface Event<T> {
-  (listener: (e: T) => void): Disposable;
-}
-
-interface DiscoveredItem {
-  externalId: string;
-  title: string;
-  description?: string;
-  url?: string;
-  group?: string;
-}
-
-interface WorkCenterProvider {
-  readonly id: string;
-  readonly label: string;
-  readonly onDidDiscoverItems: Event<DiscoveredItem[]>;
-  refresh(): Promise<void>;
-}
-
-interface GitHubIssue {
-  number: number;
-  title: string;
-  body?: string;
-  html_url: string;
-  repository_url: string;
-  pull_request?: unknown;
-}
-
-export class GitHubIssueProvider implements WorkCenterProvider {
+export class GitHubIssueProvider extends BaseGitHubProvider {
   readonly id = 'github';
   readonly label = 'GitHub Issues';
 
-  private readonly _onDidDiscoverItems = new vscode.EventEmitter<DiscoveredItem[]>();
-  readonly onDidDiscoverItems = this._onDidDiscoverItems.event;
-
-  private refreshTimer: ReturnType<typeof setInterval> | undefined;
-  private _isRefreshing = false;
-
-  startPeriodicRefresh(intervalSeconds: number): void {
-    this.stopPeriodicRefresh();
-    if (intervalSeconds <= 0) {
-      // Disable periodic refresh if interval is 0 or negative
-      return;
-    }
-    // Clamp to minimum of 60 seconds
-    const clampedInterval = Math.max(intervalSeconds, 60);
-    this.refreshTimer = setInterval(() => {
-      this.refreshInBackground().catch((err) => {
-        logger.error('Refresh failed', err);
-      });
-    }, clampedInterval * 1000);
-  }
-
-  stopPeriodicRefresh(): void {
-    if (this.refreshTimer) {
-      clearInterval(this.refreshTimer);
-      this.refreshTimer = undefined;
-    }
-  }
-
-  async refresh(): Promise<void> {
+  protected async fetchAndPublish(accessToken: string, isUserTriggered: boolean): Promise<void> {
     logger.info('Fetching assigned issues...');
-    try {
-      const session = await vscode.authentication.getSession('github', ['repo'], {
-        createIfNone: true,
-      }).catch(() => null);
-      
-      if (!session) {
-        return;
-      }
-
-      await this.fetchAndPublishIssues(session.accessToken, true);
-    } catch (err) {
-      logger.error('Failed to fetch issues', err);
-    }
-  }
-
-  private async refreshInBackground(): Promise<void> {
-    if (this._isRefreshing) {
-      return;
-    }
-
-    this._isRefreshing = true;
-    try {
-      const session = await vscode.authentication.getSession('github', ['repo'], {
-        createIfNone: false,
-      }).catch(() => null);
-      
-      if (!session) {
-        return;
-      }
-
-      await this.fetchAndPublishIssues(session.accessToken, false);
-    } catch (err) {
-      logger.error('Failed to fetch issues', err);
-    } finally {
-      this._isRefreshing = false;
-    }
-  }
-
-  private async fetchAndPublishIssues(accessToken: string, isUserTriggered: boolean = false): Promise<void> {
     const repos = this.getConfiguredRepos();
     const { issues, failures } = await this.fetchAssignedIssues(accessToken, repos);
 
@@ -140,25 +40,6 @@ export class GitHubIssueProvider implements WorkCenterProvider {
   private getConfiguredRepos(): string[] {
     const config = vscode.workspace.getConfiguration('workcenterGithub');
     return config.get<string[]>('repos', []);
-  }
-
-  private parseRepo(issue: GitHubIssue): string {
-    const match = issue.html_url.match(/github\.com\/([^/]+\/[^/]+)/);
-    if (match) {
-      return match[1];
-    }
-    
-    // Fallback to parsing from repository_url (API URL)
-    const apiMatch = issue.repository_url.match(/repos\/([^/]+\/[^/]+)/);
-    if (apiMatch) {
-      return apiMatch[1];
-    }
-    
-    // Deterministic fallback: hash the repository_url
-    const hash = issue.repository_url.split('').reduce((acc, char) => {
-      return ((acc << 5) - acc) + char.charCodeAt(0) | 0;
-    }, 0);
-    return `unknown-repo-${Math.abs(hash).toString(36)}`;
   }
 
   private async fetchAssignedIssues(
@@ -240,10 +121,5 @@ export class GitHubIssueProvider implements WorkCenterProvider {
     // Filter out pull requests (GitHub /issues endpoint returns both issues and PRs)
     const issues = items.filter(item => !item.pull_request);
     return { issues, failed: false };
-  }
-
-  dispose(): void {
-    this.stopPeriodicRefresh();
-    this._onDidDiscoverItems.dispose();
   }
 }
