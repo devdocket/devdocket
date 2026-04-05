@@ -197,15 +197,15 @@ export async function activate(context: vscode.ExtensionContext): Promise<WorkCe
     providerRegSub,
     stateStoreSub,
     workGraphSub,
-    { dispose: () => workGraph.dispose() },
-    { dispose: () => stateStore.dispose() },
+    { dispose: () => workGraph?.dispose() },
+    { dispose: () => stateStore?.dispose() },
     { dispose: () => inboxProvider.dispose() },
     { dispose: () => queueProvider.dispose() },
     { dispose: () => focusProvider.dispose() },
     { dispose: () => sourcesProvider.dispose() },
     { dispose: () => historyProvider.dispose() },
-    { dispose: () => providerRegistry.dispose() },
-    { dispose: () => actionRegistry.dispose() },
+    { dispose: () => providerRegistry?.dispose() },
+    { dispose: () => actionRegistry?.dispose() },
   );
 
   registerCommands(context, workGraph, actionRegistry, stateStore);
