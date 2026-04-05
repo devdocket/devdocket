@@ -23,7 +23,7 @@ export interface DiscoveredItem {
   description?: string;
   /** Optional URL linking back to the item in its source system. */
   url?: string;
-  /** Optional grouping key used to organize items in the Sources view. */
+  /** Optional grouping key used to organize items in the UI (for example, in the Inbox and Sources views). */
   group?: string;
 }
 
