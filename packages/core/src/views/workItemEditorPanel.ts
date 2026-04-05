@@ -8,6 +8,7 @@ export class WorkItemEditorPanel {
   private readonly workGraph: WorkGraph;
   private readonly itemId: string;
   private disposed = false;
+  private debounceTimer: ReturnType<typeof setTimeout> | undefined;
   private readonly messageSubscription: vscode.Disposable;
 
   static open(
@@ -37,20 +38,33 @@ export class WorkItemEditorPanel {
 
     this.update();
 
-    this.messageSubscription = this.panel.webview.onDidReceiveMessage(async (msg) => {
-      try {
-        if (msg.type === 'autosave') {
-          await this.saveData(msg.data);
+    this.messageSubscription = this.panel.webview.onDidReceiveMessage((msg) => {
+      if (msg.type === 'autosave') {
+        if (this.debounceTimer) {
+          clearTimeout(this.debounceTimer);
         }
-      } catch (err) {
-        const message = err instanceof Error ? err.message : String(err);
-        vscode.window.showErrorMessage(`Failed to save work item: ${message}`);
+        this.debounceTimer = setTimeout(async () => {
+          this.debounceTimer = undefined;
+          if (this.disposed) {
+            return;
+          }
+          try {
+            await this.saveData(msg.data);
+          } catch (err) {
+            const message = err instanceof Error ? err.message : String(err);
+            vscode.window.showErrorMessage(`Failed to save work item: ${message}`);
+          }
+        }, 300);
       }
     });
 
     this.panel.onDidDispose(() => {
       if (!this.disposed) {
         this.disposed = true;
+        if (this.debounceTimer) {
+          clearTimeout(this.debounceTimer);
+          this.debounceTimer = undefined;
+        }
         this.messageSubscription.dispose();
       }
     });
@@ -250,6 +264,10 @@ ${item.providerId ? '      <span id="readonly-title-hint" class="hint">Title is 
   dispose(): void {
     if (!this.disposed) {
       this.disposed = true;
+      if (this.debounceTimer) {
+        clearTimeout(this.debounceTimer);
+        this.debounceTimer = undefined;
+      }
       this.messageSubscription.dispose();
       this.panel.dispose();
     }
