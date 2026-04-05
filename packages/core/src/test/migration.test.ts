@@ -399,7 +399,9 @@ describe('Batch migration (matches extension.ts setStates path)', () => {
 
     // issue-2 already has state
     stateStore.getState.mockImplementation((_providerId: string, externalId: string) => {
-      if (externalId === 'issue-2') {return 'accepted' as any;}
+      if (externalId === 'issue-2') {
+        return 'accepted' as any;
+      }
       return undefined;
     });
 
