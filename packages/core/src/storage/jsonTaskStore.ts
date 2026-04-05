@@ -144,7 +144,10 @@ export class JsonTaskStore implements ITaskStore {
 
   // Serialize all write operations to prevent concurrent file corruption
   private enqueue(op: () => Promise<void>): Promise<void> {
-    this.writeQueue = this.writeQueue.then(op, op);
+    this.writeQueue = this.writeQueue.then(op, (err: unknown) => {
+      logger.warn('Previous write operation failed, continuing queue', err);
+      return op();
+    });
     return this.writeQueue;
   }
 }
