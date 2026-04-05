@@ -75,8 +75,8 @@ export async function activate(_context: vscode.ExtensionContext): Promise<void>
   const actionDisposable = api.registerAction(startWorkAction);
 
   _context.subscriptions.push(
-    providerRegistration,
-    prReviewRegistration,
+    { dispose: () => providerRegistration?.dispose() },
+    { dispose: () => prReviewRegistration?.dispose() },
     actionDisposable,
     { dispose: () => issueProvider?.dispose() },
     { dispose: () => prReviewProvider?.dispose() },
