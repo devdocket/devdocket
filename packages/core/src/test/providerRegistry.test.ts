@@ -363,7 +363,7 @@ describe('ProviderRegistry', () => {
       registry.register(provider);
       expect(registry.loading).toBe(true);
 
-      await vi.advanceTimersByTimeAsync(30_000);
+      await vi.advanceTimersByTimeAsync(ProviderRegistry.REFRESH_TIMEOUT_MS);
       expect(registry.loading).toBe(false);
       expect(warnSpy).toHaveBeenCalledWith(
         expect.stringContaining('Provider "slow" refresh timed out'),
@@ -384,7 +384,7 @@ describe('ProviderRegistry', () => {
       const refreshPromise = registry.refreshAll();
       expect(warnSpy).not.toHaveBeenCalled();
 
-      await vi.advanceTimersByTimeAsync(30_000);
+      await vi.advanceTimersByTimeAsync(ProviderRegistry.REFRESH_TIMEOUT_MS);
       await expect(refreshPromise).resolves.toBeUndefined();
       expect(warnSpy).toHaveBeenCalledTimes(1);
       expect(warnSpy).toHaveBeenCalledWith(
@@ -400,7 +400,7 @@ describe('ProviderRegistry', () => {
 
       // refresh already resolved (default mock is async () => {})
       // Advance past timeout — no spurious warnings should fire
-      await vi.advanceTimersByTimeAsync(30_000);
+      await vi.advanceTimersByTimeAsync(ProviderRegistry.REFRESH_TIMEOUT_MS);
       expect(registry.loading).toBe(false);
       expect(warnSpy).not.toHaveBeenCalled();
       warnSpy.mockRestore();
@@ -427,7 +427,7 @@ describe('ProviderRegistry', () => {
       expect(receivedToken).toBeDefined();
       expect(receivedToken.isCancellationRequested).toBe(false);
 
-      await vi.advanceTimersByTimeAsync(30_000);
+      await vi.advanceTimersByTimeAsync(ProviderRegistry.REFRESH_TIMEOUT_MS);
       expect(receivedToken.isCancellationRequested).toBe(true);
     });
   });

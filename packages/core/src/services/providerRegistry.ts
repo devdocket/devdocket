@@ -99,7 +99,8 @@ export class ProviderRegistry {
       }
       cts.cancel();
     }, ProviderRegistry.REFRESH_TIMEOUT_MS);
-    this._pendingRefreshes.set(provider.id, { cts, timeoutId });
+    const entry = { cts, timeoutId };
+    this._pendingRefreshes.set(provider.id, entry);
 
     const refreshPromise = provider.refresh(cts.token)
       .catch((err: unknown) => {
@@ -113,7 +114,10 @@ export class ProviderRegistry {
     return Promise.race([refreshPromise, cancelledPromise])
       .finally(() => {
         clearTimeout(timeoutId);
-        this._pendingRefreshes.delete(provider.id);
+        // Only clean up if this entry is still the current one for this provider
+        if (this._pendingRefreshes.get(provider.id) === entry) {
+          this._pendingRefreshes.delete(provider.id);
+        }
         cts.dispose();
       });
   }
