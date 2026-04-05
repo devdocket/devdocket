@@ -184,14 +184,20 @@ export class AdoWorkItemProvider implements WorkCenterProvider {
 
     const wiqlQuery = `SELECT [System.Id] FROM WorkItems WHERE [System.AssignedTo] = @Me AND [System.State] <> 'Closed' AND [System.State] <> 'Removed'`;
 
-    const wiqlResponse = await fetch(wiqlUrl, {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${token}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ query: wiqlQuery }),
-    });
+    let wiqlResponse: Response;
+    try {
+      wiqlResponse = await fetch(wiqlUrl, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ query: wiqlQuery }),
+      });
+    } catch (err) {
+      logger.error(`Network error querying work items for project "${project || this.org}":`, err);
+      return { items: [], failed: true };
+    }
 
     if (!wiqlResponse.ok) {
       logger.warn(`Failed to fetch work items for project: ${project || this.org}`);
@@ -221,11 +227,18 @@ export class AdoWorkItemProvider implements WorkCenterProvider {
       const batchIds = ids.slice(i, i + batchSize);
       const detailUrl = `https://dev.azure.com/${encodeURIComponent(this.org)}/_apis/wit/workitems?ids=${batchIds.join(',')}&fields=System.Title,System.Description,System.TeamProject,System.WorkItemType,System.State&$expand=links&api-version=7.1`;
 
-      const detailResponse = await fetch(detailUrl, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      });
+      let detailResponse: Response;
+      try {
+        detailResponse = await fetch(detailUrl, {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        });
+      } catch (err) {
+        logger.error(`Network error fetching work item details (batch at index ${i}):`, err);
+        batchFailed = true;
+        continue;
+      }
 
       if (!detailResponse.ok) {
         logger.error(`Failed to fetch work item details: ${detailResponse.status}`);
