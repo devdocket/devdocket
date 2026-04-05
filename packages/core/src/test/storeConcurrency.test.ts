@@ -342,3 +342,43 @@ describe('DiscoveredStateStore concurrency', () => {
     expect(store.getState('gh', 'post-recovery')).toBe('accepted');
   });
 });
+
+describe('DiscoveredStateStore concurrency (fresh store)', () => {
+  let store: DiscoveredStateStore;
+
+  beforeEach(() => {
+    // No pre-load — tests exercise concurrent access on an uninitialized store
+    store = new DiscoveredStateStore(tmpDir);
+  });
+
+  afterEach(() => {
+    store.dispose();
+  });
+
+  it('concurrent initial setState calls on a fresh store do not lose data', async () => {
+    const entries = Array.from({ length: 10 }, (_, i) => ({
+      providerId: 'gh',
+      externalId: `fresh-issue-${i}`,
+      state: 'accepted' as InboxState,
+    }));
+
+    await Promise.all(
+      entries.map((e) => store.setState(e.providerId, e.externalId, e.state)),
+    );
+
+    for (const e of entries) {
+      expect(store.getState(e.providerId, e.externalId)).toBe('accepted');
+    }
+
+    const disk = await readRawDiscoveredState(tmpDir);
+    expect(disk).toHaveLength(10);
+    for (const e of entries) {
+      expect(
+        disk.find(
+          (d) =>
+            d.providerId === e.providerId && d.externalId === e.externalId,
+        ),
+      ).toBeDefined();
+    }
+  });
+});

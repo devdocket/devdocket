@@ -18,6 +18,7 @@ export class DiscoveredStateStore {
   readonly onDidChange = this._onDidChange.event;
   private writeQueue: Promise<void> = Promise.resolve();
   private loaded = false;
+  private loadPromise: Promise<void> | null = null;
 
   constructor(storagePath: string) {
     this.filePath = path.join(storagePath, 'discovered-state.json');
@@ -87,6 +88,14 @@ export class DiscoveredStateStore {
     if (this.loaded) {
       return;
     }
+    // Guard against concurrent loads: reuse the same in-flight promise
+    if (this.loadPromise === null) {
+      this.loadPromise = this.doLoad();
+    }
+    return this.loadPromise;
+  }
+
+  private async doLoad(): Promise<void> {
     try {
       const data = await fs.readFile(this.filePath, 'utf-8');
       const records = JSON.parse(data) as DiscoveredStateRecord[];
@@ -102,6 +111,8 @@ export class DiscoveredStateStore {
         this.loaded = true;
         return;
       }
+      // Allow retry on failure
+      this.loadPromise = null;
       throw err;
     }
   }
