@@ -6,15 +6,18 @@ import * as vscode from 'vscode';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 function createMockStateStore() {
+  const cache = new Map<string, string>();
   return {
-    getState: vi.fn(),
-    setState: vi.fn(),
-    setStates: vi.fn(),
-    load: vi.fn(),
-    loadAll: vi.fn(),
+    getState: vi.fn((providerId: string, externalId: string) =>
+      cache.get(`${providerId}::${externalId}`),
+    ),
+    setState: vi.fn(async (_providerId: string, _externalId: string, _state: string) => {}),
+    setStates: vi.fn(async (_items: Array<{ providerId: string; externalId: string; state: string }>) => {}),
+    load: vi.fn(async () => {}),
+    loadAll: vi.fn(async () => []),
     onDidChange: vi.fn(() => ({ dispose: vi.fn() })),
     dispose: vi.fn(),
-  };
+  } as unknown as import('../storage/discoveredStateStore').DiscoveredStateStore;
 }
 
 function createMockProvider(id: string): WorkCenterProvider {
@@ -46,7 +49,7 @@ describe('WorkCenterApiImpl', () => {
 
   beforeEach(() => {
     const stateStore = createMockStateStore();
-    providerRegistry = new ProviderRegistry(stateStore as any);
+    providerRegistry = new ProviderRegistry(stateStore);
     actionRegistry = new ActionRegistry();
     api = new WorkCenterApiImpl(providerRegistry, actionRegistry);
   });
