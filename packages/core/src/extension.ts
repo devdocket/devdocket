@@ -174,8 +174,13 @@ export async function activate(context: vscode.ExtensionContext): Promise<WorkCe
     const showNotifications = config.get<boolean>('showInboxNotifications', true);
     if (showNotifications && newCount > 0) {
       vscode.window.showInformationMessage(
-        `WorkCenter: ${newCount} new item${newCount === 1 ? '' : 's'} in Inbox`
-      );
+        `WorkCenter: ${newCount} new item${newCount === 1 ? '' : 's'} in Inbox`,
+        'Show Inbox'
+      ).then(action => {
+        if (action === 'Show Inbox') {
+          vscode.commands.executeCommand('workcenter.inbox.focus');
+        }
+      });
     }
   });
   const stateStoreSub = stateStore.onDidChange(scheduleUiUpdate);
