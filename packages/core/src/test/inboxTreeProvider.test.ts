@@ -371,7 +371,7 @@ describe('InboxTreeProvider', () => {
       registry._fire();
       vi.advanceTimersByTime(DEBOUNCE_MS);
 
-      // After refresh, item should still appear as seen(circle-outline icon)
+      // After refresh, item should still appear as seen (circle-outline icon)
       expect(provider.getTreeItem(item).label).toBe('Bug');
       expect((provider.getTreeItem(item).iconPath as any).id).toBe('circle-outline');
     });
@@ -385,7 +385,7 @@ describe('InboxTreeProvider', () => {
       registry._fire();
       vi.advanceTimersByTime(DEBOUNCE_MS);
 
-      // Re-add item — should appear as unseen(circle-filled icon)
+      // Re-add item — should appear as unseen (circle-filled icon)
       registry._setItems('gh', [{ externalId: '1', title: 'Bug' }]);
       const item: InboxItem = { kind: 'item', providerId: 'gh', externalId: '1', title: 'Bug' };
       expect(provider.getTreeItem(item).label).toBe('Bug');
