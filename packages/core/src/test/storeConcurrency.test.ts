@@ -175,14 +175,14 @@ describe('JsonTaskStore concurrency', () => {
     await store.loadAll();
 
     let failNext = true;
-    vi.spyOn(fs, 'writeFile').mockImplementation(async (...args: unknown[]) => {
+    const realWriteFile = fs.writeFile;
+    vi.spyOn(fs, 'writeFile').mockImplementation(async (...args: Parameters<typeof fs.writeFile>) => {
       if (failNext) {
         failNext = false;
         throw new Error('Simulated disk failure');
       }
-      // Restore and call real implementation
       vi.mocked(fs.writeFile).mockRestore();
-      return fs.writeFile(...(args as Parameters<typeof fs.writeFile>));
+      return realWriteFile(...args);
     });
 
     // First save should fail
@@ -192,7 +192,7 @@ describe('JsonTaskStore concurrency', () => {
     const afterFail = await store.loadAll();
     expect(afterFail.find((i) => i.id === 'first')).toBeUndefined();
 
-    // Second save should succeed (mock restored itself on first call)
+    // Second save should succeed (mock passes through after first failure)
     await store.save(item2);
 
     const final = await store.loadAll();
