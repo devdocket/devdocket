@@ -103,7 +103,8 @@ export class StartWorkAction implements WorkCenterAction {
         }
 
         const errMsg = worktreeErr instanceof Error ? worktreeErr.message : String(worktreeErr);
-        if (errMsg.includes('already exists')) {
+        const errStderr = (worktreeErr as any)?.stderr ?? '';
+        if (errMsg.includes('already exists') || errStderr.includes('already exists')) {
           vscode.window.showErrorMessage(`WorkCenter: Directory "${worktreePath}" already exists.`);
           return;
         }

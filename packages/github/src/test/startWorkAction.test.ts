@@ -232,7 +232,12 @@ describe('StartWorkAction', () => {
       // Mock git worktree add to fail because directory already exists
       vi.mocked(execFile).mockImplementation(((cmd: string, args: string[], opts: any, cb: Function) => {
         if (args[0] === 'worktree') {
-          cb(new Error(`fatal: '${path.join('/mock', 'issue-123-fix-bug')}' already exists`), '', '');
+          const stderr = `fatal: '${path.join('/mock', 'issue-123-fix-bug')}' already exists`;
+          const err = new Error(
+            `Command failed: git worktree add ${path.join('/mock', 'issue-123-fix-bug')} issue-123-fix-bug\n${stderr}`
+          );
+          (err as any).stderr = stderr;
+          cb(err, '', '');
         } else {
           cb(null, { stdout: '', stderr: '' }, '');
         }
