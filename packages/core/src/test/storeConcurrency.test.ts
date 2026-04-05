@@ -114,7 +114,7 @@ describe('JsonTaskStore concurrency', () => {
     expect(final.find((i) => i.id === 'x')).toBeDefined();
   });
 
-  it('multiple simultaneous saveAll calls apply last-write-wins', async () => {
+  it('multiple simultaneous saveAll calls preserve all items', async () => {
     const batch1 = [
       makeItem({ id: 'shared', title: 'Batch 1 version' }),
       makeItem({ id: 'only-1', title: 'Only in batch 1' }),
@@ -124,6 +124,7 @@ describe('JsonTaskStore concurrency', () => {
       makeItem({ id: 'only-2', title: 'Only in batch 2' }),
     ];
 
+    // writeQueue serializes these: batch2 always runs after batch1
     await Promise.all([store.saveAll(batch1), store.saveAll(batch2)]);
 
     const cached = await store.loadAll();
@@ -132,13 +133,16 @@ describe('JsonTaskStore concurrency', () => {
     expect(cached.find((c) => c.id === 'only-1')).toBeDefined();
     expect(cached.find((c) => c.id === 'only-2')).toBeDefined();
 
-    // 'shared' must exist (from one of the batches)
+    // 'shared' takes the value from batch2 (serialized second)
     const shared = cached.find((c) => c.id === 'shared');
     expect(shared).toBeDefined();
+    expect(shared!.title).toBe('Batch 2 version');
 
-    // Disk must match cache
+    // Disk must contain the same set of items as cache
     const disk = await readRawItems(tmpDir);
-    expect(disk).toHaveLength(cached.length);
+    const cachedIds = cached.map((c) => c.id).sort();
+    const diskIds = disk.map((d) => d.id).sort();
+    expect(diskIds).toEqual(cachedIds);
   });
 
   it('save after failed save recovers gracefully', async () => {
@@ -243,9 +247,24 @@ describe('DiscoveredStateStore concurrency', () => {
     expect(store.getState('gh', 'single-1')).toBe('accepted');
     expect(store.getState('gh', 'single-2')).toBe('dismissed');
 
-    // Verify disk has all 7 records
+    // Verify disk has exactly the expected persisted records
     const disk = await readRawDiscoveredState(tmpDir);
-    expect(disk).toHaveLength(7);
+    const expectedRecords: Array<{ providerId: string; externalId: string; inboxState: InboxState }> = [
+      ...batchItems.map((b) => ({ providerId: b.providerId, externalId: b.externalId, inboxState: b.state })),
+      { providerId: 'gh', externalId: 'single-1', inboxState: 'accepted' },
+      { providerId: 'gh', externalId: 'single-2', inboxState: 'dismissed' },
+    ];
+    expect(disk).toHaveLength(expectedRecords.length);
+    for (const expected of expectedRecords) {
+      expect(
+        disk.find(
+          (d) =>
+            d.providerId === expected.providerId &&
+            d.externalId === expected.externalId &&
+            d.inboxState === expected.inboxState,
+        ),
+      ).toBeDefined();
+    }
   });
 
   it('setState rolls back cache on write failure', async () => {
