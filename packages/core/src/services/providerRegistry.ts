@@ -158,12 +158,16 @@ export class ProviderRegistry {
     if (updates.length > 0) {
       try {
         await this.stateStore.setStates(updates);
-        this._onDidAddNewUnseenItems.fire(updates.length);
+        if (!this._disposed) {
+          this._onDidAddNewUnseenItems.fire(updates.length);
+        }
       } catch (err) {
         logger.error('Failed to persist discovered states', err);
       }
     }
-    this._onDidChangeDiscoveredItems.fire();
+    if (!this._disposed) {
+      this._onDidChangeDiscoveredItems.fire();
+    }
   }
 
   dispose(): void {
