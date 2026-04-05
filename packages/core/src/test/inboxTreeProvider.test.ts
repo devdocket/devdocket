@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { EventEmitter, TreeItemCollapsibleState } from 'vscode';
+import { EventEmitter, MarkdownString, TreeItemCollapsibleState } from 'vscode';
 import { DiscoveredItem } from '../api/types';
 import { InboxTreeProvider, InboxProviderNode, InboxGroupNode, InboxItem } from '../views/inboxTreeProvider';
 
@@ -421,18 +421,20 @@ describe('InboxTreeProvider', () => {
     it('should include title and description in tooltip', () => {
       const item: InboxItem = { kind: 'item', providerId: 'gh', externalId: '1', title: 'Bug fix', description: 'Fix the crash on startup' };
       const treeItem = provider.getTreeItem(item);
-      expect(treeItem.tooltip).toBeDefined();
-      expect(treeItem.tooltip.value).toContain('Bug fix');
-      expect(treeItem.tooltip.value).toContain('Fix the crash on startup');
+      const tooltip = treeItem.tooltip as MarkdownString;
+      expect(tooltip).toBeDefined();
+      expect(tooltip.value).toContain('Bug fix');
+      expect(tooltip.value).toContain('Fix the crash on startup');
     });
 
     it('should only include title when item has no description', () => {
       const item: InboxItem = { kind: 'item', providerId: 'gh', externalId: '1', title: 'Bug fix' };
       const treeItem = provider.getTreeItem(item);
-      expect(treeItem.tooltip).toBeDefined();
-      expect(treeItem.tooltip.value).toContain('Bug fix');
+      const tooltip = treeItem.tooltip as MarkdownString;
+      expect(tooltip).toBeDefined();
+      expect(tooltip.value).toContain('Bug fix');
       // Should not contain extra content beyond the title
-      const afterTitle = treeItem.tooltip.value.replace(/\*\*Bug fix\*\*/, '').trim();
+      const afterTitle = tooltip.value.replace(/\*\*Bug fix\*\*/, '').trim();
       expect(afterTitle).toBe('');
     });
   });
