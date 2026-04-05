@@ -32,7 +32,8 @@ export interface DiscoveredItem {
  *
  * Providers are registered via {@link WorkCenterApi.registerProvider} and emit
  * {@link DiscoveredItem}s through the {@link onDidDiscoverItems} event. The core
- * extension reads items live from the provider — it never persists provider data.
+ * extension reads discovered item metadata live from the provider and does not
+ * persist that metadata; only inbox state associated with provider items is persisted.
  */
 export interface WorkCenterProvider {
   /** Stable unique identifier for this provider (e.g. `"github"`). */

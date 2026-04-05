@@ -10,7 +10,11 @@ import { logger } from './logger';
 export class WorkGraph {
   private items: Map<string, WorkItem> = new Map();
   private readonly _onDidChange = new vscode.EventEmitter<void>();
-  /** Fires whenever items are created, updated, reordered, state-transitioned, or deleted. */
+  /**
+   * Fires when this graph changes through public mutation operations exposed by {@link WorkGraph}.
+   * Internal maintenance performed during load (for example, sort-order backfilling) may update items
+   * without emitting this event.
+   */
   readonly onDidChange = this._onDidChange.event;
 
   constructor(private readonly store: ITaskStore) {}
