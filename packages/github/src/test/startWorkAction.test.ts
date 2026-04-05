@@ -229,8 +229,14 @@ describe('StartWorkAction', () => {
     });
 
     it('shows error and deletes branch when worktree directory already exists', async () => {
-      // Mock fs.existsSync to return true (directory exists)
-      vi.mocked(fs.existsSync).mockReturnValue(true);
+      // Mock git worktree add to fail because directory already exists
+      vi.mocked(execFile).mockImplementation(((cmd: string, args: string[], opts: any, cb: Function) => {
+        if (args[0] === 'worktree') {
+          cb(new Error(`fatal: '${path.join('/mock', 'issue-123-fix-bug')}' already exists`), '', '');
+        } else {
+          cb(null, { stdout: '', stderr: '' }, '');
+        }
+      }) as any);
 
       const item = createWorkItem({ title: '#123: Fix bug' });
       await action.run(item);
@@ -238,7 +244,7 @@ describe('StartWorkAction', () => {
       expect(window.showErrorMessage).toHaveBeenCalledWith(
         `WorkCenter: Directory "${path.join('/mock', 'issue-123-fix-bug')}" already exists.`,
       );
-      // Should delete the branch (I6 rollback fix)
+      // Should delete the branch (rollback)
       expect(execFile).toHaveBeenCalledWith(
         'git',
         ['branch', '-D', 'issue-123-fix-bug'],
