@@ -239,6 +239,7 @@ describe('WorkItemEditorPanel', () => {
 
     it('ignores autosave with empty title for manual items', async () => {
       const item = await graph.createItem({ title: 'Original' });
+      const saveCountBefore = vi.mocked(store.save).mock.calls.length;
       WorkItemEditorPanel.open(context, graph, item);
 
       mockPanel.webview._fireMessage({
@@ -246,10 +247,10 @@ describe('WorkItemEditorPanel', () => {
         data: { title: '', notes: 'notes' },
       });
 
-      // Give async handler time to potentially run
+      // Let microtask queue flush
       await new Promise(r => setTimeout(r, 50));
-      const current = graph.getItem(item.id);
-      expect(current!.title).toBe('Original');
+      expect(vi.mocked(store.save)).toHaveBeenCalledTimes(saveCountBefore);
+      expect(graph.getItem(item.id)!.title).toBe('Original');
     });
 
     it('provider items cannot change title, only notes', async () => {
@@ -303,6 +304,32 @@ describe('WorkItemEditorPanel', () => {
         const updated = graph.getItem(item.id);
         expect(updated!.notes).toBeUndefined();
       });
+    });
+
+    it('skips save when provider item patch is empty', async () => {
+      const item = await graph.createItem(
+        { title: 'Provider' },
+        { providerId: 'github', externalId: '1' },
+      );
+      const saveCountBefore = vi.mocked(store.save).mock.calls.length;
+      WorkItemEditorPanel.open(context, graph, item);
+
+      mockPanel.webview._fireMessage({
+        type: 'autosave',
+        data: { title: 'Provider' },
+      });
+
+      await new Promise(r => setTimeout(r, 50));
+      expect(vi.mocked(store.save)).toHaveBeenCalledTimes(saveCountBefore);
+    });
+
+    it('ignores unknown message types', async () => {
+      const item = await graph.createItem({ title: 'Task' });
+      WorkItemEditorPanel.open(context, graph, item);
+
+      expect(() => {
+        mockPanel.webview._fireMessage({ type: 'unknown', data: {} });
+      }).not.toThrow();
     });
   });
 
