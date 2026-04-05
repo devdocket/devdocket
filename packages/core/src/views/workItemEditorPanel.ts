@@ -44,7 +44,7 @@ export class WorkItemEditorPanel {
         }
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
-        vscode.window.showErrorMessage(`Failed to save work item: ${message}`);
+        void vscode.window.showErrorMessage(`Failed to save work item: ${message}`);
       }
     });
 
