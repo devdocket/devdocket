@@ -67,23 +67,31 @@ export class JsonTaskStore implements ITaskStore {
     }
   }
 
+  private getCache(): Map<string, WorkItem> {
+    if (this.cache === null) {
+      throw new Error('Cache not initialized — call loadAll() first');
+    }
+    return this.cache;
+  }
+
   async save(item: WorkItem): Promise<void> {
     logger.debug(`Saving work item: ${item.id}`);
     if (this.cache === null) {
       await this.loadAll();
     }
     return this.enqueue(async () => {
-      const previousValue = this.cache!.get(item.id);
+      const cache = this.getCache();
+      const previousValue = cache.get(item.id);
       try {
-        const items = Array.from(this.cache!.values()).filter(i => i.id !== item.id);
+        const items = Array.from(cache.values()).filter(i => i.id !== item.id);
         items.push(item);
         await this.writeFile(items);
-        this.cache!.set(item.id, item);
+        cache.set(item.id, item);
       } catch (err) {
         if (previousValue) {
-          this.cache!.set(item.id, previousValue);
+          cache.set(item.id, previousValue);
         } else {
-          this.cache!.delete(item.id);
+          cache.delete(item.id);
         }
         throw err;
       }
@@ -95,21 +103,22 @@ export class JsonTaskStore implements ITaskStore {
       if (this.cache === null) {
         await this.loadAll();
       }
-      const previousValues = new Map(items.map(i => [i.id, this.cache!.get(i.id)]));
+      const cache = this.getCache();
+      const previousValues = new Map(items.map(i => [i.id, cache.get(i.id)]));
       try {
         const ids = new Set(items.map(i => i.id));
-        const remaining = Array.from(this.cache!.values()).filter(i => !ids.has(i.id));
+        const remaining = Array.from(cache.values()).filter(i => !ids.has(i.id));
         remaining.push(...items);
         await this.writeFile(remaining);
         for (const item of items) {
-          this.cache!.set(item.id, item);
+          cache.set(item.id, item);
         }
       } catch (err) {
         for (const [id, prev] of previousValues) {
           if (prev) {
-            this.cache!.set(id, prev);
+            cache.set(id, prev);
           } else {
-            this.cache!.delete(id);
+            cache.delete(id);
           }
         }
         throw err;
@@ -122,13 +131,14 @@ export class JsonTaskStore implements ITaskStore {
       await this.loadAll();
     }
     return this.enqueue(async () => {
-      const previousValue = this.cache!.get(id);
+      const cache = this.getCache();
+      const previousValue = cache.get(id);
       try {
-        this.cache!.delete(id);
-        await this.writeFile(Array.from(this.cache!.values()));
+        cache.delete(id);
+        await this.writeFile(Array.from(cache.values()));
       } catch (err) {
         if (previousValue) {
-          this.cache!.set(id, previousValue);
+          cache.set(id, previousValue);
         }
         throw err;
       }
