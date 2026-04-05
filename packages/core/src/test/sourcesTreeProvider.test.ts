@@ -288,6 +288,93 @@ describe('SourcesTreeProvider', () => {
     });
   });
 
+  describe('getTreeItem tooltip', () => {
+    it('should include title and description in tooltip when item has description', () => {
+      const node: SourceItemNode = {
+        kind: 'item', providerId: 'gh', externalId: '1', title: 'Bug Report',
+        description: 'App crashes on startup',
+      };
+      const treeItem = provider.getTreeItem(node);
+      expect(treeItem.tooltip.value).toContain('Bug Report');
+      expect(treeItem.tooltip.value).toContain('App crashes on startup');
+      expect(treeItem.tooltip.value).toContain('**Description:**');
+    });
+
+    it('should include only title in tooltip when item has no description', () => {
+      const node: SourceItemNode = {
+        kind: 'item', providerId: 'gh', externalId: '1', title: 'Simple Item',
+      };
+      const treeItem = provider.getTreeItem(node);
+      expect(treeItem.tooltip.value).toContain('Simple Item');
+      expect(treeItem.tooltip.value).not.toContain('**Description:**');
+    });
+  });
+
+  describe('sorting', () => {
+    it('should sort provider nodes alphabetically by label', () => {
+      registry._setLabel('zz', 'Zeta Provider');
+      registry._setLabel('aa', 'Alpha Provider');
+      registry._setLabel('mm', 'Mid Provider');
+      registry._setItems('zz', [{ externalId: '1', title: 'Z' }]);
+      registry._setItems('aa', [{ externalId: '2', title: 'A' }]);
+      registry._setItems('mm', [{ externalId: '3', title: 'M' }]);
+
+      const children = provider.getChildren();
+      const labels = children.map((c) => (c as SourceProviderNode).label);
+      expect(labels).toEqual(['Alpha Provider', 'Mid Provider', 'Zeta Provider']);
+    });
+
+    it('should sort group children alphabetically by title', () => {
+      registry._setItems('gh', [
+        { externalId: '3', title: 'Zebra', group: 'Animals' },
+        { externalId: '1', title: 'Aardvark', group: 'Animals' },
+        { externalId: '2', title: 'Meerkat', group: 'Animals' },
+      ]);
+
+      const groupNode: SourceGroupNode = { kind: 'group', providerId: 'gh', groupName: 'Animals' };
+      const children = provider.getChildren(groupNode);
+      const titles = children.map((c) => (c as SourceItemNode).title);
+      expect(titles).toEqual(['Aardvark', 'Meerkat', 'Zebra']);
+    });
+  });
+
+  describe('dispose', () => {
+    it('should stop firing tree data changes after dispose', () => {
+      const listener = vi.fn();
+      provider.onDidChangeTreeData(listener);
+
+      registry._fire();
+      expect(listener).toHaveBeenCalledTimes(1);
+
+      provider.dispose();
+
+      registry._fire();
+      stateStore._fire();
+      expect(listener).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  describe('edge cases', () => {
+    it('should return empty children for a group with no matching items', () => {
+      registry._setItems('gh', [
+        { externalId: '1', title: 'PR #1', group: 'Pull Requests' },
+      ]);
+
+      const groupNode: SourceGroupNode = { kind: 'group', providerId: 'gh', groupName: 'Nonexistent Group' };
+      const children = provider.getChildren(groupNode);
+      expect(children).toEqual([]);
+    });
+
+    it('should return empty array for item element with all fields set', () => {
+      const itemNode: SourceItemNode = {
+        kind: 'item', providerId: 'gh', externalId: '99', title: 'Full Item',
+        description: 'A description', url: 'https://example.com', group: 'SomeGroup',
+      };
+      const children = provider.getChildren(itemNode);
+      expect(children).toEqual([]);
+    });
+  });
+
   describe('refresh', () => {
     it('should refresh when providerRegistry fires change event', () => {
       const listener = vi.fn();
