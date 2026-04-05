@@ -70,7 +70,7 @@ export class GitHubIssueProvider implements WorkCenterProvider {
   async refresh(): Promise<void> {
     logger.info('Fetching assigned issues...');
     try {
-      let session: vscode.AuthenticationSession | null | undefined;
+      let session: vscode.AuthenticationSession | undefined;
       try {
         session = await vscode.authentication.getSession('github', ['repo'], {
           createIfNone: true,
@@ -78,7 +78,7 @@ export class GitHubIssueProvider implements WorkCenterProvider {
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
         logger.error('GitHub authentication failed', message);
-        vscode.window.showWarningMessage(`GitHub authentication failed: ${message}`);
+        vscode.window.showWarningMessage(`WorkCenter GitHub: Authentication failed — ${message}`);
         return;
       }
 
@@ -100,7 +100,7 @@ export class GitHubIssueProvider implements WorkCenterProvider {
 
     this._isRefreshing = true;
     try {
-      let session: vscode.AuthenticationSession | null | undefined;
+      let session: vscode.AuthenticationSession | undefined;
       try {
         session = await vscode.authentication.getSession('github', ['repo'], {
           createIfNone: false,

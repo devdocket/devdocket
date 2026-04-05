@@ -79,11 +79,20 @@ export class GitHubPrReviewProvider implements WorkCenterProvider {
     this._isRefreshing = true;
     logger.info('Fetching PR review requests...');
     try {
-      const session = await vscode.authentication.getSession('github', ['repo'], {
-        createIfNone: true,
-      }).catch(() => null);
+      let session: vscode.AuthenticationSession | undefined;
+      try {
+        session = await vscode.authentication.getSession('github', ['repo'], {
+          createIfNone: true,
+        });
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        logger.error('GitHub authentication failed', message);
+        vscode.window.showWarningMessage(`WorkCenter GitHub: Authentication failed — ${message}`);
+        return;
+      }
 
       if (!session) {
+        logger.info('User cancelled GitHub authentication');
         return;
       }
 
@@ -102,11 +111,19 @@ export class GitHubPrReviewProvider implements WorkCenterProvider {
 
     this._isRefreshing = true;
     try {
-      const session = await vscode.authentication.getSession('github', ['repo'], {
-        createIfNone: false,
-      }).catch(() => null);
+      let session: vscode.AuthenticationSession | undefined;
+      try {
+        session = await vscode.authentication.getSession('github', ['repo'], {
+          createIfNone: false,
+        });
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        logger.warn('GitHub authentication failed during background refresh', message);
+        return;
+      }
 
       if (!session) {
+        logger.debug('No GitHub session available for background refresh');
         return;
       }
 
