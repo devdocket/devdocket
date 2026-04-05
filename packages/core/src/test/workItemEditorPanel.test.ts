@@ -110,8 +110,11 @@ describe('WorkItemEditorPanel', () => {
       );
       WorkItemEditorPanel.open(context, graph, item);
 
-      expect(mockPanel.webview.html).toContain('readonly');
-      expect(mockPanel.webview.html).toContain('Title is managed by the provider');
+      const html = mockPanel.webview.html;
+      const titleMatch = html.match(/<input[^>]*id="title"[^>]*>/);
+      expect(titleMatch).toBeTruthy();
+      expect(titleMatch![0]).toContain('readonly');
+      expect(html).toContain('Title is managed by the provider');
     });
 
     it('title field is editable for manual items', async () => {
