@@ -72,6 +72,22 @@ describe('Registry', () => {
     expect(registry.get('reuse')).toBe(item2);
   });
 
+  it('disposing the first registration after re-registering the same id does not remove the new item', () => {
+    const item1 = createItem('reuse', 'Original');
+    const disposable1 = registry.register(item1);
+
+    disposable1.dispose();
+
+    const item2 = createItem('reuse', 'Reused');
+    registry.register(item2);
+
+    disposable1.dispose();
+
+    expect(registry.get('reuse')).toBe(item2);
+    expect(registry.has('reuse')).toBe(true);
+    expect(registry.size).toBe(1);
+  });
+
   it('clear() removes all items', () => {
     registry.register(createItem('a'));
     registry.register(createItem('b'));
