@@ -1,3 +1,4 @@
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { commands, window, env, Uri } from 'vscode';
 import { registerCommands } from '../commands/commands';
 import { WorkGraph } from '../services/workGraph';
@@ -460,8 +461,6 @@ describe('registerCommands', () => {
     });
 
     it('shows error when createItem fails', async () => {
-      const handler = getCommandHandler('workcenter.acceptFromInbox');
-
       const failStore = createMockStore();
       failStore.save = vi.fn(async () => { throw new Error('save failed'); });
       const failGraph = new WorkGraph(failStore);
