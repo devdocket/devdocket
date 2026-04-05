@@ -2,8 +2,7 @@ export enum WorkItemState {
   New = 'New',
   Triaged = 'Triaged',
   InProgress = 'InProgress',
-  Blocked = 'Blocked',
-  WaitingOn = 'WaitingOn',
+  Paused = 'Paused',
   Done = 'Done',
   Archived = 'Archived',
 }
