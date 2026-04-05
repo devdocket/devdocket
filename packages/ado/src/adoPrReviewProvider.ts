@@ -137,7 +137,7 @@ export class AdoPrReviewProvider implements WorkCenterProvider {
     if (!userId) {
       const message = 'Failed to determine Azure DevOps user identity';
       if (isUserTriggered) {
-        vscode.window.showWarningMessage(`WorkCenter ADO: ${message}`);
+        void vscode.window.showWarningMessage(`WorkCenter ADO: ${message}`);
       }
       logger.warn(message);
       this._onDidDiscoverItems.fire([]);
@@ -177,7 +177,7 @@ export class AdoPrReviewProvider implements WorkCenterProvider {
         ? `Failed to fetch PR reviews from ${failures[0]}`
         : `Failed to fetch PR reviews from ${failures.length} projects`;
       if (isUserTriggered) {
-        vscode.window.showWarningMessage(`WorkCenter ADO: ${message}`);
+        void vscode.window.showWarningMessage(`WorkCenter ADO: ${message}`);
       }
       logger.warn(message);
     }
