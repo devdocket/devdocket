@@ -51,14 +51,16 @@ export class ProviderRegistry {
       .catch((err: unknown) => {
         logger.error(`Provider "${provider.id}" refresh failed`, err);
       });
+    let timeoutId: ReturnType<typeof setTimeout>;
     const timeoutPromise = new Promise<void>((resolve) => {
-      setTimeout(() => {
+      timeoutId = setTimeout(() => {
         logger.warn(`Provider "${provider.id}" refresh timed out after ${ProviderRegistry.REFRESH_TIMEOUT_MS}ms`);
         resolve();
       }, ProviderRegistry.REFRESH_TIMEOUT_MS);
     });
     Promise.race([refreshPromise, timeoutPromise])
       .finally(() => {
+        clearTimeout(timeoutId);
         this._loadingProviders.delete(provider.id);
         this._onDidChangeDiscoveredItems.fire();
       });
@@ -98,14 +100,17 @@ export class ProviderRegistry {
         logger.error(`Provider "${p.id}" refresh failed`, err);
       });
 
+      let timeoutId: ReturnType<typeof setTimeout>;
       const timeoutPromise = new Promise<void>((resolve) => {
-        setTimeout(() => {
+        timeoutId = setTimeout(() => {
           logger.warn(`Provider "${p.id}" refresh timed out after ${timeoutMs}ms`);
           resolve();
         }, timeoutMs);
       });
 
-      return Promise.race([refreshPromise, timeoutPromise]);
+      return Promise.race([refreshPromise, timeoutPromise]).finally(() => {
+        clearTimeout(timeoutId);
+      });
     });
     await Promise.all(promises);
   }
