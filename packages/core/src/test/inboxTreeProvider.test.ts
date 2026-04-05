@@ -387,5 +387,198 @@ describe('InboxTreeProvider', () => {
       stateStore._fire();
       expect(listener).toHaveBeenCalledTimes(1);
     });
+
+    it('should prune seenItems after state changes make item no longer unseen', () => {
+      registry._setItems('gh', [{ externalId: '1', title: 'Bug' }]);
+      provider.markSeen('gh', '1');
+
+      // Item is seen → circle-outline
+      const item: InboxItem = { kind: 'item', providerId: 'gh', externalId: '1', title: 'Bug' };
+      expect((provider.getTreeItem(item).iconPath as any).id).toBe('circle-outline');
+
+      // Accept it via stateStore, then fire change → prune runs
+      stateStore._set('gh', '1', 'accepted');
+      stateStore._fire();
+
+      // Re-add as unseen later — should be fresh (circle-filled)
+      stateStore._set('gh', '1', 'unseen');
+      expect((provider.getTreeItem(item).iconPath as any).id).toBe('circle-filled');
+    });
+
+    it('should clean up event listeners after dispose', () => {
+      const listener = vi.fn();
+      provider.onDidChangeTreeData(listener);
+      provider.dispose();
+
+      // Firing events after dispose should not reach listener
+      registry._fire();
+      stateStore._fire();
+      expect(listener).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('getTreeItem tooltip', () => {
+    it('should include title and description in tooltip', () => {
+      const item: InboxItem = { kind: 'item', providerId: 'gh', externalId: '1', title: 'Bug fix', description: 'Fix the crash on startup' };
+      const treeItem = provider.getTreeItem(item);
+      expect(treeItem.tooltip).toBeDefined();
+      expect(treeItem.tooltip.value).toContain('Bug fix');
+      expect(treeItem.tooltip.value).toContain('Fix the crash on startup');
+    });
+
+    it('should only include title when item has no description', () => {
+      const item: InboxItem = { kind: 'item', providerId: 'gh', externalId: '1', title: 'Bug fix' };
+      const treeItem = provider.getTreeItem(item);
+      expect(treeItem.tooltip).toBeDefined();
+      expect(treeItem.tooltip.value).toContain('Bug fix');
+      // Should not contain extra content beyond the title
+      const afterTitle = treeItem.tooltip.value.replace(/\*\*Bug fix\*\*/, '').trim();
+      expect(afterTitle).toBe('');
+    });
+  });
+
+  describe('getChildren for item node', () => {
+    it('should return empty array for item nodes (no children)', () => {
+      const item: InboxItem = { kind: 'item', providerId: 'gh', externalId: '1', title: 'Bug' };
+      expect(provider.getChildren(item)).toEqual([]);
+    });
+  });
+
+  describe('provider count accuracy', () => {
+    it('should show correct unseen count after some items become accepted', () => {
+      registry._setLabel('gh', 'GitHub');
+      registry._setItems('gh', [
+        { externalId: '1', title: 'A' },
+        { externalId: '2', title: 'B' },
+        { externalId: '3', title: 'C' },
+        { externalId: '4', title: 'D' },
+      ]);
+      stateStore._set('gh', '2', 'accepted');
+      stateStore._set('gh', '4', 'dismissed');
+
+      const treeItem = provider.getTreeItem(providerNode('gh'));
+      expect(treeItem.description).toBe('2');
+    });
+  });
+
+  describe('markSeen across providers', () => {
+    it('should track seen items independently per provider', () => {
+      registry._setItems('gh', [{ externalId: '1', title: 'GH Issue' }]);
+      registry._setItems('jira', [{ externalId: '1', title: 'Jira Ticket' }]);
+
+      provider.markSeen('gh', '1');
+
+      const ghItem: InboxItem = { kind: 'item', providerId: 'gh', externalId: '1', title: 'GH Issue' };
+      const jiraItem: InboxItem = { kind: 'item', providerId: 'jira', externalId: '1', title: 'Jira Ticket' };
+
+      // GH item is seen
+      expect((provider.getTreeItem(ghItem).iconPath as any).id).toBe('circle-outline');
+      // Jira item with same externalId is NOT seen
+      expect((provider.getTreeItem(jiraItem).iconPath as any).id).toBe('circle-filled');
+    });
+
+    it('should allow marking items from multiple providers as seen', () => {
+      registry._setItems('gh', [{ externalId: '1', title: 'GH' }]);
+      registry._setItems('jira', [{ externalId: '2', title: 'Jira' }]);
+      registry._setItems('ado', [{ externalId: '3', title: 'ADO' }]);
+
+      expect(provider.markSeen('gh', '1')).toBe(true);
+      expect(provider.markSeen('jira', '2')).toBe(true);
+      expect(provider.markSeen('ado', '3')).toBe(true);
+
+      const ghItem: InboxItem = { kind: 'item', providerId: 'gh', externalId: '1', title: 'GH' };
+      const jiraItem: InboxItem = { kind: 'item', providerId: 'jira', externalId: '2', title: 'Jira' };
+      const adoItem: InboxItem = { kind: 'item', providerId: 'ado', externalId: '3', title: 'ADO' };
+
+      expect((provider.getTreeItem(ghItem).iconPath as any).id).toBe('circle-outline');
+      expect((provider.getTreeItem(jiraItem).iconPath as any).id).toBe('circle-outline');
+      expect((provider.getTreeItem(adoItem).iconPath as any).id).toBe('circle-outline');
+    });
+  });
+
+  describe('large number of items', () => {
+    it('should handle 50+ items across multiple groups with correct counts and sorting', () => {
+      const items: { externalId: string; title: string; group?: string }[] = [];
+      // 20 items in group "alpha"
+      for (let i = 0; i < 20; i++) {
+        items.push({ externalId: `a-${i}`, title: `Alpha ${String(i).padStart(2, '0')}`, group: 'alpha' });
+      }
+      // 20 items in group "beta"
+      for (let i = 0; i < 20; i++) {
+        items.push({ externalId: `b-${i}`, title: `Beta ${String(i).padStart(2, '0')}`, group: 'beta' });
+      }
+      // 15 ungrouped items
+      for (let i = 0; i < 15; i++) {
+        items.push({ externalId: `u-${i}`, title: `Ungrouped ${String(i).padStart(2, '0')}` });
+      }
+
+      registry._setLabel('gh', 'GitHub');
+      registry._setItems('gh', items);
+
+      // Accept some items
+      stateStore._set('gh', 'a-0', 'accepted');
+      stateStore._set('gh', 'a-1', 'dismissed');
+      stateStore._set('gh', 'b-5', 'accepted');
+
+      // Provider-level count should be 55 total - 3 accepted/dismissed = 52
+      const providerTreeItem = provider.getTreeItem(providerNode('gh'));
+      expect(providerTreeItem.description).toBe('52');
+
+      // Provider children: 2 groups + 15 ungrouped items = 17 entries
+      const children = provider.getChildren(providerNode('gh'));
+      expect(children).toHaveLength(17);
+
+      // Groups should come first (alphabetically), then ungrouped items
+      expect(children[0].kind).toBe('group');
+      expect((children[0] as InboxGroupNode).groupName).toBe('alpha');
+      expect((children[0] as InboxGroupNode).unseenCount).toBe(18); // 20 - 2
+
+      expect(children[1].kind).toBe('group');
+      expect((children[1] as InboxGroupNode).groupName).toBe('beta');
+      expect((children[1] as InboxGroupNode).unseenCount).toBe(19); // 20 - 1
+
+      // Remaining 15 are ungrouped items, sorted alphabetically
+      for (let i = 2; i < 17; i++) {
+        expect(children[i].kind).toBe('item');
+      }
+      expect((children[2] as InboxItem).title).toBe('Ungrouped 00');
+      expect((children[16] as InboxItem).title).toBe('Ungrouped 14');
+
+      // Alpha group children: 18 unseen items, sorted
+      const alphaGroup: InboxGroupNode = { kind: 'group', providerId: 'gh', groupName: 'alpha', unseenCount: 18 };
+      const alphaChildren = provider.getChildren(alphaGroup);
+      expect(alphaChildren).toHaveLength(18);
+      expect((alphaChildren[0] as InboxItem).title).toBe('Alpha 02'); // 00 and 01 were accepted/dismissed
+
+      // Beta group children: 19 unseen items
+      const betaGroup: InboxGroupNode = { kind: 'group', providerId: 'gh', groupName: 'beta', unseenCount: 19 };
+      const betaChildren = provider.getChildren(betaGroup);
+      expect(betaChildren).toHaveLength(19);
+    });
+
+    it('should handle items from many providers', () => {
+      // Create 5 providers with 10+ items each
+      for (let p = 0; p < 5; p++) {
+        const providerId = `provider-${p}`;
+        registry._setLabel(providerId, `Provider ${p}`);
+        const providerItems: { externalId: string; title: string }[] = [];
+        for (let i = 0; i < 12; i++) {
+          providerItems.push({ externalId: `item-${i}`, title: `Item ${String(i).padStart(2, '0')}` });
+        }
+        registry._setItems(providerId, providerItems);
+      }
+
+      // Top-level should show 5 providers, sorted by label
+      const topLevel = provider.getChildren();
+      expect(topLevel).toHaveLength(5);
+      expect((topLevel[0] as InboxProviderNode).label).toBe('Provider 0');
+      expect((topLevel[4] as InboxProviderNode).label).toBe('Provider 4');
+
+      // Each provider should report 12 items
+      for (const node of topLevel) {
+        const treeItem = provider.getTreeItem(node);
+        expect(treeItem.description).toBe('12');
+      }
+    });
   });
 });
