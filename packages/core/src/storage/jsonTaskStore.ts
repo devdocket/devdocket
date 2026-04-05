@@ -1,8 +1,31 @@
 import * as fs from 'fs/promises';
 import * as path from 'path';
-import { WorkItem } from '../models/workItem';
+import { WorkItem, WorkItemState } from '../models/workItem';
 import { ITaskStore } from './taskStore';
 import { logger } from '../services/logger';
+
+const validWorkItemStates = new Set<string>(Object.values(WorkItemState));
+
+/**
+ * Validates that a parsed JSON value has the required shape of a WorkItem.
+ * Returns a descriptive error string if invalid, or undefined if valid.
+ */
+function validateWorkItem(value: unknown, index: number): string | undefined {
+  if (typeof value !== 'object' || value === null) {
+    return `Item at index ${index} is not an object`;
+  }
+  const obj = value as Record<string, unknown>;
+  if (typeof obj.id !== 'string' || obj.id.length === 0) {
+    return `Item at index ${index} is missing a valid "id" (string)`;
+  }
+  if (typeof obj.title !== 'string' || obj.title.length === 0) {
+    return `Item "${obj.id}" at index ${index} is missing a valid "title" (string)`;
+  }
+  if (typeof obj.state !== 'string' || !validWorkItemStates.has(obj.state)) {
+    return `Item "${obj.id}" at index ${index} has invalid "state": ${JSON.stringify(obj.state)}`;
+  }
+  return undefined;
+}
 
 export class JsonTaskStore implements ITaskStore {
   private readonly filePath: string;
@@ -29,12 +52,26 @@ export class JsonTaskStore implements ITaskStore {
     logger.debug(`Loading work items from ${this.filePath}`);
     try {
       const data = await fs.readFile(this.filePath, 'utf-8');
-      let items: WorkItem[];
+      let parsed: unknown;
       try {
-        items = JSON.parse(data) as WorkItem[];
+        parsed = JSON.parse(data);
       } catch {
         logger.warn('Failed to parse work items file');
         throw new Error('Failed to parse work items file');
+      }
+      if (!Array.isArray(parsed)) {
+        logger.warn('Work items file does not contain an array — resetting to empty');
+        parsed = [];
+      }
+      // Validate each item and discard invalid entries
+      const items: WorkItem[] = [];
+      for (let i = 0; i < (parsed as unknown[]).length; i++) {
+        const error = validateWorkItem((parsed as unknown[])[i], i);
+        if (error) {
+          logger.warn(`Skipping invalid work item: ${error}`);
+        } else {
+          items.push((parsed as unknown[])[i] as WorkItem);
+        }
       }
       // Migrate legacy 'description' field to 'notes'
       let needsMigration = false;

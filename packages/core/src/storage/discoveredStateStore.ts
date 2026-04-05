@@ -5,10 +5,33 @@ import { logger } from '../services/logger';
 
 export type InboxState = 'unseen' | 'accepted' | 'dismissed';
 
+const validInboxStates = new Set<string>(['unseen', 'accepted', 'dismissed']);
+
 export interface DiscoveredStateRecord {
   providerId: string;
   externalId: string;
   inboxState: InboxState;
+}
+
+/**
+ * Validates that a parsed JSON value has the required shape of a DiscoveredStateRecord.
+ * Returns a descriptive error string if invalid, or undefined if valid.
+ */
+function validateDiscoveredStateRecord(value: unknown, index: number): string | undefined {
+  if (typeof value !== 'object' || value === null) {
+    return `Record at index ${index} is not an object`;
+  }
+  const obj = value as Record<string, unknown>;
+  if (typeof obj.providerId !== 'string' || obj.providerId.length === 0) {
+    return `Record at index ${index} is missing a valid "providerId" (string)`;
+  }
+  if (typeof obj.externalId !== 'string' || obj.externalId.length === 0) {
+    return `Record at index ${index} is missing a valid "externalId" (string)`;
+  }
+  if (typeof obj.inboxState !== 'string' || !validInboxStates.has(obj.inboxState)) {
+    return `Record at index ${index} has invalid "inboxState": ${JSON.stringify(obj.inboxState)}`;
+  }
+  return undefined;
 }
 
 export class DiscoveredStateStore {
@@ -89,9 +112,29 @@ export class DiscoveredStateStore {
     }
     try {
       const data = await fs.readFile(this.filePath, 'utf-8');
-      const records = JSON.parse(data) as DiscoveredStateRecord[];
+      let parsed: unknown;
+      try {
+        parsed = JSON.parse(data);
+      } catch {
+        logger.warn('Failed to parse discovered state file — resetting to empty');
+        this.cache.clear();
+        this.loaded = true;
+        return;
+      }
+      if (!Array.isArray(parsed)) {
+        logger.warn('Discovered state file does not contain an array — resetting to empty');
+        this.cache.clear();
+        this.loaded = true;
+        return;
+      }
       this.cache.clear();
-      for (const record of records) {
+      for (let i = 0; i < parsed.length; i++) {
+        const error = validateDiscoveredStateRecord(parsed[i], i);
+        if (error) {
+          logger.warn(`Skipping invalid discovered state record: ${error}`);
+          continue;
+        }
+        const record = parsed[i] as DiscoveredStateRecord;
         this.cache.set(this.key(record.providerId, record.externalId), record);
       }
       logger.debug(`Loaded discovered state: ${this.cache.size} entries`);

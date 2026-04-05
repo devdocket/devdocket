@@ -104,11 +104,13 @@ describe('DiscoveredStateStore', () => {
     store2.dispose();
   });
 
-  it('should handle corrupted JSON by throwing', async () => {
+  it('should handle corrupted JSON gracefully by loading empty', async () => {
     const filePath = path.join(tmpDir, 'discovered-state.json');
     await fs.writeFile(filePath, 'not valid json', 'utf-8');
 
-    await expect(store.load()).rejects.toThrow();
+    await store.load();
+    const records = await store.loadAll();
+    expect(records).toEqual([]);
   });
 
   it('should create storage directory if it does not exist', async () => {
@@ -121,5 +123,54 @@ describe('DiscoveredStateStore', () => {
     const raw = await fs.readFile(filePath, 'utf-8');
     expect(JSON.parse(raw)).toHaveLength(1);
     nestedStore.dispose();
+  });
+
+  describe('schema validation', () => {
+    it('should skip records missing providerId', async () => {
+      const filePath = path.join(tmpDir, 'discovered-state.json');
+      const data = [
+        { externalId: 'issue-1', inboxState: 'unseen' },
+        { providerId: 'gh', externalId: 'issue-2', inboxState: 'accepted' },
+      ];
+      await fs.writeFile(filePath, JSON.stringify(data), 'utf-8');
+
+      const records = await store.loadAll();
+      expect(records).toHaveLength(1);
+      expect(records[0].externalId).toBe('issue-2');
+    });
+
+    it('should skip records missing externalId', async () => {
+      const filePath = path.join(tmpDir, 'discovered-state.json');
+      const data = [
+        { providerId: 'gh', inboxState: 'unseen' },
+        { providerId: 'gh', externalId: 'issue-2', inboxState: 'accepted' },
+      ];
+      await fs.writeFile(filePath, JSON.stringify(data), 'utf-8');
+
+      const records = await store.loadAll();
+      expect(records).toHaveLength(1);
+      expect(records[0].externalId).toBe('issue-2');
+    });
+
+    it('should skip records with invalid inboxState', async () => {
+      const filePath = path.join(tmpDir, 'discovered-state.json');
+      const data = [
+        { providerId: 'gh', externalId: 'issue-1', inboxState: 'bogus' },
+        { providerId: 'gh', externalId: 'issue-2', inboxState: 'accepted' },
+      ];
+      await fs.writeFile(filePath, JSON.stringify(data), 'utf-8');
+
+      const records = await store.loadAll();
+      expect(records).toHaveLength(1);
+      expect(records[0].externalId).toBe('issue-2');
+    });
+
+    it('should return empty for non-array JSON', async () => {
+      const filePath = path.join(tmpDir, 'discovered-state.json');
+      await fs.writeFile(filePath, JSON.stringify({ not: 'an array' }), 'utf-8');
+
+      const records = await store.loadAll();
+      expect(records).toEqual([]);
+    });
   });
 });
