@@ -39,6 +39,14 @@ interface GitHubSearchResponse {
   items: GitHubIssue[];
 }
 
+/**
+ * WorkCenter provider that discovers GitHub pull requests where the current
+ * user has been requested as a reviewer.
+ *
+ * Uses the GitHub Search API (`review-requested:@me`) to find open PRs.
+ * Sets {@link WorkCenterProvider.resurfaceDismissed} to `true` so that
+ * previously dismissed review requests reappear if still active.
+ */
 export class GitHubPrReviewProvider implements WorkCenterProvider {
   readonly id = 'github-pr-reviews';
   readonly label = 'GitHub PR Reviews';
@@ -50,6 +58,11 @@ export class GitHubPrReviewProvider implements WorkCenterProvider {
   private refreshTimer: ReturnType<typeof setInterval> | undefined;
   private _isRefreshing = false;
 
+  /**
+   * Starts a repeating timer that refreshes PR review requests in the background.
+   * The interval is clamped to a minimum of 60 seconds.
+   * @param intervalSeconds - Desired refresh interval in seconds (≤ 0 disables).
+   */
   startPeriodicRefresh(intervalSeconds: number): void {
     this.stopPeriodicRefresh();
     if (intervalSeconds <= 0) {
@@ -64,6 +77,7 @@ export class GitHubPrReviewProvider implements WorkCenterProvider {
     }, clampedInterval * 1000);
   }
 
+  /** Stops the periodic background refresh timer, if running. */
   stopPeriodicRefresh(): void {
     if (this.refreshTimer) {
       clearInterval(this.refreshTimer);
@@ -71,6 +85,10 @@ export class GitHubPrReviewProvider implements WorkCenterProvider {
     }
   }
 
+  /**
+   * Performs a user-triggered refresh of PR review requests.
+   * Prompts for authentication if no session exists.
+   */
   async refresh(): Promise<void> {
     if (this._isRefreshing) {
       return;
@@ -173,6 +191,7 @@ export class GitHubPrReviewProvider implements WorkCenterProvider {
     return pr.repository_url;
   }
 
+  /** Cleans up the refresh timer and event emitter. */
   dispose(): void {
     this.stopPeriodicRefresh();
     this._onDidDiscoverItems.dispose();

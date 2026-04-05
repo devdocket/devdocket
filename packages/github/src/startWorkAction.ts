@@ -28,14 +28,34 @@ interface WorkCenterAction {
   run(item: WorkItem): Promise<void>;
 }
 
+/**
+ * WorkCenter action that bootstraps a development environment for a GitHub issue.
+ *
+ * When executed on a work item originating from the GitHub provider, it:
+ * 1. Creates a feature branch from `origin/dev` (falling back to `origin/main` or `HEAD`).
+ * 2. Creates a git worktree at a sibling directory of the repository.
+ * 3. Opens the worktree in a new VS Code window.
+ *
+ * Only available for items in the `New` state from the `github` provider.
+ */
 export class StartWorkAction implements WorkCenterAction {
   readonly id = 'github.startWork';
   readonly label = 'Start Work (Branch + Worktree)';
 
+  /**
+   * Returns `true` when the item is a new GitHub issue that can be started.
+   * @param item - The work item to evaluate.
+   * @returns Whether the action is applicable.
+   */
   canRun(item: WorkItem): boolean {
     return item.providerId === 'github' && item.state === 'New';
   }
 
+  /**
+   * Creates a branch and worktree for the given work item, then opens it in a new window.
+   * @param item - The work item to start working on.
+   * @throws Displays a VS Code error message on failure (does not throw to caller).
+   */
   async run(item: WorkItem): Promise<void> {
     const issueNumber = this.extractIssueNumber(item.externalId);
     if (!issueNumber) {

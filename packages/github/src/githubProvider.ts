@@ -35,6 +35,16 @@ interface GitHubIssue {
   pull_request?: unknown;
 }
 
+/**
+ * WorkCenter provider that discovers GitHub issues assigned to the current user.
+ *
+ * Issues are fetched via the GitHub REST API using VS Code's built-in GitHub
+ * authentication. When configured repos are specified, only those repos are
+ * queried; otherwise all assigned issues across GitHub are returned.
+ *
+ * Supports periodic background refresh and emits discovered items through
+ * the {@link WorkCenterProvider.onDidDiscoverItems} event.
+ */
 export class GitHubIssueProvider implements WorkCenterProvider {
   readonly id = 'github';
   readonly label = 'GitHub Issues';
@@ -45,6 +55,12 @@ export class GitHubIssueProvider implements WorkCenterProvider {
   private refreshTimer: ReturnType<typeof setInterval> | undefined;
   private _isRefreshing = false;
 
+  /**
+   * Starts a repeating timer that refreshes issues in the background.
+   * The interval is clamped to a minimum of 60 seconds. A value of 0 or
+   * negative disables periodic refresh.
+   * @param intervalSeconds - Desired refresh interval in seconds.
+   */
   startPeriodicRefresh(intervalSeconds: number): void {
     this.stopPeriodicRefresh();
     if (intervalSeconds <= 0) {
@@ -60,6 +76,7 @@ export class GitHubIssueProvider implements WorkCenterProvider {
     }, clampedInterval * 1000);
   }
 
+  /** Stops the periodic background refresh timer, if running. */
   stopPeriodicRefresh(): void {
     if (this.refreshTimer) {
       clearInterval(this.refreshTimer);
@@ -67,6 +84,10 @@ export class GitHubIssueProvider implements WorkCenterProvider {
     }
   }
 
+  /**
+   * Performs a user-triggered refresh of assigned GitHub issues.
+   * Prompts for authentication if no session exists.
+   */
   async refresh(): Promise<void> {
     logger.info('Fetching assigned issues...');
     try {
@@ -242,6 +263,7 @@ export class GitHubIssueProvider implements WorkCenterProvider {
     return { issues, failed: false };
   }
 
+  /** Cleans up the refresh timer and event emitter. */
   dispose(): void {
     this.stopPeriodicRefresh();
     this._onDidDiscoverItems.dispose();

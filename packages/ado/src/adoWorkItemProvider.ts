@@ -49,6 +49,15 @@ interface AdoWorkItem {
 // Azure DevOps REST API scope for authentication
 const ADO_AUTH_SCOPE = '499b84ac-1321-427f-aa17-267ca6975798/.default';
 
+/**
+ * WorkCenter provider that discovers Azure DevOps work items assigned to the
+ * current user.
+ *
+ * Uses the ADO REST API with WIQL queries and Microsoft authentication.
+ * When projects are specified, only those projects are queried; otherwise
+ * the entire organisation is searched. Work items in `Closed` or `Removed`
+ * states are excluded.
+ */
 export class AdoWorkItemProvider implements WorkCenterProvider {
   readonly id = 'ado-work-items';
   readonly label = 'Azure DevOps Work Items';
@@ -59,11 +68,20 @@ export class AdoWorkItemProvider implements WorkCenterProvider {
   private refreshTimer: ReturnType<typeof setInterval> | undefined;
   private _isRefreshing = false;
 
+  /**
+   * @param org      - The Azure DevOps organisation name.
+   * @param projects - Project names to query. An empty array queries the whole org.
+   */
   constructor(
     private readonly org: string,
     private readonly projects: string[],
   ) {}
 
+  /**
+   * Starts a repeating timer that refreshes work items in the background.
+   * The interval is clamped to a minimum of 60 seconds.
+   * @param intervalSeconds - Desired refresh interval in seconds (≤ 0 disables).
+   */
   startPeriodicRefresh(intervalSeconds: number): void {
     this.stopPeriodicRefresh();
     const interval = Number(intervalSeconds);
@@ -78,6 +96,7 @@ export class AdoWorkItemProvider implements WorkCenterProvider {
     }, clampedInterval * 1000);
   }
 
+  /** Stops the periodic background refresh timer, if running. */
   stopPeriodicRefresh(): void {
     if (this.refreshTimer) {
       clearInterval(this.refreshTimer);
@@ -85,6 +104,10 @@ export class AdoWorkItemProvider implements WorkCenterProvider {
     }
   }
 
+  /**
+   * Performs a user-triggered refresh of assigned ADO work items.
+   * Prompts for authentication if no session exists.
+   */
   async refresh(): Promise<void> {
     if (this._isRefreshing) {
       return;
@@ -260,6 +283,7 @@ export class AdoWorkItemProvider implements WorkCenterProvider {
     return { items, failed: batchFailed };
   }
 
+  /** Cleans up the refresh timer and event emitter. */
   dispose(): void {
     this.stopPeriodicRefresh();
     this._onDidDiscoverItems.dispose();

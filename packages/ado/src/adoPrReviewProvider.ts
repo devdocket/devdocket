@@ -45,6 +45,15 @@ interface ConnectionData {
 // Azure DevOps REST API scope for authentication
 const ADO_AUTH_SCOPE = '499b84ac-1321-427f-aa17-267ca6975798/.default';
 
+/**
+ * WorkCenter provider that discovers Azure DevOps pull requests where the
+ * current user is listed as a reviewer.
+ *
+ * Uses the ADO Git Pull Requests API filtered by `reviewerId`. The user's
+ * ADO identity is resolved from the connection data endpoint and cached for
+ * subsequent refreshes. Sets {@link WorkCenterProvider.resurfaceDismissed}
+ * to `true` so dismissed reviews reappear if still active.
+ */
 export class AdoPrReviewProvider implements WorkCenterProvider {
   readonly id = 'ado-pr-reviews';
   readonly label = 'Azure DevOps PR Reviews';
@@ -58,11 +67,20 @@ export class AdoPrReviewProvider implements WorkCenterProvider {
   private _cachedUserId: string | undefined;
   private _cachedSessionAccountId: string | undefined;
 
+  /**
+   * @param org      - The Azure DevOps organisation name.
+   * @param projects - Project names to query. An empty array queries the whole org.
+   */
   constructor(
     private readonly org: string,
     private readonly projects: string[],
   ) {}
 
+  /**
+   * Starts a repeating timer that refreshes PR review requests in the background.
+   * The interval is clamped to a minimum of 60 seconds.
+   * @param intervalSeconds - Desired refresh interval in seconds (≤ 0 disables).
+   */
   startPeriodicRefresh(intervalSeconds: number): void {
     this.stopPeriodicRefresh();
     const interval = Number(intervalSeconds);
@@ -77,6 +95,7 @@ export class AdoPrReviewProvider implements WorkCenterProvider {
     }, clampedInterval * 1000);
   }
 
+  /** Stops the periodic background refresh timer, if running. */
   stopPeriodicRefresh(): void {
     if (this.refreshTimer) {
       clearInterval(this.refreshTimer);
@@ -84,6 +103,10 @@ export class AdoPrReviewProvider implements WorkCenterProvider {
     }
   }
 
+  /**
+   * Performs a user-triggered refresh of PR review requests.
+   * Prompts for authentication if no session exists.
+   */
   async refresh(): Promise<void> {
     if (this._isRefreshing) {
       return;
@@ -276,6 +299,7 @@ export class AdoPrReviewProvider implements WorkCenterProvider {
     return { items, failed: false };
   }
 
+  /** Cleans up the refresh timer and event emitter. */
   dispose(): void {
     this.stopPeriodicRefresh();
     this._onDidDiscoverItems.dispose();
