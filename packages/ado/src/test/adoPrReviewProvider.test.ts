@@ -81,7 +81,7 @@ describe('AdoPrReviewProvider', () => {
 
     // First call: connection data to get user ID
     expect(mockFetch).toHaveBeenCalledWith(
-      'https://dev.azure.com/myorg/_apis/connectiondata?api-version=7.1',
+      'https://dev.azure.com/myorg/_apis/connectiondata',
       expect.objectContaining({
         headers: expect.objectContaining({
           Authorization: 'Bearer test-token',
