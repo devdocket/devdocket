@@ -104,7 +104,9 @@ export class ProviderRegistry {
 
     const refreshPromise = provider.refresh(cts.token)
       .catch((err: unknown) => {
-        logger.error(`Provider "${provider.id}" refresh failed`, err);
+        if (!cts.token.isCancellationRequested) {
+          logger.error(`Provider "${provider.id}" refresh failed`, err);
+        }
       });
 
     const cancelledPromise = new Promise<void>((resolve) => {
