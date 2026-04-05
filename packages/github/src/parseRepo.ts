@@ -22,7 +22,7 @@ export function parseRepoFromUrls(htmlUrl: string, repositoryUrl: string): strin
   }
 
   // Deterministic fallback: SHA-256 hash to avoid collisions
-  logger.warn(`Could not parse repo from URLs: html_url=${htmlUrl}, repository_url=${repositoryUrl}`);
+  logger.warn('Could not parse repo from URLs', { htmlUrl, repositoryUrl });
   const hash = crypto.createHash('sha256').update(repositoryUrl).digest('hex').slice(0, 12);
   return `unknown-repo-${hash}`;
 }
