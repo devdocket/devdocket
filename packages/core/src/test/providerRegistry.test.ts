@@ -3,6 +3,7 @@ import { EventEmitter } from 'vscode';
 import { WorkCenterProvider, DiscoveredItem } from '../api/types';
 import { WorkGraph } from '../services/workGraph';
 import { ProviderRegistry } from '../services/providerRegistry';
+import { logger } from '../services/logger';
 import { ITaskStore } from '../storage/taskStore';
 import { WorkItemState } from '../models/workItem';
 
@@ -355,6 +356,7 @@ describe('ProviderRegistry', () => {
     });
 
     it('clears loading state when register refresh times out', async () => {
+      const warnSpy = vi.spyOn(logger, 'warn');
       const provider = createMockProvider('slow');
       vi.mocked(provider.refresh).mockReturnValue(new Promise(() => {}));
 
@@ -363,6 +365,10 @@ describe('ProviderRegistry', () => {
 
       await vi.advanceTimersByTimeAsync(30_000);
       expect(registry.loading).toBe(false);
+      expect(warnSpy).toHaveBeenCalledWith(
+        expect.stringContaining('Provider "slow" refresh timed out'),
+      );
+      warnSpy.mockRestore();
     });
 
     it('resolves refreshAll when a provider refresh times out', async () => {
@@ -379,6 +385,7 @@ describe('ProviderRegistry', () => {
     });
 
     it('clears timeout when refresh completes quickly', async () => {
+      const warnSpy = vi.spyOn(logger, 'warn');
       const provider = createMockProvider('fast');
       registry.register(provider);
 
@@ -386,6 +393,8 @@ describe('ProviderRegistry', () => {
       // Advance past timeout — no spurious warnings should fire
       await vi.advanceTimersByTimeAsync(30_000);
       expect(registry.loading).toBe(false);
+      expect(warnSpy).not.toHaveBeenCalled();
+      warnSpy.mockRestore();
     });
   });
 

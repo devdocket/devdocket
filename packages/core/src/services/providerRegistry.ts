@@ -102,7 +102,10 @@ export class ProviderRegistry {
     let timeoutId: ReturnType<typeof setTimeout> | undefined;
     const timeoutPromise = new Promise<void>((resolve) => {
       timeoutId = setTimeout(() => {
-        logger.warn(`Provider "${providerId}" refresh timed out after ${ProviderRegistry.REFRESH_TIMEOUT_MS}ms`);
+        // Guard against logging for providers that were unregistered before the timeout fired
+        if (this.providers.has(providerId)) {
+          logger.warn(`Provider "${providerId}" refresh timed out after ${ProviderRegistry.REFRESH_TIMEOUT_MS}ms`);
+        }
         resolve();
       }, ProviderRegistry.REFRESH_TIMEOUT_MS);
     });
