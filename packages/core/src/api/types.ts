@@ -1,5 +1,5 @@
-import * as vscode from 'vscode';
-import { WorkItem } from '../models/workItem';
+import type * as vscode from 'vscode';
+import type { WorkItem } from '../models/workItem';
 
 export interface Disposable {
   dispose(): void;
