@@ -5,16 +5,29 @@ import { logger } from './logger';
 
 export class WorkGraph {
   private items: Map<string, WorkItem> = new Map();
+  // Provenance key (`${providerId}:${externalId}`) → WorkItem.id for O(1) lookups
+  private provenanceIndex: Map<string, string> = new Map();
   private readonly _onDidChange = new vscode.EventEmitter<void>();
   readonly onDidChange = this._onDidChange.event;
 
   constructor(private readonly store: ITaskStore) {}
 
+  private static provenanceKey(providerId: string, externalId: string): string {
+    return `${providerId}:${externalId}`;
+  }
+
   async load(): Promise<void> {
     const items = await this.store.loadAll();
     this.items.clear();
+    this.provenanceIndex.clear();
     for (const item of items) {
       this.items.set(item.id, item);
+      if (item.providerId && item.externalId) {
+        this.provenanceIndex.set(
+          WorkGraph.provenanceKey(item.providerId, item.externalId),
+          item.id,
+        );
+      }
     }
     logger.debug(`Loaded ${items.length} work items from store`);
     await this.backfillSortOrder();
@@ -61,9 +74,8 @@ export class WorkGraph {
   }
 
   findItemByProvenance(providerId: string, externalId: string): WorkItem | undefined {
-    return this.getAll().find(
-      (item) => item.providerId === providerId && item.externalId === externalId
-    );
+    const id = this.provenanceIndex.get(WorkGraph.provenanceKey(providerId, externalId));
+    return id ? this.items.get(id) : undefined;
   }
 
   async createItem(
@@ -90,6 +102,12 @@ export class WorkGraph {
     };
     await this.store.save(item);
     this.items.set(item.id, item);
+    if (item.providerId && item.externalId) {
+      this.provenanceIndex.set(
+        WorkGraph.provenanceKey(item.providerId, item.externalId),
+        item.id,
+      );
+    }
     this._onDidChange.fire();
     logger.info(`Created work item: ${item.id}`);
     return item;
@@ -238,6 +256,12 @@ export class WorkGraph {
   }
 
   async deleteItem(id: string): Promise<void> {
+    const item = this.items.get(id);
+    if (item?.providerId && item?.externalId) {
+      this.provenanceIndex.delete(
+        WorkGraph.provenanceKey(item.providerId, item.externalId),
+      );
+    }
     await this.store.delete(id);
     this.items.delete(id);
     this._onDidChange.fire();
