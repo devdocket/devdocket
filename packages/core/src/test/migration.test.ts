@@ -196,9 +196,10 @@ function createMockStateStoreWithBatch() {
 }
 
 /**
- * Replicates the actual extension.ts migration logic (lines 56-78) which
- * collects items into an array and calls setStates once (batch), rather than
- * calling setState individually per item.
+ * Replicates the item-selection and batched `setStates` behavior from
+ * extension.ts (lines 56-78): eligible items are collected into an array and
+ * migrated with a single `setStates` call rather than individual `setState`
+ * calls. This helper does not mirror the production logging behavior.
  */
 async function runBatchMigration(
   workGraph: WorkGraph,
