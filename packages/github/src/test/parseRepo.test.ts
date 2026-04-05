@@ -72,4 +72,36 @@ describe('parseRepoFromUrls', () => {
     );
     expect(logged).toBe(true);
   });
+
+  it('rejects html_url with control characters in path segments', () => {
+    const result = parseRepoFromUrls(
+      'https://github.com/owner%0a/repo/issues/1',
+      'https://api.github.com/repos/owner/repo',
+    );
+    expect(result).toBe('owner/repo');
+  });
+
+  it('rejects repository_url with whitespace in path segments', () => {
+    const result = parseRepoFromUrls(
+      'https://evil.com/x',
+      'https://api.github.com/repos/owner/repo name',
+    );
+    expect(result).toMatch(/^unknown-repo-/);
+  });
+
+  it('handles percent-encoded valid characters in path segments', () => {
+    const result = parseRepoFromUrls(
+      'https://github.com/my-org/my-repo/issues/1',
+      'https://api.github.com/repos/my-org/my-repo',
+    );
+    expect(result).toBe('my-org/my-repo');
+  });
+
+  it('handles completely invalid URL gracefully', () => {
+    const result = parseRepoFromUrls(
+      'not-a-url',
+      'also-not-a-url',
+    );
+    expect(result).toMatch(/^unknown-repo-/);
+  });
 });
