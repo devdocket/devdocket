@@ -82,13 +82,19 @@ export class ProviderRegistry {
   }
 
   async refreshAll(): Promise<void> {
-    const promises = Array.from(this.providers.values()).map((p) => {
-      logger.debug(`Provider ${p.id} refreshing...`);
-      return p.refresh().catch((err) => {
-        logger.error(`Provider "${p.id}" refresh failed`, err);
-      });
-    });
-    await Promise.all(promises);
+    const providers = Array.from(this.providers.values());
+    const results = await Promise.allSettled(
+      providers.map((p) => {
+        logger.debug(`Provider ${p.id} refreshing...`);
+        return p.refresh();
+      }),
+    );
+    for (let i = 0; i < results.length; i++) {
+      const result = results[i];
+      if (result.status === 'rejected') {
+        logger.warn(`Provider "${providers[i].id}" refresh failed: ${result.reason}`);
+      }
+    }
   }
 
   private async handleDiscoveredItems(providerId: string, items: DiscoveredItem[]): Promise<void> {
