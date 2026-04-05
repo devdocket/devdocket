@@ -57,7 +57,7 @@ export function parseRepoFromUrls(htmlUrl: string, repositoryUrl: string): strin
     // Invalid repositoryUrl — fall through to hash fallback
   }
 
-  // Deterministic fallback: SHA-256 hash to avoid collisions
+  // Deterministic fallback: SHA-256 hash to reduce collision risk
   logger.warn('Could not parse repo from URLs', { htmlUrl, repositoryUrl });
   const hash = crypto.createHash('sha256').update(repositoryUrl).digest('hex').slice(0, 12);
   return `unknown-repo-${hash}`;
