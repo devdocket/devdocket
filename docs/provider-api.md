@@ -93,7 +93,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 
 ### 3. Re-declare API Types
 
-Because provider extensions run in a separate extension host, you cannot import types from the core package directly. Re-declare the interfaces you need:
+Because provider extensions are separately bundled VS Code extensions, you cannot import types from the core package at runtime. Re-declare the interfaces you need:
 
 ```ts
 interface Disposable {
