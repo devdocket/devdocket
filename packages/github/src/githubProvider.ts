@@ -1,23 +1,7 @@
 import * as vscode from 'vscode';
 import { logger } from './logger';
-
-// Re-declared to match core API contract — separate extension cannot import core types directly
-interface Disposable {
-  dispose(): void;
-}
-
-// Re-declared to match core API contract — separate extension cannot import core types directly
-interface Event<T> {
-  (listener: (e: T) => void): Disposable;
-}
-
-interface DiscoveredItem {
-  externalId: string;
-  title: string;
-  description?: string;
-  url?: string;
-  group?: string;
-}
+import { BaseProvider } from '@workcenter/shared';
+import type { DiscoveredItem, Event } from '@workcenter/shared';
 
 interface WorkCenterProvider {
   readonly id: string;
@@ -35,36 +19,12 @@ interface GitHubIssue {
   pull_request?: unknown;
 }
 
-export class GitHubIssueProvider implements WorkCenterProvider {
+export class GitHubIssueProvider extends BaseProvider implements WorkCenterProvider {
   readonly id = 'github';
   readonly label = 'GitHub Issues';
 
-  private readonly _onDidDiscoverItems = new vscode.EventEmitter<DiscoveredItem[]>();
-  readonly onDidDiscoverItems = this._onDidDiscoverItems.event;
-
-  private refreshTimer: ReturnType<typeof setInterval> | undefined;
-  private _isRefreshing = false;
-
-  startPeriodicRefresh(intervalSeconds: number): void {
-    this.stopPeriodicRefresh();
-    if (intervalSeconds <= 0) {
-      // Disable periodic refresh if interval is 0 or negative
-      return;
-    }
-    // Clamp to minimum of 60 seconds
-    const clampedInterval = Math.max(intervalSeconds, 60);
-    this.refreshTimer = setInterval(() => {
-      this.refreshInBackground().catch((err) => {
-        logger.error('Refresh failed', err);
-      });
-    }, clampedInterval * 1000);
-  }
-
-  stopPeriodicRefresh(): void {
-    if (this.refreshTimer) {
-      clearInterval(this.refreshTimer);
-      this.refreshTimer = undefined;
-    }
+  constructor() {
+    super(new vscode.EventEmitter<DiscoveredItem[]>());
   }
 
   async refresh(): Promise<void> {
@@ -84,7 +44,7 @@ export class GitHubIssueProvider implements WorkCenterProvider {
     }
   }
 
-  private async refreshInBackground(): Promise<void> {
+  protected async refreshInBackground(): Promise<void> {
     if (this._isRefreshing) {
       return;
     }
@@ -242,8 +202,4 @@ export class GitHubIssueProvider implements WorkCenterProvider {
     return { issues, failed: false };
   }
 
-  dispose(): void {
-    this.stopPeriodicRefresh();
-    this._onDidDiscoverItems.dispose();
-  }
 }

@@ -1,22 +1,7 @@
 import * as vscode from 'vscode';
 import { logger } from './logger';
-
-// Re-declared to match core API contract — separate extension cannot import core types directly
-interface Disposable {
-  dispose(): void;
-}
-
-interface Event<T> {
-  (listener: (e: T) => void): Disposable;
-}
-
-interface DiscoveredItem {
-  externalId: string;
-  title: string;
-  description?: string;
-  url?: string;
-  group?: string;
-}
+import { BaseProvider } from '@workcenter/shared';
+import type { DiscoveredItem, Event } from '@workcenter/shared';
 
 interface WorkCenterProvider {
   readonly id: string;
@@ -49,40 +34,15 @@ interface AdoWorkItem {
 // Azure DevOps REST API scope for authentication
 const ADO_AUTH_SCOPE = '499b84ac-1321-427f-aa17-267ca6975798/.default';
 
-export class AdoWorkItemProvider implements WorkCenterProvider {
+export class AdoWorkItemProvider extends BaseProvider implements WorkCenterProvider {
   readonly id = 'ado-work-items';
   readonly label = 'Azure DevOps Work Items';
-
-  private readonly _onDidDiscoverItems = new vscode.EventEmitter<DiscoveredItem[]>();
-  readonly onDidDiscoverItems = this._onDidDiscoverItems.event;
-
-  private refreshTimer: ReturnType<typeof setInterval> | undefined;
-  private _isRefreshing = false;
 
   constructor(
     private readonly org: string,
     private readonly projects: string[],
-  ) {}
-
-  startPeriodicRefresh(intervalSeconds: number): void {
-    this.stopPeriodicRefresh();
-    const interval = Number(intervalSeconds);
-    if (!Number.isFinite(interval) || interval <= 0) {
-      return;
-    }
-    const clampedInterval = Math.max(interval, 60);
-    this.refreshTimer = setInterval(() => {
-      this.refreshInBackground().catch((err) => {
-        logger.error('Work item refresh failed:', err);
-      });
-    }, clampedInterval * 1000);
-  }
-
-  stopPeriodicRefresh(): void {
-    if (this.refreshTimer) {
-      clearInterval(this.refreshTimer);
-      this.refreshTimer = undefined;
-    }
+  ) {
+    super(new vscode.EventEmitter<DiscoveredItem[]>());
   }
 
   async refresh(): Promise<void> {
@@ -109,7 +69,7 @@ export class AdoWorkItemProvider implements WorkCenterProvider {
     }
   }
 
-  private async refreshInBackground(): Promise<void> {
+  protected async refreshInBackground(): Promise<void> {
     if (this._isRefreshing) {
       return;
     }
@@ -260,8 +220,4 @@ export class AdoWorkItemProvider implements WorkCenterProvider {
     return { items, failed: batchFailed };
   }
 
-  dispose(): void {
-    this.stopPeriodicRefresh();
-    this._onDidDiscoverItems.dispose();
-  }
 }
