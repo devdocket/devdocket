@@ -195,51 +195,61 @@ export class GitHubIssueProvider implements WorkCenterProvider {
 
   private async fetchRepoIssues(token: string, repo: string): Promise<{ issues: GitHubIssue[]; failed: boolean }> {
     logger.debug(`Fetching issues for repo: ${repo}`);
-    // GitHub API max per_page is 100; pagination for >100 items is a future enhancement
-    const response = await fetch(
-      `https://api.github.com/repos/${repo}/issues?assignee=@me&state=open&per_page=100`,
-      {
-        headers: {
-          Authorization: `Bearer ${token}`,
-          Accept: 'application/vnd.github+json',
-          'X-GitHub-Api-Version': '2022-11-28',
+    try {
+      // GitHub API max per_page is 100; pagination for >100 items is a future enhancement
+      const response = await fetch(
+        `https://api.github.com/repos/${repo}/issues?assignee=@me&state=open&per_page=100`,
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+            Accept: 'application/vnd.github+json',
+            'X-GitHub-Api-Version': '2022-11-28',
+          },
         },
-      },
-    );
+      );
 
-    if (!response.ok) {
-      logger.error(`Failed to fetch issues for ${repo}: ${response.status}`);
+      if (!response.ok) {
+        logger.error(`Failed to fetch issues for ${repo}: ${response.status}`);
+        return { issues: [], failed: true };
+      }
+
+      const items = (await response.json()) as GitHubIssue[];
+      // Filter out pull requests (GitHub /issues endpoint returns both issues and PRs)
+      const issues = items.filter(item => !item.pull_request);
+      return { issues, failed: false };
+    } catch (err) {
+      logger.error(`Failed to fetch issues for ${repo}`, err);
       return { issues: [], failed: true };
     }
-
-    const items = (await response.json()) as GitHubIssue[];
-    // Filter out pull requests (GitHub /issues endpoint returns both issues and PRs)
-    const issues = items.filter(item => !item.pull_request);
-    return { issues, failed: false };
   }
 
   private async fetchAllAssignedIssues(token: string): Promise<{ issues: GitHubIssue[]; failed: boolean }> {
-    // GitHub API max per_page is 100; pagination for >100 items is a future enhancement
-    const response = await fetch(
-      'https://api.github.com/issues?filter=assigned&state=open&per_page=100',
-      {
-        headers: {
-          Authorization: `Bearer ${token}`,
-          Accept: 'application/vnd.github+json',
-          'X-GitHub-Api-Version': '2022-11-28',
+    try {
+      // GitHub API max per_page is 100; pagination for >100 items is a future enhancement
+      const response = await fetch(
+        'https://api.github.com/issues?filter=assigned&state=open&per_page=100',
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+            Accept: 'application/vnd.github+json',
+            'X-GitHub-Api-Version': '2022-11-28',
+          },
         },
-      },
-    );
+      );
 
-    if (!response.ok) {
-      logger.error(`Failed to fetch assigned issues: ${response.status}`);
+      if (!response.ok) {
+        logger.error(`Failed to fetch assigned issues: ${response.status}`);
+        return { issues: [], failed: true };
+      }
+
+      const items = (await response.json()) as GitHubIssue[];
+      // Filter out pull requests (GitHub /issues endpoint returns both issues and PRs)
+      const issues = items.filter(item => !item.pull_request);
+      return { issues, failed: false };
+    } catch (err) {
+      logger.error('Failed to fetch assigned issues', err);
       return { issues: [], failed: true };
     }
-
-    const items = (await response.json()) as GitHubIssue[];
-    // Filter out pull requests (GitHub /issues endpoint returns both issues and PRs)
-    const issues = items.filter(item => !item.pull_request);
-    return { issues, failed: false };
   }
 
   dispose(): void {

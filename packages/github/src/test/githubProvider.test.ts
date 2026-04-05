@@ -164,9 +164,9 @@ describe('GitHubIssueProvider', () => {
     const listener = vi.fn();
     provider.onDidDiscoverItems(listener);
 
-    // Should not throw
+    // Should not throw — emits empty results instead of crashing
     await expect(provider.refresh()).resolves.toBeUndefined();
-    expect(listener).not.toHaveBeenCalled();
+    expect(listener).toHaveBeenCalledWith([]);
 
     consoleError.mockRestore();
   });
