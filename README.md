@@ -29,7 +29,7 @@ WorkCenter is **not** a replacement for GitHub Issues, Jira, or any other system
 
 After installing WorkCenter GitHub, configure which repositories to watch for issues:
 
-```json
+```jsonc
 // settings.json
 {
   "workcenterGithub.repos": ["owner/repo1", "owner/repo2"],
@@ -111,7 +111,7 @@ An action is an operation that runs on a work item. Actions appear in the **Run 
 
 ### Building Your Own
 
-Provider and action extensions use a simple, well-defined API surface. See the [Extension API documentation](https://github.com/mthalman/workcenter/pull/29) for the full contract, interfaces, and example implementations. *(Added by [PR #29](https://github.com/mthalman/workcenter/pull/29); docs file will be available at `docs/extension-api.md` once merged.)*
+Provider and action extensions use a simple, well-defined API surface. See the [Extension API documentation](docs/extension-api.md) for the full contract, interfaces, and example implementations.
 
 ## Architecture
 
@@ -134,13 +134,13 @@ Provider extensions depend on the core extension via `extensionDependencies` and
 
 WorkCenter persists two JSON files in VS Code's `globalStorageUri`:
 
-- **`workitems.json`** — All accepted and manual work items with their full lifecycle, including a snapshot of provider fields (such as `title`, `description`, and `url`) captured at accept time. These snapshots may become stale compared to live data from the provider.
+- **`workitems.json`** — All accepted and manual work items with their lifecycle state, including the persisted fields WorkCenter stores at creation/accept time, such as the work item `title`, optional `url`, provider provenance (`providerId` and `externalId`), and any `notes`. Provider-derived values captured at accept time may become stale compared to live data from the provider.
 - **`discovered-state.json`** — A thin index tracking whether each discovered item has been accepted, dismissed, or not yet seen. This file does not store provider item fields; for inbox items, provider data is read live from the provider.
 
 ## Documentation
 
 - [UX Guide](https://github.com/mthalman/workcenter/pull/28) — The five views, data flow, work item states, available actions, and the editor panel. *(Added by [PR #28](https://github.com/mthalman/workcenter/pull/28); docs file will be available at `docs/ux-guide.md` once merged.)*
-- [Extension API](https://github.com/mthalman/workcenter/pull/29) — Provider and action contracts, interfaces, and example implementations. *(Added by [PR #29](https://github.com/mthalman/workcenter/pull/29); docs file will be available at `docs/extension-api.md` once merged.)*
+- [Extension API](docs/extension-api.md) — Provider and action contracts, interfaces, and example implementations.
 
 ## Contributing
 
