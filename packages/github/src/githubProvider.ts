@@ -143,18 +143,23 @@ export class GitHubIssueProvider implements WorkCenterProvider {
   }
 
   private parseRepo(issue: GitHubIssue): string {
-    const match = issue.html_url.match(/github\.com\/([^/]+\/[^/]+)/);
-    if (match) {
-      return match[1];
+    if (issue.html_url.startsWith('https://github.com/')) {
+      const match = issue.html_url.match(/github\.com\/([^/]+\/[^/]+)/);
+      if (match) {
+        return match[1];
+      }
     }
     
     // Fallback to parsing from repository_url (API URL)
-    const apiMatch = issue.repository_url.match(/repos\/([^/]+\/[^/]+)/);
-    if (apiMatch) {
-      return apiMatch[1];
+    if (issue.repository_url.startsWith('https://api.github.com/repos/')) {
+      const apiMatch = issue.repository_url.match(/repos\/([^/]+\/[^/]+)/);
+      if (apiMatch) {
+        return apiMatch[1];
+      }
     }
     
     // Deterministic fallback: hash the repository_url
+    logger.warn(`Could not parse repo from URLs: html_url=${issue.html_url}, repository_url=${issue.repository_url}`);
     const hash = issue.repository_url.split('').reduce((acc, char) => {
       return ((acc << 5) - acc) + char.charCodeAt(0) | 0;
     }, 0);
