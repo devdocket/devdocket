@@ -220,9 +220,5 @@ export function deactivate(): void {
   actionRegistry?.dispose();
   workGraph?.dispose();
   stateStore?.dispose();
-  providerRegistry = undefined;
-  actionRegistry = undefined;
-  workGraph = undefined;
-  stateStore = undefined;
   logger.info('WorkCenter deactivated');
 }

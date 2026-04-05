@@ -122,9 +122,5 @@ export function deactivate(): void {
   prRegistration?.dispose();
   workItemProvider?.dispose();
   prProvider?.dispose();
-  workItemRegistration = undefined;
-  prRegistration = undefined;
-  workItemProvider = undefined;
-  prProvider = undefined;
   logger.info('WorkCenter ADO deactivated');
 }

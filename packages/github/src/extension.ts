@@ -91,9 +91,5 @@ export function deactivate(): void {
   prReviewRegistration?.dispose();
   issueProvider?.dispose();
   prReviewProvider?.dispose();
-  providerRegistration = undefined;
-  prReviewRegistration = undefined;
-  issueProvider = undefined;
-  prReviewProvider = undefined;
   logger.info('WorkCenter GitHub deactivated');
 }
