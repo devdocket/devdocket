@@ -72,6 +72,7 @@ export async function activate(_context: vscode.ExtensionContext): Promise<void>
 
     if (!org) {
       logger.info('No organization configured — set workcenterAdo.organization to enable ADO providers');
+      vscode.window.showWarningMessage('Azure DevOps organization not configured. Set workcenterAdo.organization in settings.');
       return;
     }
 
