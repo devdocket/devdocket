@@ -88,6 +88,18 @@ describe('Registry', () => {
     expect(registry.size).toBe(1);
   });
 
+  it('dispose-reregister same instance-dispose does not remove re-registered entry', () => {
+    const item = createItem('idem');
+    const disposable1 = registry.register(item);
+    disposable1.dispose();
+
+    registry.register(item);
+    disposable1.dispose();
+
+    expect(registry.get('idem')).toBe(item);
+    expect(registry.size).toBe(1);
+  });
+
   it('clear() removes all items', () => {
     registry.register(createItem('a'));
     registry.register(createItem('b'));

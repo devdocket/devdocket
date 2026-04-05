@@ -13,10 +13,12 @@ export class Registry<T extends { readonly id: string; readonly label: string }>
     }
     this.items.set(item.id, item);
     logger.info(`Registered ${this.kind.toLowerCase()}: ${item.id} (${item.label})`);
+    let disposed = false;
     return new vscode.Disposable(() => {
-      if (this.items.get(item.id) === item) {
+      if (!disposed && this.items.get(item.id) === item) {
         this.items.delete(item.id);
       }
+      disposed = true;
     });
   }
 
