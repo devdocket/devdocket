@@ -1,5 +1,6 @@
 import * as vscode from 'vscode';
 import { logger } from './logger';
+import { parseRepoFromUrls } from './parseRepo';
 
 // Re-declared to match core API contract — separate extension cannot import core types directly
 interface Disposable {
@@ -157,28 +158,7 @@ export class GitHubPrReviewProvider implements WorkCenterProvider {
   }
 
   private parseRepo(pr: GitHubIssue): string {
-    // Only trust HTTPS URLs from known GitHub domains
-    if (pr.html_url.startsWith('https://github.com/')) {
-      const match = pr.html_url.match(/github\.com\/([^/]+\/[^/]+)/);
-      if (match) {
-        return match[1];
-      }
-    }
-
-    // Fallback to parsing from repository_url (API URL)
-    if (pr.repository_url.startsWith('https://api.github.com/repos/')) {
-      const apiMatch = pr.repository_url.match(/repos\/([^/]+\/[^/]+)/);
-      if (apiMatch) {
-        return apiMatch[1];
-      }
-    }
-
-    // Deterministic fallback: hash the repository_url
-    logger.warn(`Could not parse repo from URLs: html_url=${pr.html_url}, repository_url=${pr.repository_url}`);
-    const hash = pr.repository_url.split('').reduce((acc, char) => {
-      return ((acc << 5) - acc) + char.charCodeAt(0) | 0;
-    }, 0);
-    return `unknown-repo-${Math.abs(hash).toString(36)}`;
+    return parseRepoFromUrls(pr.html_url, pr.repository_url);
   }
 
   dispose(): void {
