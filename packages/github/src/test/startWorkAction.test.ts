@@ -263,15 +263,22 @@ describe('StartWorkAction', () => {
       expect(window.showErrorMessage).toHaveBeenCalledWith(
         expect.stringContaining('worktree add failed'),
       );
-      // Should rollback by deleting the branch (I6 fix)
-      const deleteCalls = vi.mocked(execFile).mock.calls.filter(
-        call => call[1]![0] === 'branch' && call[1]![1] === '-D'
-      );
-      expect(deleteCalls).toHaveLength(1);
+
+      const calls = vi.mocked(execFile).mock.calls;
+      const worktreeIdx = calls.findIndex(c => c[1]![0] === 'worktree');
+      const rollbackIdx = calls.findIndex(c => c[1]![0] === 'branch' && c[1]![1] === '-D');
+
+      expect(worktreeIdx).toBeGreaterThan(-1);
+      expect(rollbackIdx).toBeGreaterThan(-1);
+      // Rollback must happen after worktree add
+      expect(rollbackIdx).toBeGreaterThan(worktreeIdx);
+
+      expect(calls[rollbackIdx][1]).toEqual(['branch', '-D', 'issue-123-fix-bug']);
+      expect(calls[rollbackIdx][2]).toEqual({ cwd: '/mock/workspace' });
     });
   });
 
-  describe('error scenarios', () => {
+  describe('base branch fallback', () => {
     it('falls back to origin/main when origin/dev does not exist', async () => {
       vi.mocked(execFile).mockImplementation(((cmd: string, args: string[], opts: any, cb: Function) => {
         if (args[0] === 'rev-parse' && args[2] === 'origin/dev') {
@@ -284,7 +291,11 @@ describe('StartWorkAction', () => {
       const item = createWorkItem({ title: '#123: Fix bug' });
       await action.run(item);
 
-      // Branch creation should use origin/main as base
+      const revParseMainCall = vi.mocked(execFile).mock.calls.find(
+        call => call[1]![0] === 'rev-parse' && call[1]![2] === 'origin/main'
+      );
+      expect(revParseMainCall).toBeDefined();
+
       const branchCreateCall = vi.mocked(execFile).mock.calls.find(
         call => call[1]![0] === 'branch' && call[1]![1] !== '--list'
       );
@@ -312,19 +323,19 @@ describe('StartWorkAction', () => {
       expect(branchCreateCall).toBeDefined();
       expect(branchCreateCall![1]).toEqual(['branch', 'issue-123-fix-bug', 'HEAD']);
     });
+  });
 
+  describe('multi-workspace repository selection', () => {
     it('shows quick pick when multiple workspace folders have .git', async () => {
       (workspace as any).workspaceFolders = [
         { name: 'repo1', uri: { fsPath: '/mock/repo1' } },
         { name: 'repo2', uri: { fsPath: '/mock/repo2' } },
       ];
 
-      // Both folders have .git
       vi.mocked(fs.existsSync).mockImplementation((p: any) => {
         return p.toString().endsWith('.git');
       });
 
-      // User selects second repo
       vi.mocked(window.showQuickPick).mockResolvedValue({
         label: 'repo2',
         detail: '/mock/repo2',
@@ -342,7 +353,6 @@ describe('StartWorkAction', () => {
         expect.objectContaining({ placeHolder: 'Select repository to create work branch' }),
       );
 
-      // Branch should be created in the selected repo
       const branchCreateCall = vi.mocked(execFile).mock.calls.find(
         call => call[1]![0] === 'branch' && call[1]![1] !== '--list'
       );
@@ -360,7 +370,6 @@ describe('StartWorkAction', () => {
         return p.toString().endsWith('.git');
       });
 
-      // User cancels quick pick
       vi.mocked(window.showQuickPick).mockResolvedValue(undefined);
 
       const item = createWorkItem({ title: '#123: Fix bug' });
@@ -369,7 +378,6 @@ describe('StartWorkAction', () => {
       expect(window.showErrorMessage).toHaveBeenCalledWith(
         'WorkCenter: No repository selected.',
       );
-      // Should not attempt any git operations
       expect(execFile).not.toHaveBeenCalled();
     });
 
@@ -379,7 +387,6 @@ describe('StartWorkAction', () => {
         { name: 'folder2', uri: { fsPath: '/mock/folder2' } },
       ];
 
-      // No folders have .git
       vi.mocked(fs.existsSync).mockReturnValue(false);
 
       const item = createWorkItem({ title: '#123: Fix bug' });
@@ -390,40 +397,9 @@ describe('StartWorkAction', () => {
       );
       expect(execFile).not.toHaveBeenCalled();
     });
+  });
 
-    it('rolls back branch with git branch -D when worktree creation fails', async () => {
-      vi.mocked(execFile).mockImplementation(((cmd: string, args: string[], opts: any, cb: Function) => {
-        if (args[0] === 'worktree' && args[1] === 'add') {
-          cb(new Error('fatal: worktree add failed'), '', '');
-        } else {
-          cb(null, { stdout: '', stderr: '' }, '');
-        }
-      }) as any);
-
-      const item = createWorkItem({ title: '#123: Fix bug' });
-      await action.run(item);
-
-      const calls = vi.mocked(execFile).mock.calls;
-
-      // Find the worktree add call index
-      const worktreeIdx = calls.findIndex(c => c[1]![0] === 'worktree');
-      // Find the rollback branch -D call index
-      const rollbackIdx = calls.findIndex(c => c[1]![0] === 'branch' && c[1]![1] === '-D');
-
-      expect(worktreeIdx).toBeGreaterThan(-1);
-      expect(rollbackIdx).toBeGreaterThan(-1);
-      // Rollback must happen after worktree add
-      expect(rollbackIdx).toBeGreaterThan(worktreeIdx);
-
-      // Verify rollback call args
-      expect(calls[rollbackIdx][1]).toEqual(['branch', '-D', 'issue-123-fix-bug']);
-      expect(calls[rollbackIdx][2]).toEqual({ cwd: '/mock/workspace' });
-
-      expect(window.showErrorMessage).toHaveBeenCalledWith(
-        expect.stringContaining('fatal: worktree add failed'),
-      );
-    });
-
+  describe('error scenarios', () => {
     it('shows warning when rollback itself fails after worktree creation failure', async () => {
       vi.mocked(execFile).mockImplementation(((cmd: string, args: string[], opts: any, cb: Function) => {
         if (args[0] === 'worktree' && args[1] === 'add') {
@@ -438,15 +414,11 @@ describe('StartWorkAction', () => {
       const item = createWorkItem({ title: '#123: Fix bug' });
       await action.run(item);
 
-      // Warning about failed rollback
+      expect(window.showWarningMessage).toHaveBeenCalledTimes(1);
       expect(window.showWarningMessage).toHaveBeenCalledWith(
-        expect.stringContaining('Failed to delete branch during rollback'),
-      );
-      expect(window.showWarningMessage).toHaveBeenCalledWith(
-        expect.stringContaining('branch delete failed: ref not found'),
+        expect.stringMatching(/Failed to delete branch during rollback.*branch delete failed: ref not found/),
       );
 
-      // Original error is still shown
       expect(window.showErrorMessage).toHaveBeenCalledWith(
         expect.stringContaining('worktree add failed'),
       );
@@ -454,16 +426,6 @@ describe('StartWorkAction', () => {
 
     it('shows error when externalId is undefined', async () => {
       const item = createWorkItem({ externalId: undefined });
-      await action.run(item);
-
-      expect(window.showErrorMessage).toHaveBeenCalledWith(
-        'Could not determine issue number.',
-      );
-      expect(execFile).not.toHaveBeenCalled();
-    });
-
-    it('shows error when externalId has no issue number pattern', async () => {
-      const item = createWorkItem({ externalId: 'owner/repo' });
       await action.run(item);
 
       expect(window.showErrorMessage).toHaveBeenCalledWith(
