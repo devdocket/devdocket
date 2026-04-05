@@ -286,20 +286,31 @@ describe('AdoWorkItemProvider', () => {
   });
 
   it('handles detail batch network error with partial results', async () => {
-    // WIQL returns 2 items, but the detail fetch throws a network error
+    // WIQL returns 201 items to trigger two batches (batch size is 200)
+    const ids = Array.from({ length: 201 }, (_, i) => i + 1);
     mockFetch
       .mockResolvedValueOnce({
         ok: true,
-        json: async () => createWiqlResponse([1, 2]),
+        json: async () => createWiqlResponse(ids),
       })
+      // First batch (items 1-200) succeeds with one item for simplicity
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          value: [createWorkItemDetail(1, 'Survived')],
+        }),
+      })
+      // Second batch (item 201) fails with network error
       .mockRejectedValueOnce(new Error('Network error'));
 
     const listener = vi.fn();
     provider.onDidDiscoverItems(listener);
     await provider.refresh();
 
-    // Items fire but empty since the only batch failed
-    expect(listener).toHaveBeenCalledWith([]);
+    // Partial results from the first batch are preserved
+    const items = listener.mock.calls[0][0];
+    expect(items).toHaveLength(1);
+    expect(items[0].title).toContain('Survived');
     expect(window.showWarningMessage).toHaveBeenCalledWith(
       expect.stringContaining('Failed to fetch work items'),
     );
