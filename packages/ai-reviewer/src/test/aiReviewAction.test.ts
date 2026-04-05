@@ -249,16 +249,30 @@ describe('AiReviewAction', () => {
   describe('analyzeWithAi', () => {
     it('returns review text on success', async () => {
       const token = { isCancellationRequested: false, onCancellationRequested: vi.fn() };
-      const result = await action.analyzeWithAi('some diff content', token as never);
+      const result = await action.analyzeWithAi('some diff content', 'https://github.com/owner/repo/pull/42', token as never);
 
       expect(result).toContain('AI Code Review');
       expect(result).toContain('Review feedback here');
     });
 
+    it('includes PR URL and file path instructions in the message', async () => {
+      const token = { isCancellationRequested: false, onCancellationRequested: vi.fn() };
+      const sendRequest = vi.fn().mockResolvedValue({
+        text: (async function* () { yield 'review'; })(),
+      });
+      vi.mocked(lm.selectChatModels).mockResolvedValue([{ sendRequest }]);
+
+      await action.analyzeWithAi('diff', 'https://github.com/org/repo/pull/7', token as never);
+
+      const userMsg = sendRequest.mock.calls[0][0][0];
+      expect(userMsg.content).toContain('https://github.com/org/repo/pull/7');
+      expect(userMsg.content).toContain('file path and line number');
+    });
+
     it('appends truncation note when diff exceeds 50000 chars', async () => {
       const token = { isCancellationRequested: false, onCancellationRequested: vi.fn() };
       const largeDiff = 'x'.repeat(50001);
-      const result = await action.analyzeWithAi(largeDiff, token as never);
+      const result = await action.analyzeWithAi(largeDiff, 'https://github.com/owner/repo/pull/42', token as never);
 
       expect(result).toContain('AI Code Review');
       expect(result).toContain('⚠️ **Note:** The PR diff was truncated');
@@ -267,7 +281,7 @@ describe('AiReviewAction', () => {
     it('does not append truncation note when diff is within limit', async () => {
       const token = { isCancellationRequested: false, onCancellationRequested: vi.fn() };
       const smallDiff = 'x'.repeat(50000);
-      const result = await action.analyzeWithAi(smallDiff, token as never);
+      const result = await action.analyzeWithAi(smallDiff, 'https://github.com/owner/repo/pull/42', token as never);
 
       expect(result).toContain('AI Code Review');
       expect(result).not.toContain('truncated');
@@ -279,7 +293,7 @@ describe('AiReviewAction', () => {
       }]);
 
       const token = { isCancellationRequested: false, onCancellationRequested: vi.fn() };
-      const result = await action.analyzeWithAi('some diff', token as never);
+      const result = await action.analyzeWithAi('some diff', 'https://github.com/owner/repo/pull/42', token as never);
 
       expect(result).toBeUndefined();
       expect(window.showErrorMessage).toHaveBeenCalledWith('AI Code Review: Analysis failed');
@@ -303,13 +317,16 @@ describe('AiReviewAction', () => {
       });
       vi.mocked(lm.selectChatModels).mockResolvedValue([{ sendRequest }]);
 
-      const result = await action.analyzeWithAi('diff content', token as never);
+      const result = await action.analyzeWithAi('diff content', 'https://github.com/owner/repo/pull/99', token as never);
 
       expect(result).toContain('Security review done');
       // Verify the custom prompt was used in the message
       const userMsg = sendRequest.mock.calls[0][0][0];
       expect(userMsg.content).toContain('Focus only on security issues.');
       expect(userMsg.content).toContain('diff content');
+      // Verify runtime instructions are appended even with custom prompt
+      expect(userMsg.content).toContain('https://github.com/owner/repo/pull/99');
+      expect(userMsg.content).toContain('file path and line number');
     });
   });
 

@@ -50,7 +50,7 @@ export class AiReviewAction implements WorkCenterAction {
 
         progress.report({ message: 'Analyzing changes...' });
 
-        const review = await this.analyzeWithAi(diff, token);
+        const review = await this.analyzeWithAi(diff, item.url!, token);
         if (!review || token.isCancellationRequested) return;
 
         const doc = await vscode.workspace.openTextDocument({
@@ -152,7 +152,7 @@ export class AiReviewAction implements WorkCenterAction {
     return p.startsWith('/') || /^[a-zA-Z]:[\\/]/.test(p);
   }
 
-  async analyzeWithAi(diff: string, token: vscode.CancellationToken): Promise<string | undefined> {
+  async analyzeWithAi(diff: string, prUrl: string, token: vscode.CancellationToken): Promise<string | undefined> {
     try {
       let models = await vscode.lm.selectChatModels({ family: 'gpt-4o' });
       if (models.length === 0) {
@@ -171,10 +171,18 @@ export class AiReviewAction implements WorkCenterAction {
 
       const reviewPrompt = await this.getReviewPrompt();
 
+      const runtimeInstructions = `
+
+## Additional Instructions
+
+**PR URL:** ${prUrl} — include a link to this PR in the review header.
+
+**File paths and line numbers:** When commenting on specific issues, always include the file path and line number(s) from the diff so the reader can locate the code immediately. Use the format \`path/to/file.ts:42\` for single lines or \`path/to/file.ts:42-50\` for ranges. If a finding spans multiple files, list each location separately.`;
+
       const model = models[0];
       const messages = [
         vscode.LanguageModelChatMessage.User(
-          `${reviewPrompt}
+          `${reviewPrompt}${runtimeInstructions}
 
 \`\`\`\`diff
 ${diff.slice(0, maxDiffLength)}

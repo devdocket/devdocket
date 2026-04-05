@@ -139,8 +139,4 @@ If unsure between two levels, choose the higher one.
 
 - Ensure changes are diagnosable in production.
 - Don't log sensitive data.
-- Preserve existing observability.
-
-## File Paths and Line Numbers
-
-When commenting on specific issues, always include the file path and line number(s) from the diff so the reader can locate the code immediately. Use the format \`path/to/file.ts:42\` for single lines or \`path/to/file.ts:42-50\` for ranges. If a finding spans multiple files, list each location separately.`;
+- Preserve existing observability.`;
