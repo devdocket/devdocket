@@ -1,4 +1,5 @@
 import * as vscode from 'vscode';
+import { isValidGitHubRepo } from '@workcenter/shared';
 import { logger } from './logger';
 
 // Re-declared to match core API contract — separate extension cannot import core types directly
@@ -166,22 +167,32 @@ export class GitHubIssueProvider implements WorkCenterProvider {
     repos: string[],
   ): Promise<{ issues: GitHubIssue[]; failures: string[] }> {
     if (repos.length > 0) {
+      const validRepos: string[] = [];
+      const failures: string[] = [];
+      for (const repo of repos) {
+        if (isValidGitHubRepo(repo)) {
+          validRepos.push(repo);
+        } else {
+          logger.warn(`Skipping invalid repo identifier: "${repo}"`);
+          failures.push(repo);
+        }
+      }
+
       const results = await Promise.allSettled(
-        repos.map(repo => this.fetchRepoIssues(token, repo))
+        validRepos.map(repo => this.fetchRepoIssues(token, repo))
       );
 
       const allIssues: GitHubIssue[] = [];
-      const failures: string[] = [];
 
       results.forEach((result, index) => {
         if (result.status === 'fulfilled') {
           const { issues, failed } = result.value;
           allIssues.push(...issues);
           if (failed) {
-            failures.push(repos[index]);
+            failures.push(validRepos[index]);
           }
         } else {
-          failures.push(repos[index]);
+          failures.push(validRepos[index]);
         }
       });
 
