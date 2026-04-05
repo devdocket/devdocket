@@ -63,7 +63,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     return;
   }
 
-  let api;
+  let api: unknown;
   try {
     api = coreExtension.isActive
       ? coreExtension.exports
@@ -176,7 +176,7 @@ class JiraProvider implements WorkCenterProvider {
       title: `${ticket.key}: ${ticket.summary}`,
       description: ticket.description?.slice(0, 200),
       url: `https://jira.example.com/browse/${ticket.key}`,
-      // group organizes items under folders in the Sources view
+      // group organizes items under folders in the Inbox and Sources views
       group: ticket.project,
     }));
 
@@ -226,7 +226,7 @@ class JiraProvider implements WorkCenterProvider {
 - **EventEmitter pattern** — Use `vscode.EventEmitter<DiscoveredItem[]>` to create the event. Expose its `.event` property as the readonly `onDidDiscoverItems`.
 - **`refresh()` is called by WorkCenter** — It is invoked automatically when the provider is registered (for initial discovery) and whenever the user triggers a manual refresh. It must be safe to call multiple times.
 - **`externalId` must be unique per provider** — WorkCenter uses the combination of `providerId + externalId` to track inbox state. Use a stable identifier like `owner/repo#123` or `PROJECT/TICKET-42`.
-- **`group` is optional** — When set, items with the same group value are nested under a folder node in the Sources view.
+- **`group` is optional** — When set, items with the same group value are nested under a folder node in the Inbox and Sources views.
 - **`resurfaceDismissed`** — When `true`, items the user previously dismissed will reappear in the Inbox if the provider re-emits them. This is useful for time-sensitive items (e.g., PR review requests). When `false` or `undefined` (the default), dismissed items stay dismissed.
 - **Emit the full set every time** — Each `onDidDiscoverItems` emission replaces all previously known items for that provider. Emit everything currently relevant, not just deltas.
 
@@ -429,7 +429,7 @@ Each `onDidDiscoverItems` emission **replaces** the provider's entire known item
 
 ### Use `group` for organization
 
-Set the `group` field on `DiscoveredItem` to organize items under folder nodes in the Sources view. For example, a GitHub provider groups issues by repository name.
+Set the `group` field on `DiscoveredItem` to organize items under folder nodes in the Inbox and Sources views. For example, a GitHub provider groups issues by repository name.
 
 ---
 
@@ -512,7 +512,7 @@ interface DiscoveredItem {
   url?: string;
 
   /**
-   * Optional group name for sub-grouping in the Sources view.
+   * Optional group name for sub-grouping in the Inbox and Sources views.
    * Items with the same group appear under a folder node.
    */
   group?: string;
