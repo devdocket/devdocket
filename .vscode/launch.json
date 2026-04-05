@@ -7,11 +7,13 @@
       "request": "launch",
       "args": [
         "--extensionDevelopmentPath=${workspaceFolder}/packages/core",
-        "--extensionDevelopmentPath=${workspaceFolder}/packages/github"
+        "--extensionDevelopmentPath=${workspaceFolder}/packages/github",
+        "--extensionDevelopmentPath=${workspaceFolder}/packages/ado"
       ],
       "outFiles": [
         "${workspaceFolder}/packages/core/dist/**/*.js",
-        "${workspaceFolder}/packages/github/dist/**/*.js"
+        "${workspaceFolder}/packages/github/dist/**/*.js",
+        "${workspaceFolder}/packages/ado/dist/**/*.js"
       ],
       "preLaunchTask": "build all"
     }
