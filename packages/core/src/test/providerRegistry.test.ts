@@ -374,15 +374,19 @@ describe('ProviderRegistry', () => {
     it('resolves refreshAll when a provider refresh times out', async () => {
       const warnSpy = vi.spyOn(logger, 'warn');
       const provider = createMockProvider('hanging');
-      vi.mocked(provider.refresh).mockReturnValue(new Promise(() => {}));
+      // Let register-time refresh complete so this test only observes the
+      // timeout behavior from the refreshAll() invocation itself.
       registry.register(provider);
 
-      // Reset for refreshAll call
+      // Make the refresh triggered by refreshAll() hang
       vi.mocked(provider.refresh).mockReturnValue(new Promise(() => {}));
 
       const refreshPromise = registry.refreshAll();
+      expect(warnSpy).not.toHaveBeenCalled();
+
       await vi.advanceTimersByTimeAsync(30_000);
       await expect(refreshPromise).resolves.toBeUndefined();
+      expect(warnSpy).toHaveBeenCalledTimes(1);
       expect(warnSpy).toHaveBeenCalledWith(
         expect.stringContaining('Provider "hanging" refresh timed out'),
       );

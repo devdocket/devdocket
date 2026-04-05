@@ -93,13 +93,13 @@ export class ProviderRegistry {
   private refreshWithTimeout(provider: WorkCenterProvider): Promise<void> {
     this.cancelPendingRefresh(provider.id);
     const cts = new vscode.CancellationTokenSource();
-    const timeoutId = setTimeout(() => cts.cancel(), ProviderRegistry.REFRESH_TIMEOUT_MS);
-    this._pendingRefreshes.set(provider.id, { cts, timeoutId });
-    cts.token.onCancellationRequested(() => {
+    const timeoutId = setTimeout(() => {
       if (this.providers.has(provider.id)) {
         logger.warn(`Provider "${provider.id}" refresh timed out after ${ProviderRegistry.REFRESH_TIMEOUT_MS}ms`);
       }
-    });
+      cts.cancel();
+    }, ProviderRegistry.REFRESH_TIMEOUT_MS);
+    this._pendingRefreshes.set(provider.id, { cts, timeoutId });
 
     const refreshPromise = provider.refresh(cts.token)
       .catch((err: unknown) => {
