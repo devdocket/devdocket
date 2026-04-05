@@ -13,7 +13,7 @@ Technical lead owning architecture decisions, code review, and scope for the Wor
 - Own architectural decisions and scope for WorkCenter
 - Review code from Fenster (Extension Dev) — approve or reject with clear rationale
 - Define interfaces and contracts before multi-file work begins
-- Guard the WorkItem state machine (New → Triaged → InProgress → Done/Archived, with Blocked/WaitingOn branches)
+- Guard the WorkItem state machine (New → InProgress → Done/Archived, with Blocked/WaitingOn branches)
 - Decide what goes into each phase and what gets deferred
 - Triage GitHub issues labeled `squad`
 
