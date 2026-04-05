@@ -2,6 +2,7 @@ import * as vscode from 'vscode';
 import { DiscoveredItem } from '../api/types';
 import { ProviderRegistry } from '../services/providerRegistry';
 import { DiscoveredStateStore } from '../storage/discoveredStateStore';
+import { ReadStateStore } from '../storage/readStateStore';
 
 export interface InboxProviderNode {
   kind: 'provider';
@@ -32,11 +33,11 @@ export class InboxTreeProvider implements vscode.TreeDataProvider<InboxElement> 
   private readonly _onDidChangeTreeData = new vscode.EventEmitter<void>();
   readonly onDidChangeTreeData = this._onDidChangeTreeData.event;
   private readonly disposables: vscode.Disposable[] = [];
-  private readonly seenItems = new Set<string>();
 
   constructor(
     private readonly providerRegistry: ProviderRegistry,
     private readonly stateStore: DiscoveredStateStore,
+    private readonly readStateStore: ReadStateStore,
   ) {
     this.disposables.push(
       providerRegistry.onDidChangeDiscoveredItems(() => {
@@ -60,10 +61,15 @@ export class InboxTreeProvider implements vscode.TreeDataProvider<InboxElement> 
         }
       }
     }
-    for (const key of this.seenItems) {
+    let changed = false;
+    for (const key of this.readStateStore.keys()) {
       if (!currentKeys.has(key)) {
-        this.seenItems.delete(key);
+        this.readStateStore.delete(key);
+        changed = true;
       }
+    }
+    if (changed) {
+      this.readStateStore.save();
     }
   }
 
@@ -71,11 +77,7 @@ export class InboxTreeProvider implements vscode.TreeDataProvider<InboxElement> 
 
   markSeen(providerId: string, externalId: string): boolean {
     const key = `${providerId}::${externalId}`;
-    if (!this.seenItems.has(key)) {
-      this.seenItems.add(key);
-      return true;
-    }
-    return false;
+    return this.readStateStore.add(key);
   }
 
   getTreeItem(element: InboxElement): vscode.TreeItem {
@@ -99,7 +101,7 @@ export class InboxTreeProvider implements vscode.TreeDataProvider<InboxElement> 
     }
 
     const key = `${element.providerId}::${element.externalId}`;
-    const isSeen = this.seenItems.has(key);
+    const isSeen = this.readStateStore.has(key);
 
     const treeItem = new vscode.TreeItem(element.title, vscode.TreeItemCollapsibleState.None);
     treeItem.id = `inbox::item::${element.providerId}::${element.externalId}`;

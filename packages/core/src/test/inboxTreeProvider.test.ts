@@ -43,15 +43,33 @@ function createMockProviderRegistry() {
   };
 }
 
+function createMockReadStateStore() {
+  const items = new Set<string>();
+  return {
+    has: vi.fn((key: string) => items.has(key)),
+    add: vi.fn((key: string) => {
+      if (items.has(key)) { return false; }
+      items.add(key);
+      return true;
+    }),
+    delete: vi.fn((key: string) => items.delete(key)),
+    keys: vi.fn(() => items.values()),
+    save: vi.fn(),
+    load: vi.fn(async () => {}),
+  };
+}
+
 describe('InboxTreeProvider', () => {
   let stateStore: ReturnType<typeof createMockStateStore>;
+  let readStateStore: ReturnType<typeof createMockReadStateStore>;
   let registry: ReturnType<typeof createMockProviderRegistry>;
   let provider: InboxTreeProvider;
 
   beforeEach(() => {
     stateStore = createMockStateStore();
+    readStateStore = createMockReadStateStore();
     registry = createMockProviderRegistry();
-    provider = new InboxTreeProvider(registry as any, stateStore as any);
+    provider = new InboxTreeProvider(registry as any, stateStore as any, readStateStore as any);
   });
 
   function providerNode(providerId: string): InboxProviderNode {

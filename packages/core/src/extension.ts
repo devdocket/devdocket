@@ -3,6 +3,7 @@ import { WorkCenterApi } from './api/types';
 import { WorkCenterApiImpl } from './api/workCenterApi';
 import { JsonTaskStore } from './storage/jsonTaskStore';
 import { DiscoveredStateStore } from './storage/discoveredStateStore';
+import { ReadStateStore } from './storage/readStateStore';
 import { WorkGraph } from './services/workGraph';
 import { ProviderRegistry } from './services/providerRegistry';
 import { ActionRegistry } from './services/actionRegistry';
@@ -52,6 +53,10 @@ export async function activate(context: vscode.ExtensionContext): Promise<WorkCe
   await stateStore.load();
   logger.debug('Loaded discovered state');
 
+  const readStateStore = new ReadStateStore(storagePath);
+  await readStateStore.load();
+  logger.debug('Loaded read state');
+
   // Migration: mark existing provider-backed items as accepted
   const itemsToMigrate: Array<{ providerId: string; externalId: string; state: 'accepted' }> = [];
   
@@ -81,7 +86,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<WorkCe
   const actionRegistry = new ActionRegistry();
   const api = new WorkCenterApiImpl(providerRegistry, actionRegistry);
 
-  const inboxProvider = new InboxTreeProvider(providerRegistry, stateStore);
+  const inboxProvider = new InboxTreeProvider(providerRegistry, stateStore, readStateStore);
   const queueProvider = new QueueTreeProvider(workGraph);
   const focusProvider = new FocusTreeProvider(workGraph);
   const sourcesProvider = new SourcesTreeProvider(providerRegistry, stateStore);
