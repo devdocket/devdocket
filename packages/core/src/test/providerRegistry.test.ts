@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { EventEmitter } from 'vscode';
 import { WorkCenterProvider, DiscoveredItem } from '../api/types';
 import { WorkGraph } from '../services/workGraph';
@@ -343,6 +343,50 @@ describe('ProviderRegistry', () => {
       expect(registry.getDiscoveredItems('gh')).toHaveLength(1),
     );
     expect(listener).not.toHaveBeenCalled();
+  });
+
+  describe('refresh timeout', () => {
+    beforeEach(() => {
+      vi.useFakeTimers();
+    });
+
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    it('clears loading state when register refresh times out', async () => {
+      const provider = createMockProvider('slow');
+      vi.mocked(provider.refresh).mockReturnValue(new Promise(() => {}));
+
+      registry.register(provider);
+      expect(registry.loading).toBe(true);
+
+      await vi.advanceTimersByTimeAsync(30_000);
+      expect(registry.loading).toBe(false);
+    });
+
+    it('resolves refreshAll when a provider refresh times out', async () => {
+      const provider = createMockProvider('hanging');
+      vi.mocked(provider.refresh).mockReturnValue(new Promise(() => {}));
+      registry.register(provider);
+
+      // Reset for refreshAll call
+      vi.mocked(provider.refresh).mockReturnValue(new Promise(() => {}));
+
+      const refreshPromise = registry.refreshAll();
+      await vi.advanceTimersByTimeAsync(30_000);
+      await expect(refreshPromise).resolves.toBeUndefined();
+    });
+
+    it('clears timeout when refresh completes quickly', async () => {
+      const provider = createMockProvider('fast');
+      registry.register(provider);
+
+      // refresh already resolved (default mock is async () => {})
+      // Advance past timeout — no spurious warnings should fire
+      await vi.advanceTimersByTimeAsync(30_000);
+      expect(registry.loading).toBe(false);
+    });
   });
 
   describe('resurfaceDismissed', () => {

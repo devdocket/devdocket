@@ -51,16 +51,8 @@ export class ProviderRegistry {
       .catch((err: unknown) => {
         logger.error(`Provider "${provider.id}" refresh failed`, err);
       });
-    let timeoutId: ReturnType<typeof setTimeout>;
-    const timeoutPromise = new Promise<void>((resolve) => {
-      timeoutId = setTimeout(() => {
-        logger.warn(`Provider "${provider.id}" refresh timed out after ${ProviderRegistry.REFRESH_TIMEOUT_MS}ms`);
-        resolve();
-      }, ProviderRegistry.REFRESH_TIMEOUT_MS);
-    });
-    Promise.race([refreshPromise, timeoutPromise])
+    this.raceWithTimeout(refreshPromise, provider.id)
       .finally(() => {
-        clearTimeout(timeoutId);
         this._loadingProviders.delete(provider.id);
         this._onDidChangeDiscoveredItems.fire();
       });
@@ -92,7 +84,6 @@ export class ProviderRegistry {
   }
 
   async refreshAll(): Promise<void> {
-    const timeoutMs = ProviderRegistry.REFRESH_TIMEOUT_MS;
     const promises = Array.from(this.providers.values()).map((p) => {
       logger.debug(`Provider ${p.id} refreshing...`);
 
@@ -100,19 +91,24 @@ export class ProviderRegistry {
         logger.error(`Provider "${p.id}" refresh failed`, err);
       });
 
-      let timeoutId: ReturnType<typeof setTimeout>;
-      const timeoutPromise = new Promise<void>((resolve) => {
-        timeoutId = setTimeout(() => {
-          logger.warn(`Provider "${p.id}" refresh timed out after ${timeoutMs}ms`);
-          resolve();
-        }, timeoutMs);
-      });
-
-      return Promise.race([refreshPromise, timeoutPromise]).finally(() => {
-        clearTimeout(timeoutId);
-      });
+      return this.raceWithTimeout(refreshPromise, p.id);
     });
     await Promise.all(promises);
+  }
+
+  // Note: the losing promise in Promise.race() continues running — true cancellation
+  // would require adding CancellationToken to the provider refresh API.
+  private raceWithTimeout(promise: Promise<void>, providerLabel: string): Promise<void> {
+    let timeoutId: ReturnType<typeof setTimeout>;
+    const timeoutPromise = new Promise<void>((resolve) => {
+      timeoutId = setTimeout(() => {
+        logger.warn(`Provider "${providerLabel}" refresh timed out after ${ProviderRegistry.REFRESH_TIMEOUT_MS}ms`);
+        resolve();
+      }, ProviderRegistry.REFRESH_TIMEOUT_MS);
+    });
+    return Promise.race([promise, timeoutPromise]).finally(() => {
+      clearTimeout(timeoutId);
+    });
   }
 
   private async handleDiscoveredItems(providerId: string, items: DiscoveredItem[]): Promise<void> {
