@@ -1,8 +1,9 @@
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import * as os from 'os';
 import { JsonTaskStore } from '../storage/jsonTaskStore';
-import { DiscoveredStateStore, InboxState } from '../storage/discoveredStateStore';
+import { DiscoveredStateStore, InboxState, DiscoveredStateRecord } from '../storage/discoveredStateStore';
 import { WorkItem, WorkItemState } from '../models/workItem';
 
 // Make fs/promises exports writable so vi.spyOn can mock writeFile
@@ -39,7 +40,7 @@ async function readRawItems(dir: string): Promise<WorkItem[]> {
   return JSON.parse(raw);
 }
 
-async function readRawDiscoveredState(dir: string): Promise<Record<string, unknown>[]> {
+async function readRawDiscoveredState(dir: string): Promise<DiscoveredStateRecord[]> {
   const raw = await fs.readFile(path.join(dir, 'discovered-state.json'), 'utf-8');
   return JSON.parse(raw);
 }
@@ -212,7 +213,7 @@ describe('DiscoveredStateStore concurrency', () => {
     for (const e of entries) {
       expect(
         disk.find(
-          (d: Record<string, unknown>) =>
+          (d) =>
             d.providerId === e.providerId && d.externalId === e.externalId,
         ),
       ).toBeDefined();
@@ -272,5 +273,32 @@ describe('DiscoveredStateStore concurrency', () => {
     // After restoring, writes should work again
     await store.setState('gh', 'recovery', 'dismissed');
     expect(store.getState('gh', 'recovery')).toBe('dismissed');
+  });
+
+  it('setStates rolls back entire batch on write failure', async () => {
+    await store.setState('gh', 'existing', 'unseen');
+
+    vi.spyOn(fs, 'writeFile').mockImplementation(async () => {
+      throw new Error('Simulated write failure');
+    });
+
+    const batchItems = [
+      { providerId: 'gh', externalId: 'new-1', state: 'accepted' as InboxState },
+      { providerId: 'gh', externalId: 'new-2', state: 'dismissed' as InboxState },
+    ];
+
+    await expect(store.setStates(batchItems)).rejects.toThrow('Simulated write failure');
+
+    // Neither new item should be in cache
+    expect(store.getState('gh', 'new-1')).toBeUndefined();
+    expect(store.getState('gh', 'new-2')).toBeUndefined();
+    // Existing item should still be intact
+    expect(store.getState('gh', 'existing')).toBe('unseen');
+
+    vi.restoreAllMocks();
+
+    // Store should recover for subsequent operations
+    await store.setState('gh', 'post-recovery', 'accepted');
+    expect(store.getState('gh', 'post-recovery')).toBe('accepted');
   });
 });
