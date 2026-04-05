@@ -52,6 +52,8 @@ export function registerCommands(
         vscode.env.openExternal(vscode.Uri.parse(workItem.url));
       } else if (item.url) {
         vscode.env.openExternal(vscode.Uri.parse(item.url));
+      } else {
+        vscode.window.showWarningMessage('This item has no URL to open');
       }
     }),
     vscode.commands.registerCommand('workcenter.runAction', async (item) => {
