@@ -111,6 +111,12 @@ const workspace = {
   onDidChangeConfiguration: vi.fn(() => ({ dispose: vi.fn() })),
 };
 
+const ViewColumn = {
+  One: 1,
+  Two: 2,
+  Three: 3,
+};
+
 export {
   MockEventEmitter as EventEmitter,
   MockThemeIcon as ThemeIcon,
@@ -120,6 +126,7 @@ export {
   MockDataTransfer as DataTransfer,
   MockDisposable as Disposable,
   TreeItemCollapsibleState,
+  ViewColumn,
   window,
   commands,
   env,
