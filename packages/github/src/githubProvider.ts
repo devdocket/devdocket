@@ -230,13 +230,26 @@ export class GitHubIssueProvider implements WorkCenterProvider {
     let page = 0;
 
     while (nextUrl && page < maxPages) {
-      const response = await fetch(nextUrl, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-          Accept: 'application/vnd.github+json',
-          'X-GitHub-Api-Version': '2022-11-28',
-        },
-      });
+      let response: Response;
+      try {
+        response = await fetch(nextUrl, {
+          headers: {
+            Authorization: `Bearer ${token}`,
+            Accept: 'application/vnd.github+json',
+            'X-GitHub-Api-Version': '2022-11-28',
+          },
+        });
+      } catch (err) {
+        if (allItems.length > 0) {
+          logger.warn(
+            `Network error on page ${page + 1}. ` +
+            `Returning ${allItems.length} items from previous pages.`,
+            err,
+          );
+          return allItems;
+        }
+        throw err;
+      }
 
       if (!response.ok) {
         if (allItems.length > 0) {

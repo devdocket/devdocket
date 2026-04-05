@@ -361,6 +361,35 @@ describe('GitHubIssueProvider', () => {
     consoleWarn.mockRestore();
   });
 
+  it('returns partial results when mid-pagination network error occurs', async () => {
+    vi.mocked(workspace.getConfiguration).mockReturnValue({
+      get: vi.fn((key: string, defaultValue?: any) => {
+        if (key === 'repos') { return ['owner/repo1']; }
+        return defaultValue;
+      }),
+    } as any);
+
+    const consoleWarn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+    mockFetch
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => [createMockIssue(1, 'Survived network error')],
+        headers: { get: () => '<https://api.github.com/repos/owner/repo1/issues?page=2>; rel="next"' },
+      })
+      .mockRejectedValueOnce(new Error('Network error'));
+
+    const listener = vi.fn();
+    provider.onDidDiscoverItems(listener);
+    await provider.refresh();
+
+    const items = listener.mock.calls[0][0];
+    expect(items).toHaveLength(1);
+    expect(items[0]).toEqual(expect.objectContaining({ title: '#1: Survived network error' }));
+
+    consoleWarn.mockRestore();
+  });
+
   it('does not paginate when Link header has no next rel', async () => {
     mockFetch.mockResolvedValueOnce({
       ok: true,
