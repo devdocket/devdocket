@@ -99,10 +99,10 @@ export class JsonTaskStore implements ITaskStore {
   }
 
   async saveAll(items: WorkItem[]): Promise<void> {
+    if (this.cache === null) {
+      await this.loadAll();
+    }
     return this.enqueue(async () => {
-      if (this.cache === null) {
-        await this.loadAll();
-      }
       const cache = this.getCache();
       const previousValues = new Map(items.map(i => [i.id, cache.get(i.id)]));
       try {
