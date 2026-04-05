@@ -4,6 +4,7 @@ import { DiscoveredStateStore } from '../storage/discoveredStateStore';
 import { logger } from './logger';
 
 export class ProviderRegistry {
+  private static readonly REFRESH_TIMEOUT_MS = 30_000;
   private readonly providers = new Map<string, WorkCenterProvider>();
   private readonly subscriptions = new Map<string, { dispose(): void }>();
   private readonly discoveredItems = new Map<string, DiscoveredItem[]>();
@@ -46,10 +47,17 @@ export class ProviderRegistry {
     this._loadingProviders.add(provider.id);
     this._onDidRegisterProvider.fire();
     this._onDidChangeDiscoveredItems.fire();
-    provider.refresh()
-      .catch((err) => {
+    const refreshPromise = provider.refresh()
+      .catch((err: unknown) => {
         logger.error(`Provider "${provider.id}" refresh failed`, err);
-      })
+      });
+    const timeoutPromise = new Promise<void>((resolve) => {
+      setTimeout(() => {
+        logger.warn(`Provider "${provider.id}" refresh timed out after ${ProviderRegistry.REFRESH_TIMEOUT_MS}ms`);
+        resolve();
+      }, ProviderRegistry.REFRESH_TIMEOUT_MS);
+    });
+    Promise.race([refreshPromise, timeoutPromise])
       .finally(() => {
         this._loadingProviders.delete(provider.id);
         this._onDidChangeDiscoveredItems.fire();
@@ -82,11 +90,22 @@ export class ProviderRegistry {
   }
 
   async refreshAll(): Promise<void> {
+    const timeoutMs = ProviderRegistry.REFRESH_TIMEOUT_MS;
     const promises = Array.from(this.providers.values()).map((p) => {
       logger.debug(`Provider ${p.id} refreshing...`);
-      return p.refresh().catch((err) => {
+
+      const refreshPromise = p.refresh().catch((err: unknown) => {
         logger.error(`Provider "${p.id}" refresh failed`, err);
       });
+
+      const timeoutPromise = new Promise<void>((resolve) => {
+        setTimeout(() => {
+          logger.warn(`Provider "${p.id}" refresh timed out after ${timeoutMs}ms`);
+          resolve();
+        }, timeoutMs);
+      });
+
+      return Promise.race([refreshPromise, timeoutPromise]);
     });
     await Promise.all(promises);
   }
