@@ -223,7 +223,7 @@ async function runBatchMigration(
     try {
       await stateStore.setStates(itemsToMigrate);
     } catch {
-      // Matches extension.ts catch block — error is logged but not rethrown
+      // Intentionally swallow migration errors in this test helper; do not rethrow.
     }
   }
 }
