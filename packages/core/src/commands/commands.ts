@@ -3,7 +3,6 @@ import { WorkItemState } from '../models/workItem';
 import { WorkGraph } from '../services/workGraph';
 import { ActionRegistry } from '../services/actionRegistry';
 import { DiscoveredStateStore } from '../storage/discoveredStateStore';
-import { WorkItemEditorPanel } from '../views/workItemEditorPanel';
 import { InboxItem } from '../views/inboxTreeProvider';
 import { SourceItemNode } from '../views/sourcesTreeProvider';
 import { logger } from '../services/logger';
@@ -40,12 +39,6 @@ export function registerCommands(
     vscode.commands.registerCommand('workcenter.markWaitingOn', (item) =>
       workGraph.transitionState(item.id, WorkItemState.WaitingOn),
     ),
-    vscode.commands.registerCommand('workcenter.editItem', (item) => {
-      const workItem = workGraph.getItem(item.id);
-      if (workItem) {
-        WorkItemEditorPanel.open(context, workGraph, workItem);
-      }
-    }),
     vscode.commands.registerCommand('workcenter.openInBrowser', (item) => {
       const workItem = workGraph.getItem(item.id);
       if (workItem?.url) {

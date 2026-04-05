@@ -113,12 +113,6 @@
         "icon": "$(clock)"
       },
       {
-        "command": "workcenter.editItem",
-        "title": "Edit Work Item",
-        "category": "WorkCenter",
-        "icon": "$(edit)"
-      },
-      {
         "command": "workcenter.openInBrowser",
         "title": "Open in Browser",
         "category": "WorkCenter",
@@ -181,11 +175,6 @@
           "group": "1_actions"
         },
         {
-          "command": "workcenter.editItem",
-          "when": "view == workcenter.queue",
-          "group": "1_actions"
-        },
-        {
           "command": "workcenter.completeItem",
           "when": "view == workcenter.focus",
           "group": "inline"
@@ -203,11 +192,6 @@
         {
           "command": "workcenter.markWaitingOn",
           "when": "view == workcenter.focus && viewItem =~ /^active/",
-          "group": "1_actions"
-        },
-        {
-          "command": "workcenter.editItem",
-          "when": "view == workcenter.focus",
           "group": "1_actions"
         },
         {

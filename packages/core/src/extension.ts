@@ -4,6 +4,7 @@ import { WorkCenterApiImpl } from './api/workCenterApi';
 import { JsonTaskStore } from './storage/jsonTaskStore';
 import { DiscoveredStateStore } from './storage/discoveredStateStore';
 import { WorkGraph } from './services/workGraph';
+import { WorkItem } from './models/workItem';
 import { ProviderRegistry } from './services/providerRegistry';
 import { ActionRegistry } from './services/actionRegistry';
 import { InboxTreeProvider } from './views/inboxTreeProvider';
@@ -12,6 +13,7 @@ import { FocusTreeProvider } from './views/focusTreeProvider';
 import { SourcesTreeProvider } from './views/sourcesTreeProvider';
 import { HistoryTreeProvider } from './views/historyTreeProvider';
 import { registerCommands } from './commands/commands';
+import { WorkItemEditorPanel } from './views/workItemEditorPanel';
 import { initLogger, setLogLevel, logger, LogLevel } from './services/logger';
 import { getInboxUnseenCount } from './services/inboxBadge';
 
@@ -123,6 +125,15 @@ export async function activate(context: vscode.ExtensionContext): Promise<WorkCe
   const focusTreeView = vscode.window.createTreeView('workcenter.focus', { treeDataProvider: focusProvider });
   const historyTreeView = vscode.window.createTreeView('workcenter.history', { treeDataProvider: historyProvider });
 
+  const openItemOnSelect = (e: vscode.TreeViewSelectionChangeEvent<WorkItem>) => {
+    if (e.selection.length === 1) {
+      WorkItemEditorPanel.open(context, workGraph, e.selection[0]);
+    }
+  };
+  const queueSelectionSub = queueTreeView.onDidChangeSelection(openItemOnSelect);
+  const focusSelectionSub = focusTreeView.onDidChangeSelection(openItemOnSelect);
+  const historySelectionSub = historyTreeView.onDidChangeSelection(openItemOnSelect);
+
   const updateWorkViewMessages = () => {
     queueTreeView.message = queueProvider.getChildren().length > 0 ? undefined : 'No items in queue';
     focusTreeView.message = focusProvider.getChildren().length > 0 ? undefined : 'No active work';
@@ -187,6 +198,9 @@ export async function activate(context: vscode.ExtensionContext): Promise<WorkCe
     sourcesTreeView,
     historyTreeView,
     inboxSelectionSub,
+    queueSelectionSub,
+    focusSelectionSub,
+    historySelectionSub,
     discoveredSub,
     newItemsSub,
     providerRegSub,
