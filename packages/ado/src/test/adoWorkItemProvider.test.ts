@@ -272,6 +272,39 @@ describe('AdoWorkItemProvider', () => {
     vi.useRealTimers();
   });
 
+  it('handles WIQL network error gracefully', async () => {
+    mockFetch.mockRejectedValueOnce(new Error('Network error'));
+
+    const listener = vi.fn();
+    provider.onDidDiscoverItems(listener);
+    await provider.refresh();
+
+    expect(listener).toHaveBeenCalledWith([]);
+    expect(window.showWarningMessage).toHaveBeenCalledWith(
+      expect.stringContaining('Failed to fetch work items'),
+    );
+  });
+
+  it('handles detail batch network error with partial results', async () => {
+    // WIQL returns 2 items, but the detail fetch throws a network error
+    mockFetch
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => createWiqlResponse([1, 2]),
+      })
+      .mockRejectedValueOnce(new Error('Network error'));
+
+    const listener = vi.fn();
+    provider.onDidDiscoverItems(listener);
+    await provider.refresh();
+
+    // Items fire but empty since the only batch failed
+    expect(listener).toHaveBeenCalledWith([]);
+    expect(window.showWarningMessage).toHaveBeenCalledWith(
+      expect.stringContaining('Failed to fetch work items'),
+    );
+  });
+
   it('uses org-level WIQL when no projects are configured', async () => {
     provider.dispose();
     provider = new AdoWorkItemProvider('myorg', []);
