@@ -65,10 +65,12 @@ describe('GitHubIssueProvider', () => {
       .mockResolvedValueOnce({
         ok: true,
         json: async () => [createMockIssue(1, 'Bug', 'owner/repo1')],
+        headers: { get: () => null },
       })
       .mockResolvedValueOnce({
         ok: true,
         json: async () => [createMockIssue(2, 'Feature', 'owner/repo2')],
+        headers: { get: () => null },
       });
 
     const listener = vi.fn();
@@ -99,6 +101,7 @@ describe('GitHubIssueProvider', () => {
     mockFetch.mockResolvedValueOnce({
       ok: true,
       json: async () => [createMockIssue(42, 'Global issue')],
+      headers: { get: () => null },
     });
 
     const listener = vi.fn();
@@ -122,6 +125,7 @@ describe('GitHubIssueProvider', () => {
     mockFetch.mockResolvedValueOnce({
       ok: true,
       json: async () => [createMockIssue(10, 'My issue')],
+      headers: { get: () => null },
     });
 
     const listener = vi.fn();
@@ -147,6 +151,7 @@ describe('GitHubIssueProvider', () => {
         ...createMockIssue(1, 'Long'),
         body: longBody,
       }],
+      headers: { get: () => null },
     });
 
     const listener = vi.fn();
@@ -166,7 +171,8 @@ describe('GitHubIssueProvider', () => {
 
     // Should not throw
     await expect(provider.refresh()).resolves.toBeUndefined();
-    expect(listener).not.toHaveBeenCalled();
+    // fetchAllAssignedIssues catches the error and returns empty, so event fires with []
+    expect(listener).toHaveBeenCalledWith([]);
 
     consoleError.mockRestore();
   });
