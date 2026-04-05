@@ -12,7 +12,7 @@ import { FocusTreeProvider } from './views/focusTreeProvider';
 import { SourcesTreeProvider } from './views/sourcesTreeProvider';
 import { HistoryTreeProvider } from './views/historyTreeProvider';
 import { registerCommands } from './commands/commands';
-import { initLogger, setLogLevel, logger, LogLevel } from './services/logger';
+import { initLogger, setLogLevel, logger, resolveLogLevel } from './services/logger';
 import { getInboxUnseenCount } from './services/inboxBadge';
 
 export type { WorkCenterApi, WorkCenterProvider, WorkCenterAction, DiscoveredItem, Disposable } from './api/types';
@@ -23,19 +23,13 @@ export async function activate(context: vscode.ExtensionContext): Promise<WorkCe
   context.subscriptions.push(outputChannel);
 
   const logLevelConfig = vscode.workspace.getConfiguration('workcenter').get<string>('logLevel', 'info');
-  const logLevelMap: Record<string, LogLevel> = {
-    debug: LogLevel.Debug,
-    info: LogLevel.Info,
-    warn: LogLevel.Warn,
-    error: LogLevel.Error,
-  };
-  initLogger(outputChannel, logLevelMap[logLevelConfig] ?? LogLevel.Info);
+  initLogger(outputChannel, resolveLogLevel(logLevelConfig));
 
   context.subscriptions.push(
     vscode.workspace.onDidChangeConfiguration(e => {
       if (e.affectsConfiguration('workcenter.logLevel')) {
         const newLevel = vscode.workspace.getConfiguration('workcenter').get<string>('logLevel', 'info');
-        setLogLevel(logLevelMap[newLevel] ?? LogLevel.Info);
+        setLogLevel(resolveLogLevel(newLevel));
       }
     }),
   );

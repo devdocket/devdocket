@@ -1,2 +1,2 @@
-export { createLoggerService, LogLevel, serializeArg } from './logger';
+export { createLoggerService, LogLevel, resolveLogLevel, serializeArg } from './logger';
 export type { Logger, LogOutput, LoggerService } from './logger';
