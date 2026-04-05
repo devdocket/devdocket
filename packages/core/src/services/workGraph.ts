@@ -76,8 +76,11 @@ export class WorkGraph {
   }
 
   getItemsByState(...states: WorkItemState[]): WorkItem[] {
-    const cache = this.getOrBuildStateCache();
+    if (states.length === 0) {
+      return [];
+    }
     if (states.length === 1) {
+      const cache = this.getOrBuildStateCache();
       return [...(cache.get(states[0]) ?? [])];
     }
     const requestedStates = new Set(states);
