@@ -52,7 +52,9 @@ export class ProviderRegistry {
     this.refreshWithTimeout(provider)
       .finally(() => {
         this._loadingProviders.delete(provider.id);
-        this._onDidChangeDiscoveredItems.fire();
+        if (!this._disposed) {
+          this._onDidChangeDiscoveredItems.fire();
+        }
       });
 
     return new vscode.Disposable(() => {
@@ -62,7 +64,9 @@ export class ProviderRegistry {
       this.subscriptions.delete(provider.id);
       this.discoveredItems.delete(provider.id);
       this._loadingProviders.delete(provider.id);
-      this._onDidChangeDiscoveredItems.fire();
+      if (!this._disposed) {
+        this._onDidChangeDiscoveredItems.fire();
+      }
     });
   }
 

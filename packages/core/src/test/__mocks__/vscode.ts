@@ -99,7 +99,6 @@ class MockDataTransfer {
 }
 
 class MockCancellationTokenSource {
-  private _isCancellationRequested = false;
   private _listeners: Function[] = [];
   token = {
     isCancellationRequested: false,
@@ -109,7 +108,6 @@ class MockCancellationTokenSource {
     },
   };
   cancel() {
-    this._isCancellationRequested = true;
     this.token.isCancellationRequested = true;
     for (const listener of this._listeners) {
       listener();
