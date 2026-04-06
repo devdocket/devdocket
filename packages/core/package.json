@@ -95,22 +95,16 @@
         "icon": "$(check)"
       },
       {
-        "command": "workcenter.blockItem",
-        "title": "Mark Blocked",
+        "command": "workcenter.pauseItem",
+        "title": "Pause",
         "category": "WorkCenter",
-        "icon": "$(circle-slash)"
+        "icon": "$(debug-pause)"
       },
       {
-        "command": "workcenter.unblockItem",
-        "title": "Unblock",
+        "command": "workcenter.resumeItem",
+        "title": "Resume",
         "category": "WorkCenter",
         "icon": "$(debug-continue)"
-      },
-      {
-        "command": "workcenter.markWaitingOn",
-        "title": "Mark Waiting On",
-        "category": "WorkCenter",
-        "icon": "$(clock)"
       },
       {
         "command": "workcenter.editItem",
@@ -191,18 +185,13 @@
           "group": "inline"
         },
         {
-          "command": "workcenter.blockItem",
+          "command": "workcenter.pauseItem",
           "when": "view == workcenter.focus && viewItem =~ /^active/",
           "group": "1_actions"
         },
         {
-          "command": "workcenter.unblockItem",
-          "when": "view == workcenter.focus && viewItem =~ /^blocked/",
-          "group": "1_actions"
-        },
-        {
-          "command": "workcenter.markWaitingOn",
-          "when": "view == workcenter.focus && viewItem =~ /^active/",
+          "command": "workcenter.resumeItem",
+          "when": "view == workcenter.focus && viewItem =~ /^paused/",
           "group": "1_actions"
         },
         {

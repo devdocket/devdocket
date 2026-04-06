@@ -45,7 +45,7 @@ Providers (GitHub, future)          User (manual)
 
 1. **Inbox** — Newly discovered provider items (state: `unseen`). Accept → Queue or Dismiss.
 2. **Queue** — User's curated backlog. Manual items land here directly.
-3. **Focus** — Active work (`InProgress`, `Blocked`, `WaitingOn`).
+3. **Focus** — Active work (`InProgress`, `Paused`).
 4. **History** — Completed and archived items (`Done`, `Archived`).
 5. **Sources** — Everything providers know about, grouped by provider → sub-group. Always browsable.
 
