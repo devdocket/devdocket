@@ -46,8 +46,13 @@ describe('QueueTreeProvider', () => {
       const b = await graph.createItem({ title: 'B' });
       const c = await graph.createItem({ title: 'C' });
 
+      // Force out-of-order sortOrder to verify actual sorting
+      a.sortOrder = 30;
+      b.sortOrder = 10;
+      c.sortOrder = 20;
+
       const children = provider.getChildren();
-      expect(children.map(i => i.title)).toEqual(['A', 'B', 'C']);
+      expect(children.map(i => i.title)).toEqual(['B', 'C', 'A']);
     });
 
     it('places items without sortOrder at the end', async () => {
@@ -92,9 +97,10 @@ describe('QueueTreeProvider', () => {
     });
 
     it('sets description to providerId', async () => {
-      const item = await graph.createItem({ title: 'From provider' });
-      // Manually set providerId since createItem doesn't accept it
-      (item as any).providerId = 'github';
+      const item = await graph.createItem(
+        { title: 'From provider' },
+        { providerId: 'github', externalId: 'ext-1' },
+      );
       const treeItem = provider.getTreeItem(item);
       expect(treeItem.description).toBe('github');
     });
@@ -106,8 +112,10 @@ describe('QueueTreeProvider', () => {
     });
 
     it('sets contextValue to "queueItem.hasUrl" when item has url', async () => {
-      const item = await graph.createItem({ title: 'With URL' });
-      (item as any).url = 'https://github.com/issue/1';
+      const item = await graph.createItem(
+        { title: 'With URL' },
+        { providerId: 'github', externalId: 'ext-2', url: 'https://github.com/issue/1' },
+      );
       const treeItem = provider.getTreeItem(item);
       expect(treeItem.contextValue).toBe('queueItem.hasUrl');
     });
@@ -119,8 +127,10 @@ describe('QueueTreeProvider', () => {
     });
 
     it('sets icon to "remote" when item has providerId', async () => {
-      const item = await graph.createItem({ title: 'Provider item' });
-      (item as any).providerId = 'github';
+      const item = await graph.createItem(
+        { title: 'Provider item' },
+        { providerId: 'github', externalId: 'ext-3' },
+      );
       const treeItem = provider.getTreeItem(item);
       expect((treeItem.iconPath as any).id).toBe('remote');
     });
@@ -139,7 +149,7 @@ describe('QueueTreeProvider', () => {
 
     it('includes notes in tooltip when present', async () => {
       const item = await graph.createItem({ title: 'With notes' });
-      (item as any).notes = 'Some detailed notes';
+      item.notes = 'Some detailed notes';
       const treeItem = provider.getTreeItem(item);
       expect(treeItem.tooltip.value).toContain('Some detailed notes');
     });
