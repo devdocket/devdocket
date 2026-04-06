@@ -124,8 +124,7 @@ describe('DiscoveredStateStore', () => {
   });
 
   describe('edge cases', () => {
-    it('should handle concurrent setState calls without data loss', async () => {
-      // Pre-load so concurrent setState calls don't race on load()
+    it('should preserve all entries when concurrent setState calls run on an already-loaded store', async () => {
       await store.load();
       const promises = Array.from({ length: 20 }, (_, i) =>
         store.setState('gh', `issue-${i}`, 'unseen')
@@ -226,8 +225,7 @@ describe('DiscoveredStateStore', () => {
       await expect(store.load()).rejects.toThrow();
     });
 
-    it('should serialize concurrent save calls via write queue', async () => {
-      // Pre-load so concurrent setState calls don't race on load()
+    it('should persist all entries to disk after concurrent saves', async () => {
       await store.load();
       const promises: Promise<void>[] = [];
       for (let i = 0; i < 50; i++) {
@@ -235,7 +233,6 @@ describe('DiscoveredStateStore', () => {
       }
       await Promise.all(promises);
 
-      // All items must be present after serialized writes
       const records = await store.loadAll();
       expect(records).toHaveLength(50);
 
@@ -278,21 +275,20 @@ describe('DiscoveredStateStore', () => {
       expect(store.getState('b', 'b-9')).toBe('accepted');
     });
 
-    it('should handle rapid state transitions on the same item', async () => {
-      await Promise.all([
-        store.setState('gh', 'flip', 'unseen'),
-        store.setState('gh', 'flip', 'accepted'),
-        store.setState('gh', 'flip', 'dismissed'),
-      ]);
+    it('should apply the last sequential state transition to an item', async () => {
+      // Apply transitions sequentially so the final state is deterministic
+      await store.setState('gh', 'flip', 'unseen');
+      await store.setState('gh', 'flip', 'accepted');
+      await store.setState('gh', 'flip', 'dismissed');
 
-      // The final state depends on write-queue ordering; all three are valid
-      const finalState = store.getState('gh', 'flip');
-      expect(['unseen', 'accepted', 'dismissed']).toContain(finalState);
+      expect(store.getState('gh', 'flip')).toBe('dismissed');
 
-      // Only one record for this key
-      const records = await store.loadAll();
-      const flipRecords = records.filter((r) => r.externalId === 'flip');
-      expect(flipRecords).toHaveLength(1);
+      // Verify on-disk JSON contains exactly one entry for this key
+      const filePath = path.join(tmpDir, 'discovered-state.json');
+      const raw = await fs.readFile(filePath, 'utf-8');
+      const parsed = JSON.parse(raw);
+      const flipEntries = parsed.filter((r: { externalId: string }) => r.externalId === 'flip');
+      expect(flipEntries).toHaveLength(1);
     });
 
     it('should fire onDidChange for each setState in concurrent batch', async () => {
