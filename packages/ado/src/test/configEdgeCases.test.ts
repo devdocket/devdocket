@@ -116,13 +116,9 @@ describe('ADO provider config edge cases', () => {
   describe('organization config edge cases', () => {
     // Extension.ts checks: if (!org) { return; } — skips provider creation
 
-    it('empty organization string is falsy (providers skipped)', () => {
+    it('missing organization config falls back to empty string (providers skipped)', () => {
+      // config.get<string>('organization', '') returns '' when unset
       const org = '';
-      expect(!org).toBe(true);
-    });
-
-    it('undefined organization is falsy (providers skipped)', () => {
-      const org = undefined as unknown as string;
       expect(!org).toBe(true);
     });
 

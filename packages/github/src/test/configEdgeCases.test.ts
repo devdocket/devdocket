@@ -5,16 +5,6 @@ import { GitHubPrReviewProvider } from '../githubPrReviewProvider';
 
 const mockFetch = vi.fn();
 
-function createMockIssue(number: number, title: string, repo = 'owner/repo') {
-  return {
-    number,
-    title,
-    body: `Body for issue ${number}`,
-    html_url: `https://github.com/${repo}/issues/${number}`,
-    repository_url: `https://api.github.com/repos/${repo}`,
-  };
-}
-
 describe('GitHub provider config edge cases', () => {
   let provider: GitHubIssueProvider;
 
