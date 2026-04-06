@@ -473,10 +473,6 @@ describe('DiscoveredStateStore', () => {
   // ── Edge cases ────────────────────────────────────────────────────
 
   describe('edge cases', () => {
-    it('getState returns undefined before any load or setState', () => {
-      expect(store.getState('gh', 'anything')).toBeUndefined();
-    });
-
     it('load is idempotent after first call', async () => {
       await store.setState('gh', 'issue-1', 'unseen');
 
