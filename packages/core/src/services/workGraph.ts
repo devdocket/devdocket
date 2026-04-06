@@ -95,7 +95,7 @@ export class WorkGraph {
   /** Find a work item by its provider-scoped provenance (provider ID + external ID). */
   findItemByProvenance(providerId: string, externalId: string): WorkItem | undefined {
     const id = this.provenanceIndex.get(WorkGraph.provenanceKey(providerId, externalId));
-    return id ? this.items.get(id) : undefined;
+    return id !== undefined ? this.items.get(id) : undefined;
   }
 
   /** Create a new work item, optionally linking it to a provider-discovered source. */
@@ -126,7 +126,7 @@ export class WorkGraph {
     if (item.providerId && item.externalId) {
       const key = WorkGraph.provenanceKey(item.providerId, item.externalId);
       const existingId = this.provenanceIndex.get(key);
-      if (!existingId) {
+      if (existingId === undefined) {
         this.provenanceIndex.set(key, item.id);
       } else {
         logger.warn(
