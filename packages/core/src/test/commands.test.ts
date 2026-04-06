@@ -411,6 +411,22 @@ describe('registerCommands', () => {
       );
       expect(workGraph.moveItem).not.toHaveBeenCalled();
     });
+
+    it('shows info message when item is null', () => {
+      invoke('workcenter.moveDown', null);
+      expect(vscode.window.showInformationMessage).toHaveBeenCalledWith(
+        'WorkCenter: Select an item in the Queue to move.',
+      );
+      expect(workGraph.moveItem).not.toHaveBeenCalled();
+    });
+
+    it('shows info message when item has no id', () => {
+      invoke('workcenter.moveDown', {});
+      expect(vscode.window.showInformationMessage).toHaveBeenCalledWith(
+        'WorkCenter: Select an item in the Queue to move.',
+      );
+      expect(workGraph.moveItem).not.toHaveBeenCalled();
+    });
   });
 
   // ── acceptFromInbox ──────────────────────────────────────────────
