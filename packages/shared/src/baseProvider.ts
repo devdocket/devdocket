@@ -54,7 +54,11 @@ export abstract class BaseProvider {
     const clampedInterval = Math.max(interval, 60);
     this.refreshTimer = setInterval(() => {
       this.refreshInBackground().catch((error: unknown) => {
-        this.onBackgroundRefreshError(error);
+        try {
+          this.onBackgroundRefreshError(error);
+        } catch {
+          // Prevent handler errors from becoming unhandled rejections
+        }
       });
     }, clampedInterval * 1000);
   }
