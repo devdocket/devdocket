@@ -140,7 +140,7 @@ describe('GitHub provider config edge cases', () => {
       expect(listener).toHaveBeenCalledWith([]);
     });
 
-    it('repo with special characters results in failed fetch (no validation)', async () => {
+    it('repo with special characters causes fetch rejection', async () => {
       vi.mocked(workspace.getConfiguration).mockReturnValue({
         get: vi.fn((key: string, defaultValue?: any) => {
           if (key === 'repos') { return ['owner/repo with spaces']; }
@@ -148,7 +148,7 @@ describe('GitHub provider config edge cases', () => {
         }),
       } as any);
 
-      mockFetch.mockResolvedValueOnce({ ok: false, status: 404 });
+      mockFetch.mockRejectedValueOnce(new TypeError('Invalid URL'));
 
       const listener = vi.fn();
       provider.onDidDiscoverItems(listener);
