@@ -284,12 +284,12 @@ export class WorkGraph {
   /** Permanently delete a work item from the store. */
   async deleteItem(id: string): Promise<void> {
     const item = this.items.get(id);
+    await this.store.delete(id);
     if (item?.providerId && item?.externalId) {
       this.provenanceIndex.delete(
         WorkGraph.provenanceKey(item.providerId, item.externalId),
       );
     }
-    await this.store.delete(id);
     this.items.delete(id);
     this._onDidChange.fire();
     logger.info(`Deleted work item: ${id}`);
