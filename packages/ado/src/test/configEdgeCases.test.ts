@@ -23,8 +23,15 @@ describe('ADO provider config edge cases', () => {
   });
 
   describe('refreshIntervalSeconds edge cases', () => {
-    it('does not start timer for zero interval', () => {
+    beforeEach(() => {
       vi.useFakeTimers();
+    });
+
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    it('does not start timer for zero interval', () => {
       const provider = new AdoWorkItemProvider('myorg', []);
       const spy = vi.spyOn(provider as any, 'refreshInBackground').mockResolvedValue(undefined);
 
@@ -33,11 +40,9 @@ describe('ADO provider config edge cases', () => {
       expect(spy).not.toHaveBeenCalled();
 
       provider.dispose();
-      vi.useRealTimers();
     });
 
     it('does not start timer for negative interval', () => {
-      vi.useFakeTimers();
       const provider = new AdoWorkItemProvider('myorg', []);
       const spy = vi.spyOn(provider as any, 'refreshInBackground').mockResolvedValue(undefined);
 
@@ -46,11 +51,9 @@ describe('ADO provider config edge cases', () => {
       expect(spy).not.toHaveBeenCalled();
 
       provider.dispose();
-      vi.useRealTimers();
     });
 
     it('does not start timer for NaN interval', () => {
-      vi.useFakeTimers();
       const provider = new AdoWorkItemProvider('myorg', []);
       const spy = vi.spyOn(provider as any, 'refreshInBackground').mockResolvedValue(undefined);
 
@@ -59,11 +62,9 @@ describe('ADO provider config edge cases', () => {
       expect(spy).not.toHaveBeenCalled();
 
       provider.dispose();
-      vi.useRealTimers();
     });
 
     it('does not start timer for Infinity', () => {
-      vi.useFakeTimers();
       const provider = new AdoWorkItemProvider('myorg', []);
       const spy = vi.spyOn(provider as any, 'refreshInBackground').mockResolvedValue(undefined);
 
@@ -72,11 +73,9 @@ describe('ADO provider config edge cases', () => {
       expect(spy).not.toHaveBeenCalled();
 
       provider.dispose();
-      vi.useRealTimers();
     });
 
     it('clamps interval below 60s up to 60s', () => {
-      vi.useFakeTimers();
       const provider = new AdoWorkItemProvider('myorg', []);
       const spy = vi.spyOn(provider as any, 'refreshInBackground').mockResolvedValue(undefined);
 
@@ -89,11 +88,9 @@ describe('ADO provider config edge cases', () => {
       expect(spy).toHaveBeenCalledTimes(1);
 
       provider.dispose();
-      vi.useRealTimers();
     });
 
     it('PR review provider also rejects NaN interval', () => {
-      vi.useFakeTimers();
       const provider = new AdoPrReviewProvider('myorg', []);
       const spy = vi.spyOn(provider as any, 'refreshInBackground').mockResolvedValue(undefined);
 
@@ -102,11 +99,9 @@ describe('ADO provider config edge cases', () => {
       expect(spy).not.toHaveBeenCalled();
 
       provider.dispose();
-      vi.useRealTimers();
     });
 
     it('PR review provider also rejects negative interval', () => {
-      vi.useFakeTimers();
       const provider = new AdoPrReviewProvider('myorg', []);
       const spy = vi.spyOn(provider as any, 'refreshInBackground').mockResolvedValue(undefined);
 
@@ -115,7 +110,6 @@ describe('ADO provider config edge cases', () => {
       expect(spy).not.toHaveBeenCalled();
 
       provider.dispose();
-      vi.useRealTimers();
     });
   });
 

@@ -47,8 +47,8 @@ export class GitHubIssueProvider implements WorkCenterProvider {
 
   startPeriodicRefresh(intervalSeconds: number): void {
     this.stopPeriodicRefresh();
-    if (intervalSeconds <= 0) {
-      // Disable periodic refresh if interval is 0 or negative
+    const interval = Number(intervalSeconds);
+    if (!Number.isFinite(interval) || interval <= 0) {
       return;
     }
     // Clamp to minimum of 60 seconds

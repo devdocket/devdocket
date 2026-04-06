@@ -40,30 +40,31 @@ describe('GitHub provider config edge cases', () => {
   });
 
   describe('refreshIntervalSeconds edge cases', () => {
-    it('does not start timer for zero interval', () => {
+    beforeEach(() => {
       vi.useFakeTimers();
+    });
+
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    it('does not start timer for zero interval', () => {
       const spy = vi.spyOn(provider as any, 'refreshInBackground').mockResolvedValue(undefined);
 
       provider.startPeriodicRefresh(0);
       vi.advanceTimersByTime(120_000);
       expect(spy).not.toHaveBeenCalled();
-
-      vi.useRealTimers();
     });
 
     it('does not start timer for negative interval', () => {
-      vi.useFakeTimers();
       const spy = vi.spyOn(provider as any, 'refreshInBackground').mockResolvedValue(undefined);
 
       provider.startPeriodicRefresh(-10);
       vi.advanceTimersByTime(120_000);
       expect(spy).not.toHaveBeenCalled();
-
-      vi.useRealTimers();
     });
 
     it('clamps interval below 60s up to 60s', () => {
-      vi.useFakeTimers();
       const spy = vi.spyOn(provider as any, 'refreshInBackground').mockResolvedValue(undefined);
 
       provider.startPeriodicRefresh(10);
@@ -73,22 +74,14 @@ describe('GitHub provider config edge cases', () => {
 
       vi.advanceTimersByTime(50_000); // total 60s
       expect(spy).toHaveBeenCalledTimes(1);
-
-      vi.useRealTimers();
     });
 
-    it('NaN interval bypasses <= 0 guard (no isFinite check)', () => {
-      // GitHub provider checks: if (intervalSeconds <= 0) return
-      // NaN <= 0 is false, so it proceeds. Math.max(NaN, 60) = NaN
-      // setInterval(fn, NaN) in Node.js fires with minimum delay
-      vi.useFakeTimers();
+    it('does not start timer for NaN interval', () => {
       const spy = vi.spyOn(provider as any, 'refreshInBackground').mockResolvedValue(undefined);
 
       provider.startPeriodicRefresh(NaN);
-      vi.advanceTimersByTime(100);
-      expect(spy.mock.calls.length).toBeGreaterThan(0);
-
-      vi.useRealTimers();
+      vi.advanceTimersByTime(120_000);
+      expect(spy).not.toHaveBeenCalled();
     });
   });
 
@@ -109,7 +102,7 @@ describe('GitHub provider config edge cases', () => {
       );
     });
 
-    it('repo without slash is passed directly to API URL', async () => {
+    it('repo without slash results in failed fetch (no validation)', async () => {
       vi.mocked(workspace.getConfiguration).mockReturnValue({
         get: vi.fn((key: string, defaultValue?: any) => {
           if (key === 'repos') { return ['noslash']; }
@@ -123,13 +116,12 @@ describe('GitHub provider config edge cases', () => {
       provider.onDidDiscoverItems(listener);
       await provider.refresh();
 
-      expect(mockFetch).toHaveBeenCalledWith(
-        expect.stringContaining('/repos/noslash/issues'),
-        expect.any(Object),
-      );
+      // Invalid repo format still attempts the API call — returns empty on failure
+      expect(mockFetch).toHaveBeenCalledTimes(1);
+      expect(listener).toHaveBeenCalledWith([]);
     });
 
-    it('repo with double slash is passed directly to API URL', async () => {
+    it('repo with double slash results in failed fetch (no validation)', async () => {
       vi.mocked(workspace.getConfiguration).mockReturnValue({
         get: vi.fn((key: string, defaultValue?: any) => {
           if (key === 'repos') { return ['owner//repo']; }
@@ -143,13 +135,11 @@ describe('GitHub provider config edge cases', () => {
       provider.onDidDiscoverItems(listener);
       await provider.refresh();
 
-      expect(mockFetch).toHaveBeenCalledWith(
-        expect.stringContaining('/repos/owner//repo/issues'),
-        expect.any(Object),
-      );
+      expect(mockFetch).toHaveBeenCalledTimes(1);
+      expect(listener).toHaveBeenCalledWith([]);
     });
 
-    it('repo with special characters is passed directly to API URL', async () => {
+    it('repo with special characters results in failed fetch (no validation)', async () => {
       vi.mocked(workspace.getConfiguration).mockReturnValue({
         get: vi.fn((key: string, defaultValue?: any) => {
           if (key === 'repos') { return ['owner/repo with spaces']; }
@@ -163,10 +153,8 @@ describe('GitHub provider config edge cases', () => {
       provider.onDidDiscoverItems(listener);
       await provider.refresh();
 
-      expect(mockFetch).toHaveBeenCalledWith(
-        expect.stringContaining('/repos/owner/repo with spaces/issues'),
-        expect.any(Object),
-      );
+      expect(mockFetch).toHaveBeenCalledTimes(1);
+      expect(listener).toHaveBeenCalledWith([]);
     });
 
     it('reports failure for invalid repo format', async () => {

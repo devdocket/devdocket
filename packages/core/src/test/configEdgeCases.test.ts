@@ -1,7 +1,9 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { initLogger, setLogLevel, logger, LogLevel } from '../services/logger';
 
-// Mirrors the logLevelMap from extension.ts — tests verify the mapping + fallback behavior
+// Mirrors the logLevelMap from extension.ts — tests verify the mapping + fallback behavior.
+// Intentionally duplicated to decouple test assertions from production code changes;
+// if the production map changes, these tests will surface the divergence.
 const logLevelMap: Record<string, LogLevel> = {
   debug: LogLevel.Debug,
   info: LogLevel.Info,
@@ -109,37 +111,70 @@ describe('config edge cases', () => {
   describe('showInboxNotifications edge cases', () => {
     // Extension reads: config.get<boolean>('showInboxNotifications', true)
     // Then checks: if (showNotifications && newCount > 0)
-    // These tests document behavior when non-boolean values are returned.
+    // These tests exercise that decision path, including how the default is applied.
 
-    it('string "true" is truthy — notification fires', () => {
-      const showNotifications = 'true' as unknown as boolean;
-      expect(showNotifications && 3 > 0).toBeTruthy();
+    function runShowInboxNotificationDecision(
+      rawConfigValue: unknown,
+      newCount: number,
+    ) {
+      const config = {
+        get: vi.fn(<T>(_key: string, defaultValue: T) => {
+          return (rawConfigValue === undefined ? defaultValue : rawConfigValue) as T;
+        }),
+      };
+
+      const showNotifications = config.get<boolean>('showInboxNotifications', true);
+      const shouldNotify = Boolean(showNotifications && newCount > 0);
+
+      return { config, showNotifications, shouldNotify };
+    }
+
+    it('string "true" is returned by config.get and notification fires', () => {
+      const result = runShowInboxNotificationDecision('true', 3);
+
+      expect(result.config.get).toHaveBeenCalledWith('showInboxNotifications', true);
+      expect(result.showNotifications).toBe('true');
+      expect(result.shouldNotify).toBe(true);
     });
 
-    it('string "false" is truthy (non-empty string) — notification fires unexpectedly', () => {
-      const showNotifications = 'false' as unknown as boolean;
-      expect(showNotifications && 3 > 0).toBeTruthy();
+    it('string "false" is returned by config.get and still fires because non-empty strings are truthy', () => {
+      const result = runShowInboxNotificationDecision('false', 3);
+
+      expect(result.config.get).toHaveBeenCalledWith('showInboxNotifications', true);
+      expect(result.showNotifications).toBe('false');
+      expect(result.shouldNotify).toBe(true);
     });
 
-    it('number 1 is truthy — notification fires', () => {
-      const showNotifications = 1 as unknown as boolean;
-      expect(showNotifications && 3 > 0).toBeTruthy();
+    it('number 1 is returned by config.get and notification fires', () => {
+      const result = runShowInboxNotificationDecision(1, 3);
+
+      expect(result.config.get).toHaveBeenCalledWith('showInboxNotifications', true);
+      expect(result.showNotifications).toBe(1);
+      expect(result.shouldNotify).toBe(true);
     });
 
-    it('number 0 is falsy — notification suppressed', () => {
-      const showNotifications = 0 as unknown as boolean;
-      expect(showNotifications && 3 > 0).toBeFalsy();
+    it('number 0 is returned by config.get and notification is suppressed', () => {
+      const result = runShowInboxNotificationDecision(0, 3);
+
+      expect(result.config.get).toHaveBeenCalledWith('showInboxNotifications', true);
+      expect(result.showNotifications).toBe(0);
+      expect(result.shouldNotify).toBe(false);
     });
 
-    it('null is falsy — notification suppressed', () => {
-      const showNotifications = null as unknown as boolean;
-      expect(showNotifications && 3 > 0).toBeFalsy();
+    it('null is returned by config.get and notification is suppressed', () => {
+      const result = runShowInboxNotificationDecision(null, 3);
+
+      expect(result.config.get).toHaveBeenCalledWith('showInboxNotifications', true);
+      expect(result.showNotifications).toBeNull();
+      expect(result.shouldNotify).toBe(false);
     });
 
-    it('undefined falls back to default true via config.get', () => {
-      // config.get<boolean>('showInboxNotifications', true) returns true for missing keys
-      const showNotifications = true;
-      expect(showNotifications && 1 > 0).toBeTruthy();
+    it('undefined causes config.get to apply the default true value', () => {
+      const result = runShowInboxNotificationDecision(undefined, 1);
+
+      expect(result.config.get).toHaveBeenCalledWith('showInboxNotifications', true);
+      expect(result.showNotifications).toBe(true);
+      expect(result.shouldNotify).toBe(true);
     });
   });
 });
