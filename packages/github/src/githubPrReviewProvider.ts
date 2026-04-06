@@ -61,7 +61,7 @@ export class GitHubPrReviewProvider implements WorkCenterProvider {
   /**
    * Starts a repeating timer that refreshes PR review requests in the background.
    * The interval is clamped to a minimum of 60 seconds.
-   * @param intervalSeconds - Desired refresh interval in seconds (≤ 0 disables).
+   * @param intervalSeconds - Desired refresh interval in seconds; must be a finite number (≤ 0 disables).
    */
   startPeriodicRefresh(intervalSeconds: number): void {
     this.stopPeriodicRefresh();

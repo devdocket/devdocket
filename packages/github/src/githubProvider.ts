@@ -59,7 +59,7 @@ export class GitHubIssueProvider implements WorkCenterProvider {
    * Starts a repeating timer that refreshes issues in the background.
    * The interval is clamped to a minimum of 60 seconds. A value of 0 or
    * negative disables periodic refresh.
-   * @param intervalSeconds - Desired refresh interval in seconds.
+   * @param intervalSeconds - Desired refresh interval in seconds (must be a finite number).
    */
   startPeriodicRefresh(intervalSeconds: number): void {
     this.stopPeriodicRefresh();

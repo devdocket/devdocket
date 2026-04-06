@@ -19,7 +19,9 @@ export interface LogOutput {
 
 /**
  * Converts an arbitrary value to a human-readable string for log output.
- * Errors are serialized with their stack trace; other values use JSON.
+ * Errors are serialized with their stack trace when available, otherwise `name: message`.
+ * Other values use `JSON.stringify` when possible and fall back to `String(arg)`
+ * if JSON serialization returns `undefined` or throws.
  * @param arg - The value to serialize.
  * @returns A string representation of the argument.
  */
