@@ -25,7 +25,7 @@ export function isValidRepoSlug(slug: string): boolean {
 }
 
 /**
- * Sanitises a single URL path segment by removing characters that could
+ * Sanitizes a single URL path segment by removing characters that could
  * cause path-traversal, query-injection, or fragment-injection issues.
  * Only alphanumeric characters, hyphens, underscores, dots, and `~` are
  * kept; everything else (including `/`, `\`, `?`, `#`) is stripped.
