@@ -34,9 +34,8 @@ describe('validateRefreshInterval', () => {
     expect(validateRefreshInterval(undefined)).toBe(300);
   });
 
-  it('returns default 300 for null', () => {
+  it('clamps null to minimum (null coerces to 0)', () => {
     expect(validateRefreshInterval(null)).toBe(60);
-    // null coerces to 0 via Number(), which is below minimum → clamped to 60
   });
 
   it('returns default 300 for non-numeric strings', () => {
