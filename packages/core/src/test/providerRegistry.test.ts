@@ -346,7 +346,7 @@ describe('ProviderRegistry', () => {
   });
 
   describe('loading state and registration race conditions', () => {
-    // Yields to the event loop so pending promise chains (.then/.finally) settle
+    // Yields a macrotask so pending promise chains (.then/.finally) settle
     function nextTick(): Promise<void> {
       return new Promise(resolve => setTimeout(resolve, 0));
     }
@@ -369,7 +369,7 @@ describe('ProviderRegistry', () => {
       return { provider, resolveRefresh, rejectRefresh };
     }
 
-    it('loading is true immediately after register and false after sync refresh resolves', async () => {
+    it('loading is true immediately after register and false after immediately-resolved refresh', async () => {
       const provider = createMockProvider('sync');
       registry.register(provider);
 
@@ -510,7 +510,7 @@ describe('ProviderRegistry', () => {
       expect(registry.hasProviders).toBe(false);
     });
 
-    it('dispose clears loading state for in-flight provider', async () => {
+    it('dispose clears loading state for in-flight provider', () => {
       const { provider } = createDeferredProvider('inflight');
       const disposable = registry.register(provider);
 
