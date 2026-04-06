@@ -41,7 +41,7 @@ function initializeLogging(context: vscode.ExtensionContext): void {
   );
 }
 
-async function loadStores(storagePath: string) {
+async function loadStores(storagePath: string): Promise<{ workGraph: WorkGraph; stateStore: DiscoveredStateStore }> {
   const store = new JsonTaskStore(storagePath);
   const workGraph = new WorkGraph(store);
   await workGraph.load();
