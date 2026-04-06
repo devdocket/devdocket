@@ -46,6 +46,12 @@ describe('validateRefreshInterval', () => {
     expect(validateRefreshInterval('abc')).toBe(300);
   });
 
+  it('returns default 300 for blank/whitespace strings', () => {
+    expect(validateRefreshInterval('')).toBe(300);
+    expect(validateRefreshInterval('   ')).toBe(300);
+    expect(validateRefreshInterval('\t')).toBe(300);
+  });
+
   it('handles numeric strings', () => {
     expect(validateRefreshInterval('120')).toBe(120);
     expect(validateRefreshInterval('10')).toBe(60);
@@ -89,6 +95,14 @@ describe('validateRefreshInterval', () => {
     const logger = createMockLogger();
     validateRefreshInterval(300, logger);
     expect(logger.warn).not.toHaveBeenCalled();
+  });
+
+  it('logs a warning for blank strings', () => {
+    const logger = createMockLogger();
+    validateRefreshInterval('', logger);
+    expect(logger.warn).toHaveBeenCalledWith(
+      expect.stringContaining('not a valid number'),
+    );
   });
 
   it('does not log when disabling refresh', () => {

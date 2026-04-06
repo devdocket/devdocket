@@ -7,12 +7,19 @@ const MAXIMUM_INTERVAL_SECONDS = 2_147_483;
 
 /**
  * Validates and clamps a refresh interval value.
- * Non-finite values (NaN, undefined) fall back to the default (300s).
+ * Non-finite values (NaN, undefined) and blank strings fall back to the default (300s).
  * Zero or negative values return 0 (disables periodic refresh).
  * Positive values below the minimum (60s) are clamped up.
  * Values above the maximum (~24.8 days) are clamped down.
  */
 export function validateRefreshInterval(value: unknown, logger?: Logger): number {
+  if (typeof value === 'string' && value.trim() === '') {
+    logger?.warn(
+      `Refresh interval is not a valid number (got ${JSON.stringify(value)}), using default ${DEFAULT_INTERVAL_SECONDS} seconds`,
+    );
+    return DEFAULT_INTERVAL_SECONDS;
+  }
+
   const num = Number(value);
   if (!Number.isFinite(num)) {
     logger?.warn(
