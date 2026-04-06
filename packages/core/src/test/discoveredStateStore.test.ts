@@ -291,7 +291,7 @@ describe('DiscoveredStateStore', () => {
 
       // Only one record for this key
       const records = await store.loadAll();
-      const flipRecords = records.filter(r => r.externalId === 'flip');
+      const flipRecords = records.filter((r) => r.externalId === 'flip');
       expect(flipRecords).toHaveLength(1);
     });
 
