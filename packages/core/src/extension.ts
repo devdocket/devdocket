@@ -14,11 +14,13 @@ import { HistoryTreeProvider } from './views/historyTreeProvider';
 import { registerCommands } from './commands/commands';
 import { initLogger, setLogLevel, logger, LogLevel } from './services/logger';
 import { getInboxUnseenCount } from './services/inboxBadge';
+import { performance } from 'perf_hooks';
 
 export type { WorkCenterApi, WorkCenterProvider, WorkCenterAction, DiscoveredItem, Disposable } from './api/types';
 export { logger } from './services/logger';
 
 export async function activate(context: vscode.ExtensionContext): Promise<WorkCenterApi> {
+  const activationStart = performance.now();
   const outputChannel = vscode.window.createOutputChannel('WorkCenter');
   context.subscriptions.push(outputChannel);
 
@@ -40,10 +42,9 @@ export async function activate(context: vscode.ExtensionContext): Promise<WorkCe
     }),
   );
 
-  const activationStart = Date.now();
   logger.info('WorkCenter activating...');
 
-  const initStart = Date.now();
+  const initStart = performance.now();
   const storagePath = context.globalStorageUri.fsPath;
   const store = new JsonTaskStore(storagePath);
   const workGraph = new WorkGraph(store);
@@ -82,9 +83,9 @@ export async function activate(context: vscode.ExtensionContext): Promise<WorkCe
   const providerRegistry = new ProviderRegistry(stateStore);
   const actionRegistry = new ActionRegistry();
   const api = new WorkCenterApiImpl(providerRegistry, actionRegistry);
-  logger.info(`Store + service init took ${Date.now() - initStart}ms`);
+  logger.info(`Store + service init took ${Math.round(performance.now() - initStart)}ms`);
 
-  const treeViewStart = Date.now();
+  const treeViewStart = performance.now();
   const inboxProvider = new InboxTreeProvider(providerRegistry, stateStore);
   const queueProvider = new QueueTreeProvider(workGraph);
   const focusProvider = new FocusTreeProvider(workGraph);
@@ -134,9 +135,9 @@ export async function activate(context: vscode.ExtensionContext): Promise<WorkCe
   };
   updateWorkViewMessages();
   const workGraphSub = workGraph.onDidChange(updateWorkViewMessages);
-  logger.info(`Tree view creation took ${Date.now() - treeViewStart}ms`);
+  logger.info(`Tree view creation took ${Math.round(performance.now() - treeViewStart)}ms`);
 
-  const eventWiringStart = Date.now();
+  const eventWiringStart = performance.now();
   let initialLoadComplete = false;
   let wasLoading = false;
 
@@ -185,7 +186,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<WorkCe
     }
   });
   const stateStoreSub = stateStore.onDidChange(scheduleUiUpdate);
-  logger.info(`Event wiring took ${Date.now() - eventWiringStart}ms`);
+  logger.info(`Event wiring took ${Math.round(performance.now() - eventWiringStart)}ms`);
 
   context.subscriptions.push(
     inboxTreeView,
@@ -210,11 +211,11 @@ export async function activate(context: vscode.ExtensionContext): Promise<WorkCe
     { dispose: () => actionRegistry.dispose() },
   );
 
-  const commandRegStart = Date.now();
+  const commandRegStart = performance.now();
   registerCommands(context, workGraph, actionRegistry, stateStore);
-  logger.info(`Command registration took ${Date.now() - commandRegStart}ms`);
+  logger.info(`Command registration took ${Math.round(performance.now() - commandRegStart)}ms`);
 
-  logger.info(`WorkCenter activated in ${Date.now() - activationStart}ms`);
+  logger.info(`WorkCenter activated in ${Math.round(performance.now() - activationStart)}ms`);
   return api;
 }
 
