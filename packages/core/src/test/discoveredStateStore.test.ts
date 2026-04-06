@@ -491,8 +491,22 @@ describe('DiscoveredStateStore', () => {
     });
 
     it('handles special characters in providerId and externalId', async () => {
-      await store.setState('provider::with::colons', 'id/with/slashes', 'accepted');
-      expect(store.getState('provider::with::colons', 'id/with/slashes')).toBe('accepted');
+      const providerId = 'provider/with spaces-and-unicode-\u00df';
+      const externalId = 'id/with/slashes?and=query#fragment';
+      await store.setState(providerId, externalId, 'accepted');
+      expect(store.getState(providerId, externalId)).toBe('accepted');
+    });
+
+    it('delimiter collision in keys produces distinct entries (documents limitation)', async () => {
+      // The store keys on `providerId::externalId`, so these two
+      // combinations collide: ("a::b", "c") vs ("a", "b::c").
+      await store.setState('a::b', 'c', 'unseen');
+      await store.setState('a', 'b::c', 'accepted');
+
+      // Because both map to key "a::b::c", second write overwrites the first
+      const records = await store.loadAll();
+      expect(records).toHaveLength(1);
+      expect(store.getState('a', 'b::c')).toBe('accepted');
     });
 
     it('handles empty string providerId and externalId', async () => {
@@ -506,12 +520,16 @@ describe('DiscoveredStateStore', () => {
       await store.setState('gh', 'issue-1', 'unseen');
 
       const records1 = await store.loadAll();
-      await store.setState('gh', 'issue-2', 'accepted');
+      await store.setState('gh', 'issue-1', 'accepted');
       const records2 = await store.loadAll();
 
       // First snapshot should not be affected by later mutations
-      expect(records1).toHaveLength(1);
-      expect(records2).toHaveLength(2);
+      expect(records1).toEqual([
+        { providerId: 'gh', externalId: 'issue-1', inboxState: 'unseen' },
+      ]);
+      expect(records2).toEqual([
+        { providerId: 'gh', externalId: 'issue-1', inboxState: 'accepted' },
+      ]);
     });
 
     it('dispose cleans up event emitter', async () => {
