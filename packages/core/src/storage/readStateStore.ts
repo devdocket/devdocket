@@ -27,12 +27,14 @@ export class ReadStateStore {
   async add(key: string): Promise<boolean> {
     if (!this.loaded) { await this.load(); }
     if (this.items.has(key)) { return false; }
-    await this.enqueue(() => {
+    await this.enqueue(async () => {
       this.items.add(key);
-      return this.writeFile().catch((err) => {
+      try {
+        await this.writeFile();
+      } catch (err) {
         this.items.delete(key);
         throw err;
-      });
+      }
     });
     return true;
   }
@@ -47,7 +49,11 @@ export class ReadStateStore {
 
   /** Persist current state to disk (call after batch deletions). */
   save(): void {
-    this.enqueueSave();
+    this.enqueue(async () => {
+      await this.writeFile();
+    }).catch((err) => {
+      logger.error('Failed to save read state', err);
+    });
   }
 
   /** Returns a promise that resolves when all queued writes complete. */
@@ -74,12 +80,6 @@ export class ReadStateStore {
       }
       throw err;
     }
-  }
-
-  private enqueueSave(): void {
-    this.enqueue(async () => {
-      await this.writeFile();
-    });
   }
 
   private async writeFile(): Promise<void> {
