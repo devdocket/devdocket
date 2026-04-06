@@ -6,7 +6,7 @@ import * as vscode from 'vscode';
 
 // --- helpers -----------------------------------------------------------
 
-type MessageHandler = (msg: any) => void;
+type MessageHandler = (msg: any) => void | Promise<void>;
 
 function makeItem(overrides: Partial<WorkItem> = {}): WorkItem {
   return {
@@ -124,8 +124,8 @@ describe('WorkItemEditorPanel – concurrent autosave', () => {
     ({ panel } = openEditor(workGraph as unknown as WorkGraph, item));
   });
 
-  // 1. Rapid sequential title updates (simulating fast typing)
-  it('saves each rapid title update that reaches the backend', async () => {
+  // 1. Multiple autosave messages arriving sequentially
+  it('saves each sequential autosave message that reaches the backend', async () => {
     await panel.simulateAutosave({ title: 'A', notes: '' });
     await panel.simulateAutosave({ title: 'AB', notes: '' });
     await panel.simulateAutosave({ title: 'ABC', notes: '' });
@@ -363,8 +363,8 @@ describe('WorkItemEditorPanel – concurrent autosave', () => {
     expect(panel.title).toBe('Edit: Updated');
   });
 
-  // Notes-only update (title unchanged)
-  it('saves notes without modifying title when only notes change', async () => {
+  // Notes update includes unchanged title (extension always sends both fields)
+  it('saves both title and notes even when only notes change', async () => {
     await panel.simulateAutosave({ title: 'Original Title', notes: 'First draft' });
     expect(workGraph.updateItem).toHaveBeenCalledTimes(1);
 
