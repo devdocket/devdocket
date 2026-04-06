@@ -1,17 +1,27 @@
-// Minimal re-declarations to avoid depending on the vscode module
+/** A handle that releases a resource when disposed. */
 export interface Disposable {
   dispose(): void;
 }
 
+/** A typed event that listeners can subscribe to. */
 export interface Event<T> {
   (listener: (e: T) => void): Disposable;
 }
 
+/**
+ * An item discovered by a provider.
+ * Provider data is kept in memory and read live — only the inbox state is persisted.
+ */
 export interface DiscoveredItem {
+  /** Provider-scoped unique identifier (e.g. GitHub issue number). */
   externalId: string;
+  /** Short display title shown in Inbox and Sources views. */
   title: string;
+  /** Optional longer description of the item. */
   description?: string;
+  /** Optional URL linking back to the item in its source system. */
   url?: string;
+  /** Optional grouping key used to organize items in the UI (for example, in the Inbox and Sources views). */
   group?: string;
 }
 
