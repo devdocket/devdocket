@@ -33,42 +33,50 @@ async function handleCreateItem(workGraph: WorkGraph): Promise<void> {
   vscode.window.showInformationMessage(`WorkCenter: Created "${title.trim()}"`);
 }
 
-async function handleAcceptToFocus(workGraph: WorkGraph, item: { id: string }): Promise<void> {
+async function handleAcceptToFocus(workGraph: WorkGraph, item?: { id: string }): Promise<void> {
+  if (!item?.id) { return; }
   await workGraph.transitionState(item.id, WorkItemState.InProgress);
 }
 
-async function handleArchiveItem(workGraph: WorkGraph, item: { id: string }): Promise<void> {
+async function handleArchiveItem(workGraph: WorkGraph, item?: { id: string }): Promise<void> {
+  if (!item?.id) { return; }
   await workGraph.transitionState(item.id, WorkItemState.Archived);
 }
 
-async function handleCompleteItem(workGraph: WorkGraph, item: { id: string }): Promise<void> {
+async function handleCompleteItem(workGraph: WorkGraph, item?: { id: string }): Promise<void> {
+  if (!item?.id) { return; }
   await workGraph.transitionState(item.id, WorkItemState.Done);
 }
 
-async function handleBlockItem(workGraph: WorkGraph, item: { id: string }): Promise<void> {
+async function handleBlockItem(workGraph: WorkGraph, item?: { id: string }): Promise<void> {
+  if (!item?.id) { return; }
   await workGraph.transitionState(item.id, WorkItemState.Blocked);
 }
 
-async function handleUnblockItem(workGraph: WorkGraph, item: { id: string }): Promise<void> {
+async function handleUnblockItem(workGraph: WorkGraph, item?: { id: string }): Promise<void> {
+  if (!item?.id) { return; }
   await workGraph.transitionState(item.id, WorkItemState.InProgress);
 }
 
-async function handleMarkWaitingOn(workGraph: WorkGraph, item: { id: string }): Promise<void> {
+async function handleMarkWaitingOn(workGraph: WorkGraph, item?: { id: string }): Promise<void> {
+  if (!item?.id) { return; }
   await workGraph.transitionState(item.id, WorkItemState.WaitingOn);
 }
 
 function handleEditItem(
   context: vscode.ExtensionContext,
   workGraph: WorkGraph,
-  item: { id: string },
+  item?: { id: string },
 ): void {
+  if (!item?.id) { return; }
   const workItem = workGraph.getItem(item.id);
   if (workItem) {
     WorkItemEditorPanel.open(context, workGraph, workItem);
   }
 }
 
-async function handleOpenInBrowser(workGraph: WorkGraph, item: { id: string; url?: string }): Promise<void> {
+async function handleOpenInBrowser(workGraph: WorkGraph, item?: { id: string; url?: string }): Promise<void> {
+  if (!item?.id) { return; }
   const url = workGraph.getItem(item.id)?.url ?? item.url;
   if (url) {
     await vscode.env.openExternal(vscode.Uri.parse(url));
@@ -78,8 +86,9 @@ async function handleOpenInBrowser(workGraph: WorkGraph, item: { id: string; url
 async function handleRunAction(
   workGraph: WorkGraph,
   actionRegistry: ActionRegistry,
-  item: { id: string },
+  item?: { id: string },
 ): Promise<void> {
+  if (!item?.id) { return; }
   const workItem = workGraph.getItem(item.id);
   if (!workItem) {
     return;
@@ -128,8 +137,9 @@ async function handleMoveDown(workGraph: WorkGraph, item: { id?: string }): Prom
 async function handleAcceptFromInbox(
   workGraph: WorkGraph,
   stateStore: DiscoveredStateStore,
-  item: InboxItem,
+  item?: InboxItem,
 ): Promise<void> {
+  if (!item?.providerId || !item?.externalId) { return; }
   logger.info(`Accepting inbox item: ${item.externalId} from ${item.providerId}`);
   const existing = workGraph.findItemByProvenance(item.providerId, item.externalId);
   if (existing) {
@@ -152,8 +162,9 @@ async function handleAcceptFromInbox(
 
 async function handleDismissFromInbox(
   stateStore: DiscoveredStateStore,
-  item: InboxItem,
+  item?: InboxItem,
 ): Promise<void> {
+  if (!item?.providerId || !item?.externalId) { return; }
   logger.info(`Dismissing inbox item: ${item.externalId}`);
   try {
     await stateStore.setState(item.providerId, item.externalId, 'dismissed');
@@ -166,8 +177,9 @@ async function handleDismissFromInbox(
 async function handleAcceptFromSources(
   workGraph: WorkGraph,
   stateStore: DiscoveredStateStore,
-  item: SourceItemNode,
+  item?: SourceItemNode,
 ): Promise<void> {
+  if (!item?.providerId || !item?.externalId) { return; }
   logger.info(`Accepting sources item: ${item.externalId}`);
   const existing = workGraph.findItemByProvenance(item.providerId, item.externalId);
   if (existing) {
