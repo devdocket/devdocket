@@ -1,8 +1,9 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { EventEmitter } from 'vscode';
 import { WorkCenterProvider, DiscoveredItem } from '../api/types';
 import { WorkGraph } from '../services/workGraph';
 import { ProviderRegistry } from '../services/providerRegistry';
+import { logger } from '../services/logger';
 import { ITaskStore } from '../storage/taskStore';
 import { WorkItemState } from '../models/workItem';
 
@@ -519,6 +520,87 @@ describe('ProviderRegistry', () => {
       disposable.dispose();
       expect(registry.loading).toBe(false);
       expect(registry.hasProviders).toBe(false);
+    });
+  });
+
+  describe('refresh timeout', () => {
+    beforeEach(() => {
+      vi.useFakeTimers();
+    });
+
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    it('clears loading state when register refresh times out', async () => {
+      const warnSpy = vi.spyOn(logger, 'warn');
+      const provider = createMockProvider('slow');
+      vi.mocked(provider.refresh).mockReturnValue(new Promise(() => {}));
+
+      registry.register(provider);
+      expect(registry.loading).toBe(true);
+
+      await vi.advanceTimersByTimeAsync(ProviderRegistry.REFRESH_TIMEOUT_MS);
+      expect(registry.loading).toBe(false);
+      expect(warnSpy).toHaveBeenCalledWith(
+        expect.stringContaining('Provider "slow" refresh timed out'),
+      );
+      warnSpy.mockRestore();
+    });
+
+    it('resolves refreshAll when a provider refresh times out', async () => {
+      const warnSpy = vi.spyOn(logger, 'warn');
+      const provider = createMockProvider('hanging');
+      registry.register(provider);
+
+      vi.mocked(provider.refresh).mockReturnValue(new Promise(() => {}));
+
+      const refreshPromise = registry.refreshAll();
+      expect(warnSpy).not.toHaveBeenCalled();
+
+      await vi.advanceTimersByTimeAsync(ProviderRegistry.REFRESH_TIMEOUT_MS);
+      await expect(refreshPromise).resolves.toBeUndefined();
+      expect(warnSpy).toHaveBeenCalledTimes(1);
+      expect(warnSpy).toHaveBeenCalledWith(
+        expect.stringContaining('Provider "hanging" refresh timed out'),
+      );
+      warnSpy.mockRestore();
+    });
+
+    it('clears timeout when refresh completes quickly', async () => {
+      const warnSpy = vi.spyOn(logger, 'warn');
+      const provider = createMockProvider('fast');
+      registry.register(provider);
+
+      await vi.advanceTimersByTimeAsync(ProviderRegistry.REFRESH_TIMEOUT_MS);
+      expect(registry.loading).toBe(false);
+      expect(warnSpy).not.toHaveBeenCalled();
+      warnSpy.mockRestore();
+    });
+
+    it('passes CancellationToken to provider refresh', async () => {
+      const provider = createMockProvider('tokencheck');
+      registry.register(provider);
+
+      expect(provider.refresh).toHaveBeenCalledWith(
+        expect.objectContaining({ isCancellationRequested: false }),
+      );
+    });
+
+    it('cancels the token when timeout fires', async () => {
+      const provider = createMockProvider('cancel-test');
+      let receivedToken: any;
+      vi.mocked(provider.refresh).mockImplementation(async (token?: any) => {
+        receivedToken = token;
+        return new Promise(() => {});
+      });
+
+      registry.register(provider);
+      expect(receivedToken).toBeDefined();
+      expect(receivedToken.isCancellationRequested).toBe(false);
+
+      await vi.advanceTimersByTimeAsync(ProviderRegistry.REFRESH_TIMEOUT_MS);
+      expect(receivedToken.isCancellationRequested).toBe(true);
     });
   });
 
