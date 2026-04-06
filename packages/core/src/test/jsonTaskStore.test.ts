@@ -194,4 +194,56 @@ describe('JsonTaskStore', () => {
     expect(persisted[0].notes).toBe('Legacy description');
     expect(persisted[0].description).toBeUndefined();
   });
+
+  it('migrates legacy Blocked state to Paused on load', async () => {
+    const filePath = path.join(tmpDir, 'workitems.json');
+    const legacy = [{
+      id: 'blocked-1',
+      title: 'Blocked item',
+      state: 'Blocked',
+      createdAt: 1000,
+      updatedAt: 1000,
+    }];
+    await fs.mkdir(tmpDir, { recursive: true });
+    await fs.writeFile(filePath, JSON.stringify(legacy), 'utf-8');
+
+    const items = await store.loadAll();
+    expect(items).toHaveLength(1);
+    expect(items[0].state).toBe(WorkItemState.Paused);
+  });
+
+  it('migrates legacy WaitingOn state to Paused on load', async () => {
+    const filePath = path.join(tmpDir, 'workitems.json');
+    const legacy = [{
+      id: 'waiting-1',
+      title: 'Waiting item',
+      state: 'WaitingOn',
+      createdAt: 1000,
+      updatedAt: 1000,
+    }];
+    await fs.mkdir(tmpDir, { recursive: true });
+    await fs.writeFile(filePath, JSON.stringify(legacy), 'utf-8');
+
+    const items = await store.loadAll();
+    expect(items).toHaveLength(1);
+    expect(items[0].state).toBe(WorkItemState.Paused);
+  });
+
+  it('persists migrated Blocked/WaitingOn→Paused back to disk', async () => {
+    const filePath = path.join(tmpDir, 'workitems.json');
+    const legacy = [
+      { id: 'b-1', title: 'Blocked', state: 'Blocked', createdAt: 1000, updatedAt: 1000 },
+      { id: 'w-1', title: 'Waiting', state: 'WaitingOn', createdAt: 1000, updatedAt: 1000 },
+    ];
+    await fs.mkdir(tmpDir, { recursive: true });
+    await fs.writeFile(filePath, JSON.stringify(legacy), 'utf-8');
+
+    await store.loadAll();
+
+    const raw = await fs.readFile(filePath, 'utf-8');
+    const persisted = JSON.parse(raw);
+    expect(persisted).toHaveLength(2);
+    expect(persisted[0].state).toBe(WorkItemState.Paused);
+    expect(persisted[1].state).toBe(WorkItemState.Paused);
+  });
 });
