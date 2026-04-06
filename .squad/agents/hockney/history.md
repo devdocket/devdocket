@@ -20,7 +20,7 @@ Test infrastructure:
 Key files:
 - `src/models/workItem.ts` — model + state enum (6 states: New, InProgress, Blocked, WaitingOn, Done, Archived)
 - `src/services/workGraph.ts` — core service with createItem, updateItem, transitionState, deleteItem
-- `src/storage/jsonTaskStore.ts` — file-per-item persistence
+- `src/storage/jsonTaskStore.ts` — all items persisted in a single `workitems.json` file in globalStorageUri
 
 ## Learnings
 
