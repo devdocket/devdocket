@@ -1,3 +1,4 @@
+import * as crypto from 'crypto';
 import { WorkItem } from '../models/workItem';
 
 export interface EditorHtmlOptions {
@@ -12,8 +13,8 @@ export function getEditorPanelHtml({ cspSource, item }: EditorHtmlOptions): stri
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src ${cspSource} 'unsafe-inline'; script-src 'nonce-${nonce}';">
-  <style>
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src ${cspSource} 'nonce-${nonce}'; script-src 'nonce-${nonce}';">
+  <style nonce="${nonce}">
     :root {
       --input-bg: var(--vscode-input-background);
       --input-fg: var(--vscode-input-foreground);
@@ -159,12 +160,7 @@ ${item.providerId ? '      <span id="readonly-title-hint" class="hint">Title is 
 }
 
 function getNonce(): string {
-  let text = '';
-  const possible = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
-  for (let i = 0; i < 32; i++) {
-    text += possible.charAt(Math.floor(Math.random() * possible.length));
-  }
-  return text;
+  return crypto.randomBytes(16).toString('hex');
 }
 
 function escapeHtml(s: string): string {
