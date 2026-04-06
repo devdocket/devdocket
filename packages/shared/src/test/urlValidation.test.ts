@@ -60,9 +60,20 @@ describe('isValidRepoSlug', () => {
     expect(isValidRepoSlug('owner/../etc')).toBe(false);
   });
 
-  it('accepts single dot as a valid segment character', () => {
-    // A lone dot is a valid character, so `./repo` is `owner=".", repo="repo"`
-    expect(isValidRepoSlug('./repo')).toBe(true);
+  it('rejects a single dot owner segment', () => {
+    expect(isValidRepoSlug('./repo')).toBe(false);
+  });
+
+  it('rejects a single dot repo segment', () => {
+    expect(isValidRepoSlug('owner/.')).toBe(false);
+  });
+
+  it('rejects a double dot owner segment', () => {
+    expect(isValidRepoSlug('../repo')).toBe(false);
+  });
+
+  it('rejects a double dot repo segment', () => {
+    expect(isValidRepoSlug('owner/..')).toBe(false);
   });
 
   // --- extra slashes ---
@@ -184,8 +195,8 @@ describe('sanitizeUrlSegment', () => {
   });
 
   it('strips path-traversal sequences', () => {
-    // `../../etc/passwd` → dots kept (4 dots), slashes stripped
-    expect(sanitizeUrlSegment('../../etc/passwd')).toBe('....etcpasswd');
+    // `../../etc/passwd` → slashes stripped, leading dots removed
+    expect(sanitizeUrlSegment('../../etc/passwd')).toBe('etcpasswd');
   });
 
   it('strips spaces', () => {

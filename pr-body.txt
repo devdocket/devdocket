@@ -1,0 +1,11 @@
+## Summary
+
+Adds URL validation helper functions and comprehensive tests for the shared package.
+
+### Changes
+
+- urlValidation.ts: Two new utility functions (isValidRepoSlug, sanitizeUrlSegment)
+- urlValidation.test.ts: 47 tests covering valid inputs, path traversal, unicode, special characters, and edge cases
+- vitest.config.ts: New vitest config for the shared package
+- package.json: Updated test script from placeholder to vitest run
+- index.ts: Re-exports the new helpers
