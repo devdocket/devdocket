@@ -25,8 +25,8 @@ function handleCommandError(context: string, err: unknown): void {
 function transitionCommand(
   workGraph: WorkGraph,
   targetState: WorkItemState,
-  verb: string,
-): (item: { id: string }) => Promise<void> {
+  failureContext: string,
+): (item?: { id?: string }) => Promise<void> {
   return async (item) => {
     if (!item?.id) {
       vscode.window.showInformationMessage('WorkCenter: Select a work item first.');
@@ -35,7 +35,7 @@ function transitionCommand(
     try {
       await workGraph.transitionState(item.id, targetState);
     } catch (err: unknown) {
-      handleCommandError(`Failed to ${verb} item`, err);
+      handleCommandError(failureContext, err);
     }
   };
 }
@@ -50,27 +50,27 @@ export function registerCommands(
     vscode.commands.registerCommand('workcenter.createItem', () => createItem(workGraph)),
     vscode.commands.registerCommand(
       'workcenter.acceptToFocus',
-      transitionCommand(workGraph, WorkItemState.InProgress, 'focus'),
+      transitionCommand(workGraph, WorkItemState.InProgress, 'Failed to focus item'),
     ),
     vscode.commands.registerCommand(
       'workcenter.archiveItem',
-      transitionCommand(workGraph, WorkItemState.Archived, 'archive'),
+      transitionCommand(workGraph, WorkItemState.Archived, 'Failed to archive item'),
     ),
     vscode.commands.registerCommand(
       'workcenter.completeItem',
-      transitionCommand(workGraph, WorkItemState.Done, 'complete'),
+      transitionCommand(workGraph, WorkItemState.Done, 'Failed to complete item'),
     ),
     vscode.commands.registerCommand(
       'workcenter.blockItem',
-      transitionCommand(workGraph, WorkItemState.Blocked, 'block'),
+      transitionCommand(workGraph, WorkItemState.Blocked, 'Failed to block item'),
     ),
     vscode.commands.registerCommand(
       'workcenter.unblockItem',
-      transitionCommand(workGraph, WorkItemState.InProgress, 'unblock'),
+      transitionCommand(workGraph, WorkItemState.InProgress, 'Failed to unblock item'),
     ),
     vscode.commands.registerCommand(
       'workcenter.markWaitingOn',
-      transitionCommand(workGraph, WorkItemState.WaitingOn, 'mark as waiting'),
+      transitionCommand(workGraph, WorkItemState.WaitingOn, 'Failed to mark item as waiting'),
     ),
     vscode.commands.registerCommand('workcenter.editItem', (item) => {
       if (!item?.id) {
@@ -177,7 +177,7 @@ export function registerCommands(
         try {
           await stateStore.setState(item.providerId, item.externalId, 'accepted');
         } catch (err: unknown) {
-          handleCommandError('Failed to update state after accepting item', err);
+          handleCommandError('Failed to update state for existing accepted item', err);
         }
         return;
       }
