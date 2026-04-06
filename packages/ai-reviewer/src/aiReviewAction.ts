@@ -173,7 +173,7 @@ export class AiReviewAction implements WorkCenterAction {
 
       const runtimeInstructions = `
 
-## Additional Instructions
+## Important Instructions
 
 **PR URL:** ${prUrl} — include a link to this PR in the review header.
 
@@ -182,7 +182,7 @@ export class AiReviewAction implements WorkCenterAction {
       const model = models[0];
       const messages = [
         vscode.LanguageModelChatMessage.User(
-          `${reviewPrompt}${runtimeInstructions}
+          `${runtimeInstructions}${reviewPrompt}
 
 \`\`\`\`diff
 ${diff.slice(0, maxDiffLength)}
