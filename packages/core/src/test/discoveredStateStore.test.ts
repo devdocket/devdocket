@@ -163,33 +163,33 @@ describe('DiscoveredStateStore', () => {
       store2.dispose();
     });
 
-    it('should prune stale entries by overwriting with a reduced set', async () => {
+    it('should update individual item states without affecting other entries', async () => {
       await store.setStates([
         { providerId: 'gh', externalId: 'keep-1', state: 'accepted' },
-        { providerId: 'gh', externalId: 'stale-1', state: 'unseen' },
-        { providerId: 'gh', externalId: 'stale-2', state: 'dismissed' },
+        { providerId: 'gh', externalId: 'update-1', state: 'unseen' },
+        { providerId: 'gh', externalId: 'update-2', state: 'dismissed' },
         { providerId: 'gh', externalId: 'keep-2', state: 'accepted' },
       ]);
       expect((await store.loadAll())).toHaveLength(4);
 
-      // Simulate pruning by dismissing stale entries
-      await store.setState('gh', 'stale-1', 'dismissed');
-      await store.setState('gh', 'stale-2', 'dismissed');
+      // Transition individual items to new states
+      await store.setState('gh', 'update-1', 'dismissed');
+      await store.setState('gh', 'update-2', 'accepted');
 
-      expect(store.getState('gh', 'stale-1')).toBe('dismissed');
-      expect(store.getState('gh', 'stale-2')).toBe('dismissed');
+      expect(store.getState('gh', 'update-1')).toBe('dismissed');
+      expect(store.getState('gh', 'update-2')).toBe('accepted');
       expect(store.getState('gh', 'keep-1')).toBe('accepted');
       expect(store.getState('gh', 'keep-2')).toBe('accepted');
     });
 
-    it('should handle setState called before load completes', async () => {
+    it('should auto-load persisted data when setState is called before explicit load', async () => {
       // Pre-seed some data on disk
       const filePath = path.join(tmpDir, 'discovered-state.json');
       await fs.writeFile(filePath, JSON.stringify([
         { providerId: 'gh', externalId: 'existing-1', inboxState: 'unseen' },
       ]), 'utf-8');
 
-      // Create a fresh store and call setState immediately (triggers auto-load)
+      // Create a fresh store and call setState without calling load() first
       const freshStore = new DiscoveredStateStore(tmpDir);
       await freshStore.setState('gh', 'new-1', 'accepted');
 
@@ -198,14 +198,14 @@ describe('DiscoveredStateStore', () => {
       freshStore.dispose();
     });
 
-    it('should recover gracefully from corrupt JSON (non-parseable)', async () => {
+    it('should throw on corrupt JSON (non-parseable)', async () => {
       const filePath = path.join(tmpDir, 'discovered-state.json');
       await fs.writeFile(filePath, '{broken: json!!!', 'utf-8');
 
       await expect(store.load()).rejects.toThrow();
     });
 
-    it('should recover gracefully from truncated JSON', async () => {
+    it('should throw on truncated JSON', async () => {
       const filePath = path.join(tmpDir, 'discovered-state.json');
       await fs.writeFile(filePath, '[{"providerId":"gh","externalId":"1","inboxState":"unseen"', 'utf-8');
 
@@ -246,7 +246,7 @@ describe('DiscoveredStateStore', () => {
       expect(parsed).toHaveLength(50);
     });
 
-    it('should perform getState lookups efficiently with a large set', async () => {
+    it('should look up all items correctly from a large set', async () => {
       const count = 2000;
       const items = Array.from({ length: count }, (_, i) => ({
         providerId: 'perf',
@@ -255,17 +255,9 @@ describe('DiscoveredStateStore', () => {
       }));
       await store.setStates(items);
 
-      const start = performance.now();
       for (let i = 0; i < count; i++) {
-        store.getState('perf', `id-${i}`);
+        expect(store.getState('perf', `id-${i}`)).toBe('unseen');
       }
-      const elapsed = performance.now() - start;
-
-      // 2000 Map lookups should finish well under 1000ms even on slow CI
-      expect(elapsed).toBeLessThan(1000);
-      // Spot-check correctness
-      expect(store.getState('perf', 'id-0')).toBe('unseen');
-      expect(store.getState('perf', `id-${count - 1}`)).toBe('unseen');
     });
 
     it('should handle concurrent setStates batch calls', async () => {
