@@ -2,7 +2,7 @@ import { WorkItem } from '../models/workItem';
 import type { Disposable, Event, DiscoveredItem } from '@workcenter/shared';
 
 // Re-export shared provider-facing types so existing imports from './api/types' keep working.
-export type { Disposable, Event, DiscoveredItem } from '@workcenter/shared';
+export type { Disposable, Event, DiscoveredItem };
 
 /**
  * A provider that discovers work items from an external source (e.g. GitHub Issues).
