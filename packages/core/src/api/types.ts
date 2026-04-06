@@ -25,6 +25,7 @@ export interface DiscoveredItem {
   url?: string;
   /** Optional grouping key used to organize items in the UI (for example, in the Inbox and Sources views). */
   group?: string;
+  /** Optional notification reason explaining why this item was surfaced (e.g. `"assigned"`, `"review_requested"`). */
   reason?: string;
 }
 
