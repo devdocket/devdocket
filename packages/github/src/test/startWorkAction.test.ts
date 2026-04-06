@@ -79,8 +79,8 @@ describe('StartWorkAction', () => {
       const done = createWorkItem({ state: 'Done' });
       expect(action.canRun(done)).toBe(false);
 
-      const blocked = createWorkItem({ state: 'Blocked' });
-      expect(action.canRun(blocked)).toBe(false);
+      const paused = createWorkItem({ state: 'Paused' });
+      expect(action.canRun(paused)).toBe(false);
     });
   });
 
