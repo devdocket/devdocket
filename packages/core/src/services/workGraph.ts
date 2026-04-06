@@ -34,10 +34,15 @@ export class WorkGraph {
     for (const item of items) {
       this.items.set(item.id, item);
       if (item.providerId && item.externalId) {
-        this.provenanceIndex.set(
-          WorkGraph.provenanceKey(item.providerId, item.externalId),
-          item.id,
-        );
+        const key = WorkGraph.provenanceKey(item.providerId, item.externalId);
+        const existingItemId = this.provenanceIndex.get(key);
+        if (existingItemId === undefined) {
+          this.provenanceIndex.set(key, item.id);
+        } else {
+          logger.warn(
+            `Duplicate work item provenance detected for ${key}; keeping first loaded item ${existingItemId} and ignoring duplicate ${item.id}`,
+          );
+        }
       }
     }
     logger.debug(`Loaded ${items.length} work items from store`);
