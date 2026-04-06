@@ -52,7 +52,7 @@ export class GitHubIssueProvider implements WorkCenterProvider {
       return;
     }
     // Clamp to minimum of 60 seconds
-    const clampedInterval = Math.max(intervalSeconds, 60);
+    const clampedInterval = Math.max(interval, 60);
     this.refreshTimer = setInterval(() => {
       this.refreshInBackground().catch((err) => {
         logger.error('Refresh failed', err);

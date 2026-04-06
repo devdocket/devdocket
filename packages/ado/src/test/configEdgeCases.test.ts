@@ -277,7 +277,7 @@ describe('ADO provider config edge cases', () => {
       configValues = {
         organization: 'myorg',
         projects: ['ProjectA'],
-        refreshIntervalSeconds: 300,
+        refreshIntervalSeconds: 0, // Disable timers to prevent leaks in tests
       };
       configChangeListeners = [];
       mockRegisterProvider = vi.fn(() => ({ dispose: vi.fn() }));
@@ -307,8 +307,14 @@ describe('ADO provider config edge cases', () => {
 
       context = {
         globalStorageUri: { fsPath: 'mock-storage' },
-        subscriptions: [],
+        subscriptions: [] as { dispose: () => void }[],
       };
+    });
+
+    afterEach(() => {
+      for (const sub of context.subscriptions) {
+        sub.dispose();
+      }
     });
 
     it('does not register providers when organization is empty', async () => {
@@ -366,7 +372,7 @@ describe('ADO provider config edge cases', () => {
 
       expect(mockRegisterProvider).toHaveBeenCalledTimes(2);
 
-      configValues.refreshIntervalSeconds = 600;
+      configValues.refreshIntervalSeconds = 0;
       for (const listener of configChangeListeners) {
         listener({
           affectsConfiguration: (k: string) => k === 'workcenterAdo.refreshIntervalSeconds',

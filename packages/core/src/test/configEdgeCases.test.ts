@@ -2,8 +2,9 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { initLogger, setLogLevel, logger, LogLevel } from '../services/logger';
 
 // Mirrors the logLevelMap from extension.ts — tests verify the mapping + fallback behavior.
-// Intentionally duplicated to decouple test assertions from production code changes;
-// if the production map changes, these tests will surface the divergence.
+// Intentionally duplicated: these tests document the expected contract of the logLevel
+// config value. If the production map in extension.ts diverges, a developer updating these
+// tests will notice the mismatch.
 const logLevelMap: Record<string, LogLevel> = {
   debug: LogLevel.Debug,
   info: LogLevel.Info,
