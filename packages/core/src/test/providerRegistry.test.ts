@@ -425,7 +425,7 @@ describe('ProviderRegistry', () => {
     });
   });
 
-  describe('event coalescing and rapid updates', () => {
+  describe('rapid updates', () => {
     it('handles rapid item fires from the same provider', async () => {
       const provider = createMockProvider('rapid');
       registry.register(provider);
@@ -447,14 +447,16 @@ describe('ProviderRegistry', () => {
       const provider = createMockProvider('rapid');
       registry.register(provider);
 
+      // Wait for registration/refresh to fully complete
+      await vi.waitFor(() => expect(registry.loading).toBe(false));
+
       const listener = vi.fn();
       registry.onDidChangeDiscoveredItems(listener);
 
       provider.fireItems([{ externalId: '1', title: 'A' }]);
       provider.fireItems([{ externalId: '2', title: 'B' }]);
 
-      // Each fire triggers a change event; the loading-clear from refresh may also fire
-      await vi.waitFor(() => expect(listener.mock.calls.length).toBeGreaterThanOrEqual(2));
+      await vi.waitFor(() => expect(listener).toHaveBeenCalledTimes(2));
     });
 
     it('handles interleaved fires from multiple providers', async () => {
