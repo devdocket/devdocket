@@ -217,7 +217,7 @@ export class GitHubIssueProvider implements WorkCenterProvider {
       // Filter out pull requests (GitHub /issues endpoint returns both issues and PRs)
       const issues = items.filter(item => !item.pull_request);
       return { issues, failed: false };
-    } catch (err) {
+    } catch (err: unknown) {
       logger.error(`Failed to fetch issues for ${repo}`, err);
       return { issues: [], failed: true };
     }
