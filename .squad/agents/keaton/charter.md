@@ -32,7 +32,7 @@ Technical lead owning architecture decisions, code review, and scope for the Wor
 
 ## Key Architecture (Phase 1)
 
-- **Model:** `src/models/workItem.ts` — WorkItem interface, WorkItemState enum (7 states), WorkItemInput
+- **Model:** `src/models/workItem.ts` — WorkItem interface, WorkItemState enum (6 states), WorkItemInput
 - **Service:** `src/services/workGraph.ts` — in-memory Map, event-driven (`onDidChange`), delegates persistence to ITaskStore
 - **Storage:** `src/storage/jsonTaskStore.ts` — JSON file per item in globalStorageUri
 - **Views:** `src/views/inboxTreeProvider.ts` (Queue), `src/views/focusTreeProvider.ts` (Focus), `src/views/workItemEditorPanel.ts` (webview editor)
