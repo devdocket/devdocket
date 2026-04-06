@@ -44,44 +44,36 @@ function makeSourceItem(overrides: Partial<SourceItemNode> = {}): SourceItemNode
   };
 }
 
-function createMockWorkGraph(): {
-  [K in keyof WorkGraph]: Mock;
-} {
+type UsedWorkGraphMethods = Pick<
+  WorkGraph,
+  'transitionState' | 'getItem' | 'createItem' | 'findItemByProvenance' | 'moveItem'
+>;
+
+function createMockWorkGraph(): { [K in keyof UsedWorkGraphMethods]: Mock } {
   return {
     transitionState: vi.fn(),
     getItem: vi.fn(),
     createItem: vi.fn(async () => createWorkItem()),
     findItemByProvenance: vi.fn(),
     moveItem: vi.fn(),
-    load: vi.fn(),
-    getItemsByState: vi.fn(() => []),
-    updateItem: vi.fn(),
-    deleteItem: vi.fn(),
-    onDidChange: vi.fn(),
-  } as any;
+  };
 }
 
-function createMockActionRegistry(): {
-  [K in keyof ActionRegistry]: Mock;
-} {
+type UsedActionRegistryMethods = Pick<ActionRegistry, 'getActionsFor' | 'getAction'>;
+
+function createMockActionRegistry(): { [K in keyof UsedActionRegistryMethods]: Mock } {
   return {
     getActionsFor: vi.fn(() => []),
     getAction: vi.fn(),
-    register: vi.fn(),
-    dispose: vi.fn(),
-  } as any;
+  };
 }
 
-function createMockStateStore(): {
-  [K in keyof DiscoveredStateStore]: Mock;
-} {
+type UsedStateStoreMethods = Pick<DiscoveredStateStore, 'setState'>;
+
+function createMockStateStore(): { [K in keyof UsedStateStoreMethods]: Mock } {
   return {
     setState: vi.fn(),
-    getState: vi.fn(),
-    load: vi.fn(),
-    getAll: vi.fn(() => []),
-    onDidChange: vi.fn(),
-  } as any;
+  };
 }
 
 // ── test setup ───────────────────────────────────────────────────────
