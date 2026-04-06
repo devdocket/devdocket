@@ -1,6 +1,7 @@
 import * as vscode from 'vscode';
 import { AdoWorkItemProvider } from './adoWorkItemProvider';
 import { AdoPrReviewProvider } from './adoPrReviewProvider';
+import { validateRefreshInterval } from '@workcenter/shared';
 import { initLogger, setLogLevel, logger, LogLevel } from './logger';
 
 export async function activate(_context: vscode.ExtensionContext): Promise<void> {
@@ -77,7 +78,9 @@ export async function activate(_context: vscode.ExtensionContext): Promise<void>
 
     logger.debug(`Configuration: org=${org}, projects=[${projects.join(', ')}]`);
 
-    const intervalSeconds = config.get<number>('refreshIntervalSeconds', 300);
+    const intervalSeconds = validateRefreshInterval(
+      config.get<number>('refreshIntervalSeconds', 300), logger,
+    );
 
     workItemProvider = new AdoWorkItemProvider(org, projects);
     prProvider = new AdoPrReviewProvider(org, projects);
