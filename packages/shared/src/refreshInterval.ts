@@ -41,14 +41,14 @@ export function validateRefreshInterval(value: unknown, logger?: Logger): number
 
   if (num < MINIMUM_INTERVAL_SECONDS) {
     logger?.warn(
-      `Refresh interval clamped to minimum ${MINIMUM_INTERVAL_SECONDS} seconds`,
+      `Refresh interval clamped to minimum ${MINIMUM_INTERVAL_SECONDS} seconds (got ${num})`,
     );
     return MINIMUM_INTERVAL_SECONDS;
   }
 
   if (num > MAXIMUM_INTERVAL_SECONDS) {
     logger?.warn(
-      `Refresh interval clamped to maximum ${MAXIMUM_INTERVAL_SECONDS} seconds`,
+      `Refresh interval clamped to maximum ${MAXIMUM_INTERVAL_SECONDS} seconds (got ${num})`,
     );
     return MAXIMUM_INTERVAL_SECONDS;
   }
@@ -58,9 +58,19 @@ export function validateRefreshInterval(value: unknown, logger?: Logger): number
 
 function safeStringify(value: unknown): string {
   try {
+    if (typeof value === 'string') {
+      return JSON.stringify(value);
+    }
+    if (typeof value === 'object' && value !== null) {
+      return JSON.stringify(value) ?? String(value);
+    }
     return String(value);
   } catch {
-    return '[unrepresentable value]';
+    try {
+      return String(value);
+    } catch {
+      return '[unrepresentable value]';
+    }
   }
 }
 
