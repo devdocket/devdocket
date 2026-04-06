@@ -28,6 +28,10 @@ function transitionCommand(
   verb: string,
 ): (item: { id: string }) => Promise<void> {
   return async (item) => {
+    if (!item?.id) {
+      vscode.window.showInformationMessage('WorkCenter: Select a work item first.');
+      return;
+    }
     try {
       await workGraph.transitionState(item.id, targetState);
     } catch (err: unknown) {
@@ -69,6 +73,10 @@ export function registerCommands(
       transitionCommand(workGraph, WorkItemState.WaitingOn, 'mark as waiting'),
     ),
     vscode.commands.registerCommand('workcenter.editItem', (item) => {
+      if (!item?.id) {
+        vscode.window.showInformationMessage('WorkCenter: Select a work item first.');
+        return;
+      }
       try {
         const workItem = workGraph.getItem(item.id);
         if (workItem) {
@@ -79,8 +87,12 @@ export function registerCommands(
       }
     }),
     vscode.commands.registerCommand('workcenter.openInBrowser', (item) => {
+      if (!item?.id && !item?.url) {
+        vscode.window.showInformationMessage('WorkCenter: Select a work item first.');
+        return;
+      }
       try {
-        const workItem = workGraph.getItem(item.id);
+        const workItem = item?.id ? workGraph.getItem(item.id) : undefined;
         if (workItem?.url) {
           vscode.env.openExternal(vscode.Uri.parse(workItem.url));
         } else if (item.url) {
@@ -91,6 +103,10 @@ export function registerCommands(
       }
     }),
     vscode.commands.registerCommand('workcenter.runAction', async (item) => {
+      if (!item?.id) {
+        vscode.window.showInformationMessage('WorkCenter: Select a work item first.');
+        return;
+      }
       // Outer: guards registry/UI lookup errors
       try {
         const workItem = workGraph.getItem(item.id);
@@ -148,12 +164,21 @@ export function registerCommands(
       }
     }),
     vscode.commands.registerCommand('workcenter.acceptFromInbox', async (item: InboxItem) => {
+      if (!item?.providerId || !item?.externalId) {
+        vscode.window.showInformationMessage('WorkCenter: Select an item in the Inbox first.');
+        return;
+      }
       logger.info(`Accepting inbox item: ${item.externalId} from ${item.providerId}`);
       const existing = workGraph.findItemByProvenance(item.providerId, item.externalId);
       if (existing) {
         vscode.window.showInformationMessage(
           `WorkCenter: Item already accepted as "${existing.title}"`
         );
+        try {
+          await stateStore.setState(item.providerId, item.externalId, 'accepted');
+        } catch (err: unknown) {
+          handleCommandError('Failed to update state after accepting item', err);
+        }
         return;
       }
       try {
@@ -172,6 +197,10 @@ export function registerCommands(
       }
     }),
     vscode.commands.registerCommand('workcenter.dismissFromInbox', async (item: InboxItem) => {
+      if (!item?.providerId || !item?.externalId) {
+        vscode.window.showInformationMessage('WorkCenter: Select an item in the Inbox first.');
+        return;
+      }
       try {
         logger.info(`Dismissing inbox item: ${item.externalId}`);
         await stateStore.setState(item.providerId, item.externalId, 'dismissed');
@@ -180,6 +209,10 @@ export function registerCommands(
       }
     }),
     vscode.commands.registerCommand('workcenter.acceptFromSources', async (item: SourceItemNode) => {
+      if (!item?.providerId || !item?.externalId) {
+        vscode.window.showInformationMessage('WorkCenter: Select an item in Sources first.');
+        return;
+      }
       logger.info(`Accepting sources item: ${item.externalId}`);
       const existing = workGraph.findItemByProvenance(item.providerId, item.externalId);
       if (existing) {
