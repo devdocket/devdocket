@@ -530,7 +530,8 @@ describe('DiscoveredStateStore', () => {
       const records = await store.loadAll();
       expect(records).toHaveLength(1);
       expect(store.getState('a', 'b::c')).toBe('accepted');
-      // The original entry is no longer retrievable under its own ids
+      // The original entry is no longer retrievable correctly/uniquely
+      // under its own ids; that lookup now returns the overwritten state.
       expect(store.getState('a::b', 'c')).toBe('accepted');
     });
 
@@ -541,7 +542,7 @@ describe('DiscoveredStateStore', () => {
       expect(records).toHaveLength(1);
     });
 
-    it('loadAll returns a snapshot copy of cache values', async () => {
+    it('loadAll returns array independent of future setState calls', async () => {
       await store.setState('gh', 'issue-1', 'unseen');
 
       const records1 = await store.loadAll();
