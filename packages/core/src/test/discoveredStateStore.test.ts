@@ -170,12 +170,16 @@ describe('DiscoveredStateStore', () => {
       expect(records[0].externalId).toBe('issue-2');
     });
 
-    it('should return empty for non-array JSON', async () => {
+    it('should return empty for non-array JSON and back up', async () => {
       const filePath = path.join(tmpDir, 'discovered-state.json');
       await fs.writeFile(filePath, JSON.stringify({ not: 'an array' }), 'utf-8');
 
       const records = await store.loadAll();
       expect(records).toEqual([]);
+
+      const files = await fs.readdir(tmpDir);
+      const backupFiles = files.filter(f => f.startsWith('discovered-state.json.corrupt.'));
+      expect(backupFiles).toHaveLength(1);
     });
 
     it('should skip non-object entries', async () => {

@@ -249,13 +249,17 @@ describe('JsonTaskStore', () => {
       expect(items[0].id).toBe('valid');
     });
 
-    it('returns empty when file contains a non-array JSON value', async () => {
+    it('returns empty when file contains a non-array JSON value and backs up', async () => {
       const filePath = path.join(tmpDir, 'workitems.json');
       await fs.mkdir(tmpDir, { recursive: true });
       await fs.writeFile(filePath, JSON.stringify({ not: 'an array' }), 'utf-8');
 
       const items = await store.loadAll();
       expect(items).toEqual([]);
+
+      const files = await fs.readdir(tmpDir);
+      const backupFiles = files.filter(f => f.startsWith('workitems.json.corrupt.'));
+      expect(backupFiles).toHaveLength(1);
     });
 
     it('skips items missing createdAt', async () => {

@@ -68,8 +68,10 @@ export class JsonTaskStore implements ITaskStore {
         return [];
       }
       if (!Array.isArray(parsed)) {
-        logger.warn('Work items file does not contain an array — resetting to empty');
-        parsed = [];
+        logger.warn('Work items file does not contain an array — backing up and resetting to empty');
+        await this.backupCorruptedFile();
+        this.cache = new Map();
+        return [];
       }
       // Validate each item and discard invalid entries
       const items: WorkItem[] = [];

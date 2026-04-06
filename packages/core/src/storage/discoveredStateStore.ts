@@ -125,7 +125,8 @@ export class DiscoveredStateStore {
         return;
       }
       if (!Array.isArray(parsed)) {
-        logger.warn('Discovered state file does not contain an array — resetting to empty');
+        logger.warn('Discovered state file does not contain an array — backing up and resetting to empty');
+        await this.backupCorruptedFile();
         this.cache.clear();
         this.loaded = true;
         return;
