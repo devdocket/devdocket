@@ -8,7 +8,7 @@ export interface WorkItem {
   id: string;
   title: string;
   description?: string;
-  state: 'New' | 'Triaged' | 'InProgress' | 'Blocked' | 'WaitingOn' | 'Done' | 'Archived';
+  state: 'New' | 'Triaged' | 'InProgress' | 'Paused' | 'Done' | 'Archived';
   providerId?: string;
   externalId?: string;
   url?: string;
@@ -28,7 +28,7 @@ export interface WorkCenterProvider {
   readonly label: string;
   readonly resurfaceDismissed?: boolean;
   readonly onDidDiscoverItems: Event<DiscoveredItem[]>;
-  refresh(): Promise<void>;
+  refresh(token?: import('vscode').CancellationToken): Promise<void>;
 }
 
 interface Event<T> {
