@@ -260,6 +260,15 @@ describe('registerCommands', () => {
 
       expect(vscode.env.openExternal).not.toHaveBeenCalled();
     });
+
+    it('falls back to tree node url when workItem is not found', () => {
+      workGraph.getItem.mockReturnValue(undefined);
+
+      invoke('workcenter.openInBrowser', { id: 'wc-gone', url: 'https://tree-fallback.com' });
+
+      expect(vscode.Uri.parse).toHaveBeenCalledWith('https://tree-fallback.com');
+      expect(vscode.env.openExternal).toHaveBeenCalled();
+    });
   });
 
   // ── runAction ────────────────────────────────────────────────────
