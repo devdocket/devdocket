@@ -58,16 +58,14 @@ export class InboxTreeProvider implements vscode.TreeDataProvider<InboxElement> 
     const discoveredItems = this.providerRegistry.getAllDiscoveredItems();
     if (discoveredItems.size === 0) { return; }
 
-    // Skip pruning if no provider has any discovered items yet (e.g.
-    // all initial refreshes failed), so transient failures don't wipe state.
-    let totalItems = 0;
-    for (const [, items] of discoveredItems) {
-      totalItems += items.length;
-    }
-    if (totalItems === 0) { return; }
-
+    // Build current inbox keys, scoped to providers that have items.
+    // Providers with empty item arrays (e.g. failed refresh) are excluded
+    // so their read-state keys are preserved.
     const currentKeys = new Set<string>();
+    const activeProviderIds = new Set<string>();
     for (const [providerId, items] of discoveredItems) {
+      if (items.length === 0) { continue; }
+      activeProviderIds.add(providerId);
       for (const item of items) {
         const state = this.stateStore.getState(providerId, item.externalId);
         if (state === undefined || state === 'unseen') {
@@ -75,17 +73,18 @@ export class InboxTreeProvider implements vscode.TreeDataProvider<InboxElement> 
         }
       }
     }
-    const deletedKeys: string[] = [];
+    if (activeProviderIds.size === 0) { return; }
+
+    const keysToDelete: string[] = [];
     for (const key of this.readStateStore.keys()) {
-      if (!currentKeys.has(key)) {
-        deletedKeys.push(key);
+      const providerId = key.split('::')[0];
+      // Only prune keys belonging to providers that have active items
+      if (activeProviderIds.has(providerId) && !currentKeys.has(key)) {
+        keysToDelete.push(key);
       }
     }
-    if (deletedKeys.length > 0) {
-      for (const key of deletedKeys) {
-        this.readStateStore.delete(key);
-      }
-      this.readStateStore.saveWithRollback(deletedKeys);
+    if (keysToDelete.length > 0) {
+      this.readStateStore.deleteMany(keysToDelete);
     }
   }
 

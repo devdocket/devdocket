@@ -55,9 +55,10 @@ function createMockReadStateStore() {
       items.add(key);
       return true;
     }),
-    delete: vi.fn((key: string) => items.delete(key)),
+    deleteMany: vi.fn((keys: string[]) => {
+      for (const key of keys) { items.delete(key); }
+    }),
     keys: vi.fn(() => items.values()),
-    saveWithRollback: vi.fn(),
     load: vi.fn(async () => {}),
   };
 }
