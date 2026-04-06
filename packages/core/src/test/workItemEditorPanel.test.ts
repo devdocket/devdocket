@@ -137,8 +137,9 @@ describe('WorkItemEditorPanel – concurrent autosave', () => {
   });
 
   // 2. Overlapping in-flight saves with out-of-order completion
-  //    (simulates the race where an earlier save finishes after a later one)
-  it('keeps the newest autosave as the final persisted update when saves resolve out of order', async () => {
+  //    Demonstrates the current race: when an earlier save resolves after a
+  //    later one, the earlier value overwrites the newer one.
+  it('demonstrates that out-of-order save resolution lets an older value overwrite a newer one', async () => {
     const deferred = () => {
       let resolve!: () => void;
       const promise = new Promise<void>((r) => {
@@ -221,17 +222,24 @@ describe('WorkItemEditorPanel – concurrent autosave', () => {
   });
 
   // 5. Extension host saves immediately (no server-side debounce)
-  //    The 500ms debounce lives in the webview JS. The extension host receives
-  //    the post-debounce message and saves immediately. Here we verify that
-  //    the server-side handler does NOT add its own delay — every message
-  //    triggers an immediate updateItem call.
+  //    Uses fake timers to prove updateItem is called without advancing timers.
   it('saves immediately on each received message (no server-side debounce)', async () => {
-    await panel.simulateAutosave({ title: 'fast', notes: '' });
-    // updateItem should already have been called synchronously (awaited)
-    expect(workGraph.updateItem).toHaveBeenCalledTimes(1);
+    vi.useFakeTimers();
+    try {
+      const firstSave = panel.simulateAutosave({ title: 'fast', notes: '' });
+      // If the extension host added its own debounce/timer, this would still be 0
+      // until timers were advanced. We expect the save to happen immediately.
+      expect(workGraph.updateItem).toHaveBeenCalledTimes(1);
+      await vi.runAllTimersAsync();
+      await firstSave;
 
-    await panel.simulateAutosave({ title: 'faster', notes: '' });
-    expect(workGraph.updateItem).toHaveBeenCalledTimes(2);
+      const secondSave = panel.simulateAutosave({ title: 'faster', notes: '' });
+      expect(workGraph.updateItem).toHaveBeenCalledTimes(2);
+      await vi.runAllTimersAsync();
+      await secondSave;
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   // 6. Last value wins after a burst of updates
@@ -248,25 +256,33 @@ describe('WorkItemEditorPanel – concurrent autosave', () => {
 
   // 7. Save after panel disposal does not crash and does not save
   it('does not crash or save when a message arrives after disposal', async () => {
+    // First prove autosave is wired up before disposal.
+    await panel.simulateAutosave({ title: 'before dispose', notes: '' });
+    expect(workGraph.updateItem).toHaveBeenCalledTimes(1);
+
     panel.simulateDispose();
 
-    // Sending a message after dispose should resolve without throwing
+    // Sending a message after dispose should resolve without throwing.
     await expect(
       panel.simulateAutosave({ title: 'too late', notes: '' }),
     ).resolves.toBeUndefined();
 
-    // No save should be performed after disposal.
-    expect(workGraph.updateItem).not.toHaveBeenCalled();
+    // No additional save should be performed after disposal.
+    expect(workGraph.updateItem).toHaveBeenCalledTimes(1);
   });
 
   it('does not update panel title after disposal', async () => {
-    panel.title = 'Edit: Original Title';
+    // First prove title updates happen while the panel is active.
+    await panel.simulateAutosave({ title: 'Before Dispose', notes: '' });
+    expect(panel.title).toBe('Edit: Before Dispose');
+
     panel.simulateDispose();
+    const titleAtDisposal = panel.title;
 
     await panel.simulateAutosave({ title: 'Ghost', notes: '' });
 
-    // Panel title should remain unchanged because disposed === true
-    expect(panel.title).toBe('Edit: Original Title');
+    // Panel title should remain unchanged after disposal.
+    expect(panel.title).toBe(titleAtDisposal);
   });
 
   // 8. Concurrent title + notes update (different fields, same item)
