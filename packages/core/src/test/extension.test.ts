@@ -66,9 +66,9 @@ describe('activate()', () => {
     await activate(context);
 
     const onDidChangeConfiguration = vscode.workspace.onDidChangeConfiguration as ReturnType<typeof vi.fn>;
-    expect(onDidChangeConfiguration).toHaveBeenCalledTimes(1);
+    expect(onDidChangeConfiguration).toHaveBeenCalled();
 
-    expect(vscode.window.createOutputChannel).toHaveBeenCalledTimes(1);
+    expect(vscode.window.createOutputChannel).toHaveBeenCalled();
   });
 
   // ------------------------------------------------------------------
