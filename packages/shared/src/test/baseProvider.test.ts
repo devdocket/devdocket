@@ -135,6 +135,20 @@ describe('BaseProvider', () => {
 
       provider.dispose();
     });
+
+    it('does not stop existing timer when called with invalid interval', async () => {
+      const provider = new TestProvider(createMockEmitter());
+
+      provider.startPeriodicRefresh(60);
+
+      // Calling with invalid interval should not affect the running timer
+      provider.startPeriodicRefresh(0);
+
+      await vi.advanceTimersByTimeAsync(60_000);
+      expect(provider.backgroundRefreshCalls).toBe(1);
+
+      provider.dispose();
+    });
   });
 
   describe('stopPeriodicRefresh', () => {
