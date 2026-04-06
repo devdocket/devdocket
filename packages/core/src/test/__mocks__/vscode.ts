@@ -93,9 +93,38 @@ class MockDataTransferItem {
 }
 
 class MockDataTransfer {
-  private items = new Map<string, MockDataTransferItem>();
+  private readonly items = new Map<string, MockDataTransferItem>();
   get(mimeType: string): MockDataTransferItem | undefined { return this.items.get(mimeType); }
   set(mimeType: string, value: MockDataTransferItem): void { this.items.set(mimeType, value); }
+}
+
+class MockCancellationTokenSource {
+  private _listeners: Function[] = [];
+  token = {
+    isCancellationRequested: false,
+    onCancellationRequested: (listener: Function) => {
+      if (this.token.isCancellationRequested) {
+        listener();
+      } else {
+        this._listeners.push(listener);
+      }
+      return { dispose: () => { this._listeners = this._listeners.filter(l => l !== listener); } };
+    },
+  };
+  cancel() {
+    if (this.token.isCancellationRequested) {
+      return;
+    }
+    this.token.isCancellationRequested = true;
+    const listeners = this._listeners.slice();
+    this._listeners = [];
+    for (const listener of listeners) {
+      listener();
+    }
+  }
+  dispose() {
+    this._listeners = [];
+  }
 }
 
 class MockDisposable {
@@ -118,6 +147,7 @@ export {
   MockTreeItem as TreeItem,
   MockDataTransferItem as DataTransferItem,
   MockDataTransfer as DataTransfer,
+  MockCancellationTokenSource as CancellationTokenSource,
   MockDisposable as Disposable,
   TreeItemCollapsibleState,
   window,

@@ -24,7 +24,7 @@ interface WorkCenterProvider {
   readonly label: string;
   readonly resurfaceDismissed?: boolean;
   readonly onDidDiscoverItems: Event<DiscoveredItem[]>;
-  refresh(): Promise<void>;
+  refresh(token?: vscode.CancellationToken): Promise<void>;
 }
 
 interface GitHubIssue {
@@ -71,7 +71,7 @@ export class GitHubPrReviewProvider implements WorkCenterProvider {
     }
   }
 
-  async refresh(): Promise<void> {
+  async refresh(token?: vscode.CancellationToken): Promise<void> {
     if (this._isRefreshing) {
       return;
     }
@@ -79,6 +79,10 @@ export class GitHubPrReviewProvider implements WorkCenterProvider {
     this._isRefreshing = true;
     logger.info('Fetching PR review requests...');
     try {
+      if (token?.isCancellationRequested) {
+        return;
+      }
+
       let session: vscode.AuthenticationSession | undefined;
       try {
         session = await vscode.authentication.getSession('github', ['repo'], {
@@ -91,8 +95,10 @@ export class GitHubPrReviewProvider implements WorkCenterProvider {
         return;
       }
 
-      if (!session) {
-        logger.info('User cancelled GitHub authentication');
+      if (!session || token?.isCancellationRequested) {
+        if (!session) {
+          logger.info('User cancelled GitHub authentication');
+        }
         return;
       }
 
