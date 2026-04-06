@@ -37,18 +37,19 @@ export interface DiscoveredItem {
   title: string;
   /** Optional longer description of the item. */
   description?: string;
-  /** URL linking to the external resource. */
+  /** Optional URL linking back to the item in its source system. */
   url?: string;
-  /** Optional grouping label used to organize items in the Sources tree view. */
+  /** Optional grouping key used to organize items in the UI (e.g. in the Inbox and Sources views). */
   group?: string;
 }
 
 /**
- * A provider that discovers work items from an external source.
+ * A provider that discoverswork items from an external source.
  *
  * Providers are registered via {@link WorkCenterApi.registerProvider} and emit
  * {@link DiscoveredItem} arrays when new items are found. The core extension
- * tracks inbox state for each discovered item.
+ * reads discovered item metadata live from the provider and does not persist it;
+ * only inbox state is persisted.
  *
  * @example
  * ```ts
@@ -70,24 +71,24 @@ export interface WorkCenterProvider {
   /** Human-readable display name shown in the UI. */
   readonly label: string;
   /**
-   * When `true`, previously dismissed items are resurfaced as `unseen`
-   * if the provider rediscovers them. Defaults to `false`.
+   * When `true`, previously dismissed items are reset to unseen on the next
+   * refresh, allowing them to reappear in the Inbox. Defaults to `false`.
    */
   readonly resurfaceDismissed?: boolean;
   /** Event fired when the provider discovers or refreshes its item list. */
   readonly onDidDiscoverItems: Event<DiscoveredItem[]>;
   /**
-   * Fetch the latest items from the external source.
+   * Re-fetch items from the external source.
    * Implementations should fire {@link onDidDiscoverItems} with the results.
    */
   refresh(): Promise<void>;
 }
 
 /**
- * An action that can be performed on a {@link WorkItem}.
+ * A context-menu actionthat can be run against a {@link WorkItem}.
  *
- * Actions are registered via {@link WorkCenterApi.registerAction} and appear
- * dynamically in context menus for work items where {@link canRun} returns `true`.
+ * Actions are registered via {@link WorkCenterApi.registerAction} and surfaced
+ * dynamically — {@link canRun} is called to determine visibility.
  *
  * @example
  * ```ts
@@ -103,7 +104,7 @@ export interface WorkCenterProvider {
 export interface WorkCenterAction {
   /** Unique identifier for this action (e.g. `'start-work'`). */
   readonly id: string;
-  /** Human-readable label displayed in context menus. */
+  /** Label shown in the context menu. */
   readonly label: string;
   /**
    * Determine whether this action is applicable to the given work item.
@@ -121,10 +122,11 @@ export interface WorkCenterAction {
 }
 
 /**
- * Public API surface of the WorkCenter extension.
+ * Public API surfaceof the WorkCenter extension.
  *
- * Returned by {@link activate} and consumed by provider extensions via
- * `vscode.extensions.getExtension('mthalman.workcenter')`.
+ * Obtain this API from the core extension by getting its extension wrapper via
+ * `vscode.extensions.getExtension('mthalman.workcenter')`, then activating it
+ * with `await extension.activate()` (or reading `extension.exports` after activation).
  *
  * @example
  * ```ts

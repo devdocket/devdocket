@@ -1,28 +1,30 @@
 /**
  * Lifecycle states for a {@link WorkItem}.
  *
- * Items move through these states following the work-item state machine:
+ * Items move throughthese states following the work-item state machine:
  *
  * ```
  * New → Triaged → InProgress → Done → Archived
  *                   ↕    ↕
  *               Blocked  WaitingOn
  * ```
+ *
+ * `Triaged` is reserved for future use and is not currently used in the UI flow.
  */
 export enum WorkItemState {
-  /** Freshly created item that has not yet been triaged. */
+  /** Freshly created or accepted from the Inbox; sits in the Queue. */
   New = 'New',
-  /** Item has been reviewed and accepted into the queue. */
+  /** Reserved for future use; not currently used in the UI flow. */
   Triaged = 'Triaged',
-  /** Item is actively being worked on (appears in Focus view). */
+  /** Actively being worked on; shown in the Focus view. */
   InProgress = 'InProgress',
-  /** Work is blocked by an impediment (appears in Focus view). */
+  /** Work is stalled on an impediment; shown in the Focus view. */
   Blocked = 'Blocked',
-  /** Waiting on an external party or event (appears in Focus view). */
+  /** Waiting on an external party; shown in the Focus view. */
   WaitingOn = 'WaitingOn',
-  /** Work is complete (appears in History view). */
+  /** Work is complete; shown in History. */
   Done = 'Done',
-  /** Item has been archived and hidden from the default History view. */
+  /** Removed from active views; retained in History for reference. */
   Archived = 'Archived',
 }
 
@@ -34,25 +36,25 @@ export enum WorkItemState {
  * {@link externalId} so they can be correlated with the live provider data.
  */
 export interface WorkItem {
-  /** Unique identifier (UUID) for this work item. */
+  /** Unique identifier (auto-generated on creation). */
   id: string;
   /** Short human-readable title displayed in tree views. */
   title: string;
-  /** Optional free-form notes or description entered by the user. */
+  /** Optional free-form notes or description. */
   notes?: string;
   /** Current lifecycle state of the work item. */
   state: WorkItemState;
-  /** Identifier of the provider that originally discovered this item, if any. */
+  /** ID of the provider that originally discovered this item, if any. */
   providerId?: string;
   /** Provider-scoped identifier used to correlate with {@link DiscoveredItem.externalId}. */
   externalId?: string;
-  /** URL linking to the external resource (e.g. GitHub issue page). */
+  /** URL to the item in its source system (e.g. GitHub issue page). */
   url?: string;
-  /** Position within the queue for manual ordering. Lower values appear first. */
+  /** Ordering key within items of the same state. Lower values sort first. */
   sortOrder?: number;
-  /** Unix epoch timestamp (ms) of when the item was created. */
+  /** Epoch timestamp (ms) when the item was created. */
   createdAt: number;
-  /** Unix epoch timestamp (ms) of the last state or content change. */
+  /** Epoch timestamp (ms) of the last modification. */
   updatedAt: number;
 }
 
