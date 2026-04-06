@@ -188,6 +188,10 @@ describe('WorkItemEditorPanel – concurrent autosave', () => {
       'item-1',
       expect.objectContaining({ title: 'v2' }),
     );
+    // When the first save resolves last, it overwrites item.title with v1.
+    // This demonstrates the race condition: the final persisted state depends
+    // on resolution order, not message order.
+    expect(item.title).toBe('v1');
   });
 
   // 3. Multiple save messages arriving before debounce timer fires
@@ -204,7 +208,7 @@ describe('WorkItemEditorPanel – concurrent autosave', () => {
     expect(workGraph.updateItem).toHaveBeenCalledTimes(4);
   });
 
-  // 3. Title and notes updates interleaved rapidly
+  // 4. Title and notes updates interleaved rapidly
   it('handles interleaved title and notes updates', async () => {
     await panel.simulateAutosave({ title: 'T1', notes: '' });
     await panel.simulateAutosave({ title: 'T1', notes: 'N1' });
@@ -216,7 +220,7 @@ describe('WorkItemEditorPanel – concurrent autosave', () => {
     expect(workGraph.updateItem).toHaveBeenLastCalledWith('item-1', { title: 'T2', notes: 'N2' });
   });
 
-  // 4. Debounce timer correctly delays save until user stops typing
+  // 5. Extension host saves immediately (no server-side debounce)
   //    The 500ms debounce lives in the webview JS. The extension host receives
   //    the post-debounce message and saves immediately. Here we verify that
   //    the server-side handler does NOT add its own delay — every message
@@ -230,7 +234,7 @@ describe('WorkItemEditorPanel – concurrent autosave', () => {
     expect(workGraph.updateItem).toHaveBeenCalledTimes(2);
   });
 
-  // 5. Last value wins after a burst of updates
+  // 6. Last value wins after a burst of updates
   it('uses last value wins semantics after a burst of updates', async () => {
     await panel.simulateAutosave({ title: 'draft-1', notes: '' });
     await panel.simulateAutosave({ title: 'draft-2', notes: '' });
@@ -242,7 +246,7 @@ describe('WorkItemEditorPanel – concurrent autosave', () => {
     expect(item.title).toBe('final');
   });
 
-  // 6. Save after panel disposal does not crash and does not save
+  // 7. Save after panel disposal does not crash and does not save
   it('does not crash or save when a message arrives after disposal', async () => {
     panel.simulateDispose();
 
@@ -265,7 +269,7 @@ describe('WorkItemEditorPanel – concurrent autosave', () => {
     expect(panel.title).toBe('Edit: Original Title');
   });
 
-  // 7. Concurrent title + notes update (different fields, same item)
+  // 8. Concurrent title + notes update (different fields, same item)
   it('applies title and notes from the same message', async () => {
     await panel.simulateAutosave({ title: 'New Title', notes: 'Some notes' });
 
