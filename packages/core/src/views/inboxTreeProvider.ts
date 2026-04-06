@@ -33,7 +33,6 @@ export class InboxTreeProvider implements vscode.TreeDataProvider<InboxElement> 
   readonly onDidChangeTreeData = this._onDidChangeTreeData.event;
   private readonly disposables: vscode.Disposable[] = [];
   private readonly seenItems = new Set<string>();
-  private currentInboxKeys = new Set<string>();
   private refreshTimer: ReturnType<typeof setTimeout> | undefined;
   static readonly REFRESH_DEBOUNCE_MS = 50;
 

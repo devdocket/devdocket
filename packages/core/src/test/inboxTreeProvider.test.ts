@@ -409,5 +409,24 @@ describe('InboxTreeProvider', () => {
       vi.advanceTimersByTime(DEBOUNCE_MS);
       expect(listener).toHaveBeenCalledTimes(1);
     });
+
+    it('should cancel pending refresh on dispose', () => {
+      const listener = vi.fn();
+      provider.onDidChangeTreeData(listener);
+      registry._fire();
+      provider.dispose();
+      vi.advanceTimersByTime(DEBOUNCE_MS);
+      expect(listener).not.toHaveBeenCalled();
+    });
+
+    it('should not fire refresh before debounce window elapses', () => {
+      const listener = vi.fn();
+      provider.onDidChangeTreeData(listener);
+      registry._fire();
+      vi.advanceTimersByTime(DEBOUNCE_MS - 1);
+      expect(listener).not.toHaveBeenCalled();
+      vi.advanceTimersByTime(1);
+      expect(listener).toHaveBeenCalledTimes(1);
+    });
   });
 });
