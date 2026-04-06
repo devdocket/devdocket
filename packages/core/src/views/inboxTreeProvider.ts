@@ -52,6 +52,10 @@ export class InboxTreeProvider implements vscode.TreeDataProvider<InboxElement> 
   }
 
   private pruneSeenItems(): void {
+    // Skip pruning while providers are still loading to avoid
+    // wiping persisted read-state before discovery completes.
+    if (this.providerRegistry.loading) { return; }
+
     const currentKeys = new Set<string>();
     for (const [providerId, items] of this.providerRegistry.getAllDiscoveredItems()) {
       for (const item of items) {

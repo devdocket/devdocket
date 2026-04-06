@@ -28,7 +28,9 @@ function createMockProviderRegistry() {
   const items = new Map<string, DiscoveredItem[]>();
   const labels = new Map<string, string>();
   const emitter = new EventEmitter<void>();
+  let _loading = false;
   return {
+    get loading() { return _loading; },
     getAllDiscoveredItems: vi.fn(() => items),
     getDiscoveredItems: vi.fn((id: string) => items.get(id) ?? []),
     getProviderLabel: vi.fn((id: string) => labels.get(id) ?? id),
@@ -39,6 +41,7 @@ function createMockProviderRegistry() {
     _setLabel: (providerId: string, label: string) => {
       labels.set(providerId, label);
     },
+    _setLoading: (val: boolean) => { _loading = val; },
     _fire: () => emitter.fire(),
   };
 }
@@ -404,6 +407,25 @@ describe('InboxTreeProvider', () => {
       provider.onDidChangeTreeData(listener);
       stateStore._fire();
       expect(listener).toHaveBeenCalledTimes(1);
+    });
+
+    it('should skip pruning seenItems while providers are loading', async () => {
+      registry._setItems('gh', [{ externalId: '1', title: 'Bug' }]);
+      await provider.markSeen('gh', '1');
+
+      // Simulate provider re-registration: items temporarily empty, loading=true
+      registry._setItems('gh', []);
+      registry._setLoading(true);
+      registry._fire();
+
+      // After loading completes, items come back
+      registry._setItems('gh', [{ externalId: '1', title: 'Bug' }]);
+      registry._setLoading(false);
+      registry._fire();
+
+      // Item should still be seen because pruning was skipped while loading
+      const item: InboxItem = { kind: 'item', providerId: 'gh', externalId: '1', title: 'Bug' };
+      expect((provider.getTreeItem(item).iconPath as any).id).toBe('circle-outline');
     });
   });
 });
