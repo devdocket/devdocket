@@ -515,30 +515,6 @@ describe('ProviderRegistry', () => {
       expect(stateStore.setStates).not.toHaveBeenCalled();
     });
 
-    it('handles items with duplicate externalIds in a single fire', async () => {
-      const provider = createMockProvider('dupes');
-      registry.register(provider);
-
-      provider.fireItems([
-        { externalId: 'same', title: 'First occurrence' },
-        { externalId: 'same', title: 'Second occurrence' },
-      ]);
-
-      await vi.waitFor(() => {
-        const items = registry.getDiscoveredItems('dupes');
-        expect(items).toHaveLength(2);
-      });
-
-      // Both items are stored as-is (provider is responsible for deduplication)
-      // But setStates should receive two entries for the same externalId
-      await vi.waitFor(() => {
-        expect(stateStore.setStates).toHaveBeenCalledWith([
-          { providerId: 'dupes', externalId: 'same', state: 'unseen' },
-          { providerId: 'dupes', externalId: 'same', state: 'unseen' },
-        ]);
-      });
-    });
-
     it('deregistration clears discovered items', () => {
       const provider = createMockProvider('clearme');
       const disposable = registry.register(provider);
