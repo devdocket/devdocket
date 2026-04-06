@@ -323,6 +323,10 @@ describe('GitHubPrReviewProvider — error handling', () => {
   // ── Periodic refresh resilience ─────────────────────────────────────
 
   describe('periodic refresh continues after transient errors', () => {
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
     it('periodic refresh continues after a fetch rejection', async () => {
       vi.useFakeTimers();
 
@@ -343,8 +347,6 @@ describe('GitHubPrReviewProvider — error handling', () => {
       vi.advanceTimersByTime(60_000);
       await vi.advanceTimersByTimeAsync(0);
       expect(refreshSpy).toHaveBeenCalledTimes(2);
-
-      vi.useRealTimers();
     });
 
     it('periodic refresh continues after auth failure', async () => {
@@ -367,8 +369,6 @@ describe('GitHubPrReviewProvider — error handling', () => {
       vi.advanceTimersByTime(60_000);
       await vi.advanceTimersByTimeAsync(0);
       expect(refreshSpy).toHaveBeenCalledTimes(2);
-
-      vi.useRealTimers();
     });
   });
 
