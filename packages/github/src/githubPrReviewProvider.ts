@@ -65,7 +65,7 @@ export class GitHubPrReviewProvider implements WorkCenterProvider {
    */
   startPeriodicRefresh(intervalSeconds: number): void {
     this.stopPeriodicRefresh();
-    if (intervalSeconds <= 0) {
+    if (!Number.isFinite(intervalSeconds) || intervalSeconds <= 0) {
       return;
     }
     // Clamp to minimum of 60 seconds
