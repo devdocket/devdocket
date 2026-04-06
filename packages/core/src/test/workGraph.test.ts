@@ -387,5 +387,54 @@ describe('WorkGraph', () => {
       expect(found).toBeDefined();
       expect(found!.id).toBe(item.id);
     });
+
+    it('keeps first item indexed when duplicates are created', async () => {
+      const first = await graph.createItem(
+        { title: 'First' },
+        { providerId: 'gh', externalId: 'dup' },
+      );
+      const second = await graph.createItem(
+        { title: 'Second' },
+        { providerId: 'gh', externalId: 'dup' },
+      );
+
+      const found = graph.findItemByProvenance('gh', 'dup');
+      expect(found).toBeDefined();
+      expect(found!.id).toBe(first.id);
+    });
+
+    it('deleting unindexed duplicate does not remove indexed entry', async () => {
+      const first = await graph.createItem(
+        { title: 'First' },
+        { providerId: 'gh', externalId: 'dup' },
+      );
+      const second = await graph.createItem(
+        { title: 'Second' },
+        { providerId: 'gh', externalId: 'dup' },
+      );
+
+      await graph.deleteItem(second.id);
+
+      const found = graph.findItemByProvenance('gh', 'dup');
+      expect(found).toBeDefined();
+      expect(found!.id).toBe(first.id);
+    });
+
+    it('deleting indexed item re-points to remaining duplicate', async () => {
+      const first = await graph.createItem(
+        { title: 'First' },
+        { providerId: 'gh', externalId: 'dup' },
+      );
+      const second = await graph.createItem(
+        { title: 'Second' },
+        { providerId: 'gh', externalId: 'dup' },
+      );
+
+      await graph.deleteItem(first.id);
+
+      const found = graph.findItemByProvenance('gh', 'dup');
+      expect(found).toBeDefined();
+      expect(found!.id).toBe(second.id);
+    });
   });
 });
