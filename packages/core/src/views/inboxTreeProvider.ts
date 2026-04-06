@@ -52,12 +52,14 @@ export class InboxTreeProvider implements vscode.TreeDataProvider<InboxElement> 
   }
 
   private pruneSeenItems(): void {
-    // Skip pruning while providers are still loading to avoid
-    // wiping persisted read-state before discovery completes.
+    // Skip pruning while providers are still loading or temporarily
+    // unregistered to avoid wiping persisted read-state.
     if (this.providerRegistry.loading) { return; }
+    const discoveredItems = this.providerRegistry.getAllDiscoveredItems();
+    if (discoveredItems.size === 0) { return; }
 
     const currentKeys = new Set<string>();
-    for (const [providerId, items] of this.providerRegistry.getAllDiscoveredItems()) {
+    for (const [providerId, items] of discoveredItems) {
       for (const item of items) {
         const state = this.stateStore.getState(providerId, item.externalId);
         if (state === undefined || state === 'unseen') {
@@ -65,15 +67,17 @@ export class InboxTreeProvider implements vscode.TreeDataProvider<InboxElement> 
         }
       }
     }
-    let changed = false;
+    const deletedKeys: string[] = [];
     for (const key of this.readStateStore.keys()) {
       if (!currentKeys.has(key)) {
-        this.readStateStore.delete(key);
-        changed = true;
+        deletedKeys.push(key);
       }
     }
-    if (changed) {
-      this.readStateStore.save();
+    if (deletedKeys.length > 0) {
+      for (const key of deletedKeys) {
+        this.readStateStore.delete(key);
+      }
+      this.readStateStore.saveWithRollback(deletedKeys);
     }
   }
 
