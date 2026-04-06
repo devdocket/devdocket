@@ -395,11 +395,7 @@ describe('StartWorkAction', () => {
     });
 
     it('handles worktree directory check when branch was already created', async () => {
-      let branchCreated = false;
       vi.mocked(execFile).mockImplementation(((cmd: string, args: string[], opts: any, cb: Function) => {
-        if (args[0] === 'branch' && args[1] !== '--list' && args[1] !== '-D') {
-          branchCreated = true;
-        }
         cb(null, { stdout: '', stderr: '' }, '');
       }) as any);
 
