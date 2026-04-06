@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import * as os from 'os';
@@ -119,5 +119,33 @@ describe('ReadStateStore', () => {
     // Second load should be a no-op
     await store.load();
     expect(store.has('gh::1')).toBe(true);
+  });
+
+  it('should rollback in-memory state when write fails', async () => {
+    await store.load();
+
+    // Point the store at an invalid path to trigger a write error.
+    const originalPath = (store as any).filePath;
+    (store as any).filePath = path.join(tmpDir, '\0invalid');
+
+    await expect(store.add('gh::fail')).rejects.toThrow();
+    expect(store.has('gh::fail')).toBe(false);
+
+    // Restore path and reset write queue so afterEach cleanup succeeds
+    (store as any).filePath = originalPath;
+    (store as any).writeQueue = Promise.resolve();
+  });
+
+  it('should auto-load when add() is called before load()', async () => {
+    // Write existing state to disk first
+    const filePath = path.join(tmpDir, 'read-state.json');
+    await fs.writeFile(filePath, JSON.stringify(['gh::existing']), 'utf-8');
+
+    const freshStore = new ReadStateStore(tmpDir);
+    // Call add() without calling load() first
+    await freshStore.add('gh::new');
+
+    expect(freshStore.has('gh::existing')).toBe(true);
+    expect(freshStore.has('gh::new')).toBe(true);
   });
 });
