@@ -346,8 +346,8 @@ describe('ProviderRegistry', () => {
   });
 
   describe('loading state and registration race conditions', () => {
-    // Flushes all pending microtasks (promise .then/.catch/.finally chains)
-    function flushMicrotasks(): Promise<void> {
+    // Yields to the event loop so pending promise chains (.then/.finally) settle
+    function nextTick(): Promise<void> {
       return new Promise(resolve => setTimeout(resolve, 0));
     }
 
@@ -377,7 +377,7 @@ describe('ProviderRegistry', () => {
       expect(registry.loading).toBe(true);
 
       // After microtasks flush, the .finally() runs and loading becomes false
-      await flushMicrotasks();
+      await nextTick();
       expect(registry.loading).toBe(false);
     });
 
@@ -388,7 +388,7 @@ describe('ProviderRegistry', () => {
       registry.register(provider);
       expect(registry.loading).toBe(true);
 
-      await flushMicrotasks();
+      await nextTick();
       expect(registry.loading).toBe(false);
     });
 
@@ -399,11 +399,11 @@ describe('ProviderRegistry', () => {
       expect(registry.loading).toBe(true);
 
       // Even after flushing microtasks, loading remains true because refresh hasn't resolved
-      await flushMicrotasks();
+      await nextTick();
       expect(registry.loading).toBe(true);
 
       resolveRefresh();
-      await flushMicrotasks();
+      await nextTick();
       expect(registry.loading).toBe(false);
     });
 
@@ -414,7 +414,7 @@ describe('ProviderRegistry', () => {
       expect(registry.loading).toBe(true);
 
       rejectRefresh(new Error('network error'));
-      await flushMicrotasks();
+      await nextTick();
       expect(registry.loading).toBe(false);
     });
 
@@ -429,35 +429,42 @@ describe('ProviderRegistry', () => {
 
       // Resolve only the first provider
       d1.resolveRefresh();
-      await flushMicrotasks();
+      await nextTick();
       // Still loading because p2 hasn't resolved
       expect(registry.loading).toBe(true);
 
       // Resolve the second provider
       d2.resolveRefresh();
-      await flushMicrotasks();
+      await nextTick();
       expect(registry.loading).toBe(false);
     });
 
-    it('provider fires onDidChangeDiscoveredItems before refresh returns — loading is still true', async () => {
+    it('provider fires onDidDiscoverItems before refresh returns — loading is still true', async () => {
       const { provider, resolveRefresh } = createDeferredProvider('race');
 
-      const loadingDuringEvent: boolean[] = [];
-      registry.onDidChangeDiscoveredItems(() => {
-        loadingDuringEvent.push(registry.loading);
+      let callbackCount = 0;
+      let loadingDuringProviderEvent: boolean | undefined;
+      const providerEventObserved = new Promise<void>((resolve) => {
+        registry.onDidChangeDiscoveredItems(() => {
+          callbackCount += 1;
+          if (callbackCount === 2) {
+            loadingDuringProviderEvent = registry.loading;
+            resolve();
+          }
+        });
       });
 
       registry.register(provider);
 
       // Provider fires items while refresh is still pending
       provider.fireItems([{ externalId: '1', title: 'Item' }]);
+      await providerEventObserved;
 
-      // The event fired by handleDiscoveredItems should see loading = true
-      // (registration fire + handleDiscoveredItems fire, both while refresh pending)
-      expect(loadingDuringEvent.some(v => v === true)).toBe(true);
+      // Verify the event caused by provider.fireItems(...) happened before refresh resolved
+      expect(loadingDuringProviderEvent).toBe(true);
 
       resolveRefresh();
-      await flushMicrotasks();
+      await nextTick();
       expect(registry.loading).toBe(false);
     });
 
@@ -474,7 +481,7 @@ describe('ProviderRegistry', () => {
       expect(events).toContain(true);
 
       resolveRefresh();
-      await flushMicrotasks();
+      await nextTick();
       // The .finally() fires onDidChangeDiscoveredItems with loading=false
       expect(events).toContain(false);
     });
