@@ -34,40 +34,45 @@ export class InboxTreeProvider implements vscode.TreeDataProvider<InboxElement> 
   private readonly disposables: vscode.Disposable[] = [];
   private readonly seenItems = new Set<string>();
   private currentInboxKeys = new Set<string>();
+  private refreshTimer: ReturnType<typeof setTimeout> | undefined;
+  static readonly REFRESH_DEBOUNCE_MS = 50;
 
   constructor(
     private readonly providerRegistry: ProviderRegistry,
     private readonly stateStore: DiscoveredStateStore,
   ) {
     this.disposables.push(
-      providerRegistry.onDidChangeDiscoveredItems(() => {
-        this.pruneSeenItems();
-        this._onDidChangeTreeData.fire();
-      }),
-      stateStore.onDidChange(() => {
-        this.pruneSeenItems();
-        this._onDidChangeTreeData.fire();
-      })
+      providerRegistry.onDidChangeDiscoveredItems(() => this.scheduleRefresh()),
+      stateStore.onDidChange(() => this.scheduleRefresh()),
     );
   }
 
+  private scheduleRefresh(): void {
+    if (this.refreshTimer !== undefined) {
+      clearTimeout(this.refreshTimer);
+    }
+    this.refreshTimer = setTimeout(() => {
+      this.refreshTimer = undefined;
+      this.pruneSeenItems();
+      this._onDidChangeTreeData.fire();
+    }, InboxTreeProvider.REFRESH_DEBOUNCE_MS);
+  }
+
   private pruneSeenItems(): void {
-    const updatedKeys = new Set<string>();
+    const currentKeys = new Set<string>();
     for (const [providerId, items] of this.providerRegistry.getAllDiscoveredItems()) {
       for (const item of items) {
         const state = this.stateStore.getState(providerId, item.externalId);
         if (state === undefined || state === 'unseen') {
-          updatedKeys.add(`${providerId}::${item.externalId}`);
+          currentKeys.add(`${providerId}::${item.externalId}`);
         }
       }
     }
-    // Only prune seenItems for keys that left the inbox since last check
-    for (const key of this.currentInboxKeys) {
-      if (!updatedKeys.has(key)) {
+    for (const key of this.seenItems) {
+      if (!currentKeys.has(key)) {
         this.seenItems.delete(key);
       }
     }
-    this.currentInboxKeys = updatedKeys;
   }
 
   refresh(): void { this._onDidChangeTreeData.fire(); }
@@ -76,7 +81,6 @@ export class InboxTreeProvider implements vscode.TreeDataProvider<InboxElement> 
     const key = `${providerId}::${externalId}`;
     if (!this.seenItems.has(key)) {
       this.seenItems.add(key);
-      this.currentInboxKeys.add(key);
       return true;
     }
     return false;
@@ -251,6 +255,10 @@ export class InboxTreeProvider implements vscode.TreeDataProvider<InboxElement> 
   }
 
   dispose(): void {
+    if (this.refreshTimer !== undefined) {
+      clearTimeout(this.refreshTimer);
+      this.refreshTimer = undefined;
+    }
     this._onDidChangeTreeData.dispose();
     this.disposables.forEach(d => d.dispose());
   }
