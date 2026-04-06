@@ -491,9 +491,8 @@ describe('ProviderRegistry', () => {
 
       // Each fire triggers handleDiscoveredItems, so unseenListener fires per batch
       await vi.waitFor(() => expect(unseenListener).toHaveBeenCalledTimes(3));
-      expect(unseenListener).toHaveBeenNthCalledWith(1, 1);
-      expect(unseenListener).toHaveBeenNthCalledWith(2, 1);
-      expect(unseenListener).toHaveBeenNthCalledWith(3, 1);
+      // Each call should report exactly 1 new unseen item (order may vary with async)
+      expect(unseenListener.mock.calls.every((args) => args.length === 1 && args[0] === 1)).toBe(true);
     });
   });
 
