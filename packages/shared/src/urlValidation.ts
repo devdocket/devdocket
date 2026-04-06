@@ -10,7 +10,7 @@ export function isValidUrlSegment(value: string): boolean {
   if (!value || typeof value !== 'string') {
     return false;
   }
-  if (value.includes('..') || value.includes('//')) {
+  if (value === '.' || value === '..') {
     return false;
   }
   if (value.includes('?') || value.includes('#')) {

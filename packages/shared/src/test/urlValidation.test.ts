@@ -21,11 +21,19 @@ describe('isValidUrlSegment', () => {
   describe('rejects path traversal attempts', () => {
     it.each([
       '..',
-      '../etc',
-      'a..b',
-      '...',
+      '.',
     ])('rejects "%s"', (input) => {
       expect(isValidUrlSegment(input)).toBe(false);
+    });
+
+    it.each([
+      'a..b',
+    ])('accepts "%s" (not traversal)', (input) => {
+      expect(isValidUrlSegment(input)).toBe(true);
+    });
+
+    it('rejects "..." (starts with non-alphanumeric)', () => {
+      expect(isValidUrlSegment('...')).toBe(false);
     });
   });
 

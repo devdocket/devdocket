@@ -172,7 +172,7 @@ export class GitHubIssueProvider implements WorkCenterProvider {
         if (isValidGitHubRepo(repo)) {
           validRepos.push(repo);
         } else {
-          logger.warn(`Skipping invalid repo identifier: "${repo}"`);
+          logger.warn('Skipping invalid repo identifier', repo);
         }
       }
 

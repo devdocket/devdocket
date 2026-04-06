@@ -136,7 +136,7 @@ export class AdoWorkItemProvider implements WorkCenterProvider {
 
   private async fetchAndPublishWorkItems(accessToken: string, isUserTriggered: boolean): Promise<void> {
     if (!isValidUrlSegment(this.org)) {
-      logger.warn(`Skipping fetch: invalid ADO organization name "${this.org}"`);
+      logger.warn('Skipping fetch: invalid ADO organization name', this.org);
       return;
     }
 
@@ -145,7 +145,7 @@ export class AdoWorkItemProvider implements WorkCenterProvider {
       if (project === '' || isValidUrlSegment(project)) {
         validProjects.push(project);
       } else {
-        logger.warn(`Skipping invalid ADO project name: "${project}"`);
+        logger.warn('Skipping invalid ADO project name', project);
       }
     }
 
