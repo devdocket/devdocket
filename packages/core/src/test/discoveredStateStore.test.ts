@@ -544,5 +544,109 @@ describe('DiscoveredStateStore', () => {
       await store.setState('gh', 'issue-after-dispose', 'accepted');
       expect(listener).not.toHaveBeenCalled();
     });
+
+    it('should handle large sets (1000+ items)', async () => {
+      const items = Array.from({ length: 1200 }, (_, i) => ({
+        providerId: 'gh',
+        externalId: `item-${i}`,
+        state: 'unseen' as const,
+      }));
+      await store.setStates(items);
+
+      const records = await store.loadAll();
+      expect(records).toHaveLength(1200);
+
+      // Verify a sampling of items
+      expect(store.getState('gh', 'item-0')).toBe('unseen');
+      expect(store.getState('gh', 'item-599')).toBe('unseen');
+      expect(store.getState('gh', 'item-1199')).toBe('unseen');
+
+      // Verify persistence by reloading from disk
+      const store2 = new DiscoveredStateStore(tmpDir);
+      await store2.load();
+      const reloaded = await store2.loadAll();
+      expect(reloaded).toHaveLength(1200);
+      store2.dispose();
+    });
+
+    it('should update individual item states without affecting other entries', async () => {
+      await store.setStates([
+        { providerId: 'gh', externalId: 'keep-1', state: 'accepted' },
+        { providerId: 'gh', externalId: 'update-1', state: 'unseen' },
+        { providerId: 'gh', externalId: 'update-2', state: 'dismissed' },
+        { providerId: 'gh', externalId: 'keep-2', state: 'accepted' },
+      ]);
+      expect((await store.loadAll())).toHaveLength(4);
+
+      await store.setState('gh', 'update-1', 'dismissed');
+      await store.setState('gh', 'update-2', 'accepted');
+
+      expect(store.getState('gh', 'update-1')).toBe('dismissed');
+      expect(store.getState('gh', 'update-2')).toBe('accepted');
+      expect(store.getState('gh', 'keep-1')).toBe('accepted');
+      expect(store.getState('gh', 'keep-2')).toBe('accepted');
+    });
+
+    it('should throw on truncated JSON', async () => {
+      const filePath = path.join(tmpDir, 'discovered-state.json');
+      await fs.writeFile(filePath, `[{"providerId":"gh","externalId":"1","inboxState":"unseen"`, 'utf-8');
+
+      await expect(store.load()).rejects.toThrow();
+    });
+
+    it('should handle empty file as corrupt JSON', async () => {
+      const filePath = path.join(tmpDir, 'discovered-state.json');
+      await fs.writeFile(filePath, '', 'utf-8');
+
+      await expect(store.load()).rejects.toThrow();
+    });
+
+    it('should handle file containing only whitespace as corrupt JSON', async () => {
+      const filePath = path.join(tmpDir, 'discovered-state.json');
+      await fs.writeFile(filePath, `   \n  `, 'utf-8');
+
+      await expect(store.load()).rejects.toThrow();
+    });
+
+    it('should look up all items correctly from a large set', async () => {
+      const count = 2000;
+      const items = Array.from({ length: count }, (_, i) => ({
+        providerId: 'perf',
+        externalId: `id-${i}`,
+        state: 'unseen' as const,
+      }));
+      await store.setStates(items);
+
+      for (let i = 0; i < count; i++) {
+        expect(store.getState('perf', `id-${i}`)).toBe('unseen');
+      }
+    });
+
+    it('should apply the last sequential state transition to an item', async () => {
+      await store.setState('gh', 'flip', 'unseen');
+      await store.setState('gh', 'flip', 'accepted');
+      await store.setState('gh', 'flip', 'dismissed');
+
+      expect(store.getState('gh', 'flip')).toBe('dismissed');
+
+      const filePath = path.join(tmpDir, 'discovered-state.json');
+      const raw = await fs.readFile(filePath, 'utf-8');
+      const parsed = JSON.parse(raw);
+      const flipEntries = parsed.filter((r: { externalId: string }) => r.externalId === 'flip');
+      expect(flipEntries).toHaveLength(1);
+    });
+
+    it('should fire onDidChange for each setState in concurrent batch', async () => {
+      const listener = vi.fn();
+      store.onDidChange(listener);
+
+      await Promise.all([
+        store.setState('gh', 'x', 'unseen'),
+        store.setState('gh', 'y', 'accepted'),
+        store.setState('gh', 'z', 'dismissed'),
+      ]);
+
+      expect(listener).toHaveBeenCalledTimes(3);
+    });
   });
 });
