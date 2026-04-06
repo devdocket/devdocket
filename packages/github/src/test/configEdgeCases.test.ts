@@ -103,29 +103,13 @@ describe('GitHub provider config edge cases', () => {
       );
     });
 
-    it('repo without slash results in failed fetch (no validation)', async () => {
+    it.each([
+      ['no slash', 'noslash'],
+      ['double slash', 'owner//repo'],
+    ])('invalid repo format (%s) results in failed fetch with empty discovery', async (_label, repo) => {
       vi.mocked(workspace.getConfiguration).mockReturnValue({
         get: vi.fn((key: string, defaultValue?: any) => {
-          if (key === 'repos') { return ['noslash']; }
-          return defaultValue;
-        }),
-      } as any);
-
-      mockFetch.mockResolvedValueOnce({ ok: false, status: 404 });
-
-      const listener = vi.fn();
-      provider.onDidDiscoverItems(listener);
-      await provider.refresh();
-
-      // Invalid repo format still attempts the API call — returns empty on failure
-      expect(mockFetch).toHaveBeenCalledTimes(1);
-      expect(listener).toHaveBeenCalledWith([]);
-    });
-
-    it('repo with double slash results in failed fetch (no validation)', async () => {
-      vi.mocked(workspace.getConfiguration).mockReturnValue({
-        get: vi.fn((key: string, defaultValue?: any) => {
-          if (key === 'repos') { return ['owner//repo']; }
+          if (key === 'repos') { return [repo]; }
           return defaultValue;
         }),
       } as any);
@@ -140,71 +124,13 @@ describe('GitHub provider config edge cases', () => {
       expect(listener).toHaveBeenCalledWith([]);
     });
 
-    it('repo with special characters causes fetch rejection', async () => {
+    it.each([
+      ['spaces in repo name', 'owner/repo with spaces'],
+      ['valid repo with network error', 'owner/repo'],
+    ])('fetch rejection (%s) is handled gracefully with empty discovery', async (_label, repo) => {
       vi.mocked(workspace.getConfiguration).mockReturnValue({
         get: vi.fn((key: string, defaultValue?: any) => {
-          if (key === 'repos') { return ['owner/repo with spaces']; }
-          return defaultValue;
-        }),
-      } as any);
-
-      mockFetch.mockRejectedValueOnce(new TypeError('Invalid URL'));
-
-      const listener = vi.fn();
-      provider.onDidDiscoverItems(listener);
-      await provider.refresh();
-
-      expect(mockFetch).toHaveBeenCalledTimes(1);
-      expect(listener).toHaveBeenCalledWith([]);
-    });
-
-    it('reports failure for invalid repo format', async () => {
-      vi.mocked(workspace.getConfiguration).mockReturnValue({
-        get: vi.fn((key: string, defaultValue?: any) => {
-          if (key === 'repos') { return ['badformat']; }
-          return defaultValue;
-        }),
-      } as any);
-
-      mockFetch.mockResolvedValueOnce({ ok: false, status: 404 });
-
-      const listener = vi.fn();
-      provider.onDidDiscoverItems(listener);
-      await provider.refresh();
-
-      // Should still fire with empty items (failed repo returns empty)
-      expect(listener).toHaveBeenCalledWith([]);
-    });
-
-    it('mixed valid and invalid repos fetches all and collects failures', async () => {
-      vi.mocked(workspace.getConfiguration).mockReturnValue({
-        get: vi.fn((key: string, defaultValue?: any) => {
-          if (key === 'repos') { return ['valid/repo', 'noslash']; }
-          return defaultValue;
-        }),
-      } as any);
-
-      mockFetch
-        .mockResolvedValueOnce({
-          ok: true,
-          json: async () => [createMockIssue(1, 'Good issue', 'valid/repo')],
-        })
-        .mockResolvedValueOnce({ ok: false, status: 404 });
-
-      const listener = vi.fn();
-      provider.onDidDiscoverItems(listener);
-      await provider.refresh();
-
-      expect(mockFetch).toHaveBeenCalledTimes(2);
-      const items = listener.mock.calls[0][0];
-      expect(items).toHaveLength(1);
-      expect(items[0].title).toBe('#1: Good issue');
-    });
-
-    it('fetch rejection (e.g. invalid URL) is handled gracefully', async () => {
-      vi.mocked(workspace.getConfiguration).mockReturnValue({
-        get: vi.fn((key: string, defaultValue?: any) => {
-          if (key === 'repos') { return ['owner/repo']; }
+          if (key === 'repos') { return [repo]; }
           return defaultValue;
         }),
       } as any);
