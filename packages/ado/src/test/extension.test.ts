@@ -46,7 +46,7 @@ describe('extension activation', () => {
           get: vi.fn((key: string, defaultValue?: any) => {
             if (key === 'organization') return 'myorg';
             if (key === 'projects') return ['ProjectA'];
-            if (key === 'refreshIntervalSeconds') return 300;
+            if (key === 'refreshIntervalSeconds') return 0;
             return defaultValue;
           }),
         } as any;
@@ -59,6 +59,11 @@ describe('extension activation', () => {
   });
 
   afterEach(() => {
+    for (const d of disposables) {
+      if (d && typeof d.dispose === 'function') {
+        d.dispose();
+      }
+    }
     vi.unstubAllGlobals();
   });
 
@@ -142,7 +147,7 @@ describe('extension activation', () => {
           get: vi.fn((key: string, defaultValue?: any) => {
             if (key === 'organization') return '';
             if (key === 'projects') return [];
-            if (key === 'refreshIntervalSeconds') return 300;
+            if (key === 'refreshIntervalSeconds') return 0;
             return defaultValue;
           }),
         } as any;
