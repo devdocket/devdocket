@@ -11,8 +11,8 @@ export class WorkGraph {
   private readonly items: Map<string, WorkItem> = new Map();
   // Provenance key (`${providerId}::${externalId}`) → WorkItem.id for O(1) lookups
   private readonly provenanceIndex: Map<string, string> = new Map();
-  // Provenance keys known to have duplicate items (for efficient deleteItem)
-  private readonly duplicateProvenanceKeys: Set<string> = new Set();
+  // Provenance key → count of extra (unindexed) items sharing that key
+  private readonly duplicateProvenanceCounts: Map<string, number> = new Map();
   private readonly _onDidChange = new vscode.EventEmitter<void>();
   /**
    * Fires when this graph changes through public mutation operations exposed by {@link WorkGraph},
@@ -33,7 +33,7 @@ export class WorkGraph {
     const items = await this.store.loadAll();
     this.items.clear();
     this.provenanceIndex.clear();
-    this.duplicateProvenanceKeys.clear();
+    this.duplicateProvenanceCounts.clear();
     for (const item of items) {
       this.items.set(item.id, item);
       if (item.providerId && item.externalId) {
@@ -42,7 +42,7 @@ export class WorkGraph {
         if (existingItemId === undefined) {
           this.provenanceIndex.set(key, item.id);
         } else {
-          this.duplicateProvenanceKeys.add(key);
+          this.duplicateProvenanceCounts.set(key, (this.duplicateProvenanceCounts.get(key) ?? 0) + 1);
           logger.warn(
             `Duplicate work item provenance detected for ${key}; keeping first loaded item ${existingItemId} and ignoring duplicate ${item.id}`,
           );
@@ -133,7 +133,7 @@ export class WorkGraph {
       if (existingId === undefined) {
         this.provenanceIndex.set(key, item.id);
       } else {
-        this.duplicateProvenanceKeys.add(key);
+        this.duplicateProvenanceCounts.set(key, (this.duplicateProvenanceCounts.get(key) ?? 0) + 1);
         logger.warn(
           `Duplicate work item provenance detected for ${key}; ` +
             `keeping existing item ${existingId} indexed and leaving new item ${item.id} unindexed by provenance.`,
@@ -298,9 +298,10 @@ export class WorkGraph {
     await this.store.delete(id);
     if (item?.providerId && item?.externalId) {
       const key = WorkGraph.provenanceKey(item.providerId, item.externalId);
+      const dupCount = this.duplicateProvenanceCounts.get(key) ?? 0;
       if (this.provenanceIndex.get(key) === id) {
-        if (this.duplicateProvenanceKeys.has(key)) {
-          // Only scan for a replacement when duplicates are known to exist
+        if (dupCount > 0) {
+          // Scan for a replacement among remaining duplicates
           let replacementId: string | undefined;
           for (const [candidateId, candidate] of this.items) {
             if (
@@ -317,16 +318,28 @@ export class WorkGraph {
             this.provenanceIndex.set(key, replacementId);
           } else {
             this.provenanceIndex.delete(key);
-            this.duplicateProvenanceKeys.delete(key);
           }
+          this.decrementDuplicateCount(key);
         } else {
           this.provenanceIndex.delete(key);
         }
+      } else if (dupCount > 0) {
+        // Deleting an unindexed duplicate — decrement the count
+        this.decrementDuplicateCount(key);
       }
     }
     this.items.delete(id);
     this._onDidChange.fire();
     logger.info(`Deleted work item: ${id}`);
+  }
+
+  private decrementDuplicateCount(key: string): void {
+    const count = this.duplicateProvenanceCounts.get(key) ?? 0;
+    if (count <= 1) {
+      this.duplicateProvenanceCounts.delete(key);
+    } else {
+      this.duplicateProvenanceCounts.set(key, count - 1);
+    }
   }
 
   dispose(): void {
