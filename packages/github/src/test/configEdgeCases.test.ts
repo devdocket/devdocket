@@ -36,6 +36,7 @@ describe('GitHub provider config edge cases', () => {
     });
 
     afterEach(() => {
+      provider.dispose();
       vi.useRealTimers();
     });
 
@@ -71,6 +72,14 @@ describe('GitHub provider config edge cases', () => {
       const spy = vi.spyOn(provider as any, 'refreshInBackground').mockResolvedValue(undefined);
 
       provider.startPeriodicRefresh(NaN);
+      vi.advanceTimersByTime(120_000);
+      expect(spy).not.toHaveBeenCalled();
+    });
+
+    it('does not start timer for Infinity', () => {
+      const spy = vi.spyOn(provider as any, 'refreshInBackground').mockResolvedValue(undefined);
+
+      provider.startPeriodicRefresh(Infinity);
       vi.advanceTimersByTime(120_000);
       expect(spy).not.toHaveBeenCalled();
     });
@@ -167,6 +176,7 @@ describe('GitHub PR review provider config edge cases', () => {
     });
 
     afterEach(() => {
+      provider.dispose();
       vi.useRealTimers();
     });
 

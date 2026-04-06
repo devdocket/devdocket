@@ -111,6 +111,17 @@ describe('ADO provider config edge cases', () => {
 
       provider.dispose();
     });
+
+    it('PR review provider also rejects Infinity interval', () => {
+      const provider = new AdoPrReviewProvider('myorg', []);
+      const spy = vi.spyOn(provider as any, 'refreshInBackground').mockResolvedValue(undefined);
+
+      provider.startPeriodicRefresh(Infinity);
+      vi.advanceTimersByTime(120_000);
+      expect(spy).not.toHaveBeenCalled();
+
+      provider.dispose();
+    });
   });
 
   describe('organization config edge cases', () => {
