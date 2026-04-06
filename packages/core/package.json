@@ -113,6 +113,12 @@
         "icon": "$(clock)"
       },
       {
+        "command": "workcenter.editItem",
+        "title": "Edit Work Item",
+        "category": "WorkCenter",
+        "icon": "$(edit)"
+      },
+      {
         "command": "workcenter.openInBrowser",
         "title": "Open in Browser",
         "category": "WorkCenter",
