@@ -24,14 +24,15 @@ export interface EventEmitterLike<T> {
 
 /**
  * Base class for WorkCenter providers that need periodic refresh.
- * Owns the EventEmitter lifecycle, refresh timer, and dispose logic.
+ * Owns the EventEmitter lifecycle, refresh timer, concurrency guard, and dispose logic.
  */
 export abstract class BaseProvider {
   protected readonly _onDidDiscoverItems: EventEmitterLike<DiscoveredItem[]>;
   readonly onDidDiscoverItems: Event<DiscoveredItem[]>;
 
   private refreshTimer: ReturnType<typeof setInterval> | undefined;
-  protected _isRefreshing = false;
+  private _isRefreshing = false;
+  private _disposed = false;
 
   constructor(emitter: EventEmitterLike<DiscoveredItem[]>) {
     this._onDidDiscoverItems = emitter;
@@ -46,8 +47,9 @@ export abstract class BaseProvider {
     }
     const clampedInterval = Math.max(interval, 60);
     this.refreshTimer = setInterval(() => {
-      this.refreshInBackground().catch(() => {
-        // Errors are already handled inside refreshInBackground()
+      this.refreshInBackground().catch((error: unknown) => {
+        // Prevent unhandled promise rejections from the interval callback.
+        console.error('Background refresh failed', error);
       });
     }, clampedInterval * 1000);
   }
@@ -59,11 +61,29 @@ export abstract class BaseProvider {
     }
   }
 
-  protected abstract refreshInBackground(): Promise<void>;
+  /** Runs a background refresh with a concurrency guard to prevent overlapping calls. */
+  async refreshInBackground(): Promise<void> {
+    if (this._isRefreshing) {
+      return;
+    }
+    this._isRefreshing = true;
+    try {
+      await this.doBackgroundRefresh();
+    } finally {
+      this._isRefreshing = false;
+    }
+  }
+
+  /** Override to provide the background refresh implementation. */
+  protected abstract doBackgroundRefresh(): Promise<void>;
 
   abstract refresh(): Promise<void>;
 
   dispose(): void {
+    if (this._disposed) {
+      return;
+    }
+    this._disposed = true;
     this.stopPeriodicRefresh();
     this._onDidDiscoverItems.dispose();
   }

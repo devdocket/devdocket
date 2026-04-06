@@ -32,27 +32,15 @@ class TestProvider extends BaseProvider {
     this._onDidDiscoverItems.fire([{ externalId: 'item-1', title: 'Item 1' }]);
   }
 
-  async refreshInBackground(): Promise<void> {
-    if (this._isRefreshing) {
-      return;
+  protected async doBackgroundRefresh(): Promise<void> {
+    this.backgroundRefreshCalls++;
+    if (this.refreshDelay > 0) {
+      await new Promise(resolve => setTimeout(resolve, this.refreshDelay));
     }
-    this._isRefreshing = true;
-    try {
-      this.backgroundRefreshCalls++;
-      if (this.refreshDelay > 0) {
-        await new Promise(resolve => setTimeout(resolve, this.refreshDelay));
-      }
-      if (this.refreshError) {
-        throw this.refreshError;
-      }
-      this._onDidDiscoverItems.fire([{ externalId: 'bg-1', title: 'BG Item' }]);
-    } finally {
-      this._isRefreshing = false;
+    if (this.refreshError) {
+      throw this.refreshError;
     }
-  }
-
-  get isRefreshing(): boolean {
-    return this._isRefreshing;
+    this._onDidDiscoverItems.fire([{ externalId: 'bg-1', title: 'BG Item' }]);
   }
 }
 
@@ -66,78 +54,78 @@ describe('BaseProvider', () => {
   });
 
   describe('startPeriodicRefresh', () => {
-    it('starts an interval timer that calls refreshInBackground', () => {
+    it('starts an interval timer that calls refreshInBackground', async () => {
       const provider = new TestProvider(createMockEmitter());
 
       provider.startPeriodicRefresh(120);
       expect(provider.backgroundRefreshCalls).toBe(0);
 
-      vi.advanceTimersByTime(120_000);
+      await vi.advanceTimersByTimeAsync(120_000);
       expect(provider.backgroundRefreshCalls).toBe(1);
 
-      vi.advanceTimersByTime(120_000);
+      await vi.advanceTimersByTimeAsync(120_000);
       expect(provider.backgroundRefreshCalls).toBe(2);
 
       provider.dispose();
     });
 
-    it('clamps intervals below 60 seconds to 60', () => {
+    it('clamps intervals below 60 seconds to 60', async () => {
       const provider = new TestProvider(createMockEmitter());
 
       provider.startPeriodicRefresh(10);
 
       // At 10s nothing should fire
-      vi.advanceTimersByTime(10_000);
+      await vi.advanceTimersByTimeAsync(10_000);
       expect(provider.backgroundRefreshCalls).toBe(0);
 
       // At 60s the clamped interval fires
-      vi.advanceTimersByTime(50_000);
+      await vi.advanceTimersByTimeAsync(50_000);
       expect(provider.backgroundRefreshCalls).toBe(1);
 
       provider.dispose();
     });
 
-    it('does nothing when interval is 0 or negative', () => {
+    it('does nothing when interval is 0 or negative', async () => {
       const provider = new TestProvider(createMockEmitter());
 
       provider.startPeriodicRefresh(0);
-      vi.advanceTimersByTime(120_000);
+      await vi.advanceTimersByTimeAsync(120_000);
       expect(provider.backgroundRefreshCalls).toBe(0);
 
       provider.startPeriodicRefresh(-5);
-      vi.advanceTimersByTime(120_000);
+      await vi.advanceTimersByTimeAsync(120_000);
       expect(provider.backgroundRefreshCalls).toBe(0);
 
       provider.dispose();
     });
 
-    it('does nothing for NaN or Infinity', () => {
+    it('does nothing for NaN or Infinity', async () => {
       const provider = new TestProvider(createMockEmitter());
 
       provider.startPeriodicRefresh(NaN);
-      vi.advanceTimersByTime(120_000);
+      await vi.advanceTimersByTimeAsync(120_000);
       expect(provider.backgroundRefreshCalls).toBe(0);
 
       provider.startPeriodicRefresh(Infinity);
-      vi.advanceTimersByTime(120_000);
+      await vi.advanceTimersByTimeAsync(120_000);
       expect(provider.backgroundRefreshCalls).toBe(0);
 
       provider.dispose();
     });
 
-    it('restarts the timer when called again', () => {
+    it('restarts the timer when called again', async () => {
       const provider = new TestProvider(createMockEmitter());
 
       provider.startPeriodicRefresh(60);
-      vi.advanceTimersByTime(30_000); // halfway
+      await vi.advanceTimersByTimeAsync(30_000); // halfway
 
       // Restart with a longer interval — old timer should be cleared
       provider.startPeriodicRefresh(120);
 
-      vi.advanceTimersByTime(30_000); // 60s from original start
+      await vi.advanceTimersByTimeAsync(30_000); // 60s from original start
       expect(provider.backgroundRefreshCalls).toBe(0);
 
-      vi.advanceTimersByTime(90_000); // 120s from restart
+      await vi.advanceTimersByTimeAsync(90_000); // 120s from restart
       expect(provider.backgroundRefreshCalls).toBe(1);
 
       provider.dispose();
@@ -145,16 +133,16 @@ describe('BaseProvider', () => {
   });
 
   describe('stopPeriodicRefresh', () => {
-    it('clears the interval so no more refreshes fire', () => {
+    it('clears the interval so no more refreshes fire', async () => {
       const provider = new TestProvider(createMockEmitter());
 
       provider.startPeriodicRefresh(60);
-      vi.advanceTimersByTime(60_000);
+      await vi.advanceTimersByTimeAsync(60_000);
       expect(provider.backgroundRefreshCalls).toBe(1);
 
       provider.stopPeriodicRefresh();
 
-      vi.advanceTimersByTime(120_000);
+      await vi.advanceTimersByTimeAsync(120_000);
       expect(provider.backgroundRefreshCalls).toBe(1);
 
       provider.dispose();
@@ -176,7 +164,7 @@ describe('BaseProvider', () => {
   });
 
   describe('dispose', () => {
-    it('calls stopPeriodicRefresh and disposes the emitter', () => {
+    it('calls stopPeriodicRefresh and disposes the emitter', async () => {
       const emitter = createMockEmitter();
       const provider = new TestProvider(emitter);
 
@@ -184,7 +172,7 @@ describe('BaseProvider', () => {
       provider.dispose();
 
       // Timer should be cleared — no more background calls
-      vi.advanceTimersByTime(120_000);
+      await vi.advanceTimersByTimeAsync(120_000);
       expect(provider.backgroundRefreshCalls).toBe(0);
 
       // Emitter.dispose should have been called
@@ -196,14 +184,16 @@ describe('BaseProvider', () => {
       const provider = new TestProvider(emitter);
 
       provider.dispose();
+      expect(emitter.dispose).toHaveBeenCalledOnce();
+
       expect(() => provider.dispose()).not.toThrow();
 
-      // Emitter.dispose called twice — both should be safe
-      expect(emitter.dispose).toHaveBeenCalledTimes(2);
+      // Repeated dispose should be safe and not re-dispose the emitter
+      expect(emitter.dispose).toHaveBeenCalledOnce();
     });
   });
 
-  describe('_isRefreshing guard', () => {
+  describe('refreshInBackground concurrency guard', () => {
     it('prevents concurrent background refreshes', async () => {
       vi.useRealTimers();
       const provider = new TestProvider(createMockEmitter());
@@ -271,14 +261,14 @@ describe('BaseProvider', () => {
       provider.dispose();
     });
 
-    it('fires via the periodic timer', () => {
+    it('fires via the periodic timer', async () => {
       const provider = new TestProvider(createMockEmitter());
       const received: DiscoveredItem[][] = [];
 
       provider.onDidDiscoverItems(items => received.push(items));
       provider.startPeriodicRefresh(60);
 
-      vi.advanceTimersByTime(60_000);
+      await vi.advanceTimersByTimeAsync(60_000);
       expect(received).toHaveLength(1);
 
       provider.dispose();
@@ -286,21 +276,21 @@ describe('BaseProvider', () => {
   });
 
   describe('refresh error resilience', () => {
-    it('does not break the periodic interval', () => {
+    it('does not break the periodic interval', async () => {
       const provider = new TestProvider(createMockEmitter());
       provider.refreshError = new Error('boom');
 
       provider.startPeriodicRefresh(60);
 
       // First tick — error thrown inside, but interval should survive
-      vi.advanceTimersByTime(60_000);
+      await vi.advanceTimersByTimeAsync(60_000);
       expect(provider.backgroundRefreshCalls).toBe(1);
 
       // Clear the error
       provider.refreshError = undefined;
 
       // Second tick — should fire normally
-      vi.advanceTimersByTime(60_000);
+      await vi.advanceTimersByTimeAsync(60_000);
       expect(provider.backgroundRefreshCalls).toBe(2);
 
       provider.dispose();
