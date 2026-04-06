@@ -355,6 +355,8 @@ describe('SourcesTreeProvider', () => {
       };
       const treeItem = provider.getTreeItem(node);
       expect(treeItem.tooltip).toBeDefined();
+      expect((treeItem.tooltip as any).value).toContain('My Item');
+      expect((treeItem.tooltip as any).value).not.toContain('Description');
     });
 
     it('should include description in tooltip when present', () => {
@@ -363,6 +365,8 @@ describe('SourcesTreeProvider', () => {
       };
       const treeItem = provider.getTreeItem(node);
       expect(treeItem.tooltip).toBeDefined();
+      expect((treeItem.tooltip as any).value).toContain('Item');
+      expect((treeItem.tooltip as any).value).toContain('Details here');
     });
   });
 
@@ -375,7 +379,10 @@ describe('SourcesTreeProvider', () => {
       const listener = vi.fn();
       provider.onDidChangeTreeData(listener);
       provider.dispose();
-      // After dispose, the emitter is disposed; new fires should not reach listeners
+      provider.refresh();
+      registry._fire();
+      stateStore._fire();
+      expect(listener).not.toHaveBeenCalled();
     });
   });
 });
