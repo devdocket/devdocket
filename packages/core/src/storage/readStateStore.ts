@@ -24,10 +24,16 @@ export class ReadStateStore {
   }
 
   /** Returns true only when the key is newly added. Persists automatically. */
-  add(key: string): boolean {
+  async add(key: string): Promise<boolean> {
+    if (!this.loaded) { await this.load(); }
     if (this.items.has(key)) { return false; }
-    this.items.add(key);
-    this.enqueueSave();
+    await this.enqueue(() => {
+      this.items.add(key);
+      return this.writeFile().catch((err) => {
+        this.items.delete(key);
+        throw err;
+      });
+    });
     return true;
   }
 

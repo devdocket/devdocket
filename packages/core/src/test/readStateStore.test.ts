@@ -25,7 +25,7 @@ describe('ReadStateStore', () => {
 
   it('should add a key and persist to disk', async () => {
     await store.load();
-    expect(store.add('gh::issue-1')).toBe(true);
+    expect(await store.add('gh::issue-1')).toBe(true);
     await store.flush();
 
     const filePath = path.join(tmpDir, 'read-state.json');
@@ -35,20 +35,20 @@ describe('ReadStateStore', () => {
 
   it('should return false when adding a duplicate key', async () => {
     await store.load();
-    expect(store.add('gh::1')).toBe(true);
-    expect(store.add('gh::1')).toBe(false);
+    expect(await store.add('gh::1')).toBe(true);
+    expect(await store.add('gh::1')).toBe(false);
   });
 
   it('should report has() correctly after add', async () => {
     await store.load();
     expect(store.has('gh::1')).toBe(false);
-    store.add('gh::1');
+    await store.add('gh::1');
     expect(store.has('gh::1')).toBe(true);
   });
 
   it('should delete a key', async () => {
     await store.load();
-    store.add('gh::1');
+    await store.add('gh::1');
     expect(store.delete('gh::1')).toBe(true);
     expect(store.has('gh::1')).toBe(false);
   });
@@ -60,16 +60,16 @@ describe('ReadStateStore', () => {
 
   it('should iterate keys', async () => {
     await store.load();
-    store.add('gh::1');
-    store.add('gh::2');
+    await store.add('gh::1');
+    await store.add('gh::2');
     const keys = [...store.keys()];
     expect(keys.sort()).toEqual(['gh::1', 'gh::2']);
   });
 
   it('should persist after save()', async () => {
     await store.load();
-    store.add('gh::1');
-    store.add('gh::2');
+    await store.add('gh::1');
+    await store.add('gh::2');
     store.delete('gh::1');
     store.save();
     await store.flush();
@@ -81,8 +81,8 @@ describe('ReadStateStore', () => {
 
   it('should load persisted state from a fresh instance', async () => {
     await store.load();
-    store.add('gh::1');
-    store.add('jira::2');
+    await store.add('gh::1');
+    await store.add('jira::2');
     await store.flush();
 
     const store2 = new ReadStateStore(tmpDir);
@@ -103,7 +103,7 @@ describe('ReadStateStore', () => {
     const nestedDir = path.join(tmpDir, 'nested', 'path');
     const nestedStore = new ReadStateStore(nestedDir);
     await nestedStore.load();
-    nestedStore.add('gh::1');
+    await nestedStore.add('gh::1');
     await nestedStore.flush();
 
     const filePath = path.join(nestedDir, 'read-state.json');
@@ -113,7 +113,7 @@ describe('ReadStateStore', () => {
 
   it('should only load once (idempotent)', async () => {
     await store.load();
-    store.add('gh::1');
+    await store.add('gh::1');
     await store.flush();
 
     // Second load should be a no-op

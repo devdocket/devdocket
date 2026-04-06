@@ -95,11 +95,11 @@ export async function activate(context: vscode.ExtensionContext): Promise<WorkCe
   const inboxTreeView = vscode.window.createTreeView('workcenter.inbox', { treeDataProvider: inboxProvider });
   const sourcesTreeView = vscode.window.createTreeView('workcenter.sources', { treeDataProvider: sourcesProvider });
 
-  const inboxSelectionSub = inboxTreeView.onDidChangeSelection((e) => {
+  const inboxSelectionSub = inboxTreeView.onDidChangeSelection(async (e) => {
     let changed = false;
     for (const item of e.selection) {
       if (item.kind === 'item') {
-        changed = inboxProvider.markSeen(item.providerId, item.externalId) || changed;
+        changed = await inboxProvider.markSeen(item.providerId, item.externalId) || changed;
       }
     }
     if (changed) {

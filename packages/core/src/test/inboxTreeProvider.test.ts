@@ -47,7 +47,7 @@ function createMockReadStateStore() {
   const items = new Set<string>();
   return {
     has: vi.fn((key: string) => items.has(key)),
-    add: vi.fn((key: string) => {
+    add: vi.fn(async (key: string) => {
       if (items.has(key)) { return false; }
       items.add(key);
       return true;
@@ -273,9 +273,9 @@ describe('InboxTreeProvider', () => {
       expect((treeItem.iconPath as any).id).toBe('circle-filled');
     });
 
-    it('should render seen inbox item with circle-outline icon', () => {
+    it('should render seen inbox item with circle-outline icon', async () => {
       const item: InboxItem = { kind: 'item', providerId: 'gh', externalId: '1', title: 'Bug' };
-      provider.markSeen('gh', '1');
+      await provider.markSeen('gh', '1');
       const treeItem = provider.getTreeItem(item);
 
       expect(treeItem.label).toBe('Bug');
@@ -309,13 +309,13 @@ describe('InboxTreeProvider', () => {
   });
 
   describe('markSeen', () => {
-    it('should return true for a newly seen item', () => {
-      expect(provider.markSeen('gh', '1')).toBe(true);
+    it('should return true for a newly seen item', async () => {
+      expect(await provider.markSeen('gh', '1')).toBe(true);
     });
 
-    it('should return false if item is already seen', () => {
-      provider.markSeen('gh', '1');
-      expect(provider.markSeen('gh', '1')).toBe(false);
+    it('should return false if item is already seen', async () => {
+      await provider.markSeen('gh', '1');
+      expect(await provider.markSeen('gh', '1')).toBe(false);
     });
   });
 
@@ -367,10 +367,10 @@ describe('InboxTreeProvider', () => {
       expect(listener).toHaveBeenCalledTimes(1);
     });
 
-    it('should retain seenItems for items still in inbox after provider refresh', () => {
+    it('should retain seenItems for items still in inbox after provider refresh', async () => {
       registry._setItems('gh', [{ externalId: '1', title: 'Bug' }]);
       const item: InboxItem = { kind: 'item', providerId: 'gh', externalId: '1', title: 'Bug' };
-      provider.markSeen('gh', '1');
+      await provider.markSeen('gh', '1');
 
       // Before refresh, item should be seen (circle-outline icon)
       expect(provider.getTreeItem(item).label).toBe('Bug');
@@ -384,9 +384,9 @@ describe('InboxTreeProvider', () => {
       expect((provider.getTreeItem(item).iconPath as any).id).toBe('circle-outline');
     });
 
-    it('should prune seenItems for items no longer in inbox after provider refresh', () => {
+    it('should prune seenItems for items no longer in inbox after provider refresh', async () => {
       registry._setItems('gh', [{ externalId: '1', title: 'Bug' }]);
-      provider.markSeen('gh', '1');
+      await provider.markSeen('gh', '1');
 
       // Remove item from provider
       registry._setItems('gh', []);

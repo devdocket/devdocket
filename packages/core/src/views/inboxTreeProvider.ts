@@ -75,7 +75,7 @@ export class InboxTreeProvider implements vscode.TreeDataProvider<InboxElement> 
 
   refresh(): void { this._onDidChangeTreeData.fire(); }
 
-  markSeen(providerId: string, externalId: string): boolean {
+  async markSeen(providerId: string, externalId: string): Promise<boolean> {
     const key = `${providerId}::${externalId}`;
     return this.readStateStore.add(key);
   }
