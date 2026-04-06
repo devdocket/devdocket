@@ -63,11 +63,7 @@ export class AdoWorkItemProvider implements WorkCenterProvider {
   constructor(
     private readonly org: string,
     private readonly projects: string[],
-  ) {
-    if (!isValidUrlSegment(org)) {
-      throw new Error(`Invalid ADO organization name: "${org}"`);
-    }
-  }
+  ) {}
 
   startPeriodicRefresh(intervalSeconds: number): void {
     this.stopPeriodicRefresh();
@@ -139,16 +135,25 @@ export class AdoWorkItemProvider implements WorkCenterProvider {
   }
 
   private async fetchAndPublishWorkItems(accessToken: string, isUserTriggered: boolean): Promise<void> {
+    if (!isValidUrlSegment(this.org)) {
+      logger.warn(`Skipping fetch: invalid ADO organization name "${this.org}"`);
+      return;
+    }
+
     const validProjects: string[] = [];
-    const invalidProjects: string[] = [];
     for (const project of this.projects) {
       if (project === '' || isValidUrlSegment(project)) {
         validProjects.push(project);
       } else {
         logger.warn(`Skipping invalid ADO project name: "${project}"`);
-        invalidProjects.push(project);
       }
     }
+
+    if (this.projects.length > 0 && validProjects.length === 0) {
+      logger.warn('All configured ADO projects are invalid — skipping fetch');
+      return;
+    }
+
     const projectList = validProjects.length > 0 ? validProjects : [''];
     const results = await Promise.allSettled(
       projectList.map(project => this.fetchWorkItemsForProject(accessToken, project)),

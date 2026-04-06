@@ -168,15 +168,15 @@ export class GitHubIssueProvider implements WorkCenterProvider {
   ): Promise<{ issues: GitHubIssue[]; failures: string[] }> {
     if (repos.length > 0) {
       const validRepos: string[] = [];
-      const failures: string[] = [];
       for (const repo of repos) {
         if (isValidGitHubRepo(repo)) {
           validRepos.push(repo);
         } else {
           logger.warn(`Skipping invalid repo identifier: "${repo}"`);
-          failures.push(repo);
         }
       }
+
+      const failures: string[] = [];
 
       const results = await Promise.allSettled(
         validRepos.map(repo => this.fetchRepoIssues(token, repo))

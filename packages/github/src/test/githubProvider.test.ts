@@ -211,6 +211,35 @@ describe('GitHubIssueProvider', () => {
     vi.useRealTimers();
   });
 
+  it('skips invalid repo identifiers without treating them as fetch failures', async () => {
+    vi.mocked(workspace.getConfiguration).mockReturnValue({
+      get: vi.fn((key: string, defaultValue?: any) => {
+        if (key === 'repos') { return ['owner/valid', '../traversal', 'good/repo']; }
+        return defaultValue;
+      }),
+    } as any);
+
+    mockFetch
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => [createMockIssue(1, 'Issue A', 'owner/valid')],
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => [createMockIssue(2, 'Issue B', 'good/repo')],
+      });
+
+    const listener = vi.fn();
+    provider.onDidDiscoverItems(listener);
+    await provider.refresh();
+
+    // Only 2 fetch calls — invalid repo is skipped
+    expect(mockFetch).toHaveBeenCalledTimes(2);
+    expect(listener).toHaveBeenCalledTimes(1);
+    const items = listener.mock.calls[0][0];
+    expect(items).toHaveLength(2);
+  });
+
   it('stopPeriodicRefresh clears the timer', () => {
     vi.useFakeTimers();
 
