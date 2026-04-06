@@ -44,7 +44,7 @@ function createMockPanel(): MockPanel {
     webview: {
       onDidReceiveMessage: vi.fn((handler: MessageHandler) => {
         messageHandler = handler;
-        return { dispose: vi.fn() };
+        return { dispose: vi.fn(() => { messageHandler = undefined; }) };
       }),
       html: '',
       cspSource: 'mock-csp',
@@ -79,7 +79,7 @@ function createMockWorkGraph(item: WorkItem) {
   return {
     getItem: vi.fn(() => ({ ...item })),
     updateItem: vi.fn(async (_id: string, patch: any) => {
-      if (patch.title) {
+      if (patch.title !== undefined) {
         item.title = patch.title;
       }
       if (patch.notes !== undefined) {
@@ -131,9 +131,9 @@ describe('WorkItemEditorPanel – concurrent autosave', () => {
     await panel.simulateAutosave({ title: 'ABC', notes: '' });
 
     expect(workGraph.updateItem).toHaveBeenCalledTimes(3);
-    expect(workGraph.updateItem).toHaveBeenNthCalledWith(1, 'item-1', { title: 'A' });
-    expect(workGraph.updateItem).toHaveBeenNthCalledWith(2, 'item-1', { title: 'AB' });
-    expect(workGraph.updateItem).toHaveBeenNthCalledWith(3, 'item-1', { title: 'ABC' });
+    expect(workGraph.updateItem).toHaveBeenNthCalledWith(1, 'item-1', expect.objectContaining({ title: 'A' }));
+    expect(workGraph.updateItem).toHaveBeenNthCalledWith(2, 'item-1', expect.objectContaining({ title: 'AB' }));
+    expect(workGraph.updateItem).toHaveBeenNthCalledWith(3, 'item-1', expect.objectContaining({ title: 'ABC' }));
   });
 
   // 2. Multiple save messages arriving before debounce timer fires
@@ -188,8 +188,8 @@ describe('WorkItemEditorPanel – concurrent autosave', () => {
     expect(item.title).toBe('final');
   });
 
-  // 6. Save after panel disposal is a no-op (no crash)
-  it('does not crash when a save message arrives after disposal', async () => {
+  // 6. Save after panel disposal does not crash and does not save
+  it('does not crash or save when a message arrives after disposal', async () => {
     panel.simulateDispose();
 
     // Sending a message after dispose should resolve without throwing
@@ -197,7 +197,8 @@ describe('WorkItemEditorPanel – concurrent autosave', () => {
       panel.simulateAutosave({ title: 'too late', notes: '' }),
     ).resolves.toBeUndefined();
 
-    // Sending a message after dispose is handled safely.
+    // No save should be performed after disposal.
+    expect(workGraph.updateItem).not.toHaveBeenCalled();
   });
 
   it('does not update panel title after disposal', async () => {
