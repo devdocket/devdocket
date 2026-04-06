@@ -9,6 +9,7 @@ import { logger } from './logger';
  */
 export class WorkGraph {
   private readonly items: Map<string, WorkItem> = new Map();
+  /** Lazily-built index of items grouped by state; nulled on any mutation to {@link items}. */
   private stateCache: Map<WorkItemState, WorkItem[]> | null = null;
   private readonly _onDidChange = new vscode.EventEmitter<void>();
   /**
@@ -98,7 +99,10 @@ export class WorkGraph {
     }
     const cache = this.getOrBuildStateCache();
     const result: WorkItem[] = [];
+    const seen = new Set<WorkItemState>();
     for (const state of states) {
+      if (seen.has(state)) continue;
+      seen.add(state);
       const items = cache.get(state);
       if (items) {
         result.push(...items);
