@@ -30,8 +30,12 @@ describe('validateRefreshInterval', () => {
     expect(validateRefreshInterval(-100)).toBe(0);
   });
 
-  it('returns 0 for null (null coerces to 0)', () => {
-    expect(validateRefreshInterval(null)).toBe(0);
+  it('returns default 300 for null (treated as missing config)', () => {
+    expect(validateRefreshInterval(null)).toBe(300);
+  });
+
+  it('returns default 300 for false', () => {
+    expect(validateRefreshInterval(false)).toBe(300);
   });
 
   it('returns default 300 for NaN', () => {
@@ -103,6 +107,10 @@ describe('validateRefreshInterval', () => {
     expect(logger.warn).toHaveBeenCalledWith(
       expect.stringContaining('not a valid number'),
     );
+  });
+
+  it('returns default 300 for Symbol', () => {
+    expect(validateRefreshInterval(Symbol('test'))).toBe(300);
   });
 
   it('does not log when disabling refresh', () => {

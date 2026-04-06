@@ -7,25 +7,31 @@ const MAXIMUM_INTERVAL_SECONDS = 2_147_483;
 
 /**
  * Validates and clamps a refresh interval value.
- * Non-finite values (NaN, undefined) and blank strings fall back to the default (300s).
+ * Blank strings and values that do not convert to a finite number (for example
+ * NaN, undefined, null, or non-numeric strings such as 'abc') fall back to
+ * the default (300s).
  * Zero or negative values return 0 (disables periodic refresh).
  * Positive values below the minimum (60s) are clamped up.
  * Values above the maximum (~24.8 days) are clamped down.
  */
 export function validateRefreshInterval(value: unknown, logger?: Logger): number {
-  if (typeof value === 'string' && value.trim() === '') {
-    logger?.warn(
-      `Refresh interval is not a valid number (got ${JSON.stringify(value)}), using default ${DEFAULT_INTERVAL_SECONDS} seconds`,
-    );
-    return DEFAULT_INTERVAL_SECONDS;
+  if (value == null || value === false) {
+    return warnAndDefault(logger, String(value));
   }
 
-  const num = Number(value);
+  if (typeof value === 'string' && value.trim() === '') {
+    return warnAndDefault(logger, JSON.stringify(value));
+  }
+
+  let num: number;
+  try {
+    num = Number(value);
+  } catch {
+    return warnAndDefault(logger, String(value));
+  }
+
   if (!Number.isFinite(num)) {
-    logger?.warn(
-      `Refresh interval is not a valid number (got ${String(value)}), using default ${DEFAULT_INTERVAL_SECONDS} seconds`,
-    );
-    return DEFAULT_INTERVAL_SECONDS;
+    return warnAndDefault(logger, String(value));
   }
 
   if (num <= 0) {
@@ -47,4 +53,11 @@ export function validateRefreshInterval(value: unknown, logger?: Logger): number
   }
 
   return num;
+}
+
+function warnAndDefault(logger: Logger | undefined, repr: string): number {
+  logger?.warn(
+    `Refresh interval is not a valid number (got ${repr}), using default ${DEFAULT_INTERVAL_SECONDS} seconds`,
+  );
+  return DEFAULT_INTERVAL_SECONDS;
 }
