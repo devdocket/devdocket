@@ -351,9 +351,13 @@ describe('ProviderRegistry', () => {
       const provider = createMockProvider('loader');
       // Make refresh hang so loading stays true
       provider.refresh = vi.fn(() => new Promise(() => {}));
-      registry.register(provider);
+      const registration = registry.register(provider);
 
-      expect(registry.loading).toBe(true);
+      try {
+        expect(registry.loading).toBe(true);
+      } finally {
+        registration.dispose();
+      }
     });
 
     it('loading becomes false after provider refresh resolves', async () => {
@@ -507,6 +511,7 @@ describe('ProviderRegistry', () => {
       // Wait for initial refresh to complete so we isolate the empty-fire behavior
       await vi.waitFor(() => expect(registry.loading).toBe(false));
 
+      stateStore.setStates.mockClear();
       const changeListener = vi.fn();
       registry.onDidChangeDiscoveredItems(changeListener);
 
