@@ -134,10 +134,10 @@ export async function activate(context: vscode.ExtensionContext): Promise<WorkCe
     historyTreeView.message = historyProvider.getChildren().length > 0 ? undefined : 'No history items';
   };
   updateWorkViewMessages();
-  const workGraphSub = workGraph.onDidChange(updateWorkViewMessages);
   logger.info(`Tree view creation took ${Math.round(performance.now() - treeViewStart)}ms`);
 
   const eventWiringStart = performance.now();
+  const workGraphSub = workGraph.onDidChange(updateWorkViewMessages);
   let initialLoadComplete = false;
   let wasLoading = false;
 
