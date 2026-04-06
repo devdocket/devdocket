@@ -38,7 +38,7 @@ function createMockWebviewPanel() {
   };
   return {
     panel,
-    simulateMessage: (msg: any) => messageHandler?.(msg),
+    simulateMessage: (msg: any) => messageHandler?.(msg) ?? Promise.resolve(),
     simulateDispose: () => disposeHandler?.(),
   };
 }
@@ -489,7 +489,7 @@ describe('WorkItemEditorPanel', () => {
         if (patch.title !== undefined) {
           item.title = patch.title;
         }
-        if (patch.notes !== undefined) {
+        if ('notes' in patch) {
           item.notes = patch.notes;
         }
       });
