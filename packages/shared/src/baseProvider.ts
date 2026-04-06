@@ -31,7 +31,7 @@ export abstract class BaseProvider {
   readonly onDidDiscoverItems: Event<DiscoveredItem[]>;
 
   private refreshTimer: ReturnType<typeof setInterval> | undefined;
-  private _isRefreshing = false;
+  protected _isRefreshing = false;
   private _disposed = false;
 
   /** Optional error handler for background refresh failures. Override to add logging. */
