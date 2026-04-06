@@ -22,8 +22,9 @@ interface DiscoveredItem {
 interface WorkCenterProvider {
   readonly id: string;
   readonly label: string;
+  readonly resurfaceDismissed?: boolean;
   readonly onDidDiscoverItems: Event<DiscoveredItem[]>;
-  refresh(): Promise<void>;
+  refresh(token?: vscode.CancellationToken): Promise<void>;
 }
 
 interface GitHubIssue {
@@ -67,20 +68,31 @@ export class GitHubIssueProvider implements WorkCenterProvider {
     }
   }
 
-  async refresh(): Promise<void> {
+  async refresh(token?: vscode.CancellationToken): Promise<void> {
+    if (this._isRefreshing) {
+      return;
+    }
+
+    this._isRefreshing = true;
     logger.info('Fetching assigned issues...');
     try {
+      if (token?.isCancellationRequested) {
+        return;
+      }
+
       const session = await vscode.authentication.getSession('github', ['repo'], {
         createIfNone: true,
       }).catch(() => null);
       
-      if (!session) {
+      if (!session || token?.isCancellationRequested) {
         return;
       }
 
       await this.fetchAndPublishIssues(session.accessToken, true);
     } catch (err) {
       logger.error('Failed to fetch issues', err);
+    } finally {
+      this._isRefreshing = false;
     }
   }
 
