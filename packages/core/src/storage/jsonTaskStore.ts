@@ -24,6 +24,12 @@ function validateWorkItem(value: unknown, index: number): string | undefined {
   if (typeof obj.state !== 'string' || !validWorkItemStates.has(obj.state)) {
     return `Item "${obj.id}" at index ${index} has invalid "state": ${JSON.stringify(obj.state)}`;
   }
+  if (typeof obj.createdAt !== 'number' || !Number.isFinite(obj.createdAt)) {
+    return `Item "${obj.id}" at index ${index} is missing a valid "createdAt" (finite number)`;
+  }
+  if (typeof obj.updatedAt !== 'number' || !Number.isFinite(obj.updatedAt)) {
+    return `Item "${obj.id}" at index ${index} is missing a valid "updatedAt" (finite number)`;
+  }
   return undefined;
 }
 
@@ -56,8 +62,9 @@ export class JsonTaskStore implements ITaskStore {
       try {
         parsed = JSON.parse(data);
       } catch {
-        logger.warn('Failed to parse work items file');
-        throw new Error('Failed to parse work items file');
+        logger.warn('Failed to parse work items file — resetting to empty');
+        this.cache = new Map();
+        return [];
       }
       if (!Array.isArray(parsed)) {
         logger.warn('Work items file does not contain an array — resetting to empty');
