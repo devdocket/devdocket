@@ -197,4 +197,210 @@ describe('DiscoveredStateStore', () => {
       expect(records[0].externalId).toBe('issue-1');
     });
   });
+
+  describe('edge cases', () => {
+    it('should preserve all entries when concurrent setState calls run on an already-loaded store', async () => {
+      await store.load();
+      const promises = Array.from({ length: 20 }, (_, i) =>
+        store.setState('gh', `issue-${i}`, 'unseen')
+      );
+      await Promise.all(promises);
+
+      const records = await store.loadAll();
+      expect(records).toHaveLength(20);
+      for (let i = 0; i < 20; i++) {
+        expect(store.getState('gh', `issue-${i}`)).toBe('unseen');
+      }
+    });
+
+    it('should handle large sets (1000+ items)', async () => {
+      const items = Array.from({ length: 1200 }, (_, i) => ({
+        providerId: 'gh',
+        externalId: `item-${i}`,
+        state: 'unseen' as const,
+      }));
+      await store.setStates(items);
+
+      const records = await store.loadAll();
+      expect(records).toHaveLength(1200);
+
+      // Verify a sampling of items
+      expect(store.getState('gh', 'item-0')).toBe('unseen');
+      expect(store.getState('gh', 'item-599')).toBe('unseen');
+      expect(store.getState('gh', 'item-1199')).toBe('unseen');
+
+      // Verify persistence by reloading from disk
+      const store2 = new DiscoveredStateStore(tmpDir);
+      await store2.load();
+      const reloaded = await store2.loadAll();
+      expect(reloaded).toHaveLength(1200);
+      store2.dispose();
+    });
+
+    it('should update individual item states without affecting other entries', async () => {
+      await store.setStates([
+        { providerId: 'gh', externalId: 'keep-1', state: 'accepted' },
+        { providerId: 'gh', externalId: 'update-1', state: 'unseen' },
+        { providerId: 'gh', externalId: 'update-2', state: 'dismissed' },
+        { providerId: 'gh', externalId: 'keep-2', state: 'accepted' },
+      ]);
+      expect((await store.loadAll())).toHaveLength(4);
+
+      // Transition individual items to new states
+      await store.setState('gh', 'update-1', 'dismissed');
+      await store.setState('gh', 'update-2', 'accepted');
+
+      expect(store.getState('gh', 'update-1')).toBe('dismissed');
+      expect(store.getState('gh', 'update-2')).toBe('accepted');
+      expect(store.getState('gh', 'keep-1')).toBe('accepted');
+      expect(store.getState('gh', 'keep-2')).toBe('accepted');
+    });
+
+    it('should auto-load persisted data when setState is called before explicit load', async () => {
+      // Pre-seed some data on disk
+      const filePath = path.join(tmpDir, 'discovered-state.json');
+      await fs.writeFile(filePath, JSON.stringify([
+        { providerId: 'gh', externalId: 'existing-1', inboxState: 'unseen' },
+      ]), 'utf-8');
+
+      // Create a fresh store and call setState without calling load() first
+      const freshStore = new DiscoveredStateStore(tmpDir);
+      await freshStore.setState('gh', 'new-1', 'accepted');
+
+      expect(freshStore.getState('gh', 'existing-1')).toBe('unseen');
+      expect(freshStore.getState('gh', 'new-1')).toBe('accepted');
+      freshStore.dispose();
+    });
+
+    it('should handle corrupt JSON gracefully by backing up and loading empty', async () => {
+      const filePath = path.join(tmpDir, 'discovered-state.json');
+      await fs.writeFile(filePath, '{broken: json!!!', 'utf-8');
+
+      await store.load();
+      const records = await store.loadAll();
+      expect(records).toEqual([]);
+
+      const files = await fs.readdir(tmpDir);
+      const backupFiles = files.filter(f => f.startsWith('discovered-state.json.corrupt.'));
+      expect(backupFiles).toHaveLength(1);
+    });
+
+    it('should handle truncated JSON gracefully by backing up and loading empty', async () => {
+      const filePath = path.join(tmpDir, 'discovered-state.json');
+      await fs.writeFile(filePath, `[{"providerId":"gh","externalId":"1","inboxState":"unseen"`, 'utf-8');
+
+      await store.load();
+      const records = await store.loadAll();
+      expect(records).toEqual([]);
+
+      const files = await fs.readdir(tmpDir);
+      const backupFiles = files.filter(f => f.startsWith('discovered-state.json.corrupt.'));
+      expect(backupFiles).toHaveLength(1);
+    });
+
+    it('should handle empty file gracefully by backing up and loading empty', async () => {
+      const filePath = path.join(tmpDir, 'discovered-state.json');
+      await fs.writeFile(filePath, '', 'utf-8');
+
+      await store.load();
+      const records = await store.loadAll();
+      expect(records).toEqual([]);
+
+      const files = await fs.readdir(tmpDir);
+      const backupFiles = files.filter(f => f.startsWith('discovered-state.json.corrupt.'));
+      expect(backupFiles).toHaveLength(1);
+    });
+
+    it('should handle file containing only whitespace gracefully by backing up and loading empty', async () => {
+      const filePath = path.join(tmpDir, 'discovered-state.json');
+      await fs.writeFile(filePath, `   \n  `, 'utf-8');
+
+      await store.load();
+      const records = await store.loadAll();
+      expect(records).toEqual([]);
+
+      const files = await fs.readdir(tmpDir);
+      const backupFiles = files.filter(f => f.startsWith('discovered-state.json.corrupt.'));
+      expect(backupFiles).toHaveLength(1);
+    });
+
+    it('should persist all entries to disk after concurrent saves', async () => {
+      await store.load();
+      const promises: Promise<void>[] = [];
+      for (let i = 0; i < 50; i++) {
+        promises.push(store.setState('gh', `concurrent-${i}`, 'unseen'));
+      }
+      await Promise.all(promises);
+
+      const records = await store.loadAll();
+      expect(records).toHaveLength(50);
+
+      // Verify the file on disk is valid JSON with all entries
+      const filePath = path.join(tmpDir, 'discovered-state.json');
+      const raw = await fs.readFile(filePath, 'utf-8');
+      const parsed = JSON.parse(raw);
+      expect(parsed).toHaveLength(50);
+    });
+
+    it('should look up all items correctly from a large set', async () => {
+      const count = 2000;
+      const items = Array.from({ length: count }, (_, i) => ({
+        providerId: 'perf',
+        externalId: `id-${i}`,
+        state: 'unseen' as const,
+      }));
+      await store.setStates(items);
+
+      for (let i = 0; i < count; i++) {
+        expect(store.getState('perf', `id-${i}`)).toBe('unseen');
+      }
+    });
+
+    it('should handle concurrent setStates batch calls', async () => {
+      // Pre-load so concurrent setStates calls don't race on load()
+      await store.load();
+      const batch1 = Array.from({ length: 10 }, (_, i) => ({
+        providerId: 'a', externalId: `a-${i}`, state: 'unseen' as const,
+      }));
+      const batch2 = Array.from({ length: 10 }, (_, i) => ({
+        providerId: 'b', externalId: `b-${i}`, state: 'accepted' as const,
+      }));
+
+      await Promise.all([store.setStates(batch1), store.setStates(batch2)]);
+
+      const records = await store.loadAll();
+      expect(records).toHaveLength(20);
+      expect(store.getState('a', 'a-0')).toBe('unseen');
+      expect(store.getState('b', 'b-9')).toBe('accepted');
+    });
+
+    it('should apply the last sequential state transition to an item', async () => {
+      // Apply transitions sequentially so the final state is deterministic
+      await store.setState('gh', 'flip', 'unseen');
+      await store.setState('gh', 'flip', 'accepted');
+      await store.setState('gh', 'flip', 'dismissed');
+
+      expect(store.getState('gh', 'flip')).toBe('dismissed');
+
+      // Verify on-disk JSON contains exactly one entry for this key
+      const filePath = path.join(tmpDir, 'discovered-state.json');
+      const raw = await fs.readFile(filePath, 'utf-8');
+      const parsed = JSON.parse(raw);
+      const flipEntries = parsed.filter((r: { externalId: string }) => r.externalId === 'flip');
+      expect(flipEntries).toHaveLength(1);
+    });
+
+    it('should fire onDidChange for each setState in concurrent batch', async () => {
+      const listener = vi.fn();
+      store.onDidChange(listener);
+
+      await Promise.all([
+        store.setState('gh', 'x', 'unseen'),
+        store.setState('gh', 'y', 'accepted'),
+        store.setState('gh', 'z', 'dismissed'),
+      ]);
+
+      expect(listener).toHaveBeenCalledTimes(3);
+    });
+  });
 });
