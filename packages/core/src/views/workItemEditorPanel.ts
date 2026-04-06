@@ -205,8 +205,8 @@ export class WorkItemEditorPanel {
   <div id="form" role="form">
     <div class="field">
       <label for="title">Title</label>
-      <input type="text" id="title" value="${escapeAttr(item.title)}" ${item.providerId ? 'disabled aria-disabled="true" aria-describedby="readonly-title-hint"' : ''} />
-${item.providerId ? '      <span id="readonly-title-hint" class="hint">Title is managed by the provider</span>' : ''}
+      <input type="text" id="title" value="${escapeAttr(item.title)}" ${item.providerId ? 'disabled aria-disabled="true" aria-describedby="disabled-title-hint"' : ''} />
+${item.providerId ? '      <span id="disabled-title-hint" class="hint">Title is managed by the provider</span>' : ''}
     </div>
     <div class="field">
       <label for="notes">Notes</label>
