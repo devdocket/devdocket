@@ -41,7 +41,7 @@ export class WorkItemEditorPanel {
     this.update();
 
     this.messageSubscription = this.panel.webview.onDidReceiveMessage((msg) => {
-      if (msg.type === 'autosave') {
+      if (msg?.type === 'autosave' && msg.data && typeof msg.data === 'object') {
         this.pendingData = msg.data;
         if (this.debounceTimer) {
           clearTimeout(this.debounceTimer);
