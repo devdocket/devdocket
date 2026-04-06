@@ -16,8 +16,8 @@ export class DiscoveredStateStore {
   private readonly cache = new Map<string, DiscoveredStateRecord>();
   private readonly _onDidChange = new vscode.EventEmitter<void>();
   readonly onDidChange = this._onDidChange.event;
-  private _pendingWrite: Promise<void> = Promise.resolve();
-  private _loadingPromise: Promise<void> | null = null;
+  private writeQueue: Promise<void> = Promise.resolve();
+  private loadPromise: Promise<void> | null = null;
   private loaded = false;
 
   constructor(storagePath: string) {
@@ -92,13 +92,13 @@ export class DiscoveredStateStore {
     if (this.loaded) {
       return;
     }
-    if (!this._loadingPromise) {
-      this._loadingPromise = this.doLoad().catch((err) => {
-        this._loadingPromise = null;
+    if (!this.loadPromise) {
+      this.loadPromise = this.doLoad().catch((err) => {
+        this.loadPromise = null;
         throw err;
       });
     }
-    return this._loadingPromise;
+    return this.loadPromise;
   }
 
   private async doLoad(): Promise<void> {
@@ -130,8 +130,8 @@ export class DiscoveredStateStore {
   }
 
   private enqueue(op: () => Promise<void>): Promise<void> {
-    this._pendingWrite = this._pendingWrite.then(op, op);
-    return this._pendingWrite;
+    this.writeQueue = this.writeQueue.then(op, op);
+    return this.writeQueue;
   }
 
   dispose(): void {
