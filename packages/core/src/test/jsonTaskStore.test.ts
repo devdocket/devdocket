@@ -288,13 +288,13 @@ describe('JsonTaskStore', () => {
 
     it('skips items with non-finite timestamps', async () => {
       const filePath = path.join(tmpDir, 'workitems.json');
-      const data = [
-        { id: 'inf-ts', title: 'Bad ts', state: 'New', createdAt: Infinity, updatedAt: 1000 },
-        makeItem({ id: 'valid' }),
-      ];
+      // Use raw JSON so 1e309 parses as a number but fails Number.isFinite(...)
+      const data = `[
+        {"id":"inf-ts","title":"Bad ts","state":"New","createdAt":1e309,"updatedAt":1000},
+        ${JSON.stringify(makeItem({ id: 'valid' }))}
+      ]`;
       await fs.mkdir(tmpDir, { recursive: true });
-      // Infinity serializes to null in JSON
-      await fs.writeFile(filePath, JSON.stringify(data), 'utf-8');
+      await fs.writeFile(filePath, data, 'utf-8');
 
       const items = await store.loadAll();
       expect(items).toHaveLength(1);
