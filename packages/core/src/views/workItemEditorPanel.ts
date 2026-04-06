@@ -187,8 +187,8 @@ export class WorkItemEditorPanel {
       border: 1px solid var(--input-border);
     }
     input[readonly], textarea[readonly] {
-      opacity: 0.55;
-      cursor: not-allowed;
+      color: var(--vscode-disabledForeground, var(--vscode-foreground));
+      cursor: text;
       border-style: dashed;
       background-color: var(--vscode-editor-inactiveSelectionBackground, rgba(128,128,128,0.15));
     }
