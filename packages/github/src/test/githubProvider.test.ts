@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
-import { authentication, workspace } from 'vscode';
+import { authentication, workspace, window } from 'vscode';
 import { GitHubIssueProvider } from '../githubProvider';
 
 // Mock global fetch
@@ -238,6 +238,8 @@ describe('GitHubIssueProvider', () => {
     expect(listener).toHaveBeenCalledTimes(1);
     const items = listener.mock.calls[0][0];
     expect(items).toHaveLength(2);
+    // Invalid repo should not surface as a fetch failure warning
+    expect(window.showWarningMessage).not.toHaveBeenCalled();
   });
 
   it('stopPeriodicRefresh clears the timer', () => {
