@@ -345,4 +345,47 @@ describe('WorkGraph', () => {
       .sort((x, y) => (x.sortOrder ?? Number.MAX_SAFE_INTEGER) - (y.sortOrder ?? Number.MAX_SAFE_INTEGER));
     expect(ordered.map((i) => i.title)).toEqual(['B', 'A', 'C']);
   });
+
+  describe('provenance index', () => {
+    it('finds item by provenance after createItem', async () => {
+      const item = await graph.createItem(
+        { title: 'Indexed' },
+        { providerId: 'github', externalId: '42' },
+      );
+
+      const found = graph.findItemByProvenance('github', '42');
+      expect(found).toBeDefined();
+      expect(found!.id).toBe(item.id);
+    });
+
+    it('returns undefined for unknown provenance', () => {
+      const found = graph.findItemByProvenance('github', 'missing');
+      expect(found).toBeUndefined();
+    });
+
+    it('removes provenance entry on deleteItem', async () => {
+      const item = await graph.createItem(
+        { title: 'ToDelete' },
+        { providerId: 'github', externalId: '99' },
+      );
+      expect(graph.findItemByProvenance('github', '99')).toBeDefined();
+
+      await graph.deleteItem(item.id);
+      expect(graph.findItemByProvenance('github', '99')).toBeUndefined();
+    });
+
+    it('rebuilds provenance index from store on load', async () => {
+      const item = await graph.createItem(
+        { title: 'Persisted' },
+        { providerId: 'azdo', externalId: '7' },
+      );
+
+      const freshGraph = new WorkGraph(store);
+      await freshGraph.load();
+
+      const found = freshGraph.findItemByProvenance('azdo', '7');
+      expect(found).toBeDefined();
+      expect(found!.id).toBe(item.id);
+    });
+  });
 });
