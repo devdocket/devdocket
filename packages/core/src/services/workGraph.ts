@@ -97,15 +97,11 @@ export class WorkGraph {
       const cache = this.getOrBuildStateCache();
       return [...(cache.get(states[0]) ?? [])];
     }
-    const cache = this.getOrBuildStateCache();
+    const requestedStates = new Set(states);
     const result: WorkItem[] = [];
-    const seen = new Set<WorkItemState>();
-    for (const state of states) {
-      if (seen.has(state)) continue;
-      seen.add(state);
-      const items = cache.get(state);
-      if (items) {
-        result.push(...items);
+    for (const item of this.items.values()) {
+      if (requestedStates.has(item.state)) {
+        result.push(item);
       }
     }
     return result;
