@@ -28,7 +28,7 @@ export interface DiscoveredItem {
 /**
  * A provider that discovers work items from an external source (e.g. GitHub Issues).
  *
- * Providers are registered via {@link WorkCenterApi.registerProvider} and emit
+ * Providers are registered through the WorkCenter API and emit
  * {@link DiscoveredItem}s through the {@link onDidDiscoverItems} event. The core
  * extension reads discovered item metadata live from the provider and does not
  * persist that metadata; only inbox state associated with provider items is persisted.
