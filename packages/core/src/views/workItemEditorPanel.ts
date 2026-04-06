@@ -186,7 +186,7 @@ export class WorkItemEditorPanel {
       color: var(--vscode-foreground);
       border: 1px solid var(--input-border);
     }
-    input:disabled, textarea:disabled {
+    input[readonly], textarea[readonly] {
       opacity: 0.55;
       cursor: not-allowed;
       border-style: dashed;
@@ -201,12 +201,12 @@ export class WorkItemEditorPanel {
   </style>
 </head>
 <body>
-  <h2>Edit Work Item</h2>
-  <div id="form" role="form">
+  <h2 id="editor-heading">Edit Work Item</h2>
+  <div id="form" role="form" aria-labelledby="editor-heading">
     <div class="field">
       <label for="title">Title</label>
-      <input type="text" id="title" value="${escapeAttr(item.title)}" ${item.providerId ? 'disabled aria-disabled="true" aria-describedby="disabled-title-hint"' : ''} />
-${item.providerId ? '      <span id="disabled-title-hint" class="hint">Title is managed by the provider</span>' : ''}
+      <input type="text" id="title" value="${escapeAttr(item.title)}" ${item.providerId ? 'readonly aria-readonly="true" aria-describedby="readonly-title-hint"' : ''} />
+${item.providerId ? '      <span id="readonly-title-hint" class="hint">Title is managed by the provider</span>' : ''}
     </div>
     <div class="field">
       <label for="notes">Notes</label>
@@ -230,7 +230,7 @@ ${item.providerId ? '      <span id="disabled-title-hint" class="hint">Title is 
       debounceTimer = setTimeout(() => {
         const data = getData();
         const titleEl = document.getElementById('title');
-        if (!data.title && titleEl instanceof HTMLInputElement && !titleEl.disabled) return;
+        if (!data.title && titleEl instanceof HTMLInputElement && !titleEl.readOnly) return;
         vscode.postMessage({ type: 'autosave', data });
       }, 500);
     }
@@ -238,7 +238,7 @@ ${item.providerId ? '      <span id="disabled-title-hint" class="hint">Title is 
     fields.forEach(f => {
       const el = document.getElementById(f);
       if (el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement) {
-        if (!el.disabled) {
+        if (!el.readOnly) {
           el.addEventListener('input', scheduleAutosave);
         }
       }
