@@ -207,7 +207,7 @@ describe('DiscoveredStateStore', () => {
 
     it('should throw on truncated JSON', async () => {
       const filePath = path.join(tmpDir, 'discovered-state.json');
-      await fs.writeFile(filePath, '[{"providerId":"gh","externalId":"1","inboxState":"unseen"', 'utf-8');
+      await fs.writeFile(filePath, `[{"providerId":"gh","externalId":"1","inboxState":"unseen"`, 'utf-8');
 
       await expect(store.load()).rejects.toThrow();
     });
@@ -221,7 +221,7 @@ describe('DiscoveredStateStore', () => {
 
     it('should handle file containing only whitespace as corrupt JSON', async () => {
       const filePath = path.join(tmpDir, 'discovered-state.json');
-      await fs.writeFile(filePath, '   \n  ', 'utf-8');
+      await fs.writeFile(filePath, `   \n  `, 'utf-8');
 
       await expect(store.load()).rejects.toThrow();
     });
