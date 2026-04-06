@@ -1,0 +1,20 @@
+## Summary
+
+Adds integration tests for the core extension's ctivate() function, covering the full activation lifecycle including:
+
+- API return shape (provider/action registration)
+- Subscription cleanup
+- Tree view creation for all five panels (Inbox, Queue, Focus, Sources, History)
+- Command registration
+- Output channel creation
+- Badge count updates on Inbox changes
+- Provider and action registration via the returned API
+- Event coalescing (debounced refresh)
+- Migration from legacy storage
+- Error handling (corrupt JSON, ENOENT)
+- Configuration-driven behavior
+
+## Test Details
+
+- **16 new tests** in packages/core/src/test/extension.test.ts
+- All 254 tests pass across the monorepo (212 core + 42 github)

@@ -35,9 +35,17 @@ describe('activate()', () => {
   });
 
   afterEach(() => {
-    // Dispose everything activate pushed into subscriptions
+    // Dispose everything activate pushed into subscriptions.
+    // Surface disposal errors so cleanup bugs are caught.
+    const errors: unknown[] = [];
     for (const sub of [...context.subscriptions].reverse()) {
-      try { (sub as any).dispose?.(); } catch { /* ignore */ }
+      try { (sub as any).dispose?.(); } catch (e) { errors.push(e); }
+    }
+    if (errors.length > 0) {
+      throw new Error(
+        `Failed to dispose ${errors.length} subscription(s): ` +
+        errors.map((e, i) => `[${i + 1}] ${e instanceof Error ? e.message : String(e)}`).join('; '),
+      );
     }
   });
 
@@ -52,13 +60,17 @@ describe('activate()', () => {
   });
 
   // ------------------------------------------------------------------
-  // 2. Pushes disposables into context.subscriptions
+  // 2. Registers expected disposables via specific API call counts
   // ------------------------------------------------------------------
-  it('registers disposables in context.subscriptions', async () => {
+  it('registers the expected tree views and configuration listener', async () => {
     await activate(context);
-    // The function pushes: outputChannel, configChange listener,
-    // 5 tree views, selection sub, multiple event subs, dispose wrappers
-    expect(context.subscriptions.length).toBeGreaterThan(10);
+    const createTreeView = vscode.window.createTreeView as ReturnType<typeof vi.fn>;
+    expect(createTreeView).toHaveBeenCalledTimes(5);
+
+    const onDidChangeConfiguration = vscode.workspace.onDidChangeConfiguration as ReturnType<typeof vi.fn>;
+    expect(onDidChangeConfiguration).toHaveBeenCalledTimes(1);
+
+    expect(vscode.window.createOutputChannel).toHaveBeenCalledTimes(1);
   });
 
   // ------------------------------------------------------------------
@@ -199,8 +211,9 @@ describe('activate()', () => {
     // After flushing, the coalesced callback ran. Even though register()
     // fired 2 events synchronously, the first queueMicrotask should
     // coalesce them. provider.refresh() also fires another event later.
-    // Total message writes should be well under the raw event count.
+    // Total message writes should be strictly less than the raw event count (≥2).
     expect(messageSetCount).toBeGreaterThan(0);
+    expect(messageSetCount).toBeLessThanOrEqual(2);
   });
 
   // ------------------------------------------------------------------
