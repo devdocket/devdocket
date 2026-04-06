@@ -137,9 +137,13 @@ describe('WorkItemEditorPanel – concurrent autosave', () => {
   });
 
   // 2. Overlapping in-flight saves with out-of-order completion
-  //    Demonstrates the current race: when an earlier save resolves after a
-  //    later one, the earlier value overwrites the newer one.
-  it('demonstrates that out-of-order save resolution lets an older value overwrite a newer one', async () => {
+  //    TODO: Once sequencing/cancellation is implemented, this should assert
+  //    that the newest value ('v2') persists regardless of resolution order.
+  it.todo('preserves the newest autosave value when saves resolve out of order');
+
+  // 2b. Characterization test: documents current race condition behavior.
+  //     Remove this once the above todo is implemented.
+  it('documents current behavior: out-of-order resolution lets older value overwrite newer', async () => {
     const deferred = () => {
       let resolve!: () => void;
       const promise = new Promise<void>((r) => {
