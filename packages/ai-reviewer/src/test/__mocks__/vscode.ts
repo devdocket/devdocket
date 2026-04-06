@@ -6,7 +6,7 @@ class MockEventEmitter {
     this.listeners.push(listener);
     return { dispose: () => { this.listeners = this.listeners.filter(l => l !== listener); } };
   };
-  fire(data?: any) {
+  fire(data?: unknown) {
     for (const listener of this.listeners) {
       listener(data);
     }
@@ -35,14 +35,20 @@ class MockTreeItem {
   label: string;
   collapsibleState: number;
   description?: string;
-  tooltip?: any;
+  tooltip?: unknown;
   contextValue?: string;
-  iconPath?: any;
+  iconPath?: unknown;
   constructor(label: string, collapsibleState?: number) {
     this.label = label;
     this.collapsibleState = collapsibleState ?? 0;
   }
 }
+
+const ProgressLocation = {
+  SourceControl: 1,
+  Window: 10,
+  Notification: 15,
+};
 
 const window = {
   showInputBox: vi.fn(),
@@ -50,18 +56,14 @@ const window = {
   showWarningMessage: vi.fn(),
   showErrorMessage: vi.fn(),
   showQuickPick: vi.fn(),
+  showTextDocument: vi.fn(),
   registerTreeDataProvider: vi.fn(() => ({ dispose: vi.fn() })),
   createWebviewPanel: vi.fn(),
-  createOutputChannel: vi.fn(() => ({
-    appendLine: vi.fn(),
-    append: vi.fn(),
-    clear: vi.fn(),
-    show: vi.fn(),
-    hide: vi.fn(),
-    dispose: vi.fn(),
-    name: 'WorkCenter ADO',
-    replace: vi.fn(),
-  })),
+  withProgress: vi.fn(async (options: unknown, task: Function) => {
+    const progress = { report: vi.fn() };
+    const token = { isCancellationRequested: false, onCancellationRequested: vi.fn() };
+    return task(progress, token);
+  }),
 };
 
 const commands = {
@@ -76,6 +78,10 @@ const env = {
 const Uri = {
   parse: vi.fn((s: string) => ({ toString: () => s })),
   file: vi.fn((path: string) => ({ fsPath: path, toString: () => `file://${path}` })),
+  joinPath: vi.fn((base: { fsPath: string }, ...segments: string[]) => {
+    const joined = [base.fsPath, ...segments].join('/');
+    return { fsPath: joined, toString: () => `file://${joined}` };
+  }),
 };
 
 const authentication = {
@@ -84,10 +90,33 @@ const authentication = {
 
 const workspace = {
   getConfiguration: vi.fn().mockReturnValue({
-    get: vi.fn((key: string, defaultValue?: any) => defaultValue),
+    get: vi.fn((key: string, defaultValue?: unknown) => defaultValue),
   }),
   workspaceFolders: [{ uri: { fsPath: '/mock/workspace' } }],
-  onDidChangeConfiguration: vi.fn(() => ({ dispose: vi.fn() })),
+  openTextDocument: vi.fn().mockResolvedValue({ uri: 'mock-doc-uri' }),
+  fs: {
+    readFile: vi.fn().mockResolvedValue(new Uint8Array()),
+  },
+};
+
+class MockLanguageModelChatMessage {
+  role: string;
+  content: string;
+  constructor(role: string, content: string) {
+    this.role = role;
+    this.content = content;
+  }
+  static User(content: string) {
+    return new MockLanguageModelChatMessage('user', content);
+  }
+}
+
+const lm = {
+  selectChatModels: vi.fn().mockResolvedValue([{
+    sendRequest: vi.fn().mockResolvedValue({
+      text: (async function* () { yield 'Review feedback here'; })(),
+    }),
+  }]),
 };
 
 const extensions = {
@@ -110,7 +139,9 @@ export {
   MockMarkdownString as MarkdownString,
   MockTreeItem as TreeItem,
   MockDisposable as Disposable,
+  MockLanguageModelChatMessage as LanguageModelChatMessage,
   TreeItemCollapsibleState,
+  ProgressLocation,
   window,
   commands,
   env,
@@ -118,4 +149,5 @@ export {
   authentication,
   workspace,
   extensions,
+  lm,
 };
