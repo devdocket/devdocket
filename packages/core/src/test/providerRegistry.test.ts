@@ -389,11 +389,18 @@ describe('ProviderRegistry', () => {
       registry.register(p2);
       expect(registry.loading).toBe(true);
 
-      resolveP1();
-      await vi.waitFor(() => {
-        // p1 done, p2 still loading
-        expect(registry.loading).toBe(true);
+      const p1RefreshCompleted = new Promise<void>((resolve) => {
+        const disposable = registry.onDidChangeDiscoveredItems(() => {
+          disposable.dispose();
+          resolve();
+        });
       });
+
+      resolveP1();
+      await p1RefreshCompleted;
+
+      // p1 finished and emitted its update; p2 should still keep loading true
+      expect(registry.loading).toBe(true);
 
       resolveP2();
       await vi.waitFor(() => expect(registry.loading).toBe(false));
@@ -493,6 +500,9 @@ describe('ProviderRegistry', () => {
       const provider = createMockProvider('empty');
       registry.register(provider);
 
+      // Wait for initial refresh to complete so we isolate the empty-fire behavior
+      await vi.waitFor(() => expect(registry.loading).toBe(false));
+
       const changeListener = vi.fn();
       registry.onDidChangeDiscoveredItems(changeListener);
 
@@ -550,15 +560,19 @@ describe('ProviderRegistry', () => {
       expect(registry.loading).toBe(false);
     });
 
-    it('fires onDidChangeDiscoveredItems on deregistration', () => {
+    it('fires onDidChangeDiscoveredItems on deregistration', async () => {
       const provider = createMockProvider('notify');
       const disposable = registry.register(provider);
+
+      // Wait for initial refresh to complete
+      await vi.waitFor(() => expect(registry.loading).toBe(false));
 
       const listener = vi.fn();
       registry.onDidChangeDiscoveredItems(listener);
 
       disposable.dispose();
-      expect(listener).toHaveBeenCalled();
+
+      await vi.waitFor(() => expect(listener).toHaveBeenCalledTimes(1));
     });
 
     it('fires onDidRegisterProvider on registration', () => {
