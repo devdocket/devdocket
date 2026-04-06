@@ -249,8 +249,7 @@ interface WorkItem {
 enum WorkItemState {
   New = 'New',
   InProgress = 'InProgress',
-  Blocked = 'Blocked',
-  WaitingOn = 'WaitingOn',
+  Paused = 'Paused',
   Done = 'Done',
   Archived = 'Archived',
 }
@@ -264,12 +263,11 @@ Items transition through these states as the user interacts with them in the UI.
 |-------|------|-------------|
 | `New` | **Queue** | Freshly created or accepted items awaiting triage. |
 | `InProgress` | **Focus** | Work the user is actively doing. |
-| `Blocked` | **Focus** | Work that cannot proceed (shown alongside in-progress items). |
-| `WaitingOn` | **Focus** | Work paused on an external dependency. |
+| `Paused` | **Focus** | Work that is temporarily paused (shown alongside in-progress items). |
 | `Done` | **History** | Completed items shown in the History view. |
 | `Archived` | **History** | Archived items shown in the History view. |
 
-Action authors should use this mapping when implementing `canRun()` — for example, an action that only applies to active work should target `InProgress`, `Blocked`, and `WaitingOn`.
+Action authors should use this mapping when implementing `canRun()` — for example, an action that only applies to active work should target `InProgress` and `Paused`.
 
 ## Examples
 
@@ -373,8 +371,7 @@ import * as vscode from 'vscode';
 enum WorkItemState {
   New = 'New',
   InProgress = 'InProgress',
-  Blocked = 'Blocked',
-  WaitingOn = 'WaitingOn',
+  Paused = 'Paused',
   Done = 'Done',
   Archived = 'Archived',
 }

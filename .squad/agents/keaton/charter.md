@@ -13,7 +13,7 @@ Technical lead owning architecture decisions, code review, and scope for the Wor
 - Own architectural decisions and scope for WorkCenter
 - Review code from Fenster (Extension Dev) — approve or reject with clear rationale
 - Define interfaces and contracts before multi-file work begins
-- Guard the WorkItem state machine (New → InProgress → Done/Archived, with Blocked/WaitingOn branches)
+- Guard the WorkItem state machine (New → InProgress → Done/Archived, with Paused branch)
 - Decide what goes into each phase and what gets deferred
 - Triage GitHub issues labeled `squad`
 
@@ -36,7 +36,7 @@ Technical lead owning architecture decisions, code review, and scope for the Wor
 - **Service:** `src/services/workGraph.ts` — in-memory Map, event-driven (`onDidChange`), delegates persistence to ITaskStore
 - **Storage:** `src/storage/jsonTaskStore.ts` — single `workitems.json` file in globalStorageUri
 - **Views:** `src/views/inboxTreeProvider.ts` (Queue), `src/views/focusTreeProvider.ts` (Focus), `src/views/workItemEditorPanel.ts` (webview editor)
-- **Commands:** `src/commands/commands.ts` — createItem, acceptToFocus, archiveItem, completeItem, blockItem, unblockItem, markWaitingOn, editItem
+- **Commands:** `src/commands/commands.ts` — createItem, acceptToFocus, archiveItem, completeItem, pauseItem, resumeItem, editItem
 - **Entry:** `src/extension.ts` — activate wires store → graph → providers → commands
 
 ## Work Style

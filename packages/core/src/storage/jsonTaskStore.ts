@@ -36,6 +36,7 @@ export class JsonTaskStore implements ITaskStore {
         logger.warn('Failed to parse work items file');
         throw new Error('Failed to parse work items file');
       }
+      // Migrate legacy fields
       let needsMigration = false;
       for (const item of items) {
         // Migrate legacy 'description' field to 'notes'
@@ -50,6 +51,11 @@ export class JsonTaskStore implements ITaskStore {
         // Migrate removed 'Triaged' state to 'New'
         if ((item.state as string) === 'Triaged') {
           item.state = WorkItemState.New;
+          needsMigration = true;
+        }
+        // Migrate legacy Blocked/WaitingOn states to Paused
+        if ((item.state as string) === 'Blocked' || (item.state as string) === 'WaitingOn') {
+          item.state = WorkItemState.Paused;
           needsMigration = true;
         }
       }
