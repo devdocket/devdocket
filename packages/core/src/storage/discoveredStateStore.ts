@@ -118,7 +118,8 @@ export class DiscoveredStateStore {
       try {
         parsed = JSON.parse(data);
       } catch {
-        logger.warn('Failed to parse discovered state file — resetting to empty');
+        logger.warn('Failed to parse discovered state file — backing up and resetting to empty');
+        await this.backupCorruptedFile();
         this.cache.clear();
         this.loaded = true;
         return;
@@ -162,6 +163,16 @@ export class DiscoveredStateStore {
   private enqueue(op: () => Promise<void>): Promise<void> {
     this.writeQueue = this.writeQueue.then(op, op);
     return this.writeQueue;
+  }
+
+  private async backupCorruptedFile(): Promise<void> {
+    try {
+      const backupPath = `${this.filePath}.corrupt.${Date.now()}`;
+      await fs.rename(this.filePath, backupPath);
+      logger.warn(`Backed up corrupted file to ${backupPath}`);
+    } catch {
+      logger.warn('Failed to back up corrupted discovered state file');
+    }
   }
 
   dispose(): void {

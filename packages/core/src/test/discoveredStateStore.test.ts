@@ -104,13 +104,18 @@ describe('DiscoveredStateStore', () => {
     store2.dispose();
   });
 
-  it('should handle corrupted JSON gracefully by loading empty', async () => {
+  it('should handle corrupted JSON gracefully by loading empty and backing up', async () => {
     const filePath = path.join(tmpDir, 'discovered-state.json');
     await fs.writeFile(filePath, 'not valid json', 'utf-8');
 
     await store.load();
     const records = await store.loadAll();
     expect(records).toEqual([]);
+
+    // Verify the corrupted file was backed up
+    const files = await fs.readdir(tmpDir);
+    const backupFiles = files.filter(f => f.startsWith('discovered-state.json.corrupt.'));
+    expect(backupFiles).toHaveLength(1);
   });
 
   it('should create storage directory if it does not exist', async () => {
@@ -171,6 +176,21 @@ describe('DiscoveredStateStore', () => {
 
       const records = await store.loadAll();
       expect(records).toEqual([]);
+    });
+
+    it('should skip non-object entries', async () => {
+      const filePath = path.join(tmpDir, 'discovered-state.json');
+      const data = [
+        'a string',
+        42,
+        null,
+        { providerId: 'gh', externalId: 'issue-1', inboxState: 'accepted' },
+      ];
+      await fs.writeFile(filePath, JSON.stringify(data), 'utf-8');
+
+      const records = await store.loadAll();
+      expect(records).toHaveLength(1);
+      expect(records[0].externalId).toBe('issue-1');
     });
   });
 });

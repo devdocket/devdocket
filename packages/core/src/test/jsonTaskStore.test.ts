@@ -301,13 +301,18 @@ describe('JsonTaskStore', () => {
       expect(items[0].id).toBe('valid');
     });
 
-    it('handles corrupted JSON gracefully by loading empty', async () => {
+    it('handles corrupted JSON gracefully by loading empty and backing up', async () => {
       const filePath = path.join(tmpDir, 'workitems.json');
       await fs.mkdir(tmpDir, { recursive: true });
       await fs.writeFile(filePath, 'not valid json', 'utf-8');
 
       const items = await store.loadAll();
       expect(items).toEqual([]);
+
+      // Verify the corrupted file was backed up
+      const files = await fs.readdir(tmpDir);
+      const backupFiles = files.filter(f => f.startsWith('workitems.json.corrupt.'));
+      expect(backupFiles).toHaveLength(1);
     });
   });
 });

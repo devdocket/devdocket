@@ -62,7 +62,8 @@ export class JsonTaskStore implements ITaskStore {
       try {
         parsed = JSON.parse(data);
       } catch {
-        logger.warn('Failed to parse work items file — resetting to empty');
+        logger.warn('Failed to parse work items file — backing up and resetting to empty');
+        await this.backupCorruptedFile();
         this.cache = new Map();
         return [];
       }
@@ -190,6 +191,16 @@ export class JsonTaskStore implements ITaskStore {
   private enqueue(op: () => Promise<void>): Promise<void> {
     this.writeQueue = this.writeQueue.then(op, op);
     return this.writeQueue;
+  }
+
+  private async backupCorruptedFile(): Promise<void> {
+    try {
+      const backupPath = `${this.filePath}.corrupt.${Date.now()}`;
+      await fs.rename(this.filePath, backupPath);
+      logger.warn(`Backed up corrupted file to ${backupPath}`);
+    } catch {
+      logger.warn('Failed to back up corrupted work items file');
+    }
   }
 }
 
