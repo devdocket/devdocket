@@ -99,7 +99,7 @@ class MockDataTransferItem {
 }
 
 class MockDataTransfer {
-  private items = new Map<string, MockDataTransferItem>();
+  private readonly items = new Map<string, MockDataTransferItem>();
   get(mimeType: string): MockDataTransferItem | undefined { return this.items.get(mimeType); }
   set(mimeType: string, value: MockDataTransferItem): void { this.items.set(mimeType, value); }
 }
