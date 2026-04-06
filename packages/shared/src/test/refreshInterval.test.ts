@@ -38,6 +38,10 @@ describe('validateRefreshInterval', () => {
     expect(validateRefreshInterval(false)).toBe(300);
   });
 
+  it('returns default 300 for true', () => {
+    expect(validateRefreshInterval(true)).toBe(300);
+  });
+
   it('returns default 300 for NaN', () => {
     expect(validateRefreshInterval(NaN)).toBe(300);
   });

@@ -15,7 +15,7 @@ const MAXIMUM_INTERVAL_SECONDS = 2_147_483;
  * Values above the maximum (~24.8 days) are clamped down.
  */
 export function validateRefreshInterval(value: unknown, logger?: Logger): number {
-  if (value == null || value === false) {
+  if (value == null || typeof value === 'boolean') {
     return warnAndDefault(logger, String(value));
   }
 
