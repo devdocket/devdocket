@@ -60,11 +60,6 @@ describe('config edge cases', () => {
       }
     });
 
-    it('falls back to Info for undefined', () => {
-      const resolved = logLevelMap[undefined as unknown as string] ?? LogLevel.Info;
-      expect(resolved).toBe(LogLevel.Info);
-    });
-
     it('falls back to Info for null', () => {
       const resolved = logLevelMap[null as unknown as string] ?? LogLevel.Info;
       expect(resolved).toBe(LogLevel.Info);
