@@ -95,16 +95,18 @@ export async function activate(context: vscode.ExtensionContext): Promise<WorkCe
   const inboxTreeView = vscode.window.createTreeView('workcenter.inbox', { treeDataProvider: inboxProvider });
   const sourcesTreeView = vscode.window.createTreeView('workcenter.sources', { treeDataProvider: sourcesProvider });
 
-  const inboxSelectionSub = inboxTreeView.onDidChangeSelection(async (e) => {
-    let changed = false;
-    for (const item of e.selection) {
-      if (item.kind === 'item') {
-        changed = await inboxProvider.markSeen(item.providerId, item.externalId) || changed;
+  const inboxSelectionSub = inboxTreeView.onDidChangeSelection((e) => {
+    void (async () => {
+      let changed = false;
+      for (const item of e.selection) {
+        if (item.kind === 'item') {
+          changed = await inboxProvider.markSeen(item.providerId, item.externalId) || changed;
+        }
       }
-    }
-    if (changed) {
-      inboxProvider.refresh();
-    }
+      if (changed) {
+        inboxProvider.refresh();
+      }
+    })().catch(err => logger.error('Failed to mark inbox item as seen', err));
   });
 
   // View message state: empty by default, loading when providers are fetching
