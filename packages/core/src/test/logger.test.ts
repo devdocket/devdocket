@@ -354,7 +354,7 @@ describe('logger', () => {
         expect(result).toBe('{"a":1,"c":"hello"}');
       });
 
-      it('should handle arrays with null holes', () => {
+      it('should handle arrays with explicit null values', () => {
         const arr = [1, null, 3];
         const result = serializeArg(arr);
         expect(result).toBe('[1,null,3]');
