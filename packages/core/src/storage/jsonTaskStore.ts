@@ -32,6 +32,21 @@ function validateWorkItem(value: unknown, index: number): string | undefined {
   if (typeof obj.updatedAt !== 'number' || !Number.isFinite(obj.updatedAt)) {
     return `Item "${obj.id}" at index ${index} is missing a valid "updatedAt" (finite number)`;
   }
+  if (obj.url !== undefined && typeof obj.url !== 'string') {
+    return `Item "${obj.id}" at index ${index} has invalid "url" (string expected)`;
+  }
+  if (obj.providerId !== undefined && typeof obj.providerId !== 'string') {
+    return `Item "${obj.id}" at index ${index} has invalid "providerId" (string expected)`;
+  }
+  if (obj.externalId !== undefined && typeof obj.externalId !== 'string') {
+    return `Item "${obj.id}" at index ${index} has invalid "externalId" (string expected)`;
+  }
+  if (obj.notes !== undefined && typeof obj.notes !== 'string') {
+    return `Item "${obj.id}" at index ${index} has invalid "notes" (string expected)`;
+  }
+  if (obj.sortOrder !== undefined && (typeof obj.sortOrder !== 'number' || !Number.isFinite(obj.sortOrder))) {
+    return `Item "${obj.id}" at index ${index} has invalid "sortOrder" (finite number expected)`;
+  }
   return undefined;
 }
 

@@ -318,6 +318,25 @@ describe('JsonTaskStore', () => {
       const backupFiles = files.filter(f => f.startsWith('workitems.json.corrupt.'));
       expect(backupFiles).toHaveLength(1);
     });
+
+    it('skips items with invalid optional fields', async () => {
+      const filePath = path.join(tmpDir, 'workitems.json');
+      const data = [
+        { ...makeItem({ id: 'bad-url' }), url: 123 },
+        { ...makeItem({ id: 'bad-provider' }), providerId: 42 },
+        { ...makeItem({ id: 'bad-external' }), externalId: true },
+        { ...makeItem({ id: 'bad-notes' }), notes: 999 },
+        { ...makeItem({ id: 'bad-sort' }), sortOrder: 'abc' },
+        { ...makeItem({ id: 'inf-sort' }), sortOrder: Infinity },
+        makeItem({ id: 'valid' }),
+      ];
+      await fs.mkdir(tmpDir, { recursive: true });
+      await fs.writeFile(filePath, JSON.stringify(data), 'utf-8');
+
+      const items = await store.loadAll();
+      expect(items).toHaveLength(1);
+      expect(items[0].id).toBe('valid');
+    });
   });
 
   it('migrates legacy Blocked state to Paused on load', async () => {
