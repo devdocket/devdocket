@@ -34,7 +34,7 @@ export interface LoggerService {
   setLogLevel(level: LogLevel): void;
 }
 
-const logLevelMap: Record<string, LogLevel> = {
+const logLevelMap: Partial<Record<string, LogLevel>> = {
   debug: LogLevel.Debug,
   info: LogLevel.Info,
   warn: LogLevel.Warn,
