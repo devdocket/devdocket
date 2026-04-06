@@ -86,7 +86,7 @@ export function registerCommands(
         handleCommandError('Failed to open editor', err);
       }
     }),
-    vscode.commands.registerCommand('workcenter.openInBrowser', (item) => {
+    vscode.commands.registerCommand('workcenter.openInBrowser', async (item) => {
       if (!item?.id && !item?.url) {
         vscode.window.showInformationMessage('WorkCenter: Select a work item first.');
         return;
@@ -94,9 +94,9 @@ export function registerCommands(
       try {
         const workItem = item?.id ? workGraph.getItem(item.id) : undefined;
         if (workItem?.url) {
-          vscode.env.openExternal(vscode.Uri.parse(workItem.url));
+          await vscode.env.openExternal(vscode.Uri.parse(workItem.url));
         } else if (item.url) {
-          vscode.env.openExternal(vscode.Uri.parse(item.url));
+          await vscode.env.openExternal(vscode.Uri.parse(item.url));
         }
       } catch (err: unknown) {
         handleCommandError('Failed to open in browser', err);
