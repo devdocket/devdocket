@@ -26,21 +26,20 @@ export class ReadStateStore {
   /** Returns true only when the key is newly added. Persists automatically. */
   async add(key: string): Promise<boolean> {
     if (!this.loaded) { await this.load(); }
-    if (this.items.has(key)) { return false; }
+    let added = false;
     await this.enqueue(async () => {
+      if (this.items.has(key)) { return; }
       this.items.add(key);
+      added = true;
       try {
         await this.writeFile();
       } catch (err) {
         this.items.delete(key);
+        added = false;
         throw err;
       }
     });
-    return true;
-  }
-
-  delete(key: string): boolean {
-    return this.items.delete(key);
+    return added;
   }
 
   keys(): IterableIterator<string> {
@@ -48,15 +47,22 @@ export class ReadStateStore {
   }
 
   /**
-   * Persist current state to disk with rollback on failure.
-   * If the write fails, previously-deleted keys are restored.
+   * Atomically delete keys and persist, with rollback on write failure.
+   * Both deletes and write are serialized through the writeQueue.
    */
-  saveWithRollback(deletedKeys: string[]): void {
+  deleteMany(keys: string[]): void {
     this.enqueue(async () => {
+      const actuallyDeleted: string[] = [];
+      for (const key of keys) {
+        if (this.items.delete(key)) {
+          actuallyDeleted.push(key);
+        }
+      }
+      if (actuallyDeleted.length === 0) { return; }
       try {
         await this.writeFile();
       } catch (err) {
-        for (const key of deletedKeys) {
+        for (const key of actuallyDeleted) {
           this.items.add(key);
         }
         logger.error('Failed to save read state, rolled back deletions', err);

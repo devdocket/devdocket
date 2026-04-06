@@ -46,16 +46,30 @@ describe('ReadStateStore', () => {
     expect(store.has('gh::1')).toBe(true);
   });
 
-  it('should delete a key', async () => {
+  it('should deleteMany keys and persist', async () => {
     await store.load();
     await store.add('gh::1');
-    expect(store.delete('gh::1')).toBe(true);
+    await store.add('gh::2');
+    await store.add('gh::3');
+    store.deleteMany(['gh::1', 'gh::3']);
+    await store.flush();
+
     expect(store.has('gh::1')).toBe(false);
+    expect(store.has('gh::2')).toBe(true);
+    expect(store.has('gh::3')).toBe(false);
+
+    const filePath = path.join(tmpDir, 'read-state.json');
+    const raw = await fs.readFile(filePath, 'utf-8');
+    expect(JSON.parse(raw)).toEqual(['gh::2']);
   });
 
-  it('should return false when deleting a non-existent key', async () => {
+  it('should ignore non-existent keys in deleteMany', async () => {
     await store.load();
-    expect(store.delete('gh::nonexistent')).toBe(false);
+    await store.add('gh::1');
+    store.deleteMany(['gh::nonexistent']);
+    await store.flush();
+
+    expect(store.has('gh::1')).toBe(true);
   });
 
   it('should iterate keys', async () => {
@@ -64,19 +78,6 @@ describe('ReadStateStore', () => {
     await store.add('gh::2');
     const keys = [...store.keys()];
     expect(keys.sort()).toEqual(['gh::1', 'gh::2']);
-  });
-
-  it('should persist after saveWithRollback()', async () => {
-    await store.load();
-    await store.add('gh::1');
-    await store.add('gh::2');
-    store.delete('gh::1');
-    store.saveWithRollback(['gh::1']);
-    await store.flush();
-
-    const filePath = path.join(tmpDir, 'read-state.json');
-    const raw = await fs.readFile(filePath, 'utf-8');
-    expect(JSON.parse(raw)).toEqual(['gh::2']);
   });
 
   it('should load persisted state from a fresh instance', async () => {
