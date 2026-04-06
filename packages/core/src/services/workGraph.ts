@@ -124,10 +124,16 @@ export class WorkGraph {
     await this.store.save(item);
     this.items.set(item.id, item);
     if (item.providerId && item.externalId) {
-      this.provenanceIndex.set(
-        WorkGraph.provenanceKey(item.providerId, item.externalId),
-        item.id,
-      );
+      const key = WorkGraph.provenanceKey(item.providerId, item.externalId);
+      const existingId = this.provenanceIndex.get(key);
+      if (!existingId) {
+        this.provenanceIndex.set(key, item.id);
+      } else {
+        logger.warn(
+          `Duplicate work item provenance detected for ${key}; ` +
+            `keeping existing item ${existingId} indexed and leaving new item ${item.id} unindexed by provenance.`,
+        );
+      }
     }
     this._onDidChange.fire();
     logger.info(`Created work item: ${item.id}`);
