@@ -46,11 +46,11 @@ export abstract class BaseProvider {
     if (this._disposed) {
       return;
     }
+    this.stopPeriodicRefresh();
     const interval = Number(intervalSeconds);
     if (!Number.isFinite(interval) || interval <= 0) {
       return;
     }
-    this.stopPeriodicRefresh();
     const clampedInterval = Math.max(interval, 60);
     this.refreshTimer = setInterval(() => {
       this.refreshInBackground().catch((error: unknown) => {
