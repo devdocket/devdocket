@@ -34,7 +34,7 @@ Technical lead owning architecture decisions, code review, and scope for the Wor
 
 - **Model:** `src/models/workItem.ts` — WorkItem interface, WorkItemState enum (6 states), WorkItemInput
 - **Service:** `src/services/workGraph.ts` — in-memory Map, event-driven (`onDidChange`), delegates persistence to ITaskStore
-- **Storage:** `src/storage/jsonTaskStore.ts` — JSON file per item in globalStorageUri
+- **Storage:** `src/storage/jsonTaskStore.ts` — single `workitems.json` file in globalStorageUri
 - **Views:** `src/views/inboxTreeProvider.ts` (Queue), `src/views/focusTreeProvider.ts` (Focus), `src/views/workItemEditorPanel.ts` (webview editor)
 - **Commands:** `src/commands/commands.ts` — createItem, acceptToFocus, archiveItem, completeItem, blockItem, unblockItem, markWaitingOn, editItem
 - **Entry:** `src/extension.ts` — activate wires store → graph → providers → commands
