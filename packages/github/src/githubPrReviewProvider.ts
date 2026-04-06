@@ -158,9 +158,7 @@ export class GitHubPrReviewProvider implements WorkCenterProvider {
     repos: string[],
   ): Promise<{ prs: GitHubIssue[]; failures: string[] }> {
     if (repos.length > 0) {
-      const results = await Promise.allSettled(
-        repos.map(repo => this.fetchRepoPrReviews(token, repo)),
-      );
+      const results = await this.fetchRepoPrReviewsWithLimit(token, repos, 3);
 
       const allPrs: GitHubIssue[] = [];
       const failures: string[] = [];
@@ -183,6 +181,33 @@ export class GitHubPrReviewProvider implements WorkCenterProvider {
     // Fallback: fetch all review-requested PRs across all repos
     const { prs, failed } = await this.fetchAllPrReviews(token);
     return { prs, failures: failed ? ['all repositories'] : [] };
+  }
+
+  // Limit concurrent per-repo search API calls to avoid hitting rate limits
+  private async fetchRepoPrReviewsWithLimit(
+    token: string,
+    repos: string[],
+    maxConcurrent: number,
+  ): Promise<PromiseSettledResult<{ prs: GitHubIssue[]; failed: boolean }>[]> {
+    const results: PromiseSettledResult<{ prs: GitHubIssue[]; failed: boolean }>[] = new Array(repos.length);
+    let nextIndex = 0;
+
+    const runWorker = async (): Promise<void> => {
+      while (nextIndex < repos.length) {
+        const currentIndex = nextIndex++;
+        try {
+          const value = await this.fetchRepoPrReviews(token, repos[currentIndex]);
+          results[currentIndex] = { status: 'fulfilled', value };
+        } catch (reason) {
+          results[currentIndex] = { status: 'rejected', reason: reason as Error };
+        }
+      }
+    };
+
+    const workerCount = Math.min(maxConcurrent, repos.length);
+    await Promise.all(Array.from({ length: workerCount }, () => runWorker()));
+
+    return results;
   }
 
   private async fetchRepoPrReviews(token: string, repo: string): Promise<{ prs: GitHubIssue[]; failed: boolean }> {

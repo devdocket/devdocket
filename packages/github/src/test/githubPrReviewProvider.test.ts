@@ -285,6 +285,10 @@ describe('GitHubPrReviewProvider', () => {
       } as any);
     }
 
+    afterEach(() => {
+      vi.mocked(workspace.getConfiguration).mockReset();
+    });
+
     it('fetches from global search API when repos is empty', async () => {
       mockRepos([]);
       mockFetch.mockResolvedValueOnce({
