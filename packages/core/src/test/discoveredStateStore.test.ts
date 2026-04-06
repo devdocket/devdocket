@@ -264,7 +264,8 @@ describe('DiscoveredStateStore', () => {
     it('setState rolls back cache when writeFile fails for a new item', async () => {
       await store.load();
 
-      // Mock the store's private writeFile method to simulate disk failure
+      // Spy on the store's internal writeFile because fs.writeFile from ESM
+      // fs/promises has non-configurable property descriptors and cannot be spied on.
       const writeSpy = vi.spyOn(store as any, 'writeFile').mockRejectedValueOnce(new Error('disk full'));
 
       await expect(store.setState('gh', 'issue-1', 'unseen')).rejects.toThrow('disk full');
@@ -517,11 +518,11 @@ describe('DiscoveredStateStore', () => {
       const listener = vi.fn();
       store.onDidChange(listener);
 
-      store.dispose();
+      expect(() => store.dispose()).not.toThrow();
 
-      // After dispose, firing should not reach the listener
-      // (We can verify by creating a new store and not receiving events)
-      // The key invariant is that dispose() does not throw
+      // After dispose, setState still works but listener should not fire
+      await store.setState('gh', 'issue-after-dispose', 'accepted');
+      expect(listener).not.toHaveBeenCalled();
     });
   });
 });
