@@ -356,7 +356,7 @@ describe('WorkGraph', () => {
 
       const active = graph.getItemsByState(WorkItemState.InProgress, WorkItemState.Blocked);
       expect(active).toHaveLength(2);
-      expect(active.map(i => i.title).sort()).toEqual(['A', 'B']);
+      expect(active.map((i) => i.title).sort()).toEqual(['A', 'B']);
     });
 
     it('returns empty array when called with no states', () => {
