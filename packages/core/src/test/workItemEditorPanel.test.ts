@@ -184,14 +184,12 @@ describe('WorkItemEditorPanel – concurrent autosave', () => {
   it('does not crash when a save message arrives after disposal', async () => {
     panel.simulateDispose();
 
-    // Sending a message after dispose should not throw
+    // Sending a message after dispose should resolve without throwing
     await expect(
       panel.simulateMessage({ type: 'autosave', data: { title: 'too late' } }),
-    ).resolves.not.toThrow();
+    ).resolves.toBeUndefined();
 
-    // updateItem should still be called because the message handler remains
-    // bound; the disposed flag only prevents panel.title updates.
-    // The important thing is that it doesn't crash.
+    // Sending a message after dispose is handled safely.
   });
 
   it('does not update panel title after disposal', async () => {
@@ -217,7 +215,7 @@ describe('WorkItemEditorPanel – concurrent autosave', () => {
     });
   });
 
-  it('applies notes-only update without title change for non-provider items', async () => {
+  it('applies title and notes together for non-provider items', async () => {
     // When title is provided alongside notes, both go into the patch
     await panel.simulateMessage({
       type: 'autosave',
