@@ -75,9 +75,9 @@ function handleEditItem(
   }
 }
 
-async function handleOpenInBrowser(workGraph: WorkGraph, item?: { id: string; url?: string }): Promise<void> {
-  if (!item?.id) { return; }
-  const url = workGraph.getItem(item.id)?.url ?? item.url;
+async function handleOpenInBrowser(workGraph: WorkGraph, item?: { id?: string; url?: string }): Promise<void> {
+  if (!item) { return; }
+  const url = item.id ? workGraph.getItem(item.id)?.url ?? item.url : item.url;
   if (url) {
     await vscode.env.openExternal(vscode.Uri.parse(url));
   }
