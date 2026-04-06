@@ -38,7 +38,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<WorkCe
           const newLevel = vscode.workspace.getConfiguration('workcenter').get<string>('logLevel', 'info');
           setLogLevel(logLevelMap[newLevel] ?? LogLevel.Info);
         }
-      } catch (err) {
+      } catch (err: unknown) {
         logger.error('Error handling configuration change', err);
       }
     }),
@@ -105,7 +105,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<WorkCe
       if (changed) {
         inboxProvider.refresh();
       }
-    } catch (err) {
+    } catch (err: unknown) {
       logger.error('Error handling inbox selection change', err);
     }
   });
@@ -140,7 +140,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<WorkCe
   const workGraphSub = workGraph.onDidChange(() => {
     try {
       updateWorkViewMessages();
-    } catch (err) {
+    } catch (err: unknown) {
       logger.error('Error handling work graph change', err);
     }
   });
@@ -162,12 +162,12 @@ export async function activate(context: vscode.ExtensionContext): Promise<WorkCe
     uiUpdateScheduled = true;
     queueMicrotask(() => {
       try {
-        uiUpdateScheduled = false;
         updateViewMessages();
         updateInboxBadge();
-      } catch (err) {
-        uiUpdateScheduled = false;
+      } catch (err: unknown) {
         logger.error('Error during scheduled UI update', err);
+      } finally {
+        uiUpdateScheduled = false;
       }
     });
   };
@@ -175,7 +175,13 @@ export async function activate(context: vscode.ExtensionContext): Promise<WorkCe
   updateViewMessages();
   updateInboxBadge();
 
-  const providerRegSub = providerRegistry.onDidRegisterProvider(scheduleUiUpdate);
+  const providerRegSub = providerRegistry.onDidRegisterProvider(() => {
+    try {
+      scheduleUiUpdate();
+    } catch (err: unknown) {
+      logger.error('Error handling provider registration', err);
+    }
+  });
   const discoveredSub = providerRegistry.onDidChangeDiscoveredItems(() => {
     try {
       scheduleUiUpdate();
@@ -187,7 +193,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<WorkCe
         }
         wasLoading = wasLoading || providerRegistry.loading;
       }
-    } catch (err) {
+    } catch (err: unknown) {
       logger.error('Error handling discovered items change', err);
     }
   });
@@ -201,11 +207,17 @@ export async function activate(context: vscode.ExtensionContext): Promise<WorkCe
           `WorkCenter: ${newCount} new item${newCount === 1 ? '' : 's'} in Inbox`
         );
       }
-    } catch (err) {
+    } catch (err: unknown) {
       logger.error('Error handling new unseen items notification', err);
     }
   });
-  const stateStoreSub = stateStore.onDidChange(scheduleUiUpdate);
+  const stateStoreSub = stateStore.onDidChange(() => {
+    try {
+      scheduleUiUpdate();
+    } catch (err: unknown) {
+      logger.error('Error handling state store change', err);
+    }
+  });
 
   context.subscriptions.push(
     inboxTreeView,
