@@ -386,8 +386,8 @@ describe('GitHubIssueProvider — error handling', () => {
       mockFetch
         .mockResolvedValueOnce({
           ok: true,
-        headers: noLinkHeaders,
-        json: async () => [createMockIssue(1, 'Good issue', 'good/repo')],
+          headers: noLinkHeaders,
+          json: async () => [createMockIssue(1, 'Good issue', 'good/repo')],
         })
         .mockResolvedValueOnce({ ok: false, status: 404 });
 
@@ -406,8 +406,8 @@ describe('GitHubIssueProvider — error handling', () => {
       mockFetch
         .mockResolvedValueOnce({
           ok: true,
-        headers: noLinkHeaders,
-        json: async () => [createMockIssue(1, 'OK', 'good/repo')],
+          headers: noLinkHeaders,
+          json: async () => [createMockIssue(1, 'OK', 'good/repo')],
         })
         .mockResolvedValueOnce({ ok: false, status: 500 })
         .mockResolvedValueOnce({ ok: false, status: 403 });
@@ -425,8 +425,8 @@ describe('GitHubIssueProvider — error handling', () => {
       mockFetch
         .mockResolvedValueOnce({
           ok: true,
-        headers: noLinkHeaders,
-        json: async () => [createMockIssue(1, 'OK', 'good/repo')],
+          headers: noLinkHeaders,
+          json: async () => [createMockIssue(1, 'OK', 'good/repo')],
         })
         .mockResolvedValueOnce({ ok: false, status: 500 });
 
@@ -443,8 +443,8 @@ describe('GitHubIssueProvider — error handling', () => {
       mockFetch
         .mockResolvedValueOnce({
           ok: true,
-        headers: noLinkHeaders,
-        json: async () => [createMockIssue(1, 'Works', 'good/repo')],
+          headers: noLinkHeaders,
+          json: async () => [createMockIssue(1, 'Works', 'good/repo')],
         })
         .mockRejectedValueOnce(new Error('ETIMEDOUT'));
 
@@ -477,13 +477,13 @@ describe('GitHubIssueProvider — error handling', () => {
       mockFetch
         .mockResolvedValueOnce({
           ok: true,
-        headers: noLinkHeaders,
-        json: async () => [createMockIssue(1, 'OK', 'good/repo')],
+          headers: noLinkHeaders,
+          json: async () => [createMockIssue(1, 'OK', 'good/repo')],
         })
         .mockResolvedValueOnce({
           ok: true,
-        headers: noLinkHeaders,
-        json: async () => { throw new SyntaxError('Invalid JSON'); },
+          headers: noLinkHeaders,
+          json: async () => { throw new SyntaxError('Invalid JSON'); },
         });
 
       const listener = vi.fn();

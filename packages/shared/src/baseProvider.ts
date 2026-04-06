@@ -86,7 +86,7 @@ export abstract class BaseProvider {
   /** Override to provide the background refresh implementation. */
   protected abstract doBackgroundRefresh(): Promise<void>;
 
-  abstract refresh(): Promise<void>;
+  abstract refresh(token?: unknown): Promise<void>;
 
   dispose(): void {
     if (this._disposed) {
