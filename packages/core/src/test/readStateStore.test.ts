@@ -66,12 +66,12 @@ describe('ReadStateStore', () => {
     expect(keys.sort()).toEqual(['gh::1', 'gh::2']);
   });
 
-  it('should persist after save()', async () => {
+  it('should persist after saveWithRollback()', async () => {
     await store.load();
     await store.add('gh::1');
     await store.add('gh::2');
     store.delete('gh::1');
-    store.save();
+    store.saveWithRollback(['gh::1']);
     await store.flush();
 
     const filePath = path.join(tmpDir, 'read-state.json');

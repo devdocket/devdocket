@@ -47,12 +47,22 @@ export class ReadStateStore {
     return this.items.values();
   }
 
-  /** Persist current state to disk (call after batch deletions). */
-  save(): void {
+  /**
+   * Persist current state to disk with rollback on failure.
+   * If the write fails, previously-deleted keys are restored.
+   */
+  saveWithRollback(deletedKeys: string[]): void {
     this.enqueue(async () => {
-      await this.writeFile();
-    }).catch((err) => {
-      logger.error('Failed to save read state', err);
+      try {
+        await this.writeFile();
+      } catch (err) {
+        for (const key of deletedKeys) {
+          this.items.add(key);
+        }
+        logger.error('Failed to save read state, rolled back deletions', err);
+      }
+    }).catch(() => {
+      // Error already handled inside enqueue with rollback
     });
   }
 
