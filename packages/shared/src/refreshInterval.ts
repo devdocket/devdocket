@@ -2,12 +2,15 @@ import type { Logger } from './logger';
 
 const DEFAULT_INTERVAL_SECONDS = 300;
 const MINIMUM_INTERVAL_SECONDS = 60;
+// Node.js setInterval uses a 32-bit signed ms delay; cap at ~24.8 days.
+const MAXIMUM_INTERVAL_SECONDS = 2_147_483;
 
 /**
  * Validates and clamps a refresh interval value.
  * Non-finite values (NaN, undefined) fall back to the default (300s).
- * null coerces to 0 and is clamped to the minimum (60s).
- * Values below the minimum (60s) are clamped up.
+ * Zero or negative values return 0 (disables periodic refresh).
+ * Positive values below the minimum (60s) are clamped up.
+ * Values above the maximum (~24.8 days) are clamped down.
  */
 export function validateRefreshInterval(value: unknown, logger?: Logger): number {
   const num = Number(value);
@@ -18,9 +21,22 @@ export function validateRefreshInterval(value: unknown, logger?: Logger): number
     return DEFAULT_INTERVAL_SECONDS;
   }
 
+  if (num <= 0) {
+    return 0;
+  }
+
   if (num < MINIMUM_INTERVAL_SECONDS) {
-    logger?.warn('Refresh interval clamped to minimum 60 seconds');
+    logger?.warn(
+      `Refresh interval clamped to minimum ${MINIMUM_INTERVAL_SECONDS} seconds`,
+    );
     return MINIMUM_INTERVAL_SECONDS;
+  }
+
+  if (num > MAXIMUM_INTERVAL_SECONDS) {
+    logger?.warn(
+      `Refresh interval clamped to maximum ${MAXIMUM_INTERVAL_SECONDS} seconds`,
+    );
+    return MAXIMUM_INTERVAL_SECONDS;
   }
 
   return num;
