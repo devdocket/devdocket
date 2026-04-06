@@ -248,7 +248,11 @@ export class InboxTreeProvider implements vscode.TreeDataProvider<InboxElement> 
   private buildTooltip(item: InboxItem): vscode.MarkdownString {
     const md = new vscode.MarkdownString();
     md.appendMarkdown(`**${item.title}**\n\n`);
-    if (item.reason) { md.appendMarkdown(`*Reason: ${this.formatReason(item.reason)}*\n\n`); }
+    if (item.reason) {
+      md.appendMarkdown('*Reason: ');
+      md.appendText(this.formatReason(item.reason));
+      md.appendMarkdown('*\n\n');
+    }
     if (item.description) { md.appendText(`${item.description}\n\n`); }
     return md;
   }
