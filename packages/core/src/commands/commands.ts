@@ -66,7 +66,7 @@ async function handleMarkWaitingOn(workGraph: WorkGraph, item?: { id: string }):
 function handleEditItem(
   context: vscode.ExtensionContext,
   workGraph: WorkGraph,
-  item?: { id: string },
+  item?: { id?: string },
 ): void {
   if (!item?.id) { return; }
   const workItem = workGraph.getItem(item.id);
@@ -86,7 +86,7 @@ async function handleOpenInBrowser(workGraph: WorkGraph, item?: { id?: string; u
 async function handleRunAction(
   workGraph: WorkGraph,
   actionRegistry: ActionRegistry,
-  item?: { id: string },
+  item?: { id?: string },
 ): Promise<void> {
   if (!item?.id) { return; }
   const workItem = workGraph.getItem(item.id);
