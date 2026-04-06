@@ -29,7 +29,7 @@ export enum WorkItemState {
 }
 
 /**
- * A persisted work item managed by WorkCenter.
+ * A persisted work item managed by the WorkGraph.
  *
  * Work items may originate from a provider (e.g. a GitHub issue) or be created
  * manually by the user. Provider-backed items carry {@link providerId} and
@@ -46,7 +46,7 @@ export interface WorkItem {
   state: WorkItemState;
   /** ID of the provider that originally discovered this item, if any. */
   providerId?: string;
-  /** Provider-scoped identifier used to correlate with {@link DiscoveredItem.externalId}. */
+  /** Provider-scoped identifier used to correlate with the provider's discovered item. */
   externalId?: string;
   /** URL to the item in its source system (e.g. GitHub issue page). */
   url?: string;
@@ -71,7 +71,7 @@ export interface WorkItem {
  * ```
  */
 export interface WorkItemInput {
-  /** Short human-readable title for the new work item. */
+  /** Short human-readable title of the work item. */
   title: string;
   /** Optional free-form notes or description. */
   notes?: string;

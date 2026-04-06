@@ -53,6 +53,7 @@ export interface DiscoveredItem {
  *
  * @example
  * ```ts
+ * const emitter = new vscode.EventEmitter<DiscoveredItem[]>();
  * const provider: WorkCenterProvider = {
  *   id: 'github',
  *   label: 'GitHub Issues',
@@ -131,7 +132,7 @@ export interface WorkCenterAction {
  * @example
  * ```ts
  * const ext = vscode.extensions.getExtension<WorkCenterApi>('mthalman.workcenter');
- * const api = ext?.exports;
+ * const api = await ext?.activate();
  * if (api) {
  *   api.registerProvider(myProvider);
  *   api.registerAction(myAction);
