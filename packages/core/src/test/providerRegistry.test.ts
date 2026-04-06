@@ -347,7 +347,8 @@ describe('ProviderRegistry', () => {
   });
 
   describe('loading state and registration race conditions', () => {
-    // Yields a macrotask so pending promise chains (.then/.finally) settle
+    // Schedules a macrotask via setTimeout; before it fires, the JS event loop
+    // flushes all pending microtasks (promise .then/.catch/.finally chains).
     function nextTick(): Promise<void> {
       return new Promise(resolve => setTimeout(resolve, 0));
     }
@@ -440,7 +441,7 @@ describe('ProviderRegistry', () => {
       expect(registry.loading).toBe(false);
     });
 
-    it('provider fires onDidDiscoverItems before refresh returns — loading is still true', async () => {
+    it('provider fires onDidDiscoverItems before refresh resolves — loading is still true', async () => {
       const { provider, resolveRefresh } = createDeferredProvider('race');
 
       let callbackCount = 0;
