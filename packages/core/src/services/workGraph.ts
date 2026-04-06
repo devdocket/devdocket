@@ -292,9 +292,27 @@ export class WorkGraph {
     const item = this.items.get(id);
     await this.store.delete(id);
     if (item?.providerId && item?.externalId) {
-      this.provenanceIndex.delete(
-        WorkGraph.provenanceKey(item.providerId, item.externalId),
-      );
+      const key = WorkGraph.provenanceKey(item.providerId, item.externalId);
+      if (this.provenanceIndex.get(key) === id) {
+        // If there's another item with the same provenance, re-point the index
+        let replacementId: string | undefined;
+        for (const [candidateId, candidate] of this.items) {
+          if (
+            candidateId !== id &&
+            candidate.providerId === item.providerId &&
+            candidate.externalId === item.externalId
+          ) {
+            replacementId = candidateId;
+            break;
+          }
+        }
+
+        if (replacementId) {
+          this.provenanceIndex.set(key, replacementId);
+        } else {
+          this.provenanceIndex.delete(key);
+        }
+      }
     }
     this.items.delete(id);
     this._onDidChange.fire();
