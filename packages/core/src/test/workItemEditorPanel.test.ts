@@ -30,6 +30,8 @@ interface MockPanel {
   dispose: ReturnType<typeof vi.fn>;
   /** Fire a webview message as if the webview posted it */
   simulateMessage: (msg: any) => Promise<void>;
+  /** Simulate autosave matching real getData() shape (always sends both title and notes) */
+  simulateAutosave: (data: { title: string; notes: string }) => Promise<void>;
   /** Fire the onDidDispose callback */
   simulateDispose: () => void;
 }
@@ -56,6 +58,12 @@ function createMockPanel(): MockPanel {
     simulateMessage: async (msg: any) => {
       if (messageHandler) {
         await messageHandler(msg);
+      }
+    },
+    /** Simulate a webview autosave matching the real getData() shape (always sends both fields) */
+    simulateAutosave: async (data: { title: string; notes: string }) => {
+      if (messageHandler) {
+        await messageHandler({ type: 'autosave', data });
       }
     },
     simulateDispose: () => {
@@ -118,9 +126,9 @@ describe('WorkItemEditorPanel – concurrent autosave', () => {
 
   // 1. Rapid sequential title updates (simulating fast typing)
   it('saves each rapid title update that reaches the backend', async () => {
-    await panel.simulateMessage({ type: 'autosave', data: { title: 'A' } });
-    await panel.simulateMessage({ type: 'autosave', data: { title: 'AB' } });
-    await panel.simulateMessage({ type: 'autosave', data: { title: 'ABC' } });
+    await panel.simulateAutosave({ title: 'A', notes: '' });
+    await panel.simulateAutosave({ title: 'AB', notes: '' });
+    await panel.simulateAutosave({ title: 'ABC', notes: '' });
 
     expect(workGraph.updateItem).toHaveBeenCalledTimes(3);
     expect(workGraph.updateItem).toHaveBeenNthCalledWith(1, 'item-1', { title: 'A' });
@@ -132,10 +140,10 @@ describe('WorkItemEditorPanel – concurrent autosave', () => {
   //    (simulates the webview sending several autosave messages in quick succession)
   it('processes every autosave message that arrives at the extension host', async () => {
     const promises = [
-      panel.simulateMessage({ type: 'autosave', data: { title: 'v1' } }),
-      panel.simulateMessage({ type: 'autosave', data: { title: 'v2' } }),
-      panel.simulateMessage({ type: 'autosave', data: { title: 'v3' } }),
-      panel.simulateMessage({ type: 'autosave', data: { title: 'v4' } }),
+      panel.simulateAutosave({ title: 'v1', notes: '' }),
+      panel.simulateAutosave({ title: 'v2', notes: '' }),
+      panel.simulateAutosave({ title: 'v3', notes: '' }),
+      panel.simulateAutosave({ title: 'v4', notes: '' }),
     ];
     await Promise.all(promises);
 
@@ -144,10 +152,10 @@ describe('WorkItemEditorPanel – concurrent autosave', () => {
 
   // 3. Title and notes updates interleaved rapidly
   it('handles interleaved title and notes updates', async () => {
-    await panel.simulateMessage({ type: 'autosave', data: { title: 'T1' } });
-    await panel.simulateMessage({ type: 'autosave', data: { title: 'T1', notes: 'N1' } });
-    await panel.simulateMessage({ type: 'autosave', data: { title: 'T2', notes: 'N1' } });
-    await panel.simulateMessage({ type: 'autosave', data: { title: 'T2', notes: 'N2' } });
+    await panel.simulateAutosave({ title: 'T1', notes: '' });
+    await panel.simulateAutosave({ title: 'T1', notes: 'N1' });
+    await panel.simulateAutosave({ title: 'T2', notes: 'N1' });
+    await panel.simulateAutosave({ title: 'T2', notes: 'N2' });
 
     expect(workGraph.updateItem).toHaveBeenCalledTimes(4);
     // Last call should carry the final values
@@ -160,19 +168,19 @@ describe('WorkItemEditorPanel – concurrent autosave', () => {
   //    the server-side handler does NOT add its own delay — every message
   //    triggers an immediate updateItem call.
   it('saves immediately on each received message (no server-side debounce)', async () => {
-    await panel.simulateMessage({ type: 'autosave', data: { title: 'fast' } });
+    await panel.simulateAutosave({ title: 'fast', notes: '' });
     // updateItem should already have been called synchronously (awaited)
     expect(workGraph.updateItem).toHaveBeenCalledTimes(1);
 
-    await panel.simulateMessage({ type: 'autosave', data: { title: 'faster' } });
+    await panel.simulateAutosave({ title: 'faster', notes: '' });
     expect(workGraph.updateItem).toHaveBeenCalledTimes(2);
   });
 
-  // 5. Only the last value is persisted (not intermediate values)
-  it('persists only the final value after a burst of updates', async () => {
-    await panel.simulateMessage({ type: 'autosave', data: { title: 'draft-1' } });
-    await panel.simulateMessage({ type: 'autosave', data: { title: 'draft-2' } });
-    await panel.simulateMessage({ type: 'autosave', data: { title: 'final' } });
+  // 5. Last value wins after a burst of updates
+  it('uses last value wins semantics after a burst of updates', async () => {
+    await panel.simulateAutosave({ title: 'draft-1', notes: '' });
+    await panel.simulateAutosave({ title: 'draft-2', notes: '' });
+    await panel.simulateAutosave({ title: 'final', notes: '' });
 
     // The underlying item should reflect the last write
     const lastPatch = workGraph.updateItem.mock.calls.at(-1)![1];
@@ -186,7 +194,7 @@ describe('WorkItemEditorPanel – concurrent autosave', () => {
 
     // Sending a message after dispose should resolve without throwing
     await expect(
-      panel.simulateMessage({ type: 'autosave', data: { title: 'too late' } }),
+      panel.simulateAutosave({ title: 'too late', notes: '' }),
     ).resolves.toBeUndefined();
 
     // Sending a message after dispose is handled safely.
@@ -196,7 +204,7 @@ describe('WorkItemEditorPanel – concurrent autosave', () => {
     panel.title = 'Edit: Original Title';
     panel.simulateDispose();
 
-    await panel.simulateMessage({ type: 'autosave', data: { title: 'Ghost' } });
+    await panel.simulateAutosave({ title: 'Ghost', notes: '' });
 
     // Panel title should remain unchanged because disposed === true
     expect(panel.title).toBe('Edit: Original Title');
@@ -204,10 +212,7 @@ describe('WorkItemEditorPanel – concurrent autosave', () => {
 
   // 7. Concurrent title + notes update (different fields, same item)
   it('applies title and notes from the same message', async () => {
-    await panel.simulateMessage({
-      type: 'autosave',
-      data: { title: 'New Title', notes: 'Some notes' },
-    });
+    await panel.simulateAutosave({ title: 'New Title', notes: 'Some notes' });
 
     expect(workGraph.updateItem).toHaveBeenCalledWith('item-1', {
       title: 'New Title',
@@ -217,10 +222,7 @@ describe('WorkItemEditorPanel – concurrent autosave', () => {
 
   it('applies title and notes together for non-provider items', async () => {
     // When title is provided alongside notes, both go into the patch
-    await panel.simulateMessage({
-      type: 'autosave',
-      data: { title: 'Original Title', notes: 'Just notes' },
-    });
+    await panel.simulateAutosave({ title: 'Original Title', notes: 'Just notes' });
 
     expect(workGraph.updateItem).toHaveBeenCalledWith('item-1', {
       title: 'Original Title',
@@ -230,7 +232,7 @@ describe('WorkItemEditorPanel – concurrent autosave', () => {
 
   // Edge case: empty title is rejected
   it('skips save when title is empty for non-provider items', async () => {
-    await panel.simulateMessage({ type: 'autosave', data: { title: '', notes: 'note' } });
+    await panel.simulateAutosave({ title: '', notes: 'note' });
 
     expect(workGraph.updateItem).not.toHaveBeenCalled();
   });
@@ -241,10 +243,7 @@ describe('WorkItemEditorPanel – concurrent autosave', () => {
     const providerGraph = createMockWorkGraph(providerItem);
     const { panel: pPanel } = openEditor(providerGraph as unknown as WorkGraph, providerItem);
 
-    await pPanel.simulateMessage({
-      type: 'autosave',
-      data: { title: 'PR #42', notes: 'My review notes' },
-    });
+    await pPanel.simulateAutosave({ title: 'PR #42', notes: 'My review notes' });
 
     expect(providerGraph.updateItem).toHaveBeenCalledWith(providerItem.id, {
       notes: 'My review notes',
@@ -258,7 +257,7 @@ describe('WorkItemEditorPanel – concurrent autosave', () => {
   it('shows error message when save fails', async () => {
     workGraph.updateItem.mockRejectedValueOnce(new Error('disk full'));
 
-    await panel.simulateMessage({ type: 'autosave', data: { title: 'Boom' } });
+    await panel.simulateAutosave({ title: 'Boom', notes: '' });
 
     expect(vscode.window.showErrorMessage).toHaveBeenCalledWith(
       'Failed to save work item: disk full',
@@ -269,7 +268,7 @@ describe('WorkItemEditorPanel – concurrent autosave', () => {
   it('shows error when item no longer exists', async () => {
     workGraph.getItem.mockReturnValue(undefined);
 
-    await panel.simulateMessage({ type: 'autosave', data: { title: 'Orphan' } });
+    await panel.simulateAutosave({ title: 'Orphan', notes: '' });
 
     expect(vscode.window.showErrorMessage).toHaveBeenCalledWith(
       expect.stringContaining('no longer exists'),
@@ -280,8 +279,21 @@ describe('WorkItemEditorPanel – concurrent autosave', () => {
   it('updates panel title on successful title save', async () => {
     panel.title = 'Edit: Original Title';
 
-    await panel.simulateMessage({ type: 'autosave', data: { title: 'Updated' } });
+    await panel.simulateAutosave({ title: 'Updated', notes: '' });
 
     expect(panel.title).toBe('Edit: Updated');
+  });
+
+  // Notes-only update (title unchanged)
+  it('saves notes without modifying title when only notes change', async () => {
+    await panel.simulateAutosave({ title: 'Original Title', notes: 'First draft' });
+    expect(workGraph.updateItem).toHaveBeenCalledTimes(1);
+
+    await panel.simulateAutosave({ title: 'Original Title', notes: 'Revised notes' });
+    expect(workGraph.updateItem).toHaveBeenCalledTimes(2);
+    expect(workGraph.updateItem).toHaveBeenLastCalledWith('item-1', {
+      title: 'Original Title',
+      notes: 'Revised notes',
+    });
   });
 });
