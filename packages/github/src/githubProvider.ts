@@ -201,10 +201,11 @@ export class GitHubIssueProvider implements WorkCenterProvider {
       logger.error(`Invalid repo format, expected owner/name: ${repo}`);
       return { issues: [], failed: true };
     }
+    const [owner, name] = repo.split('/');
     try {
       // GitHub API max per_page is 100; pagination for >100 items is a future enhancement
       const response = await fetch(
-        `https://api.github.com/repos/${encodeURIComponent(repo.split('/')[0])}/${encodeURIComponent(repo.split('/')[1])}/issues?assignee=@me&state=open&per_page=100`,
+        `https://api.github.com/repos/${encodeURIComponent(owner)}/${encodeURIComponent(name)}/issues?assignee=@me&state=open&per_page=100`,
         {
           headers: {
             Authorization: `Bearer ${token}`,
