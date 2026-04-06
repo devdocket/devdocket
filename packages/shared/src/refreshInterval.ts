@@ -7,16 +7,17 @@ const MAXIMUM_INTERVAL_SECONDS = 2_147_483;
 
 /**
  * Validates and clamps a refresh interval value.
- * Blank strings and values that do not convert to a finite number (for example
- * NaN, undefined, null, or non-numeric strings such as 'abc') fall back to
- * the default (300s).
+ * Blank strings, booleans, and values that do not convert to a finite number
+ * (for example NaN, undefined, null, or non-numeric strings such as 'abc')
+ * fall back to the default (300s). Booleans are treated as misconfiguration
+ * even though they coerce to finite numbers.
  * Zero or negative values return 0 (disables periodic refresh).
  * Positive values below the minimum (60s) are clamped up.
  * Values above the maximum (~24.8 days) are clamped down.
  */
 export function validateRefreshInterval(value: unknown, logger?: Logger): number {
   if (value == null || typeof value === 'boolean') {
-    return warnAndDefault(logger, String(value));
+    return warnAndDefault(logger, safeStringify(value));
   }
 
   if (typeof value === 'string' && value.trim() === '') {
@@ -27,11 +28,11 @@ export function validateRefreshInterval(value: unknown, logger?: Logger): number
   try {
     num = Number(value);
   } catch {
-    return warnAndDefault(logger, String(value));
+    return warnAndDefault(logger, safeStringify(value));
   }
 
   if (!Number.isFinite(num)) {
-    return warnAndDefault(logger, String(value));
+    return warnAndDefault(logger, safeStringify(value));
   }
 
   if (num <= 0) {
@@ -53,6 +54,14 @@ export function validateRefreshInterval(value: unknown, logger?: Logger): number
   }
 
   return num;
+}
+
+function safeStringify(value: unknown): string {
+  try {
+    return String(value);
+  } catch {
+    return '[unrepresentable value]';
+  }
 }
 
 function warnAndDefault(logger: Logger | undefined, repr: string): number {
