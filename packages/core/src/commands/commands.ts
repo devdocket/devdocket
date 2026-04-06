@@ -31,14 +31,11 @@ export function registerCommands(
     vscode.commands.registerCommand('workcenter.completeItem', (item) =>
       workGraph.transitionState(item.id, WorkItemState.Done),
     ),
-    vscode.commands.registerCommand('workcenter.blockItem', (item) =>
-      workGraph.transitionState(item.id, WorkItemState.Blocked),
+    vscode.commands.registerCommand('workcenter.pauseItem', (item) =>
+      workGraph.transitionState(item.id, WorkItemState.Paused),
     ),
-    vscode.commands.registerCommand('workcenter.unblockItem', (item) =>
+    vscode.commands.registerCommand('workcenter.resumeItem', (item) =>
       workGraph.transitionState(item.id, WorkItemState.InProgress),
-    ),
-    vscode.commands.registerCommand('workcenter.markWaitingOn', (item) =>
-      workGraph.transitionState(item.id, WorkItemState.WaitingOn),
     ),
     vscode.commands.registerCommand('workcenter.editItem', (item) => {
       const workItem = workGraph.getItem(item.id);
