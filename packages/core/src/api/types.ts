@@ -44,7 +44,7 @@ export interface DiscoveredItem {
 }
 
 /**
- * A provider that discoverswork items from an external source.
+ * A provider that discovers work items from an external source.
  *
  * Providers are registered via {@link WorkCenterApi.registerProvider} and emit
  * {@link DiscoveredItem} arrays when new items are found. The core extension
@@ -85,7 +85,7 @@ export interface WorkCenterProvider {
 }
 
 /**
- * A context-menu actionthat can be run against a {@link WorkItem}.
+ * A context-menu action that can be run against a {@link WorkItem}.
  *
  * Actions are registered via {@link WorkCenterApi.registerAction} and surfaced
  * dynamically — {@link canRun} is called to determine visibility.
@@ -122,7 +122,7 @@ export interface WorkCenterAction {
 }
 
 /**
- * Public API surfaceof the WorkCenter extension.
+ * Public API surface of the WorkCenter extension.
  *
  * Obtain this API from the core extension by getting its extension wrapper via
  * `vscode.extensions.getExtension('mthalman.workcenter')`, then activating it
@@ -142,8 +142,9 @@ export interface WorkCenterApi {
   /**
    * Register a work-item provider.
    *
-   * The provider will be immediately refreshed and its discovered items will
-   * appear in the Inbox and Sources views.
+   * The provider's initial refresh is triggered automatically after
+   * registration (asynchronously), and its discovered items will appear
+   * in the Inbox and Sources views.
    *
    * @param provider - The provider to register.
    * @returns A {@link Disposable} that unregisters the provider when disposed.

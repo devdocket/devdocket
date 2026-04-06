@@ -1,12 +1,12 @@
 /**
  * Lifecycle states for a {@link WorkItem}.
  *
- * Items move throughthese states following the work-item state machine:
+ * Items move through these states following the work-item state machine:
  *
  * ```
- * New → Triaged → InProgress → Done → Archived
- *                   ↕    ↕
- *               Blocked  WaitingOn
+ * New → Triaged (future) → InProgress → Done → Archived
+ *                            ↕    ↕
+ *                        Blocked  WaitingOn
  * ```
  *
  * `Triaged` is reserved for future use and is not currently used in the UI flow.
@@ -59,7 +59,8 @@ export interface WorkItem {
 }
 
 /**
- * Input payload for creating a new work item manually (without a provider).
+ * Editable fields of a work item, used as input for creation and
+ * (via `Partial<WorkItemInput>`) for updates.
  *
  * @example
  * ```ts
