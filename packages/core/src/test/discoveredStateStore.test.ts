@@ -497,16 +497,18 @@ describe('DiscoveredStateStore', () => {
       expect(store.getState(providerId, externalId)).toBe('accepted');
     });
 
-    it('delimiter collision in keys produces distinct entries (documents limitation)', async () => {
+    it('delimiter in ids causes key collision (documents limitation)', async () => {
       // The store keys on `providerId::externalId`, so these two
       // combinations collide: ("a::b", "c") vs ("a", "b::c").
       await store.setState('a::b', 'c', 'unseen');
       await store.setState('a', 'b::c', 'accepted');
 
-      // Because both map to key "a::b::c", second write overwrites the first
+      // Both map to key "a::b::c", so second write overwrites the first
       const records = await store.loadAll();
       expect(records).toHaveLength(1);
       expect(store.getState('a', 'b::c')).toBe('accepted');
+      // The original entry is no longer retrievable under its own ids
+      expect(store.getState('a::b', 'c')).toBe('accepted');
     });
 
     it('handles empty string providerId and externalId', async () => {
