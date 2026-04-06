@@ -36,7 +36,6 @@ describe('GitHub provider config edge cases', () => {
     });
 
     afterEach(() => {
-      provider.dispose();
       vi.useRealTimers();
     });
 
@@ -176,7 +175,6 @@ describe('GitHub PR review provider config edge cases', () => {
     });
 
     afterEach(() => {
-      provider.dispose();
       vi.useRealTimers();
     });
 
