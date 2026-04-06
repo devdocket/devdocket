@@ -315,11 +315,11 @@ describe('InboxTreeProvider', () => {
       expect(listener).not.toHaveBeenCalled();
     });
 
-    it('should expose seen items via readItems', () => {
-      expect(provider.readItems.size).toBe(0);
+    it('should expose seen items via sessionSeenItems', () => {
+      expect(provider.sessionSeenItems.size).toBe(0);
       provider.markSeen('gh', '1');
-      expect(provider.readItems.has('gh::1')).toBe(true);
-      expect(provider.readItems.size).toBe(1);
+      expect(provider.sessionSeenItems.has('gh::1')).toBe(true);
+      expect(provider.sessionSeenItems.size).toBe(1);
     });
   });
 

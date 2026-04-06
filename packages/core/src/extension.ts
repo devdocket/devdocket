@@ -135,7 +135,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<WorkCe
   let wasLoading = false;
 
   const updateInboxBadge = () => {
-    const count = getInboxUnseenCount(providerRegistry, stateStore, inboxProvider.readItems);
+    const count = getInboxUnseenCount(providerRegistry, stateStore, inboxProvider.sessionSeenItems);
     inboxTreeView.badge = count > 0 ? { value: count, tooltip: `${count} unseen item${count === 1 ? '' : 's'}` } : undefined;
   };
 

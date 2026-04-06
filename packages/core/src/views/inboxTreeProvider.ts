@@ -69,7 +69,7 @@ export class InboxTreeProvider implements vscode.TreeDataProvider<InboxElement> 
     }
   }
 
-  get readItems(): ReadonlySet<string> { return this.seenItems; }
+  get sessionSeenItems(): ReadonlySet<string> { return this.seenItems; }
 
   refresh(): void { this._onDidChangeTreeData.fire(); }
 
