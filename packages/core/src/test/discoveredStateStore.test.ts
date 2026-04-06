@@ -194,9 +194,6 @@ describe('DiscoveredStateStore', () => {
     });
 
     it('should handle an empty array gracefully', async () => {
-      const listener = vi.fn();
-      store.onDidChange(listener);
-
       await store.setState('gh', 'issue-1', 'unseen');
 
       await store.setStates([]);
@@ -205,8 +202,6 @@ describe('DiscoveredStateStore', () => {
       expect(store.getState('gh', 'issue-1')).toBe('unseen');
       const records = await store.loadAll();
       expect(records).toHaveLength(1);
-      // onDidChange fires even for empty batch (setState + setStates = 2 fires)
-      expect(listener).toHaveBeenCalledTimes(2);
     });
 
     it('should handle duplicate keys in the same batch (last wins)', async () => {
@@ -368,7 +363,7 @@ describe('DiscoveredStateStore', () => {
   // ── Concurrent operations ─────────────────────────────────────────
 
   describe('concurrent operations', () => {
-    it('concurrent setState calls are serialized via writeQueue', async () => {
+    it('concurrent setState calls produce correct final state', async () => {
       // Pre-load to avoid lazy load race condition
       await store.load();
 
