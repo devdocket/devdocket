@@ -388,15 +388,21 @@ describe('InboxTreeProvider', () => {
     });
 
     it('should prune seenItems for items no longer in inbox after provider refresh', async () => {
-      registry._setItems('gh', [{ externalId: '1', title: 'Bug' }]);
+      registry._setItems('gh', [
+        { externalId: '1', title: 'Bug' },
+        { externalId: '2', title: 'Feature' },
+      ]);
       await provider.markSeen('gh', '1');
 
-      // Remove item from provider
-      registry._setItems('gh', []);
+      // Replace items — item '1' is gone, item '2' remains
+      registry._setItems('gh', [{ externalId: '2', title: 'Feature' }]);
       registry._fire();
 
-      // Re-add item — should appear as unseen (circle-filled icon)
-      registry._setItems('gh', [{ externalId: '1', title: 'Bug' }]);
+      // Re-add item '1' — should appear as unseen since it was pruned
+      registry._setItems('gh', [
+        { externalId: '1', title: 'Bug' },
+        { externalId: '2', title: 'Feature' },
+      ]);
       const item: InboxItem = { kind: 'item', providerId: 'gh', externalId: '1', title: 'Bug' };
       expect(provider.getTreeItem(item).label).toBe('Bug');
       expect((provider.getTreeItem(item).iconPath as any).id).toBe('circle-filled');

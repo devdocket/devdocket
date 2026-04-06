@@ -58,6 +58,14 @@ export class InboxTreeProvider implements vscode.TreeDataProvider<InboxElement> 
     const discoveredItems = this.providerRegistry.getAllDiscoveredItems();
     if (discoveredItems.size === 0) { return; }
 
+    // Skip pruning if no provider has any discovered items yet (e.g.
+    // all initial refreshes failed), so transient failures don't wipe state.
+    let totalItems = 0;
+    for (const [, items] of discoveredItems) {
+      totalItems += items.length;
+    }
+    if (totalItems === 0) { return; }
+
     const currentKeys = new Set<string>();
     for (const [providerId, items] of discoveredItems) {
       for (const item of items) {
