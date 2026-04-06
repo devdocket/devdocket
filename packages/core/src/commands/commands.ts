@@ -33,28 +33,28 @@ async function handleCreateItem(workGraph: WorkGraph): Promise<void> {
   vscode.window.showInformationMessage(`WorkCenter: Created "${title.trim()}"`);
 }
 
-function handleAcceptToFocus(workGraph: WorkGraph, item: { id: string }): void {
-  workGraph.transitionState(item.id, WorkItemState.InProgress);
+async function handleAcceptToFocus(workGraph: WorkGraph, item: { id: string }): Promise<void> {
+  await workGraph.transitionState(item.id, WorkItemState.InProgress);
 }
 
-function handleArchiveItem(workGraph: WorkGraph, item: { id: string }): void {
-  workGraph.transitionState(item.id, WorkItemState.Archived);
+async function handleArchiveItem(workGraph: WorkGraph, item: { id: string }): Promise<void> {
+  await workGraph.transitionState(item.id, WorkItemState.Archived);
 }
 
-function handleCompleteItem(workGraph: WorkGraph, item: { id: string }): void {
-  workGraph.transitionState(item.id, WorkItemState.Done);
+async function handleCompleteItem(workGraph: WorkGraph, item: { id: string }): Promise<void> {
+  await workGraph.transitionState(item.id, WorkItemState.Done);
 }
 
-function handleBlockItem(workGraph: WorkGraph, item: { id: string }): void {
-  workGraph.transitionState(item.id, WorkItemState.Blocked);
+async function handleBlockItem(workGraph: WorkGraph, item: { id: string }): Promise<void> {
+  await workGraph.transitionState(item.id, WorkItemState.Blocked);
 }
 
-function handleUnblockItem(workGraph: WorkGraph, item: { id: string }): void {
-  workGraph.transitionState(item.id, WorkItemState.InProgress);
+async function handleUnblockItem(workGraph: WorkGraph, item: { id: string }): Promise<void> {
+  await workGraph.transitionState(item.id, WorkItemState.InProgress);
 }
 
-function handleMarkWaitingOn(workGraph: WorkGraph, item: { id: string }): void {
-  workGraph.transitionState(item.id, WorkItemState.WaitingOn);
+async function handleMarkWaitingOn(workGraph: WorkGraph, item: { id: string }): Promise<void> {
+  await workGraph.transitionState(item.id, WorkItemState.WaitingOn);
 }
 
 function handleEditItem(
@@ -68,12 +68,10 @@ function handleEditItem(
   }
 }
 
-function handleOpenInBrowser(workGraph: WorkGraph, item: { id: string; url?: string }): void {
-  const workItem = workGraph.getItem(item.id);
-  if (workItem?.url) {
-    vscode.env.openExternal(vscode.Uri.parse(workItem.url));
-  } else if (item.url) {
-    vscode.env.openExternal(vscode.Uri.parse(item.url));
+async function handleOpenInBrowser(workGraph: WorkGraph, item: { id: string; url?: string }): Promise<void> {
+  const url = workGraph.getItem(item.id)?.url ?? item.url;
+  if (url) {
+    await vscode.env.openExternal(vscode.Uri.parse(url));
   }
 }
 
@@ -111,20 +109,20 @@ async function handleRunAction(
   }
 }
 
-function handleMoveUp(workGraph: WorkGraph, item: { id?: string }): void {
+async function handleMoveUp(workGraph: WorkGraph, item: { id?: string }): Promise<void> {
   if (!item?.id) {
     vscode.window.showInformationMessage('WorkCenter: Select an item in the Queue to move.');
     return;
   }
-  workGraph.moveItem(item.id, 'up');
+  await workGraph.moveItem(item.id, 'up');
 }
 
-function handleMoveDown(workGraph: WorkGraph, item: { id?: string }): void {
+async function handleMoveDown(workGraph: WorkGraph, item: { id?: string }): Promise<void> {
   if (!item?.id) {
     vscode.window.showInformationMessage('WorkCenter: Select an item in the Queue to move.');
     return;
   }
-  workGraph.moveItem(item.id, 'down');
+  await workGraph.moveItem(item.id, 'down');
 }
 
 async function handleAcceptFromInbox(
