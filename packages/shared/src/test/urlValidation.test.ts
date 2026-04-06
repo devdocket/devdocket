@@ -69,10 +69,8 @@ describe('isValidUrlSegment', () => {
   });
 
   describe('rejects segments starting with non-safe characters', () => {
-    it.each([
-      ' leading-space',
-    ])('rejects "%s"', (input) => {
-      expect(isValidUrlSegment(input)).toBe(false);
+    it('rejects whitespace-only strings', () => {
+      expect(isValidUrlSegment('   ')).toBe(false);
     });
   });
 
@@ -86,14 +84,23 @@ describe('isValidUrlSegment', () => {
     });
   });
 
-  describe('rejects special characters', () => {
+  describe('rejects special characters used in URL injection', () => {
+    it.each([
+      'org?param',
+      'org#fragment',
+    ])('rejects "%s"', (input) => {
+      expect(isValidUrlSegment(input)).toBe(false);
+    });
+  });
+
+  describe('accepts segments with other special characters', () => {
     it.each([
       'org name',
       'org@host',
       'org:port',
       'org;semi',
-    ])('rejects "%s"', (input) => {
-      expect(isValidUrlSegment(input)).toBe(false);
+    ])('accepts "%s" (encoded by provider)', (input) => {
+      expect(isValidUrlSegment(input)).toBe(true);
     });
   });
 });

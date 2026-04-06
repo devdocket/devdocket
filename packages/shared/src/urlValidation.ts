@@ -1,13 +1,14 @@
-// Pattern for a single URL path segment: one or more alphanumeric/hyphens/underscores/dots
-const SAFE_SEGMENT = /^[a-zA-Z0-9._-]+$/;
-
 /**
  * Validates a single URL path segment (org name, project name, repo name).
- * Rejects empty strings, path traversal sequences, query/fragment characters,
- * slashes, and anything that doesn't match the safe character set.
+ * Blocks path traversal (`.` / `..`), path separators (`/` / `\`),
+ * and query/fragment injection (`?` / `#`). Allows other characters
+ * since providers already apply encodeURIComponent when building URLs.
  */
 export function isValidUrlSegment(value: string): boolean {
   if (!value || typeof value !== 'string') {
+    return false;
+  }
+  if (!value.trim()) {
     return false;
   }
   if (value === '.' || value === '..') {
@@ -19,7 +20,7 @@ export function isValidUrlSegment(value: string): boolean {
   if (value.includes('/') || value.includes('\\')) {
     return false;
   }
-  return SAFE_SEGMENT.test(value);
+  return true;
 }
 
 /**
