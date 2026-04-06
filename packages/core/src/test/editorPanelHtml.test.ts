@@ -3,11 +3,13 @@ import { getEditorPanelHtml } from '../views/editorPanelHtml';
 import { WorkItem, WorkItemState } from '../models/workItem';
 
 function makeItem(overrides: Partial<WorkItem> = {}): WorkItem {
+  const now = Date.now();
   return {
     id: 'test-1',
     title: 'Test Item',
     state: WorkItemState.New,
-    createdAt: new Date().toISOString(),
+    createdAt: now,
+    updatedAt: now,
     notes: '',
     ...overrides,
   };
