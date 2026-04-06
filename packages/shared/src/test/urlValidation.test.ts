@@ -48,6 +48,7 @@ describe('isValidUrlSegment', () => {
   describe('rejects query and fragment characters', () => {
     it.each([
       'org?malicious=param',
+      'org?param',
       'org#fragment',
     ])('rejects "%s"', (input) => {
       expect(isValidUrlSegment(input)).toBe(false);
@@ -81,15 +82,6 @@ describe('isValidUrlSegment', () => {
       '_underscore',
     ])('accepts "%s"', (input) => {
       expect(isValidUrlSegment(input)).toBe(true);
-    });
-  });
-
-  describe('rejects special characters used in URL injection', () => {
-    it.each([
-      'org?param',
-      'org#fragment',
-    ])('rejects "%s"', (input) => {
-      expect(isValidUrlSegment(input)).toBe(false);
     });
   });
 

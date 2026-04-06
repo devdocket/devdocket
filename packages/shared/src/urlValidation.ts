@@ -23,9 +23,13 @@ export function isValidUrlSegment(value: string): boolean {
   return true;
 }
 
+// GitHub owner/repo names: alphanumeric, hyphens, dots, underscores
+const GITHUB_SEGMENT = /^[a-zA-Z0-9._-]+$/;
+
 /**
  * Validates a GitHub repo identifier in "owner/repo" format.
- * Both owner and repo segments must individually pass segment validation.
+ * Uses a strict character set since GitHub URLs interpolate the value
+ * directly without encodeURIComponent.
  */
 export function isValidGitHubRepo(repo: string): boolean {
   if (!repo || typeof repo !== 'string') {
@@ -35,5 +39,9 @@ export function isValidGitHubRepo(repo: string): boolean {
   if (parts.length !== 2) {
     return false;
   }
-  return isValidUrlSegment(parts[0]) && isValidUrlSegment(parts[1]);
+  const [owner, name] = parts;
+  if (owner === '.' || owner === '..' || name === '.' || name === '..') {
+    return false;
+  }
+  return GITHUB_SEGMENT.test(owner) && GITHUB_SEGMENT.test(name);
 }
