@@ -178,7 +178,10 @@ export async function activate(context: vscode.ExtensionContext): Promise<WorkCe
         'Show Inbox'
       ).then(action => {
         if (action === 'Show Inbox') {
-          vscode.commands.executeCommand('workcenter.inbox.focus');
+          vscode.commands.executeCommand('workcenter.inbox.focus').then(
+            undefined,
+            () => { /* view focus is best-effort */ }
+          );
         }
       });
     }

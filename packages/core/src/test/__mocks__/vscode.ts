@@ -48,7 +48,7 @@ class MockTreeItem {
 
 const window = {
   showInputBox: vi.fn(),
-  showInformationMessage: vi.fn(),
+  showInformationMessage: vi.fn().mockResolvedValue(undefined),
   showWarningMessage: vi.fn(),
   showErrorMessage: vi.fn(),
   showQuickPick: vi.fn(),
