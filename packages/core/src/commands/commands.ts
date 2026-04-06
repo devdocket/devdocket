@@ -33,32 +33,32 @@ async function handleCreateItem(workGraph: WorkGraph): Promise<void> {
   vscode.window.showInformationMessage(`WorkCenter: Created "${title.trim()}"`);
 }
 
-async function handleAcceptToFocus(workGraph: WorkGraph, item?: { id: string }): Promise<void> {
+async function handleAcceptToFocus(workGraph: WorkGraph, item?: { id?: string }): Promise<void> {
   if (!item?.id) { return; }
   await workGraph.transitionState(item.id, WorkItemState.InProgress);
 }
 
-async function handleArchiveItem(workGraph: WorkGraph, item?: { id: string }): Promise<void> {
+async function handleArchiveItem(workGraph: WorkGraph, item?: { id?: string }): Promise<void> {
   if (!item?.id) { return; }
   await workGraph.transitionState(item.id, WorkItemState.Archived);
 }
 
-async function handleCompleteItem(workGraph: WorkGraph, item?: { id: string }): Promise<void> {
+async function handleCompleteItem(workGraph: WorkGraph, item?: { id?: string }): Promise<void> {
   if (!item?.id) { return; }
   await workGraph.transitionState(item.id, WorkItemState.Done);
 }
 
-async function handleBlockItem(workGraph: WorkGraph, item?: { id: string }): Promise<void> {
+async function handleBlockItem(workGraph: WorkGraph, item?: { id?: string }): Promise<void> {
   if (!item?.id) { return; }
   await workGraph.transitionState(item.id, WorkItemState.Blocked);
 }
 
-async function handleUnblockItem(workGraph: WorkGraph, item?: { id: string }): Promise<void> {
+async function handleUnblockItem(workGraph: WorkGraph, item?: { id?: string }): Promise<void> {
   if (!item?.id) { return; }
   await workGraph.transitionState(item.id, WorkItemState.InProgress);
 }
 
-async function handleMarkWaitingOn(workGraph: WorkGraph, item?: { id: string }): Promise<void> {
+async function handleMarkWaitingOn(workGraph: WorkGraph, item?: { id?: string }): Promise<void> {
   if (!item?.id) { return; }
   await workGraph.transitionState(item.id, WorkItemState.WaitingOn);
 }
@@ -118,7 +118,7 @@ async function handleRunAction(
   }
 }
 
-async function handleMoveUp(workGraph: WorkGraph, item: { id?: string }): Promise<void> {
+async function handleMoveUp(workGraph: WorkGraph, item?: { id?: string }): Promise<void> {
   if (!item?.id) {
     vscode.window.showInformationMessage('WorkCenter: Select an item in the Queue to move.');
     return;
@@ -126,7 +126,7 @@ async function handleMoveUp(workGraph: WorkGraph, item: { id?: string }): Promis
   await workGraph.moveItem(item.id, 'up');
 }
 
-async function handleMoveDown(workGraph: WorkGraph, item: { id?: string }): Promise<void> {
+async function handleMoveDown(workGraph: WorkGraph, item?: { id?: string }): Promise<void> {
   if (!item?.id) {
     vscode.window.showInformationMessage('WorkCenter: Select an item in the Queue to move.');
     return;
