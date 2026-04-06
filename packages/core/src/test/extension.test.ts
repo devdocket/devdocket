@@ -18,12 +18,12 @@ function createExtensionContext(overrides?: Partial<vscode.ExtensionContext>): v
   } as unknown as vscode.ExtensionContext;
 }
 
-/** Flush all pending microtasks so coalesced UI updates execute. */
+/** Flush pending microtasks so coalesced UI updates execute. */
 async function flushMicrotasks(): Promise<void> {
-  // queueMicrotask callbacks run before the next macrotask.
-  // Two rounds ensure nested microtasks also settle.
-  await new Promise<void>((r) => setTimeout(r, 0));
-  await new Promise<void>((r) => setTimeout(r, 0));
+  // Await resolved promises to yield to the microtask queue.
+  // Two rounds help nested microtasks scheduled by earlier microtasks settle too.
+  await Promise.resolve();
+  await Promise.resolve();
 }
 
 describe('activate()', () => {
@@ -108,7 +108,7 @@ describe('activate()', () => {
   });
 
   // ------------------------------------------------------------------
-  // 6. Badge count initialises to zero (no providers, no items)
+  // 6. Badge is undefined when there are no providers or items
   // ------------------------------------------------------------------
   it('initialises inbox badge to undefined when there are no items', async () => {
     await activate(context);
