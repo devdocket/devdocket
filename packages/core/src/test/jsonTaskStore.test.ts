@@ -209,7 +209,7 @@ describe('JsonTaskStore', () => {
 
     const items = await store.loadAll();
     expect(items).toHaveLength(1);
-    expect(items[0].state).toBe('Paused');
+    expect(items[0].state).toBe(WorkItemState.Paused);
   });
 
   it('migrates legacy WaitingOn state to Paused on load', async () => {
@@ -226,7 +226,7 @@ describe('JsonTaskStore', () => {
 
     const items = await store.loadAll();
     expect(items).toHaveLength(1);
-    expect(items[0].state).toBe('Paused');
+    expect(items[0].state).toBe(WorkItemState.Paused);
   });
 
   it('persists migrated Blocked/WaitingOn→Paused back to disk', async () => {
@@ -243,7 +243,7 @@ describe('JsonTaskStore', () => {
     const raw = await fs.readFile(filePath, 'utf-8');
     const persisted = JSON.parse(raw);
     expect(persisted).toHaveLength(2);
-    expect(persisted[0].state).toBe('Paused');
-    expect(persisted[1].state).toBe('Paused');
+    expect(persisted[0].state).toBe(WorkItemState.Paused);
+    expect(persisted[1].state).toBe(WorkItemState.Paused);
   });
 });

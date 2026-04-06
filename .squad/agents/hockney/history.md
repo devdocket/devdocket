@@ -7,7 +7,7 @@ WorkCenter is a VS Code extension for managing work items. Phase 1 is complete:
 - Manual work item creation via input box, editing via webview panel with auto-save
 - 6-state WorkItem model (New, Triaged, InProgress, Paused, Done, Archived)
 - WorkGraph service: in-memory Map, event-driven, ITaskStore abstraction
-- JsonTaskStore: one JSON file per item in globalStorageUri
+- JsonTaskStore: single `workitems.json` file in `globalStorageUri` containing an array of items
 - 19 passing vitest tests
 - esbuild bundler, TypeScript strict mode
 
@@ -20,7 +20,7 @@ Test infrastructure:
 Key files:
 - `src/models/workItem.ts` — model + state enum (6 states: New, Triaged, InProgress, Paused, Done, Archived)
 - `src/services/workGraph.ts` — core service with createItem, updateItem, transitionState, deleteItem
-- `src/storage/jsonTaskStore.ts` — file-per-item persistence
+- `src/storage/jsonTaskStore.ts` — single-file persistence (all items in `workitems.json`)
 
 ## Learnings
 
