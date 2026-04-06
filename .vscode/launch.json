@@ -8,12 +8,14 @@
       "args": [
         "--extensionDevelopmentPath=${workspaceFolder}/packages/core",
         "--extensionDevelopmentPath=${workspaceFolder}/packages/github",
-        "--extensionDevelopmentPath=${workspaceFolder}/packages/ado"
+        "--extensionDevelopmentPath=${workspaceFolder}/packages/ado",
+        "--extensionDevelopmentPath=${workspaceFolder}/packages/ai-reviewer"
       ],
       "outFiles": [
         "${workspaceFolder}/packages/core/dist/**/*.js",
         "${workspaceFolder}/packages/github/dist/**/*.js",
-        "${workspaceFolder}/packages/ado/dist/**/*.js"
+        "${workspaceFolder}/packages/ado/dist/**/*.js",
+        "${workspaceFolder}/packages/ai-reviewer/dist/**/*.js"
       ],
       "preLaunchTask": "build all"
     }
