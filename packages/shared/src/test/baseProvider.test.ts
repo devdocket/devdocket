@@ -191,6 +191,24 @@ describe('BaseProvider', () => {
       // Repeated dispose should be safe and not re-dispose the emitter
       expect(emitter.dispose).toHaveBeenCalledOnce();
     });
+
+    it('prevents startPeriodicRefresh after dispose', async () => {
+      const provider = new TestProvider(createMockEmitter());
+      provider.dispose();
+
+      provider.startPeriodicRefresh(60);
+      await vi.advanceTimersByTimeAsync(120_000);
+      expect(provider.backgroundRefreshCalls).toBe(0);
+    });
+
+    it('prevents refreshInBackground after dispose', async () => {
+      vi.useRealTimers();
+      const provider = new TestProvider(createMockEmitter());
+      provider.dispose();
+
+      await provider.refreshInBackground();
+      expect(provider.backgroundRefreshCalls).toBe(0);
+    });
   });
 
   describe('refreshInBackground concurrency guard', () => {
@@ -292,6 +310,21 @@ describe('BaseProvider', () => {
       // Second tick — should fire normally
       await vi.advanceTimersByTimeAsync(60_000);
       expect(provider.backgroundRefreshCalls).toBe(2);
+
+      provider.dispose();
+    });
+
+    it('routes errors through the overridable onBackgroundRefreshError handler', async () => {
+      const provider = new TestProvider(createMockEmitter());
+      const errors: unknown[] = [];
+      provider.onBackgroundRefreshError = (err) => errors.push(err);
+      provider.refreshError = new Error('custom handler');
+
+      provider.startPeriodicRefresh(60);
+      await vi.advanceTimersByTimeAsync(60_000);
+
+      expect(errors).toHaveLength(1);
+      expect(errors[0]).toBeInstanceOf(Error);
 
       provider.dispose();
     });

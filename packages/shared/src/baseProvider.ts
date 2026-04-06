@@ -34,12 +34,20 @@ export abstract class BaseProvider {
   private _isRefreshing = false;
   private _disposed = false;
 
+  /** Optional error handler for background refresh failures. Defaults to console.error. */
+  protected onBackgroundRefreshError: (error: unknown) => void = (error) => {
+    console.error('Background refresh failed', error);
+  };
+
   constructor(emitter: EventEmitterLike<DiscoveredItem[]>) {
     this._onDidDiscoverItems = emitter;
     this.onDidDiscoverItems = emitter.event;
   }
 
   startPeriodicRefresh(intervalSeconds: number): void {
+    if (this._disposed) {
+      return;
+    }
     this.stopPeriodicRefresh();
     const interval = Number(intervalSeconds);
     if (!Number.isFinite(interval) || interval <= 0) {
@@ -48,8 +56,7 @@ export abstract class BaseProvider {
     const clampedInterval = Math.max(interval, 60);
     this.refreshTimer = setInterval(() => {
       this.refreshInBackground().catch((error: unknown) => {
-        // Prevent unhandled promise rejections from the interval callback.
-        console.error('Background refresh failed', error);
+        this.onBackgroundRefreshError(error);
       });
     }, clampedInterval * 1000);
   }
@@ -63,7 +70,7 @@ export abstract class BaseProvider {
 
   /** Runs a background refresh with a concurrency guard to prevent overlapping calls. */
   async refreshInBackground(): Promise<void> {
-    if (this._isRefreshing) {
+    if (this._isRefreshing || this._disposed) {
       return;
     }
     this._isRefreshing = true;
