@@ -76,7 +76,8 @@ describe('GitHubIssueProvider — error handling', () => {
     });
 
     it('handles AbortError from fetch', async () => {
-      const abortError = new DOMException('The operation was aborted', 'AbortError');
+      const abortError = new Error('The operation was aborted');
+      abortError.name = 'AbortError';
       mockFetch.mockRejectedValueOnce(abortError);
 
       const listener = vi.fn();
@@ -85,7 +86,7 @@ describe('GitHubIssueProvider — error handling', () => {
       expect(listener).not.toHaveBeenCalled();
     });
 
-    it('handles fetch rejection on configured repo and logs error', async () => {
+    it('handles fetch rejection on configured repo without throwing', async () => {
       configureRepos(['owner/repo1']);
       mockFetch.mockRejectedValueOnce(new Error('ECONNREFUSED'));
 
