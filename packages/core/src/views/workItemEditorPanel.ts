@@ -202,9 +202,10 @@ export class WorkItemEditorPanel {
       border: 1px solid var(--input-border);
     }
     input[readonly], textarea[readonly] {
-      opacity: 0.7;
-      cursor: not-allowed;
+      color: var(--vscode-disabledForeground, var(--vscode-foreground));
+      cursor: text;
       border-style: dashed;
+      background-color: var(--vscode-editor-inactiveSelectionBackground, rgba(128,128,128,0.15));
     }
     .hint {
       font-size: 0.8em;
@@ -215,8 +216,8 @@ export class WorkItemEditorPanel {
   </style>
 </head>
 <body>
-  <h2>Edit Work Item</h2>
-  <div id="form">
+  <h2 id="editor-heading">Edit Work Item</h2>
+  <div id="form" role="form" aria-labelledby="editor-heading">
     <div class="field">
       <label for="title">Title</label>
       <input type="text" id="title" value="${escapeAttr(item.title)}" ${item.providerId ? 'readonly aria-readonly="true" aria-describedby="readonly-title-hint"' : ''} />
@@ -224,7 +225,7 @@ ${item.providerId ? '      <span id="readonly-title-hint" class="hint">Title is 
     </div>
     <div class="field">
       <label for="notes">Notes</label>
-      <textarea id="notes">${escapeHtml(item.notes ?? '')}</textarea>
+      <textarea id="notes" placeholder="Add notes...">${escapeHtml(item.notes ?? '')}</textarea>
     </div>
   </div>
   <script nonce="${nonce}">
