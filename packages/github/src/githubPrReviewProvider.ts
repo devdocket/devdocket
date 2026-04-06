@@ -25,7 +25,7 @@ interface WorkCenterProvider {
   readonly label: string;
   readonly resurfaceDismissed?: boolean;
   readonly onDidDiscoverItems: Event<DiscoveredItem[]>;
-  refresh(): Promise<void>;
+  refresh(token?: vscode.CancellationToken): Promise<void>;
 }
 
 interface GitHubIssue {
@@ -53,11 +53,12 @@ export class GitHubPrReviewProvider implements WorkCenterProvider {
 
   startPeriodicRefresh(intervalSeconds: number): void {
     this.stopPeriodicRefresh();
-    if (intervalSeconds <= 0) {
+    const interval = Number(intervalSeconds);
+    if (!Number.isFinite(interval) || interval <= 0) {
       return;
     }
     // Clamp to minimum of 60 seconds
-    const clampedInterval = Math.max(intervalSeconds, 60);
+    const clampedInterval = Math.max(interval, 60);
     this.refreshTimer = setInterval(() => {
       this.refreshInBackground().catch((err) => {
         logger.error('PR review refresh failed', err);
@@ -72,7 +73,7 @@ export class GitHubPrReviewProvider implements WorkCenterProvider {
     }
   }
 
-  async refresh(): Promise<void> {
+  async refresh(token?: vscode.CancellationToken): Promise<void> {
     if (this._isRefreshing) {
       return;
     }
@@ -80,11 +81,15 @@ export class GitHubPrReviewProvider implements WorkCenterProvider {
     this._isRefreshing = true;
     logger.info('Fetching PR review requests...');
     try {
+      if (token?.isCancellationRequested) {
+        return;
+      }
+
       const session = await vscode.authentication.getSession('github', ['repo'], {
         createIfNone: true,
       }).catch(() => null);
 
-      if (!session) {
+      if (!session || token?.isCancellationRequested) {
         return;
       }
 

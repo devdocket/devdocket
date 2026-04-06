@@ -1,4 +1,5 @@
-import { WorkItem } from '../models/workItem';
+import type * as vscode from 'vscode';
+import type { WorkItem } from '../models/workItem';
 
 /** A handle that releases a resource when disposed. */
 export interface Disposable {
@@ -50,7 +51,7 @@ export interface WorkCenterProvider {
   /** Fires when the provider has a new or updated set of discovered items. */
   readonly onDidDiscoverItems: Event<DiscoveredItem[]>;
   /** Re-fetch items from the external source. */
-  refresh(): Promise<void>;
+  refresh(token?: vscode.CancellationToken): Promise<void>;
 }
 
 /**
