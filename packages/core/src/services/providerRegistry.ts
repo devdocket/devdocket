@@ -92,7 +92,7 @@ export class ProviderRegistry {
     for (let i = 0; i < results.length; i++) {
       const result = results[i];
       if (result.status === 'rejected') {
-        logger.warn(`Provider "${providers[i].id}" refresh failed: ${result.reason}`);
+        logger.error(`Provider "${providers[i].id}" refresh failed`, result.reason);
       }
     }
   }
