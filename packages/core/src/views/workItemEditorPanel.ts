@@ -10,6 +10,7 @@ export class WorkItemEditorPanel {
   private disposed = false;
   private debounceTimer: ReturnType<typeof setTimeout> | undefined;
   private pendingData: Record<string, string> | undefined;
+  private saveQueue: Promise<void> = Promise.resolve();
   private readonly messageSubscription: vscode.Disposable;
 
   static open(
@@ -45,19 +46,14 @@ export class WorkItemEditorPanel {
         if (this.debounceTimer) {
           clearTimeout(this.debounceTimer);
         }
-        this.debounceTimer = setTimeout(async () => {
+        this.debounceTimer = setTimeout(() => {
           this.debounceTimer = undefined;
           const data = this.pendingData;
           this.pendingData = undefined;
           if (!data) {
             return;
           }
-          try {
-            await this.saveData(data);
-          } catch (err) {
-            const message = err instanceof Error ? err.message : String(err);
-            vscode.window.showErrorMessage(`Failed to save work item: ${message}`);
-          }
+          this.enqueueSave(data);
         }, 300);
       }
     });
@@ -283,8 +279,19 @@ ${item.providerId ? '      <span id="readonly-title-hint" class="hint">Title is 
     const data = this.pendingData;
     this.pendingData = undefined;
     if (data) {
-      this.saveData(data).catch(() => {});
+      this.enqueueSave(data);
     }
+  }
+
+  private enqueueSave(data: Record<string, string>): void {
+    this.saveQueue = this.saveQueue.then(async () => {
+      try {
+        await this.saveData(data);
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        vscode.window.showErrorMessage(`Failed to save work item: ${message}`);
+      }
+    });
   }
 
   private getNonce(): string {
