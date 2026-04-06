@@ -28,12 +28,10 @@ describe('isValidUrlSegment', () => {
 
     it.each([
       'a..b',
+      '...',
+      '.github',
     ])('accepts "%s" (not traversal)', (input) => {
       expect(isValidUrlSegment(input)).toBe(true);
-    });
-
-    it('rejects "..." (starts with non-alphanumeric)', () => {
-      expect(isValidUrlSegment('...')).toBe(false);
     });
   });
 
@@ -70,13 +68,21 @@ describe('isValidUrlSegment', () => {
     });
   });
 
-  describe('rejects segments starting with non-alphanumeric', () => {
+  describe('rejects segments starting with non-safe characters', () => {
+    it.each([
+      ' leading-space',
+    ])('rejects "%s"', (input) => {
+      expect(isValidUrlSegment(input)).toBe(false);
+    });
+  });
+
+  describe('accepts segments starting with dot/dash/underscore', () => {
     it.each([
       '.hidden',
       '-dash',
       '_underscore',
-    ])('rejects "%s"', (input) => {
-      expect(isValidUrlSegment(input)).toBe(false);
+    ])('accepts "%s"', (input) => {
+      expect(isValidUrlSegment(input)).toBe(true);
     });
   });
 
@@ -119,6 +125,10 @@ describe('isValidGitHubRepo', () => {
 
     it('rejects traversal in repo', () => {
       expect(isValidGitHubRepo('owner/..')).toBe(false);
+    });
+
+    it('accepts .github repo names', () => {
+      expect(isValidGitHubRepo('owner/.github')).toBe(true);
     });
 
     it('rejects empty string', () => {

@@ -1,5 +1,5 @@
-// Pattern for a single URL path segment: alphanumeric start, then alphanumeric/hyphens/underscores/dots
-const SAFE_SEGMENT = /^[a-zA-Z0-9][a-zA-Z0-9._-]*$/;
+// Pattern for a single URL path segment: one or more alphanumeric/hyphens/underscores/dots
+const SAFE_SEGMENT = /^[a-zA-Z0-9._-]+$/;
 
 /**
  * Validates a single URL path segment (org name, project name, repo name).
