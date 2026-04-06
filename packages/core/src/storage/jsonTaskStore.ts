@@ -112,7 +112,7 @@ export class JsonTaskStore implements ITaskStore {
   }
 
   /**
-   * Persists multiple work items in a single atomic write.
+   * Persists multiple work items in a single serialized write.
    * @param items - The work items to save (inserted or replaced by `id`).
    * @throws If the write to disk fails (cache is rolled back on error).
    */

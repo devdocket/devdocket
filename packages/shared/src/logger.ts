@@ -69,8 +69,8 @@ export interface LoggerService {
 }
 
 /**
- * Creates a new {@link LoggerService} with its own output channel and log level.
- * Call {@link LoggerService.initLogger} before emitting messages.
+ * Creates a new {@link LoggerService} that starts unconfigured.
+ * Call {@link LoggerService.initLogger} to attach an output sink before emitting messages.
  * @returns A fresh logger service instance.
  */
 export function createLoggerService(): LoggerService {

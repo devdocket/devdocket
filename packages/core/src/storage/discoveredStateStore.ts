@@ -79,7 +79,7 @@ export class DiscoveredStateStore {
   }
 
   /**
-   * Sets the inbox state for multiple discovered items in a single atomic write.
+   * Sets the inbox state for multiple discovered items in a single serialized write.
    * @param items - Array of items with their new states.
    * @throws If the write to disk fails (cache is rolled back on error).
    */
