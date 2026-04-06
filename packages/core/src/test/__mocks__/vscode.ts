@@ -78,6 +78,7 @@ const window = {
 
 const commands = {
   registerCommand: vi.fn(() => ({ dispose: vi.fn() })),
+  executeCommand: vi.fn().mockResolvedValue(undefined),
 };
 
 const env = {
