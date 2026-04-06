@@ -3,9 +3,11 @@ import * as fs from 'fs/promises';
 import * as path from 'path';
 import { logger } from '../services/logger';
 
-export type InboxState = 'unseen' | 'accepted' | 'dismissed';
+const inboxStates = ['unseen', 'accepted', 'dismissed'] as const;
 
-const validInboxStates = new Set<string>(['unseen', 'accepted', 'dismissed']);
+export type InboxState = (typeof inboxStates)[number];
+
+const validInboxStates = new Set<string>(inboxStates);
 
 export interface DiscoveredStateRecord {
   providerId: string;
