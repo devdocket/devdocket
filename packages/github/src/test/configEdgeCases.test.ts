@@ -199,5 +199,22 @@ describe('GitHub provider config edge cases', () => {
       expect(items).toHaveLength(1);
       expect(items[0].title).toBe('#1: Good issue');
     });
+
+    it('fetch rejection (e.g. invalid URL) is handled gracefully', async () => {
+      vi.mocked(workspace.getConfiguration).mockReturnValue({
+        get: vi.fn((key: string, defaultValue?: any) => {
+          if (key === 'repos') { return ['owner/repo']; }
+          return defaultValue;
+        }),
+      } as any);
+
+      mockFetch.mockRejectedValueOnce(new TypeError('Invalid URL'));
+
+      const listener = vi.fn();
+      provider.onDidDiscoverItems(listener);
+      await provider.refresh();
+
+      expect(listener).toHaveBeenCalledWith([]);
+    });
   });
 });
