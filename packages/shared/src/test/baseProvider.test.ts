@@ -22,7 +22,12 @@ class TestProvider extends BaseProvider {
   refreshCalls = 0;
   backgroundRefreshCalls = 0;
   refreshError: Error | undefined;
-  refreshDelay = 0;
+  /** Set to a deferred promise to simulate an in-flight refresh. */
+  refreshGate: { promise: Promise<void>; resolve: () => void } | undefined;
+
+  setErrorHandler(handler: (error: unknown) => void): void {
+    this.onBackgroundRefreshError = handler;
+  }
 
   async refresh(): Promise<void> {
     this.refreshCalls++;
@@ -34,8 +39,8 @@ class TestProvider extends BaseProvider {
 
   protected async doBackgroundRefresh(): Promise<void> {
     this.backgroundRefreshCalls++;
-    if (this.refreshDelay > 0) {
-      await new Promise(resolve => setTimeout(resolve, this.refreshDelay));
+    if (this.refreshGate) {
+      await this.refreshGate.promise;
     }
     if (this.refreshError) {
       throw this.refreshError;
@@ -202,7 +207,6 @@ describe('BaseProvider', () => {
     });
 
     it('prevents refreshInBackground after dispose', async () => {
-      vi.useRealTimers();
       const provider = new TestProvider(createMockEmitter());
       provider.dispose();
 
@@ -213,19 +217,29 @@ describe('BaseProvider', () => {
 
   describe('refreshInBackground concurrency guard', () => {
     it('prevents concurrent background refreshes', async () => {
-      vi.useRealTimers();
       const provider = new TestProvider(createMockEmitter());
-      provider.refreshDelay = 50;
 
-      // Start first refresh
+      // Create a gate to hold the first refresh in-flight
+      let resolveGate!: () => void;
+      provider.refreshGate = {
+        promise: new Promise<void>(r => { resolveGate = r; }),
+        resolve: () => resolveGate(),
+      };
+
+      // Start first refresh — it will suspend at the gate
       const first = provider.refreshInBackground();
 
       // While first is in-flight, second should be skipped
       await provider.refreshInBackground();
       expect(provider.backgroundRefreshCalls).toBe(1);
 
+      // Release the gate so first completes
+      resolveGate();
       await first;
       expect(provider.backgroundRefreshCalls).toBe(1);
+
+      // Clear the gate for subsequent calls
+      provider.refreshGate = undefined;
 
       // After first completes, a new refresh should work
       await provider.refreshInBackground();
@@ -235,7 +249,6 @@ describe('BaseProvider', () => {
     });
 
     it('resets after a refresh error', async () => {
-      vi.useRealTimers();
       const provider = new TestProvider(createMockEmitter());
       provider.refreshError = new Error('network down');
 
@@ -252,7 +265,6 @@ describe('BaseProvider', () => {
 
   describe('event emission', () => {
     it('fires onDidDiscoverItems after refresh', async () => {
-      vi.useRealTimers();
       const provider = new TestProvider(createMockEmitter());
       const received: DiscoveredItem[][] = [];
 
@@ -266,7 +278,6 @@ describe('BaseProvider', () => {
     });
 
     it('fires onDidDiscoverItems after background refresh', async () => {
-      vi.useRealTimers();
       const provider = new TestProvider(createMockEmitter());
       const received: DiscoveredItem[][] = [];
 
@@ -317,7 +328,7 @@ describe('BaseProvider', () => {
     it('routes errors through the overridable onBackgroundRefreshError handler', async () => {
       const provider = new TestProvider(createMockEmitter());
       const errors: unknown[] = [];
-      provider.onBackgroundRefreshError = (err) => errors.push(err);
+      provider.setErrorHandler((err) => errors.push(err));
       provider.refreshError = new Error('custom handler');
 
       provider.startPeriodicRefresh(60);
