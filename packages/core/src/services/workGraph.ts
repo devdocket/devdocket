@@ -3,11 +3,21 @@ import { WorkItem, WorkItemInput, WorkItemState } from '../models/workItem';
 import { ITaskStore } from '../storage/taskStore';
 import { logger } from './logger';
 
+/**
+ * In-memory graph of {@link WorkItem}s backed by a persistent {@link ITaskStore}.
+ * Provides CRUD operations, state transitions, and ordering.
+ */
 export class WorkGraph {
-  private items: Map<string, WorkItem> = new Map();
+  private readonly items: Map<string, WorkItem> = new Map();
   // Provenance key (`${providerId}:${externalId}`) → WorkItem.id for O(1) lookups
-  private provenanceIndex: Map<string, string> = new Map();
+  private readonly provenanceIndex: Map<string, string> = new Map();
   private readonly _onDidChange = new vscode.EventEmitter<void>();
+  /**
+   * Fires when this graph changes through public mutation operations exposed by {@link WorkGraph},
+   * except for internal maintenance or normalization work that may update items without emitting
+   * this event. This includes maintenance performed during load (for example, sort-order backfilling)
+   * and normalization triggered as part of a public operation when no user-visible mutation occurs.
+   */
   readonly onDidChange = this._onDidChange.event;
 
   constructor(private readonly store: ITaskStore) {}
@@ -16,6 +26,7 @@ export class WorkGraph {
     return `${providerId}:${externalId}`;
   }
 
+  /** Load all work items from the backing store into memory. */
   async load(): Promise<void> {
     const items = await this.store.loadAll();
     this.items.clear();
@@ -61,23 +72,28 @@ export class WorkGraph {
     }
   }
 
+  /** Return all work items. */
   getAll(): WorkItem[] {
     return Array.from(this.items.values());
   }
 
+  /** Return all work items matching any of the given states. */
   getItemsByState(...states: WorkItemState[]): WorkItem[] {
     return this.getAll().filter((item) => states.includes(item.state));
   }
 
+  /** Return a single work item by ID, or `undefined` if not found. */
   getItem(id: string): WorkItem | undefined {
     return this.items.get(id);
   }
 
+  /** Find a work item by its provider-scoped provenance (provider ID + external ID). */
   findItemByProvenance(providerId: string, externalId: string): WorkItem | undefined {
     const id = this.provenanceIndex.get(WorkGraph.provenanceKey(providerId, externalId));
     return id ? this.items.get(id) : undefined;
   }
 
+  /** Create a new work item, optionally linking it to a provider-discovered source. */
   async createItem(
     input: WorkItemInput,
     provenance?: { providerId: string; externalId: string; url?: string },
@@ -113,6 +129,7 @@ export class WorkGraph {
     return item;
   }
 
+  /** Apply a partial update (title and/or notes) to an existing work item. */
   async updateItem(id: string, patch: Partial<WorkItemInput>): Promise<void> {
     const item = this.items.get(id);
     if (!item) {
@@ -125,6 +142,7 @@ export class WorkGraph {
     logger.info(`Updated work item: ${id}`);
   }
 
+  /** Transition a work item to a new lifecycle state. */
   async transitionState(id: string, newState: WorkItemState): Promise<void> {
     const item = this.items.get(id);
     if (!item) {
@@ -137,6 +155,7 @@ export class WorkGraph {
     logger.info(`Transitioned work item ${id} to ${newState}`);
   }
 
+  /** Swap a work item one position up or down among siblings in the same state. */
   async moveItem(id: string, direction: 'up' | 'down'): Promise<void> {
     const item = this.items.get(id);
     if (!item) {
@@ -184,6 +203,7 @@ export class WorkGraph {
     this._onDidChange.fire();
   }
 
+  /** Insert a work item before or after a target item (drag-and-drop reorder). */
   async reorderItem(draggedId: string, targetId: string): Promise<void> {
     const dragged = this.items.get(draggedId);
     const target = this.items.get(targetId);
@@ -222,6 +242,7 @@ export class WorkGraph {
     }
   }
 
+  /** Move a work item to the last position among siblings in the same state. */
   async moveToEnd(id: string): Promise<void> {
     const item = this.items.get(id);
     if (!item) { return; }
@@ -255,6 +276,7 @@ export class WorkGraph {
     }
   }
 
+  /** Permanently delete a work item from the store. */
   async deleteItem(id: string): Promise<void> {
     const item = this.items.get(id);
     if (item?.providerId && item?.externalId) {
