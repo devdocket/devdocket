@@ -62,10 +62,8 @@ describe('activate()', () => {
   // ------------------------------------------------------------------
   // 2. Registers expected disposables via specific API call counts
   // ------------------------------------------------------------------
-  it('registers the expected tree views and configuration listener', async () => {
+  it('registers the expected configuration listener and output channel', async () => {
     await activate(context);
-    const createTreeView = vscode.window.createTreeView as ReturnType<typeof vi.fn>;
-    expect(createTreeView).toHaveBeenCalledTimes(5);
 
     const onDidChangeConfiguration = vscode.workspace.onDidChangeConfiguration as ReturnType<typeof vi.fn>;
     expect(onDidChangeConfiguration).toHaveBeenCalledTimes(1);
@@ -179,6 +177,7 @@ describe('activate()', () => {
 
     const createTreeView = vscode.window.createTreeView as ReturnType<typeof vi.fn>;
     const inboxIdx = createTreeView.mock.calls.findIndex((c: any[]) => c[0] === 'workcenter.inbox');
+    expect(inboxIdx).toBeGreaterThanOrEqual(0);
     const inboxView = createTreeView.mock.results[inboxIdx].value;
 
     // Track how many times `message` is written
@@ -286,14 +285,17 @@ describe('activate()', () => {
     const createTreeView = vscode.window.createTreeView as ReturnType<typeof vi.fn>;
 
     const queueIdx = createTreeView.mock.calls.findIndex((c: any[]) => c[0] === 'workcenter.queue');
+    expect(queueIdx).toBeGreaterThanOrEqual(0);
     const queueView = createTreeView.mock.results[queueIdx].value;
     expect(queueView.message).toBe('No items in queue');
 
     const focusIdx = createTreeView.mock.calls.findIndex((c: any[]) => c[0] === 'workcenter.focus');
+    expect(focusIdx).toBeGreaterThanOrEqual(0);
     const focusView = createTreeView.mock.results[focusIdx].value;
     expect(focusView.message).toBe('No active work');
 
     const historyIdx = createTreeView.mock.calls.findIndex((c: any[]) => c[0] === 'workcenter.history');
+    expect(historyIdx).toBeGreaterThanOrEqual(0);
     const historyView = createTreeView.mock.results[historyIdx].value;
     expect(historyView.message).toBe('No history items');
   });
