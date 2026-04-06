@@ -31,7 +31,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<WorkCe
   };
   initLogger(outputChannel, logLevelMap[logLevelConfig] ?? LogLevel.Info);
   if (!Object.hasOwn(logLevelMap, logLevelConfig)) {
-    logger.warn(`Invalid log level '${logLevelConfig}', falling back to 'Info'`);
+    logger.warn(`Invalid log level '${logLevelConfig}', falling back to 'info'. Valid values: debug, info, warn, error`);
   }
 
   context.subscriptions.push(
@@ -39,7 +39,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<WorkCe
       if (e.affectsConfiguration('workcenter.logLevel')) {
         const newLevel = vscode.workspace.getConfiguration('workcenter').get<string>('logLevel', 'info');
         if (!Object.hasOwn(logLevelMap, newLevel)) {
-          logger.warn(`Invalid log level '${newLevel}', falling back to 'Info'`);
+          logger.warn(`Invalid log level '${newLevel}', falling back to 'info'. Valid values: debug, info, warn, error`);
         }
         setLogLevel(logLevelMap[newLevel] ?? LogLevel.Info);
       }
