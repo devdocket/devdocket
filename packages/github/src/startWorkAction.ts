@@ -53,8 +53,8 @@ export class StartWorkAction implements WorkCenterAction {
 
   /**
    * Creates a branch and worktree for the given work item, then opens it in a new window.
+   * Errors are reported via VS Code notification messages rather than thrown.
    * @param item - The work item to start working on.
-   * @throws Displays a VS Code error message on failure (does not throw to caller).
    */
   async run(item: WorkItem): Promise<void> {
     const issueNumber = this.extractIssueNumber(item.externalId);
