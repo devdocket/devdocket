@@ -9,7 +9,7 @@ import { logger } from './logger';
  */
 export class WorkGraph {
   private readonly items: Map<string, WorkItem> = new Map();
-  // Provenance key (`${providerId}:${externalId}`) → WorkItem.id for O(1) lookups
+  // Provenance key (`${providerId}::${externalId}`) → WorkItem.id for O(1) lookups
   private readonly provenanceIndex: Map<string, string> = new Map();
   private readonly _onDidChange = new vscode.EventEmitter<void>();
   /**
@@ -23,7 +23,7 @@ export class WorkGraph {
   constructor(private readonly store: ITaskStore) {}
 
   private static provenanceKey(providerId: string, externalId: string): string {
-    return `${providerId}:${externalId}`;
+    return `${providerId}::${externalId}`;
   }
 
   /** Load all work items from the backing store into memory. */
