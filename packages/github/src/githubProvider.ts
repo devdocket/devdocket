@@ -193,12 +193,18 @@ export class GitHubIssueProvider implements WorkCenterProvider {
     return { issues, failures: failed ? ['all repositories'] : [] };
   }
 
+  private static readonly REPO_PATTERN = /^[A-Za-z0-9._-]+\/[A-Za-z0-9._-]+$/;
+
   private async fetchRepoIssues(token: string, repo: string): Promise<{ issues: GitHubIssue[]; failed: boolean }> {
     logger.debug(`Fetching issues for repo: ${repo}`);
+    if (!GitHubIssueProvider.REPO_PATTERN.test(repo)) {
+      logger.error(`Invalid repo format, expected owner/name: ${repo}`);
+      return { issues: [], failed: true };
+    }
     try {
       // GitHub API max per_page is 100; pagination for >100 items is a future enhancement
       const response = await fetch(
-        `https://api.github.com/repos/${repo}/issues?assignee=@me&state=open&per_page=100`,
+        `https://api.github.com/repos/${encodeURIComponent(repo.split('/')[0])}/${encodeURIComponent(repo.split('/')[1])}/issues?assignee=@me&state=open&per_page=100`,
         {
           headers: {
             Authorization: `Bearer ${token}`,
