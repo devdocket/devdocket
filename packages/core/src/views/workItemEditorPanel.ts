@@ -9,6 +9,7 @@ export class WorkItemEditorPanel {
   private readonly itemId: string;
   private disposed = false;
   private debounceTimer: ReturnType<typeof setTimeout> | undefined;
+  private pendingData: Record<string, string> | undefined;
   private readonly messageSubscription: vscode.Disposable;
 
   static open(
@@ -40,16 +41,19 @@ export class WorkItemEditorPanel {
 
     this.messageSubscription = this.panel.webview.onDidReceiveMessage((msg) => {
       if (msg.type === 'autosave') {
+        this.pendingData = msg.data;
         if (this.debounceTimer) {
           clearTimeout(this.debounceTimer);
         }
         this.debounceTimer = setTimeout(async () => {
           this.debounceTimer = undefined;
-          if (this.disposed) {
+          const data = this.pendingData;
+          this.pendingData = undefined;
+          if (!data) {
             return;
           }
           try {
-            await this.saveData(msg.data);
+            await this.saveData(data);
           } catch (err) {
             const message = err instanceof Error ? err.message : String(err);
             vscode.window.showErrorMessage(`Failed to save work item: ${message}`);
@@ -65,6 +69,7 @@ export class WorkItemEditorPanel {
           clearTimeout(this.debounceTimer);
           this.debounceTimer = undefined;
         }
+        this.flushPendingData();
         this.messageSubscription.dispose();
       }
     });
@@ -268,8 +273,17 @@ ${item.providerId ? '      <span id="readonly-title-hint" class="hint">Title is 
         clearTimeout(this.debounceTimer);
         this.debounceTimer = undefined;
       }
+      this.flushPendingData();
       this.messageSubscription.dispose();
       this.panel.dispose();
+    }
+  }
+
+  private flushPendingData(): void {
+    const data = this.pendingData;
+    this.pendingData = undefined;
+    if (data) {
+      this.saveData(data).catch(() => {});
     }
   }
 
