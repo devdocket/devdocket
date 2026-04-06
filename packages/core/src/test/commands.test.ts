@@ -102,7 +102,7 @@ describe('registerCommands', () => {
   let ctx: vscode.ExtensionContext;
 
   beforeEach(() => {
-    vi.clearAllMocks();
+    vi.restoreAllMocks();
 
     commandHandlers = new Map();
     (vscode.commands.registerCommand as Mock).mockImplementation(
