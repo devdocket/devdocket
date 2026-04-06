@@ -23,10 +23,10 @@ export async function activate(_context: vscode.ExtensionContext): Promise<void>
     vscode.workspace.onDidChangeConfiguration(e => {
       if (e.affectsConfiguration('workcenter.logLevel')) {
         const newLevel = vscode.workspace.getConfiguration('workcenter').get<string>('logLevel', 'info');
+        setLogLevel(logLevelMap[newLevel] ?? LogLevel.Info);
         if (!Object.hasOwn(logLevelMap, newLevel)) {
           logger.warn(`Invalid log level '${newLevel}', falling back to 'info'. Valid values: debug, info, warn, error`);
         }
-        setLogLevel(logLevelMap[newLevel] ?? LogLevel.Info);
       }
     }),
   );
