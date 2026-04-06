@@ -32,6 +32,12 @@ const TreeItemCollapsibleState = {
   Expanded: 2,
 };
 
+const ViewColumn = {
+  One: 1,
+  Two: 2,
+  Three: 3,
+};
+
 class MockTreeItem {
   label: string | { label: string; highlights?: [number, number][] };
   collapsibleState: number;
@@ -150,6 +156,7 @@ export {
   MockCancellationTokenSource as CancellationTokenSource,
   MockDisposable as Disposable,
   TreeItemCollapsibleState,
+  ViewColumn,
   window,
   commands,
   env,
