@@ -56,8 +56,8 @@ export abstract class BaseProvider {
     }
     const clampedInterval = Math.max(interval, 60);
     this.refreshTimer = setInterval(() => {
-      this.refreshInBackground().catch(() => {
-        // Errors are already handled inside refreshInBackground()
+      this.refreshInBackground().catch((err: unknown) => {
+        this.onPeriodicRefreshError(err);
       });
     }, clampedInterval * 1000);
   }
@@ -67,6 +67,15 @@ export abstract class BaseProvider {
       clearInterval(this.refreshTimer);
       this.refreshTimer = undefined;
     }
+  }
+
+  /**
+   * Called when the periodic refresh timer catches an unhandled error from
+   * {@link refreshInBackground}. Override to route errors to a custom logger.
+   * The default writes to `console.error` so failures are never silently swallowed.
+   */
+  protected onPeriodicRefreshError(err: unknown): void {
+    console.error('Periodic refresh failed:', err);
   }
 
   protected abstract refreshInBackground(): Promise<void>;
