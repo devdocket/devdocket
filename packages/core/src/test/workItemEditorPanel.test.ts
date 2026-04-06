@@ -136,7 +136,61 @@ describe('WorkItemEditorPanel – concurrent autosave', () => {
     expect(workGraph.updateItem).toHaveBeenNthCalledWith(3, 'item-1', expect.objectContaining({ title: 'ABC' }));
   });
 
-  // 2. Multiple save messages arriving before debounce timer fires
+  // 2. Overlapping in-flight saves with out-of-order completion
+  //    (simulates the race where an earlier save finishes after a later one)
+  it('keeps the newest autosave as the final persisted update when saves resolve out of order', async () => {
+    const deferred = () => {
+      let resolve!: () => void;
+      const promise = new Promise<void>((r) => {
+        resolve = r;
+      });
+      return { promise, resolve };
+    };
+
+    const firstSave = deferred();
+    const secondSave = deferred();
+
+    workGraph.updateItem
+      .mockImplementationOnce(async (_id: string, patch: any) => {
+        await firstSave.promise;
+        if (patch.title !== undefined) {
+          item.title = patch.title;
+        }
+      })
+      .mockImplementationOnce(async (_id: string, patch: any) => {
+        await secondSave.promise;
+        if (patch.title !== undefined) {
+          item.title = patch.title;
+        }
+      });
+
+    const firstAutosave = panel.simulateAutosave({ title: 'v1', notes: '' });
+    const secondAutosave = panel.simulateAutosave({ title: 'v2', notes: '' });
+
+    await vi.waitFor(() => {
+      expect(workGraph.updateItem).toHaveBeenCalledTimes(2);
+    });
+
+    // Resolve the newer save first to simulate out-of-order completion
+    secondSave.resolve();
+    await secondAutosave;
+
+    firstSave.resolve();
+    await firstAutosave;
+
+    expect(workGraph.updateItem).toHaveBeenNthCalledWith(
+      1,
+      'item-1',
+      expect.objectContaining({ title: 'v1' }),
+    );
+    expect(workGraph.updateItem).toHaveBeenNthCalledWith(
+      2,
+      'item-1',
+      expect.objectContaining({ title: 'v2' }),
+    );
+  });
+
+  // 3. Multiple save messages arriving before debounce timer fires
   //    (simulates the webview sending several autosave messages in quick succession)
   it('processes every autosave message that arrives at the extension host', async () => {
     const promises = [
