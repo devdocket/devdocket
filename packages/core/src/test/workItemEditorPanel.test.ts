@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { window } from 'vscode';
+import { ViewColumn, window } from 'vscode';
 import { WorkItem, WorkItemState } from '../models/workItem';
 import { WorkItemEditorPanel } from '../views/workItemEditorPanel';
 
@@ -83,7 +83,7 @@ describe('WorkItemEditorPanel', () => {
       expect(window.createWebviewPanel).toHaveBeenCalledWith(
         'workcenter.editItem',
         'Edit: My Task',
-        1,
+        ViewColumn.One,
         { enableScripts: true, retainContextWhenHidden: true },
       );
     });
@@ -138,7 +138,7 @@ describe('WorkItemEditorPanel', () => {
       const mock = createMockWebviewPanel();
       openPanel(item, createMockWorkGraph(item), mock);
 
-      expect(mock.panel.webview.html).toContain('readonly');
+      expect(mock.panel.webview.html).toMatch(/<input\b(?=[^>]*\bid="title")(?=[^>]*\breadonly)[^>]*>/);
       expect(mock.panel.webview.html).toContain('Title is managed by the provider');
     });
 
