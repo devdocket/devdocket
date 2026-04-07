@@ -1,5 +1,5 @@
 import * as vscode from 'vscode';
-import { BaseProvider, DiscoveredItem } from '@workcenter/shared';
+import { BaseProvider, DiscoveredItem, isValidUrlSegment } from '@workcenter/shared';
 import { logger } from './logger';
 
 // Azure DevOps WIQL query response
@@ -82,7 +82,26 @@ export class AdoWorkItemProvider extends BaseProvider {
   }
 
   private async fetchAndPublishWorkItems(accessToken: string, isUserTriggered: boolean): Promise<void> {
-    const projectList = this.projects.length > 0 ? this.projects : [''];
+    if (!isValidUrlSegment(this.org)) {
+      logger.warn('Skipping fetch: invalid ADO organization name', this.org);
+      return;
+    }
+
+    const validProjects: string[] = [];
+    for (const project of this.projects) {
+      if (project === '' || isValidUrlSegment(project)) {
+        validProjects.push(project);
+      } else {
+        logger.warn('Skipping invalid ADO project name', project);
+      }
+    }
+
+    if (this.projects.length > 0 && validProjects.length === 0) {
+      logger.warn('All configured ADO projects are invalid — skipping fetch');
+      return;
+    }
+
+    const projectList = validProjects.length > 0 ? validProjects : [''];
     const results = await Promise.allSettled(
       projectList.map(project => this.fetchWorkItemsForProject(accessToken, project)),
     );

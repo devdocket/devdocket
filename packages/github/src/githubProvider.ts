@@ -1,69 +1,14 @@
 import * as vscode from 'vscode';
-import { BaseProvider, DiscoveredItem } from '@workcenter/shared';
+import { isValidGitHubRepo } from '@workcenter/shared';
 import { logger } from './logger';
+import { BaseGitHubProvider, DiscoveredItem, GitHubIssue } from './baseGithubProvider';
 
-interface GitHubIssue {
-  number: number;
-  title: string;
-  body?: string;
-  html_url: string;
-  repository_url: string;
-  pull_request?: unknown;
-}
-
-export class GitHubIssueProvider extends BaseProvider {
+export class GitHubIssueProvider extends BaseGitHubProvider {
   readonly id = 'github';
   readonly label = 'GitHub Issues';
 
-  constructor() {
-    super(new vscode.EventEmitter<DiscoveredItem[]>());
-  }
-
-  async refresh(token?: vscode.CancellationToken): Promise<void> {
-    if (this._isRefreshing) {
-      return;
-    }
-
-    this._isRefreshing = true;
+  protected async fetchAndPublish(accessToken: string, isUserTriggered: boolean): Promise<void> {
     logger.info('Fetching assigned issues...');
-    try {
-      if (token?.isCancellationRequested) {
-        return;
-      }
-
-      const session = await vscode.authentication.getSession('github', ['repo'], {
-        createIfNone: true,
-      }).catch(() => null);
-      
-      if (!session || token?.isCancellationRequested) {
-        return;
-      }
-
-      await this.fetchAndPublishIssues(session.accessToken, true);
-    } catch (err) {
-      logger.error('Failed to fetch issues', err);
-    } finally {
-      this._isRefreshing = false;
-    }
-  }
-
-  protected async doBackgroundRefresh(): Promise<void> {
-    try {
-      const session = await vscode.authentication.getSession('github', ['repo'], {
-        createIfNone: false,
-      }).catch(() => null);
-      
-      if (!session) {
-        return;
-      }
-
-      await this.fetchAndPublishIssues(session.accessToken, false);
-    } catch (err) {
-      logger.error('Failed to fetch issues', err);
-    }
-  }
-
-  private async fetchAndPublishIssues(accessToken: string, isUserTriggered: boolean = false): Promise<void> {
     const repos = this.getConfiguredRepos();
     const { issues, failures } = await this.fetchAssignedIssues(accessToken, repos);
 
@@ -98,46 +43,37 @@ export class GitHubIssueProvider extends BaseProvider {
     return config.get<string[]>('repos', []);
   }
 
-  private parseRepo(issue: GitHubIssue): string {
-    const match = issue.html_url.match(/github\.com\/([^/]+\/[^/]+)/);
-    if (match) {
-      return match[1];
-    }
-    
-    // Fallback to parsing from repository_url (API URL)
-    const apiMatch = issue.repository_url.match(/repos\/([^/]+\/[^/]+)/);
-    if (apiMatch) {
-      return apiMatch[1];
-    }
-    
-    // Deterministic fallback: hash the repository_url
-    const hash = issue.repository_url.split('').reduce((acc, char) => {
-      return ((acc << 5) - acc) + char.charCodeAt(0) | 0;
-    }, 0);
-    return `unknown-repo-${Math.abs(hash).toString(36)}`;
-  }
-
   private async fetchAssignedIssues(
     token: string,
     repos: string[],
   ): Promise<{ issues: GitHubIssue[]; failures: string[] }> {
     if (repos.length > 0) {
+      const validRepos: string[] = [];
+      for (const repo of repos) {
+        if (isValidGitHubRepo(repo)) {
+          validRepos.push(repo);
+        } else {
+          logger.warn('Skipping invalid repo identifier', repo);
+        }
+      }
+
+      const failures: string[] = [];
+
       const results = await Promise.allSettled(
-        repos.map(repo => this.fetchRepoIssues(token, repo))
+        validRepos.map(repo => this.fetchRepoIssues(token, repo))
       );
 
       const allIssues: GitHubIssue[] = [];
-      const failures: string[] = [];
 
       results.forEach((result, index) => {
         if (result.status === 'fulfilled') {
           const { issues, failed } = result.value;
           allIssues.push(...issues);
           if (failed) {
-            failures.push(repos[index]);
+            failures.push(validRepos[index]);
           }
         } else {
-          failures.push(repos[index]);
+          failures.push(validRepos[index]);
         }
       });
 
@@ -237,5 +173,4 @@ export class GitHubIssueProvider extends BaseProvider {
     const match = linkHeader.match(/<([^>]+)>;\s*rel="next"/);
     return match ? match[1] : null;
   }
-
 }

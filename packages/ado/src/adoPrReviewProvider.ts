@@ -1,5 +1,5 @@
 import * as vscode from 'vscode';
-import { BaseProvider, DiscoveredItem } from '@workcenter/shared';
+import { BaseProvider, DiscoveredItem, isValidUrlSegment } from '@workcenter/shared';
 import { logger } from './logger';
 
 interface AdoPullRequest {
@@ -82,6 +82,11 @@ export class AdoPrReviewProvider extends BaseProvider {
   }
 
   private async fetchAndPublishPrs(accessToken: string, isUserTriggered: boolean, sessionAccountId: string): Promise<void> {
+    if (!isValidUrlSegment(this.org)) {
+      logger.warn('Skipping PR fetch: invalid ADO organization name', this.org);
+      return;
+    }
+
     const userId = await this.getUserId(accessToken, sessionAccountId);
     if (!userId) {
       const message = 'Failed to determine Azure DevOps user identity';
@@ -93,7 +98,21 @@ export class AdoPrReviewProvider extends BaseProvider {
       return;
     }
 
-    const projectList = this.projects.length > 0 ? this.projects : [''];
+    const validProjects: string[] = [];
+    for (const project of this.projects) {
+      if (project === '' || isValidUrlSegment(project)) {
+        validProjects.push(project);
+      } else {
+        logger.warn('Skipping invalid ADO project name', project);
+      }
+    }
+
+    if (this.projects.length > 0 && validProjects.length === 0) {
+      logger.warn('All configured ADO projects are invalid — skipping PR fetch');
+      return;
+    }
+
+    const projectList = validProjects.length > 0 ? validProjects : [''];
     const results = await Promise.allSettled(
       projectList.map(project => this.fetchPrsForProject(accessToken, project, userId)),
     );
