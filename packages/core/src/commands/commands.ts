@@ -48,6 +48,16 @@ async function handleCompleteItem(workGraph: WorkGraph, item?: { id?: string }):
   await workGraph.transitionState(item.id, WorkItemState.Done);
 }
 
+async function handlePauseItem(workGraph: WorkGraph, item?: { id?: string }): Promise<void> {
+  if (!item?.id) { return; }
+  await workGraph.transitionState(item.id, WorkItemState.Paused);
+}
+
+async function handleResumeItem(workGraph: WorkGraph, item?: { id?: string }): Promise<void> {
+  if (!item?.id) { return; }
+  await workGraph.transitionState(item.id, WorkItemState.InProgress);
+}
+
 async function handleBlockItem(workGraph: WorkGraph, item?: { id?: string }): Promise<void> {
   if (!item?.id) { return; }
   await workGraph.transitionState(item.id, WorkItemState.Blocked);
@@ -225,6 +235,10 @@ export function registerCommands(
       handleArchiveItem(workGraph, item)),
     vscode.commands.registerCommand('workcenter.completeItem', (item) =>
       handleCompleteItem(workGraph, item)),
+    vscode.commands.registerCommand('workcenter.pauseItem', (item) =>
+      handlePauseItem(workGraph, item)),
+    vscode.commands.registerCommand('workcenter.resumeItem', (item) =>
+      handleResumeItem(workGraph, item)),
     vscode.commands.registerCommand('workcenter.blockItem', (item) =>
       handleBlockItem(workGraph, item)),
     vscode.commands.registerCommand('workcenter.unblockItem', (item) =>
