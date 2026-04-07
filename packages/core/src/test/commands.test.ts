@@ -203,6 +203,16 @@ describe('registerCommands', () => {
         expect(workGraph.transitionState).toHaveBeenCalledWith('wc-42', expectedState);
       });
     }
+
+    it.each([
+      'workcenter.blockItem',
+      'workcenter.unblockItem',
+      'workcenter.markWaitingOn',
+    ])('%s shows info message when invoked without item', (cmd) => {
+      invoke(cmd, undefined);
+      expect(workGraph.transitionState).not.toHaveBeenCalled();
+      expect(vscode.window.showInformationMessage).toHaveBeenCalledWith('No item selected');
+    });
   });
 
   // ── editItem ─────────────────────────────────────────────────────

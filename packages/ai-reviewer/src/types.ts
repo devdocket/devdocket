@@ -7,8 +7,8 @@ export interface Disposable {
 export interface WorkItem {
   id: string;
   title: string;
-  description?: string;
-  state: 'New' | 'Triaged' | 'InProgress' | 'Paused' | 'Blocked' | 'WaitingOn' | 'Done' | 'Archived';
+  notes?: string;
+  state: 'New' | 'InProgress' | 'Paused' | 'Blocked' | 'WaitingOn' | 'Done' | 'Archived';
   providerId?: string;
   externalId?: string;
   url?: string;

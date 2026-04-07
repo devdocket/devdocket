@@ -37,15 +37,18 @@ export function registerCommands(
     vscode.commands.registerCommand('workcenter.resumeItem', (item) =>
       workGraph.transitionState(item.id, WorkItemState.InProgress),
     ),
-    vscode.commands.registerCommand('workcenter.blockItem', (item) =>
-      workGraph.transitionState(item.id, WorkItemState.Blocked),
-    ),
-    vscode.commands.registerCommand('workcenter.unblockItem', (item) =>
-      workGraph.transitionState(item.id, WorkItemState.InProgress),
-    ),
-    vscode.commands.registerCommand('workcenter.markWaitingOn', (item) =>
-      workGraph.transitionState(item.id, WorkItemState.WaitingOn),
-    ),
+    vscode.commands.registerCommand('workcenter.blockItem', (item) => {
+      if (!item?.id) { vscode.window.showInformationMessage('No item selected'); return; }
+      return workGraph.transitionState(item.id, WorkItemState.Blocked);
+    }),
+    vscode.commands.registerCommand('workcenter.unblockItem', (item) => {
+      if (!item?.id) { vscode.window.showInformationMessage('No item selected'); return; }
+      return workGraph.transitionState(item.id, WorkItemState.InProgress);
+    }),
+    vscode.commands.registerCommand('workcenter.markWaitingOn', (item) => {
+      if (!item?.id) { vscode.window.showInformationMessage('No item selected'); return; }
+      return workGraph.transitionState(item.id, WorkItemState.WaitingOn);
+    }),
     vscode.commands.registerCommand('workcenter.editItem', (item) => {
       const workItem = workGraph.getItem(item.id);
       if (workItem) {
