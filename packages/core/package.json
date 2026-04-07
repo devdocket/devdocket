@@ -229,11 +229,6 @@
         },
         {
           "command": "workcenter.resumeItem",
-          "when": "view == workcenter.focus && viewItem =~ /^blocked/",
-          "group": "1_actions"
-        },
-        {
-          "command": "workcenter.resumeItem",
           "when": "view == workcenter.focus && viewItem =~ /^waitingOn/",
           "group": "1_actions"
         },

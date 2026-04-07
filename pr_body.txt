@@ -1,0 +1,21 @@
+## feat: add Blocked and WaitingOn states to Focus view
+
+### Problem
+The Focus view only supported InProgress and Paused states, with no way to distinguish items blocked by external dependencies from items temporarily paused by the user.
+
+### Solution
+Added `Blocked` and `WaitingOn` as first-class states in the work item lifecycle, fully integrated across the extension.
+
+**Key changes:**
+- **workItem.ts:** Added `Blocked` and `WaitingOn` enum values with documentation
+- **focusTreeProvider.ts:** Added distinct labels, icons, and contextValues for each state
+- **commands.ts:** Registered `blockItem`, `unblockItem`, `markWaitingOn` commands
+- **package.json:** Declared new commands with icons and added menu entries with state-specific `when` clauses
+- **jsonTaskStore.ts:** Removed legacy migration that converted Blocked/WaitingOn to Paused
+- **ai-reviewer/types.ts:** Updated type definitions to include Paused and match core contract; added CancellationToken to refresh()
+
+### Testing
+- Updated FocusTreeProvider tests with 8 new cases for Blocked/WaitingOn (contextValue, description, icon)
+- Updated JsonTaskStore tests to verify Blocked/WaitingOn are preserved (not migrated)
+- Updated command tests, actionRegistry tests, historyTreeProvider tests, workGraph tests
+- Added inbox debounce edge-case tests
