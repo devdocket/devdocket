@@ -19,17 +19,17 @@ import { getInboxUnseenCount } from './services/inboxBadge';
 export type { WorkCenterApi, WorkCenterProvider, WorkCenterAction, DiscoveredItem, Disposable } from './api/types';
 export { logger } from './services/logger';
 
-export async function activate(context: vscode.ExtensionContext): Promise<WorkCenterApi> {
+function initializeLogging(context: vscode.ExtensionContext): void {
   const outputChannel = vscode.window.createOutputChannel('WorkCenter');
   context.subscriptions.push(outputChannel);
 
-  const logLevelConfig = vscode.workspace.getConfiguration('workcenter').get<string>('logLevel', 'info');
   const logLevelMap: Record<string, LogLevel> = {
     debug: LogLevel.Debug,
     info: LogLevel.Info,
     warn: LogLevel.Warn,
     error: LogLevel.Error,
   };
+  const logLevelConfig = vscode.workspace.getConfiguration('workcenter').get<string>('logLevel', 'info');
   initLogger(outputChannel, logLevelMap[logLevelConfig] ?? LogLevel.Info);
 
   context.subscriptions.push(
@@ -40,10 +40,9 @@ export async function activate(context: vscode.ExtensionContext): Promise<WorkCe
       }
     }),
   );
+}
 
-  logger.info('WorkCenter activating...');
-
-  const storagePath = context.globalStorageUri.fsPath;
+async function loadStores(storagePath: string): Promise<{ workGraph: WorkGraph; stateStore: DiscoveredStateStore; readStateStore: ReadStateStore }> {
   const store = new JsonTaskStore(storagePath);
   const workGraph = new WorkGraph(store);
   await workGraph.load();
@@ -57,9 +56,12 @@ export async function activate(context: vscode.ExtensionContext): Promise<WorkCe
   await readStateStore.load();
   logger.debug('Loaded read state');
 
-  // Migration: mark existing provider-backed items as accepted
+  return { workGraph, stateStore, readStateStore };
+}
+
+async function migrateDiscoveredState(workGraph: WorkGraph, stateStore: DiscoveredStateStore): Promise<void> {
   const itemsToMigrate: Array<{ providerId: string; externalId: string; state: 'accepted' }> = [];
-  
+
   for (const item of workGraph.getAll()) {
     if (item.providerId && item.externalId) {
       const existing = stateStore.getState(item.providerId, item.externalId);
@@ -81,11 +83,14 @@ export async function activate(context: vscode.ExtensionContext): Promise<WorkCe
       logger.error('Migration failed', err);
     }
   }
+}
 
-  const providerRegistry = new ProviderRegistry(stateStore);
-  const actionRegistry = new ActionRegistry();
-  const api = new WorkCenterApiImpl(providerRegistry, actionRegistry);
-
+function createTreeViews(
+  providerRegistry: ProviderRegistry,
+  stateStore: DiscoveredStateStore,
+  readStateStore: ReadStateStore,
+  workGraph: WorkGraph,
+) {
   const inboxProvider = new InboxTreeProvider(providerRegistry, stateStore, readStateStore);
   const queueProvider = new QueueTreeProvider(workGraph);
   const focusProvider = new FocusTreeProvider(workGraph);
@@ -94,6 +99,9 @@ export async function activate(context: vscode.ExtensionContext): Promise<WorkCe
 
   const inboxTreeView = vscode.window.createTreeView('workcenter.inbox', { treeDataProvider: inboxProvider });
   const sourcesTreeView = vscode.window.createTreeView('workcenter.sources', { treeDataProvider: sourcesProvider });
+  const queueTreeView = vscode.window.createTreeView('workcenter.queue', { treeDataProvider: queueProvider, dragAndDropController: queueProvider });
+  const focusTreeView = vscode.window.createTreeView('workcenter.focus', { treeDataProvider: focusProvider });
+  const historyTreeView = vscode.window.createTreeView('workcenter.history', { treeDataProvider: historyProvider });
 
   const inboxSelectionSub = inboxTreeView.onDidChangeSelection((e) => {
     void (async () => {
@@ -108,6 +116,24 @@ export async function activate(context: vscode.ExtensionContext): Promise<WorkCe
       }
     })().catch(err => logger.error('Failed to mark inbox item as seen', err));
   });
+
+  return {
+    providers: { inboxProvider, queueProvider, focusProvider, sourcesProvider, historyProvider },
+    views: { inboxTreeView, queueTreeView, focusTreeView, sourcesTreeView, historyTreeView },
+    disposables: [inboxSelectionSub] as vscode.Disposable[],
+  };
+}
+
+// Wires up all event-driven UI updates: view messages, inbox badge,
+// coalesced provider events, and new-item notifications.
+function wireEvents(
+  providerRegistry: ProviderRegistry,
+  stateStore: DiscoveredStateStore,
+  workGraph: WorkGraph,
+  { providers, views }: ReturnType<typeof createTreeViews>,
+): vscode.Disposable[] {
+  const { inboxProvider, queueProvider, focusProvider, historyProvider } = providers;
+  const { inboxTreeView, sourcesTreeView, queueTreeView, focusTreeView, historyTreeView } = views;
 
   // View message state: empty by default, loading when providers are fetching
   const updateViewMessages = () => {
@@ -126,17 +152,12 @@ export async function activate(context: vscode.ExtensionContext): Promise<WorkCe
       inboxTreeView.message = hasInboxItems ? undefined : 'No new items';
     }
   };
-  const queueTreeView = vscode.window.createTreeView('workcenter.queue', { treeDataProvider: queueProvider, dragAndDropController: queueProvider });
-  const focusTreeView = vscode.window.createTreeView('workcenter.focus', { treeDataProvider: focusProvider });
-  const historyTreeView = vscode.window.createTreeView('workcenter.history', { treeDataProvider: historyProvider });
 
   const updateWorkViewMessages = () => {
     queueTreeView.message = queueProvider.getChildren().length > 0 ? undefined : 'No items in queue';
     focusTreeView.message = focusProvider.getChildren().length > 0 ? undefined : 'No active work';
     historyTreeView.message = historyProvider.getChildren().length > 0 ? undefined : 'No history items';
   };
-  updateWorkViewMessages();
-  const workGraphSub = workGraph.onDidChange(updateWorkViewMessages);
 
   let initialLoadComplete = false;
   let wasLoading = false;
@@ -160,6 +181,8 @@ export async function activate(context: vscode.ExtensionContext): Promise<WorkCe
     });
   };
 
+  // Set initial state
+  updateWorkViewMessages();
   updateViewMessages();
   updateInboxBadge();
 
@@ -186,26 +209,39 @@ export async function activate(context: vscode.ExtensionContext): Promise<WorkCe
     }
   });
   const stateStoreSub = stateStore.onDidChange(scheduleUiUpdate);
+  const workGraphSub = workGraph.onDidChange(updateWorkViewMessages);
+
+  return [discoveredSub, newItemsSub, providerRegSub, stateStoreSub, workGraphSub];
+}
+
+export async function activate(context: vscode.ExtensionContext): Promise<WorkCenterApi> {
+  initializeLogging(context);
+  logger.info('WorkCenter activating...');
+
+  const storagePath = context.globalStorageUri.fsPath;
+  const { workGraph, stateStore, readStateStore } = await loadStores(storagePath);
+  await migrateDiscoveredState(workGraph, stateStore);
+
+  const providerRegistry = new ProviderRegistry(stateStore);
+  const actionRegistry = new ActionRegistry();
+  const api = new WorkCenterApiImpl(providerRegistry, actionRegistry);
+
+  const treeSetup = createTreeViews(providerRegistry, stateStore, readStateStore, workGraph);
+  const eventDisposables = wireEvents(providerRegistry, stateStore, workGraph, treeSetup);
+
+  const { providers, views, disposables: viewDisposables } = treeSetup;
 
   context.subscriptions.push(
-    inboxTreeView,
-    queueTreeView,
-    focusTreeView,
-    sourcesTreeView,
-    historyTreeView,
-    inboxSelectionSub,
-    discoveredSub,
-    newItemsSub,
-    providerRegSub,
-    stateStoreSub,
-    workGraphSub,
+    ...Object.values(views),
+    ...viewDisposables,
+    ...eventDisposables,
     { dispose: () => workGraph.dispose() },
     { dispose: () => stateStore.dispose() },
-    { dispose: () => inboxProvider.dispose() },
-    { dispose: () => queueProvider.dispose() },
-    { dispose: () => focusProvider.dispose() },
-    { dispose: () => sourcesProvider.dispose() },
-    { dispose: () => historyProvider.dispose() },
+    { dispose: () => providers.inboxProvider.dispose() },
+    { dispose: () => providers.queueProvider.dispose() },
+    { dispose: () => providers.focusProvider.dispose() },
+    { dispose: () => providers.sourcesProvider.dispose() },
+    { dispose: () => providers.historyProvider.dispose() },
     { dispose: () => providerRegistry.dispose() },
     { dispose: () => actionRegistry.dispose() },
   );

@@ -33,6 +33,8 @@ export class InboxTreeProvider implements vscode.TreeDataProvider<InboxElement> 
   private readonly _onDidChangeTreeData = new vscode.EventEmitter<void>();
   readonly onDidChangeTreeData = this._onDidChangeTreeData.event;
   private readonly disposables: vscode.Disposable[] = [];
+  private refreshTimer: ReturnType<typeof setTimeout> | undefined;
+  static readonly REFRESH_DEBOUNCE_MS = 50;
 
   constructor(
     private readonly providerRegistry: ProviderRegistry,
@@ -40,15 +42,20 @@ export class InboxTreeProvider implements vscode.TreeDataProvider<InboxElement> 
     private readonly readStateStore: ReadStateStore,
   ) {
     this.disposables.push(
-      providerRegistry.onDidChangeDiscoveredItems(() => {
-        this.pruneSeenItems();
-        this._onDidChangeTreeData.fire();
-      }),
-      stateStore.onDidChange(() => {
-        this.pruneSeenItems();
-        this._onDidChangeTreeData.fire();
-      })
+      providerRegistry.onDidChangeDiscoveredItems(() => this.scheduleRefresh()),
+      stateStore.onDidChange(() => this.scheduleRefresh()),
     );
+  }
+
+  private scheduleRefresh(): void {
+    if (this.refreshTimer !== undefined) {
+      clearTimeout(this.refreshTimer);
+    }
+    this.refreshTimer = setTimeout(() => {
+      this.refreshTimer = undefined;
+      this.pruneSeenItems();
+      this._onDidChangeTreeData.fire();
+    }, InboxTreeProvider.REFRESH_DEBOUNCE_MS);
   }
 
   private pruneSeenItems(): void {
@@ -264,6 +271,10 @@ export class InboxTreeProvider implements vscode.TreeDataProvider<InboxElement> 
   }
 
   dispose(): void {
+    if (this.refreshTimer !== undefined) {
+      clearTimeout(this.refreshTimer);
+      this.refreshTimer = undefined;
+    }
     this._onDidChangeTreeData.dispose();
     this.disposables.forEach(d => d.dispose());
   }
