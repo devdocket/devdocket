@@ -2,6 +2,7 @@ import * as vscode from 'vscode';
 import { GitHubIssueProvider } from './githubProvider';
 import { GitHubPrReviewProvider } from './githubPrReviewProvider';
 import { StartWorkAction } from './startWorkAction';
+import { validateRefreshInterval } from '@workcenter/shared';
 import { initLogger, setLogLevel, logger, resolveLogLevel } from './logger';
 
 export async function activate(_context: vscode.ExtensionContext): Promise<void> {
@@ -49,7 +50,9 @@ export async function activate(_context: vscode.ExtensionContext): Promise<void>
   // Register the GitHub issue provider
   const provider = new GitHubIssueProvider();
   const config = vscode.workspace.getConfiguration('workcenterGithub');
-  const intervalSeconds = config.get<number>('refreshIntervalSeconds', 300);
+  const intervalSeconds = validateRefreshInterval(
+    config.get<number>('refreshIntervalSeconds', 300), logger,
+  );
   provider.startPeriodicRefresh(intervalSeconds);
 
   const providerDisposable = api.registerProvider(provider);
