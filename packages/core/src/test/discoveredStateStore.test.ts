@@ -113,6 +113,57 @@ describe('DiscoveredStateStore', () => {
     await expect(store.load()).rejects.toThrow();
   });
 
+  it('should serialize concurrent setState calls without lost writes', async () => {
+    const count = 20;
+    const promises: Promise<void>[] = [];
+    for (let i = 0; i < count; i++) {
+      promises.push(store.setState('gh', `issue-${i}`, 'unseen'));
+    }
+    await Promise.all(promises);
+
+    const records = await store.loadAll();
+    expect(records).toHaveLength(count);
+
+    const filePath = path.join(tmpDir, 'discovered-state.json');
+    const raw = await fs.readFile(filePath, 'utf-8');
+    const persisted = JSON.parse(raw);
+    expect(persisted).toHaveLength(count);
+  });
+
+  it('should serialize concurrent setStates calls without corruption', async () => {
+    const batch1 = [
+      { providerId: 'gh', externalId: 'a1', state: 'unseen' as const },
+      { providerId: 'gh', externalId: 'a2', state: 'accepted' as const },
+    ];
+    const batch2 = [
+      { providerId: 'jira', externalId: 'b1', state: 'dismissed' as const },
+      { providerId: 'jira', externalId: 'b2', state: 'unseen' as const },
+    ];
+    const batch3 = [
+      { providerId: 'gh', externalId: 'a1', state: 'dismissed' as const },
+    ];
+
+    await Promise.all([
+      store.setStates(batch1),
+      store.setStates(batch2),
+      store.setStates(batch3),
+    ]);
+
+    const records = await store.loadAll();
+    // a1, a2, b1, b2 — four distinct keys
+    expect(records).toHaveLength(4);
+
+    const filePath = path.join(tmpDir, 'discovered-state.json');
+    const raw = await fs.readFile(filePath, 'utf-8');
+    const persisted = JSON.parse(raw);
+    expect(persisted).toHaveLength(4);
+
+    // a1 was set by both batch1 and batch3; the final value depends on
+    // serialization order but must be one of the two, not corrupted
+    const a1 = persisted.find((r: any) => r.externalId === 'a1');
+    expect(['unseen', 'dismissed']).toContain(a1.inboxState);
+  });
+
   it('should create storage directory if it does not exist', async () => {
     const nestedDir = path.join(tmpDir, 'nested', 'path');
     const nestedStore = new DiscoveredStateStore(nestedDir);
