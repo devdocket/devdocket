@@ -48,11 +48,6 @@ export class JsonTaskStore implements ITaskStore {
           delete legacy.description;
           needsMigration = true;
         }
-        // Migrate removed 'Triaged' state to 'New'
-        if ((item.state as string) === 'Triaged') {
-          item.state = WorkItemState.New;
-          needsMigration = true;
-        }
         // Migrate legacy Blocked/WaitingOn states to Paused
         if ((item.state as string) === 'Blocked' || (item.state as string) === 'WaitingOn') {
           item.state = WorkItemState.Paused;

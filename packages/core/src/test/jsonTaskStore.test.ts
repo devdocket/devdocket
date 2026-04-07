@@ -173,43 +173,6 @@ describe('JsonTaskStore', () => {
     expect((items[0] as any).description).toBeUndefined();
   });
 
-  it('migrates removed Triaged state to New on load', async () => {
-    const filePath = path.join(tmpDir, 'workitems.json');
-    const legacy = [{
-      id: 'triaged-1',
-      title: 'Triaged item',
-      state: 'Triaged',
-      createdAt: 1000,
-      updatedAt: 1000,
-    }];
-    await fs.mkdir(tmpDir, { recursive: true });
-    await fs.writeFile(filePath, JSON.stringify(legacy), 'utf-8');
-
-    const items = await store.loadAll();
-    expect(items).toHaveLength(1);
-    expect(items[0].state).toBe(WorkItemState.New);
-  });
-
-  it('persists migrated Triaged→New back to disk', async () => {
-    const filePath = path.join(tmpDir, 'workitems.json');
-    const legacy = [{
-      id: 'triaged-1',
-      title: 'Triaged item',
-      state: 'Triaged',
-      createdAt: 1000,
-      updatedAt: 1000,
-    }];
-    await fs.mkdir(tmpDir, { recursive: true });
-    await fs.writeFile(filePath, JSON.stringify(legacy), 'utf-8');
-
-    await store.loadAll();
-
-    const raw = await fs.readFile(filePath, 'utf-8');
-    const persisted = JSON.parse(raw);
-    expect(persisted).toHaveLength(1);
-    expect(persisted[0].state).toBe('New');
-  });
-
   it('persists migrated description→notes back to disk', async () => {
     const filePath = path.join(tmpDir, 'workitems.json');
     const legacy = [{
