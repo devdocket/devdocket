@@ -22,8 +22,9 @@ interface DiscoveredItem {
 interface WorkCenterProvider {
   readonly id: string;
   readonly label: string;
+  readonly resurfaceDismissed?: boolean;
   readonly onDidDiscoverItems: Event<DiscoveredItem[]>;
-  refresh(): Promise<void>;
+  refresh(token?: vscode.CancellationToken): Promise<void>;
 }
 
 interface GitHubIssue {
@@ -47,12 +48,12 @@ export class GitHubIssueProvider implements WorkCenterProvider {
 
   startPeriodicRefresh(intervalSeconds: number): void {
     this.stopPeriodicRefresh();
-    if (intervalSeconds <= 0) {
-      // Disable periodic refresh if interval is 0 or negative
+    const interval = Number(intervalSeconds);
+    if (!Number.isFinite(interval) || interval <= 0) {
       return;
     }
     // Clamp to minimum of 60 seconds
-    const clampedInterval = Math.max(intervalSeconds, 60);
+    const clampedInterval = Math.max(interval, 60);
     this.refreshTimer = setInterval(() => {
       this.refreshInBackground().catch((err) => {
         logger.error('Refresh failed', err);
@@ -67,20 +68,42 @@ export class GitHubIssueProvider implements WorkCenterProvider {
     }
   }
 
-  async refresh(): Promise<void> {
+  async refresh(token?: vscode.CancellationToken): Promise<void> {
+    if (this._isRefreshing) {
+      return;
+    }
+
+    this._isRefreshing = true;
     logger.info('Fetching assigned issues...');
     try {
-      const session = await vscode.authentication.getSession('github', ['repo'], {
-        createIfNone: true,
-      }).catch(() => null);
-      
-      if (!session) {
+      if (token?.isCancellationRequested) {
+        return;
+      }
+
+      let session: vscode.AuthenticationSession | undefined;
+      try {
+        session = await vscode.authentication.getSession('github', ['repo'], {
+          createIfNone: true,
+        });
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        logger.error('GitHub authentication failed', err);
+        vscode.window.showWarningMessage(`WorkCenter GitHub: Authentication failed — ${message}`);
+        return;
+      }
+
+      if (!session || token?.isCancellationRequested) {
+        if (!session) {
+          logger.info('User cancelled GitHub authentication');
+        }
         return;
       }
 
       await this.fetchAndPublishIssues(session.accessToken, true);
     } catch (err) {
       logger.error('Failed to fetch issues', err);
+    } finally {
+      this._isRefreshing = false;
     }
   }
 
@@ -91,11 +114,18 @@ export class GitHubIssueProvider implements WorkCenterProvider {
 
     this._isRefreshing = true;
     try {
-      const session = await vscode.authentication.getSession('github', ['repo'], {
-        createIfNone: false,
-      }).catch(() => null);
-      
+      let session: vscode.AuthenticationSession | undefined;
+      try {
+        session = await vscode.authentication.getSession('github', ['repo'], {
+          createIfNone: false,
+        });
+      } catch (err) {
+        logger.warn('GitHub authentication failed during background refresh', err);
+        return;
+      }
+
       if (!session) {
+        logger.debug('No GitHub session available for background refresh');
         return;
       }
 
@@ -201,30 +231,15 @@ export class GitHubIssueProvider implements WorkCenterProvider {
       logger.error(`Invalid repo format, expected owner/name: ${repo}`);
       return { issues: [], failed: true };
     }
-    const [owner, name] = repo.split('/');
     try {
-      // GitHub API max per_page is 100; pagination for >100 items is a future enhancement
-      const response = await fetch(
-        `https://api.github.com/repos/${encodeURIComponent(owner)}/${encodeURIComponent(name)}/issues?assignee=@me&state=open&per_page=100`,
-        {
-          headers: {
-            Authorization: `Bearer ${token}`,
-            Accept: 'application/vnd.github+json',
-            'X-GitHub-Api-Version': '2022-11-28',
-          },
-        },
+      const items = await this.fetchPaginated<GitHubIssue>(
+        `https://api.github.com/repos/${repo}/issues?assignee=@me&state=open&per_page=100`,
+        token,
       );
-
-      if (!response.ok) {
-        logger.error(`Failed to fetch issues for ${repo}: ${response.status}`);
-        return { issues: [], failed: true };
-      }
-
-      const items = (await response.json()) as GitHubIssue[];
       // Filter out pull requests (GitHub /issues endpoint returns both issues and PRs)
       const issues = items.filter(item => !item.pull_request);
       return { issues, failed: false };
-    } catch (err: unknown) {
+    } catch (err) {
       logger.error(`Failed to fetch issues for ${repo}`, err);
       return { issues: [], failed: true };
     }
@@ -232,31 +247,75 @@ export class GitHubIssueProvider implements WorkCenterProvider {
 
   private async fetchAllAssignedIssues(token: string): Promise<{ issues: GitHubIssue[]; failed: boolean }> {
     try {
-      // GitHub API max per_page is 100; pagination for >100 items is a future enhancement
-      const response = await fetch(
+      const items = await this.fetchPaginated<GitHubIssue>(
         'https://api.github.com/issues?filter=assigned&state=open&per_page=100',
-        {
+        token,
+      );
+      // Filter out pull requests (GitHub /issues endpoint returns both issues and PRs)
+      const issues = items.filter(item => !item.pull_request);
+      return { issues, failed: false };
+    } catch (err) {
+      logger.error('Failed to fetch assigned issues', err);
+      return { issues: [], failed: true };
+    }
+  }
+
+  private async fetchPaginated<T>(url: string, token: string, maxPages: number = 10): Promise<T[]> {
+    const allItems: T[] = [];
+    let nextUrl: string | null = url;
+    let page = 0;
+
+    while (nextUrl && page < maxPages) {
+      let response: Response;
+      try {
+        response = await fetch(nextUrl, {
           headers: {
             Authorization: `Bearer ${token}`,
             Accept: 'application/vnd.github+json',
             'X-GitHub-Api-Version': '2022-11-28',
           },
-        },
-      );
-
-      if (!response.ok) {
-        logger.error(`Failed to fetch assigned issues: ${response.status}`);
-        return { issues: [], failed: true };
+        });
+      } catch (err) {
+        if (allItems.length > 0) {
+          logger.warn(
+            `Network error on page ${page + 1}. ` +
+            `Returning ${allItems.length} items from previous pages.`,
+            err,
+          );
+          return allItems;
+        }
+        throw err;
       }
 
-      const items = (await response.json()) as GitHubIssue[];
-      // Filter out pull requests (GitHub /issues endpoint returns both issues and PRs)
-      const issues = items.filter(item => !item.pull_request);
-      return { issues, failed: false };
-    } catch (err: unknown) {
-      logger.error('Failed to fetch assigned issues', err);
-      return { issues: [], failed: true };
+      if (!response.ok) {
+        if (allItems.length > 0) {
+          logger.warn(
+            `GitHub API returned ${response.status} on page ${page + 1}. ` +
+            `Returning ${allItems.length} items from previous pages.`,
+          );
+          return allItems;
+        }
+        throw new Error(`GitHub API returned ${response.status}`);
+      }
+
+      const items = (await response.json()) as T[];
+      allItems.push(...items);
+
+      nextUrl = this.getNextPageUrl(response.headers.get('link'));
+      page++;
     }
+
+    if (nextUrl) {
+      logger.warn(`Pagination limit reached (${maxPages} pages). Some items may not be shown.`);
+    }
+
+    return allItems;
+  }
+
+  private getNextPageUrl(linkHeader: string | null): string | null {
+    if (!linkHeader) return null;
+    const match = linkHeader.match(/<([^>]+)>;\s*rel="next"/);
+    return match ? match[1] : null;
   }
 
   dispose(): void {
