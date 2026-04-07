@@ -1,3 +1,4 @@
+import type * as vscode from 'vscode';
 import { WorkItem } from '../models/workItem';
 import type { Disposable, Event, DiscoveredItem } from '@workcenter/shared';
 
@@ -25,7 +26,7 @@ export interface WorkCenterProvider {
   /** Fires when the provider has a new or updated set of discovered items. */
   readonly onDidDiscoverItems: Event<DiscoveredItem[]>;
   /** Re-fetch items from the external source. */
-  refresh(): Promise<void>;
+  refresh(token?: vscode.CancellationToken): Promise<void>;
 }
 
 /**

@@ -8,7 +8,7 @@ interface WorkCenterProvider {
   readonly label: string;
   readonly resurfaceDismissed?: boolean;
   readonly onDidDiscoverItems: Event<DiscoveredItem[]>;
-  refresh(): Promise<void>;
+  refresh(token?: vscode.CancellationToken): Promise<void>;
 }
 
 interface AdoPullRequest {
@@ -45,7 +45,7 @@ export class AdoPrReviewProvider extends BaseProvider implements WorkCenterProvi
     super(new vscode.EventEmitter<DiscoveredItem[]>());
   }
 
-  async refresh(): Promise<void> {
+  async refresh(token?: vscode.CancellationToken): Promise<void> {
     if (this._isRefreshing) {
       return;
     }
@@ -53,11 +53,15 @@ export class AdoPrReviewProvider extends BaseProvider implements WorkCenterProvi
     this._isRefreshing = true;
     try {
       logger.info('Fetching ADO PR reviews...');
+      if (token?.isCancellationRequested) {
+        return;
+      }
+
       const session = await vscode.authentication.getSession('microsoft', [ADO_AUTH_SCOPE], {
         createIfNone: true,
       }).catch(() => null);
 
-      if (!session) {
+      if (!session || token?.isCancellationRequested) {
         return;
       }
 
