@@ -107,6 +107,24 @@
         "icon": "$(debug-continue)"
       },
       {
+        "command": "workcenter.blockItem",
+        "title": "Block",
+        "category": "WorkCenter",
+        "icon": "$(error)"
+      },
+      {
+        "command": "workcenter.unblockItem",
+        "title": "Unblock",
+        "category": "WorkCenter",
+        "icon": "$(debug-continue)"
+      },
+      {
+        "command": "workcenter.markWaitingOn",
+        "title": "Mark Waiting",
+        "category": "WorkCenter",
+        "icon": "$(watch)"
+      },
+      {
         "command": "workcenter.editItem",
         "title": "Edit Work Item",
         "category": "WorkCenter",
@@ -192,6 +210,31 @@
         {
           "command": "workcenter.resumeItem",
           "when": "view == workcenter.focus && viewItem =~ /^paused/",
+          "group": "1_actions"
+        },
+        {
+          "command": "workcenter.blockItem",
+          "when": "view == workcenter.focus && viewItem =~ /^active/",
+          "group": "1_actions"
+        },
+        {
+          "command": "workcenter.unblockItem",
+          "when": "view == workcenter.focus && viewItem =~ /^blocked/",
+          "group": "1_actions"
+        },
+        {
+          "command": "workcenter.markWaitingOn",
+          "when": "view == workcenter.focus && viewItem =~ /^active/",
+          "group": "1_actions"
+        },
+        {
+          "command": "workcenter.resumeItem",
+          "when": "view == workcenter.focus && viewItem =~ /^blocked/",
+          "group": "1_actions"
+        },
+        {
+          "command": "workcenter.resumeItem",
+          "when": "view == workcenter.focus && viewItem =~ /^waitingOn/",
           "group": "1_actions"
         },
         {

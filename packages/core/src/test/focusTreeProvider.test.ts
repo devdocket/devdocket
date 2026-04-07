@@ -52,6 +52,50 @@ describe('FocusTreeProvider', () => {
       const item = makeItem({ state: WorkItemState.Paused, url: 'https://example.com' });
       expect(provider.getTreeItem(item).contextValue).toBe('paused.hasUrl');
     });
+
+    it('should set contextValue to "blocked" for Blocked item without url', () => {
+      const item = makeItem({ state: WorkItemState.Blocked });
+      expect(provider.getTreeItem(item).contextValue).toBe('blocked');
+    });
+
+    it('should set contextValue to "blocked.hasUrl" for Blocked item with url', () => {
+      const item = makeItem({ state: WorkItemState.Blocked, url: 'https://example.com' });
+      expect(provider.getTreeItem(item).contextValue).toBe('blocked.hasUrl');
+    });
+
+    it('should set contextValue to "waitingOn" for WaitingOn item without url', () => {
+      const item = makeItem({ state: WorkItemState.WaitingOn });
+      expect(provider.getTreeItem(item).contextValue).toBe('waitingOn');
+    });
+
+    it('should set contextValue to "waitingOn.hasUrl" for WaitingOn item with url', () => {
+      const item = makeItem({ state: WorkItemState.WaitingOn, url: 'https://example.com' });
+      expect(provider.getTreeItem(item).contextValue).toBe('waitingOn.hasUrl');
+    });
+  });
+
+  describe('getTreeItem description and icon', () => {
+    it('should show "🚫 blocked" description for Blocked item', () => {
+      const item = makeItem({ state: WorkItemState.Blocked });
+      expect(provider.getTreeItem(item).description).toBe('🚫 blocked');
+    });
+
+    it('should show "⏳ waiting" description for WaitingOn item', () => {
+      const item = makeItem({ state: WorkItemState.WaitingOn });
+      expect(provider.getTreeItem(item).description).toBe('⏳ waiting');
+    });
+
+    it('should use error icon for Blocked item', () => {
+      const item = makeItem({ state: WorkItemState.Blocked });
+      const icon = provider.getTreeItem(item).iconPath as any;
+      expect(icon.id).toBe('error');
+    });
+
+    it('should use watch icon for WaitingOn item', () => {
+      const item = makeItem({ state: WorkItemState.WaitingOn });
+      const icon = provider.getTreeItem(item).iconPath as any;
+      expect(icon.id).toBe('watch');
+    });
   });
 
   describe('getChildren', () => {

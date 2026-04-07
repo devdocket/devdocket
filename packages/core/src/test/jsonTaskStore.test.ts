@@ -340,9 +340,9 @@ describe('JsonTaskStore', () => {
     });
   });
 
-  it('migrates legacy Blocked state to Paused on load', async () => {
+  it('preserves Blocked state on load (no longer migrated)', async () => {
     const filePath = path.join(tmpDir, 'workitems.json');
-    const legacy = [{
+    const items = [{
       id: 'blocked-1',
       title: 'Blocked item',
       state: 'Blocked',
@@ -350,16 +350,16 @@ describe('JsonTaskStore', () => {
       updatedAt: 1000,
     }];
     await fs.mkdir(tmpDir, { recursive: true });
-    await fs.writeFile(filePath, JSON.stringify(legacy), 'utf-8');
+    await fs.writeFile(filePath, JSON.stringify(items), 'utf-8');
 
-    const items = await store.loadAll();
-    expect(items).toHaveLength(1);
-    expect(items[0].state).toBe(WorkItemState.Paused);
+    const loaded = await store.loadAll();
+    expect(loaded).toHaveLength(1);
+    expect(loaded[0].state).toBe(WorkItemState.Blocked);
   });
 
-  it('migrates legacy WaitingOn state to Paused on load', async () => {
+  it('preserves WaitingOn state on load (no longer migrated)', async () => {
     const filePath = path.join(tmpDir, 'workitems.json');
-    const legacy = [{
+    const items = [{
       id: 'waiting-1',
       title: 'Waiting item',
       state: 'WaitingOn',
@@ -367,28 +367,28 @@ describe('JsonTaskStore', () => {
       updatedAt: 1000,
     }];
     await fs.mkdir(tmpDir, { recursive: true });
-    await fs.writeFile(filePath, JSON.stringify(legacy), 'utf-8');
+    await fs.writeFile(filePath, JSON.stringify(items), 'utf-8');
 
-    const items = await store.loadAll();
-    expect(items).toHaveLength(1);
-    expect(items[0].state).toBe(WorkItemState.Paused);
+    const loaded = await store.loadAll();
+    expect(loaded).toHaveLength(1);
+    expect(loaded[0].state).toBe(WorkItemState.WaitingOn);
   });
 
-  it('persists migrated Blocked/WaitingOn→Paused back to disk', async () => {
+  it('preserves Blocked/WaitingOn states on disk (no migration)', async () => {
     const filePath = path.join(tmpDir, 'workitems.json');
-    const legacy = [
+    const items = [
       { id: 'b-1', title: 'Blocked', state: 'Blocked', createdAt: 1000, updatedAt: 1000 },
       { id: 'w-1', title: 'Waiting', state: 'WaitingOn', createdAt: 1000, updatedAt: 1000 },
     ];
     await fs.mkdir(tmpDir, { recursive: true });
-    await fs.writeFile(filePath, JSON.stringify(legacy), 'utf-8');
+    await fs.writeFile(filePath, JSON.stringify(items), 'utf-8');
 
     await store.loadAll();
 
     const raw = await fs.readFile(filePath, 'utf-8');
     const persisted = JSON.parse(raw);
     expect(persisted).toHaveLength(2);
-    expect(persisted[0].state).toBe(WorkItemState.Paused);
-    expect(persisted[1].state).toBe(WorkItemState.Paused);
+    expect(persisted[0].state).toBe('Blocked');
+    expect(persisted[1].state).toBe('WaitingOn');
   });
 });
