@@ -106,6 +106,7 @@ export class JsonTaskStore implements ITaskStore {
       // Migrate legacy fields
       let needsMigration = false;
       for (const item of items) {
+        // Migrate legacy 'description' field to 'notes'
         const legacy = item as WorkItem & { description?: string };
         if (legacy.description !== undefined) {
           if (item.notes === undefined) {
