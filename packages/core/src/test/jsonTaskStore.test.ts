@@ -325,6 +325,7 @@ describe('JsonTaskStore', () => {
         { ...makeItem({ id: 'bad-url' }), url: 123 },
         { ...makeItem({ id: 'bad-provider' }), providerId: 42 },
         { ...makeItem({ id: 'bad-external' }), externalId: true },
+        { ...makeItem({ id: 'bad-desc' }), description: 42 },
         { ...makeItem({ id: 'bad-notes' }), notes: 999 },
         { ...makeItem({ id: 'bad-sort' }), sortOrder: 'abc' },
         { ...makeItem({ id: 'inf-sort' }), sortOrder: Infinity },

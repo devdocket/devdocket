@@ -41,6 +41,9 @@ function validateWorkItem(value: unknown, index: number): string | undefined {
   if (obj.externalId !== undefined && typeof obj.externalId !== 'string') {
     return `Item "${obj.id}" at index ${index} has invalid "externalId" (string expected)`;
   }
+  if (obj.description !== undefined && typeof obj.description !== 'string') {
+    return `Item "${obj.id}" at index ${index} has invalid legacy "description" (string expected)`;
+  }
   if (obj.notes !== undefined && typeof obj.notes !== 'string') {
     return `Item "${obj.id}" at index ${index} has invalid "notes" (string expected)`;
   }
