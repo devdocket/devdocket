@@ -69,8 +69,8 @@ describe('WorkGraph', () => {
     await graph.transitionState(item.id, WorkItemState.InProgress);
     expect(graph.getItem(item.id)?.state).toBe(WorkItemState.InProgress);
 
-    await graph.transitionState(item.id, WorkItemState.Blocked);
-    expect(graph.getItem(item.id)?.state).toBe(WorkItemState.Blocked);
+    await graph.transitionState(item.id, WorkItemState.Paused);
+    expect(graph.getItem(item.id)?.state).toBe(WorkItemState.Paused);
 
     await graph.transitionState(item.id, WorkItemState.InProgress);
     expect(graph.getItem(item.id)?.state).toBe(WorkItemState.InProgress);
@@ -344,5 +344,37 @@ describe('WorkGraph', () => {
     const ordered = legacyGraph.getItemsByState(WorkItemState.New)
       .sort((x, y) => (x.sortOrder ?? Number.MAX_SAFE_INTEGER) - (y.sortOrder ?? Number.MAX_SAFE_INTEGER));
     expect(ordered.map((i) => i.title)).toEqual(['B', 'A', 'C']);
+  });
+
+  describe('getItemsByState - multi-state and edge cases', () => {
+    it('returns items matching multiple states', async () => {
+      const a = await graph.createItem({ title: 'A' });
+      await graph.transitionState(a.id, WorkItemState.InProgress);
+      const b = await graph.createItem({ title: 'B' });
+      await graph.transitionState(b.id, WorkItemState.Blocked);
+      await graph.createItem({ title: 'C' }); // stays New
+
+      const active = graph.getItemsByState(WorkItemState.InProgress, WorkItemState.Blocked);
+      expect(active).toHaveLength(2);
+      expect(active.map((i) => i.title).sort()).toEqual(['A', 'B']);
+    });
+
+    it('returns empty array when called with no states', () => {
+      expect(graph.getItemsByState()).toEqual([]);
+    });
+
+    it('returns consistent results on consecutive reads without mutations', async () => {
+      await graph.createItem({ title: 'A' });
+      const first = graph.getItemsByState(WorkItemState.New);
+      const second = graph.getItemsByState(WorkItemState.New);
+      expect(first).toEqual(second);
+    });
+
+    it('deduplicates when the same state is passed multiple times', async () => {
+      await graph.createItem({ title: 'A' });
+      await graph.createItem({ title: 'B' });
+      const result = graph.getItemsByState(WorkItemState.New, WorkItemState.New);
+      expect(result).toHaveLength(2);
+    });
   });
 });

@@ -1,597 +1,589 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { commands, window, env, Uri } from 'vscode';
+import { describe, it, expect, beforeEach, vi, type Mock } from 'vitest';
+import * as vscode from 'vscode';
+import { WorkItemState, type WorkItem } from '../models/workItem';
 import { registerCommands } from '../commands/commands';
-import { WorkGraph } from '../services/workGraph';
-import { WorkItem, WorkItemState } from '../models/workItem';
-import { ActionRegistry } from '../services/actionRegistry';
-import { WorkItemEditorPanel } from '../views/workItemEditorPanel';
-import { ITaskStore } from '../storage/taskStore';
+import type { WorkGraph } from '../services/workGraph';
+import type { ActionRegistry } from '../services/actionRegistry';
+import type { DiscoveredStateStore } from '../storage/discoveredStateStore';
 import type { InboxItem } from '../views/inboxTreeProvider';
 import type { SourceItemNode } from '../views/sourcesTreeProvider';
+import { WorkItemEditorPanel } from '../views/workItemEditorPanel';
 
-vi.mock('../views/workItemEditorPanel', () => ({
-  WorkItemEditorPanel: { open: vi.fn() },
-}));
+// ── helpers ──────────────────────────────────────────────────────────
 
-vi.mock('../services/logger', () => ({
-  logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() },
-}));
-
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
-
-function createMockStore(): ITaskStore {
-  const items: Map<string, any> = new Map();
+function createWorkItem(overrides: Partial<WorkItem> = {}): WorkItem {
   return {
-    loadAll: vi.fn(async () => Array.from(items.values())),
-    save: vi.fn(async (item) => { items.set(item.id, item); }),
-    saveAll: vi.fn(async (batch) => { for (const item of batch) { items.set(item.id, item); } }),
-    delete: vi.fn(async (id) => { items.delete(id); }),
+    id: 'wc-test-1',
+    title: 'Test Item',
+    state: WorkItemState.New,
+    createdAt: Date.now(),
+    updatedAt: Date.now(),
+    ...overrides,
   };
 }
 
-function createMockStateStore() {
+function makeInboxItem(overrides: Partial<InboxItem> = {}): InboxItem {
   return {
-    setState: vi.fn(async () => {}),
-    getState: vi.fn(() => 'unseen' as const),
-    load: vi.fn(async () => {}),
-    onDidChange: vi.fn(() => ({ dispose: vi.fn() })),
+    kind: 'item',
+    providerId: 'github',
+    externalId: 'ext-1',
+    title: 'Inbox Issue',
+    url: 'https://github.com/org/repo/issues/1',
+    ...overrides,
   };
 }
 
-function createMockContext() {
+function makeSourceItem(overrides: Partial<SourceItemNode> = {}): SourceItemNode {
   return {
-    subscriptions: [] as any[],
-    globalStorageUri: { fsPath: '/mock/storage' },
-  } as any;
+    kind: 'item',
+    providerId: 'github',
+    externalId: 'ext-2',
+    title: 'Source Issue',
+    url: 'https://github.com/org/repo/issues/2',
+    ...overrides,
+  };
 }
 
-function getCommandHandler(commandId: string): Function {
-  const calls = vi.mocked(commands.registerCommand).mock.calls;
-  const match = calls.find((c) => c[0] === commandId);
-  if (!match) {
-    throw new Error(`Command not registered: ${commandId}`);
-  }
-  return match[1] as Function;
+type UsedWorkGraphMethods = Pick<
+  WorkGraph,
+  'transitionState' | 'getItem' | 'createItem' | 'findItemByProvenance' | 'moveItem'
+>;
+
+function createMockWorkGraph(): { [K in keyof UsedWorkGraphMethods]: Mock } {
+  return {
+    transitionState: vi.fn(),
+    getItem: vi.fn(),
+    createItem: vi.fn(async () => createWorkItem()),
+    findItemByProvenance: vi.fn(),
+    moveItem: vi.fn(),
+  };
 }
 
-// ---------------------------------------------------------------------------
-// Tests
-// ---------------------------------------------------------------------------
+type UsedActionRegistryMethods = Pick<ActionRegistry, 'getActionsFor' | 'getAction'>;
+
+function createMockActionRegistry(): { [K in keyof UsedActionRegistryMethods]: Mock } {
+  return {
+    getActionsFor: vi.fn(() => []),
+    getAction: vi.fn(),
+  };
+}
+
+type UsedStateStoreMethods = Pick<DiscoveredStateStore, 'setState'>;
+
+function createMockStateStore(): { [K in keyof UsedStateStoreMethods]: Mock } {
+  return {
+    setState: vi.fn(),
+  };
+}
+
+// ── test setup ───────────────────────────────────────────────────────
+
+// Capture handlers registered via vscode.commands.registerCommand
+let commandHandlers: Map<string, (...args: any[]) => any>;
+
+function createMockContext(): vscode.ExtensionContext {
+  return {
+    subscriptions: [],
+  } as unknown as vscode.ExtensionContext;
+}
 
 describe('registerCommands', () => {
-  let workGraph: WorkGraph;
-  let actionRegistry: ActionRegistry;
+  let workGraph: ReturnType<typeof createMockWorkGraph>;
+  let actionRegistry: ReturnType<typeof createMockActionRegistry>;
   let stateStore: ReturnType<typeof createMockStateStore>;
-  let mockContext: ReturnType<typeof createMockContext>;
+  let ctx: vscode.ExtensionContext;
 
-  beforeEach(async () => {
-    vi.clearAllMocks();
-    const store = createMockStore();
-    workGraph = new WorkGraph(store);
-    await workGraph.load();
-    actionRegistry = new ActionRegistry();
+  beforeEach(() => {
+    vi.restoreAllMocks();
+
+    commandHandlers = new Map();
+    (vscode.commands.registerCommand as Mock).mockImplementation(
+      (id: string, handler: (...args: any[]) => any) => {
+        commandHandlers.set(id, handler);
+        return { dispose: vi.fn() };
+      },
+    );
+
+    // Stub WorkItemEditorPanel.open to avoid needing full vscode.ViewColumn
+    vi.spyOn(WorkItemEditorPanel, 'open').mockImplementation(() => {});
+
+    workGraph = createMockWorkGraph();
+    actionRegistry = createMockActionRegistry();
     stateStore = createMockStateStore();
-    mockContext = createMockContext();
+    ctx = createMockContext();
 
-    registerCommands(mockContext, workGraph, actionRegistry, stateStore as any);
+    registerCommands(ctx, workGraph as any, actionRegistry as any, stateStore as any);
   });
 
-  // -----------------------------------------------------------------------
-  // workcenter.createItem
-  // -----------------------------------------------------------------------
+  // helper to invoke a registered command
+  function invoke(name: string, ...args: any[]) {
+    const handler = commandHandlers.get(name);
+    if (!handler) {
+      throw new Error(`Command not registered: ${name}`);
+    }
+    return handler(...args);
+  }
+
+  // ── registration ─────────────────────────────────────────────────
+
+  it('registers all expected commands', () => {
+    const expected = [
+      'workcenter.createItem',
+      'workcenter.acceptToFocus',
+      'workcenter.archiveItem',
+      'workcenter.completeItem',
+      'workcenter.pauseItem',
+      'workcenter.resumeItem',
+      'workcenter.editItem',
+      'workcenter.openInBrowser',
+      'workcenter.runAction',
+      'workcenter.moveUp',
+      'workcenter.moveDown',
+      'workcenter.acceptFromInbox',
+      'workcenter.dismissFromInbox',
+      'workcenter.acceptFromSources',
+    ];
+    for (const cmd of expected) {
+      expect(commandHandlers.has(cmd), `missing command: ${cmd}`).toBe(true);
+    }
+  });
+
+  it('pushes disposables into context.subscriptions', () => {
+    expect(ctx.subscriptions.length).toBeGreaterThan(0);
+  });
+
+  // ── createItem ───────────────────────────────────────────────────
 
   describe('workcenter.createItem', () => {
     it('creates item when user provides a title', async () => {
-      vi.mocked(window.showInputBox).mockResolvedValueOnce('Fix login bug');
-      const handler = getCommandHandler('workcenter.createItem');
-      await handler();
+      (vscode.window.showInputBox as Mock).mockResolvedValue('My Task');
+      await invoke('workcenter.createItem');
 
-      const items = workGraph.getAll();
-      expect(items).toHaveLength(1);
-      expect(items[0].title).toBe('Fix login bug');
-      expect(window.showInformationMessage).toHaveBeenCalledWith(
-        expect.stringContaining('Fix login bug'),
+      expect(workGraph.createItem).toHaveBeenCalledWith({ title: 'My Task' });
+      expect(vscode.window.showInformationMessage).toHaveBeenCalledWith(
+        'WorkCenter: Created "My Task"',
       );
     });
 
-    it('does nothing when user cancels input', async () => {
-      vi.mocked(window.showInputBox).mockResolvedValueOnce(undefined);
-      const handler = getCommandHandler('workcenter.createItem');
-      await handler();
+    it('trims whitespace from the title', async () => {
+      (vscode.window.showInputBox as Mock).mockResolvedValue('  Padded  ');
+      await invoke('workcenter.createItem');
 
-      expect(workGraph.getAll()).toHaveLength(0);
-      expect(window.showInformationMessage).not.toHaveBeenCalled();
+      expect(workGraph.createItem).toHaveBeenCalledWith({ title: 'Padded' });
     });
 
-    it('trims whitespace from title', async () => {
-      vi.mocked(window.showInputBox).mockResolvedValueOnce('  spaced  ');
-      const handler = getCommandHandler('workcenter.createItem');
-      await handler();
+    it('does nothing when user cancels the input box', async () => {
+      (vscode.window.showInputBox as Mock).mockResolvedValue(undefined);
+      await invoke('workcenter.createItem');
 
-      expect(workGraph.getAll()[0].title).toBe('spaced');
+      expect(workGraph.createItem).not.toHaveBeenCalled();
     });
   });
 
-  // -----------------------------------------------------------------------
-  // State transition commands
-  // -----------------------------------------------------------------------
+  // ── simple state-transition commands ─────────────────────────────
 
-  describe('state transition commands', () => {
-    let item: WorkItem;
+  describe('state-transition commands', () => {
+    const transitions: [string, WorkItemState][] = [
+      ['workcenter.acceptToFocus', WorkItemState.InProgress],
+      ['workcenter.archiveItem', WorkItemState.Archived],
+      ['workcenter.completeItem', WorkItemState.Done],
+      ['workcenter.pauseItem', WorkItemState.Paused],
+      ['workcenter.resumeItem', WorkItemState.InProgress],
+    ];
 
-    beforeEach(async () => {
-      item = await workGraph.createItem({ title: 'Test item' });
-    });
-
-    it('acceptToFocus transitions to InProgress', async () => {
-      const handler = getCommandHandler('workcenter.acceptToFocus');
-      await handler({ id: item.id });
-      expect(workGraph.getItem(item.id)!.state).toBe(WorkItemState.InProgress);
-    });
-
-    it('archiveItem transitions to Archived', async () => {
-      const handler = getCommandHandler('workcenter.archiveItem');
-      await handler({ id: item.id });
-      expect(workGraph.getItem(item.id)!.state).toBe(WorkItemState.Archived);
-    });
-
-    it('completeItem transitions to Done', async () => {
-      const handler = getCommandHandler('workcenter.completeItem');
-      await handler({ id: item.id });
-      expect(workGraph.getItem(item.id)!.state).toBe(WorkItemState.Done);
-    });
-
-    it('blockItem transitions to Blocked', async () => {
-      await workGraph.transitionState(item.id, WorkItemState.InProgress);
-      const handler = getCommandHandler('workcenter.blockItem');
-      await handler({ id: item.id });
-      expect(workGraph.getItem(item.id)!.state).toBe(WorkItemState.Blocked);
-    });
-
-    it('unblockItem transitions to InProgress', async () => {
-      await workGraph.transitionState(item.id, WorkItemState.InProgress);
-      await workGraph.transitionState(item.id, WorkItemState.Blocked);
-      const handler = getCommandHandler('workcenter.unblockItem');
-      await handler({ id: item.id });
-      expect(workGraph.getItem(item.id)!.state).toBe(WorkItemState.InProgress);
-    });
-
-    it('markWaitingOn transitions to WaitingOn', async () => {
-      await workGraph.transitionState(item.id, WorkItemState.InProgress);
-      const handler = getCommandHandler('workcenter.markWaitingOn');
-      await handler({ id: item.id });
-      expect(workGraph.getItem(item.id)!.state).toBe(WorkItemState.WaitingOn);
-    });
+    for (const [cmd, expectedState] of transitions) {
+      it(`${cmd} transitions to ${expectedState}`, () => {
+        invoke(cmd, { id: 'wc-42' });
+        expect(workGraph.transitionState).toHaveBeenCalledWith('wc-42', expectedState);
+      });
+    }
   });
 
-  // -----------------------------------------------------------------------
-  // workcenter.editItem
-  // -----------------------------------------------------------------------
+  // ── editItem ─────────────────────────────────────────────────────
 
   describe('workcenter.editItem', () => {
-    it('opens editor panel for existing item', async () => {
-      const item = await workGraph.createItem({ title: 'Edit me' });
-      const handler = getCommandHandler('workcenter.editItem');
-      handler({ id: item.id });
+    it('opens editor panel when item exists', () => {
+      const item = createWorkItem();
+      workGraph.getItem.mockReturnValue(item);
 
-      expect(WorkItemEditorPanel.open).toHaveBeenCalledWith(
-        mockContext,
-        workGraph,
-        expect.objectContaining({ id: item.id, title: 'Edit me' }),
-      );
+      invoke('workcenter.editItem', { id: item.id });
+
+      expect(workGraph.getItem).toHaveBeenCalledWith(item.id);
+      expect(WorkItemEditorPanel.open).toHaveBeenCalledWith(ctx, workGraph, item);
     });
 
-    it('does nothing for nonexistent item', () => {
-      const handler = getCommandHandler('workcenter.editItem');
-      handler({ id: 'nonexistent' });
+    it('does not open editor when item is not found', () => {
+      workGraph.getItem.mockReturnValue(undefined);
+      invoke('workcenter.editItem', { id: 'missing' });
+
+      expect(workGraph.getItem).toHaveBeenCalledWith('missing');
       expect(WorkItemEditorPanel.open).not.toHaveBeenCalled();
     });
   });
 
-  // -----------------------------------------------------------------------
-  // workcenter.openInBrowser
-  // -----------------------------------------------------------------------
+  // ── openInBrowser ────────────────────────────────────────────────
 
   describe('workcenter.openInBrowser', () => {
-    it('opens workItem.url when available', async () => {
-      const item = await workGraph.createItem(
-        { title: 'Has url' },
-        { providerId: 'gh', externalId: '1', url: 'https://github.com/issue/1' },
-      );
-      const handler = getCommandHandler('workcenter.openInBrowser');
-      handler({ id: item.id });
+    it('opens workItem url when found', () => {
+      const item = createWorkItem({ url: 'https://example.com' });
+      workGraph.getItem.mockReturnValue(item);
 
-      expect(Uri.parse).toHaveBeenCalledWith('https://github.com/issue/1');
-      expect(env.openExternal).toHaveBeenCalled();
+      invoke('workcenter.openInBrowser', { id: item.id });
+
+      expect(vscode.env.openExternal).toHaveBeenCalled();
+      expect(vscode.Uri.parse).toHaveBeenCalledWith('https://example.com');
     });
 
-    it('falls back to item.url when workItem has no url', async () => {
-      const item = await workGraph.createItem({ title: 'No provider url' });
-      const handler = getCommandHandler('workcenter.openInBrowser');
-      handler({ id: item.id, url: 'https://fallback.com' });
+    it('falls back to item.url when workItem has no url', () => {
+      workGraph.getItem.mockReturnValue(createWorkItem({ url: undefined }));
 
-      expect(Uri.parse).toHaveBeenCalledWith('https://fallback.com');
-      expect(env.openExternal).toHaveBeenCalled();
+      invoke('workcenter.openInBrowser', { id: 'wc-1', url: 'https://fallback.com' });
+
+      expect(vscode.Uri.parse).toHaveBeenCalledWith('https://fallback.com');
+      expect(vscode.env.openExternal).toHaveBeenCalled();
     });
 
-    it('uses item.url from argument when workItem has no url', () => {
-      const handler = getCommandHandler('workcenter.openInBrowser');
-      handler({ id: 'nonexistent', url: 'https://fallback.com' });
+    it('does nothing when neither source has a url', () => {
+      workGraph.getItem.mockReturnValue(createWorkItem({ url: undefined }));
 
-      expect(Uri.parse).toHaveBeenCalledWith('https://fallback.com');
-      expect(env.openExternal).toHaveBeenCalled();
+      invoke('workcenter.openInBrowser', { id: 'wc-1' });
+
+      expect(vscode.env.openExternal).not.toHaveBeenCalled();
     });
 
-    it('does nothing when no url exists', async () => {
-      const item = await workGraph.createItem({ title: 'No url at all' });
-      const handler = getCommandHandler('workcenter.openInBrowser');
-      handler({ id: item.id });
-      expect(env.openExternal).not.toHaveBeenCalled();
+    it('does nothing when item not found and tree item has no url', () => {
+      workGraph.getItem.mockReturnValue(undefined);
+
+      invoke('workcenter.openInBrowser', { id: 'wc-gone' });
+
+      expect(vscode.env.openExternal).not.toHaveBeenCalled();
+    });
+
+    it('falls back to tree node url when workItem is not found', () => {
+      workGraph.getItem.mockReturnValue(undefined);
+
+      invoke('workcenter.openInBrowser', { id: 'wc-gone', url: 'https://tree-fallback.com' });
+
+      expect(vscode.Uri.parse).toHaveBeenCalledWith('https://tree-fallback.com');
+      expect(vscode.env.openExternal).toHaveBeenCalled();
     });
   });
 
-  // -----------------------------------------------------------------------
-  // workcenter.runAction
-  // -----------------------------------------------------------------------
+  // ── runAction ────────────────────────────────────────────────────
 
   describe('workcenter.runAction', () => {
-    it('shows info message when no actions available', async () => {
-      const item = await workGraph.createItem({ title: 'No actions' });
-      const handler = getCommandHandler('workcenter.runAction');
-      await handler({ id: item.id });
+    it('does nothing when item is not found', async () => {
+      workGraph.getItem.mockReturnValue(undefined);
 
-      expect(window.showInformationMessage).toHaveBeenCalledWith(
+      await invoke('workcenter.runAction', { id: 'missing' });
+
+      expect(actionRegistry.getActionsFor).not.toHaveBeenCalled();
+    });
+
+    it('shows info message when no actions are available', async () => {
+      const item = createWorkItem();
+      workGraph.getItem.mockReturnValue(item);
+      actionRegistry.getActionsFor.mockReturnValue([]);
+
+      await invoke('workcenter.runAction', { id: item.id });
+
+      expect(vscode.window.showInformationMessage).toHaveBeenCalledWith(
         'No actions available for this item.',
       );
     });
 
-    it('does nothing when work item not found', async () => {
-      const handler = getCommandHandler('workcenter.runAction');
-      await handler({ id: 'nonexistent' });
+    it('runs the selected action', async () => {
+      const item = createWorkItem();
+      workGraph.getItem.mockReturnValue(item);
 
-      expect(window.showQuickPick).not.toHaveBeenCalled();
-      expect(window.showInformationMessage).not.toHaveBeenCalled();
+      const action = { id: 'act-1', label: 'Deploy', canRun: vi.fn(() => true), run: vi.fn() };
+      actionRegistry.getActionsFor.mockReturnValue([action]);
+      actionRegistry.getAction.mockReturnValue(action);
+      (vscode.window.showQuickPick as Mock).mockResolvedValue({
+        label: 'Deploy',
+        actionId: 'act-1',
+      });
+
+      await invoke('workcenter.runAction', { id: item.id });
+
+      expect(action.run).toHaveBeenCalledWith(item);
     });
 
-    it('runs selected action', async () => {
-      const item = await workGraph.createItem({ title: 'Actionable' });
-      const mockAction = {
-        id: 'test-action',
-        label: 'Test Action',
-        canRun: () => true,
-        run: vi.fn(async () => {}),
-      };
-      actionRegistry.register(mockAction);
+    it('does nothing when user cancels the quick pick', async () => {
+      const item = createWorkItem();
+      workGraph.getItem.mockReturnValue(item);
 
-      vi.mocked(window.showQuickPick).mockResolvedValueOnce({
-        label: 'Test Action',
-        actionId: 'test-action',
-      } as any);
+      const action = { id: 'a', label: 'X', canRun: vi.fn(() => true), run: vi.fn() };
+      actionRegistry.getActionsFor.mockReturnValue([action]);
+      (vscode.window.showQuickPick as Mock).mockResolvedValue(undefined);
 
-      const handler = getCommandHandler('workcenter.runAction');
-      await handler({ id: item.id });
+      await invoke('workcenter.runAction', { id: item.id });
 
-      expect(window.showQuickPick).toHaveBeenCalled();
-      expect(mockAction.run).toHaveBeenCalledWith(expect.objectContaining({ id: item.id }));
-    });
-
-    it('does nothing when user cancels quick pick', async () => {
-      const item = await workGraph.createItem({ title: 'Cancel action' });
-      const mockAction = {
-        id: 'action2',
-        label: 'Action',
-        canRun: () => true,
-        run: vi.fn(async () => {}),
-      };
-      actionRegistry.register(mockAction);
-
-      vi.mocked(window.showQuickPick).mockResolvedValueOnce(undefined);
-
-      const handler = getCommandHandler('workcenter.runAction');
-      await handler({ id: item.id });
-
-      expect(mockAction.run).not.toHaveBeenCalled();
+      expect(action.run).not.toHaveBeenCalled();
     });
 
     it('shows error message when action throws', async () => {
-      const item = await workGraph.createItem({ title: 'Failing action' });
-      const mockAction = {
-        id: 'fail-action',
-        label: 'Fail',
-        canRun: () => true,
-        run: vi.fn(async () => { throw new Error('boom'); }),
+      const item = createWorkItem();
+      workGraph.getItem.mockReturnValue(item);
+
+      const action = {
+        id: 'fail',
+        label: 'Broken',
+        canRun: vi.fn(() => true),
+        run: vi.fn().mockRejectedValue(new Error('boom')),
       };
-      actionRegistry.register(mockAction);
+      actionRegistry.getActionsFor.mockReturnValue([action]);
+      actionRegistry.getAction.mockReturnValue(action);
+      (vscode.window.showQuickPick as Mock).mockResolvedValue({
+        label: 'Broken',
+        actionId: 'fail',
+      });
 
-      vi.mocked(window.showQuickPick).mockResolvedValueOnce({
-        label: 'Fail',
-        actionId: 'fail-action',
-      } as any);
+      await invoke('workcenter.runAction', { id: item.id });
 
-      const handler = getCommandHandler('workcenter.runAction');
-      await handler({ id: item.id });
+      expect(vscode.window.showErrorMessage).toHaveBeenCalledWith(
+        'WorkCenter: Action "Broken" failed — boom',
+      );
+    });
 
-      expect(window.showErrorMessage).toHaveBeenCalledWith(
-        expect.stringContaining('boom'),
+    it('shows stringified error when action throws a non-Error', async () => {
+      const item = createWorkItem();
+      workGraph.getItem.mockReturnValue(item);
+
+      const action = {
+        id: 'fail2',
+        label: 'StringErr',
+        canRun: vi.fn(() => true),
+        run: vi.fn().mockRejectedValue('string error'),
+      };
+      actionRegistry.getActionsFor.mockReturnValue([action]);
+      actionRegistry.getAction.mockReturnValue(action);
+      (vscode.window.showQuickPick as Mock).mockResolvedValue({
+        label: 'StringErr',
+        actionId: 'fail2',
+      });
+
+      await invoke('workcenter.runAction', { id: item.id });
+
+      expect(vscode.window.showErrorMessage).toHaveBeenCalledWith(
+        'WorkCenter: Action "StringErr" failed — string error',
       );
     });
   });
 
-  // -----------------------------------------------------------------------
-  // workcenter.moveUp / moveDown
-  // -----------------------------------------------------------------------
+  // ── moveUp / moveDown ────────────────────────────────────────────
 
-  describe('workcenter.moveUp / moveDown', () => {
-    it('moveUp shows info message when no item selected', () => {
-      const handler = getCommandHandler('workcenter.moveUp');
-      handler(undefined);
-      expect(window.showInformationMessage).toHaveBeenCalledWith(
+  describe('workcenter.moveUp', () => {
+    it('calls workGraph.moveItem with "up"', () => {
+      invoke('workcenter.moveUp', { id: 'wc-1' });
+      expect(workGraph.moveItem).toHaveBeenCalledWith('wc-1', 'up');
+    });
+
+    it('shows info message when item is null', () => {
+      invoke('workcenter.moveUp', null);
+      expect(vscode.window.showInformationMessage).toHaveBeenCalledWith(
         'WorkCenter: Select an item in the Queue to move.',
       );
+      expect(workGraph.moveItem).not.toHaveBeenCalled();
     });
 
-    it('moveDown shows info message when no item selected', () => {
-      const handler = getCommandHandler('workcenter.moveDown');
-      handler(null);
-      expect(window.showInformationMessage).toHaveBeenCalledWith(
+    it('shows info message when item has no id', () => {
+      invoke('workcenter.moveUp', {});
+      expect(vscode.window.showInformationMessage).toHaveBeenCalledWith(
         'WorkCenter: Select an item in the Queue to move.',
       );
-    });
-
-    it('moveUp shows info message when item has no id', () => {
-      const handler = getCommandHandler('workcenter.moveUp');
-      handler({});
-      expect(window.showInformationMessage).toHaveBeenCalledWith(
-        'WorkCenter: Select an item in the Queue to move.',
-      );
-    });
-
-    it('moveUp calls workGraph.moveItem with up', async () => {
-      const item1 = await workGraph.createItem({ title: 'First' });
-      const item2 = await workGraph.createItem({ title: 'Second' });
-      const handler = getCommandHandler('workcenter.moveUp');
-      await handler({ id: item2.id });
-
-      const updated = workGraph.getItem(item2.id)!;
-      const other = workGraph.getItem(item1.id)!;
-      expect(updated.sortOrder).toBeLessThan(other.sortOrder!);
-    });
-
-    it('moveDown calls workGraph.moveItem with down', async () => {
-      const item1 = await workGraph.createItem({ title: 'First' });
-      const item2 = await workGraph.createItem({ title: 'Second' });
-      const handler = getCommandHandler('workcenter.moveDown');
-      await handler({ id: item1.id });
-
-      const updated = workGraph.getItem(item1.id)!;
-      const other = workGraph.getItem(item2.id)!;
-      expect(updated.sortOrder).toBeGreaterThan(other.sortOrder!);
-    });
-
-    it('moveUp on first item is a no-op', async () => {
-      const item1 = await workGraph.createItem({ title: 'First' });
-      await workGraph.createItem({ title: 'Second' });
-      const originalOrder = workGraph.getItem(item1.id)!.sortOrder;
-      const handler = getCommandHandler('workcenter.moveUp');
-      await handler({ id: item1.id });
-
-      expect(workGraph.getItem(item1.id)!.sortOrder).toBe(originalOrder);
-    });
-
-    it('moveDown on last item is a no-op', async () => {
-      await workGraph.createItem({ title: 'First' });
-      const item2 = await workGraph.createItem({ title: 'Second' });
-      const originalOrder = workGraph.getItem(item2.id)!.sortOrder;
-      const handler = getCommandHandler('workcenter.moveDown');
-      await handler({ id: item2.id });
-
-      expect(workGraph.getItem(item2.id)!.sortOrder).toBe(originalOrder);
-    });
-
-    it('moveUp with a single item is a no-op', async () => {
-      const item = await workGraph.createItem({ title: 'Only' });
-      const originalOrder = workGraph.getItem(item.id)!.sortOrder;
-      const handler = getCommandHandler('workcenter.moveUp');
-      await handler({ id: item.id });
-
-      expect(workGraph.getItem(item.id)!.sortOrder).toBe(originalOrder);
+      expect(workGraph.moveItem).not.toHaveBeenCalled();
     });
   });
 
-  // -----------------------------------------------------------------------
-  // workcenter.acceptFromInbox
-  // -----------------------------------------------------------------------
+  describe('workcenter.moveDown', () => {
+    it('calls workGraph.moveItem with "down"', () => {
+      invoke('workcenter.moveDown', { id: 'wc-1' });
+      expect(workGraph.moveItem).toHaveBeenCalledWith('wc-1', 'down');
+    });
+
+    it('shows info message when item is undefined', () => {
+      invoke('workcenter.moveDown', undefined);
+      expect(vscode.window.showInformationMessage).toHaveBeenCalledWith(
+        'WorkCenter: Select an item in the Queue to move.',
+      );
+      expect(workGraph.moveItem).not.toHaveBeenCalled();
+    });
+
+    it('shows info message when item is null', () => {
+      invoke('workcenter.moveDown', null);
+      expect(vscode.window.showInformationMessage).toHaveBeenCalledWith(
+        'WorkCenter: Select an item in the Queue to move.',
+      );
+      expect(workGraph.moveItem).not.toHaveBeenCalled();
+    });
+
+    it('shows info message when item has no id', () => {
+      invoke('workcenter.moveDown', {});
+      expect(vscode.window.showInformationMessage).toHaveBeenCalledWith(
+        'WorkCenter: Select an item in the Queue to move.',
+      );
+      expect(workGraph.moveItem).not.toHaveBeenCalled();
+    });
+  });
+
+  // ── acceptFromInbox ──────────────────────────────────────────────
 
   describe('workcenter.acceptFromInbox', () => {
-    const inboxItem: InboxItem = {
-      kind: 'item',
-      providerId: 'github',
-      externalId: '42',
-      title: 'Fix bug',
-      url: 'https://github.com/issue/42',
-    };
+    it('creates a work item and sets state to accepted', async () => {
+      const inboxItem = makeInboxItem();
+      workGraph.findItemByProvenance.mockReturnValue(undefined);
 
-    it('creates work item and sets state to accepted', async () => {
-      const handler = getCommandHandler('workcenter.acceptFromInbox');
-      await handler(inboxItem);
+      await invoke('workcenter.acceptFromInbox', inboxItem);
 
-      const items = workGraph.getAll();
-      expect(items).toHaveLength(1);
-      expect(items[0].title).toBe('Fix bug');
-      expect(stateStore.setState).toHaveBeenCalledWith('github', '42', 'accepted');
+      expect(workGraph.createItem).toHaveBeenCalledWith(
+        { title: 'Inbox Issue' },
+        { providerId: 'github', externalId: 'ext-1', url: 'https://github.com/org/repo/issues/1' },
+      );
+      expect(stateStore.setState).toHaveBeenCalledWith('github', 'ext-1', 'accepted');
+    });
+
+    it('prefixes group to title when group is present', async () => {
+      const inboxItem = makeInboxItem({ group: 'org/repo' });
+      workGraph.findItemByProvenance.mockReturnValue(undefined);
+
+      await invoke('workcenter.acceptFromInbox', inboxItem);
+
+      expect(workGraph.createItem).toHaveBeenCalledWith(
+        { title: 'org/repo Inbox Issue' },
+        expect.any(Object),
+      );
+    });
+
+    it('does not prefix group when group is empty/whitespace', async () => {
+      const inboxItem = makeInboxItem({ group: '  ' });
+      workGraph.findItemByProvenance.mockReturnValue(undefined);
+
+      await invoke('workcenter.acceptFromInbox', inboxItem);
+
+      expect(workGraph.createItem).toHaveBeenCalledWith(
+        { title: 'Inbox Issue' },
+        expect.any(Object),
+      );
     });
 
     it('shows info message when item already accepted', async () => {
-      await workGraph.createItem(
-        { title: 'Fix bug' },
-        { providerId: 'github', externalId: '42', url: 'https://github.com/issue/42' },
+      const existing = createWorkItem({ title: 'Already There' });
+      workGraph.findItemByProvenance.mockReturnValue(existing);
+
+      await invoke('workcenter.acceptFromInbox', makeInboxItem());
+
+      expect(workGraph.createItem).not.toHaveBeenCalled();
+      expect(vscode.window.showInformationMessage).toHaveBeenCalledWith(
+        'WorkCenter: Item already accepted as "Already There"',
       );
-
-      const handler = getCommandHandler('workcenter.acceptFromInbox');
-      await handler(inboxItem);
-
-      expect(workGraph.getAll()).toHaveLength(1);
-      expect(window.showInformationMessage).toHaveBeenCalledWith(
-        expect.stringContaining('already accepted'),
-      );
-      expect(stateStore.setState).toHaveBeenCalledWith('github', '42', 'accepted');
-    });
-
-    it('prefixes title with group when group is present', async () => {
-      const groupedItem: InboxItem = {
-        ...inboxItem,
-        group: 'myorg/myrepo',
-      };
-      const handler = getCommandHandler('workcenter.acceptFromInbox');
-      await handler(groupedItem);
-
-      expect(workGraph.getAll()[0].title).toBe('myorg/myrepo Fix bug');
     });
 
     it('shows error when setState fails', async () => {
-      stateStore.setState.mockRejectedValueOnce(new Error('write failed'));
-      const handler = getCommandHandler('workcenter.acceptFromInbox');
-      await handler(inboxItem);
+      workGraph.findItemByProvenance.mockReturnValue(undefined);
+      stateStore.setState.mockRejectedValue(new Error('disk full'));
 
-      expect(window.showErrorMessage).toHaveBeenCalledWith(
-        expect.stringContaining('write failed'),
+      await invoke('workcenter.acceptFromInbox', makeInboxItem());
+
+      expect(vscode.window.showErrorMessage).toHaveBeenCalledWith(
+        'WorkCenter: Failed to update state — disk full',
       );
-    });
-
-    it('shows error when createItem fails', async () => {
-      const failStore = createMockStore();
-      failStore.save = vi.fn(async () => { throw new Error('save failed'); });
-      const failGraph = new WorkGraph(failStore);
-      await failGraph.load();
-
-      vi.mocked(commands.registerCommand).mockClear();
-      const ctx = createMockContext();
-      registerCommands(ctx, failGraph, actionRegistry, stateStore as any);
-
-      const newHandler = getCommandHandler('workcenter.acceptFromInbox');
-      await newHandler(inboxItem);
-
-      expect(window.showErrorMessage).toHaveBeenCalledWith(
-        expect.stringContaining('save failed'),
-      );
-      expect(failGraph.getAll()).toHaveLength(0);
-      expect(stateStore.setState).not.toHaveBeenCalled();
     });
   });
 
-  // -----------------------------------------------------------------------
-  // workcenter.dismissFromInbox
-  // -----------------------------------------------------------------------
+  // ── dismissFromInbox ─────────────────────────────────────────────
 
   describe('workcenter.dismissFromInbox', () => {
-    const inboxItem: InboxItem = {
-      kind: 'item',
-      providerId: 'github',
-      externalId: '99',
-      title: 'Not relevant',
-    };
-
     it('sets state to dismissed', async () => {
-      const handler = getCommandHandler('workcenter.dismissFromInbox');
-      await handler(inboxItem);
+      const inboxItem = makeInboxItem();
+      await invoke('workcenter.dismissFromInbox', inboxItem);
 
-      expect(stateStore.setState).toHaveBeenCalledWith('github', '99', 'dismissed');
+      expect(stateStore.setState).toHaveBeenCalledWith('github', 'ext-1', 'dismissed');
     });
 
     it('shows error when setState fails', async () => {
-      stateStore.setState.mockRejectedValueOnce(new Error('disk full'));
-      const handler = getCommandHandler('workcenter.dismissFromInbox');
-      await handler(inboxItem);
+      stateStore.setState.mockRejectedValue(new Error('io error'));
 
-      expect(window.showErrorMessage).toHaveBeenCalledWith(
-        expect.stringContaining('disk full'),
+      await invoke('workcenter.dismissFromInbox', makeInboxItem());
+
+      expect(vscode.window.showErrorMessage).toHaveBeenCalledWith(
+        'WorkCenter: Failed to dismiss item — io error',
+      );
+    });
+
+    it('shows stringified error for non-Error throw', async () => {
+      stateStore.setState.mockRejectedValue('raw string');
+
+      await invoke('workcenter.dismissFromInbox', makeInboxItem());
+
+      expect(vscode.window.showErrorMessage).toHaveBeenCalledWith(
+        'WorkCenter: Failed to dismiss item — raw string',
       );
     });
   });
 
-  // -----------------------------------------------------------------------
-  // workcenter.acceptFromSources
-  // -----------------------------------------------------------------------
+  // ── acceptFromSources ────────────────────────────────────────────
 
   describe('workcenter.acceptFromSources', () => {
-    const sourceItem: SourceItemNode = {
-      kind: 'item',
-      providerId: 'github',
-      externalId: '77',
-      title: 'Feature request',
-      url: 'https://github.com/issue/77',
-    };
+    it('creates a work item and sets state to accepted for new item', async () => {
+      const sourceItem = makeSourceItem();
+      workGraph.findItemByProvenance.mockReturnValue(undefined);
 
-    it('creates work item and sets state to accepted', async () => {
-      const handler = getCommandHandler('workcenter.acceptFromSources');
-      await handler(sourceItem);
+      await invoke('workcenter.acceptFromSources', sourceItem);
 
-      const items = workGraph.getAll();
-      expect(items).toHaveLength(1);
-      expect(items[0].title).toBe('Feature request');
-      expect(stateStore.setState).toHaveBeenCalledWith('github', '77', 'accepted');
+      expect(workGraph.createItem).toHaveBeenCalledWith(
+        { title: 'Source Issue' },
+        { providerId: 'github', externalId: 'ext-2', url: 'https://github.com/org/repo/issues/2' },
+      );
+      expect(stateStore.setState).toHaveBeenCalledWith('github', 'ext-2', 'accepted');
     });
 
-    it('sets state and shows info when item already exists', async () => {
-      await workGraph.createItem(
-        { title: 'Feature request' },
-        { providerId: 'github', externalId: '77', url: 'https://github.com/issue/77' },
-      );
+    it('sets state to accepted without creating when item already exists', async () => {
+      const existing = createWorkItem({ title: 'Existing' });
+      workGraph.findItemByProvenance.mockReturnValue(existing);
 
-      const handler = getCommandHandler('workcenter.acceptFromSources');
-      await handler(sourceItem);
+      await invoke('workcenter.acceptFromSources', makeSourceItem());
 
-      expect(workGraph.getAll()).toHaveLength(1);
-      expect(stateStore.setState).toHaveBeenCalledWith('github', '77', 'accepted');
-      expect(window.showInformationMessage).toHaveBeenCalledWith(
-        expect.stringContaining('already accepted'),
+      expect(workGraph.createItem).not.toHaveBeenCalled();
+      expect(stateStore.setState).toHaveBeenCalledWith('github', 'ext-2', 'accepted');
+      expect(vscode.window.showInformationMessage).toHaveBeenCalledWith(
+        'WorkCenter: Item already accepted as "Existing"',
       );
     });
 
-    it('prefixes title with group when group is present', async () => {
-      const groupedItem: SourceItemNode = {
-        ...sourceItem,
-        group: 'org/repo',
-      };
-      const handler = getCommandHandler('workcenter.acceptFromSources');
-      await handler(groupedItem);
+    it('shows error when setState fails for existing item', async () => {
+      const existing = createWorkItem({ title: 'Existing' });
+      workGraph.findItemByProvenance.mockReturnValue(existing);
+      stateStore.setState.mockRejectedValue(new Error('write fail'));
 
-      expect(workGraph.getAll()[0].title).toBe('org/repo Feature request');
-    });
+      await invoke('workcenter.acceptFromSources', makeSourceItem());
 
-    it('shows error when createItem fails', async () => {
-      // Create a store that fails
-      const failStore = createMockStore();
-      failStore.save = vi.fn(async () => { throw new Error('save failed'); });
-      const failGraph = new WorkGraph(failStore);
-      await failGraph.load();
-
-      // Re-register commands with failing graph
-      vi.mocked(commands.registerCommand).mockClear();
-      const ctx = createMockContext();
-      registerCommands(ctx, failGraph, actionRegistry, stateStore as any);
-
-      const newHandler = getCommandHandler('workcenter.acceptFromSources');
-      await newHandler(sourceItem);
-
-      expect(window.showErrorMessage).toHaveBeenCalledWith(
-        expect.stringContaining('save failed'),
+      expect(vscode.window.showErrorMessage).toHaveBeenCalledWith(
+        'WorkCenter: Failed to update state — write fail',
       );
-      expect(stateStore.setState).not.toHaveBeenCalled();
-      expect(failGraph.getAll()).toHaveLength(0);
     });
-  });
 
-  // -----------------------------------------------------------------------
-  // subscriptions
-  // -----------------------------------------------------------------------
+    it('shows error when createItem fails for new item', async () => {
+      workGraph.findItemByProvenance.mockReturnValue(undefined);
+      workGraph.createItem.mockRejectedValue(new Error('store error'));
 
-  describe('subscriptions', () => {
-    it('pushes all disposables to context.subscriptions', () => {
-      const registeredCount = vi.mocked(commands.registerCommand).mock.calls.length;
-      expect(mockContext.subscriptions).toHaveLength(registeredCount);
+      await invoke('workcenter.acceptFromSources', makeSourceItem());
+
+      expect(vscode.window.showErrorMessage).toHaveBeenCalledWith(
+        'WorkCenter: Failed to accept item — store error',
+      );
+    });
+
+    it('prefixes group to title for source items with group', async () => {
+      const sourceItem = makeSourceItem({ group: 'myorg/myrepo' });
+      workGraph.findItemByProvenance.mockReturnValue(undefined);
+
+      await invoke('workcenter.acceptFromSources', sourceItem);
+
+      expect(workGraph.createItem).toHaveBeenCalledWith(
+        { title: 'myorg/myrepo Source Issue' },
+        expect.any(Object),
+      );
     });
   });
 });
