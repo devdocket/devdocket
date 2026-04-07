@@ -3,7 +3,7 @@ import { ViewColumn, window } from 'vscode';
 import { WorkItem, WorkItemState } from '../models/workItem';
 import { WorkItemEditorPanel } from '../views/workItemEditorPanel';
 
-type MessageHandler = (msg: any) => Promise<void>;
+type MessageHandler = (msg: any) => void | Promise<void>;
 type DisposeHandler = () => void;
 
 function makeItem(overrides: Partial<WorkItem> = {}): WorkItem {
@@ -197,16 +197,25 @@ describe('WorkItemEditorPanel', () => {
   });
 
   describe('message handling (autosave)', () => {
+    beforeEach(() => {
+      vi.useFakeTimers();
+    });
+
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
     it('should save title and notes on autosave message', async () => {
       const item = makeItem({ title: 'Old Title' });
       const workGraph = createMockWorkGraph(item);
       const mock = createMockWebviewPanel();
       openPanel(item, workGraph, mock);
 
-      await mock.simulateMessage({
+      mock.simulateMessage({
         type: 'autosave',
         data: { title: 'New Title', notes: 'Some notes' },
       });
+      await vi.advanceTimersByTimeAsync(300);
 
       expect(workGraph.updateItem).toHaveBeenCalledWith('item-1', {
         title: 'New Title',
@@ -220,10 +229,11 @@ describe('WorkItemEditorPanel', () => {
       const mock = createMockWebviewPanel();
       openPanel(item, workGraph, mock);
 
-      await mock.simulateMessage({
+      mock.simulateMessage({
         type: 'autosave',
         data: { title: 'Updated Title', notes: '' },
       });
+      await vi.advanceTimersByTimeAsync(300);
 
       expect(mock.panel.title).toBe('Edit: Updated Title');
     });
@@ -235,10 +245,11 @@ describe('WorkItemEditorPanel', () => {
       openPanel(item, workGraph, mock);
       mock.panel.title = 'Edit: Provider Title';
 
-      await mock.simulateMessage({
+      mock.simulateMessage({
         type: 'autosave',
         data: { title: 'Provider Title', notes: 'new note' },
       });
+      await vi.advanceTimersByTimeAsync(300);
 
       // Title should not change for provider items (title not in patch)
       expect(mock.panel.title).toBe('Edit: Provider Title');
@@ -250,10 +261,11 @@ describe('WorkItemEditorPanel', () => {
       const mock = createMockWebviewPanel();
       openPanel(item, workGraph, mock);
 
-      await mock.simulateMessage({
+      mock.simulateMessage({
         type: 'autosave',
         data: { title: '', notes: 'Some notes' },
       });
+      await vi.advanceTimersByTimeAsync(300);
 
       expect(workGraph.updateItem).not.toHaveBeenCalled();
     });
@@ -264,10 +276,11 @@ describe('WorkItemEditorPanel', () => {
       const mock = createMockWebviewPanel();
       openPanel(item, workGraph, mock);
 
-      await mock.simulateMessage({
+      mock.simulateMessage({
         type: 'autosave',
         data: { title: 'Provider Item', notes: 'Updated notes' },
       });
+      await vi.advanceTimersByTimeAsync(300);
 
       expect(workGraph.updateItem).toHaveBeenCalledWith('item-1', {
         notes: 'Updated notes',
@@ -280,10 +293,11 @@ describe('WorkItemEditorPanel', () => {
       const mock = createMockWebviewPanel();
       openPanel(item, workGraph, mock);
 
-      await mock.simulateMessage({
+      mock.simulateMessage({
         type: 'autosave',
         data: { title: 'Test item', notes: '' },
       });
+      await vi.advanceTimersByTimeAsync(300);
 
       expect(workGraph.updateItem).toHaveBeenCalledWith('item-1', {
         title: 'Test item',
@@ -300,10 +314,11 @@ describe('WorkItemEditorPanel', () => {
       // Make item disappear after panel was created
       workGraph.getItem.mockReturnValue(undefined);
 
-      await mock.simulateMessage({
+      mock.simulateMessage({
         type: 'autosave',
         data: { title: 'New', notes: '' },
       });
+      await vi.advanceTimersByTimeAsync(300);
 
       expect(window.showErrorMessage).toHaveBeenCalledWith(
         expect.stringContaining('no longer exists'),
@@ -318,10 +333,11 @@ describe('WorkItemEditorPanel', () => {
 
       workGraph.updateItem.mockRejectedValue(new Error('disk full'));
 
-      await mock.simulateMessage({
+      mock.simulateMessage({
         type: 'autosave',
         data: { title: 'Test item', notes: '' },
       });
+      await vi.advanceTimersByTimeAsync(300);
 
       expect(window.showErrorMessage).toHaveBeenCalledWith(
         expect.stringContaining('disk full'),
@@ -336,10 +352,11 @@ describe('WorkItemEditorPanel', () => {
 
       workGraph.updateItem.mockRejectedValue('string error');
 
-      await mock.simulateMessage({
+      mock.simulateMessage({
         type: 'autosave',
         data: { title: 'Test item', notes: '' },
       });
+      await vi.advanceTimersByTimeAsync(300);
 
       expect(window.showErrorMessage).toHaveBeenCalledWith(
         expect.stringContaining('string error'),
@@ -352,7 +369,8 @@ describe('WorkItemEditorPanel', () => {
       const mock = createMockWebviewPanel();
       openPanel(item, workGraph, mock);
 
-      await mock.simulateMessage({ type: 'unknown', data: {} });
+      mock.simulateMessage({ type: 'unknown', data: {} });
+      await vi.advanceTimersByTimeAsync(300);
 
       expect(workGraph.updateItem).not.toHaveBeenCalled();
     });
@@ -364,12 +382,38 @@ describe('WorkItemEditorPanel', () => {
       openPanel(item, workGraph, mock);
 
       // Simulate message without 'notes' key in data
-      await mock.simulateMessage({
+      mock.simulateMessage({
         type: 'autosave',
         data: { title: 'Provider Item' },
       });
+      await vi.advanceTimersByTimeAsync(300);
 
       expect(workGraph.updateItem).not.toHaveBeenCalled();
+    });
+
+    it('should debounce rapid autosave messages and only save the latest', async () => {
+      const item = makeItem();
+      const workGraph = createMockWorkGraph(item);
+      const mock = createMockWebviewPanel();
+      openPanel(item, workGraph, mock);
+
+      mock.simulateMessage({
+        type: 'autosave',
+        data: { title: 'First', notes: '' },
+      });
+      await vi.advanceTimersByTimeAsync(100);
+
+      mock.simulateMessage({
+        type: 'autosave',
+        data: { title: 'Second', notes: 'final notes' },
+      });
+      await vi.advanceTimersByTimeAsync(300);
+
+      expect(workGraph.updateItem).toHaveBeenCalledTimes(1);
+      expect(workGraph.updateItem).toHaveBeenCalledWith('item-1', {
+        title: 'Second',
+        notes: 'final notes',
+      });
     });
   });
 
@@ -416,6 +460,7 @@ describe('WorkItemEditorPanel', () => {
     });
 
     it('should not update panel title after disposal', async () => {
+      vi.useFakeTimers();
       const item = makeItem({ title: 'Original' });
       const workGraph = createMockWorkGraph(item);
       const mock = createMockWebviewPanel();
@@ -426,13 +471,15 @@ describe('WorkItemEditorPanel', () => {
       mock.panel.title = 'Edit: Original';
 
       // Then try to save
-      await mock.simulateMessage({
+      mock.simulateMessage({
         type: 'autosave',
         data: { title: 'Changed', notes: '' },
       });
+      await vi.advanceTimersByTimeAsync(300);
 
       // Title should remain unchanged because panel is disposed
       expect(mock.panel.title).toBe('Edit: Original');
+      vi.useRealTimers();
     });
   });
 
