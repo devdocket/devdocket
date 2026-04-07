@@ -1,3 +1,5 @@
+// Minimal re-declarations to avoid depending on the vscode module
+
 /** A handle that releases a resource when disposed. */
 export interface Disposable {
   dispose(): void;
@@ -34,7 +36,7 @@ export interface EventEmitterLike<T> {
 
 /**
  * Base class for WorkCenter providers that need periodic refresh.
- * Owns the EventEmitter lifecycle, refresh timer, and dispose logic.
+ * Owns the EventEmitter lifecycle, refresh timer, concurrency guard, and dispose logic.
  */
 export abstract class BaseProvider {
   protected readonly _onDidDiscoverItems: EventEmitterLike<DiscoveredItem[]>;
@@ -42,6 +44,10 @@ export abstract class BaseProvider {
 
   private refreshTimer: ReturnType<typeof setInterval> | undefined;
   protected _isRefreshing = false;
+  private _disposed = false;
+
+  /** Optional error handler for background refresh failures. Override to add logging. */
+  protected onBackgroundRefreshError: (error: unknown) => void = () => {};
 
   constructor(emitter: EventEmitterLike<DiscoveredItem[]>) {
     this._onDidDiscoverItems = emitter;
@@ -49,6 +55,9 @@ export abstract class BaseProvider {
   }
 
   startPeriodicRefresh(intervalSeconds: number): void {
+    if (this._disposed) {
+      return;
+    }
     this.stopPeriodicRefresh();
     const interval = Number(intervalSeconds);
     if (!Number.isFinite(interval) || interval <= 0) {
@@ -56,8 +65,12 @@ export abstract class BaseProvider {
     }
     const clampedInterval = Math.max(interval, 60);
     this.refreshTimer = setInterval(() => {
-      this.refreshInBackground().catch((err: unknown) => {
-        this.onPeriodicRefreshError(err);
+      this.refreshInBackground().catch((error: unknown) => {
+        try {
+          this.onBackgroundRefreshError(error);
+        } catch {
+          // Prevent handler errors from becoming unhandled rejections
+        }
       });
     }, clampedInterval * 1000);
   }
@@ -69,20 +82,29 @@ export abstract class BaseProvider {
     }
   }
 
-  /**
-   * Called when the periodic refresh timer catches an unhandled error from
-   * {@link refreshInBackground}. Override to route errors to a custom logger.
-   * The default writes to `console.error` so failures are never silently swallowed.
-   */
-  protected onPeriodicRefreshError(err: unknown): void {
-    console.error('Periodic refresh failed:', err);
+  /** Runs a background refresh with a concurrency guard to prevent overlapping calls. */
+  async refreshInBackground(): Promise<void> {
+    if (this._isRefreshing || this._disposed) {
+      return;
+    }
+    this._isRefreshing = true;
+    try {
+      await this.doBackgroundRefresh();
+    } finally {
+      this._isRefreshing = false;
+    }
   }
 
-  protected abstract refreshInBackground(): Promise<void>;
+  /** Override to provide the background refresh implementation. */
+  protected abstract doBackgroundRefresh(): Promise<void>;
 
-  abstract refresh(): Promise<void>;
+  abstract refresh(token?: unknown): Promise<void>;
 
   dispose(): void {
+    if (this._disposed) {
+      return;
+    }
+    this._disposed = true;
     this.stopPeriodicRefresh();
     this._onDidDiscoverItems.dispose();
   }

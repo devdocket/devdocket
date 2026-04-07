@@ -1,15 +1,6 @@
 import * as vscode from 'vscode';
+import { BaseProvider, DiscoveredItem, isValidUrlSegment } from '@workcenter/shared';
 import { logger } from './logger';
-import { BaseProvider } from '@workcenter/shared';
-import type { DiscoveredItem, Event } from '@workcenter/shared';
-
-interface WorkCenterProvider {
-  readonly id: string;
-  readonly label: string;
-  readonly resurfaceDismissed?: boolean;
-  readonly onDidDiscoverItems: Event<DiscoveredItem[]>;
-  refresh(token?: vscode.CancellationToken): Promise<void>;
-}
 
 interface AdoPullRequest {
   pullRequestId: number;
@@ -30,7 +21,7 @@ interface ConnectionData {
 // Azure DevOps REST API scope for authentication
 const ADO_AUTH_SCOPE = '499b84ac-1321-427f-aa17-267ca6975798/.default';
 
-export class AdoPrReviewProvider extends BaseProvider implements WorkCenterProvider {
+export class AdoPrReviewProvider extends BaseProvider {
   readonly id = 'ado-pr-reviews';
   readonly label = 'Azure DevOps PR Reviews';
   readonly resurfaceDismissed = true;
@@ -73,12 +64,7 @@ export class AdoPrReviewProvider extends BaseProvider implements WorkCenterProvi
     }
   }
 
-  protected async refreshInBackground(): Promise<void> {
-    if (this._isRefreshing) {
-      return;
-    }
-
-    this._isRefreshing = true;
+  protected async doBackgroundRefresh(): Promise<void> {
     try {
       logger.info('Fetching ADO PR reviews...');
       const session = await vscode.authentication.getSession('microsoft', [ADO_AUTH_SCOPE], {
@@ -92,12 +78,15 @@ export class AdoPrReviewProvider extends BaseProvider implements WorkCenterProvi
       await this.fetchAndPublishPrs(session.accessToken, false, session.account.id);
     } catch (err) {
       logger.error('Failed to fetch PR reviews:', err);
-    } finally {
-      this._isRefreshing = false;
     }
   }
 
   private async fetchAndPublishPrs(accessToken: string, isUserTriggered: boolean, sessionAccountId: string): Promise<void> {
+    if (!isValidUrlSegment(this.org)) {
+      logger.warn('Skipping PR fetch: invalid ADO organization name', this.org);
+      return;
+    }
+
     const userId = await this.getUserId(accessToken, sessionAccountId);
     if (!userId) {
       const message = 'Failed to determine Azure DevOps user identity';
@@ -109,7 +98,21 @@ export class AdoPrReviewProvider extends BaseProvider implements WorkCenterProvi
       return;
     }
 
-    const projectList = this.projects.length > 0 ? this.projects : [''];
+    const validProjects: string[] = [];
+    for (const project of this.projects) {
+      if (project === '' || isValidUrlSegment(project)) {
+        validProjects.push(project);
+      } else {
+        logger.warn('Skipping invalid ADO project name', project);
+      }
+    }
+
+    if (this.projects.length > 0 && validProjects.length === 0) {
+      logger.warn('All configured ADO projects are invalid — skipping PR fetch');
+      return;
+    }
+
+    const projectList = validProjects.length > 0 ? validProjects : [''];
     const results = await Promise.allSettled(
       projectList.map(project => this.fetchPrsForProject(accessToken, project, userId)),
     );
