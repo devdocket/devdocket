@@ -1,31 +1,6 @@
 import * as vscode from 'vscode';
+import { BaseProvider, DiscoveredItem } from '@workcenter/shared';
 import { logger } from './logger';
-
-// Re-declared to match core API contract — separate extension cannot import core types directly
-interface Disposable {
-  dispose(): void;
-}
-
-// Re-declared to match core API contract — separate extension cannot import core types directly
-interface Event<T> {
-  (listener: (e: T) => void): Disposable;
-}
-
-interface DiscoveredItem {
-  externalId: string;
-  title: string;
-  description?: string;
-  url?: string;
-  group?: string;
-}
-
-interface WorkCenterProvider {
-  readonly id: string;
-  readonly label: string;
-  readonly resurfaceDismissed?: boolean;
-  readonly onDidDiscoverItems: Event<DiscoveredItem[]>;
-  refresh(token?: vscode.CancellationToken): Promise<void>;
-}
 
 interface GitHubIssue {
   number: number;
@@ -36,36 +11,12 @@ interface GitHubIssue {
   pull_request?: unknown;
 }
 
-export class GitHubIssueProvider implements WorkCenterProvider {
+export class GitHubIssueProvider extends BaseProvider {
   readonly id = 'github';
   readonly label = 'GitHub Issues';
 
-  private readonly _onDidDiscoverItems = new vscode.EventEmitter<DiscoveredItem[]>();
-  readonly onDidDiscoverItems = this._onDidDiscoverItems.event;
-
-  private refreshTimer: ReturnType<typeof setInterval> | undefined;
-  private _isRefreshing = false;
-
-  startPeriodicRefresh(intervalSeconds: number): void {
-    this.stopPeriodicRefresh();
-    const interval = Number(intervalSeconds);
-    if (!Number.isFinite(interval) || interval <= 0) {
-      return;
-    }
-    // Clamp to minimum of 60 seconds
-    const clampedInterval = Math.max(interval, 60);
-    this.refreshTimer = setInterval(() => {
-      this.refreshInBackground().catch((err) => {
-        logger.error('Refresh failed', err);
-      });
-    }, clampedInterval * 1000);
-  }
-
-  stopPeriodicRefresh(): void {
-    if (this.refreshTimer) {
-      clearInterval(this.refreshTimer);
-      this.refreshTimer = undefined;
-    }
+  constructor() {
+    super(new vscode.EventEmitter<DiscoveredItem[]>());
   }
 
   async refresh(token?: vscode.CancellationToken): Promise<void> {
@@ -96,12 +47,7 @@ export class GitHubIssueProvider implements WorkCenterProvider {
     }
   }
 
-  private async refreshInBackground(): Promise<void> {
-    if (this._isRefreshing) {
-      return;
-    }
-
-    this._isRefreshing = true;
+  protected async doBackgroundRefresh(): Promise<void> {
     try {
       const session = await vscode.authentication.getSession('github', ['repo'], {
         createIfNone: false,
@@ -114,8 +60,6 @@ export class GitHubIssueProvider implements WorkCenterProvider {
       await this.fetchAndPublishIssues(session.accessToken, false);
     } catch (err) {
       logger.error('Failed to fetch issues', err);
-    } finally {
-      this._isRefreshing = false;
     }
   }
 
@@ -294,8 +238,4 @@ export class GitHubIssueProvider implements WorkCenterProvider {
     return match ? match[1] : null;
   }
 
-  dispose(): void {
-    this.stopPeriodicRefresh();
-    this._onDidDiscoverItems.dispose();
-  }
 }
