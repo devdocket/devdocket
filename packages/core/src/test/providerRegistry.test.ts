@@ -524,6 +524,145 @@ describe('ProviderRegistry', () => {
     });
   });
 
+  describe('rapid updates', () => {
+    it('handles rapid item fires from the same provider', async () => {
+      const provider = createMockProvider('rapid');
+      registry.register(provider);
+
+      // Fire items rapidly in succession
+      provider.fireItems([{ externalId: '1', title: 'First' }]);
+      provider.fireItems([{ externalId: '2', title: 'Second' }]);
+      provider.fireItems([{ externalId: '3', title: 'Third' }]);
+
+      // Last fire wins — items are replaced, not accumulated
+      await vi.waitFor(() => {
+        const items = registry.getDiscoveredItems('rapid');
+        expect(items).toHaveLength(1);
+        expect(items[0].externalId).toBe('3');
+      });
+    });
+
+    it('fires onDidChangeDiscoveredItems for each rapid update', async () => {
+      const provider = createMockProvider('rapid');
+      registry.register(provider);
+
+      // Wait for registration/refresh to fully complete
+      await vi.waitFor(() => expect(registry.loading).toBe(false));
+
+      const listener = vi.fn();
+      registry.onDidChangeDiscoveredItems(listener);
+
+      provider.fireItems([{ externalId: '1', title: 'A' }]);
+      provider.fireItems([{ externalId: '2', title: 'B' }]);
+
+      await vi.waitFor(() => expect(listener).toHaveBeenCalledTimes(2));
+    });
+
+    it('handles interleaved fires from multiple providers', async () => {
+      const p1 = createMockProvider('alpha');
+      const p2 = createMockProvider('beta');
+      registry.register(p1);
+      registry.register(p2);
+
+      p1.fireItems([{ externalId: 'a1', title: 'Alpha 1' }]);
+      p2.fireItems([{ externalId: 'b1', title: 'Beta 1' }]);
+      p1.fireItems([{ externalId: 'a2', title: 'Alpha 2' }]);
+
+      await vi.waitFor(() => {
+        expect(registry.getDiscoveredItems('alpha')).toHaveLength(1);
+        expect(registry.getDiscoveredItems('alpha')[0].externalId).toBe('a2');
+        expect(registry.getDiscoveredItems('beta')).toHaveLength(1);
+        expect(registry.getDiscoveredItems('beta')[0].externalId).toBe('b1');
+      });
+    });
+
+    it('correctly counts new unseen items across rapid fires', async () => {
+      const provider = createMockProvider('rapid');
+      registry.register(provider);
+
+      const unseenListener = vi.fn();
+      registry.onDidAddNewUnseenItems(unseenListener);
+
+      // Rapid fires — each produces a new unseen item
+      provider.fireItems([{ externalId: '1', title: 'One' }]);
+      provider.fireItems([{ externalId: '2', title: 'Two' }]);
+      provider.fireItems([{ externalId: '3', title: 'Three' }]);
+
+      // Each fire triggers handleDiscoveredItems, so unseenListener fires per batch
+      await vi.waitFor(() => expect(unseenListener).toHaveBeenCalledTimes(3));
+      // Each call should report exactly 1 new unseen item
+      expect(unseenListener).toHaveBeenNthCalledWith(1, 1);
+      expect(unseenListener).toHaveBeenNthCalledWith(2, 1);
+      expect(unseenListener).toHaveBeenNthCalledWith(3, 1);
+    });
+  });
+
+  describe('edge cases', () => {
+    it('handles empty items array from provider', async () => {
+      const provider = createMockProvider('empty');
+      registry.register(provider);
+
+      // Wait for initial refresh to complete so we isolate the empty-fire behavior
+      await vi.waitFor(() => expect(registry.loading).toBe(false));
+
+      stateStore.setStates.mockClear();
+      const changeListener = vi.fn();
+      registry.onDidChangeDiscoveredItems(changeListener);
+
+      provider.fireItems([]);
+
+      await vi.waitFor(() => expect(changeListener).toHaveBeenCalled());
+      expect(registry.getDiscoveredItems('empty')).toEqual([]);
+      // No unseen items to set
+      expect(stateStore.setStates).not.toHaveBeenCalled();
+    });
+
+    it('deregistration clears discovered items', () => {
+      const provider = createMockProvider('clearme');
+      const disposable = registry.register(provider);
+
+      provider.fireItems([{ externalId: '1', title: 'Item' }]);
+      expect(registry.getDiscoveredItems('clearme')).toHaveLength(1);
+
+      disposable.dispose();
+      expect(registry.getDiscoveredItems('clearme')).toEqual([]);
+    });
+
+    it('deregistration removes loading state', async () => {
+      const provider = createMockProvider('loadclear');
+      // Make refresh hang
+      provider.refresh = vi.fn(() => new Promise(() => {}));
+      const disposable = registry.register(provider);
+
+      expect(registry.loading).toBe(true);
+      disposable.dispose();
+      expect(registry.loading).toBe(false);
+    });
+
+    it('fires onDidChangeDiscoveredItems on deregistration', async () => {
+      const provider = createMockProvider('notify');
+      const disposable = registry.register(provider);
+
+      // Wait for initial refresh to complete
+      await vi.waitFor(() => expect(registry.loading).toBe(false));
+
+      const listener = vi.fn();
+      registry.onDidChangeDiscoveredItems(listener);
+
+      disposable.dispose();
+
+      await vi.waitFor(() => expect(listener).toHaveBeenCalledTimes(1));
+    });
+
+    it('fires onDidRegisterProvider on registration', () => {
+      const listener = vi.fn();
+      registry.onDidRegisterProvider(listener);
+
+      registry.register(createMockProvider('notifyreg'));
+      expect(listener).toHaveBeenCalledTimes(1);
+    });
+  });
+
   describe('refresh timeout', () => {
     beforeEach(() => {
       vi.useFakeTimers();
