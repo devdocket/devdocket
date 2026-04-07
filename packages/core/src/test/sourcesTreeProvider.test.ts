@@ -73,14 +73,31 @@ describe('SourcesTreeProvider', () => {
       expect((children[0] as SourceProviderNode).providerId).toBe('gh');
     });
 
-    it('should show multiple provider nodes', () => {
+    it('should show multiple provider nodes sorted alphabetically', () => {
       registry._setLabel('gh', 'GitHub');
       registry._setLabel('jira', 'Jira');
+      registry._setLabel('ado', 'Azure DevOps');
       registry._setItems('gh', [{ externalId: '1', title: 'A' }]);
       registry._setItems('jira', [{ externalId: '2', title: 'B' }]);
+      registry._setItems('ado', [{ externalId: '3', title: 'C' }]);
+
+      const children = provider.getChildren();
+      expect(children).toHaveLength(3);
+      const labels = children.map((c) => (c as SourceProviderNode).label);
+      expect(labels).toEqual(['Azure DevOps', 'GitHub', 'Jira']);
+    });
+
+    it('should handle duplicate provider labels from different provider IDs', () => {
+      registry._setLabel('gh1', 'GitHub');
+      registry._setLabel('gh2', 'GitHub');
+      registry._setItems('gh1', [{ externalId: '1', title: 'A' }]);
+      registry._setItems('gh2', [{ externalId: '2', title: 'B' }]);
 
       const children = provider.getChildren();
       expect(children).toHaveLength(2);
+      expect(children.every((c) => (c as SourceProviderNode).label === 'GitHub')).toBe(true);
+      const ids = children.map((c) => (c as SourceProviderNode).providerId).sort();
+      expect(ids).toEqual(['gh1', 'gh2']);
     });
 
     it('should hide provider with empty items', () => {
@@ -133,6 +150,23 @@ describe('SourcesTreeProvider', () => {
       const kinds = children.map((c) => c.kind);
       expect(kinds).toContain('group');
       expect(kinds).toContain('item');
+    });
+
+    it('should sort children alphabetically (groups and items mixed)', () => {
+      registry._setItems('gh', [
+        { externalId: '1', title: 'Zebra' },
+        { externalId: '2', title: 'Grouped', group: 'Alpha Group' },
+        { externalId: '3', title: 'Apple' },
+      ]);
+
+      const providerNode: SourceProviderNode = { kind: 'provider', providerId: 'gh', label: 'GitHub' };
+      const children = provider.getChildren(providerNode);
+
+      expect(children).toHaveLength(3);
+      const labels = children.map((c) =>
+        c.kind === 'group' ? (c as SourceGroupNode).groupName : (c as SourceItemNode).title,
+      );
+      expect(labels).toEqual(['Alpha Group', 'Apple', 'Zebra']);
     });
   });
 
@@ -396,6 +430,52 @@ describe('SourcesTreeProvider', () => {
 
       stateStore._fire();
       expect(listener).toHaveBeenCalledTimes(1);
+    });
+
+    it('should refresh when refresh() is called explicitly', () => {
+      const listener = vi.fn();
+      provider.onDidChangeTreeData(listener);
+
+      provider.refresh();
+      expect(listener).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  describe('tooltip', () => {
+    it('should include title in tooltip', () => {
+      const node: SourceItemNode = {
+        kind: 'item', providerId: 'gh', externalId: '1', title: 'My Item',
+      };
+      const treeItem = provider.getTreeItem(node);
+      expect(treeItem.tooltip).toBeDefined();
+      expect((treeItem.tooltip as any).value).toContain('My Item');
+      expect((treeItem.tooltip as any).value).not.toContain('Description');
+    });
+
+    it('should include description in tooltip when present', () => {
+      const node: SourceItemNode = {
+        kind: 'item', providerId: 'gh', externalId: '1', title: 'Item', description: 'Details here',
+      };
+      const treeItem = provider.getTreeItem(node);
+      expect(treeItem.tooltip).toBeDefined();
+      expect((treeItem.tooltip as any).value).toContain('Item');
+      expect((treeItem.tooltip as any).value).toContain('Details here');
+    });
+  });
+
+  describe('dispose', () => {
+    it('should dispose without errors', () => {
+      expect(() => provider.dispose()).not.toThrow();
+    });
+
+    it('should not fire events after dispose', () => {
+      const listener = vi.fn();
+      provider.onDidChangeTreeData(listener);
+      provider.dispose();
+      provider.refresh();
+      registry._fire();
+      stateStore._fire();
+      expect(listener).not.toHaveBeenCalled();
     });
   });
 });
