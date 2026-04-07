@@ -106,11 +106,18 @@ describe('DiscoveredStateStore', () => {
     store2.dispose();
   });
 
-  it('should handle corrupted JSON by throwing', async () => {
+  it('should handle corrupted JSON gracefully by loading empty and backing up', async () => {
     const filePath = path.join(tmpDir, 'discovered-state.json');
     await fs.writeFile(filePath, 'not valid json', 'utf-8');
 
-    await expect(store.load()).rejects.toThrow();
+    await store.load();
+    const records = await store.loadAll();
+    expect(records).toEqual([]);
+
+    // Verify the corrupted file was backed up
+    const files = await fs.readdir(tmpDir);
+    const backupFiles = files.filter(f => f.startsWith('discovered-state.json.corrupt.'));
+    expect(backupFiles).toHaveLength(1);
   });
 
   it('should serialize concurrent setState calls without lost writes', async () => {
@@ -174,6 +181,74 @@ describe('DiscoveredStateStore', () => {
     const raw = await fs.readFile(filePath, 'utf-8');
     expect(JSON.parse(raw)).toHaveLength(1);
     nestedStore.dispose();
+  });
+
+  describe('schema validation', () => {
+    it('should skip records missing providerId', async () => {
+      const filePath = path.join(tmpDir, 'discovered-state.json');
+      const data = [
+        { externalId: 'issue-1', inboxState: 'unseen' },
+        { providerId: 'gh', externalId: 'issue-2', inboxState: 'accepted' },
+      ];
+      await fs.writeFile(filePath, JSON.stringify(data), 'utf-8');
+
+      const records = await store.loadAll();
+      expect(records).toHaveLength(1);
+      expect(records[0].externalId).toBe('issue-2');
+    });
+
+    it('should skip records missing externalId', async () => {
+      const filePath = path.join(tmpDir, 'discovered-state.json');
+      const data = [
+        { providerId: 'gh', inboxState: 'unseen' },
+        { providerId: 'gh', externalId: 'issue-2', inboxState: 'accepted' },
+      ];
+      await fs.writeFile(filePath, JSON.stringify(data), 'utf-8');
+
+      const records = await store.loadAll();
+      expect(records).toHaveLength(1);
+      expect(records[0].externalId).toBe('issue-2');
+    });
+
+    it('should skip records with invalid inboxState', async () => {
+      const filePath = path.join(tmpDir, 'discovered-state.json');
+      const data = [
+        { providerId: 'gh', externalId: 'issue-1', inboxState: 'bogus' },
+        { providerId: 'gh', externalId: 'issue-2', inboxState: 'accepted' },
+      ];
+      await fs.writeFile(filePath, JSON.stringify(data), 'utf-8');
+
+      const records = await store.loadAll();
+      expect(records).toHaveLength(1);
+      expect(records[0].externalId).toBe('issue-2');
+    });
+
+    it('should return empty for non-array JSON and back up', async () => {
+      const filePath = path.join(tmpDir, 'discovered-state.json');
+      await fs.writeFile(filePath, JSON.stringify({ not: 'an array' }), 'utf-8');
+
+      const records = await store.loadAll();
+      expect(records).toEqual([]);
+
+      const files = await fs.readdir(tmpDir);
+      const backupFiles = files.filter(f => f.startsWith('discovered-state.json.corrupt.'));
+      expect(backupFiles).toHaveLength(1);
+    });
+
+    it('should skip non-object entries', async () => {
+      const filePath = path.join(tmpDir, 'discovered-state.json');
+      const data = [
+        'a string',
+        42,
+        null,
+        { providerId: 'gh', externalId: 'issue-1', inboxState: 'accepted' },
+      ];
+      await fs.writeFile(filePath, JSON.stringify(data), 'utf-8');
+
+      const records = await store.loadAll();
+      expect(records).toHaveLength(1);
+      expect(records[0].externalId).toBe('issue-1');
+    });
   });
 
   // ── setStates (batch) ─────────────────────────────────────────────
@@ -653,25 +728,72 @@ describe('DiscoveredStateStore', () => {
       expect(store.getState('gh', 'keep-2')).toBe('accepted');
     });
 
-    it('should throw on truncated JSON', async () => {
+    it('should auto-load persisted data when setState is called before explicit load', async () => {
+      // Pre-seed some data on disk
+      const filePath = path.join(tmpDir, 'discovered-state.json');
+      await fs.writeFile(filePath, JSON.stringify([
+        { providerId: 'gh', externalId: 'existing-1', inboxState: 'unseen' },
+      ]), 'utf-8');
+
+      // Create a fresh store and call setState without calling load() first
+      const freshStore = new DiscoveredStateStore(tmpDir);
+      await freshStore.setState('gh', 'new-1', 'accepted');
+
+      expect(freshStore.getState('gh', 'existing-1')).toBe('unseen');
+      expect(freshStore.getState('gh', 'new-1')).toBe('accepted');
+      freshStore.dispose();
+    });
+
+    it('should handle corrupt JSON gracefully by backing up and loading empty', async () => {
+      const filePath = path.join(tmpDir, 'discovered-state.json');
+      await fs.writeFile(filePath, '{broken: json!!!', 'utf-8');
+
+      await store.load();
+      const records = await store.loadAll();
+      expect(records).toEqual([]);
+
+      const files = await fs.readdir(tmpDir);
+      const backupFiles = files.filter(f => f.startsWith('discovered-state.json.corrupt.'));
+      expect(backupFiles).toHaveLength(1);
+    });
+
+    it('should handle truncated JSON gracefully by backing up and loading empty', async () => {
       const filePath = path.join(tmpDir, 'discovered-state.json');
       await fs.writeFile(filePath, `[{"providerId":"gh","externalId":"1","inboxState":"unseen"`, 'utf-8');
 
-      await expect(store.load()).rejects.toThrow();
+      await store.load();
+      const records = await store.loadAll();
+      expect(records).toEqual([]);
+
+      const files = await fs.readdir(tmpDir);
+      const backupFiles = files.filter(f => f.startsWith('discovered-state.json.corrupt.'));
+      expect(backupFiles).toHaveLength(1);
     });
 
-    it('should handle empty file as corrupt JSON', async () => {
+    it('should handle empty file gracefully by backing up and loading empty', async () => {
       const filePath = path.join(tmpDir, 'discovered-state.json');
       await fs.writeFile(filePath, '', 'utf-8');
 
-      await expect(store.load()).rejects.toThrow();
+      await store.load();
+      const records = await store.loadAll();
+      expect(records).toEqual([]);
+
+      const files = await fs.readdir(tmpDir);
+      const backupFiles = files.filter(f => f.startsWith('discovered-state.json.corrupt.'));
+      expect(backupFiles).toHaveLength(1);
     });
 
-    it('should handle file containing only whitespace as corrupt JSON', async () => {
+    it('should handle file containing only whitespace gracefully by backing up and loading empty', async () => {
       const filePath = path.join(tmpDir, 'discovered-state.json');
       await fs.writeFile(filePath, `   \n  `, 'utf-8');
 
-      await expect(store.load()).rejects.toThrow();
+      await store.load();
+      const records = await store.loadAll();
+      expect(records).toEqual([]);
+
+      const files = await fs.readdir(tmpDir);
+      const backupFiles = files.filter(f => f.startsWith('discovered-state.json.corrupt.'));
+      expect(backupFiles).toHaveLength(1);
     });
 
     it('should look up all items correctly from a large set', async () => {
