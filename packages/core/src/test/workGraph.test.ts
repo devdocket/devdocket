@@ -352,11 +352,13 @@ describe('WorkGraph', () => {
       await graph.transitionState(a.id, WorkItemState.InProgress);
       const b = await graph.createItem({ title: 'B' });
       await graph.transitionState(b.id, WorkItemState.Paused);
-      await graph.createItem({ title: 'C' }); // stays New
+      const c = await graph.createItem({ title: 'C' });
+      await graph.transitionState(c.id, WorkItemState.Blocked);
+      await graph.createItem({ title: 'D' }); // stays New
 
-      const active = graph.getItemsByState(WorkItemState.InProgress, WorkItemState.Paused);
-      expect(active).toHaveLength(2);
-      expect(active.map((i) => i.title).sort()).toEqual(['A', 'B']);
+      const active = graph.getItemsByState(WorkItemState.InProgress, WorkItemState.Paused, WorkItemState.Blocked);
+      expect(active).toHaveLength(3);
+      expect(active.map((i) => i.title).sort()).toEqual(['A', 'B', 'C']);
     });
 
     it('returns empty array when called with no states', () => {

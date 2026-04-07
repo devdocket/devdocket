@@ -150,14 +150,21 @@ describe('ActionRegistry', () => {
       'paused-action',
       (i) => i.state === WorkItemState.Paused,
     );
+    const blockedOnly = createMockAction(
+      'blocked-action',
+      (i) => i.state === WorkItemState.Blocked,
+    );
     registry.register(inProgressOnly);
     registry.register(pausedOnly);
+    registry.register(blockedOnly);
 
     const ipItem = createWorkItem({ state: WorkItemState.InProgress });
     const pausedItem = createWorkItem({ state: WorkItemState.Paused });
+    const blockedItem = createWorkItem({ state: WorkItemState.Blocked });
 
     expect(registry.getActionsFor(ipItem)).toEqual([inProgressOnly]);
     expect(registry.getActionsFor(pausedItem)).toEqual([pausedOnly]);
+    expect(registry.getActionsFor(blockedItem)).toEqual([blockedOnly]);
   });
 
   it('dispose makes getActionsFor return empty for previously matching actions', () => {

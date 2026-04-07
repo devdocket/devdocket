@@ -24,7 +24,7 @@ export class FocusTreeProvider implements vscode.TreeDataProvider<WorkItem> {
     treeItem.iconPath = this.getIcon(item.state);
 
     // contextValue controls which context menu items appear
-    if (item.state === WorkItemState.Paused) {
+    if (item.state === WorkItemState.Paused || item.state === WorkItemState.Blocked || item.state === WorkItemState.WaitingOn) {
       treeItem.contextValue = item.url ? 'paused.hasUrl' : 'paused';
     } else {
       treeItem.contextValue = item.url ? 'active.hasUrl' : 'active';
@@ -37,6 +37,8 @@ export class FocusTreeProvider implements vscode.TreeDataProvider<WorkItem> {
     return this.workGraph.getItemsByState(
       WorkItemState.InProgress,
       WorkItemState.Paused,
+      WorkItemState.Blocked,
+      WorkItemState.WaitingOn,
     ).sort((a, b) => a.title.localeCompare(b.title));
   }
 
@@ -46,6 +48,10 @@ export class FocusTreeProvider implements vscode.TreeDataProvider<WorkItem> {
         return 'in progress';
       case WorkItemState.Paused:
         return '⏸ paused';
+      case WorkItemState.Blocked:
+        return '🚫 blocked';
+      case WorkItemState.WaitingOn:
+        return '⏳ waiting';
       default:
         return state;
     }
@@ -57,6 +63,10 @@ export class FocusTreeProvider implements vscode.TreeDataProvider<WorkItem> {
         return new vscode.ThemeIcon('play-circle');
       case WorkItemState.Paused:
         return new vscode.ThemeIcon('debug-pause');
+      case WorkItemState.Blocked:
+        return new vscode.ThemeIcon('error');
+      case WorkItemState.WaitingOn:
+        return new vscode.ThemeIcon('watch');
       default:
         return new vscode.ThemeIcon('circle-outline');
     }

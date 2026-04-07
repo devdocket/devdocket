@@ -134,6 +134,9 @@ describe('registerCommands', () => {
       'workcenter.completeItem',
       'workcenter.pauseItem',
       'workcenter.resumeItem',
+      'workcenter.blockItem',
+      'workcenter.unblockItem',
+      'workcenter.markWaitingOn',
       'workcenter.editItem',
       'workcenter.openInBrowser',
       'workcenter.runAction',
@@ -189,6 +192,9 @@ describe('registerCommands', () => {
       ['workcenter.completeItem', WorkItemState.Done],
       ['workcenter.pauseItem', WorkItemState.Paused],
       ['workcenter.resumeItem', WorkItemState.InProgress],
+      ['workcenter.blockItem', WorkItemState.Blocked],
+      ['workcenter.unblockItem', WorkItemState.InProgress],
+      ['workcenter.markWaitingOn', WorkItemState.WaitingOn],
     ];
 
     for (const [cmd, expectedState] of transitions) {

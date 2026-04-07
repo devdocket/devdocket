@@ -2,7 +2,7 @@
  * Lifecycle states for a {@link WorkItem}.
  *
  * Typical flow in the current UI: `New` → `InProgress` → `Done` → `Archived`.
- * Items may also move from active work to `Paused`.
+ * Items may also move from active work to `Paused`, `Blocked`, or `WaitingOn`.
  * `Triaged` is reserved for future use and is not currently used in the UI flow.
  */
 export enum WorkItemState {
@@ -14,6 +14,10 @@ export enum WorkItemState {
   InProgress = 'InProgress',
   /** Work is temporarily on hold; shown in the Focus view. */
   Paused = 'Paused',
+  /** Work is blocked by an external dependency; shown in the Focus view. */
+  Blocked = 'Blocked',
+  /** Waiting on someone or something; shown in the Focus view. */
+  WaitingOn = 'WaitingOn',
   /** Work is complete; shown in History. */
   Done = 'Done',
   /** Removed from active views; retained in History for reference. */

@@ -43,6 +43,7 @@ describe('HistoryTreeProvider', () => {
         makeItem({ id: '1', title: 'In progress', state: WorkItemState.InProgress }),
         makeItem({ id: '2', title: 'New', state: WorkItemState.New }),
         makeItem({ id: '3', title: 'Paused', state: WorkItemState.Paused }),
+        makeItem({ id: '4', title: 'Blocked', state: WorkItemState.Blocked }),
       ]);
       expect(provider.getChildren()).toEqual([]);
     });
