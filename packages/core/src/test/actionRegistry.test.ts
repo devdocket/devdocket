@@ -105,4 +105,66 @@ describe('ActionRegistry', () => {
     expect(registry.getAction('a1')).toBeUndefined();
     expect(registry.getAction('a2')).toBeUndefined();
   });
+
+  it('getActionsFor returns empty array when registry is empty', () => {
+    const item = createWorkItem();
+    const actions = registry.getActionsFor(item);
+
+    expect(actions).toHaveLength(0);
+  });
+
+  it('allows re-registering an action after its Disposable is disposed', () => {
+    const action1 = createMockAction('reuse');
+    const disposable = registry.register(action1);
+    disposable.dispose();
+
+    const action2 = createMockAction('reuse');
+    const disposable2 = registry.register(action2);
+
+    expect(registry.getAction('reuse')).toBe(action2);
+    disposable2.dispose();
+  });
+
+  it('canRun receives the correct work item', () => {
+    const canRunSpy = vi.fn(() => true);
+    const action: WorkCenterAction = {
+      id: 'spy-action',
+      label: 'Spy Action',
+      canRun: canRunSpy,
+      run: vi.fn(async () => {}),
+    };
+    registry.register(action);
+
+    const item = createWorkItem({ id: 'specific-item', title: 'Specific' });
+    registry.getActionsFor(item);
+
+    expect(canRunSpy).toHaveBeenCalledWith(item);
+  });
+
+  it('getActionsFor filters by work item state', () => {
+    const inProgressOnly = createMockAction(
+      'ip-action',
+      (i) => i.state === WorkItemState.InProgress,
+    );
+    const blockedOnly = createMockAction(
+      'blocked-action',
+      (i) => i.state === WorkItemState.Blocked,
+    );
+    registry.register(inProgressOnly);
+    registry.register(blockedOnly);
+
+    const ipItem = createWorkItem({ state: WorkItemState.InProgress });
+    const blockedItem = createWorkItem({ state: WorkItemState.Blocked });
+
+    expect(registry.getActionsFor(ipItem)).toEqual([inProgressOnly]);
+    expect(registry.getActionsFor(blockedItem)).toEqual([blockedOnly]);
+  });
+
+  it('dispose makes getActionsFor return empty for previously matching actions', () => {
+    registry.register(createMockAction('will-clear'));
+    registry.dispose();
+
+    const item = createWorkItem();
+    expect(registry.getActionsFor(item)).toHaveLength(0);
+  });
 });
