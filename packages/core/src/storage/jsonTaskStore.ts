@@ -1,6 +1,6 @@
 import * as fs from 'fs/promises';
 import * as path from 'path';
-import { WorkItem } from '../models/workItem';
+import { WorkItem, WorkItemState } from '../models/workItem';
 import { ITaskStore } from './taskStore';
 import { logger } from '../services/logger';
 
@@ -36,7 +36,7 @@ export class JsonTaskStore implements ITaskStore {
         logger.warn('Failed to parse work items file');
         throw new Error('Failed to parse work items file');
       }
-      // Migrate legacy 'description' field to 'notes'
+      // Migrate legacy fields
       let needsMigration = false;
       for (const item of items) {
         const legacy = item as WorkItem & { description?: string };
@@ -45,6 +45,11 @@ export class JsonTaskStore implements ITaskStore {
             item.notes = legacy.description;
           }
           delete legacy.description;
+          needsMigration = true;
+        }
+        // Migrate legacy Blocked/WaitingOn states to Paused
+        if ((item.state as string) === 'Blocked' || (item.state as string) === 'WaitingOn') {
+          item.state = WorkItemState.Paused;
           needsMigration = true;
         }
       }
