@@ -223,6 +223,7 @@ describe('GitHubIssueProvider — error handling', () => {
     it('handles issue with missing body field', async () => {
       mockFetch.mockResolvedValueOnce({
         ok: true,
+        headers: { get: () => null },
         json: async () => [{
           number: 1,
           title: 'No body',
@@ -245,6 +246,7 @@ describe('GitHubIssueProvider — error handling', () => {
     it('handles issue with null body', async () => {
       mockFetch.mockResolvedValueOnce({
         ok: true,
+        headers: { get: () => null },
         json: async () => [{
           number: 1,
           title: 'Null body',
@@ -380,6 +382,7 @@ describe('GitHubIssueProvider — error handling', () => {
       mockFetch
         .mockResolvedValueOnce({
           ok: true,
+          headers: { get: () => null },
           json: async () => [createMockIssue(1, 'Good issue', 'good/repo')],
           headers: { get: () => null },
         })
@@ -400,6 +403,7 @@ describe('GitHubIssueProvider — error handling', () => {
       mockFetch
         .mockResolvedValueOnce({
           ok: true,
+          headers: { get: () => null },
           json: async () => [createMockIssue(1, 'OK', 'good/repo')],
           headers: { get: () => null },
         })
@@ -419,6 +423,7 @@ describe('GitHubIssueProvider — error handling', () => {
       mockFetch
         .mockResolvedValueOnce({
           ok: true,
+          headers: { get: () => null },
           json: async () => [createMockIssue(1, 'OK', 'good/repo')],
           headers: { get: () => null },
         })
@@ -437,6 +442,7 @@ describe('GitHubIssueProvider — error handling', () => {
       mockFetch
         .mockResolvedValueOnce({
           ok: true,
+          headers: { get: () => null },
           json: async () => [createMockIssue(1, 'Works', 'good/repo')],
           headers: { get: () => null },
         })
@@ -471,6 +477,7 @@ describe('GitHubIssueProvider — error handling', () => {
       mockFetch
         .mockResolvedValueOnce({
           ok: true,
+          headers: { get: () => null },
           json: async () => [createMockIssue(1, 'OK', 'good/repo')],
           headers: { get: () => null },
         })
