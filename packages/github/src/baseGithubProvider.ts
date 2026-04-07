@@ -24,7 +24,7 @@ export interface WorkCenterProvider {
   readonly label: string;
   readonly resurfaceDismissed?: boolean;
   readonly onDidDiscoverItems: Event<DiscoveredItem[]>;
-  refresh(): Promise<void>;
+  refresh(token?: vscode.CancellationToken): Promise<void>;
 }
 
 export interface GitHubIssue {
@@ -49,11 +49,12 @@ export abstract class BaseGitHubProvider implements WorkCenterProvider {
 
   startPeriodicRefresh(intervalSeconds: number): void {
     this.stopPeriodicRefresh();
-    if (intervalSeconds <= 0) {
+    const interval = Number(intervalSeconds);
+    if (!Number.isFinite(interval) || interval <= 0) {
       return;
     }
     // Clamp to minimum of 60 seconds
-    const clampedInterval = Math.max(intervalSeconds, 60);
+    const clampedInterval = Math.max(interval, 60);
     this.refreshTimer = setInterval(() => {
       this.refreshInBackground().catch((err) => {
         logger.error(`${this.label} refresh failed`, err);
@@ -68,27 +69,52 @@ export abstract class BaseGitHubProvider implements WorkCenterProvider {
     }
   }
 
-  async refresh(): Promise<void> {
-    await this.doRefresh(true);
+  async refresh(token?: vscode.CancellationToken): Promise<void> {
+    await this.doRefresh(true, token);
   }
 
   private async refreshInBackground(): Promise<void> {
     await this.doRefresh(false);
   }
 
-  private async doRefresh(isUserTriggered: boolean): Promise<void> {
+  private async doRefresh(isUserTriggered: boolean, token?: vscode.CancellationToken): Promise<void> {
     if (this._isRefreshing) {
       return;
     }
     this._isRefreshing = true;
     try {
-      const createIfNone = isUserTriggered;
-      const session = await vscode.authentication.getSession('github', ['repo'], {
-        createIfNone,
-      }).catch(() => null);
-      if (!session) {
+      if (token?.isCancellationRequested) {
         return;
       }
+
+      const createIfNone = isUserTriggered;
+      let session: vscode.AuthenticationSession | undefined;
+      try {
+        session = await vscode.authentication.getSession('github', ['repo'], {
+          createIfNone,
+        });
+      } catch (err) {
+        if (isUserTriggered) {
+          const message = err instanceof Error ? err.message : String(err);
+          logger.error('GitHub authentication failed', err);
+          vscode.window.showWarningMessage(`WorkCenter GitHub: Authentication failed — ${message}`);
+        } else {
+          logger.warn('GitHub authentication failed during background refresh', err);
+        }
+        return;
+      }
+
+      if (!session || token?.isCancellationRequested) {
+        if (!session) {
+          if (isUserTriggered) {
+            logger.info('User cancelled GitHub authentication');
+          } else {
+            logger.debug('No GitHub session available for background refresh');
+          }
+        }
+        return;
+      }
+
       await this.fetchAndPublish(session.accessToken, isUserTriggered);
     } catch (err) {
       logger.error(`Failed to fetch ${this.label}`, err);
