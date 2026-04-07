@@ -13,6 +13,8 @@ export class WorkGraph {
   private readonly provenanceIndex: Map<string, string> = new Map();
   // Provenance key → count of extra (unindexed) items sharing that key
   private readonly duplicateProvenanceCounts: Map<string, number> = new Map();
+  /** Lazily-built index of items grouped by state; nulled on any mutation to {@link items}. */
+  private stateCache: Map<WorkItemState, WorkItem[]> | null = null;
   private readonly _onDidChange = new vscode.EventEmitter<void>();
   /**
    * Fires when this graph changes through public mutation operations exposed by {@link WorkGraph},
@@ -49,6 +51,7 @@ export class WorkGraph {
         }
       }
     }
+    this.invalidateStateCache();
     logger.debug(`Loaded ${items.length} work items from store`);
     await this.backfillSortOrder();
   }
@@ -79,6 +82,7 @@ export class WorkGraph {
     for (const updated of toSave) {
       this.items.set(updated.id, updated);
     }
+    this.invalidateStateCache();
   }
 
   /** Return all work items. */
@@ -86,9 +90,43 @@ export class WorkGraph {
     return Array.from(this.items.values());
   }
 
+  private invalidateStateCache(): void {
+    this.stateCache = null;
+  }
+
+  private getOrBuildStateCache(): Map<WorkItemState, WorkItem[]> {
+    if (this.stateCache) return this.stateCache;
+
+    const cache = new Map<WorkItemState, WorkItem[]>();
+    for (const item of this.items.values()) {
+      const list = cache.get(item.state);
+      if (list) {
+        list.push(item);
+      } else {
+        cache.set(item.state, [item]);
+      }
+    }
+    this.stateCache = cache;
+    return cache;
+  }
+
   /** Return all work items matching any of the given states. */
   getItemsByState(...states: WorkItemState[]): WorkItem[] {
-    return this.getAll().filter((item) => states.includes(item.state));
+    if (states.length === 0) {
+      return [];
+    }
+    if (states.length === 1) {
+      const cache = this.getOrBuildStateCache();
+      return [...(cache.get(states[0]) ?? [])];
+    }
+    const requestedStates = new Set(states);
+    const result: WorkItem[] = [];
+    for (const item of this.items.values()) {
+      if (requestedStates.has(item.state)) {
+        result.push(item);
+      }
+    }
+    return result;
   }
 
   /** Return a single work item by ID, or `undefined` if not found. */
@@ -140,6 +178,7 @@ export class WorkGraph {
         );
       }
     }
+    this.invalidateStateCache();
     this._onDidChange.fire();
     logger.info(`Created work item: ${item.id}`);
     return item;
@@ -154,6 +193,7 @@ export class WorkGraph {
     const updated = { ...item, ...patch, updatedAt: Date.now() };
     await this.store.save(updated);
     this.items.set(id, updated);
+    this.invalidateStateCache();
     this._onDidChange.fire();
     logger.info(`Updated work item: ${id}`);
   }
@@ -167,6 +207,7 @@ export class WorkGraph {
     const updated = { ...item, state: newState, updatedAt: Date.now() };
     await this.store.save(updated);
     this.items.set(id, updated);
+    this.invalidateStateCache();
     this._onDidChange.fire();
     logger.info(`Transitioned work item ${id} to ${newState}`);
   }
@@ -195,6 +236,7 @@ export class WorkGraph {
       for (const normalized of toNormalize) {
         this.items.set(normalized.id, normalized);
       }
+      this.invalidateStateCache();
     }
 
     const index = siblings.findIndex((s) => s.id === id);
@@ -216,6 +258,7 @@ export class WorkGraph {
     await this.store.saveAll([updatedItem, updatedSwap]);
     this.items.set(updatedItem.id, updatedItem);
     this.items.set(updatedSwap.id, updatedSwap);
+    this.invalidateStateCache();
     this._onDidChange.fire();
   }
 
@@ -254,6 +297,7 @@ export class WorkGraph {
       for (const updated of itemsToSave) {
         this.items.set(updated.id, updated);
       }
+      this.invalidateStateCache();
       this._onDidChange.fire();
     }
   }
@@ -288,6 +332,7 @@ export class WorkGraph {
       for (const updated of itemsToSave) {
         this.items.set(updated.id, updated);
       }
+      this.invalidateStateCache();
       this._onDidChange.fire();
     }
   }
@@ -329,6 +374,7 @@ export class WorkGraph {
       }
     }
     this.items.delete(id);
+    this.invalidateStateCache();
     this._onDidChange.fire();
     logger.info(`Deleted work item: ${id}`);
   }
