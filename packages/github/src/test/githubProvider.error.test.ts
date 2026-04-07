@@ -64,7 +64,6 @@ describe('GitHubIssueProvider — error handling', () => {
       const listener = vi.fn();
       provider.onDidDiscoverItems(listener);
       await expect(provider.refresh()).resolves.toBeUndefined();
-      // Error is caught internally; event fires with empty items
       expect(listener).toHaveBeenCalledWith([]);
     });
 
@@ -207,7 +206,6 @@ describe('GitHubIssueProvider — error handling', () => {
       const listener = vi.fn();
       provider.onDidDiscoverItems(listener);
       await expect(provider.refresh()).resolves.toBeUndefined();
-      // Error is caught internally; event fires with empty items
       expect(listener).toHaveBeenCalledWith([]);
     });
 
