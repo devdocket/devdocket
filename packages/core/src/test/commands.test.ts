@@ -132,9 +132,8 @@ describe('registerCommands', () => {
       'workcenter.acceptToFocus',
       'workcenter.archiveItem',
       'workcenter.completeItem',
-      'workcenter.blockItem',
-      'workcenter.unblockItem',
-      'workcenter.markWaitingOn',
+      'workcenter.pauseItem',
+      'workcenter.resumeItem',
       'workcenter.editItem',
       'workcenter.openInBrowser',
       'workcenter.runAction',
@@ -188,9 +187,8 @@ describe('registerCommands', () => {
       ['workcenter.acceptToFocus', WorkItemState.InProgress],
       ['workcenter.archiveItem', WorkItemState.Archived],
       ['workcenter.completeItem', WorkItemState.Done],
-      ['workcenter.blockItem', WorkItemState.Blocked],
-      ['workcenter.unblockItem', WorkItemState.InProgress],
-      ['workcenter.markWaitingOn', WorkItemState.WaitingOn],
+      ['workcenter.pauseItem', WorkItemState.Paused],
+      ['workcenter.resumeItem', WorkItemState.InProgress],
     ];
 
     for (const [cmd, expectedState] of transitions) {
