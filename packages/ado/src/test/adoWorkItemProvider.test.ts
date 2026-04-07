@@ -290,4 +290,51 @@ describe('AdoWorkItemProvider', () => {
       expect.any(Object),
     );
   });
+
+  it('skips fetch when org name is invalid', async () => {
+    provider.dispose();
+    provider = new AdoWorkItemProvider('../evil', ['MyProject']);
+
+    const listener = vi.fn();
+    provider.onDidDiscoverItems(listener);
+    await provider.refresh();
+
+    expect(mockFetch).not.toHaveBeenCalled();
+    expect(listener).not.toHaveBeenCalled();
+  });
+
+  it('skips invalid projects and fetches only valid ones', async () => {
+    provider.dispose();
+    provider = new AdoWorkItemProvider('myorg', ['ValidProject', '../bad', 'AlsoValid']);
+
+    mockFetch
+      .mockResolvedValueOnce({ ok: true, json: async () => createWiqlResponse([]) })
+      .mockResolvedValueOnce({ ok: true, json: async () => createWiqlResponse([]) });
+
+    const listener = vi.fn();
+    provider.onDidDiscoverItems(listener);
+    await provider.refresh();
+
+    expect(mockFetch).toHaveBeenCalledTimes(2);
+    expect(mockFetch).toHaveBeenCalledWith(
+      'https://dev.azure.com/myorg/ValidProject/_apis/wit/wiql?api-version=7.1',
+      expect.any(Object),
+    );
+    expect(mockFetch).toHaveBeenCalledWith(
+      'https://dev.azure.com/myorg/AlsoValid/_apis/wit/wiql?api-version=7.1',
+      expect.any(Object),
+    );
+  });
+
+  it('skips fetch when all configured projects are invalid', async () => {
+    provider.dispose();
+    provider = new AdoWorkItemProvider('myorg', ['../bad', '?evil']);
+
+    const listener = vi.fn();
+    provider.onDidDiscoverItems(listener);
+    await provider.refresh();
+
+    expect(mockFetch).not.toHaveBeenCalled();
+    expect(listener).not.toHaveBeenCalled();
+  });
 });

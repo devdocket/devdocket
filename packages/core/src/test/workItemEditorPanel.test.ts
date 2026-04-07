@@ -27,7 +27,7 @@ function createMockWebviewPanel() {
       cspSource: 'https://test.csp',
       onDidReceiveMessage: vi.fn((handler: MessageHandler) => {
         messageHandler = handler;
-        return { dispose: vi.fn() };
+        return { dispose: vi.fn(() => { messageHandler = undefined; }) };
       }),
     },
     onDidDispose: vi.fn((handler: DisposeHandler) => {
@@ -38,7 +38,7 @@ function createMockWebviewPanel() {
   };
   return {
     panel,
-    simulateMessage: (msg: any) => messageHandler?.(msg),
+    simulateMessage: (msg: any) => messageHandler?.(msg) ?? Promise.resolve(),
     simulateDispose: () => disposeHandler?.(),
   };
 }
@@ -468,6 +468,167 @@ describe('WorkItemEditorPanel', () => {
 
       expect(mock.panel.webview.html).toContain('scheduleAutosave');
       expect(mock.panel.webview.html).toContain('acquireVsCodeApi');
+    });
+  });
+
+  describe('concurrent autosave', () => {
+    let item: WorkItem;
+    let workGraph: ReturnType<typeof createMockWorkGraph>;
+    let mock: ReturnType<typeof createMockWebviewPanel>;
+
+    function simulateAutosave(data: { title: string; notes: string }) {
+      return mock.simulateMessage({ type: 'autosave', data });
+    }
+
+    beforeEach(() => {
+      vi.clearAllMocks();
+      item = makeItem();
+      workGraph = createMockWorkGraph(item);
+      // Override updateItem to actually apply patches so race-condition tests work
+      workGraph.updateItem.mockImplementation(async (_id: string, patch: any) => {
+        if (patch.title !== undefined) {
+          item.title = patch.title;
+        }
+        if ('notes' in patch) {
+          item.notes = patch.notes;
+        }
+      });
+      mock = createMockWebviewPanel();
+      openPanel(item, workGraph, mock);
+    });
+
+    it('saves each sequential autosave message that reaches the backend', async () => {
+      await simulateAutosave({ title: 'A', notes: '' });
+      await simulateAutosave({ title: 'AB', notes: '' });
+      await simulateAutosave({ title: 'ABC', notes: '' });
+
+      expect(workGraph.updateItem).toHaveBeenCalledTimes(3);
+      expect(workGraph.updateItem).toHaveBeenNthCalledWith(1, 'item-1', expect.objectContaining({ title: 'A' }));
+      expect(workGraph.updateItem).toHaveBeenNthCalledWith(2, 'item-1', expect.objectContaining({ title: 'AB' }));
+      expect(workGraph.updateItem).toHaveBeenNthCalledWith(3, 'item-1', expect.objectContaining({ title: 'ABC' }));
+    });
+
+    // TODO: Once sequencing/cancellation is implemented, this should assert
+    // that the newest value ('v2') persists regardless of resolution order.
+    it.todo('preserves the newest autosave value when saves resolve out of order');
+
+    // Characterization test: documents current race condition behavior.
+    // Remove this once the above todo is implemented.
+    it('documents current behavior: out-of-order resolution lets older value overwrite newer', async () => {
+      const deferred = () => {
+        let resolve!: () => void;
+        const promise = new Promise<void>((r) => {
+          resolve = r;
+        });
+        return { promise, resolve };
+      };
+
+      const firstSave = deferred();
+      const secondSave = deferred();
+
+      workGraph.updateItem
+        .mockImplementationOnce(async (_id: string, patch: any) => {
+          await firstSave.promise;
+          if (patch.title !== undefined) {
+            item.title = patch.title;
+          }
+        })
+        .mockImplementationOnce(async (_id: string, patch: any) => {
+          await secondSave.promise;
+          if (patch.title !== undefined) {
+            item.title = patch.title;
+          }
+        });
+
+      const firstAutosave = simulateAutosave({ title: 'v1', notes: '' });
+      const secondAutosave = simulateAutosave({ title: 'v2', notes: '' });
+
+      await vi.waitFor(() => {
+        expect(workGraph.updateItem).toHaveBeenCalledTimes(2);
+      });
+
+      // Resolve the newer save first to simulate out-of-order completion
+      secondSave.resolve();
+      await secondAutosave;
+
+      firstSave.resolve();
+      await firstAutosave;
+
+      expect(workGraph.updateItem).toHaveBeenNthCalledWith(
+        1,
+        'item-1',
+        expect.objectContaining({ title: 'v1' }),
+      );
+      expect(workGraph.updateItem).toHaveBeenNthCalledWith(
+        2,
+        'item-1',
+        expect.objectContaining({ title: 'v2' }),
+      );
+      // When the first save resolves last, it overwrites item.title with v1.
+      // This demonstrates the race condition: the final persisted state depends
+      // on resolution order, not message order.
+      expect(item.title).toBe('v1');
+    });
+
+    it('processes every autosave message that arrives at the extension host', async () => {
+      const promises = [
+        simulateAutosave({ title: 'v1', notes: '' }),
+        simulateAutosave({ title: 'v2', notes: '' }),
+        simulateAutosave({ title: 'v3', notes: '' }),
+        simulateAutosave({ title: 'v4', notes: '' }),
+      ];
+      await Promise.all(promises);
+
+      expect(workGraph.updateItem).toHaveBeenCalledTimes(4);
+    });
+
+    it('handles interleaved title and notes updates', async () => {
+      await simulateAutosave({ title: 'T1', notes: '' });
+      await simulateAutosave({ title: 'T1', notes: 'N1' });
+      await simulateAutosave({ title: 'T2', notes: 'N1' });
+      await simulateAutosave({ title: 'T2', notes: 'N2' });
+
+      expect(workGraph.updateItem).toHaveBeenCalledTimes(4);
+      expect(workGraph.updateItem).toHaveBeenLastCalledWith('item-1', { title: 'T2', notes: 'N2' });
+    });
+
+    it('saves immediately on each received message (no server-side debounce)', async () => {
+      vi.useFakeTimers();
+      try {
+        const firstSave = simulateAutosave({ title: 'fast', notes: '' });
+        expect(workGraph.updateItem).toHaveBeenCalledTimes(1);
+        await vi.runAllTimersAsync();
+        await firstSave;
+
+        const secondSave = simulateAutosave({ title: 'faster', notes: '' });
+        expect(workGraph.updateItem).toHaveBeenCalledTimes(2);
+        await vi.runAllTimersAsync();
+        await secondSave;
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('uses last value wins semantics after a burst of updates', async () => {
+      await simulateAutosave({ title: 'draft-1', notes: '' });
+      await simulateAutosave({ title: 'draft-2', notes: '' });
+      await simulateAutosave({ title: 'final', notes: '' });
+
+      const lastPatch = workGraph.updateItem.mock.calls.at(-1)![1];
+      expect(lastPatch.title).toBe('final');
+      expect(item.title).toBe('final');
+    });
+
+    it('does not crash or save when a message arrives after disposal', async () => {
+      await simulateAutosave({ title: 'before dispose', notes: '' });
+      expect(workGraph.updateItem).toHaveBeenCalledTimes(1);
+
+      mock.simulateDispose();
+
+      // Message handler is cleared on disposal, so this is a no-op
+      await simulateAutosave({ title: 'too late', notes: '' });
+
+      expect(workGraph.updateItem).toHaveBeenCalledTimes(1);
     });
   });
 });
