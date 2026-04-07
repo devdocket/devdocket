@@ -1,1 +1,0 @@
-{"body": "Fixed in 88a4a69: added blockItem, unblockItem, and markWaitingOn to contributes.commands in package.json with appropriate icons. Also added menu entries with when-clauses targeting the correct contextValues."}
