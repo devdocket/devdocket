@@ -32,6 +32,12 @@ const TreeItemCollapsibleState = {
   Expanded: 2,
 };
 
+const ViewColumn = {
+  One: 1,
+  Two: 2,
+  Three: 3,
+};
+
 class MockTreeItem {
   label: string | { label: string; highlights?: [number, number][] };
   collapsibleState: number;
@@ -98,6 +104,35 @@ class MockDataTransfer {
   set(mimeType: string, value: MockDataTransferItem): void { this.items.set(mimeType, value); }
 }
 
+class MockCancellationTokenSource {
+  private _listeners: Function[] = [];
+  token = {
+    isCancellationRequested: false,
+    onCancellationRequested: (listener: Function) => {
+      if (this.token.isCancellationRequested) {
+        listener();
+      } else {
+        this._listeners.push(listener);
+      }
+      return { dispose: () => { this._listeners = this._listeners.filter(l => l !== listener); } };
+    },
+  };
+  cancel() {
+    if (this.token.isCancellationRequested) {
+      return;
+    }
+    this.token.isCancellationRequested = true;
+    const listeners = this._listeners.slice();
+    this._listeners = [];
+    for (const listener of listeners) {
+      listener();
+    }
+  }
+  dispose() {
+    this._listeners = [];
+  }
+}
+
 class MockDisposable {
   private callback: () => void;
   constructor(callback: () => void) { this.callback = callback; }
@@ -111,12 +146,6 @@ const workspace = {
   onDidChangeConfiguration: vi.fn(() => ({ dispose: vi.fn() })),
 };
 
-const ViewColumn = {
-  One: 1,
-  Two: 2,
-  Three: 3,
-};
-
 export {
   MockEventEmitter as EventEmitter,
   MockThemeIcon as ThemeIcon,
@@ -124,6 +153,7 @@ export {
   MockTreeItem as TreeItem,
   MockDataTransferItem as DataTransferItem,
   MockDataTransfer as DataTransfer,
+  MockCancellationTokenSource as CancellationTokenSource,
   MockDisposable as Disposable,
   TreeItemCollapsibleState,
   ViewColumn,

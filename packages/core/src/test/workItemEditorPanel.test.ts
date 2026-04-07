@@ -1,9 +1,80 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import * as vscode from 'vscode';
+import { ViewColumn, window } from 'vscode';
 import { WorkItemEditorPanel } from '../views/workItemEditorPanel';
 import { WorkGraph } from '../services/workGraph';
 import { WorkItem, WorkItemState } from '../models/workItem';
 import { ITaskStore } from '../storage/taskStore';
+
+type MessageHandler = (msg: any) => Promise<void>;
+type DisposeHandler = () => void;
+
+function makeItem(overrides: Partial<WorkItem> = {}): WorkItem {
+  return {
+    id: 'item-1',
+    title: 'Test item',
+    state: WorkItemState.InProgress,
+    createdAt: Date.now(),
+    updatedAt: Date.now(),
+    ...overrides,
+  };
+}
+
+// --- Unit-test helpers (mock WorkGraph) ---
+
+function createMockWebviewPanel() {
+  let messageHandler: MessageHandler | undefined;
+  let disposeHandler: DisposeHandler | undefined;
+  const panel = {
+    title: '',
+    webview: {
+      html: '',
+      cspSource: 'https://test.csp',
+      onDidReceiveMessage: vi.fn((handler: MessageHandler) => {
+        messageHandler = handler;
+        return { dispose: vi.fn() };
+      }),
+    },
+    onDidDispose: vi.fn((handler: DisposeHandler) => {
+      disposeHandler = handler;
+      return { dispose: vi.fn() };
+    }),
+    dispose: vi.fn(),
+  };
+  return {
+    panel,
+    simulateMessage: (msg: any) => messageHandler?.(msg),
+    simulateDispose: () => disposeHandler?.(),
+  };
+}
+
+function createMockWorkGraph(item?: WorkItem) {
+  return {
+    getItem: vi.fn((id: string) => (item && item.id === id ? item : undefined)),
+    updateItem: vi.fn(async () => {}),
+  };
+}
+
+function createMockContext() {
+  const subscriptions: { dispose: () => void }[] = [];
+  return {
+    subscriptions,
+    extensionUri: { toString: () => 'file:///ext' },
+  } as any;
+}
+
+function openPanel(
+  item: WorkItem,
+  workGraph: ReturnType<typeof createMockWorkGraph>,
+  mock: ReturnType<typeof createMockWebviewPanel>,
+  context = createMockContext(),
+) {
+  vi.mocked(window.createWebviewPanel).mockReturnValue(mock.panel as any);
+  WorkItemEditorPanel.open(context, workGraph as any, item);
+  return context;
+}
+
+// --- Integration-test helpers (real WorkGraph) ---
 
 function createMockStore(): ITaskStore {
   const items: Map<string, any> = new Map();
@@ -15,7 +86,7 @@ function createMockStore(): ITaskStore {
   };
 }
 
-function createMockWebviewPanel() {
+function createIntegrationWebviewPanel() {
   const messageListeners: Function[] = [];
   const disposeListeners: Function[] = [];
   return {
@@ -39,35 +110,427 @@ function createMockWebviewPanel() {
   };
 }
 
-function createMockContext(): vscode.ExtensionContext {
+function createIntegrationContext(): vscode.ExtensionContext {
   return {
     subscriptions: [],
   } as unknown as vscode.ExtensionContext;
 }
 
-function makeItem(overrides: Partial<WorkItem> = {}): WorkItem {
-  return {
-    id: 'test-item-1',
-    title: 'Test Item',
-    state: WorkItemState.New,
-    createdAt: Date.now(),
-    updatedAt: Date.now(),
-    ...overrides,
-  };
-}
-
 describe('WorkItemEditorPanel', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  describe('open (panel creation)', () => {
+    it('should create a webview panel with correct title', () => {
+      const item = makeItem({ title: 'My Task' });
+      const mock = createMockWebviewPanel();
+      openPanel(item, createMockWorkGraph(item), mock);
+
+      expect(window.createWebviewPanel).toHaveBeenCalledWith(
+        'workcenter.editItem',
+        'Edit: My Task',
+        ViewColumn.One,
+        { enableScripts: true, retainContextWhenHidden: true },
+      );
+    });
+
+    it('should push a disposable onto context.subscriptions', () => {
+      const item = makeItem();
+      const mock = createMockWebviewPanel();
+      const ctx = openPanel(item, createMockWorkGraph(item), mock);
+
+      expect(ctx.subscriptions.length).toBe(1);
+      expect(typeof ctx.subscriptions[0].dispose).toBe('function');
+    });
+
+    it('should register a message handler on the webview', () => {
+      const item = makeItem();
+      const mock = createMockWebviewPanel();
+      openPanel(item, createMockWorkGraph(item), mock);
+
+      expect(mock.panel.webview.onDidReceiveMessage).toHaveBeenCalledTimes(1);
+    });
+
+    it('should register a dispose handler on the panel', () => {
+      const item = makeItem();
+      const mock = createMockWebviewPanel();
+      openPanel(item, createMockWorkGraph(item), mock);
+
+      expect(mock.panel.onDidDispose).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  describe('HTML generation', () => {
+    it('should render HTML with item title and notes', () => {
+      const item = makeItem({ title: 'My Title', notes: 'My Notes' });
+      const mock = createMockWebviewPanel();
+      openPanel(item, createMockWorkGraph(item), mock);
+
+      expect(mock.panel.webview.html).toContain('My Title');
+      expect(mock.panel.webview.html).toContain('My Notes');
+    });
+
+    it('should render "Item not found" when item does not exist', () => {
+      const item = makeItem({ id: 'missing' });
+      const mock = createMockWebviewPanel();
+      const workGraph = createMockWorkGraph(); // no item configured
+      openPanel(item, workGraph, mock);
+
+      expect(mock.panel.webview.html).toContain('Item not found');
+    });
+
+    it('should render readonly title for provider items', () => {
+      const item = makeItem({ providerId: 'github' });
+      const mock = createMockWebviewPanel();
+      openPanel(item, createMockWorkGraph(item), mock);
+
+      expect(mock.panel.webview.html).toMatch(/<input\b(?=[^>]*\bid="title")(?=[^>]*\breadonly)[^>]*>/);
+      expect(mock.panel.webview.html).toContain('Title is managed by the provider');
+    });
+
+    it('should not render readonly for non-provider items', () => {
+      const item = makeItem({ providerId: undefined });
+      const mock = createMockWebviewPanel();
+      openPanel(item, createMockWorkGraph(item), mock);
+
+      expect(mock.panel.webview.html).not.toContain('Title is managed by the provider');
+    });
+
+    it('should escape HTML special characters in notes', () => {
+      const item = makeItem({ notes: '<script>alert("xss")</script>' });
+      const mock = createMockWebviewPanel();
+      openPanel(item, createMockWorkGraph(item), mock);
+
+      expect(mock.panel.webview.html).not.toContain('<script>alert');
+      expect(mock.panel.webview.html).toContain('&lt;script&gt;');
+    });
+
+    it('should escape special characters in title attribute', () => {
+      const item = makeItem({ title: 'Item "with" <quotes>' });
+      const mock = createMockWebviewPanel();
+      openPanel(item, createMockWorkGraph(item), mock);
+
+      expect(mock.panel.webview.html).toContain('&quot;with&quot;');
+      expect(mock.panel.webview.html).toContain('&lt;quotes&gt;');
+    });
+
+    it('should render empty textarea for item with no notes', () => {
+      const item = makeItem({ notes: undefined });
+      const mock = createMockWebviewPanel();
+      openPanel(item, createMockWorkGraph(item), mock);
+
+      expect(mock.panel.webview.html).toContain('<textarea id="notes" placeholder="Add notes..."></textarea>');
+    });
+
+    it('should include a nonce and CSP meta tag', () => {
+      const item = makeItem();
+      const mock = createMockWebviewPanel();
+      openPanel(item, createMockWorkGraph(item), mock);
+
+      expect(mock.panel.webview.html).toContain('Content-Security-Policy');
+      expect(mock.panel.webview.html).toContain('nonce-');
+      expect(mock.panel.webview.html).toContain(mock.panel.webview.cspSource);
+    });
+
+    it('should handle very long notes', () => {
+      const longNotes = 'A'.repeat(10000);
+      const item = makeItem({ notes: longNotes });
+      const mock = createMockWebviewPanel();
+      openPanel(item, createMockWorkGraph(item), mock);
+
+      expect(mock.panel.webview.html).toContain(longNotes);
+    });
+  });
+
+  describe('message handling (autosave)', () => {
+    it('should save title and notes on autosave message', async () => {
+      const item = makeItem({ title: 'Old Title' });
+      const workGraph = createMockWorkGraph(item);
+      const mock = createMockWebviewPanel();
+      openPanel(item, workGraph, mock);
+
+      await mock.simulateMessage({
+        type: 'autosave',
+        data: { title: 'New Title', notes: 'Some notes' },
+      });
+
+      expect(workGraph.updateItem).toHaveBeenCalledWith('item-1', {
+        title: 'New Title',
+        notes: 'Some notes',
+      });
+    });
+
+    it('should update panel title for non-provider items', async () => {
+      const item = makeItem({ title: 'Old Title', providerId: undefined });
+      const workGraph = createMockWorkGraph(item);
+      const mock = createMockWebviewPanel();
+      openPanel(item, workGraph, mock);
+
+      await mock.simulateMessage({
+        type: 'autosave',
+        data: { title: 'Updated Title', notes: '' },
+      });
+
+      expect(mock.panel.title).toBe('Edit: Updated Title');
+    });
+
+    it('should not update panel title for provider items', async () => {
+      const item = makeItem({ title: 'Provider Title', providerId: 'github' });
+      const workGraph = createMockWorkGraph(item);
+      const mock = createMockWebviewPanel();
+      openPanel(item, workGraph, mock);
+      mock.panel.title = 'Edit: Provider Title';
+
+      await mock.simulateMessage({
+        type: 'autosave',
+        data: { title: 'Provider Title', notes: 'new note' },
+      });
+
+      // Title should not change for provider items (title not in patch)
+      expect(mock.panel.title).toBe('Edit: Provider Title');
+    });
+
+    it('should skip save when title is empty for non-provider items', async () => {
+      const item = makeItem({ providerId: undefined });
+      const workGraph = createMockWorkGraph(item);
+      const mock = createMockWebviewPanel();
+      openPanel(item, workGraph, mock);
+
+      await mock.simulateMessage({
+        type: 'autosave',
+        data: { title: '', notes: 'Some notes' },
+      });
+
+      expect(workGraph.updateItem).not.toHaveBeenCalled();
+    });
+
+    it('should save notes only for provider items', async () => {
+      const item = makeItem({ providerId: 'github', title: 'Provider Item' });
+      const workGraph = createMockWorkGraph(item);
+      const mock = createMockWebviewPanel();
+      openPanel(item, workGraph, mock);
+
+      await mock.simulateMessage({
+        type: 'autosave',
+        data: { title: 'Provider Item', notes: 'Updated notes' },
+      });
+
+      expect(workGraph.updateItem).toHaveBeenCalledWith('item-1', {
+        notes: 'Updated notes',
+      });
+    });
+
+    it('should set notes to undefined when notes field is empty string', async () => {
+      const item = makeItem({ notes: 'old notes' });
+      const workGraph = createMockWorkGraph(item);
+      const mock = createMockWebviewPanel();
+      openPanel(item, workGraph, mock);
+
+      await mock.simulateMessage({
+        type: 'autosave',
+        data: { title: 'Test item', notes: '' },
+      });
+
+      expect(workGraph.updateItem).toHaveBeenCalledWith('item-1', {
+        title: 'Test item',
+        notes: undefined,
+      });
+    });
+
+    it('should show error message when item no longer exists during save', async () => {
+      const item = makeItem();
+      const workGraph = createMockWorkGraph(item);
+      const mock = createMockWebviewPanel();
+      openPanel(item, workGraph, mock);
+
+      // Make item disappear after panel was created
+      workGraph.getItem.mockReturnValue(undefined);
+
+      await mock.simulateMessage({
+        type: 'autosave',
+        data: { title: 'New', notes: '' },
+      });
+
+      expect(window.showErrorMessage).toHaveBeenCalledWith(
+        expect.stringContaining('no longer exists'),
+      );
+    });
+
+    it('should show error message when updateItem throws', async () => {
+      const item = makeItem();
+      const workGraph = createMockWorkGraph(item);
+      const mock = createMockWebviewPanel();
+      openPanel(item, workGraph, mock);
+
+      workGraph.updateItem.mockRejectedValue(new Error('disk full'));
+
+      await mock.simulateMessage({
+        type: 'autosave',
+        data: { title: 'Test item', notes: '' },
+      });
+
+      expect(window.showErrorMessage).toHaveBeenCalledWith(
+        expect.stringContaining('disk full'),
+      );
+    });
+
+    it('should handle non-Error thrown values in error message', async () => {
+      const item = makeItem();
+      const workGraph = createMockWorkGraph(item);
+      const mock = createMockWebviewPanel();
+      openPanel(item, workGraph, mock);
+
+      workGraph.updateItem.mockRejectedValue('string error');
+
+      await mock.simulateMessage({
+        type: 'autosave',
+        data: { title: 'Test item', notes: '' },
+      });
+
+      expect(window.showErrorMessage).toHaveBeenCalledWith(
+        expect.stringContaining('string error'),
+      );
+    });
+
+    it('should ignore messages with unknown type', async () => {
+      const item = makeItem();
+      const workGraph = createMockWorkGraph(item);
+      const mock = createMockWebviewPanel();
+      openPanel(item, workGraph, mock);
+
+      await mock.simulateMessage({ type: 'unknown', data: {} });
+
+      expect(workGraph.updateItem).not.toHaveBeenCalled();
+    });
+
+    it('should not call updateItem when patch is empty (provider item with no notes change)', async () => {
+      const item = makeItem({ providerId: 'github', title: 'Provider Item' });
+      const workGraph = createMockWorkGraph(item);
+      const mock = createMockWebviewPanel();
+      openPanel(item, workGraph, mock);
+
+      // Simulate message without 'notes' key in data
+      await mock.simulateMessage({
+        type: 'autosave',
+        data: { title: 'Provider Item' },
+      });
+
+      expect(workGraph.updateItem).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('disposal', () => {
+    it('should dispose message subscription when panel is disposed via onDidDispose', () => {
+      const item = makeItem();
+      const mock = createMockWebviewPanel();
+      const msgDisposable = { dispose: vi.fn() };
+      mock.panel.webview.onDidReceiveMessage.mockReturnValue(msgDisposable);
+
+      openPanel(item, createMockWorkGraph(item), mock);
+      mock.simulateDispose();
+
+      expect(msgDisposable.dispose).toHaveBeenCalledTimes(1);
+    });
+
+    it('should dispose panel and subscription when dispose() is called via context', () => {
+      const item = makeItem();
+      const mock = createMockWebviewPanel();
+      const msgDisposable = { dispose: vi.fn() };
+      mock.panel.webview.onDidReceiveMessage.mockReturnValue(msgDisposable);
+
+      const ctx = openPanel(item, createMockWorkGraph(item), mock);
+      ctx.subscriptions[0].dispose();
+
+      expect(msgDisposable.dispose).toHaveBeenCalledTimes(1);
+      expect(mock.panel.dispose).toHaveBeenCalledTimes(1);
+    });
+
+    it('should be safe to call dispose multiple times', () => {
+      const item = makeItem();
+      const mock = createMockWebviewPanel();
+      const msgDisposable = { dispose: vi.fn() };
+      mock.panel.webview.onDidReceiveMessage.mockReturnValue(msgDisposable);
+
+      const ctx = openPanel(item, createMockWorkGraph(item), mock);
+
+      // Dispose via context, then simulate panel dispose
+      ctx.subscriptions[0].dispose();
+      mock.simulateDispose();
+
+      expect(msgDisposable.dispose).toHaveBeenCalledTimes(1);
+      expect(mock.panel.dispose).toHaveBeenCalledTimes(1);
+    });
+
+    it('should not update panel title after disposal', async () => {
+      const item = makeItem({ title: 'Original' });
+      const workGraph = createMockWorkGraph(item);
+      const mock = createMockWebviewPanel();
+      openPanel(item, workGraph, mock);
+
+      // Dispose first
+      mock.simulateDispose();
+      mock.panel.title = 'Edit: Original';
+
+      // Then try to save
+      await mock.simulateMessage({
+        type: 'autosave',
+        data: { title: 'Changed', notes: '' },
+      });
+
+      // Title should remain unchanged because panel is disposed
+      expect(mock.panel.title).toBe('Edit: Original');
+    });
+  });
+
+  describe('special characters and edge cases', () => {
+    it('should handle ampersands in title', () => {
+      const item = makeItem({ title: 'Tom & Jerry' });
+      const mock = createMockWebviewPanel();
+      openPanel(item, createMockWorkGraph(item), mock);
+
+      expect(mock.panel.webview.html).toContain('Tom &amp; Jerry');
+    });
+
+    it('should handle double quotes in title', () => {
+      const item = makeItem({ title: 'Say "hello"' });
+      const mock = createMockWebviewPanel();
+      openPanel(item, createMockWorkGraph(item), mock);
+
+      expect(mock.panel.webview.html).toContain('Say &quot;hello&quot;');
+    });
+
+    it('should handle special characters in notes', () => {
+      const item = makeItem({ notes: 'a < b && c > d' });
+      const mock = createMockWebviewPanel();
+      openPanel(item, createMockWorkGraph(item), mock);
+
+      expect(mock.panel.webview.html).toContain('a &lt; b &amp;&amp; c &gt; d');
+    });
+
+    it('should include autosave script in HTML output', () => {
+      const item = makeItem();
+      const mock = createMockWebviewPanel();
+      openPanel(item, createMockWorkGraph(item), mock);
+
+      expect(mock.panel.webview.html).toContain('scheduleAutosave');
+      expect(mock.panel.webview.html).toContain('acquireVsCodeApi');
+    });
+  });
+});
+
+describe('WorkItemEditorPanel (integration with WorkGraph)', () => {
   let store: ITaskStore;
   let graph: WorkGraph;
-  let mockPanel: ReturnType<typeof createMockWebviewPanel>;
+  let mockPanel: ReturnType<typeof createIntegrationWebviewPanel>;
   let context: vscode.ExtensionContext;
 
   beforeEach(async () => {
     store = createMockStore();
     graph = new WorkGraph(store);
     await graph.load();
-    context = createMockContext();
-    mockPanel = createMockWebviewPanel();
+    context = createIntegrationContext();
+    mockPanel = createIntegrationWebviewPanel();
     vi.mocked(vscode.window.createWebviewPanel).mockReset();
     vi.mocked(vscode.window.createWebviewPanel).mockReturnValue(mockPanel as any);
     vi.mocked(vscode.window.showErrorMessage).mockReset();
@@ -122,7 +585,6 @@ describe('WorkItemEditorPanel', () => {
       const item = await graph.createItem({ title: 'Manual Task' });
       WorkItemEditorPanel.open(context, graph, item);
 
-      // The title input should not have readonly attribute
       const html = mockPanel.webview.html;
       const titleMatch = html.match(/<input[^>]*id="title"[^>]*>/);
       expect(titleMatch).toBeTruthy();
@@ -167,7 +629,6 @@ describe('WorkItemEditorPanel', () => {
     });
 
     it('shows "Item not found" when item is missing', () => {
-      // Open with an item that doesn't exist in the graph
       const fakeItem = makeItem({ id: 'nonexistent' });
       WorkItemEditorPanel.open(context, graph, fakeItem);
 
@@ -181,12 +642,10 @@ describe('WorkItemEditorPanel', () => {
       WorkItemEditorPanel.open(context, graph, item);
 
       const html = mockPanel.webview.html;
-      // The title is in an attribute value, so &, <, >, " should be escaped
       expect(html).toContain('&amp;');
       expect(html).toContain('&lt;');
       expect(html).toContain('&gt;');
       expect(html).toContain('&quot;');
-      // Raw dangerous characters should not appear unescaped in the value attribute
       expect(html).not.toMatch(/value="[^"]*<script>/);
     });
 
@@ -195,7 +654,6 @@ describe('WorkItemEditorPanel', () => {
       WorkItemEditorPanel.open(context, graph, item);
 
       const html = mockPanel.webview.html;
-      // Notes are inside textarea (escapeHtml), so &, <, > should be escaped
       expect(html).toContain('&lt;b&gt;bold&lt;/b&gt;');
       expect(html).toContain('&amp;');
     });
@@ -205,7 +663,7 @@ describe('WorkItemEditorPanel', () => {
       WorkItemEditorPanel.open(context, graph, item);
 
       const html = mockPanel.webview.html;
-      expect(html).toMatch(/<textarea id="notes"><\/textarea>/);
+      expect(html).toMatch(/<textarea id="notes" placeholder="Add notes..."><\/textarea>/);
     });
   });
 
@@ -219,7 +677,6 @@ describe('WorkItemEditorPanel', () => {
         data: { title: 'Updated Title', notes: 'Some notes' },
       });
 
-      // Allow async handler to complete
       await vi.waitFor(() => {
         const updated = graph.getItem(item.id);
         expect(updated!.title).toBe('Updated Title');
@@ -251,7 +708,6 @@ describe('WorkItemEditorPanel', () => {
         data: { title: '', notes: 'notes' },
       });
 
-      // Let pending microtasks run without relying on a fixed delay
       await Promise.resolve();
       expect(vi.mocked(store.save)).toHaveBeenCalledTimes(saveCountBefore);
       expect(graph.getItem(item.id)!.title).toBe('Original');
@@ -280,7 +736,6 @@ describe('WorkItemEditorPanel', () => {
       const item = await graph.createItem({ title: 'Temp' });
       WorkItemEditorPanel.open(context, graph, item);
 
-      // Delete the item from the graph
       await graph.deleteItem(item.id);
 
       mockPanel.webview._fireMessage({
@@ -343,7 +798,6 @@ describe('WorkItemEditorPanel', () => {
       const item = await graph.createItem({ title: 'Task' });
       WorkItemEditorPanel.open(context, graph, item);
 
-      // Dispose via the context subscription
       const sub = context.subscriptions[0] as vscode.Disposable;
       sub.dispose();
 
@@ -354,10 +808,8 @@ describe('WorkItemEditorPanel', () => {
       const item = await graph.createItem({ title: 'Task' });
       WorkItemEditorPanel.open(context, graph, item);
 
-      // Get the message subscription disposable
       const msgDisposable = vi.mocked(mockPanel.webview.onDidReceiveMessage).mock.results[0].value;
 
-      // Fire the onDidDispose event
       mockPanel._fireDispose();
 
       expect(msgDisposable.dispose).toHaveBeenCalled();
@@ -369,7 +821,6 @@ describe('WorkItemEditorPanel', () => {
 
       const sub = context.subscriptions[0] as vscode.Disposable;
       sub.dispose();
-      // Second dispose should not throw
       expect(() => sub.dispose()).not.toThrow();
     });
   });
