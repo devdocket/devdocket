@@ -23,17 +23,17 @@ let actionRegistry: ActionRegistry | undefined;
 let workGraph: WorkGraph | undefined;
 let stateStore: DiscoveredStateStore | undefined;
 
-export async function activate(context: vscode.ExtensionContext): Promise<WorkCenterApi> {
+function initializeLogging(context: vscode.ExtensionContext): void {
   const outputChannel = vscode.window.createOutputChannel('WorkCenter');
   context.subscriptions.push(outputChannel);
 
-  const logLevelConfig = vscode.workspace.getConfiguration('workcenter').get<string>('logLevel', 'info');
   const logLevelMap: Record<string, LogLevel> = {
     debug: LogLevel.Debug,
     info: LogLevel.Info,
     warn: LogLevel.Warn,
     error: LogLevel.Error,
   };
+  const logLevelConfig = vscode.workspace.getConfiguration('workcenter').get<string>('logLevel', 'info');
   initLogger(outputChannel, logLevelMap[logLevelConfig] ?? LogLevel.Info);
 
   context.subscriptions.push(
@@ -44,10 +44,9 @@ export async function activate(context: vscode.ExtensionContext): Promise<WorkCe
       }
     }),
   );
+}
 
-  logger.info('WorkCenter activating...');
-
-  const storagePath = context.globalStorageUri.fsPath;
+async function loadStores(storagePath: string): Promise<{ workGraph: WorkGraph; stateStore: DiscoveredStateStore }> {
   const store = new JsonTaskStore(storagePath);
   const wg = new WorkGraph(store);
   workGraph = wg;
@@ -59,12 +58,15 @@ export async function activate(context: vscode.ExtensionContext): Promise<WorkCe
   await ss.load();
   logger.debug('Loaded discovered state');
 
-  // Migration: mark existing provider-backed items as accepted
+  return { workGraph: wg, stateStore: ss };
+}
+
+async function migrateDiscoveredState(workGraph: WorkGraph, stateStore: DiscoveredStateStore): Promise<void> {
   const itemsToMigrate: Array<{ providerId: string; externalId: string; state: 'accepted' }> = [];
-  
-  for (const item of wg.getAll()) {
+
+  for (const item of workGraph.getAll()) {
     if (item.providerId && item.externalId) {
-      const existing = ss.getState(item.providerId, item.externalId);
+      const existing = stateStore.getState(item.providerId, item.externalId);
       if (existing === undefined) {
         itemsToMigrate.push({
           providerId: item.providerId,
@@ -77,27 +79,30 @@ export async function activate(context: vscode.ExtensionContext): Promise<WorkCe
 
   if (itemsToMigrate.length > 0) {
     try {
-      await ss.setStates(itemsToMigrate);
+      await stateStore.setStates(itemsToMigrate);
       logger.info(`Migrated ${itemsToMigrate.length} items to accepted state`);
     } catch (err) {
       logger.error('Migration failed', err);
     }
   }
+}
 
-  const pr = new ProviderRegistry(ss);
-  providerRegistry = pr;
-  const ar = new ActionRegistry();
-  actionRegistry = ar;
-  const api = new WorkCenterApiImpl(pr, ar);
-
-  const inboxProvider = new InboxTreeProvider(pr, ss);
-  const queueProvider = new QueueTreeProvider(wg);
-  const focusProvider = new FocusTreeProvider(wg);
-  const sourcesProvider = new SourcesTreeProvider(pr, ss);
-  const historyProvider = new HistoryTreeProvider(wg);
+function createTreeViews(
+  providerRegistry: ProviderRegistry,
+  stateStore: DiscoveredStateStore,
+  workGraph: WorkGraph,
+) {
+  const inboxProvider = new InboxTreeProvider(providerRegistry, stateStore);
+  const queueProvider = new QueueTreeProvider(workGraph);
+  const focusProvider = new FocusTreeProvider(workGraph);
+  const sourcesProvider = new SourcesTreeProvider(providerRegistry, stateStore);
+  const historyProvider = new HistoryTreeProvider(workGraph);
 
   const inboxTreeView = vscode.window.createTreeView('workcenter.inbox', { treeDataProvider: inboxProvider });
   const sourcesTreeView = vscode.window.createTreeView('workcenter.sources', { treeDataProvider: sourcesProvider });
+  const queueTreeView = vscode.window.createTreeView('workcenter.queue', { treeDataProvider: queueProvider, dragAndDropController: queueProvider });
+  const focusTreeView = vscode.window.createTreeView('workcenter.focus', { treeDataProvider: focusProvider });
+  const historyTreeView = vscode.window.createTreeView('workcenter.history', { treeDataProvider: historyProvider });
 
   const inboxSelectionSub = inboxTreeView.onDidChangeSelection((e) => {
     let changed = false;
@@ -111,40 +116,53 @@ export async function activate(context: vscode.ExtensionContext): Promise<WorkCe
     }
   });
 
+  return {
+    providers: { inboxProvider, queueProvider, focusProvider, sourcesProvider, historyProvider },
+    views: { inboxTreeView, queueTreeView, focusTreeView, sourcesTreeView, historyTreeView },
+    disposables: [inboxSelectionSub] as vscode.Disposable[],
+  };
+}
+
+// Wires up all event-driven UI updates: view messages, inbox badge,
+// coalesced provider events, and new-item notifications.
+function wireEvents(
+  providerRegistry: ProviderRegistry,
+  stateStore: DiscoveredStateStore,
+  workGraph: WorkGraph,
+  { providers, views }: ReturnType<typeof createTreeViews>,
+): vscode.Disposable[] {
+  const { inboxProvider, queueProvider, focusProvider, historyProvider } = providers;
+  const { inboxTreeView, sourcesTreeView, queueTreeView, focusTreeView, historyTreeView } = views;
+
   // View message state: empty by default, loading when providers are fetching
   const updateViewMessages = () => {
-    if (pr.loading) {
+    if (providerRegistry.loading) {
       sourcesTreeView.message = 'Loading…';
       inboxTreeView.message = 'Loading…';
-    } else if (pr.getAllDiscoveredItems().size === 0) {
+    } else if (providerRegistry.getAllDiscoveredItems().size === 0) {
       sourcesTreeView.message = 'No sources connected';
       inboxTreeView.message = 'No new items';
     } else {
       // Providers loaded — show empty messages only if views have no content
-      const hasDiscoveredItems = [...pr.getAllDiscoveredItems().values()].some(items => items.length > 0);
+      const hasDiscoveredItems = [...providerRegistry.getAllDiscoveredItems().values()].some(items => items.length > 0);
       sourcesTreeView.message = hasDiscoveredItems ? undefined : 'No items found';
 
       const hasInboxItems = inboxProvider.getChildren().length > 0;
       inboxTreeView.message = hasInboxItems ? undefined : 'No new items';
     }
   };
-  const queueTreeView = vscode.window.createTreeView('workcenter.queue', { treeDataProvider: queueProvider, dragAndDropController: queueProvider });
-  const focusTreeView = vscode.window.createTreeView('workcenter.focus', { treeDataProvider: focusProvider });
-  const historyTreeView = vscode.window.createTreeView('workcenter.history', { treeDataProvider: historyProvider });
 
   const updateWorkViewMessages = () => {
     queueTreeView.message = queueProvider.getChildren().length > 0 ? undefined : 'No items in queue';
     focusTreeView.message = focusProvider.getChildren().length > 0 ? undefined : 'No active work';
     historyTreeView.message = historyProvider.getChildren().length > 0 ? undefined : 'No history items';
   };
-  updateWorkViewMessages();
-  const workGraphSub = wg.onDidChange(updateWorkViewMessages);
 
   let initialLoadComplete = false;
   let wasLoading = false;
 
   const updateInboxBadge = () => {
-    const count = getInboxUnseenCount(pr, ss);
+    const count = getInboxUnseenCount(providerRegistry, stateStore);
     inboxTreeView.badge = count > 0 ? { value: count, tooltip: `${count} unseen item${count === 1 ? '' : 's'}` } : undefined;
   };
 
@@ -162,22 +180,24 @@ export async function activate(context: vscode.ExtensionContext): Promise<WorkCe
     });
   };
 
+  // Set initial state
+  updateWorkViewMessages();
   updateViewMessages();
   updateInboxBadge();
 
-  const providerRegSub = pr.onDidRegisterProvider(scheduleUiUpdate);
-  const discoveredSub = pr.onDidChangeDiscoveredItems(() => {
+  const providerRegSub = providerRegistry.onDidRegisterProvider(scheduleUiUpdate);
+  const discoveredSub = providerRegistry.onDidChangeDiscoveredItems(() => {
     scheduleUiUpdate();
 
     // Mark initial load complete when loading transitions from true to false
     if (!initialLoadComplete) {
-      if (wasLoading && !pr.loading) {
+      if (wasLoading && !providerRegistry.loading) {
         initialLoadComplete = true;
       }
-      wasLoading = wasLoading || pr.loading;
+      wasLoading = wasLoading || providerRegistry.loading;
     }
   });
-  const newItemsSub = pr.onDidAddNewUnseenItems((newCount) => {
+  const newItemsSub = providerRegistry.onDidAddNewUnseenItems((newCount) => {
     if (!initialLoadComplete) { return; }
     const config = vscode.workspace.getConfiguration('workcenter');
     const showNotifications = config.get<boolean>('showInboxNotifications', true);
@@ -187,25 +207,44 @@ export async function activate(context: vscode.ExtensionContext): Promise<WorkCe
       );
     }
   });
-  const stateStoreSub = ss.onDidChange(scheduleUiUpdate);
+  const stateStoreSub = stateStore.onDidChange(scheduleUiUpdate);
+  const workGraphSub = workGraph.onDidChange(updateWorkViewMessages);
+
+  return [discoveredSub, newItemsSub, providerRegSub, stateStoreSub, workGraphSub];
+}
+
+export async function activate(context: vscode.ExtensionContext): Promise<WorkCenterApi> {
+  initializeLogging(context);
+  logger.info('WorkCenter activating...');
+
+  const storagePath = context.globalStorageUri.fsPath;
+  const { workGraph: wg, stateStore: ss } = await loadStores(storagePath);
+  await migrateDiscoveredState(wg, ss);
+
+  const pr = new ProviderRegistry(ss);
+  providerRegistry = pr;
+  const ar = new ActionRegistry();
+  actionRegistry = ar;
+  const api = new WorkCenterApiImpl(pr, ar);
+
+  const treeSetup = createTreeViews(pr, ss, wg);
+  const eventDisposables = wireEvents(pr, ss, wg, treeSetup);
+
+  const { providers, views, disposables: viewDisposables } = treeSetup;
 
   context.subscriptions.push(
-    inboxTreeView,
-    queueTreeView,
-    focusTreeView,
-    sourcesTreeView,
-    historyTreeView,
-    inboxSelectionSub,
-    discoveredSub,
-    newItemsSub,
-    providerRegSub,
-    stateStoreSub,
-    workGraphSub,
-    { dispose: () => inboxProvider.dispose() },
-    { dispose: () => queueProvider.dispose() },
-    { dispose: () => focusProvider.dispose() },
-    { dispose: () => sourcesProvider.dispose() },
-    { dispose: () => historyProvider.dispose() },
+    ...Object.values(views),
+    ...viewDisposables,
+    ...eventDisposables,
+    { dispose: () => wg.dispose() },
+    { dispose: () => ss.dispose() },
+    { dispose: () => providers.inboxProvider.dispose() },
+    { dispose: () => providers.queueProvider.dispose() },
+    { dispose: () => providers.focusProvider.dispose() },
+    { dispose: () => providers.sourcesProvider.dispose() },
+    { dispose: () => providers.historyProvider.dispose() },
+    { dispose: () => pr.dispose() },
+    { dispose: () => ar.dispose() },
   );
 
   registerCommands(context, wg, ar, ss);
