@@ -84,11 +84,22 @@ export class GitHubPrReviewProvider implements WorkCenterProvider {
         return;
       }
 
-      const session = await vscode.authentication.getSession('github', ['repo'], {
-        createIfNone: true,
-      }).catch(() => null);
+      let session: vscode.AuthenticationSession | undefined;
+      try {
+        session = await vscode.authentication.getSession('github', ['repo'], {
+          createIfNone: true,
+        });
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        logger.error('GitHub authentication failed', err);
+        vscode.window.showWarningMessage(`WorkCenter GitHub: Authentication failed — ${message}`);
+        return;
+      }
 
       if (!session || token?.isCancellationRequested) {
+        if (!session) {
+          logger.info('User cancelled GitHub authentication');
+        }
         return;
       }
 
@@ -107,11 +118,18 @@ export class GitHubPrReviewProvider implements WorkCenterProvider {
 
     this._isRefreshing = true;
     try {
-      const session = await vscode.authentication.getSession('github', ['repo'], {
-        createIfNone: false,
-      }).catch(() => null);
+      let session: vscode.AuthenticationSession | undefined;
+      try {
+        session = await vscode.authentication.getSession('github', ['repo'], {
+          createIfNone: false,
+        });
+      } catch (err) {
+        logger.warn('GitHub authentication failed during background refresh', err);
+        return;
+      }
 
       if (!session) {
+        logger.debug('No GitHub session available for background refresh');
         return;
       }
 
