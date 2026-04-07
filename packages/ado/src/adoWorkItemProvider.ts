@@ -61,7 +61,7 @@ export class AdoWorkItemProvider implements WorkCenterProvider {
     }
   }
 
-  async refresh(): Promise<void> {
+  async refresh(token?: vscode.CancellationToken): Promise<void> {
     if (this._isRefreshing) {
       return;
     }
@@ -69,11 +69,15 @@ export class AdoWorkItemProvider implements WorkCenterProvider {
     this._isRefreshing = true;
     try {
       logger.info('Fetching assigned ADO work items...');
+      if (token?.isCancellationRequested) {
+        return;
+      }
+
       const session = await vscode.authentication.getSession('microsoft', [ADO_AUTH_SCOPE], {
         createIfNone: true,
       }).catch(() => null);
 
-      if (!session) {
+      if (!session || token?.isCancellationRequested) {
         return;
       }
 
