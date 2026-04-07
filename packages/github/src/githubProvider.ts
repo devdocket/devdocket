@@ -1,100 +1,14 @@
 import * as vscode from 'vscode';
 import { logger } from './logger';
-import type { DiscoveredItem, WorkCenterProvider } from '@workcenter/shared';
+import type { DiscoveredItem } from '@workcenter/shared';
+import { BaseGitHubProvider, GitHubIssue } from './baseGithubProvider';
 
-interface GitHubIssue {
-  number: number;
-  title: string;
-  body?: string;
-  html_url: string;
-  repository_url: string;
-  pull_request?: unknown;
-}
-
-export class GitHubIssueProvider implements WorkCenterProvider {
+export class GitHubIssueProvider extends BaseGitHubProvider {
   readonly id = 'github';
   readonly label = 'GitHub Issues';
 
-  private readonly _onDidDiscoverItems = new vscode.EventEmitter<DiscoveredItem[]>();
-  readonly onDidDiscoverItems = this._onDidDiscoverItems.event;
-
-  private refreshTimer: ReturnType<typeof setInterval> | undefined;
-  private _isRefreshing = false;
-
-  startPeriodicRefresh(intervalSeconds: number): void {
-    this.stopPeriodicRefresh();
-    const interval = Number(intervalSeconds);
-    if (!Number.isFinite(interval) || interval <= 0) {
-      return;
-    }
-    // Clamp to minimum of 60 seconds
-    const clampedInterval = Math.max(interval, 60);
-    this.refreshTimer = setInterval(() => {
-      this.refreshInBackground().catch((err) => {
-        logger.error('Refresh failed', err);
-      });
-    }, clampedInterval * 1000);
-  }
-
-  stopPeriodicRefresh(): void {
-    if (this.refreshTimer) {
-      clearInterval(this.refreshTimer);
-      this.refreshTimer = undefined;
-    }
-  }
-
-  async refresh(token?: vscode.CancellationToken): Promise<void> {
-    if (this._isRefreshing) {
-      return;
-    }
-
-    this._isRefreshing = true;
+  protected async fetchAndPublish(accessToken: string, isUserTriggered: boolean): Promise<void> {
     logger.info('Fetching assigned issues...');
-    try {
-      if (token?.isCancellationRequested) {
-        return;
-      }
-
-      const session = await vscode.authentication.getSession('github', ['repo'], {
-        createIfNone: true,
-      }).catch(() => null);
-      
-      if (!session || token?.isCancellationRequested) {
-        return;
-      }
-
-      await this.fetchAndPublishIssues(session.accessToken, true);
-    } catch (err) {
-      logger.error('Failed to fetch issues', err);
-    } finally {
-      this._isRefreshing = false;
-    }
-  }
-
-  private async refreshInBackground(): Promise<void> {
-    if (this._isRefreshing) {
-      return;
-    }
-
-    this._isRefreshing = true;
-    try {
-      const session = await vscode.authentication.getSession('github', ['repo'], {
-        createIfNone: false,
-      }).catch(() => null);
-      
-      if (!session) {
-        return;
-      }
-
-      await this.fetchAndPublishIssues(session.accessToken, false);
-    } catch (err) {
-      logger.error('Failed to fetch issues', err);
-    } finally {
-      this._isRefreshing = false;
-    }
-  }
-
-  private async fetchAndPublishIssues(accessToken: string, isUserTriggered: boolean = false): Promise<void> {
     const repos = this.getConfiguredRepos();
     const { issues, failures } = await this.fetchAssignedIssues(accessToken, repos);
 
@@ -127,25 +41,6 @@ export class GitHubIssueProvider implements WorkCenterProvider {
   private getConfiguredRepos(): string[] {
     const config = vscode.workspace.getConfiguration('workcenterGithub');
     return config.get<string[]>('repos', []);
-  }
-
-  private parseRepo(issue: GitHubIssue): string {
-    const match = issue.html_url.match(/github\.com\/([^/]+\/[^/]+)/);
-    if (match) {
-      return match[1];
-    }
-    
-    // Fallback to parsing from repository_url (API URL)
-    const apiMatch = issue.repository_url.match(/repos\/([^/]+\/[^/]+)/);
-    if (apiMatch) {
-      return apiMatch[1];
-    }
-    
-    // Deterministic fallback: hash the repository_url
-    const hash = issue.repository_url.split('').reduce((acc, char) => {
-      return ((acc << 5) - acc) + char.charCodeAt(0) | 0;
-    }, 0);
-    return `unknown-repo-${Math.abs(hash).toString(36)}`;
   }
 
   private async fetchAssignedIssues(
@@ -267,10 +162,5 @@ export class GitHubIssueProvider implements WorkCenterProvider {
     if (!linkHeader) return null;
     const match = linkHeader.match(/<([^>]+)>;\s*rel="next"/);
     return match ? match[1] : null;
-  }
-
-  dispose(): void {
-    this.stopPeriodicRefresh();
-    this._onDidDiscoverItems.dispose();
   }
 }
