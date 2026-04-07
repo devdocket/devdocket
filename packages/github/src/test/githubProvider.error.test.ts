@@ -4,6 +4,7 @@ import { GitHubIssueProvider } from '../githubProvider';
 import { initLogger, LogLevel } from '../logger';
 
 const mockFetch = vi.fn();
+const noLinkHeaders = { get: () => null };
 
 function createMockIssue(number: number, title: string, repo = 'owner/repo') {
   return {
@@ -198,6 +199,7 @@ describe('GitHubIssueProvider — error handling', () => {
     it('handles JSON parse error in response body', async () => {
       mockFetch.mockResolvedValueOnce({
         ok: true,
+        headers: noLinkHeaders,
         json: async () => { throw new SyntaxError('Unexpected token < in JSON'); },
         headers: { get: () => null },
       });
@@ -211,6 +213,7 @@ describe('GitHubIssueProvider — error handling', () => {
     it('handles empty array response body', async () => {
       mockFetch.mockResolvedValueOnce({
         ok: true,
+        headers: noLinkHeaders,
         json: async () => [],
         headers: { get: () => null },
       });
@@ -225,7 +228,7 @@ describe('GitHubIssueProvider — error handling', () => {
     it('handles issue with missing body field', async () => {
       mockFetch.mockResolvedValueOnce({
         ok: true,
-        headers: { get: () => null },
+        headers: noLinkHeaders,
         json: async () => [{
           number: 1,
           title: 'No body',
@@ -248,7 +251,7 @@ describe('GitHubIssueProvider — error handling', () => {
     it('handles issue with null body', async () => {
       mockFetch.mockResolvedValueOnce({
         ok: true,
-        headers: { get: () => null },
+        headers: noLinkHeaders,
         json: async () => [{
           number: 1,
           title: 'Null body',
@@ -272,6 +275,7 @@ describe('GitHubIssueProvider — error handling', () => {
       configureRepos(['owner/repo1']);
       mockFetch.mockResolvedValueOnce({
         ok: true,
+        headers: noLinkHeaders,
         json: async () => { throw new SyntaxError('Unexpected end of JSON input'); },
         headers: { get: () => null },
       });
@@ -385,7 +389,7 @@ describe('GitHubIssueProvider — error handling', () => {
       mockFetch
         .mockResolvedValueOnce({
           ok: true,
-          headers: { get: () => null },
+          headers: noLinkHeaders,
           json: async () => [createMockIssue(1, 'Good issue', 'good/repo')],
           headers: { get: () => null },
         })
@@ -406,7 +410,7 @@ describe('GitHubIssueProvider — error handling', () => {
       mockFetch
         .mockResolvedValueOnce({
           ok: true,
-          headers: { get: () => null },
+          headers: noLinkHeaders,
           json: async () => [createMockIssue(1, 'OK', 'good/repo')],
           headers: { get: () => null },
         })
@@ -426,7 +430,7 @@ describe('GitHubIssueProvider — error handling', () => {
       mockFetch
         .mockResolvedValueOnce({
           ok: true,
-          headers: { get: () => null },
+          headers: noLinkHeaders,
           json: async () => [createMockIssue(1, 'OK', 'good/repo')],
           headers: { get: () => null },
         })
@@ -445,7 +449,7 @@ describe('GitHubIssueProvider — error handling', () => {
       mockFetch
         .mockResolvedValueOnce({
           ok: true,
-          headers: { get: () => null },
+          headers: noLinkHeaders,
           json: async () => [createMockIssue(1, 'Works', 'good/repo')],
           headers: { get: () => null },
         })
@@ -480,12 +484,13 @@ describe('GitHubIssueProvider — error handling', () => {
       mockFetch
         .mockResolvedValueOnce({
           ok: true,
-          headers: { get: () => null },
+          headers: noLinkHeaders,
           json: async () => [createMockIssue(1, 'OK', 'good/repo')],
           headers: { get: () => null },
         })
         .mockResolvedValueOnce({
           ok: true,
+          headers: noLinkHeaders,
           json: async () => { throw new SyntaxError('Invalid JSON'); },
           headers: { get: () => null },
         });
@@ -512,6 +517,7 @@ describe('GitHubIssueProvider — error handling', () => {
       // _isRefreshing should be false, so a second call proceeds
       mockFetch.mockResolvedValueOnce({
         ok: true,
+        headers: noLinkHeaders,
         json: async () => [],
         headers: { get: () => null },
       });
