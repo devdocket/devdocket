@@ -72,6 +72,14 @@ export function registerCommands(
       'workcenter.markWaitingOn',
       transitionCommand(workGraph, WorkItemState.WaitingOn, 'Failed to mark item as waiting'),
     ),
+    vscode.commands.registerCommand(
+      'workcenter.pauseItem',
+      transitionCommand(workGraph, WorkItemState.Paused, 'Failed to pause item'),
+    ),
+    vscode.commands.registerCommand(
+      'workcenter.resumeItem',
+      transitionCommand(workGraph, WorkItemState.InProgress, 'Failed to resume item'),
+    ),
     vscode.commands.registerCommand('workcenter.editItem', (item) => {
       if (!item?.id) {
         vscode.window.showInformationMessage('WorkCenter: Select a work item first.');
