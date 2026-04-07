@@ -42,6 +42,7 @@ export class DiscoveredStateStore {
   private readonly _onDidChange = new vscode.EventEmitter<void>();
   readonly onDidChange = this._onDidChange.event;
   private writeQueue: Promise<void> = Promise.resolve();
+  private loadPromise: Promise<void> | null = null;
   private loaded = false;
 
   constructor(storagePath: string) {
@@ -58,38 +59,42 @@ export class DiscoveredStateStore {
 
   async setState(providerId: string, externalId: string, state: InboxState): Promise<void> {
     logger.debug(`Setting state for ${providerId}/${externalId} to ${state}`);
-    if (!this.loaded) {
-      await this.load();
-    }
-    const k = this.key(providerId, externalId);
-    const newRecord = { providerId, externalId, inboxState: state };
-    await this.enqueue(() => {
+    await this.enqueue(async () => {
+      if (!this.loaded) {
+        await this.load();
+      }
+      const k = this.key(providerId, externalId);
       const previousValue = this.cache.get(k);
+      const newRecord = { providerId, externalId, inboxState: state };
       this.cache.set(k, newRecord);
-      return this.writeFile().catch((err) => {
+      try {
+        await this.writeFile();
+      } catch (err) {
         if (previousValue) {
           this.cache.set(k, previousValue);
         } else {
           this.cache.delete(k);
         }
         throw err;
-      });
+      }
     });
     this._onDidChange.fire();
   }
 
   async setStates(items: Array<{ providerId: string; externalId: string; state: InboxState }>): Promise<void> {
-    if (!this.loaded) {
-      await this.load();
-    }
-    await this.enqueue(() => {
+    await this.enqueue(async () => {
+      if (!this.loaded) {
+        await this.load();
+      }
       const rollback = new Map<string, DiscoveredStateRecord | undefined>();
       for (const item of items) {
         const k = this.key(item.providerId, item.externalId);
         rollback.set(k, this.cache.get(k));
         this.cache.set(k, { providerId: item.providerId, externalId: item.externalId, inboxState: item.state });
       }
-      return this.writeFile().catch((err) => {
+      try {
+        await this.writeFile();
+      } catch (err) {
         for (const [k, previousValue] of rollback) {
           if (previousValue) {
             this.cache.set(k, previousValue);
@@ -98,7 +103,7 @@ export class DiscoveredStateStore {
           }
         }
         throw err;
-      });
+      }
     });
     this._onDidChange.fire();
   }
@@ -112,6 +117,16 @@ export class DiscoveredStateStore {
     if (this.loaded) {
       return;
     }
+    if (!this.loadPromise) {
+      this.loadPromise = this.doLoad().catch((err) => {
+        this.loadPromise = null;
+        throw err;
+      });
+    }
+    return this.loadPromise;
+  }
+
+  private async doLoad(): Promise<void> {
     try {
       const data = await fs.readFile(this.filePath, 'utf-8');
       let parsed: unknown;
