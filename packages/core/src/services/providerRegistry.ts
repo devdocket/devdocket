@@ -11,6 +11,7 @@ import { logger } from './logger';
  * Fires events when providers are registered or when their discovered items change.
  */
 export class ProviderRegistry {
+  static readonly REFRESH_TIMEOUT_MS = 30_000;
   private readonly providers = new Map<string, WorkCenterProvider>();
   private readonly subscriptions = new Map<string, { dispose(): void }>();
   private readonly discoveredItems = new Map<string, DiscoveredItem[]>();
@@ -24,6 +25,8 @@ export class ProviderRegistry {
   /** Fired when new unseen items are added to the inbox, with the count of new items. */
   readonly onDidAddNewUnseenItems = this._onDidAddNewUnseenItems.event;
   private readonly _loadingProviders = new Set<string>();
+  private readonly _pendingRefreshes = new Map<string, { cts: vscode.CancellationTokenSource; timeoutId: ReturnType<typeof setTimeout> }>();
+  private _disposed = false;
 
   /** Whether any provider is currently performing its initial refresh. */
   get loading(): boolean {
@@ -68,22 +71,24 @@ export class ProviderRegistry {
     this._loadingProviders.add(provider.id);
     this._onDidRegisterProvider.fire();
     this._onDidChangeDiscoveredItems.fire();
-    provider.refresh()
-      .catch((err) => {
-        logger.error(`Provider "${provider.id}" refresh failed`, err);
-      })
+    this.refreshWithTimeout(provider)
       .finally(() => {
         this._loadingProviders.delete(provider.id);
-        this._onDidChangeDiscoveredItems.fire();
+        if (!this._disposed) {
+          this._onDidChangeDiscoveredItems.fire();
+        }
       });
 
     return new vscode.Disposable(() => {
+      this.cancelPendingRefresh(provider.id);
       this.providers.delete(provider.id);
       this.subscriptions.get(provider.id)?.dispose();
       this.subscriptions.delete(provider.id);
       this.discoveredItems.delete(provider.id);
       this._loadingProviders.delete(provider.id);
-      this._onDidChangeDiscoveredItems.fire();
+      if (!this._disposed) {
+        this._onDidChangeDiscoveredItems.fire();
+      }
     });
   }
 
@@ -135,14 +140,59 @@ export class ProviderRegistry {
   async refreshAll(): Promise<void> {
     const promises = Array.from(this.providers.values()).map((p) => {
       logger.debug(`Provider ${p.id} refreshing...`);
-      return p.refresh().catch((err) => {
-        logger.error(`Provider "${p.id}" refresh failed`, err);
-      });
+      return this.refreshWithTimeout(p);
     });
     await Promise.all(promises);
   }
 
+  private refreshWithTimeout(provider: WorkCenterProvider): Promise<void> {
+    this.cancelPendingRefresh(provider.id);
+    const cts = new vscode.CancellationTokenSource();
+    const timeoutId = setTimeout(() => {
+      if (this.providers.has(provider.id)) {
+        logger.warn(`Provider "${provider.id}" refresh timed out after ${ProviderRegistry.REFRESH_TIMEOUT_MS}ms`);
+      }
+      cts.cancel();
+    }, ProviderRegistry.REFRESH_TIMEOUT_MS);
+    const entry = { cts, timeoutId };
+    this._pendingRefreshes.set(provider.id, entry);
+
+    const refreshPromise = provider.refresh(cts.token)
+      .catch((err: unknown) => {
+        if (!cts.token.isCancellationRequested) {
+          logger.error(`Provider "${provider.id}" refresh failed`, err);
+        }
+      });
+
+    const cancelledPromise = new Promise<void>((resolve) => {
+      cts.token.onCancellationRequested(() => resolve());
+    });
+
+    return Promise.race([refreshPromise, cancelledPromise])
+      .finally(() => {
+        clearTimeout(timeoutId);
+        // Only clean up if this entry is still the current one for this provider
+        if (this._pendingRefreshes.get(provider.id) === entry) {
+          this._pendingRefreshes.delete(provider.id);
+        }
+        cts.dispose();
+      });
+  }
+
+  private cancelPendingRefresh(providerId: string): void {
+    const pending = this._pendingRefreshes.get(providerId);
+    if (pending) {
+      clearTimeout(pending.timeoutId);
+      pending.cts.cancel();
+      // CTS is disposed in refreshWithTimeout's finally block
+      this._pendingRefreshes.delete(providerId);
+    }
+  }
+
   private async handleDiscoveredItems(providerId: string, items: DiscoveredItem[]): Promise<void> {
+    if (this._disposed) {
+      return;
+    }
     logger.info(`Provider ${providerId} discovered ${items.length} items`);
     this.discoveredItems.set(providerId, items);
     const provider = this.providers.get(providerId);
@@ -159,20 +209,32 @@ export class ProviderRegistry {
     if (updates.length > 0) {
       try {
         await this.stateStore.setStates(updates);
-        this._onDidAddNewUnseenItems.fire(updates.length);
+        if (!this._disposed) {
+          this._onDidAddNewUnseenItems.fire(updates.length);
+        }
       } catch (err) {
         logger.error('Failed to persist discovered states', err);
       }
     }
-    this._onDidChangeDiscoveredItems.fire();
+    if (!this._disposed) {
+      this._onDidChangeDiscoveredItems.fire();
+    }
   }
 
   /** Release all subscriptions and clear internal state. */
   dispose(): void {
+    this._disposed = true;
+    // Clear providers first so cancellation handlers don't log spurious timeout warnings
+    this.providers.clear();
+    for (const { cts, timeoutId } of this._pendingRefreshes.values()) {
+      clearTimeout(timeoutId);
+      cts.cancel();
+      // CTS is disposed in refreshWithTimeout's finally block
+    }
+    this._pendingRefreshes.clear();
     for (const sub of this.subscriptions.values()) {
       sub.dispose();
     }
-    this.providers.clear();
     this.subscriptions.clear();
     this._onDidChangeDiscoveredItems.dispose();
     this._onDidRegisterProvider.dispose();

@@ -1,4 +1,5 @@
-import { WorkItem } from '../models/workItem';
+import type * as vscode from 'vscode';
+import type { WorkItem } from '../models/workItem';
 
 /**
  * A resource that can be released to free underlying handles or subscriptions.
@@ -82,7 +83,7 @@ export interface WorkCenterProvider {
    * Re-fetch items from the external source.
    * Implementations should fire {@link onDidDiscoverItems} with the results.
    */
-  refresh(): Promise<void>;
+  refresh(token?: vscode.CancellationToken): Promise<void>;
 }
 
 /**
