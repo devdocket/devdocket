@@ -199,6 +199,7 @@ describe('GitHubIssueProvider — error handling', () => {
       mockFetch.mockResolvedValueOnce({
         ok: true,
         json: async () => { throw new SyntaxError('Unexpected token < in JSON'); },
+        headers: { get: () => null },
       });
 
       const listener = vi.fn();
@@ -272,6 +273,7 @@ describe('GitHubIssueProvider — error handling', () => {
       mockFetch.mockResolvedValueOnce({
         ok: true,
         json: async () => { throw new SyntaxError('Unexpected end of JSON input'); },
+        headers: { get: () => null },
       });
 
       const listener = vi.fn();
@@ -485,6 +487,7 @@ describe('GitHubIssueProvider — error handling', () => {
         .mockResolvedValueOnce({
           ok: true,
           json: async () => { throw new SyntaxError('Invalid JSON'); },
+          headers: { get: () => null },
         });
 
       const listener = vi.fn();

@@ -112,13 +112,12 @@ describe('GitHub provider config edge cases', () => {
         }),
       } as any);
 
-      mockFetch.mockResolvedValueOnce({ ok: false, status: 404 });
-
       const listener = vi.fn();
       provider.onDidDiscoverItems(listener);
       await provider.refresh();
 
-      expect(mockFetch).toHaveBeenCalledTimes(1);
+      // Invalid repos are filtered out before fetching
+      expect(mockFetch).toHaveBeenCalledTimes(0);
       expect(listener).toHaveBeenCalledWith([]);
     });
 
