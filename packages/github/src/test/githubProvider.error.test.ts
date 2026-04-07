@@ -211,6 +211,7 @@ describe('GitHubIssueProvider — error handling', () => {
       mockFetch.mockResolvedValueOnce({
         ok: true,
         json: async () => [],
+        headers: { get: () => null },
       });
 
       const listener = vi.fn();
@@ -231,6 +232,7 @@ describe('GitHubIssueProvider — error handling', () => {
           repository_url: 'https://api.github.com/repos/owner/repo',
           body: undefined,
         }],
+        headers: { get: () => null },
       });
 
       const listener = vi.fn();
@@ -253,6 +255,7 @@ describe('GitHubIssueProvider — error handling', () => {
           repository_url: 'https://api.github.com/repos/owner/repo',
           body: null,
         }],
+        headers: { get: () => null },
       });
 
       const listener = vi.fn();
@@ -382,6 +385,7 @@ describe('GitHubIssueProvider — error handling', () => {
           ok: true,
           headers: { get: () => null },
           json: async () => [createMockIssue(1, 'Good issue', 'good/repo')],
+          headers: { get: () => null },
         })
         .mockResolvedValueOnce({ ok: false, status: 404 });
 
@@ -402,6 +406,7 @@ describe('GitHubIssueProvider — error handling', () => {
           ok: true,
           headers: { get: () => null },
           json: async () => [createMockIssue(1, 'OK', 'good/repo')],
+          headers: { get: () => null },
         })
         .mockResolvedValueOnce({ ok: false, status: 500 })
         .mockResolvedValueOnce({ ok: false, status: 403 });
@@ -421,6 +426,7 @@ describe('GitHubIssueProvider — error handling', () => {
           ok: true,
           headers: { get: () => null },
           json: async () => [createMockIssue(1, 'OK', 'good/repo')],
+          headers: { get: () => null },
         })
         .mockResolvedValueOnce({ ok: false, status: 500 });
 
@@ -439,6 +445,7 @@ describe('GitHubIssueProvider — error handling', () => {
           ok: true,
           headers: { get: () => null },
           json: async () => [createMockIssue(1, 'Works', 'good/repo')],
+          headers: { get: () => null },
         })
         .mockRejectedValueOnce(new Error('ETIMEDOUT'));
 
@@ -473,6 +480,7 @@ describe('GitHubIssueProvider — error handling', () => {
           ok: true,
           headers: { get: () => null },
           json: async () => [createMockIssue(1, 'OK', 'good/repo')],
+          headers: { get: () => null },
         })
         .mockResolvedValueOnce({
           ok: true,
@@ -502,6 +510,7 @@ describe('GitHubIssueProvider — error handling', () => {
       mockFetch.mockResolvedValueOnce({
         ok: true,
         json: async () => [],
+        headers: { get: () => null },
       });
 
       const listener = vi.fn();
