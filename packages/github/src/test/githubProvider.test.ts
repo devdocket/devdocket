@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
-import { authentication, workspace } from 'vscode';
+import { authentication, window, workspace } from 'vscode';
 import { GitHubIssueProvider } from '../githubProvider';
+import { initLogger, LogLevel } from '../logger';
 
 // Mock global fetch
 const mockFetch = vi.fn();
@@ -17,11 +18,15 @@ function createMockIssue(number: number, title: string, repo = 'owner/repo') {
 
 describe('GitHubIssueProvider', () => {
   let provider: GitHubIssueProvider;
+  let mockChannel: { appendLine: ReturnType<typeof vi.fn> };
 
   beforeEach(() => {
     vi.clearAllMocks();
     vi.stubGlobal('fetch', mockFetch);
     provider = new GitHubIssueProvider();
+
+    mockChannel = { appendLine: vi.fn() };
+    initLogger(mockChannel as any, LogLevel.Debug);
 
     // Default: auth session returns a token
     vi.mocked(authentication.getSession).mockResolvedValue({
@@ -197,6 +202,67 @@ describe('GitHubIssueProvider', () => {
     expect(listener).toHaveBeenCalledWith([]);
 
     consoleError.mockRestore();
+  });
+
+  it('shows warning and logs error when auth throws on user-triggered refresh', async () => {
+    vi.mocked(authentication.getSession).mockRejectedValueOnce(
+      new Error('Auth service unavailable'),
+    );
+
+    const listener = vi.fn();
+    provider.onDidDiscoverItems(listener);
+    await provider.refresh();
+
+    expect(window.showWarningMessage).toHaveBeenCalledWith(
+      expect.stringContaining('Authentication failed'),
+    );
+    expect(listener).not.toHaveBeenCalled();
+    expect(mockFetch).not.toHaveBeenCalled();
+
+    const logged = mockChannel.appendLine.mock.calls.some(
+      (call: string[]) => call[0].includes('[ERROR]') && call[0].includes('GitHub authentication failed'),
+    );
+    expect(logged).toBe(true);
+  });
+
+  it('does not show warning on auth failure during background refresh', async () => {
+    vi.mocked(authentication.getSession).mockRejectedValueOnce(
+      new Error('Network error'),
+    );
+
+    const refreshBg = (provider as any).refreshInBackground.bind(provider);
+    await refreshBg();
+
+    expect(window.showWarningMessage).not.toHaveBeenCalled();
+    expect(mockFetch).not.toHaveBeenCalled();
+
+    const logged = mockChannel.appendLine.mock.calls.some(
+      (call: string[]) => call[0].includes('[WARN]') && call[0].includes('background refresh'),
+    );
+    expect(logged).toBe(true);
+  });
+
+  it('logs info when user cancels authentication', async () => {
+    vi.mocked(authentication.getSession).mockResolvedValue(undefined as any);
+
+    await provider.refresh();
+
+    const logged = mockChannel.appendLine.mock.calls.some(
+      (call: string[]) => call[0].includes('User cancelled GitHub authentication'),
+    );
+    expect(logged).toBe(true);
+  });
+
+  it('logs debug when no session available for background refresh', async () => {
+    vi.mocked(authentication.getSession).mockResolvedValue(undefined as any);
+
+    const refreshBg = (provider as any).refreshInBackground.bind(provider);
+    await refreshBg();
+
+    const logged = mockChannel.appendLine.mock.calls.some(
+      (call: string[]) => call[0].includes('No GitHub session available'),
+    );
+    expect(logged).toBe(true);
   });
 
   it('startPeriodicRefresh schedules a repeating timer', () => {

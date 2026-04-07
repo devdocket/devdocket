@@ -62,6 +62,67 @@ describe('GitHubPrReviewProvider', () => {
     expect(mockFetch).not.toHaveBeenCalled();
   });
 
+  it('shows warning and logs error when auth throws on user-triggered refresh', async () => {
+    vi.mocked(authentication.getSession).mockRejectedValueOnce(
+      new Error('Auth service unavailable'),
+    );
+
+    const listener = vi.fn();
+    provider.onDidDiscoverItems(listener);
+    await provider.refresh();
+
+    expect(window.showWarningMessage).toHaveBeenCalledWith(
+      expect.stringContaining('Authentication failed'),
+    );
+    expect(listener).not.toHaveBeenCalled();
+    expect(mockFetch).not.toHaveBeenCalled();
+
+    const logged = mockChannel.appendLine.mock.calls.some(
+      (call: string[]) => call[0].includes('[ERROR]') && call[0].includes('GitHub authentication failed'),
+    );
+    expect(logged).toBe(true);
+  });
+
+  it('does not show warning on auth failure during background refresh', async () => {
+    vi.mocked(authentication.getSession).mockRejectedValueOnce(
+      new Error('Network error'),
+    );
+
+    const refreshBg = (provider as any).refreshInBackground.bind(provider);
+    await refreshBg();
+
+    expect(window.showWarningMessage).not.toHaveBeenCalled();
+    expect(mockFetch).not.toHaveBeenCalled();
+
+    const logged = mockChannel.appendLine.mock.calls.some(
+      (call: string[]) => call[0].includes('[WARN]') && call[0].includes('background refresh'),
+    );
+    expect(logged).toBe(true);
+  });
+
+  it('logs info when user cancels authentication', async () => {
+    vi.mocked(authentication.getSession).mockResolvedValue(undefined as any);
+
+    await provider.refresh();
+
+    const logged = mockChannel.appendLine.mock.calls.some(
+      (call: string[]) => call[0].includes('User cancelled GitHub authentication'),
+    );
+    expect(logged).toBe(true);
+  });
+
+  it('logs debug when no session available for background refresh', async () => {
+    vi.mocked(authentication.getSession).mockResolvedValue(undefined as any);
+
+    const refreshBg = (provider as any).refreshInBackground.bind(provider);
+    await refreshBg();
+
+    const logged = mockChannel.appendLine.mock.calls.some(
+      (call: string[]) => call[0].includes('No GitHub session available'),
+    );
+    expect(logged).toBe(true);
+  });
+
   it('fetches PR reviews from search API with correct URL and headers', async () => {
     mockFetch.mockResolvedValueOnce({
       ok: true,
