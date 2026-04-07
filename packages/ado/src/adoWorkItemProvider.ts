@@ -23,7 +23,7 @@ interface WorkCenterProvider {
   readonly label: string;
   readonly resurfaceDismissed?: boolean;
   readonly onDidDiscoverItems: Event<DiscoveredItem[]>;
-  refresh(): Promise<void>;
+  refresh(token?: vscode.CancellationToken): Promise<void>;
 }
 
 // Azure DevOps WIQL query response
@@ -108,7 +108,7 @@ export class AdoWorkItemProvider implements WorkCenterProvider {
    * Performs a user-triggered refresh of assigned ADO work items.
    * Prompts for authentication if no session exists.
    */
-  async refresh(): Promise<void> {
+  async refresh(token?: vscode.CancellationToken): Promise<void> {
     if (this._isRefreshing) {
       return;
     }
@@ -116,11 +116,15 @@ export class AdoWorkItemProvider implements WorkCenterProvider {
     this._isRefreshing = true;
     try {
       logger.info('Fetching assigned ADO work items...');
+      if (token?.isCancellationRequested) {
+        return;
+      }
+
       const session = await vscode.authentication.getSession('microsoft', [ADO_AUTH_SCOPE], {
         createIfNone: true,
       }).catch(() => null);
 
-      if (!session) {
+      if (!session || token?.isCancellationRequested) {
         return;
       }
 
