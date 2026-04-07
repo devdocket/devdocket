@@ -63,7 +63,7 @@ describe('GitHubIssueProvider — error handling', () => {
       const listener = vi.fn();
       provider.onDidDiscoverItems(listener);
       await expect(provider.refresh()).resolves.toBeUndefined();
-      expect(listener).not.toHaveBeenCalled();
+      expect(listener).toHaveBeenCalledWith([]);
     });
 
     it('handles TypeError from fetch (e.g. DNS failure)', async () => {
@@ -72,7 +72,7 @@ describe('GitHubIssueProvider — error handling', () => {
       const listener = vi.fn();
       provider.onDidDiscoverItems(listener);
       await expect(provider.refresh()).resolves.toBeUndefined();
-      expect(listener).not.toHaveBeenCalled();
+      expect(listener).toHaveBeenCalledWith([]);
     });
 
     it('handles AbortError from fetch', async () => {
@@ -83,7 +83,7 @@ describe('GitHubIssueProvider — error handling', () => {
       const listener = vi.fn();
       provider.onDidDiscoverItems(listener);
       await expect(provider.refresh()).resolves.toBeUndefined();
-      expect(listener).not.toHaveBeenCalled();
+      expect(listener).toHaveBeenCalledWith([]);
     });
 
     it('handles fetch rejection on configured repo without throwing', async () => {
@@ -204,7 +204,7 @@ describe('GitHubIssueProvider — error handling', () => {
       const listener = vi.fn();
       provider.onDidDiscoverItems(listener);
       await expect(provider.refresh()).resolves.toBeUndefined();
-      expect(listener).not.toHaveBeenCalled();
+      expect(listener).toHaveBeenCalledWith([]);
     });
 
     it('handles empty array response body', async () => {
@@ -223,6 +223,7 @@ describe('GitHubIssueProvider — error handling', () => {
     it('handles issue with missing body field', async () => {
       mockFetch.mockResolvedValueOnce({
         ok: true,
+        headers: { get: () => null },
         json: async () => [{
           number: 1,
           title: 'No body',
@@ -244,6 +245,7 @@ describe('GitHubIssueProvider — error handling', () => {
     it('handles issue with null body', async () => {
       mockFetch.mockResolvedValueOnce({
         ok: true,
+        headers: { get: () => null },
         json: async () => [{
           number: 1,
           title: 'Null body',
@@ -378,6 +380,7 @@ describe('GitHubIssueProvider — error handling', () => {
       mockFetch
         .mockResolvedValueOnce({
           ok: true,
+          headers: { get: () => null },
           json: async () => [createMockIssue(1, 'Good issue', 'good/repo')],
         })
         .mockResolvedValueOnce({ ok: false, status: 404 });
@@ -397,6 +400,7 @@ describe('GitHubIssueProvider — error handling', () => {
       mockFetch
         .mockResolvedValueOnce({
           ok: true,
+          headers: { get: () => null },
           json: async () => [createMockIssue(1, 'OK', 'good/repo')],
         })
         .mockResolvedValueOnce({ ok: false, status: 500 })
@@ -415,6 +419,7 @@ describe('GitHubIssueProvider — error handling', () => {
       mockFetch
         .mockResolvedValueOnce({
           ok: true,
+          headers: { get: () => null },
           json: async () => [createMockIssue(1, 'OK', 'good/repo')],
         })
         .mockResolvedValueOnce({ ok: false, status: 500 });
@@ -432,6 +437,7 @@ describe('GitHubIssueProvider — error handling', () => {
       mockFetch
         .mockResolvedValueOnce({
           ok: true,
+          headers: { get: () => null },
           json: async () => [createMockIssue(1, 'Works', 'good/repo')],
         })
         .mockRejectedValueOnce(new Error('ETIMEDOUT'));
@@ -465,6 +471,7 @@ describe('GitHubIssueProvider — error handling', () => {
       mockFetch
         .mockResolvedValueOnce({
           ok: true,
+          headers: { get: () => null },
           json: async () => [createMockIssue(1, 'OK', 'good/repo')],
         })
         .mockResolvedValueOnce({
