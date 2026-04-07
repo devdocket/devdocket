@@ -6,7 +6,10 @@
   "types": "src/index.ts",
   "scripts": {
     "build": "echo No build needed",
-    "test": "echo No tests yet",
+    "test": "vitest run",
     "lint": "echo No lint needed"
+  },
+  "devDependencies": {
+    "vitest": "^1.2.0"
   }
 }
