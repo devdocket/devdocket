@@ -173,7 +173,7 @@ describe('WorkItemEditorPanel', () => {
       const mock = createMockWebviewPanel();
       openPanel(item, createMockWorkGraph(item), mock);
 
-      expect(mock.panel.webview.html).toContain('<textarea id="notes"></textarea>');
+      expect(mock.panel.webview.html).toContain('<textarea id="notes" placeholder="Add notes..."></textarea>');
     });
 
     it('should include a nonce and CSP meta tag', () => {
