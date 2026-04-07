@@ -421,6 +421,7 @@ describe('InboxTreeProvider', () => {
       // Accept it via stateStore, then fire change → prune runs
       stateStore._set('gh', '1', 'accepted');
       stateStore._fire();
+      vi.advanceTimersByTime(DEBOUNCE_MS);
 
       // Re-add as unseen later — should be fresh (circle-filled)
       stateStore._set('gh', '1', 'unseen');
