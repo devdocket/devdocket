@@ -38,15 +38,15 @@ export function registerCommands(
       workGraph.transitionState(item.id, WorkItemState.InProgress),
     ),
     vscode.commands.registerCommand('workcenter.blockItem', (item) => {
-      if (!item?.id) { vscode.window.showInformationMessage('No item selected'); return; }
+      if (!item?.id) { vscode.window.showInformationMessage('WorkCenter: Select an item in Focus to block.'); return; }
       return workGraph.transitionState(item.id, WorkItemState.Blocked);
     }),
     vscode.commands.registerCommand('workcenter.unblockItem', (item) => {
-      if (!item?.id) { vscode.window.showInformationMessage('No item selected'); return; }
+      if (!item?.id) { vscode.window.showInformationMessage('WorkCenter: Select an item in Focus to unblock.'); return; }
       return workGraph.transitionState(item.id, WorkItemState.InProgress);
     }),
     vscode.commands.registerCommand('workcenter.markWaitingOn', (item) => {
-      if (!item?.id) { vscode.window.showInformationMessage('No item selected'); return; }
+      if (!item?.id) { vscode.window.showInformationMessage('WorkCenter: Select an item in Focus to mark as waiting.'); return; }
       return workGraph.transitionState(item.id, WorkItemState.WaitingOn);
     }),
     vscode.commands.registerCommand('workcenter.editItem', (item) => {

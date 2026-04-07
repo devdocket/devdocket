@@ -205,13 +205,13 @@ describe('registerCommands', () => {
     }
 
     it.each([
-      'workcenter.blockItem',
-      'workcenter.unblockItem',
-      'workcenter.markWaitingOn',
-    ])('%s shows info message when invoked without item', (cmd) => {
+      ['workcenter.blockItem', 'WorkCenter: Select an item in Focus to block.'],
+      ['workcenter.unblockItem', 'WorkCenter: Select an item in Focus to unblock.'],
+      ['workcenter.markWaitingOn', 'WorkCenter: Select an item in Focus to mark as waiting.'],
+    ])('%s shows info message when invoked without item', (cmd, expectedMsg) => {
       invoke(cmd, undefined);
       expect(workGraph.transitionState).not.toHaveBeenCalled();
-      expect(vscode.window.showInformationMessage).toHaveBeenCalledWith('No item selected');
+      expect(vscode.window.showInformationMessage).toHaveBeenCalledWith(expectedMsg);
     });
   });
 
