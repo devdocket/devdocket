@@ -43,24 +43,14 @@ describe('FocusTreeProvider', () => {
       expect(provider.getTreeItem(item).contextValue).toBe('active.hasUrl');
     });
 
-    it('should set contextValue to "blocked" for Blocked item without url', () => {
-      const item = makeItem({ state: WorkItemState.Blocked });
-      expect(provider.getTreeItem(item).contextValue).toBe('blocked');
+    it('should set contextValue to "paused" for Paused item without url', () => {
+      const item = makeItem({ state: WorkItemState.Paused });
+      expect(provider.getTreeItem(item).contextValue).toBe('paused');
     });
 
-    it('should set contextValue to "blocked.hasUrl" for Blocked item with url', () => {
-      const item = makeItem({ state: WorkItemState.Blocked, url: 'https://example.com' });
-      expect(provider.getTreeItem(item).contextValue).toBe('blocked.hasUrl');
-    });
-
-    it('should set contextValue to "blocked.hasUrl" for WaitingOn item with url', () => {
-      const item = makeItem({ state: WorkItemState.WaitingOn, url: 'https://example.com' });
-      expect(provider.getTreeItem(item).contextValue).toBe('blocked.hasUrl');
-    });
-
-    it('should set contextValue to "blocked" for WaitingOn item without url', () => {
-      const item = makeItem({ state: WorkItemState.WaitingOn });
-      expect(provider.getTreeItem(item).contextValue).toBe('blocked');
+    it('should set contextValue to "paused.hasUrl" for Paused item with url', () => {
+      const item = makeItem({ state: WorkItemState.Paused, url: 'https://example.com' });
+      expect(provider.getTreeItem(item).contextValue).toBe('paused.hasUrl');
     });
   });
 
@@ -70,14 +60,9 @@ describe('FocusTreeProvider', () => {
       expect(provider.getTreeItem(item).description).toBe('in progress');
     });
 
-    it('should show "⛔ blocked" for Blocked items', () => {
-      const item = makeItem({ state: WorkItemState.Blocked });
-      expect(provider.getTreeItem(item).description).toBe('⛔ blocked');
-    });
-
-    it('should show "⏳ waiting" for WaitingOn items', () => {
-      const item = makeItem({ state: WorkItemState.WaitingOn });
-      expect(provider.getTreeItem(item).description).toBe('⏳ waiting');
+    it('should show "⏸ paused" for Paused items', () => {
+      const item = makeItem({ state: WorkItemState.Paused });
+      expect(provider.getTreeItem(item).description).toBe('⏸ paused');
     });
   });
 
@@ -87,14 +72,9 @@ describe('FocusTreeProvider', () => {
       expect((provider.getTreeItem(item).iconPath as any).id).toBe('play-circle');
     });
 
-    it('should show circle-slash icon for Blocked items', () => {
-      const item = makeItem({ state: WorkItemState.Blocked });
-      expect((provider.getTreeItem(item).iconPath as any).id).toBe('circle-slash');
-    });
-
-    it('should show clock icon for WaitingOn items', () => {
-      const item = makeItem({ state: WorkItemState.WaitingOn });
-      expect((provider.getTreeItem(item).iconPath as any).id).toBe('clock');
+    it('should show debug-pause icon for Paused items', () => {
+      const item = makeItem({ state: WorkItemState.Paused });
+      expect((provider.getTreeItem(item).iconPath as any).id).toBe('debug-pause');
     });
   });
 
@@ -118,9 +98,9 @@ describe('FocusTreeProvider', () => {
     });
 
     it('should include state in tooltip', () => {
-      const item = makeItem({ state: WorkItemState.Blocked });
+      const item = makeItem({ state: WorkItemState.Paused });
       const tooltip = (provider.getTreeItem(item).tooltip as any).value;
-      expect(tooltip).toContain(WorkItemState.Blocked);
+      expect(tooltip).toContain(WorkItemState.Paused);
     });
 
     it('should include created timestamp in tooltip', () => {
@@ -136,7 +116,7 @@ describe('FocusTreeProvider', () => {
     it('should return items sorted by title', () => {
       const items = [
         makeItem({ id: '2', title: 'Zebra', state: WorkItemState.InProgress }),
-        makeItem({ id: '1', title: 'Alpha', state: WorkItemState.Blocked }),
+        makeItem({ id: '1', title: 'Alpha', state: WorkItemState.Paused }),
       ];
       workGraph.getItemsByState.mockReturnValue(items);
 
@@ -144,13 +124,12 @@ describe('FocusTreeProvider', () => {
       expect(children.map(c => c.title)).toEqual(['Alpha', 'Zebra']);
     });
 
-    it('should request InProgress, Blocked, and WaitingOn states', () => {
+    it('should request InProgress and Paused states', () => {
       workGraph.getItemsByState.mockReturnValue([]);
       provider.getChildren();
       expect(workGraph.getItemsByState).toHaveBeenCalledWith(
         WorkItemState.InProgress,
-        WorkItemState.Blocked,
-        WorkItemState.WaitingOn,
+        WorkItemState.Paused,
       );
     });
 
