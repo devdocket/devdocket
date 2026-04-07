@@ -43,24 +43,14 @@ describe('FocusTreeProvider', () => {
       expect(provider.getTreeItem(item).contextValue).toBe('active.hasUrl');
     });
 
-    it('should set contextValue to "blocked" for Blocked item without url', () => {
-      const item = makeItem({ state: WorkItemState.Blocked });
-      expect(provider.getTreeItem(item).contextValue).toBe('blocked');
+    it('should set contextValue to "paused" for Paused item without url', () => {
+      const item = makeItem({ state: WorkItemState.Paused });
+      expect(provider.getTreeItem(item).contextValue).toBe('paused');
     });
 
-    it('should set contextValue to "blocked.hasUrl" for Blocked item with url', () => {
-      const item = makeItem({ state: WorkItemState.Blocked, url: 'https://example.com' });
-      expect(provider.getTreeItem(item).contextValue).toBe('blocked.hasUrl');
-    });
-
-    it('should set contextValue to "blocked.hasUrl" for WaitingOn item with url', () => {
-      const item = makeItem({ state: WorkItemState.WaitingOn, url: 'https://example.com' });
-      expect(provider.getTreeItem(item).contextValue).toBe('blocked.hasUrl');
-    });
-
-    it('should set contextValue to "blocked" for WaitingOn item without url', () => {
-      const item = makeItem({ state: WorkItemState.WaitingOn });
-      expect(provider.getTreeItem(item).contextValue).toBe('blocked');
+    it('should set contextValue to "paused.hasUrl" for Paused item with url', () => {
+      const item = makeItem({ state: WorkItemState.Paused, url: 'https://example.com' });
+      expect(provider.getTreeItem(item).contextValue).toBe('paused.hasUrl');
     });
   });
 
@@ -68,7 +58,7 @@ describe('FocusTreeProvider', () => {
     it('should return items sorted by title', () => {
       const items = [
         makeItem({ id: '2', title: 'Zebra', state: WorkItemState.InProgress }),
-        makeItem({ id: '1', title: 'Alpha', state: WorkItemState.Blocked }),
+        makeItem({ id: '1', title: 'Alpha', state: WorkItemState.Paused }),
       ];
       workGraph.getItemsByState.mockReturnValue(items);
 

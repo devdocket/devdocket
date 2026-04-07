@@ -69,8 +69,8 @@ describe('WorkGraph', () => {
     await graph.transitionState(item.id, WorkItemState.InProgress);
     expect(graph.getItem(item.id)?.state).toBe(WorkItemState.InProgress);
 
-    await graph.transitionState(item.id, WorkItemState.Blocked);
-    expect(graph.getItem(item.id)?.state).toBe(WorkItemState.Blocked);
+    await graph.transitionState(item.id, WorkItemState.Paused);
+    expect(graph.getItem(item.id)?.state).toBe(WorkItemState.Paused);
 
     await graph.transitionState(item.id, WorkItemState.InProgress);
     expect(graph.getItem(item.id)?.state).toBe(WorkItemState.InProgress);
