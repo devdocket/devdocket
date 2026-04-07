@@ -109,6 +109,18 @@ describe('FocusTreeProvider', () => {
       const children = provider.getChildren();
       expect(children.map(c => c.title)).toEqual(['Alpha', 'Zebra']);
     });
+
+    it('should query all focus states including Blocked and WaitingOn', () => {
+      workGraph.getItemsByState.mockReturnValue([]);
+
+      provider.getChildren();
+      expect(workGraph.getItemsByState).toHaveBeenCalledWith(
+        WorkItemState.InProgress,
+        WorkItemState.Paused,
+        WorkItemState.Blocked,
+        WorkItemState.WaitingOn,
+      );
+    });
   });
 
   describe('events', () => {
