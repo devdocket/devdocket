@@ -346,6 +346,323 @@ describe('ProviderRegistry', () => {
     expect(listener).not.toHaveBeenCalled();
   });
 
+  describe('loading state and registration race conditions', () => {
+    // Schedules a macrotask via setTimeout; before it fires, the JS event loop
+    // flushes all pending microtasks (promise .then/.catch/.finally chains).
+    function nextTick(): Promise<void> {
+      return new Promise(resolve => setTimeout(resolve, 0));
+    }
+
+    function createDeferredProvider(id: string) {
+      let resolveRefresh!: () => void;
+      let rejectRefresh!: (err: Error) => void;
+      const refreshPromise = new Promise<void>((resolve, reject) => {
+        resolveRefresh = resolve;
+        rejectRefresh = reject;
+      });
+      const emitter = new EventEmitter<DiscoveredItem[]>();
+      const provider: WorkCenterProvider & { fireItems: (items: DiscoveredItem[]) => void } = {
+        id,
+        label: `Provider ${id}`,
+        onDidDiscoverItems: emitter.event,
+        refresh: vi.fn(() => refreshPromise),
+        fireItems: (items) => emitter.fire(items),
+      };
+      return { provider, resolveRefresh, rejectRefresh };
+    }
+
+    it('loading is true immediately after register and false after immediately-resolved refresh', async () => {
+      const provider = createMockProvider('sync');
+      registry.register(provider);
+
+      // loading is true synchronously after register (microtask hasn't run yet)
+      expect(registry.loading).toBe(true);
+
+      // After microtasks flush, the .finally() runs and loading becomes false
+      await nextTick();
+      expect(registry.loading).toBe(false);
+    });
+
+    it('loading becomes false after refresh rejects synchronously', async () => {
+      const provider = createMockProvider('fail-sync');
+      vi.mocked(provider.refresh).mockImplementation(() => Promise.reject(new Error('boom')));
+
+      registry.register(provider);
+      expect(registry.loading).toBe(true);
+
+      await nextTick();
+      expect(registry.loading).toBe(false);
+    });
+
+    it('loading stays true during async refresh until it completes', async () => {
+      const { provider, resolveRefresh } = createDeferredProvider('async');
+      registry.register(provider);
+
+      expect(registry.loading).toBe(true);
+
+      // Even after flushing microtasks, loading remains true because refresh hasn't resolved
+      await nextTick();
+      expect(registry.loading).toBe(true);
+
+      resolveRefresh();
+      await nextTick();
+      expect(registry.loading).toBe(false);
+    });
+
+    it('loading stays true during async refresh until it rejects', async () => {
+      const { provider, rejectRefresh } = createDeferredProvider('async-fail');
+      registry.register(provider);
+
+      expect(registry.loading).toBe(true);
+
+      rejectRefresh(new Error('network error'));
+      await nextTick();
+      expect(registry.loading).toBe(false);
+    });
+
+    it('loading is true until both providers finish when two are registered simultaneously', async () => {
+      const d1 = createDeferredProvider('p1');
+      const d2 = createDeferredProvider('p2');
+
+      registry.register(d1.provider);
+      registry.register(d2.provider);
+
+      expect(registry.loading).toBe(true);
+
+      // Resolve only the first provider
+      d1.resolveRefresh();
+      await nextTick();
+      // Still loading because p2 hasn't resolved
+      expect(registry.loading).toBe(true);
+
+      // Resolve the second provider
+      d2.resolveRefresh();
+      await nextTick();
+      expect(registry.loading).toBe(false);
+    });
+
+    it('provider fires onDidDiscoverItems before refresh resolves — loading is still true', async () => {
+      const { provider, resolveRefresh } = createDeferredProvider('race');
+
+      let callbackCount = 0;
+      let loadingDuringProviderEvent: boolean | undefined;
+      const providerEventObserved = new Promise<void>((resolve) => {
+        registry.onDidChangeDiscoveredItems(() => {
+          callbackCount += 1;
+          if (callbackCount === 2) {
+            loadingDuringProviderEvent = registry.loading;
+            resolve();
+          }
+        });
+      });
+
+      registry.register(provider);
+
+      // Provider fires items while refresh is still pending
+      provider.fireItems([{ externalId: '1', title: 'Item' }]);
+      await providerEventObserved;
+
+      // Verify the event caused by provider.fireItems(...) happened before refresh resolved
+      expect(loadingDuringProviderEvent).toBe(true);
+
+      resolveRefresh();
+      await nextTick();
+      expect(registry.loading).toBe(false);
+    });
+
+    it('onDidChangeDiscoveredItems fires when loading state transitions to false', async () => {
+      const { provider, resolveRefresh } = createDeferredProvider('notif');
+
+      const events: boolean[] = [];
+      registry.onDidChangeDiscoveredItems(() => {
+        events.push(registry.loading);
+      });
+
+      registry.register(provider);
+      // Register fires onDidChangeDiscoveredItems with loading=true
+      expect(events).toContain(true);
+
+      resolveRefresh();
+      await nextTick();
+      // The .finally() fires onDidChangeDiscoveredItems with loading=false
+      expect(events).toContain(false);
+    });
+
+    it('hasProviders is true after register and false after dispose', () => {
+      expect(registry.hasProviders).toBe(false);
+
+      const provider = createMockProvider('hp');
+      const disposable = registry.register(provider);
+      expect(registry.hasProviders).toBe(true);
+
+      disposable.dispose();
+      expect(registry.hasProviders).toBe(false);
+    });
+
+    it('hasProviders reflects multiple providers correctly', () => {
+      const d1 = registry.register(createMockProvider('a'));
+      const d2 = registry.register(createMockProvider('b'));
+
+      expect(registry.hasProviders).toBe(true);
+
+      d1.dispose();
+      expect(registry.hasProviders).toBe(true);
+
+      d2.dispose();
+      expect(registry.hasProviders).toBe(false);
+    });
+
+    it('dispose clears loading state for in-flight provider', () => {
+      const { provider } = createDeferredProvider('inflight');
+      const disposable = registry.register(provider);
+
+      expect(registry.loading).toBe(true);
+
+      disposable.dispose();
+      expect(registry.loading).toBe(false);
+      expect(registry.hasProviders).toBe(false);
+    });
+  });
+
+  describe('rapid updates', () => {
+    it('handles rapid item fires from the same provider', async () => {
+      const provider = createMockProvider('rapid');
+      registry.register(provider);
+
+      // Fire items rapidly in succession
+      provider.fireItems([{ externalId: '1', title: 'First' }]);
+      provider.fireItems([{ externalId: '2', title: 'Second' }]);
+      provider.fireItems([{ externalId: '3', title: 'Third' }]);
+
+      // Last fire wins — items are replaced, not accumulated
+      await vi.waitFor(() => {
+        const items = registry.getDiscoveredItems('rapid');
+        expect(items).toHaveLength(1);
+        expect(items[0].externalId).toBe('3');
+      });
+    });
+
+    it('fires onDidChangeDiscoveredItems for each rapid update', async () => {
+      const provider = createMockProvider('rapid');
+      registry.register(provider);
+
+      // Wait for registration/refresh to fully complete
+      await vi.waitFor(() => expect(registry.loading).toBe(false));
+
+      const listener = vi.fn();
+      registry.onDidChangeDiscoveredItems(listener);
+
+      provider.fireItems([{ externalId: '1', title: 'A' }]);
+      provider.fireItems([{ externalId: '2', title: 'B' }]);
+
+      await vi.waitFor(() => expect(listener).toHaveBeenCalledTimes(2));
+    });
+
+    it('handles interleaved fires from multiple providers', async () => {
+      const p1 = createMockProvider('alpha');
+      const p2 = createMockProvider('beta');
+      registry.register(p1);
+      registry.register(p2);
+
+      p1.fireItems([{ externalId: 'a1', title: 'Alpha 1' }]);
+      p2.fireItems([{ externalId: 'b1', title: 'Beta 1' }]);
+      p1.fireItems([{ externalId: 'a2', title: 'Alpha 2' }]);
+
+      await vi.waitFor(() => {
+        expect(registry.getDiscoveredItems('alpha')).toHaveLength(1);
+        expect(registry.getDiscoveredItems('alpha')[0].externalId).toBe('a2');
+        expect(registry.getDiscoveredItems('beta')).toHaveLength(1);
+        expect(registry.getDiscoveredItems('beta')[0].externalId).toBe('b1');
+      });
+    });
+
+    it('correctly counts new unseen items across rapid fires', async () => {
+      const provider = createMockProvider('rapid');
+      registry.register(provider);
+
+      const unseenListener = vi.fn();
+      registry.onDidAddNewUnseenItems(unseenListener);
+
+      // Rapid fires — each produces a new unseen item
+      provider.fireItems([{ externalId: '1', title: 'One' }]);
+      provider.fireItems([{ externalId: '2', title: 'Two' }]);
+      provider.fireItems([{ externalId: '3', title: 'Three' }]);
+
+      // Each fire triggers handleDiscoveredItems, so unseenListener fires per batch
+      await vi.waitFor(() => expect(unseenListener).toHaveBeenCalledTimes(3));
+      // Each call should report exactly 1 new unseen item
+      expect(unseenListener).toHaveBeenNthCalledWith(1, 1);
+      expect(unseenListener).toHaveBeenNthCalledWith(2, 1);
+      expect(unseenListener).toHaveBeenNthCalledWith(3, 1);
+    });
+  });
+
+  describe('edge cases', () => {
+    it('handles empty items array from provider', async () => {
+      const provider = createMockProvider('empty');
+      registry.register(provider);
+
+      // Wait for initial refresh to complete so we isolate the empty-fire behavior
+      await vi.waitFor(() => expect(registry.loading).toBe(false));
+
+      stateStore.setStates.mockClear();
+      const changeListener = vi.fn();
+      registry.onDidChangeDiscoveredItems(changeListener);
+
+      provider.fireItems([]);
+
+      await vi.waitFor(() => expect(changeListener).toHaveBeenCalled());
+      expect(registry.getDiscoveredItems('empty')).toEqual([]);
+      // No unseen items to set
+      expect(stateStore.setStates).not.toHaveBeenCalled();
+    });
+
+    it('deregistration clears discovered items', () => {
+      const provider = createMockProvider('clearme');
+      const disposable = registry.register(provider);
+
+      provider.fireItems([{ externalId: '1', title: 'Item' }]);
+      expect(registry.getDiscoveredItems('clearme')).toHaveLength(1);
+
+      disposable.dispose();
+      expect(registry.getDiscoveredItems('clearme')).toEqual([]);
+    });
+
+    it('deregistration removes loading state', async () => {
+      const provider = createMockProvider('loadclear');
+      // Make refresh hang
+      provider.refresh = vi.fn(() => new Promise(() => {}));
+      const disposable = registry.register(provider);
+
+      expect(registry.loading).toBe(true);
+      disposable.dispose();
+      expect(registry.loading).toBe(false);
+    });
+
+    it('fires onDidChangeDiscoveredItems on deregistration', async () => {
+      const provider = createMockProvider('notify');
+      const disposable = registry.register(provider);
+
+      // Wait for initial refresh to complete
+      await vi.waitFor(() => expect(registry.loading).toBe(false));
+
+      const listener = vi.fn();
+      registry.onDidChangeDiscoveredItems(listener);
+
+      disposable.dispose();
+
+      await vi.waitFor(() => expect(listener).toHaveBeenCalledTimes(1));
+    });
+
+    it('fires onDidRegisterProvider on registration', () => {
+      const listener = vi.fn();
+      registry.onDidRegisterProvider(listener);
+
+      registry.register(createMockProvider('notifyreg'));
+      expect(listener).toHaveBeenCalledTimes(1);
+    });
+  });
+
   describe('refresh timeout', () => {
     beforeEach(() => {
       vi.useFakeTimers();
@@ -374,11 +691,8 @@ describe('ProviderRegistry', () => {
     it('resolves refreshAll when a provider refresh times out', async () => {
       const warnSpy = vi.spyOn(logger, 'warn');
       const provider = createMockProvider('hanging');
-      // Let register-time refresh complete so this test only observes the
-      // timeout behavior from the refreshAll() invocation itself.
       registry.register(provider);
 
-      // Make the refresh triggered by refreshAll() hang
       vi.mocked(provider.refresh).mockReturnValue(new Promise(() => {}));
 
       const refreshPromise = registry.refreshAll();
@@ -398,8 +712,6 @@ describe('ProviderRegistry', () => {
       const provider = createMockProvider('fast');
       registry.register(provider);
 
-      // refresh already resolved (default mock is async () => {})
-      // Advance past timeout — no spurious warnings should fire
       await vi.advanceTimersByTimeAsync(ProviderRegistry.REFRESH_TIMEOUT_MS);
       expect(registry.loading).toBe(false);
       expect(warnSpy).not.toHaveBeenCalled();
