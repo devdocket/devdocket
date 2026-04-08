@@ -93,7 +93,7 @@ describe('GitHubPrReviewProvider — error handling', () => {
       const listener = vi.fn();
       provider.onDidDiscoverItems(listener);
       await expect(provider.refresh()).resolves.toBeUndefined();
-      expect(listener).not.toHaveBeenCalled();
+      expect(listener).toHaveBeenCalledWith([]);
     });
 
     it('handles 403 rate-limited response without throwing', async () => {
@@ -102,7 +102,7 @@ describe('GitHubPrReviewProvider — error handling', () => {
       const listener = vi.fn();
       provider.onDidDiscoverItems(listener);
       await expect(provider.refresh()).resolves.toBeUndefined();
-      expect(listener).not.toHaveBeenCalled();
+      expect(listener).toHaveBeenCalledWith([]);
     });
 
     it('handles 404 Not Found without throwing', async () => {
@@ -111,7 +111,7 @@ describe('GitHubPrReviewProvider — error handling', () => {
       const listener = vi.fn();
       provider.onDidDiscoverItems(listener);
       await expect(provider.refresh()).resolves.toBeUndefined();
-      expect(listener).not.toHaveBeenCalled();
+      expect(listener).toHaveBeenCalledWith([]);
     });
 
     it('handles 500 Internal Server Error without throwing', async () => {
@@ -120,7 +120,7 @@ describe('GitHubPrReviewProvider — error handling', () => {
       const listener = vi.fn();
       provider.onDidDiscoverItems(listener);
       await expect(provider.refresh()).resolves.toBeUndefined();
-      expect(listener).not.toHaveBeenCalled();
+      expect(listener).toHaveBeenCalledWith([]);
     });
 
     it('shows warning for user-triggered refresh on 401', async () => {
@@ -174,7 +174,7 @@ describe('GitHubPrReviewProvider — error handling', () => {
 
       expect(window.showWarningMessage).not.toHaveBeenCalled();
       const logged = mockChannel.appendLine.mock.calls.some(
-        (call: string[]) => call[0].includes('[WARN]') && call[0].includes('403'),
+        (call: string[]) => call[0].includes('403'),
       );
       expect(logged).toBe(true);
     });

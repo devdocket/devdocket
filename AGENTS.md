@@ -89,6 +89,17 @@ Tests run outside VS Code via vitest. The `vscode` import is aliased to `src/tes
 
 Items in Inbox and Sources are read live from the provider's in-memory data. The only persisted state is the `inboxState` enum. This keeps data fresh and avoids stale copies.
 
+### Posting text to GitHub (backtick safety)
+
+When posting ANY text to GitHub via `gh` CLI (PR descriptions, comments, review replies, issue comments), text containing backticks (`` ` ``) will be mangled by **both PowerShell and Python escape handling**. This applies to `--body`, `--fill`, `-f body=`, `gh pr comment`, `gh api`, etc.
+
+**Always use this pattern:**
+1. Write the text to a file using the `create` tool (which has zero escape interpretation)
+2. Pass the file to `gh` via `--body-file`
+3. Delete the temp file after
+
+**Never** construct backtick-containing text inside Python strings, PowerShell strings, or inline shell arguments. The `create` tool is the only safe way to produce the file content.
+
 ### PR workflow — use the `create-pr` skill
 
 When creating pull requests in an environment with [GitHub Copilot CLI](https://docs.github.com/en/copilot/github-copilot-in-the-cli), **always invoke the `create-pr` skill** and follow its full multi-phase lifecycle. The `create-pr`, `copilot-pr-review`, and `superpowers:code-reviewer` references below are Copilot CLI skills and agents — they are available automatically when using Copilot CLI in this repository. Do NOT hand-roll a simplified version. The skill enforces:

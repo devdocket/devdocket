@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
-import { authentication, window } from 'vscode';
+import { authentication, window, workspace } from 'vscode';
 import { GitHubPrReviewProvider } from '../githubPrReviewProvider';
 import { initLogger, LogLevel } from '../logger';
 
@@ -60,6 +60,67 @@ describe('GitHubPrReviewProvider', () => {
 
     expect(listener).not.toHaveBeenCalled();
     expect(mockFetch).not.toHaveBeenCalled();
+  });
+
+  it('shows warning and logs error when auth throws on user-triggered refresh', async () => {
+    vi.mocked(authentication.getSession).mockRejectedValueOnce(
+      new Error('Auth service unavailable'),
+    );
+
+    const listener = vi.fn();
+    provider.onDidDiscoverItems(listener);
+    await provider.refresh();
+
+    expect(window.showWarningMessage).toHaveBeenCalledWith(
+      expect.stringContaining('Authentication failed'),
+    );
+    expect(listener).not.toHaveBeenCalled();
+    expect(mockFetch).not.toHaveBeenCalled();
+
+    const logged = mockChannel.appendLine.mock.calls.some(
+      (call: string[]) => call[0].includes('[ERROR]') && call[0].includes('GitHub authentication failed'),
+    );
+    expect(logged).toBe(true);
+  });
+
+  it('does not show warning on auth failure during background refresh', async () => {
+    vi.mocked(authentication.getSession).mockRejectedValueOnce(
+      new Error('Network error'),
+    );
+
+    const refreshBg = (provider as any).refreshInBackground.bind(provider);
+    await refreshBg();
+
+    expect(window.showWarningMessage).not.toHaveBeenCalled();
+    expect(mockFetch).not.toHaveBeenCalled();
+
+    const logged = mockChannel.appendLine.mock.calls.some(
+      (call: string[]) => call[0].includes('[WARN]') && call[0].includes('background refresh'),
+    );
+    expect(logged).toBe(true);
+  });
+
+  it('logs info when user cancels authentication', async () => {
+    vi.mocked(authentication.getSession).mockResolvedValue(undefined as any);
+
+    await provider.refresh();
+
+    const logged = mockChannel.appendLine.mock.calls.some(
+      (call: string[]) => call[0].includes('User cancelled GitHub authentication'),
+    );
+    expect(logged).toBe(true);
+  });
+
+  it('logs debug when no session available for background refresh', async () => {
+    vi.mocked(authentication.getSession).mockResolvedValue(undefined as any);
+
+    const refreshBg = (provider as any).refreshInBackground.bind(provider);
+    await refreshBg();
+
+    const logged = mockChannel.appendLine.mock.calls.some(
+      (call: string[]) => call[0].includes('No GitHub session available'),
+    );
+    expect(logged).toBe(true);
   });
 
   it('fetches PR reviews from search API with correct URL and headers', async () => {
@@ -170,7 +231,8 @@ describe('GitHubPrReviewProvider', () => {
     provider.onDidDiscoverItems(listener);
 
     await expect(provider.refresh()).resolves.toBeUndefined();
-    expect(listener).not.toHaveBeenCalled();
+    // Event fires with empty items (consistent with issues provider)
+    expect(listener).toHaveBeenCalledWith([]);
   });
 
   it('shows warning message on non-ok response for user-triggered refresh', async () => {
@@ -270,5 +332,120 @@ describe('GitHubPrReviewProvider', () => {
     expect(refreshSpy).not.toHaveBeenCalled();
 
     vi.useRealTimers();
+  });
+
+  describe('repos setting', () => {
+    function mockRepos(repos: string[]) {
+      vi.mocked(workspace.getConfiguration).mockReturnValue({
+        get: vi.fn((key: string, defaultValue?: any) => {
+          if (key === 'repos') {
+            return repos;
+          }
+          return defaultValue;
+        }),
+      } as any);
+    }
+
+    afterEach(() => {
+      vi.mocked(workspace.getConfiguration).mockReset();
+    });
+
+    it('fetches from global search API when repos is empty', async () => {
+      mockRepos([]);
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ items: [createMockPr(1, 'Global PR')] }),
+      });
+
+      const listener = vi.fn();
+      provider.onDidDiscoverItems(listener);
+      await provider.refresh();
+
+      expect(mockFetch).toHaveBeenCalledTimes(1);
+      expect(mockFetch).toHaveBeenCalledWith(
+        'https://api.github.com/search/issues?q=type:pr+state:open+review-requested:@me&per_page=100',
+        expect.any(Object),
+      );
+    });
+
+    it('fetches per-repo when repos are configured', async () => {
+      mockRepos(['org/repo1', 'org/repo2']);
+      mockFetch
+        .mockResolvedValueOnce({
+          ok: true,
+          json: async () => ({ items: [createMockPr(1, 'PR in repo1', 'org/repo1')] }),
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          json: async () => ({ items: [createMockPr(2, 'PR in repo2', 'org/repo2')] }),
+        });
+
+      const listener = vi.fn();
+      provider.onDidDiscoverItems(listener);
+      await provider.refresh();
+
+      expect(mockFetch).toHaveBeenCalledTimes(2);
+      expect(mockFetch).toHaveBeenCalledWith(
+        'https://api.github.com/search/issues?q=type:pr+state:open+review-requested:@me+repo:org/repo1&per_page=100',
+        expect.any(Object),
+      );
+      expect(mockFetch).toHaveBeenCalledWith(
+        'https://api.github.com/search/issues?q=type:pr+state:open+review-requested:@me+repo:org/repo2&per_page=100',
+        expect.any(Object),
+      );
+
+      const items = listener.mock.calls[0][0];
+      expect(items).toHaveLength(2);
+      expect(items[0].externalId).toBe('org/repo1#1');
+      expect(items[1].externalId).toBe('org/repo2#2');
+    });
+
+    it('collects failures from individual repo fetches', async () => {
+      mockRepos(['org/good', 'org/bad']);
+      mockFetch
+        .mockResolvedValueOnce({
+          ok: true,
+          json: async () => ({ items: [createMockPr(1, 'Good PR', 'org/good')] }),
+        })
+        .mockResolvedValueOnce({ ok: false, status: 404 });
+
+      const listener = vi.fn();
+      provider.onDidDiscoverItems(listener);
+      await provider.refresh();
+
+      // Should still fire with the successful items
+      const items = listener.mock.calls[0][0];
+      expect(items).toHaveLength(1);
+      expect(items[0].externalId).toBe('org/good#1');
+
+      // Should show warning for user-triggered refresh
+      expect(window.showWarningMessage).toHaveBeenCalledWith(
+        expect.stringContaining('org/bad'),
+      );
+    });
+
+    it('reports multiple failures with count', async () => {
+      mockRepos(['org/bad1', 'org/bad2']);
+      mockFetch
+        .mockResolvedValueOnce({ ok: false, status: 500 })
+        .mockResolvedValueOnce({ ok: false, status: 500 });
+
+      const listener = vi.fn();
+      provider.onDidDiscoverItems(listener);
+      await provider.refresh();
+
+      expect(window.showWarningMessage).toHaveBeenCalledWith(
+        expect.stringContaining('2 repositories'),
+      );
+    });
+
+    it('handles rejected fetch promises for configured repos', async () => {
+      mockRepos(['org/crash']);
+      mockFetch.mockRejectedValueOnce(new Error('Network error'));
+
+      const listener = vi.fn();
+      provider.onDidDiscoverItems(listener);
+      await expect(provider.refresh()).resolves.toBeUndefined();
+    });
   });
 });
