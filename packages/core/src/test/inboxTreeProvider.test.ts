@@ -30,7 +30,9 @@ function createMockProviderRegistry() {
   const items = new Map<string, DiscoveredItem[]>();
   const labels = new Map<string, string>();
   const emitter = new EventEmitter<void>();
+  let _loading = false;
   return {
+    get loading() { return _loading; },
     getAllDiscoveredItems: vi.fn(() => items),
     getDiscoveredItems: vi.fn((id: string) => items.get(id) ?? []),
     getProviderLabel: vi.fn((id: string) => labels.get(id) ?? id),
@@ -41,20 +43,40 @@ function createMockProviderRegistry() {
     _setLabel: (providerId: string, label: string) => {
       labels.set(providerId, label);
     },
+    _setLoading: (val: boolean) => { _loading = val; },
     _fire: () => emitter.fire(),
+  };
+}
+
+function createMockReadStateStore() {
+  const items = new Set<string>();
+  return {
+    has: vi.fn((key: string) => items.has(key)),
+    add: vi.fn(async (key: string) => {
+      if (items.has(key)) { return false; }
+      items.add(key);
+      return true;
+    }),
+    deleteMany: vi.fn((keys: string[]) => {
+      for (const key of keys) { items.delete(key); }
+    }),
+    keys: vi.fn(() => items.values()),
+    load: vi.fn(async () => {}),
   };
 }
 
 describe('InboxTreeProvider', () => {
   let stateStore: ReturnType<typeof createMockStateStore>;
+  let readStateStore: ReturnType<typeof createMockReadStateStore>;
   let registry: ReturnType<typeof createMockProviderRegistry>;
   let provider: InboxTreeProvider;
 
   beforeEach(() => {
     vi.useFakeTimers();
     stateStore = createMockStateStore();
+    readStateStore = createMockReadStateStore();
     registry = createMockProviderRegistry();
-    provider = new InboxTreeProvider(registry as any, stateStore as any);
+    provider = new InboxTreeProvider(registry as any, stateStore as any, readStateStore as any);
   });
 
   afterEach(() => {
@@ -263,9 +285,9 @@ describe('InboxTreeProvider', () => {
       expect((treeItem.iconPath as any).id).toBe('circle-filled');
     });
 
-    it('should render seen inbox item with circle-outline icon', () => {
+    it('should render seen inbox item with circle-outline icon', async () => {
       const item: InboxItem = { kind: 'item', providerId: 'gh', externalId: '1', title: 'Bug' };
-      provider.markSeen('gh', '1');
+      await provider.markSeen('gh', '1');
       const treeItem = provider.getTreeItem(item);
 
       expect(treeItem.label).toBe('Bug');
@@ -299,13 +321,13 @@ describe('InboxTreeProvider', () => {
   });
 
   describe('markSeen', () => {
-    it('should return true for a newly seen item', () => {
-      expect(provider.markSeen('gh', '1')).toBe(true);
+    it('should return true for a newly seen item', async () => {
+      expect(await provider.markSeen('gh', '1')).toBe(true);
     });
 
-    it('should return false if item is already seen', () => {
-      provider.markSeen('gh', '1');
-      expect(provider.markSeen('gh', '1')).toBe(false);
+    it('should return false if item is already seen', async () => {
+      await provider.markSeen('gh', '1');
+      expect(await provider.markSeen('gh', '1')).toBe(false);
     });
   });
 
@@ -358,10 +380,10 @@ describe('InboxTreeProvider', () => {
       expect(listener).toHaveBeenCalledTimes(1);
     });
 
-    it('should retain seenItems for items still in inbox after provider refresh', () => {
+    it('should retain seenItems for items still in inbox after provider refresh', async () => {
       registry._setItems('gh', [{ externalId: '1', title: 'Bug' }]);
       const item: InboxItem = { kind: 'item', providerId: 'gh', externalId: '1', title: 'Bug' };
-      provider.markSeen('gh', '1');
+      await provider.markSeen('gh', '1');
 
       // Before refresh, item should be seen (circle-outline icon)
       expect(provider.getTreeItem(item).label).toBe('Bug');
@@ -376,17 +398,23 @@ describe('InboxTreeProvider', () => {
       expect((provider.getTreeItem(item).iconPath as any).id).toBe('circle-outline');
     });
 
-    it('should prune seenItems for items no longer in inbox after provider refresh', () => {
-      registry._setItems('gh', [{ externalId: '1', title: 'Bug' }]);
-      provider.markSeen('gh', '1');
+    it('should prune seenItems for items no longer in inbox after provider refresh', async () => {
+      registry._setItems('gh', [
+        { externalId: '1', title: 'Bug' },
+        { externalId: '2', title: 'Feature' },
+      ]);
+      await provider.markSeen('gh', '1');
 
-      // Remove item from provider
-      registry._setItems('gh', []);
+      // Replace items — item '1' is gone, item '2' remains
+      registry._setItems('gh', [{ externalId: '2', title: 'Feature' }]);
       registry._fire();
       vi.advanceTimersByTime(DEBOUNCE_MS);
 
-      // Re-add item — should appear as unseen (circle-filled icon)
-      registry._setItems('gh', [{ externalId: '1', title: 'Bug' }]);
+      // Re-add item '1' — should appear as unseen since it was pruned
+      registry._setItems('gh', [
+        { externalId: '1', title: 'Bug' },
+        { externalId: '2', title: 'Feature' },
+      ]);
       const item: InboxItem = { kind: 'item', providerId: 'gh', externalId: '1', title: 'Bug' };
       expect(provider.getTreeItem(item).label).toBe('Bug');
       expect((provider.getTreeItem(item).iconPath as any).id).toBe('circle-filled');
@@ -408,6 +436,25 @@ describe('InboxTreeProvider', () => {
       stateStore._fire();
       vi.advanceTimersByTime(DEBOUNCE_MS);
       expect(listener).toHaveBeenCalledTimes(1);
+    });
+
+    it('should skip pruning seenItems while providers are loading', async () => {
+      registry._setItems('gh', [{ externalId: '1', title: 'Bug' }]);
+      await provider.markSeen('gh', '1');
+
+      // Simulate provider re-registration: items temporarily empty, loading=true
+      registry._setItems('gh', []);
+      registry._setLoading(true);
+      registry._fire();
+
+      // After loading completes, items come back
+      registry._setItems('gh', [{ externalId: '1', title: 'Bug' }]);
+      registry._setLoading(false);
+      registry._fire();
+
+      // Item should still be seen because pruning was skipped while loading
+      const item: InboxItem = { kind: 'item', providerId: 'gh', externalId: '1', title: 'Bug' };
+      expect((provider.getTreeItem(item).iconPath as any).id).toBe('circle-outline');
     });
   });
 });

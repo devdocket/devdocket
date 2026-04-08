@@ -42,7 +42,7 @@ export async function activate(_context: vscode.ExtensionContext): Promise<void>
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : String(err);
     logger.error(`Failed to activate core extension — ${message}`);
-    vscode.window.showErrorMessage(`WorkCenter ADO: Failed to activate core extension — ${message}`);
+    void vscode.window.showErrorMessage(`WorkCenter ADO: Failed to activate core extension — ${message}`);
     return;
   }
 
@@ -55,6 +55,7 @@ export async function activate(_context: vscode.ExtensionContext): Promise<void>
   let prProvider: AdoPrReviewProvider | undefined;
   let workItemRegistration: vscode.Disposable | undefined;
   let prRegistration: vscode.Disposable | undefined;
+  let orgWarningShown = false;
 
   const configureProviders = () => {
     // Dispose existing providers and registrations before reconfiguring
@@ -73,8 +74,14 @@ export async function activate(_context: vscode.ExtensionContext): Promise<void>
 
     if (!org) {
       logger.info('No organization configured — set workcenterAdo.organization to enable ADO providers');
+      if (!orgWarningShown) {
+        vscode.window.showWarningMessage('WorkCenter ADO: Azure DevOps organization not configured. Set workcenterAdo.organization in settings.');
+        orgWarningShown = true;
+      }
       return;
     }
+
+    orgWarningShown = false;
 
     logger.debug(`Configuration: org=${org}, projects=[${projects.join(', ')}]`);
 
