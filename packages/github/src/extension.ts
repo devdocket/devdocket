@@ -2,21 +2,16 @@ import * as vscode from 'vscode';
 import { GitHubIssueProvider } from './githubProvider';
 import { GitHubPrReviewProvider } from './githubPrReviewProvider';
 import { StartWorkAction } from './startWorkAction';
-import { initLogger, setLogLevel, logger, LogLevel } from './logger';
+import { validateRefreshInterval } from '@workcenter/shared';
+import { initLogger, setLogLevel, logger, resolveLogLevel } from './logger';
 
 export async function activate(_context: vscode.ExtensionContext): Promise<void> {
   const outputChannel = vscode.window.createOutputChannel('WorkCenter GitHub');
   _context.subscriptions.push(outputChannel);
 
   const logLevelConfig = vscode.workspace.getConfiguration('workcenter').get<string>('logLevel', 'info');
-  const logLevelMap: Record<string, LogLevel> = {
-    debug: LogLevel.Debug,
-    info: LogLevel.Info,
-    warn: LogLevel.Warn,
-    error: LogLevel.Error,
-  };
-  initLogger(outputChannel, logLevelMap[logLevelConfig] ?? LogLevel.Info);
-  if (!Object.hasOwn(logLevelMap, logLevelConfig)) {
+  initLogger(outputChannel, resolveLogLevel(logLevelConfig));
+  if (!['debug', 'info', 'warn', 'error'].includes(logLevelConfig)) {
     logger.warn(`Invalid log level '${logLevelConfig}', falling back to 'info'. Valid values: debug, info, warn, error`);
   }
 
@@ -24,8 +19,8 @@ export async function activate(_context: vscode.ExtensionContext): Promise<void>
     vscode.workspace.onDidChangeConfiguration(e => {
       if (e.affectsConfiguration('workcenter.logLevel')) {
         const newLevel = vscode.workspace.getConfiguration('workcenter').get<string>('logLevel', 'info');
-        setLogLevel(logLevelMap[newLevel] ?? LogLevel.Info);
-        if (!Object.hasOwn(logLevelMap, newLevel)) {
+        setLogLevel(resolveLogLevel(newLevel));
+        if (!['debug', 'info', 'warn', 'error'].includes(newLevel)) {
           logger.warn(`Invalid log level '${newLevel}', falling back to 'info'. Valid values: debug, info, warn, error`);
         }
       }
@@ -49,7 +44,7 @@ export async function activate(_context: vscode.ExtensionContext): Promise<void>
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : String(err);
     logger.error(`Failed to activate core extension — ${message}`);
-    vscode.window.showErrorMessage(`WorkCenter GitHub: Failed to activate core extension — ${message}`);
+    void vscode.window.showErrorMessage(`WorkCenter GitHub: Failed to activate core extension — ${message}`);
     return;
   }
 
@@ -61,7 +56,9 @@ export async function activate(_context: vscode.ExtensionContext): Promise<void>
   // Register the GitHub issue provider
   const provider = new GitHubIssueProvider();
   const config = vscode.workspace.getConfiguration('workcenterGithub');
-  const intervalSeconds = config.get<number>('refreshIntervalSeconds', 300);
+  const intervalSeconds = validateRefreshInterval(
+    config.get<number>('refreshIntervalSeconds', 300), logger,
+  );
   provider.startPeriodicRefresh(intervalSeconds);
 
   const providerDisposable = api.registerProvider(provider);
