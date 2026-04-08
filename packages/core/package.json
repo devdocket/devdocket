@@ -175,11 +175,6 @@
           "group": "1_actions"
         },
         {
-          "command": "workcenter.editItem",
-          "when": "view == workcenter.queue",
-          "group": "1_actions"
-        },
-        {
           "command": "workcenter.completeItem",
           "when": "view == workcenter.focus",
           "group": "inline"
@@ -192,11 +187,6 @@
         {
           "command": "workcenter.resumeItem",
           "when": "view == workcenter.focus && viewItem =~ /^paused/",
-          "group": "1_actions"
-        },
-        {
-          "command": "workcenter.editItem",
-          "when": "view == workcenter.focus",
           "group": "1_actions"
         },
         {
