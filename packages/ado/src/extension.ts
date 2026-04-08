@@ -1,26 +1,21 @@
 import * as vscode from 'vscode';
 import { AdoWorkItemProvider } from './adoWorkItemProvider';
 import { AdoPrReviewProvider } from './adoPrReviewProvider';
-import { initLogger, setLogLevel, logger, LogLevel } from './logger';
+import { validateRefreshInterval } from '@workcenter/shared';
+import { initLogger, setLogLevel, logger, resolveLogLevel } from './logger';
 
 export async function activate(_context: vscode.ExtensionContext): Promise<void> {
   const outputChannel = vscode.window.createOutputChannel('WorkCenter ADO');
   _context.subscriptions.push(outputChannel);
 
   const logLevelConfig = vscode.workspace.getConfiguration('workcenter').get<string>('logLevel', 'info');
-  const logLevelMap: Record<string, LogLevel> = {
-    debug: LogLevel.Debug,
-    info: LogLevel.Info,
-    warn: LogLevel.Warn,
-    error: LogLevel.Error,
-  };
-  initLogger(outputChannel, logLevelMap[logLevelConfig] ?? LogLevel.Info);
+  initLogger(outputChannel, resolveLogLevel(logLevelConfig));
 
   _context.subscriptions.push(
     vscode.workspace.onDidChangeConfiguration(e => {
       if (e.affectsConfiguration('workcenter.logLevel')) {
         const newLevel = vscode.workspace.getConfiguration('workcenter').get<string>('logLevel', 'info');
-        setLogLevel(logLevelMap[newLevel] ?? LogLevel.Info);
+        setLogLevel(resolveLogLevel(newLevel));
       }
     }),
   );
@@ -41,7 +36,7 @@ export async function activate(_context: vscode.ExtensionContext): Promise<void>
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : String(err);
     logger.error(`Failed to activate core extension — ${message}`);
-    vscode.window.showErrorMessage(`WorkCenter ADO: Failed to activate core extension — ${message}`);
+    void vscode.window.showErrorMessage(`WorkCenter ADO: Failed to activate core extension — ${message}`);
     return;
   }
 
@@ -54,6 +49,7 @@ export async function activate(_context: vscode.ExtensionContext): Promise<void>
   let prProvider: AdoPrReviewProvider | undefined;
   let workItemRegistration: vscode.Disposable | undefined;
   let prRegistration: vscode.Disposable | undefined;
+  let orgWarningShown = false;
 
   const configureProviders = () => {
     // Dispose existing providers and registrations before reconfiguring
@@ -72,12 +68,20 @@ export async function activate(_context: vscode.ExtensionContext): Promise<void>
 
     if (!org) {
       logger.info('No organization configured — set workcenterAdo.organization to enable ADO providers');
+      if (!orgWarningShown) {
+        vscode.window.showWarningMessage('WorkCenter ADO: Azure DevOps organization not configured. Set workcenterAdo.organization in settings.');
+        orgWarningShown = true;
+      }
       return;
     }
 
+    orgWarningShown = false;
+
     logger.debug(`Configuration: org=${org}, projects=[${projects.join(', ')}]`);
 
-    const intervalSeconds = config.get<number>('refreshIntervalSeconds', 300);
+    const intervalSeconds = validateRefreshInterval(
+      config.get<number>('refreshIntervalSeconds', 300), logger,
+    );
 
     workItemProvider = new AdoWorkItemProvider(org, projects);
     prProvider = new AdoPrReviewProvider(org, projects);
