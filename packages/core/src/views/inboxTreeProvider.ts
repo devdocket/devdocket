@@ -33,6 +33,9 @@ export class InboxTreeProvider implements vscode.TreeDataProvider<InboxElement> 
   private readonly _onDidChangeTreeData = new vscode.EventEmitter<void>();
   readonly onDidChangeTreeData = this._onDidChangeTreeData.event;
   private readonly disposables: vscode.Disposable[] = [];
+  private readonly seenItems = new Set<string>();
+  private readonly _onDidMarkSeen = new vscode.EventEmitter<void>();
+  readonly onDidMarkSeen = this._onDidMarkSeen.event;
   private refreshTimer: ReturnType<typeof setTimeout> | undefined;
   static readonly REFRESH_DEBOUNCE_MS = 50;
 
@@ -95,10 +98,16 @@ export class InboxTreeProvider implements vscode.TreeDataProvider<InboxElement> 
     }
   }
 
+  get sessionSeenItems(): ReadonlySet<string> { return this.seenItems; }
+
   refresh(): void { this._onDidChangeTreeData.fire(); }
 
   async markSeen(providerId: string, externalId: string): Promise<boolean> {
     const key = `${providerId}::${externalId}`;
+    if (!this.seenItems.has(key)) {
+      this.seenItems.add(key);
+      this._onDidMarkSeen.fire();
+    }
     return this.readStateStore.add(key);
   }
 
@@ -276,6 +285,7 @@ export class InboxTreeProvider implements vscode.TreeDataProvider<InboxElement> 
       this.refreshTimer = undefined;
     }
     this._onDidChangeTreeData.dispose();
+    this._onDidMarkSeen.dispose();
     this.disposables.forEach(d => d.dispose());
   }
 }

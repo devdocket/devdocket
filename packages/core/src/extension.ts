@@ -163,7 +163,7 @@ function wireEvents(
   let wasLoading = false;
 
   const updateInboxBadge = () => {
-    const count = getInboxUnseenCount(providerRegistry, stateStore);
+    const count = getInboxUnseenCount(providerRegistry, stateStore, inboxProvider.sessionSeenItems);
     inboxTreeView.badge = count > 0 ? { value: count, tooltip: `${count} unseen item${count === 1 ? '' : 's'}` } : undefined;
   };
 
@@ -209,9 +209,10 @@ function wireEvents(
     }
   });
   const stateStoreSub = stateStore.onDidChange(scheduleUiUpdate);
+  const markSeenSub = inboxProvider.onDidMarkSeen(scheduleUiUpdate);
   const workGraphSub = workGraph.onDidChange(updateWorkViewMessages);
 
-  return [discoveredSub, newItemsSub, providerRegSub, stateStoreSub, workGraphSub];
+  return [discoveredSub, newItemsSub, providerRegSub, stateStoreSub, markSeenSub, workGraphSub];
 }
 
 export async function activate(context: vscode.ExtensionContext): Promise<WorkCenterApi> {
