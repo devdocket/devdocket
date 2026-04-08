@@ -1,30 +1,6 @@
 import * as vscode from 'vscode';
+import { BaseProvider, DiscoveredItem, isValidUrlSegment } from '@workcenter/shared';
 import { logger } from './logger';
-
-// Re-declared to match core API contract — separate extension cannot import core types directly
-interface Disposable {
-  dispose(): void;
-}
-
-interface Event<T> {
-  (listener: (e: T) => void): Disposable;
-}
-
-interface DiscoveredItem {
-  externalId: string;
-  title: string;
-  description?: string;
-  url?: string;
-  group?: string;
-}
-
-interface WorkCenterProvider {
-  readonly id: string;
-  readonly label: string;
-  readonly resurfaceDismissed?: boolean;
-  readonly onDidDiscoverItems: Event<DiscoveredItem[]>;
-  refresh(token?: vscode.CancellationToken): Promise<void>;
-}
 
 interface AdoPullRequest {
   pullRequestId: number;
@@ -54,16 +30,11 @@ const ADO_AUTH_SCOPE = '499b84ac-1321-427f-aa17-267ca6975798/.default';
  * subsequent refreshes. Sets {@link WorkCenterProvider.resurfaceDismissed}
  * to `true` so dismissed reviews reappear if still active.
  */
-export class AdoPrReviewProvider implements WorkCenterProvider {
+export class AdoPrReviewProvider extends BaseProvider {
   readonly id = 'ado-pr-reviews';
   readonly label = 'Azure DevOps PR Reviews';
   readonly resurfaceDismissed = true;
 
-  private readonly _onDidDiscoverItems = new vscode.EventEmitter<DiscoveredItem[]>();
-  readonly onDidDiscoverItems = this._onDidDiscoverItems.event;
-
-  private refreshTimer: ReturnType<typeof setInterval> | undefined;
-  private _isRefreshing = false;
   private _cachedUserId: string | undefined;
   private _cachedSessionAccountId: string | undefined;
 
@@ -74,33 +45,8 @@ export class AdoPrReviewProvider implements WorkCenterProvider {
   constructor(
     private readonly org: string,
     private readonly projects: string[],
-  ) {}
-
-  /**
-   * Starts a repeating timer that refreshes PR review requests in the background.
-   * The interval is clamped to a minimum of 60 seconds.
-   * @param intervalSeconds - Desired refresh interval in seconds (≤ 0 disables).
-   */
-  startPeriodicRefresh(intervalSeconds: number): void {
-    this.stopPeriodicRefresh();
-    const interval = Number(intervalSeconds);
-    if (!Number.isFinite(interval) || interval <= 0) {
-      return;
-    }
-    const clampedInterval = Math.max(interval, 60);
-    this.refreshTimer = setInterval(() => {
-      this.refreshInBackground().catch((err) => {
-        logger.error('PR review refresh failed:', err);
-      });
-    }, clampedInterval * 1000);
-  }
-
-  /** Stops the periodic background refresh timer, if running. */
-  stopPeriodicRefresh(): void {
-    if (this.refreshTimer) {
-      clearInterval(this.refreshTimer);
-      this.refreshTimer = undefined;
-    }
+  ) {
+    super(new vscode.EventEmitter<DiscoveredItem[]>());
   }
 
   /**
@@ -135,12 +81,7 @@ export class AdoPrReviewProvider implements WorkCenterProvider {
     }
   }
 
-  private async refreshInBackground(): Promise<void> {
-    if (this._isRefreshing) {
-      return;
-    }
-
-    this._isRefreshing = true;
+  protected async doBackgroundRefresh(): Promise<void> {
     try {
       logger.info('Fetching ADO PR reviews...');
       const session = await vscode.authentication.getSession('microsoft', [ADO_AUTH_SCOPE], {
@@ -154,24 +95,41 @@ export class AdoPrReviewProvider implements WorkCenterProvider {
       await this.fetchAndPublishPrs(session.accessToken, false, session.account.id);
     } catch (err) {
       logger.error('Failed to fetch PR reviews:', err);
-    } finally {
-      this._isRefreshing = false;
     }
   }
 
   private async fetchAndPublishPrs(accessToken: string, isUserTriggered: boolean, sessionAccountId: string): Promise<void> {
+    if (!isValidUrlSegment(this.org)) {
+      logger.warn('Skipping PR fetch: invalid ADO organization name', this.org);
+      return;
+    }
+
     const userId = await this.getUserId(accessToken, sessionAccountId);
     if (!userId) {
       const message = 'Failed to determine Azure DevOps user identity';
       if (isUserTriggered) {
-        vscode.window.showWarningMessage(`WorkCenter ADO: ${message}`);
+        void vscode.window.showWarningMessage(`WorkCenter ADO: ${message}`);
       }
       logger.warn(message);
       this._onDidDiscoverItems.fire([]);
       return;
     }
 
-    const projectList = this.projects.length > 0 ? this.projects : [''];
+    const validProjects: string[] = [];
+    for (const project of this.projects) {
+      if (project === '' || isValidUrlSegment(project)) {
+        validProjects.push(project);
+      } else {
+        logger.warn('Skipping invalid ADO project name', project);
+      }
+    }
+
+    if (this.projects.length > 0 && validProjects.length === 0) {
+      logger.warn('All configured ADO projects are invalid — skipping PR fetch');
+      return;
+    }
+
+    const projectList = validProjects.length > 0 ? validProjects : [''];
     const results = await Promise.allSettled(
       projectList.map(project => this.fetchPrsForProject(accessToken, project, userId)),
     );
@@ -204,7 +162,7 @@ export class AdoPrReviewProvider implements WorkCenterProvider {
         ? `Failed to fetch PR reviews from ${failures[0]}`
         : `Failed to fetch PR reviews from ${failures.length} projects`;
       if (isUserTriggered) {
-        vscode.window.showWarningMessage(`WorkCenter ADO: ${message}`);
+        void vscode.window.showWarningMessage(`WorkCenter ADO: ${message}`);
       }
       logger.warn(message);
     }
@@ -297,15 +255,12 @@ export class AdoPrReviewProvider implements WorkCenterProvider {
         description: pr.description?.slice(0, 200),
         url: `${pr.repository.webUrl}/pullrequest/${pr.pullRequestId}`,
         group: `${projectName}/${repoName}`,
+        reason: 'review_requested',
       };
     });
 
     return { items, failed: false };
   }
 
-  /** Cleans up the refresh timer and event emitter. */
-  dispose(): void {
-    this.stopPeriodicRefresh();
-    this._onDidDiscoverItems.dispose();
-  }
+
 }

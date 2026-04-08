@@ -5,6 +5,9 @@
 WorkCenter is a VS Code extension for managing work items. Phase 1 is complete:
 - Queue view (new items) and Focus view (in-progress items) as tree data providers
 - Manual work item creation via input box, editing via webview panel with auto-save
+- 6-state WorkItem model (New, InProgress, Blocked, WaitingOn, Done, Archived)
+- WorkGraph service: in-memory Map, event-driven, ITaskStore abstraction
+- JsonTaskStore: all items persisted in a single `workitems.json` file in globalStorageUri
 - 6-state WorkItem model (New, Triaged, InProgress, Paused, Done, Archived)
 - WorkGraph service: in-memory Map, event-driven, ITaskStore abstraction
 - JsonTaskStore: single `workitems.json` file in `globalStorageUri` containing an array of items

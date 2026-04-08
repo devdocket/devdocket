@@ -111,4 +111,64 @@ describe('getInboxUnseenCount', () => {
 
     expect(getInboxUnseenCount(registry, stateStore as any)).toBe(1);
   });
+
+  it('excludes items present in seenItems set', () => {
+    const provider = createMockProvider('gh');
+    registry.register(provider);
+    provider.fireItems([
+      { externalId: '1', title: 'Issue 1' },
+      { externalId: '2', title: 'Issue 2' },
+    ]);
+
+    const seen = new Set(['gh::1']);
+    expect(getInboxUnseenCount(registry, stateStore as any, seen)).toBe(1);
+  });
+
+  it('still counts unseen items not in seenItems set', () => {
+    const provider = createMockProvider('gh');
+    registry.register(provider);
+    provider.fireItems([
+      { externalId: '1', title: 'Issue 1' },
+      { externalId: '2', title: 'Issue 2' },
+      { externalId: '3', title: 'Issue 3' },
+    ]);
+
+    const seen = new Set(['gh::2']);
+    expect(getInboxUnseenCount(registry, stateStore as any, seen)).toBe(2);
+  });
+
+  it('returns full count when seenItems is undefined', () => {
+    const provider = createMockProvider('gh');
+    registry.register(provider);
+    provider.fireItems([
+      { externalId: '1', title: 'Issue 1' },
+      { externalId: '2', title: 'Issue 2' },
+    ]);
+
+    expect(getInboxUnseenCount(registry, stateStore as any, undefined)).toBe(2);
+  });
+
+  it('returns full count when seenItems is empty', () => {
+    const provider = createMockProvider('gh');
+    registry.register(provider);
+    provider.fireItems([
+      { externalId: '1', title: 'Issue 1' },
+      { externalId: '2', title: 'Issue 2' },
+    ]);
+
+    expect(getInboxUnseenCount(registry, stateStore as any, new Set())).toBe(2);
+  });
+
+  it('does not double-exclude items that are both seen and accepted', () => {
+    const provider = createMockProvider('gh');
+    registry.register(provider);
+    provider.fireItems([
+      { externalId: '1', title: 'Issue 1' },
+      { externalId: '2', title: 'Issue 2' },
+    ]);
+    stateStore._set('gh', '1', 'accepted');
+
+    const seen = new Set(['gh::1', 'gh::2']);
+    expect(getInboxUnseenCount(registry, stateStore as any, seen)).toBe(0);
+  });
 });
