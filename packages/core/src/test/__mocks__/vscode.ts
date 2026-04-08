@@ -54,7 +54,7 @@ class MockTreeItem {
 
 const window = {
   showInputBox: vi.fn(),
-  showInformationMessage: vi.fn(),
+  showInformationMessage: vi.fn().mockResolvedValue(undefined),
   showWarningMessage: vi.fn(),
   showErrorMessage: vi.fn(),
   showQuickPick: vi.fn(),
@@ -84,6 +84,7 @@ const window = {
 
 const commands = {
   registerCommand: vi.fn(() => ({ dispose: vi.fn() })),
+  executeCommand: vi.fn().mockResolvedValue(undefined),
 };
 
 const env = {
