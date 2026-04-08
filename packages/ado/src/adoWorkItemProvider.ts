@@ -1,30 +1,6 @@
 import * as vscode from 'vscode';
+import { BaseProvider, DiscoveredItem, isValidUrlSegment } from '@workcenter/shared';
 import { logger } from './logger';
-
-// Re-declared to match core API contract — separate extension cannot import core types directly
-interface Disposable {
-  dispose(): void;
-}
-
-interface Event<T> {
-  (listener: (e: T) => void): Disposable;
-}
-
-interface DiscoveredItem {
-  externalId: string;
-  title: string;
-  description?: string;
-  url?: string;
-  group?: string;
-}
-
-interface WorkCenterProvider {
-  readonly id: string;
-  readonly label: string;
-  readonly resurfaceDismissed?: boolean;
-  readonly onDidDiscoverItems: Event<DiscoveredItem[]>;
-  refresh(token?: vscode.CancellationToken): Promise<void>;
-}
 
 // Azure DevOps WIQL query response
 interface WiqlResponse {
@@ -49,40 +25,15 @@ interface AdoWorkItem {
 // Azure DevOps REST API scope for authentication
 const ADO_AUTH_SCOPE = '499b84ac-1321-427f-aa17-267ca6975798/.default';
 
-export class AdoWorkItemProvider implements WorkCenterProvider {
+export class AdoWorkItemProvider extends BaseProvider {
   readonly id = 'ado-work-items';
   readonly label = 'Azure DevOps Work Items';
-
-  private readonly _onDidDiscoverItems = new vscode.EventEmitter<DiscoveredItem[]>();
-  readonly onDidDiscoverItems = this._onDidDiscoverItems.event;
-
-  private refreshTimer: ReturnType<typeof setInterval> | undefined;
-  private _isRefreshing = false;
 
   constructor(
     private readonly org: string,
     private readonly projects: string[],
-  ) {}
-
-  startPeriodicRefresh(intervalSeconds: number): void {
-    this.stopPeriodicRefresh();
-    const interval = Number(intervalSeconds);
-    if (!Number.isFinite(interval) || interval <= 0) {
-      return;
-    }
-    const clampedInterval = Math.max(interval, 60);
-    this.refreshTimer = setInterval(() => {
-      this.refreshInBackground().catch((err) => {
-        logger.error('Work item refresh failed:', err);
-      });
-    }, clampedInterval * 1000);
-  }
-
-  stopPeriodicRefresh(): void {
-    if (this.refreshTimer) {
-      clearInterval(this.refreshTimer);
-      this.refreshTimer = undefined;
-    }
+  ) {
+    super(new vscode.EventEmitter<DiscoveredItem[]>());
   }
 
   async refresh(token?: vscode.CancellationToken): Promise<void> {
@@ -113,12 +64,7 @@ export class AdoWorkItemProvider implements WorkCenterProvider {
     }
   }
 
-  private async refreshInBackground(): Promise<void> {
-    if (this._isRefreshing) {
-      return;
-    }
-
-    this._isRefreshing = true;
+  protected async doBackgroundRefresh(): Promise<void> {
     try {
       logger.info('Fetching assigned ADO work items...');
       const session = await vscode.authentication.getSession('microsoft', [ADO_AUTH_SCOPE], {
@@ -132,13 +78,30 @@ export class AdoWorkItemProvider implements WorkCenterProvider {
       await this.fetchAndPublishWorkItems(session.accessToken, false);
     } catch (err) {
       logger.error('Failed to fetch work items:', err);
-    } finally {
-      this._isRefreshing = false;
     }
   }
 
   private async fetchAndPublishWorkItems(accessToken: string, isUserTriggered: boolean): Promise<void> {
-    const projectList = this.projects.length > 0 ? this.projects : [''];
+    if (!isValidUrlSegment(this.org)) {
+      logger.warn('Skipping fetch: invalid ADO organization name', this.org);
+      return;
+    }
+
+    const validProjects: string[] = [];
+    for (const project of this.projects) {
+      if (project === '' || isValidUrlSegment(project)) {
+        validProjects.push(project);
+      } else {
+        logger.warn('Skipping invalid ADO project name', project);
+      }
+    }
+
+    if (this.projects.length > 0 && validProjects.length === 0) {
+      logger.warn('All configured ADO projects are invalid — skipping fetch');
+      return;
+    }
+
+    const projectList = validProjects.length > 0 ? validProjects : [''];
     const results = await Promise.allSettled(
       projectList.map(project => this.fetchWorkItemsForProject(accessToken, project)),
     );
@@ -172,7 +135,7 @@ export class AdoWorkItemProvider implements WorkCenterProvider {
         ? `Failed to fetch work items from ${failures[0]}`
         : `Failed to fetch work items from ${failures.length} projects`;
       if (isUserTriggered) {
-        vscode.window.showWarningMessage(`WorkCenter ADO: ${message}`);
+        void vscode.window.showWarningMessage(`WorkCenter ADO: ${message}`);
       }
       logger.warn(message);
     }
@@ -188,18 +151,24 @@ export class AdoWorkItemProvider implements WorkCenterProvider {
 
     const wiqlQuery = `SELECT [System.Id] FROM WorkItems WHERE [System.AssignedTo] = @Me AND [System.State] <> 'Closed' AND [System.State] <> 'Removed'`;
 
-    const wiqlResponse = await fetch(wiqlUrl, {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${token}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ query: wiqlQuery }),
-    });
+    let wiqlResponse: Response;
+    try {
+      wiqlResponse = await fetch(wiqlUrl, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ query: wiqlQuery }),
+      });
+    } catch (err) {
+      logger.error(`Network error querying work items for project "${project || this.org}":`, err);
+      return { items: [], failed: true };
+    }
 
     if (!wiqlResponse.ok) {
       logger.warn(`Failed to fetch work items for project: ${project || this.org}`);
-      logger.error(`WIQL query failed for project "${project}": ${wiqlResponse.status}`);
+      logger.error(`WIQL query failed for project "${project || this.org}": ${wiqlResponse.status}`);
       return { items: [], failed: true };
     }
 
@@ -225,11 +194,21 @@ export class AdoWorkItemProvider implements WorkCenterProvider {
       const batchIds = ids.slice(i, i + batchSize);
       const detailUrl = `https://dev.azure.com/${encodeURIComponent(this.org)}/_apis/wit/workitems?ids=${batchIds.join(',')}&fields=System.Title,System.Description,System.TeamProject,System.WorkItemType,System.State&$expand=links&api-version=7.1`;
 
-      const detailResponse = await fetch(detailUrl, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      });
+      let detailResponse: Response;
+      try {
+        detailResponse = await fetch(detailUrl, {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        });
+      } catch (err) {
+        logger.error(
+          `Network error fetching work item details for ${project || this.org} (batch at index ${i}, ids ${batchIds[0]}-${batchIds[batchIds.length - 1]}):`,
+          err,
+        );
+        batchFailed = true;
+        continue;
+      }
 
       if (!detailResponse.ok) {
         logger.error(`Failed to fetch work item details: ${detailResponse.status}`);
@@ -264,8 +243,4 @@ export class AdoWorkItemProvider implements WorkCenterProvider {
     return { items, failed: batchFailed };
   }
 
-  dispose(): void {
-    this.stopPeriodicRefresh();
-    this._onDidDiscoverItems.dispose();
-  }
 }

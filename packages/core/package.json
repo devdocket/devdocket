@@ -227,6 +227,11 @@
         {
           "command": "workcenter.dismissFromInbox",
           "when": "view == workcenter.inbox && viewItem =~ /inboxItem/",
+          "group": "inline"
+        },
+        {
+          "command": "workcenter.dismissFromInbox",
+          "when": "view == workcenter.inbox && viewItem =~ /inboxItem/",
           "group": "1_actions"
         },
         {

@@ -3,6 +3,7 @@ import { WorkCenterApi } from './api/types';
 import { WorkCenterApiImpl } from './api/workCenterApi';
 import { JsonTaskStore } from './storage/jsonTaskStore';
 import { DiscoveredStateStore } from './storage/discoveredStateStore';
+import { ReadStateStore } from './storage/readStateStore';
 import { WorkGraph } from './services/workGraph';
 import { ProviderRegistry } from './services/providerRegistry';
 import { ActionRegistry } from './services/actionRegistry';
@@ -41,7 +42,7 @@ function initializeLogging(context: vscode.ExtensionContext): void {
   );
 }
 
-async function loadStores(storagePath: string): Promise<{ workGraph: WorkGraph; stateStore: DiscoveredStateStore }> {
+async function loadStores(storagePath: string): Promise<{ workGraph: WorkGraph; stateStore: DiscoveredStateStore; readStateStore: ReadStateStore }> {
   const store = new JsonTaskStore(storagePath);
   const workGraph = new WorkGraph(store);
   await workGraph.load();
@@ -51,7 +52,11 @@ async function loadStores(storagePath: string): Promise<{ workGraph: WorkGraph; 
   await stateStore.load();
   logger.debug('Loaded discovered state');
 
-  return { workGraph, stateStore };
+  const readStateStore = new ReadStateStore(storagePath);
+  await readStateStore.load();
+  logger.debug('Loaded read state');
+
+  return { workGraph, stateStore, readStateStore };
 }
 
 async function migrateDiscoveredState(workGraph: WorkGraph, stateStore: DiscoveredStateStore): Promise<void> {
@@ -83,9 +88,10 @@ async function migrateDiscoveredState(workGraph: WorkGraph, stateStore: Discover
 function createTreeViews(
   providerRegistry: ProviderRegistry,
   stateStore: DiscoveredStateStore,
+  readStateStore: ReadStateStore,
   workGraph: WorkGraph,
 ) {
-  const inboxProvider = new InboxTreeProvider(providerRegistry, stateStore);
+  const inboxProvider = new InboxTreeProvider(providerRegistry, stateStore, readStateStore);
   const queueProvider = new QueueTreeProvider(workGraph);
   const focusProvider = new FocusTreeProvider(workGraph);
   const sourcesProvider = new SourcesTreeProvider(providerRegistry, stateStore);
@@ -98,15 +104,17 @@ function createTreeViews(
   const historyTreeView = vscode.window.createTreeView('workcenter.history', { treeDataProvider: historyProvider });
 
   const inboxSelectionSub = inboxTreeView.onDidChangeSelection((e) => {
-    let changed = false;
-    for (const item of e.selection) {
-      if (item.kind === 'item') {
-        changed = inboxProvider.markSeen(item.providerId, item.externalId) || changed;
+    void (async () => {
+      let changed = false;
+      for (const item of e.selection) {
+        if (item.kind === 'item') {
+          changed = await inboxProvider.markSeen(item.providerId, item.externalId) || changed;
+        }
       }
-    }
-    if (changed) {
-      inboxProvider.refresh();
-    }
+      if (changed) {
+        inboxProvider.refresh();
+      }
+    })().catch(err => logger.error('Failed to mark inbox item as seen', err));
   });
 
   return {
@@ -211,14 +219,14 @@ export async function activate(context: vscode.ExtensionContext): Promise<WorkCe
   logger.info('WorkCenter activating...');
 
   const storagePath = context.globalStorageUri.fsPath;
-  const { workGraph, stateStore } = await loadStores(storagePath);
+  const { workGraph, stateStore, readStateStore } = await loadStores(storagePath);
   await migrateDiscoveredState(workGraph, stateStore);
 
   const providerRegistry = new ProviderRegistry(stateStore);
   const actionRegistry = new ActionRegistry();
   const api = new WorkCenterApiImpl(providerRegistry, actionRegistry);
 
-  const treeSetup = createTreeViews(providerRegistry, stateStore, workGraph);
+  const treeSetup = createTreeViews(providerRegistry, stateStore, readStateStore, workGraph);
   const eventDisposables = wireEvents(providerRegistry, stateStore, workGraph, treeSetup);
 
   const { providers, views, disposables: viewDisposables } = treeSetup;
