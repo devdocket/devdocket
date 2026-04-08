@@ -1,5 +1,5 @@
 import { WorkItem } from '../models/workItem';
-import type { Disposable, WorkCenterProvider } from '@workcenter/shared';
+import type { Disposable } from '@workcenter/shared';
 
 export type { Disposable, Event, DiscoveredItem, WorkCenterProvider } from '@workcenter/shared';
 

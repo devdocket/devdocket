@@ -17,6 +17,7 @@ export interface DiscoveredItem {
   description?: string;
   url?: string;
   group?: string;
+  reason?: string;
 }
 
 export interface WorkCenterProvider {
