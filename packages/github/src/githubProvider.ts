@@ -31,7 +31,7 @@ export class GitHubIssueProvider extends BaseGitHubProvider {
         ? `Failed to fetch issues from ${failures[0]}`
         : `Failed to fetch issues from ${failures.length} repositories`;
       if (isUserTriggered) {
-        vscode.window.showWarningMessage(`WorkCenter GitHub: ${message}`);
+        void vscode.window.showWarningMessage(`WorkCenter GitHub: ${message}`);
       } else {
         logger.warn(message);
       }
