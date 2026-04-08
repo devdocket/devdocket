@@ -30,7 +30,7 @@ async function handleCreateItem(workGraph: WorkGraph): Promise<void> {
 
   logger.info(`Creating new work item: ${title.trim()}`);
   await workGraph.createItem({ title: title.trim() });
-  vscode.window.showInformationMessage(`WorkCenter: Created "${title.trim()}"`);
+  void vscode.window.showInformationMessage(`WorkCenter: Created "${title.trim()}"`);
 }
 
 async function handleAcceptToFocus(workGraph: WorkGraph, item?: { id?: string }): Promise<void> {
@@ -106,7 +106,7 @@ async function handleRunAction(
   const actions = actionRegistry.getActionsFor(workItem);
   if (actions.length === 0) {
     logger.warn(`No actions available for item ${workItem.id}`);
-    vscode.window.showInformationMessage('No actions available for this item.');
+    void vscode.window.showInformationMessage('No actions available for this item.');
     return;
   }
   const picks = actions.map((a) => ({ label: a.label, actionId: a.id }));
@@ -122,7 +122,7 @@ async function handleRunAction(
       } catch (err: unknown) {
         logger.error('Action failed: ' + selected.label, err);
         const message = err instanceof Error ? err.message : String(err);
-        vscode.window.showErrorMessage(`WorkCenter: Action "${selected.label}" failed — ${message}`);
+        void vscode.window.showErrorMessage(`WorkCenter: Action "${selected.label}" failed — ${message}`);
       }
     }
   }
@@ -130,7 +130,7 @@ async function handleRunAction(
 
 async function handleMoveUp(workGraph: WorkGraph, item?: { id?: string }): Promise<void> {
   if (!item?.id) {
-    vscode.window.showInformationMessage('WorkCenter: Select an item in the Queue to move.');
+    void vscode.window.showInformationMessage('WorkCenter: Select an item in the Queue to move.');
     return;
   }
   await workGraph.moveItem(item.id, 'up');
@@ -138,7 +138,7 @@ async function handleMoveUp(workGraph: WorkGraph, item?: { id?: string }): Promi
 
 async function handleMoveDown(workGraph: WorkGraph, item?: { id?: string }): Promise<void> {
   if (!item?.id) {
-    vscode.window.showInformationMessage('WorkCenter: Select an item in the Queue to move.');
+    void vscode.window.showInformationMessage('WorkCenter: Select an item in the Queue to move.');
     return;
   }
   await workGraph.moveItem(item.id, 'down');
@@ -153,7 +153,7 @@ async function handleAcceptFromInbox(
   logger.info(`Accepting inbox item: ${item.externalId} from ${item.providerId}`);
   const existing = workGraph.findItemByProvenance(item.providerId, item.externalId);
   if (existing) {
-    vscode.window.showInformationMessage(
+    void vscode.window.showInformationMessage(
       `WorkCenter: Item already accepted as "${existing.title}"`
     );
     return;
@@ -166,7 +166,7 @@ async function handleAcceptFromInbox(
     await stateStore.setState(item.providerId, item.externalId, 'accepted');
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : String(err);
-    vscode.window.showErrorMessage(`WorkCenter: Failed to update state — ${message}`);
+    void vscode.window.showErrorMessage(`WorkCenter: Failed to update state — ${message}`);
   }
 }
 
@@ -180,7 +180,7 @@ async function handleDismissFromInbox(
     await stateStore.setState(item.providerId, item.externalId, 'dismissed');
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : String(err);
-    vscode.window.showErrorMessage(`WorkCenter: Failed to dismiss item — ${message}`);
+    void vscode.window.showErrorMessage(`WorkCenter: Failed to dismiss item — ${message}`);
   }
 }
 
@@ -197,9 +197,9 @@ async function handleAcceptFromSources(
       await stateStore.setState(item.providerId, item.externalId, 'accepted');
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : String(err);
-      vscode.window.showErrorMessage(`WorkCenter: Failed to update state — ${message}`);
+      void vscode.window.showErrorMessage(`WorkCenter: Failed to update state — ${message}`);
     }
-    vscode.window.showInformationMessage(
+    void vscode.window.showInformationMessage(
       `WorkCenter: Item already accepted as "${existing.title}"`
     );
     return;
@@ -212,7 +212,7 @@ async function handleAcceptFromSources(
     await stateStore.setState(item.providerId, item.externalId, 'accepted');
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : String(err);
-    vscode.window.showErrorMessage(`WorkCenter: Failed to accept item — ${message}`);
+    void vscode.window.showErrorMessage(`WorkCenter: Failed to accept item — ${message}`);
   }
 }
 

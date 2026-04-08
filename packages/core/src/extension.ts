@@ -203,7 +203,7 @@ function wireEvents(
     const config = vscode.workspace.getConfiguration('workcenter');
     const showNotifications = config.get<boolean>('showInboxNotifications', true);
     if (showNotifications && newCount > 0) {
-      vscode.window.showInformationMessage(
+      void vscode.window.showInformationMessage(
         `WorkCenter: ${newCount} new item${newCount === 1 ? '' : 's'} in Inbox`
       );
     }
