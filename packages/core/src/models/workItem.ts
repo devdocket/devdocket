@@ -4,7 +4,7 @@
  * Items move through these states following the work-item state machine:
  *
  * ```
- * New → Triaged (future) → InProgress → Done → Archived
+ * New → InProgress → Done → Archived
  *                            ↕    ↕
  *                        Blocked  WaitingOn
  * ```
