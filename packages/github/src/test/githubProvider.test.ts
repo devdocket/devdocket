@@ -145,6 +145,7 @@ describe('GitHubIssueProvider', () => {
       description: 'Body for issue 10',
       url: 'https://github.com/owner/repo/issues/10',
       group: 'owner/repo',
+      reason: 'assigned',
     });
   });
 

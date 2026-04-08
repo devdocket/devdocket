@@ -25,6 +25,7 @@ export interface InboxItem {
   description?: string;
   url?: string;
   group?: string;
+  reason?: string;
 }
 
 export type InboxElement = InboxProviderNode | InboxGroupNode | InboxItem;
@@ -252,6 +253,7 @@ export class InboxTreeProvider implements vscode.TreeDataProvider<InboxElement> 
       description: item.description,
       url: item.url,
       group: item.group,
+      reason: item.reason,
     };
   }
 
@@ -272,9 +274,18 @@ export class InboxTreeProvider implements vscode.TreeDataProvider<InboxElement> 
     }).length;
   }
 
+  private formatReason(reason: string): string {
+    return reason.replace(/_/g, ' ').replace(/^./, c => c.toUpperCase());
+  }
+
   private buildTooltip(item: InboxItem): vscode.MarkdownString {
     const md = new vscode.MarkdownString();
     md.appendMarkdown(`**${item.title}**\n\n`);
+    if (item.reason) {
+      md.appendMarkdown('*Reason: ');
+      md.appendText(this.formatReason(item.reason));
+      md.appendMarkdown('*\n\n');
+    }
     if (item.description) { md.appendText(`${item.description}\n\n`); }
     return md;
   }
