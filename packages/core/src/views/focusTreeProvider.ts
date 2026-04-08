@@ -30,6 +30,7 @@ export class FocusTreeProvider implements vscode.TreeDataProvider<WorkItem> {
       treeItem.contextValue = item.url ? 'active.hasUrl' : 'active';
     }
 
+    treeItem.command = { command: 'workcenter.editItem', title: 'Open Details', arguments: [item] };
     return treeItem;
   }
 
