@@ -272,6 +272,50 @@ describe('AdoWorkItemProvider', () => {
     vi.useRealTimers();
   });
 
+  it('handles WIQL network error gracefully', async () => {
+    mockFetch.mockRejectedValueOnce(new Error('Network error'));
+
+    const listener = vi.fn();
+    provider.onDidDiscoverItems(listener);
+    await provider.refresh();
+
+    expect(listener).toHaveBeenCalledWith([]);
+    expect(window.showWarningMessage).toHaveBeenCalledWith(
+      expect.stringContaining('Failed to fetch work items'),
+    );
+  });
+
+  it('handles detail batch network error with partial results', async () => {
+    // WIQL returns 201 items to trigger two batches (batch size is 200)
+    const ids = Array.from({ length: 201 }, (_, i) => i + 1);
+    mockFetch
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => createWiqlResponse(ids),
+      })
+      // First batch (items 1-200) succeeds with one item for simplicity
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          value: [createWorkItemDetail(1, 'Survived')],
+        }),
+      })
+      // Second batch (item 201) fails with network error
+      .mockRejectedValueOnce(new Error('Network error'));
+
+    const listener = vi.fn();
+    provider.onDidDiscoverItems(listener);
+    await provider.refresh();
+
+    // Partial results from the first batch are preserved
+    const items = listener.mock.calls[0][0];
+    expect(items).toHaveLength(1);
+    expect(items[0].title).toContain('Survived');
+    expect(window.showWarningMessage).toHaveBeenCalledWith(
+      expect.stringContaining('Failed to fetch work items'),
+    );
+  });
+
   it('uses org-level WIQL when no projects are configured', async () => {
     provider.dispose();
     provider = new AdoWorkItemProvider('myorg', []);
