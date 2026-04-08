@@ -91,7 +91,10 @@ const env = {
 };
 
 const Uri = {
-  parse: vi.fn((s: string) => ({ toString: () => s })),
+  parse: vi.fn((s: string) => {
+    const m = s.match(/^(\w+):/);
+    return { toString: () => s, scheme: m ? m[1] : '' };
+  }),
 };
 
 class MockDataTransferItem {
