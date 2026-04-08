@@ -34,6 +34,18 @@ export interface LoggerService {
   setLogLevel(level: LogLevel): void;
 }
 
+const logLevelMap: Partial<Record<string, LogLevel>> = {
+  debug: LogLevel.Debug,
+  info: LogLevel.Info,
+  warn: LogLevel.Warn,
+  error: LogLevel.Error,
+};
+
+/** Map a config string (e.g. 'debug') to a LogLevel enum value, defaulting to Info. */
+export function resolveLogLevel(level: string | undefined): LogLevel {
+  return (level !== undefined ? logLevelMap[level] : undefined) ?? LogLevel.Info;
+}
+
 export function createLoggerService(): LoggerService {
   let outputChannel: LogOutput | undefined;
   let currentLevel: LogLevel = LogLevel.Info;

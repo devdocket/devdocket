@@ -23,6 +23,7 @@ export class HistoryTreeProvider implements vscode.TreeDataProvider<WorkItem> {
     treeItem.tooltip = this.buildTooltip(item);
     treeItem.iconPath = this.getIcon(item.state);
     treeItem.contextValue = item.url ? 'historyItem.hasUrl' : 'historyItem';
+    treeItem.command = { command: 'workcenter.editItem', title: 'Open Details', arguments: [item] };
     return treeItem;
   }
 
