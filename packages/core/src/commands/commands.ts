@@ -30,7 +30,7 @@ async function handleCreateItem(workGraph: WorkGraph): Promise<void> {
 
   logger.info(`Creating new work item: ${title.trim()}`);
   await workGraph.createItem({ title: title.trim() });
-  vscode.window.showInformationMessage(`WorkCenter: Created "${title.trim()}"`);
+  void vscode.window.showInformationMessage(`WorkCenter: Created "${title.trim()}"`);
 }
 
 async function handleAcceptToFocus(workGraph: WorkGraph, item?: { id?: string }): Promise<void> {
@@ -86,10 +86,24 @@ function handleEditItem(
 }
 
 async function handleOpenInBrowser(workGraph: WorkGraph, item?: { id?: string; url?: string }): Promise<void> {
-  if (!item) { return; }
-  const url = item.id ? workGraph.getItem(item.id)?.url ?? item.url : item.url;
-  if (url) {
-    await vscode.env.openExternal(vscode.Uri.parse(url));
+  if (!item?.id) {
+    vscode.window.showWarningMessage('WorkCenter: Select an item to open in the browser.');
+    return;
+  }
+  const workItem = workGraph.getItem(item.id);
+  const url = workItem?.url ?? item.url;
+  if (!url) {
+    vscode.window.showWarningMessage('This item has no URL to open.');
+    return;
+  }
+  const uri = vscode.Uri.parse(url);
+  if (uri.scheme !== 'http' && uri.scheme !== 'https') {
+    vscode.window.showWarningMessage(`Cannot open non-web URL: ${url}`);
+    return;
+  }
+  const opened = await vscode.env.openExternal(uri);
+  if (!opened) {
+    vscode.window.showWarningMessage('Failed to open URL in the browser.');
   }
 }
 
@@ -106,7 +120,7 @@ async function handleRunAction(
   const actions = actionRegistry.getActionsFor(workItem);
   if (actions.length === 0) {
     logger.warn(`No actions available for item ${workItem.id}`);
-    vscode.window.showInformationMessage('No actions available for this item.');
+    void vscode.window.showInformationMessage('No actions available for this item.');
     return;
   }
   const picks = actions.map((a) => ({ label: a.label, actionId: a.id }));
@@ -122,7 +136,7 @@ async function handleRunAction(
       } catch (err: unknown) {
         logger.error('Action failed: ' + selected.label, err);
         const message = err instanceof Error ? err.message : String(err);
-        vscode.window.showErrorMessage(`WorkCenter: Action "${selected.label}" failed — ${message}`);
+        void vscode.window.showErrorMessage(`WorkCenter: Action "${selected.label}" failed — ${message}`);
       }
     }
   }
@@ -130,7 +144,7 @@ async function handleRunAction(
 
 async function handleMoveUp(workGraph: WorkGraph, item?: { id?: string }): Promise<void> {
   if (!item?.id) {
-    vscode.window.showInformationMessage('WorkCenter: Select an item in the Queue to move.');
+    void vscode.window.showInformationMessage('WorkCenter: Select an item in the Queue to move.');
     return;
   }
   await workGraph.moveItem(item.id, 'up');
@@ -138,7 +152,7 @@ async function handleMoveUp(workGraph: WorkGraph, item?: { id?: string }): Promi
 
 async function handleMoveDown(workGraph: WorkGraph, item?: { id?: string }): Promise<void> {
   if (!item?.id) {
-    vscode.window.showInformationMessage('WorkCenter: Select an item in the Queue to move.');
+    void vscode.window.showInformationMessage('WorkCenter: Select an item in the Queue to move.');
     return;
   }
   await workGraph.moveItem(item.id, 'down');
@@ -153,7 +167,7 @@ async function handleAcceptFromInbox(
   logger.info(`Accepting inbox item: ${item.externalId} from ${item.providerId}`);
   const existing = workGraph.findItemByProvenance(item.providerId, item.externalId);
   if (existing) {
-    vscode.window.showInformationMessage(
+    void vscode.window.showInformationMessage(
       `WorkCenter: Item already accepted as "${existing.title}"`
     );
     return;
@@ -166,7 +180,7 @@ async function handleAcceptFromInbox(
     await stateStore.setState(item.providerId, item.externalId, 'accepted');
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : String(err);
-    vscode.window.showErrorMessage(`WorkCenter: Failed to update state — ${message}`);
+    void vscode.window.showErrorMessage(`WorkCenter: Failed to update state — ${message}`);
   }
 }
 
@@ -180,7 +194,7 @@ async function handleDismissFromInbox(
     await stateStore.setState(item.providerId, item.externalId, 'dismissed');
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : String(err);
-    vscode.window.showErrorMessage(`WorkCenter: Failed to dismiss item — ${message}`);
+    void vscode.window.showErrorMessage(`WorkCenter: Failed to dismiss item — ${message}`);
   }
 }
 
@@ -197,9 +211,9 @@ async function handleAcceptFromSources(
       await stateStore.setState(item.providerId, item.externalId, 'accepted');
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : String(err);
-      vscode.window.showErrorMessage(`WorkCenter: Failed to update state — ${message}`);
+      void vscode.window.showErrorMessage(`WorkCenter: Failed to update state — ${message}`);
     }
-    vscode.window.showInformationMessage(
+    void vscode.window.showInformationMessage(
       `WorkCenter: Item already accepted as "${existing.title}"`
     );
     return;
@@ -212,7 +226,7 @@ async function handleAcceptFromSources(
     await stateStore.setState(item.providerId, item.externalId, 'accepted');
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : String(err);
-    vscode.window.showErrorMessage(`WorkCenter: Failed to accept item — ${message}`);
+    void vscode.window.showErrorMessage(`WorkCenter: Failed to accept item — ${message}`);
   }
 }
 

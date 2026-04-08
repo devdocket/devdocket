@@ -224,45 +224,45 @@ describe('registerCommands', () => {
   // ── openInBrowser ────────────────────────────────────────────────
 
   describe('workcenter.openInBrowser', () => {
-    it('opens workItem url when found', () => {
+    it('opens workItem url when found', async () => {
       const item = createWorkItem({ url: 'https://example.com' });
       workGraph.getItem.mockReturnValue(item);
 
-      invoke('workcenter.openInBrowser', { id: item.id });
+      await invoke('workcenter.openInBrowser', { id: item.id });
 
       expect(vscode.env.openExternal).toHaveBeenCalled();
       expect(vscode.Uri.parse).toHaveBeenCalledWith('https://example.com');
     });
 
-    it('falls back to item.url when workItem has no url', () => {
+    it('falls back to item.url when workItem has no url', async () => {
       workGraph.getItem.mockReturnValue(createWorkItem({ url: undefined }));
 
-      invoke('workcenter.openInBrowser', { id: 'wc-1', url: 'https://fallback.com' });
+      await invoke('workcenter.openInBrowser', { id: 'wc-1', url: 'https://fallback.com' });
 
       expect(vscode.Uri.parse).toHaveBeenCalledWith('https://fallback.com');
       expect(vscode.env.openExternal).toHaveBeenCalled();
     });
 
-    it('does nothing when neither source has a url', () => {
+    it('does nothing when neither source has a url', async () => {
       workGraph.getItem.mockReturnValue(createWorkItem({ url: undefined }));
 
-      invoke('workcenter.openInBrowser', { id: 'wc-1' });
+      await invoke('workcenter.openInBrowser', { id: 'wc-1' });
 
       expect(vscode.env.openExternal).not.toHaveBeenCalled();
     });
 
-    it('does nothing when item not found and tree item has no url', () => {
+    it('does nothing when item not found and tree item has no url', async () => {
       workGraph.getItem.mockReturnValue(undefined);
 
-      invoke('workcenter.openInBrowser', { id: 'wc-gone' });
+      await invoke('workcenter.openInBrowser', { id: 'wc-gone' });
 
       expect(vscode.env.openExternal).not.toHaveBeenCalled();
     });
 
-    it('falls back to tree node url when workItem is not found', () => {
+    it('falls back to tree node url when workItem is not found', async () => {
       workGraph.getItem.mockReturnValue(undefined);
 
-      invoke('workcenter.openInBrowser', { id: 'wc-gone', url: 'https://tree-fallback.com' });
+      await invoke('workcenter.openInBrowser', { id: 'wc-gone', url: 'https://tree-fallback.com' });
 
       expect(vscode.Uri.parse).toHaveBeenCalledWith('https://tree-fallback.com');
       expect(vscode.env.openExternal).toHaveBeenCalled();

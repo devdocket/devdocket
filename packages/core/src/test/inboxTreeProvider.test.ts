@@ -318,6 +318,20 @@ describe('InboxTreeProvider', () => {
       const item: InboxItem = { kind: 'item', providerId: 'gh', externalId: '1', title: 'X' };
       expect(provider.getTreeItem(item).contextValue).toBe('inboxItem');
     });
+
+    it('should include reason in tooltip when item has reason', () => {
+      const item: InboxItem = { kind: 'item', providerId: 'gh', externalId: '1', title: 'Bug', reason: 'review_requested' };
+      const treeItem = provider.getTreeItem(item);
+      const tooltip = treeItem.tooltip as any;
+      expect(tooltip.value).toContain('Reason: Review requested');
+    });
+
+    it('should not include reason in tooltip when item has no reason', () => {
+      const item: InboxItem = { kind: 'item', providerId: 'gh', externalId: '1', title: 'Bug' };
+      const treeItem = provider.getTreeItem(item);
+      const tooltip = treeItem.tooltip as any;
+      expect(tooltip.value).not.toContain('Reason');
+    });
   });
 
   describe('markSeen', () => {
@@ -328,6 +342,28 @@ describe('InboxTreeProvider', () => {
     it('should return false if item is already seen', async () => {
       await provider.markSeen('gh', '1');
       expect(await provider.markSeen('gh', '1')).toBe(false);
+    });
+
+    it('should fire onDidMarkSeen when a new item is marked seen', () => {
+      const listener = vi.fn();
+      provider.onDidMarkSeen(listener);
+      provider.markSeen('gh', '1');
+      expect(listener).toHaveBeenCalledTimes(1);
+    });
+
+    it('should not fire onDidMarkSeen when item is already seen', () => {
+      provider.markSeen('gh', '1');
+      const listener = vi.fn();
+      provider.onDidMarkSeen(listener);
+      provider.markSeen('gh', '1');
+      expect(listener).not.toHaveBeenCalled();
+    });
+
+    it('should expose seen items via sessionSeenItems', () => {
+      expect(provider.sessionSeenItems.size).toBe(0);
+      provider.markSeen('gh', '1');
+      expect(provider.sessionSeenItems.has('gh::1')).toBe(true);
+      expect(provider.sessionSeenItems.size).toBe(1);
     });
   });
 

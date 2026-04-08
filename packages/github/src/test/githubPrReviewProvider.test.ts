@@ -165,6 +165,7 @@ describe('GitHubPrReviewProvider', () => {
       description: 'Body for PR 42',
       url: 'https://github.com/org/myrepo/pull/42',
       group: 'org/myrepo',
+      reason: 'review_requested',
     });
   });
 
