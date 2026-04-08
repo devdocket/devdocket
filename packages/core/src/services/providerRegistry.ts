@@ -138,11 +138,19 @@ export class ProviderRegistry {
    * returned promise, so one failing provider does not block others.
    */
   async refreshAll(): Promise<void> {
-    const promises = Array.from(this.providers.values()).map((p) => {
-      logger.debug(`Provider ${p.id} refreshing...`);
-      return this.refreshWithTimeout(p);
-    });
-    await Promise.all(promises);
+    const providers = Array.from(this.providers.values());
+    const results = await Promise.allSettled(
+      providers.map((p) => {
+        logger.debug(`Provider ${p.id} refreshing...`);
+        return this.refreshWithTimeout(p);
+      }),
+    );
+    for (let i = 0; i < results.length; i++) {
+      const result = results[i];
+      if (result.status === 'rejected') {
+        logger.error(`Provider "${providers[i].id}" refresh failed`, result.reason);
+      }
+    }
   }
 
   private refreshWithTimeout(provider: WorkCenterProvider): Promise<void> {

@@ -105,6 +105,7 @@ describe('AdoWorkItemProvider', () => {
       description: 'Description for 1',
       url: 'https://dev.azure.com/myorg/MyProject/_workitems/edit/1',
       group: 'MyProject',
+      reason: 'assigned',
     });
     expect(items[1]).toEqual({
       externalId: 'MyProject/2',
@@ -112,6 +113,7 @@ describe('AdoWorkItemProvider', () => {
       description: 'Description for 2',
       url: 'https://dev.azure.com/myorg/MyProject/_workitems/edit/2',
       group: 'MyProject',
+      reason: 'assigned',
     });
   });
 
@@ -272,6 +274,50 @@ describe('AdoWorkItemProvider', () => {
     vi.useRealTimers();
   });
 
+  it('handles WIQL network error gracefully', async () => {
+    mockFetch.mockRejectedValueOnce(new Error('Network error'));
+
+    const listener = vi.fn();
+    provider.onDidDiscoverItems(listener);
+    await provider.refresh();
+
+    expect(listener).toHaveBeenCalledWith([]);
+    expect(window.showWarningMessage).toHaveBeenCalledWith(
+      expect.stringContaining('Failed to fetch work items'),
+    );
+  });
+
+  it('handles detail batch network error with partial results', async () => {
+    // WIQL returns 201 items to trigger two batches (batch size is 200)
+    const ids = Array.from({ length: 201 }, (_, i) => i + 1);
+    mockFetch
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => createWiqlResponse(ids),
+      })
+      // First batch (items 1-200) succeeds with one item for simplicity
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          value: [createWorkItemDetail(1, 'Survived')],
+        }),
+      })
+      // Second batch (item 201) fails with network error
+      .mockRejectedValueOnce(new Error('Network error'));
+
+    const listener = vi.fn();
+    provider.onDidDiscoverItems(listener);
+    await provider.refresh();
+
+    // Partial results from the first batch are preserved
+    const items = listener.mock.calls[0][0];
+    expect(items).toHaveLength(1);
+    expect(items[0].title).toContain('Survived');
+    expect(window.showWarningMessage).toHaveBeenCalledWith(
+      expect.stringContaining('Failed to fetch work items'),
+    );
+  });
+
   it('uses org-level WIQL when no projects are configured', async () => {
     provider.dispose();
     provider = new AdoWorkItemProvider('myorg', []);
@@ -289,5 +335,52 @@ describe('AdoWorkItemProvider', () => {
       'https://dev.azure.com/myorg/_apis/wit/wiql?api-version=7.1',
       expect.any(Object),
     );
+  });
+
+  it('skips fetch when org name is invalid', async () => {
+    provider.dispose();
+    provider = new AdoWorkItemProvider('../evil', ['MyProject']);
+
+    const listener = vi.fn();
+    provider.onDidDiscoverItems(listener);
+    await provider.refresh();
+
+    expect(mockFetch).not.toHaveBeenCalled();
+    expect(listener).not.toHaveBeenCalled();
+  });
+
+  it('skips invalid projects and fetches only valid ones', async () => {
+    provider.dispose();
+    provider = new AdoWorkItemProvider('myorg', ['ValidProject', '../bad', 'AlsoValid']);
+
+    mockFetch
+      .mockResolvedValueOnce({ ok: true, json: async () => createWiqlResponse([]) })
+      .mockResolvedValueOnce({ ok: true, json: async () => createWiqlResponse([]) });
+
+    const listener = vi.fn();
+    provider.onDidDiscoverItems(listener);
+    await provider.refresh();
+
+    expect(mockFetch).toHaveBeenCalledTimes(2);
+    expect(mockFetch).toHaveBeenCalledWith(
+      'https://dev.azure.com/myorg/ValidProject/_apis/wit/wiql?api-version=7.1',
+      expect.any(Object),
+    );
+    expect(mockFetch).toHaveBeenCalledWith(
+      'https://dev.azure.com/myorg/AlsoValid/_apis/wit/wiql?api-version=7.1',
+      expect.any(Object),
+    );
+  });
+
+  it('skips fetch when all configured projects are invalid', async () => {
+    provider.dispose();
+    provider = new AdoWorkItemProvider('myorg', ['../bad', '?evil']);
+
+    const listener = vi.fn();
+    provider.onDidDiscoverItems(listener);
+    await provider.refresh();
+
+    expect(mockFetch).not.toHaveBeenCalled();
+    expect(listener).not.toHaveBeenCalled();
   });
 });

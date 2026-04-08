@@ -1,48 +1,9 @@
 import type * as vscode from 'vscode';
-import type { WorkItem } from '../models/workItem';
+import { WorkItem } from '../models/workItem';
+import type { Disposable, Event, DiscoveredItem } from '@workcenter/shared';
 
-/**
- * A resource that can be released to free underlying handles or subscriptions.
- */
-export interface Disposable {
-  /** Release any resources held by this object. */
-  dispose(): void;
-}
-
-/**
- * A typed event that listeners can subscribe to.
- *
- * @typeParam T - The payload type delivered to each listener.
- */
-export interface Event<T> {
-  /**
-   * Subscribe to this event.
-   *
-   * @param listener - Callback invoked each time the event fires.
-   * @returns A {@link Disposable} that removes the listener when disposed.
-   */
-  (listener: (e: T) => void): Disposable;
-}
-
-/**
- * An item discovered by a {@link WorkCenterProvider}.
- *
- * Discovered items are ephemeral references held in memory by the provider.
- * Only the inbox state (`unseen` | `accepted` | `dismissed`) is persisted;
- * the item's data is always read live from the provider.
- */
-export interface DiscoveredItem {
-  /** Provider-scoped unique identifier (e.g. a GitHub issue number). */
-  externalId: string;
-  /** Human-readable title displayed in the Inbox and Sources views. */
-  title: string;
-  /** Optional longer description of the item. */
-  description?: string;
-  /** Optional URL linking back to the item in its source system. */
-  url?: string;
-  /** Optional grouping key used to organize items in the UI (e.g. in the Inbox and Sources views). */
-  group?: string;
-}
+// Re-export shared provider-facing types so existing imports from './api/types' keep working.
+export type { Disposable, Event, DiscoveredItem };
 
 /**
  * A provider that discovers work items from an external source.

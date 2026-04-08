@@ -2,6 +2,7 @@ import * as vscode from 'vscode';
 import { WorkCenterAction } from '../api/types';
 import { WorkItem } from '../models/workItem';
 import { logger } from './logger';
+import { Registry } from './registry';
 
 /**
  * Central registry for {@link WorkCenterAction} instances.
@@ -11,7 +12,7 @@ import { logger } from './logger';
  * returns `true`.
  */
 export class ActionRegistry {
-  private readonly actions = new Map<string, WorkCenterAction>();
+  private readonly registry = new Registry<WorkCenterAction>('Action');
 
   /**
    * Register an action and make it available in work-item context menus.
@@ -21,15 +22,7 @@ export class ActionRegistry {
    * @throws If an action with the same {@link WorkCenterAction.id} is already registered.
    */
   register(action: WorkCenterAction): vscode.Disposable {
-    if (this.actions.has(action.id)) {
-      throw new Error(`Action already registered: ${action.id}`);
-    }
-    this.actions.set(action.id, action);
-    logger.info(`Registered action: ${action.id} (${action.label})`);
-
-    return new vscode.Disposable(() => {
-      this.actions.delete(action.id);
-    });
+    return this.registry.register(action);
   }
 
   /**
@@ -42,7 +35,7 @@ export class ActionRegistry {
    * @returns An array of actions that can be run on the item.
    */
   getActionsFor(item: WorkItem): WorkCenterAction[] {
-    const matching = Array.from(this.actions.values()).filter((a) => a.canRun(item));
+    const matching = this.registry.getAll().filter((a) => a.canRun(item));
     logger.debug(`Found ${matching.length} actions for item ${item.id}`);
     return matching;
   }
@@ -54,11 +47,11 @@ export class ActionRegistry {
    * @returns The matching action, or `undefined` if not registered.
    */
   getAction(id: string): WorkCenterAction | undefined {
-    return this.actions.get(id);
+    return this.registry.get(id);
   }
 
   /** Release all registered actions. */
   dispose(): void {
-    this.actions.clear();
+    this.registry.clear();
   }
 }
