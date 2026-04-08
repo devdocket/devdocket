@@ -260,11 +260,11 @@ describe('activate()', () => {
   // ------------------------------------------------------------------
   // 12. Error handling: corrupt workitems.json
   // ------------------------------------------------------------------
-  it('throws when workitems.json contains invalid JSON', async () => {
+  it('recovers gracefully when workitems.json contains invalid JSON', async () => {
     const fs = await import('fs/promises');
     (fs.readFile as ReturnType<typeof vi.fn>).mockResolvedValueOnce('NOT VALID JSON');
 
-    await expect(activate(context)).rejects.toThrow();
+    await expect(activate(context)).resolves.toBeDefined();
   });
 
   // ------------------------------------------------------------------

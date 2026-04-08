@@ -419,4 +419,56 @@ describe('AdoPrReviewProvider', () => {
 
     vi.useRealTimers();
   });
+
+  it('skips fetch when org name is invalid', async () => {
+    provider.dispose();
+    provider = new AdoPrReviewProvider('../evil', ['MyProject']);
+
+    const listener = vi.fn();
+    provider.onDidDiscoverItems(listener);
+    await provider.refresh();
+
+    expect(mockFetch).not.toHaveBeenCalled();
+    expect(listener).not.toHaveBeenCalled();
+  });
+
+  it('skips invalid projects and fetches only valid ones', async () => {
+    provider.dispose();
+    provider = new AdoPrReviewProvider('myorg', ['ValidProject', '../bad', 'AlsoValid']);
+
+    // Connection data + 2 valid project PR fetches
+    mockFetch
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ authenticatedUser: { id: 'user-123' } }),
+      })
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ value: [] }) })
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ value: [] }) });
+
+    const listener = vi.fn();
+    provider.onDidDiscoverItems(listener);
+    await provider.refresh();
+
+    // 1 connection data + 2 valid project fetches = 3
+    expect(mockFetch).toHaveBeenCalledTimes(3);
+  });
+
+  it('skips fetch when all configured projects are invalid', async () => {
+    provider.dispose();
+    provider = new AdoPrReviewProvider('myorg', ['../bad', '?evil']);
+
+    // Connection data call still happens before project validation
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({ authenticatedUser: { id: 'user-123' } }),
+    });
+
+    const listener = vi.fn();
+    provider.onDidDiscoverItems(listener);
+    await provider.refresh();
+
+    // Only connection data fetch — no PR fetches
+    expect(mockFetch).toHaveBeenCalledTimes(1);
+    expect(listener).not.toHaveBeenCalled();
+  });
 });
