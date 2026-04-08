@@ -69,8 +69,8 @@ describe('WorkGraph', () => {
     await graph.transitionState(item.id, WorkItemState.InProgress);
     expect(graph.getItem(item.id)?.state).toBe(WorkItemState.InProgress);
 
-    await graph.transitionState(item.id, WorkItemState.Blocked);
-    expect(graph.getItem(item.id)?.state).toBe(WorkItemState.Blocked);
+    await graph.transitionState(item.id, WorkItemState.Paused);
+    expect(graph.getItem(item.id)?.state).toBe(WorkItemState.Paused);
 
     await graph.transitionState(item.id, WorkItemState.InProgress);
     expect(graph.getItem(item.id)?.state).toBe(WorkItemState.InProgress);
@@ -344,5 +344,129 @@ describe('WorkGraph', () => {
     const ordered = legacyGraph.getItemsByState(WorkItemState.New)
       .sort((x, y) => (x.sortOrder ?? Number.MAX_SAFE_INTEGER) - (y.sortOrder ?? Number.MAX_SAFE_INTEGER));
     expect(ordered.map((i) => i.title)).toEqual(['B', 'A', 'C']);
+  });
+
+  describe('provenance index', () => {
+    it('finds item by provenance after createItem', async () => {
+      const item = await graph.createItem(
+        { title: 'Indexed' },
+        { providerId: 'github', externalId: '42' },
+      );
+
+      const found = graph.findItemByProvenance('github', '42');
+      expect(found).toBeDefined();
+      expect(found!.id).toBe(item.id);
+    });
+
+    it('returns undefined for unknown provenance', () => {
+      const found = graph.findItemByProvenance('github', 'missing');
+      expect(found).toBeUndefined();
+    });
+
+    it('removes provenance entry on deleteItem', async () => {
+      const item = await graph.createItem(
+        { title: 'ToDelete' },
+        { providerId: 'github', externalId: '99' },
+      );
+      expect(graph.findItemByProvenance('github', '99')).toBeDefined();
+
+      await graph.deleteItem(item.id);
+      expect(graph.findItemByProvenance('github', '99')).toBeUndefined();
+    });
+
+    it('rebuilds provenance index from store on load', async () => {
+      const item = await graph.createItem(
+        { title: 'Persisted' },
+        { providerId: 'azdo', externalId: '7' },
+      );
+
+      const freshGraph = new WorkGraph(store);
+      await freshGraph.load();
+
+      const found = freshGraph.findItemByProvenance('azdo', '7');
+      expect(found).toBeDefined();
+      expect(found!.id).toBe(item.id);
+    });
+
+    it('keeps first item indexed when duplicates are created', async () => {
+      const first = await graph.createItem(
+        { title: 'First' },
+        { providerId: 'gh', externalId: 'dup' },
+      );
+      const second = await graph.createItem(
+        { title: 'Second' },
+        { providerId: 'gh', externalId: 'dup' },
+      );
+
+      const found = graph.findItemByProvenance('gh', 'dup');
+      expect(found).toBeDefined();
+      expect(found!.id).toBe(first.id);
+    });
+
+    it('deleting unindexed duplicate does not remove indexed entry', async () => {
+      const first = await graph.createItem(
+        { title: 'First' },
+        { providerId: 'gh', externalId: 'dup' },
+      );
+      const second = await graph.createItem(
+        { title: 'Second' },
+        { providerId: 'gh', externalId: 'dup' },
+      );
+
+      await graph.deleteItem(second.id);
+
+      const found = graph.findItemByProvenance('gh', 'dup');
+      expect(found).toBeDefined();
+      expect(found!.id).toBe(first.id);
+    });
+
+    it('deleting indexed item re-points to remaining duplicate', async () => {
+      const first = await graph.createItem(
+        { title: 'First' },
+        { providerId: 'gh', externalId: 'dup' },
+      );
+      const second = await graph.createItem(
+        { title: 'Second' },
+        { providerId: 'gh', externalId: 'dup' },
+      );
+
+      await graph.deleteItem(first.id);
+
+      const found = graph.findItemByProvenance('gh', 'dup');
+      expect(found).toBeDefined();
+      expect(found!.id).toBe(second.id);
+    });
+  });
+
+  describe('getItemsByState - multi-state and edge cases', () => {
+    it('returns items matching multiple states', async () => {
+      const a = await graph.createItem({ title: 'A' });
+      await graph.transitionState(a.id, WorkItemState.InProgress);
+      const b = await graph.createItem({ title: 'B' });
+      await graph.transitionState(b.id, WorkItemState.Blocked);
+      await graph.createItem({ title: 'C' }); // stays New
+
+      const active = graph.getItemsByState(WorkItemState.InProgress, WorkItemState.Blocked);
+      expect(active).toHaveLength(2);
+      expect(active.map((i) => i.title).sort()).toEqual(['A', 'B']);
+    });
+
+    it('returns empty array when called with no states', () => {
+      expect(graph.getItemsByState()).toEqual([]);
+    });
+
+    it('returns consistent results on consecutive reads without mutations', async () => {
+      await graph.createItem({ title: 'A' });
+      const first = graph.getItemsByState(WorkItemState.New);
+      const second = graph.getItemsByState(WorkItemState.New);
+      expect(first).toEqual(second);
+    });
+
+    it('deduplicates when the same state is passed multiple times', async () => {
+      await graph.createItem({ title: 'A' });
+      await graph.createItem({ title: 'B' });
+      const result = graph.getItemsByState(WorkItemState.New, WorkItemState.New);
+      expect(result).toHaveLength(2);
+    });
   });
 });

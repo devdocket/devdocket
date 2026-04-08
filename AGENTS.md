@@ -45,7 +45,7 @@ Providers (GitHub, future)          User (manual)
 
 1. **Inbox** — Newly discovered provider items (state: `unseen`). Accept → Queue or Dismiss.
 2. **Queue** — User's curated backlog. Manual items land here directly.
-3. **Focus** — Active work (`InProgress`, `Blocked`, `WaitingOn`).
+3. **Focus** — Active work (`InProgress`, `Paused`).
 4. **History** — Completed and archived items (`Done`, `Archived`).
 5. **Sources** — Everything providers know about, grouped by provider → sub-group. Always browsable.
 
@@ -88,6 +88,17 @@ Tests run outside VS Code via vitest. The `vscode` import is aliased to `src/tes
 ### Provider items are references, not copies
 
 Items in Inbox and Sources are read live from the provider's in-memory data. The only persisted state is the `inboxState` enum. This keeps data fresh and avoids stale copies.
+
+### Posting text to GitHub (backtick safety)
+
+When posting ANY text to GitHub via `gh` CLI (PR descriptions, comments, review replies, issue comments), text containing backticks (`` ` ``) will be mangled by **both PowerShell and Python escape handling**. This applies to `--body`, `--fill`, `-f body=`, `gh pr comment`, `gh api`, etc.
+
+**Always use this pattern:**
+1. Write the text to a file using the `create` tool (which has zero escape interpretation)
+2. Pass the file to `gh` via `--body-file`
+3. Delete the temp file after
+
+**Never** construct backtick-containing text inside Python strings, PowerShell strings, or inline shell arguments. The `create` tool is the only safe way to produce the file content.
 
 ### PR workflow — use the `create-pr` skill
 
