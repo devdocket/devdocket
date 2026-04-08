@@ -248,7 +248,6 @@ interface WorkItem {
 ```ts
 enum WorkItemState {
   New = 'New',
-  Triaged = 'Triaged',
   InProgress = 'InProgress',
   Paused = 'Paused',
   Done = 'Done',
@@ -265,7 +264,6 @@ Items transition through these states as the user interacts with them in the UI.
 | `New` | **Queue** | Freshly created or accepted items awaiting triage. |
 | `InProgress` | **Focus** | Work the user is actively doing. |
 | `Paused` | **Focus** | Work that is temporarily paused (shown alongside in-progress items). |
-| `Triaged` | *(none)* | Reserved for future use; not surfaced in any view today. |
 | `Done` | **History** | Completed items shown in the History view. |
 | `Archived` | **History** | Archived items shown in the History view. |
 
@@ -372,7 +370,6 @@ import * as vscode from 'vscode';
 
 enum WorkItemState {
   New = 'New',
-  Triaged = 'Triaged',
   InProgress = 'InProgress',
   Paused = 'Paused',
   Done = 'Done',
