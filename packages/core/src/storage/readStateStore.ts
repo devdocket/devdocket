@@ -84,7 +84,7 @@ export class ReadStateStore {
       const stats = await fs.stat(this.filePath);
       if (stats.size > MAX_STORE_FILE_SIZE) {
         logger.warn(`Read state file exceeds ${MAX_STORE_FILE_SIZE} bytes — backing up and resetting to empty`);
-        await this.backupCorruptedFile();
+        await this.backupInvalidFile();
         this.items.clear();
         this.loaded = true;
         return;
@@ -95,25 +95,38 @@ export class ReadStateStore {
         parsed = JSON.parse(data);
       } catch {
         logger.warn('Failed to parse read state file — backing up and resetting to empty');
-        await this.backupCorruptedFile();
+        await this.backupInvalidFile();
         this.items.clear();
         this.loaded = true;
         return;
       }
       if (!Array.isArray(parsed)) {
         logger.warn('Read state file does not contain an array — backing up and resetting to empty');
-        await this.backupCorruptedFile();
+        await this.backupInvalidFile();
         this.items.clear();
         this.loaded = true;
         return;
       }
       this.items.clear();
+      const maxInvalidEntryWarnings = 5;
+      let invalidEntryCount = 0;
       for (const item of parsed) {
         if (typeof item !== 'string') {
-          logger.warn(`Skipping invalid read state entry: expected string, got ${typeof item}`);
+          invalidEntryCount += 1;
+          if (invalidEntryCount <= maxInvalidEntryWarnings) {
+            logger.warn(`Skipping invalid read state entry: expected string, got ${typeof item}`);
+          }
           continue;
         }
         this.items.add(item);
+      }
+      if (invalidEntryCount > 0) {
+        const suppressed = invalidEntryCount - maxInvalidEntryWarnings;
+        if (suppressed > 0) {
+          logger.warn(`Skipped ${invalidEntryCount} invalid read state entries (${suppressed} additional warnings suppressed)`);
+        } else {
+          logger.warn(`Skipped ${invalidEntryCount} invalid read state entr${invalidEntryCount === 1 ? 'y' : 'ies'}`);
+        }
       }
       logger.debug(`Loaded read state: ${this.items.size} entries`);
       this.loaded = true;
@@ -139,13 +152,13 @@ export class ReadStateStore {
     return this.writeQueue;
   }
 
-  private async backupCorruptedFile(): Promise<void> {
+  private async backupInvalidFile(): Promise<void> {
     try {
       const backupPath = `${this.filePath}.corrupt.${Date.now()}`;
       await fs.rename(this.filePath, backupPath);
-      logger.warn(`Backed up corrupted file to ${backupPath}`);
+      logger.warn(`Backed up invalid read state file to ${backupPath}`);
     } catch {
-      logger.warn('Failed to back up corrupted read state file');
+      logger.warn('Failed to back up invalid read state file');
     }
   }
 }
