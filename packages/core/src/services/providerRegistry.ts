@@ -12,6 +12,11 @@ import { logger } from './logger';
  */
 export class ProviderRegistry {
   static readonly REFRESH_TIMEOUT_MS = 30_000;
+  /**
+   * Maximum number of discovered items accepted from a single provider per refresh.
+   * Excess items are truncated after logging a warning.
+   */
+  static readonly MAX_ITEMS_PER_PROVIDER = 10_000;
   private readonly providers = new Map<string, WorkCenterProvider>();
   private readonly subscriptions = new Map<string, { dispose(): void }>();
   private readonly discoveredItems = new Map<string, DiscoveredItem[]>();
@@ -200,6 +205,14 @@ export class ProviderRegistry {
   private async handleDiscoveredItems(providerId: string, items: DiscoveredItem[]): Promise<void> {
     if (this._disposed) {
       return;
+    }
+    if (items.length > ProviderRegistry.MAX_ITEMS_PER_PROVIDER) {
+      logger.warn(
+        `Provider "${providerId}" emitted ${items.length} items, exceeding the limit of ${ProviderRegistry.MAX_ITEMS_PER_PROVIDER}. Truncating.`,
+      );
+      items = items.slice(0, ProviderRegistry.MAX_ITEMS_PER_PROVIDER);
+    } else {
+      items = items.slice();
     }
     logger.info(`Provider ${providerId} discovered ${items.length} items`);
     this.discoveredItems.set(providerId, items);
