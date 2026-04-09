@@ -1,3 +1,4 @@
+import * as path from 'path';
 import * as vscode from 'vscode';
 import type { WorkItem, WorkCenterAction } from './types';
 import { DEFAULT_REVIEW_PROMPT } from './defaultPrompt';
@@ -121,30 +122,63 @@ export class AiReviewAction implements WorkCenterAction {
         return DEFAULT_REVIEW_PROMPT;
       }
       return content;
-    } catch {
+    } catch (err) {
+      const message = err instanceof Error ? err.message : `Could not read custom prompt file "${customPath}"`;
       vscode.window.showWarningMessage(
-        `AI Code Review: Could not read custom prompt file "${customPath}" — using built-in prompt.`,
+        `AI Code Review: ${message} — using built-in prompt.`,
       );
       return DEFAULT_REVIEW_PROMPT;
     }
   }
 
-  /** Resolve a prompt path to a URI. Absolute paths are used directly; relative paths resolve against the single workspace folder. */
+  /** Resolve a prompt path to a URI, validating it stays within the workspace. */
   resolvePromptUri(promptPath: string): vscode.Uri {
-    if (this.isAbsolutePath(promptPath)) {
-      return vscode.Uri.file(promptPath);
-    }
-
     const folders = vscode.workspace.workspaceFolders;
     if (!folders || folders.length === 0) {
-      throw new Error('No workspace folder open — cannot resolve relative prompt path.');
+      throw new Error('No workspace folder open — cannot resolve custom prompt path.');
     }
-    if (folders.length > 1) {
+
+    let resolvedUri: vscode.Uri;
+
+    if (this.isAbsolutePath(promptPath)) {
+      resolvedUri = vscode.Uri.file(promptPath);
+    } else {
+      if (folders.length > 1) {
+        throw new Error(
+          'Multiple workspace folders — use an absolute path for the custom prompt.',
+        );
+      }
+      resolvedUri = vscode.Uri.joinPath(folders[0].uri, promptPath);
+    }
+
+    if (!this.isWithinWorkspace(resolvedUri.fsPath, folders)) {
       throw new Error(
-        'Multiple workspace folders — use an absolute path for the custom prompt.',
+        `Custom prompt path must be within the workspace. "${promptPath}" resolves outside all workspace folders.`,
       );
     }
-    return vscode.Uri.joinPath(folders[0].uri, promptPath);
+
+    return resolvedUri;
+  }
+
+  private isWithinWorkspace(
+    filePath: string,
+    folders: readonly vscode.WorkspaceFolder[],
+  ): boolean {
+    const normalizedFile = path.normalize(filePath);
+    return folders.some((folder) => {
+      const normalizedFolder = path.normalize(folder.uri.fsPath);
+      const prefix = normalizedFolder + path.sep;
+      if (process.platform === 'win32') {
+        return (
+          normalizedFile.toLowerCase() === normalizedFolder.toLowerCase() ||
+          normalizedFile.toLowerCase().startsWith(prefix.toLowerCase())
+        );
+      }
+      return (
+        normalizedFile === normalizedFolder ||
+        normalizedFile.startsWith(prefix)
+      );
+    });
   }
 
   private isAbsolutePath(p: string): boolean {
