@@ -14,6 +14,24 @@ function formatItemTitle(item: { group?: string; title: string }): string {
   return trimmedGroup ? `${trimmedGroup} ${item.title}` : item.title;
 }
 
+/** Log the error and show a user-facing message. */
+function handleCommandError(context: string, err: unknown): void {
+  logger.error(context, err);
+  const detail = err instanceof Error ? err.message : String(err);
+  void vscode.window.showErrorMessage(`WorkCenter: ${context} — ${detail}`);
+}
+
+/** Wrap a command handler so unhandled errors are logged and shown to the user. */
+function wrapCommand<T extends unknown[]>(label: string, fn: (...args: T) => Promise<void> | void): (...args: T) => Promise<void> {
+  return async (...args: T) => {
+    try {
+      await fn(...args);
+    } catch (err: unknown) {
+      handleCommandError(label, err);
+    }
+  };
+}
+
 // ---------------------------------------------------------------------------
 // Individual command handlers
 // ---------------------------------------------------------------------------
@@ -135,8 +153,8 @@ async function handleRunAction(
         await action.run(workItem);
       } catch (err: unknown) {
         logger.error('Action failed: ' + selected.label, err);
-        const message = err instanceof Error ? err.message : String(err);
-        void vscode.window.showErrorMessage(`WorkCenter: Action "${selected.label}" failed — ${message}`);
+        const detail = err instanceof Error ? err.message : String(err);
+        void vscode.window.showErrorMessage(`WorkCenter: Action "${selected.label}" failed — ${detail}`);
       }
     }
   }
@@ -170,17 +188,26 @@ async function handleAcceptFromInbox(
     void vscode.window.showInformationMessage(
       `WorkCenter: Item already accepted as "${existing.title}"`
     );
+    try {
+      await stateStore.setState(item.providerId, item.externalId, 'accepted');
+    } catch (err: unknown) {
+      handleCommandError('Failed to update state for existing accepted item', err);
+    }
     return;
   }
-  await workGraph.createItem(
-    { title: formatItemTitle(item) },
-    { providerId: item.providerId, externalId: item.externalId, url: item.url },
-  );
+  try {
+    await workGraph.createItem(
+      { title: formatItemTitle(item) },
+      { providerId: item.providerId, externalId: item.externalId, url: item.url },
+    );
+  } catch (err: unknown) {
+    handleCommandError('Failed to accept inbox item', err);
+    return;
+  }
   try {
     await stateStore.setState(item.providerId, item.externalId, 'accepted');
   } catch (err: unknown) {
-    const message = err instanceof Error ? err.message : String(err);
-    void vscode.window.showErrorMessage(`WorkCenter: Failed to update state — ${message}`);
+    handleCommandError('Failed to update state after accepting item', err);
   }
 }
 
@@ -189,12 +216,11 @@ async function handleDismissFromInbox(
   item?: InboxItem,
 ): Promise<void> {
   if (!item?.providerId || !item?.externalId) { return; }
-  logger.info(`Dismissing inbox item: ${item.externalId}`);
   try {
+    logger.info(`Dismissing inbox item: ${item.externalId}`);
     await stateStore.setState(item.providerId, item.externalId, 'dismissed');
   } catch (err: unknown) {
-    const message = err instanceof Error ? err.message : String(err);
-    void vscode.window.showErrorMessage(`WorkCenter: Failed to dismiss item — ${message}`);
+    handleCommandError('Failed to dismiss item', err);
   }
 }
 
@@ -210,8 +236,7 @@ async function handleAcceptFromSources(
     try {
       await stateStore.setState(item.providerId, item.externalId, 'accepted');
     } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : String(err);
-      void vscode.window.showErrorMessage(`WorkCenter: Failed to update state — ${message}`);
+      handleCommandError('Failed to update state for existing item', err);
     }
     void vscode.window.showInformationMessage(
       `WorkCenter: Item already accepted as "${existing.title}"`
@@ -223,10 +248,14 @@ async function handleAcceptFromSources(
       { title: formatItemTitle(item) },
       { providerId: item.providerId, externalId: item.externalId, url: item.url },
     );
+  } catch (err: unknown) {
+    handleCommandError('Failed to accept sources item', err);
+    return;
+  }
+  try {
     await stateStore.setState(item.providerId, item.externalId, 'accepted');
   } catch (err: unknown) {
-    const message = err instanceof Error ? err.message : String(err);
-    void vscode.window.showErrorMessage(`WorkCenter: Failed to accept item — ${message}`);
+    handleCommandError('Failed to update state after accepting item', err);
   }
 }
 
@@ -241,39 +270,39 @@ export function registerCommands(
   stateStore: DiscoveredStateStore,
 ): void {
   context.subscriptions.push(
-    vscode.commands.registerCommand('workcenter.createItem', () =>
-      handleCreateItem(workGraph)),
-    vscode.commands.registerCommand('workcenter.acceptToFocus', (item) =>
-      handleAcceptToFocus(workGraph, item)),
-    vscode.commands.registerCommand('workcenter.archiveItem', (item) =>
-      handleArchiveItem(workGraph, item)),
-    vscode.commands.registerCommand('workcenter.completeItem', (item) =>
-      handleCompleteItem(workGraph, item)),
-    vscode.commands.registerCommand('workcenter.pauseItem', (item) =>
-      handlePauseItem(workGraph, item)),
-    vscode.commands.registerCommand('workcenter.resumeItem', (item) =>
-      handleResumeItem(workGraph, item)),
-    vscode.commands.registerCommand('workcenter.blockItem', (item) =>
-      handleBlockItem(workGraph, item)),
-    vscode.commands.registerCommand('workcenter.unblockItem', (item) =>
-      handleUnblockItem(workGraph, item)),
-    vscode.commands.registerCommand('workcenter.markWaitingOn', (item) =>
-      handleMarkWaitingOn(workGraph, item)),
-    vscode.commands.registerCommand('workcenter.editItem', (item) =>
-      handleEditItem(context, workGraph, item)),
-    vscode.commands.registerCommand('workcenter.openInBrowser', (item) =>
-      handleOpenInBrowser(workGraph, item)),
-    vscode.commands.registerCommand('workcenter.runAction', (item) =>
-      handleRunAction(workGraph, actionRegistry, item)),
-    vscode.commands.registerCommand('workcenter.moveUp', (item) =>
-      handleMoveUp(workGraph, item)),
-    vscode.commands.registerCommand('workcenter.moveDown', (item) =>
-      handleMoveDown(workGraph, item)),
-    vscode.commands.registerCommand('workcenter.acceptFromInbox', (item: InboxItem) =>
-      handleAcceptFromInbox(workGraph, stateStore, item)),
-    vscode.commands.registerCommand('workcenter.dismissFromInbox', (item: InboxItem) =>
-      handleDismissFromInbox(stateStore, item)),
-    vscode.commands.registerCommand('workcenter.acceptFromSources', (item: SourceItemNode) =>
-      handleAcceptFromSources(workGraph, stateStore, item)),
+    vscode.commands.registerCommand('workcenter.createItem',
+      wrapCommand('Failed to create item', () => handleCreateItem(workGraph))),
+    vscode.commands.registerCommand('workcenter.acceptToFocus',
+      wrapCommand('Failed to focus item', (item) => handleAcceptToFocus(workGraph, item))),
+    vscode.commands.registerCommand('workcenter.archiveItem',
+      wrapCommand('Failed to archive item', (item) => handleArchiveItem(workGraph, item))),
+    vscode.commands.registerCommand('workcenter.completeItem',
+      wrapCommand('Failed to complete item', (item) => handleCompleteItem(workGraph, item))),
+    vscode.commands.registerCommand('workcenter.pauseItem',
+      wrapCommand('Failed to pause item', (item) => handlePauseItem(workGraph, item))),
+    vscode.commands.registerCommand('workcenter.resumeItem',
+      wrapCommand('Failed to resume item', (item) => handleResumeItem(workGraph, item))),
+    vscode.commands.registerCommand('workcenter.blockItem',
+      wrapCommand('Failed to block item', (item) => handleBlockItem(workGraph, item))),
+    vscode.commands.registerCommand('workcenter.unblockItem',
+      wrapCommand('Failed to unblock item', (item) => handleUnblockItem(workGraph, item))),
+    vscode.commands.registerCommand('workcenter.markWaitingOn',
+      wrapCommand('Failed to mark item as waiting', (item) => handleMarkWaitingOn(workGraph, item))),
+    vscode.commands.registerCommand('workcenter.editItem',
+      wrapCommand('Failed to open editor', (item) => handleEditItem(context, workGraph, item))),
+    vscode.commands.registerCommand('workcenter.openInBrowser',
+      wrapCommand('Failed to open in browser', (item) => handleOpenInBrowser(workGraph, item))),
+    vscode.commands.registerCommand('workcenter.runAction',
+      wrapCommand('Failed to run action', (item) => handleRunAction(workGraph, actionRegistry, item))),
+    vscode.commands.registerCommand('workcenter.moveUp',
+      wrapCommand('Failed to move item up', (item) => handleMoveUp(workGraph, item))),
+    vscode.commands.registerCommand('workcenter.moveDown',
+      wrapCommand('Failed to move item down', (item) => handleMoveDown(workGraph, item))),
+    vscode.commands.registerCommand('workcenter.acceptFromInbox',
+      wrapCommand('Failed to accept from inbox', (item: InboxItem) => handleAcceptFromInbox(workGraph, stateStore, item))),
+    vscode.commands.registerCommand('workcenter.dismissFromInbox',
+      wrapCommand('Failed to dismiss from inbox', (item: InboxItem) => handleDismissFromInbox(stateStore, item))),
+    vscode.commands.registerCommand('workcenter.acceptFromSources',
+      wrapCommand('Failed to accept from sources', (item: SourceItemNode) => handleAcceptFromSources(workGraph, stateStore, item))),
   );
 }

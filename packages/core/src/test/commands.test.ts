@@ -197,6 +197,14 @@ describe('registerCommands', () => {
         expect(workGraph.transitionState).toHaveBeenCalledWith('wc-42', expectedState);
       });
     }
+
+    it('shows error when transitionState throws', async () => {
+      workGraph.transitionState.mockRejectedValue(new Error('db crash'));
+      await invoke('workcenter.archiveItem', { id: 'wc-1' });
+      expect(vscode.window.showErrorMessage).toHaveBeenCalledWith(
+        'WorkCenter: Failed to archive item — db crash',
+      );
+    });
   });
 
   // ── editItem ─────────────────────────────────────────────────────
@@ -467,7 +475,7 @@ describe('registerCommands', () => {
       );
     });
 
-    it('shows info message when item already accepted', async () => {
+    it('shows info message and sets state when item already accepted', async () => {
       const existing = createWorkItem({ title: 'Already There' });
       workGraph.findItemByProvenance.mockReturnValue(existing);
 
@@ -477,6 +485,34 @@ describe('registerCommands', () => {
       expect(vscode.window.showInformationMessage).toHaveBeenCalledWith(
         'WorkCenter: Item already accepted as "Already There"',
       );
+      expect(stateStore.setState).toHaveBeenCalledWith('github', 'ext-1', 'accepted');
+    });
+
+    it('shows error when setState fails for existing accepted item', async () => {
+      const existing = createWorkItem({ title: 'Already There' });
+      workGraph.findItemByProvenance.mockReturnValue(existing);
+      stateStore.setState.mockRejectedValue(new Error('write fail'));
+
+      await invoke('workcenter.acceptFromInbox', makeInboxItem());
+
+      expect(vscode.window.showInformationMessage).toHaveBeenCalledWith(
+        'WorkCenter: Item already accepted as "Already There"',
+      );
+      expect(vscode.window.showErrorMessage).toHaveBeenCalledWith(
+        'WorkCenter: Failed to update state for existing accepted item — write fail',
+      );
+    });
+
+    it('shows error when createItem fails', async () => {
+      workGraph.findItemByProvenance.mockReturnValue(undefined);
+      workGraph.createItem.mockRejectedValue(new Error('store error'));
+
+      await invoke('workcenter.acceptFromInbox', makeInboxItem());
+
+      expect(vscode.window.showErrorMessage).toHaveBeenCalledWith(
+        'WorkCenter: Failed to accept inbox item — store error',
+      );
+      expect(stateStore.setState).not.toHaveBeenCalled();
     });
 
     it('shows error when setState fails', async () => {
@@ -486,7 +522,7 @@ describe('registerCommands', () => {
       await invoke('workcenter.acceptFromInbox', makeInboxItem());
 
       expect(vscode.window.showErrorMessage).toHaveBeenCalledWith(
-        'WorkCenter: Failed to update state — disk full',
+        'WorkCenter: Failed to update state after accepting item — disk full',
       );
     });
   });
@@ -558,8 +594,11 @@ describe('registerCommands', () => {
 
       await invoke('workcenter.acceptFromSources', makeSourceItem());
 
+      expect(vscode.window.showInformationMessage).toHaveBeenCalledWith(
+        'WorkCenter: Item already accepted as "Existing"',
+      );
       expect(vscode.window.showErrorMessage).toHaveBeenCalledWith(
-        'WorkCenter: Failed to update state — write fail',
+        'WorkCenter: Failed to update state for existing item — write fail',
       );
     });
 
@@ -570,7 +609,7 @@ describe('registerCommands', () => {
       await invoke('workcenter.acceptFromSources', makeSourceItem());
 
       expect(vscode.window.showErrorMessage).toHaveBeenCalledWith(
-        'WorkCenter: Failed to accept item — store error',
+        'WorkCenter: Failed to accept sources item — store error',
       );
     });
 
