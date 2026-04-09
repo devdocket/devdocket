@@ -94,13 +94,14 @@ export class JsonTaskStore implements ITaskStore {
   private async doLoad(): Promise<WorkItem[]> {
     logger.debug(`Loading work items from ${this.filePath}`);
     try {
-      const data = await fs.readFile(this.filePath, 'utf-8');
-      if (data.length > MAX_STORE_FILE_SIZE) {
+      const stats = await fs.stat(this.filePath);
+      if (stats.size > MAX_STORE_FILE_SIZE) {
         logger.warn(`Work items file exceeds ${MAX_STORE_FILE_SIZE} bytes — backing up and resetting to empty`);
         await this.backupCorruptedFile();
         this.cache = new Map();
         return [];
       }
+      const data = await fs.readFile(this.filePath, 'utf-8');
       let parsed: unknown;
       try {
         parsed = JSON.parse(data);
