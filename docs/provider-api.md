@@ -310,7 +310,6 @@ import * as vscode from 'vscode';
 
 enum WorkItemState {
   New = 'New',
-  Triaged = 'Triaged',
   InProgress = 'InProgress',
   Paused = 'Paused',
   Done = 'Done',
@@ -614,7 +613,6 @@ interface WorkItem {
 ```ts
 enum WorkItemState {
   New = 'New',         // Queue — freshly created or accepted
-  Triaged = 'Triaged', // Reserved for future use
   InProgress = 'InProgress', // Focus — active work
   Paused = 'Paused',         // Focus — temporarily on hold
   Done = 'Done',             // History — completed
