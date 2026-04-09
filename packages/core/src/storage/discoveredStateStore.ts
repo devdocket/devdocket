@@ -2,6 +2,7 @@ import * as vscode from 'vscode';
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import { logger } from '../services/logger';
+import { MAX_STORE_FILE_SIZE } from './limits';
 
 /** Possible states for a provider-discovered item in the inbox workflow. */
 const inboxStates = ['unseen', 'accepted', 'dismissed'] as const;
@@ -168,6 +169,13 @@ export class DiscoveredStateStore {
   private async doLoad(): Promise<void> {
     try {
       const data = await fs.readFile(this.filePath, 'utf-8');
+      if (data.length > MAX_STORE_FILE_SIZE) {
+        logger.warn(`Discovered state file exceeds ${MAX_STORE_FILE_SIZE} bytes — backing up and resetting to empty`);
+        await this.backupCorruptedFile();
+        this.cache.clear();
+        this.loaded = true;
+        return;
+      }
       let parsed: unknown;
       try {
         parsed = JSON.parse(data);

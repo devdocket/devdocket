@@ -1,6 +1,7 @@
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import { logger } from '../services/logger';
+import { MAX_STORE_FILE_SIZE } from './limits';
 
 /**
  * Persists the set of inbox item IDs that the user has viewed ("read")
@@ -81,10 +82,37 @@ export class ReadStateStore {
     if (this.loaded) { return; }
     try {
       const data = await fs.readFile(this.filePath, 'utf-8');
-      const arr = JSON.parse(data) as string[];
+      if (data.length > MAX_STORE_FILE_SIZE) {
+        logger.warn(`Read state file exceeds ${MAX_STORE_FILE_SIZE} bytes — backing up and resetting to empty`);
+        await this.backupCorruptedFile();
+        this.items.clear();
+        this.loaded = true;
+        return;
+      }
+      let parsed: unknown;
+      try {
+        parsed = JSON.parse(data);
+      } catch {
+        logger.warn('Failed to parse read state file — backing up and resetting to empty');
+        await this.backupCorruptedFile();
+        this.items.clear();
+        this.loaded = true;
+        return;
+      }
+      if (!Array.isArray(parsed)) {
+        logger.warn('Read state file does not contain an array — backing up and resetting to empty');
+        await this.backupCorruptedFile();
+        this.items.clear();
+        this.loaded = true;
+        return;
+      }
       this.items.clear();
-      for (const key of arr) {
-        this.items.add(key);
+      for (const item of parsed) {
+        if (typeof item !== 'string') {
+          logger.warn(`Skipping invalid read state entry: expected string, got ${typeof item}`);
+          continue;
+        }
+        this.items.add(item);
       }
       logger.debug(`Loaded read state: ${this.items.size} entries`);
       this.loaded = true;
@@ -108,6 +136,16 @@ export class ReadStateStore {
   private enqueue(op: () => Promise<void>): Promise<void> {
     this.writeQueue = this.writeQueue.then(op, op);
     return this.writeQueue;
+  }
+
+  private async backupCorruptedFile(): Promise<void> {
+    try {
+      const backupPath = `${this.filePath}.corrupt.${Date.now()}`;
+      await fs.rename(this.filePath, backupPath);
+      logger.warn(`Backed up corrupted file to ${backupPath}`);
+    } catch {
+      logger.warn('Failed to back up corrupted read state file');
+    }
   }
 }
 

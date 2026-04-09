@@ -3,6 +3,7 @@ import * as path from 'path';
 import { WorkItem, WorkItemState } from '../models/workItem';
 import { ITaskStore } from './taskStore';
 import { logger } from '../services/logger';
+import { MAX_STORE_FILE_SIZE } from './limits';
 
 const validWorkItemStates = new Set<string>(Object.values(WorkItemState));
 // Legacy states that are no longer in the enum but can be migrated
@@ -94,6 +95,12 @@ export class JsonTaskStore implements ITaskStore {
     logger.debug(`Loading work items from ${this.filePath}`);
     try {
       const data = await fs.readFile(this.filePath, 'utf-8');
+      if (data.length > MAX_STORE_FILE_SIZE) {
+        logger.warn(`Work items file exceeds ${MAX_STORE_FILE_SIZE} bytes — backing up and resetting to empty`);
+        await this.backupCorruptedFile();
+        this.cache = new Map();
+        return [];
+      }
       let parsed: unknown;
       try {
         parsed = JSON.parse(data);
