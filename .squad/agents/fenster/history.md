@@ -140,3 +140,55 @@ Fixed 4 rounds of Copilot PR review feedback:
 ### Decision Record
 Patterns documented in `.squad/decisions.md` under "Code Review Fix Patterns" (2026-03-24).
 
+## Issue #154: crypto.randomUUID() for work item IDs (2026-07-14)
+
+### Learnings
+- `crypto.randomUUID()` is available as a Node.js built-in — no additional dependencies needed. Since `crypto` is a native module, it doesn't require a vitest mock (unlike `vscode`).
+- The old `generateId()` used `Date.now()` + `Math.random()`, which is predictable. The new format `wc-<uuid>` is simpler and cryptographically secure.
+- The codebase already used `crypto.randomBytes()` in `editorPanelHtml.ts` for CSP nonces, so this aligns with existing practice.
+
+## Issue #156: Sanitize PR URL before LLM prompt interpolation (2026-07-14)
+
+### Learnings
+- External data interpolated into LLM prompts is a prompt injection vector. Always sanitize before embedding in prompt strings.
+- `new URL(url)` is the standard way to validate URL format in Node.js — it throws on malformed input, making try/catch a clean validation pattern.
+- `URL.href` returns the canonical, re-serialized URL which normalizes encoding — safer than using the raw input string.
+- Stripping `\r`, `\n`, and backticks prevents an attacker from breaking out of the markdown structure in the prompt template.
+
+## Issue #155: URL scheme validation before openExternal (2026-07-14)
+
+### Learnings
+- The codebase already had inline URL scheme validation using `vscode.Uri.parse().scheme`, but extracting a dedicated `isSafeUrl()` helper using the standard `URL` constructor is more robust — it catches malformed URLs via try/catch rather than letting `vscode.Uri.parse` silently accept them.
+- `URL.protocol` includes the trailing colon (e.g., `'https:'`), while `vscode.Uri.scheme` does not (e.g., `'https'`). Always check which API you're using to avoid subtle mismatches.
+- Using the native `URL` constructor for validation means the helper works in both VS Code runtime and Node.js tests without needing vscode mocks.
+
+## Issue #158: Markdown injection in tooltip rendering (2026-07-14)
+
+### Learnings
+- `MarkdownString.appendMarkdown()` renders raw markdown — interpolating user-controlled strings (like issue titles) enables markdown injection. Always use `appendText()` for user content, which escapes markdown metacharacters.
+- The secure pattern is: `md.appendMarkdown('**Title:** ')` then `md.appendText(item.title)` then `md.appendMarkdown('\n\n')` — label in markdown, value in plain text.
+- `queueTreeProvider.ts` and `inboxTreeProvider.ts` were the only two views missing this pattern; `focusTreeProvider.ts`, `sourcesTreeProvider.ts`, and `historyTreeProvider.ts` already used it correctly.
+
+## Issue #157: Plugin API trust boundary validation (2026-04-09)
+
+### Learnings
+- VS Code's extension API provides no caller identity context — there is no way to verify which extension is registering a provider or action. The only practical mitigation is logging registrations at warn level for auditability and rejecting duplicate IDs.
+- `Readonly<WorkItem>` in TypeScript is a shallow read-only wrapper. It prevents direct property mutation at the type level but doesn't create a runtime-frozen object. For the plugin API surface this is sufficient since it catches accidental mutations at compile time.
+- Provider data size limits should be enforced at the ingestion boundary (`handleDiscoveredItems`) rather than at the storage layer, to prevent large arrays from propagating through the event pipeline before being caught.
+- The `MAX_ITEMS_PER_PROVIDER` constant is on the class (`static readonly`) rather than module-level, keeping it discoverable alongside the registry and testable via `ProviderRegistry.MAX_ITEMS_PER_PROVIDER`.
+
+## Issue #152: Custom prompt path allows arbitrary file read (2026-07-14)
+
+### Learnings
+- `resolvePromptUri` now validates ALL resolved paths (both absolute and relative) are contained within a workspace folder using `path.normalize()` + prefix comparison. Absolute paths are no longer blindly accepted.
+- On Windows, path comparison must be case-insensitive (`toLowerCase()` both sides) since `C:\Users` and `c:\users` are the same. `process.platform === 'win32'` is the standard detection.
+- `path.normalize()` resolves `..` traversal segments, so `workspace/../../etc/passwd` becomes `etc/passwd` at the filesystem level — the containment check catches this by comparing the normalized result against the normalized workspace root.
+- The `getReviewPrompt` catch block now surfaces the actual `Error.message` from validation failures instead of a generic string, so users see exactly why their custom prompt path was rejected.
+- 6 existing tests fail because they test the old insecure behavior (absolute paths outside workspace). Hockney needs to update them to use paths within the mock workspace folder (`/mock/workspace/...`).
+
+## Issue #153: JSON deserialization validation and file size limits (2026-07-14)
+
+### Learnings
+- ReadStateStore was the only store using an unchecked `JSON.parse(data) as string[]` type assertion. The other two stores (jsonTaskStore, discoveredStateStore) already had full validation + backup-on-corruption patterns. Always validate parsed JSON at runtime, even for simple types like `string[]`.
+- A shared `MAX_STORE_FILE_SIZE` constant in `limits.ts` keeps the size guard consistent across all stores and avoids magic numbers scattered across files.
+- Changing ReadStateStore from "throw on corruption" to "backup and reset" is a deliberate behavioral change that aligns with the other stores. This breaks the existing test `should handle corrupted JSON by throwing` — flagged for Hockney to update.
