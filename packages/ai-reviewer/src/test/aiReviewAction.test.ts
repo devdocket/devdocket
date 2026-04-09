@@ -423,16 +423,19 @@ describe('AiReviewAction', () => {
       expect(Uri.file).toHaveBeenCalledWith('/mock/workspace/prompt.md');
     });
 
-    it('returns file URI for absolute Windows path within workspace', () => {
-      const original = workspace.workspaceFolders;
-      workspace.workspaceFolders = [{ uri: { fsPath: 'C:\\Users\\me' } }] as never;
-      try {
-        action.resolvePromptUri('C:\\Users\\me\\prompt.md');
-        expect(Uri.file).toHaveBeenCalledWith('C:\\Users\\me\\prompt.md');
-      } finally {
-        workspace.workspaceFolders = original;
-      }
-    });
+    (process.platform === 'win32' ? it : it.skip)(
+      'returns file URI for absolute Windows path within workspace',
+      () => {
+        const original = workspace.workspaceFolders;
+        workspace.workspaceFolders = [{ uri: { fsPath: 'C:\\Users\\me' } }] as never;
+        try {
+          action.resolvePromptUri('C:\\Users\\me\\prompt.md');
+          expect(Uri.file).toHaveBeenCalledWith('C:\\Users\\me\\prompt.md');
+        } finally {
+          workspace.workspaceFolders = original;
+        }
+      },
+    );
 
     it('joins relative path with single workspace folder', () => {
       action.resolvePromptUri('relative/prompt.md');
