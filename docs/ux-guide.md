@@ -43,16 +43,15 @@ Clicking a Queue item opens the editor panel for that item.
 
 | Action | Description |
 |--------|-------------|
-| **Move to Focus** | Transitions the item to **InProgress** and moves it to the Focus view (inline button) |
+| **Move to Focus** | Transitions the item to **In Progress** and moves it to the Focus view (inline button) |
 | **Archive** | Transitions the item to **Archived**, removing it from the Queue |
 | **Move Up / Move Down** | Reorders the item within the Queue |
-| **Edit Work Item** | Opens the editor panel to modify title and notes |
 | **Run Action…** | Shows available provider actions for this item |
 | **Open in Browser** | Opens the item's URL in your default browser (if the item has a URL) |
 
 ### Focus
 
-The Focus view shows items you are actively working on. Items here can be in one of two states: **InProgress** or **Paused**.
+The Focus view shows items you are actively working on. Items here can be in one of two states: **In Progress** or **Paused**.
 
 Items display a state label next to the title, with icons indicating status:
 - **in progress** — actively being worked on (shown with a ▶ play-circle icon)
@@ -65,13 +64,12 @@ Clicking a Focus item opens the editor panel for that item.
 | Action | Description |
 |--------|-------------|
 | **Complete** | Transitions the item to **Done** and moves it to History (inline button) |
-| **Pause** | Transitions an active (InProgress) item to **Paused** |
-| **Resume** | Transitions a paused item back to **InProgress** |
-| **Edit Work Item** | Opens the editor panel to modify title and notes |
+| **Pause** | Transitions an active (in progress) item to **Paused** |
+| **Resume** | Transitions a paused item back to **In Progress** |
 | **Run Action…** | Shows available provider actions for this item |
 | **Open in Browser** | Opens the item's URL in your default browser (if the item has a URL) |
 
-> **Note:** The **Pause** action is only available on active (InProgress) items. The **Resume** action is only available on paused items.
+> **Note:** The **Pause** action is only available on active (in progress) items. The **Resume** action is only available on paused items.
 
 ### Sources
 
@@ -131,7 +129,7 @@ Provider discovers items
        ▼
 ┌──────────────┐
 │    Focus     │
-│ [InProgress] │ ◄──► [Paused]
+│ [In Progress] │ ◄──► [Paused]
 └──────┬───────┘
        │ Complete
        ▼
@@ -177,7 +175,7 @@ WorkCenter defines five states for work items:
 | State | View | Description |
 |-------|------|-------------|
 | **New** | Queue | Item is in the backlog, waiting to be started |
-| **InProgress** | Focus | Item is actively being worked on |
+| **In Progress** | Focus | Item is actively being worked on |
 | **Paused** | Focus | Work is temporarily on hold |
 | **Done** | History | Work is complete |
 | **Archived** | History | Item is archived |
@@ -193,7 +191,7 @@ WorkCenter defines five states for work items:
               │                  │
               ▼                  ▼
         ┌──────────┐       ┌──────────┐
-        │InProgress│       │ Archived │  (History)
+        │In Progress│       │ Archived │  (History)
         └────┬─────┘       └──────────┘
              │
       ┌──────┼──────┐
@@ -204,7 +202,7 @@ WorkCenter defines five states for work items:
       │  └───┬────┘ │
       │      │      │
       │      ▼      │
-      │ InProgress  │
+      │ In Progress │
       │      │      │
       └──────┘      │
              │      │
@@ -216,11 +214,11 @@ WorkCenter defines five states for work items:
 
 **Valid transitions:**
 
-- **New → InProgress** — "Move to Focus" from Queue
+- **New → In Progress** — "Move to Focus" from Queue
 - **New → Archived** — "Archive" from Queue (skip/dismiss)
-- **InProgress → Paused** — "Pause" from Focus
-- **InProgress → Done** — "Complete" from Focus
-- **Paused → InProgress** — "Resume" from Focus
+- **In Progress → Paused** — "Pause" from Focus
+- **In Progress → Done** — "Complete" from Focus
+- **Paused → In Progress** — "Resume" from Focus
 
 ## Available Commands
 
@@ -236,7 +234,6 @@ Commands are available from context menus, inline actions, or the view title bar
 | Resume | `workcenter.resumeItem` | Focus (context, paused items only) | $(debug-continue) |
 | Move Up | `workcenter.moveUp` | Queue (context menu) | $(arrow-up) |
 | Move Down | `workcenter.moveDown` | Queue (context menu) | $(arrow-down) |
-| Edit Work Item | `workcenter.editItem` | Queue, Focus (context menu) | $(edit) |
 | Open in Browser | `workcenter.openInBrowser` | Any view (items with URL) | $(link-external) |
 | Run Action… | `workcenter.runAction` | Queue, Focus (context menu) | $(play) |
 | Accept to Queue | `workcenter.acceptFromInbox` | Inbox (inline) | $(arrow-right) |
@@ -245,7 +242,7 @@ Commands are available from context menus, inline actions, or the view title bar
 
 ## Editor Panel
 
-The **Edit Work Item** command (or clicking an item in Queue, Focus, or History) opens a webview-based editor panel with two fields:
+Clicking an item in Queue, Focus, or History opens a webview-based editor panel with two fields:
 
 - **Title** — A single-line text input (required). Cannot be saved if empty. For provider-backed items, the title is **read-only** with a hint: _"Title is managed by the provider"_.
 - **Notes** — A multi-line textarea for additional notes.
