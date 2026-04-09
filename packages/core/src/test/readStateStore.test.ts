@@ -4,6 +4,9 @@ import * as path from 'path';
 import * as os from 'os';
 import { ReadStateStore } from '../storage/readStateStore';
 
+const mockLimits = vi.hoisted(() => ({ MAX_STORE_FILE_SIZE: 10 * 1024 * 1024 }));
+vi.mock('../storage/limits', () => mockLimits);
+
 describe('ReadStateStore', () => {
   let tmpDir: string;
   let store: ReadStateStore;
@@ -93,11 +96,72 @@ describe('ReadStateStore', () => {
     expect(store2.has('gh::3')).toBe(false);
   });
 
-  it('should handle corrupted JSON by throwing', async () => {
+  it('should handle corrupted JSON by backing up and loading empty', async () => {
     const filePath = path.join(tmpDir, 'read-state.json');
     await fs.writeFile(filePath, 'not valid json', 'utf-8');
 
-    await expect(store.load()).rejects.toThrow();
+    await store.load();
+    expect([...store.keys()]).toEqual([]);
+
+    const files = await fs.readdir(tmpDir);
+    const backupFiles = files.filter(f => f.startsWith('read-state.json.corrupt.'));
+    expect(backupFiles).toHaveLength(1);
+  });
+
+  it('should handle non-array JSON by backing up and resetting', async () => {
+    const filePath = path.join(tmpDir, 'read-state.json');
+    await fs.writeFile(filePath, JSON.stringify({ not: 'an array' }), 'utf-8');
+
+    await store.load();
+    expect([...store.keys()]).toEqual([]);
+
+    const files = await fs.readdir(tmpDir);
+    const backupFiles = files.filter(f => f.startsWith('read-state.json.corrupt.'));
+    expect(backupFiles).toHaveLength(1);
+  });
+
+  it('should skip non-string elements in the array', async () => {
+    const filePath = path.join(tmpDir, 'read-state.json');
+    await fs.writeFile(
+      filePath,
+      JSON.stringify(['valid::1', 42, null, true, 'valid::2', { obj: true }]),
+      'utf-8',
+    );
+
+    await store.load();
+    const keys = [...store.keys()].sort();
+    expect(keys).toEqual(['valid::1', 'valid::2']);
+  });
+
+  describe('file size limits', () => {
+    afterEach(() => {
+      mockLimits.MAX_STORE_FILE_SIZE = 10 * 1024 * 1024;
+    });
+
+    it('should back up and reset when file exceeds size limit', async () => {
+      mockLimits.MAX_STORE_FILE_SIZE = 50;
+      const filePath = path.join(tmpDir, 'read-state.json');
+      const oversizedContent = JSON.stringify(['a'.repeat(60)]);
+      await fs.writeFile(filePath, oversizedContent, 'utf-8');
+
+      await store.load();
+      expect([...store.keys()]).toEqual([]);
+
+      const files = await fs.readdir(tmpDir);
+      const backupFiles = files.filter(f => f.startsWith('read-state.json.corrupt.'));
+      expect(backupFiles).toHaveLength(1);
+    });
+
+    it('should parse normally when file is just under size limit', async () => {
+      const filePath = path.join(tmpDir, 'read-state.json');
+      const content = JSON.stringify(['gh::1', 'gh::2']);
+      mockLimits.MAX_STORE_FILE_SIZE = content.length + 1;
+      await fs.writeFile(filePath, content, 'utf-8');
+
+      await store.load();
+      expect(store.has('gh::1')).toBe(true);
+      expect(store.has('gh::2')).toBe(true);
+    });
   });
 
   it('should create storage directory if it does not exist', async () => {

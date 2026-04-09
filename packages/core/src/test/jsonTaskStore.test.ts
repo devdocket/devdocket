@@ -1,9 +1,12 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import * as fs from 'fs/promises';
 import * as path from 'path';
 import * as os from 'os';
 import { JsonTaskStore } from '../storage/jsonTaskStore';
 import { WorkItem, WorkItemState } from '../models/workItem';
+
+const mockLimits = vi.hoisted(() => ({ MAX_STORE_FILE_SIZE: 10 * 1024 * 1024 }));
+vi.mock('../storage/limits', () => mockLimits);
 
 describe('JsonTaskStore', () => {
   let tmpDir: string;
@@ -390,5 +393,39 @@ describe('JsonTaskStore', () => {
     expect(persisted).toHaveLength(2);
     expect(persisted[0].state).toBe(WorkItemState.Paused);
     expect(persisted[1].state).toBe(WorkItemState.Paused);
+  });
+
+  describe('file size limits', () => {
+    afterEach(() => {
+      mockLimits.MAX_STORE_FILE_SIZE = 10 * 1024 * 1024;
+    });
+
+    it('should back up and reset when file exceeds size limit', async () => {
+      mockLimits.MAX_STORE_FILE_SIZE = 50;
+      const filePath = path.join(tmpDir, 'workitems.json');
+      const oversizedContent = JSON.stringify([makeItem({ id: 'oversized', title: 'A very long title that pushes the file over the limit' })]);
+      await fs.mkdir(tmpDir, { recursive: true });
+      await fs.writeFile(filePath, oversizedContent, 'utf-8');
+
+      const items = await store.loadAll();
+      expect(items).toEqual([]);
+
+      const files = await fs.readdir(tmpDir);
+      const backupFiles = files.filter(f => f.startsWith('workitems.json.corrupt.'));
+      expect(backupFiles).toHaveLength(1);
+    });
+
+    it('should parse normally when file is just under size limit', async () => {
+      const filePath = path.join(tmpDir, 'workitems.json');
+      const item = makeItem({ id: 'ok' });
+      const content = JSON.stringify([item]);
+      mockLimits.MAX_STORE_FILE_SIZE = content.length + 1;
+      await fs.mkdir(tmpDir, { recursive: true });
+      await fs.writeFile(filePath, content, 'utf-8');
+
+      const items = await store.loadAll();
+      expect(items).toHaveLength(1);
+      expect(items[0].id).toBe('ok');
+    });
   });
 });

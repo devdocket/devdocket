@@ -3,6 +3,7 @@ import * as path from 'path';
 import { WorkItem, WorkItemState } from '../models/workItem';
 import { ITaskStore } from './taskStore';
 import { logger } from '../services/logger';
+import { MAX_STORE_FILE_SIZE } from './limits';
 
 const validWorkItemStates = new Set<string>(Object.values(WorkItemState));
 // Legacy states that are no longer in the enum but can be migrated
@@ -93,19 +94,32 @@ export class JsonTaskStore implements ITaskStore {
   private async doLoad(): Promise<WorkItem[]> {
     logger.debug(`Loading work items from ${this.filePath}`);
     try {
+      const stats = await fs.stat(this.filePath);
+      if (!stats.isFile()) {
+        logger.warn('Work items path is not a regular file — backing up and resetting to empty');
+        await this.backupInvalidFile();
+        this.cache = new Map();
+        return [];
+      }
+      if (stats.size > MAX_STORE_FILE_SIZE) {
+        logger.warn(`Work items file exceeds ${MAX_STORE_FILE_SIZE} bytes — backing up and resetting to empty`);
+        await this.backupInvalidFile();
+        this.cache = new Map();
+        return [];
+      }
       const data = await fs.readFile(this.filePath, 'utf-8');
       let parsed: unknown;
       try {
         parsed = JSON.parse(data);
       } catch {
         logger.warn('Failed to parse work items file — backing up and resetting to empty');
-        await this.backupCorruptedFile();
+        await this.backupInvalidFile();
         this.cache = new Map();
         return [];
       }
       if (!Array.isArray(parsed)) {
         logger.warn('Work items file does not contain an array — backing up and resetting to empty');
-        await this.backupCorruptedFile();
+        await this.backupInvalidFile();
         this.cache = new Map();
         return [];
       }
@@ -265,13 +279,13 @@ export class JsonTaskStore implements ITaskStore {
     return this.writeQueue;
   }
 
-  private async backupCorruptedFile(): Promise<void> {
+  private async backupInvalidFile(): Promise<void> {
     try {
       const backupPath = `${this.filePath}.corrupt.${Date.now()}`;
       await fs.rename(this.filePath, backupPath);
-      logger.warn(`Backed up corrupted file to ${backupPath}`);
+      logger.warn(`Backed up invalid work items file to ${backupPath}`);
     } catch {
-      logger.warn('Failed to back up corrupted work items file');
+      logger.warn('Failed to back up invalid work items file');
     }
   }
 }
