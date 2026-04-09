@@ -55,10 +55,11 @@ export interface WorkCenterProvider {
  *
  * ## Trust model
  *
- * Actions receive a **read-only snapshot** of the work item (`Readonly<WorkItem>`).
- * This prevents accidental or malicious mutation of the core data model by
- * third-party extensions. Actions that need to modify work-item state should use
- * the WorkCenter API (e.g. VS Code commands) rather than mutating the object.
+ * Actions receive a **read-only view** of the work item (`Readonly<WorkItem>`).
+ * This is a TypeScript type-level restriction only; it does not create a
+ * runtime snapshot or frozen copy of the item. Third-party extensions should
+ * treat the object as immutable and use the WorkCenter API (e.g. VS Code
+ * commands) rather than mutating the object.
  *
  * @example
  * ```ts
