@@ -32,15 +32,21 @@ const TreeItemCollapsibleState = {
   Expanded: 2,
 };
 
+const ViewColumn = {
+  One: 1,
+  Two: 2,
+  Three: 3,
+};
+
 class MockTreeItem {
-  label: string;
+  label: string | { label: string; highlights?: [number, number][] };
   collapsibleState: number;
   id?: string;
   description?: string;
   tooltip?: any;
   contextValue?: string;
   iconPath?: any;
-  constructor(label: string, collapsibleState?: number) {
+  constructor(label: string | { label: string; highlights?: [number, number][] }, collapsibleState?: number) {
     this.label = label;
     this.collapsibleState = collapsibleState ?? 0;
   }
@@ -48,12 +54,21 @@ class MockTreeItem {
 
 const window = {
   showInputBox: vi.fn(),
-  showInformationMessage: vi.fn(),
+  showInformationMessage: vi.fn().mockResolvedValue(undefined),
   showWarningMessage: vi.fn(),
   showErrorMessage: vi.fn(),
   showQuickPick: vi.fn(),
   registerTreeDataProvider: vi.fn(() => ({ dispose: vi.fn() })),
-  createTreeView: vi.fn(() => ({ dispose: vi.fn(), message: undefined })),
+  createTreeView: vi.fn(() => {
+    const selectionEmitter = new MockEventEmitter();
+    return {
+      dispose: vi.fn(),
+      message: undefined,
+      badge: undefined,
+      onDidChangeSelection: selectionEmitter.event,
+      _selectionEmitter: selectionEmitter,
+    };
+  }),
   createWebviewPanel: vi.fn(),
   createOutputChannel: vi.fn(() => ({
     appendLine: vi.fn(),
@@ -69,6 +84,7 @@ const window = {
 
 const commands = {
   registerCommand: vi.fn(() => ({ dispose: vi.fn() })),
+  executeCommand: vi.fn().mockResolvedValue(undefined),
 };
 
 const env = {
@@ -76,7 +92,10 @@ const env = {
 };
 
 const Uri = {
-  parse: vi.fn((s: string) => ({ toString: () => s })),
+  parse: vi.fn((s: string) => {
+    const m = s.match(/^(\w+):/);
+    return { toString: () => s, scheme: m ? m[1] : '' };
+  }),
 };
 
 class MockDataTransferItem {
@@ -84,9 +103,38 @@ class MockDataTransferItem {
 }
 
 class MockDataTransfer {
-  private items = new Map<string, MockDataTransferItem>();
+  private readonly items = new Map<string, MockDataTransferItem>();
   get(mimeType: string): MockDataTransferItem | undefined { return this.items.get(mimeType); }
   set(mimeType: string, value: MockDataTransferItem): void { this.items.set(mimeType, value); }
+}
+
+class MockCancellationTokenSource {
+  private _listeners: Function[] = [];
+  token = {
+    isCancellationRequested: false,
+    onCancellationRequested: (listener: Function) => {
+      if (this.token.isCancellationRequested) {
+        listener();
+      } else {
+        this._listeners.push(listener);
+      }
+      return { dispose: () => { this._listeners = this._listeners.filter(l => l !== listener); } };
+    },
+  };
+  cancel() {
+    if (this.token.isCancellationRequested) {
+      return;
+    }
+    this.token.isCancellationRequested = true;
+    const listeners = this._listeners.slice();
+    this._listeners = [];
+    for (const listener of listeners) {
+      listener();
+    }
+  }
+  dispose() {
+    this._listeners = [];
+  }
 }
 
 class MockDisposable {
@@ -109,8 +157,10 @@ export {
   MockTreeItem as TreeItem,
   MockDataTransferItem as DataTransferItem,
   MockDataTransfer as DataTransfer,
+  MockCancellationTokenSource as CancellationTokenSource,
   MockDisposable as Disposable,
   TreeItemCollapsibleState,
+  ViewColumn,
   window,
   commands,
   env,

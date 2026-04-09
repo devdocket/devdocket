@@ -3,19 +3,55 @@ import { WorkItem, WorkItemInput, WorkItemState } from '../models/workItem';
 import { ITaskStore } from '../storage/taskStore';
 import { logger } from './logger';
 
+/**
+ * In-memory graph of {@link WorkItem}s backed by a persistent {@link ITaskStore}.
+ * Provides CRUD operations, state transitions, and ordering.
+ */
 export class WorkGraph {
-  private items: Map<string, WorkItem> = new Map();
+  private readonly items: Map<string, WorkItem> = new Map();
+  // Provenance key (`${providerId}::${externalId}`) → WorkItem.id for O(1) lookups
+  private readonly provenanceIndex: Map<string, string> = new Map();
+  // Provenance key → count of extra (unindexed) items sharing that key
+  private readonly duplicateProvenanceCounts: Map<string, number> = new Map();
+  /** Lazily-built index of items grouped by state; nulled on any mutation to {@link items}. */
+  private stateCache: Map<WorkItemState, WorkItem[]> | null = null;
   private readonly _onDidChange = new vscode.EventEmitter<void>();
+  /**
+   * Fires when this graph changes through public mutation operations exposed by {@link WorkGraph},
+   * except for internal maintenance or normalization work that may update items without emitting
+   * this event. This includes maintenance performed during load (for example, sort-order backfilling)
+   * and normalization triggered as part of a public operation when no user-visible mutation occurs.
+   */
   readonly onDidChange = this._onDidChange.event;
 
   constructor(private readonly store: ITaskStore) {}
 
+  private static provenanceKey(providerId: string, externalId: string): string {
+    return `${providerId}::${externalId}`;
+  }
+
+  /** Load all work items from the backing store into memory. */
   async load(): Promise<void> {
     const items = await this.store.loadAll();
     this.items.clear();
+    this.provenanceIndex.clear();
+    this.duplicateProvenanceCounts.clear();
     for (const item of items) {
       this.items.set(item.id, item);
+      if (item.providerId && item.externalId) {
+        const key = WorkGraph.provenanceKey(item.providerId, item.externalId);
+        const existingItemId = this.provenanceIndex.get(key);
+        if (existingItemId === undefined) {
+          this.provenanceIndex.set(key, item.id);
+        } else {
+          this.duplicateProvenanceCounts.set(key, (this.duplicateProvenanceCounts.get(key) ?? 0) + 1);
+          logger.warn(
+            `Duplicate work item provenance detected for ${key}; keeping first loaded item ${existingItemId} and ignoring duplicate ${item.id}`,
+          );
+        }
+      }
     }
+    this.invalidateStateCache();
     logger.debug(`Loaded ${items.length} work items from store`);
     await this.backfillSortOrder();
   }
@@ -46,26 +82,65 @@ export class WorkGraph {
     for (const updated of toSave) {
       this.items.set(updated.id, updated);
     }
+    this.invalidateStateCache();
   }
 
+  /** Return all work items. */
   getAll(): WorkItem[] {
     return Array.from(this.items.values());
   }
 
-  getItemsByState(...states: WorkItemState[]): WorkItem[] {
-    return this.getAll().filter((item) => states.includes(item.state));
+  private invalidateStateCache(): void {
+    this.stateCache = null;
   }
 
+  private getOrBuildStateCache(): Map<WorkItemState, WorkItem[]> {
+    if (this.stateCache) return this.stateCache;
+
+    const cache = new Map<WorkItemState, WorkItem[]>();
+    for (const item of this.items.values()) {
+      const list = cache.get(item.state);
+      if (list) {
+        list.push(item);
+      } else {
+        cache.set(item.state, [item]);
+      }
+    }
+    this.stateCache = cache;
+    return cache;
+  }
+
+  /** Return all work items matching any of the given states. */
+  getItemsByState(...states: WorkItemState[]): WorkItem[] {
+    if (states.length === 0) {
+      return [];
+    }
+    if (states.length === 1) {
+      const cache = this.getOrBuildStateCache();
+      return [...(cache.get(states[0]) ?? [])];
+    }
+    const requestedStates = new Set(states);
+    const result: WorkItem[] = [];
+    for (const item of this.items.values()) {
+      if (requestedStates.has(item.state)) {
+        result.push(item);
+      }
+    }
+    return result;
+  }
+
+  /** Return a single work item by ID, or `undefined` if not found. */
   getItem(id: string): WorkItem | undefined {
     return this.items.get(id);
   }
 
+  /** Find a work item by its provider-scoped provenance (provider ID + external ID). */
   findItemByProvenance(providerId: string, externalId: string): WorkItem | undefined {
-    return this.getAll().find(
-      (item) => item.providerId === providerId && item.externalId === externalId
-    );
+    const id = this.provenanceIndex.get(WorkGraph.provenanceKey(providerId, externalId));
+    return id !== undefined ? this.items.get(id) : undefined;
   }
 
+  /** Create a new work item, optionally linking it to a provider-discovered source. */
   async createItem(
     input: WorkItemInput,
     provenance?: { providerId: string; externalId: string; url?: string },
@@ -79,7 +154,7 @@ export class WorkGraph {
     const item: WorkItem = {
       id: generateId(),
       title: input.title,
-      description: input.description,
+      notes: input.notes,
       state: WorkItemState.New,
       providerId: provenance?.providerId,
       externalId: provenance?.externalId,
@@ -90,11 +165,26 @@ export class WorkGraph {
     };
     await this.store.save(item);
     this.items.set(item.id, item);
+    if (item.providerId && item.externalId) {
+      const key = WorkGraph.provenanceKey(item.providerId, item.externalId);
+      const existingId = this.provenanceIndex.get(key);
+      if (existingId === undefined) {
+        this.provenanceIndex.set(key, item.id);
+      } else {
+        this.duplicateProvenanceCounts.set(key, (this.duplicateProvenanceCounts.get(key) ?? 0) + 1);
+        logger.warn(
+          `Duplicate work item provenance detected for ${key}; ` +
+            `keeping existing item ${existingId} indexed and leaving new item ${item.id} unindexed by provenance.`,
+        );
+      }
+    }
+    this.invalidateStateCache();
     this._onDidChange.fire();
     logger.info(`Created work item: ${item.id}`);
     return item;
   }
 
+  /** Apply a partial update (title and/or notes) to an existing work item. */
   async updateItem(id: string, patch: Partial<WorkItemInput>): Promise<void> {
     const item = this.items.get(id);
     if (!item) {
@@ -103,10 +193,12 @@ export class WorkGraph {
     const updated = { ...item, ...patch, updatedAt: Date.now() };
     await this.store.save(updated);
     this.items.set(id, updated);
+    this.invalidateStateCache();
     this._onDidChange.fire();
     logger.info(`Updated work item: ${id}`);
   }
 
+  /** Transition a work item to a new lifecycle state. */
   async transitionState(id: string, newState: WorkItemState): Promise<void> {
     const item = this.items.get(id);
     if (!item) {
@@ -115,10 +207,12 @@ export class WorkGraph {
     const updated = { ...item, state: newState, updatedAt: Date.now() };
     await this.store.save(updated);
     this.items.set(id, updated);
+    this.invalidateStateCache();
     this._onDidChange.fire();
     logger.info(`Transitioned work item ${id} to ${newState}`);
   }
 
+  /** Swap a work item one position up or down among siblings in the same state. */
   async moveItem(id: string, direction: 'up' | 'down'): Promise<void> {
     const item = this.items.get(id);
     if (!item) {
@@ -142,6 +236,7 @@ export class WorkGraph {
       for (const normalized of toNormalize) {
         this.items.set(normalized.id, normalized);
       }
+      this.invalidateStateCache();
     }
 
     const index = siblings.findIndex((s) => s.id === id);
@@ -163,9 +258,11 @@ export class WorkGraph {
     await this.store.saveAll([updatedItem, updatedSwap]);
     this.items.set(updatedItem.id, updatedItem);
     this.items.set(updatedSwap.id, updatedSwap);
+    this.invalidateStateCache();
     this._onDidChange.fire();
   }
 
+  /** Insert a work item before or after a target item (drag-and-drop reorder). */
   async reorderItem(draggedId: string, targetId: string): Promise<void> {
     const dragged = this.items.get(draggedId);
     const target = this.items.get(targetId);
@@ -200,10 +297,12 @@ export class WorkGraph {
       for (const updated of itemsToSave) {
         this.items.set(updated.id, updated);
       }
+      this.invalidateStateCache();
       this._onDidChange.fire();
     }
   }
 
+  /** Move a work item to the last position among siblings in the same state. */
   async moveToEnd(id: string): Promise<void> {
     const item = this.items.get(id);
     if (!item) { return; }
@@ -233,15 +332,60 @@ export class WorkGraph {
       for (const updated of itemsToSave) {
         this.items.set(updated.id, updated);
       }
+      this.invalidateStateCache();
       this._onDidChange.fire();
     }
   }
 
+  /** Permanently delete a work item from the store. */
   async deleteItem(id: string): Promise<void> {
+    const item = this.items.get(id);
     await this.store.delete(id);
+    if (item?.providerId && item?.externalId) {
+      const key = WorkGraph.provenanceKey(item.providerId, item.externalId);
+      const dupCount = this.duplicateProvenanceCounts.get(key) ?? 0;
+      if (this.provenanceIndex.get(key) === id) {
+        if (dupCount > 0) {
+          // Scan for a replacement among remaining duplicates
+          let replacementId: string | undefined;
+          for (const [candidateId, candidate] of this.items) {
+            if (
+              candidateId !== id &&
+              candidate.providerId === item.providerId &&
+              candidate.externalId === item.externalId
+            ) {
+              replacementId = candidateId;
+              break;
+            }
+          }
+
+          if (replacementId !== undefined) {
+            this.provenanceIndex.set(key, replacementId);
+          } else {
+            this.provenanceIndex.delete(key);
+          }
+          this.decrementDuplicateCount(key);
+        } else {
+          this.provenanceIndex.delete(key);
+        }
+      } else if (dupCount > 0) {
+        // Deleting an unindexed duplicate — decrement the count
+        this.decrementDuplicateCount(key);
+      }
+    }
     this.items.delete(id);
+    this.invalidateStateCache();
     this._onDidChange.fire();
     logger.info(`Deleted work item: ${id}`);
+  }
+
+  private decrementDuplicateCount(key: string): void {
+    const count = this.duplicateProvenanceCounts.get(key) ?? 0;
+    if (count <= 1) {
+      this.duplicateProvenanceCounts.delete(key);
+    } else {
+      this.duplicateProvenanceCounts.set(key, count - 1);
+    }
   }
 
   dispose(): void {

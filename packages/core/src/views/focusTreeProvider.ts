@@ -24,20 +24,20 @@ export class FocusTreeProvider implements vscode.TreeDataProvider<WorkItem> {
     treeItem.iconPath = this.getIcon(item.state);
 
     // contextValue controls which context menu items appear
-    if (item.state === WorkItemState.Blocked || item.state === WorkItemState.WaitingOn) {
-      treeItem.contextValue = 'blocked';
+    if (item.state === WorkItemState.Paused) {
+      treeItem.contextValue = item.url ? 'paused.hasUrl' : 'paused';
     } else {
-      treeItem.contextValue = 'active';
+      treeItem.contextValue = item.url ? 'active.hasUrl' : 'active';
     }
 
+    treeItem.command = { command: 'workcenter.editItem', title: 'Open Details', arguments: [item] };
     return treeItem;
   }
 
   getChildren(): WorkItem[] {
     return this.workGraph.getItemsByState(
       WorkItemState.InProgress,
-      WorkItemState.Blocked,
-      WorkItemState.WaitingOn,
+      WorkItemState.Paused,
     ).sort((a, b) => a.title.localeCompare(b.title));
   }
 
@@ -45,10 +45,8 @@ export class FocusTreeProvider implements vscode.TreeDataProvider<WorkItem> {
     switch (state) {
       case WorkItemState.InProgress:
         return 'in progress';
-      case WorkItemState.Blocked:
-        return '⛔ blocked';
-      case WorkItemState.WaitingOn:
-        return '⏳ waiting';
+      case WorkItemState.Paused:
+        return '⏸ paused';
       default:
         return state;
     }
@@ -58,10 +56,8 @@ export class FocusTreeProvider implements vscode.TreeDataProvider<WorkItem> {
     switch (state) {
       case WorkItemState.InProgress:
         return new vscode.ThemeIcon('play-circle');
-      case WorkItemState.Blocked:
-        return new vscode.ThemeIcon('circle-slash');
-      case WorkItemState.WaitingOn:
-        return new vscode.ThemeIcon('clock');
+      case WorkItemState.Paused:
+        return new vscode.ThemeIcon('debug-pause');
       default:
         return new vscode.ThemeIcon('circle-outline');
     }
@@ -72,9 +68,9 @@ export class FocusTreeProvider implements vscode.TreeDataProvider<WorkItem> {
     md.appendMarkdown(`**Title:** `);
     md.appendText(item.title);
     md.appendMarkdown(`\n\n`);
-    if (item.description) {
-      md.appendMarkdown(`**Description:** `);
-      md.appendText(item.description);
+    if (item.notes) {
+      md.appendMarkdown(`**Notes:** `);
+      md.appendText(item.notes);
       md.appendMarkdown(`\n\n`);
     }
     md.appendMarkdown(`**State:** ${item.state}\n\n`);

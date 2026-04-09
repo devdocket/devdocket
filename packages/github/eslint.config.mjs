@@ -3,12 +3,14 @@ import tsparser from '@typescript-eslint/parser';
 
 export default [
   {
-    files: ['**/*.ts'],
+    files: ['src/**/*.ts'],
+    ignores: ['src/test/**'],
     languageOptions: {
       parser: tsparser,
       parserOptions: {
         ecmaVersion: 2022,
         sourceType: 'module',
+        project: './tsconfig.json',
       },
     },
     plugins: {
@@ -16,9 +18,29 @@ export default [
     },
     rules: {
       ...tseslint.configs.recommended.rules,
+      '@typescript-eslint/no-floating-promises': 'error',
     },
   },
   {
-    ignores: ['dist/**', 'node_modules/**'],
+    files: ['src/test/**/*.ts'],
+    languageOptions: {
+      parser: tsparser,
+      parserOptions: {
+        ecmaVersion: 2022,
+        sourceType: 'module',
+        project: true,
+      },
+    },
+    plugins: {
+      '@typescript-eslint': tseslint,
+    },
+    rules: {
+      ...tseslint.configs.recommended.rules,
+      '@typescript-eslint/no-floating-promises': 'warn',
+      'prefer-const': 'warn',
+    },
+  },
+  {
+    ignores: ['dist/**', 'node_modules/**', 'src/test/**'],
   },
 ];

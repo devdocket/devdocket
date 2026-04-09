@@ -153,4 +153,242 @@ describe('JsonTaskStore', () => {
     expect(parsed).toHaveLength(1);
     expect(parsed[0].id).toBe('test-1');
   });
+
+  it('migrates legacy description field to notes on load', async () => {
+    const filePath = path.join(tmpDir, 'workitems.json');
+    const legacy = [{
+      id: 'legacy-1',
+      title: 'Old item',
+      description: 'Legacy description',
+      state: 'New',
+      createdAt: 1000,
+      updatedAt: 1000,
+    }];
+    await fs.mkdir(tmpDir, { recursive: true });
+    await fs.writeFile(filePath, JSON.stringify(legacy), 'utf-8');
+
+    const items = await store.loadAll();
+    expect(items).toHaveLength(1);
+    expect(items[0].notes).toBe('Legacy description');
+    expect((items[0] as any).description).toBeUndefined();
+  });
+
+  it('persists migrated description→notes back to disk', async () => {
+    const filePath = path.join(tmpDir, 'workitems.json');
+    const legacy = [{
+      id: 'legacy-1',
+      title: 'Old item',
+      description: 'Legacy description',
+      state: 'New',
+      createdAt: 1000,
+      updatedAt: 1000,
+    }];
+    await fs.mkdir(tmpDir, { recursive: true });
+    await fs.writeFile(filePath, JSON.stringify(legacy), 'utf-8');
+
+    await store.loadAll();
+
+    const raw = await fs.readFile(filePath, 'utf-8');
+    const persisted = JSON.parse(raw);
+    expect(persisted).toHaveLength(1);
+    expect(persisted[0].notes).toBe('Legacy description');
+    expect(persisted[0].description).toBeUndefined();
+  });
+
+  describe('schema validation', () => {
+    it('skips items missing an id', async () => {
+      const filePath = path.join(tmpDir, 'workitems.json');
+      const data = [
+        { title: 'No ID', state: 'New', createdAt: 1000, updatedAt: 1000 },
+        makeItem({ id: 'valid' }),
+      ];
+      await fs.mkdir(tmpDir, { recursive: true });
+      await fs.writeFile(filePath, JSON.stringify(data), 'utf-8');
+
+      const items = await store.loadAll();
+      expect(items).toHaveLength(1);
+      expect(items[0].id).toBe('valid');
+    });
+
+    it('skips items missing a title', async () => {
+      const filePath = path.join(tmpDir, 'workitems.json');
+      const data = [
+        { id: 'no-title', state: 'New', createdAt: 1000, updatedAt: 1000 },
+        makeItem({ id: 'valid' }),
+      ];
+      await fs.mkdir(tmpDir, { recursive: true });
+      await fs.writeFile(filePath, JSON.stringify(data), 'utf-8');
+
+      const items = await store.loadAll();
+      expect(items).toHaveLength(1);
+      expect(items[0].id).toBe('valid');
+    });
+
+    it('skips items with an invalid state', async () => {
+      const filePath = path.join(tmpDir, 'workitems.json');
+      const data = [
+        { id: 'bad-state', title: 'Bad', state: 'InvalidState', createdAt: 1000, updatedAt: 1000 },
+        makeItem({ id: 'valid' }),
+      ];
+      await fs.mkdir(tmpDir, { recursive: true });
+      await fs.writeFile(filePath, JSON.stringify(data), 'utf-8');
+
+      const items = await store.loadAll();
+      expect(items).toHaveLength(1);
+      expect(items[0].id).toBe('valid');
+    });
+
+    it('skips non-object entries', async () => {
+      const filePath = path.join(tmpDir, 'workitems.json');
+      const data = ['a string', 42, null, makeItem({ id: 'valid' })];
+      await fs.mkdir(tmpDir, { recursive: true });
+      await fs.writeFile(filePath, JSON.stringify(data), 'utf-8');
+
+      const items = await store.loadAll();
+      expect(items).toHaveLength(1);
+      expect(items[0].id).toBe('valid');
+    });
+
+    it('returns empty when file contains a non-array JSON value and backs up', async () => {
+      const filePath = path.join(tmpDir, 'workitems.json');
+      await fs.mkdir(tmpDir, { recursive: true });
+      await fs.writeFile(filePath, JSON.stringify({ not: 'an array' }), 'utf-8');
+
+      const items = await store.loadAll();
+      expect(items).toEqual([]);
+
+      const files = await fs.readdir(tmpDir);
+      const backupFiles = files.filter(f => f.startsWith('workitems.json.corrupt.'));
+      expect(backupFiles).toHaveLength(1);
+    });
+
+    it('skips items missing createdAt', async () => {
+      const filePath = path.join(tmpDir, 'workitems.json');
+      const data = [
+        { id: 'no-created', title: 'Missing ts', state: 'New', updatedAt: 1000 },
+        makeItem({ id: 'valid' }),
+      ];
+      await fs.mkdir(tmpDir, { recursive: true });
+      await fs.writeFile(filePath, JSON.stringify(data), 'utf-8');
+
+      const items = await store.loadAll();
+      expect(items).toHaveLength(1);
+      expect(items[0].id).toBe('valid');
+    });
+
+    it('skips items missing updatedAt', async () => {
+      const filePath = path.join(tmpDir, 'workitems.json');
+      const data = [
+        { id: 'no-updated', title: 'Missing ts', state: 'New', createdAt: 1000 },
+        makeItem({ id: 'valid' }),
+      ];
+      await fs.mkdir(tmpDir, { recursive: true });
+      await fs.writeFile(filePath, JSON.stringify(data), 'utf-8');
+
+      const items = await store.loadAll();
+      expect(items).toHaveLength(1);
+      expect(items[0].id).toBe('valid');
+    });
+
+    it('skips items with non-finite timestamps', async () => {
+      const filePath = path.join(tmpDir, 'workitems.json');
+      // Use raw JSON so 1e309 parses as a number but fails Number.isFinite(...)
+      const data = `[
+        {"id":"inf-ts","title":"Bad ts","state":"New","createdAt":1e309,"updatedAt":1000},
+        ${JSON.stringify(makeItem({ id: 'valid' }))}
+      ]`;
+      await fs.mkdir(tmpDir, { recursive: true });
+      await fs.writeFile(filePath, data, 'utf-8');
+
+      const items = await store.loadAll();
+      expect(items).toHaveLength(1);
+      expect(items[0].id).toBe('valid');
+    });
+
+    it('handles corrupted JSON gracefully by loading empty and backing up', async () => {
+      const filePath = path.join(tmpDir, 'workitems.json');
+      await fs.mkdir(tmpDir, { recursive: true });
+      await fs.writeFile(filePath, 'not valid json', 'utf-8');
+
+      const items = await store.loadAll();
+      expect(items).toEqual([]);
+
+      // Verify the corrupted file was backed up
+      const files = await fs.readdir(tmpDir);
+      const backupFiles = files.filter(f => f.startsWith('workitems.json.corrupt.'));
+      expect(backupFiles).toHaveLength(1);
+    });
+
+    it('skips items with invalid optional fields', async () => {
+      const filePath = path.join(tmpDir, 'workitems.json');
+      const data = [
+        { ...makeItem({ id: 'bad-url' }), url: 123 },
+        { ...makeItem({ id: 'bad-provider' }), providerId: 42 },
+        { ...makeItem({ id: 'bad-external' }), externalId: true },
+        { ...makeItem({ id: 'bad-desc' }), description: 42 },
+        { ...makeItem({ id: 'bad-notes' }), notes: 999 },
+        { ...makeItem({ id: 'bad-sort' }), sortOrder: 'abc' },
+        { ...makeItem({ id: 'inf-sort' }), sortOrder: Infinity },
+        makeItem({ id: 'valid' }),
+      ];
+      await fs.mkdir(tmpDir, { recursive: true });
+      await fs.writeFile(filePath, JSON.stringify(data), 'utf-8');
+
+      const items = await store.loadAll();
+      expect(items).toHaveLength(1);
+      expect(items[0].id).toBe('valid');
+    });
+  });
+
+  it('migrates legacy Blocked state to Paused on load', async () => {
+    const filePath = path.join(tmpDir, 'workitems.json');
+    const legacy = [{
+      id: 'blocked-1',
+      title: 'Blocked item',
+      state: 'Blocked',
+      createdAt: 1000,
+      updatedAt: 1000,
+    }];
+    await fs.mkdir(tmpDir, { recursive: true });
+    await fs.writeFile(filePath, JSON.stringify(legacy), 'utf-8');
+
+    const items = await store.loadAll();
+    expect(items).toHaveLength(1);
+    expect(items[0].state).toBe(WorkItemState.Paused);
+  });
+
+  it('migrates legacy WaitingOn state to Paused on load', async () => {
+    const filePath = path.join(tmpDir, 'workitems.json');
+    const legacy = [{
+      id: 'waiting-1',
+      title: 'Waiting item',
+      state: 'WaitingOn',
+      createdAt: 1000,
+      updatedAt: 1000,
+    }];
+    await fs.mkdir(tmpDir, { recursive: true });
+    await fs.writeFile(filePath, JSON.stringify(legacy), 'utf-8');
+
+    const items = await store.loadAll();
+    expect(items).toHaveLength(1);
+    expect(items[0].state).toBe(WorkItemState.Paused);
+  });
+
+  it('persists migrated Blocked/WaitingOn→Paused back to disk', async () => {
+    const filePath = path.join(tmpDir, 'workitems.json');
+    const legacy = [
+      { id: 'b-1', title: 'Blocked', state: 'Blocked', createdAt: 1000, updatedAt: 1000 },
+      { id: 'w-1', title: 'Waiting', state: 'WaitingOn', createdAt: 1000, updatedAt: 1000 },
+    ];
+    await fs.mkdir(tmpDir, { recursive: true });
+    await fs.writeFile(filePath, JSON.stringify(legacy), 'utf-8');
+
+    await store.loadAll();
+
+    const raw = await fs.readFile(filePath, 'utf-8');
+    const persisted = JSON.parse(raw);
+    expect(persisted).toHaveLength(2);
+    expect(persisted[0].state).toBe(WorkItemState.Paused);
+    expect(persisted[1].state).toBe(WorkItemState.Paused);
+  });
 });

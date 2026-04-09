@@ -26,6 +26,7 @@ export class QueueTreeProvider implements vscode.TreeDataProvider<WorkItem>, vsc
     treeItem.tooltip = this.buildTooltip(item);
     treeItem.contextValue = item.url ? 'queueItem.hasUrl' : 'queueItem';
     treeItem.iconPath = new vscode.ThemeIcon(item.providerId ? 'remote' : 'circle-filled');
+    treeItem.command = { command: 'workcenter.editItem', title: 'Open Details', arguments: [item] };
     return treeItem;
   }
 
@@ -37,7 +38,7 @@ export class QueueTreeProvider implements vscode.TreeDataProvider<WorkItem>, vsc
   private buildTooltip(item: WorkItem): vscode.MarkdownString {
     const md = new vscode.MarkdownString();
     md.appendMarkdown(`**${item.title}**\n\n`);
-    if (item.description) { md.appendText(`${item.description}\n\n`); }
+    if (item.notes) { md.appendText(`${item.notes}\n\n`); }
     md.appendMarkdown(`Created: ${new Date(item.createdAt).toLocaleString()}`);
     return md;
   }
