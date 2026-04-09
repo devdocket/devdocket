@@ -543,6 +543,64 @@ describe('InboxTreeProvider', () => {
       const afterTitle = tooltip.value.replace(/\*\*Title:\*\* /, '').replace('Bug fix', '').trim();
       expect(afterTitle).toBe('');
     });
+
+    it('uses appendText for title to prevent markdown injection', () => {
+      const maliciousTitle = '[Click me](command:workbench.action.terminal.sendSequence)';
+      const item: InboxItem = { kind: 'item', providerId: 'gh', externalId: '1', title: maliciousTitle };
+
+      const appendTextSpy = vi.spyOn(MarkdownString.prototype, 'appendText');
+      const appendMarkdownSpy = vi.spyOn(MarkdownString.prototype, 'appendMarkdown');
+
+      provider.getTreeItem(item);
+
+      const textCalls = appendTextSpy.mock.calls.map(c => c[0]);
+      const mdCalls = appendMarkdownSpy.mock.calls.map(c => c[0]);
+
+      expect(textCalls).toContainEqual(maliciousTitle);
+      expect(mdCalls).not.toContainEqual(maliciousTitle);
+
+      appendTextSpy.mockRestore();
+      appendMarkdownSpy.mockRestore();
+    });
+
+    it('uses appendText for description to prevent markdown injection', () => {
+      const maliciousDesc = '![img](https://evil.com/track.png)';
+      const item: InboxItem = { kind: 'item', providerId: 'gh', externalId: '1', title: 'Safe', description: maliciousDesc };
+
+      const appendTextSpy = vi.spyOn(MarkdownString.prototype, 'appendText');
+      const appendMarkdownSpy = vi.spyOn(MarkdownString.prototype, 'appendMarkdown');
+
+      provider.getTreeItem(item);
+
+      const textCalls = appendTextSpy.mock.calls.map(c => c[0]);
+      const mdCalls = appendMarkdownSpy.mock.calls.map(c => c[0]);
+
+      expect(textCalls).toContainEqual(expect.stringContaining(maliciousDesc));
+      expect(mdCalls).not.toContainEqual(expect.stringContaining(maliciousDesc));
+
+      appendTextSpy.mockRestore();
+      appendMarkdownSpy.mockRestore();
+    });
+
+    it('uses appendText for reason to prevent markdown injection', () => {
+      const maliciousReason = '[evil](command:exec)';
+      const item: InboxItem = { kind: 'item', providerId: 'gh', externalId: '1', title: 'Safe', reason: maliciousReason };
+
+      const appendTextSpy = vi.spyOn(MarkdownString.prototype, 'appendText');
+      const appendMarkdownSpy = vi.spyOn(MarkdownString.prototype, 'appendMarkdown');
+
+      provider.getTreeItem(item);
+
+      const textCalls = appendTextSpy.mock.calls.map(c => c[0]);
+      const mdCalls = appendMarkdownSpy.mock.calls.map(c => c[0]);
+
+      const formattedReason = maliciousReason.replace(/_/g, ' ').replace(/^./, c => c.toUpperCase());
+      expect(textCalls).toContainEqual(formattedReason);
+      expect(mdCalls).not.toContainEqual(formattedReason);
+
+      appendTextSpy.mockRestore();
+      appendMarkdownSpy.mockRestore();
+    });
   });
 
   describe('getChildren for item node', () => {
