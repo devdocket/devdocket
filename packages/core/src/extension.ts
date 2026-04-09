@@ -20,14 +20,14 @@ import { performance } from 'perf_hooks';
 export type { WorkCenterApi, WorkCenterProvider, WorkCenterAction, DiscoveredItem, Disposable } from './api/types';
 export { logger } from './services/logger';
 
-/** Wrap an event callback so unhandled errors are logged instead of crashing. */
-function safeHandler<T extends unknown[]>(label: string, fn: (...args: T) => void): (...args: T) => void {
+/** Wrap an event callback so unhandled errors (sync or async) are logged instead of crashing. */
+function safeHandler<T extends unknown[]>(label: string, fn: (...args: T) => void | Promise<void>): (...args: T) => void {
   return (...args: T) => {
-    try {
-      fn(...args);
-    } catch (err: unknown) {
-      logger.error(label, err);
-    }
+    void Promise.resolve()
+      .then(() => fn(...args))
+      .catch((err: unknown) => {
+        logger.error(label, err);
+      });
   };
 }
 
@@ -196,16 +196,19 @@ function wireEvents(
     uiUpdateScheduled = true;
     queueMicrotask(() => {
       try {
-        updateViewMessages();
-      } catch (err: unknown) {
-        logger.error('Error updating view messages', err);
+        try {
+          updateViewMessages();
+        } catch (err: unknown) {
+          logger.error('Error updating view messages', err);
+        }
+        try {
+          updateInboxBadge();
+        } catch (err: unknown) {
+          logger.error('Error updating inbox badge', err);
+        }
+      } finally {
+        uiUpdateScheduled = false;
       }
-      try {
-        updateInboxBadge();
-      } catch (err: unknown) {
-        logger.error('Error updating inbox badge', err);
-      }
-      uiUpdateScheduled = false;
     });
   };
 
