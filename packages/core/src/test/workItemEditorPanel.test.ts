@@ -6,7 +6,7 @@ import { WorkGraph } from '../services/workGraph';
 import { WorkItem, WorkItemState } from '../models/workItem';
 import { ITaskStore } from '../storage/taskStore';
 
-type MessageHandler = (msg: any) => Promise<void>;
+type MessageHandler = (msg: any) => void | Promise<void>;
 type DisposeHandler = () => void;
 
 function makeItem(overrides: Partial<WorkItem> = {}): WorkItem {
@@ -244,16 +244,25 @@ describe('WorkItemEditorPanel', () => {
   });
 
   describe('message handling (autosave)', () => {
+    beforeEach(() => {
+      vi.useFakeTimers();
+    });
+
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
     it('should save title and notes on autosave message', async () => {
       const item = makeItem({ title: 'Old Title' });
       const workGraph = createMockWorkGraph(item);
       const mock = createMockWebviewPanel();
       openPanel(item, workGraph, mock);
 
-      await mock.simulateMessage({
+      mock.simulateMessage({
         type: 'autosave',
         data: { title: 'New Title', notes: 'Some notes' },
       });
+      await vi.advanceTimersByTimeAsync(300);
 
       expect(workGraph.updateItem).toHaveBeenCalledWith('item-1', {
         title: 'New Title',
@@ -267,10 +276,11 @@ describe('WorkItemEditorPanel', () => {
       const mock = createMockWebviewPanel();
       openPanel(item, workGraph, mock);
 
-      await mock.simulateMessage({
+      mock.simulateMessage({
         type: 'autosave',
         data: { title: 'Updated Title', notes: '' },
       });
+      await vi.advanceTimersByTimeAsync(300);
 
       expect(mock.panel.title).toBe('Edit: Updated Title');
     });
@@ -282,10 +292,11 @@ describe('WorkItemEditorPanel', () => {
       openPanel(item, workGraph, mock);
       mock.panel.title = 'Edit: Provider Title';
 
-      await mock.simulateMessage({
+      mock.simulateMessage({
         type: 'autosave',
         data: { title: 'Provider Title', notes: 'new note' },
       });
+      await vi.advanceTimersByTimeAsync(300);
 
       // Title should not change for provider items (title not in patch)
       expect(mock.panel.title).toBe('Edit: Provider Title');
@@ -297,10 +308,11 @@ describe('WorkItemEditorPanel', () => {
       const mock = createMockWebviewPanel();
       openPanel(item, workGraph, mock);
 
-      await mock.simulateMessage({
+      mock.simulateMessage({
         type: 'autosave',
         data: { title: '', notes: 'Some notes' },
       });
+      await vi.advanceTimersByTimeAsync(300);
 
       expect(workGraph.updateItem).not.toHaveBeenCalled();
     });
@@ -311,10 +323,11 @@ describe('WorkItemEditorPanel', () => {
       const mock = createMockWebviewPanel();
       openPanel(item, workGraph, mock);
 
-      await mock.simulateMessage({
+      mock.simulateMessage({
         type: 'autosave',
         data: { title: 'Provider Item', notes: 'Updated notes' },
       });
+      await vi.advanceTimersByTimeAsync(300);
 
       expect(workGraph.updateItem).toHaveBeenCalledWith('item-1', {
         notes: 'Updated notes',
@@ -327,10 +340,11 @@ describe('WorkItemEditorPanel', () => {
       const mock = createMockWebviewPanel();
       openPanel(item, workGraph, mock);
 
-      await mock.simulateMessage({
+      mock.simulateMessage({
         type: 'autosave',
         data: { title: 'Test item', notes: '' },
       });
+      await vi.advanceTimersByTimeAsync(300);
 
       expect(workGraph.updateItem).toHaveBeenCalledWith('item-1', {
         title: 'Test item',
@@ -347,10 +361,11 @@ describe('WorkItemEditorPanel', () => {
       // Make item disappear after panel was created
       workGraph.getItem.mockReturnValue(undefined);
 
-      await mock.simulateMessage({
+      mock.simulateMessage({
         type: 'autosave',
         data: { title: 'New', notes: '' },
       });
+      await vi.advanceTimersByTimeAsync(300);
 
       expect(window.showErrorMessage).toHaveBeenCalledWith(
         expect.stringContaining('no longer exists'),
@@ -365,10 +380,11 @@ describe('WorkItemEditorPanel', () => {
 
       workGraph.updateItem.mockRejectedValue(new Error('disk full'));
 
-      await mock.simulateMessage({
+      mock.simulateMessage({
         type: 'autosave',
         data: { title: 'Test item', notes: '' },
       });
+      await vi.advanceTimersByTimeAsync(300);
 
       expect(window.showErrorMessage).toHaveBeenCalledWith(
         expect.stringContaining('disk full'),
@@ -383,10 +399,11 @@ describe('WorkItemEditorPanel', () => {
 
       workGraph.updateItem.mockRejectedValue('string error');
 
-      await mock.simulateMessage({
+      mock.simulateMessage({
         type: 'autosave',
         data: { title: 'Test item', notes: '' },
       });
+      await vi.advanceTimersByTimeAsync(300);
 
       expect(window.showErrorMessage).toHaveBeenCalledWith(
         expect.stringContaining('string error'),
@@ -399,7 +416,8 @@ describe('WorkItemEditorPanel', () => {
       const mock = createMockWebviewPanel();
       openPanel(item, workGraph, mock);
 
-      await mock.simulateMessage({ type: 'unknown', data: {} });
+      mock.simulateMessage({ type: 'unknown', data: {} });
+      await vi.advanceTimersByTimeAsync(300);
 
       expect(workGraph.updateItem).not.toHaveBeenCalled();
     });
@@ -411,12 +429,38 @@ describe('WorkItemEditorPanel', () => {
       openPanel(item, workGraph, mock);
 
       // Simulate message without 'notes' key in data
-      await mock.simulateMessage({
+      mock.simulateMessage({
         type: 'autosave',
         data: { title: 'Provider Item' },
       });
+      await vi.advanceTimersByTimeAsync(300);
 
       expect(workGraph.updateItem).not.toHaveBeenCalled();
+    });
+
+    it('should debounce rapid autosave messages and only save the latest', async () => {
+      const item = makeItem();
+      const workGraph = createMockWorkGraph(item);
+      const mock = createMockWebviewPanel();
+      openPanel(item, workGraph, mock);
+
+      mock.simulateMessage({
+        type: 'autosave',
+        data: { title: 'First', notes: '' },
+      });
+      await vi.advanceTimersByTimeAsync(100);
+
+      mock.simulateMessage({
+        type: 'autosave',
+        data: { title: 'Second', notes: 'final notes' },
+      });
+      await vi.advanceTimersByTimeAsync(300);
+
+      expect(workGraph.updateItem).toHaveBeenCalledTimes(1);
+      expect(workGraph.updateItem).toHaveBeenCalledWith('item-1', {
+        title: 'Second',
+        notes: 'final notes',
+      });
     });
   });
 
@@ -463,6 +507,7 @@ describe('WorkItemEditorPanel', () => {
     });
 
     it('should not update panel title after disposal', async () => {
+      vi.useFakeTimers();
       const item = makeItem({ title: 'Original' });
       const workGraph = createMockWorkGraph(item);
       const mock = createMockWebviewPanel();
@@ -473,13 +518,15 @@ describe('WorkItemEditorPanel', () => {
       mock.panel.title = 'Edit: Original';
 
       // Then try to save
-      await mock.simulateMessage({
+      mock.simulateMessage({
         type: 'autosave',
         data: { title: 'Changed', notes: '' },
       });
+      await vi.advanceTimersByTimeAsync(300);
 
       // Title should remain unchanged because panel is disposed
       expect(mock.panel.title).toBe('Edit: Original');
+      vi.useRealTimers();
     });
   });
 
@@ -529,6 +576,7 @@ describe('WorkItemEditorPanel', () => {
 
     beforeEach(() => {
       vi.clearAllMocks();
+      vi.useFakeTimers();
       item = makeItem();
       workGraph = createMockWorkGraph(item);
       // Override updateItem to actually apply patches so race-condition tests work
@@ -544,10 +592,17 @@ describe('WorkItemEditorPanel', () => {
       openPanel(item, workGraph, mock);
     });
 
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
     it('saves each sequential autosave message that reaches the backend', async () => {
-      await simulateAutosave({ title: 'A', notes: '' });
-      await simulateAutosave({ title: 'AB', notes: '' });
-      await simulateAutosave({ title: 'ABC', notes: '' });
+      simulateAutosave({ title: 'A', notes: '' });
+      await vi.advanceTimersByTimeAsync(300);
+      simulateAutosave({ title: 'AB', notes: '' });
+      await vi.advanceTimersByTimeAsync(300);
+      simulateAutosave({ title: 'ABC', notes: '' });
+      await vi.advanceTimersByTimeAsync(300);
 
       expect(workGraph.updateItem).toHaveBeenCalledTimes(3);
       expect(workGraph.updateItem).toHaveBeenNthCalledWith(1, 'item-1', expect.objectContaining({ title: 'A' }));
@@ -559,121 +614,84 @@ describe('WorkItemEditorPanel', () => {
     // that the newest value ('v2') persists regardless of resolution order.
     it.todo('preserves the newest autosave value when saves resolve out of order');
 
-    // Characterization test: documents current race condition behavior.
-    // Remove this once the above todo is implemented.
-    it('documents current behavior: out-of-order resolution lets older value overwrite newer', async () => {
-      const deferred = () => {
-        let resolve!: () => void;
-        const promise = new Promise<void>((r) => {
-          resolve = r;
-        });
-        return { promise, resolve };
-      };
+    it('debounces rapid messages and only saves the last value', async () => {
+      simulateAutosave({ title: 'v1', notes: '' });
+      simulateAutosave({ title: 'v2', notes: '' });
 
-      const firstSave = deferred();
-      const secondSave = deferred();
+      // No save yet during the debounce window
+      expect(workGraph.updateItem).toHaveBeenCalledTimes(0);
 
-      workGraph.updateItem
-        .mockImplementationOnce(async (_id: string, patch: any) => {
-          await firstSave.promise;
-          if (patch.title !== undefined) {
-            item.title = patch.title;
-          }
-        })
-        .mockImplementationOnce(async (_id: string, patch: any) => {
-          await secondSave.promise;
-          if (patch.title !== undefined) {
-            item.title = patch.title;
-          }
-        });
+      await vi.advanceTimersByTimeAsync(300);
 
-      const firstAutosave = simulateAutosave({ title: 'v1', notes: '' });
-      const secondAutosave = simulateAutosave({ title: 'v2', notes: '' });
-
-      await vi.waitFor(() => {
-        expect(workGraph.updateItem).toHaveBeenCalledTimes(2);
-      });
-
-      // Resolve the newer save first to simulate out-of-order completion
-      secondSave.resolve();
-      await secondAutosave;
-
-      firstSave.resolve();
-      await firstAutosave;
-
-      expect(workGraph.updateItem).toHaveBeenNthCalledWith(
-        1,
-        'item-1',
-        expect.objectContaining({ title: 'v1' }),
-      );
-      expect(workGraph.updateItem).toHaveBeenNthCalledWith(
-        2,
+      expect(workGraph.updateItem).toHaveBeenCalledTimes(1);
+      expect(workGraph.updateItem).toHaveBeenCalledWith(
         'item-1',
         expect.objectContaining({ title: 'v2' }),
       );
-      // When the first save resolves last, it overwrites item.title with v1.
-      // This demonstrates the race condition: the final persisted state depends
-      // on resolution order, not message order.
-      expect(item.title).toBe('v1');
     });
 
-    it('processes every autosave message that arrives at the extension host', async () => {
-      const promises = [
-        simulateAutosave({ title: 'v1', notes: '' }),
-        simulateAutosave({ title: 'v2', notes: '' }),
-        simulateAutosave({ title: 'v3', notes: '' }),
-        simulateAutosave({ title: 'v4', notes: '' }),
-      ];
-      await Promise.all(promises);
+    it('processes every autosave message when spaced beyond debounce window', async () => {
+      simulateAutosave({ title: 'v1', notes: '' });
+      await vi.advanceTimersByTimeAsync(300);
+      simulateAutosave({ title: 'v2', notes: '' });
+      await vi.advanceTimersByTimeAsync(300);
+      simulateAutosave({ title: 'v3', notes: '' });
+      await vi.advanceTimersByTimeAsync(300);
+      simulateAutosave({ title: 'v4', notes: '' });
+      await vi.advanceTimersByTimeAsync(300);
 
       expect(workGraph.updateItem).toHaveBeenCalledTimes(4);
     });
 
     it('handles interleaved title and notes updates', async () => {
-      await simulateAutosave({ title: 'T1', notes: '' });
-      await simulateAutosave({ title: 'T1', notes: 'N1' });
-      await simulateAutosave({ title: 'T2', notes: 'N1' });
-      await simulateAutosave({ title: 'T2', notes: 'N2' });
+      simulateAutosave({ title: 'T1', notes: '' });
+      await vi.advanceTimersByTimeAsync(300);
+      simulateAutosave({ title: 'T1', notes: 'N1' });
+      await vi.advanceTimersByTimeAsync(300);
+      simulateAutosave({ title: 'T2', notes: 'N1' });
+      await vi.advanceTimersByTimeAsync(300);
+      simulateAutosave({ title: 'T2', notes: 'N2' });
+      await vi.advanceTimersByTimeAsync(300);
 
       expect(workGraph.updateItem).toHaveBeenCalledTimes(4);
       expect(workGraph.updateItem).toHaveBeenLastCalledWith('item-1', { title: 'T2', notes: 'N2' });
     });
 
-    it('saves immediately on each received message (no server-side debounce)', async () => {
-      vi.useFakeTimers();
-      try {
-        const firstSave = simulateAutosave({ title: 'fast', notes: '' });
-        expect(workGraph.updateItem).toHaveBeenCalledTimes(1);
-        await vi.runAllTimersAsync();
-        await firstSave;
+    it('debounces saves by 300ms before flushing', async () => {
+      simulateAutosave({ title: 'fast', notes: '' });
+      expect(workGraph.updateItem).toHaveBeenCalledTimes(0);
+      await vi.advanceTimersByTimeAsync(300);
+      expect(workGraph.updateItem).toHaveBeenCalledTimes(1);
 
-        const secondSave = simulateAutosave({ title: 'faster', notes: '' });
-        expect(workGraph.updateItem).toHaveBeenCalledTimes(2);
-        await vi.runAllTimersAsync();
-        await secondSave;
-      } finally {
-        vi.useRealTimers();
-      }
+      simulateAutosave({ title: 'faster', notes: '' });
+      expect(workGraph.updateItem).toHaveBeenCalledTimes(1);
+      await vi.advanceTimersByTimeAsync(300);
+      expect(workGraph.updateItem).toHaveBeenCalledTimes(2);
     });
 
     it('uses last value wins semantics after a burst of updates', async () => {
-      await simulateAutosave({ title: 'draft-1', notes: '' });
-      await simulateAutosave({ title: 'draft-2', notes: '' });
-      await simulateAutosave({ title: 'final', notes: '' });
+      simulateAutosave({ title: 'draft-1', notes: '' });
+      simulateAutosave({ title: 'draft-2', notes: '' });
+      simulateAutosave({ title: 'final', notes: '' });
+      await vi.advanceTimersByTimeAsync(300);
 
+      // Debounce coalesces the burst — only the last value is saved
+      expect(workGraph.updateItem).toHaveBeenCalledTimes(1);
       const lastPatch = workGraph.updateItem.mock.calls.at(-1)![1];
       expect(lastPatch.title).toBe('final');
       expect(item.title).toBe('final');
     });
 
     it('does not crash or save when a message arrives after disposal', async () => {
-      await simulateAutosave({ title: 'before dispose', notes: '' });
+      simulateAutosave({ title: 'before dispose', notes: '' });
+      await vi.advanceTimersByTimeAsync(300);
       expect(workGraph.updateItem).toHaveBeenCalledTimes(1);
 
       mock.simulateDispose();
 
       // Message handler is cleared on disposal, so this is a no-op
-      await simulateAutosave({ title: 'too late', notes: '' });
+      simulateAutosave({ title: 'too late', notes: '' });
+      await vi.advanceTimersByTimeAsync(300);
 
       expect(workGraph.updateItem).toHaveBeenCalledTimes(1);
     });

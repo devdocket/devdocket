@@ -18,9 +18,10 @@ export default [
     rules: {
       ...tseslint.configs.recommended.rules,
       '@typescript-eslint/no-floating-promises': 'error',
+      'prefer-const': 'warn',
     },
   },
   {
-    ignores: ['dist/**', 'node_modules/**'],
+    ignores: ['dist/**', 'node_modules/**', 'src/test/**'],
   },
 ];

@@ -1,11 +1,20 @@
 import * as vscode from 'vscode';
 import { logger } from './logger';
+import { parseRepoFromUrls } from './parseRepo';
 import { BaseGitHubProvider, DiscoveredItem, GitHubIssue } from './baseGithubProvider';
 
 interface GitHubSearchResponse {
   items: GitHubIssue[];
 }
 
+/**
+ * WorkCenter provider that discovers GitHub pull requests where the current
+ * user has been requested as a reviewer.
+ *
+ * Uses the GitHub Search API (`review-requested:@me`) to find open PRs.
+ * Sets {@link WorkCenterProvider.resurfaceDismissed} to `true` so that
+ * previously dismissed review requests reappear if still active.
+ */
 export class GitHubPrReviewProvider extends BaseGitHubProvider {
   readonly id = 'github-pr-reviews';
   readonly label = 'GitHub PR Reviews';
@@ -148,19 +157,7 @@ export class GitHubPrReviewProvider extends BaseGitHubProvider {
     return { prs: data.items, failed: false };
   }
 
-  // Override: use repository_url as-is to maintain unique externalId
   protected override parseRepo(issue: GitHubIssue): string {
-    const match = issue.html_url.match(/github\.com\/([^/]+\/[^/]+)/);
-    if (match) {
-      return match[1];
-    }
-
-    const apiMatch = issue.repository_url.match(/repos\/([^/]+\/[^/]+)/);
-    if (apiMatch) {
-      return apiMatch[1];
-    }
-
-    logger.warn(`Could not parse repo from PR URL: ${issue.html_url}`);
-    return issue.repository_url;
+    return parseRepoFromUrls(issue.html_url, issue.repository_url);
   }
 }

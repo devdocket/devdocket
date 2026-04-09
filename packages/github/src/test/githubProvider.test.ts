@@ -284,6 +284,22 @@ describe('GitHubIssueProvider', () => {
     vi.useRealTimers();
   });
 
+  it('startPeriodicRefresh does not schedule a timer for NaN or Infinity', () => {
+    vi.useFakeTimers();
+
+    const refreshSpy = vi.spyOn(provider as any, 'refreshInBackground').mockResolvedValue();
+
+    provider.startPeriodicRefresh(NaN);
+    vi.advanceTimersByTime(120_000);
+    expect(refreshSpy).not.toHaveBeenCalled();
+
+    provider.startPeriodicRefresh(Infinity);
+    vi.advanceTimersByTime(120_000);
+    expect(refreshSpy).not.toHaveBeenCalled();
+
+    vi.useRealTimers();
+  });
+
   it('skips invalid repo identifiers without treating them as fetch failures', async () => {
     vi.mocked(workspace.getConfiguration).mockReturnValue({
       get: vi.fn((key: string, defaultValue?: any) => {
@@ -345,6 +361,71 @@ describe('GitHubIssueProvider', () => {
     expect(refreshSpy).not.toHaveBeenCalled();
 
     vi.useRealTimers();
+  });
+
+  describe('URL validation in parseRepo', () => {
+    it('rejects html_url from unexpected domain and falls back to repository_url', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => [{
+          number: 99,
+          title: 'Suspicious',
+          body: 'test',
+          html_url: 'https://evil.com/github.com/attacker/repo/issues/99',
+          repository_url: 'https://api.github.com/repos/legit/repo',
+        }],
+        headers: { get: () => null },
+      });
+
+      const listener = vi.fn();
+      provider.onDidDiscoverItems(listener);
+      await provider.refresh();
+
+      const items = listener.mock.calls[0][0];
+      expect(items[0].group).toBe('legit/repo');
+    });
+
+    it('falls back to hash when both URLs are from unexpected domains', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => [{
+          number: 99,
+          title: 'Suspicious',
+          body: 'test',
+          html_url: 'https://evil.com/github.com/attacker/repo/issues/99',
+          repository_url: 'https://evil.com/repos/attacker/repo',
+        }],
+        headers: { get: () => null },
+      });
+
+      const listener = vi.fn();
+      provider.onDidDiscoverItems(listener);
+      await provider.refresh();
+
+      const items = listener.mock.calls[0][0];
+      expect(items[0].group).toMatch(/^unknown-repo-/);
+    });
+
+    it('uses API URL fallback when html_url has unexpected domain but repository_url is valid', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => [{
+          number: 50,
+          title: 'Mixed',
+          body: 'test',
+          html_url: 'https://not-github.example.com/owner/repo/issues/50',
+          repository_url: 'https://api.github.com/repos/owner/repo',
+        }],
+        headers: { get: () => null },
+      });
+
+      const listener = vi.fn();
+      provider.onDidDiscoverItems(listener);
+      await provider.refresh();
+
+      const items = listener.mock.calls[0][0];
+      expect(items[0].group).toBe('owner/repo');
+    });
   });
 
   it('paginates through multiple pages via Link header', async () => {

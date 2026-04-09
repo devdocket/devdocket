@@ -53,16 +53,32 @@ function validateWorkItem(value: unknown, index: number): string | undefined {
   return undefined;
 }
 
+/**
+ * Persists {@link WorkItem} objects as a JSON array on disk.
+ *
+ * All write operations are serialized through an internal queue to prevent
+ * concurrent file corruption. An in-memory cache is populated on first load
+ * and kept in sync with every mutation.
+ */
 export class JsonTaskStore implements ITaskStore {
   private readonly filePath: string;
   private writeQueue: Promise<void> = Promise.resolve();
   private cache: Map<string, WorkItem> | null = null;
   private loadPromise: Promise<WorkItem[]> | null = null;
 
+  /**
+   * @param storagePath - Directory where `workitems.json` will be stored.
+   */
   constructor(storagePath: string) {
     this.filePath = path.join(storagePath, 'workitems.json');
   }
 
+  /**
+   * Returns all persisted work items, loading from disk on first call.
+   * Subsequent calls return the cached data.
+   * @returns All stored work items.
+   * @throws If the JSON file exists but cannot be parsed.
+   */
   async loadAll(): Promise<WorkItem[]> {
     if (this.cache !== null) {
       return Array.from(this.cache.values());
@@ -140,6 +156,11 @@ export class JsonTaskStore implements ITaskStore {
     }
   }
 
+  /**
+   * Persists a single work item, inserting or replacing by `id`.
+   * @param item - The work item to save.
+   * @throws If the write to disk fails (cache is rolled back on error).
+   */
   async save(item: WorkItem): Promise<void> {
     logger.debug(`Saving work item: ${item.id}`);
     if (this.cache === null) {
@@ -163,6 +184,11 @@ export class JsonTaskStore implements ITaskStore {
     });
   }
 
+  /**
+   * Persists multiple work items in a single serialized write.
+   * @param items - The work items to save (inserted or replaced by `id`).
+   * @throws If the write to disk fails (cache is rolled back on error).
+   */
   async saveAll(items: WorkItem[]): Promise<void> {
     return this.enqueue(async () => {
       if (this.cache === null) {
@@ -190,6 +216,11 @@ export class JsonTaskStore implements ITaskStore {
     });
   }
 
+  /**
+   * Removes a work item by its ID.
+   * @param id - The ID of the work item to delete.
+   * @throws If the write to disk fails (cache is rolled back on error).
+   */
   async delete(id: string): Promise<void> {
     if (this.cache === null) {
       await this.loadAll();

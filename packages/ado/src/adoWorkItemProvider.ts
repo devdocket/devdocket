@@ -25,10 +25,23 @@ interface AdoWorkItem {
 // Azure DevOps REST API scope for authentication
 const ADO_AUTH_SCOPE = '499b84ac-1321-427f-aa17-267ca6975798/.default';
 
+/**
+ * WorkCenter provider that discovers Azure DevOps work items assigned to the
+ * current user.
+ *
+ * Uses the ADO REST API with WIQL queries and Microsoft authentication.
+ * When projects are specified, only those projects are queried; otherwise
+ * the entire organisation is searched. Work items in `Closed` or `Removed`
+ * states are excluded.
+ */
 export class AdoWorkItemProvider extends BaseProvider {
   readonly id = 'ado-work-items';
   readonly label = 'Azure DevOps Work Items';
 
+  /**
+   * @param org      - The Azure DevOps organisation name.
+   * @param projects - Project names to query. An empty array queries the whole org.
+   */
   constructor(
     private readonly org: string,
     private readonly projects: string[],
@@ -36,6 +49,10 @@ export class AdoWorkItemProvider extends BaseProvider {
     super(new vscode.EventEmitter<DiscoveredItem[]>());
   }
 
+  /**
+   * Performs a user-triggered refresh of assigned ADO work items.
+   * Prompts for authentication if no session exists.
+   */
   async refresh(token?: vscode.CancellationToken): Promise<void> {
     if (this._isRefreshing) {
       return;
@@ -243,5 +260,6 @@ export class AdoWorkItemProvider extends BaseProvider {
 
     return { items, failed: batchFailed };
   }
+
 
 }

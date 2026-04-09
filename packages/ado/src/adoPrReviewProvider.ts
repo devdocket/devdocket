@@ -21,6 +21,15 @@ interface ConnectionData {
 // Azure DevOps REST API scope for authentication
 const ADO_AUTH_SCOPE = '499b84ac-1321-427f-aa17-267ca6975798/.default';
 
+/**
+ * WorkCenter provider that discovers Azure DevOps pull requests where the
+ * current user is listed as a reviewer.
+ *
+ * Uses the ADO Git Pull Requests API filtered by `reviewerId`. The user's
+ * ADO identity is resolved from the connection data endpoint and cached for
+ * subsequent refreshes. Sets {@link WorkCenterProvider.resurfaceDismissed}
+ * to `true` so dismissed reviews reappear if still active.
+ */
 export class AdoPrReviewProvider extends BaseProvider {
   readonly id = 'ado-pr-reviews';
   readonly label = 'Azure DevOps PR Reviews';
@@ -29,6 +38,10 @@ export class AdoPrReviewProvider extends BaseProvider {
   private _cachedUserId: string | undefined;
   private _cachedSessionAccountId: string | undefined;
 
+  /**
+   * @param org      - The Azure DevOps organisation name.
+   * @param projects - Project names to query. An empty array queries the whole org.
+   */
   constructor(
     private readonly org: string,
     private readonly projects: string[],
@@ -36,6 +49,10 @@ export class AdoPrReviewProvider extends BaseProvider {
     super(new vscode.EventEmitter<DiscoveredItem[]>());
   }
 
+  /**
+   * Performs a user-triggered refresh of PR review requests.
+   * Prompts for authentication if no session exists.
+   */
   async refresh(token?: vscode.CancellationToken): Promise<void> {
     if (this._isRefreshing) {
       return;
@@ -244,5 +261,6 @@ export class AdoPrReviewProvider extends BaseProvider {
 
     return { items, failed: false };
   }
+
 
 }

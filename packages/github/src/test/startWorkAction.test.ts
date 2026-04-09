@@ -263,11 +263,175 @@ describe('StartWorkAction', () => {
       expect(window.showErrorMessage).toHaveBeenCalledWith(
         expect.stringContaining('worktree add failed'),
       );
-      // Should rollback by deleting the branch (I6 fix)
-      const deleteCalls = vi.mocked(execFile).mock.calls.filter(
-        call => call[1]![0] === 'branch' && call[1]![1] === '-D'
+
+      const calls = vi.mocked(execFile).mock.calls;
+      const worktreeIdx = calls.findIndex(c => c[1]![0] === 'worktree');
+      const rollbackIdx = calls.findIndex(c => c[1]![0] === 'branch' && c[1]![1] === '-D');
+
+      expect(worktreeIdx).toBeGreaterThan(-1);
+      expect(rollbackIdx).toBeGreaterThan(-1);
+      // Rollback must happen after worktree add
+      expect(rollbackIdx).toBeGreaterThan(worktreeIdx);
+
+      expect(calls[rollbackIdx][1]).toEqual(['branch', '-D', 'issue-123-fix-bug']);
+      expect(calls[rollbackIdx][2]).toEqual({ cwd: '/mock/workspace' });
+    });
+  });
+
+  describe('base branch fallback', () => {
+    it('falls back to origin/main when origin/dev does not exist', async () => {
+      vi.mocked(execFile).mockImplementation(((cmd: string, args: string[], opts: any, cb: Function) => {
+        if (args[0] === 'rev-parse' && args[2] === 'origin/dev') {
+          cb(new Error('not found'), '', '');
+        } else {
+          cb(null, { stdout: '', stderr: '' }, '');
+        }
+      }) as any);
+
+      const item = createWorkItem({ title: '#123: Fix bug' });
+      await action.run(item);
+
+      const revParseMainCall = vi.mocked(execFile).mock.calls.find(
+        call => call[1]![0] === 'rev-parse' && call[1]![2] === 'origin/main'
       );
-      expect(deleteCalls).toHaveLength(1);
+      expect(revParseMainCall).toBeDefined();
+
+      const branchCreateCall = vi.mocked(execFile).mock.calls.find(
+        call => call[1]![0] === 'branch' && call[1]![1] !== '--list'
+      );
+      expect(branchCreateCall).toBeDefined();
+      expect(branchCreateCall![1]).toEqual(['branch', 'issue-123-fix-bug', 'origin/main']);
+    });
+
+    it('falls back to HEAD when neither origin/dev nor origin/main exist', async () => {
+      vi.mocked(execFile).mockImplementation(((cmd: string, args: string[], opts: any, cb: Function) => {
+        if (args[0] === 'rev-parse' && args[2] === 'origin/dev') {
+          cb(new Error('not found'), '', '');
+        } else if (args[0] === 'rev-parse' && args[2] === 'origin/main') {
+          cb(new Error('not found'), '', '');
+        } else {
+          cb(null, { stdout: '', stderr: '' }, '');
+        }
+      }) as any);
+
+      const item = createWorkItem({ title: '#123: Fix bug' });
+      await action.run(item);
+
+      const branchCreateCall = vi.mocked(execFile).mock.calls.find(
+        call => call[1]![0] === 'branch' && call[1]![1] !== '--list'
+      );
+      expect(branchCreateCall).toBeDefined();
+      expect(branchCreateCall![1]).toEqual(['branch', 'issue-123-fix-bug', 'HEAD']);
+    });
+  });
+
+  describe('multi-workspace repository selection', () => {
+    it('shows quick pick when multiple workspace folders have .git', async () => {
+      (workspace as any).workspaceFolders = [
+        { name: 'repo1', uri: { fsPath: '/mock/repo1' } },
+        { name: 'repo2', uri: { fsPath: '/mock/repo2' } },
+      ];
+
+      vi.mocked(fs.existsSync).mockImplementation((p: any) => {
+        return p.toString().endsWith('.git');
+      });
+
+      vi.mocked(window.showQuickPick).mockResolvedValue({
+        label: 'repo2',
+        detail: '/mock/repo2',
+        folder: { name: 'repo2', uri: { fsPath: '/mock/repo2' } },
+      } as any);
+
+      const item = createWorkItem({ title: '#123: Fix bug' });
+      await action.run(item);
+
+      expect(window.showQuickPick).toHaveBeenCalledWith(
+        expect.arrayContaining([
+          expect.objectContaining({ label: 'repo1' }),
+          expect.objectContaining({ label: 'repo2' }),
+        ]),
+        expect.objectContaining({ placeHolder: 'Select repository to create work branch' }),
+      );
+
+      const branchCreateCall = vi.mocked(execFile).mock.calls.find(
+        call => call[1]![0] === 'branch' && call[1]![1] !== '--list'
+      );
+      expect(branchCreateCall).toBeDefined();
+      expect(branchCreateCall![2]).toEqual({ cwd: '/mock/repo2' });
+    });
+
+    it('shows error when user cancels quick pick', async () => {
+      (workspace as any).workspaceFolders = [
+        { name: 'repo1', uri: { fsPath: '/mock/repo1' } },
+        { name: 'repo2', uri: { fsPath: '/mock/repo2' } },
+      ];
+
+      vi.mocked(fs.existsSync).mockImplementation((p: any) => {
+        return p.toString().endsWith('.git');
+      });
+
+      vi.mocked(window.showQuickPick).mockResolvedValue(undefined);
+
+      const item = createWorkItem({ title: '#123: Fix bug' });
+      await action.run(item);
+
+      expect(window.showErrorMessage).toHaveBeenCalledWith(
+        'WorkCenter: No repository selected.',
+      );
+      expect(execFile).not.toHaveBeenCalled();
+    });
+
+    it('shows error when no workspace folders contain a git repository', async () => {
+      (workspace as any).workspaceFolders = [
+        { name: 'folder1', uri: { fsPath: '/mock/folder1' } },
+        { name: 'folder2', uri: { fsPath: '/mock/folder2' } },
+      ];
+
+      vi.mocked(fs.existsSync).mockReturnValue(false);
+
+      const item = createWorkItem({ title: '#123: Fix bug' });
+      await action.run(item);
+
+      expect(window.showErrorMessage).toHaveBeenCalledWith(
+        'WorkCenter: No git repository found in workspace folders.',
+      );
+      expect(execFile).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('error scenarios', () => {
+    it('shows warning when rollback itself fails after worktree creation failure', async () => {
+      vi.mocked(execFile).mockImplementation(((cmd: string, args: string[], opts: any, cb: Function) => {
+        if (args[0] === 'worktree' && args[1] === 'add') {
+          cb(new Error('worktree add failed'), '', '');
+        } else if (args[0] === 'branch' && args[1] === '-D') {
+          cb(new Error('branch delete failed: ref not found'), '', '');
+        } else {
+          cb(null, { stdout: '', stderr: '' }, '');
+        }
+      }) as any);
+
+      const item = createWorkItem({ title: '#123: Fix bug' });
+      await action.run(item);
+
+      expect(window.showWarningMessage).toHaveBeenCalledTimes(1);
+      expect(window.showWarningMessage).toHaveBeenCalledWith(
+        expect.stringMatching(/Failed to delete branch during rollback.*branch delete failed: ref not found/),
+      );
+
+      expect(window.showErrorMessage).toHaveBeenCalledWith(
+        expect.stringContaining('worktree add failed'),
+      );
+    });
+
+    it('shows error when externalId is undefined', async () => {
+      const item = createWorkItem({ externalId: undefined });
+      await action.run(item);
+
+      expect(window.showErrorMessage).toHaveBeenCalledWith(
+        'Could not determine issue number.',
+      );
+      expect(execFile).not.toHaveBeenCalled();
     });
 
     it('shows warning when worktree fails and branch rollback also fails', async () => {
