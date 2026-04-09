@@ -23,7 +23,7 @@ WorkCenter is **not** a replacement for GitHub Issues, Jira, or any other system
 3. **Open the WorkCenter sidebar** by clicking the WorkCenter icon in the activity bar.
 4. **Check your Inbox** — newly discovered items from providers appear here. Accept items to add them to your Queue, or dismiss them. Some providers may re-surface dismissed items if they remain relevant.
 5. **Work your Queue** — move items to Focus when you're ready to start, or create manual items with the ➕ button.
-6. **Stay focused** — the Focus view shows only what you're actively working on. Mark items as blocked, waiting, or complete as you go.
+6. **Stay focused** — the Focus view shows only what you're actively working on. Pause items or mark them complete as you go.
 
 ### Configuring the GitHub Provider
 
@@ -39,7 +39,7 @@ After installing WorkCenter GitHub, configure which repositories to watch for is
 
 Leave `repos` empty to fetch all issues assigned to you across all repositories.
 
-> **Note:** The `repos` setting currently scopes **issue discovery only**. PR review requests are always discovered globally (all open PRs where your review is requested across all repositories).
+> **Note:** The `repos` setting scopes both **issue discovery and PR review discovery**. When `repos` is empty, both fall back to global discovery (all issues assigned to you and all PRs where your review is requested, across all repositories).
 
 ## The Five-View Model
 
@@ -55,7 +55,7 @@ Your curated backlog. Items arrive here when accepted from the Inbox or Sources,
 
 ### Focus
 
-Your active work. Items here are things you're actively working on, blocked on something, or waiting on someone else. The Focus view is designed to show only what matters right now. Mark items complete when you're done, or mark them as blocked or waiting to signal status at a glance.
+Your active work. Items here are things you're actively working on or paused. The Focus view is designed to show only what matters right now. Mark items complete when you're done, or pause them to signal status at a glance.
 
 ### History
 
@@ -67,19 +67,15 @@ A browsable library of everything providers know about, organized by provider an
 
 ### Data Flow
 
-```
-Providers (GitHub, etc.)          Manual creation
-        │                               │
-        ▼                               ▼
-      Inbox  ────Accept────►  Queue  ───Move to Focus──►  Focus
-                                │                           │
-                              Archive                   Block/Wait
-                                │                        ◄──►
-                                │                      Working on
-                                │                           │
-                                │                     Mark complete
-                                ▼                           ▼
-                             History                     History
+```mermaid
+flowchart LR
+    P["Providers\n(GitHub, etc.)"] --> Inbox
+    M["Manual\ncreation"] --> Queue
+    Inbox -- Accept --> Queue
+    Queue -- Move to Focus --> Focus
+    Queue -- Archive --> History
+    Focus -- Pause --> Focus
+    Focus -- Mark complete --> History
 ```
 
 > **Note:** Items in History are a read-only record of completed or archived work. You can open their links (when available), but they can't currently be moved back to Queue or Focus.
