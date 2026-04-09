@@ -109,35 +109,19 @@ Clicking a History item opens the editor panel to view its details (read-only fo
 
 Items flow through WorkCenter in a defined progression:
 
-```
-Provider discovers items
-        │
-        ▼
-┌──────────────┐
-│    Inbox     │  (unseen provider items)
-│   [unseen]   │  ● unread / ○ read indicator
-└──────┬───────┘
-       │ Accept ──────────────────────────────┐
-       │ Dismiss → item stays in Sources only │
-       ▼                                      │
-┌──────────────┐                              │
-│    Queue     │  ◄── Manual "Create Item"    │
-│   [New]      │  ◄───────────────────────────┘
-└──────┬───────┘  (drag-and-drop reorder)
-       │ Move to Focus
-       │ (or Archive → History)
-       ▼
-┌──────────────┐
-│    Focus     │
-│ [In Progress] │ ◄──► [Paused]
-└──────┬───────┘
-       │ Complete
-       ▼
-┌──────────────┐
-│   History    │  (Done and Archived items, sorted by last updated)
-│ [Done]       │
-│ [Archived]   │
-└──────────────┘
+```mermaid
+flowchart TD
+    P["Provider discovers items"] --> Inbox
+    Inbox["**Inbox**\n(unseen provider items)\n● unread / ○ read"]
+    Inbox -- Accept --> Queue
+    Inbox -. "Dismiss → stays in Sources only" .-> Sources["**Sources**"]
+    Manual["Manual 'Create Item'"] --> Queue
+    Queue["**Queue**\n[New]\n(drag-and-drop reorder)"]
+    Queue -- Move to Focus --> Focus
+    Queue -- Archive --> History
+    Focus["**Focus**\n[In Progress] ↔ [Paused]"]
+    Focus -- Complete --> History
+    History["**History**\n[Done] · [Archived]\n(sorted by last updated)"]
 ```
 
 **Sources** sits alongside this flow as a read-only view of all provider data. You can accept items from Sources into the Queue at any time.
@@ -182,34 +166,20 @@ WorkCenter defines five states for work items:
 
 ### State Transition Diagram
 
-```
-                    ┌──────────┐
-                    │   New    │  (Queue)
-                    └────┬─────┘
-                         │
-              ┌──────────┴───────┐
-              │                  │
-              ▼                  ▼
-        ┌──────────┐       ┌──────────┐
-        │In Progress│       │ Archived │  (History)
-        └────┬─────┘       └──────────┘
-             │
-      ┌──────┼──────┐
-      │      │      │
-      │      ▼      │
-      │  ┌────────┐ │
-      │  │ Paused │ │
-      │  └───┬────┘ │
-      │      │      │
-      │      ▼      │
-      │ In Progress │
-      │      │      │
-      └──────┘      │
-             │      │
-             ▼      │
-        ┌──────────┐│
-        │   Done   │◄┘  (History, terminal)
-        └──────────┘
+```mermaid
+stateDiagram-v2
+    [*] --> New
+    New --> In_Progress : Move to Focus
+    New --> Archived : Archive
+    In_Progress --> Paused : Pause
+    In_Progress --> Done : Complete
+    Paused --> In_Progress : Resume
+
+    state "New" as New
+    state "In Progress" as In_Progress
+    state "Paused" as Paused
+    state "Done" as Done
+    state "Archived" as Archived
 ```
 
 **Valid transitions:**
