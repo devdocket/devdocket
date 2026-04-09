@@ -227,6 +227,16 @@ function wireEvents(
   return [discoveredSub, newItemsSub, providerRegSub, stateStoreSub, markSeenSub, workGraphSub];
 }
 
+/**
+ * Activate the WorkCenter extension.
+ *
+ * Initialises storage, loads persisted work items and discovered-item state,
+ * registers all tree views (Inbox, Queue, Focus, History, Sources), and
+ * returns the public {@link WorkCenterApi} for provider extensions to consume.
+ *
+ * @param context - The VS Code extension context provided at activation.
+ * @returns The public API used by provider extensions to register providers and actions.
+ */
 export async function activate(context: vscode.ExtensionContext): Promise<WorkCenterApi> {
   const activationStart = performance.now();
   initializeLogging(context);
@@ -275,6 +285,12 @@ export async function activate(context: vscode.ExtensionContext): Promise<WorkCe
   return api;
 }
 
+/**
+ * Deactivate the WorkCenter extension.
+ *
+ * All resources are disposed automatically via `context.subscriptions`,
+ * so this function is intentionally a no-op.
+ */
 export function deactivate(): void {
   // Resources disposed via subscriptions
 }
