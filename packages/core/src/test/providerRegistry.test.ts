@@ -822,7 +822,7 @@ describe('ProviderRegistry', () => {
       });
     });
 
-    it('only truncated items appear in discovered items after cap', async () => {
+    it('excess items are excluded from discovered items after cap', async () => {
       const provider = createMockProvider('truncated-only');
       registry.register(provider);
 
@@ -860,6 +860,25 @@ describe('ProviderRegistry', () => {
         expect.stringContaining('Truncating'),
       );
       warnSpy.mockRestore();
+    });
+
+    it('stores a defensive copy so later mutations to the original array do not affect the registry', async () => {
+      const provider = createMockProvider('defensive-copy');
+      registry.register(provider);
+      await vi.waitFor(() => expect(registry.loading).toBe(false));
+
+      const items = makeItems(3);
+      provider.fireItems(items);
+
+      await vi.waitFor(() => {
+        expect(registry.getDiscoveredItems('defensive-copy')).toHaveLength(3);
+      });
+
+      // Mutate the original array after it was stored
+      items.push({ externalId: 'sneaky', title: 'Sneaky' });
+
+      // The registry should still have only 3 items
+      expect(registry.getDiscoveredItems('defensive-copy')).toHaveLength(3);
     });
   });
 
