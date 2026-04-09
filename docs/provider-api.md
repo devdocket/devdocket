@@ -92,50 +92,84 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 }
 ```
 
-### 3. Add the Shared Package Dependency
+### 3. Re-declare API Types
 
-The `@workcenter/shared` package exports the provider-facing types (`DiscoveredItem`, `WorkCenterProvider`, `Event`, `Disposable`) and the `BaseProvider` base class. Add it to your extension's `package.json`:
-
-```jsonc
-// package.json
-{
-  "dependencies": {
-    "@workcenter/shared": "*"
-  }
-}
-```
-
-Import the types you need:
+Because provider extensions are separately bundled VS Code extensions, you cannot import types from the core package at runtime. Re-declare the interfaces you need:
 
 ```ts
-import { BaseProvider, validateRefreshInterval } from '@workcenter/shared';
-import type { DiscoveredItem } from '@workcenter/shared';
-```
+interface Disposable {
+  dispose(): void;
+}
 
-> **Note on type boundaries:** Types that describe *provider* concepts (`DiscoveredItem`, `WorkCenterProvider`, `BaseProvider`) live in `@workcenter/shared` and can be imported directly. Types that describe *core* concepts (`WorkItem`, `WorkCenterAction`, `WorkItemState`) belong to the core extension and must be re-declared in your code since they cross a VS Code extension boundary. See [Implementing an Action](#implementing-an-action) for an example.
+interface Event<T> {
+  (listener: (e: T) => void): Disposable;
+}
+
+interface DiscoveredItem {
+  externalId: string;
+  title: string;
+  description?: string;
+  url?: string;
+  group?: string;
+}
+
+interface WorkCenterProvider {
+  readonly id: string;
+  readonly label: string;
+  readonly resurfaceDismissed?: boolean;
+  readonly onDidDiscoverItems: Event<DiscoveredItem[]>;
+  refresh(token?: vscode.CancellationToken): Promise<void>;
+}
+```
 
 ---
 
 ## Implementing a Provider
 
-A provider discovers items from an external source and reports them to WorkCenter via an event emitter. The `BaseProvider` class from `@workcenter/shared` handles the common boilerplate — event emitter setup, periodic refresh timer, concurrency guard, and disposal — so you only need to implement the data-fetching logic.
+A provider discovers items from an external source and reports them to WorkCenter via an event emitter.
 
 ### Full Example
 
 ```ts
 import * as vscode from 'vscode';
-import { BaseProvider } from '@workcenter/shared';
-import type { DiscoveredItem } from '@workcenter/shared';
 
-class JiraProvider extends BaseProvider {
+interface DiscoveredItem {
+  externalId: string;
+  title: string;
+  description?: string;
+  url?: string;
+  group?: string;
+}
+
+interface Disposable {
+  dispose(): void;
+}
+
+interface Event<T> {
+  (listener: (e: T) => void): Disposable;
+}
+
+interface WorkCenterProvider {
+  readonly id: string;
+  readonly label: string;
+  readonly resurfaceDismissed?: boolean;
+  readonly onDidDiscoverItems: Event<DiscoveredItem[]>;
+  refresh(token?: vscode.CancellationToken): Promise<void>;
+}
+
+class JiraProvider implements WorkCenterProvider {
   readonly id = 'jira';
   readonly label = 'Jira Issues';
 
-  protected async doRefresh(token?: vscode.CancellationToken): Promise<void> {
-    if (token?.isCancellationRequested) {
-      return;
-    }
+  // Use vscode.EventEmitter to implement the onDidDiscoverItems event
+  private readonly _onDidDiscoverItems =
+    new vscode.EventEmitter<DiscoveredItem[]>();
+  readonly onDidDiscoverItems = this._onDidDiscoverItems.event;
 
+  private refreshTimer: ReturnType<typeof setInterval> | undefined;
+  private _isRefreshing = false;
+
+  async refresh(token?: vscode.CancellationToken): Promise<void> {
     const tickets = await this.fetchTickets();
 
     const items: DiscoveredItem[] = tickets.map((ticket) => ({
@@ -149,11 +183,37 @@ class JiraProvider extends BaseProvider {
     }));
 
     // Each emission replaces the provider's entire item set
-    this.fireDiscoveredItems(items);
+    this._onDidDiscoverItems.fire(items);
   }
 
-  protected override onBackgroundRefreshError(err: unknown): void {
-    console.error('Jira background refresh failed', err);
+  /** Start a periodic refresh on a timer. */
+  startPeriodicRefresh(intervalSeconds: number): void {
+    this.stopPeriodicRefresh();
+    const safeIntervalSeconds = Number.isFinite(intervalSeconds)
+      ? intervalSeconds
+      : 60;
+    const interval = Math.max(safeIntervalSeconds, 60) * 1000;
+    this.refreshTimer = setInterval(() => {
+      if (this._isRefreshing) {
+        return; // Skip if a refresh is already in progress
+      }
+      this._isRefreshing = true;
+      this.refresh()
+        .catch((err) => console.error('Jira refresh failed', err))
+        .finally(() => { this._isRefreshing = false; });
+    }, interval);
+  }
+
+  stopPeriodicRefresh(): void {
+    if (this.refreshTimer) {
+      clearInterval(this.refreshTimer);
+      this.refreshTimer = undefined;
+    }
+  }
+
+  dispose(): void {
+    this.stopPeriodicRefresh();
+    this._onDidDiscoverItems.dispose();
   }
 
   private async fetchTickets(): Promise<
@@ -170,31 +230,20 @@ class JiraProvider extends BaseProvider {
 }
 ```
 
-### What BaseProvider Gives You
-
-By extending `BaseProvider`, your provider inherits:
-
-- **`onDidDiscoverItems` event** — A `vscode.EventEmitter<DiscoveredItem[]>` wired up and exposed as a readonly event property.
-- **`fireDiscoveredItems(items)`** — Call this from `doRefresh()` to emit items.
-- **`refresh(token?)`** — The public method called by WorkCenter. It wraps `doRefresh()` with a concurrency guard that skips overlapping calls and resets the flag in a `finally` block.
-- **`startPeriodicRefresh(intervalSeconds)` / `stopPeriodicRefresh()`** — Timer management with 60-second minimum clamping.
-- **`doBackgroundRefresh()`** — Called by the periodic timer. Defaults to calling `doRefresh()`. Override when background refreshes need different behavior (e.g., skipping interactive auth prompts).
-- **`onBackgroundRefreshError(err)`** — Called when a background refresh throws. Override to log or report errors.
-- **`dispose()`** — Stops the timer and disposes the event emitter.
-
 ### Key Points
 
-- **Extend `BaseProvider`** — The `BaseProvider` class from `@workcenter/shared` provides the event emitter, concurrency guard, periodic refresh timer, and disposal. You only need to implement `doRefresh()`.
-- **`doRefresh()` is your data-fetching method** — Called by WorkCenter on registration for initial discovery and by the periodic timer. WorkCenter passes a `CancellationToken` and enforces a refresh timeout; check `token?.isCancellationRequested` before and during long-running operations.
+- **EventEmitter pattern** — Use `vscode.EventEmitter<DiscoveredItem[]>` to create the event. Expose its `.event` property as the readonly `onDidDiscoverItems`.
+- **`refresh()` is called by WorkCenter** — It is invoked automatically when the provider is registered for initial discovery. It must be safe to call multiple times. WorkCenter passes a `CancellationToken` and enforces a refresh timeout; providers should check `token.isCancellationRequested` before and during long-running operations.
 - **`externalId` must be unique per provider** — WorkCenter uses the combination of `providerId + externalId` to track inbox state. Use a stable identifier like `owner/repo#123` or `PROJECT/TICKET-42`.
 - **`group` is optional** — When set, items with the same group value are nested under a folder node in the Inbox and Sources views.
 - **`resurfaceDismissed`** — When `true`, items the user previously dismissed will reappear in the Inbox if the provider re-emits them. This is useful for time-sensitive items (e.g., PR review requests). When `false` or `undefined` (the default), dismissed items stay dismissed.
-- **Emit the full set every time** — Each `fireDiscoveredItems()` call replaces all previously known items for that provider. Emit everything currently relevant, not just deltas.
-- **Override `doBackgroundRefresh()`** — When your provider needs different behavior for timer-triggered refreshes (e.g., skipping interactive auth prompts), override this method. By default it delegates to `doRefresh()`.
+- **Emit the full set every time** — Each `onDidDiscoverItems` emission replaces all previously known items for that provider. Emit everything currently relevant, not just deltas.
 
 ### Periodic Refresh Pattern
 
-`BaseProvider.startPeriodicRefresh(intervalSeconds)` handles timer setup with 60-second minimum clamping. Use `validateRefreshInterval()` from `@workcenter/shared` to validate user-configured intervals before passing them in:
+For providers that poll an external API, set up a `setInterval` timer. Clamp the interval to a reasonable minimum (e.g., 60 seconds) and guard against overlapping refreshes.
+
+The `@workcenter/shared` package provides a `validateRefreshInterval(value, logger?)` helper that validates and clamps user-configured intervals. It handles non-numeric values, enforces a 60-second minimum, and returns 0 (disabled) for zero/negative input:
 
 ```ts
 import { validateRefreshInterval } from '@workcenter/shared';
@@ -204,6 +253,25 @@ const intervalSeconds = validateRefreshInterval(
   config.get<number>('refreshIntervalSeconds', 300), logger,
 );
 provider.startPeriodicRefresh(intervalSeconds);
+```
+
+Typical refresh guard pattern:
+
+```ts
+private _isRefreshing = false;
+
+private async refreshInBackground(): Promise<void> {
+  if (this._isRefreshing) {
+    return; // Skip if a refresh is already in progress
+  }
+
+  this._isRefreshing = true;
+  try {
+    await this.refresh();
+  } finally {
+    this._isRefreshing = false;
+  }
+}
 ```
 
 ### Registering the Provider
@@ -232,8 +300,6 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 ## Implementing an Action
 
 An action is an operation users can perform on a work item. Actions appear dynamically in the **Run Action…** quick pick menu on Queue and Focus items.
-
-> **Why re-declare these types?** `WorkItem`, `WorkItemState`, and `WorkCenterAction` are defined in the core extension (`packages/core`), which is a separate VS Code extension. Unlike provider types in `@workcenter/shared`, these core types cannot be imported across the extension boundary and must be re-declared in your code.
 
 ### Full Example
 
@@ -359,19 +425,20 @@ Good patterns: `owner/repo#123`, `PROJECT-42`, `ticket/12345`
 
 ### Keep refresh lightweight
 
-`doRefresh()` is called on registration, and may also run frequently if your provider schedules periodic refreshes with a timer. Avoid heavy processing:
+`refresh()` is called on registration, and may also run frequently if your provider schedules periodic refreshes with a timer. Avoid heavy processing:
 - Cache API responses where appropriate
-- `BaseProvider` handles the concurrency guard for you — no need to add your own
-- Use `validateRefreshInterval()` to clamp user-configured intervals (≥ 60 seconds)
+- Guard against overlapping refreshes with a boolean flag
+- Clamp periodic intervals to a reasonable minimum (≥ 60 seconds)
 
 ### Don't store provider item data
 
-WorkCenter reads `DiscoveredItem` data live from the provider. There is no need to persist item details on your side — just call `fireDiscoveredItems()` with the current set on each refresh. This ensures discovery views such as Inbox and Sources show the latest provider data, while accepted items in Queue, Focus, and History continue to display their persisted `WorkItem` snapshots.
+WorkCenter reads `DiscoveredItem` data live from the provider. There is no need to persist item details on your side — just emit the current set on each refresh. This ensures discovery views such as Inbox and Sources show the latest provider data, while accepted items in Queue, Focus, and History continue to display their persisted `WorkItem` snapshots.
 
 ### Dispose subscriptions properly
 
 - Push the `Disposable` returned by `registerProvider()` / `registerAction()` into `context.subscriptions`
-- Provider resources (timers, event emitters) are **not** disposed by WorkCenter — clean them up yourself. `BaseProvider.dispose()` handles the timer and emitter, but you still need to push it:
+- Provider resources (timers, event emitters) are **not** disposed by WorkCenter — clean them up yourself
+- Use a `dispose()` method on your provider class and push it into `context.subscriptions`
 
 ```ts
 context.subscriptions.push(api.registerProvider(provider));
@@ -380,7 +447,7 @@ context.subscriptions.push({ dispose: () => provider.dispose() });
 
 ### Emit the complete item set
 
-Each `fireDiscoveredItems()` call **replaces** the provider's entire known item set. Always emit all current items, not incremental changes.
+Each `onDidDiscoverItems` emission **replaces** the provider's entire known item set. Always emit all current items, not incremental changes.
 
 ### Use `group` for organization
 
