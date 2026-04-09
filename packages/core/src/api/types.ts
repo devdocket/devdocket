@@ -61,6 +61,14 @@ export interface WorkCenterProvider {
  * treat the object as immutable and use the WorkCenter API (e.g. VS Code
  * commands) rather than mutating the object.
  *
+ * ## Migration note
+ *
+ * The `canRun` and `run` signatures changed from `WorkItem` to
+ * `Readonly<WorkItem>`. Extensions that explicitly annotate their parameter
+ * types as `WorkItem` (e.g. `canRun: (item: WorkItem) => ...`) should update
+ * to `Readonly<WorkItem>` or simply omit the annotation and let TypeScript
+ * infer the type.
+ *
  * @example
  * ```ts
  * const action: WorkCenterAction = {
