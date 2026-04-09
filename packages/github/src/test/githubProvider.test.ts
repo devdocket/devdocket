@@ -171,16 +171,13 @@ describe('GitHubIssueProvider', () => {
   it('handles fetch errors gracefully', async () => {
     mockFetch.mockRejectedValueOnce(new Error('Network error'));
 
-    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
     const listener = vi.fn();
     provider.onDidDiscoverItems(listener);
 
-    // Should not throw
+    // Should not throw — emits empty results on error instead of skipping emission
     await expect(provider.refresh()).resolves.toBeUndefined();
     // fetchAllAssignedIssues catches the error and returns empty, so event fires with []
     expect(listener).toHaveBeenCalledWith([]);
-
-    consoleError.mockRestore();
   });
 
   it('handles non-ok response gracefully', async () => {

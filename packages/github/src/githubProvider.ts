@@ -101,8 +101,14 @@ export class GitHubIssueProvider extends BaseGitHubProvider {
     return { issues, failures: failed ? ['all repositories'] : [] };
   }
 
+  private static readonly REPO_PATTERN = /^[A-Za-z0-9._-]+\/[A-Za-z0-9._-]+$/;
+
   private async fetchRepoIssues(token: string, repo: string): Promise<{ issues: GitHubIssue[]; failed: boolean }> {
     logger.debug(`Fetching issues for repo: ${repo}`);
+    if (!GitHubIssueProvider.REPO_PATTERN.test(repo)) {
+      logger.error(`Invalid repo format, expected owner/name: ${repo}`);
+      return { issues: [], failed: true };
+    }
     try {
       const items = await this.fetchPaginated<GitHubIssue>(
         `https://api.github.com/repos/${repo}/issues?assignee=@me&state=open&per_page=100`,
