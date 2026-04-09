@@ -594,6 +594,9 @@ describe('registerCommands', () => {
 
       await invoke('workcenter.acceptFromSources', makeSourceItem());
 
+      expect(vscode.window.showInformationMessage).toHaveBeenCalledWith(
+        'WorkCenter: Item already accepted as "Existing"',
+      );
       expect(vscode.window.showErrorMessage).toHaveBeenCalledWith(
         'WorkCenter: Failed to update state for existing item — write fail',
       );
