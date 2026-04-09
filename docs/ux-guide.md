@@ -16,7 +16,7 @@ Each provider's items are grouped under the provider name with a count of unseen
 
 **Badge:** The Inbox view displays a badge on its tab showing the count of unseen items that you haven't clicked on yet.
 
-**Notifications:** When new items arrive in the Inbox (after the initial provider load), a notification appears: _"WorkCenter: N new item(s) in Inbox"_ with a **Show Inbox** button. This can be disabled via the `workcenter.showInboxNotifications` setting.
+**Notifications:** When new items arrive in the Inbox, a notification appears with a **Show Inbox** button. This can be disabled via the `workcenter.showInboxNotifications` setting.
 
 **Available actions on Inbox items:**
 
@@ -95,7 +95,7 @@ Items display a state label next to the title:
 - **✓ done** — work that was completed (shown with a ✓ check icon)
 - **📦 archived** — items that were archived (shown with an archive icon)
 
-Clicking a History item opens the editor panel to view its details (read-only for provider-managed titles).
+Clicking a History item opens the editor panel to view its details.
 
 **Available actions on History items:**
 
@@ -137,31 +137,14 @@ To create a work item manually:
 
 Manually created items exist only within WorkCenter — they aren't linked to any provider.
 
-## Provider Items Lifecycle
-
-Provider items (e.g., GitHub issues) follow this lifecycle:
-
-1. **Discovery** — A provider discovers items and they appear in both **Sources** (always) and **Inbox** (if unseen).
-
-2. **Inbox state** — Each provider item is tracked with an inbox state:
-   - `unseen` — Appears in the Inbox (default for new items).
-   - `accepted` — Removed from Inbox; a corresponding work item exists in Queue/Focus.
-   - `dismissed` — Removed from Inbox; still visible in Sources with a "dismissed" label.
-
-3. **Acceptance** — When you accept an item (from Inbox or Sources), WorkCenter creates a work item with a snapshot of the provider's title, description, and URL. Items shown in **Sources** are always read live from the provider.
-
-4. **Duplicate prevention** — Accepting an item that was already accepted shows a notification instead of creating a duplicate.
-
 ## Editor Panel
 
 Clicking an item in Queue, Focus, or History opens a webview-based editor panel with two fields:
 
-- **Title** — A single-line text input (required). Cannot be saved if empty. For provider-backed items, the title is **read-only** with a hint: _"Title is managed by the provider"_.
+- **Title** — A single-line text input (required). For provider-backed items, the title is read-only.
 - **Notes** — A multi-line textarea for additional notes.
 
-The editor **auto-saves** changes after a short debounce (~500ms). There is no explicit save button — edits are persisted automatically as you type. The panel title updates to reflect the current item title.
-
-The editor uses VS Code's native theming, matching your current color scheme for inputs, buttons, and text.
+The editor **auto-saves** as you type — there is no save button. The panel title updates to reflect the current item title.
 
 ## Providers
 
