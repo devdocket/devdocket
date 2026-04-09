@@ -1,143 +1,25 @@
 import * as vscode from 'vscode';
+import { isValidGitHubRepo } from '@workcenter/shared';
 import { logger } from './logger';
+import { parseRepoFromUrls } from './parseRepo';
+import { BaseGitHubProvider, DiscoveredItem, GitHubIssue } from './baseGithubProvider';
 
-// Re-declared to match core API contract — separate extension cannot import core types directly
-interface Disposable {
-  dispose(): void;
-}
-
-// Re-declared to match core API contract — separate extension cannot import core types directly
-interface Event<T> {
-  (listener: (e: T) => void): Disposable;
-}
-
-interface DiscoveredItem {
-  externalId: string;
-  title: string;
-  description?: string;
-  url?: string;
-  group?: string;
-}
-
-interface WorkCenterProvider {
-  readonly id: string;
-  readonly label: string;
-  readonly resurfaceDismissed?: boolean;
-  readonly onDidDiscoverItems: Event<DiscoveredItem[]>;
-  refresh(token?: vscode.CancellationToken): Promise<void>;
-}
-
-interface GitHubIssue {
-  number: number;
-  title: string;
-  body?: string;
-  html_url: string;
-  repository_url: string;
-  pull_request?: unknown;
-}
-
-export class GitHubIssueProvider implements WorkCenterProvider {
+/**
+ * WorkCenter provider that discovers GitHub issues assigned to the current user.
+ *
+ * Issues are fetched via the GitHub REST API using VS Code's built-in GitHub
+ * authentication. When configured repos are specified, only those repos are
+ * queried; otherwise all assigned issues across GitHub are returned.
+ *
+ * Supports periodic background refresh and emits discovered items through
+ * the {@link WorkCenterProvider.onDidDiscoverItems} event.
+ */
+export class GitHubIssueProvider extends BaseGitHubProvider {
   readonly id = 'github';
   readonly label = 'GitHub Issues';
 
-  private readonly _onDidDiscoverItems = new vscode.EventEmitter<DiscoveredItem[]>();
-  readonly onDidDiscoverItems = this._onDidDiscoverItems.event;
-
-  private refreshTimer: ReturnType<typeof setInterval> | undefined;
-  private _isRefreshing = false;
-
-  startPeriodicRefresh(intervalSeconds: number): void {
-    this.stopPeriodicRefresh();
-    const interval = Number(intervalSeconds);
-    if (!Number.isFinite(interval) || interval <= 0) {
-      return;
-    }
-    // Clamp to minimum of 60 seconds
-    const clampedInterval = Math.max(interval, 60);
-    this.refreshTimer = setInterval(() => {
-      this.refreshInBackground().catch((err) => {
-        logger.error('Refresh failed', err);
-      });
-    }, clampedInterval * 1000);
-  }
-
-  stopPeriodicRefresh(): void {
-    if (this.refreshTimer) {
-      clearInterval(this.refreshTimer);
-      this.refreshTimer = undefined;
-    }
-  }
-
-  async refresh(token?: vscode.CancellationToken): Promise<void> {
-    if (this._isRefreshing) {
-      return;
-    }
-
-    this._isRefreshing = true;
+  protected async fetchAndPublish(accessToken: string, isUserTriggered: boolean): Promise<void> {
     logger.info('Fetching assigned issues...');
-    try {
-      if (token?.isCancellationRequested) {
-        return;
-      }
-
-      let session: vscode.AuthenticationSession | undefined;
-      try {
-        session = await vscode.authentication.getSession('github', ['repo'], {
-          createIfNone: true,
-        });
-      } catch (err) {
-        const message = err instanceof Error ? err.message : String(err);
-        logger.error('GitHub authentication failed', err);
-        vscode.window.showWarningMessage(`WorkCenter GitHub: Authentication failed — ${message}`);
-        return;
-      }
-
-      if (!session || token?.isCancellationRequested) {
-        if (!session) {
-          logger.info('User cancelled GitHub authentication');
-        }
-        return;
-      }
-
-      await this.fetchAndPublishIssues(session.accessToken, true);
-    } catch (err) {
-      logger.error('Failed to fetch issues', err);
-    } finally {
-      this._isRefreshing = false;
-    }
-  }
-
-  private async refreshInBackground(): Promise<void> {
-    if (this._isRefreshing) {
-      return;
-    }
-
-    this._isRefreshing = true;
-    try {
-      let session: vscode.AuthenticationSession | undefined;
-      try {
-        session = await vscode.authentication.getSession('github', ['repo'], {
-          createIfNone: false,
-        });
-      } catch (err) {
-        logger.warn('GitHub authentication failed during background refresh', err);
-        return;
-      }
-
-      if (!session) {
-        logger.debug('No GitHub session available for background refresh');
-        return;
-      }
-
-      await this.fetchAndPublishIssues(session.accessToken, false);
-    } catch (err) {
-      logger.error('Failed to fetch issues', err);
-    } finally {
-      this._isRefreshing = false;
-    }
-  }
-
-  private async fetchAndPublishIssues(accessToken: string, isUserTriggered: boolean = false): Promise<void> {
     const repos = this.getConfiguredRepos();
     const { issues, failures } = await this.fetchAssignedIssues(accessToken, repos);
 
@@ -149,6 +31,7 @@ export class GitHubIssueProvider implements WorkCenterProvider {
         description: issue.body?.slice(0, 200),
         url: issue.html_url,
         group: repoName,
+        reason: 'assigned',
       };
     });
 
@@ -160,7 +43,7 @@ export class GitHubIssueProvider implements WorkCenterProvider {
         ? `Failed to fetch issues from ${failures[0]}`
         : `Failed to fetch issues from ${failures.length} repositories`;
       if (isUserTriggered) {
-        vscode.window.showWarningMessage(`WorkCenter GitHub: ${message}`);
+        void vscode.window.showWarningMessage(`WorkCenter GitHub: ${message}`);
       } else {
         logger.warn(message);
       }
@@ -172,23 +55,8 @@ export class GitHubIssueProvider implements WorkCenterProvider {
     return config.get<string[]>('repos', []);
   }
 
-  private parseRepo(issue: GitHubIssue): string {
-    const match = issue.html_url.match(/github\.com\/([^/]+\/[^/]+)/);
-    if (match) {
-      return match[1];
-    }
-    
-    // Fallback to parsing from repository_url (API URL)
-    const apiMatch = issue.repository_url.match(/repos\/([^/]+\/[^/]+)/);
-    if (apiMatch) {
-      return apiMatch[1];
-    }
-    
-    // Deterministic fallback: hash the repository_url
-    const hash = issue.repository_url.split('').reduce((acc, char) => {
-      return ((acc << 5) - acc) + char.charCodeAt(0) | 0;
-    }, 0);
-    return `unknown-repo-${Math.abs(hash).toString(36)}`;
+  protected override parseRepo(issue: GitHubIssue): string {
+    return parseRepoFromUrls(issue.html_url, issue.repository_url);
   }
 
   private async fetchAssignedIssues(
@@ -196,22 +64,32 @@ export class GitHubIssueProvider implements WorkCenterProvider {
     repos: string[],
   ): Promise<{ issues: GitHubIssue[]; failures: string[] }> {
     if (repos.length > 0) {
+      const validRepos: string[] = [];
+      for (const repo of repos) {
+        if (isValidGitHubRepo(repo)) {
+          validRepos.push(repo);
+        } else {
+          logger.warn('Skipping invalid repo identifier', repo);
+        }
+      }
+
+      const failures: string[] = [];
+
       const results = await Promise.allSettled(
-        repos.map(repo => this.fetchRepoIssues(token, repo))
+        validRepos.map(repo => this.fetchRepoIssues(token, repo))
       );
 
       const allIssues: GitHubIssue[] = [];
-      const failures: string[] = [];
 
       results.forEach((result, index) => {
         if (result.status === 'fulfilled') {
           const { issues, failed } = result.value;
           allIssues.push(...issues);
           if (failed) {
-            failures.push(repos[index]);
+            failures.push(validRepos[index]);
           }
         } else {
-          failures.push(repos[index]);
+          failures.push(validRepos[index]);
         }
       });
 
@@ -223,8 +101,14 @@ export class GitHubIssueProvider implements WorkCenterProvider {
     return { issues, failures: failed ? ['all repositories'] : [] };
   }
 
+  private static readonly REPO_PATTERN = /^[A-Za-z0-9._-]+\/[A-Za-z0-9._-]+$/;
+
   private async fetchRepoIssues(token: string, repo: string): Promise<{ issues: GitHubIssue[]; failed: boolean }> {
     logger.debug(`Fetching issues for repo: ${repo}`);
+    if (!GitHubIssueProvider.REPO_PATTERN.test(repo)) {
+      logger.error(`Invalid repo format, expected owner/name: ${repo}`);
+      return { issues: [], failed: true };
+    }
     try {
       const items = await this.fetchPaginated<GitHubIssue>(
         `https://api.github.com/repos/${repo}/issues?assignee=@me&state=open&per_page=100`,
@@ -312,8 +196,4 @@ export class GitHubIssueProvider implements WorkCenterProvider {
     return match ? match[1] : null;
   }
 
-  dispose(): void {
-    this.stopPeriodicRefresh();
-    this._onDidDiscoverItems.dispose();
-  }
 }

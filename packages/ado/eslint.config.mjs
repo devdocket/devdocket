@@ -9,6 +9,7 @@ export default [
       parserOptions: {
         ecmaVersion: 2022,
         sourceType: 'module',
+        project: ['./tsconfig.json', './tsconfig.test.json'],
       },
     },
     plugins: {
@@ -16,9 +17,11 @@ export default [
     },
     rules: {
       ...tseslint.configs.recommended.rules,
+      '@typescript-eslint/no-floating-promises': 'error',
+      'prefer-const': 'warn',
     },
   },
   {
-    ignores: ['dist/**', 'node_modules/**'],
+    ignores: ['dist/**', 'node_modules/**', 'src/test/**'],
   },
 ];

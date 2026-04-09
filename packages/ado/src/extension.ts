@@ -2,26 +2,32 @@ import * as vscode from 'vscode';
 import { AdoWorkItemProvider } from './adoWorkItemProvider';
 import { AdoPrReviewProvider } from './adoPrReviewProvider';
 import { validateRefreshInterval } from '@workcenter/shared';
-import { initLogger, setLogLevel, logger, LogLevel } from './logger';
+import { initLogger, setLogLevel, logger, resolveLogLevel } from './logger';
+
+let workItemProvider: AdoWorkItemProvider | undefined;
+let prProvider: AdoPrReviewProvider | undefined;
+let workItemRegistration: vscode.Disposable | undefined;
+let prRegistration: vscode.Disposable | undefined;
+let orgWarningShown = false;
 
 export async function activate(_context: vscode.ExtensionContext): Promise<void> {
   const outputChannel = vscode.window.createOutputChannel('WorkCenter ADO');
   _context.subscriptions.push(outputChannel);
 
   const logLevelConfig = vscode.workspace.getConfiguration('workcenter').get<string>('logLevel', 'info');
-  const logLevelMap: Record<string, LogLevel> = {
-    debug: LogLevel.Debug,
-    info: LogLevel.Info,
-    warn: LogLevel.Warn,
-    error: LogLevel.Error,
-  };
-  initLogger(outputChannel, logLevelMap[logLevelConfig] ?? LogLevel.Info);
+  initLogger(outputChannel, resolveLogLevel(logLevelConfig));
+  if (!['debug', 'info', 'warn', 'error'].includes(logLevelConfig)) {
+    logger.warn(`Invalid log level '${logLevelConfig}', falling back to 'info'. Valid values: debug, info, warn, error`);
+  }
 
   _context.subscriptions.push(
     vscode.workspace.onDidChangeConfiguration(e => {
       if (e.affectsConfiguration('workcenter.logLevel')) {
         const newLevel = vscode.workspace.getConfiguration('workcenter').get<string>('logLevel', 'info');
-        setLogLevel(logLevelMap[newLevel] ?? LogLevel.Info);
+        setLogLevel(resolveLogLevel(newLevel));
+        if (!['debug', 'info', 'warn', 'error'].includes(newLevel)) {
+          logger.warn(`Invalid log level '${newLevel}', falling back to 'info'. Valid values: debug, info, warn, error`);
+        }
       }
     }),
   );
@@ -42,7 +48,7 @@ export async function activate(_context: vscode.ExtensionContext): Promise<void>
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : String(err);
     logger.error(`Failed to activate core extension — ${message}`);
-    vscode.window.showErrorMessage(`WorkCenter ADO: Failed to activate core extension — ${message}`);
+    void vscode.window.showErrorMessage(`WorkCenter ADO: Failed to activate core extension — ${message}`);
     return;
   }
 
@@ -51,12 +57,7 @@ export async function activate(_context: vscode.ExtensionContext): Promise<void>
     return;
   }
 
-  let workItemProvider: AdoWorkItemProvider | undefined;
-  let prProvider: AdoPrReviewProvider | undefined;
-  let workItemRegistration: vscode.Disposable | undefined;
-  let prRegistration: vscode.Disposable | undefined;
-
-  const configureProviders = () => {
+  const configureProviders= () => {
     // Dispose existing providers and registrations before reconfiguring
     workItemRegistration?.dispose();
     workItemRegistration = undefined;
@@ -73,8 +74,14 @@ export async function activate(_context: vscode.ExtensionContext): Promise<void>
 
     if (!org) {
       logger.info('No organization configured — set workcenterAdo.organization to enable ADO providers');
+      if (!orgWarningShown) {
+        vscode.window.showWarningMessage('WorkCenter ADO: Azure DevOps organization not configured. Set workcenterAdo.organization in settings.');
+        orgWarningShown = true;
+      }
       return;
     }
+
+    orgWarningShown = false;
 
     logger.debug(`Configuration: org=${org}, projects=[${projects.join(', ')}]`);
 
@@ -106,19 +113,16 @@ export async function activate(_context: vscode.ExtensionContext): Promise<void>
         configureProviders();
       }
     }),
-    {
-      dispose: () => {
-        workItemRegistration?.dispose();
-        prRegistration?.dispose();
-        workItemProvider?.dispose();
-        prProvider?.dispose();
-      },
-    },
   );
 
   logger.info('WorkCenter ADO activated');
 }
 
 export function deactivate(): void {
-  // Resources disposed via subscriptions
+  logger.info('WorkCenter ADO deactivating...');
+  workItemRegistration?.dispose();
+  prRegistration?.dispose();
+  workItemProvider?.dispose();
+  prProvider?.dispose();
+  logger.info('WorkCenter ADO deactivated');
 }

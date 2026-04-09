@@ -140,7 +140,7 @@
         "command": "workcenter.acceptFromInbox",
         "title": "Accept to Queue",
         "category": "WorkCenter",
-        "icon": "$(arrow-down)"
+        "icon": "$(arrow-right)"
       },
       {
         "command": "workcenter.dismissFromInbox",
@@ -152,7 +152,7 @@
         "command": "workcenter.acceptFromSources",
         "title": "Accept to Queue",
         "category": "WorkCenter",
-        "icon": "$(arrow-down)"
+        "icon": "$(arrow-right)"
       }
     ],
     "menus": {
@@ -175,11 +175,6 @@
           "group": "1_actions"
         },
         {
-          "command": "workcenter.editItem",
-          "when": "view == workcenter.queue",
-          "group": "1_actions"
-        },
-        {
           "command": "workcenter.completeItem",
           "when": "view == workcenter.focus",
           "group": "inline"
@@ -192,11 +187,6 @@
         {
           "command": "workcenter.resumeItem",
           "when": "view == workcenter.focus && viewItem =~ /^paused/",
-          "group": "1_actions"
-        },
-        {
-          "command": "workcenter.editItem",
-          "when": "view == workcenter.focus",
           "group": "1_actions"
         },
         {
@@ -227,6 +217,11 @@
         {
           "command": "workcenter.dismissFromInbox",
           "when": "view == workcenter.inbox && viewItem =~ /inboxItem/",
+          "group": "inline"
+        },
+        {
+          "command": "workcenter.dismissFromInbox",
+          "when": "view == workcenter.inbox && viewItem =~ /inboxItem/",
           "group": "1_actions"
         },
         {
@@ -238,8 +233,9 @@
     }
   },
   "scripts": {
-    "vscode:prepublish": "npm run build",
+    "vscode:prepublish": "npm run build:prod",
     "build": "esbuild src/extension.ts --bundle --outfile=dist/extension.js --external:vscode --format=cjs --platform=node --sourcemap",
+    "build:prod": "esbuild src/extension.ts --bundle --outfile=dist/extension.js --external:vscode --format=cjs --platform=node --minify --sourcemap",
     "watch": "esbuild src/extension.ts --bundle --outfile=dist/extension.js --external:vscode --format=cjs --platform=node --sourcemap --watch",
     "lint": "eslint src",
     "test": "vitest run",

@@ -28,18 +28,38 @@ interface WorkCenterAction {
   run(item: WorkItem): Promise<void>;
 }
 
+/**
+ * WorkCenter action that bootstraps a development environment for a GitHub issue.
+ *
+ * When executed on a work item originating from the GitHub provider, it:
+ * 1. Creates a feature branch from `origin/dev` (falling back to `origin/main` or `HEAD`).
+ * 2. Creates a git worktree at a sibling directory of the repository.
+ * 3. Opens the worktree in a new VS Code window.
+ *
+ * Only available for items in the `New` state from the `github` provider.
+ */
 export class StartWorkAction implements WorkCenterAction {
   readonly id = 'github.startWork';
   readonly label = 'Start Work (Branch + Worktree)';
 
+  /**
+   * Returns `true` when the item is a new GitHub issue that can be started.
+   * @param item - The work item to evaluate.
+   * @returns Whether the action is applicable.
+   */
   canRun(item: WorkItem): boolean {
     return item.providerId === 'github' && item.state === 'New';
   }
 
+  /**
+   * Creates a branch and worktree for the given work item, then opens it in a new window.
+   * Errors are reported via VS Code notification messages rather than thrown.
+   * @param item - The work item to start working on.
+   */
   async run(item: WorkItem): Promise<void> {
     const issueNumber = this.extractIssueNumber(item.externalId);
     if (!issueNumber) {
-      vscode.window.showErrorMessage('Could not determine issue number.');
+      void vscode.window.showErrorMessage('Could not determine issue number.');
       return;
     }
 
@@ -47,7 +67,7 @@ export class StartWorkAction implements WorkCenterAction {
 
     const workspaceFolders = vscode.workspace.workspaceFolders;
     if (!workspaceFolders || workspaceFolders.length === 0) {
-      vscode.window.showErrorMessage('WorkCenter: No workspace folder open. Open a repository first.');
+      void vscode.window.showErrorMessage('WorkCenter: No workspace folder open. Open a repository first.');
       return;
     }
 
@@ -56,7 +76,7 @@ export class StartWorkAction implements WorkCenterAction {
       repoPath = await this.selectRepository(workspaceFolders);
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : String(err);
-      vscode.window.showErrorMessage(`WorkCenter: ${message}`);
+      void vscode.window.showErrorMessage(`WorkCenter: ${message}`);
       return;
     }
 
@@ -64,7 +84,7 @@ export class StartWorkAction implements WorkCenterAction {
       // Check if branch already exists
       const { stdout: branchList } = await execFileAsync('git', ['branch', '--list', branchName], { cwd: repoPath });
       if (branchList.trim()) {
-        vscode.window.showErrorMessage(`WorkCenter: Branch "${branchName}" already exists.`);
+        void vscode.window.showErrorMessage(`WorkCenter: Branch "${branchName}" already exists.`);
         return;
       }
 
@@ -85,13 +105,14 @@ export class StartWorkAction implements WorkCenterAction {
       await execFileAsync('git', ['branch', branchName, baseBranch], { cwd: repoPath });
       logger.info(`Starting work: creating branch ${branchName}`);
 
-      // Create worktree
+      // Create worktree — let git worktree add fail naturally if the directory
+      // already exists, avoiding a TOCTOU race with a pre-check.
       const worktreePath = path.join(path.dirname(repoPath), branchName);
-      
+
       // Check if worktree directory already exists
       if (fs.existsSync(worktreePath)) {
         await execFileAsync('git', ['branch', '-D', branchName], { cwd: repoPath });
-        vscode.window.showErrorMessage(`WorkCenter: Directory "${worktreePath}" already exists.`);
+        void vscode.window.showErrorMessage(`WorkCenter: Directory "${worktreePath}" already exists.`);
         return;
       }
 
@@ -105,7 +126,14 @@ export class StartWorkAction implements WorkCenterAction {
           await execFileAsync('git', ['branch', '-D', branchName], { cwd: repoPath });
         } catch (rollbackErr) {
           const rollbackMessage = rollbackErr instanceof Error ? rollbackErr.message : String(rollbackErr);
-          vscode.window.showWarningMessage(`WorkCenter: Failed to delete branch during rollback — ${rollbackMessage}`);
+          void vscode.window.showWarningMessage(`WorkCenter: Failed to delete branch during rollback — ${rollbackMessage}`);
+        }
+
+        const errMsg = worktreeErr instanceof Error ? worktreeErr.message : String(worktreeErr);
+        const errStderr = (worktreeErr as any)?.stderr ?? '';
+        if (errMsg.includes('already exists') || errStderr.includes('already exists')) {
+          vscode.window.showErrorMessage(`WorkCenter: Directory "${worktreePath}" already exists.`);
+          return;
         }
         throw worktreeErr;
       }
@@ -118,13 +146,13 @@ export class StartWorkAction implements WorkCenterAction {
         forceNewWindow: true,
       });
 
-      vscode.window.showInformationMessage(
+      void vscode.window.showInformationMessage(
         `WorkCenter: Created worktree for ${branchName}`,
       );
     } catch (err: unknown) {
       logger.error('Failed to start work', err);
       const message = err instanceof Error ? err.message : String(err);
-      vscode.window.showErrorMessage(`WorkCenter: Failed to start work — ${message}`);
+      void vscode.window.showErrorMessage(`WorkCenter: Failed to start work — ${message}`);
     }
   }
 
