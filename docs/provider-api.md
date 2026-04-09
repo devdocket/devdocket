@@ -159,9 +159,9 @@ interface WorkCenterProvider {
   refresh(token?: vscode.CancellationToken): Promise<void>;
 }
 
-class JiraProvider implements WorkCenterProvider {
-  readonly id = 'jira';
-  readonly label = 'Jira Issues';
+class AdoWorkItemProvider implements WorkCenterProvider {
+  readonly id = 'ado-workitems';
+  readonly label = 'ADO Work Items';
 
   // Use vscode.EventEmitter to implement the onDidDiscoverItems event
   private readonly _onDidDiscoverItems =
@@ -176,10 +176,10 @@ class JiraProvider implements WorkCenterProvider {
 
     const items: DiscoveredItem[] = tickets.map((ticket) => ({
       // externalId must be unique within this provider and stable across refreshes
-      externalId: `${ticket.project}/${ticket.key}`,
-      title: `${ticket.key}: ${ticket.summary}`,
+      externalId: `${ticket.project}/${ticket.id}`,
+      title: `${ticket.id}: ${ticket.title}`,
       description: ticket.description?.slice(0, 200),
-      url: `https://jira.example.com/browse/${ticket.key}`,
+      url: `https://dev.azure.com/${ticket.org}/${ticket.project}/_workitems/edit/${ticket.id}`,
       // group organizes items under folders in the Inbox and Sources views
       group: ticket.project,
     }));
@@ -201,7 +201,7 @@ class JiraProvider implements WorkCenterProvider {
       }
       this._isRefreshing = true;
       this.refresh()
-        .catch((err) => console.error('Jira refresh failed', err))
+        .catch((err) => console.error('ADO refresh failed', err))
         .finally(() => { this._isRefreshing = false; });
     }, interval);
   }
@@ -282,7 +282,7 @@ private async refreshInBackground(): Promise<void> {
 export async function activate(context: vscode.ExtensionContext): Promise<void> {
   // ... acquire api (see Getting Started) ...
 
-  const provider = new JiraProvider();
+  const provider = new AdoWorkItemProvider();
   provider.startPeriodicRefresh(300); // every 5 minutes
 
   // registerProvider returns a Disposable — push it for cleanup
@@ -337,12 +337,12 @@ interface WorkCenterAction {
 }
 
 class CreateBranchAction implements WorkCenterAction {
-  readonly id = 'jira.createBranch';
+  readonly id = 'ado.createBranch';
   readonly label = 'Create Feature Branch';
 
   canRun(item: WorkItem): boolean {
-    // Only show for Jira items that are new (not yet started)
-    return item.providerId === 'jira' && item.state === WorkItemState.New;
+    // Only show for ADO items that are new (not yet started)
+    return item.providerId === 'ado-workitems' && item.state === WorkItemState.New;
   }
 
   async run(item: WorkItem): Promise<void> {
@@ -475,7 +475,7 @@ Implemented by extensions that discover items from an external source.
 
 ```ts
 interface WorkCenterProvider {
-  /** Unique identifier for this provider (e.g., 'github', 'jira'). */
+  /** Unique identifier for this provider (e.g., 'github', 'ado-workitems'). */
   readonly id: string;
 
   /** Human-readable label shown in the UI (e.g., 'GitHub Issues'). */
