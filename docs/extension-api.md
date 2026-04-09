@@ -285,10 +285,6 @@ Each provider is capped at **10,000 discovered items** per refresh. If a provide
 
 URLs opened via `vscode.env.openExternal` are validated to use `http:` or `https:` schemes only. Other URL schemes (e.g., `file:`, `javascript:`, custom protocols) are rejected. Ensure any URLs your provider or action constructs use standard web URLs.
 
-### Trust Model
-
-Provider extensions have full read access to the data they inject and to the `WorkItem` objects passed to their actions. Provider IDs are first-come-first-served — the VS Code extension API does not expose caller identity, so WorkCenter cannot verify which extension is registering a given provider or action ID. Duplicate IDs are rejected, and all registrations are logged at warn level for auditability.
-
 ## Examples
 
 ### Minimal Provider
