@@ -377,25 +377,14 @@ context.subscriptions.push(api.registerAction(action));
 
 Understanding how items move through WorkCenter helps you build effective providers.
 
-```
-Provider emits DiscoveredItem[]
-        │
-        ▼
-   ┌─────────┐     accept     ┌─────────┐    start     ┌─────────┐
-   │  Inbox   │ ──────────▶   │  Queue   │ ──────────▶  │  Focus  │
-   │ (unseen) │               │  (New)   │              │(InProgress,│
-   └─────────┘               └─────────┘              │ Paused)  │
-        │                          ▲                    └─────────┘
-     dismiss                       │                    └─────────┘
-        │                     manual add                     │
-        ▼                          │                      complete
-   ┌───────────┐              User creates               │
-   │ dismissed  │             item directly              ▼
-   │(Sources only)│                                ┌─────────┐
-   └───────────┘                                   │ History │
-                                                   │(Done,    │
-                                                   │ Archived)│
-                                                   └─────────┘
+```mermaid
+flowchart TD
+    P["Provider emits DiscoveredItem[]"] --> Inbox["Inbox\n(unseen)"]
+    Inbox -- accept --> Queue["Queue\n(New)"]
+    Inbox -- dismiss --> Dismissed["dismissed\n(Sources only)"]
+    User["User creates item directly"] -- manual add --> Queue
+    Queue -- start --> Focus["Focus\n(InProgress, Paused)"]
+    Focus -- complete --> History["History\n(Done, Archived)"]
 ```
 
 ### What gets persisted
