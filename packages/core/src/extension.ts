@@ -178,7 +178,7 @@ function wireEvents(
     historyTreeView.message = historyProvider.getChildren().length > 0 ? undefined : 'No history items';
   };
 
-  const workGraphSub = workGraph.onDidChange(updateWorkViewMessages);
+  const workGraphSub = workGraph.onDidChange(safeHandler('Error handling work graph change', updateWorkViewMessages));
   let initialLoadComplete = false;
   let wasLoading = false;
 
@@ -197,12 +197,15 @@ function wireEvents(
     queueMicrotask(() => {
       try {
         updateViewMessages();
+      } catch (err: unknown) {
+        logger.error('Error updating view messages', err);
+      }
+      try {
         updateInboxBadge();
       } catch (err: unknown) {
-        logger.error('Error during scheduled UI update', err);
-      } finally {
-        uiUpdateScheduled = false;
+        logger.error('Error updating inbox badge', err);
       }
+      uiUpdateScheduled = false;
     });
   };
 
@@ -245,7 +248,7 @@ function wireEvents(
     }
   }));
   const stateStoreSub = stateStore.onDidChange(safeHandler('Error handling state store change', scheduleUiUpdate));
-  const markSeenSub = inboxProvider.onDidMarkSeen(scheduleUiUpdate);
+  const markSeenSub = inboxProvider.onDidMarkSeen(safeHandler('Error handling mark seen', scheduleUiUpdate));
 
   return [discoveredSub, newItemsSub, providerRegSub, stateStoreSub, markSeenSub, workGraphSub];
 }
