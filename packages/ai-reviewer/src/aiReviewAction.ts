@@ -123,7 +123,10 @@ export class AiReviewAction implements WorkCenterAction {
       }
       return content;
     } catch (err) {
-      const message = err instanceof Error ? err.message : `Could not read custom prompt file "${customPath}"`;
+      const message =
+        err instanceof Error
+          ? `Could not read custom prompt file "${customPath}": ${err.message}`
+          : `Could not read custom prompt file "${customPath}"`;
       vscode.window.showWarningMessage(
         `AI Code Review: ${message} — using built-in prompt.`,
       );
@@ -167,7 +170,7 @@ export class AiReviewAction implements WorkCenterAction {
     const normalizedFile = path.normalize(filePath);
     return folders.some((folder) => {
       const normalizedFolder = path.normalize(folder.uri.fsPath);
-      const prefix = normalizedFolder + path.sep;
+      const prefix = normalizedFolder.endsWith(path.sep) ? normalizedFolder : normalizedFolder + path.sep;
       if (process.platform === 'win32') {
         return (
           normalizedFile.toLowerCase() === normalizedFolder.toLowerCase() ||
