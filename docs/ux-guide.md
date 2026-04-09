@@ -1,6 +1,6 @@
 # WorkCenter UX Guide
 
-WorkCenter is a VS Code extension that provides a unified hub for managing work items from multiple sources. This guide covers the five-view model, data flow, work item lifecycle, and available actions.
+WorkCenter is a VS Code extension that provides a unified hub for managing work items from multiple sources. This guide covers the five-view model, data flow, work item lifecycle, available actions, and provider configuration.
 
 ## The Five Views
 
@@ -8,9 +8,15 @@ WorkCenter organizes work across five views, accessible from the WorkCenter acti
 
 ### Inbox
 
-The Inbox shows newly discovered items from providers that you haven't acted on yet. Items appear here automatically when a provider (such as GitHub Issues) discovers them.
+The Inbox shows newly discovered items from providers that you haven't acted on yet. Items appear here automatically when a provider (such as GitHub Issues or Azure DevOps) discovers them.
 
-Each provider's items are grouped under the provider name with a count of unseen items. Only providers with unseen items appear in the Inbox.
+Each provider's items are grouped under the provider name with a count of unseen items. Items from the same provider may also be grouped by sub-group (e.g., repository name). Only providers with unseen items appear in the Inbox.
+
+**Read/unread tracking:** Inbox items track whether you've viewed them. Unread items show a filled circle icon (●) and read items show an outline circle (○). Clicking an item marks it as read. Read state is persisted across VS Code restarts.
+
+**Badge:** The Inbox view displays a badge on its tab showing the count of unseen items that you haven't clicked on yet.
+
+**Notifications:** When new items arrive in the Inbox (after the initial provider load), a notification appears: _"WorkCenter: N new item(s) in Inbox"_ with a **Show Inbox** button. This can be disabled via the `workcenter.showInboxNotifications` setting.
 
 **Available actions on Inbox items:**
 
@@ -27,40 +33,45 @@ The Queue is your curated backlog — items you've decided to work on but haven'
 1. **Accepted from Inbox or Sources** — provider-discovered items you've chosen to keep.
 2. **Manually created** — items you add yourself using the **Create Work Item** button (➕) in the Queue title bar.
 
-All items in the Queue are in the **New** state.
+All items in the Queue are in the **New** state. Items are sorted by their sort order (the order you've arranged them in).
+
+Clicking a Queue item opens the editor panel for that item.
+
+**Reordering:** You can reorder Queue items by **drag-and-drop** or by using the **Move Up** / **Move Down** context menu commands. Drag an item onto another to insert it at that position.
 
 **Available actions on Queue items:**
 
 | Action | Description |
 |--------|-------------|
-| **Move to Focus** | Transitions the item to **InProgress** and moves it to the Focus view |
+| **Move to Focus** | Transitions the item to **InProgress** and moves it to the Focus view (inline button) |
 | **Archive** | Transitions the item to **Archived**, removing it from the Queue |
-| **Edit Work Item** | Opens the editor panel to modify title and description |
+| **Move Up / Move Down** | Reorders the item within the Queue |
+| **Edit Work Item** | Opens the editor panel to modify title and notes |
 | **Run Action…** | Shows available provider actions for this item |
 | **Open in Browser** | Opens the item's URL in your default browser (if the item has a URL) |
 
 ### Focus
 
-The Focus view shows items you are actively working on. Items here can be in one of three states: **InProgress**, **Blocked**, or **WaitingOn**.
+The Focus view shows items you are actively working on. Items here can be in one of two states: **InProgress** or **Paused**.
 
 Items display a state label next to the title, with icons indicating status:
-- **in progress** — actively being worked on (shown with a separate in-progress icon)
-- **blocked** — work is blocked by an external dependency (prefixed with a ⛔ icon)
-- **waiting** — waiting on someone or something (shown as `⏳ waiting`)
+- **in progress** — actively being worked on (shown with a ▶ play-circle icon)
+- **⏸ paused** — work is temporarily on hold (shown with a pause icon)
+
+Clicking a Focus item opens the editor panel for that item.
 
 **Available actions on Focus items:**
 
 | Action | Description |
 |--------|-------------|
-| **Complete** | Transitions the item to **Done** (inline button) |
-| **Mark Blocked** | Transitions an active item to **Blocked** |
-| **Unblock** | Transitions a blocked/waiting item back to **InProgress** |
-| **Mark Waiting On** | Transitions an active item to **WaitingOn** |
-| **Edit Work Item** | Opens the editor panel to modify title and description |
+| **Complete** | Transitions the item to **Done** and moves it to History (inline button) |
+| **Pause** | Transitions an active (InProgress) item to **Paused** |
+| **Resume** | Transitions a paused item back to **InProgress** |
+| **Edit Work Item** | Opens the editor panel to modify title and notes |
 | **Run Action…** | Shows available provider actions for this item |
 | **Open in Browser** | Opens the item's URL in your default browser (if the item has a URL) |
 
-> **Note:** The **Mark Blocked** and **Mark Waiting On** actions are only available on active (InProgress) items. The **Unblock** action is only available on blocked or waiting items.
+> **Note:** The **Pause** action is only available on active (InProgress) items. The **Resume** action is only available on paused items.
 
 ### Sources
 
@@ -83,8 +94,10 @@ Sources is a browsable library of everything providers know about, regardless of
 The History view shows completed and archived items, sorted by most recently updated (newest first). This provides a record of past work without cluttering the active views.
 
 Items display a state label next to the title:
-- **✓ done** — work that was completed (shown with a $(check) icon)
-- **📦 archived** — items that were archived (shown with a $(archive) icon)
+- **✓ done** — work that was completed (shown with a ✓ check icon)
+- **📦 archived** — items that were archived (shown with an archive icon)
+
+Clicking a History item opens the editor panel to view its details (read-only for provider-managed titles).
 
 **Available actions on History items:**
 
@@ -92,7 +105,7 @@ Items display a state label next to the title:
 |--------|-------------|
 | **Open in Browser** | Opens the item's URL in your default browser (if the item has a URL) |
 
-> **Note:** History items are in terminal states, so no state-changing commands (such as Archive) are available.
+> **Note:** History items are in terminal states, so no state-changing commands are available.
 
 ## Data Flow
 
@@ -104,7 +117,7 @@ Provider discovers items
         ▼
 ┌──────────────┐
 │    Inbox     │  (unseen provider items)
-│   [unseen]   │
+│   [unseen]   │  ● unread / ○ read indicator
 └──────┬───────┘
        │ Accept ──────────────────────────────┐
        │ Dismiss → item stays in Sources only │
@@ -112,14 +125,13 @@ Provider discovers items
 ┌──────────────┐                              │
 │    Queue     │  ◄── Manual "Create Item"    │
 │   [New]      │  ◄───────────────────────────┘
-└──────┬───────┘
+└──────┬───────┘  (drag-and-drop reorder)
        │ Move to Focus
        │ (or Archive → History)
        ▼
 ┌──────────────┐
 │    Focus     │
-│ [InProgress] │ ◄──► [Blocked]
-│              │ ◄──► [WaitingOn]
+│ [InProgress] │ ◄──► [Paused]
 └──────┬───────┘
        │ Complete
        ▼
@@ -160,15 +172,13 @@ Provider items (e.g., GitHub issues) follow this lifecycle:
 
 ## Work Item States and Transitions
 
-WorkCenter defines seven states for work items:
+WorkCenter defines five states for work items:
 
 | State | View | Description |
 |-------|------|-------------|
 | **New** | Queue | Item is in the backlog, waiting to be started |
-| **Triaged** | — | Reserved for future use |
 | **InProgress** | Focus | Item is actively being worked on |
-| **Blocked** | Focus | Work is blocked by an external dependency |
-| **WaitingOn** | Focus | Waiting on someone or something |
+| **Paused** | Focus | Work is temporarily on hold |
 | **Done** | History | Work is complete |
 | **Archived** | History | Item is archived |
 
@@ -183,39 +193,34 @@ WorkCenter defines seven states for work items:
               │                  │
               ▼                  ▼
         ┌──────────┐       ┌──────────┐
-        │InProgress│       │ Archived │
+        │InProgress│       │ Archived │  (History)
         └────┬─────┘       └──────────┘
              │
-     ┌───────┼───────┐
-     │       │       │
-     ▼       ▼       │
-┌─────────┐ ┌──────────┐
-│ Blocked │ │WaitingOn │
-└────┬────┘ └────┬─────┘
-     │         │     │
-     └────┬────┘     │
-          │          │
-          ▼          │
-    ┌──────────┐     │
-    │InProgress│ ◄───┘
-    └────┬─────┘
-         │
-         ▼
-    ┌──────────┐
-    │   Done   │  (terminal)
-    └──────────┘
+      ┌──────┼──────┐
+      │      │      │
+      │      ▼      │
+      │  ┌────────┐ │
+      │  │ Paused │ │
+      │  └───┬────┘ │
+      │      │      │
+      │      ▼      │
+      │ InProgress  │
+      │      │      │
+      └──────┘      │
+             │      │
+             ▼      │
+        ┌──────────┐│
+        │   Done   │◄┘  (History, terminal)
+        └──────────┘
 ```
 
 **Valid transitions:**
 
 - **New → InProgress** — "Move to Focus" from Queue
 - **New → Archived** — "Archive" from Queue (skip/dismiss)
-- **InProgress → Blocked** — "Mark Blocked" from Focus
-- **InProgress → WaitingOn** — "Mark Waiting On" from Focus
+- **InProgress → Paused** — "Pause" from Focus
 - **InProgress → Done** — "Complete" from Focus
-- **Blocked → InProgress** — "Unblock" from Focus
-- **WaitingOn → InProgress** — "Unblock" from Focus
-- **Done** — Terminal state; no further transitions are currently exposed. Visible in History.
+- **Paused → InProgress** — "Resume" from Focus
 
 ## Available Commands
 
@@ -227,23 +232,77 @@ Commands are available from context menus, inline actions, or the view title bar
 | Move to Focus | `workcenter.acceptToFocus` | Queue (inline) | $(arrow-right) |
 | Archive | `workcenter.archiveItem` | Queue (context menu) | $(archive) |
 | Complete | `workcenter.completeItem` | Focus (inline) | $(check) |
-| Mark Blocked | `workcenter.blockItem` | Focus (context, active items) | $(circle-slash) |
-| Unblock | `workcenter.unblockItem` | Focus (context, blocked items) | $(debug-continue) |
-| Mark Waiting On | `workcenter.markWaitingOn` | Focus (context, active items) | $(clock) |
+| Pause | `workcenter.pauseItem` | Focus (context, active items only) | $(debug-pause) |
+| Resume | `workcenter.resumeItem` | Focus (context, paused items only) | $(debug-continue) |
+| Move Up | `workcenter.moveUp` | Queue (context menu) | $(arrow-up) |
+| Move Down | `workcenter.moveDown` | Queue (context menu) | $(arrow-down) |
 | Edit Work Item | `workcenter.editItem` | Queue, Focus (context menu) | $(edit) |
 | Open in Browser | `workcenter.openInBrowser` | Any view (items with URL) | $(link-external) |
 | Run Action… | `workcenter.runAction` | Queue, Focus (context menu) | $(play) |
-| Accept to Queue | `workcenter.acceptFromInbox` | Inbox (inline) | $(arrow-down) |
-| Dismiss | `workcenter.dismissFromInbox` | Inbox (context menu) | $(close) |
-| Accept to Queue | `workcenter.acceptFromSources` | Sources (inline, items only) | $(arrow-down) |
+| Accept to Queue | `workcenter.acceptFromInbox` | Inbox (inline) | $(arrow-right) |
+| Dismiss | `workcenter.dismissFromInbox` | Inbox (inline + context menu) | $(close) |
+| Accept to Queue | `workcenter.acceptFromSources` | Sources (inline, items only) | $(arrow-right) |
 
 ## Editor Panel
 
-The **Edit Work Item** command opens a webview-based editor panel with two fields:
+The **Edit Work Item** command (or clicking an item in Queue, Focus, or History) opens a webview-based editor panel with two fields:
 
-- **Title** — A single-line text input (required). Cannot be saved if empty.
-- **Description** — A multi-line textarea for additional notes.
+- **Title** — A single-line text input (required). Cannot be saved if empty. For provider-backed items, the title is **read-only** with a hint: _"Title is managed by the provider"_.
+- **Notes** — A multi-line textarea for additional notes.
 
-The editor **auto-saves** changes after a 500ms debounce. There is no explicit save button — edits are persisted automatically as you type. The panel title updates to reflect the current item title.
+The editor **auto-saves** changes after a short debounce (~500ms). There is no explicit save button — edits are persisted automatically as you type. The panel title updates to reflect the current item title.
 
 The editor uses VS Code's native theming, matching your current color scheme for inputs, buttons, and text.
+
+## Providers
+
+WorkCenter supports multiple provider extensions that discover work items from external systems. Each provider is a separate VS Code extension that depends on the core WorkCenter extension.
+
+### GitHub Provider (`workcenter-github`)
+
+Discovers items from GitHub via two sub-providers:
+
+- **GitHub Issues** — Finds issues assigned to you across configured repositories.
+- **GitHub PR Reviews** — Finds pull requests where you've been requested as a reviewer. Previously dismissed review requests will reappear if the PR is still active.
+
+**Actions:**
+- **Start Work (Branch + Worktree)** — Available on **New** GitHub issue items. Creates a feature branch, sets up a git worktree in a sibling directory, and opens it in a new VS Code window.
+
+**Configuration:**
+
+| Setting | Type | Default | Description |
+|---------|------|---------|-------------|
+| `workcenterGithub.repos` | `string[]` | `[]` | GitHub repositories to watch (e.g., `owner/repo`). Leave empty to fetch all assigned issues across all repositories. |
+| `workcenterGithub.refreshIntervalSeconds` | `number` | `300` | How often to refresh GitHub data (in seconds). Minimum 60 seconds; values below 60 are clamped. |
+
+### Azure DevOps Provider (`workcenter-ado`)
+
+Discovers items from Azure DevOps via two sub-providers:
+
+- **ADO Work Items** — Finds work items assigned to you.
+- **ADO PR Reviews** — Finds pull requests where you've been requested as a reviewer.
+
+**Configuration:**
+
+| Setting | Type | Default | Description |
+|---------|------|---------|-------------|
+| `workcenterAdo.organization` | `string` | `""` | Azure DevOps organization name (required to enable the provider). |
+| `workcenterAdo.projects` | `string[]` | `[]` | Projects to monitor. Leave empty to fetch across the entire organization. |
+| `workcenterAdo.refreshIntervalSeconds` | `number` | `300` | How often to refresh ADO data (in seconds). Minimum 60 seconds; set to 0 or negative to disable periodic refresh. |
+
+### AI Code Review (`workcenter-ai-reviewer`)
+
+Registers an **AI Code Review** action that can be run on any work item whose URL points to a GitHub pull request. When triggered via **Run Action…**, it fetches the PR diff and sends it to a VS Code language model for review.
+
+**Configuration:**
+
+| Setting | Type | Default | Description |
+|---------|------|---------|-------------|
+| `workcenterAiReview.customPromptPath` | `string` | `""` | Path to a custom code review prompt file. Replaces the built-in review instructions. The PR diff is always appended automatically. Supports absolute paths and workspace-relative paths. |
+
+## Core Configuration
+
+| Setting | Type | Default | Description |
+|---------|------|---------|-------------|
+| `workcenter.logLevel` | `string` | `"info"` | Log level for the WorkCenter output channel. Valid values: `debug`, `info`, `warn`, `error`. |
+| `workcenter.showInboxNotifications` | `boolean` | `true` | Show a notification when new items arrive in the Inbox. |
