@@ -20,6 +20,17 @@ import { performance } from 'perf_hooks';
 export type { WorkCenterApi, WorkCenterProvider, WorkCenterAction, DiscoveredItem, Disposable } from './api/types';
 export { logger } from './services/logger';
 
+/** Wrap an event callback so unhandled errors are logged instead of crashing. */
+function safeHandler<T extends unknown[]>(label: string, fn: (...args: T) => void): (...args: T) => void {
+  return (...args: T) => {
+    try {
+      fn(...args);
+    } catch (err: unknown) {
+      logger.error(label, err);
+    }
+  };
+}
+
 function initializeLogging(context: vscode.ExtensionContext): void {
   const outputChannel = vscode.window.createOutputChannel('WorkCenter');
   context.subscriptions.push(outputChannel);
@@ -28,16 +39,12 @@ function initializeLogging(context: vscode.ExtensionContext): void {
   initLogger(outputChannel, resolveLogLevel(logLevelConfig));
 
   context.subscriptions.push(
-    vscode.workspace.onDidChangeConfiguration(e => {
-      try {
-        if (e.affectsConfiguration('workcenter.logLevel')) {
-          const newLevel = vscode.workspace.getConfiguration('workcenter').get<string>('logLevel', 'info');
-          setLogLevel(resolveLogLevel(newLevel));
-        }
-      } catch (err: unknown) {
-        logger.error('Error handling configuration change', err);
+    vscode.workspace.onDidChangeConfiguration(safeHandler('Error handling configuration change', (e) => {
+      if (e.affectsConfiguration('workcenter.logLevel')) {
+        const newLevel = vscode.workspace.getConfiguration('workcenter').get<string>('logLevel', 'info');
+        setLogLevel(resolveLogLevel(newLevel));
       }
-    }),
+    })),
   );
 }
 
@@ -191,60 +198,40 @@ function wireEvents(
   updateViewMessages();
   updateInboxBadge();
 
-  const providerRegSub = providerRegistry.onDidRegisterProvider(() => {
-    try {
-      scheduleUiUpdate();
-    } catch (err: unknown) {
-      logger.error('Error handling provider registration', err);
-    }
-  });
-  const discoveredSub = providerRegistry.onDidChangeDiscoveredItems(() => {
-    try {
-      scheduleUiUpdate();
+  const providerRegSub = providerRegistry.onDidRegisterProvider(safeHandler('Error handling provider registration', scheduleUiUpdate));
+  const discoveredSub = providerRegistry.onDidChangeDiscoveredItems(safeHandler('Error handling discovered items change', () => {
+    scheduleUiUpdate();
 
-      // Mark initial load complete when loading transitions from true to false
-      if (!initialLoadComplete) {
-        if (wasLoading && !providerRegistry.loading) {
-          initialLoadComplete = true;
-        }
-        wasLoading = wasLoading || providerRegistry.loading;
+    // Mark initial load complete when loading transitions from true to false
+    if (!initialLoadComplete) {
+      if (wasLoading && !providerRegistry.loading) {
+        initialLoadComplete = true;
       }
-    } catch (err: unknown) {
-      logger.error('Error handling discovered items change', err);
+      wasLoading = wasLoading || providerRegistry.loading;
     }
-  });
-  const newItemsSub = providerRegistry.onDidAddNewUnseenItems((newCount) => {
-    try {
-      if (!initialLoadComplete) { return; }
-      const config = vscode.workspace.getConfiguration('workcenter');
-      const showNotifications = config.get<boolean>('showInboxNotifications', true);
-      if (showNotifications && newCount > 0) {
-        void vscode.window.showInformationMessage(
-          `WorkCenter: ${newCount} new item${newCount === 1 ? '' : 's'} in Inbox`,
-          'Show Inbox'
-        ).then(
-          action => {
-            if (action === 'Show Inbox') {
-              vscode.commands.executeCommand('workcenter.inbox.focus').then(
-                undefined,
-                () => { /* view focus is best-effort */ }
-              );
-            }
-          },
-          () => { /* notification is best-effort */ }
-        );
-      }
-    } catch (err: unknown) {
-      logger.error('Error handling new unseen items notification', err);
+  }));
+  const newItemsSub = providerRegistry.onDidAddNewUnseenItems(safeHandler('Error handling new unseen items notification', (newCount) => {
+    if (!initialLoadComplete) { return; }
+    const config = vscode.workspace.getConfiguration('workcenter');
+    const showNotifications = config.get<boolean>('showInboxNotifications', true);
+    if (showNotifications && newCount > 0) {
+      void vscode.window.showInformationMessage(
+        `WorkCenter: ${newCount} new item${newCount === 1 ? '' : 's'} in Inbox`,
+        'Show Inbox'
+      ).then(
+        action => {
+          if (action === 'Show Inbox') {
+            vscode.commands.executeCommand('workcenter.inbox.focus').then(
+              undefined,
+              () => { /* view focus is best-effort */ }
+            );
+          }
+        },
+        () => { /* notification is best-effort */ }
+      );
     }
-  });
-  const stateStoreSub = stateStore.onDidChange(() => {
-    try {
-      scheduleUiUpdate();
-    } catch (err: unknown) {
-      logger.error('Error handling state store change', err);
-    }
-  });
+  }));
+  const stateStoreSub = stateStore.onDidChange(safeHandler('Error handling state store change', scheduleUiUpdate));
   const markSeenSub = inboxProvider.onDidMarkSeen(scheduleUiUpdate);
 
   return [discoveredSub, newItemsSub, providerRegSub, stateStoreSub, markSeenSub, workGraphSub];
