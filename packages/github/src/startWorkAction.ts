@@ -105,9 +105,10 @@ export class StartWorkAction implements WorkCenterAction {
       await execFileAsync('git', ['branch', branchName, baseBranch], { cwd: repoPath });
       logger.info(`Starting work: creating branch ${branchName}`);
 
-      // Create worktree
+      // Create worktree — let git worktree add fail naturally if the directory
+      // already exists, avoiding a TOCTOU race with a pre-check.
       const worktreePath = path.join(path.dirname(repoPath), branchName);
-      
+
       // Check if worktree directory already exists
       if (fs.existsSync(worktreePath)) {
         await execFileAsync('git', ['branch', '-D', branchName], { cwd: repoPath });
@@ -126,6 +127,13 @@ export class StartWorkAction implements WorkCenterAction {
         } catch (rollbackErr) {
           const rollbackMessage = rollbackErr instanceof Error ? rollbackErr.message : String(rollbackErr);
           void vscode.window.showWarningMessage(`WorkCenter: Failed to delete branch during rollback — ${rollbackMessage}`);
+        }
+
+        const errMsg = worktreeErr instanceof Error ? worktreeErr.message : String(worktreeErr);
+        const errStderr = (worktreeErr as any)?.stderr ?? '';
+        if (errMsg.includes('already exists') || errStderr.includes('already exists')) {
+          vscode.window.showErrorMessage(`WorkCenter: Directory "${worktreePath}" already exists.`);
+          return;
         }
         throw worktreeErr;
       }

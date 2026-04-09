@@ -229,8 +229,19 @@ describe('StartWorkAction', () => {
     });
 
     it('shows error and deletes branch when worktree directory already exists', async () => {
-      // Mock fs.existsSync to return true (directory exists)
-      vi.mocked(fs.existsSync).mockReturnValue(true);
+      // Mock git worktree add to fail because directory already exists
+      vi.mocked(execFile).mockImplementation(((cmd: string, args: string[], opts: any, cb: Function) => {
+        if (args[0] === 'worktree') {
+          const stderr = `fatal: '${path.join('/mock', 'issue-123-fix-bug')}' already exists`;
+          const err = new Error(
+            `Command failed: git worktree add ${path.join('/mock', 'issue-123-fix-bug')} issue-123-fix-bug\n${stderr}`
+          );
+          (err as any).stderr = stderr;
+          cb(err, '', '');
+        } else {
+          cb(null, { stdout: '', stderr: '' }, '');
+        }
+      }) as any);
 
       const item = createWorkItem({ title: '#123: Fix bug' });
       await action.run(item);
@@ -238,7 +249,7 @@ describe('StartWorkAction', () => {
       expect(window.showErrorMessage).toHaveBeenCalledWith(
         `WorkCenter: Directory "${path.join('/mock', 'issue-123-fix-bug')}" already exists.`,
       );
-      // Should delete the branch (I6 rollback fix)
+      // Should delete the branch (rollback)
       expect(execFile).toHaveBeenCalledWith(
         'git',
         ['branch', '-D', 'issue-123-fix-bug'],
@@ -560,16 +571,15 @@ describe('StartWorkAction', () => {
 
     it('handles worktree directory check when branch was already created', async () => {
       vi.mocked(execFile).mockImplementation(((cmd: string, args: string[], opts: any, cb: Function) => {
-        cb(null, { stdout: '', stderr: '' }, '');
+        // Simulate git worktree add failing because directory already exists
+        if (args[0] === 'worktree' && args[1] === 'add') {
+          const err = new Error("fatal: 'issue-123-fix-bug' already exists");
+          (err as any).stderr = "'issue-123-fix-bug' already exists";
+          cb(err, '', '');
+        } else {
+          cb(null, { stdout: '', stderr: '' }, '');
+        }
       }) as any);
-
-      // existsSync: true for .git, and true for worktree path (simulating existing dir)
-      vi.mocked(fs.existsSync).mockImplementation((p: any) => {
-        const s = p.toString();
-        if (s.endsWith('.git')) return true;
-        if (s.includes('issue-123')) return true;
-        return false;
-      });
 
       const item = createWorkItem({ title: '#123: Fix bug' });
       await action.run(item);
