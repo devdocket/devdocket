@@ -14,6 +14,16 @@ function formatItemTitle(item: { group?: string; title: string }): string {
   return trimmedGroup ? `${trimmedGroup} ${item.title}` : item.title;
 }
 
+/** Returns true if the URL uses an allowed web scheme (http or https). */
+function isSafeUrl(url: string): boolean {
+  try {
+    const parsed = new URL(url);
+    return parsed.protocol === 'http:' || parsed.protocol === 'https:';
+  } catch {
+    return false;
+  }
+}
+
 /** Log the error and show a user-facing message. */
 function handleCommandError(context: string, err: unknown): void {
   logger.error(context, err);
@@ -114,12 +124,11 @@ async function handleOpenInBrowser(workGraph: WorkGraph, item?: { id?: string; u
     vscode.window.showWarningMessage('This item has no URL to open.');
     return;
   }
-  const uri = vscode.Uri.parse(url);
-  if (uri.scheme !== 'http' && uri.scheme !== 'https') {
+  if (!isSafeUrl(url)) {
     vscode.window.showWarningMessage(`Cannot open non-web URL: ${url}`);
     return;
   }
-  const opened = await vscode.env.openExternal(uri);
+  const opened = await vscode.env.openExternal(vscode.Uri.parse(url));
   if (!opened) {
     vscode.window.showWarningMessage('Failed to open URL in the browser.');
   }
