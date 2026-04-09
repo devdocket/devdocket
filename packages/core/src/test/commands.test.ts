@@ -239,7 +239,7 @@ describe('registerCommands', () => {
       await invoke('workcenter.openInBrowser', { id: item.id });
 
       expect(vscode.env.openExternal).toHaveBeenCalled();
-      expect(vscode.Uri.parse).toHaveBeenCalledWith('https://example.com');
+      expect(vscode.Uri.parse).toHaveBeenCalledWith('https://example.com/');
     });
 
     it('falls back to item.url when workItem has no url', async () => {
@@ -247,7 +247,7 @@ describe('registerCommands', () => {
 
       await invoke('workcenter.openInBrowser', { id: 'wc-1', url: 'https://fallback.com' });
 
-      expect(vscode.Uri.parse).toHaveBeenCalledWith('https://fallback.com');
+      expect(vscode.Uri.parse).toHaveBeenCalledWith('https://fallback.com/');
       expect(vscode.env.openExternal).toHaveBeenCalled();
     });
 
@@ -272,7 +272,7 @@ describe('registerCommands', () => {
 
       await invoke('workcenter.openInBrowser', { id: 'wc-gone', url: 'https://tree-fallback.com' });
 
-      expect(vscode.Uri.parse).toHaveBeenCalledWith('https://tree-fallback.com');
+      expect(vscode.Uri.parse).toHaveBeenCalledWith('https://tree-fallback.com/');
       expect(vscode.env.openExternal).toHaveBeenCalled();
     });
 
@@ -667,30 +667,34 @@ describe('registerCommands', () => {
 
 describe('isSafeUrl', () => {
   it('accepts http:// URLs', () => {
-    expect(isSafeUrl('http://example.com')).toBe(true);
+    const result = isSafeUrl('http://example.com');
+    expect(result).not.toBeNull();
+    expect(result!.href).toBe('http://example.com/');
   });
 
   it('accepts https:// URLs', () => {
-    expect(isSafeUrl('https://example.com')).toBe(true);
+    const result = isSafeUrl('https://example.com');
+    expect(result).not.toBeNull();
+    expect(result!.href).toBe('https://example.com/');
   });
 
   it('rejects data: URLs', () => {
-    expect(isSafeUrl('data:text/html,<h1>hi</h1>')).toBe(false);
+    expect(isSafeUrl('data:text/html,<h1>hi</h1>')).toBeNull();
   });
 
   it('rejects file: URLs', () => {
-    expect(isSafeUrl('file:///etc/passwd')).toBe(false);
+    expect(isSafeUrl('file:///etc/passwd')).toBeNull();
   });
 
   it('rejects javascript: URLs', () => {
-    expect(isSafeUrl('javascript:alert(1)')).toBe(false);
+    expect(isSafeUrl('javascript:alert(1)')).toBeNull();
   });
 
   it('rejects malformed URLs', () => {
-    expect(isSafeUrl('not-a-url')).toBe(false);
+    expect(isSafeUrl('not-a-url')).toBeNull();
   });
 
   it('rejects empty strings', () => {
-    expect(isSafeUrl('')).toBe(false);
+    expect(isSafeUrl('')).toBeNull();
   });
 });

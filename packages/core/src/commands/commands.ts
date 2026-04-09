@@ -14,13 +14,13 @@ function formatItemTitle(item: { group?: string; title: string }): string {
   return trimmedGroup ? `${trimmedGroup} ${item.title}` : item.title;
 }
 
-/** Returns true if the URL uses an allowed web scheme (http or https). */
-export function isSafeUrl(url: string): boolean {
+/** Returns the parsed URL if it uses an allowed web scheme (http or https), or null otherwise. */
+export function isSafeUrl(url: string): URL | null {
   try {
     const parsed = new URL(url);
-    return parsed.protocol === 'http:' || parsed.protocol === 'https:';
+    return (parsed.protocol === 'http:' || parsed.protocol === 'https:') ? parsed : null;
   } catch {
-    return false;
+    return null;
   }
 }
 
@@ -124,13 +124,14 @@ async function handleOpenInBrowser(workGraph: WorkGraph, item?: { id?: string; u
     vscode.window.showWarningMessage('This item has no URL to open.');
     return;
   }
-  if (!isSafeUrl(url)) {
+  const safeUrl = isSafeUrl(url);
+  if (!safeUrl) {
     const display = url.length > 100 ? url.slice(0, 100) + '…' : url;
     const sanitized = display.replace(/[\n\r]/g, ' ');
     vscode.window.showWarningMessage(`Cannot open non-web URL: ${sanitized}`);
     return;
   }
-  const opened = await vscode.env.openExternal(vscode.Uri.parse(url));
+  const opened = await vscode.env.openExternal(vscode.Uri.parse(safeUrl.href));
   if (!opened) {
     vscode.window.showWarningMessage('Failed to open URL in the browser.');
   }
