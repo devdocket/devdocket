@@ -2,7 +2,7 @@
 
 **A unified work hub inside VS Code.**
 
-WorkCenter is a VS Code extension that brings all of your work items — GitHub issues, PR review requests, investigations, follow-ups, and ad-hoc tasks — into a single, organized sidebar. Instead of juggling browser tabs, notification emails, and sticky notes, you manage everything from where you already write code.
+WorkCenter is a VS Code extension that brings all of your work items — GitHub issues, Azure DevOps work items, PR review requests, investigations, follow-ups, and ad-hoc tasks — into a single, organized sidebar. Instead of juggling browser tabs, notification emails, and sticky notes, you manage everything from where you already write code.
 
 ## The Problem
 
@@ -12,7 +12,7 @@ Developers constantly context-switch between tools. Issues live in GitHub, tasks
 
 WorkCenter is **not** a replacement for GitHub Issues, Jira, or any other system of record. It is an **aggregation layer** that sits inside VS Code and gives you a personal, unified view of your work:
 
-- **Providers** discover items from external sources (GitHub issues, PR reviews, and more in the future) and surface them automatically.
+- **Providers** discover items from external sources (GitHub issues, Azure DevOps work items, PR reviews, and more in the future) and surface them automatically.
 - **You** decide what to accept, what to dismiss, and what to work on next.
 - **Actions** let provider extensions automate workflows — like creating a branch and worktree for a GitHub issue with one click.
 
@@ -88,22 +88,25 @@ WorkCenter is built around an extensible plugin model with two extension points:
 
 A provider discovers work items from an external source and reports them to WorkCenter. The core extension handles all UI — providers just emit data.
 
-**Built-in providers** (via WorkCenter GitHub):
+**Built-in providers:**
 
 | Provider | What It Discovers |
 |----------|-------------------|
 | **GitHub Issues** | Issues assigned to you in configured repositories |
 | **GitHub PR Reviews** | Pull requests where your review is requested |
+| **ADO Work Items** | Azure DevOps work items assigned to you |
+| **ADO PR Reviews** | Azure DevOps pull requests where your review is requested |
 
 ### Actions
 
 An action is an operation that runs on a work item. Actions appear in the **Run Action…** menu on Queue and Focus items.
 
-**Built-in actions** (via WorkCenter GitHub):
+**Built-in actions:**
 
 | Action | Description |
 |--------|-------------|
 | **Start Work (Branch + Worktree)** | Creates a git branch and worktree for a GitHub issue, then opens a new VS Code window |
+| **AI Code Review** | Analyzes the current diff using an AI model and posts review comments |
 
 ### Building Your Own
 
@@ -111,20 +114,24 @@ Provider and action extensions use a simple, well-defined API surface. See the [
 
 ## Architecture
 
-WorkCenter is a monorepo with two VS Code extensions and a shared library:
+WorkCenter is a monorepo with four VS Code extensions and a shared library:
 
 ```
 packages/
-├── core/       # WorkCenter — the hub extension (UI, lifecycle, plugin API)
-├── github/     # WorkCenter GitHub — provider for issues and PR reviews
-└── shared/     # Shared library used by both extensions
+├── core/          # WorkCenter — the hub extension (UI, lifecycle, plugin API)
+├── github/        # WorkCenter GitHub — provider for GitHub issues and PR reviews
+├── ado/           # WorkCenter ADO — provider for Azure DevOps work items and PR reviews
+├── ai-reviewer/   # AI code review action extension
+└── shared/        # Shared library (BaseProvider, URL validation, logger, refresh interval)
 ```
 
 - **`packages/core`** owns the five views, work item persistence, the editor panel, and the extension API (`WorkCenterApi`).
 - **`packages/github`** is a provider extension that discovers GitHub issues and PR reviews, and offers a "Start Work" action.
-- **`packages/shared`** contains common utilities and types shared across both extensions.
+- **`packages/ado`** is a provider extension that discovers Azure DevOps work items and PR reviews.
+- **`packages/ai-reviewer`** is an action extension that analyzes diffs using an AI model and posts review comments.
+- **`packages/shared`** contains the `BaseProvider` base class for consistent provider lifecycle management (periodic refresh, concurrency guards, disposal), URL validation helpers, a logger service, and refresh interval validation.
 
-Provider extensions depend on the core extension via `extensionDependencies` and acquire the API at activation time. They do not import code from the core package directly — interfaces are re-declared to keep the extensions decoupled.
+Provider extensions extend `BaseProvider` from `@workcenter/shared` and depend on the core extension via `extensionDependencies`, acquiring the API at activation time. They do not import code from the core package directly — interfaces are re-declared to keep the extensions decoupled.
 
 ### Data Storage
 
