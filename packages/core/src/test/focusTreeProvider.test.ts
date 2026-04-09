@@ -17,8 +17,8 @@ function makeItem(overrides: Partial<WorkItem> = {}): WorkItem {
     id: 'item-1',
     title: 'Test item',
     state: WorkItemState.InProgress,
-    createdAt: Date.now(),
-    updatedAt: Date.now(),
+    createdAt: 1700000000000,
+    updatedAt: 1700000000000,
     ...overrides,
   };
 }
@@ -54,6 +54,64 @@ describe('FocusTreeProvider', () => {
     });
   });
 
+  describe('getTreeItem description', () => {
+    it('should show "in progress" for InProgress items', () => {
+      const item = makeItem({ state: WorkItemState.InProgress });
+      expect(provider.getTreeItem(item).description).toBe('in progress');
+    });
+
+    it('should show "⏸ paused" for Paused items', () => {
+      const item = makeItem({ state: WorkItemState.Paused });
+      expect(provider.getTreeItem(item).description).toBe('⏸ paused');
+    });
+  });
+
+  describe('getTreeItem icon', () => {
+    it('should show play-circle icon for InProgress items', () => {
+      const item = makeItem({ state: WorkItemState.InProgress });
+      expect((provider.getTreeItem(item).iconPath as any).id).toBe('play-circle');
+    });
+
+    it('should show debug-pause icon for Paused items', () => {
+      const item = makeItem({ state: WorkItemState.Paused });
+      expect((provider.getTreeItem(item).iconPath as any).id).toBe('debug-pause');
+    });
+  });
+
+  describe('getTreeItem tooltip', () => {
+    it('should include title in tooltip', () => {
+      const item = makeItem({ title: 'My Task' });
+      const tooltip = (provider.getTreeItem(item).tooltip as any).value;
+      expect(tooltip).toContain('My Task');
+    });
+
+    it('should include notes in tooltip when present', () => {
+      const item = makeItem({ notes: 'Some details' });
+      const tooltip = (provider.getTreeItem(item).tooltip as any).value;
+      expect(tooltip).toContain('Some details');
+    });
+
+    it('should not include notes section when notes are absent', () => {
+      const item = makeItem();
+      const tooltip = (provider.getTreeItem(item).tooltip as any).value;
+      expect(tooltip).not.toContain('**Notes:**');
+    });
+
+    it('should include state in tooltip', () => {
+      const item = makeItem({ state: WorkItemState.Paused });
+      const tooltip = (provider.getTreeItem(item).tooltip as any).value;
+      expect(tooltip).toContain(WorkItemState.Paused);
+    });
+
+    it('should include created timestamp in tooltip', () => {
+      const ts = 1700000000000;
+      const item = makeItem({ createdAt: ts });
+      const tooltip = (provider.getTreeItem(item).tooltip as any).value;
+      expect(tooltip).toContain('**Created:**');
+      expect(tooltip).toContain(new Date(ts).toLocaleString());
+    });
+  });
+
   describe('getChildren', () => {
     it('should return items sorted by title', () => {
       const items = [
@@ -65,6 +123,20 @@ describe('FocusTreeProvider', () => {
       const children = provider.getChildren();
       expect(children.map(c => c.title)).toEqual(['Alpha', 'Zebra']);
     });
+
+    it('should request InProgress and Paused states', () => {
+      workGraph.getItemsByState.mockReturnValue([]);
+      provider.getChildren();
+      expect(workGraph.getItemsByState).toHaveBeenCalledWith(
+        WorkItemState.InProgress,
+        WorkItemState.Paused,
+      );
+    });
+
+    it('should return empty array when no focus items exist', () => {
+      workGraph.getItemsByState.mockReturnValue([]);
+      expect(provider.getChildren()).toEqual([]);
+    });
   });
 
   describe('events', () => {
@@ -73,6 +145,16 @@ describe('FocusTreeProvider', () => {
       provider.onDidChangeTreeData(listener);
       workGraph._fire();
       expect(listener).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  describe('dispose', () => {
+    it('should stop firing events after dispose', () => {
+      const listener = vi.fn();
+      provider.onDidChangeTreeData(listener);
+      provider.dispose();
+      workGraph._fire();
+      expect(listener).not.toHaveBeenCalled();
     });
   });
 });
