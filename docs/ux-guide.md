@@ -1,6 +1,6 @@
 # WorkCenter UX Guide
 
-WorkCenter is a VS Code extension that provides a unified hub for managing work items from multiple sources. This guide covers the five-view model, data flow, work item lifecycle, available actions, and provider configuration.
+WorkCenter is a VS Code extension that provides a unified hub for managing work items from multiple sources. This guide covers the five-view model, data flow, available actions, and provider configuration.
 
 ## The Five Views
 
@@ -135,80 +135,22 @@ To create a work item manually:
 3. Enter a title in the input box (required).
 4. The item appears in the Queue in the **New** state.
 
-Manually created items have no `providerId` or `externalId` — they exist only within WorkCenter.
+Manually created items exist only within WorkCenter — they aren't linked to any provider.
 
 ## Provider Items Lifecycle
 
 Provider items (e.g., GitHub issues) follow this lifecycle:
 
-1. **Discovery** — A provider emits items via `onDidDiscoverItems`. These items appear in both **Sources** (always) and **Inbox** (if unseen).
+1. **Discovery** — A provider discovers items and they appear in both **Sources** (always) and **Inbox** (if unseen).
 
 2. **Inbox state** — Each provider item is tracked with an inbox state:
    - `unseen` — Appears in the Inbox (default for new items).
    - `accepted` — Removed from Inbox; a corresponding work item exists in Queue/Focus.
    - `dismissed` — Removed from Inbox; still visible in Sources with a "dismissed" label.
 
-3. **Acceptance** — When you accept an item (from Inbox or Sources), WorkCenter creates a persisted work item that stores a snapshot of the provider's title, description, and URL at that time, along with the mapping back to the provider item. Provider items shown in **Sources** are read live from the provider; both the inbox state mapping and the accepted work item are persisted.
+3. **Acceptance** — When you accept an item (from Inbox or Sources), WorkCenter creates a work item with a snapshot of the provider's title, description, and URL. Items shown in **Sources** are always read live from the provider.
 
 4. **Duplicate prevention** — Accepting an item that was already accepted shows a notification instead of creating a duplicate.
-
-## Work Item States and Transitions
-
-WorkCenter defines five states for work items:
-
-| State | View | Description |
-|-------|------|-------------|
-| **New** | Queue | Item is in the backlog, waiting to be started |
-| **In Progress** | Focus | Item is actively being worked on |
-| **Paused** | Focus | Work is temporarily on hold |
-| **Done** | History | Work is complete |
-| **Archived** | History | Item is archived |
-
-### State Transition Diagram
-
-```mermaid
-stateDiagram-v2
-    [*] --> New
-    New --> In_Progress : Move to Focus
-    New --> Archived : Archive
-    In_Progress --> Paused : Pause
-    In_Progress --> Done : Complete
-    Paused --> In_Progress : Resume
-
-    state "New" as New
-    state "In Progress" as In_Progress
-    state "Paused" as Paused
-    state "Done" as Done
-    state "Archived" as Archived
-```
-
-**Valid transitions:**
-
-- **New → In Progress** — "Move to Focus" from Queue
-- **New → Archived** — "Archive" from Queue (skip/dismiss)
-- **In Progress → Paused** — "Pause" from Focus
-- **In Progress → Done** — "Complete" from Focus
-- **Paused → In Progress** — "Resume" from Focus
-
-## Available Commands
-
-Commands are available from context menus, inline actions, or the view title bar in their respective views. Commands are registered under the **WorkCenter** category.
-
-| Command | ID | Available In | Icon |
-|---------|----|-------------|------|
-| Create Work Item | `workcenter.createItem` | Queue (title bar) | $(add) |
-| Move to Focus | `workcenter.acceptToFocus` | Queue (inline) | $(arrow-right) |
-| Archive | `workcenter.archiveItem` | Queue (context menu) | $(archive) |
-| Complete | `workcenter.completeItem` | Focus (inline) | $(check) |
-| Pause | `workcenter.pauseItem` | Focus (context, active items only) | $(debug-pause) |
-| Resume | `workcenter.resumeItem` | Focus (context, paused items only) | $(debug-continue) |
-| Move Up | `workcenter.moveUp` | Queue (context menu) | $(arrow-up) |
-| Move Down | `workcenter.moveDown` | Queue (context menu) | $(arrow-down) |
-| Open in Browser | `workcenter.openInBrowser` | Any view (items with URL) | $(link-external) |
-| Run Action… | `workcenter.runAction` | Queue, Focus (context menu) | $(play) |
-| Accept to Queue | `workcenter.acceptFromInbox` | Inbox (inline) | $(arrow-right) |
-| Dismiss | `workcenter.dismissFromInbox` | Inbox (inline + context menu) | $(close) |
-| Accept to Queue | `workcenter.acceptFromSources` | Sources (inline, items only) | $(arrow-right) |
 
 ## Editor Panel
 
