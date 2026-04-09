@@ -168,14 +168,15 @@ export class DiscoveredStateStore {
 
   private async doLoad(): Promise<void> {
     try {
-      const data = await fs.readFile(this.filePath, 'utf-8');
-      if (data.length > MAX_STORE_FILE_SIZE) {
+      const stats = await fs.stat(this.filePath);
+      if (stats.size > MAX_STORE_FILE_SIZE) {
         logger.warn(`Discovered state file exceeds ${MAX_STORE_FILE_SIZE} bytes — backing up and resetting to empty`);
         await this.backupCorruptedFile();
         this.cache.clear();
         this.loaded = true;
         return;
       }
+      const data = await fs.readFile(this.filePath, 'utf-8');
       let parsed: unknown;
       try {
         parsed = JSON.parse(data);
