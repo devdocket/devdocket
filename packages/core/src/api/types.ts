@@ -53,6 +53,13 @@ export interface WorkCenterProvider {
  * Actions are registered via {@link WorkCenterApi.registerAction} and surfaced
  * dynamically — {@link canRun} is called to determine visibility.
  *
+ * ## Trust model
+ *
+ * Actions receive a **read-only snapshot** of the work item (`Readonly<WorkItem>`).
+ * This prevents accidental or malicious mutation of the core data model by
+ * third-party extensions. Actions that need to modify work-item state should use
+ * the WorkCenter API (e.g. VS Code commands) rather than mutating the object.
+ *
  * @example
  * ```ts
  * const action: WorkCenterAction = {
@@ -72,16 +79,16 @@ export interface WorkCenterAction {
   /**
    * Determine whether this action is applicable to the given work item.
    *
-   * @param item - The work item to test.
+   * @param item - A read-only view of the work item to test.
    * @returns `true` if the action should be offered for this item.
    */
-  canRun(item: WorkItem): boolean;
+  canRun(item: Readonly<WorkItem>): boolean;
   /**
    * Execute the action against the given work item.
    *
-   * @param item - The work item to act on.
+   * @param item - A read-only view of the work item to act on.
    */
-  run(item: WorkItem): Promise<void>;
+  run(item: Readonly<WorkItem>): Promise<void>;
 }
 
 /**
