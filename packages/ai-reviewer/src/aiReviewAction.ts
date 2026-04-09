@@ -138,30 +138,45 @@ export class AiReviewAction implements WorkCenterAction {
         return DEFAULT_REVIEW_PROMPT;
       }
       return content;
-    } catch {
+    } catch (err) {
+      const message =
+        err instanceof Error
+          ? `Could not read custom prompt file "${customPath}": ${err.message}`
+          : `Could not read custom prompt file "${customPath}"`;
       vscode.window.showWarningMessage(
-        `AI Code Review: Could not read custom prompt file "${customPath}" — using built-in prompt.`,
+        `AI Code Review: ${message} — using built-in prompt.`,
       );
       return DEFAULT_REVIEW_PROMPT;
     }
   }
 
-  /** Resolve a prompt path to a URI. Absolute paths are used directly; relative paths resolve against the single workspace folder. */
+  /** Resolve a prompt path to a URI, validating it stays within the workspace. */
   resolvePromptUri(promptPath: string): vscode.Uri {
-    if (this.isAbsolutePath(promptPath)) {
-      return vscode.Uri.file(promptPath);
-    }
-
     const folders = vscode.workspace.workspaceFolders;
     if (!folders || folders.length === 0) {
-      throw new Error('No workspace folder open — cannot resolve relative prompt path.');
+      throw new Error('No workspace folder open — cannot resolve custom prompt path.');
     }
-    if (folders.length > 1) {
+
+    let resolvedUri: vscode.Uri;
+
+    if (this.isAbsolutePath(promptPath)) {
+      resolvedUri = vscode.Uri.file(promptPath);
+    } else {
+      if (folders.length > 1) {
+        throw new Error(
+          'Multiple workspace folders — use an absolute path for the custom prompt.',
+        );
+      }
+      resolvedUri = vscode.Uri.joinPath(folders[0].uri, promptPath);
+    }
+
+    if (!vscode.workspace.getWorkspaceFolder(resolvedUri)) {
       throw new Error(
-        'Multiple workspace folders — use an absolute path for the custom prompt.',
+        `Custom prompt path must be within the workspace. "${promptPath}" resolves outside all workspace folders.`,
       );
     }
-    return vscode.Uri.joinPath(folders[0].uri, promptPath);
+
+    return resolvedUri;
   }
 
   private isAbsolutePath(p: string): boolean {

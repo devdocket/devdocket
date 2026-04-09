@@ -347,7 +347,7 @@ describe('AiReviewAction', () => {
 
       vi.mocked(workspace.getConfiguration).mockReturnValue({
         get: vi.fn((key: string, defaultValue?: unknown) => {
-          if (key === 'customPromptPath') return '/absolute/review-prompt.md';
+          if (key === 'customPromptPath') return '/mock/workspace/review-prompt.md';
           return defaultValue;
         }),
       } as never);
@@ -392,7 +392,7 @@ describe('AiReviewAction', () => {
       const customContent = 'Review for accessibility issues only.';
       vi.mocked(workspace.getConfiguration).mockReturnValue({
         get: vi.fn((key: string, defaultValue?: unknown) => {
-          if (key === 'customPromptPath') return '/my/prompt.md';
+          if (key === 'customPromptPath') return '/mock/workspace/prompt.md';
           return defaultValue;
         }),
       } as never);
@@ -407,7 +407,7 @@ describe('AiReviewAction', () => {
     it('falls back to default and warns when file read fails', async () => {
       vi.mocked(workspace.getConfiguration).mockReturnValue({
         get: vi.fn((key: string, defaultValue?: unknown) => {
-          if (key === 'customPromptPath') return '/nonexistent/prompt.md';
+          if (key === 'customPromptPath') return '/mock/workspace/nonexistent/prompt.md';
           return defaultValue;
         }),
       } as never);
@@ -416,14 +416,14 @@ describe('AiReviewAction', () => {
       const prompt = await action.getReviewPrompt();
       expect(prompt).toContain('Severity Classification');
       expect(window.showWarningMessage).toHaveBeenCalledWith(
-        expect.stringContaining('Could not read custom prompt file'),
+        expect.stringContaining('File not found'),
       );
     });
 
     it('falls back to default and warns when file is empty', async () => {
       vi.mocked(workspace.getConfiguration).mockReturnValue({
         get: vi.fn((key: string, defaultValue?: unknown) => {
-          if (key === 'customPromptPath') return '/my/empty.md';
+          if (key === 'customPromptPath') return '/mock/workspace/empty.md';
           return defaultValue;
         }),
       } as never);
@@ -460,15 +460,24 @@ describe('AiReviewAction', () => {
   });
 
   describe('resolvePromptUri', () => {
-    it('returns file URI for absolute Unix path', () => {
-      action.resolvePromptUri('/absolute/path/prompt.md');
-      expect(Uri.file).toHaveBeenCalledWith('/absolute/path/prompt.md');
+    it('returns file URI for absolute path within workspace', () => {
+      action.resolvePromptUri('/mock/workspace/prompt.md');
+      expect(Uri.file).toHaveBeenCalledWith('/mock/workspace/prompt.md');
     });
 
-    it('returns file URI for absolute Windows path', () => {
-      action.resolvePromptUri('C:\\Users\\me\\prompt.md');
-      expect(Uri.file).toHaveBeenCalledWith('C:\\Users\\me\\prompt.md');
-    });
+    (process.platform === 'win32' ? it : it.skip)(
+      'returns file URI for absolute Windows path within workspace',
+      () => {
+        const original = workspace.workspaceFolders;
+        workspace.workspaceFolders = [{ uri: { fsPath: 'C:\\Users\\me' } }] as never;
+        try {
+          action.resolvePromptUri('C:\\Users\\me\\prompt.md');
+          expect(Uri.file).toHaveBeenCalledWith('C:\\Users\\me\\prompt.md');
+        } finally {
+          workspace.workspaceFolders = original;
+        }
+      },
+    );
 
     it('joins relative path with single workspace folder', () => {
       action.resolvePromptUri('relative/prompt.md');
@@ -503,6 +512,39 @@ describe('AiReviewAction', () => {
       } finally {
         workspace.workspaceFolders = original;
       }
+    });
+
+    it('rejects absolute paths outside all workspace folders', () => {
+      expect(() => action.resolvePromptUri('/etc/evil/prompt.md')).toThrow(
+        'resolves outside all workspace folders',
+      );
+    });
+
+    it('rejects relative paths that traverse above workspace with ..', () => {
+      expect(() => action.resolvePromptUri('../../etc/passwd')).toThrow(
+        'resolves outside all workspace folders',
+      );
+    });
+
+    it('accepts valid relative paths within workspace', () => {
+      const uri = action.resolvePromptUri('prompts/review.md');
+      expect(Uri.joinPath).toHaveBeenCalledWith(
+        workspace.workspaceFolders![0].uri,
+        'prompts/review.md',
+      );
+      expect(uri).toBeDefined();
+    });
+
+    it('accepts valid absolute paths within workspace', () => {
+      const uri = action.resolvePromptUri('/mock/workspace/deep/nested/prompt.md');
+      expect(Uri.file).toHaveBeenCalledWith('/mock/workspace/deep/nested/prompt.md');
+      expect(uri).toBeDefined();
+    });
+
+    it('includes the offending path in the error message', () => {
+      expect(() => action.resolvePromptUri('/outside/prompt.md')).toThrow(
+        '"/outside/prompt.md"',
+      );
     });
   });
 });
