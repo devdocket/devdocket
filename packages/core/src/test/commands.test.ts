@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, vi, type Mock } from 'vitest';
 import * as vscode from 'vscode';
 import { WorkItemState, type WorkItem } from '../models/workItem';
-import { registerCommands } from '../commands/commands';
+import { registerCommands, isSafeUrl } from '../commands/commands';
 import type { WorkGraph } from '../services/workGraph';
 import type { ActionRegistry } from '../services/actionRegistry';
 import type { DiscoveredStateStore } from '../storage/discoveredStateStore';
@@ -239,7 +239,7 @@ describe('registerCommands', () => {
       await invoke('workcenter.openInBrowser', { id: item.id });
 
       expect(vscode.env.openExternal).toHaveBeenCalled();
-      expect(vscode.Uri.parse).toHaveBeenCalledWith('https://example.com');
+      expect(vscode.Uri.parse).toHaveBeenCalledWith('https://example.com/');
     });
 
     it('falls back to item.url when workItem has no url', async () => {
@@ -247,7 +247,7 @@ describe('registerCommands', () => {
 
       await invoke('workcenter.openInBrowser', { id: 'wc-1', url: 'https://fallback.com' });
 
-      expect(vscode.Uri.parse).toHaveBeenCalledWith('https://fallback.com');
+      expect(vscode.Uri.parse).toHaveBeenCalledWith('https://fallback.com/');
       expect(vscode.env.openExternal).toHaveBeenCalled();
     });
 
@@ -272,8 +272,44 @@ describe('registerCommands', () => {
 
       await invoke('workcenter.openInBrowser', { id: 'wc-gone', url: 'https://tree-fallback.com' });
 
-      expect(vscode.Uri.parse).toHaveBeenCalledWith('https://tree-fallback.com');
+      expect(vscode.Uri.parse).toHaveBeenCalledWith('https://tree-fallback.com/');
       expect(vscode.env.openExternal).toHaveBeenCalled();
+    });
+
+    it('shows warning and does not call openExternal for unsafe URL', async () => {
+      const item = createWorkItem({ url: 'javascript:alert(1)' });
+      workGraph.getItem.mockReturnValue(item);
+
+      await invoke('workcenter.openInBrowser', { id: item.id });
+
+      expect(vscode.window.showWarningMessage).toHaveBeenCalledWith(
+        'Cannot open non-web URL: javascript:alert(1)',
+      );
+      expect(vscode.env.openExternal).not.toHaveBeenCalled();
+    });
+
+    it('shows warning and does not call openExternal for data: URL', async () => {
+      const item = createWorkItem({ url: 'data:text/html,<h1>hi</h1>' });
+      workGraph.getItem.mockReturnValue(item);
+
+      await invoke('workcenter.openInBrowser', { id: item.id });
+
+      expect(vscode.window.showWarningMessage).toHaveBeenCalledWith(
+        expect.stringContaining('Cannot open non-web URL'),
+      );
+      expect(vscode.env.openExternal).not.toHaveBeenCalled();
+    });
+
+    it('shows warning and does not call openExternal for file: URL', async () => {
+      const item = createWorkItem({ url: 'file:///etc/passwd' });
+      workGraph.getItem.mockReturnValue(item);
+
+      await invoke('workcenter.openInBrowser', { id: item.id });
+
+      expect(vscode.window.showWarningMessage).toHaveBeenCalledWith(
+        expect.stringContaining('Cannot open non-web URL'),
+      );
+      expect(vscode.env.openExternal).not.toHaveBeenCalled();
     });
   });
 
@@ -624,5 +660,41 @@ describe('registerCommands', () => {
         expect.any(Object),
       );
     });
+  });
+});
+
+// ── isSafeUrl (unit tests) ───────────────────────────────────────────
+
+describe('isSafeUrl', () => {
+  it('accepts http:// URLs', () => {
+    const result = isSafeUrl('http://example.com');
+    expect(result).not.toBeNull();
+    expect(result!.href).toBe('http://example.com/');
+  });
+
+  it('accepts https:// URLs', () => {
+    const result = isSafeUrl('https://example.com');
+    expect(result).not.toBeNull();
+    expect(result!.href).toBe('https://example.com/');
+  });
+
+  it('rejects data: URLs', () => {
+    expect(isSafeUrl('data:text/html,<h1>hi</h1>')).toBeNull();
+  });
+
+  it('rejects file: URLs', () => {
+    expect(isSafeUrl('file:///etc/passwd')).toBeNull();
+  });
+
+  it('rejects javascript: URLs', () => {
+    expect(isSafeUrl('javascript:alert(1)')).toBeNull();
+  });
+
+  it('rejects malformed URLs', () => {
+    expect(isSafeUrl('not-a-url')).toBeNull();
+  });
+
+  it('rejects empty strings', () => {
+    expect(isSafeUrl('')).toBeNull();
   });
 });
