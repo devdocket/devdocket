@@ -141,7 +141,7 @@ describe('QueueTreeProvider', () => {
       expect((treeItem.iconPath as any).id).toBe('circle-filled');
     });
 
-    it('builds tooltip with title in bold', async () => {
+    it('builds tooltip with title label and title text', async () => {
       const item = await graph.createItem({ title: 'Important' });
       const treeItem = provider.getTreeItem(item);
       expect(treeItem.tooltip.value).toContain('**Title:** ');
