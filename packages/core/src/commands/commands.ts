@@ -125,7 +125,9 @@ async function handleOpenInBrowser(workGraph: WorkGraph, item?: { id?: string; u
     return;
   }
   if (!isSafeUrl(url)) {
-    vscode.window.showWarningMessage(`Cannot open non-web URL: ${url}`);
+    const display = url.length > 100 ? url.slice(0, 100) + '…' : url;
+    const sanitized = display.replace(/[\n\r]/g, ' ');
+    vscode.window.showWarningMessage(`Cannot open non-web URL: ${sanitized}`);
     return;
   }
   const opened = await vscode.env.openExternal(vscode.Uri.parse(url));
