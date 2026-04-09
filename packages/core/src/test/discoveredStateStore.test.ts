@@ -4,6 +4,9 @@ import * as path from 'path';
 import * as os from 'os';
 import { DiscoveredStateStore } from '../storage/discoveredStateStore';
 
+const mockLimits = vi.hoisted(() => ({ MAX_STORE_FILE_SIZE: 10 * 1024 * 1024 }));
+vi.mock('../storage/limits', () => mockLimits);
+
 describe('DiscoveredStateStore', () => {
   let tmpDir: string;
   let store: DiscoveredStateStore;
@@ -835,6 +838,43 @@ describe('DiscoveredStateStore', () => {
       ]);
 
       expect(listener).toHaveBeenCalledTimes(3);
+    });
+  });
+
+  describe('file size limits', () => {
+    afterEach(() => {
+      mockLimits.MAX_STORE_FILE_SIZE = 10 * 1024 * 1024;
+    });
+
+    it('should back up and reset when file exceeds size limit', async () => {
+      mockLimits.MAX_STORE_FILE_SIZE = 50;
+      const filePath = path.join(tmpDir, 'discovered-state.json');
+      const oversizedContent = JSON.stringify([
+        { providerId: 'gh', externalId: 'issue-with-a-very-long-id-that-pushes-over', inboxState: 'unseen' },
+      ]);
+      await fs.mkdir(tmpDir, { recursive: true });
+      await fs.writeFile(filePath, oversizedContent, 'utf-8');
+
+      const records = await store.loadAll();
+      expect(records).toEqual([]);
+
+      const files = await fs.readdir(tmpDir);
+      const backupFiles = files.filter(f => f.startsWith('discovered-state.json.corrupt.'));
+      expect(backupFiles).toHaveLength(1);
+    });
+
+    it('should parse normally when file is just under size limit', async () => {
+      const filePath = path.join(tmpDir, 'discovered-state.json');
+      const content = JSON.stringify([
+        { providerId: 'gh', externalId: '1', inboxState: 'unseen' },
+      ]);
+      mockLimits.MAX_STORE_FILE_SIZE = content.length + 1;
+      await fs.mkdir(tmpDir, { recursive: true });
+      await fs.writeFile(filePath, content, 'utf-8');
+
+      const records = await store.loadAll();
+      expect(records).toHaveLength(1);
+      expect(records[0].providerId).toBe('gh');
     });
   });
 });
