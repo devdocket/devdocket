@@ -539,8 +539,8 @@ describe('InboxTreeProvider', () => {
       expect(treeItem.tooltip).toBeInstanceOf(MarkdownString);
       const tooltip = treeItem.tooltip as MarkdownString;
       expect(tooltip.value).toContain('Bug fix');
-      // Should not contain extra content beyond the title
-      const afterTitle = tooltip.value.replace(/\*\*Bug fix\*\*/, '').trim();
+      // Should not contain extra content beyond the title label
+      const afterTitle = tooltip.value.replace(/\*\*Title:\*\* /, '').replace('Bug fix', '').trim();
       expect(afterTitle).toBe('');
     });
   });

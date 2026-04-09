@@ -144,7 +144,8 @@ describe('QueueTreeProvider', () => {
     it('builds tooltip with title in bold', async () => {
       const item = await graph.createItem({ title: 'Important' });
       const treeItem = provider.getTreeItem(item);
-      expect(treeItem.tooltip.value).toContain('**Important**');
+      expect(treeItem.tooltip.value).toContain('**Title:** ');
+      expect(treeItem.tooltip.value).toContain('Important');
     });
 
     it('includes notes in tooltip when present', async () => {
