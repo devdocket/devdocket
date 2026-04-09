@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { DataTransfer, DataTransferItem, TreeItemCollapsibleState } from 'vscode';
+import { DataTransfer, DataTransferItem, MarkdownString, TreeItemCollapsibleState } from 'vscode';
 import { WorkGraph } from '../services/workGraph';
 import { WorkItemState } from '../models/workItem';
 import { ITaskStore } from '../storage/taskStore';
@@ -141,10 +141,11 @@ describe('QueueTreeProvider', () => {
       expect((treeItem.iconPath as any).id).toBe('circle-filled');
     });
 
-    it('builds tooltip with title in bold', async () => {
+    it('builds tooltip with title label and title text', async () => {
       const item = await graph.createItem({ title: 'Important' });
       const treeItem = provider.getTreeItem(item);
-      expect(treeItem.tooltip.value).toContain('**Important**');
+      expect(treeItem.tooltip.value).toContain('**Title:** ');
+      expect(treeItem.tooltip.value).toContain('Important');
     });
 
     it('includes notes in tooltip when present', async () => {
@@ -158,6 +159,45 @@ describe('QueueTreeProvider', () => {
       const item = await graph.createItem({ title: 'Dated' });
       const treeItem = provider.getTreeItem(item);
       expect(treeItem.tooltip.value).toContain('Created:');
+    });
+
+    it('uses appendText for title to prevent markdown injection', async () => {
+      const maliciousTitle = '[Click me](command:workbench.action.terminal.sendSequence)';
+      const item = await graph.createItem({ title: maliciousTitle });
+
+      const appendTextSpy = vi.spyOn(MarkdownString.prototype, 'appendText');
+      const appendMarkdownSpy = vi.spyOn(MarkdownString.prototype, 'appendMarkdown');
+
+      provider.getTreeItem(item);
+
+      const textCalls = appendTextSpy.mock.calls.map(c => c[0]);
+      const mdCalls = appendMarkdownSpy.mock.calls.map(c => c[0]);
+
+      expect(textCalls).toContainEqual(maliciousTitle);
+      expect(mdCalls).not.toContainEqual(maliciousTitle);
+
+      appendTextSpy.mockRestore();
+      appendMarkdownSpy.mockRestore();
+    });
+
+    it('uses appendText for notes to prevent markdown injection', async () => {
+      const maliciousNotes = '![img](https://evil.com/track.png)';
+      const item = await graph.createItem({ title: 'Safe title' });
+      item.notes = maliciousNotes;
+
+      const appendTextSpy = vi.spyOn(MarkdownString.prototype, 'appendText');
+      const appendMarkdownSpy = vi.spyOn(MarkdownString.prototype, 'appendMarkdown');
+
+      provider.getTreeItem(item);
+
+      const textCalls = appendTextSpy.mock.calls.map(c => c[0]);
+      const mdCalls = appendMarkdownSpy.mock.calls.map(c => c[0]);
+
+      expect(textCalls).toContainEqual(expect.stringContaining(maliciousNotes));
+      expect(mdCalls).not.toContainEqual(expect.stringContaining(maliciousNotes));
+
+      appendTextSpy.mockRestore();
+      appendMarkdownSpy.mockRestore();
     });
   });
 
