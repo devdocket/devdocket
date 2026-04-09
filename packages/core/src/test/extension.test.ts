@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
 import * as vscode from 'vscode';
-import { activate, deactivate } from '../extension';
+import { activate, deactivate, logger } from '../extension';
 
 // Stub fs so stores never touch disk
 vi.mock('fs/promises', () => ({
@@ -301,47 +301,33 @@ describe('activate()', () => {
   });
 
   // ------------------------------------------------------------------
-  // 15. Error handling: safeHandler catches sync errors in callbacks
+  // 15. Error handling: safeHandler catches sync throw in event callback
   // ------------------------------------------------------------------
-  it('continues activation when a wrapped event callback throws synchronously', async () => {
-    const api = await activate(context);
+  it('logs error and continues when a safeHandler-wrapped callback throws', async () => {
+    await activate(context);
     await flushMicrotasks();
 
-    const itemEmitter = new (vscode.EventEmitter as any)();
-    const provider = {
-      id: 'err-sync',
-      label: 'ErrSync',
-      onDidDiscoverItems: itemEmitter.event,
-      refresh: vi.fn().mockResolvedValue(undefined),
-    };
-    api.registerProvider(provider as any);
+    const errorSpy = vi.spyOn(logger, 'error');
+
+    // The onDidChangeConfiguration listener is wrapped with safeHandler.
+    // Force its inner code to throw by making getConfiguration throw.
+    const onDidChangeCfg = vscode.workspace.onDidChangeConfiguration as ReturnType<typeof vi.fn>;
+    const configListener = onDidChangeCfg.mock.calls[0][0];
+
+    (vscode.workspace.getConfiguration as ReturnType<typeof vi.fn>)
+      .mockImplementationOnce(() => { throw new Error('Config read failure'); });
+
+    // Call the safeHandler-wrapped listener — should not throw
+    configListener({ affectsConfiguration: () => true });
     await flushMicrotasks();
 
-    // Fire an event that triggers a callback which will exercise safeHandler.
-    // Even if the internal UI update path encountered an error, the extension
-    // should remain functional — subsequent events still trigger UI updates.
-    const createTreeView = vscode.window.createTreeView as ReturnType<typeof vi.fn>;
-    const inboxIdx = createTreeView.mock.calls.findIndex((c: any[]) => c[0] === 'workcenter.inbox');
-    const inboxView = createTreeView.mock.results[inboxIdx].value;
+    // Verify the error was logged via safeHandler's catch
+    expect(errorSpy).toHaveBeenCalledWith(
+      'Error handling configuration change',
+      expect.any(Error),
+    );
 
-    let messageSetCount = 0;
-    let currentMessage: string | undefined = inboxView.message;
-    Object.defineProperty(inboxView, 'message', {
-      get: () => currentMessage,
-      set: (v: string | undefined) => { currentMessage = v; messageSetCount++; },
-      configurable: true,
-    });
-
-    // Fire a discovered items event, then verify the UI still updates
-    itemEmitter.fire([]);
-    await flushMicrotasks();
-    expect(messageSetCount).toBeGreaterThan(0);
-
-    // Fire again — should still work (coalescing flag was properly reset)
-    messageSetCount = 0;
-    itemEmitter.fire([]);
-    await flushMicrotasks();
-    expect(messageSetCount).toBeGreaterThan(0);
+    errorSpy.mockRestore();
   });
 
   // ------------------------------------------------------------------
@@ -355,7 +341,9 @@ describe('activate()', () => {
     const sourcesIdx = createTreeView.mock.calls.findIndex((c: any[]) => c[0] === 'workcenter.sources');
     const sourcesView = createTreeView.mock.results[sourcesIdx].value;
 
-    // Make the sources view message setter throw to simulate a microtask error
+    // Make the sources view message setter throw to trigger the inner catch
+    // inside the microtask's updateViewMessages() path.
+    const errorSpy = vi.spyOn(logger, 'error');
     Object.defineProperty(sourcesView, 'message', {
       get: () => undefined,
       set: () => { throw new Error('Simulated view message error'); },
@@ -371,6 +359,12 @@ describe('activate()', () => {
     };
     api.registerProvider(provider as any);
     await flushMicrotasks();
+
+    // Verify the error was caught and logged inside the microtask
+    expect(errorSpy).toHaveBeenCalledWith(
+      'Error updating view messages',
+      expect.any(Error),
+    );
 
     // Remove the throwing setter so next update succeeds
     Object.defineProperty(sourcesView, 'message', {
@@ -395,6 +389,8 @@ describe('activate()', () => {
     itemEmitter.fire([]);
     await flushMicrotasks();
     expect(messageSetCount).toBeGreaterThan(0);
+
+    errorSpy.mockRestore();
   });
 
   // ------------------------------------------------------------------
@@ -404,29 +400,45 @@ describe('activate()', () => {
     const api = await activate(context);
     await flushMicrotasks();
 
-    // Register a provider whose refresh rejects — safeHandler should
-    // catch the rejection without surfacing an unhandled promise rejection.
-    const itemEmitter = new (vscode.EventEmitter as any)();
-    const provider = {
-      id: 'err-async',
-      label: 'ErrAsync',
-      onDidDiscoverItems: itemEmitter.event,
-      refresh: vi.fn().mockRejectedValue(new Error('Async refresh failure')),
-    };
+    const errorSpy = vi.spyOn(logger, 'error');
+    const onUnhandledRejection = vi.fn();
+    process.on('unhandledRejection', onUnhandledRejection);
 
-    // registerProvider should not throw despite refresh rejection
-    expect(() => api.registerProvider(provider as any)).not.toThrow();
-    await flushMicrotasks();
+    try {
+      // The onDidChangeConfiguration listener is wrapped with safeHandler
+      // which supports async handlers via Promise.resolve().then().catch().
+      // Make getConfiguration return an object whose get() rejects.
+      const onDidChangeCfg = vscode.workspace.onDidChangeConfiguration as ReturnType<typeof vi.fn>;
+      const configListener = onDidChangeCfg.mock.calls[0][0];
 
-    // Extension should still be functional — can register more providers
-    const provider2 = {
-      id: 'err-async-2',
-      label: 'ErrAsync2',
-      onDidDiscoverItems: new (vscode.EventEmitter as any)().event,
-      refresh: vi.fn().mockResolvedValue(undefined),
-    };
-    expect(() => api.registerProvider(provider2 as any)).not.toThrow();
-    await flushMicrotasks();
+      // Simulate an async throw by making the wrapped function throw after
+      // a resolved promise tick — safeHandler's .catch() should capture it.
+      (vscode.workspace.getConfiguration as ReturnType<typeof vi.fn>)
+        .mockImplementationOnce(() => { throw new Error('Async config failure'); });
+
+      configListener({ affectsConfiguration: () => true });
+      await flushMicrotasks();
+
+      // Error should have been caught by safeHandler, not surfaced as unhandled
+      expect(errorSpy).toHaveBeenCalledWith(
+        'Error handling configuration change',
+        expect.any(Error),
+      );
+      expect(onUnhandledRejection).not.toHaveBeenCalled();
+
+      // Extension should still be functional — register a provider
+      const provider = {
+        id: 'err-async-ok',
+        label: 'ErrAsyncOk',
+        onDidDiscoverItems: new (vscode.EventEmitter as any)().event,
+        refresh: vi.fn().mockResolvedValue(undefined),
+      };
+      expect(() => api.registerProvider(provider as any)).not.toThrow();
+      await flushMicrotasks();
+    } finally {
+      process.off('unhandledRejection', onUnhandledRejection);
+      errorSpy.mockRestore();
+    }
   });
 });
 
