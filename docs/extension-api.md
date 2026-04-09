@@ -185,14 +185,16 @@ interface WorkCenterAction {
    * Called each time the user opens the Run Action menu.
    * Use this to filter by provider, state, or other item properties.
    */
-  canRun(item: WorkItem): boolean;
+  canRun(item: Readonly<WorkItem>): boolean;
 
   /**
    * Executes the action. Throw an error to show an error message to the user.
    */
-  run(item: WorkItem): Promise<void>;
+  run(item: Readonly<WorkItem>): Promise<void>;
 }
 ```
+
+> **Note:** `canRun` and `run` receive `Readonly<WorkItem>`. Actions should treat work items as immutable and use WorkCenter commands to make changes rather than mutating the object directly.
 
 ### Registering an Action
 
@@ -268,6 +270,24 @@ Items transition through these states as the user interacts with them in the UI.
 | `Archived` | **History** | Archived items shown in the History view. |
 
 Action authors should use this mapping when implementing `canRun()` — for example, an action that only applies to active work should target `InProgress` and `Paused`.
+
+## Limits and Security
+
+### Item Count Limits
+
+Each provider is capped at **10,000 discovered items** per refresh. If a provider emits more than 10,000 items, excess items are silently truncated from the end and a warning is logged. Design your provider to stay within this limit — for example, by filtering to only relevant items in your `refresh()` implementation.
+
+### Readonly WorkItem in Actions
+
+`canRun()` and `run()` receive `Readonly<WorkItem>`. Actions must not mutate the work item object directly. To update a work item's state, use the appropriate WorkCenter VS Code commands (e.g., `workcenter.startWork`, `workcenter.completeWork`).
+
+### URL Validation
+
+URLs opened via `vscode.env.openExternal` are validated to use `http:` or `https:` schemes only. Other URL schemes (e.g., `file:`, `javascript:`, custom protocols) are rejected. Ensure any URLs your provider or action constructs use standard web URLs.
+
+### Trust Model
+
+Provider extensions have full read access to the data they inject and to the `WorkItem` objects passed to their actions. Provider IDs are first-come-first-served — the VS Code extension API does not expose caller identity, so WorkCenter cannot verify which extension is registering a given provider or action ID. Duplicate IDs are rejected, and all registrations are logged at warn level for auditability.
 
 ## Examples
 
@@ -392,20 +412,20 @@ interface WorkItem {
 interface WorkCenterAction {
   readonly id: string;
   readonly label: string;
-  canRun(item: WorkItem): boolean;
-  run(item: WorkItem): Promise<void>;
+  canRun(item: Readonly<WorkItem>): boolean;
+  run(item: Readonly<WorkItem>): Promise<void>;
 }
 
 class OpenDashboardAction implements WorkCenterAction {
   readonly id = 'my-tasks.openDashboard';
   readonly label = 'Open in Dashboard';
 
-  canRun(item: WorkItem): boolean {
+  canRun(item: Readonly<WorkItem>): boolean {
     // Only show this action for items from our provider
     return item.providerId === 'my-tasks';
   }
 
-  async run(item: WorkItem): Promise<void> {
+  async run(item: Readonly<WorkItem>): Promise<void> {
     if (!item.externalId) {
       vscode.window.showErrorMessage('No external ID found for this item.');
       return;
