@@ -155,7 +155,8 @@ export class DiscoveredStateStore {
     if (this.loaded) {
       return;
     }
-    if (!this.loadPromise) {
+    // Guard against concurrent loads: reuse the same in-flight promise
+    if (this.loadPromise === null) {
       this.loadPromise = this.doLoad().catch((err) => {
         this.loadPromise = null;
         throw err;
@@ -203,6 +204,10 @@ export class DiscoveredStateStore {
         return;
       }
       throw err;
+    } finally {
+      // Clear the in-flight promise so it doesn't retain a reference
+      // and so reload can be supported in the future
+      this.loadPromise = null;
     }
   }
 
