@@ -20,6 +20,17 @@ import { performance } from 'perf_hooks';
 export type { WorkCenterApi, WorkCenterProvider, WorkCenterAction, DiscoveredItem, Disposable } from './api/types';
 export { logger } from './services/logger';
 
+/** Wrap an event callback so unhandled errors (sync or async) are logged instead of crashing. */
+function safeHandler<T extends unknown[]>(label: string, fn: (...args: T) => void | Promise<void>): (...args: T) => void {
+  return (...args: T) => {
+    void Promise.resolve()
+      .then(() => fn(...args))
+      .catch((err: unknown) => {
+        logger.error(label, err);
+      });
+  };
+}
+
 let providerRegistry: ProviderRegistry | undefined;
 let actionRegistry: ActionRegistry | undefined;
 let workGraph: WorkGraph | undefined;
@@ -36,7 +47,7 @@ function initializeLogging(context: vscode.ExtensionContext): void {
   }
 
   context.subscriptions.push(
-    vscode.workspace.onDidChangeConfiguration(e => {
+    vscode.workspace.onDidChangeConfiguration(safeHandler('Error handling configuration change', (e) => {
       if (e.affectsConfiguration('workcenter.logLevel')) {
         const newLevel = vscode.workspace.getConfiguration('workcenter').get<string>('logLevel', 'info');
         setLogLevel(resolveLogLevel(newLevel));
@@ -44,7 +55,7 @@ function initializeLogging(context: vscode.ExtensionContext): void {
           logger.warn(`Invalid log level '${newLevel}', falling back to 'info'. Valid values: debug, info, warn, error`);
         }
       }
-    }),
+    })),
   );
 }
 
@@ -167,7 +178,7 @@ function wireEvents(
     historyTreeView.message = historyProvider.getChildren().length > 0 ? undefined : 'No history items';
   };
 
-  const workGraphSub = workGraph.onDidChange(updateWorkViewMessages);
+  const workGraphSub = workGraph.onDidChange(safeHandler('Error handling work graph change', updateWorkViewMessages));
   let initialLoadComplete = false;
   let wasLoading = false;
 
@@ -184,9 +195,20 @@ function wireEvents(
     if (uiUpdateScheduled) { return; }
     uiUpdateScheduled = true;
     queueMicrotask(() => {
-      uiUpdateScheduled = false;
-      updateViewMessages();
-      updateInboxBadge();
+      try {
+        try {
+          updateViewMessages();
+        } catch (err: unknown) {
+          logger.error('Error updating view messages', err);
+        }
+        try {
+          updateInboxBadge();
+        } catch (err: unknown) {
+          logger.error('Error updating inbox badge', err);
+        }
+      } finally {
+        uiUpdateScheduled = false;
+      }
     });
   };
 
@@ -195,8 +217,8 @@ function wireEvents(
   updateViewMessages();
   updateInboxBadge();
 
-  const providerRegSub = providerRegistry.onDidRegisterProvider(scheduleUiUpdate);
-  const discoveredSub = providerRegistry.onDidChangeDiscoveredItems(() => {
+  const providerRegSub = providerRegistry.onDidRegisterProvider(safeHandler('Error handling provider registration', scheduleUiUpdate));
+  const discoveredSub = providerRegistry.onDidChangeDiscoveredItems(safeHandler('Error handling discovered items change', () => {
     scheduleUiUpdate();
 
     // Mark initial load complete when loading transitions from true to false
@@ -206,8 +228,8 @@ function wireEvents(
       }
       wasLoading = wasLoading || providerRegistry.loading;
     }
-  });
-  const newItemsSub = providerRegistry.onDidAddNewUnseenItems((newCount) => {
+  }));
+  const newItemsSub = providerRegistry.onDidAddNewUnseenItems(safeHandler('Error handling new unseen items notification', (newCount) => {
     if (!initialLoadComplete) { return; }
     const config = vscode.workspace.getConfiguration('workcenter');
     const showNotifications = config.get<boolean>('showInboxNotifications', true);
@@ -227,9 +249,9 @@ function wireEvents(
         () => { /* notification is best-effort */ }
       );
     }
-  });
-  const stateStoreSub = stateStore.onDidChange(scheduleUiUpdate);
-  const markSeenSub = inboxProvider.onDidMarkSeen(scheduleUiUpdate);
+  }));
+  const stateStoreSub = stateStore.onDidChange(safeHandler('Error handling state store change', scheduleUiUpdate));
+  const markSeenSub = inboxProvider.onDidMarkSeen(safeHandler('Error handling mark seen', scheduleUiUpdate));
 
   return [discoveredSub, newItemsSub, providerRegSub, stateStoreSub, markSeenSub, workGraphSub];
 }
