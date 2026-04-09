@@ -1,4 +1,5 @@
 import { vi } from 'vitest';
+import * as nodePath from 'path';
 
 class MockEventEmitter {
   private listeners: Function[] = [];
@@ -79,7 +80,7 @@ const Uri = {
   parse: vi.fn((s: string) => ({ toString: () => s })),
   file: vi.fn((path: string) => ({ fsPath: path, toString: () => `file://${path}` })),
   joinPath: vi.fn((base: { fsPath: string }, ...segments: string[]) => {
-    const joined = [base.fsPath, ...segments].join('/');
+    const joined = nodePath.posix.resolve(base.fsPath, ...segments);
     return { fsPath: joined, toString: () => `file://${joined}` };
   }),
 };
@@ -93,6 +94,16 @@ const workspace = {
     get: vi.fn((key: string, defaultValue?: unknown) => defaultValue),
   }),
   workspaceFolders: [{ uri: { fsPath: '/mock/workspace' } }],
+  getWorkspaceFolder: vi.fn((uri: { fsPath: string }) => {
+    const folders = workspace.workspaceFolders;
+    if (!folders) return undefined;
+    for (const folder of folders) {
+      if (uri.fsPath.startsWith(folder.uri.fsPath)) {
+        return folder;
+      }
+    }
+    return undefined;
+  }),
   openTextDocument: vi.fn().mockResolvedValue({ uri: 'mock-doc-uri' }),
   fs: {
     readFile: vi.fn().mockResolvedValue(new Uint8Array()),

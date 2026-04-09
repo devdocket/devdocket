@@ -1,4 +1,3 @@
-import * as path from 'path';
 import * as vscode from 'vscode';
 import type { WorkItem, WorkCenterAction } from './types';
 import { DEFAULT_REVIEW_PROMPT } from './defaultPrompt';
@@ -154,34 +153,13 @@ export class AiReviewAction implements WorkCenterAction {
       resolvedUri = vscode.Uri.joinPath(folders[0].uri, promptPath);
     }
 
-    if (!this.isWithinWorkspace(resolvedUri.fsPath, folders)) {
+    if (!vscode.workspace.getWorkspaceFolder(resolvedUri)) {
       throw new Error(
         `Custom prompt path must be within the workspace. "${promptPath}" resolves outside all workspace folders.`,
       );
     }
 
     return resolvedUri;
-  }
-
-  private isWithinWorkspace(
-    filePath: string,
-    folders: readonly vscode.WorkspaceFolder[],
-  ): boolean {
-    const normalizedFile = path.normalize(filePath);
-    return folders.some((folder) => {
-      const normalizedFolder = path.normalize(folder.uri.fsPath);
-      const prefix = normalizedFolder.endsWith(path.sep) ? normalizedFolder : normalizedFolder + path.sep;
-      if (process.platform === 'win32') {
-        return (
-          normalizedFile.toLowerCase() === normalizedFolder.toLowerCase() ||
-          normalizedFile.toLowerCase().startsWith(prefix.toLowerCase())
-        );
-      }
-      return (
-        normalizedFile === normalizedFolder ||
-        normalizedFile.startsWith(prefix)
-      );
-    });
   }
 
   private isAbsolutePath(p: string): boolean {
