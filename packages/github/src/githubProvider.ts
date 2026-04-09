@@ -1,6 +1,7 @@
 import * as vscode from 'vscode';
 import { isValidGitHubRepo } from '@workcenter/shared';
 import { logger } from './logger';
+import { parseRepoFromUrls } from './parseRepo';
 import { BaseGitHubProvider, DiscoveredItem, GitHubIssue } from './baseGithubProvider';
 
 /**
@@ -52,6 +53,10 @@ export class GitHubIssueProvider extends BaseGitHubProvider {
   private getConfiguredRepos(): string[] {
     const config = vscode.workspace.getConfiguration('workcenterGithub');
     return config.get<string[]>('repos', []);
+  }
+
+  protected override parseRepo(issue: GitHubIssue): string {
+    return parseRepoFromUrls(issue.html_url, issue.repository_url);
   }
 
   private async fetchAssignedIssues(

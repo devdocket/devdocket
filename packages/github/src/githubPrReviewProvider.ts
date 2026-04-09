@@ -1,5 +1,6 @@
 import * as vscode from 'vscode';
 import { logger } from './logger';
+import { parseRepoFromUrls } from './parseRepo';
 import { BaseGitHubProvider, DiscoveredItem, GitHubIssue } from './baseGithubProvider';
 
 interface GitHubSearchResponse {
@@ -156,19 +157,7 @@ export class GitHubPrReviewProvider extends BaseGitHubProvider {
     return { prs: data.items, failed: false };
   }
 
-  // Override: use repository_url as-is to maintain unique externalId
   protected override parseRepo(issue: GitHubIssue): string {
-    const match = issue.html_url.match(/github\.com\/([^/]+\/[^/]+)/);
-    if (match) {
-      return match[1];
-    }
-
-    const apiMatch = issue.repository_url.match(/repos\/([^/]+\/[^/]+)/);
-    if (apiMatch) {
-      return apiMatch[1];
-    }
-
-    logger.warn(`Could not parse repo from PR URL: ${issue.html_url}`);
-    return issue.repository_url;
+    return parseRepoFromUrls(issue.html_url, issue.repository_url);
   }
 }
