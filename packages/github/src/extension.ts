@@ -5,6 +5,11 @@ import { StartWorkAction } from './startWorkAction';
 import { validateRefreshInterval } from '@workcenter/shared';
 import { initLogger, setLogLevel, logger, resolveLogLevel } from './logger';
 
+let issueProvider: GitHubIssueProvider | undefined;
+let prReviewProvider: GitHubPrReviewProvider | undefined;
+let providerRegistration: vscode.Disposable | undefined;
+let prReviewRegistration: vscode.Disposable | undefined;
+
 export async function activate(_context: vscode.ExtensionContext): Promise<void> {
   const outputChannel = vscode.window.createOutputChannel('WorkCenter GitHub');
   _context.subscriptions.push(outputChannel);
@@ -54,35 +59,36 @@ export async function activate(_context: vscode.ExtensionContext): Promise<void>
   }
 
   // Register the GitHub issue provider
-  const provider = new GitHubIssueProvider();
+  issueProvider = new GitHubIssueProvider();
   const config = vscode.workspace.getConfiguration('workcenterGithub');
   const intervalSeconds = validateRefreshInterval(
     config.get<number>('refreshIntervalSeconds', 300), logger,
   );
-  provider.startPeriodicRefresh(intervalSeconds);
+  issueProvider.startPeriodicRefresh(intervalSeconds);
 
-  const providerDisposable = api.registerProvider(provider);
+  providerRegistration = api.registerProvider(issueProvider);
 
   // Register the GitHub PR review provider
-  const prReviewProvider = new GitHubPrReviewProvider();
+  prReviewProvider = new GitHubPrReviewProvider();
   prReviewProvider.startPeriodicRefresh(intervalSeconds);
-  const prReviewDisposable = api.registerProvider(prReviewProvider);
+  prReviewRegistration = api.registerProvider(prReviewProvider);
 
   // Register the Start Work action
   const startWorkAction = new StartWorkAction();
   const actionDisposable = api.registerAction(startWorkAction);
 
   _context.subscriptions.push(
-    providerDisposable,
-    prReviewDisposable,
     actionDisposable,
-    { dispose: () => provider.dispose() },
-    { dispose: () => prReviewProvider.dispose() },
   );
 
   logger.info('WorkCenter GitHub activated, registered 2 providers');
 }
 
 export function deactivate(): void {
-  // Resources disposed via subscriptions
+  logger.info('WorkCenter GitHub deactivating...');
+  providerRegistration?.dispose();
+  prReviewRegistration?.dispose();
+  issueProvider?.dispose();
+  prReviewProvider?.dispose();
+  logger.info('WorkCenter GitHub deactivated');
 }

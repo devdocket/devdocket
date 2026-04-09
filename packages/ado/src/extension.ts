@@ -4,6 +4,12 @@ import { AdoPrReviewProvider } from './adoPrReviewProvider';
 import { validateRefreshInterval } from '@workcenter/shared';
 import { initLogger, setLogLevel, logger, resolveLogLevel } from './logger';
 
+let workItemProvider: AdoWorkItemProvider | undefined;
+let prProvider: AdoPrReviewProvider | undefined;
+let workItemRegistration: vscode.Disposable | undefined;
+let prRegistration: vscode.Disposable | undefined;
+let orgWarningShown = false;
+
 export async function activate(_context: vscode.ExtensionContext): Promise<void> {
   const outputChannel = vscode.window.createOutputChannel('WorkCenter ADO');
   _context.subscriptions.push(outputChannel);
@@ -51,13 +57,7 @@ export async function activate(_context: vscode.ExtensionContext): Promise<void>
     return;
   }
 
-  let workItemProvider: AdoWorkItemProvider | undefined;
-  let prProvider: AdoPrReviewProvider | undefined;
-  let workItemRegistration: vscode.Disposable | undefined;
-  let prRegistration: vscode.Disposable | undefined;
-  let orgWarningShown = false;
-
-  const configureProviders = () => {
+  const configureProviders= () => {
     // Dispose existing providers and registrations before reconfiguring
     workItemRegistration?.dispose();
     workItemRegistration = undefined;
@@ -113,19 +113,16 @@ export async function activate(_context: vscode.ExtensionContext): Promise<void>
         configureProviders();
       }
     }),
-    {
-      dispose: () => {
-        workItemRegistration?.dispose();
-        prRegistration?.dispose();
-        workItemProvider?.dispose();
-        prProvider?.dispose();
-      },
-    },
   );
 
   logger.info('WorkCenter ADO activated');
 }
 
 export function deactivate(): void {
-  // Resources disposed via subscriptions
+  logger.info('WorkCenter ADO deactivating...');
+  workItemRegistration?.dispose();
+  prRegistration?.dispose();
+  workItemProvider?.dispose();
+  prProvider?.dispose();
+  logger.info('WorkCenter ADO deactivated');
 }
