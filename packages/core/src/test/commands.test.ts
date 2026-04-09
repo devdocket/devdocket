@@ -475,7 +475,7 @@ describe('registerCommands', () => {
       );
     });
 
-    it('shows info message when item already accepted', async () => {
+    it('shows info message and sets state when item already accepted', async () => {
       const existing = createWorkItem({ title: 'Already There' });
       workGraph.findItemByProvenance.mockReturnValue(existing);
 
@@ -485,6 +485,34 @@ describe('registerCommands', () => {
       expect(vscode.window.showInformationMessage).toHaveBeenCalledWith(
         'WorkCenter: Item already accepted as "Already There"',
       );
+      expect(stateStore.setState).toHaveBeenCalledWith('github', 'ext-1', 'accepted');
+    });
+
+    it('shows error when setState fails for existing accepted item', async () => {
+      const existing = createWorkItem({ title: 'Already There' });
+      workGraph.findItemByProvenance.mockReturnValue(existing);
+      stateStore.setState.mockRejectedValue(new Error('write fail'));
+
+      await invoke('workcenter.acceptFromInbox', makeInboxItem());
+
+      expect(vscode.window.showInformationMessage).toHaveBeenCalledWith(
+        'WorkCenter: Item already accepted as "Already There"',
+      );
+      expect(vscode.window.showErrorMessage).toHaveBeenCalledWith(
+        'WorkCenter: Failed to update state for existing accepted item — write fail',
+      );
+    });
+
+    it('shows error when createItem fails', async () => {
+      workGraph.findItemByProvenance.mockReturnValue(undefined);
+      workGraph.createItem.mockRejectedValue(new Error('store error'));
+
+      await invoke('workcenter.acceptFromInbox', makeInboxItem());
+
+      expect(vscode.window.showErrorMessage).toHaveBeenCalledWith(
+        'WorkCenter: Failed to accept inbox item — store error',
+      );
+      expect(stateStore.setState).not.toHaveBeenCalled();
     });
 
     it('shows error when setState fails', async () => {
