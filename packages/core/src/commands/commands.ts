@@ -15,7 +15,7 @@ function formatItemTitle(item: { group?: string; title: string }): string {
 }
 
 /** Returns true if the URL uses an allowed web scheme (http or https). */
-function isSafeUrl(url: string): boolean {
+export function isSafeUrl(url: string): boolean {
   try {
     const parsed = new URL(url);
     return parsed.protocol === 'http:' || parsed.protocol === 'https:';
