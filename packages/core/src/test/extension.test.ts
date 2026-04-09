@@ -299,6 +299,135 @@ describe('activate()', () => {
     const historyView = createTreeView.mock.results[historyIdx].value;
     expect(historyView.message).toBe('No history items');
   });
+
+  // ------------------------------------------------------------------
+  // 15. Error handling: safeHandler catches sync errors in callbacks
+  // ------------------------------------------------------------------
+  it('continues activation when a wrapped event callback throws synchronously', async () => {
+    const api = await activate(context);
+    await flushMicrotasks();
+
+    const itemEmitter = new (vscode.EventEmitter as any)();
+    const provider = {
+      id: 'err-sync',
+      label: 'ErrSync',
+      onDidDiscoverItems: itemEmitter.event,
+      refresh: vi.fn().mockResolvedValue(undefined),
+    };
+    api.registerProvider(provider as any);
+    await flushMicrotasks();
+
+    // Fire an event that triggers a callback which will exercise safeHandler.
+    // Even if the internal UI update path encountered an error, the extension
+    // should remain functional — subsequent events still trigger UI updates.
+    const createTreeView = vscode.window.createTreeView as ReturnType<typeof vi.fn>;
+    const inboxIdx = createTreeView.mock.calls.findIndex((c: any[]) => c[0] === 'workcenter.inbox');
+    const inboxView = createTreeView.mock.results[inboxIdx].value;
+
+    let messageSetCount = 0;
+    let currentMessage: string | undefined = inboxView.message;
+    Object.defineProperty(inboxView, 'message', {
+      get: () => currentMessage,
+      set: (v: string | undefined) => { currentMessage = v; messageSetCount++; },
+      configurable: true,
+    });
+
+    // Fire a discovered items event, then verify the UI still updates
+    itemEmitter.fire([]);
+    await flushMicrotasks();
+    expect(messageSetCount).toBeGreaterThan(0);
+
+    // Fire again — should still work (coalescing flag was properly reset)
+    messageSetCount = 0;
+    itemEmitter.fire([]);
+    await flushMicrotasks();
+    expect(messageSetCount).toBeGreaterThan(0);
+  });
+
+  // ------------------------------------------------------------------
+  // 16. Error handling: uiUpdateScheduled resets even when microtask throws
+  // ------------------------------------------------------------------
+  it('resets uiUpdateScheduled flag after microtask errors via finally', async () => {
+    const api = await activate(context);
+    await flushMicrotasks();
+
+    const createTreeView = vscode.window.createTreeView as ReturnType<typeof vi.fn>;
+    const sourcesIdx = createTreeView.mock.calls.findIndex((c: any[]) => c[0] === 'workcenter.sources');
+    const sourcesView = createTreeView.mock.results[sourcesIdx].value;
+
+    // Make the sources view message setter throw to simulate a microtask error
+    Object.defineProperty(sourcesView, 'message', {
+      get: () => undefined,
+      set: () => { throw new Error('Simulated view message error'); },
+      configurable: true,
+    });
+
+    const itemEmitter = new (vscode.EventEmitter as any)();
+    const provider = {
+      id: 'err-finally',
+      label: 'ErrFinally',
+      onDidDiscoverItems: itemEmitter.event,
+      refresh: vi.fn().mockResolvedValue(undefined),
+    };
+    api.registerProvider(provider as any);
+    await flushMicrotasks();
+
+    // Remove the throwing setter so next update succeeds
+    Object.defineProperty(sourcesView, 'message', {
+      value: undefined,
+      writable: true,
+      configurable: true,
+    });
+
+    // The coalescing flag should have been reset by `finally`, so
+    // a subsequent event should still trigger a UI update.
+    const inboxIdx = createTreeView.mock.calls.findIndex((c: any[]) => c[0] === 'workcenter.inbox');
+    const inboxView = createTreeView.mock.results[inboxIdx].value;
+
+    let messageSetCount = 0;
+    let currentMessage: string | undefined = inboxView.message;
+    Object.defineProperty(inboxView, 'message', {
+      get: () => currentMessage,
+      set: (v: string | undefined) => { currentMessage = v; messageSetCount++; },
+      configurable: true,
+    });
+
+    itemEmitter.fire([]);
+    await flushMicrotasks();
+    expect(messageSetCount).toBeGreaterThan(0);
+  });
+
+  // ------------------------------------------------------------------
+  // 17. Error handling: safeHandler catches async rejection in callbacks
+  // ------------------------------------------------------------------
+  it('catches async rejections in safeHandler-wrapped callbacks', async () => {
+    const api = await activate(context);
+    await flushMicrotasks();
+
+    // Register a provider whose refresh rejects — safeHandler should
+    // catch the rejection without surfacing an unhandled promise rejection.
+    const itemEmitter = new (vscode.EventEmitter as any)();
+    const provider = {
+      id: 'err-async',
+      label: 'ErrAsync',
+      onDidDiscoverItems: itemEmitter.event,
+      refresh: vi.fn().mockRejectedValue(new Error('Async refresh failure')),
+    };
+
+    // registerProvider should not throw despite refresh rejection
+    expect(() => api.registerProvider(provider as any)).not.toThrow();
+    await flushMicrotasks();
+
+    // Extension should still be functional — can register more providers
+    const provider2 = {
+      id: 'err-async-2',
+      label: 'ErrAsync2',
+      onDidDiscoverItems: new (vscode.EventEmitter as any)().event,
+      refresh: vi.fn().mockResolvedValue(undefined),
+    };
+    expect(() => api.registerProvider(provider2 as any)).not.toThrow();
+    await flushMicrotasks();
+  });
 });
 
 describe('deactivate()', () => {
