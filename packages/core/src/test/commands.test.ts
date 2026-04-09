@@ -197,6 +197,14 @@ describe('registerCommands', () => {
         expect(workGraph.transitionState).toHaveBeenCalledWith('wc-42', expectedState);
       });
     }
+
+    it('shows error when transitionState throws', async () => {
+      workGraph.transitionState.mockRejectedValue(new Error('db crash'));
+      await invoke('workcenter.archiveItem', { id: 'wc-1' });
+      expect(vscode.window.showErrorMessage).toHaveBeenCalledWith(
+        'WorkCenter: Failed to archive item — db crash',
+      );
+    });
   });
 
   // ── editItem ─────────────────────────────────────────────────────
@@ -486,7 +494,7 @@ describe('registerCommands', () => {
       await invoke('workcenter.acceptFromInbox', makeInboxItem());
 
       expect(vscode.window.showErrorMessage).toHaveBeenCalledWith(
-        'WorkCenter: Failed to accept inbox item — disk full',
+        'WorkCenter: Failed to update state after accepting item — disk full',
       );
     });
   });

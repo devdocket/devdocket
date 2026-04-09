@@ -18,7 +18,7 @@ function formatItemTitle(item: { group?: string; title: string }): string {
 function handleCommandError(context: string, err: unknown): void {
   logger.error(context, err);
   const detail = err instanceof Error ? err.message : String(err);
-  vscode.window.showErrorMessage(`WorkCenter: ${context} — ${detail}`);
+  void vscode.window.showErrorMessage(`WorkCenter: ${context} — ${detail}`);
 }
 
 /** Wrap a command handler so unhandled errors are logged and shown to the user. */
@@ -200,9 +200,14 @@ async function handleAcceptFromInbox(
       { title: formatItemTitle(item) },
       { providerId: item.providerId, externalId: item.externalId, url: item.url },
     );
-    await stateStore.setState(item.providerId, item.externalId, 'accepted');
   } catch (err: unknown) {
     handleCommandError('Failed to accept inbox item', err);
+    return;
+  }
+  try {
+    await stateStore.setState(item.providerId, item.externalId, 'accepted');
+  } catch (err: unknown) {
+    handleCommandError('Failed to update state after accepting item', err);
   }
 }
 
