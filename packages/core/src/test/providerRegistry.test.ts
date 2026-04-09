@@ -744,6 +744,125 @@ describe('ProviderRegistry', () => {
     });
   });
 
+  describe('item cap (MAX_ITEMS_PER_PROVIDER)', () => {
+    function makeItems(count: number): DiscoveredItem[] {
+      return Array.from({ length: count }, (_, i) => ({
+        externalId: `item-${i}`,
+        title: `Item ${i}`,
+      }));
+    }
+
+    it('accepts all items when count equals MAX_ITEMS_PER_PROVIDER', async () => {
+      const provider = createMockProvider('exact-cap');
+      registry.register(provider);
+
+      const items = makeItems(ProviderRegistry.MAX_ITEMS_PER_PROVIDER);
+      provider.fireItems(items);
+
+      await vi.waitFor(() => {
+        const stored = registry.getDiscoveredItems('exact-cap');
+        expect(stored).toHaveLength(ProviderRegistry.MAX_ITEMS_PER_PROVIDER);
+      });
+    });
+
+    it('truncates items exceeding MAX_ITEMS_PER_PROVIDER', async () => {
+      const warnSpy = vi.spyOn(logger, 'warn');
+      const provider = createMockProvider('over-cap');
+      registry.register(provider);
+
+      const excess = 50;
+      const items = makeItems(ProviderRegistry.MAX_ITEMS_PER_PROVIDER + excess);
+      provider.fireItems(items);
+
+      await vi.waitFor(() => {
+        const stored = registry.getDiscoveredItems('over-cap');
+        expect(stored).toHaveLength(ProviderRegistry.MAX_ITEMS_PER_PROVIDER);
+      });
+      expect(warnSpy).toHaveBeenCalledWith(
+        expect.stringContaining(`emitted ${ProviderRegistry.MAX_ITEMS_PER_PROVIDER + excess} items`),
+      );
+      expect(warnSpy).toHaveBeenCalledWith(
+        expect.stringContaining('Truncating'),
+      );
+      warnSpy.mockRestore();
+    });
+
+    it('accepts 0 items without truncation or warning', async () => {
+      const warnSpy = vi.spyOn(logger, 'warn');
+      const provider = createMockProvider('zero-items');
+      registry.register(provider);
+      await vi.waitFor(() => expect(registry.loading).toBe(false));
+      warnSpy.mockClear();
+
+      provider.fireItems([]);
+
+      await vi.waitFor(() => {
+        expect(registry.getDiscoveredItems('zero-items')).toEqual([]);
+      });
+      expect(warnSpy).not.toHaveBeenCalledWith(
+        expect.stringContaining('Truncating'),
+      );
+      warnSpy.mockRestore();
+    });
+
+    it('preserves order of first N items after truncation', async () => {
+      const provider = createMockProvider('order-check');
+      registry.register(provider);
+
+      const items = makeItems(ProviderRegistry.MAX_ITEMS_PER_PROVIDER + 100);
+      provider.fireItems(items);
+
+      await vi.waitFor(() => {
+        const stored = registry.getDiscoveredItems('order-check');
+        expect(stored).toHaveLength(ProviderRegistry.MAX_ITEMS_PER_PROVIDER);
+        // First and last retained items match original order
+        expect(stored[0].externalId).toBe('item-0');
+        expect(stored[ProviderRegistry.MAX_ITEMS_PER_PROVIDER - 1].externalId)
+          .toBe(`item-${ProviderRegistry.MAX_ITEMS_PER_PROVIDER - 1}`);
+      });
+    });
+
+    it('only truncated items appear in discovered items after cap', async () => {
+      const provider = createMockProvider('truncated-only');
+      registry.register(provider);
+
+      const excess = 25;
+      const total = ProviderRegistry.MAX_ITEMS_PER_PROVIDER + excess;
+      const items = makeItems(total);
+      provider.fireItems(items);
+
+      await vi.waitFor(() => {
+        const stored = registry.getDiscoveredItems('truncated-only');
+        expect(stored).toHaveLength(ProviderRegistry.MAX_ITEMS_PER_PROVIDER);
+        // None of the excess items should be present
+        const ids = new Set(stored.map(i => i.externalId));
+        for (let i = ProviderRegistry.MAX_ITEMS_PER_PROVIDER; i < total; i++) {
+          expect(ids.has(`item-${i}`)).toBe(false);
+        }
+      });
+    });
+
+    it('does not warn when items are at or below the cap', async () => {
+      const warnSpy = vi.spyOn(logger, 'warn');
+      const provider = createMockProvider('under-cap');
+      registry.register(provider);
+      await vi.waitFor(() => expect(registry.loading).toBe(false));
+      warnSpy.mockClear();
+
+      provider.fireItems(makeItems(ProviderRegistry.MAX_ITEMS_PER_PROVIDER));
+
+      await vi.waitFor(() => {
+        expect(registry.getDiscoveredItems('under-cap')).toHaveLength(
+          ProviderRegistry.MAX_ITEMS_PER_PROVIDER,
+        );
+      });
+      expect(warnSpy).not.toHaveBeenCalledWith(
+        expect.stringContaining('Truncating'),
+      );
+      warnSpy.mockRestore();
+    });
+  });
+
   describe('resurfaceDismissed', () => {
     function createResurfaceProvider(id: string): WorkCenterProvider & { fireItems: (items: DiscoveredItem[]) => void } {
       const emitter = new EventEmitter<DiscoveredItem[]>();
