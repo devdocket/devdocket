@@ -94,7 +94,9 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 
 ### 3. Re-declare API Types
 
-Because provider extensions are separately bundled VS Code extensions, you cannot import types from the core package at runtime. Re-declare the interfaces you need:
+Because provider extensions are separately packaged VS Code extensions, they cannot import types from the core package directly. Re-declare the interfaces your extension needs. (First-party providers in the WorkCenter monorepo use an internal shared package for this, but it is not published for external use.)
+
+Copy the following declarations into your provider code:
 
 ```ts
 interface Disposable {
@@ -649,4 +651,4 @@ interface Event<T> {
 - [`packages/github`](../packages/github/src/) — Production provider implementation (GitHub Issues, PR reviews, Start Work action)
 - [`packages/ado`](../packages/ado/src/) — Azure DevOps provider implementation (work items, PR reviews)
 - [`packages/ai-reviewer`](../packages/ai-reviewer/src/) — Action-only extension that adds AI-powered code review for GitHub PR items
-- [`packages/shared`](../packages/shared/src/) — Shared utilities for provider extensions (`validateRefreshInterval`, URL validation, logging)
+- [`packages/shared`](../packages/shared/src/) — Internal shared package used by first-party providers. Includes `BaseProvider` (an abstract base class that handles periodic refresh, concurrency guards, and disposal), `validateRefreshInterval`, URL validation, and logging utilities. This package is not published for external use; third-party authors should implement equivalent logic themselves (see the [Periodic Refresh Pattern](#periodic-refresh-pattern) section)
