@@ -305,6 +305,22 @@ describe('GitHubPrReviewProvider', () => {
     vi.useRealTimers();
   });
 
+  it('startPeriodicRefresh does not schedule a timer for NaN or Infinity', () => {
+    vi.useFakeTimers();
+
+    const refreshSpy = vi.spyOn(provider as any, 'refreshInBackground').mockResolvedValue(undefined);
+
+    provider.startPeriodicRefresh(NaN);
+    vi.advanceTimersByTime(120_000);
+    expect(refreshSpy).not.toHaveBeenCalled();
+
+    provider.startPeriodicRefresh(Infinity);
+    vi.advanceTimersByTime(120_000);
+    expect(refreshSpy).not.toHaveBeenCalled();
+
+    vi.useRealTimers();
+  });
+
   it('stopPeriodicRefresh clears the timer', () => {
     vi.useFakeTimers();
 

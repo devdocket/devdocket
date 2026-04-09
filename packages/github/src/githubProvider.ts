@@ -3,6 +3,16 @@ import { isValidGitHubRepo } from '@workcenter/shared';
 import { logger } from './logger';
 import { BaseGitHubProvider, DiscoveredItem, GitHubIssue } from './baseGithubProvider';
 
+/**
+ * WorkCenter provider that discovers GitHub issues assigned to the current user.
+ *
+ * Issues are fetched via the GitHub REST API using VS Code's built-in GitHub
+ * authentication. When configured repos are specified, only those repos are
+ * queried; otherwise all assigned issues across GitHub are returned.
+ *
+ * Supports periodic background refresh and emits discovered items through
+ * the {@link WorkCenterProvider.onDidDiscoverItems} event.
+ */
 export class GitHubIssueProvider extends BaseGitHubProvider {
   readonly id = 'github';
   readonly label = 'GitHub Issues';
@@ -174,4 +184,5 @@ export class GitHubIssueProvider extends BaseGitHubProvider {
     const match = linkHeader.match(/<([^>]+)>;\s*rel="next"/);
     return match ? match[1] : null;
   }
+
 }
