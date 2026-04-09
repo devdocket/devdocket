@@ -9,6 +9,9 @@ export class WorkItemEditorPanel {
   private readonly workGraph: WorkGraph;
   private readonly itemId: string;
   private disposed = false;
+  private debounceTimer: ReturnType<typeof setTimeout> | undefined;
+  private pendingData: Record<string, string> | undefined;
+  private saveQueue: Promise<void> = Promise.resolve();
   private readonly messageSubscription: vscode.Disposable;
 
   static open(
@@ -38,20 +41,32 @@ export class WorkItemEditorPanel {
 
     this.update();
 
-    this.messageSubscription = this.panel.webview.onDidReceiveMessage(async (msg) => {
-      try {
-        if (msg.type === 'autosave') {
-          await this.saveData(msg.data);
+    this.messageSubscription = this.panel.webview.onDidReceiveMessage((msg) => {
+      if (msg?.type === 'autosave' && msg.data && typeof msg.data === 'object') {
+        this.pendingData = msg.data;
+        if (this.debounceTimer) {
+          clearTimeout(this.debounceTimer);
         }
-      } catch (err: unknown) {
-        const message = err instanceof Error ? err.message : String(err);
-        void vscode.window.showErrorMessage(`Failed to save work item: ${message}`);
+        this.debounceTimer = setTimeout(() => {
+          this.debounceTimer = undefined;
+          const data = this.pendingData;
+          this.pendingData = undefined;
+          if (!data) {
+            return;
+          }
+          this.enqueueSave(data);
+        }, 300);
       }
     });
 
     this.panel.onDidDispose(() => {
       if (!this.disposed) {
         this.disposed = true;
+        if (this.debounceTimer) {
+          clearTimeout(this.debounceTimer);
+          this.debounceTimer = undefined;
+        }
+        this.flushPendingData();
         this.messageSubscription.dispose();
       }
     });
@@ -104,9 +119,49 @@ export class WorkItemEditorPanel {
   dispose(): void {
     if (!this.disposed) {
       this.disposed = true;
+      if (this.debounceTimer) {
+        clearTimeout(this.debounceTimer);
+        this.debounceTimer = undefined;
+      }
+      this.flushPendingData();
       this.messageSubscription.dispose();
       this.panel.dispose();
     }
   }
 
+  private flushPendingData(): void {
+    const data = this.pendingData;
+    this.pendingData = undefined;
+    if (data) {
+      this.enqueueSave(data);
+    }
+  }
+
+  private enqueueSave(data: Record<string, string>): void {
+    this.saveQueue = this.saveQueue.then(async () => {
+      try {
+        await this.saveData(data);
+      } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : String(err);
+        vscode.window.showErrorMessage(`Failed to save work item: ${message}`);
+      }
+    });
+  }
+
+  private getNonce(): string {
+    let text = '';
+    const possible = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+    for (let i = 0; i < 32; i++) {
+      text += possible.charAt(Math.floor(Math.random() * possible.length));
+    }
+    return text;
+  }
+}
+
+function escapeHtml(s: string): string {
+  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
+function escapeAttr(s: string): string {
+  return escapeHtml(s).replace(/"/g, '&quot;');
 }

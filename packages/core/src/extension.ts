@@ -20,18 +20,29 @@ import { performance } from 'perf_hooks';
 export type { WorkCenterApi, WorkCenterProvider, WorkCenterAction, DiscoveredItem, Disposable } from './api/types';
 export { logger } from './services/logger';
 
+let providerRegistry: ProviderRegistry | undefined;
+let actionRegistry: ActionRegistry | undefined;
+let workGraph: WorkGraph | undefined;
+let stateStore: DiscoveredStateStore | undefined;
+
 function initializeLogging(context: vscode.ExtensionContext): void {
   const outputChannel = vscode.window.createOutputChannel('WorkCenter');
   context.subscriptions.push(outputChannel);
 
   const logLevelConfig = vscode.workspace.getConfiguration('workcenter').get<string>('logLevel', 'info');
   initLogger(outputChannel, resolveLogLevel(logLevelConfig));
+  if (!['debug', 'info', 'warn', 'error'].includes(logLevelConfig)) {
+    logger.warn(`Invalid log level '${logLevelConfig}', falling back to 'info'. Valid values: debug, info, warn, error`);
+  }
 
   context.subscriptions.push(
     vscode.workspace.onDidChangeConfiguration(e => {
       if (e.affectsConfiguration('workcenter.logLevel')) {
         const newLevel = vscode.workspace.getConfiguration('workcenter').get<string>('logLevel', 'info');
         setLogLevel(resolveLogLevel(newLevel));
+        if (!['debug', 'info', 'warn', 'error'].includes(newLevel)) {
+          logger.warn(`Invalid log level '${newLevel}', falling back to 'info'. Valid values: debug, info, warn, error`);
+        }
       }
     }),
   );
@@ -39,19 +50,21 @@ function initializeLogging(context: vscode.ExtensionContext): void {
 
 async function loadStores(storagePath: string): Promise<{ workGraph: WorkGraph; stateStore: DiscoveredStateStore; readStateStore: ReadStateStore }> {
   const store = new JsonTaskStore(storagePath);
-  const workGraph = new WorkGraph(store);
-  await workGraph.load();
-  logger.debug(`Loaded ${workGraph.getAll().length} work items`);
+  const wg = new WorkGraph(store);
+  workGraph = wg;
+  await wg.load();
+  logger.debug(`Loaded ${wg.getAll().length} work items`);
 
-  const stateStore = new DiscoveredStateStore(storagePath);
-  await stateStore.load();
+  const ss = new DiscoveredStateStore(storagePath);
+  stateStore = ss;
+  await ss.load();
   logger.debug('Loaded discovered state');
 
   const readStateStore = new ReadStateStore(storagePath);
   await readStateStore.load();
   logger.debug('Loaded read state');
 
-  return { workGraph, stateStore, readStateStore };
+  return { workGraph: wg, stateStore: ss, readStateStore };
 }
 
 async function migrateDiscoveredState(workGraph: WorkGraph, stateStore: DiscoveredStateStore): Promise<void> {
@@ -221,6 +234,16 @@ function wireEvents(
   return [discoveredSub, newItemsSub, providerRegSub, stateStoreSub, markSeenSub, workGraphSub];
 }
 
+/**
+ * Activate the WorkCenter extension.
+ *
+ * Initialises storage, loads persisted work items and discovered-item state,
+ * registers all tree views (Inbox, Queue, Focus, History, Sources), and
+ * returns the public {@link WorkCenterApi} for provider extensions to consume.
+ *
+ * @param context - The VS Code extension context provided at activation.
+ * @returns The public API used by provider extensions to register providers and actions.
+ */
 export async function activate(context: vscode.ExtensionContext): Promise<WorkCenterApi> {
   const activationStart = performance.now();
   initializeLogging(context);
@@ -228,20 +251,22 @@ export async function activate(context: vscode.ExtensionContext): Promise<WorkCe
 
   const initStart = performance.now();
   const storagePath = context.globalStorageUri.fsPath;
-  const { workGraph, stateStore, readStateStore } = await loadStores(storagePath);
-  await migrateDiscoveredState(workGraph, stateStore);
+  const { workGraph: wg, stateStore: ss, readStateStore } = await loadStores(storagePath);
+  await migrateDiscoveredState(wg, ss);
 
-  const providerRegistry = new ProviderRegistry(stateStore);
-  const actionRegistry = new ActionRegistry();
-  const api = new WorkCenterApiImpl(providerRegistry, actionRegistry);
+  const pr = new ProviderRegistry(ss);
+  providerRegistry = pr;
+  const ar = new ActionRegistry();
+  actionRegistry = ar;
+  const api = new WorkCenterApiImpl(pr, ar);
   logger.info(`Store + service init took ${Math.round(performance.now() - initStart)}ms`);
 
   const treeViewStart = performance.now();
-  const treeSetup = createTreeViews(providerRegistry, stateStore, readStateStore, workGraph);
+  const treeSetup = createTreeViews(pr, ss, readStateStore, wg);
   logger.info(`Tree view creation took ${Math.round(performance.now() - treeViewStart)}ms`);
 
   const eventWiringStart = performance.now();
-  const eventDisposables = wireEvents(providerRegistry, stateStore, workGraph, treeSetup);
+  const eventDisposables = wireEvents(pr, ss, wg, treeSetup);
   logger.info(`Event wiring took ${Math.round(performance.now() - eventWiringStart)}ms`);
 
   const { providers, views, disposables: viewDisposables } = treeSetup;
@@ -250,25 +275,36 @@ export async function activate(context: vscode.ExtensionContext): Promise<WorkCe
     ...Object.values(views),
     ...viewDisposables,
     ...eventDisposables,
-    { dispose: () => workGraph.dispose() },
-    { dispose: () => stateStore.dispose() },
+    { dispose: () => wg.dispose() },
+    { dispose: () => ss.dispose() },
     { dispose: () => providers.inboxProvider.dispose() },
     { dispose: () => providers.queueProvider.dispose() },
     { dispose: () => providers.focusProvider.dispose() },
     { dispose: () => providers.sourcesProvider.dispose() },
     { dispose: () => providers.historyProvider.dispose() },
-    { dispose: () => providerRegistry.dispose() },
-    { dispose: () => actionRegistry.dispose() },
+    { dispose: () => pr.dispose() },
+    { dispose: () => ar.dispose() },
   );
 
   const commandRegStart = performance.now();
-  registerCommands(context, workGraph, actionRegistry, stateStore);
+  registerCommands(context, wg, ar, ss);
   logger.info(`Command registration took ${Math.round(performance.now() - commandRegStart)}ms`);
 
   logger.info(`WorkCenter activated in ${Math.round(performance.now() - activationStart)}ms`);
   return api;
 }
 
+/**
+ * Deactivate the WorkCenter extension.
+ *
+ * All resources are disposed automatically via `context.subscriptions`,
+ * so this function is intentionally a no-op.
+ */
 export function deactivate(): void {
-  // Resources disposed via subscriptions
+  logger.info('WorkCenter deactivating...');
+  providerRegistry?.dispose();
+  actionRegistry?.dispose();
+  workGraph?.dispose();
+  stateStore?.dispose();
+  logger.info('WorkCenter deactivated');
 }

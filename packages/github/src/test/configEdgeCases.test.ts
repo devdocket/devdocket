@@ -104,7 +104,7 @@ describe('GitHub provider config edge cases', () => {
     it.each([
       ['no slash', 'noslash'],
       ['double slash', 'owner//repo'],
-    ])('invalid repo format (%s) results in failed fetch with empty discovery', async (_label, repo) => {
+    ])('invalid repo format (%s) is rejected before fetch with empty discovery', async (_label, repo) => {
       vi.mocked(workspace.getConfiguration).mockReturnValue({
         get: vi.fn((key: string, defaultValue?: any) => {
           if (key === 'repos') { return [repo]; }
@@ -116,8 +116,8 @@ describe('GitHub provider config edge cases', () => {
       provider.onDidDiscoverItems(listener);
       await provider.refresh();
 
-      // Invalid repos are filtered out before fetching
-      expect(mockFetch).toHaveBeenCalledTimes(0);
+      // REPO_PATTERN validation rejects invalid formats before calling fetch
+      expect(mockFetch).not.toHaveBeenCalled();
       expect(listener).toHaveBeenCalledWith([]);
     });
 
