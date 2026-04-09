@@ -237,7 +237,7 @@ describe('activate()', () => {
       .mockResolvedValueOnce(JSON.stringify(workItems))   // workitems.json
       .mockRejectedValueOnce(Object.assign(new Error('ENOENT'), { code: 'ENOENT' })); // discovered-state.json
     (fs.stat as ReturnType<typeof vi.fn>)
-      .mockResolvedValueOnce({ size: 100 }); // workitems.json stat
+      .mockResolvedValueOnce({ size: 100, isFile: () => true }); // workitems.json stat
 
     await activate(context);
 
@@ -266,7 +266,7 @@ describe('activate()', () => {
   it('recovers gracefully when workitems.json contains invalid JSON', async () => {
     const fs = await import('fs/promises');
     (fs.readFile as ReturnType<typeof vi.fn>).mockResolvedValueOnce('NOT VALID JSON');
-    (fs.stat as ReturnType<typeof vi.fn>).mockResolvedValueOnce({ size: 100 }); // workitems.json stat
+    (fs.stat as ReturnType<typeof vi.fn>).mockResolvedValueOnce({ size: 100, isFile: () => true }); // workitems.json stat
 
     await expect(activate(context)).resolves.toBeDefined();
   });

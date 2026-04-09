@@ -169,6 +169,13 @@ export class DiscoveredStateStore {
   private async doLoad(): Promise<void> {
     try {
       const stats = await fs.stat(this.filePath);
+      if (!stats.isFile()) {
+        logger.warn('Discovered state path is not a regular file — backing up and resetting to empty');
+        await this.backupInvalidFile();
+        this.cache.clear();
+        this.loaded = true;
+        return;
+      }
       if (stats.size > MAX_STORE_FILE_SIZE) {
         logger.warn(`Discovered state file exceeds ${MAX_STORE_FILE_SIZE} bytes — backing up and resetting to empty`);
         await this.backupInvalidFile();

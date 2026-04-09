@@ -95,6 +95,12 @@ export class JsonTaskStore implements ITaskStore {
     logger.debug(`Loading work items from ${this.filePath}`);
     try {
       const stats = await fs.stat(this.filePath);
+      if (!stats.isFile()) {
+        logger.warn('Work items path is not a regular file — backing up and resetting to empty');
+        await this.backupInvalidFile();
+        this.cache = new Map();
+        return [];
+      }
       if (stats.size > MAX_STORE_FILE_SIZE) {
         logger.warn(`Work items file exceeds ${MAX_STORE_FILE_SIZE} bytes — backing up and resetting to empty`);
         await this.backupInvalidFile();
