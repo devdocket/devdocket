@@ -220,7 +220,10 @@ export class DiscoveredStateStore {
   }
 
   private enqueue(op: () => Promise<void>): Promise<void> {
-    this.writeQueue = this.writeQueue.then(op, op);
+    this.writeQueue = this.writeQueue.then(op, (err: unknown) => {
+      logger.warn('Previous write operation failed, continuing queue', err);
+      return op();
+    });
     return this.writeQueue;
   }
 
