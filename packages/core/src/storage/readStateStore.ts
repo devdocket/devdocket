@@ -81,14 +81,15 @@ export class ReadStateStore {
   async load(): Promise<void> {
     if (this.loaded) { return; }
     try {
-      const data = await fs.readFile(this.filePath, 'utf-8');
-      if (data.length > MAX_STORE_FILE_SIZE) {
+      const stats = await fs.stat(this.filePath);
+      if (stats.size > MAX_STORE_FILE_SIZE) {
         logger.warn(`Read state file exceeds ${MAX_STORE_FILE_SIZE} bytes — backing up and resetting to empty`);
         await this.backupCorruptedFile();
         this.items.clear();
         this.loaded = true;
         return;
       }
+      const data = await fs.readFile(this.filePath, 'utf-8');
       let parsed: unknown;
       try {
         parsed = JSON.parse(data);
