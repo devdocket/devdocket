@@ -41,6 +41,14 @@ describe('WorkGraph', () => {
     expect(a.id).not.toBe(b.id);
   });
 
+  it('generates IDs with wc- prefix followed by a valid UUID', async () => {
+    const item = await graph.createItem({ title: 'UUID check' });
+    const uuidPart = item.id.slice(3);
+    const uuidV4Regex = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
+    expect(item.id).toMatch(/^wc-/);
+    expect(uuidPart).toMatch(uuidV4Regex);
+  });
+
   it('gets items by state', async () => {
     await graph.createItem({ title: 'A' });
     await graph.createItem({ title: 'B' });
