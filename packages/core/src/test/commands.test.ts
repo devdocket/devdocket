@@ -486,7 +486,7 @@ describe('registerCommands', () => {
       await invoke('workcenter.acceptFromInbox', makeInboxItem());
 
       expect(vscode.window.showErrorMessage).toHaveBeenCalledWith(
-        'WorkCenter: Failed to update state after accepting item — disk full',
+        'WorkCenter: Failed to accept inbox item — disk full',
       );
     });
   });
