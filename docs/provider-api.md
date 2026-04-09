@@ -118,7 +118,7 @@ interface WorkCenterProvider {
   readonly label: string;
   readonly resurfaceDismissed?: boolean;
   readonly onDidDiscoverItems: Event<DiscoveredItem[]>;
-  refresh(): Promise<void>;
+  refresh(token?: vscode.CancellationToken): Promise<void>;
 }
 ```
 
@@ -154,7 +154,7 @@ interface WorkCenterProvider {
   readonly label: string;
   readonly resurfaceDismissed?: boolean;
   readonly onDidDiscoverItems: Event<DiscoveredItem[]>;
-  refresh(): Promise<void>;
+  refresh(token?: vscode.CancellationToken): Promise<void>;
 }
 
 class JiraProvider implements WorkCenterProvider {
@@ -169,7 +169,7 @@ class JiraProvider implements WorkCenterProvider {
   private refreshTimer: ReturnType<typeof setInterval> | undefined;
   private _isRefreshing = false;
 
-  async refresh(): Promise<void> {
+  async refresh(token?: vscode.CancellationToken): Promise<void> {
     const tickets = await this.fetchTickets();
 
     const items: DiscoveredItem[] = tickets.map((ticket) => ({
@@ -233,7 +233,7 @@ class JiraProvider implements WorkCenterProvider {
 ### Key Points
 
 - **EventEmitter pattern** — Use `vscode.EventEmitter<DiscoveredItem[]>` to create the event. Expose its `.event` property as the readonly `onDidDiscoverItems`.
-- **`refresh()` is called by WorkCenter** — It is invoked automatically when the provider is registered for initial discovery. It must be safe to call multiple times.
+- **`refresh()` is called by WorkCenter** — It is invoked automatically when the provider is registered for initial discovery. It must be safe to call multiple times. WorkCenter passes a `CancellationToken` and enforces a refresh timeout; providers should check `token.isCancellationRequested` before and during long-running operations.
 - **`externalId` must be unique per provider** — WorkCenter uses the combination of `providerId + externalId` to track inbox state. Use a stable identifier like `owner/repo#123` or `PROJECT/TICKET-42`.
 - **`group` is optional** — When set, items with the same group value are nested under a folder node in the Inbox and Sources views.
 - **`resurfaceDismissed`** — When `true`, items the user previously dismissed will reappear in the Inbox if the provider re-emits them. This is useful for time-sensitive items (e.g., PR review requests). When `false` or `undefined` (the default), dismissed items stay dismissed.
@@ -241,7 +241,21 @@ class JiraProvider implements WorkCenterProvider {
 
 ### Periodic Refresh Pattern
 
-For providers that poll an external API, set up a `setInterval` timer. Clamp the interval to a reasonable minimum (e.g., 60 seconds) and guard against overlapping refreshes:
+For providers that poll an external API, set up a `setInterval` timer. Clamp the interval to a reasonable minimum (e.g., 60 seconds) and guard against overlapping refreshes.
+
+The `@workcenter/shared` package provides a `validateRefreshInterval(value, logger?)` helper that validates and clamps user-configured intervals. It handles non-numeric values, enforces a 60-second minimum, and returns 0 (disabled) for zero/negative input:
+
+```ts
+import { validateRefreshInterval } from '@workcenter/shared';
+
+const config = vscode.workspace.getConfiguration('myExtension');
+const intervalSeconds = validateRefreshInterval(
+  config.get<number>('refreshIntervalSeconds', 300), logger,
+);
+provider.startPeriodicRefresh(intervalSeconds);
+```
+
+Typical refresh guard pattern:
 
 ```ts
 private _isRefreshing = false;
@@ -296,8 +310,7 @@ enum WorkItemState {
   New = 'New',
   Triaged = 'Triaged',
   InProgress = 'InProgress',
-  Blocked = 'Blocked',
-  WaitingOn = 'WaitingOn',
+  Paused = 'Paused',
   Done = 'Done',
   Archived = 'Archived',
 }
@@ -370,8 +383,8 @@ Provider emits DiscoveredItem[]
    ┌─────────┐     accept     ┌─────────┐    start     ┌─────────┐
    │  Inbox   │ ──────────▶   │  Queue   │ ──────────▶  │  Focus  │
    │ (unseen) │               │  (New)   │              │(InProgress,│
-   └─────────┘               └─────────┘              │ Blocked,   │
-        │                          ▲                    │ WaitingOn) │
+   └─────────┘               └─────────┘              │ Paused)  │
+        │                          ▲                    └─────────┘
      dismiss                       │                    └─────────┘
         │                     manual add                     │
         ▼                          │                      complete
@@ -493,9 +506,12 @@ interface WorkCenterProvider {
 
   /**
    * Called by WorkCenter on registration for initial discovery.
-   * Must be safe to call multiple times.
+   * Must be safe to call multiple times. Providers should honor
+   * the cancellation token when practical — WorkCenter enforces
+   * a refresh timeout and cancels the token if the provider takes
+   * too long.
    */
-  refresh(): Promise<void>;
+  refresh(token?: vscode.CancellationToken): Promise<void>;
 }
 ```
 
@@ -598,8 +614,7 @@ enum WorkItemState {
   New = 'New',         // Queue — freshly created or accepted
   Triaged = 'Triaged', // Reserved for future use
   InProgress = 'InProgress', // Focus — active work
-  Blocked = 'Blocked',       // Focus — cannot proceed
-  WaitingOn = 'WaitingOn',   // Focus — waiting on external dependency
+  Paused = 'Paused',         // Focus — temporarily on hold
   Done = 'Done',             // History — completed
   Archived = 'Archived',     // History — archived
 }
@@ -632,3 +647,6 @@ interface Event<T> {
 
 - [Extension API reference](./extension-api.md) — Detailed API walkthrough with additional examples
 - [`packages/github`](../packages/github/src/) — Production provider implementation (GitHub Issues, PR reviews, Start Work action)
+- [`packages/ado`](../packages/ado/src/) — Azure DevOps provider implementation (work items, PR reviews)
+- [`packages/ai-reviewer`](../packages/ai-reviewer/src/) — Action-only extension that adds AI-powered code review for GitHub PR items
+- [`packages/shared`](../packages/shared/src/) — Shared utilities for provider extensions (`validateRefreshInterval`, URL validation, logging)
