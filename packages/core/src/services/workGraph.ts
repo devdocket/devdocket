@@ -1,3 +1,4 @@
+import * as crypto from 'crypto';
 import * as vscode from 'vscode';
 import { WorkItem, WorkItemInput, WorkItemState } from '../models/workItem';
 import { ITaskStore } from '../storage/taskStore';
@@ -394,5 +395,5 @@ export class WorkGraph {
 }
 
 function generateId(): string {
-  return `wc-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+  return `wc-${crypto.randomUUID()}`;
 }
