@@ -331,9 +331,10 @@ describe('activate()', () => {
   });
 
   // ------------------------------------------------------------------
-  // 16. Error handling: uiUpdateScheduled resets even when microtask throws
+  // 16. Error handling: microtask catches view setter errors and
+  //     continues processing subsequent UI updates
   // ------------------------------------------------------------------
-  it('resets uiUpdateScheduled flag after microtask errors via finally', async () => {
+  it('catches view setter errors in microtask and continues processing UI updates', async () => {
     const api = await activate(context);
     await flushMicrotasks();
 
@@ -373,8 +374,8 @@ describe('activate()', () => {
       configurable: true,
     });
 
-    // The coalescing flag should have been reset by `finally`, so
-    // a subsequent event should still trigger a UI update.
+    // The coalescing flag should have been reset (by the finally block),
+    // so a subsequent event should still trigger a UI update.
     const inboxIdx = createTreeView.mock.calls.findIndex((c: any[]) => c[0] === 'workcenter.inbox');
     const inboxView = createTreeView.mock.results[inboxIdx].value;
 
@@ -394,9 +395,9 @@ describe('activate()', () => {
   });
 
   // ------------------------------------------------------------------
-  // 17. Error handling: safeHandler catches async rejection in callbacks
+  // 17. Error handling: safeHandler catches sync throws via promise chain
   // ------------------------------------------------------------------
-  it('catches async rejections in safeHandler-wrapped callbacks', async () => {
+  it('catches sync throws via promise chain without unhandled rejections', async () => {
     const api = await activate(context);
     await flushMicrotasks();
 
@@ -406,15 +407,15 @@ describe('activate()', () => {
 
     try {
       // The onDidChangeConfiguration listener is wrapped with safeHandler
-      // which supports async handlers via Promise.resolve().then().catch().
-      // Make getConfiguration return an object whose get() rejects.
+      // which runs callbacks via Promise.resolve().then().catch(). A sync
+      // throw inside .then() becomes a rejected promise caught by .catch().
       const onDidChangeCfg = vscode.workspace.onDidChangeConfiguration as ReturnType<typeof vi.fn>;
       const configListener = onDidChangeCfg.mock.calls[0][0];
 
-      // Simulate an async throw by making the wrapped function throw after
-      // a resolved promise tick — safeHandler's .catch() should capture it.
+      // Make the wrapped function throw synchronously — safeHandler's
+      // promise chain converts this to a caught rejection.
       (vscode.workspace.getConfiguration as ReturnType<typeof vi.fn>)
-        .mockImplementationOnce(() => { throw new Error('Async config failure'); });
+        .mockImplementationOnce(() => { throw new Error('Config failure'); });
 
       configListener({ affectsConfiguration: () => true });
       await flushMicrotasks();
