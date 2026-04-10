@@ -99,7 +99,7 @@ function handleEditItem(
 }
 
 async function handleOpenInBrowser(workGraph: WorkGraph, item?: { id?: string; url?: string }): Promise<void> {
-  if (!item?.id && !item?.url) {
+  if (!item || (!item.id && !item.url)) {
     vscode.window.showWarningMessage('WorkCenter: Select an item to open in the browser.');
     return;
   }
