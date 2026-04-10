@@ -59,6 +59,7 @@ describe('AdoWorkItemProvider', () => {
     provider.onDidDiscoverItems(listener);
     await provider.refresh();
 
+    expect(listener).toHaveBeenCalledTimes(1);
     expect(listener).toHaveBeenCalledWith([]);
     expect(mockFetch).not.toHaveBeenCalled();
   });
@@ -224,6 +225,7 @@ describe('AdoWorkItemProvider', () => {
     provider.onDidDiscoverItems(listener);
     await provider.refresh(token);
 
+    expect(listener).toHaveBeenCalledTimes(1);
     expect(listener).toHaveBeenCalledWith([]);
     expect(mockFetch).not.toHaveBeenCalled();
   });
@@ -244,6 +246,7 @@ describe('AdoWorkItemProvider', () => {
     provider.onDidDiscoverItems(listener);
     await provider.refresh(token);
 
+    expect(listener).toHaveBeenCalledTimes(1);
     expect(listener).toHaveBeenCalledWith([]);
     expect(mockFetch).not.toHaveBeenCalled();
   });
@@ -257,6 +260,7 @@ describe('AdoWorkItemProvider', () => {
     const refreshBg = (provider as any).refreshInBackground.bind(provider);
     await refreshBg();
 
+    expect(listener).toHaveBeenCalledTimes(1);
     expect(listener).toHaveBeenCalledWith([]);
     expect(mockFetch).not.toHaveBeenCalled();
   });
@@ -268,6 +272,7 @@ describe('AdoWorkItemProvider', () => {
     provider.onDidDiscoverItems(listener);
 
     await expect(provider.refresh()).resolves.toBeUndefined();
+    expect(listener).toHaveBeenCalledTimes(1);
     expect(listener).toHaveBeenCalledWith([]);
   });
 
@@ -278,6 +283,7 @@ describe('AdoWorkItemProvider', () => {
     provider.onDidDiscoverItems(listener);
     await provider.refresh();
 
+    expect(listener).toHaveBeenCalledTimes(1);
     expect(listener).toHaveBeenCalledWith([]);
   });
 
@@ -290,6 +296,7 @@ describe('AdoWorkItemProvider', () => {
     const refreshBg = (provider as any).refreshInBackground.bind(provider);
     await refreshBg();
 
+    expect(listener).toHaveBeenCalledTimes(1);
     expect(listener).toHaveBeenCalledWith([]);
   });
 
@@ -412,6 +419,7 @@ describe('AdoWorkItemProvider', () => {
     await provider.refresh();
 
     expect(mockFetch).not.toHaveBeenCalled();
+    expect(listener).toHaveBeenCalledTimes(1);
     expect(listener).toHaveBeenCalledWith([]);
   });
 
@@ -447,6 +455,7 @@ describe('AdoWorkItemProvider', () => {
     await provider.refresh();
 
     expect(mockFetch).not.toHaveBeenCalled();
+    expect(listener).toHaveBeenCalledTimes(1);
     expect(listener).toHaveBeenCalledWith([]);
   });
 });

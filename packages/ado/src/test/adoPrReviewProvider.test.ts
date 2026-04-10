@@ -54,6 +54,7 @@ describe('AdoPrReviewProvider', () => {
     provider.onDidDiscoverItems(listener);
     await provider.refresh();
 
+    expect(listener).toHaveBeenCalledTimes(1);
     expect(listener).toHaveBeenCalledWith([]);
     expect(mockFetch).not.toHaveBeenCalled();
   });
@@ -65,6 +66,7 @@ describe('AdoPrReviewProvider', () => {
     provider.onDidDiscoverItems(listener);
     await provider.refresh(token);
 
+    expect(listener).toHaveBeenCalledTimes(1);
     expect(listener).toHaveBeenCalledWith([]);
     expect(mockFetch).not.toHaveBeenCalled();
   });
@@ -85,6 +87,7 @@ describe('AdoPrReviewProvider', () => {
     provider.onDidDiscoverItems(listener);
     await provider.refresh(token);
 
+    expect(listener).toHaveBeenCalledTimes(1);
     expect(listener).toHaveBeenCalledWith([]);
     expect(mockFetch).not.toHaveBeenCalled();
   });
@@ -98,6 +101,7 @@ describe('AdoPrReviewProvider', () => {
     const refreshBg = (provider as any).refreshInBackground.bind(provider);
     await refreshBg();
 
+    expect(listener).toHaveBeenCalledTimes(1);
     expect(listener).toHaveBeenCalledWith([]);
     expect(mockFetch).not.toHaveBeenCalled();
   });
@@ -321,6 +325,7 @@ describe('AdoPrReviewProvider', () => {
     provider.onDidDiscoverItems(listener);
     await provider.refresh();
 
+    expect(listener).toHaveBeenCalledTimes(1);
     expect(listener).toHaveBeenCalledWith([]);
   });
 
@@ -333,6 +338,7 @@ describe('AdoPrReviewProvider', () => {
     const refreshBg = (provider as any).refreshInBackground.bind(provider);
     await refreshBg();
 
+    expect(listener).toHaveBeenCalledTimes(1);
     expect(listener).toHaveBeenCalledWith([]);
   });
 
@@ -495,6 +501,7 @@ describe('AdoPrReviewProvider', () => {
     await provider.refresh();
 
     expect(mockFetch).not.toHaveBeenCalled();
+    expect(listener).toHaveBeenCalledTimes(1);
     expect(listener).toHaveBeenCalledWith([]);
   });
 
@@ -535,6 +542,7 @@ describe('AdoPrReviewProvider', () => {
 
     // Only connection data fetch — no PR fetches
     expect(mockFetch).toHaveBeenCalledTimes(1);
+    expect(listener).toHaveBeenCalledTimes(1);
     expect(listener).toHaveBeenCalledWith([]);
   });
 });
