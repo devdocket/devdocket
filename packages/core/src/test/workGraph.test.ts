@@ -482,8 +482,10 @@ describe('WorkGraph', () => {
   describe('state transition validation', () => {
     it('rejects New → Done (skipping InProgress)', async () => {
       const item = await graph.createItem({ title: 'Test' });
+      (store.save as ReturnType<typeof vi.fn>).mockClear();
       await expect(graph.transitionState(item.id, WorkItemState.Done))
         .rejects.toThrow('Invalid state transition');
+      expect(store.save).not.toHaveBeenCalled();
     });
 
     it('rejects New → Archived', async () => {
