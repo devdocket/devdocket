@@ -228,33 +228,9 @@ const worktreePath = path.join(path.dirname(repoPath), branchName);
 
 Test patterns documented in `.squad/decisions.md` under "Test Update Patterns" (2026-03-25).
 
-### ADO Work Item State Exclusion Testing (2025-05-16)
+### ADO Work Item State Exclusion Testing (2025-05-16) — SUPERSEDED
 
-**Issue:** GitHub issue #178 — ADO provider should exclude non-active work items from Inbox and Sources.
-
-**Changes:** Updated `packages/ado/src/test/adoWorkItemProvider.extended.test.ts` to verify WIQL query excludes `Resolved` and `Done` states alongside existing exclusions (`Closed` and `Removed`).
-
-**Test file:** `packages/ado/src/test/adoWorkItemProvider.extended.test.ts`  
-**Test:** "sends correct WIQL query body filtering by assignment and state" (within `WIQL query construction` describe block)
-
-**Assertions added:**
-```typescript
-expect(body.query).toContain("[System.State] <> 'Resolved'");
-expect(body.query).toContain("[System.State] <> 'Done'");
-```
-
-**Result:** All 125 ADO provider tests pass. Production code already contained the updated WIQL query filtering out all four non-active states.
-
-**Why:** Ensures that only active work items (not completed or resolved items) appear in WorkCenter's Inbox and Sources views. This reduces noise and keeps users focused on actionable work items.
-
-**Production query:**
-```sql
-SELECT [System.Id] FROM WorkItems WHERE [System.AssignedTo] = @Me 
-  AND [System.State] <> 'Closed' 
-  AND [System.State] <> 'Removed' 
-  AND [System.State] <> 'Resolved' 
-  AND [System.State] <> 'Done'
-```
+**Note:** This initial approach (hardcoding `Resolved` and `Done` in WIQL) was replaced by state-category-based filtering. See "ADO State Category Filtering Tests" below for the current approach. WIQL now only excludes `Closed` and `Removed` for performance; all other non-active states are filtered via the ADO Work Item Type States API.
 
 ### ADO State Category Filtering Tests (2025-05-16, Issue #178)
 
@@ -300,13 +276,13 @@ SELECT [System.Id] FROM WorkItems WHERE [System.AssignedTo] = @Me
 
 **Root cause:** The `filterActiveItems` method now calls `fetchTerminalStates`, which makes a `fetch` call for each unique (project, workItemType) pair. Existing tests didn't mock this call, and new state category filtering tests had incorrect assertions for `externalId` and `title` formats.
 
-**Fix strategy:** Added a default `mockImplementation` fallback in `beforeEach` blocks of both test files to handle unmocked states API calls:
+**Fix strategy:** Added a default `mockImplementation` fallback in `beforeEach` blocks of both test files. The fallback handles unmocked states API calls and throws on unexpected URLs for fast failure diagnostics:
 ```typescript
 mockFetch.mockImplementation(async (url: string) => {
   if (typeof url === 'string' && url.includes('/workitemtypes/') && url.includes('/states')) {
     return { ok: true, json: async () => ({ count: 0, value: [] }) };
   }
-  return undefined;
+  throw new Error(`Unexpected fetch call in test: ${String(url)}`);
 });
 ```
 
