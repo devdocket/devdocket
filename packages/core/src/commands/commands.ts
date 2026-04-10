@@ -100,25 +100,25 @@ function handleEditItem(
 
 async function handleOpenInBrowser(workGraph: WorkGraph, item?: { id?: string; url?: string }): Promise<void> {
   if (!item || (!item.id && !item.url)) {
-    vscode.window.showWarningMessage('WorkCenter: Select an item to open in the browser.');
+    void vscode.window.showWarningMessage('WorkCenter: Select an item to open in the browser.');
     return;
   }
   const workItem = item.id ? workGraph.getItem(item.id) : undefined;
   const url = workItem?.url ?? item.url;
   if (!url) {
-    vscode.window.showWarningMessage('This item has no URL to open.');
+    void vscode.window.showWarningMessage('This item has no URL to open.');
     return;
   }
   const safeUrl = isSafeUrl(url);
   if (!safeUrl) {
     const display = url.length > 100 ? url.slice(0, 100) + '…' : url;
     const sanitized = display.replace(/[\n\r]/g, ' ');
-    vscode.window.showWarningMessage(`Cannot open non-web URL: ${sanitized}`);
+    void vscode.window.showWarningMessage(`Cannot open non-web URL: ${sanitized}`);
     return;
   }
   const opened = await vscode.env.openExternal(vscode.Uri.parse(safeUrl.href));
   if (!opened) {
-    vscode.window.showWarningMessage('Failed to open URL in the browser.');
+    void vscode.window.showWarningMessage('Failed to open URL in the browser.');
   }
 }
 
