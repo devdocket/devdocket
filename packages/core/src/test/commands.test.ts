@@ -322,6 +322,32 @@ describe('registerCommands', () => {
       );
       expect(vscode.env.openExternal).not.toHaveBeenCalled();
     });
+
+    it('opens url from item without id (Inbox/Sources items)', async () => {
+      await invoke('workcenter.openInBrowser', { url: 'https://provider-item.com' });
+
+      expect(workGraph.getItem).not.toHaveBeenCalled();
+      expect(vscode.Uri.parse).toHaveBeenCalledWith('https://provider-item.com/');
+      expect(vscode.env.openExternal).toHaveBeenCalled();
+    });
+
+    it('rejects unsafe url-only item (Inbox/Sources)', async () => {
+      await invoke('workcenter.openInBrowser', { url: 'javascript:alert(1)' });
+
+      expect(vscode.window.showWarningMessage).toHaveBeenCalledWith(
+        expect.stringContaining('Cannot open non-web URL'),
+      );
+      expect(vscode.env.openExternal).not.toHaveBeenCalled();
+    });
+
+    it('shows warning when item has neither id nor url', async () => {
+      await invoke('workcenter.openInBrowser', {});
+
+      expect(vscode.window.showWarningMessage).toHaveBeenCalledWith(
+        'WorkCenter: Select an item to open in the browser.',
+      );
+      expect(vscode.env.openExternal).not.toHaveBeenCalled();
+    });
   });
 
   // ── runAction ────────────────────────────────────────────────────
