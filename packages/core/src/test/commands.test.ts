@@ -326,6 +326,7 @@ describe('registerCommands', () => {
     it('opens url from item without id (Inbox/Sources items)', async () => {
       await invoke('workcenter.openInBrowser', { url: 'https://provider-item.com' });
 
+      expect(workGraph.getItem).not.toHaveBeenCalled();
       expect(vscode.Uri.parse).toHaveBeenCalledWith('https://provider-item.com/');
       expect(vscode.env.openExternal).toHaveBeenCalled();
     });
