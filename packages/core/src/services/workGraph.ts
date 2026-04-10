@@ -209,12 +209,12 @@ export class WorkGraph {
 
   /** Transition a work item to a new lifecycle state. */
   async transitionState(id: string, newState: WorkItemState): Promise<void> {
-    if (!Object.values(WorkItemState).includes(newState)) {
-      throw new Error(`Invalid state value: ${String(newState)}. Expected one of: ${Object.values(WorkItemState).join(', ')}`);
-    }
     const item = this.items.get(id);
     if (!item) {
       throw new Error(`Work item not found: ${id}`);
+    }
+    if (!Object.values(WorkItemState).includes(newState)) {
+      throw new Error(`Invalid state value: ${String(newState)}. Expected one of: ${Object.values(WorkItemState).join(', ')}`);
     }
     const allowedTargets = VALID_TRANSITIONS.get(item.state);
     if (!allowedTargets || !allowedTargets.has(newState)) {
