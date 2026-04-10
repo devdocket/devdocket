@@ -3,6 +3,7 @@ import { DiscoveredItem } from '../api/types';
 import { ProviderRegistry } from '../services/providerRegistry';
 import { DiscoveredStateStore } from '../storage/discoveredStateStore';
 import { ReadStateStore } from '../storage/readStateStore';
+import { logger } from '../services/logger';
 
 export interface InboxProviderNode {
   kind: 'provider';
@@ -95,7 +96,9 @@ export class InboxTreeProvider implements vscode.TreeDataProvider<InboxElement> 
       }
     }
     if (keysToDelete.length > 0) {
-      this.readStateStore.deleteMany(keysToDelete);
+      void this.readStateStore.deleteMany(keysToDelete).catch(err =>
+        logger.error('Failed to prune read state', err)
+      );
     }
   }
 
