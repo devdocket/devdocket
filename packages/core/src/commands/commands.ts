@@ -275,7 +275,7 @@ async function handleAcceptFromSources(
   try {
     await stateStore.setState(item.providerId, item.externalId, 'accepted');
   } catch (err: unknown) {
-    // Roll back the created work item to prevent it appearing in Queue while still unseen in Inbox
+    // Roll back the created work item to prevent it appearing in Queue while still unseen in Sources
     try {
       await workGraph.deleteItem(createdItem.id);
     } catch (rollbackErr: unknown) {
