@@ -4,6 +4,14 @@ import { WorkItem, WorkItemInput, WorkItemState } from '../models/workItem';
 import { ITaskStore } from '../storage/taskStore';
 import { logger } from './logger';
 
+const VALID_TRANSITIONS: ReadonlyMap<WorkItemState, ReadonlySet<WorkItemState>> = new Map([
+  [WorkItemState.New, new Set([WorkItemState.InProgress])],
+  [WorkItemState.InProgress, new Set([WorkItemState.Paused, WorkItemState.Done])],
+  [WorkItemState.Paused, new Set([WorkItemState.InProgress])],
+  [WorkItemState.Done, new Set([WorkItemState.Archived])],
+  [WorkItemState.Archived, new Set<WorkItemState>()],
+]);
+
 /**
  * In-memory graph of {@link WorkItem}s backed by a persistent {@link ITaskStore}.
  * Provides CRUD operations, state transitions, and ordering.
@@ -204,6 +212,12 @@ export class WorkGraph {
     const item = this.items.get(id);
     if (!item) {
       throw new Error(`Work item not found: ${id}`);
+    }
+    const allowedTargets = VALID_TRANSITIONS.get(item.state);
+    if (!allowedTargets || !allowedTargets.has(newState)) {
+      throw new Error(
+        `Invalid state transition: cannot move from ${item.state} to ${newState}`,
+      );
     }
     const updated = { ...item, state: newState, updatedAt: Date.now() };
     await this.store.save(updated);

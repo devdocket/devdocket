@@ -451,10 +451,11 @@ describe('WorkGraph', () => {
       const a = await graph.createItem({ title: 'A' });
       await graph.transitionState(a.id, WorkItemState.InProgress);
       const b = await graph.createItem({ title: 'B' });
-      await graph.transitionState(b.id, WorkItemState.Blocked);
+      await graph.transitionState(b.id, WorkItemState.InProgress);
+      await graph.transitionState(b.id, WorkItemState.Paused);
       await graph.createItem({ title: 'C' }); // stays New
 
-      const active = graph.getItemsByState(WorkItemState.InProgress, WorkItemState.Blocked);
+      const active = graph.getItemsByState(WorkItemState.InProgress, WorkItemState.Paused);
       expect(active).toHaveLength(2);
       expect(active.map((i) => i.title).sort()).toEqual(['A', 'B']);
     });
@@ -475,6 +476,84 @@ describe('WorkGraph', () => {
       await graph.createItem({ title: 'B' });
       const result = graph.getItemsByState(WorkItemState.New, WorkItemState.New);
       expect(result).toHaveLength(2);
+    });
+  });
+
+  describe('state transition validation', () => {
+    it('rejects New → Done (skipping InProgress)', async () => {
+      const item = await graph.createItem({ title: 'Test' });
+      await expect(graph.transitionState(item.id, WorkItemState.Done))
+        .rejects.toThrow('Invalid state transition');
+    });
+
+    it('rejects New → Archived', async () => {
+      const item = await graph.createItem({ title: 'Test' });
+      await expect(graph.transitionState(item.id, WorkItemState.Archived))
+        .rejects.toThrow('Invalid state transition');
+    });
+
+    it('rejects New → Paused', async () => {
+      const item = await graph.createItem({ title: 'Test' });
+      await expect(graph.transitionState(item.id, WorkItemState.Paused))
+        .rejects.toThrow('Invalid state transition');
+    });
+
+    it('rejects Done → New', async () => {
+      const item = await graph.createItem({ title: 'Test' });
+      await graph.transitionState(item.id, WorkItemState.InProgress);
+      await graph.transitionState(item.id, WorkItemState.Done);
+      await expect(graph.transitionState(item.id, WorkItemState.New))
+        .rejects.toThrow('Invalid state transition');
+    });
+
+    it('rejects Done → InProgress', async () => {
+      const item = await graph.createItem({ title: 'Test' });
+      await graph.transitionState(item.id, WorkItemState.InProgress);
+      await graph.transitionState(item.id, WorkItemState.Done);
+      await expect(graph.transitionState(item.id, WorkItemState.InProgress))
+        .rejects.toThrow('Invalid state transition');
+    });
+
+    it('rejects Archived → New', async () => {
+      const item = await graph.createItem({ title: 'Test' });
+      await graph.transitionState(item.id, WorkItemState.InProgress);
+      await graph.transitionState(item.id, WorkItemState.Done);
+      await graph.transitionState(item.id, WorkItemState.Archived);
+      await expect(graph.transitionState(item.id, WorkItemState.New))
+        .rejects.toThrow('Invalid state transition');
+    });
+
+    it('rejects InProgress → New', async () => {
+      const item = await graph.createItem({ title: 'Test' });
+      await graph.transitionState(item.id, WorkItemState.InProgress);
+      await expect(graph.transitionState(item.id, WorkItemState.New))
+        .rejects.toThrow('Invalid state transition');
+    });
+
+    it('rejects InProgress → Archived (skipping Done)', async () => {
+      const item = await graph.createItem({ title: 'Test' });
+      await graph.transitionState(item.id, WorkItemState.InProgress);
+      await expect(graph.transitionState(item.id, WorkItemState.Archived))
+        .rejects.toThrow('Invalid state transition');
+    });
+
+    it('allows all valid transitions in the full lifecycle', async () => {
+      const item = await graph.createItem({ title: 'Lifecycle' });
+      // New → InProgress
+      await graph.transitionState(item.id, WorkItemState.InProgress);
+      expect(graph.getItem(item.id)?.state).toBe(WorkItemState.InProgress);
+      // InProgress → Paused
+      await graph.transitionState(item.id, WorkItemState.Paused);
+      expect(graph.getItem(item.id)?.state).toBe(WorkItemState.Paused);
+      // Paused → InProgress
+      await graph.transitionState(item.id, WorkItemState.InProgress);
+      expect(graph.getItem(item.id)?.state).toBe(WorkItemState.InProgress);
+      // InProgress → Done
+      await graph.transitionState(item.id, WorkItemState.Done);
+      expect(graph.getItem(item.id)?.state).toBe(WorkItemState.Done);
+      // Done → Archived
+      await graph.transitionState(item.id, WorkItemState.Archived);
+      expect(graph.getItem(item.id)?.state).toBe(WorkItemState.Archived);
     });
   });
 });
