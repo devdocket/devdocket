@@ -192,3 +192,21 @@ Patterns documented in `.squad/decisions.md` under "Code Review Fix Patterns" (2
 - ReadStateStore was the only store using an unchecked `JSON.parse(data) as string[]` type assertion. The other two stores (jsonTaskStore, discoveredStateStore) already had full validation + backup-on-corruption patterns. Always validate parsed JSON at runtime, even for simple types like `string[]`.
 - A shared `MAX_STORE_FILE_SIZE` constant in `limits.ts` keeps the size guard consistent across all stores and avoids magic numbers scattered across files.
 - Changing ReadStateStore from "throw on corruption" to "backup and reset" is a deliberate behavioral change that aligns with the other stores. This breaks the existing test `should handle corrupted JSON by throwing` — flagged for Hockney to update.
+
+## Issue #178: ADO provider state filter (2025-01-22)
+
+### Learnings
+- Updated `AdoWorkItemProvider` WIQL query to exclude all non-active work item states: `Closed`, `Removed`, `Resolved`, and `Done`. Previously only excluded `Closed` and `Removed`.
+- Updated the class JSDoc comment to document all four excluded states for clarity.
+- This prevents resolved/completed work items from appearing in Inbox and Sources views, keeping the UI focused on actionable items.
+
+## Issue #178: State-category-based filtering (2025-01-22)
+
+### Learnings
+- Reverted WIQL hardcoded state exclusions from 4 states (`Closed`, `Removed`, `Resolved`, `Done`) back to 2 (`Closed`, `Removed`) as a performance optimization. The other states are not universal across ADO process templates.
+- Added two-layer filtering approach: WIQL excludes common terminal states for performance, then state category API filters remaining non-active items for correctness.
+- The ADO Work Item Type States API (`/workitemtypes/{type}/states`) returns state definitions with a `category` field. States with categories `Completed`, `Removed`, or `Resolved` are non-active and should be excluded.
+- Caching terminal states per `project/workItemType` pair prevents redundant API calls during the same refresh cycle. Cache is instance-level and survives multiple refresh operations.
+- **Fail open pattern**: If the states API call fails (network error, parse error, non-ok response), return an empty set of terminal states to avoid filtering out all items. Users see potentially completed items rather than missing active items.
+- URL-encoding is required for org, project, and workItemType in all API URLs using `encodeURIComponent()` to handle special characters and spaces.
+- Grouping work items by `(project, workItemType)` before fetching states minimizes API calls when multiple items share the same type.

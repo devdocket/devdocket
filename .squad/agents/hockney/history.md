@@ -228,4 +228,110 @@ const worktreePath = path.join(path.dirname(repoPath), branchName);
 
 Test patterns documented in `.squad/decisions.md` under "Test Update Patterns" (2026-03-25).
 
+### ADO Work Item State Exclusion Testing (2025-05-16)
+
+**Issue:** GitHub issue #178 — ADO provider should exclude non-active work items from Inbox and Sources.
+
+**Changes:** Updated `packages/ado/src/test/adoWorkItemProvider.extended.test.ts` to verify WIQL query excludes `Resolved` and `Done` states alongside existing exclusions (`Closed` and `Removed`).
+
+**Test file:** `packages/ado/src/test/adoWorkItemProvider.extended.test.ts`  
+**Test:** "sends correct WIQL query body filtering by assignment and state" (within `WIQL query construction` describe block)
+
+**Assertions added:**
+```typescript
+expect(body.query).toContain("[System.State] <> 'Resolved'");
+expect(body.query).toContain("[System.State] <> 'Done'");
+```
+
+**Result:** All 125 ADO provider tests pass. Production code already contained the updated WIQL query filtering out all four non-active states.
+
+**Why:** Ensures that only active work items (not completed or resolved items) appear in WorkCenter's Inbox and Sources views. This reduces noise and keeps users focused on actionable work items.
+
+**Production query:**
+```sql
+SELECT [System.Id] FROM WorkItems WHERE [System.AssignedTo] = @Me 
+  AND [System.State] <> 'Closed' 
+  AND [System.State] <> 'Removed' 
+  AND [System.State] <> 'Resolved' 
+  AND [System.State] <> 'Done'
+```
+
+### ADO State Category Filtering Tests (2025-05-16, Issue #178)
+
+**Issue:** ADO provider refactoring to use state category API for filtering terminal work items.
+
+**Design:** Production code (Fenster) is moving state filtering from WIQL query to post-fetch filtering using ADO Work Item Type States API. WIQL will keep only basic `Closed` and `Removed` exclusions for performance. After detail fetch, provider calls states API per work item type to get state categories (`Completed`, `Removed`, `Resolved` = terminal) and filters items before publishing.
+
+**Tests added:** 9 new tests in `state category filtering` describe block:
+
+1. **Updated WIQL test** — Changed existing test to verify WIQL only excludes `Closed` and `Removed` (NOT `Resolved` or `Done`)
+2. **Filters out work items in terminal state categories** — Mock WIQL returns 3 items (Active, Resolved, New). States API maps Resolved→Resolved category. Expect only Active and New published.
+3. **Handles multiple work item types** — Bug and User Story with different terminal states. Verify correct per-type filtering.
+4. **Caches state definitions** — Call refresh twice. Verify states API called only once per (project, type) pair.
+5. **Fails open on states API error** — Mock 500 error for one type. Items of that type kept visible, other types filtered correctly.
+6. **Fails open on network error** — States API throws network error. Items kept (not filtered).
+7. **Fails open on unparseable JSON** — States API response.json() throws. Items kept.
+8. **Handles org-level query** — Provider with empty projects array. Verify states API URL uses project from work item detail.
+
+**Helper added:** `createStatesResponse()` to mock ADO states API responses.
+
+**Updated helper:** Added `state` parameter to `createWorkItemDetail()` (defaults to 'Active').
+
+**Test results:** 132 tests total (102→132, +30). **16 tests currently failing:**
+- **9 new state filtering tests fail** — Expected. Production code not yet implemented by Fenster.
+- **7 pre-existing tests now fail** — Also expected. Tests need updating after Fenster's refactor completes:
+  - 3 tests expect 2 fetch calls, now get 3 (states API added)
+  - 4 tests expect items, now get empty arrays (items filtered out by new logic)
+
+**Failure patterns:**
+- "fetches assigned work items via WIQL and detail APIs" — expects 2 fetch calls, gets 3 (states API)
+- "strips HTML tags from description" — items[0] is undefined (filtered out)
+- "truncates description to 200 chars" — items[0] is undefined (filtered out)
+- "handles detail batch network error" — expects 1 item, gets 0 (filtered out)
+- "handles work item with undefined description" — items[0] is undefined (filtered out)
+- "handles work item with empty description" — items[0] is undefined (filtered out)
+- State filtering tests — all expect filtering logic that isn't implemented yet
+
+**Status:** Tests written per spec. Waiting for Fenster to complete production implementation. Tests document expected behavior and will pass once states API integration is complete.
+
+### ADO State Category Filtering Test Fixes (2025-05-16, Issue #178)
+
+**Issue:** After Fenster's state-category-based filtering implementation, 16 tests were failing due to missing mock implementations and incorrect assertions.
+
+**Root cause:** The `filterActiveItems` method now calls `fetchTerminalStates`, which makes a `fetch` call for each unique (project, workItemType) pair. Existing tests didn't mock this call, and new state category filtering tests had incorrect assertions for `externalId` and `title` formats.
+
+**Fix strategy:** Added a default `mockImplementation` fallback in `beforeEach` blocks of both test files to handle unmocked states API calls:
+```typescript
+mockFetch.mockImplementation(async (url: string) => {
+  if (typeof url === 'string' && url.includes('/workitemtypes/') && url.includes('/states')) {
+    return { ok: true, json: async () => ({ count: 0, value: [] }) };
+  }
+  return undefined;
+});
+```
+
+**Changes made:**
+
+1. **Added fallback mock implementation** in both test files (`adoWorkItemProvider.test.ts` and `adoWorkItemProvider.extended.test.ts`)
+   - Catches states API calls that aren't explicitly mocked
+   - Returns empty states → no items filtered → existing behavior preserved
+   - Tests with explicit `mockResolvedValueOnce` for states API take priority
+
+2. **Updated `toHaveBeenCalledTimes` assertions** to account for additional states API calls:
+   - "fetches assigned work items via WIQL and detail APIs": 2 → 4 calls (2 work item types: User Story + Bug)
+   - "fetches work item details in batches of 200": 4 → 5 calls (1 WIQL + 3 batches + 1 states)
+
+3. **Fixed assertions in new state category filtering tests:**
+   - `externalId` format: Changed `'myorg/MyProject#1'` → `'MyProject/1'` (format is `${project}/${id}`)
+   - `title` format: Changed `'Bug Active'` → `'Bug 1: Bug Active'` (format is `${type} ${id}: ${title}`)
+   - Fixed 5 test assertions across 3 tests (filters out terminal states, handles multiple types, fail-open tests)
+
+4. **Fixed double-slash check in org-level query test:**
+   - Changed from checking `not.toContain('//')` (fails for `https://`)
+   - To regex check `not.toMatch(/[^:]\/\//)` (catches path segment issues like `//_apis`)
+
+**Test results:** All 132 ADO tests passing. Full test suite: 434 tests passing (132 ADO + 169 GitHub + 133 shared).
+
+**Key learning:** When adding new API calls to production code, use `mockImplementation` as a default fallback in tests rather than updating every individual test. This provides safe defaults while allowing specific tests to override with `mockResolvedValueOnce`.
+
 
