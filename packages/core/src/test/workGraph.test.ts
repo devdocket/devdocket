@@ -563,8 +563,11 @@ describe('WorkGraph', () => {
 
     it('rejects undefined state value', async () => {
       const item = await graph.createItem({ title: 'Test' });
+      vi.mocked(store.save).mockClear();
       await expect(graph.transitionState(item.id, undefined as any))
         .rejects.toThrow('Invalid state value');
+      expect(store.save).not.toHaveBeenCalled();
+      expect(graph.getItem(item.id)?.state).toBe(WorkItemState.New);
     });
 
     it('allows all valid transitions in the full lifecycle', async () => {
