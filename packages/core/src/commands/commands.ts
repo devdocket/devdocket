@@ -207,8 +207,9 @@ async function handleAcceptFromInbox(
     }
     return;
   }
+  let createdItem: Awaited<ReturnType<typeof workGraph.createItem>>;
   try {
-    await workGraph.createItem(
+    createdItem = await workGraph.createItem(
       { title: formatItemTitle(item) },
       { providerId: item.providerId, externalId: item.externalId, url: item.url },
     );
@@ -219,6 +220,12 @@ async function handleAcceptFromInbox(
   try {
     await stateStore.setState(item.providerId, item.externalId, 'accepted');
   } catch (err: unknown) {
+    // Roll back the created work item to prevent it appearing in Queue while still unseen in Inbox
+    try {
+      await workGraph.deleteItem(createdItem.id);
+    } catch (rollbackErr: unknown) {
+      logger.error('Failed to roll back created item after setState failure', rollbackErr);
+    }
     handleCommandError('Failed to update state after accepting item', err);
   }
 }
@@ -255,8 +262,9 @@ async function handleAcceptFromSources(
     );
     return;
   }
+  let createdItem: Awaited<ReturnType<typeof workGraph.createItem>>;
   try {
-    await workGraph.createItem(
+    createdItem = await workGraph.createItem(
       { title: formatItemTitle(item) },
       { providerId: item.providerId, externalId: item.externalId, url: item.url },
     );
@@ -267,6 +275,12 @@ async function handleAcceptFromSources(
   try {
     await stateStore.setState(item.providerId, item.externalId, 'accepted');
   } catch (err: unknown) {
+    // Roll back the created work item to prevent it appearing in Queue while still unseen in Sources
+    try {
+      await workGraph.deleteItem(createdItem.id);
+    } catch (rollbackErr: unknown) {
+      logger.error('Failed to roll back created item after setState failure', rollbackErr);
+    }
     handleCommandError('Failed to update state after accepting item', err);
   }
 }
