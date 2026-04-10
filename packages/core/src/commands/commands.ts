@@ -86,21 +86,6 @@ async function handleResumeItem(workGraph: WorkGraph, item?: { id?: string }): P
   await workGraph.transitionState(item.id, WorkItemState.InProgress);
 }
 
-async function handleBlockItem(workGraph: WorkGraph, item?: { id?: string }): Promise<void> {
-  if (!item?.id) { return; }
-  await workGraph.transitionState(item.id, WorkItemState.Blocked);
-}
-
-async function handleUnblockItem(workGraph: WorkGraph, item?: { id?: string }): Promise<void> {
-  if (!item?.id) { return; }
-  await workGraph.transitionState(item.id, WorkItemState.InProgress);
-}
-
-async function handleMarkWaitingOn(workGraph: WorkGraph, item?: { id?: string }): Promise<void> {
-  if (!item?.id) { return; }
-  await workGraph.transitionState(item.id, WorkItemState.WaitingOn);
-}
-
 function handleEditItem(
   context: vscode.ExtensionContext,
   workGraph: WorkGraph,
@@ -308,12 +293,6 @@ export function registerCommands(
       wrapCommand('Failed to pause item', (item) => handlePauseItem(workGraph, item))),
     vscode.commands.registerCommand('workcenter.resumeItem',
       wrapCommand('Failed to resume item', (item) => handleResumeItem(workGraph, item))),
-    vscode.commands.registerCommand('workcenter.blockItem',
-      wrapCommand('Failed to block item', (item) => handleBlockItem(workGraph, item))),
-    vscode.commands.registerCommand('workcenter.unblockItem',
-      wrapCommand('Failed to unblock item', (item) => handleUnblockItem(workGraph, item))),
-    vscode.commands.registerCommand('workcenter.markWaitingOn',
-      wrapCommand('Failed to mark item as waiting', (item) => handleMarkWaitingOn(workGraph, item))),
     vscode.commands.registerCommand('workcenter.editItem',
       wrapCommand('Failed to open editor', (item) => handleEditItem(context, workGraph, item))),
     vscode.commands.registerCommand('workcenter.openInBrowser',

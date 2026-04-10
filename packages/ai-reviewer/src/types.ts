@@ -8,7 +8,7 @@ export interface WorkItem {
   id: string;
   title: string;
   description?: string;
-  state: 'New' | 'Triaged' | 'InProgress' | 'Blocked' | 'WaitingOn' | 'Done' | 'Archived';
+  state: 'New' | 'InProgress' | 'Paused' | 'Done' | 'Archived';
   providerId?: string;
   externalId?: string;
   url?: string;

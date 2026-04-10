@@ -451,10 +451,10 @@ describe('WorkGraph', () => {
       const a = await graph.createItem({ title: 'A' });
       await graph.transitionState(a.id, WorkItemState.InProgress);
       const b = await graph.createItem({ title: 'B' });
-      await graph.transitionState(b.id, WorkItemState.Blocked);
+      await graph.transitionState(b.id, WorkItemState.Paused);
       await graph.createItem({ title: 'C' }); // stays New
 
-      const active = graph.getItemsByState(WorkItemState.InProgress, WorkItemState.Blocked);
+      const active = graph.getItemsByState(WorkItemState.InProgress, WorkItemState.Paused);
       expect(active).toHaveLength(2);
       expect(active.map((i) => i.title).sort()).toEqual(['A', 'B']);
     });
