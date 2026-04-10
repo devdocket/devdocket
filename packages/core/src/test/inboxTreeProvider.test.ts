@@ -57,7 +57,7 @@ function createMockReadStateStore() {
       items.add(key);
       return true;
     }),
-    deleteMany: vi.fn((keys: string[]) => {
+    deleteMany: vi.fn(async (keys: string[]) => {
       for (const key of keys) { items.delete(key); }
     }),
     keys: vi.fn(() => items.values()),

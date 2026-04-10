@@ -54,8 +54,7 @@ describe('ReadStateStore', () => {
     await store.add('gh::1');
     await store.add('gh::2');
     await store.add('gh::3');
-    store.deleteMany(['gh::1', 'gh::3']);
-    await store.flush();
+    await store.deleteMany(['gh::1', 'gh::3']);
 
     expect(store.has('gh::1')).toBe(false);
     expect(store.has('gh::2')).toBe(true);
@@ -69,8 +68,7 @@ describe('ReadStateStore', () => {
   it('should ignore non-existent keys in deleteMany', async () => {
     await store.load();
     await store.add('gh::1');
-    store.deleteMany(['gh::nonexistent']);
-    await store.flush();
+    await store.deleteMany(['gh::nonexistent']);
 
     expect(store.has('gh::1')).toBe(true);
   });
@@ -199,6 +197,36 @@ describe('ReadStateStore', () => {
     // Restore path and reset write queue so afterEach cleanup succeeds
     (store as any).filePath = originalPath;
     (store as any).writeQueue = Promise.resolve();
+  });
+
+  it('should propagate write errors from deleteMany', async () => {
+    await store.load();
+    await store.add('gh::1');
+    await store.flush();
+
+    // Point to invalid path to trigger write error
+    const originalPath = (store as any).filePath;
+    (store as any).filePath = path.join(tmpDir, '\0invalid');
+
+    await expect(store.deleteMany(['gh::1'])).rejects.toThrow();
+
+    // Verify rollback - key should still be present
+    expect(store.has('gh::1')).toBe(true);
+
+    // Restore path and reset write queue so afterEach cleanup succeeds
+    (store as any).filePath = originalPath;
+    (store as any).writeQueue = Promise.resolve();
+  });
+
+  it('should auto-load when deleteMany() is called before load()', async () => {
+    const filePath = path.join(tmpDir, 'read-state.json');
+    await fs.writeFile(filePath, JSON.stringify(['gh::existing', 'gh::remove']), 'utf-8');
+
+    const freshStore = new ReadStateStore(tmpDir);
+    await freshStore.deleteMany(['gh::remove']);
+
+    expect(freshStore.has('gh::existing')).toBe(true);
+    expect(freshStore.has('gh::remove')).toBe(false);
   });
 
   it('should auto-load when add() is called before load()', async () => {

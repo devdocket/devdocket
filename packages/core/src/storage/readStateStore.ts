@@ -51,8 +51,9 @@ export class ReadStateStore {
    * Atomically delete keys and persist, with rollback on write failure.
    * Both deletes and write are serialized through the writeQueue.
    */
-  deleteMany(keys: string[]): void {
-    this.enqueue(async () => {
+  async deleteMany(keys: string[]): Promise<void> {
+    if (!this.loaded) { await this.load(); }
+    return this.enqueue(async () => {
       const actuallyDeleted: string[] = [];
       for (const key of keys) {
         if (this.items.delete(key)) {
@@ -66,10 +67,8 @@ export class ReadStateStore {
         for (const key of actuallyDeleted) {
           this.items.add(key);
         }
-        logger.error('Failed to save read state, rolled back deletions', err);
+        throw err;
       }
-    }).catch(() => {
-      // Error already handled inside enqueue with rollback
     });
   }
 
