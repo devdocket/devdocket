@@ -5,12 +5,9 @@
  *
  * ```
  * New → InProgress → Done → Archived
- *                            ↕    ↕
- *                        Blocked  WaitingOn
+ *            ↕
+ *          Paused
  * ```
- *
- * Typical flow in the current UI: `New` → `InProgress` → `Done` → `Archived`.
- * Items may also move from active work to `Paused`.
  */
 export enum WorkItemState {
   /** Freshly created or accepted from the Inbox; sits in the Queue. */

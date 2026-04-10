@@ -268,12 +268,12 @@ describe('Batch migration (matches extension.ts setStates path)', () => {
     expect(stateStore.setStates).not.toHaveBeenCalled();
   });
 
-  it('should migrate items in Done, Archived, InProgress, and Blocked states', async () => {
+  it('should migrate items in Done, Archived, InProgress, and Paused states', async () => {
     const items = [
       makeWorkItem({ id: 'done1', providerId: 'gh', externalId: 'e-done', state: WorkItemState.Done }),
       makeWorkItem({ id: 'arch1', providerId: 'gh', externalId: 'e-archived', state: WorkItemState.Archived }),
       makeWorkItem({ id: 'ip1', providerId: 'gh', externalId: 'e-inprogress', state: WorkItemState.InProgress }),
-      makeWorkItem({ id: 'bl1', providerId: 'gh', externalId: 'e-blocked', state: WorkItemState.Blocked }),
+      makeWorkItem({ id: 'p1', providerId: 'gh', externalId: 'e-paused', state: WorkItemState.Paused }),
     ];
     const store = createMockStore(items);
     const graph = new WorkGraph(store);
@@ -289,7 +289,7 @@ describe('Batch migration (matches extension.ts setStates path)', () => {
         { providerId: 'gh', externalId: 'e-done', state: 'accepted' },
         { providerId: 'gh', externalId: 'e-archived', state: 'accepted' },
         { providerId: 'gh', externalId: 'e-inprogress', state: 'accepted' },
-        { providerId: 'gh', externalId: 'e-blocked', state: 'accepted' },
+        { providerId: 'gh', externalId: 'e-paused', state: 'accepted' },
       ]),
     );
   });
