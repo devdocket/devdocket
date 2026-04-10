@@ -33,7 +33,7 @@ Azure DevOps work item states vary by process template (Agile, Scrum, CMMI, cust
 **References:**
 - Issue #178
 - `packages/ado/src/adoWorkItemProvider.ts`
-- ADO REST API: [Work Item Type States](https://learn.microsoft.com/en-us/rest/api/azure/devops/wit/work-item-types-field/get-work-item-type)
+- ADO REST API: [Work Item Type States](https://learn.microsoft.com/en-us/rest/api/azure/devops/wit/work-item-type-states/list)
 
 ---
 
