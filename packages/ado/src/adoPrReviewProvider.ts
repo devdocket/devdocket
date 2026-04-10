@@ -62,6 +62,7 @@ export class AdoPrReviewProvider extends BaseProvider {
     try {
       logger.info('Fetching ADO PR reviews...');
       if (token?.isCancellationRequested) {
+        this._onDidDiscoverItems.fire([]);
         return;
       }
 
@@ -70,11 +71,13 @@ export class AdoPrReviewProvider extends BaseProvider {
       }).catch(() => null);
 
       if (!session || token?.isCancellationRequested) {
+        this._onDidDiscoverItems.fire([]);
         return;
       }
 
       await this.fetchAndPublishPrs(session.accessToken, true, session.account.id);
     } catch (err) {
+      this._onDidDiscoverItems.fire([]);
       logger.error('Failed to fetch PR reviews:', err);
     } finally {
       this._isRefreshing = false;
@@ -89,11 +92,13 @@ export class AdoPrReviewProvider extends BaseProvider {
       }).catch(() => null);
 
       if (!session) {
+        this._onDidDiscoverItems.fire([]);
         return;
       }
 
       await this.fetchAndPublishPrs(session.accessToken, false, session.account.id);
     } catch (err) {
+      this._onDidDiscoverItems.fire([]);
       logger.error('Failed to fetch PR reviews:', err);
     }
   }
@@ -101,6 +106,7 @@ export class AdoPrReviewProvider extends BaseProvider {
   private async fetchAndPublishPrs(accessToken: string, isUserTriggered: boolean, sessionAccountId: string): Promise<void> {
     if (!isValidUrlSegment(this.org)) {
       logger.warn('Skipping PR fetch: invalid ADO organization name', this.org);
+      this._onDidDiscoverItems.fire([]);
       return;
     }
 
@@ -126,6 +132,7 @@ export class AdoPrReviewProvider extends BaseProvider {
 
     if (this.projects.length > 0 && validProjects.length === 0) {
       logger.warn('All configured ADO projects are invalid — skipping PR fetch');
+      this._onDidDiscoverItems.fire([]);
       return;
     }
 

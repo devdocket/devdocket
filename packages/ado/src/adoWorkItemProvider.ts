@@ -62,6 +62,7 @@ export class AdoWorkItemProvider extends BaseProvider {
     try {
       logger.info('Fetching assigned ADO work items...');
       if (token?.isCancellationRequested) {
+        this._onDidDiscoverItems.fire([]);
         return;
       }
 
@@ -70,11 +71,13 @@ export class AdoWorkItemProvider extends BaseProvider {
       }).catch(() => null);
 
       if (!session || token?.isCancellationRequested) {
+        this._onDidDiscoverItems.fire([]);
         return;
       }
 
       await this.fetchAndPublishWorkItems(session.accessToken, true);
     } catch (err) {
+      this._onDidDiscoverItems.fire([]);
       logger.error('Failed to fetch work items:', err);
     } finally {
       this._isRefreshing = false;
@@ -89,11 +92,13 @@ export class AdoWorkItemProvider extends BaseProvider {
       }).catch(() => null);
 
       if (!session) {
+        this._onDidDiscoverItems.fire([]);
         return;
       }
 
       await this.fetchAndPublishWorkItems(session.accessToken, false);
     } catch (err) {
+      this._onDidDiscoverItems.fire([]);
       logger.error('Failed to fetch work items:', err);
     }
   }
@@ -101,6 +106,7 @@ export class AdoWorkItemProvider extends BaseProvider {
   private async fetchAndPublishWorkItems(accessToken: string, isUserTriggered: boolean): Promise<void> {
     if (!isValidUrlSegment(this.org)) {
       logger.warn('Skipping fetch: invalid ADO organization name', this.org);
+      this._onDidDiscoverItems.fire([]);
       return;
     }
 
@@ -115,6 +121,7 @@ export class AdoWorkItemProvider extends BaseProvider {
 
     if (this.projects.length > 0 && validProjects.length === 0) {
       logger.warn('All configured ADO projects are invalid — skipping fetch');
+      this._onDidDiscoverItems.fire([]);
       return;
     }
 

@@ -52,14 +52,14 @@ describe('AdoWorkItemProvider', () => {
     expect(provider.label).toBe('Azure DevOps Work Items');
   });
 
-  it('does nothing when no auth session exists', async () => {
+  it('fires empty items when no auth session exists', async () => {
     vi.mocked(authentication.getSession).mockResolvedValue(undefined as any);
 
     const listener = vi.fn();
     provider.onDidDiscoverItems(listener);
     await provider.refresh();
 
-    expect(listener).not.toHaveBeenCalled();
+    expect(listener).toHaveBeenCalledWith([]);
     expect(mockFetch).not.toHaveBeenCalled();
   });
 
@@ -217,6 +217,50 @@ describe('AdoWorkItemProvider', () => {
     expect(window.showWarningMessage).not.toHaveBeenCalled();
   });
 
+  it('fires empty items when cancellation is requested before auth', async () => {
+    const token = { isCancellationRequested: true } as any;
+
+    const listener = vi.fn();
+    provider.onDidDiscoverItems(listener);
+    await provider.refresh(token);
+
+    expect(listener).toHaveBeenCalledWith([]);
+    expect(mockFetch).not.toHaveBeenCalled();
+  });
+
+  it('fires empty items when cancellation is requested after auth', async () => {
+    const token = { isCancellationRequested: false } as any;
+    vi.mocked(authentication.getSession).mockImplementation(async () => {
+      token.isCancellationRequested = true;
+      return {
+        accessToken: 'test-token',
+        id: 'session-1',
+        scopes: ['499b84ac-1321-427f-aa17-267ca6975798/.default'],
+        account: { id: '1', label: 'testuser' },
+      } as any;
+    });
+
+    const listener = vi.fn();
+    provider.onDidDiscoverItems(listener);
+    await provider.refresh(token);
+
+    expect(listener).toHaveBeenCalledWith([]);
+    expect(mockFetch).not.toHaveBeenCalled();
+  });
+
+  it('fires empty items on background refresh when no session exists', async () => {
+    vi.mocked(authentication.getSession).mockResolvedValue(undefined as any);
+
+    const listener = vi.fn();
+    provider.onDidDiscoverItems(listener);
+
+    const refreshBg = (provider as any).refreshInBackground.bind(provider);
+    await refreshBg();
+
+    expect(listener).toHaveBeenCalledWith([]);
+    expect(mockFetch).not.toHaveBeenCalled();
+  });
+
   it('handles authentication failure gracefully', async () => {
     vi.mocked(authentication.getSession).mockRejectedValue(new Error('Auth failed'));
 
@@ -224,7 +268,29 @@ describe('AdoWorkItemProvider', () => {
     provider.onDidDiscoverItems(listener);
 
     await expect(provider.refresh()).resolves.toBeUndefined();
-    expect(listener).not.toHaveBeenCalled();
+    expect(listener).toHaveBeenCalledWith([]);
+  });
+
+  it('fires empty items when fetchAndPublishWorkItems throws in refresh', async () => {
+    mockFetch.mockImplementation(() => { throw new Error('unexpected'); });
+
+    const listener = vi.fn();
+    provider.onDidDiscoverItems(listener);
+    await provider.refresh();
+
+    expect(listener).toHaveBeenCalledWith([]);
+  });
+
+  it('fires empty items when fetchAndPublishWorkItems throws in background refresh', async () => {
+    mockFetch.mockImplementation(() => { throw new Error('unexpected'); });
+
+    const listener = vi.fn();
+    provider.onDidDiscoverItems(listener);
+
+    const refreshBg = (provider as any).refreshInBackground.bind(provider);
+    await refreshBg();
+
+    expect(listener).toHaveBeenCalledWith([]);
   });
 
   it('startPeriodicRefresh schedules a repeating timer', () => {
@@ -337,7 +403,7 @@ describe('AdoWorkItemProvider', () => {
     );
   });
 
-  it('skips fetch when org name is invalid', async () => {
+  it('fires empty items when org name is invalid', async () => {
     provider.dispose();
     provider = new AdoWorkItemProvider('../evil', ['MyProject']);
 
@@ -346,7 +412,7 @@ describe('AdoWorkItemProvider', () => {
     await provider.refresh();
 
     expect(mockFetch).not.toHaveBeenCalled();
-    expect(listener).not.toHaveBeenCalled();
+    expect(listener).toHaveBeenCalledWith([]);
   });
 
   it('skips invalid projects and fetches only valid ones', async () => {
@@ -372,7 +438,7 @@ describe('AdoWorkItemProvider', () => {
     );
   });
 
-  it('skips fetch when all configured projects are invalid', async () => {
+  it('fires empty items when all configured projects are invalid', async () => {
     provider.dispose();
     provider = new AdoWorkItemProvider('myorg', ['../bad', '?evil']);
 
@@ -381,6 +447,6 @@ describe('AdoWorkItemProvider', () => {
     await provider.refresh();
 
     expect(mockFetch).not.toHaveBeenCalled();
-    expect(listener).not.toHaveBeenCalled();
+    expect(listener).toHaveBeenCalledWith([]);
   });
 });
