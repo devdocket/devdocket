@@ -105,6 +105,7 @@ describe('registerCommands', () => {
 
   beforeEach(() => {
     vi.restoreAllMocks();
+    vi.clearAllMocks();
 
     commandHandlers = new Map();
     (vscode.commands.registerCommand as Mock).mockImplementation(
