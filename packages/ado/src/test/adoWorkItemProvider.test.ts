@@ -271,8 +271,8 @@ describe('AdoWorkItemProvider', () => {
     expect(listener).toHaveBeenCalledWith([]);
   });
 
-  it('fires empty items when fetchAndPublishWorkItems throws in refresh', async () => {
-    mockFetch.mockImplementation(() => { throw new Error('unexpected'); });
+  it('fires empty items when refresh catch block is hit', async () => {
+    vi.spyOn(provider as any, 'fetchAndPublishWorkItems').mockRejectedValue(new Error('unexpected'));
 
     const listener = vi.fn();
     provider.onDidDiscoverItems(listener);
@@ -281,8 +281,8 @@ describe('AdoWorkItemProvider', () => {
     expect(listener).toHaveBeenCalledWith([]);
   });
 
-  it('fires empty items when fetchAndPublishWorkItems throws in background refresh', async () => {
-    mockFetch.mockImplementation(() => { throw new Error('unexpected'); });
+  it('fires empty items when doBackgroundRefresh catch block is hit', async () => {
+    vi.spyOn(provider as any, 'fetchAndPublishWorkItems').mockRejectedValue(new Error('unexpected'));
 
     const listener = vi.fn();
     provider.onDidDiscoverItems(listener);
