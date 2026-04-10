@@ -6,8 +6,6 @@ import { logger } from '../services/logger';
 import { MAX_STORE_FILE_SIZE } from './limits';
 
 const validWorkItemStates = new Set<string>(Object.values(WorkItemState));
-// Legacy states that are no longer in the enum but can be migrated
-const legacyWorkItemStates = new Set<string>(['Blocked', 'WaitingOn']);
 
 /**
  * Validates that a parsed JSON value has the required shape of a WorkItem.
@@ -24,7 +22,7 @@ function validateWorkItem(value: unknown, index: number): string | undefined {
   if (typeof obj.title !== 'string' || obj.title.length === 0) {
     return `Item "${obj.id}" at index ${index} is missing a valid "title" (string)`;
   }
-  if (typeof obj.state !== 'string' || (!validWorkItemStates.has(obj.state) && !legacyWorkItemStates.has(obj.state))) {
+  if (typeof obj.state !== 'string' || !validWorkItemStates.has(obj.state)) {
     return `Item "${obj.id}" at index ${index} has invalid "state": ${JSON.stringify(obj.state)}`;
   }
   if (typeof obj.createdAt !== 'number' || !Number.isFinite(obj.createdAt)) {
@@ -143,11 +141,6 @@ export class JsonTaskStore implements ITaskStore {
             item.notes = legacy.description;
           }
           delete legacy.description;
-          needsMigration = true;
-        }
-        // Migrate legacy Blocked/WaitingOn states to Paused
-        if ((item.state as string) === 'Blocked' || (item.state as string) === 'WaitingOn') {
-          item.state = WorkItemState.Paused;
           needsMigration = true;
         }
       }

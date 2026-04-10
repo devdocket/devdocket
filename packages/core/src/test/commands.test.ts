@@ -8,6 +8,15 @@ import type { DiscoveredStateStore } from '../storage/discoveredStateStore';
 import type { InboxItem } from '../views/inboxTreeProvider';
 import type { SourceItemNode } from '../views/sourcesTreeProvider';
 import { WorkItemEditorPanel } from '../views/workItemEditorPanel';
+import { logger } from '../services/logger';
+
+vi.mock('../services/logger', () => ({
+  logger: {
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
+  },
+}));
 
 // ── helpers ──────────────────────────────────────────────────────────
 
@@ -46,7 +55,7 @@ function makeSourceItem(overrides: Partial<SourceItemNode> = {}): SourceItemNode
 
 type UsedWorkGraphMethods = Pick<
   WorkGraph,
-  'transitionState' | 'getItem' | 'createItem' | 'findItemByProvenance' | 'moveItem'
+  'transitionState' | 'getItem' | 'createItem' | 'findItemByProvenance' | 'moveItem' | 'deleteItem'
 >;
 
 function createMockWorkGraph(): { [K in keyof UsedWorkGraphMethods]: Mock } {
@@ -56,6 +65,7 @@ function createMockWorkGraph(): { [K in keyof UsedWorkGraphMethods]: Mock } {
     createItem: vi.fn(async () => createWorkItem()),
     findItemByProvenance: vi.fn(),
     moveItem: vi.fn(),
+    deleteItem: vi.fn(),
   };
 }
 
@@ -95,6 +105,7 @@ describe('registerCommands', () => {
 
   beforeEach(() => {
     vi.restoreAllMocks();
+    vi.clearAllMocks();
 
     commandHandlers = new Map();
     (vscode.commands.registerCommand as Mock).mockImplementation(
@@ -551,12 +562,34 @@ describe('registerCommands', () => {
       expect(stateStore.setState).not.toHaveBeenCalled();
     });
 
-    it('shows error when setState fails', async () => {
+    it('rolls back created item when setState fails', async () => {
+      const createdItem = createWorkItem({ id: 'wc-new-1' });
       workGraph.findItemByProvenance.mockReturnValue(undefined);
+      workGraph.createItem.mockResolvedValue(createdItem);
       stateStore.setState.mockRejectedValue(new Error('disk full'));
 
       await invoke('workcenter.acceptFromInbox', makeInboxItem());
 
+      expect(workGraph.deleteItem).toHaveBeenCalledWith('wc-new-1');
+      expect(vscode.window.showErrorMessage).toHaveBeenCalledWith(
+        'WorkCenter: Failed to update state after accepting item — disk full',
+      );
+    });
+
+    it('logs error when rollback also fails', async () => {
+      const createdItem = createWorkItem({ id: 'wc-new-2' });
+      workGraph.findItemByProvenance.mockReturnValue(undefined);
+      workGraph.createItem.mockResolvedValue(createdItem);
+      stateStore.setState.mockRejectedValue(new Error('disk full'));
+      workGraph.deleteItem.mockRejectedValue(new Error('delete failed'));
+
+      await invoke('workcenter.acceptFromInbox', makeInboxItem());
+
+      expect(workGraph.deleteItem).toHaveBeenCalledWith('wc-new-2');
+      expect(logger.error).toHaveBeenCalledWith(
+        'Failed to roll back created item after setState failure',
+        expect.any(Error),
+      );
       expect(vscode.window.showErrorMessage).toHaveBeenCalledWith(
         'WorkCenter: Failed to update state after accepting item — disk full',
       );
@@ -658,6 +691,39 @@ describe('registerCommands', () => {
       expect(workGraph.createItem).toHaveBeenCalledWith(
         { title: 'myorg/myrepo Source Issue' },
         expect.any(Object),
+      );
+    });
+
+    it('rolls back created item when setState fails for new item', async () => {
+      const createdItem = createWorkItem({ id: 'wc-new-3' });
+      workGraph.findItemByProvenance.mockReturnValue(undefined);
+      workGraph.createItem.mockResolvedValue(createdItem);
+      stateStore.setState.mockRejectedValue(new Error('disk full'));
+
+      await invoke('workcenter.acceptFromSources', makeSourceItem());
+
+      expect(workGraph.deleteItem).toHaveBeenCalledWith('wc-new-3');
+      expect(vscode.window.showErrorMessage).toHaveBeenCalledWith(
+        'WorkCenter: Failed to update state after accepting item — disk full',
+      );
+    });
+
+    it('logs error when rollback also fails for new item', async () => {
+      const createdItem = createWorkItem({ id: 'wc-new-4' });
+      workGraph.findItemByProvenance.mockReturnValue(undefined);
+      workGraph.createItem.mockResolvedValue(createdItem);
+      stateStore.setState.mockRejectedValue(new Error('disk full'));
+      workGraph.deleteItem.mockRejectedValue(new Error('delete failed'));
+
+      await invoke('workcenter.acceptFromSources', makeSourceItem());
+
+      expect(workGraph.deleteItem).toHaveBeenCalledWith('wc-new-4');
+      expect(logger.error).toHaveBeenCalledWith(
+        'Failed to roll back created item after setState failure',
+        expect.any(Error),
+      );
+      expect(vscode.window.showErrorMessage).toHaveBeenCalledWith(
+        'WorkCenter: Failed to update state after accepting item — disk full',
       );
     });
   });

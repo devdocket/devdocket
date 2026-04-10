@@ -86,21 +86,6 @@ async function handleResumeItem(workGraph: WorkGraph, item?: { id?: string }): P
   await workGraph.transitionState(item.id, WorkItemState.InProgress);
 }
 
-async function handleBlockItem(workGraph: WorkGraph, item?: { id?: string }): Promise<void> {
-  if (!item?.id) { return; }
-  await workGraph.transitionState(item.id, WorkItemState.Blocked);
-}
-
-async function handleUnblockItem(workGraph: WorkGraph, item?: { id?: string }): Promise<void> {
-  if (!item?.id) { return; }
-  await workGraph.transitionState(item.id, WorkItemState.InProgress);
-}
-
-async function handleMarkWaitingOn(workGraph: WorkGraph, item?: { id?: string }): Promise<void> {
-  if (!item?.id) { return; }
-  await workGraph.transitionState(item.id, WorkItemState.WaitingOn);
-}
-
 function handleEditItem(
   context: vscode.ExtensionContext,
   workGraph: WorkGraph,
@@ -207,8 +192,9 @@ async function handleAcceptFromInbox(
     }
     return;
   }
+  let createdItem: Awaited<ReturnType<typeof workGraph.createItem>>;
   try {
-    await workGraph.createItem(
+    createdItem = await workGraph.createItem(
       { title: formatItemTitle(item) },
       { providerId: item.providerId, externalId: item.externalId, url: item.url },
     );
@@ -219,6 +205,12 @@ async function handleAcceptFromInbox(
   try {
     await stateStore.setState(item.providerId, item.externalId, 'accepted');
   } catch (err: unknown) {
+    // Roll back the created work item to prevent it appearing in Queue while still unseen in Inbox
+    try {
+      await workGraph.deleteItem(createdItem.id);
+    } catch (rollbackErr: unknown) {
+      logger.error('Failed to roll back created item after setState failure', rollbackErr);
+    }
     handleCommandError('Failed to update state after accepting item', err);
   }
 }
@@ -255,8 +247,9 @@ async function handleAcceptFromSources(
     );
     return;
   }
+  let createdItem: Awaited<ReturnType<typeof workGraph.createItem>>;
   try {
-    await workGraph.createItem(
+    createdItem = await workGraph.createItem(
       { title: formatItemTitle(item) },
       { providerId: item.providerId, externalId: item.externalId, url: item.url },
     );
@@ -267,6 +260,12 @@ async function handleAcceptFromSources(
   try {
     await stateStore.setState(item.providerId, item.externalId, 'accepted');
   } catch (err: unknown) {
+    // Roll back the created work item to prevent it appearing in Queue while still unseen in Sources
+    try {
+      await workGraph.deleteItem(createdItem.id);
+    } catch (rollbackErr: unknown) {
+      logger.error('Failed to roll back created item after setState failure', rollbackErr);
+    }
     handleCommandError('Failed to update state after accepting item', err);
   }
 }
@@ -294,12 +293,6 @@ export function registerCommands(
       wrapCommand('Failed to pause item', (item) => handlePauseItem(workGraph, item))),
     vscode.commands.registerCommand('workcenter.resumeItem',
       wrapCommand('Failed to resume item', (item) => handleResumeItem(workGraph, item))),
-    vscode.commands.registerCommand('workcenter.blockItem',
-      wrapCommand('Failed to block item', (item) => handleBlockItem(workGraph, item))),
-    vscode.commands.registerCommand('workcenter.unblockItem',
-      wrapCommand('Failed to unblock item', (item) => handleUnblockItem(workGraph, item))),
-    vscode.commands.registerCommand('workcenter.markWaitingOn',
-      wrapCommand('Failed to mark item as waiting', (item) => handleMarkWaitingOn(workGraph, item))),
     vscode.commands.registerCommand('workcenter.editItem',
       wrapCommand('Failed to open editor', (item) => handleEditItem(context, workGraph, item))),
     vscode.commands.registerCommand('workcenter.openInBrowser',
