@@ -57,7 +57,7 @@ describe('AdoWorkItemProvider — extended', () => {
       if (typeof url === 'string' && url.includes('/workitemtypes/') && url.includes('/states')) {
         return { ok: true, json: async () => ({ count: 0, value: [] }) };
       }
-      return undefined;
+      throw new Error(`Unexpected fetch call in test: ${String(url)}`);
     });
   });
 

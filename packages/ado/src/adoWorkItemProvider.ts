@@ -345,7 +345,7 @@ export class AdoWorkItemProvider extends BaseProvider {
     // Collect terminal state names
     const terminalStates = new Set<string>();
     for (const state of data.value) {
-      if (TERMINAL_CATEGORIES.has(state.category)) {
+      if (state && typeof state.name === 'string' && typeof state.category === 'string' && TERMINAL_CATEGORIES.has(state.category)) {
         terminalStates.add(state.name);
       }
     }
