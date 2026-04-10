@@ -329,22 +329,24 @@ export class AdoWorkItemProvider extends BaseProvider {
       return new Set<string>(); // Fail open
     }
 
-    let data: { value: WorkItemTypeState[] };
+    let data: unknown;
     try {
-      data = (await response.json()) as { value: WorkItemTypeState[] };
+      data = await response.json();
     } catch (err) {
       logger.warn(`Failed to parse states response for ${cacheKey}:`, err);
       return new Set<string>(); // Fail open
     }
 
-    if (!Array.isArray(data.value)) {
+    if (typeof data !== 'object' || data === null || !('value' in data) || !Array.isArray((data as { value: unknown }).value)) {
       logger.warn(`Unexpected states response shape for ${cacheKey}`);
       return new Set<string>(); // Fail open
     }
 
+    const typedData = data as { value: WorkItemTypeState[] };
+
     // Collect terminal state names
     const terminalStates = new Set<string>();
-    for (const state of data.value) {
+    for (const state of typedData.value) {
       if (state && typeof state.name === 'string' && typeof state.category === 'string' && TERMINAL_CATEGORIES.has(state.category)) {
         terminalStates.add(state.name);
       }
