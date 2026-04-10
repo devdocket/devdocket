@@ -10,7 +10,7 @@ function createWiqlResponse(ids: number[]) {
   };
 }
 
-function createWorkItemDetail(id: number, title: string, project = 'MyProject', type = 'User Story') {
+function createWorkItemDetail(id: number, title: string, project = 'MyProject', type = 'User Story', state = 'Active') {
   return {
     id,
     fields: {
@@ -18,11 +18,18 @@ function createWorkItemDetail(id: number, title: string, project = 'MyProject', 
       'System.Description': `<p>Description for ${id}</p>`,
       'System.TeamProject': project,
       'System.WorkItemType': type,
-      'System.State': 'Active',
+      'System.State': state,
     },
     _links: {
       html: { href: `https://dev.azure.com/myorg/${project}/_workitems/edit/${id}` },
     },
+  };
+}
+
+function createStatesResponse(states: { name: string; category: string }[]) {
+  return {
+    count: states.length,
+    value: states,
   };
 }
 
@@ -44,6 +51,14 @@ describe('AdoWorkItemProvider — extended', () => {
     vi.stubGlobal('fetch', mockFetch);
     provider = new AdoWorkItemProvider('myorg', ['MyProject']);
     mockAuthSession();
+
+    // Default fallback: states API calls return no terminal states (items pass through)
+    mockFetch.mockImplementation(async (url: string) => {
+      if (typeof url === 'string' && url.includes('/workitemtypes/') && url.includes('/states')) {
+        return { ok: true, json: async () => ({ count: 0, value: [] }) };
+      }
+      throw new Error(`Unexpected fetch call in test: ${String(url)}`);
+    });
   });
 
   afterEach(() => {
@@ -65,6 +80,9 @@ describe('AdoWorkItemProvider — extended', () => {
       expect(body.query).toContain('[System.AssignedTo] = @Me');
       expect(body.query).toContain("[System.State] <> 'Closed'");
       expect(body.query).toContain("[System.State] <> 'Removed'");
+      // Verify Resolved and Done are NOT in WIQL (handled by state category filtering)
+      expect(body.query).not.toContain("[System.State] <> 'Resolved'");
+      expect(body.query).not.toContain("[System.State] <> 'Done'");
     });
 
     it('URL-encodes org and project names with special characters', async () => {
@@ -83,6 +101,338 @@ describe('AdoWorkItemProvider — extended', () => {
       expect(url).toContain('my%20org');
       expect(url).toContain('My%20Project');
       expect(url).not.toContain('my org');
+    });
+  });
+
+  describe('state category filtering', () => {
+    it('filters out work items in terminal state categories', async () => {
+      // WIQL returns 3 items
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => createWiqlResponse([1, 2, 3]),
+      });
+
+      // Detail fetch returns items with Active, Resolved, New states
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          value: [
+            createWorkItemDetail(1, 'Active Item', 'MyProject', 'User Story', 'Active'),
+            createWorkItemDetail(2, 'Resolved Item', 'MyProject', 'User Story', 'Resolved'),
+            createWorkItemDetail(3, 'New Item', 'MyProject', 'User Story', 'New'),
+          ],
+        }),
+      });
+
+      // States API for User Story returns Active=InProgress, Resolved=Resolved, New=Proposed
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => createStatesResponse([
+          { name: 'New', category: 'Proposed' },
+          { name: 'Active', category: 'InProgress' },
+          { name: 'Resolved', category: 'Resolved' },
+          { name: 'Closed', category: 'Completed' },
+        ]),
+      });
+
+      const listener = vi.fn();
+      provider.onDidDiscoverItems(listener);
+      await provider.refresh();
+
+      // Only Active and New items should be published (Resolved is terminal)
+      const items = listener.mock.calls[0][0];
+      expect(items).toHaveLength(2);
+      expect(items.map((i: any) => i.externalId)).toContain('MyProject/1'); // Active
+      expect(items.map((i: any) => i.externalId)).toContain('MyProject/3'); // New
+      expect(items.map((i: any) => i.externalId)).not.toContain('MyProject/2'); // Resolved
+    });
+
+    it('handles multiple work item types with different state definitions', async () => {
+      // WIQL returns items of type Bug and User Story
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => createWiqlResponse([1, 2, 3, 4]),
+      });
+
+      // Detail fetch returns Bug and User Story items
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          value: [
+            createWorkItemDetail(1, 'Bug Active', 'MyProject', 'Bug', 'Active'),
+            createWorkItemDetail(2, 'Bug Resolved', 'MyProject', 'Bug', 'Resolved'),
+            createWorkItemDetail(3, 'Story Active', 'MyProject', 'User Story', 'Active'),
+            createWorkItemDetail(4, 'Story Done', 'MyProject', 'User Story', 'Done'),
+          ],
+        }),
+      });
+
+      // States API for Bug
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => createStatesResponse([
+          { name: 'Active', category: 'InProgress' },
+          { name: 'Resolved', category: 'Resolved' }, // Terminal
+          { name: 'Closed', category: 'Completed' },
+        ]),
+      });
+
+      // States API for User Story
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => createStatesResponse([
+          { name: 'New', category: 'Proposed' },
+          { name: 'Active', category: 'InProgress' },
+          { name: 'Done', category: 'Completed' }, // Terminal
+        ]),
+      });
+
+      const listener = vi.fn();
+      provider.onDidDiscoverItems(listener);
+      await provider.refresh();
+
+      // Only Active items should be published (Bug Resolved and Story Done are terminal)
+      const items = listener.mock.calls[0][0];
+      expect(items).toHaveLength(2);
+      expect(items.map((i: any) => i.title)).toContain('Bug 1: Bug Active');
+      expect(items.map((i: any) => i.title)).toContain('User Story 3: Story Active');
+      expect(items.map((i: any) => i.title)).not.toContain('Bug 2: Bug Resolved');
+      expect(items.map((i: any) => i.title)).not.toContain('User Story 4: Story Done');
+    });
+
+    it('caches state definitions across calls', async () => {
+      // First refresh
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => createWiqlResponse([1]),
+      });
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          value: [createWorkItemDetail(1, 'Item 1', 'MyProject', 'User Story', 'Active')],
+        }),
+      });
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => createStatesResponse([
+          { name: 'Active', category: 'InProgress' },
+          { name: 'Resolved', category: 'Resolved' },
+        ]),
+      });
+
+      await provider.refresh();
+
+      // Second refresh with same project and type
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => createWiqlResponse([2]),
+      });
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          value: [createWorkItemDetail(2, 'Item 2', 'MyProject', 'User Story', 'Active')],
+        }),
+      });
+
+      await provider.refresh();
+
+      // States API should be called only once (first refresh: WIQL + details + states = 3, second: WIQL + details = 2)
+      expect(mockFetch).toHaveBeenCalledTimes(5); // 3 + 2
+      const statesApiCalls = mockFetch.mock.calls.filter((call: any) => 
+        call[0].includes('workitemtypes') && call[0].includes('/states')
+      );
+      expect(statesApiCalls).toHaveLength(1);
+    });
+
+    it('fails open when states API returns error', async () => {
+      // WIQL returns items of two types
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => createWiqlResponse([1, 2]),
+      });
+
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          value: [
+            createWorkItemDetail(1, 'Bug Item', 'MyProject', 'Bug', 'Resolved'),
+            createWorkItemDetail(2, 'Story Item', 'MyProject', 'User Story', 'Resolved'),
+          ],
+        }),
+      });
+
+      // States API for Bug returns 500
+      mockFetch.mockResolvedValueOnce({ ok: false, status: 500 });
+
+      // States API for User Story succeeds
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => createStatesResponse([
+          { name: 'Active', category: 'InProgress' },
+          { name: 'Resolved', category: 'Resolved' }, // Terminal
+        ]),
+      });
+
+      const listener = vi.fn();
+      provider.onDidDiscoverItems(listener);
+      await provider.refresh();
+
+      const items = listener.mock.calls[0][0];
+      // Bug item should NOT be filtered (fail open), Story item should be filtered
+      expect(items).toHaveLength(1);
+      expect(items[0].title).toBe('Bug 1: Bug Item');
+    });
+
+    it('fails open when states API has network error', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => createWiqlResponse([1]),
+      });
+
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          value: [createWorkItemDetail(1, 'Item 1', 'MyProject', 'User Story', 'Resolved')],
+        }),
+      });
+
+      // States API throws network error
+      mockFetch.mockRejectedValueOnce(new TypeError('Network error'));
+
+      const listener = vi.fn();
+      provider.onDidDiscoverItems(listener);
+      await provider.refresh();
+
+      // Item should be kept (not filtered out)
+      const items = listener.mock.calls[0][0];
+      expect(items).toHaveLength(1);
+      expect(items[0].title).toBe('User Story 1: Item 1');
+    });
+
+    it('fails open when states API returns unparseable JSON', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => createWiqlResponse([1]),
+      });
+
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          value: [createWorkItemDetail(1, 'Item 1', 'MyProject', 'User Story', 'Resolved')],
+        }),
+      });
+
+      // States API response.json() throws
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => { throw new SyntaxError('Unexpected token'); },
+      });
+
+      const listener = vi.fn();
+      provider.onDidDiscoverItems(listener);
+      await provider.refresh();
+
+      // Item should be kept (not filtered out)
+      const items = listener.mock.calls[0][0];
+      expect(items).toHaveLength(1);
+      expect(items[0].title).toBe('User Story 1: Item 1');
+    });
+
+    it('fails open when states API returns response without value array', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => createWiqlResponse([1]),
+      });
+
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          value: [createWorkItemDetail(1, 'Item 1', 'MyProject', 'User Story', 'CustomState')],
+        }),
+      });
+
+      // States API returns valid JSON but no value array
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ count: 0 }),
+      });
+
+      const listener = vi.fn();
+      provider.onDidDiscoverItems(listener);
+      await provider.refresh();
+
+      // Item should be kept (fail open — no value array means no filtering)
+      const items = listener.mock.calls[0][0];
+      expect(items).toHaveLength(1);
+      expect(items[0].title).toBe('User Story 1: Item 1');
+    });
+
+    it('fails open when states API returns null value', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => createWiqlResponse([1]),
+      });
+
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          value: [createWorkItemDetail(1, 'Item 1', 'MyProject', 'User Story', 'CustomState')],
+        }),
+      });
+
+      // States API returns null value
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ count: 0, value: null }),
+      });
+
+      const listener = vi.fn();
+      provider.onDidDiscoverItems(listener);
+      await provider.refresh();
+
+      // Item should be kept (fail open)
+      const items = listener.mock.calls[0][0];
+      expect(items).toHaveLength(1);
+    });
+
+    it('handles org-level query (no project)', async () => {
+      provider.dispose();
+      provider = new AdoWorkItemProvider('myorg', []); // Empty projects array
+      mockAuthSession();
+
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => createWiqlResponse([1]),
+      });
+
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          value: [createWorkItemDetail(1, 'Item 1', 'SomeProject', 'User Story', 'Active')],
+        }),
+      });
+
+      // States API for User Story
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => createStatesResponse([
+          { name: 'Active', category: 'InProgress' },
+          { name: 'Resolved', category: 'Resolved' },
+        ]),
+      });
+
+      await provider.refresh();
+
+      // Verify states API URL doesn't have double-slash or missing project segment
+      const statesApiCall = mockFetch.mock.calls.find((call: any) => 
+        call[0].includes('workitemtypes') && call[0].includes('/states')
+      );
+      expect(statesApiCall).toBeDefined();
+      const statesUrl = statesApiCall![0] as string;
+      // Should use the project from work item detail (SomeProject), not from provider config
+      expect(statesUrl).toContain('SomeProject');
+      // Check for path segment issues (like '//_apis' or 'myorg//_apis')
+      expect(statesUrl).not.toMatch(/[^:]\/\//);
     });
   });
 
@@ -122,8 +472,8 @@ describe('AdoWorkItemProvider — extended', () => {
       provider.onDidDiscoverItems(listener);
       await provider.refresh();
 
-      // 1 WIQL + 3 batch detail calls
-      expect(mockFetch).toHaveBeenCalledTimes(4);
+      // 1 WIQL + 3 batch detail calls + 1 states call (User Story)
+      expect(mockFetch).toHaveBeenCalledTimes(5);
 
       const items = listener.mock.calls[0][0];
       expect(items).toHaveLength(450);

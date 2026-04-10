@@ -22,8 +22,17 @@ interface AdoWorkItem {
   };
 }
 
+// Azure DevOps work item type state
+interface WorkItemTypeState {
+  name: string;
+  category: string;
+}
+
 // Azure DevOps REST API scope for authentication
 const ADO_AUTH_SCOPE = '499b84ac-1321-427f-aa17-267ca6975798/.default';
+
+// Terminal state categories (Completed, Removed, Resolved) that indicate non-active work
+const TERMINAL_CATEGORIES: ReadonlySet<string> = new Set(['Completed', 'Removed', 'Resolved']);
 
 /**
  * WorkCenter provider that discovers Azure DevOps work items assigned to the
@@ -31,12 +40,17 @@ const ADO_AUTH_SCOPE = '499b84ac-1321-427f-aa17-267ca6975798/.default';
  *
  * Uses the ADO REST API with WIQL queries and Microsoft authentication.
  * When projects are specified, only those projects are queried; otherwise
- * the entire organisation is searched. Work items in `Closed` or `Removed`
- * states are excluded.
+ * the entire organisation is searched.
+ *
+ * Filtering strategy (two-layer):
+ * 1. WIQL query excludes common terminal states (Closed, Removed) for performance
+ * 2. State category API filters remaining non-active items for correctness across all process templates
  */
 export class AdoWorkItemProvider extends BaseProvider {
   readonly id = 'ado-work-items';
   readonly label = 'Azure DevOps Work Items';
+
+  private _terminalStatesCache = new Map<string, Set<string>>();
 
   /**
    * @param org      - The Azure DevOps organisation name.
@@ -252,7 +266,10 @@ export class AdoWorkItemProvider extends BaseProvider {
       allWorkItems.push(...detailData.value);
     }
 
-    const items: DiscoveredItem[] = allWorkItems.map((wi) => {
+    // Filter out items in terminal state categories
+    const activeWorkItems = await this.filterActiveItems(token, allWorkItems);
+
+    const items: DiscoveredItem[] = activeWorkItems.map((wi) => {
       const projectName = wi.fields['System.TeamProject'];
       const wiType = wi.fields['System.WorkItemType'];
       return {
@@ -268,5 +285,144 @@ export class AdoWorkItemProvider extends BaseProvider {
     return { items, failed: batchFailed };
   }
 
+  /**
+   * Fetches terminal states for a given work item type by querying the ADO Work Item Type States API.
+   * States with category 'Completed', 'Removed', or 'Resolved' are considered terminal.
+   * Results are cached per project/workItemType pair.
+   *
+   * @param token - Access token for ADO API
+   * @param project - Project name (empty string for org-level)
+   * @param workItemType - Work item type name (e.g., 'Task', 'Bug', 'User Story')
+   * @returns Set of terminal state names, or empty set on failure (fail open)
+   */
+  private async fetchTerminalStates(
+    token: string,
+    project: string,
+    workItemType: string,
+  ): Promise<Set<string>> {
+    const cacheKey = `${project}/${workItemType}`;
+    
+    // Check cache first
+    const cached = this._terminalStatesCache.get(cacheKey);
+    if (cached) {
+      return cached;
+    }
+
+    // Build API URL
+    const projectPath = project ? `/${encodeURIComponent(project)}` : '';
+    const statesUrl = `https://dev.azure.com/${encodeURIComponent(this.org)}${projectPath}/_apis/wit/workitemtypes/${encodeURIComponent(workItemType)}/states?api-version=7.1`;
+
+    let response: Response;
+    try {
+      response = await fetch(statesUrl, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+    } catch (err) {
+      logger.warn(`Failed to fetch states for ${cacheKey}: network error`, err);
+      return new Set<string>(); // Fail open
+    }
+
+    if (!response.ok) {
+      logger.warn(`Failed to fetch states for ${cacheKey}: ${response.status}`);
+      return new Set<string>(); // Fail open
+    }
+
+    let data: unknown;
+    try {
+      data = await response.json();
+    } catch (err) {
+      logger.warn(`Failed to parse states response for ${cacheKey}:`, err);
+      return new Set<string>(); // Fail open
+    }
+
+    if (typeof data !== 'object' || data === null || !('value' in data) || !Array.isArray((data as { value: unknown }).value)) {
+      logger.warn(`Unexpected states response shape for ${cacheKey}`);
+      return new Set<string>(); // Fail open
+    }
+
+    const typedData = data as { value: WorkItemTypeState[] };
+
+    // Collect terminal state names
+    const terminalStates = new Set<string>();
+    for (const state of typedData.value) {
+      if (state && typeof state.name === 'string' && typeof state.category === 'string' && TERMINAL_CATEGORIES.has(state.category)) {
+        terminalStates.add(state.name);
+      }
+    }
+
+    // Cache and return
+    this._terminalStatesCache.set(cacheKey, terminalStates);
+    logger.debug(`Cached ${terminalStates.size} terminal states for ${cacheKey}`);
+    return terminalStates;
+  }
+
+  /**
+   * Filters work items to only include those in active (non-terminal) states.
+   * Groups items by (project, workItemType), fetches terminal states for each group,
+   * and excludes items whose state is terminal.
+   *
+   * @param token - Access token for ADO API
+   * @param workItems - All work items to filter
+   * @returns Only work items in active states
+   */
+  private async filterActiveItems(
+    token: string,
+    workItems: AdoWorkItem[],
+  ): Promise<AdoWorkItem[]> {
+    if (workItems.length === 0) {
+      return [];
+    }
+
+    // Group by (project, workItemType)
+    const groups = new Map<string, AdoWorkItem[]>();
+    for (const item of workItems) {
+      const project = item.fields['System.TeamProject'];
+      const workItemType = item.fields['System.WorkItemType'];
+      const key = `${project}/${workItemType}`;
+      
+      const group = groups.get(key);
+      if (group) {
+        group.push(item);
+      } else {
+        groups.set(key, [item]);
+      }
+    }
+
+    // Fetch terminal states for each unique (project, type) pair in parallel
+    const entries = [...groups.keys()].map(key => {
+      const [project, workItemType] = key.split('/');
+      return { key, project, workItemType };
+    });
+
+    const results = await Promise.all(
+      entries.map(async ({ key, project, workItemType }) => {
+        const terminalStates = await this.fetchTerminalStates(token, project, workItemType);
+        return { key, terminalStates };
+      }),
+    );
+
+    const terminalStatesByGroup = new Map(
+      results.map(({ key, terminalStates }) => [key, terminalStates]),
+    );
+
+    // Filter out items in terminal states
+    const activeItems: AdoWorkItem[] = [];
+    for (const item of workItems) {
+      const project = item.fields['System.TeamProject'];
+      const workItemType = item.fields['System.WorkItemType'];
+      const key = `${project}/${workItemType}`;
+      const terminalStates = terminalStatesByGroup.get(key) || new Set<string>();
+      
+      const state = item.fields['System.State'];
+      if (!terminalStates.has(state)) {
+        activeItems.push(item);
+      }
+    }
+
+    logger.debug(`Filtered ${workItems.length} items to ${activeItems.length} active items`);
+    return activeItems;
+  }
 
 }

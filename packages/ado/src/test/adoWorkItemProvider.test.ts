@@ -40,6 +40,14 @@ describe('AdoWorkItemProvider', () => {
       scopes: ['499b84ac-1321-427f-aa17-267ca6975798/.default'],
       account: { id: '1', label: 'testuser' },
     } as any);
+
+    // Default fallback: states API calls return no terminal states (items pass through)
+    mockFetch.mockImplementation(async (url: string) => {
+      if (typeof url === 'string' && url.includes('/workitemtypes/') && url.includes('/states')) {
+        return { ok: true, json: async () => ({ count: 0, value: [] }) };
+      }
+      throw new Error(`Unexpected fetch call in test: ${String(url)}`);
+    });
   });
 
   afterEach(() => {
@@ -84,7 +92,7 @@ describe('AdoWorkItemProvider', () => {
     provider.onDidDiscoverItems(listener);
     await provider.refresh();
 
-    expect(mockFetch).toHaveBeenCalledTimes(2);
+    expect(mockFetch).toHaveBeenCalledTimes(4);
 
     // First call: WIQL query
     expect(mockFetch).toHaveBeenCalledWith(
