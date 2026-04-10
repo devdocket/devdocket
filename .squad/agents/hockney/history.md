@@ -310,4 +310,21 @@ mockFetch.mockImplementation(async (url: string) => {
 
 **Key learning:** When adding new API calls to production code, use `mockImplementation` as a default fallback in tests rather than updating every individual test. This provides safe defaults while allowing specific tests to override with `mockResolvedValueOnce`.
 
+### AiWalkthroughAction Tests (Issue #12)
+
+**Tests added:** 9 tests in `packages/ai-reviewer/src/test/aiWalkthroughAction.test.ts`
+
+**Scope:** Walkthrough-specific behavior only — base class behavior (canRun, isPrUrl, parseGitHubPrUrl, fetchDiff, resolvePromptUri, sanitizePrUrl) is already covered by `aiReviewAction.test.ts`.
+
+**What's tested:**
+1. Identity — `id` is `'ai-reviewer.walkthrough'`, `label` is `'PR Walkthrough'`
+2. Default prompt — contains walkthrough-specific strings (`What This PR Does`, `File-by-File Walkthrough`, `The Big Picture`)
+3. Output header — document content starts with `# PR Walkthrough`
+4. Confirmation message — includes `'PR Walkthrough will send the PR diff'`
+5. Config section — reads from `workcenterAiWalkthrough` (not `workcenterAiReview`)
+6. Runtime instructions — LM message contains `'walkthrough header'` and PR URL
+7. No model warning — uses `'PR Walkthrough:'` prefix
+
+**Pattern:** Reuses identical mock setup from `aiReviewAction.test.ts` (stubGlobal fetch, authentication, lm, workspace, window mocks). No base class test duplication.
+
 

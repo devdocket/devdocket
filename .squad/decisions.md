@@ -2,6 +2,39 @@
 
 ## Active Decisions
 
+### BasePrAction Extraction Pattern (2026-07-22)
+
+**Author:** Fenster (Extension Dev)  
+**Status:** Implemented
+
+Shared PR action logic (diff fetching, GitHub auth, LLM model selection, prompt loading with custom file support, workspace path validation) is extracted into `BasePrAction` in `basePrAction.ts`. Each new AI action (code review, walkthrough) extends this base class and provides only configuration properties and a `getRuntimeInstructions()` method.
+
+**Rationale:**
+- Eliminates code duplication across AI actions that all follow the same fetch-diff → confirm → analyze → display pattern
+- New actions require ~25 lines instead of ~240, reducing bug surface
+- Each action gets its own VS Code configuration section (`workcenterAiReview`, `workcenterAiWalkthrough`) for independent custom prompt paths
+- Re-exporting `sanitizePrUrl` from `aiReviewAction.ts` preserves test backward compatibility without requiring test refactoring
+
+**Implementation:**
+- `packages/ai-reviewer/src/basePrAction.ts` — Base class (pre-existing)
+- `packages/ai-reviewer/src/aiReviewAction.ts` — Thin subclass
+- `packages/ai-reviewer/src/aiWalkthroughAction.ts` — Thin subclass (pre-existing)
+- `packages/ai-reviewer/src/walkthroughPrompt.ts` — Walkthrough prompt (pre-existing)
+- `packages/ai-reviewer/src/defaultPrompt.ts` — Enhanced review prompt with all 10 superpowers items + Holistic Assessment + Codebase Consistency sections
+- `packages/ai-reviewer/src/extension.ts` — Registers both actions
+- `packages/ai-reviewer/package.json` — Updated metadata + `workcenterAiWalkthrough` config
+
+**Test Coverage:** 50 existing review action tests + 9 new walkthrough tests, all passing  
+**Result:** All 59 tests passing, build passes
+
+**References:**
+- Issue #12
+- `packages/ai-reviewer/src/basePrAction.ts`
+- `packages/ai-reviewer/src/aiReviewAction.ts`
+- `packages/ai-reviewer/src/extension.ts`
+
+---
+
 ### ADO State-Category-Based Filtering (2025-01-22)
 
 **Author:** Fenster (Extension Dev)  
