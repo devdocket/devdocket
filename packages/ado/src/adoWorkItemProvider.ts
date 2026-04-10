@@ -337,6 +337,11 @@ export class AdoWorkItemProvider extends BaseProvider {
       return new Set<string>(); // Fail open
     }
 
+    if (!Array.isArray(data.value)) {
+      logger.warn(`Unexpected states response shape for ${cacheKey}`);
+      return new Set<string>(); // Fail open
+    }
+
     // Collect terminal state names
     const terminalStates = new Set<string>();
     for (const state of data.value) {
@@ -383,13 +388,22 @@ export class AdoWorkItemProvider extends BaseProvider {
       }
     }
 
-    // Fetch terminal states for each unique (project, type) pair
-    const terminalStatesByGroup = new Map<string, Set<string>>();
-    for (const [key, _items] of groups) {
+    // Fetch terminal states for each unique (project, type) pair in parallel
+    const entries = [...groups.keys()].map(key => {
       const [project, workItemType] = key.split('/');
-      const terminalStates = await this.fetchTerminalStates(token, project, workItemType);
-      terminalStatesByGroup.set(key, terminalStates);
-    }
+      return { key, project, workItemType };
+    });
+
+    const results = await Promise.all(
+      entries.map(async ({ key, project, workItemType }) => {
+        const terminalStates = await this.fetchTerminalStates(token, project, workItemType);
+        return { key, terminalStates };
+      }),
+    );
+
+    const terminalStatesByGroup = new Map(
+      results.map(({ key, terminalStates }) => [key, terminalStates]),
+    );
 
     // Filter out items in terminal states
     const activeItems: AdoWorkItem[] = [];

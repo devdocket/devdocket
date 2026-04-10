@@ -338,6 +338,63 @@ describe('AdoWorkItemProvider — extended', () => {
       expect(items[0].title).toBe('User Story 1: Item 1');
     });
 
+    it('fails open when states API returns response without value array', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => createWiqlResponse([1]),
+      });
+
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          value: [createWorkItemDetail(1, 'Item 1', 'MyProject', 'User Story', 'CustomState')],
+        }),
+      });
+
+      // States API returns valid JSON but no value array
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ count: 0 }),
+      });
+
+      const listener = vi.fn();
+      provider.onDidDiscoverItems(listener);
+      await provider.refresh();
+
+      // Item should be kept (fail open — no value array means no filtering)
+      const items = listener.mock.calls[0][0];
+      expect(items).toHaveLength(1);
+      expect(items[0].title).toBe('User Story 1: Item 1');
+    });
+
+    it('fails open when states API returns null value', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => createWiqlResponse([1]),
+      });
+
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          value: [createWorkItemDetail(1, 'Item 1', 'MyProject', 'User Story', 'CustomState')],
+        }),
+      });
+
+      // States API returns null value
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ count: 0, value: null }),
+      });
+
+      const listener = vi.fn();
+      provider.onDidDiscoverItems(listener);
+      await provider.refresh();
+
+      // Item should be kept (fail open)
+      const items = listener.mock.calls[0][0];
+      expect(items).toHaveLength(1);
+    });
+
     it('handles org-level query (no project)', async () => {
       provider.dispose();
       provider = new AdoWorkItemProvider('myorg', []); // Empty projects array
