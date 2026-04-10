@@ -209,6 +209,9 @@ export class WorkGraph {
 
   /** Transition a work item to a new lifecycle state. */
   async transitionState(id: string, newState: WorkItemState): Promise<void> {
+    if (!Object.values(WorkItemState).includes(newState)) {
+      throw new Error(`Invalid state value: ${String(newState)}`);
+    }
     const item = this.items.get(id);
     if (!item) {
       throw new Error(`Work item not found: ${id}`);
