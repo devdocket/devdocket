@@ -51,6 +51,13 @@ const ProgressLocation = {
   Notification: 15,
 };
 
+const FileType = {
+  Unknown: 0,
+  File: 1,
+  Directory: 2,
+  SymbolicLink: 64,
+};
+
 const window = {
   showInputBox: vi.fn(),
   showInformationMessage: vi.fn(),
@@ -107,18 +114,62 @@ const workspace = {
   openTextDocument: vi.fn().mockResolvedValue({ uri: 'mock-doc-uri' }),
   fs: {
     readFile: vi.fn().mockResolvedValue(new Uint8Array()),
+    readDirectory: vi.fn().mockResolvedValue([]),
+    stat: vi.fn().mockResolvedValue({ type: 1 }),
+    createDirectory: vi.fn().mockResolvedValue(undefined),
+    delete: vi.fn().mockResolvedValue(undefined),
   },
 };
 
 class MockLanguageModelChatMessage {
   role: string;
-  content: string;
-  constructor(role: string, content: string) {
+  content: unknown;
+  constructor(role: string, content: unknown) {
     this.role = role;
     this.content = content;
   }
-  static User(content: string) {
+  static User(content: unknown) {
     return new MockLanguageModelChatMessage('user', content);
+  }
+  static Assistant(content: unknown) {
+    return new MockLanguageModelChatMessage('assistant', content);
+  }
+}
+
+class MockLanguageModelTextPart {
+  constructor(public value: string) {}
+}
+
+class MockLanguageModelToolCallPart {
+  constructor(public callId: string, public name: string, public input: unknown) {}
+}
+
+class MockLanguageModelToolResultPart {
+  constructor(public callId: string, public content: unknown[]) {}
+}
+
+class MockLanguageModelToolResult {
+  constructor(public content: unknown[]) {}
+}
+
+class MockChatResponseMarkdownPart {
+  value: { value: string };
+  constructor(text: string) {
+    this.value = { value: text };
+  }
+}
+
+class MockChatRequestTurn {
+  prompt: string;
+  constructor(prompt: string) {
+    this.prompt = prompt;
+  }
+}
+
+class MockChatResponseTurn {
+  response: MockChatResponseMarkdownPart[];
+  constructor(parts: MockChatResponseMarkdownPart[]) {
+    this.response = parts;
   }
 }
 
@@ -126,8 +177,25 @@ const lm = {
   selectChatModels: vi.fn().mockResolvedValue([{
     sendRequest: vi.fn().mockResolvedValue({
       text: (async function* () { yield 'Review feedback here'; })(),
+      stream: (async function* () { yield new MockLanguageModelTextPart('Review feedback here'); })(),
     }),
   }]),
+  registerTool: vi.fn((_name: string, _impl: unknown) => ({ dispose: vi.fn() })),
+  invokeTool: vi.fn().mockResolvedValue({
+    content: [new MockLanguageModelTextPart('Tool result')],
+  }),
+  tools: [] as Array<{ name: string; description: string; inputSchema: unknown }>,
+};
+
+const chat = {
+  createChatParticipant: vi.fn((id: string, handler: Function) => ({
+    id,
+    iconPath: undefined,
+    requestHandler: handler,
+    followupProvider: undefined as unknown,
+    onDidReceiveFeedback: vi.fn(() => ({ dispose: vi.fn() })),
+    dispose: vi.fn(),
+  })),
 };
 
 const extensions = {
@@ -151,8 +219,16 @@ export {
   MockTreeItem as TreeItem,
   MockDisposable as Disposable,
   MockLanguageModelChatMessage as LanguageModelChatMessage,
+  MockLanguageModelTextPart as LanguageModelTextPart,
+  MockLanguageModelToolCallPart as LanguageModelToolCallPart,
+  MockLanguageModelToolResultPart as LanguageModelToolResultPart,
+  MockLanguageModelToolResult as LanguageModelToolResult,
+  MockChatResponseMarkdownPart as ChatResponseMarkdownPart,
+  MockChatRequestTurn as ChatRequestTurn,
+  MockChatResponseTurn as ChatResponseTurn,
   TreeItemCollapsibleState,
   ProgressLocation,
+  FileType,
   window,
   commands,
   env,
@@ -161,4 +237,5 @@ export {
   workspace,
   extensions,
   lm,
+  chat,
 };

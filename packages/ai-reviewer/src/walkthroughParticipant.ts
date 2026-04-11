@@ -1,0 +1,241 @@
+import * as vscode from 'vscode';
+import { RepoManager, type WorktreeInfo } from './repoManager';
+import { buildWalkthroughPrompt } from './walkthroughPrompt';
+
+export class WalkthroughParticipant {
+  private sessions = new Map<string, WorktreeInfo>();
+
+  constructor(private readonly repoManager: RepoManager) {}
+
+  /** Register the chat participant. Returns disposable. */
+  register(): vscode.Disposable {
+    const participant = vscode.chat.createChatParticipant(
+      'workcenter.walkthrough',
+      this.handleRequest.bind(this),
+    );
+    participant.iconPath = new vscode.ThemeIcon('book');
+    participant.followupProvider = {
+      provideFollowups: this.provideFollowups.bind(this),
+    };
+    return participant;
+  }
+
+  private provideFollowups(
+    result: vscode.ChatResult,
+    _context: vscode.ChatContext,
+    _token: vscode.CancellationToken,
+  ): vscode.ChatFollowup[] {
+    const phase = (result.metadata as Record<string, unknown> | undefined)?.phase as string | undefined;
+
+    if (phase === 'no-url' || phase === 'error' || phase === 'wrapup') {
+      return [];
+    }
+
+    if (phase === 'summary') {
+      return [
+        { prompt: 'Start the walkthrough', label: '▶️ Start walkthrough' },
+        { prompt: 'Adjust the reading order', label: '🔄 Adjust order' },
+        { prompt: 'Skip to the wrap-up summary', label: '⏭️ Skip to wrap-up' },
+      ];
+    }
+
+    // During file-by-file walkthrough (default)
+    return [
+      { prompt: 'Continue to the next file', label: '▶️ Next file' },
+      { prompt: 'Go deeper — show callers and related code', label: '🔍 Go deeper' },
+      { prompt: 'Skip to the wrap-up summary', label: '⏭️ Wrap up' },
+    ];
+  }
+
+  /** The ChatRequestHandler. */
+  private async handleRequest(
+    request: vscode.ChatRequest,
+    context: vscode.ChatContext,
+    response: vscode.ChatResponseStream,
+    token: vscode.CancellationToken,
+  ): Promise<vscode.ChatResult> {
+    // Parse PR URL from the prompt
+    const prUrl = this.extractPrUrl(request.prompt, context);
+    if (!prUrl) {
+      response.markdown(
+        'Please provide a GitHub PR URL to walk through. For example:\n\n' +
+        '> Walk me through this PR: https://github.com/owner/repo/pull/42',
+      );
+      return { metadata: { phase: 'no-url' } };
+    }
+
+    // Ensure worktree
+    let info = this.sessions.get(prUrl) ?? this.repoManager.getWorktreeInfo(prUrl);
+    if (!info) {
+      response.progress('Cloning repository and preparing worktree…');
+      try {
+        info = await this.repoManager.ensureWorktree(prUrl);
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        response.markdown(`❌ Failed to prepare repository: ${msg}`);
+        return { metadata: { phase: 'error' } };
+      }
+      this.sessions.set(prUrl, info);
+    }
+
+    if (token.isCancellationRequested) return { metadata: { phase: 'error' } };
+
+    // Build system prompt
+    const systemPrompt = buildWalkthroughPrompt(info);
+
+    // Build messages array
+    const messages: vscode.LanguageModelChatMessage[] = [
+      vscode.LanguageModelChatMessage.User(systemPrompt),
+    ];
+
+    // Add history from previous turns
+    for (const turn of context.history) {
+      if (turn instanceof vscode.ChatRequestTurn) {
+        messages.push(vscode.LanguageModelChatMessage.User(turn.prompt));
+      } else if (turn instanceof vscode.ChatResponseTurn) {
+        const parts: string[] = [];
+        for (const part of turn.response) {
+          if (part instanceof vscode.ChatResponseMarkdownPart) {
+            parts.push(part.value.value);
+          }
+        }
+        if (parts.length > 0) {
+          messages.push(vscode.LanguageModelChatMessage.Assistant(parts.join('')));
+        }
+      }
+    }
+
+    // Add current user message
+    messages.push(vscode.LanguageModelChatMessage.User(request.prompt));
+
+    // Select model
+    let model: vscode.LanguageModelChat;
+    if (request.model) {
+      model = request.model;
+    } else {
+      const models = await vscode.lm.selectChatModels({ family: 'gpt-4o' });
+      if (models.length === 0) {
+        response.markdown('❌ No language model available. Please install GitHub Copilot.');
+        return {};
+      }
+      model = models[0];
+    }
+
+    // Gather workcenter tools + the phase-signaling tool
+    const tools = [
+      ...vscode.lm.tools
+        .filter((t: vscode.LanguageModelToolInformation) => t.name.startsWith('workcenter-'))
+        .map((t: vscode.LanguageModelToolInformation) => ({
+          name: t.name,
+          description: t.description,
+          inputSchema: t.inputSchema!,
+        })),
+      {
+        name: 'workcenter-signalPhase',
+        description: 'Signal the current walkthrough phase so the UI can show appropriate follow-up actions. Call this at the end of every response.',
+        inputSchema: {
+          type: 'object' as const,
+          properties: {
+            phase: {
+              type: 'string' as const,
+              enum: ['summary', 'walkthrough', 'wrapup'],
+              description: 'Current phase: "summary" after presenting the opening overview, "walkthrough" during file-by-file presentation, "wrapup" after the final wrap-up.',
+            },
+          },
+          required: ['phase'],
+        },
+      },
+    ];
+
+    // Tool-use loop
+    const loopMessages = [...messages];
+    const maxIterations = 20;
+    let iterations = 0;
+    let phase = context.history.length === 0 ? 'summary' : 'walkthrough';
+
+    while (!token.isCancellationRequested && iterations < maxIterations) {
+      iterations++;
+      const chatResponse = await model.sendRequest(loopMessages, { tools }, token);
+
+      let hasToolCalls = false;
+      for await (const part of chatResponse.stream) {
+        if (part instanceof vscode.LanguageModelTextPart) {
+          response.markdown(part.value);
+        } else if (part instanceof vscode.LanguageModelToolCallPart) {
+          // Handle phase signal locally — not a real tool call, don't trigger another loop
+          if (part.name === 'workcenter-signalPhase') {
+            const input = part.input as { phase?: string };
+            if (input.phase) {
+              phase = input.phase;
+            }
+            loopMessages.push(
+              vscode.LanguageModelChatMessage.Assistant([part]),
+              vscode.LanguageModelChatMessage.User([
+                new vscode.LanguageModelToolResultPart(part.callId, [
+                  new vscode.LanguageModelTextPart('Phase recorded.'),
+                ]),
+              ]),
+            );
+            continue;
+          }
+
+          hasToolCalls = true;
+          try {
+            const result = await vscode.lm.invokeTool(
+              part.name,
+              {
+                input: part.input,
+                toolInvocationToken: request.toolInvocationToken,
+              },
+              token,
+            );
+            // Add tool call and result to messages for next iteration
+            loopMessages.push(
+              vscode.LanguageModelChatMessage.Assistant([part]),
+              vscode.LanguageModelChatMessage.User([
+                new vscode.LanguageModelToolResultPart(part.callId, result.content),
+              ]),
+            );
+          } catch (err) {
+            const errMsg = err instanceof Error ? err.message : String(err);
+            loopMessages.push(
+              vscode.LanguageModelChatMessage.Assistant([part]),
+              vscode.LanguageModelChatMessage.User([
+                new vscode.LanguageModelToolResultPart(part.callId, [
+                  new vscode.LanguageModelTextPart(`Error: ${errMsg}`),
+                ]),
+              ]),
+            );
+          }
+        }
+      }
+
+      if (!hasToolCalls) break;
+    }
+
+    return { metadata: { phase } };
+  }
+
+  private extractPrUrl(
+    prompt: string,
+    context: vscode.ChatContext,
+  ): string | undefined {
+    // Try current prompt first
+    const urlMatch = prompt.match(
+      /https?:\/\/github\.com\/[^/]+\/[^/]+\/pull\/\d+/,
+    );
+    if (urlMatch) return urlMatch[0];
+
+    // Check previous turns in history
+    for (const turn of context.history) {
+      if (turn instanceof vscode.ChatRequestTurn) {
+        const historyMatch = turn.prompt.match(
+          /https?:\/\/github\.com\/[^/]+\/[^/]+\/pull\/\d+/,
+        );
+        if (historyMatch) return historyMatch[0];
+      }
+    }
+
+    return undefined;
+  }
+}

@@ -1,7 +1,7 @@
 {
   "name": "workcenter-ai-reviewer",
-  "displayName": "WorkCenter — AI Code Review",
-  "description": "AI-powered code review action for WorkCenter",
+  "displayName": "WorkCenter — AI Actions",
+  "description": "AI-powered code review and PR walkthrough actions for WorkCenter",
   "version": "0.1.0",
   "publisher": "mthalman",
   "license": "MIT",
@@ -19,8 +19,109 @@
   ],
   "main": "./dist/extension.js",
   "contributes": {
+    "chatParticipants": [
+      {
+        "id": "workcenter.walkthrough",
+        "fullName": "PR Walkthrough",
+        "name": "walkthrough",
+        "description": "Interactive PR walkthrough — explains code changes step by step",
+        "isSticky": true
+      }
+    ],
+    "languageModelTools": [
+      {
+        "name": "workcenter-readFile",
+        "displayName": "Read File",
+        "description": "Read the contents of a file in a PR worktree",
+        "modelDescription": "Read the full contents of a file at the given path within a git worktree. Use this to examine source files, configuration, tests, or any other file in the repository.",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "worktreePath": { "type": "string", "description": "Absolute path to the git worktree" },
+            "filePath": { "type": "string", "description": "Path relative to worktree root" }
+          },
+          "required": ["worktreePath", "filePath"]
+        }
+      },
+      {
+        "name": "workcenter-listDirectory",
+        "displayName": "List Directory",
+        "description": "List files and directories in a PR worktree",
+        "modelDescription": "List files and subdirectories at a given path within a git worktree. Use this to explore the repository structure and discover files.",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "worktreePath": { "type": "string", "description": "Absolute path to the git worktree" },
+            "dirPath": { "type": "string", "description": "Directory path relative to worktree root (default: root)" }
+          },
+          "required": ["worktreePath"]
+        }
+      },
+      {
+        "name": "workcenter-getDiff",
+        "displayName": "Get PR Diff",
+        "description": "Get the full unified diff for a PR",
+        "modelDescription": "Get the full unified diff between the base and head refs of a pull request. Returns the complete set of changes across all files.",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "worktreePath": { "type": "string", "description": "Absolute path to the git worktree" },
+            "baseRef": { "type": "string", "description": "Base branch or commit ref" },
+            "headRef": { "type": "string", "description": "Head branch or commit ref" }
+          },
+          "required": ["worktreePath", "baseRef", "headRef"]
+        }
+      },
+      {
+        "name": "workcenter-getFileDiff",
+        "displayName": "Get File Diff",
+        "description": "Get the unified diff for a specific file in a PR",
+        "modelDescription": "Get the unified diff for a single file between the base and head refs of a pull request. Use this to examine changes to a specific file.",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "worktreePath": { "type": "string", "description": "Absolute path to the git worktree" },
+            "baseRef": { "type": "string", "description": "Base branch or commit ref" },
+            "headRef": { "type": "string", "description": "Head branch or commit ref" },
+            "filePath": { "type": "string", "description": "Path to the file relative to worktree root" }
+          },
+          "required": ["worktreePath", "baseRef", "headRef", "filePath"]
+        }
+      },
+      {
+        "name": "workcenter-gitLog",
+        "displayName": "Git Log",
+        "description": "Get recent commit history, optionally for a specific file",
+        "modelDescription": "Get recent git commit history in the worktree, optionally scoped to a specific file. Use this to understand the change history and context of the code.",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "worktreePath": { "type": "string", "description": "Absolute path to the git worktree" },
+            "filePath": { "type": "string", "description": "Optional file path to scope history" },
+            "maxCount": { "type": "number", "description": "Maximum commits to return (default: 20)" }
+          },
+          "required": ["worktreePath"]
+        }
+      },
+      {
+        "name": "workcenter-searchCode",
+        "displayName": "Search Code",
+        "description": "Search for a pattern in the codebase using git grep",
+        "modelDescription": "Search for a text pattern across the codebase using git grep. Use this to find callers, usages, related code, or any text pattern in the repository.",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "worktreePath": { "type": "string", "description": "Absolute path to the git worktree" },
+            "pattern": { "type": "string", "description": "Search pattern" },
+            "fileGlob": { "type": "string", "description": "Optional file glob to restrict search" },
+            "maxResults": { "type": "number", "description": "Maximum results (default: 50)" }
+          },
+          "required": ["worktreePath", "pattern"]
+        }
+      }
+    ],
     "configuration": {
-      "title": "WorkCenter AI Code Review",
+      "title": "WorkCenter AI Actions",
       "properties": {
         "workcenterAiReview.customPromptPath": {
           "type": "string",
