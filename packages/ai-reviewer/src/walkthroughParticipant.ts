@@ -158,24 +158,26 @@ export class WalkthroughParticipant {
       const chatResponse = await model.sendRequest(loopMessages, { tools }, token);
 
       let hasToolCalls = false;
+      const assistantParts: unknown[] = [];
+      const toolResults: Array<{ callId: string; content: unknown[] }> = [];
+
       for await (const part of chatResponse.stream) {
         if (part instanceof vscode.LanguageModelTextPart) {
           response.markdown(part.value);
+          assistantParts.push(part);
         } else if (part instanceof vscode.LanguageModelToolCallPart) {
+          assistantParts.push(part);
+
           // Handle phase signal locally — not a real tool call, don't trigger another loop
           if (part.name === 'workcenter-signalPhase') {
             const input = part.input as { phase?: string };
             if (input.phase) {
               phase = input.phase;
             }
-            loopMessages.push(
-              vscode.LanguageModelChatMessage.Assistant([part]),
-              vscode.LanguageModelChatMessage.User([
-                new vscode.LanguageModelToolResultPart(part.callId, [
-                  new vscode.LanguageModelTextPart('Phase recorded.'),
-                ]),
-              ]),
-            );
+            toolResults.push({
+              callId: part.callId,
+              content: [new vscode.LanguageModelTextPart('Phase recorded.')],
+            });
             continue;
           }
 
@@ -189,24 +191,26 @@ export class WalkthroughParticipant {
               },
               token,
             );
-            // Add tool call and result to messages for next iteration
-            loopMessages.push(
-              vscode.LanguageModelChatMessage.Assistant([part]),
-              vscode.LanguageModelChatMessage.User([
-                new vscode.LanguageModelToolResultPart(part.callId, result.content),
-              ]),
-            );
+            toolResults.push({ callId: part.callId, content: result.content });
           } catch (err) {
             const errMsg = err instanceof Error ? err.message : String(err);
-            loopMessages.push(
-              vscode.LanguageModelChatMessage.Assistant([part]),
-              vscode.LanguageModelChatMessage.User([
-                new vscode.LanguageModelToolResultPart(part.callId, [
-                  new vscode.LanguageModelTextPart(`Error: ${errMsg}`),
-                ]),
-              ]),
-            );
+            toolResults.push({
+              callId: part.callId,
+              content: [new vscode.LanguageModelTextPart(`Error: ${errMsg}`)],
+            });
           }
+        }
+      }
+
+      // Add the complete assistant turn + all tool results to conversation
+      if (assistantParts.length > 0) {
+        loopMessages.push(vscode.LanguageModelChatMessage.Assistant(assistantParts));
+        for (const tr of toolResults) {
+          loopMessages.push(
+            vscode.LanguageModelChatMessage.User([
+              new vscode.LanguageModelToolResultPart(tr.callId, tr.content),
+            ]),
+          );
         }
       }
 
