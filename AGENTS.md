@@ -109,7 +109,7 @@ During code review (via `superpowers:code-reviewer` or manual review), **any cha
 These files define the contract that provider extensions depend on:
 
 - `packages/core/src/api/types.ts` — `WorkCenterApi`, `WorkCenterProvider`, `WorkCenterAction`, and re-exported shared types (`Disposable`, `Event`, `DiscoveredItem`)
-- `packages/core/src/models/workItem.ts` — `WorkItem`, `WorkItemInput`, and `WorkItemState` (exposed to action implementors via `WorkCenterAction.canRun` / `run`)
+- `packages/core/src/models/workItem.ts` — `WorkItem` and `WorkItemState` (`WorkItem` is exposed to action implementors via `WorkCenterAction.canRun` / `run`, and references `WorkItemState`)
 - `packages/shared/src/baseProvider.ts` — `DiscoveredItem`, `Disposable`, `Event`, `EventEmitterLike`, `BaseProvider`
 - `packages/shared/src/index.ts` — all symbols exported from this barrel are considered public API surface of `@workcenter/shared`
 
