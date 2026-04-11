@@ -7,6 +7,7 @@ import { WorkItemEditorPanel } from '../views/workItemEditorPanel';
 import { InboxItem } from '../views/inboxTreeProvider';
 import { SourceItemNode } from '../views/sourcesTreeProvider';
 import { logger } from '../services/logger';
+import { toggleViewLayout, ViewId } from '../views/viewLayout';
 
 /** Builds a work-item title, optionally prefixed with the provider group. */
 function formatItemTitle(item: { group?: string; title: string }): string {
@@ -309,5 +310,15 @@ export function registerCommands(
       wrapCommand('Failed to dismiss from inbox', (item: InboxItem) => handleDismissFromInbox(stateStore, item))),
     vscode.commands.registerCommand('workcenter.acceptFromSources',
       wrapCommand('Failed to accept from sources', (item: SourceItemNode) => handleAcceptFromSources(workGraph, stateStore, item))),
+    vscode.commands.registerCommand('workcenter.toggleInboxLayout',
+      wrapCommand('Failed to toggle inbox layout', () => toggleViewLayout('inbox'))),
+    vscode.commands.registerCommand('workcenter.toggleQueueLayout',
+      wrapCommand('Failed to toggle queue layout', () => toggleViewLayout('queue'))),
+    vscode.commands.registerCommand('workcenter.toggleFocusLayout',
+      wrapCommand('Failed to toggle focus layout', () => toggleViewLayout('focus'))),
+    vscode.commands.registerCommand('workcenter.toggleHistoryLayout',
+      wrapCommand('Failed to toggle history layout', () => toggleViewLayout('history'))),
+    vscode.commands.registerCommand('workcenter.toggleSourcesLayout',
+      wrapCommand('Failed to toggle sources layout', () => toggleViewLayout('sources'))),
   );
 }

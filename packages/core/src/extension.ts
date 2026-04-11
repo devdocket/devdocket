@@ -15,6 +15,7 @@ import { HistoryTreeProvider } from './views/historyTreeProvider';
 import { registerCommands } from './commands/commands';
 import { initLogger, setLogLevel, logger, resolveLogLevel } from './services/logger';
 import { getInboxUnseenCount } from './services/inboxBadge';
+import { getViewLayout, ViewId } from './views/viewLayout';
 import { performance } from 'perf_hooks';
 
 export type { WorkCenterApi, WorkCenterProvider, WorkCenterAction, DiscoveredItem, Disposable } from './api/types';
@@ -115,6 +116,13 @@ function createTreeViews(
   const focusProvider = new FocusTreeProvider(workGraph);
   const sourcesProvider = new SourcesTreeProvider(providerRegistry, stateStore);
   const historyProvider = new HistoryTreeProvider(workGraph);
+
+  // Apply persisted layout settings
+  inboxProvider.layout = getViewLayout('inbox');
+  queueProvider.layout = getViewLayout('queue');
+  focusProvider.layout = getViewLayout('focus');
+  sourcesProvider.layout = getViewLayout('sources');
+  historyProvider.layout = getViewLayout('history');
 
   const inboxTreeView = vscode.window.createTreeView('workcenter.inbox', { treeDataProvider: inboxProvider });
   const sourcesTreeView = vscode.window.createTreeView('workcenter.sources', { treeDataProvider: sourcesProvider });
@@ -311,6 +319,30 @@ export async function activate(context: vscode.ExtensionContext): Promise<WorkCe
   const commandRegStart = performance.now();
   registerCommands(context, wg, ar, ss);
   logger.info(`Command registration took ${Math.round(performance.now() - commandRegStart)}ms`);
+
+  // Set context keys and listen for layout changes
+  const viewIds: ViewId[] = ['inbox', 'queue', 'focus', 'history', 'sources'];
+  const providerMap: Record<ViewId, { layout: import('./views/viewLayout').ViewLayout }> = {
+    inbox: providers.inboxProvider,
+    queue: providers.queueProvider,
+    focus: providers.focusProvider,
+    history: providers.historyProvider,
+    sources: providers.sourcesProvider,
+  };
+  for (const id of viewIds) {
+    void vscode.commands.executeCommand('setContext', `workcenter.${id}Layout`, getViewLayout(id));
+  }
+  context.subscriptions.push(
+    vscode.workspace.onDidChangeConfiguration(safeHandler('Error handling viewLayout configuration change', (e) => {
+      if (e.affectsConfiguration('workcenter.viewLayout')) {
+        for (const id of viewIds) {
+          const layout = getViewLayout(id);
+          providerMap[id].layout = layout;
+          void vscode.commands.executeCommand('setContext', `workcenter.${id}Layout`, layout);
+        }
+      }
+    })),
+  );
 
   logger.info(`WorkCenter activated in ${Math.round(performance.now() - activationStart)}ms`);
   return api;

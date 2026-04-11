@@ -1,0 +1,119 @@
+import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { TreeItemCollapsibleState } from 'vscode';
+import { WorkGraph } from '../services/workGraph';
+import { WorkItemState } from '../models/workItem';
+import { ITaskStore } from '../storage/taskStore';
+import { QueueTreeProvider } from '../views/queueTreeProvider';
+import { isProviderGroupNode, ProviderGroupNode } from '../views/viewLayout';
+
+function createMockStore(): ITaskStore {
+  const items: Map<string, any> = new Map();
+  return {
+    loadAll: vi.fn(async () => Array.from(items.values())),
+    save: vi.fn(async (item) => { items.set(item.id, item); }),
+    saveAll: vi.fn(async (batch) => { for (const item of batch) { items.set(item.id, item); } }),
+    delete: vi.fn(async (id) => { items.delete(id); }),
+  };
+}
+
+describe('QueueTreeProvider layout toggle', () => {
+  let store: ITaskStore;
+  let graph: WorkGraph;
+  let provider: QueueTreeProvider;
+
+  beforeEach(async () => {
+    store = createMockStore();
+    graph = new WorkGraph(store);
+    await graph.load();
+    provider = new QueueTreeProvider(graph);
+  });
+
+  it('defaults to flat layout', () => {
+    expect(provider.layout).toBe('flat');
+  });
+
+  it('fires tree data change when layout changes', () => {
+    const listener = vi.fn();
+    provider.onDidChangeTreeData(listener);
+    provider.layout = 'tree';
+    expect(listener).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not fire when setting same layout', () => {
+    const listener = vi.fn();
+    provider.onDidChangeTreeData(listener);
+    provider.layout = 'flat';
+    expect(listener).not.toHaveBeenCalled();
+  });
+
+  describe('flat mode (default)', () => {
+    it('returns work items directly', async () => {
+      await graph.createItem({ title: 'A' });
+      await graph.createItem({ title: 'B' });
+      const children = provider.getChildren();
+      expect(children).toHaveLength(2);
+      expect(children.every(c => !isProviderGroupNode(c))).toBe(true);
+    });
+  });
+
+  describe('tree mode', () => {
+    beforeEach(() => {
+      provider.layout = 'tree';
+    });
+
+    it('returns provider group nodes at top level', async () => {
+      await graph.createItem({ title: 'A' }, { providerId: 'github', externalId: 'ext-1' });
+      await graph.createItem({ title: 'B' }, { providerId: 'jira', externalId: 'ext-2' });
+      const children = provider.getChildren();
+      expect(children).toHaveLength(2);
+      expect(children.every(c => isProviderGroupNode(c))).toBe(true);
+    });
+
+    it('groups manual items under "Other"', async () => {
+      await graph.createItem({ title: 'Manual' });
+      await graph.createItem({ title: 'Provider' }, { providerId: 'github', externalId: 'ext-1' });
+      const children = provider.getChildren();
+      expect(children).toHaveLength(2);
+      const labels = children.map(c => (c as ProviderGroupNode).label);
+      expect(labels).toContain('Other');
+      expect(labels).toContain('github');
+    });
+
+    it('sorts "Other" group last', async () => {
+      await graph.createItem({ title: 'Manual' });
+      await graph.createItem({ title: 'Provider' }, { providerId: 'alpha', externalId: 'ext-1' });
+      const children = provider.getChildren();
+      expect((children[children.length - 1] as ProviderGroupNode).label).toBe('Other');
+    });
+
+    it('returns items for a provider group', async () => {
+      await graph.createItem({ title: 'A' }, { providerId: 'github', externalId: 'ext-1' });
+      await graph.createItem({ title: 'B' }, { providerId: 'github', externalId: 'ext-2' });
+      await graph.createItem({ title: 'C' }, { providerId: 'jira', externalId: 'ext-3' });
+      const group: ProviderGroupNode = { kind: 'providerGroup', label: 'github', providerId: 'github' };
+      const children = provider.getChildren(group);
+      expect(children).toHaveLength(2);
+      expect(children.every(c => !isProviderGroupNode(c))).toBe(true);
+    });
+
+    it('renders group node as collapsed tree item', async () => {
+      const group: ProviderGroupNode = { kind: 'providerGroup', label: 'github', providerId: 'github' };
+      const treeItem = provider.getTreeItem(group);
+      expect(treeItem.label).toBe('github');
+      expect(treeItem.collapsibleState).toBe(TreeItemCollapsibleState.Collapsed);
+      expect(treeItem.contextValue).toBe('queueGroup');
+      expect((treeItem.iconPath as any).id).toBe('plug');
+    });
+
+    it('renders "Other" group with circle-filled icon', () => {
+      const group: ProviderGroupNode = { kind: 'providerGroup', label: 'Other', providerId: undefined };
+      const treeItem = provider.getTreeItem(group);
+      expect((treeItem.iconPath as any).id).toBe('circle-filled');
+    });
+
+    it('returns empty when no items exist', () => {
+      const children = provider.getChildren();
+      expect(children).toEqual([]);
+    });
+  });
+});

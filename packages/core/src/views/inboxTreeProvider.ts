@@ -4,6 +4,7 @@ import { ProviderRegistry } from '../services/providerRegistry';
 import { DiscoveredStateStore } from '../storage/discoveredStateStore';
 import { ReadStateStore } from '../storage/readStateStore';
 import { logger } from '../services/logger';
+import { ViewLayout } from './viewLayout';
 
 export interface InboxProviderNode {
   kind: 'provider';
@@ -40,6 +41,15 @@ export class InboxTreeProvider implements vscode.TreeDataProvider<InboxElement> 
   readonly onDidMarkSeen = this._onDidMarkSeen.event;
   private refreshTimer: ReturnType<typeof setTimeout> | undefined;
   static readonly REFRESH_DEBOUNCE_MS = 50;
+  private _layout: ViewLayout = 'tree';
+
+  get layout(): ViewLayout { return this._layout; }
+  set layout(value: ViewLayout) {
+    if (this._layout !== value) {
+      this._layout = value;
+      this._onDidChangeTreeData.fire();
+    }
+  }
 
   constructor(
     private readonly providerRegistry: ProviderRegistry,
@@ -177,6 +187,9 @@ export class InboxTreeProvider implements vscode.TreeDataProvider<InboxElement> 
 
   getChildren(element?: InboxElement): InboxElement[] {
     if (!element) {
+      if (this._layout === 'flat') {
+        return this.getAllUnseenItems();
+      }
       const result: InboxProviderNode[] = [];
       const allItems = this.providerRegistry.getAllDiscoveredItems();
       for (const [providerId] of allItems) {
@@ -200,6 +213,19 @@ export class InboxTreeProvider implements vscode.TreeDataProvider<InboxElement> 
     }
 
     return [];
+  }
+
+  private getAllUnseenItems(): InboxItem[] {
+    const result: InboxItem[] = [];
+    const allItems = this.providerRegistry.getAllDiscoveredItems();
+    for (const [providerId, items] of allItems) {
+      for (const item of items) {
+        const state = this.stateStore.getState(providerId, item.externalId);
+        if (state !== undefined && state !== 'unseen') { continue; }
+        result.push(this.toItemNode(providerId, item));
+      }
+    }
+    return result.sort((a, b) => a.title.localeCompare(b.title));
   }
 
   private getProviderChildren(providerId: string): (InboxGroupNode | InboxItem)[] {

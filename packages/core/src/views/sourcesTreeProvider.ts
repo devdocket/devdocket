@@ -2,6 +2,7 @@ import * as vscode from 'vscode';
 import { DiscoveredItem } from '../api/types';
 import { ProviderRegistry } from '../services/providerRegistry';
 import { DiscoveredStateStore } from '../storage/discoveredStateStore';
+import { ViewLayout } from './viewLayout';
 
 export type SourcesElement = SourceProviderNode | SourceGroupNode | SourceItemNode;
 
@@ -31,6 +32,15 @@ export class SourcesTreeProvider implements vscode.TreeDataProvider<SourcesEleme
   private readonly _onDidChangeTreeData = new vscode.EventEmitter<void>();
   readonly onDidChangeTreeData = this._onDidChangeTreeData.event;
   private readonly disposables: vscode.Disposable[] = [];
+  private _layout: ViewLayout = 'tree';
+
+  get layout(): ViewLayout { return this._layout; }
+  set layout(value: ViewLayout) {
+    if (this._layout !== value) {
+      this._layout = value;
+      this._onDidChangeTreeData.fire();
+    }
+  }
 
   constructor(
     private readonly providerRegistry: ProviderRegistry,
@@ -73,6 +83,9 @@ export class SourcesTreeProvider implements vscode.TreeDataProvider<SourcesEleme
 
   getChildren(element?: SourcesElement): SourcesElement[] {
     if (!element) {
+      if (this._layout === 'flat') {
+        return this.getAllItems();
+      }
       const result: SourceProviderNode[] = [];
       const allItems = this.providerRegistry.getAllDiscoveredItems();
       for (const [providerId, items] of allItems) {
@@ -96,6 +109,17 @@ export class SourcesTreeProvider implements vscode.TreeDataProvider<SourcesEleme
     }
 
     return [];
+  }
+
+  private getAllItems(): SourceItemNode[] {
+    const result: SourceItemNode[] = [];
+    const allItems = this.providerRegistry.getAllDiscoveredItems();
+    for (const [providerId, items] of allItems) {
+      for (const item of items) {
+        result.push(this.toItemNode(providerId, item));
+      }
+    }
+    return result.sort((a, b) => a.title.localeCompare(b.title));
   }
 
   private getProviderChildren(providerId: string): SourcesElement[] {

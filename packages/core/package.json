@@ -33,6 +33,19 @@
           "type": "boolean",
           "default": true,
           "description": "Show a notification when new items arrive in the Inbox"
+        },
+        "workcenter.viewLayout": {
+          "type": "object",
+          "default": {},
+          "description": "Per-view layout mode. Keys are view names (inbox, queue, focus, history, sources) and values are 'flat' or 'tree'.",
+          "properties": {
+            "inbox": { "type": "string", "enum": ["flat", "tree"], "default": "tree" },
+            "queue": { "type": "string", "enum": ["flat", "tree"], "default": "flat" },
+            "focus": { "type": "string", "enum": ["flat", "tree"], "default": "flat" },
+            "history": { "type": "string", "enum": ["flat", "tree"], "default": "flat" },
+            "sources": { "type": "string", "enum": ["flat", "tree"], "default": "tree" }
+          },
+          "additionalProperties": false
         }
       }
     },
@@ -153,6 +166,36 @@
         "title": "Accept to Queue",
         "category": "WorkCenter",
         "icon": "$(arrow-right)"
+      },
+      {
+        "command": "workcenter.toggleInboxLayout",
+        "title": "Toggle Inbox Layout",
+        "category": "WorkCenter",
+        "icon": "$(list-tree)"
+      },
+      {
+        "command": "workcenter.toggleQueueLayout",
+        "title": "Toggle Queue Layout",
+        "category": "WorkCenter",
+        "icon": "$(list-tree)"
+      },
+      {
+        "command": "workcenter.toggleFocusLayout",
+        "title": "Toggle Focus Layout",
+        "category": "WorkCenter",
+        "icon": "$(list-tree)"
+      },
+      {
+        "command": "workcenter.toggleHistoryLayout",
+        "title": "Toggle History Layout",
+        "category": "WorkCenter",
+        "icon": "$(list-tree)"
+      },
+      {
+        "command": "workcenter.toggleSourcesLayout",
+        "title": "Toggle Sources Layout",
+        "category": "WorkCenter",
+        "icon": "$(list-tree)"
       }
     ],
     "menus": {
@@ -160,6 +203,31 @@
         {
           "command": "workcenter.createItem",
           "when": "view == workcenter.queue",
+          "group": "navigation"
+        },
+        {
+          "command": "workcenter.toggleInboxLayout",
+          "when": "view == workcenter.inbox",
+          "group": "navigation"
+        },
+        {
+          "command": "workcenter.toggleQueueLayout",
+          "when": "view == workcenter.queue",
+          "group": "navigation"
+        },
+        {
+          "command": "workcenter.toggleFocusLayout",
+          "when": "view == workcenter.focus",
+          "group": "navigation"
+        },
+        {
+          "command": "workcenter.toggleHistoryLayout",
+          "when": "view == workcenter.history",
+          "group": "navigation"
+        },
+        {
+          "command": "workcenter.toggleSourcesLayout",
+          "when": "view == workcenter.sources",
           "group": "navigation"
         }
       ],
