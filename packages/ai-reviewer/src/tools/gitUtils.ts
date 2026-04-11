@@ -9,7 +9,8 @@ export function gitExec(args: string[], cwd: string): Promise<string> {
       { cwd, maxBuffer: 10 * 1024 * 1024 },
       (err, stdout, stderr) => {
         if (err) {
-          reject(new Error(`git ${args[0]} failed: ${stderr || err.message}`));
+          const errorOutput = stderr?.trim() || 'git command failed';
+          reject(new Error(`git ${args[0]} failed: ${errorOutput}`));
         } else {
           resolve(stdout);
         }
