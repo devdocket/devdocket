@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { chat, lm, LanguageModelTextPart, ChatRequestTurn, ChatResponseTurn, ChatResponseMarkdownPart } from 'vscode';
+import { chat, lm, LanguageModelTextPart, LanguageModelToolCallPart, ChatRequestTurn, ChatResponseTurn, ChatResponseMarkdownPart } from 'vscode';
 import { WalkthroughParticipant } from '../walkthroughParticipant';
 import type { RepoManager, WorktreeInfo } from '../repoManager';
 
@@ -224,6 +224,72 @@ describe('WalkthroughParticipant', () => {
       expect(response.progress).toHaveBeenCalledWith(
         expect.stringContaining('worktree'),
       );
+    });
+
+    it('invokes real tools via lm.invokeTool and continues the loop', async () => {
+      const mockModel = {
+        sendRequest: vi.fn()
+          .mockResolvedValueOnce({
+            stream: (async function* () {
+              yield new LanguageModelToolCallPart('call-1', 'workcenter-readFile', { worktreePath: '/mock', filePath: 'src/index.ts' });
+            })(),
+          })
+          .mockResolvedValueOnce({
+            stream: (async function* () {
+              yield new LanguageModelTextPart('File contents analyzed.');
+            })(),
+          }),
+      };
+
+      vi.mocked(lm.invokeTool).mockResolvedValue({
+        content: [new LanguageModelTextPart('file content here')],
+      });
+
+      participant.register();
+      const handler = vi.mocked(chat.createChatParticipant).mock.calls[0][1];
+
+      const request = createMockRequest('Walk me through https://github.com/owner/repo/pull/42', mockModel);
+      const context = createMockContext();
+      const response = createMockResponse();
+      const token = { isCancellationRequested: false };
+
+      await handler(request, context, response, token);
+
+      expect(lm.invokeTool).toHaveBeenCalledWith(
+        'workcenter-readFile',
+        expect.objectContaining({ input: { worktreePath: '/mock', filePath: 'src/index.ts' } }),
+        token,
+      );
+      expect(mockModel.sendRequest).toHaveBeenCalledTimes(2);
+      expect(response.markdown).toHaveBeenCalledWith('File contents analyzed.');
+    });
+
+    it('signalPhase updates ChatResult metadata without triggering another loop', async () => {
+      const mockModel = {
+        sendRequest: vi.fn().mockResolvedValue({
+          stream: (async function* () {
+            yield new LanguageModelTextPart('Wrap-up complete.');
+            yield new LanguageModelToolCallPart('phase-1', 'workcenter-signalPhase', { phase: 'wrapup' });
+          })(),
+        }),
+      };
+
+      participant.register();
+      const handler = vi.mocked(chat.createChatParticipant).mock.calls[0][1];
+
+      const request = createMockRequest('Walk me through https://github.com/owner/repo/pull/42', mockModel);
+      const context = createMockContext([new ChatRequestTurn('previous turn')]);
+      const response = createMockResponse();
+      const token = { isCancellationRequested: false };
+
+      const result = await handler(request, context, response, token);
+
+      // signalPhase should not trigger invokeTool
+      expect(lm.invokeTool).not.toHaveBeenCalled();
+      // Model should only be called once (no re-loop for signalPhase)
+      expect(mockModel.sendRequest).toHaveBeenCalledTimes(1);
+      // Phase should be in the result metadata
+      expect((result as { metadata?: Record<string, unknown> }).metadata?.phase).toBe('wrapup');
     });
   });
 });
