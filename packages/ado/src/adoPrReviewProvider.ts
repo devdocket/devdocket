@@ -137,14 +137,16 @@ export class AdoPrReviewProvider extends BaseProvider {
       );
 
       results.forEach((result, index) => {
+        const project = projectList[index];
+        const target = project ? `${orgConfig.org}/${project}` : orgConfig.org;
+
         if (result.status === 'fulfilled') {
           const { items, failed } = result.value;
           allItems.push(...items);
           if (failed) {
-            failures.push(projectList[index] || orgConfig.org);
+            failures.push(target);
           }
         } else {
-          const target = projectList[index] || orgConfig.org;
           failures.push(target);
           logger.error(
             `Failed to fetch PR reviews from ${target}:`,
