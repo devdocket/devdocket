@@ -52,6 +52,14 @@ export async function toggleViewLayout(viewId: ViewId): Promise<void> {
   // resource URI that toggle commands don't have, so updating it without one
   // could silently write to the wrong folder in multi-root workspaces.
   const inspection = config.inspect('viewLayout');
+
+  if (inspection?.workspaceFolderValue !== undefined) {
+    void vscode.window.showWarningMessage(
+      'A workspace-folder setting is overriding the layout for this view. ' +
+      'Update or remove "workcenter.viewLayout" in your folder settings to use the toggle.',
+    );
+  }
+
   const hasWorkspaceValue = inspection?.workspaceValue !== undefined;
   const scopeValue = hasWorkspaceValue ? inspection.workspaceValue : inspection?.globalValue;
   const target = hasWorkspaceValue
