@@ -172,7 +172,7 @@ export class AdoWorkItemProvider extends BaseProvider {
     if (failures.length > 0) {
       const message = failures.length === 1
         ? `Failed to fetch work items from ${failures[0]}`
-        : `Failed to fetch work items from ${failures.length} projects`;
+        : `Failed to fetch work items from ${failures.length} sources`;
       if (isUserTriggered) {
         void vscode.window.showWarningMessage(`WorkCenter ADO: ${message}`);
       }
