@@ -129,14 +129,8 @@ describe('ADO provider config edge cases', () => {
     // With the new config parser, providers are created when orgConfigs is non-empty
 
     it('no configuration at all yields no org configs', () => {
-      const result = parseAdoProjectsConfig([], '');
+      const result = parseAdoProjectsConfig([]);
       expect(result).toHaveLength(0);
-    });
-
-    it('legacy org alone yields one org config', () => {
-      const result = parseAdoProjectsConfig([], 'myorg');
-      expect(result).toHaveLength(1);
-      expect(result[0].org).toBe('myorg');
     });
   });
 
@@ -241,7 +235,6 @@ describe('ADO provider config edge cases', () => {
 
     it('affectsConfiguration matches all ADO config keys', () => {
       const relevantKeys = [
-        'workcenterAdo.organization',
         'workcenterAdo.projects',
         'workcenterAdo.refreshIntervalSeconds',
       ];
@@ -249,7 +242,6 @@ describe('ADO provider config edge cases', () => {
       for (const key of relevantKeys) {
         const event = { affectsConfiguration: (k: string) => k === key };
         const shouldReconfigure =
-          event.affectsConfiguration('workcenterAdo.organization') ||
           event.affectsConfiguration('workcenterAdo.projects') ||
           event.affectsConfiguration('workcenterAdo.refreshIntervalSeconds');
         expect(shouldReconfigure).toBe(true);
@@ -266,7 +258,6 @@ describe('ADO provider config edge cases', () => {
       for (const key of unrelatedKeys) {
         const event = { affectsConfiguration: (k: string) => k === key };
         const shouldReconfigure =
-          event.affectsConfiguration('workcenterAdo.organization') ||
           event.affectsConfiguration('workcenterAdo.projects') ||
           event.affectsConfiguration('workcenterAdo.refreshIntervalSeconds');
         expect(shouldReconfigure).toBe(false);
@@ -282,8 +273,7 @@ describe('ADO provider config edge cases', () => {
 
     beforeEach(() => {
       configValues = {
-        organization: 'myorg',
-        projects: ['ProjectA'],
+        projects: ['myorg/ProjectA'],
         refreshIntervalSeconds: 0, // Disable timers to prevent leaks in tests
       };
       configChangeListeners = [];
@@ -325,7 +315,6 @@ describe('ADO provider config edge cases', () => {
     });
 
     it('does not register providers when no organizations are configured', async () => {
-      configValues.organization = '';
       configValues.projects = [];
 
       const { activate } = await import('../extension');
@@ -334,29 +323,11 @@ describe('ADO provider config edge cases', () => {
       expect(mockRegisterProvider).not.toHaveBeenCalled();
     });
 
-    it('registers providers when organization is set', async () => {
+    it('registers providers when projects are set', async () => {
       const { activate } = await import('../extension');
       await activate(context);
 
       expect(mockRegisterProvider).toHaveBeenCalledTimes(2);
-    });
-
-    it('reconfigures providers on organization change', async () => {
-      const { activate } = await import('../extension');
-      await activate(context);
-
-      expect(mockRegisterProvider).toHaveBeenCalledTimes(2);
-
-      // Clear both org and projects → providers should be torn down
-      configValues.organization = '';
-      configValues.projects = [];
-      for (const listener of configChangeListeners) {
-        listener({ affectsConfiguration: (k: string) => k === 'workcenterAdo.organization' });
-      }
-
-      // No new providers registered (nothing configured)
-      // The dispose calls happen internally — we verify no new registrations
-      expect(mockRegisterProvider).toHaveBeenCalledTimes(2); // still 2 from initial
     });
 
     it('reconfigures providers on projects change', async () => {
@@ -366,7 +337,7 @@ describe('ADO provider config edge cases', () => {
       expect(mockRegisterProvider).toHaveBeenCalledTimes(2);
 
       // Change projects
-      configValues.projects = ['NewProject'];
+      configValues.projects = ['myorg/NewProject'];
       for (const listener of configChangeListeners) {
         listener({ affectsConfiguration: (k: string) => k === 'workcenterAdo.projects' });
       }

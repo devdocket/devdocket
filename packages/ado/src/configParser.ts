@@ -8,44 +8,23 @@ export interface OrgConfig {
 }
 
 /**
- * Parses the `workcenterAdo.projects` and (deprecated) `workcenterAdo.organization`
- * settings into a list of per-organization configurations.
+ * Parses the `workcenterAdo.projects` setting into a list of per-organization
+ * configurations.
  *
- * New-format entries in `projects`:
+ * Entries in `projects`:
  *   - `<org>` — monitor an entire organization
  *   - `<org>/<project>` — monitor a specific project
  *
- * Legacy backward compatibility: if `projects` contains no valid
- * `<org>/<project>` entries and `legacyOrganization` is non-empty, entries are
- * treated as project names under that organization. Malformed entries
- * such as `/`, `org/`, `/project`, and multi-slash entries like `org/proj/extra`
- * are ignored when determining whether to use legacy mode.
+ * Malformed entries such as `/`, `org/`, `/project`, and multi-slash entries
+ * like `org/proj/extra` are silently skipped.
  */
 export function parseAdoProjectsConfig(
   projects: string[],
-  legacyOrganization: string,
 ): OrgConfig[] {
-  const trimmedLegacyOrg = legacyOrganization.trim();
-
-  // Determine whether entries use new org/project format by checking for
-  // valid slash-separated entries (exactly one slash with non-empty parts)
-  const hasNewFormatEntry = projects.some(p => {
-    const t = p.trim();
-    const idx = t.indexOf('/');
-    return idx > 0 && idx < t.length - 1 && t.lastIndexOf('/') === idx;
-  });
-
-  // Legacy mode: no entry contains a valid '/' and the deprecated org setting is present
-  if (!hasNewFormatEntry && trimmedLegacyOrg) {
-    return [{ org: trimmedLegacyOrg, projects: [...new Set(projects.map(p => p.trim()).filter(Boolean))] }];
-  }
-
-  // Nothing to monitor
   if (projects.length === 0) {
     return [];
   }
 
-  // New format parsing
   const orgMap = new Map<string, { projects: string[]; wholeOrg: boolean }>();
 
   for (const entry of projects) {

@@ -22,19 +22,13 @@
     "configuration": {
       "title": "WorkCenter Azure DevOps",
       "properties": {
-        "workcenterAdo.organization": {
-          "type": "string",
-          "default": "",
-          "description": "(Deprecated) Azure DevOps organization name. Use workcenterAdo.projects with 'org' or 'org/project' entries instead.",
-          "deprecationMessage": "Use workcenterAdo.projects with entries like 'myorg' or 'myorg/myproject' instead."
-        },
         "workcenterAdo.projects": {
           "type": "array",
           "items": {
             "type": "string"
           },
           "default": [],
-          "description": "Azure DevOps organizations and projects to monitor. Each entry is either '<org>' (monitor entire organization) or '<org>/<project>' (monitor a specific project). Supports multiple organizations. For backward compatibility, plain project names are treated as projects under workcenterAdo.organization if that setting is configured."
+          "description": "Azure DevOps organizations and projects to monitor. Each entry is either '<org>' (monitor entire organization) or '<org>/<project>' (monitor a specific project). Supports multiple organizations."
         },
         "workcenterAdo.refreshIntervalSeconds": {
           "type": "number",

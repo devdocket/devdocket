@@ -70,10 +70,9 @@ export async function activate(_context: vscode.ExtensionContext): Promise<void>
     prProvider = undefined;
 
     const config = vscode.workspace.getConfiguration('workcenterAdo');
-    const legacyOrg = config.get<string>('organization', '');
     const projects = config.get<string[]>('projects', []);
 
-    const orgConfigs = parseAdoProjectsConfig(projects, legacyOrg);
+    const orgConfigs = parseAdoProjectsConfig(projects);
 
     if (orgConfigs.length === 0) {
       const hasEntries = projects.some(p => p.trim().length > 0);
@@ -122,7 +121,6 @@ export async function activate(_context: vscode.ExtensionContext): Promise<void>
   _context.subscriptions.push(
     vscode.workspace.onDidChangeConfiguration(e => {
       if (
-        e.affectsConfiguration('workcenterAdo.organization') ||
         e.affectsConfiguration('workcenterAdo.projects') ||
         e.affectsConfiguration('workcenterAdo.refreshIntervalSeconds')
       ) {
