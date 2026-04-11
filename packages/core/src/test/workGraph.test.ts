@@ -497,7 +497,7 @@ describe('WorkGraph', () => {
       expect(graph.getItem(item.id)?.state).toBe(WorkItemState.Archived);
     });
 
-    it('rejects New → Paused',async () => {
+    it('rejects New → Paused', async () => {
       const item = await graph.createItem({ title: 'Test' });
       vi.mocked(store.save).mockClear();
       await expect(graph.transitionState(item.id, WorkItemState.Paused))
