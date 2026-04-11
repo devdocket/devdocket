@@ -60,10 +60,10 @@ export class FocusTreeProvider implements vscode.TreeDataProvider<FocusElement> 
       const items = this.workGraph.getItemsByState(
         WorkItemState.InProgress,
         WorkItemState.Paused,
-      ).sort((a, b) => a.title.localeCompare(b.title));
+      );
 
       if (this._layout === 'flat') {
-        return items;
+        return items.sort((a, b) => a.title.localeCompare(b.title));
       }
 
       return this.groupByProvider(items);
