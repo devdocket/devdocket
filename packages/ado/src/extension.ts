@@ -76,12 +76,23 @@ export async function activate(_context: vscode.ExtensionContext): Promise<void>
     const orgConfigs = parseAdoProjectsConfig(projects, legacyOrg);
 
     if (orgConfigs.length === 0) {
-      logger.info('No organizations configured — set workcenterAdo.projects to enable ADO providers');
-      if (!orgWarningShown) {
-        void vscode.window.showWarningMessage(
-          'WorkCenter ADO: No Azure DevOps organizations configured. Add entries to workcenterAdo.projects (e.g. "myorg" or "myorg/myproject").',
-        );
-        orgWarningShown = true;
+      const hasEntries = projects.some(p => p.trim().length > 0);
+      if (hasEntries) {
+        logger.info('All workcenterAdo.projects entries are invalid — entries must be "org" or "org/project"');
+        if (!orgWarningShown) {
+          void vscode.window.showWarningMessage(
+            'WorkCenter ADO: All workcenterAdo.projects entries are invalid. Each entry must be "org" or "org/project".',
+          );
+          orgWarningShown = true;
+        }
+      } else {
+        logger.info('No organizations configured — set workcenterAdo.projects to enable ADO providers');
+        if (!orgWarningShown) {
+          void vscode.window.showWarningMessage(
+            'WorkCenter ADO: No Azure DevOps organizations configured. Add entries to workcenterAdo.projects (e.g. "myorg" or "myorg/myproject").',
+          );
+          orgWarningShown = true;
+        }
       }
       return;
     }
