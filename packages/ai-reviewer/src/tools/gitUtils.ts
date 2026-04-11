@@ -1,5 +1,13 @@
 import { execFile } from 'child_process';
 
+/** Error thrown by gitExec, exposing the process exit code. */
+export class GitExecError extends Error {
+  constructor(message: string, public readonly exitCode: number | null) {
+    super(message);
+    this.name = 'GitExecError';
+  }
+}
+
 /** Run a git command in the given directory. Returns stdout. */
 export function gitExec(args: string[], cwd: string): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -10,7 +18,8 @@ export function gitExec(args: string[], cwd: string): Promise<string> {
       (err, stdout, stderr) => {
         if (err) {
           const errorOutput = stderr?.trim() || 'git command failed';
-          reject(new Error(`git ${args[0]} failed: ${errorOutput}`));
+          const exitCode = 'code' in err ? (err as { code?: number }).code ?? null : null;
+          reject(new GitExecError(`git ${args[0]} failed: ${errorOutput}`, exitCode));
         } else {
           resolve(stdout);
         }

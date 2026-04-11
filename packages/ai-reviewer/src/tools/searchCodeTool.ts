@@ -1,6 +1,6 @@
 import * as vscode from 'vscode';
 import * as path from 'path';
-import { gitExec } from './gitUtils';
+import { gitExec, GitExecError } from './gitUtils';
 import { validWorktreePaths } from './worktreeRegistry';
 
 interface SearchCodeInput {
@@ -46,13 +46,13 @@ export function registerSearchCodeTool(): vscode.Disposable {
           new vscode.LanguageModelTextPart(output || '(no matches found)'),
         ]);
       } catch (err) {
-        // git grep exits with code 1 when no matches are found
-        const msg = err instanceof Error ? err.message : String(err);
-        if (msg.includes('exit code 1') || msg.includes('git grep failed')) {
+        // git grep exits with code 1 specifically when no matches are found
+        if (err instanceof GitExecError && err.exitCode === 1) {
           return new vscode.LanguageModelToolResult([
             new vscode.LanguageModelTextPart('(no matches found)'),
           ]);
         }
+        const msg = err instanceof Error ? err.message : String(err);
         return new vscode.LanguageModelToolResult([
           new vscode.LanguageModelTextPart(`Error searching code: ${msg}`),
         ]);
