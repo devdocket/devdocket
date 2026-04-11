@@ -151,6 +151,18 @@
         "icon": "$(arrow-down)"
       },
       {
+        "command": "workcenter.focusMoveUp",
+        "title": "Move Up",
+        "category": "WorkCenter",
+        "icon": "$(arrow-up)"
+      },
+      {
+        "command": "workcenter.focusMoveDown",
+        "title": "Move Down",
+        "category": "WorkCenter",
+        "icon": "$(arrow-down)"
+      },
+      {
         "command": "workcenter.acceptFromInbox",
         "title": "Accept to Queue",
         "category": "WorkCenter",
@@ -288,12 +300,22 @@
         {
           "command": "workcenter.moveUp",
           "when": "view == workcenter.queue && viewItem =~ /^queueItem/",
-          "group": "3_reorder"
+          "group": "3_reorder@1"
         },
         {
           "command": "workcenter.moveDown",
           "when": "view == workcenter.queue && viewItem =~ /^queueItem/",
-          "group": "3_reorder"
+          "group": "3_reorder@2"
+        },
+        {
+          "command": "workcenter.focusMoveUp",
+          "when": "view == workcenter.focus",
+          "group": "3_reorder@1"
+        },
+        {
+          "command": "workcenter.focusMoveDown",
+          "when": "view == workcenter.focus",
+          "group": "3_reorder@2"
         },
         {
           "command": "workcenter.openInBrowser",
