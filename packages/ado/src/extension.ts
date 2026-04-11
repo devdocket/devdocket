@@ -78,7 +78,7 @@ export async function activate(_context: vscode.ExtensionContext): Promise<void>
     if (orgConfigs.length === 0) {
       logger.info('No organizations configured — set workcenterAdo.projects to enable ADO providers');
       if (!orgWarningShown) {
-        vscode.window.showWarningMessage(
+        void vscode.window.showWarningMessage(
           'WorkCenter ADO: No Azure DevOps organizations configured. Add entries to workcenterAdo.projects (e.g. "myorg" or "myorg/myproject").',
         );
         orgWarningShown = true;
