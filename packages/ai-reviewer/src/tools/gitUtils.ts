@@ -18,7 +18,8 @@ export function gitExec(args: string[], cwd: string): Promise<string> {
       (err, stdout, stderr) => {
         if (err) {
           const errorOutput = stderr?.trim() || 'git command failed';
-          const exitCode = 'code' in err ? (err as { code?: number }).code ?? null : null;
+          const rawCode = 'code' in err ? (err as { code?: unknown }).code : undefined;
+          const exitCode = typeof rawCode === 'number' ? rawCode : null;
           reject(new GitExecError(`git ${args[0]} failed: ${errorOutput}`, exitCode));
         } else {
           resolve(stdout);

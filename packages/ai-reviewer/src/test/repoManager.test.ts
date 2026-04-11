@@ -99,8 +99,8 @@ describe('RepoManager', () => {
       const prFetch = fetchCalls.find(c => c[1]?.some((a: string) => a.includes('pull/42/head')));
       expect(prFetch).toBeDefined();
 
-      // Should fetch base branch
-      const baseFetch = fetchCalls.find(c => c[1]?.includes('main'));
+      // Should fetch base branch (via refs/heads/)
+      const baseFetch = fetchCalls.find(c => c[1]?.some((a: string) => a.includes('refs/heads/main')));
       expect(baseFetch).toBeDefined();
     });
 

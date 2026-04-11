@@ -97,8 +97,11 @@ export class RepoManager {
       );
     }
 
-    // Fetch base branch for diffs
-    await gitAuth(['fetch', 'origin', baseRef], clonePath, session.accessToken);
+    // Fetch base branch for diffs (validate ref from API)
+    if (/^-|\s/.test(baseRef)) {
+      throw new Error(`Invalid base ref from GitHub API: ${baseRef}`);
+    }
+    await gitAuth(['fetch', 'origin', `refs/heads/${baseRef}`], clonePath, session.accessToken);
 
     // Create worktree if it doesn't exist yet
     if (!worktreeExists) {

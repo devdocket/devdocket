@@ -29,7 +29,7 @@ Shared PR action logic (diff fetching, GitHub auth, LLM model selection, prompt 
 - `packages/ai-reviewer/package.json` — Updated metadata, added chatParticipants + languageModelTools contributions
 
 **Test Coverage:** Existing review action coverage plus new walkthrough, participant, tool, and RepoManager tests — all passing at implementation time
-**Result:** All 59 tests passing, build passes
+**Result:** All relevant test suites passing at implementation time
 
 **References:**
 - Issue #12

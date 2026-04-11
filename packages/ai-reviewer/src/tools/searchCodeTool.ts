@@ -32,7 +32,8 @@ export function registerSearchCodeTool(): vscode.Disposable {
         }
         const output = await gitExec(args, worktreePath);
 
-        const lines = output.split('\n');
+        const trimmed = output.trimEnd();
+        const lines = trimmed ? trimmed.split('\n') : [];
         if (lines.length > limit) {
           const truncated = lines.slice(0, limit).join('\n');
           return new vscode.LanguageModelToolResult([
