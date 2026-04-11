@@ -16,12 +16,12 @@ Shared PR action logic (diff fetching, GitHub auth, LLM model selection, prompt 
 - Re-exporting `sanitizePrUrl` from `aiReviewAction.ts` preserves test backward compatibility without requiring test refactoring
 
 **Implementation:**
-- `packages/ai-reviewer/src/basePrAction.ts` — Base class (pre-existing)
-- `packages/ai-reviewer/src/aiReviewAction.ts` — Thin subclass
-- `packages/ai-reviewer/src/aiWalkthroughAction.ts` — Thin subclass (pre-existing)
-- `packages/ai-reviewer/src/walkthroughPrompt.ts` — Walkthrough prompt (pre-existing)
-- `packages/ai-reviewer/src/defaultPrompt.ts` — Enhanced review prompt with all 10 superpowers items + Holistic Assessment + Codebase Consistency sections
-- `packages/ai-reviewer/src/extension.ts` — Registers both actions
+- `packages/ai-reviewer/src/basePrAction.ts` — Added base class for shared PR action logic
+- `packages/ai-reviewer/src/aiReviewAction.ts` — Refactored into a thin subclass of `BasePrAction`
+- `packages/ai-reviewer/src/aiWalkthroughAction.ts` — Added thin subclass for walkthrough generation
+- `packages/ai-reviewer/src/walkthroughPrompt.ts` — Added walkthrough prompt
+- `packages/ai-reviewer/src/defaultPrompt.ts` — Updated review prompt with all 10 superpowers items + Holistic Assessment + Codebase Consistency sections
+- `packages/ai-reviewer/src/extension.ts` — Updated to register both actions
 - `packages/ai-reviewer/package.json` — Updated metadata + `workcenterAiWalkthrough` config
 
 **Test Coverage:** 50 existing review action tests + 9 new walkthrough tests, all passing  
