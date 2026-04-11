@@ -2,38 +2,28 @@ import * as vscode from 'vscode';
 import { WorkItem, WorkItemState } from '../models/workItem';
 import { WorkGraph } from '../services/workGraph';
 import {
-  ViewLayout, ProviderGroupNode, isProviderGroupNode,
-  LayoutState, getTreeModeChildren, createProviderGroupTreeItem,
+  WorkItemElement, WorkItemViewProvider,
 } from './viewLayout';
 
-export type HistoryElement = WorkItem | ProviderGroupNode;
+export type HistoryElement = WorkItemElement;
 
-export class HistoryTreeProvider implements vscode.TreeDataProvider<HistoryElement> {
-  private readonly _onDidChangeTreeData = new vscode.EventEmitter<void>();
-  readonly onDidChangeTreeData = this._onDidChangeTreeData.event;
-  private readonly disposables: vscode.Disposable[] = [];
-  private readonly _layoutState: LayoutState;
+export class HistoryTreeProvider extends WorkItemViewProvider {
+  protected readonly groupPrefix = 'history';
+  protected readonly groupContextValue = 'historyGroup';
 
-  get layout(): ViewLayout { return this._layoutState.value; }
-  set layout(value: ViewLayout) { this._layoutState.value = value; }
-
-  constructor(private readonly workGraph: WorkGraph) {
-    this._layoutState = new LayoutState('flat', () => this._onDidChangeTreeData.fire());
-    this.disposables.push(
-      workGraph.onDidChange(() => this._onDidChangeTreeData.fire())
-    );
+  constructor(workGraph: WorkGraph) {
+    super(workGraph, 'flat');
   }
 
-  refresh(): void {
-    this._onDidChangeTreeData.fire();
+  protected getItems(): WorkItem[] {
+    return this.workGraph.getItemsByState(WorkItemState.Done, WorkItemState.Archived);
   }
 
-  getTreeItem(element: HistoryElement): vscode.TreeItem {
-    if (isProviderGroupNode(element)) {
-      return createProviderGroupTreeItem(element, 'history', 'historyGroup');
-    }
+  protected sortItems(items: WorkItem[]): WorkItem[] {
+    return items.sort((a, b) => b.updatedAt - a.updatedAt);
+  }
 
-    const item = element;
+  protected createWorkItemTreeItem(item: WorkItem): vscode.TreeItem {
     const treeItem = new vscode.TreeItem(item.title, vscode.TreeItemCollapsibleState.None);
     treeItem.description = this.getStateLabel(item.state);
     treeItem.tooltip = this.buildTooltip(item);
@@ -41,15 +31,6 @@ export class HistoryTreeProvider implements vscode.TreeDataProvider<HistoryEleme
     treeItem.contextValue = item.url ? 'historyItem.hasUrl' : 'historyItem';
     treeItem.command = { command: 'workcenter.editItem', title: 'Open Details', arguments: [item] };
     return treeItem;
-  }
-
-  getChildren(element?: HistoryElement): HistoryElement[] {
-    return getTreeModeChildren(
-      element,
-      () => this.workGraph.getItemsByState(WorkItemState.Done, WorkItemState.Archived),
-      items => items.sort((a, b) => b.updatedAt - a.updatedAt),
-      this._layoutState.value,
-    );
   }
 
   private getStateLabel(state: WorkItemState): string {
@@ -88,10 +69,5 @@ export class HistoryTreeProvider implements vscode.TreeDataProvider<HistoryEleme
     const timestampLabel = item.state === WorkItemState.Done ? 'Completed at' : item.state === WorkItemState.Archived ? 'Archived at' : 'Last updated';
     md.appendMarkdown(`**${timestampLabel}:** ${new Date(item.updatedAt).toLocaleString()}`);
     return md;
-  }
-
-  dispose(): void {
-    this._onDidChangeTreeData.dispose();
-    this.disposables.forEach(d => d.dispose());
   }
 }

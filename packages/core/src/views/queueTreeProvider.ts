@@ -2,40 +2,32 @@ import * as vscode from 'vscode';
 import { WorkItem, WorkItemState } from '../models/workItem';
 import { WorkGraph } from '../services/workGraph';
 import {
-  ViewLayout, ProviderGroupNode, isProviderGroupNode,
-  LayoutState, getTreeModeChildren, createProviderGroupTreeItem,
+  WorkItemElement, WorkItemViewProvider, isProviderGroupNode,
 } from './viewLayout';
 
-export type QueueElement = WorkItem | ProviderGroupNode;
+export type QueueElement = WorkItemElement;
 
 const DRAG_MIME_TYPE = 'application/vnd.code.tree.workcenter.queue';
 
-export class QueueTreeProvider implements vscode.TreeDataProvider<QueueElement>, vscode.TreeDragAndDropController<QueueElement> {
+export class QueueTreeProvider extends WorkItemViewProvider implements vscode.TreeDragAndDropController<QueueElement> {
   readonly dropMimeTypes = [DRAG_MIME_TYPE];
   readonly dragMimeTypes = [DRAG_MIME_TYPE];
-  private readonly _onDidChangeTreeData = new vscode.EventEmitter<void>();
-  readonly onDidChangeTreeData = this._onDidChangeTreeData.event;
-  private readonly disposables: vscode.Disposable[] = [];
-  private readonly _layoutState: LayoutState;
+  protected readonly groupPrefix = 'queue';
+  protected readonly groupContextValue = 'queueGroup';
 
-  get layout(): ViewLayout { return this._layoutState.value; }
-  set layout(value: ViewLayout) { this._layoutState.value = value; }
-
-  constructor(private readonly workGraph: WorkGraph) {
-    this._layoutState = new LayoutState('flat', () => this._onDidChangeTreeData.fire());
-    this.disposables.push(
-      workGraph.onDidChange(() => this._onDidChangeTreeData.fire())
-    );
+  constructor(workGraph: WorkGraph) {
+    super(workGraph, 'flat');
   }
 
-  refresh(): void { this._onDidChangeTreeData.fire(); }
+  protected getItems(): WorkItem[] {
+    return this.workGraph.getItemsByState(WorkItemState.New);
+  }
 
-  getTreeItem(element: QueueElement): vscode.TreeItem {
-    if (isProviderGroupNode(element)) {
-      return createProviderGroupTreeItem(element, 'queue', 'queueGroup');
-    }
+  protected sortItems(items: WorkItem[]): WorkItem[] {
+    return items.sort((a, b) => (a.sortOrder ?? Number.MAX_SAFE_INTEGER) - (b.sortOrder ?? Number.MAX_SAFE_INTEGER));
+  }
 
-    const item = element;
+  protected createWorkItemTreeItem(item: WorkItem): vscode.TreeItem {
     const treeItem = new vscode.TreeItem(item.title, vscode.TreeItemCollapsibleState.None);
     treeItem.id = item.id;
     treeItem.description = item.providerId;
@@ -44,18 +36,6 @@ export class QueueTreeProvider implements vscode.TreeDataProvider<QueueElement>,
     treeItem.iconPath = new vscode.ThemeIcon(item.providerId ? 'remote' : 'circle-filled');
     treeItem.command = { command: 'workcenter.editItem', title: 'Open Details', arguments: [item] };
     return treeItem;
-  }
-
-  private readonly sortBySortOrder = (items: WorkItem[]): WorkItem[] =>
-    items.sort((a, b) => (a.sortOrder ?? Number.MAX_SAFE_INTEGER) - (b.sortOrder ?? Number.MAX_SAFE_INTEGER));
-
-  getChildren(element?: QueueElement): QueueElement[] {
-    return getTreeModeChildren(
-      element,
-      () => this.workGraph.getItemsByState(WorkItemState.New),
-      this.sortBySortOrder,
-      this._layoutState.value,
-    );
   }
 
   private buildTooltip(item: WorkItem): vscode.MarkdownString {
@@ -92,10 +72,5 @@ export class QueueTreeProvider implements vscode.TreeDataProvider<QueueElement>,
     if (draggedId === target.id) { return; }
 
     await this.workGraph.reorderItem(draggedId, target.id);
-  }
-
-  dispose(): void {
-    this._onDidChangeTreeData.dispose();
-    this.disposables.forEach(d => d.dispose());
   }
 }

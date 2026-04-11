@@ -2,38 +2,28 @@ import * as vscode from 'vscode';
 import { WorkItem, WorkItemState } from '../models/workItem';
 import { WorkGraph } from '../services/workGraph';
 import {
-  ViewLayout, ProviderGroupNode, isProviderGroupNode,
-  LayoutState, getTreeModeChildren, createProviderGroupTreeItem,
+  WorkItemElement, WorkItemViewProvider,
 } from './viewLayout';
 
-export type FocusElement = WorkItem | ProviderGroupNode;
+export type FocusElement = WorkItemElement;
 
-export class FocusTreeProvider implements vscode.TreeDataProvider<FocusElement> {
-  private readonly _onDidChangeTreeData = new vscode.EventEmitter<void>();
-  readonly onDidChangeTreeData = this._onDidChangeTreeData.event;
-  private readonly disposables: vscode.Disposable[] = [];
-  private readonly _layoutState: LayoutState;
+export class FocusTreeProvider extends WorkItemViewProvider {
+  protected readonly groupPrefix = 'focus';
+  protected readonly groupContextValue = 'focusGroup';
 
-  get layout(): ViewLayout { return this._layoutState.value; }
-  set layout(value: ViewLayout) { this._layoutState.value = value; }
-
-  constructor(private readonly workGraph: WorkGraph) {
-    this._layoutState = new LayoutState('flat', () => this._onDidChangeTreeData.fire());
-    this.disposables.push(
-      workGraph.onDidChange(() => this._onDidChangeTreeData.fire())
-    );
+  constructor(workGraph: WorkGraph) {
+    super(workGraph, 'flat');
   }
 
-  refresh(): void {
-    this._onDidChangeTreeData.fire();
+  protected getItems(): WorkItem[] {
+    return this.workGraph.getItemsByState(WorkItemState.InProgress, WorkItemState.Paused);
   }
 
-  getTreeItem(element: FocusElement): vscode.TreeItem {
-    if (isProviderGroupNode(element)) {
-      return createProviderGroupTreeItem(element, 'focus', 'focusGroup');
-    }
+  protected sortItems(items: WorkItem[]): WorkItem[] {
+    return items.sort((a, b) => a.title.localeCompare(b.title));
+  }
 
-    const item = element;
+  protected createWorkItemTreeItem(item: WorkItem): vscode.TreeItem {
     const treeItem = new vscode.TreeItem(item.title, vscode.TreeItemCollapsibleState.None);
     treeItem.description = this.getStateLabel(item.state);
     treeItem.tooltip = this.buildTooltip(item);
@@ -48,15 +38,6 @@ export class FocusTreeProvider implements vscode.TreeDataProvider<FocusElement> 
 
     treeItem.command = { command: 'workcenter.editItem', title: 'Open Details', arguments: [item] };
     return treeItem;
-  }
-
-  getChildren(element?: FocusElement): FocusElement[] {
-    return getTreeModeChildren(
-      element,
-      () => this.workGraph.getItemsByState(WorkItemState.InProgress, WorkItemState.Paused),
-      items => items.sort((a, b) => a.title.localeCompare(b.title)),
-      this._layoutState.value,
-    );
   }
 
   private getStateLabel(state: WorkItemState): string {
@@ -94,10 +75,5 @@ export class FocusTreeProvider implements vscode.TreeDataProvider<FocusElement> 
     md.appendMarkdown(`**State:** ${item.state}\n\n`);
     md.appendMarkdown(`**Created:** ${new Date(item.createdAt).toLocaleString()}`);
     return md;
-  }
-
-  dispose(): void {
-    this._onDidChangeTreeData.dispose();
-    this.disposables.forEach(d => d.dispose());
   }
 }

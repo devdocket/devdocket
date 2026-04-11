@@ -184,3 +184,71 @@ export function createProviderGroupTreeItem(
   treeItem.iconPath = new vscode.ThemeIcon(node.providerId ? 'plug' : 'circle-filled');
   return treeItem;
 }
+
+/**
+ * Element type for providers that display WorkItems with optional provider grouping.
+ */
+export type WorkItemElement = WorkItem | ProviderGroupNode;
+
+/**
+ * Abstract base for Focus, Queue, and History tree providers.
+ * Encapsulates the shared layout state, event wiring, getChildren routing,
+ * and getTreeItem delegation so subclasses only define view-specific logic.
+ */
+export abstract class WorkItemViewProvider implements vscode.TreeDataProvider<WorkItemElement> {
+  private readonly _onDidChangeTreeData = new vscode.EventEmitter<void>();
+  readonly onDidChangeTreeData = this._onDidChangeTreeData.event;
+  protected readonly disposables: vscode.Disposable[] = [];
+  private readonly _layoutState: LayoutState;
+
+  get layout(): ViewLayout { return this._layoutState.value; }
+  set layout(value: ViewLayout) { this._layoutState.value = value; }
+
+  constructor(
+    protected readonly workGraph: import('../services/workGraph').WorkGraph,
+    defaultLayout: ViewLayout,
+  ) {
+    this._layoutState = new LayoutState(defaultLayout, () => this._onDidChangeTreeData.fire());
+    this.disposables.push(
+      workGraph.onDidChange(() => this._onDidChangeTreeData.fire()),
+    );
+  }
+
+  refresh(): void { this._onDidChangeTreeData.fire(); }
+
+  /** Return the WorkItems this view cares about (before sorting). */
+  protected abstract getItems(): WorkItem[];
+
+  /** View-specific sort order applied in both flat and group-expanded modes. */
+  protected abstract sortItems(items: WorkItem[]): WorkItem[];
+
+  /** ID prefix for provider-group tree items (e.g. 'focus', 'queue'). */
+  protected abstract readonly groupPrefix: string;
+
+  /** contextValue for provider-group tree items (e.g. 'focusGroup'). */
+  protected abstract readonly groupContextValue: string;
+
+  /** Create a TreeItem for a WorkItem (not a group node). */
+  protected abstract createWorkItemTreeItem(item: WorkItem): vscode.TreeItem;
+
+  getTreeItem(element: WorkItemElement): vscode.TreeItem {
+    if (isProviderGroupNode(element)) {
+      return createProviderGroupTreeItem(element, this.groupPrefix, this.groupContextValue);
+    }
+    return this.createWorkItemTreeItem(element);
+  }
+
+  getChildren(element?: WorkItemElement): WorkItemElement[] {
+    return getTreeModeChildren(
+      element,
+      () => this.getItems(),
+      items => this.sortItems(items),
+      this._layoutState.value,
+    );
+  }
+
+  dispose(): void {
+    this._onDidChangeTreeData.dispose();
+    this.disposables.forEach(d => d.dispose());
+  }
+}
