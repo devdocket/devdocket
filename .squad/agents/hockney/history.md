@@ -310,4 +310,51 @@ mockFetch.mockImplementation(async (url: string) => {
 
 **Key learning:** When adding new API calls to production code, use `mockImplementation` as a default fallback in tests rather than updating every individual test. This provides safe defaults while allowing specific tests to override with `mockResolvedValueOnce`.
 
+### Dismissed Items Persistence Tests (2025-01-30, Issue #189)
+
+**Issue:** Dismissed items reappearing in inbox after provider refresh. Need tests to verify dismissed state persists through multiple refresh cycles.
+
+**Context:** The `ProviderRegistry.handleDiscoveredItems` method respects existing inbox states (unseen/accepted/dismissed) and only sets state to 'unseen' for newly discovered items. The `InboxTreeProvider` filters items based on `stateStore.getState()`, showing only items where state is `undefined` or `'unseen'`. Tests needed to verify this behavior works correctly across refresh cycles.
+
+**Tests added:** 13 new tests across 2 files
+
+**`providerRegistry.test.ts`** — 5 new tests in "issue #189: dismissed items reappearing in inbox" describe block:
+
+1. **should NOT reset dismissed item to unseen after provider refresh** — Verify dismissed state persists when provider re-emits same items
+2. **should maintain dismissed state through multiple provider refresh cycles** — Verify 5 consecutive refreshes don't reset dismissed state
+3. **should show only unseen items when mix includes dismissed items** — Verify filtering when items have mixed states (unseen/accepted/dismissed)
+4. **should add new items as unseen while preserving dismissed items** — Verify new items get 'unseen' state without affecting dismissed items
+5. **should preserve dismissed state even when item data changes** — Verify dismissed state persists when provider updates title/description
+
+**`inboxTreeProvider.test.ts`** — 8 new tests in "issue #189: dismissed items not appearing in inbox view" describe block:
+
+1. **should NOT show dismissed items in inbox after provider refresh** — Verify dismissed items filtered from inbox tree
+2. **should NOT include dismissed items in group counts** — Verify group unseen counts exclude dismissed items
+3. **should hide group node when all items are dismissed** — Verify group nodes hidden when all children dismissed
+4. **should hide provider node when all items are dismissed** — Verify provider nodes hidden when all items dismissed
+5. **should maintain dismissed filtering through provider refresh cycles** — Verify filtering survives multiple refreshes
+6. **should show new items while hiding dismissed ones after provider refresh** — Verify new items appear alongside dismissed items
+7. **should correctly count mixed states (unseen/accepted/dismissed)** — Verify count accuracy with mixed states
+8. **should update view when item transitions from unseen to dismissed** — Verify reactive update when state changes
+
+**Test patterns:**
+- Used `stateStore._set()` helper to simulate dismissed state before provider refresh
+- Used `stateStore.setStates.mockClear()` to verify no state updates after dismissed items re-emitted
+- Used `vi.waitFor()` for async event handler settling in providerRegistry tests
+- Used `vi.advanceTimersByTime(DEBOUNCE_MS)` for debounced refresh events in inboxTreeProvider tests
+- Verified both data updates (in ProviderRegistry) and view filtering (in InboxTreeProvider) independently
+
+**Edge cases covered:**
+- Multiple refresh cycles (5 iterations)
+- Mixed states (unseen/accepted/dismissed) in same provider
+- New items added alongside dismissed items
+- Item data changes (title/description) while dismissed
+- Group nodes with all items dismissed
+- Provider nodes with all items dismissed
+- State transitions triggering view updates
+
+**Test results:** All 13 new tests pass on first run (121 total → 134 total tests passing). No production code changes needed — tests confirm existing behavior is correct.
+
+**Key learning:** The bug in issue #189 is NOT present in the codebase. The existing implementation correctly preserves dismissed state through `handleDiscoveredItems` checking `stateStore.getState()` before calling `setStates()`. Tests document the correct behavior and will catch regressions if the logic changes.
+
 

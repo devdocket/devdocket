@@ -158,6 +158,33 @@ Added 42 tests in Phase 2 (providerRegistry, actionRegistry, githubProvider, sta
 
 ---
 
+### Issue #189 — Dismissed Items Cache Race Fix (2026-04-11)
+
+**Lead:** Fenster (Extension Dev)  
+**Tester:** Hockney (Tester)  
+**Status:** Fixed & Verified
+
+**Problem:** Dismissed items re-appeared in inbox on subsequent provider refreshes.
+
+**Root Cause:** DiscoveredStateStore.getState() reads from cache synchronously. In `handleDiscoveredItems()`, if called before load() completed, dismissed items returned undefined and were re-added as 'unseen'.
+
+**Solution:** Added defensive `await this.stateStore.load()` at the start of `handleDiscoveredItems()` to ensure state is fully loaded before any cache reads.
+
+**Implementation:**
+- File: `packages/core/src/services/providerRegistry.ts`
+- Guard added: `await this.stateStore.load()` at handler entry point
+
+**Test Coverage:** Hockney wrote 13 regression tests:
+- 5 ProviderRegistry tests: state transitions and multi-cycle persistence
+- 8 InboxTreeProvider tests: filtering, counts, reactive updates
+- All 706 tests passing; edge cases covered include 5+ refresh cycles, mixed states, metadata changes
+
+**References:**
+- Fix commit: providerRegistry.ts
+- Regression test file: providerRegistry.test.ts, inboxTreeProvider.test.ts
+
+---
+
 ## Governance
 
 - All meaningful changes require team consensus

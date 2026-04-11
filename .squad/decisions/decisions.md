@@ -89,3 +89,45 @@ Extracted a standalone `isSafeUrl(url: string): boolean` helper that uses the na
 #### Impact
 - Blocks dangerous protocols (`data:`, `file:`, `javascript:`, etc.)
 - Helper is reusable if other commands need URL validation in the future
+
+---
+
+## Decision: Remove resurfaceDismissed — Dismissed Items Stay Dismissed
+
+**Author:** Fenster (Extension Dev)  
+**Date:** 2025-01-24  
+**Issue:** #189  
+**Status:** Implemented
+
+### Context
+
+PR review providers (`GitHubPrReviewProvider`, `AdoPrReviewProvider`) had `resurfaceDismissed = true`, which caused `handleDiscoveredItems()` to overwrite dismissed items back to `unseen` on every provider refresh. This made it impossible for users to permanently dismiss PR review requests from their Inbox.
+
+### Decision
+
+Remove the `resurfaceDismissed` feature entirely. Dismissed items should **never** be resurfaced by any provider. This aligns with the original four-view architecture decision that "dismissed items are sticky."
+
+### What Changed
+
+- Removed `resurfaceDismissed` from `WorkCenterProvider` interface in core, github, ado, and ai-reviewer packages
+- Removed the resurface logic from `ProviderRegistry.handleDiscoveredItems()`
+- Removed the property from `BaseGitHubProvider`, `GitHubPrReviewProvider`, and `AdoPrReviewProvider`
+- Removed all related tests and documentation
+- Also reverted an incorrect prior fix (defensive `await stateStore.load()`) that addressed a non-existent race condition
+
+### Rationale
+
+- **User intent is clear**: When a user dismisses an item, they do not want to see it again. Resurfacing violated this expectation.
+- **Design consistency**: The four-view model's core invariant is that dismissed = permanent. Adding exceptions per-provider creates confusion.
+- **Simplicity**: Providers should not need to opt into behavioral variations of the inbox state machine. One behavior, no flags.
+
+### Alternatives Considered
+
+- **Keep resurfaceDismissed but default to false**: Still adds complexity to the provider API for a feature no one wants.
+- **Add a "snooze" state instead**: Possible future work if users want temporary dismissal, but should be a separate state (`snoozed`) rather than overloading `dismissed`.
+
+### Impact
+
+- 13 files changed, ~500 lines removed
+- All 1174 tests pass
+- No breaking changes for existing providers (the removed property was optional)
