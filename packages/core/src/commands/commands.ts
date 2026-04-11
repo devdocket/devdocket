@@ -341,7 +341,7 @@ async function handleAcceptFromInbox(
       stateUpdates.push({ providerId: inboxItem.providerId, externalId: inboxItem.externalId, state: 'accepted' });
     } catch (err: unknown) {
       failed++;
-      handleCommandError(`Failed to accept inbox item "${inboxItem.title}"`, err);
+      logger.error(`Failed to accept inbox item "${inboxItem.title}"`, err);
     }
   }
 
@@ -366,6 +366,11 @@ async function handleAcceptFromInbox(
       ? `Accepted ${total} of ${total + failed} items to Queue`
       : `Accepted ${total} item${total === 1 ? '' : 's'} to Queue`;
     void vscode.window.showInformationMessage(msg);
+  }
+  if (failed > 0) {
+    void vscode.window.showErrorMessage(
+      `WorkCenter: Failed to accept ${failed} item(s); see Output for details`,
+    );
   }
 }
 
@@ -484,7 +489,7 @@ async function handleAcceptFromSources(
       stateUpdates.push({ providerId: sourceItem.providerId, externalId: sourceItem.externalId, state: 'accepted' });
     } catch (err: unknown) {
       failed++;
-      handleCommandError(`Failed to accept source item "${sourceItem.title}"`, err);
+      logger.error(`Failed to accept source item "${sourceItem.title}"`, err);
     }
   }
 
@@ -508,6 +513,11 @@ async function handleAcceptFromSources(
       ? `Accepted ${total} of ${total + failed} items to Queue`
       : `Accepted ${total} item${total === 1 ? '' : 's'} to Queue`;
     void vscode.window.showInformationMessage(msg);
+  }
+  if (failed > 0) {
+    void vscode.window.showErrorMessage(
+      `WorkCenter: Failed to accept ${failed} item(s); see Output for details`,
+    );
   }
 }
 

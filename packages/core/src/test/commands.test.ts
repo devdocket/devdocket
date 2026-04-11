@@ -770,8 +770,12 @@ describe('registerCommands', () => {
         { providerId: 'github', externalId: 'ext-1', state: 'accepted' },
         { providerId: 'github', externalId: 'ext-3', state: 'accepted' },
       ]);
+      expect(logger.error).toHaveBeenCalledWith(
+        'Failed to accept inbox item "Issue 2"',
+        expect.any(Error),
+      );
       expect(vscode.window.showErrorMessage).toHaveBeenCalledWith(
-        expect.stringContaining('Failed to accept inbox item "Issue 2"'),
+        'WorkCenter: Failed to accept 1 item(s); see Output for details',
       );
       expect(vscode.window.showInformationMessage).toHaveBeenCalledWith(
         'Accepted 2 of 3 items to Queue',
@@ -1205,8 +1209,12 @@ describe('registerCommands', () => {
         { providerId: 'github', externalId: 'ext-1', state: 'accepted' },
         { providerId: 'github', externalId: 'ext-3', state: 'accepted' },
       ]);
+      expect(logger.error).toHaveBeenCalledWith(
+        'Failed to accept source item "Issue 2"',
+        expect.any(Error),
+      );
       expect(vscode.window.showErrorMessage).toHaveBeenCalledWith(
-        expect.stringContaining('Failed to accept source item "Issue 2"'),
+        'WorkCenter: Failed to accept 1 item(s); see Output for details',
       );
       expect(vscode.window.showInformationMessage).toHaveBeenCalledWith(
         'Accepted 2 of 3 items to Queue',
