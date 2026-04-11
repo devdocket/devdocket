@@ -146,14 +146,16 @@ export class AdoWorkItemProvider extends BaseProvider {
       );
 
       results.forEach((result, index) => {
+        const project = projectList[index];
+        const failureTarget = project ? `${orgConfig.org}/${project}` : orgConfig.org;
+
         if (result.status === 'fulfilled') {
           const { items, failed } = result.value;
           allItems.push(...items);
           if (failed) {
-            failures.push(projectList[index] || orgConfig.org);
+            failures.push(failureTarget);
           }
         } else {
-          const failureTarget = projectList[index] || orgConfig.org;
           failures.push(failureTarget);
           const reason = (result as PromiseRejectedResult).reason;
           logger.warn(
