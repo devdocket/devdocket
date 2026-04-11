@@ -153,6 +153,12 @@
         "title": "Accept to Queue",
         "category": "WorkCenter",
         "icon": "$(arrow-right)"
+      },
+      {
+        "command": "workcenter.refresh",
+        "title": "Refresh",
+        "category": "WorkCenter",
+        "icon": "$(refresh)"
       }
     ],
     "menus": {
@@ -160,6 +166,11 @@
         {
           "command": "workcenter.createItem",
           "when": "view == workcenter.queue",
+          "group": "navigation"
+        },
+        {
+          "command": "workcenter.refresh",
+          "when": "view == workcenter.inbox || view == workcenter.queue || view == workcenter.focus || view == workcenter.history || view == workcenter.sources",
           "group": "navigation"
         }
       ],
