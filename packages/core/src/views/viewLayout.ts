@@ -36,11 +36,13 @@ export async function toggleViewLayout(viewId: ViewId): Promise<void> {
   const current = getViewLayout(viewId);
   layouts[viewId] = current === 'flat' ? 'tree' : 'flat';
 
-  // Update in workspace scope if one exists, otherwise global
+  // Update the most specific existing scope so the effective layout changes
   const inspection = config.inspect('viewLayout');
-  const target = inspection?.workspaceValue !== undefined
-    ? vscode.ConfigurationTarget.Workspace
-    : vscode.ConfigurationTarget.Global;
+  const target = inspection?.workspaceFolderValue !== undefined
+    ? vscode.ConfigurationTarget.WorkspaceFolder
+    : inspection?.workspaceValue !== undefined
+      ? vscode.ConfigurationTarget.Workspace
+      : vscode.ConfigurationTarget.Global;
   await config.update('viewLayout', layouts, target);
 }
 
