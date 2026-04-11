@@ -106,6 +106,8 @@ describe('AiWalkthroughAction', () => {
 
       expect(commands.executeCommand).toHaveBeenCalledWith('workbench.action.chat.open', {
         query: '@walkthrough Walk me through this PR: https://github.com/owner/repo/pull/42',
+        isPartialQuery: false,
+        newChat: true,
       });
     });
 

@@ -36,9 +36,11 @@ export class AiWalkthroughAction implements WorkCenterAction {
 
         if (token.isCancellationRequested) return;
 
-        // Open chat with the walkthrough participant
+        // Open a new chat conversation with the walkthrough participant
         await vscode.commands.executeCommand('workbench.action.chat.open', {
           query: `@walkthrough Walk me through this PR: ${item.url}`,
+          isPartialQuery: false,
+          newChat: true,
         });
       },
     );

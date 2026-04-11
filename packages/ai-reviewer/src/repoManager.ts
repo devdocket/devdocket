@@ -46,8 +46,9 @@ export class RepoManager {
     const key = `${org}/${repo}#${prNumber}`;
 
     const repoDir = `${org}-${repo}`;
-    const clonePath = path.join(this.storageUri.fsPath, 'repos', repoDir);
-    const worktreePath = path.join(clonePath, 'worktrees', `pr-${prNumber}`);
+    const repoBase = path.join(this.storageUri.fsPath, 'repos', repoDir);
+    const clonePath = path.join(repoBase, 'clone');
+    const worktreePath = path.join(repoBase, 'worktrees', `pr-${prNumber}`);
 
     // Get GitHub auth token
     const session = await vscode.authentication.getSession('github', ['repo'], {
@@ -101,7 +102,11 @@ export class RepoManager {
     if (/^-|\s/.test(baseRef)) {
       throw new Error(`Invalid base ref from GitHub API: ${baseRef}`);
     }
-    await gitAuth(['fetch', 'origin', `refs/heads/${baseRef}`], clonePath, session.accessToken);
+    await gitAuth(
+      ['fetch', 'origin', `refs/heads/${baseRef}:refs/remotes/origin/${baseRef}`],
+      clonePath,
+      session.accessToken,
+    );
 
     // Create worktree if it doesn't exist yet
     if (!worktreeExists) {
@@ -165,9 +170,9 @@ export class RepoManager {
     }
 
     const repoDir = `${org}-${repo}`;
-    const clonePath = path.join(this.storageUri.fsPath, 'repos', repoDir);
+    const repoBase = path.join(this.storageUri.fsPath, 'repos', repoDir);
     try {
-      await vscode.workspace.fs.delete(vscode.Uri.file(clonePath), {
+      await vscode.workspace.fs.delete(vscode.Uri.file(repoBase), {
         recursive: true,
         useTrash: false,
       });
