@@ -353,8 +353,8 @@ mockFetch.mockImplementation(async (url: string) => {
 - Provider nodes with all items dismissed
 - State transitions triggering view updates
 
-**Test results:** All 13 new tests pass on first run (121 total → 134 total tests passing). No production code changes needed — tests confirm existing behavior is correct.
+**Test results:** All 13 new tests pass on first run (121 total → 134 total tests passing). The tests validate the fix and document the expected behavior so regressions are caught if dismissed items are resurfaced again.
 
-**Key learning:** The bug in issue #189 is NOT present in the codebase. The existing implementation correctly preserves dismissed state through `handleDiscoveredItems` checking `stateStore.getState()` before calling `setStates()`. Tests document the correct behavior and will catch regressions if the logic changes.
+**Key learning:** The bug in issue #189 was present in the codebase. The root cause was explicit resurface logic (`resurfaceDismissed`) that reset dismissed items when they were rediscovered, causing them to reappear. The correct fix was to remove that resurface behavior; the tests now document the expected dismissed-state preservation and guard against future regressions.
 
 
