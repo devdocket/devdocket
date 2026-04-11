@@ -162,6 +162,50 @@ describe('FocusTreeProvider', () => {
     });
   });
 
+  describe('handleDrag', () => {
+    it('serializes dragged item ids into data transfer', () => {
+      const item = makeItem({ id: 'drag-1' });
+      const dataTransfer = new DataTransfer();
+
+      provider.handleDrag([item], dataTransfer);
+
+      const transferItem = dataTransfer.get(DRAG_MIME_TYPE);
+      expect(transferItem).toBeDefined();
+      expect(transferItem!.value).toEqual(['drag-1']);
+    });
+
+    it('serializes multiple dragged item ids', () => {
+      const a = makeItem({ id: 'a' });
+      const b = makeItem({ id: 'b' });
+      const dataTransfer = new DataTransfer();
+
+      provider.handleDrag([a, b], dataTransfer);
+
+      const transferItem = dataTransfer.get(DRAG_MIME_TYPE);
+      expect(transferItem!.value).toEqual(['a', 'b']);
+    });
+
+    it('uses the correct MIME type', () => {
+      const item = makeItem({ id: 'mime-check' });
+      const dataTransfer = new DataTransfer();
+
+      provider.handleDrag([item], dataTransfer);
+
+      expect(dataTransfer.get(DRAG_MIME_TYPE)).toBeDefined();
+      expect(dataTransfer.get('text/plain')).toBeUndefined();
+    });
+  });
+
+  describe('drag/drop mime types', () => {
+    it('exposes correct dropMimeTypes', () => {
+      expect(provider.dropMimeTypes).toEqual([DRAG_MIME_TYPE]);
+    });
+
+    it('exposes correct dragMimeTypes', () => {
+      expect(provider.dragMimeTypes).toEqual([DRAG_MIME_TYPE]);
+    });
+  });
+
   describe('handleDrop', () => {
     beforeEach(() => {
       (window.showInformationMessage as ReturnType<typeof vi.fn>).mockClear();
@@ -215,6 +259,49 @@ describe('FocusTreeProvider', () => {
       await provider.handleDrop(target, dataTransfer);
 
       expect(workGraph.reorderItem).not.toHaveBeenCalled();
+    });
+
+    it('should no-op when no transfer item exists', async () => {
+      const target = makeItem({ id: 'a', state: WorkItemState.InProgress });
+      const dataTransfer = new DataTransfer();
+
+      await provider.handleDrop(target, dataTransfer);
+
+      expect(workGraph.reorderItem).not.toHaveBeenCalled();
+      expect(workGraph.moveToEnd).not.toHaveBeenCalled();
+    });
+
+    it('should no-op when transfer value is not an array', async () => {
+      const target = makeItem({ id: 'a', state: WorkItemState.InProgress });
+      const dataTransfer = new DataTransfer();
+      dataTransfer.set(DRAG_MIME_TYPE, new DataTransferItem('not-an-array'));
+
+      await provider.handleDrop(target, dataTransfer);
+
+      expect(workGraph.reorderItem).not.toHaveBeenCalled();
+      expect(workGraph.moveToEnd).not.toHaveBeenCalled();
+    });
+
+    it('should no-op when transfer value contains non-string', async () => {
+      const target = makeItem({ id: 'a', state: WorkItemState.InProgress });
+      const dataTransfer = new DataTransfer();
+      dataTransfer.set(DRAG_MIME_TYPE, new DataTransferItem([123]));
+
+      await provider.handleDrop(target, dataTransfer);
+
+      expect(workGraph.reorderItem).not.toHaveBeenCalled();
+      expect(workGraph.moveToEnd).not.toHaveBeenCalled();
+    });
+
+    it('should no-op when dragging multiple items', async () => {
+      const target = makeItem({ id: 'c', state: WorkItemState.InProgress });
+      const dataTransfer = new DataTransfer();
+      dataTransfer.set(DRAG_MIME_TYPE, new DataTransferItem(['a', 'b']));
+
+      await provider.handleDrop(target, dataTransfer);
+
+      expect(workGraph.reorderItem).not.toHaveBeenCalled();
+      expect(workGraph.moveToEnd).not.toHaveBeenCalled();
     });
   });
 
