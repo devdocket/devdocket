@@ -571,14 +571,21 @@ describe('WorkGraph', () => {
       expect(returned.sortOrder).toBeGreaterThan(remaining.sortOrder!);
     });
 
-    it('rejects InProgress → Archived (skipping Done)', async () => {
+    it('allows InProgress → Archived', async () => {
       const item = await graph.createItem({ title: 'Test' });
       await graph.transitionState(item.id, WorkItemState.InProgress);
-      vi.mocked(store.save).mockClear();
-      await expect(graph.transitionState(item.id, WorkItemState.Archived))
-        .rejects.toThrow('Invalid state transition');
-      expect(store.save).not.toHaveBeenCalled();
-      expect(graph.getItem(item.id)?.state).toBe(WorkItemState.InProgress);
+
+      await graph.transitionState(item.id, WorkItemState.Archived);
+      expect(graph.getItem(item.id)?.state).toBe(WorkItemState.Archived);
+    });
+
+    it('allows Paused → Archived', async () => {
+      const item = await graph.createItem({ title: 'Test' });
+      await graph.transitionState(item.id, WorkItemState.InProgress);
+      await graph.transitionState(item.id, WorkItemState.Paused);
+
+      await graph.transitionState(item.id, WorkItemState.Archived);
+      expect(graph.getItem(item.id)?.state).toBe(WorkItemState.Archived);
     });
 
     it('rejects undefined state value', async () => {

@@ -186,6 +186,11 @@
           "group": "inline"
         },
         {
+          "command": "workcenter.archiveItem",
+          "when": "view == workcenter.focus",
+          "group": "1_actions"
+        },
+        {
           "command": "workcenter.pauseItem",
           "when": "view == workcenter.focus && viewItem =~ /^active/",
           "group": "1_actions"

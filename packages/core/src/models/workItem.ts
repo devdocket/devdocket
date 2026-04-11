@@ -4,12 +4,16 @@
  * Items move through these states following the work-item state machine:
  *
  * ```
- * New ──→ InProgress ──→ Done ──→ Archived
- * ↑          ↕
- * │        Paused
+ * New → InProgress → Done → Archived
+ * ↑         ↕         ↗
+ * │       Paused ────┘
  * └──────────┘
+ * └──────────────────────→ Archived
  * ```
- * New may also transition directly to Archived.
+ *
+ * InProgress and Paused may transition back to New (returning to Queue).
+ * Both InProgress and Paused may also transition directly to Archived
+ * (for abandoned or no-longer-relevant work).
  */
 export enum WorkItemState {
   /** Freshly created or accepted from the Inbox; sits in the Queue. */
