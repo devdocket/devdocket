@@ -244,7 +244,7 @@
         },
         {
           "command": "workcenter.completeItem",
-          "when": "view == workcenter.focus",
+          "when": "view == workcenter.focus && viewItem =~ /^(active|paused)/",
           "group": "inline"
         },
         {
