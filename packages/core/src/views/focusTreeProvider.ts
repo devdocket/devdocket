@@ -23,6 +23,7 @@ export class FocusTreeProvider implements vscode.TreeDataProvider<WorkItem>, vsc
 
   getTreeItem(item: WorkItem): vscode.TreeItem {
     const treeItem = new vscode.TreeItem(item.title, vscode.TreeItemCollapsibleState.None);
+    treeItem.id = item.id;
     treeItem.description = this.getStateLabel(item.state);
     treeItem.tooltip = this.buildTooltip(item);
     treeItem.iconPath = this.getIcon(item.state);
