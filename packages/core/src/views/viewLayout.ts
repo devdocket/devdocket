@@ -122,10 +122,18 @@ function normalizeProviderId(providerId: string | null | undefined): string | un
 }
 
 /**
+ * Resolves a raw providerId to a human-friendly display name.
+ * When not supplied, the raw providerId is used as-is.
+ */
+export type LabelResolver = (providerId: string) => string;
+
+/**
  * Group WorkItems by providerId into ProviderGroupNodes.
  * Items without a providerId (or with an empty/whitespace one) are grouped under "Other" (sorted last).
+ *
+ * @param labelResolver  Optional function that maps a providerId to a display name.
  */
-export function groupByProvider(items: WorkItem[]): ProviderGroupNode[] {
+export function groupByProvider(items: WorkItem[], labelResolver?: LabelResolver): ProviderGroupNode[] {
   const seen = new Set<string | undefined>();
   for (const item of items) {
     seen.add(normalizeProviderId(item.providerId));
@@ -135,7 +143,7 @@ export function groupByProvider(items: WorkItem[]): ProviderGroupNode[] {
   for (const providerId of seen) {
     result.push({
       kind: 'providerGroup',
-      label: providerId ?? 'Other',
+      label: providerId ? (labelResolver?.(providerId) ?? providerId) : 'Other',
       providerId,
     });
   }
@@ -151,23 +159,25 @@ export function groupByProvider(items: WorkItem[]): ProviderGroupNode[] {
  * Common getChildren routing for providers that show WorkItems
  * in either flat or tree (grouped-by-provider) mode.
  *
- * @param element   The tree element being expanded (undefined = root)
- * @param getItems  Returns all relevant WorkItems for this view
- * @param sortItems Sorts a flat list of items (view-specific ordering)
- * @param layout    Current layout mode
+ * @param element        The tree element being expanded (undefined = root)
+ * @param getItems       Returns all relevant WorkItems for this view
+ * @param sortItems      Sorts a flat list of items (view-specific ordering)
+ * @param layout         Current layout mode
+ * @param labelResolver  Optional function that maps a providerId to a display name.
  */
 export function getTreeModeChildren(
   element: WorkItem | ProviderGroupNode | undefined,
   getItems: () => WorkItem[],
   sortItems: (items: WorkItem[]) => WorkItem[],
   layout: ViewLayout,
+  labelResolver?: LabelResolver,
 ): (WorkItem | ProviderGroupNode)[] {
   if (!element) {
     const items = getItems();
     if (layout === 'flat') {
       return sortItems(items);
     }
-    return groupByProvider(items);
+    return groupByProvider(items, labelResolver);
   }
 
   if (isProviderGroupNode(element)) {
@@ -215,6 +225,7 @@ export abstract class WorkItemViewProvider implements vscode.TreeDataProvider<Wo
   constructor(
     protected readonly workGraph: import('../services/workGraph').WorkGraph,
     defaultLayout: ViewLayout,
+    private readonly labelResolver?: LabelResolver,
   ) {
     this._layoutState = new LayoutState(defaultLayout, () => this._onDidChangeTreeData.fire());
     this.disposables.push(
@@ -252,6 +263,7 @@ export abstract class WorkItemViewProvider implements vscode.TreeDataProvider<Wo
       () => this.getItems(),
       items => this.sortItems(items),
       this._layoutState.value,
+      this.labelResolver,
     );
   }
 

@@ -24,13 +24,20 @@ function makeItem(overrides: Partial<WorkItem> = {}): WorkItem {
   };
 }
 
+function createMockProviderRegistry(labels: Record<string, string> = {}) {
+  return {
+    getProviderLabel: vi.fn((id: string) => labels[id] ?? id),
+  };
+}
+
 describe('FocusTreeProvider layout toggle', () => {
   let workGraph: ReturnType<typeof createMockWorkGraph>;
   let provider: FocusTreeProvider;
+  const providerLabels: Record<string, string> = { github: 'GitHub', jira: 'Jira' };
 
   beforeEach(() => {
     workGraph = createMockWorkGraph();
-    provider = new FocusTreeProvider(workGraph as any);
+    provider = new FocusTreeProvider(workGraph as any, createMockProviderRegistry(providerLabels) as any);
   });
 
   it('defaults to flat layout', () => {
@@ -49,7 +56,7 @@ describe('FocusTreeProvider layout toggle', () => {
       provider.layout = 'tree';
     });
 
-    it('returns provider group nodes at top level', () => {
+    it('returns provider group nodes with display names at top level', () => {
       const items = [
         makeItem({ id: '1', title: 'A', providerId: 'github', state: WorkItemState.InProgress }),
         makeItem({ id: '2', title: 'B', providerId: 'jira', state: WorkItemState.Paused }),
@@ -58,6 +65,9 @@ describe('FocusTreeProvider layout toggle', () => {
       const children = provider.getChildren();
       expect(children).toHaveLength(2);
       expect(children.every(c => isProviderGroupNode(c))).toBe(true);
+      const labels = children.map(c => (c as ProviderGroupNode).label);
+      expect(labels).toContain('GitHub');
+      expect(labels).toContain('Jira');
     });
 
     it('groups items without providerId under "Other"', () => {
@@ -82,9 +92,9 @@ describe('FocusTreeProvider layout toggle', () => {
     });
 
     it('renders group node correctly', () => {
-      const group: ProviderGroupNode = { kind: 'providerGroup', label: 'github', providerId: 'github' };
+      const group: ProviderGroupNode = { kind: 'providerGroup', label: 'GitHub', providerId: 'github' };
       const treeItem = provider.getTreeItem(group);
-      expect(treeItem.label).toBe('github');
+      expect(treeItem.label).toBe('GitHub');
       expect(treeItem.collapsibleState).toBe(TreeItemCollapsibleState.Collapsed);
       expect(treeItem.contextValue).toBe('focusGroup');
       expect((treeItem.iconPath as any).id).toBe('plug');

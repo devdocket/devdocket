@@ -20,12 +20,18 @@ describe('QueueTreeProvider layout toggle', () => {
   let store: ITaskStore;
   let graph: WorkGraph;
   let provider: QueueTreeProvider;
+  const mockRegistry = {
+    getProviderLabel: vi.fn((id: string) => {
+      const labels: Record<string, string> = { github: 'GitHub', jira: 'Jira', alpha: 'Alpha Provider' };
+      return labels[id] ?? id;
+    }),
+  };
 
   beforeEach(async () => {
     store = createMockStore();
     graph = new WorkGraph(store);
     await graph.load();
-    provider = new QueueTreeProvider(graph);
+    provider = new QueueTreeProvider(graph, mockRegistry as any);
   });
 
   it('defaults to flat layout', () => {
@@ -76,7 +82,7 @@ describe('QueueTreeProvider layout toggle', () => {
       expect(children).toHaveLength(2);
       const labels = children.map(c => (c as ProviderGroupNode).label);
       expect(labels).toContain('Other');
-      expect(labels).toContain('github');
+      expect(labels).toContain('GitHub');
     });
 
     it('sorts "Other" group last', async () => {
@@ -84,6 +90,7 @@ describe('QueueTreeProvider layout toggle', () => {
       await graph.createItem({ title: 'Provider' }, { providerId: 'alpha', externalId: 'ext-1' });
       const children = provider.getChildren();
       expect((children[children.length - 1] as ProviderGroupNode).label).toBe('Other');
+      expect((children[0] as ProviderGroupNode).label).toBe('Alpha Provider');
     });
 
     it('returns items for a provider group', async () => {
@@ -97,9 +104,9 @@ describe('QueueTreeProvider layout toggle', () => {
     });
 
     it('renders group node as collapsed tree item', async () => {
-      const group: ProviderGroupNode = { kind: 'providerGroup', label: 'github', providerId: 'github' };
+      const group: ProviderGroupNode = { kind: 'providerGroup', label: 'GitHub', providerId: 'github' };
       const treeItem = provider.getTreeItem(group);
-      expect(treeItem.label).toBe('github');
+      expect(treeItem.label).toBe('GitHub');
       expect(treeItem.collapsibleState).toBe(TreeItemCollapsibleState.Collapsed);
       expect(treeItem.contextValue).toBe('queueGroup');
       expect((treeItem.iconPath as any).id).toBe('plug');

@@ -112,10 +112,10 @@ function createTreeViews(
   workGraph: WorkGraph,
 ) {
   const inboxProvider = new InboxTreeProvider(providerRegistry, stateStore, readStateStore);
-  const queueProvider = new QueueTreeProvider(workGraph);
-  const focusProvider = new FocusTreeProvider(workGraph);
+  const queueProvider = new QueueTreeProvider(workGraph, providerRegistry);
+  const focusProvider = new FocusTreeProvider(workGraph, providerRegistry);
   const sourcesProvider = new SourcesTreeProvider(providerRegistry, stateStore);
-  const historyProvider = new HistoryTreeProvider(workGraph);
+  const historyProvider = new HistoryTreeProvider(workGraph, providerRegistry);
 
   // Apply persisted layout settings
   inboxProvider.layout = getViewLayout('inbox');

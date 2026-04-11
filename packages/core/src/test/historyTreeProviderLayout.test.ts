@@ -25,13 +25,20 @@ function makeItem(overrides: Partial<WorkItem> & { id: string; title: string }):
   };
 }
 
+function createMockProviderRegistry(labels: Record<string, string> = {}) {
+  return {
+    getProviderLabel: vi.fn((id: string) => labels[id] ?? id),
+  };
+}
+
 describe('HistoryTreeProvider layout toggle', () => {
   let workGraph: ReturnType<typeof createMockWorkGraph>;
   let provider: HistoryTreeProvider;
+  const providerLabels: Record<string, string> = { github: 'GitHub', jira: 'Jira', alpha: 'Alpha Provider' };
 
   beforeEach(() => {
     workGraph = createMockWorkGraph();
-    provider = new HistoryTreeProvider(workGraph as any);
+    provider = new HistoryTreeProvider(workGraph as any, createMockProviderRegistry(providerLabels) as any);
   });
 
   it('defaults to flat layout', () => {
@@ -88,7 +95,7 @@ describe('HistoryTreeProvider layout toggle', () => {
       expect(children).toHaveLength(2);
       const labels = children.map(c => (c as ProviderGroupNode).label);
       expect(labels).toContain('Other');
-      expect(labels).toContain('github');
+      expect(labels).toContain('GitHub');
     });
 
     it('sorts "Other" group last', () => {
@@ -113,9 +120,9 @@ describe('HistoryTreeProvider layout toggle', () => {
     });
 
     it('renders group node as collapsed tree item', () => {
-      const group: ProviderGroupNode = { kind: 'providerGroup', label: 'github', providerId: 'github' };
+      const group: ProviderGroupNode = { kind: 'providerGroup', label: 'GitHub', providerId: 'github' };
       const treeItem = provider.getTreeItem(group);
-      expect(treeItem.label).toBe('github');
+      expect(treeItem.label).toBe('GitHub');
       expect(treeItem.collapsibleState).toBe(TreeItemCollapsibleState.Collapsed);
       expect(treeItem.contextValue).toBe('historyGroup');
     });

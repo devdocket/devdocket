@@ -1,6 +1,7 @@
 import * as vscode from 'vscode';
 import { WorkItem, WorkItemState } from '../models/workItem';
 import { WorkGraph } from '../services/workGraph';
+import { ProviderRegistry } from '../services/providerRegistry';
 import {
   WorkItemElement, WorkItemViewProvider,
 } from './viewLayout';
@@ -11,8 +12,8 @@ export class FocusTreeProvider extends WorkItemViewProvider {
   protected readonly groupPrefix = 'focus';
   protected readonly groupContextValue = 'focusGroup';
 
-  constructor(workGraph: WorkGraph) {
-    super(workGraph, 'flat');
+  constructor(workGraph: WorkGraph, providerRegistry?: ProviderRegistry) {
+    super(workGraph, 'flat', providerRegistry ? id => providerRegistry.getProviderLabel(id) : undefined);
   }
 
   protected getItems(): WorkItem[] {

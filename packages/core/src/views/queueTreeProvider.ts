@@ -1,6 +1,7 @@
 import * as vscode from 'vscode';
 import { WorkItem, WorkItemState } from '../models/workItem';
 import { WorkGraph } from '../services/workGraph';
+import { ProviderRegistry } from '../services/providerRegistry';
 import {
   WorkItemElement, WorkItemViewProvider, isProviderGroupNode,
 } from './viewLayout';
@@ -15,8 +16,8 @@ export class QueueTreeProvider extends WorkItemViewProvider implements vscode.Tr
   protected readonly groupPrefix = 'queue';
   protected readonly groupContextValue = 'queueGroup';
 
-  constructor(workGraph: WorkGraph) {
-    super(workGraph, 'flat');
+  constructor(workGraph: WorkGraph, providerRegistry?: ProviderRegistry) {
+    super(workGraph, 'flat', providerRegistry ? id => providerRegistry.getProviderLabel(id) : undefined);
   }
 
   protected getItems(): WorkItem[] {
