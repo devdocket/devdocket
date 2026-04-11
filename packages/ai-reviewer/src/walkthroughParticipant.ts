@@ -158,8 +158,8 @@ export class WalkthroughParticipant {
       const chatResponse = await model.sendRequest(loopMessages, { tools }, token);
 
       let hasToolCalls = false;
-      const assistantParts: unknown[] = [];
-      const toolResults: Array<{ callId: string; content: unknown[] }> = [];
+      const assistantParts: (vscode.LanguageModelTextPart | vscode.LanguageModelToolCallPart)[] = [];
+      const toolResults: Array<{ callId: string; content: (vscode.LanguageModelTextPart | vscode.LanguageModelToolResultPart)[] }> = [];
 
       for await (const part of chatResponse.stream) {
         if (part instanceof vscode.LanguageModelTextPart) {
