@@ -52,12 +52,28 @@ class MockTreeItem {
   }
 }
 
+const ProgressLocation = {
+  SourceControl: 1,
+  Window: 10,
+  Notification: 15,
+};
+
 const window = {
   showInputBox: vi.fn(),
   showInformationMessage: vi.fn().mockResolvedValue(undefined),
   showWarningMessage: vi.fn(),
   showErrorMessage: vi.fn(),
   showQuickPick: vi.fn(),
+  withProgress: vi.fn((_options: any, task: (progress: any, token: any) => Promise<any>) => {
+    const cancellationEmitter = new MockEventEmitter();
+    return task(
+      { report: vi.fn() },
+      {
+        isCancellationRequested: false,
+        onCancellationRequested: cancellationEmitter.event,
+      },
+    );
+  }),
   registerTreeDataProvider: vi.fn(() => ({ dispose: vi.fn() })),
   createTreeView: vi.fn(() => {
     const selectionEmitter = new MockEventEmitter();
@@ -170,6 +186,7 @@ export {
   TreeItemCollapsibleState,
   ViewColumn,
   ConfigurationTarget,
+  ProgressLocation,
   window,
   commands,
   env,
