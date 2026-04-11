@@ -47,6 +47,15 @@ export function registerReadFileTool(): vscode.Disposable {
       try {
         const fullPath = path.join(worktreePath, filePath);
         const uri = vscode.Uri.file(fullPath);
+
+        // Reject symlinks to prevent reads escaping the worktree
+        const stat = await vscode.workspace.fs.stat(uri);
+        if (stat.type & vscode.FileType.SymbolicLink) {
+          return new vscode.LanguageModelToolResult([
+            new vscode.LanguageModelTextPart('Symbolic links are not allowed for security reasons'),
+          ]);
+        }
+
         const bytes = await vscode.workspace.fs.readFile(uri);
         const content = new TextDecoder('utf-8').decode(bytes);
         return new vscode.LanguageModelToolResult([
