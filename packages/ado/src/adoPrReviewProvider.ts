@@ -228,7 +228,7 @@ export class AdoPrReviewProvider extends BaseProvider {
     }
 
     this._cachedUserIds.set(org, data.authenticatedUser.id);
-    logger.debug(`Resolved user ID: ${data.authenticatedUser.id}`);
+    logger.debug(`Resolved user ID for org ${org}: ${data.authenticatedUser.id}`);
     return data.authenticatedUser.id;
   }
 
