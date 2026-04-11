@@ -23,7 +23,7 @@ export function registerListDirectoryTool(): vscode.Disposable {
 
       const relDir = dirPath ?? '.';
       const normalized = path.normalize(relDir);
-      if (normalized.startsWith('..') || path.isAbsolute(normalized)) {
+      if (normalized.startsWith('..' + path.sep) || normalized === '..' || path.isAbsolute(normalized)) {
         return new vscode.LanguageModelToolResult([
           new vscode.LanguageModelTextPart(
             'Path traversal not allowed: dirPath must be relative and within the worktree',

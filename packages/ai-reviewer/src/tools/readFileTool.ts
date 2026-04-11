@@ -19,7 +19,7 @@ function validatePath(worktreePath: string, filePath: string): string | undefine
   if (wtError) return wtError;
 
   const normalized = path.normalize(filePath);
-  if (normalized.startsWith('..') || path.isAbsolute(normalized)) {
+  if (normalized === '..' || normalized.startsWith('..' + path.sep) || path.isAbsolute(normalized)) {
     return 'Path traversal not allowed: filePath must be relative and within the worktree';
   }
   const resolved = path.resolve(worktreePath, normalized);

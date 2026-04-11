@@ -32,7 +32,7 @@ export function registerGetFileDiffTool(): vscode.Disposable {
 
       // Path traversal protection
       const normalized = path.normalize(filePath);
-      if (normalized.startsWith('..') || path.isAbsolute(normalized)) {
+      if (normalized.startsWith('..' + path.sep) || normalized === '..' || path.isAbsolute(normalized)) {
         return new vscode.LanguageModelToolResult([
           new vscode.LanguageModelTextPart(
             'Path traversal not allowed: filePath must be relative and within the worktree',
