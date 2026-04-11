@@ -7,7 +7,7 @@ import { WorkItemEditorPanel } from '../views/workItemEditorPanel';
 import { InboxItem } from '../views/inboxTreeProvider';
 import { SourceItemNode } from '../views/sourcesTreeProvider';
 import { logger } from '../services/logger';
-import { toggleViewLayout, ViewId } from '../views/viewLayout';
+import { toggleViewLayout } from '../views/viewLayout';
 
 /** Builds a work-item title, optionally prefixed with the provider group. */
 function formatItemTitle(item: { group?: string; title: string }): string {
