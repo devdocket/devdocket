@@ -105,13 +105,20 @@ export class LayoutState {
 }
 
 /**
+ * Normalize a providerId: treat empty/whitespace-only strings the same as undefined.
+ */
+function normalizeProviderId(providerId: string | null | undefined): string | undefined {
+  return providerId?.trim() || undefined;
+}
+
+/**
  * Group WorkItems by providerId into ProviderGroupNodes.
- * Items without a providerId are grouped under "Other" (sorted last).
+ * Items without a providerId (or with an empty/whitespace one) are grouped under "Other" (sorted last).
  */
 export function groupByProvider(items: WorkItem[]): ProviderGroupNode[] {
   const groups = new Map<string | undefined, WorkItem[]>();
   for (const item of items) {
-    const key = item.providerId ?? undefined;
+    const key = normalizeProviderId(item.providerId);
     const list = groups.get(key) ?? [];
     list.push(item);
     groups.set(key, list);
@@ -157,7 +164,7 @@ export function getTreeModeChildren(
 
   if (isProviderGroupNode(element)) {
     return sortItems(
-      getItems().filter(i => (i.providerId ?? undefined) === element.providerId),
+      getItems().filter(i => normalizeProviderId(i.providerId) === element.providerId),
     );
   }
 
