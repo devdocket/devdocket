@@ -5,8 +5,8 @@ import { ActionRegistry } from '../services/actionRegistry';
 import { ProviderRegistry } from '../services/providerRegistry';
 import { DiscoveredStateStore, type InboxState } from '../storage/discoveredStateStore';
 import { WorkItemEditorPanel } from '../views/workItemEditorPanel';
-import { InboxItem, type InboxElement } from '../views/inboxTreeProvider';
-import { SourceItemNode, type SourcesElement } from '../views/sourcesTreeProvider';
+import { type InboxItem, type InboxElement } from '../views/inboxTreeProvider';
+import { type SourceItemNode, type SourcesElement } from '../views/sourcesTreeProvider';
 import { logger } from '../services/logger';
 
 /**
