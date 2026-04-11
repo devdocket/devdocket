@@ -53,10 +53,10 @@ export class HistoryTreeProvider implements vscode.TreeDataProvider<HistoryEleme
       const items = this.workGraph.getItemsByState(
         WorkItemState.Done,
         WorkItemState.Archived,
-      ).sort((a, b) => b.updatedAt - a.updatedAt);
+      );
 
       if (this._layout === 'flat') {
-        return items;
+        return items.sort((a, b) => b.updatedAt - a.updatedAt);
       }
 
       return this.groupByProvider(items);
