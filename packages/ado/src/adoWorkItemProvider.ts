@@ -216,7 +216,7 @@ export class AdoWorkItemProvider extends BaseProvider {
     try {
       wiqlData = (await wiqlResponse.json()) as WiqlResponse;
     } catch (err) {
-      logger.error(`Failed to parse WIQL response for project "${project}":`, err);
+      logger.error(`Failed to parse WIQL response for ${project || org}:`, err);
       return { items: [], failed: true };
     }
     logger.debug(`WIQL returned ${wiqlData.workItems.length} work item IDs`);
@@ -251,7 +251,7 @@ export class AdoWorkItemProvider extends BaseProvider {
       }
 
       if (!detailResponse.ok) {
-        logger.error(`Failed to fetch work item details: ${detailResponse.status}`);
+        logger.error(`Failed to fetch work item details for ${project || org}: ${detailResponse.status}`);
         batchFailed = true;
         continue;
       }
@@ -260,7 +260,7 @@ export class AdoWorkItemProvider extends BaseProvider {
       try {
         detailData = (await detailResponse.json()) as { value: AdoWorkItem[] };
       } catch (err) {
-        logger.error('Failed to parse work item detail response:', err);
+        logger.error(`Failed to parse work item detail response for ${project || org}:`, err);
         batchFailed = true;
         continue;
       }
