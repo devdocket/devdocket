@@ -140,7 +140,7 @@ export class RepoManager {
     const info = this.worktrees.get(key);
     if (!info) return;
 
-    await gitExec(['worktree', 'remove', info.worktreePath, '--force'], info.clonePath);
+    await gitExec(['worktree', 'remove', '--force', info.worktreePath], info.clonePath);
     validWorktreePaths.delete(path.resolve(info.worktreePath));
     this.worktrees.delete(key);
   }
@@ -153,7 +153,7 @@ export class RepoManager {
 
     for (const [key, info] of toRemove) {
       try {
-        await gitExec(['worktree', 'remove', info.worktreePath, '--force'], info.clonePath);
+        await gitExec(['worktree', 'remove', '--force', info.worktreePath], info.clonePath);
       } catch {
         // Worktree may already be gone
       }
