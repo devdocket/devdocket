@@ -2,6 +2,7 @@ import * as vscode from 'vscode';
 import { WorkItemState } from '../models/workItem';
 import { WorkGraph } from '../services/workGraph';
 import { ActionRegistry } from '../services/actionRegistry';
+import { ProviderRegistry } from '../services/providerRegistry';
 import { DiscoveredStateStore } from '../storage/discoveredStateStore';
 import { WorkItemEditorPanel } from '../views/workItemEditorPanel';
 import { InboxItem } from '../views/inboxTreeProvider';
@@ -84,6 +85,11 @@ async function handlePauseItem(workGraph: WorkGraph, item?: { id?: string }): Pr
 async function handleResumeItem(workGraph: WorkGraph, item?: { id?: string }): Promise<void> {
   if (!item?.id) { return; }
   await workGraph.transitionState(item.id, WorkItemState.InProgress);
+}
+
+async function handleMoveToQueue(workGraph: WorkGraph, item?: { id?: string }): Promise<void> {
+  if (!item?.id) { return; }
+  await workGraph.transitionState(item.id, WorkItemState.New);
 }
 
 function handleEditItem(
@@ -228,6 +234,17 @@ async function handleDismissFromInbox(
   }
 }
 
+async function handleRefresh(providerRegistry: ProviderRegistry): Promise<void> {
+  logger.info('Manual refresh triggered');
+  await vscode.window.withProgress(
+    {
+      location: vscode.ProgressLocation.Window,
+      title: 'WorkCenter: Refreshing…',
+    },
+    () => providerRegistry.refreshAll(),
+  );
+}
+
 async function handleAcceptFromSources(
   workGraph: WorkGraph,
   stateStore: DiscoveredStateStore,
@@ -279,8 +296,11 @@ export function registerCommands(
   workGraph: WorkGraph,
   actionRegistry: ActionRegistry,
   stateStore: DiscoveredStateStore,
+  providerRegistry: ProviderRegistry,
 ): void {
   context.subscriptions.push(
+    vscode.commands.registerCommand('workcenter.refresh',
+      wrapCommand('Failed to refresh', () => handleRefresh(providerRegistry))),
     vscode.commands.registerCommand('workcenter.createItem',
       wrapCommand('Failed to create item', () => handleCreateItem(workGraph))),
     vscode.commands.registerCommand('workcenter.acceptToFocus',
@@ -303,6 +323,8 @@ export function registerCommands(
       wrapCommand('Failed to move item up', (item) => handleMoveUp(workGraph, item))),
     vscode.commands.registerCommand('workcenter.moveDown',
       wrapCommand('Failed to move item down', (item) => handleMoveDown(workGraph, item))),
+    vscode.commands.registerCommand('workcenter.moveToQueue',
+      wrapCommand('Failed to move item to queue', (item) => handleMoveToQueue(workGraph, item))),
     vscode.commands.registerCommand('workcenter.acceptFromInbox',
       wrapCommand('Failed to accept from inbox', (item: InboxItem) => handleAcceptFromInbox(workGraph, stateStore, item))),
     vscode.commands.registerCommand('workcenter.dismissFromInbox',
