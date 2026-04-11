@@ -40,6 +40,7 @@ function createMockWebviewPanel() {
       return { dispose: vi.fn() };
     }),
     dispose: vi.fn(),
+    reveal: vi.fn(),
   };
   return {
     panel,
@@ -119,6 +120,7 @@ function createIntegrationContext(): vscode.ExtensionContext {
 describe('WorkItemEditorPanel', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    WorkItemEditorPanel.clearPanelCache();
   });
 
   describe('open (panel creation)', () => {
@@ -158,6 +160,111 @@ describe('WorkItemEditorPanel', () => {
       openPanel(item, createMockWorkGraph(item), mock);
 
       expect(mock.panel.onDidDispose).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  describe('panel reuse', () => {
+    it('should reuse existing panel when opening same item twice', () => {
+      const item = makeItem({ id: 'reuse-1', title: 'Reuse Item' });
+      const mock = createMockWebviewPanel();
+      vi.mocked(window.createWebviewPanel).mockReturnValue(mock.panel as any);
+
+      const ctx = createMockContext();
+      WorkItemEditorPanel.open(ctx, createMockWorkGraph(item) as any, item);
+      WorkItemEditorPanel.open(ctx, createMockWorkGraph(item) as any, item);
+
+      expect(window.createWebviewPanel).toHaveBeenCalledTimes(1);
+      expect(mock.panel.reveal).toHaveBeenCalled();
+    });
+
+    it('should create separate panels for different items', () => {
+      const item1 = makeItem({ id: 'a', title: 'Item A' });
+      const item2 = makeItem({ id: 'b', title: 'Item B' });
+      const mock1 = createMockWebviewPanel();
+      const mock2 = createMockWebviewPanel();
+      const wg1 = createMockWorkGraph(item1);
+      const wg2 = createMockWorkGraph(item2);
+
+      vi.mocked(window.createWebviewPanel)
+        .mockReturnValueOnce(mock1.panel as any)
+        .mockReturnValueOnce(mock2.panel as any);
+
+      const ctx = createMockContext();
+      WorkItemEditorPanel.open(ctx, wg1 as any, item1);
+      WorkItemEditorPanel.open(ctx, wg2 as any, item2);
+
+      expect(window.createWebviewPanel).toHaveBeenCalledTimes(2);
+    });
+
+    it('should create new panel after previous one was disposed', () => {
+      const item = makeItem({ id: 'dispose-reopen', title: 'Dispose Item' });
+      const mock1 = createMockWebviewPanel();
+      const mock2 = createMockWebviewPanel();
+
+      vi.mocked(window.createWebviewPanel)
+        .mockReturnValueOnce(mock1.panel as any)
+        .mockReturnValueOnce(mock2.panel as any);
+
+      const ctx = createMockContext();
+      WorkItemEditorPanel.open(ctx, createMockWorkGraph(item) as any, item);
+      mock1.simulateDispose();
+      WorkItemEditorPanel.open(ctx, createMockWorkGraph(item) as any, item);
+
+      expect(window.createWebviewPanel).toHaveBeenCalledTimes(2);
+    });
+
+    it('should reveal the existing panel on second open', () => {
+      const item = makeItem({ id: 'reveal-1', title: 'Reveal Item' });
+      const mock = createMockWebviewPanel();
+      vi.mocked(window.createWebviewPanel).mockReturnValue(mock.panel as any);
+
+      const ctx = createMockContext();
+      WorkItemEditorPanel.open(ctx, createMockWorkGraph(item) as any, item);
+
+      expect(mock.panel.reveal).not.toHaveBeenCalled();
+
+      WorkItemEditorPanel.open(ctx, createMockWorkGraph(item) as any, item);
+
+      expect(mock.panel.reveal).toHaveBeenCalledTimes(1);
+      expect(mock.panel.reveal).toHaveBeenCalledWith();
+    });
+
+    it('should allow reopening after dispose() via context subscription', () => {
+      const item = makeItem({ id: 'ctx-dispose', title: 'Context Dispose' });
+      const mock1 = createMockWebviewPanel();
+      const mock2 = createMockWebviewPanel();
+
+      vi.mocked(window.createWebviewPanel)
+        .mockReturnValueOnce(mock1.panel as any)
+        .mockReturnValueOnce(mock2.panel as any);
+
+      const ctx = createMockContext();
+      WorkItemEditorPanel.open(ctx, createMockWorkGraph(item) as any, item);
+
+      // Dispose via context subscription (the dispose() method path)
+      ctx.subscriptions[ctx.subscriptions.length - 1].dispose();
+
+      WorkItemEditorPanel.open(ctx, createMockWorkGraph(item) as any, item);
+
+      expect(window.createWebviewPanel).toHaveBeenCalledTimes(2);
+    });
+
+    it('should refresh content when reusing an existing panel', () => {
+      const item = makeItem({ id: 'refresh-1', title: 'Original Title', notes: 'Original Notes' });
+      const mock = createMockWebviewPanel();
+      const wg = createMockWorkGraph(item);
+      vi.mocked(window.createWebviewPanel).mockReturnValue(mock.panel as any);
+
+      const ctx = createMockContext();
+      WorkItemEditorPanel.open(ctx, wg as any, item);
+
+      // Simulate the item being updated in the work graph
+      const updatedItem = makeItem({ id: 'refresh-1', title: 'Updated Title', notes: 'Updated Notes' });
+      vi.mocked(wg.getItem).mockReturnValue(updatedItem);
+      WorkItemEditorPanel.open(ctx, wg as any, updatedItem);
+
+      expect(mock.panel.title).toBe('Edit: Updated Title');
+      expect(mock.panel.webview.html).toContain('Updated Title');
     });
   });
 
