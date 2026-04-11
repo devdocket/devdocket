@@ -16,7 +16,8 @@
     "onView:workcenter.queue",
     "onView:workcenter.focus",
     "onView:workcenter.sources",
-    "onView:workcenter.history"
+    "onView:workcenter.history",
+    "onCommand:workcenter.refresh"
   ],
   "main": "./dist/extension.js",
   "contributes": {
