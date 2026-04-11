@@ -231,6 +231,16 @@ describe('HistoryTreeProvider', () => {
       const item = makeItem({ id: '1', title: 'X', state: WorkItemState.Done, url: undefined });
       expect(provider.getTreeItem(item).contextValue).toBe('historyItem.done');
     });
+
+    it('should fall back to historyItem for unexpected states', () => {
+      const item = makeItem({ id: '1', title: 'X', state: WorkItemState.InProgress });
+      expect(provider.getTreeItem(item).contextValue).toBe('historyItem');
+    });
+
+    it('should fall back to historyItem.hasUrl for unexpected states with url', () => {
+      const item = makeItem({ id: '1', title: 'X', state: WorkItemState.InProgress, url: 'https://example.com' });
+      expect(provider.getTreeItem(item).contextValue).toBe('historyItem.hasUrl');
+    });
   });
 
   describe('tooltip', () => {
