@@ -6,8 +6,8 @@ import { logger } from './logger';
 
 const VALID_TRANSITIONS: ReadonlyMap<WorkItemState, ReadonlySet<WorkItemState>> = new Map([
   [WorkItemState.New, new Set([WorkItemState.InProgress, WorkItemState.Archived])],
-  [WorkItemState.InProgress, new Set([WorkItemState.Paused, WorkItemState.Done])],
-  [WorkItemState.Paused, new Set([WorkItemState.InProgress])],
+  [WorkItemState.InProgress, new Set([WorkItemState.Paused, WorkItemState.Done, WorkItemState.Archived])],
+  [WorkItemState.Paused, new Set([WorkItemState.InProgress, WorkItemState.Archived])],
   [WorkItemState.Done, new Set([WorkItemState.Archived])],
   [WorkItemState.Archived, new Set<WorkItemState>()],
 ]);
