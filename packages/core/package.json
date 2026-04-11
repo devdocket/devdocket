@@ -234,12 +234,12 @@
       "view/item/context": [
         {
           "command": "workcenter.acceptToFocus",
-          "when": "view == workcenter.queue",
+          "when": "view == workcenter.queue && viewItem =~ /^queueItem/",
           "group": "inline"
         },
         {
           "command": "workcenter.archiveItem",
-          "when": "view == workcenter.queue",
+          "when": "view == workcenter.queue && viewItem =~ /^queueItem/",
           "group": "1_actions"
         },
         {
@@ -259,12 +259,12 @@
         },
         {
           "command": "workcenter.moveUp",
-          "when": "view == workcenter.queue",
+          "when": "view == workcenter.queue && viewItem =~ /^queueItem/",
           "group": "3_reorder"
         },
         {
           "command": "workcenter.moveDown",
-          "when": "view == workcenter.queue",
+          "when": "view == workcenter.queue && viewItem =~ /^queueItem/",
           "group": "3_reorder"
         },
         {
@@ -274,7 +274,7 @@
         },
         {
           "command": "workcenter.runAction",
-          "when": "view == workcenter.queue || view == workcenter.focus",
+          "when": "(view == workcenter.queue && viewItem =~ /^queueItem/) || (view == workcenter.focus && viewItem =~ /^(active|paused)/)",
           "group": "0_actions"
         },
         {
