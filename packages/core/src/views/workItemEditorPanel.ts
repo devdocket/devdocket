@@ -5,6 +5,7 @@ import { getEditorPanelHtml } from './editorPanelHtml';
 
 export class WorkItemEditorPanel {
   private static readonly viewType = 'workcenter.editItem';
+  private static readonly openPanels = new Map<string, WorkItemEditorPanel>();
   private readonly panel: vscode.WebviewPanel;
   private readonly workGraph: WorkGraph;
   private readonly itemId: string;
@@ -19,6 +20,12 @@ export class WorkItemEditorPanel {
     workGraph: WorkGraph,
     item: WorkItem,
   ): void {
+    const existing = WorkItemEditorPanel.openPanels.get(item.id);
+    if (existing) {
+      existing.panel.reveal(vscode.ViewColumn.One);
+      return;
+    }
+
     const panel = vscode.window.createWebviewPanel(
       WorkItemEditorPanel.viewType,
       `Edit: ${item.title}`,
@@ -27,7 +34,13 @@ export class WorkItemEditorPanel {
     );
 
     const editor = new WorkItemEditorPanel(panel, workGraph, item.id);
+    WorkItemEditorPanel.openPanels.set(item.id, editor);
     context.subscriptions.push({ dispose: () => editor.dispose() });
+  }
+
+  /** @internal Exposed for testing only. */
+  static clearPanelCache(): void {
+    WorkItemEditorPanel.openPanels.clear();
   }
 
   private constructor(
@@ -62,6 +75,7 @@ export class WorkItemEditorPanel {
     this.panel.onDidDispose(() => {
       if (!this.disposed) {
         this.disposed = true;
+        WorkItemEditorPanel.openPanels.delete(this.itemId);
         if (this.debounceTimer) {
           clearTimeout(this.debounceTimer);
           this.debounceTimer = undefined;
@@ -119,6 +133,7 @@ export class WorkItemEditorPanel {
   dispose(): void {
     if (!this.disposed) {
       this.disposed = true;
+      WorkItemEditorPanel.openPanels.delete(this.itemId);
       if (this.debounceTimer) {
         clearTimeout(this.debounceTimer);
         this.debounceTimer = undefined;
