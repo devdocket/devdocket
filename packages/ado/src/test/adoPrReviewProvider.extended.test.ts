@@ -249,7 +249,7 @@ describe('AdoPrReviewProvider — extended', () => {
       await provider.refresh();
 
       expect(window.showWarningMessage).toHaveBeenCalledWith(
-        expect.stringContaining('2 projects'),
+        expect.stringContaining('2 sources'),
       );
     });
 
@@ -277,7 +277,7 @@ describe('AdoPrReviewProvider — extended', () => {
       expect(items[0].group).toBe('GoodProj/goodrepo');
 
       expect(window.showWarningMessage).toHaveBeenCalledWith(
-        expect.stringContaining('Failed to fetch PR reviews from BadProj'),
+        expect.stringContaining('BadProj'),
       );
     });
   });

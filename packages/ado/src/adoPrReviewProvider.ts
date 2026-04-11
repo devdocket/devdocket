@@ -102,7 +102,8 @@ export class AdoPrReviewProvider extends BaseProvider {
 
   private async fetchAndPublishPrs(accessToken: string, isUserTriggered: boolean, sessionAccountId: string): Promise<void> {
     const allItems: DiscoveredItem[] = [];
-    const failures: string[] = [];
+    const identityFailures: string[] = [];
+    const fetchFailures: string[] = [];
 
     for (const orgConfig of this.orgConfigs) {
       if (!isValidUrlSegment(orgConfig.org)) {
@@ -112,7 +113,7 @@ export class AdoPrReviewProvider extends BaseProvider {
 
       const userId = await this.getUserId(accessToken, orgConfig.org, sessionAccountId);
       if (!userId) {
-        failures.push(`${orgConfig.org} (user identity)`);
+        identityFailures.push(orgConfig.org);
         logger.warn(`Failed to determine Azure DevOps user identity for org ${orgConfig.org}`);
         continue;
       }
@@ -144,10 +145,10 @@ export class AdoPrReviewProvider extends BaseProvider {
           const { items, failed } = result.value;
           allItems.push(...items);
           if (failed) {
-            failures.push(target);
+            fetchFailures.push(target);
           }
         } else {
-          failures.push(target);
+          fetchFailures.push(target);
           logger.error(
             `Failed to fetch PR reviews from ${target}:`,
             (result as PromiseRejectedResult).reason,
@@ -159,10 +160,19 @@ export class AdoPrReviewProvider extends BaseProvider {
     this._onDidDiscoverItems.fire(allItems);
     logger.info(`Discovered ${allItems.length} ADO PR reviews`);
 
-    if (failures.length > 0) {
-      const message = failures.length === 1
-        ? `Failed to fetch PR reviews from ${failures[0]}`
-        : `Failed to fetch PR reviews from ${failures.length} projects`;
+    const messages: string[] = [];
+    if (identityFailures.length > 0) {
+      messages.push(`user identity failed for ${identityFailures.join(', ')}`);
+    }
+    if (fetchFailures.length > 0) {
+      messages.push(
+        fetchFailures.length === 1
+          ? `failed to fetch from ${fetchFailures[0]}`
+          : `failed to fetch from ${fetchFailures.length} sources`,
+      );
+    }
+    if (messages.length > 0) {
+      const message = `PR review errors: ${messages.join('; ')}`;
       if (isUserTriggered) {
         void vscode.window.showWarningMessage(`WorkCenter ADO: ${message}`);
       }

@@ -352,7 +352,7 @@ describe('AdoPrReviewProvider', () => {
 
     expect(listener).toHaveBeenCalledWith([]);
     expect(window.showWarningMessage).toHaveBeenCalledWith(
-      expect.stringContaining('Failed to fetch PR reviews'),
+      expect.stringContaining('failed to fetch from'),
     );
   });
 

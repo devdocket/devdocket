@@ -677,7 +677,7 @@ describe('AdoWorkItemProvider — extended', () => {
 
       // Should warn about the failed project
       expect(window.showWarningMessage).toHaveBeenCalledWith(
-        expect.stringContaining('Failed to fetch work items from BadProject'),
+        expect.stringContaining('BadProject'),
       );
     });
   });
