@@ -5,11 +5,10 @@
  *
  * ```
  * New → InProgress → Done → Archived
- * │    ↕    ↕
- * │  Paused │
- * │    ↓    │
- * │   New ←─┘
- * └──────────────────────→ Archived
+ * ↑       ↕
+ * │     Paused
+ * └───────┘
+ * New ──────────────────→ Archived
  * ```
  */
 export enum WorkItemState {
