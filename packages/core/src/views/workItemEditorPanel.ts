@@ -42,6 +42,10 @@ export class WorkItemEditorPanel {
 
   /** @internal Exposed for testing only. */
   static clearPanelCache(): void {
+    const panels = Array.from(WorkItemEditorPanel.openPanels.values());
+    for (const editor of panels) {
+      editor.dispose();
+    }
     WorkItemEditorPanel.openPanels.clear();
   }
 
