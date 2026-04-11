@@ -91,14 +91,6 @@ interface WorkCenterProvider {
   readonly label: string;
 
   /**
-   * If true, previously dismissed items will reappear in the Inbox
-   * when re-emitted by the provider. Defaults to false (undefined).
-   * Useful for time-sensitive items like PR review requests that
-   * should resurface if still active.
-   */
-  readonly resurfaceDismissed?: boolean;
-
-  /**
    * Event that fires when the provider has new items to report.
    * Each emission replaces the provider's entire item set.
    */
@@ -159,12 +151,6 @@ const provider = new MyProvider();
 const disposable = api.registerProvider(provider);
 context.subscriptions.push(disposable);
 ```
-
-### resurfaceDismissed
-
-When `resurfaceDismissed` is `true`, items that the user previously dismissed will reappear in the Inbox if the provider re-emits them. This is useful for time-sensitive items (e.g., PR review requests) where the user may want to be reminded.
-
-When `false` or `undefined` (the default), dismissed items stay dismissed and only appear in the Sources view.
 
 ## Actions
 
@@ -315,7 +301,6 @@ interface Event<T> {
 interface WorkCenterProvider {
   readonly id: string;
   readonly label: string;
-  readonly resurfaceDismissed?: boolean;
   readonly onDidDiscoverItems: Event<DiscoveredItem[]>;
   refresh(): Promise<void>;
 }
@@ -442,6 +427,6 @@ context.subscriptions.push(api.registerAction(action));
 For a complete, production-quality example, see the `packages/github` package in the WorkCenter repository:
 
 - [`githubProvider.ts`](../packages/github/src/githubProvider.ts) — Full provider with periodic refresh, GitHub API integration, and error handling.
-- [`githubPrReviewProvider.ts`](../packages/github/src/githubPrReviewProvider.ts) — Provider using `resurfaceDismissed: true` for PR review requests.
+- [`githubPrReviewProvider.ts`](../packages/github/src/githubPrReviewProvider.ts) — Provider for PR review requests.
 - [`startWorkAction.ts`](../packages/github/src/startWorkAction.ts) — Action that creates a git branch and worktree for a GitHub issue.
 - [`extension.ts`](../packages/github/src/extension.ts) — Full activation flow showing API acquisition and registration.

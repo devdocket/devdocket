@@ -12,13 +12,10 @@ interface GitHubSearchResponse {
  * user has been requested as a reviewer.
  *
  * Uses the GitHub Search API (`review-requested:@me`) to find open PRs.
- * Sets {@link WorkCenterProvider.resurfaceDismissed} to `true` so that
- * previously dismissed review requests reappear if still active.
  */
 export class GitHubPrReviewProvider extends BaseGitHubProvider {
   readonly id = 'github-pr-reviews';
   readonly label = 'GitHub PR Reviews';
-  readonly resurfaceDismissed = true;
 
   protected async fetchAndPublish(accessToken: string, isUserTriggered: boolean): Promise<void> {
     logger.info('Fetching PR review requests...');

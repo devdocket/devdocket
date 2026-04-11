@@ -26,7 +26,6 @@ export interface WorkCenterAction {
 export interface WorkCenterProvider {
   readonly id: string;
   readonly label: string;
-  readonly resurfaceDismissed?: boolean;
   readonly onDidDiscoverItems: Event<DiscoveredItem[]>;
   refresh(): Promise<void>;
 }

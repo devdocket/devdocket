@@ -43,10 +43,6 @@ describe('AdoPrReviewProvider', () => {
     expect(provider.label).toBe('Azure DevOps PR Reviews');
   });
 
-  it('has resurfaceDismissed set to true', () => {
-    expect(provider.resurfaceDismissed).toBe(true);
-  });
-
   it('fires empty items when no auth session exists', async () => {
     vi.mocked(authentication.getSession).mockResolvedValue(undefined as any);
 

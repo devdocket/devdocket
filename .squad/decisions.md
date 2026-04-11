@@ -158,6 +158,22 @@ Added 42 tests in Phase 2 (providerRegistry, actionRegistry, githubProvider, sta
 
 ---
 
+### Issue #189 — Dismissed Items Resurfacing Fix (2026-04-11)
+
+**Lead:** Fenster (Extension Dev)  
+**Tester:** Hockney (Tester)  
+**Status:** Fixed & Verified
+
+**Problem:** Dismissed items re-appeared in inbox on subsequent provider refreshes.
+
+**Root Cause:** PR review providers (`GitHubPrReviewProvider`, `AdoPrReviewProvider`) had `resurfaceDismissed = true`, which caused `handleDiscoveredItems()` to overwrite dismissed items back to `unseen` on every provider refresh.
+
+**Solution:** Removed `resurfaceDismissed` entirely from the codebase. Dismissed items should never be resurfaced by any provider.
+
+**Note:** An initial misdiagnosis attributed the bug to a cache race condition in `DiscoveredStateStore.getState()`. That theory was incorrect — the real cause was the explicit resurface logic.
+
+---
+
 ## Governance
 
 - All meaningful changes require team consensus

@@ -47,10 +47,6 @@ describe('GitHubPrReviewProvider', () => {
     expect(provider.label).toBe('GitHub PR Reviews');
   });
 
-  it('has resurfaceDismissed set to true', () => {
-    expect(provider.resurfaceDismissed).toBe(true);
-  });
-
   it('does nothing when no auth session exists', async () => {
     vi.mocked(authentication.getSession).mockResolvedValue(undefined as any);
 

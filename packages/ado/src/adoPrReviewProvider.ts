@@ -27,13 +27,11 @@ const ADO_AUTH_SCOPE = '499b84ac-1321-427f-aa17-267ca6975798/.default';
  *
  * Uses the ADO Git Pull Requests API filtered by `reviewerId`. The user's
  * ADO identity is resolved from the connection data endpoint and cached for
- * subsequent refreshes. Sets {@link WorkCenterProvider.resurfaceDismissed}
- * to `true` so dismissed reviews reappear if still active.
+ * subsequent refreshes.
  */
 export class AdoPrReviewProvider extends BaseProvider {
   readonly id = 'ado-pr-reviews';
   readonly label = 'Azure DevOps PR Reviews';
-  readonly resurfaceDismissed = true;
 
   private _cachedUserId: string | undefined;
   private _cachedSessionAccountId: string | undefined;

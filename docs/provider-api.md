@@ -118,7 +118,6 @@ interface DiscoveredItem {
 interface WorkCenterProvider {
   readonly id: string;
   readonly label: string;
-  readonly resurfaceDismissed?: boolean;
   readonly onDidDiscoverItems: Event<DiscoveredItem[]>;
   refresh(token?: vscode.CancellationToken): Promise<void>;
 }
@@ -154,7 +153,6 @@ interface Event<T> {
 interface WorkCenterProvider {
   readonly id: string;
   readonly label: string;
-  readonly resurfaceDismissed?: boolean;
   readonly onDidDiscoverItems: Event<DiscoveredItem[]>;
   refresh(token?: vscode.CancellationToken): Promise<void>;
 }
@@ -238,7 +236,6 @@ class JiraProvider implements WorkCenterProvider {
 - **`refresh()` is called by WorkCenter** — It is invoked automatically when the provider is registered for initial discovery. It must be safe to call multiple times. WorkCenter passes a `CancellationToken` and enforces a refresh timeout; providers should check `token.isCancellationRequested` before and during long-running operations.
 - **`externalId` must be unique per provider** — WorkCenter uses the combination of `providerId + externalId` to track inbox state. Use a stable identifier like `owner/repo#123` or `PROJECT/TICKET-42`.
 - **`group` is optional** — When set, items with the same group value are nested under a folder node in the Inbox and Sources views.
-- **`resurfaceDismissed`** — When `true`, items the user previously dismissed will reappear in the Inbox if the provider re-emits them. This is useful for time-sensitive items (e.g., PR review requests). When `false` or `undefined` (the default), dismissed items stay dismissed.
 - **Emit the full set every time** — Each `onDidDiscoverItems` emission replaces all previously known items for that provider. Emit everything currently relevant, not just deltas.
 
 ### Periodic Refresh Pattern
@@ -480,13 +477,6 @@ interface WorkCenterProvider {
 
   /** Human-readable label shown in the UI (e.g., 'GitHub Issues'). */
   readonly label: string;
-
-  /**
-   * If true, previously dismissed items reappear in the Inbox
-   * when re-emitted. Defaults to false.
-   * Useful for time-sensitive items like PR review requests.
-   */
-  readonly resurfaceDismissed?: boolean;
 
   /**
    * Event that fires when the provider has items to report.
