@@ -222,7 +222,16 @@ export class WorkGraph {
         `Invalid state transition: cannot move from ${item.state} to ${newState}`,
       );
     }
-    const updated = { ...item, state: newState, updatedAt: Date.now() };
+    const updated: WorkItem = { ...item, state: newState, updatedAt: Date.now() };
+    // When returning to Queue, assign a fresh sortOrder to avoid collisions
+    if (newState === WorkItemState.New) {
+      const newItems = this.getItemsByState(WorkItemState.New);
+      const maxOrder = Math.max(
+        newItems.length - 1,
+        newItems.reduce((max, i) => Math.max(max, i.sortOrder ?? -1), -1),
+      );
+      updated.sortOrder = maxOrder + 1;
+    }
     await this.store.save(updated);
     this.items.set(id, updated);
     this.invalidateStateCache();
