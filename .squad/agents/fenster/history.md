@@ -219,3 +219,39 @@ Patterns documented in `.squad/decisions.md` under "Code Review Fix Patterns" (2
 - **Enhanced default prompt**: `defaultPrompt.ts` now includes all 10 items from superpowers Step 3 (including "Don't flag what CI catches", enhanced false-positive guidance with "Never assert...deprecated", and "Context-shift analysis"). Also adds Holistic Assessment subsection, Codebase Consistency section, and "Using ✅ Verified" paragraph to Severity Classification.
 - **Extension registration**: `extension.ts` creates and registers both `AiReviewAction` and `AiWalkthroughAction` — each gets its own `api.registerAction()` call pushed to `context.subscriptions`.
 - **Configuration and prompt sourcing**: `AiReviewAction` uses the `workcenterAiReview` config section with `customPromptPath` in `package.json`. The walkthrough uses the `@walkthrough` chat participant with a built-in prompt — no separate config entry.
+## Issue #189: Dismissed items reappearing in inbox (2025-01-24)
+
+### Root Cause
+- `DiscoveredStateStore.getState()` is synchronous and reads from an in-memory cache. If called before `await load()` completes, it returns `undefined` for dismissed items that exist in the JSON file but haven't been loaded into the cache yet.
+- `ProviderRegistry.handleDiscoveredItems()` calls `getState()` to check if items are dismissed. If it returns `undefined`, the item is treated as new and added to inbox with state `'unseen'`, overwriting the persisted dismissed state.
+
+### Fix
+- Added defensive `await this.stateStore.load()` at the start of `handleDiscoveredItems()` before checking item states.
+- The load() method is idempotent (returns immediately if already loaded), so this adds negligible overhead in normal operation.
+- This guards against edge cases where provider refresh might fire before the initial store load completes during extension activation, or any other timing race conditions.
+
+### Test Updates
+- Updated 14 tests that synchronously called `provider.fireItems()` and immediately asserted on state.
+- These tests now use `async/await` with `vi.waitFor()` to wait for the async `handleDiscoveredItems` handler to complete before asserting.
+- Pattern: `await vi.waitFor(() => { expect(registry.getDiscoveredItems('gh')).toHaveLength(N); });`
+
+### Key Learning
+- **Defensive async loading**: When a synchronous getter reads from an async-loaded cache, ensure the cache is loaded at every call site. Don't rely solely on initialization order guarantees.
+- **Test timing**: When production code adds an async operation to a previously-synchronous code path, tests that fire-and-forget events need to wait for async handlers to complete before asserting on side effects.
+
+## Issue #189: resurfaceDismissed removal (2025-01-24)
+
+### Root Cause (Corrected)
+- The ACTUAL root cause was `resurfaceDismissed = true` on PR review providers. This flag explicitly overwrote dismissed items back to `unseen` on every provider refresh in `handleDiscoveredItems()`. The previous fix (defensive `load()` call) addressed a non-existent race condition.
+
+### Fix
+- Removed `resurfaceDismissed` property from: `WorkCenterProvider` interface (core, github, ai-reviewer), `BaseGitHubProvider` class, `GitHubPrReviewProvider`, `AdoPrReviewProvider`.
+- Removed the `resurface` variable and `else if (resurface && existing === 'dismissed')` branch from `handleDiscoveredItems()`.
+- Reverted the unnecessary `await this.stateStore.load()` and associated test changes from commit 15e237f.
+- Removed tests for resurfaceDismissed behavior across all packages.
+- Updated extension-api.md and provider-api.md to remove all resurfaceDismissed documentation.
+
+### Key Learnings
+- **Dismissed means dismissed**: The original four-view design established that dismissed items are sticky. The `resurfaceDismissed` feature contradicted this core design principle.
+- **Root cause matters**: The first fix (defensive load) was plausible but wrong. The symptom (dismissed items reappearing) had a simpler explanation: code explicitly designed to resurface them.
+- **Reverting cleanly**: When reverting test changes, `git checkout <commit> -- <files>` is the safest approach to restore files to a known-good state before applying new targeted edits.

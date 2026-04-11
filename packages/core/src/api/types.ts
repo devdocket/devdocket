@@ -33,11 +33,6 @@ export interface WorkCenterProvider {
   readonly id: string;
   /** Human-readable display name shown in the UI. */
   readonly label: string;
-  /**
-   * When `true`, previously dismissed items are reset to unseen on the next
-   * refresh, allowing them to reappear in the Inbox. Defaults to `false`.
-   */
-  readonly resurfaceDismissed?: boolean;
   /** Event fired when the provider discovers or refreshes its item list. */
   readonly onDidDiscoverItems: Event<DiscoveredItem[]>;
   /**

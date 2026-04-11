@@ -216,14 +216,10 @@ export class ProviderRegistry {
     }
     logger.info(`Provider ${providerId} discovered ${items.length} items`);
     this.discoveredItems.set(providerId, items);
-    const provider = this.providers.get(providerId);
-    const resurface = provider?.resurfaceDismissed === true;
     const updates: Array<{ providerId: string; externalId: string; state: 'unseen' }> = [];
     for (const item of items) {
       const existing = this.stateStore.getState(providerId, item.externalId);
       if (existing === undefined) {
-        updates.push({ providerId, externalId: item.externalId, state: 'unseen' });
-      } else if (resurface && existing === 'dismissed') {
         updates.push({ providerId, externalId: item.externalId, state: 'unseen' });
       }
     }

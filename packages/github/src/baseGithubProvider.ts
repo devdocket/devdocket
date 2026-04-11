@@ -23,7 +23,6 @@ export interface DiscoveredItem {
 export interface WorkCenterProvider {
   readonly id: string;
   readonly label: string;
-  readonly resurfaceDismissed?: boolean;
   readonly onDidDiscoverItems: Event<DiscoveredItem[]>;
   refresh(token?: vscode.CancellationToken): Promise<void>;
 }
@@ -40,7 +39,6 @@ export interface GitHubIssue {
 export abstract class BaseGitHubProvider implements WorkCenterProvider {
   abstract readonly id: string;
   abstract readonly label: string;
-  readonly resurfaceDismissed?: boolean;
 
   protected readonly _onDidDiscoverItems = new vscode.EventEmitter<DiscoveredItem[]>();
   readonly onDidDiscoverItems = this._onDidDiscoverItems.event;
