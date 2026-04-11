@@ -106,6 +106,16 @@ export class FocusTreeProvider implements vscode.TreeDataProvider<WorkItem>, vsc
 
     if (draggedId === target.id) { return; }
 
+    const draggedItem = this.workGraph.getItem(draggedId);
+    if (!draggedItem) { return; }
+
+    if (draggedItem.state !== target.state) {
+      void vscode.window.showInformationMessage(
+        'WorkCenter: Cannot reorder items across different states.'
+      );
+      return;
+    }
+
     await this.workGraph.reorderItem(draggedId, target.id);
   }
 
