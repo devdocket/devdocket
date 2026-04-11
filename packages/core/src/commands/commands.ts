@@ -273,22 +273,37 @@ async function handleMoveDown(workGraph: WorkGraph, item?: { id?: string }): Pro
 async function handleDeleteItem(workGraph: WorkGraph, item?: { id?: string }, selectedItems?: { id?: string }[]): Promise<void> {
   const ids = resolveItemIds(item, selectedItems);
   if (ids.length === 0) { return; }
+
+  // Confirm before destructive delete
+  const itemWord = ids.length === 1 ? 'item' : `${ids.length} items`;
+  const confirm = await vscode.window.showWarningMessage(
+    `Delete ${itemWord}? This cannot be undone.`,
+    { modal: true },
+    'Delete',
+  );
+  if (confirm !== 'Delete') { return; }
+
   if (ids.length === 1) {
     await workGraph.deleteItem(ids[0]);
     return;
   }
-  let failed = 0;
+  const failedIds: string[] = [];
   for (const id of ids) {
     try {
       await workGraph.deleteItem(id);
     } catch (err: unknown) {
-      failed++;
-      handleCommandError(`Failed to delete item ${id}`, err);
+      failedIds.push(id);
+      logger.error(`Failed to delete item ${id}`, err);
     }
   }
-  const succeeded = ids.length - failed;
+  const succeeded = ids.length - failedIds.length;
   if (succeeded > 0) {
     void vscode.window.showInformationMessage(`Deleted ${succeeded} item${succeeded === 1 ? '' : 's'}`);
+  }
+  if (failedIds.length > 0) {
+    void vscode.window.showErrorMessage(
+      `WorkCenter: Failed to delete ${failedIds.length} item(s); see Output for details`,
+    );
   }
 }
 

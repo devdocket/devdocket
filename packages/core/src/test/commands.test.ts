@@ -1045,9 +1045,24 @@ describe('registerCommands', () => {
   // ── deleteItem ──────────────────────────────────────────────────────
 
   describe('workcenter.deleteItem', () => {
-    it('deletes a single item', async () => {
+    beforeEach(() => {
+      (vscode.window.showWarningMessage as Mock).mockResolvedValue('Delete');
+    });
+
+    it('deletes a single item after confirmation', async () => {
       await invoke('workcenter.deleteItem', { id: 'wc-1' });
+      expect(vscode.window.showWarningMessage).toHaveBeenCalledWith(
+        'Delete item? This cannot be undone.',
+        { modal: true },
+        'Delete',
+      );
       expect(workGraph.deleteItem).toHaveBeenCalledWith('wc-1');
+    });
+
+    it('does nothing when user cancels confirmation', async () => {
+      (vscode.window.showWarningMessage as Mock).mockResolvedValue(undefined);
+      await invoke('workcenter.deleteItem', { id: 'wc-1' });
+      expect(workGraph.deleteItem).not.toHaveBeenCalled();
     });
 
     it('does nothing when item has no id', async () => {
@@ -1055,10 +1070,15 @@ describe('registerCommands', () => {
       expect(workGraph.deleteItem).not.toHaveBeenCalled();
     });
 
-    it('batch deletes multiple items', async () => {
+    it('batch deletes multiple items after confirmation', async () => {
       const items = [{ id: 'wc-1' }, { id: 'wc-2' }, { id: 'wc-3' }];
       await invoke('workcenter.deleteItem', items[0], items);
 
+      expect(vscode.window.showWarningMessage).toHaveBeenCalledWith(
+        'Delete 3 items? This cannot be undone.',
+        { modal: true },
+        'Delete',
+      );
       expect(workGraph.deleteItem).toHaveBeenCalledTimes(3);
       expect(workGraph.deleteItem).toHaveBeenCalledWith('wc-1');
       expect(workGraph.deleteItem).toHaveBeenCalledWith('wc-2');
@@ -1084,8 +1104,12 @@ describe('registerCommands', () => {
       await invoke('workcenter.deleteItem', items[0], items);
 
       expect(workGraph.deleteItem).toHaveBeenCalledTimes(3);
+      expect(logger.error).toHaveBeenCalledWith(
+        'Failed to delete item wc-2',
+        expect.any(Error),
+      );
       expect(vscode.window.showErrorMessage).toHaveBeenCalledWith(
-        expect.stringContaining('Failed to delete item wc-2'),
+        'WorkCenter: Failed to delete 1 item(s); see Output for details',
       );
       expect(vscode.window.showInformationMessage).toHaveBeenCalledWith('Deleted 2 items');
     });
