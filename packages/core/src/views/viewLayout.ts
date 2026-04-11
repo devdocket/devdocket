@@ -29,10 +29,19 @@ export function getViewLayout(viewId: ViewId): ViewLayout {
 /** Toggle the layout for a view between flat and tree and persist the choice. */
 export async function toggleViewLayout(viewId: ViewId): Promise<void> {
   const config = vscode.workspace.getConfiguration('workcenter');
-  const layouts = { ...config.get<Record<string, string>>('viewLayout', {}) };
+  const raw: unknown = config.get('viewLayout');
+  const layouts: Record<string, string> = (raw && typeof raw === 'object' && !Array.isArray(raw))
+    ? { ...(raw as Record<string, string>) }
+    : {};
   const current = getViewLayout(viewId);
   layouts[viewId] = current === 'flat' ? 'tree' : 'flat';
-  await config.update('viewLayout', layouts, vscode.ConfigurationTarget.Global);
+
+  // Update in workspace scope if one exists, otherwise global
+  const inspection = config.inspect('viewLayout');
+  const target = inspection?.workspaceValue !== undefined
+    ? vscode.ConfigurationTarget.Workspace
+    : vscode.ConfigurationTarget.Global;
+  await config.update('viewLayout', layouts, target);
 }
 
 /**
