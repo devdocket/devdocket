@@ -162,6 +162,7 @@ describe('registerCommands', () => {
       'workcenter.runAction',
       'workcenter.moveUp',
       'workcenter.moveDown',
+      'workcenter.moveToQueue',
       'workcenter.acceptFromInbox',
       'workcenter.dismissFromInbox',
       'workcenter.acceptFromSources',
@@ -226,6 +227,7 @@ describe('registerCommands', () => {
       ['workcenter.completeItem', WorkItemState.Done],
       ['workcenter.pauseItem', WorkItemState.Paused],
       ['workcenter.resumeItem', WorkItemState.InProgress],
+      ['workcenter.moveToQueue', WorkItemState.New],
     ];
 
     for (const [cmd, expectedState] of transitions) {

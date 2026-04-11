@@ -100,6 +100,46 @@ When posting ANY text to GitHub via `gh` CLI (PR descriptions, comments, review 
 
 **Never** construct backtick-containing text inside Python strings, PowerShell strings, or inline shell arguments. The `create` tool is the only safe way to produce the file content.
 
+### Extension API breaking change detection
+
+During code review (via `superpowers:code-reviewer` or manual review), **any change to the public API surface must be evaluated for breaking changes**. Breaking changes must be flagged as **Critical** findings.
+
+#### Public API surface files
+
+These files define the contract that provider extensions depend on:
+
+- `packages/core/src/api/types.ts` — `WorkCenterApi`, `WorkCenterProvider`, `WorkCenterAction`, and re-exported shared types (`Disposable`, `Event`, `DiscoveredItem`)
+- `packages/core/src/models/workItem.ts` — `WorkItem` and `WorkItemState` (`WorkItem` is exposed to action implementors via `WorkCenterAction.canRun` / `run`, and references `WorkItemState`)
+- `packages/shared/src/baseProvider.ts` — `DiscoveredItem`, `Disposable`, `Event`, `EventEmitterLike`, `BaseProvider`
+- `packages/shared/src/index.ts` — all symbols exported from this barrel are considered public API surface of `@workcenter/shared`
+
+#### What constitutes a breaking change
+
+Any of the following applied to an exported interface, type, class, or function is a **breaking change**:
+
+1. **Removing** a method, property, exported symbol, or enum member.
+2. **Renaming** an exported symbol or enum member (type, interface, function, class, constant, enum value).
+3. **Adding a required parameter** to an existing method or function (adding an *optional* parameter is safe).
+4. **Changing the type** of an existing parameter, property, or return value in a way that is not a supertype widening.
+5. **Changing an interface from optional to required** for any property (e.g. `foo?: string` → `foo: string`).
+6. **Removing a re-export** from `packages/shared/src/index.ts` or `packages/core/src/api/types.ts`.
+7. **Changing generic type parameters** (adding required generics, removing generics, changing constraints).
+8. **Moving an exported symbol** to a different module path without preserving the old path as a re-export.
+
+**Usually not breaking**: adding new optional properties, adding new exported symbols, adding new interfaces/types, widening an existing parameter type to a supertype, or adding new overload signatures only when they are appended and do not overlap with existing overload resolution. **Note:** widening a return type is often breaking for TypeScript consumers.
+
+#### Code review requirements
+
+- The reviewer **must** check all changed files against the API surface list above.
+- Any detected breaking change **must** be reported as a **Critical** finding with the label `[API BREAKING CHANGE]`.
+- If a breaking change is **intentional**, the PR description **must** include a `## Migration Notes` section documenting:
+  - Which interfaces/types/exports changed and how.
+  - What provider extensions need to update (code examples preferred).
+  - The justification for the break.
+- If a breaking change is found and the PR description lacks migration notes, the reviewer **must** block the PR and request they be added.
+
+The `superpowers:code-reviewer` agent enforces this policy automatically; manual reviewers should follow the same checklist.
+
 ### PR workflow — use the `create-pr` skill
 
 When creating pull requests in an environment with [GitHub Copilot CLI](https://docs.github.com/en/copilot/github-copilot-in-the-cli), **always invoke the `create-pr` skill** and follow its full multi-phase lifecycle. The `create-pr`, `copilot-pr-review`, and `superpowers:code-reviewer` references below are Copilot CLI skills and agents — they are available automatically when using Copilot CLI in this repository. Do NOT hand-roll a simplified version. The skill enforces:

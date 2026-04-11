@@ -5,10 +5,15 @@
  *
  * ```
  * New → InProgress → Done → Archived
- * │         ↕
- * │       Paused
+ * ↑         ↕         ↗
+ * │       Paused ────┘
+ * └──────────┘
  * └──────────────────────→ Archived
  * ```
+ *
+ * InProgress and Paused may transition back to New (returning to Queue).
+ * Both InProgress and Paused may also transition directly to Archived
+ * (for abandoned or no-longer-relevant work).
  */
 export enum WorkItemState {
   /** Freshly created or accepted from the Inbox; sits in the Queue. */
