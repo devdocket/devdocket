@@ -309,7 +309,7 @@ export function registerCommands(
     vscode.commands.registerCommand('workcenter.moveDown',
       wrapCommand('Failed to move item down', (item) => handleMoveDown(workGraph, item))),
     vscode.commands.registerCommand('workcenter.moveToQueue',
-      wrapCommand('Failed to move to queue', (item) => handleMoveToQueue(workGraph, item))),
+      wrapCommand('Failed to move item to queue', (item) => handleMoveToQueue(workGraph, item))),
     vscode.commands.registerCommand('workcenter.acceptFromInbox',
       wrapCommand('Failed to accept from inbox', (item: InboxItem) => handleAcceptFromInbox(workGraph, stateStore, item))),
     vscode.commands.registerCommand('workcenter.dismissFromInbox',
