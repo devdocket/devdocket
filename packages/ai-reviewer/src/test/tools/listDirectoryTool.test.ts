@@ -1,8 +1,13 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import * as path from 'path';
+import * as fs from 'fs/promises';
 import { workspace } from 'vscode';
 import { registerListDirectoryTool } from '../../tools/listDirectoryTool';
 import { validWorktreePaths } from '../../tools/worktreeRegistry';
+
+vi.mock('fs/promises', () => ({
+  realpath: vi.fn((p: string) => Promise.resolve(p)),
+}));
 
 describe('listDirectoryTool', () => {
   beforeEach(() => {
@@ -27,6 +32,9 @@ describe('listDirectoryTool', () => {
     });
 
     it('lists directory contents', async () => {
+      vi.mocked(fs.realpath).mockImplementation((p: unknown) =>
+        Promise.resolve(path.resolve(String(p))),
+      );
       vi.mocked(workspace.fs.readDirectory).mockResolvedValue([
         ['src', 2],     // Directory
         ['README.md', 1], // File
@@ -44,7 +52,11 @@ describe('listDirectoryTool', () => {
         { isCancellationRequested: false } as never,
       );
 
-      expect(result).toBeDefined();
+      expect(workspace.fs.readDirectory).toHaveBeenCalled();
+      const text = (result as { content: Array<{ value: string }> }).content[0].value;
+      expect(text).toContain('[dir]');
+      expect(text).toContain('src');
+      expect(text).toContain('README.md');
     });
 
     it('rejects path traversal', async () => {
@@ -64,6 +76,9 @@ describe('listDirectoryTool', () => {
     });
 
     it('handles errors gracefully', async () => {
+      vi.mocked(fs.realpath).mockImplementation((p: unknown) =>
+        Promise.resolve(path.resolve(String(p))),
+      );
       vi.mocked(workspace.fs.readDirectory).mockRejectedValue(new Error('not found'));
 
       const { lm } = await import('vscode');

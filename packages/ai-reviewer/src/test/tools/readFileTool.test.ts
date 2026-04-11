@@ -1,8 +1,13 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import * as path from 'path';
+import * as fs from 'fs/promises';
 import { workspace } from 'vscode';
 import { registerReadFileTool, validatePath } from '../../tools/readFileTool';
 import { validWorktreePaths } from '../../tools/worktreeRegistry';
+
+vi.mock('fs/promises', () => ({
+  realpath: vi.fn((p: string) => Promise.resolve(p)),
+}));
 
 describe('readFileTool', () => {
   beforeEach(() => {
@@ -50,8 +55,13 @@ describe('readFileTool', () => {
 
     it('reads file content successfully', async () => {
       const content = 'export const hello = "world";';
+      const worktree = path.resolve('/mock/worktree');
+      const fullFile = path.resolve('/mock/worktree', 'src/index.ts');
       vi.mocked(workspace.fs.readFile).mockResolvedValue(
         new TextEncoder().encode(content) as never,
+      );
+      vi.mocked(fs.realpath).mockImplementation((p: unknown) =>
+        Promise.resolve(path.resolve(String(p))),
       );
 
       // Get the handler from the registerTool mock
@@ -67,7 +77,8 @@ describe('readFileTool', () => {
         { isCancellationRequested: false } as never,
       );
 
-      expect(result).toBeDefined();
+      expect(workspace.fs.readFile).toHaveBeenCalled();
+      expect((result as { content: Array<{ value: string }> }).content[0].value).toBe(content);
     });
 
     it('rejects path traversal attempts', async () => {
@@ -88,6 +99,9 @@ describe('readFileTool', () => {
     });
 
     it('handles file read errors', async () => {
+      vi.mocked(fs.realpath).mockImplementation((p: unknown) =>
+        Promise.resolve(path.resolve(String(p))),
+      );
       vi.mocked(workspace.fs.readFile).mockRejectedValue(new Error('File not found'));
 
       const { lm } = await import('vscode');
