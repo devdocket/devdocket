@@ -153,6 +153,9 @@ export class InboxTreeProvider implements vscode.TreeDataProvider<InboxElement> 
   }
 
   getParent(element: InboxElement): InboxElement | undefined {
+    if (this._layoutState.value === 'flat') {
+      return undefined;
+    }
     switch (element.kind) {
       case 'provider':
         return undefined;
