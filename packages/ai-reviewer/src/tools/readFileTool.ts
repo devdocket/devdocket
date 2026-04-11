@@ -23,7 +23,8 @@ function validatePath(worktreePath: string, filePath: string): string | undefine
     return 'Path traversal not allowed: filePath must be relative and within the worktree';
   }
   const resolved = path.resolve(worktreePath, normalized);
-  if (!resolved.startsWith(path.resolve(worktreePath))) {
+  const root = path.resolve(worktreePath);
+  if (!resolved.startsWith(root + path.sep) && resolved !== root) {
     return 'Path traversal not allowed: resolved path escapes the worktree';
   }
   return undefined;

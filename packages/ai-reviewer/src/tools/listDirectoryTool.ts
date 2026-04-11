@@ -32,7 +32,8 @@ export function registerListDirectoryTool(): vscode.Disposable {
       }
 
       const resolved = path.resolve(worktreePath, normalized);
-      if (!resolved.startsWith(path.resolve(worktreePath))) {
+      const root = path.resolve(worktreePath);
+      if (!resolved.startsWith(root + path.sep) && resolved !== root) {
         return new vscode.LanguageModelToolResult([
           new vscode.LanguageModelTextPart(
             'Path traversal not allowed: resolved path escapes the worktree',
