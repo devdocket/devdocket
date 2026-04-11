@@ -196,6 +196,12 @@
         "title": "Toggle Sources Layout",
         "category": "WorkCenter",
         "icon": "$(list-tree)"
+      },
+      {
+        "command": "workcenter.moveToQueue",
+        "title": "Move to Queue",
+        "category": "WorkCenter",
+        "icon": "$(arrow-left)"
       }
     ],
     "menus": {
@@ -248,6 +254,11 @@
           "group": "inline"
         },
         {
+          "command": "workcenter.archiveItem",
+          "when": "view == workcenter.focus",
+          "group": "1_actions"
+        },
+        {
           "command": "workcenter.pauseItem",
           "when": "view == workcenter.focus && viewItem =~ /^active/",
           "group": "1_actions"
@@ -255,6 +266,11 @@
         {
           "command": "workcenter.resumeItem",
           "when": "view == workcenter.focus && viewItem =~ /^paused/",
+          "group": "1_actions"
+        },
+        {
+          "command": "workcenter.moveToQueue",
+          "when": "view == workcenter.focus && viewItem =~ /^(active|paused)/",
           "group": "1_actions"
         },
         {
