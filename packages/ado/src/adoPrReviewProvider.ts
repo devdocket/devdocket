@@ -249,8 +249,9 @@ export class AdoPrReviewProvider extends BaseProvider {
     });
 
     if (!response.ok) {
-      logger.warn(`Failed to fetch PRs for project: ${project || org}`);
-      logger.error(`PR fetch failed for project "${project}": ${response.status}`);
+      const target = project || org;
+      logger.warn(`Failed to fetch PRs for ${target}`);
+      logger.error(`PR fetch failed for ${target}: ${response.status}`);
       return { items: [], failed: true };
     }
 
@@ -258,7 +259,7 @@ export class AdoPrReviewProvider extends BaseProvider {
     try {
       prData = (await response.json()) as { value: AdoPullRequest[] };
     } catch (err) {
-      logger.error(`Failed to parse PR response for project "${project}":`, err);
+      logger.error(`Failed to parse PR response for ${project || org}:`, err);
       return { items: [], failed: true };
     }
     const items: DiscoveredItem[] = prData.value.map((pr) => {
