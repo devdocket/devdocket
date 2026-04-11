@@ -58,6 +58,7 @@ describe('viewLayout', () => {
           return defaultValue;
         }),
         update: mockUpdate,
+        inspect: vi.fn(() => undefined),
       });
 
       await toggleViewLayout('inbox');
@@ -76,6 +77,7 @@ describe('viewLayout', () => {
           return defaultValue;
         }),
         update: mockUpdate,
+        inspect: vi.fn(() => undefined),
       });
 
       await toggleViewLayout('queue');
@@ -91,6 +93,7 @@ describe('viewLayout', () => {
       (workspace.getConfiguration as ReturnType<typeof vi.fn>).mockReturnValue({
         get: vi.fn((_key: string, defaultValue?: any) => defaultValue),
         update: mockUpdate,
+        inspect: vi.fn(() => undefined),
       });
 
       // sources defaults to 'tree', so toggle should set to 'flat'
