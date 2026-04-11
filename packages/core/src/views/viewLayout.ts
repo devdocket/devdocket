@@ -15,7 +15,10 @@ const VIEW_DEFAULTS: Record<ViewId, ViewLayout> = {
 /** Read the persisted layout for a given view, falling back to its default. */
 export function getViewLayout(viewId: ViewId): ViewLayout {
   const config = vscode.workspace.getConfiguration('workcenter');
-  const layouts = config.get<Record<string, string>>('viewLayout', {});
+  const layoutsRaw: unknown = config.get('viewLayout');
+  const layouts = (layoutsRaw && typeof layoutsRaw === 'object' && !Array.isArray(layoutsRaw))
+    ? layoutsRaw as Record<string, unknown>
+    : {};
   const value = layouts[viewId];
   if (value === 'flat' || value === 'tree') {
     return value;
