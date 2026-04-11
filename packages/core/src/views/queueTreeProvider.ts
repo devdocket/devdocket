@@ -133,9 +133,11 @@ export class QueueTreeProvider implements vscode.TreeDataProvider<QueueElement>,
       return;
     }
 
-    if (draggedId === (target as WorkItem).id) { return; }
+    // After filtering out group nodes above, target is always a WorkItem
+    const targetItem = target as WorkItem;
+    if (draggedId === targetItem.id) { return; }
 
-    await this.workGraph.reorderItem(draggedId, (target as WorkItem).id);
+    await this.workGraph.reorderItem(draggedId, targetItem.id);
   }
 
   dispose(): void {
