@@ -24,6 +24,12 @@ export function registerGetFileDiffTool(): vscode.Disposable {
         ]);
       }
 
+      if (/^-|\s/.test(baseRef) || /^-|\s/.test(headRef)) {
+        return new vscode.LanguageModelToolResult([
+          new vscode.LanguageModelTextPart('Invalid ref: refs must not start with - or contain whitespace'),
+        ]);
+      }
+
       // Path traversal protection
       const normalized = path.normalize(filePath);
       if (normalized.startsWith('..') || path.isAbsolute(normalized)) {

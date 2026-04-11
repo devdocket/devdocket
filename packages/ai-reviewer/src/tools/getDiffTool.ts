@@ -23,6 +23,12 @@ export function registerGetDiffTool(): vscode.Disposable {
         ]);
       }
 
+      if (/^-|\s/.test(baseRef) || /^-|\s/.test(headRef)) {
+        return new vscode.LanguageModelToolResult([
+          new vscode.LanguageModelTextPart('Invalid ref: refs must not start with - or contain whitespace'),
+        ]);
+      }
+
       try {
         const output = await gitExec(
           ['diff', '--no-color', `${baseRef}...${headRef}`],
