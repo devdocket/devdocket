@@ -540,14 +540,23 @@ describe('WorkGraph', () => {
       expect(graph.getItem(item.id)?.state).toBe(WorkItemState.Archived);
     });
 
-    it('rejects InProgress → New', async () => {
+    it('allows InProgress → New (move to queue)', async () => {
       const item = await graph.createItem({ title: 'Test' });
       await graph.transitionState(item.id, WorkItemState.InProgress);
       vi.mocked(store.save).mockClear();
-      await expect(graph.transitionState(item.id, WorkItemState.New))
-        .rejects.toThrow('Invalid state transition');
-      expect(store.save).not.toHaveBeenCalled();
-      expect(graph.getItem(item.id)?.state).toBe(WorkItemState.InProgress);
+      await graph.transitionState(item.id, WorkItemState.New);
+      expect(store.save).toHaveBeenCalled();
+      expect(graph.getItem(item.id)?.state).toBe(WorkItemState.New);
+    });
+
+    it('allows Paused → New (move to queue)', async () => {
+      const item = await graph.createItem({ title: 'Test' });
+      await graph.transitionState(item.id, WorkItemState.InProgress);
+      await graph.transitionState(item.id, WorkItemState.Paused);
+      vi.mocked(store.save).mockClear();
+      await graph.transitionState(item.id, WorkItemState.New);
+      expect(store.save).toHaveBeenCalled();
+      expect(graph.getItem(item.id)?.state).toBe(WorkItemState.New);
     });
 
     it('rejects InProgress → Archived (skipping Done)', async () => {

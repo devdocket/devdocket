@@ -5,8 +5,10 @@
  *
  * ```
  * New → InProgress → Done → Archived
- * │         ↕
- * │       Paused
+ * │    ↕    ↕
+ * │  Paused │
+ * │    ↓    │
+ * │   New ←─┘
  * └──────────────────────→ Archived
  * ```
  */
