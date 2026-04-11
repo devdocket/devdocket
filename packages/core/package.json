@@ -279,7 +279,7 @@
         },
         {
           "command": "workcenter.archiveItem",
-          "when": "view == workcenter.focus",
+          "when": "view == workcenter.focus && viewItem =~ /^(active|paused)/",
           "group": "1_actions"
         },
         {
@@ -309,12 +309,12 @@
         },
         {
           "command": "workcenter.focusMoveUp",
-          "when": "view == workcenter.focus",
+          "when": "view == workcenter.focus && viewItem =~ /^(active|paused)/",
           "group": "3_reorder@1"
         },
         {
           "command": "workcenter.focusMoveDown",
-          "when": "view == workcenter.focus",
+          "when": "view == workcenter.focus && viewItem =~ /^(active|paused)/",
           "group": "3_reorder@2"
         },
         {
