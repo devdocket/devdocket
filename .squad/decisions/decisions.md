@@ -130,4 +130,4 @@ Remove the `resurfaceDismissed` feature entirely. Dismissed items should **never
 
 - 13 files changed, ~500 lines removed
 - All 1174 tests pass
-- No breaking changes for existing providers (the removed property was optional)
+- Compile-time breaking change for external providers that still set `resurfaceDismissed`: removing the optional property from the exported `WorkCenterProvider` type will fail TypeScript excess property checks for object-literal providers. This is an intentional breaking change.
