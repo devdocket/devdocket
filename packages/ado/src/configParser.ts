@@ -15,9 +15,11 @@ export interface OrgConfig {
  *   - `<org>` — monitor an entire organization
  *   - `<org>/<project>` — monitor a specific project
  *
- * Legacy backward compatibility: if no entry in `projects` contains `/` and
- * `legacyOrganization` is non-empty, entries are treated as project names
- * under that organization.
+ * Legacy backward compatibility: if `projects` contains no valid
+ * `<org>/<project>` entries and `legacyOrganization` is non-empty, entries are
+ * treated as project names under that organization. Malformed slash entries
+ * such as `/`, `org/`, and `/project` are ignored when determining whether to
+ * use legacy mode.
  */
 export function parseAdoProjectsConfig(
   projects: string[],
