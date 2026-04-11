@@ -815,9 +815,30 @@ describe('registerCommands', () => {
       expect(stateStore.setState).toHaveBeenCalledWith('github', 'ext-1', 'dismissed');
       expect(stateStore.setStates).not.toHaveBeenCalled();
     });
+
+    it('filters out non-item nodes from selectedItems', async () => {
+      const providerNode: InboxProviderNode = { kind: 'provider', providerId: 'github', label: 'GitHub' };
+      const groupNode: InboxGroupNode = { kind: 'group', providerId: 'github', groupName: 'org/repo', unseenCount: 3 };
+      const inboxItem = makeInboxItem({ externalId: 'ext-1' });
+
+      await invoke('workcenter.dismissFromInbox', providerNode, [providerNode, groupNode, inboxItem]);
+
+      expect(stateStore.setState).toHaveBeenCalledWith('github', 'ext-1', 'dismissed');
+      expect(stateStore.setStates).not.toHaveBeenCalled();
+    });
+
+    it('does nothing when selectedItems contains only non-item nodes', async () => {
+      const providerNode: InboxProviderNode = { kind: 'provider', providerId: 'github', label: 'GitHub' };
+      const groupNode: InboxGroupNode = { kind: 'group', providerId: 'github', groupName: 'org/repo', unseenCount: 3 };
+
+      await invoke('workcenter.dismissFromInbox', providerNode, [providerNode, groupNode]);
+
+      expect(stateStore.setState).not.toHaveBeenCalled();
+      expect(stateStore.setStates).not.toHaveBeenCalled();
+    });
   });
 
-  // ── acceptFromSources ────────────────────────────────────────────
+  // ── acceptFromSources────────────────────────────────────────────
 
   describe('workcenter.acceptFromSources', () => {
     it('creates a work item and sets state to accepted for new item', async () => {
