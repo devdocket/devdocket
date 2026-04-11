@@ -13,11 +13,15 @@ import { logger } from '../services/logger';
  * When canSelectMany is enabled, VS Code passes InboxElement (the union type) in
  * selectedItems, which may include provider/group nodes — we filter to leaf items only.
  */
+function isInboxItem(i?: InboxElement): i is InboxItem {
+  return !!i && i.kind === 'item' && !!i.providerId && !!i.externalId;
+}
+
 function resolveInboxItems(item?: InboxElement, selectedItems?: InboxElement[]): InboxItem[] {
   if (selectedItems && selectedItems.length > 0) {
-    return selectedItems.filter((i): i is InboxItem => i.kind === 'item' && !!i.providerId);
+    return selectedItems.filter(isInboxItem);
   }
-  if (item && item.kind === 'item' && item.providerId && item.externalId) {
+  if (isInboxItem(item)) {
     return [item];
   }
   return [];
@@ -233,7 +237,7 @@ async function handleAcceptFromInbox(
       // Roll back all created work items
       for (const id of createdIds) {
         try { await workGraph.deleteItem(id); } catch (rollbackErr: unknown) {
-          logger.error('Failed to roll back created item after batch setState failure', rollbackErr);
+          logger.error('Failed to roll back created item after batch setStates failure', rollbackErr);
         }
       }
       handleCommandError('Failed to update states after accepting items', err);

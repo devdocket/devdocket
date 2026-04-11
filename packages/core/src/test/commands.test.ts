@@ -5,7 +5,7 @@ import { registerCommands, isSafeUrl } from '../commands/commands';
 import type { WorkGraph } from '../services/workGraph';
 import type { ActionRegistry } from '../services/actionRegistry';
 import type { DiscoveredStateStore } from '../storage/discoveredStateStore';
-import type { InboxItem } from '../views/inboxTreeProvider';
+import type { InboxItem, InboxProviderNode, InboxGroupNode } from '../views/inboxTreeProvider';
 import type { SourceItemNode } from '../views/sourcesTreeProvider';
 import { WorkItemEditorPanel } from '../views/workItemEditorPanel';
 import { logger } from '../services/logger';
@@ -757,6 +757,19 @@ describe('registerCommands', () => {
 
       expect(stateStore.setState).toHaveBeenCalledWith('github', 'ext-1', 'accepted');
       expect(stateStore.setStates).not.toHaveBeenCalled();
+    });
+
+    it('filters out non-item nodes from selectedItems', async () => {
+      const providerNode: InboxProviderNode = { kind: 'provider', providerId: 'github', label: 'GitHub' };
+      const groupNode: InboxGroupNode = { kind: 'group', providerId: 'github', groupName: 'org/repo', unseenCount: 3 };
+      const inboxItem = makeInboxItem({ externalId: 'ext-1', title: 'Issue 1' });
+      workGraph.findItemByProvenance.mockReturnValue(undefined);
+      workGraph.createItem.mockResolvedValue(createWorkItem({ id: 'wc-1' }));
+
+      await invoke('workcenter.acceptFromInbox', providerNode, [providerNode, groupNode, inboxItem]);
+
+      expect(stateStore.setState).toHaveBeenCalledWith('github', 'ext-1', 'accepted');
+      expect(workGraph.createItem).toHaveBeenCalledTimes(1);
     });
   });
 
