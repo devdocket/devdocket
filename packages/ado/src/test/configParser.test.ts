@@ -151,10 +151,15 @@ describe('parseAdoProjectsConfig', () => {
       ] satisfies OrgConfig[]);
     });
 
-    it('handles entry with multiple slashes (first slash splits)', () => {
+    it('skips entry with multiple slashes', () => {
       const result = parseAdoProjectsConfig(['org/proj/extra'], '');
+      expect(result).toEqual([] satisfies OrgConfig[]);
+    });
+
+    it('multi-slash entry does not disable legacy fallback', () => {
+      const result = parseAdoProjectsConfig(['ProjectA', 'org/proj/extra'], 'myorg');
       expect(result).toEqual([
-        { org: 'org', projects: ['proj/extra'] },
+        { org: 'myorg', projects: ['ProjectA', 'org/proj/extra'] },
       ] satisfies OrgConfig[]);
     });
 

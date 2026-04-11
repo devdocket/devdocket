@@ -17,9 +17,9 @@ export interface OrgConfig {
  *
  * Legacy backward compatibility: if `projects` contains no valid
  * `<org>/<project>` entries and `legacyOrganization` is non-empty, entries are
- * treated as project names under that organization. Malformed slash entries
- * such as `/`, `org/`, and `/project` are ignored when determining whether to
- * use legacy mode.
+ * treated as project names under that organization. Malformed entries
+ * such as `/`, `org/`, `/project`, and multi-slash entries like `org/proj/extra`
+ * are ignored when determining whether to use legacy mode.
  */
 export function parseAdoProjectsConfig(
   projects: string[],
@@ -28,11 +28,11 @@ export function parseAdoProjectsConfig(
   const trimmedLegacyOrg = legacyOrganization.trim();
 
   // Determine whether entries use new org/project format by checking for
-  // valid slash-separated entries (ignoring malformed ones like "/" or "/proj")
+  // valid slash-separated entries (exactly one slash with non-empty parts)
   const hasNewFormatEntry = projects.some(p => {
     const t = p.trim();
     const idx = t.indexOf('/');
-    return idx > 0 && idx < t.length - 1;
+    return idx > 0 && idx < t.length - 1 && t.lastIndexOf('/') === idx;
   });
 
   // Legacy mode: no entry contains a valid '/' and the deprecated org setting is present
@@ -66,8 +66,8 @@ export function parseAdoProjectsConfig(
     } else {
       const org = trimmed.substring(0, slashIndex).trim();
       const project = trimmed.substring(slashIndex + 1).trim();
-      if (!org || !project) {
-        continue; // skip malformed entries like "/", "org/", or "/project"
+      if (!org || !project || project.includes('/')) {
+        continue; // skip malformed entries like "/", "org/", "/project", or "org/proj/extra"
       }
 
       const existing = orgMap.get(org);
