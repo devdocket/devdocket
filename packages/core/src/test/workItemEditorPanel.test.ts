@@ -174,7 +174,7 @@ describe('WorkItemEditorPanel', () => {
       WorkItemEditorPanel.open(ctx, createMockWorkGraph(item) as any, item);
 
       expect(window.createWebviewPanel).toHaveBeenCalledTimes(1);
-      expect(mock.panel.reveal).toHaveBeenCalledWith(ViewColumn.One);
+      expect(mock.panel.reveal).toHaveBeenCalled();
     });
 
     it('should create separate panels for different items', () => {
@@ -226,7 +226,27 @@ describe('WorkItemEditorPanel', () => {
       WorkItemEditorPanel.open(ctx, createMockWorkGraph(item) as any, item);
 
       expect(mock.panel.reveal).toHaveBeenCalledTimes(1);
-      expect(mock.panel.reveal).toHaveBeenCalledWith(ViewColumn.One);
+      expect(mock.panel.reveal).toHaveBeenCalledWith();
+    });
+
+    it('should allow reopening after dispose() via context subscription', () => {
+      const item = makeItem({ id: 'ctx-dispose', title: 'Context Dispose' });
+      const mock1 = createMockWebviewPanel();
+      const mock2 = createMockWebviewPanel();
+
+      vi.mocked(window.createWebviewPanel)
+        .mockReturnValueOnce(mock1.panel as any)
+        .mockReturnValueOnce(mock2.panel as any);
+
+      const ctx = createMockContext();
+      WorkItemEditorPanel.open(ctx, createMockWorkGraph(item) as any, item);
+
+      // Dispose via context subscription (the dispose() method path)
+      ctx.subscriptions[ctx.subscriptions.length - 1].dispose();
+
+      WorkItemEditorPanel.open(ctx, createMockWorkGraph(item) as any, item);
+
+      expect(window.createWebviewPanel).toHaveBeenCalledTimes(2);
     });
   });
 

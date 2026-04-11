@@ -22,7 +22,7 @@ export class WorkItemEditorPanel {
   ): void {
     const existing = WorkItemEditorPanel.openPanels.get(item.id);
     if (existing) {
-      existing.panel.reveal(vscode.ViewColumn.One);
+      existing.panel.reveal();
       return;
     }
 
