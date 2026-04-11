@@ -201,14 +201,14 @@ export class AdoPrReviewProvider extends BaseProvider {
         },
       );
     } catch (err) {
-      logger.error('Network error fetching connection data:', err);
+      logger.error(`Network error fetching connection data for org ${org}:`, err);
       this._cachedUserIds.delete(org);
       return undefined;
     }
 
     if (!response.ok) {
       const body = await response.text().catch(() => '');
-      logger.error(`Failed to fetch connection data: ${response.status} ${body}`);
+      logger.error(`Failed to fetch connection data for org ${org}: ${response.status} ${body}`);
       this._cachedUserIds.delete(org);
       return undefined;
     }
@@ -217,7 +217,7 @@ export class AdoPrReviewProvider extends BaseProvider {
     try {
       data = (await response.json()) as ConnectionData;
     } catch (err) {
-      logger.error('Failed to parse connection data response:', err);
+      logger.error(`Failed to parse connection data response for org ${org}:`, err);
       this._cachedUserIds.delete(org);
       return undefined;
     }
