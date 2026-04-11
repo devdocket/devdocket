@@ -124,11 +124,11 @@ export class WalkthroughParticipant {
     // Gather workcenter tools + the phase-signaling tool
     const tools = [
       ...vscode.lm.tools
-        .filter((t: vscode.LanguageModelToolInformation) => t.name.startsWith('workcenter-'))
+        .filter((t: vscode.LanguageModelToolInformation) => t.name.startsWith('workcenter-') && t.inputSchema)
         .map((t: vscode.LanguageModelToolInformation) => ({
           name: t.name,
           description: t.description,
-          inputSchema: t.inputSchema!,
+          inputSchema: t.inputSchema as Record<string, unknown>,
         })),
       {
         name: 'workcenter-signalPhase',

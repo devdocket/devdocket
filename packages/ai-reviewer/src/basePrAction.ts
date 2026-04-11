@@ -3,8 +3,10 @@ import type { WorkItem, WorkCenterAction } from './types';
 import { parsePrUrl } from './prUrl';
 
 /**
- * Validate and sanitize a PR URL before interpolating it into an LLM prompt.
- * Prevents prompt injection via crafted URL strings.
+ * Sanitize a URL before interpolating it into an LLM prompt.
+ * Ensures the URL uses http(s) and strips characters that could
+ * break prompt structure (newlines, backticks). Does not validate
+ * that the URL points to a GitHub PR — use parsePrUrl for that.
  */
 export function sanitizePrUrl(url: string): string {
   try {

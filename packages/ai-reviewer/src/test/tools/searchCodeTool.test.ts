@@ -100,8 +100,8 @@ describe('searchCodeTool', () => {
     it('handles no matches (exit code 1)', async () => {
       vi.mocked(execFile).mockImplementation(
         (_cmd: unknown, _args: unknown, _opts: unknown, cb: unknown) => {
-          const err = new Error('git grep failed') as NodeJS.ErrnoException;
-          err.code = '1';
+          const err = new Error('git grep failed') as NodeJS.ErrnoException & { code: number };
+          err.code = 1;
           (cb as Function)(err, '', '');
           return undefined as never;
         },
@@ -119,7 +119,7 @@ describe('searchCodeTool', () => {
         { isCancellationRequested: false } as never,
       );
 
-      expect(result).toBeDefined();
+      expect((result as { content: Array<{ value: string }> }).content[0].value).toBe('(no matches found)');
     });
   });
 });
