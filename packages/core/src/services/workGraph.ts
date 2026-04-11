@@ -5,7 +5,7 @@ import { ITaskStore } from '../storage/taskStore';
 import { logger } from './logger';
 
 const VALID_TRANSITIONS: ReadonlyMap<WorkItemState, ReadonlySet<WorkItemState>> = new Map([
-  [WorkItemState.New, new Set([WorkItemState.InProgress])],
+  [WorkItemState.New, new Set([WorkItemState.InProgress, WorkItemState.Archived])],
   [WorkItemState.InProgress, new Set([WorkItemState.Paused, WorkItemState.Done])],
   [WorkItemState.Paused, new Set([WorkItemState.InProgress])],
   [WorkItemState.Done, new Set([WorkItemState.Archived])],

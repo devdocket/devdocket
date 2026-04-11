@@ -489,13 +489,12 @@ describe('WorkGraph', () => {
       expect(graph.getItem(item.id)?.state).toBe(WorkItemState.New);
     });
 
-    it('rejects New → Archived', async () => {
+    it('allows New → Archived', async () => {
       const item = await graph.createItem({ title: 'Test' });
       vi.mocked(store.save).mockClear();
-      await expect(graph.transitionState(item.id, WorkItemState.Archived))
-        .rejects.toThrow('Invalid state transition');
-      expect(store.save).not.toHaveBeenCalled();
-      expect(graph.getItem(item.id)?.state).toBe(WorkItemState.New);
+      await graph.transitionState(item.id, WorkItemState.Archived);
+      expect(store.save).toHaveBeenCalled();
+      expect(graph.getItem(item.id)?.state).toBe(WorkItemState.Archived);
     });
 
     it('rejects New → Paused', async () => {

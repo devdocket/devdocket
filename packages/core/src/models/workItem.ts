@@ -5,8 +5,9 @@
  *
  * ```
  * New → InProgress → Done → Archived
- *            ↕
- *          Paused
+ * │         ↕
+ * │       Paused
+ * └──────────────────────→ Archived
  * ```
  */
 export enum WorkItemState {
