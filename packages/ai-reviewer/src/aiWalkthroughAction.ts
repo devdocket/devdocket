@@ -5,7 +5,7 @@ import { parsePrUrl } from './prUrl';
 
 export class AiWalkthroughAction implements WorkCenterAction {
   readonly id = 'ai-reviewer.walkthrough';
-  readonly label = 'PR Walkthrough';
+  readonly label = 'AI Walkthrough';
 
   constructor(private readonly repoManager: RepoManager) {}
 
@@ -20,7 +20,7 @@ export class AiWalkthroughAction implements WorkCenterAction {
     await vscode.window.withProgress(
       {
         location: vscode.ProgressLocation.Notification,
-        title: 'PR Walkthrough',
+        title: 'AI Walkthrough',
         cancellable: true,
       },
       async (progress, token) => {
@@ -30,17 +30,16 @@ export class AiWalkthroughAction implements WorkCenterAction {
           await this.repoManager.ensureWorktree(item.url!);
         } catch (err) {
           const msg = err instanceof Error ? err.message : String(err);
-          vscode.window.showErrorMessage(`PR Walkthrough: Failed to prepare repository — ${msg}`);
+          vscode.window.showErrorMessage(`AI Walkthrough: Failed to prepare repository — ${msg}`);
           return;
         }
 
         if (token.isCancellationRequested) return;
 
-        // Open a new chat conversation with the walkthrough participant
+        // Start a fresh chat conversation, then send the walkthrough query
+        await vscode.commands.executeCommand('workbench.action.chat.newChat');
         await vscode.commands.executeCommand('workbench.action.chat.open', {
           query: `@walkthrough Walk me through this PR: ${item.url}`,
-          isPartialQuery: false,
-          newChat: true,
         });
       },
     );

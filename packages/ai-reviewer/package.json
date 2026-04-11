@@ -22,7 +22,7 @@
     "chatParticipants": [
       {
         "id": "workcenter.walkthrough",
-        "fullName": "PR Walkthrough",
+        "fullName": "AI Walkthrough",
         "name": "walkthrough",
         "description": "Interactive PR walkthrough — explains code changes step by step",
         "isSticky": true

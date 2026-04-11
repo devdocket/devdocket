@@ -60,8 +60,8 @@ describe('AiWalkthroughAction', () => {
       expect(action.id).toBe('ai-reviewer.walkthrough');
     });
 
-    it('has label "PR Walkthrough"', () => {
-      expect(action.label).toBe('PR Walkthrough');
+    it('has label "AI Walkthrough"', () => {
+      expect(action.label).toBe('AI Walkthrough');
     });
   });
 
@@ -104,10 +104,9 @@ describe('AiWalkthroughAction', () => {
       const item = createWorkItem();
       await action.run(item);
 
+      expect(commands.executeCommand).toHaveBeenCalledWith('workbench.action.chat.newChat');
       expect(commands.executeCommand).toHaveBeenCalledWith('workbench.action.chat.open', {
         query: '@walkthrough Walk me through this PR: https://github.com/owner/repo/pull/42',
-        isPartialQuery: false,
-        newChat: true,
       });
     });
 
@@ -118,7 +117,7 @@ describe('AiWalkthroughAction', () => {
       await action.run(item);
 
       expect(window.showErrorMessage).toHaveBeenCalledWith(
-        'PR Walkthrough: Failed to prepare repository — Clone failed',
+        'AI Walkthrough: Failed to prepare repository — Clone failed',
       );
       expect(commands.executeCommand).not.toHaveBeenCalled();
     });
