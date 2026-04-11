@@ -133,6 +133,7 @@ export function groupByProvider(items: WorkItem[]): ProviderGroupNode[] {
     });
   }
   return result.sort((a, b) => {
+    if (!a.providerId && !b.providerId) { return 0; }
     if (!a.providerId) { return 1; }
     if (!b.providerId) { return -1; }
     return a.label.localeCompare(b.label);
