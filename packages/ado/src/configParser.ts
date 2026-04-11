@@ -37,7 +37,7 @@ export function parseAdoProjectsConfig(
 
   // Legacy mode: no entry contains a valid '/' and the deprecated org setting is present
   if (!hasNewFormatEntry && trimmedLegacyOrg) {
-    return [{ org: trimmedLegacyOrg, projects: projects.map(p => p.trim()).filter(Boolean) }];
+    return [{ org: trimmedLegacyOrg, projects: [...new Set(projects.map(p => p.trim()).filter(Boolean))] }];
   }
 
   // Nothing to monitor

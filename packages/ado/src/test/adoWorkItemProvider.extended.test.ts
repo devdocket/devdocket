@@ -642,7 +642,7 @@ describe('AdoWorkItemProvider — extended', () => {
       await provider.refresh();
 
       expect(window.showWarningMessage).toHaveBeenCalledWith(
-        expect.stringContaining('2 projects'),
+        expect.stringContaining('2 sources'),
       );
     });
 
