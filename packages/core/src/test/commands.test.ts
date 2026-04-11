@@ -162,6 +162,8 @@ describe('registerCommands', () => {
       'workcenter.runAction',
       'workcenter.moveUp',
       'workcenter.moveDown',
+      'workcenter.focusMoveUp',
+      'workcenter.focusMoveDown',
       'workcenter.moveToQueue',
       'workcenter.acceptFromInbox',
       'workcenter.dismissFromInbox',
@@ -531,6 +533,54 @@ describe('registerCommands', () => {
       invoke('workcenter.moveDown', {});
       expect(vscode.window.showInformationMessage).toHaveBeenCalledWith(
         'WorkCenter: Select an item in the Queue to move.',
+      );
+      expect(workGraph.moveItem).not.toHaveBeenCalled();
+    });
+  });
+
+  // ── focusMoveUp / focusMoveDown ─────────────────────────────────
+
+  describe('workcenter.focusMoveUp', () => {
+    it('calls workGraph.moveItem with "up"', () => {
+      invoke('workcenter.focusMoveUp', { id: 'wc-1' });
+      expect(workGraph.moveItem).toHaveBeenCalledWith('wc-1', 'up');
+    });
+
+    it('shows info message when item is null', () => {
+      invoke('workcenter.focusMoveUp', null);
+      expect(vscode.window.showInformationMessage).toHaveBeenCalledWith(
+        'WorkCenter: Select an item in Focus to move.',
+      );
+      expect(workGraph.moveItem).not.toHaveBeenCalled();
+    });
+
+    it('shows info message when item has no id', () => {
+      invoke('workcenter.focusMoveUp', {});
+      expect(vscode.window.showInformationMessage).toHaveBeenCalledWith(
+        'WorkCenter: Select an item in Focus to move.',
+      );
+      expect(workGraph.moveItem).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('workcenter.focusMoveDown', () => {
+    it('calls workGraph.moveItem with "down"', () => {
+      invoke('workcenter.focusMoveDown', { id: 'wc-1' });
+      expect(workGraph.moveItem).toHaveBeenCalledWith('wc-1', 'down');
+    });
+
+    it('shows info message when item is undefined', () => {
+      invoke('workcenter.focusMoveDown', undefined);
+      expect(vscode.window.showInformationMessage).toHaveBeenCalledWith(
+        'WorkCenter: Select an item in Focus to move.',
+      );
+      expect(workGraph.moveItem).not.toHaveBeenCalled();
+    });
+
+    it('shows info message when item has no id', () => {
+      invoke('workcenter.focusMoveDown', {});
+      expect(vscode.window.showInformationMessage).toHaveBeenCalledWith(
+        'WorkCenter: Select an item in Focus to move.',
       );
       expect(workGraph.moveItem).not.toHaveBeenCalled();
     });

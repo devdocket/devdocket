@@ -250,10 +250,12 @@ export class WorkGraph {
     const siblings = this.getItemsByState(item.state)
       .sort((a, b) => (a.sortOrder ?? Number.MAX_SAFE_INTEGER) - (b.sortOrder ?? Number.MAX_SAFE_INTEGER));
 
-    // Normalize any missing sortOrder values so swaps are consistent
+    // Normalize sortOrder values to sequential indices so swaps are consistent
+    // even when items have duplicate or missing sortOrder (e.g. after state transitions)
+    let didMutate = false;
     const toNormalize: WorkItem[] = [];
     for (let i = 0; i < siblings.length; i++) {
-      if (siblings[i].sortOrder === undefined) {
+      if (siblings[i].sortOrder !== i) {
         const normalized = { ...siblings[i], sortOrder: i, updatedAt: Date.now() };
         siblings[i] = normalized;
         toNormalize.push(normalized);
@@ -265,15 +267,18 @@ export class WorkGraph {
         this.items.set(normalized.id, normalized);
       }
       this.invalidateStateCache();
+      didMutate = true;
     }
 
     const index = siblings.findIndex((s) => s.id === id);
     if (index === -1) {
+      if (didMutate) { this._onDidChange.fire(); }
       return;
     }
 
     const swapIndex = direction === 'up' ? index - 1 : index + 1;
     if (swapIndex < 0 || swapIndex >= siblings.length) {
+      if (didMutate) { this._onDidChange.fire(); }
       return;
     }
 

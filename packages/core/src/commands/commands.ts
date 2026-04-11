@@ -179,6 +179,22 @@ async function handleMoveDown(workGraph: WorkGraph, item?: { id?: string }): Pro
   await workGraph.moveItem(item.id, 'down');
 }
 
+async function handleFocusMoveUp(workGraph: WorkGraph, item?: { id?: string }): Promise<void> {
+  if (!item?.id) {
+    void vscode.window.showInformationMessage('WorkCenter: Select an item in Focus to move.');
+    return;
+  }
+  await workGraph.moveItem(item.id, 'up');
+}
+
+async function handleFocusMoveDown(workGraph: WorkGraph, item?: { id?: string }): Promise<void> {
+  if (!item?.id) {
+    void vscode.window.showInformationMessage('WorkCenter: Select an item in Focus to move.');
+    return;
+  }
+  await workGraph.moveItem(item.id, 'down');
+}
+
 async function handleAcceptFromInbox(
   workGraph: WorkGraph,
   stateStore: DiscoveredStateStore,
@@ -323,6 +339,10 @@ export function registerCommands(
       wrapCommand('Failed to move item up', (item) => handleMoveUp(workGraph, item))),
     vscode.commands.registerCommand('workcenter.moveDown',
       wrapCommand('Failed to move item down', (item) => handleMoveDown(workGraph, item))),
+    vscode.commands.registerCommand('workcenter.focusMoveUp',
+      wrapCommand('Failed to move focus item up', (item) => handleFocusMoveUp(workGraph, item))),
+    vscode.commands.registerCommand('workcenter.focusMoveDown',
+      wrapCommand('Failed to move focus item down', (item) => handleFocusMoveDown(workGraph, item))),
     vscode.commands.registerCommand('workcenter.moveToQueue',
       wrapCommand('Failed to move item to queue', (item) => handleMoveToQueue(workGraph, item))),
     vscode.commands.registerCommand('workcenter.acceptFromInbox',
