@@ -48,13 +48,23 @@ export async function toggleViewLayout(viewId: ViewId): Promise<void> {
   const config = vscode.workspace.getConfiguration('workcenter');
   const current = getViewLayout(viewId);
 
-  // Persist this UI preference at workspace scope when available; otherwise use global scope
+  // Update at the most-specific scope that already has a value so the toggle
+  // takes effect even when a narrower scope overrides broader ones
+  // (e.g. workspace-folder > workspace > global).
   const inspection = config.inspect('viewLayout');
-  const hasWorkspaceValue = inspection?.workspaceValue !== undefined;
-  const scopeValue = hasWorkspaceValue ? inspection.workspaceValue : inspection?.globalValue;
-  const target = hasWorkspaceValue
-    ? vscode.ConfigurationTarget.Workspace
-    : vscode.ConfigurationTarget.Global;
+  let scopeValue: unknown;
+  let target: vscode.ConfigurationTarget;
+
+  if (inspection?.workspaceFolderValue !== undefined) {
+    scopeValue = inspection.workspaceFolderValue;
+    target = vscode.ConfigurationTarget.WorkspaceFolder;
+  } else if (inspection?.workspaceValue !== undefined) {
+    scopeValue = inspection.workspaceValue;
+    target = vscode.ConfigurationTarget.Workspace;
+  } else {
+    scopeValue = inspection?.globalValue;
+    target = vscode.ConfigurationTarget.Global;
+  }
 
   const layouts = sanitizeLayouts(scopeValue);
   layouts[viewId] = current === 'flat' ? 'tree' : 'flat';
