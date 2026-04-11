@@ -42,6 +42,15 @@ export function registerListDirectoryTool(): vscode.Disposable {
 
       try {
         const uri = vscode.Uri.file(resolved);
+
+        // Reject symlinked directories to prevent reads escaping the worktree
+        const dirStat = await vscode.workspace.fs.stat(uri);
+        if (dirStat.type & vscode.FileType.SymbolicLink) {
+          return new vscode.LanguageModelToolResult([
+            new vscode.LanguageModelTextPart('Symbolic links are not allowed for security reasons'),
+          ]);
+        }
+
         const entries = await vscode.workspace.fs.readDirectory(uri);
         const lines = entries.map(([name, type]) => {
           const isSymbolicLink = (type & vscode.FileType.SymbolicLink) !== 0;
