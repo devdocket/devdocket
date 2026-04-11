@@ -126,7 +126,7 @@ describe('viewLayout', () => {
       );
     });
 
-    it('prefers workspaceFolder scope when it exists alongside workspace', async () => {
+    it('prefers workspace scope even when workspaceFolder value exists', async () => {
       const mockUpdate = vi.fn().mockResolvedValue(undefined);
       (workspace.getConfiguration as ReturnType<typeof vi.fn>).mockReturnValue({
         get: vi.fn((_key: string) => {
@@ -144,7 +144,7 @@ describe('viewLayout', () => {
       expect(mockUpdate).toHaveBeenCalledWith(
         'viewLayout',
         expect.objectContaining({ inbox: 'tree' }),
-        ConfigurationTarget.WorkspaceFolder,
+        ConfigurationTarget.Workspace,
       );
     });
   });
