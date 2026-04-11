@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { chat, lm, LanguageModelTextPart, LanguageModelToolCallPart, ChatRequestTurn, ChatResponseTurn, ChatResponseMarkdownPart } from 'vscode';
+import { chat, lm, LanguageModelTextPart, LanguageModelToolCallPart, ChatRequestTurn } from 'vscode';
 import { WalkthroughParticipant } from '../walkthroughParticipant';
 import type { RepoManager, WorktreeInfo } from '../repoManager';
 

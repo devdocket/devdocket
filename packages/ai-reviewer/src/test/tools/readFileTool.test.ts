@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import * as path from 'path';
-import { workspace, LanguageModelToolResult, LanguageModelTextPart } from 'vscode';
+import { workspace } from 'vscode';
 import { registerReadFileTool, validatePath } from '../../tools/readFileTool';
 import { validWorktreePaths } from '../../tools/worktreeRegistry';
 

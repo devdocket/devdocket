@@ -317,7 +317,7 @@ mockFetch.mockImplementation(async (url: string) => {
 **Scope:** The walkthrough action prepares a git worktree via RepoManager and opens the `@walkthrough` chat participant. Tests cover this flow, not the chat participant itself (tested separately in `walkthroughParticipant.test.ts`).
 
 **What's tested:**
-1. Identity — `id` is `'ai-reviewer.walkthrough'`, `label` is `'PR Walkthrough'`
+1. Identity — `id` is `'ai-reviewer.walkthrough'`, `label` is `'AI Walkthrough'`
 2. canRun — returns true for GitHub PR URLs, false for non-PR URLs, URLs with queries/fragments
 3. run — calls `repoManager.ensureWorktree` with the PR URL
 4. run — opens chat with correct `@walkthrough` query after preparing worktree
