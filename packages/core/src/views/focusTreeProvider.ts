@@ -3,14 +3,14 @@ import { WorkItem, WorkItemState } from '../models/workItem';
 import { WorkGraph } from '../services/workGraph';
 import { ProviderRegistry } from '../services/providerRegistry';
 import {
-  WorkItemElement, WorkItemViewProvider,
+  WorkItemElement, WorkItemViewProvider, isProviderGroupNode,
 } from './viewLayout';
 
 const DRAG_MIME_TYPE = 'application/vnd.code.tree.workcenter.focus';
 
 export type FocusElement = WorkItemElement;
 
-export class FocusTreeProvider extends WorkItemViewProvider implements vscode.TreeDragAndDropController<WorkItem> {
+export class FocusTreeProvider extends WorkItemViewProvider implements vscode.TreeDragAndDropController<FocusElement> {
   readonly dropMimeTypes = [DRAG_MIME_TYPE];
   readonly dragMimeTypes = [DRAG_MIME_TYPE];
   protected readonly groupPrefix = 'focus';
@@ -84,11 +84,13 @@ export class FocusTreeProvider extends WorkItemViewProvider implements vscode.Tr
     }
   }
 
-  handleDrag(source: readonly WorkItem[], dataTransfer: vscode.DataTransfer): void {
-    dataTransfer.set(DRAG_MIME_TYPE, new vscode.DataTransferItem(source.map(s => s.id)));
+  handleDrag(source: readonly FocusElement[], dataTransfer: vscode.DataTransfer): void {
+    const items = source.filter((s): s is WorkItem => !isProviderGroupNode(s));
+    if (items.length === 0) { return; }
+    dataTransfer.set(DRAG_MIME_TYPE, new vscode.DataTransferItem(items.map(s => s.id)));
   }
 
-  async handleDrop(target: WorkItem | undefined, dataTransfer: vscode.DataTransfer): Promise<void> {
+  async handleDrop(target: FocusElement | undefined, dataTransfer: vscode.DataTransfer): Promise<void> {
     const transferItem = dataTransfer.get(DRAG_MIME_TYPE);
     if (!transferItem) { return; }
 
@@ -98,8 +100,8 @@ export class FocusTreeProvider extends WorkItemViewProvider implements vscode.Tr
     const draggedIds: string[] = rawValue;
     const draggedId = draggedIds[0];
 
-    if (!target) {
-      // moveToEnd is inherently state-scoped — no cross-state guard needed
+    // Group node targets or no target → move to end
+    if (!target || isProviderGroupNode(target)) {
       await this.workGraph.moveToEnd(draggedId);
       return;
     }
