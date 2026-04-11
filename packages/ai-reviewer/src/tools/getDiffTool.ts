@@ -25,7 +25,7 @@ export function registerGetDiffTool(): vscode.Disposable {
 
       try {
         const output = await gitExec(
-          ['diff', '--no-color', '--', `${baseRef}...${headRef}`],
+          ['diff', '--no-color', `${baseRef}...${headRef}`],
           worktreePath,
         );
         return new vscode.LanguageModelToolResult([

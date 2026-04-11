@@ -1,5 +1,6 @@
 import * as vscode from 'vscode';
 import type { WorkItem, WorkCenterAction } from './types';
+import { parsePrUrl } from './prUrl';
 
 /**
  * Validate and sanitize a PR URL before interpolating it into an LLM prompt.
@@ -45,9 +46,9 @@ export abstract class BasePrAction implements WorkCenterAction {
 
   /** Parse a GitHub PR URL, returning repo and PR number or undefined. */
   parseGitHubPrUrl(url: string): { repo: string; prNumber: string } | undefined {
-    const match = url.match(/^https?:\/\/github\.com\/([^/]+\/[^/]+)\/pull\/(\d+)(?:$|[\/?#])/);
-    if (!match) return undefined;
-    return { repo: match[1], prNumber: match[2] };
+    const parts = parsePrUrl(url);
+    if (!parts) return undefined;
+    return { repo: `${parts.org}/${parts.repo}`, prNumber: parts.prNumber };
   }
 
   async run(item: WorkItem): Promise<void> {
