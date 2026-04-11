@@ -17,7 +17,9 @@
     "onView:workcenter.focus",
     "onView:workcenter.sources",
     "onView:workcenter.history",
-    "onCommand:workcenter.refresh"
+    "onCommand:workcenter.refresh",
+    "onCommand:workcenter.dismissFromSources",
+    "onCommand:workcenter.deleteItem"
   ],
   "main": "./dist/extension.js",
   "contributes": {
