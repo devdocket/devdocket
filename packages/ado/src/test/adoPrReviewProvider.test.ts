@@ -310,7 +310,7 @@ describe('AdoPrReviewProvider', () => {
     await provider.refresh();
 
     expect(window.showWarningMessage).toHaveBeenCalledWith(
-      expect.stringContaining('Failed to determine Azure DevOps user identity'),
+      expect.stringContaining('user identity'),
     );
   });
 

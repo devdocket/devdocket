@@ -139,7 +139,7 @@ describe('AdoPrReviewProvider — extended', () => {
       // Should fire empty items and show warning
       expect(listener).toHaveBeenCalledWith([]);
       expect(window.showWarningMessage).toHaveBeenCalledWith(
-        expect.stringContaining('Failed to determine Azure DevOps user identity'),
+        expect.stringContaining('user identity'),
       );
     });
 
@@ -155,7 +155,7 @@ describe('AdoPrReviewProvider — extended', () => {
 
       expect(listener).toHaveBeenCalledWith([]);
       expect(window.showWarningMessage).toHaveBeenCalledWith(
-        expect.stringContaining('Failed to determine Azure DevOps user identity'),
+        expect.stringContaining('user identity'),
       );
     });
 

@@ -112,11 +112,8 @@ export class AdoPrReviewProvider extends BaseProvider {
 
       const userId = await this.getUserId(accessToken, orgConfig.org, sessionAccountId);
       if (!userId) {
-        const message = 'Failed to determine Azure DevOps user identity';
-        if (isUserTriggered) {
-          void vscode.window.showWarningMessage(`WorkCenter ADO: ${message}`);
-        }
-        logger.warn(message);
+        failures.push(`${orgConfig.org} (user identity)`);
+        logger.warn(`Failed to determine Azure DevOps user identity for org ${orgConfig.org}`);
         continue;
       }
 
