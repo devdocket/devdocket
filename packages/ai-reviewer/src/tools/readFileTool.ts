@@ -1,5 +1,13 @@
 import * as vscode from 'vscode';
 import * as path from 'path';
+import { validWorktreePaths } from './worktreeRegistry';
+
+function validateWorktreePath(worktreePath: string): string | undefined {
+  if (!validWorktreePaths.has(path.resolve(worktreePath))) {
+    return 'Invalid worktree path: not a known managed worktree';
+  }
+  return undefined;
+}
 
 interface ReadFileInput {
   worktreePath: string;
@@ -7,6 +15,9 @@ interface ReadFileInput {
 }
 
 function validatePath(worktreePath: string, filePath: string): string | undefined {
+  const wtError = validateWorktreePath(worktreePath);
+  if (wtError) return wtError;
+
   const normalized = path.normalize(filePath);
   if (normalized.startsWith('..') || path.isAbsolute(normalized)) {
     return 'Path traversal not allowed: filePath must be relative and within the worktree';

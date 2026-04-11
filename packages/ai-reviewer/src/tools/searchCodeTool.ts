@@ -1,5 +1,7 @@
 import * as vscode from 'vscode';
-import { execFile } from 'child_process';
+import * as path from 'path';
+import { gitExec } from './gitUtils';
+import { validWorktreePaths } from './worktreeRegistry';
 
 interface SearchCodeInput {
   worktreePath: string;
@@ -17,10 +19,16 @@ export function registerSearchCodeTool(): vscode.Disposable {
       const { worktreePath, pattern, fileGlob, maxResults } = options.input;
       const limit = maxResults ?? 50;
 
+      if (!validWorktreePaths.has(path.resolve(worktreePath))) {
+        return new vscode.LanguageModelToolResult([
+          new vscode.LanguageModelTextPart('Invalid worktree path: not a known managed worktree'),
+        ]);
+      }
+
       try {
-        const args = ['grep', '-n', '--no-color', pattern];
+        const args = ['grep', '-n', '--no-color', '--', pattern];
         if (fileGlob) {
-          args.push('--', fileGlob);
+          args.push(fileGlob);
         }
         const output = await gitExec(args, worktreePath);
 
@@ -50,22 +58,5 @@ export function registerSearchCodeTool(): vscode.Disposable {
         ]);
       }
     },
-  });
-}
-
-function gitExec(args: string[], cwd: string): Promise<string> {
-  return new Promise((resolve, reject) => {
-    execFile(
-      'git',
-      ['--no-pager', ...args],
-      { cwd, maxBuffer: 10 * 1024 * 1024 },
-      (err, stdout, stderr) => {
-        if (err) {
-          reject(new Error(`git ${args[0]} failed: ${stderr || err.message}`));
-        } else {
-          resolve(stdout);
-        }
-      },
-    );
   });
 }

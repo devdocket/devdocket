@@ -1,5 +1,6 @@
 import * as vscode from 'vscode';
 import * as path from 'path';
+import { validWorktreePaths } from './worktreeRegistry';
 
 interface ListDirectoryInput {
   worktreePath: string;
@@ -13,6 +14,12 @@ export function registerListDirectoryTool(): vscode.Disposable {
       _token: vscode.CancellationToken,
     ) {
       const { worktreePath, dirPath } = options.input;
+
+      if (!validWorktreePaths.has(path.resolve(worktreePath))) {
+        return new vscode.LanguageModelToolResult([
+          new vscode.LanguageModelTextPart('Invalid worktree path: not a known managed worktree'),
+        ]);
+      }
 
       const relDir = dirPath ?? '.';
       const normalized = path.normalize(relDir);

@@ -1,8 +1,18 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import * as path from 'path';
 import { workspace } from 'vscode';
 import { registerListDirectoryTool } from '../../tools/listDirectoryTool';
+import { validWorktreePaths } from '../../tools/worktreeRegistry';
 
 describe('listDirectoryTool', () => {
+  beforeEach(() => {
+    validWorktreePaths.add(path.resolve('/mock/worktree'));
+  });
+
+  afterEach(() => {
+    validWorktreePaths.clear();
+  });
+
   describe('registerListDirectoryTool', () => {
     it('returns a disposable', () => {
       const disposable = registerListDirectoryTool();

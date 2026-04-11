@@ -1,5 +1,7 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import * as path from 'path';
 import { registerSearchCodeTool } from '../../tools/searchCodeTool';
+import { validWorktreePaths } from '../../tools/worktreeRegistry';
 
 vi.mock('child_process', () => ({
   execFile: vi.fn((_cmd: string, _args: string[], _opts: unknown, cb: Function) => {
@@ -11,7 +13,12 @@ import { execFile } from 'child_process';
 
 describe('searchCodeTool', () => {
   beforeEach(() => {
+    validWorktreePaths.add(path.resolve('/mock/worktree'));
     vi.clearAllMocks();
+  });
+
+  afterEach(() => {
+    validWorktreePaths.clear();
   });
 
   describe('registerSearchCodeTool', () => {

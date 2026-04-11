@@ -92,21 +92,6 @@ describe('AiWalkthroughAction', () => {
     });
   });
 
-  describe('parseGitHubPrUrl', () => {
-    it('parses valid GitHub PR URLs', () => {
-      const result = action.parseGitHubPrUrl('https://github.com/owner/repo/pull/42');
-      expect(result).toEqual({ repo: 'owner/repo', prNumber: '42' });
-    });
-
-    it('returns undefined for non-PR URLs', () => {
-      expect(action.parseGitHubPrUrl('https://github.com/owner/repo/issues/42')).toBeUndefined();
-    });
-
-    it('returns undefined for invalid URLs', () => {
-      expect(action.parseGitHubPrUrl('not-a-url')).toBeUndefined();
-    });
-  });
-
   describe('run', () => {
     it('calls repoManager.ensureWorktree with the PR URL', async () => {
       const item = createWorkItem();

@@ -1,6 +1,7 @@
 import * as vscode from 'vscode';
 import type { WorkItem, WorkCenterAction } from './types';
 import { RepoManager } from './repoManager';
+import { parsePrUrl } from './prUrl';
 
 export class AiWalkthroughAction implements WorkCenterAction {
   readonly id = 'ai-reviewer.walkthrough';
@@ -10,17 +11,7 @@ export class AiWalkthroughAction implements WorkCenterAction {
 
   canRun(item: WorkItem): boolean {
     if (!item.url) return false;
-    return this.isPrUrl(item.url);
-  }
-
-  isPrUrl(url: string): boolean {
-    return this.parseGitHubPrUrl(url) !== undefined;
-  }
-
-  parseGitHubPrUrl(url: string): { repo: string; prNumber: string } | undefined {
-    const match = url.match(/^https?:\/\/github\.com\/([^/]+\/[^/]+)\/pull\/(\d+)(?:$|[\/?#])/);
-    if (!match) return undefined;
-    return { repo: match[1], prNumber: match[2] };
+    return parsePrUrl(item.url) !== undefined;
   }
 
   async run(item: WorkItem): Promise<void> {

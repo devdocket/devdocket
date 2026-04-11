@@ -1,5 +1,7 @@
 import * as vscode from 'vscode';
-import { execFile } from 'child_process';
+import * as path from 'path';
+import { gitExec } from './gitUtils';
+import { validWorktreePaths } from './worktreeRegistry';
 
 interface GetDiffInput {
   worktreePath: string;
@@ -15,9 +17,15 @@ export function registerGetDiffTool(): vscode.Disposable {
     ) {
       const { worktreePath, baseRef, headRef } = options.input;
 
+      if (!validWorktreePaths.has(path.resolve(worktreePath))) {
+        return new vscode.LanguageModelToolResult([
+          new vscode.LanguageModelTextPart('Invalid worktree path: not a known managed worktree'),
+        ]);
+      }
+
       try {
         const output = await gitExec(
-          ['diff', '--no-color', `${baseRef}...${headRef}`],
+          ['diff', '--no-color', '--', `${baseRef}...${headRef}`],
           worktreePath,
         );
         return new vscode.LanguageModelToolResult([
@@ -30,22 +38,5 @@ export function registerGetDiffTool(): vscode.Disposable {
         ]);
       }
     },
-  });
-}
-
-function gitExec(args: string[], cwd: string): Promise<string> {
-  return new Promise((resolve, reject) => {
-    execFile(
-      'git',
-      ['--no-pager', ...args],
-      { cwd, maxBuffer: 10 * 1024 * 1024 },
-      (err, stdout, stderr) => {
-        if (err) {
-          reject(new Error(`git ${args[0]} failed: ${stderr || err.message}`));
-        } else {
-          resolve(stdout);
-        }
-      },
-    );
   });
 }

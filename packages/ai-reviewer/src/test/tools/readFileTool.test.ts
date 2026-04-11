@@ -1,8 +1,19 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import * as path from 'path';
 import { workspace, LanguageModelToolResult, LanguageModelTextPart } from 'vscode';
 import { registerReadFileTool, validatePath } from '../../tools/readFileTool';
+import { validWorktreePaths } from '../../tools/worktreeRegistry';
 
 describe('readFileTool', () => {
+  beforeEach(() => {
+    validWorktreePaths.add(path.resolve('/worktree'));
+    validWorktreePaths.add(path.resolve('/mock/worktree'));
+  });
+
+  afterEach(() => {
+    validWorktreePaths.clear();
+  });
+
   describe('validatePath', () => {
     it('allows normal relative paths', () => {
       expect(validatePath('/worktree', 'src/index.ts')).toBeUndefined();
