@@ -104,6 +104,49 @@ describe('viewLayout', () => {
         ConfigurationTarget.Global,
       );
     });
+
+    it('updates workspace scope when workspaceValue exists', async () => {
+      const mockUpdate = vi.fn().mockResolvedValue(undefined);
+      (workspace.getConfiguration as ReturnType<typeof vi.fn>).mockReturnValue({
+        get: vi.fn((_key: string) => {
+          if (_key === 'viewLayout') { return { focus: 'flat' }; }
+          return undefined;
+        }),
+        update: mockUpdate,
+        inspect: vi.fn(() => ({
+          workspaceValue: { focus: 'flat' },
+        })),
+      });
+
+      await toggleViewLayout('focus');
+      expect(mockUpdate).toHaveBeenCalledWith(
+        'viewLayout',
+        expect.objectContaining({ focus: 'tree' }),
+        ConfigurationTarget.Workspace,
+      );
+    });
+
+    it('updates workspaceFolder scope when workspaceFolderValue exists', async () => {
+      const mockUpdate = vi.fn().mockResolvedValue(undefined);
+      (workspace.getConfiguration as ReturnType<typeof vi.fn>).mockReturnValue({
+        get: vi.fn((_key: string) => {
+          if (_key === 'viewLayout') { return { inbox: 'flat' }; }
+          return undefined;
+        }),
+        update: mockUpdate,
+        inspect: vi.fn(() => ({
+          workspaceValue: { inbox: 'tree' },
+          workspaceFolderValue: { inbox: 'flat' },
+        })),
+      });
+
+      await toggleViewLayout('inbox');
+      expect(mockUpdate).toHaveBeenCalledWith(
+        'viewLayout',
+        expect.objectContaining({ inbox: 'tree' }),
+        ConfigurationTarget.WorkspaceFolder,
+      );
+    });
   });
 
   describe('isProviderGroupNode', () => {
