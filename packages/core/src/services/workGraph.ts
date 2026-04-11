@@ -6,8 +6,8 @@ import { logger } from './logger';
 
 const VALID_TRANSITIONS: ReadonlyMap<WorkItemState, ReadonlySet<WorkItemState>> = new Map([
   [WorkItemState.New, new Set([WorkItemState.InProgress, WorkItemState.Archived])],
-  [WorkItemState.InProgress, new Set([WorkItemState.Paused, WorkItemState.Done, WorkItemState.Archived])],
-  [WorkItemState.Paused, new Set([WorkItemState.InProgress, WorkItemState.Archived])],
+  [WorkItemState.InProgress, new Set([WorkItemState.Paused, WorkItemState.Done, WorkItemState.New, WorkItemState.Archived])],
+  [WorkItemState.Paused, new Set([WorkItemState.InProgress, WorkItemState.New, WorkItemState.Archived])],
   [WorkItemState.Done, new Set([WorkItemState.Archived])],
   [WorkItemState.Archived, new Set<WorkItemState>()],
 ]);
@@ -94,6 +94,17 @@ export class WorkGraph {
     this.invalidateStateCache();
   }
 
+  /** Return the next available sortOrder for items in the given state. */
+  private nextSortOrder(state: WorkItemState): number {
+    const items = this.getItemsByState(state);
+    // Account for legacy items that may not have sortOrder assigned
+    const maxOrder = Math.max(
+      items.length - 1,
+      items.reduce((max, i) => Math.max(max, i.sortOrder ?? -1), -1),
+    );
+    return maxOrder + 1;
+  }
+
   /** Return all work items. */
   getAll(): WorkItem[] {
     return Array.from(this.items.values());
@@ -154,12 +165,7 @@ export class WorkGraph {
     input: WorkItemInput,
     provenance?: { providerId: string; externalId: string; url?: string },
   ): Promise<WorkItem> {
-    const existingItems = this.getItemsByState(WorkItemState.New);
-    // Account for legacy items that may not have sortOrder assigned
-    const maxOrder = Math.max(
-      existingItems.length - 1,
-      existingItems.reduce((max, i) => Math.max(max, i.sortOrder ?? -1), -1),
-    );
+    const sortOrder = this.nextSortOrder(WorkItemState.New);
     const item: WorkItem = {
       id: generateId(),
       title: input.title,
@@ -168,7 +174,7 @@ export class WorkGraph {
       providerId: provenance?.providerId,
       externalId: provenance?.externalId,
       url: provenance?.url,
-      sortOrder: maxOrder + 1,
+      sortOrder,
       createdAt: Date.now(),
       updatedAt: Date.now(),
     };
@@ -222,7 +228,11 @@ export class WorkGraph {
         `Invalid state transition: cannot move from ${item.state} to ${newState}`,
       );
     }
-    const updated = { ...item, state: newState, updatedAt: Date.now() };
+    const updated: WorkItem = { ...item, state: newState, updatedAt: Date.now() };
+    // When returning to Queue, assign a fresh sortOrder to avoid collisions
+    if (newState === WorkItemState.New) {
+      updated.sortOrder = this.nextSortOrder(WorkItemState.New);
+    }
     await this.store.save(updated);
     this.items.set(id, updated);
     this.invalidateStateCache();

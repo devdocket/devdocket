@@ -5,11 +5,13 @@
  *
  * ```
  * New → InProgress → Done → Archived
- * │         ↕         ↗
+ * ↑         ↕         ↗
  * │       Paused ────┘
+ * └──────────┘
  * └──────────────────────→ Archived
  * ```
  *
+ * InProgress and Paused may transition back to New (returning to Queue).
  * Both InProgress and Paused may also transition directly to Archived
  * (for abandoned or no-longer-relevant work).
  */
