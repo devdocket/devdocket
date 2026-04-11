@@ -119,7 +119,7 @@ function createTreeViews(
   const inboxTreeView = vscode.window.createTreeView('workcenter.inbox', { treeDataProvider: inboxProvider });
   const sourcesTreeView = vscode.window.createTreeView('workcenter.sources', { treeDataProvider: sourcesProvider });
   const queueTreeView = vscode.window.createTreeView('workcenter.queue', { treeDataProvider: queueProvider, dragAndDropController: queueProvider });
-  const focusTreeView = vscode.window.createTreeView('workcenter.focus', { treeDataProvider: focusProvider });
+  const focusTreeView = vscode.window.createTreeView('workcenter.focus', { treeDataProvider: focusProvider, dragAndDropController: focusProvider });
   const historyTreeView = vscode.window.createTreeView('workcenter.history', { treeDataProvider: historyProvider });
 
   const inboxSelectionSub = inboxTreeView.onDidChangeSelection((e) => {

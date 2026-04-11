@@ -113,10 +113,21 @@ describe('FocusTreeProvider', () => {
   });
 
   describe('getChildren', () => {
-    it('should return items sorted by title', () => {
+    it('should return items sorted by sortOrder', () => {
+      const items = [
+        makeItem({ id: '2', title: 'Zebra', state: WorkItemState.InProgress, sortOrder: 0 }),
+        makeItem({ id: '1', title: 'Alpha', state: WorkItemState.Paused, sortOrder: 1 }),
+      ];
+      workGraph.getItemsByState.mockReturnValue(items);
+
+      const children = provider.getChildren();
+      expect(children.map(c => c.title)).toEqual(['Zebra', 'Alpha']);
+    });
+
+    it('should sort items without sortOrder after those with sortOrder', () => {
       const items = [
         makeItem({ id: '2', title: 'Zebra', state: WorkItemState.InProgress }),
-        makeItem({ id: '1', title: 'Alpha', state: WorkItemState.Paused }),
+        makeItem({ id: '1', title: 'Alpha', state: WorkItemState.Paused, sortOrder: 0 }),
       ];
       workGraph.getItemsByState.mockReturnValue(items);
 
