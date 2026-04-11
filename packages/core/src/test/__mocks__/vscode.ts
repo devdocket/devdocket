@@ -64,9 +64,16 @@ const window = {
   showWarningMessage: vi.fn(),
   showErrorMessage: vi.fn(),
   showQuickPick: vi.fn(),
-  withProgress: vi.fn((_options: any, task: (progress: any, token: any) => Promise<any>) =>
-    task({ report: vi.fn() }, { isCancellationRequested: false, onCancellationRequested: vi.fn() }),
-  ),
+  withProgress: vi.fn((_options: any, task: (progress: any, token: any) => Promise<any>) => {
+    const cancellationEmitter = new MockEventEmitter();
+    return task(
+      { report: vi.fn() },
+      {
+        isCancellationRequested: false,
+        onCancellationRequested: cancellationEmitter.event,
+      },
+    );
+  }),
   registerTreeDataProvider: vi.fn(() => ({ dispose: vi.fn() })),
   createTreeView: vi.fn(() => {
     const selectionEmitter = new MockEventEmitter();
