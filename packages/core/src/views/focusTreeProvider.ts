@@ -100,6 +100,7 @@ export class FocusTreeProvider implements vscode.TreeDataProvider<WorkItem>, vsc
     const draggedId = draggedIds[0];
 
     if (!target) {
+      // moveToEnd is inherently state-scoped — no cross-state guard needed
       await this.workGraph.moveToEnd(draggedId);
       return;
     }

@@ -1,13 +1,18 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { EventEmitter } from 'vscode';
+import { EventEmitter, DataTransfer, DataTransferItem, window } from 'vscode';
 import { WorkItem, WorkItemState } from '../models/workItem';
 import { FocusTreeProvider } from '../views/focusTreeProvider';
+
+const DRAG_MIME_TYPE = 'application/vnd.code.tree.workcenter.focus';
 
 function createMockWorkGraph() {
   const emitter = new EventEmitter<void>();
   return {
     onDidChange: emitter.event,
     getItemsByState: vi.fn((..._states: WorkItemState[]) => [] as WorkItem[]),
+    getItem: vi.fn((_id: string) => undefined as WorkItem | undefined),
+    reorderItem: vi.fn(async (_draggedId: string, _targetId: string) => {}),
+    moveToEnd: vi.fn(async (_id: string) => {}),
     _fire: () => emitter.fire(),
   };
 }
@@ -154,6 +159,58 @@ describe('FocusTreeProvider', () => {
     it('should return empty array when no focus items exist', () => {
       workGraph.getItemsByState.mockReturnValue([]);
       expect(provider.getChildren()).toEqual([]);
+    });
+  });
+
+  describe('handleDrop', () => {
+    it('should reject drop when dragged item and target have different states', async () => {
+      const inProgressItem = makeItem({ id: 'a', state: WorkItemState.InProgress });
+      const pausedItem = makeItem({ id: 'b', state: WorkItemState.Paused });
+      workGraph.getItem.mockReturnValue(inProgressItem);
+
+      const dataTransfer = new DataTransfer();
+      dataTransfer.set(DRAG_MIME_TYPE, new DataTransferItem(['a']));
+
+      await provider.handleDrop(pausedItem, dataTransfer);
+
+      expect(workGraph.reorderItem).not.toHaveBeenCalled();
+      expect(window.showInformationMessage).toHaveBeenCalledWith(
+        'WorkCenter: Cannot reorder items across different states.'
+      );
+    });
+
+    it('should allow drop when dragged item and target have same state', async () => {
+      const item1 = makeItem({ id: 'a', state: WorkItemState.InProgress });
+      const item2 = makeItem({ id: 'b', state: WorkItemState.InProgress });
+      workGraph.getItem.mockReturnValue(item1);
+
+      const dataTransfer = new DataTransfer();
+      dataTransfer.set(DRAG_MIME_TYPE, new DataTransferItem(['a']));
+
+      await provider.handleDrop(item2, dataTransfer);
+
+      expect(workGraph.reorderItem).toHaveBeenCalledWith('a', 'b');
+    });
+
+    it('should call moveToEnd when target is undefined', async () => {
+      const dataTransfer = new DataTransfer();
+      dataTransfer.set(DRAG_MIME_TYPE, new DataTransferItem(['a']));
+
+      await provider.handleDrop(undefined, dataTransfer);
+
+      expect(workGraph.moveToEnd).toHaveBeenCalledWith('a');
+    });
+
+    it('should no-op when dragged item is not found', async () => {
+      const target = makeItem({ id: 'b', state: WorkItemState.InProgress });
+      workGraph.getItem.mockReturnValue(undefined);
+
+      const dataTransfer = new DataTransfer();
+      dataTransfer.set(DRAG_MIME_TYPE, new DataTransferItem(['a']));
+
+      await provider.handleDrop(target, dataTransfer);
+
+      expect(workGraph.reorderItem).not.toHaveBeenCalled();
     });
   });
 
