@@ -113,31 +113,23 @@ export class QueueTreeProvider implements vscode.TreeDataProvider<QueueElement>,
   }
 
   async handleDrop(target: QueueElement | undefined, dataTransfer: vscode.DataTransfer): Promise<void> {
-    // Treat group node targets as "move to end"
-    if (target && isProviderGroupNode(target)) {
-      target = undefined;
-    }
-
     const transferItem = dataTransfer.get(DRAG_MIME_TYPE);
     if (!transferItem) { return; }
 
     const rawValue: unknown = transferItem.value;
     if (!Array.isArray(rawValue) || rawValue.length !== 1 || typeof rawValue[0] !== 'string') { return; }
 
-    const draggedIds: string[] = rawValue;
+    const draggedId: string = rawValue[0];
 
-    const draggedId = draggedIds[0];
-
-    if (!target) {
+    // Group node targets or no target → move to end
+    if (!target || isProviderGroupNode(target)) {
       await this.workGraph.moveToEnd(draggedId);
       return;
     }
 
-    // After filtering out group nodes above, target is always a WorkItem
-    const targetItem = target as WorkItem;
-    if (draggedId === targetItem.id) { return; }
+    if (draggedId === target.id) { return; }
 
-    await this.workGraph.reorderItem(draggedId, targetItem.id);
+    await this.workGraph.reorderItem(draggedId, target.id);
   }
 
   dispose(): void {
