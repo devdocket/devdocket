@@ -206,7 +206,7 @@ describe('AiReviewAction', () => {
       expect(window.withProgress).not.toHaveBeenCalled();
     });
 
-    it('prompts for auth and exits silently when user declines', async () => {
+    it('shows warning when GitHub auth is unavailable', async () => {
       vi.mocked(authentication.getSession).mockResolvedValue(null as never);
 
       const item = createWorkItem();
@@ -215,7 +215,9 @@ describe('AiReviewAction', () => {
       expect(authentication.getSession).toHaveBeenCalledWith('github', ['repo'], {
         createIfNone: true,
       });
-      expect(window.showWarningMessage).not.toHaveBeenCalled();
+      expect(window.showWarningMessage).toHaveBeenCalledWith(
+        expect.stringContaining('GitHub authentication is required'),
+      );
     });
 
     it('does not open document when cancelled after analysis', async () => {

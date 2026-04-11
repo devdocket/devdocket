@@ -112,6 +112,9 @@ export abstract class BasePrAction implements WorkCenterAction {
       createIfNone: true,
     });
     if (!session) {
+      vscode.window.showWarningMessage(
+        `${this.progressTitle}: GitHub authentication is required to fetch the PR diff.`,
+      );
       return undefined;
     }
 
