@@ -240,10 +240,11 @@ export class WorkGraph {
     const siblings = this.getItemsByState(item.state)
       .sort((a, b) => (a.sortOrder ?? Number.MAX_SAFE_INTEGER) - (b.sortOrder ?? Number.MAX_SAFE_INTEGER));
 
-    // Normalize any missing sortOrder values so swaps are consistent
+    // Normalize sortOrder values to sequential indices so swaps are consistent
+    // even when items have duplicate or missing sortOrder (e.g. after state transitions)
     const toNormalize: WorkItem[] = [];
     for (let i = 0; i < siblings.length; i++) {
-      if (siblings[i].sortOrder === undefined) {
+      if (siblings[i].sortOrder !== i) {
         const normalized = { ...siblings[i], sortOrder: i, updatedAt: Date.now() };
         siblings[i] = normalized;
         toNormalize.push(normalized);
