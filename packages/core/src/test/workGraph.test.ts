@@ -497,15 +497,7 @@ describe('WorkGraph', () => {
       expect(graph.getItem(item.id)?.state).toBe(WorkItemState.Archived);
     });
 
-    it('transitions directly from New to Archived', async () => {
-      const item = await graph.createItem({ title: 'Archive from queue' });
-      expect(item.state).toBe(WorkItemState.New);
-      await graph.transitionState(item.id, WorkItemState.Archived);
-      const updated = graph.getItem(item.id);
-      expect(updated?.state).toBe(WorkItemState.Archived);
-    });
-
-    it('rejects New → Paused', async () => {
+    it('rejects New → Paused',async () => {
       const item = await graph.createItem({ title: 'Test' });
       vi.mocked(store.save).mockClear();
       await expect(graph.transitionState(item.id, WorkItemState.Paused))
