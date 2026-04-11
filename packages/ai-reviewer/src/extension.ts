@@ -1,5 +1,9 @@
 import * as vscode from 'vscode';
 import { AiReviewAction } from './aiReviewAction';
+import { AiWalkthroughAction } from './aiWalkthroughAction';
+import { WalkthroughParticipant } from './walkthroughParticipant';
+import { RepoManager } from './repoManager';
+import { registerAllTools } from './tools';
 import type { WorkCenterApi } from './types';
 
 export async function activate(context: vscode.ExtensionContext): Promise<void> {
@@ -30,9 +34,22 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     return;
   }
 
-  const action = new AiReviewAction();
-  const actionDisposable = api.registerAction(action);
-  context.subscriptions.push(actionDisposable);
+  // Register code review action (unchanged)
+  const reviewAction = new AiReviewAction();
+  context.subscriptions.push(api.registerAction(reviewAction));
+
+  // Set up walkthrough infrastructure
+  const repoManager = new RepoManager(context.globalStorageUri);
+  const walkthroughAction = new AiWalkthroughAction(repoManager);
+  context.subscriptions.push(api.registerAction(walkthroughAction));
+
+  // Register LM tools
+  const toolDisposables = registerAllTools();
+  toolDisposables.forEach(d => context.subscriptions.push(d));
+
+  // Register chat participant
+  const participant = new WalkthroughParticipant(repoManager);
+  context.subscriptions.push(participant.register());
 }
 
 export function deactivate(): void {

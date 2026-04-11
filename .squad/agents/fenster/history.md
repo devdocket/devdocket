@@ -211,6 +211,14 @@ Patterns documented in `.squad/decisions.md` under "Code Review Fix Patterns" (2
 - URL-encoding is required for org, project, and workItemType in all API URLs using `encodeURIComponent()` to handle special characters and spaces.
 - Grouping work items by `(project, workItemType)` before fetching states minimizes API calls when multiple items share the same type.
 
+## Issue #12: AI-powered PR actions (2025-07-22)
+
+### Learnings
+- **BasePrAction extraction pattern**: Shared PR action logic (diff fetching, LLM interaction, prompt loading, workspace validation) lives in `basePrAction.ts`. Subclasses only provide: `id`, `label`, `configSection`, `defaultPromptContent`, `progressTitle`, `outputHeader`, `confirmationMessage`, and `getRuntimeInstructions()`.
+- **Re-export for backward compatibility**: When extracting a function to a base module, re-export it from the original module (`export { sanitizePrUrl }` in `aiReviewAction.ts`) so existing test imports don't break.
+- **Enhanced default prompt**: `defaultPrompt.ts` now includes all 10 items from superpowers Step 3 (including "Don't flag what CI catches", enhanced false-positive guidance with "Never assert...deprecated", and "Context-shift analysis"). Also adds Holistic Assessment subsection, Codebase Consistency section, and "Using ✅ Verified" paragraph to Severity Classification.
+- **Extension registration**: `extension.ts` creates and registers both `AiReviewAction` and `AiWalkthroughAction` — each gets its own `api.registerAction()` call pushed to `context.subscriptions`.
+- **Configuration and prompt sourcing**: `AiReviewAction` uses the `workcenterAiReview` config section with `customPromptPath` in `package.json`. The walkthrough uses the `@walkthrough` chat participant with a built-in prompt — no separate config entry.
 ## Issue #189: Dismissed items reappearing in inbox (2025-01-24)
 
 ### Root Cause

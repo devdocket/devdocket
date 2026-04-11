@@ -2,6 +2,43 @@
 
 ## Active Decisions
 
+### BasePrAction Extraction Pattern (2026-07-22)
+
+**Author:** Fenster (Extension Dev)  
+**Status:** Implemented
+
+Shared PR action logic (diff fetching, GitHub auth, LLM model selection, prompt loading with custom file support, workspace path validation) is extracted into `BasePrAction` in `basePrAction.ts`. `AiReviewAction` extends this base class and provides configuration properties plus a `getRuntimeInstructions()` method, while `AiWalkthroughAction` is a standalone `WorkCenterAction` that prepares a worktree and opens the `@walkthrough` chat participant.
+
+**Rationale:**
+- Eliminates code duplication across AI actions that all follow the same fetch-diff → confirm → analyze → display pattern
+- New actions require ~25 lines instead of ~240, reducing bug surface
+- The code review action (`AiReviewAction`) has its own VS Code configuration section (`workcenterAiReview`) for a custom prompt path
+- The walkthrough action (`AiWalkthroughAction`) uses the `@walkthrough` chat participant with a built-in prompt and has no custom prompt config
+- Re-exporting `sanitizePrUrl` from `aiReviewAction.ts` preserves test backward compatibility without requiring test refactoring
+
+**Implementation:**
+- `packages/ai-reviewer/src/basePrAction.ts` — Added base class for shared PR action logic (used by code review)
+- `packages/ai-reviewer/src/aiReviewAction.ts` — Refactored into a thin subclass of `BasePrAction`
+- `packages/ai-reviewer/src/aiWalkthroughAction.ts` — Added lightweight action that prepares worktree and opens `@walkthrough` chat
+- `packages/ai-reviewer/src/walkthroughParticipant.ts` — Chat participant with tool-use loop
+- `packages/ai-reviewer/src/walkthroughPrompt.ts` — Interactive walkthrough prompt builder
+- `packages/ai-reviewer/src/repoManager.ts` — Git clone + worktree management
+- `packages/ai-reviewer/src/tools/` — 6 LM tools for repo access
+- `packages/ai-reviewer/src/defaultPrompt.ts` — Updated review prompt with superpowers content
+- `packages/ai-reviewer/src/extension.ts` — Registers both actions, chat participant, and LM tools
+- `packages/ai-reviewer/package.json` — Updated metadata, added chatParticipants + languageModelTools contributions
+
+**Test Coverage:** Existing review action coverage plus new walkthrough, participant, tool, and RepoManager tests — all passing at implementation time
+**Result:** All relevant test suites passing at implementation time
+
+**References:**
+- Issue #12
+- `packages/ai-reviewer/src/basePrAction.ts`
+- `packages/ai-reviewer/src/aiReviewAction.ts`
+- `packages/ai-reviewer/src/extension.ts`
+
+---
+
 ### ADO State-Category-Based Filtering (2025-01-22)
 
 **Author:** Fenster (Extension Dev)  
