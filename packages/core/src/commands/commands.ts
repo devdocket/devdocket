@@ -2,6 +2,7 @@ import * as vscode from 'vscode';
 import { WorkItemState } from '../models/workItem';
 import { WorkGraph } from '../services/workGraph';
 import { ActionRegistry } from '../services/actionRegistry';
+import { ProviderRegistry } from '../services/providerRegistry';
 import { DiscoveredStateStore } from '../storage/discoveredStateStore';
 import { WorkItemEditorPanel } from '../views/workItemEditorPanel';
 import { InboxItem } from '../views/inboxTreeProvider';
@@ -233,6 +234,17 @@ async function handleDismissFromInbox(
   }
 }
 
+async function handleRefresh(providerRegistry: ProviderRegistry): Promise<void> {
+  logger.info('Manual refresh triggered');
+  await vscode.window.withProgress(
+    {
+      location: vscode.ProgressLocation.Window,
+      title: 'WorkCenter: Refreshing…',
+    },
+    () => providerRegistry.refreshAll(),
+  );
+}
+
 async function handleAcceptFromSources(
   workGraph: WorkGraph,
   stateStore: DiscoveredStateStore,
@@ -284,8 +296,11 @@ export function registerCommands(
   workGraph: WorkGraph,
   actionRegistry: ActionRegistry,
   stateStore: DiscoveredStateStore,
+  providerRegistry: ProviderRegistry,
 ): void {
   context.subscriptions.push(
+    vscode.commands.registerCommand('workcenter.refresh',
+      wrapCommand('Failed to refresh', () => handleRefresh(providerRegistry))),
     vscode.commands.registerCommand('workcenter.createItem',
       wrapCommand('Failed to create item', () => handleCreateItem(workGraph))),
     vscode.commands.registerCommand('workcenter.acceptToFocus',
