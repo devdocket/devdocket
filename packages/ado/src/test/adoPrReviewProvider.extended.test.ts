@@ -457,6 +457,32 @@ describe('AdoPrReviewProvider — extended', () => {
   });
 
   describe('PR URL construction in results', () => {
+    it('constructs URL from org/project/repo when webUrl is undefined', async () => {
+      const prWithoutWebUrl = {
+        pullRequestId: 99,
+        title: 'No webUrl PR',
+        description: 'A PR without webUrl',
+        repository: {
+          name: 'myrepo',
+          project: { name: 'MyProject' },
+        },
+      };
+
+      mockFetch
+        .mockResolvedValueOnce(mockConnectionData())
+        .mockResolvedValueOnce({
+          ok: true,
+          json: async () => ({ value: [prWithoutWebUrl] }),
+        });
+
+      const listener = vi.fn();
+      provider.onDidDiscoverItems(listener);
+      await provider.refresh();
+
+      const items = listener.mock.calls[0][0];
+      expect(items[0].url).toBe('https://dev.azure.com/myorg/MyProject/_git/myrepo/pullrequest/99');
+    });
+
     it('constructs correct PR URL from repository webUrl', async () => {
       mockFetch
         .mockResolvedValueOnce(mockConnectionData())

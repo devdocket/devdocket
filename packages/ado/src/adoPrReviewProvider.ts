@@ -9,7 +9,7 @@ interface AdoPullRequest {
   repository: {
     name: string;
     project: { name: string };
-    webUrl: string;
+    webUrl?: string;
   };
 }
 
@@ -254,11 +254,12 @@ export class AdoPrReviewProvider extends BaseProvider {
     const items: DiscoveredItem[] = prData.value.map((pr) => {
       const projectName = pr.repository.project.name;
       const repoName = pr.repository.name;
+      const repoUrl = pr.repository.webUrl ?? `https://dev.azure.com/${encodeURIComponent(this.org)}/${encodeURIComponent(projectName)}/_git/${encodeURIComponent(repoName)}`;
       return {
         externalId: `${projectName}/${repoName}/${pr.pullRequestId}`,
         title: `PR ${pr.pullRequestId}: ${pr.title}`,
         description: pr.description?.slice(0, 200),
-        url: `${pr.repository.webUrl}/pullrequest/${pr.pullRequestId}`,
+        url: `${repoUrl}/pullrequest/${pr.pullRequestId}`,
         group: `${projectName}/${repoName}`,
         reason: 'review_requested',
       };
