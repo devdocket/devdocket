@@ -23,11 +23,19 @@ export function parseAdoProjectsConfig(
   projects: string[],
   legacyOrganization: string,
 ): OrgConfig[] {
-  const hasNewFormatEntry = projects.some(p => p.includes('/'));
+  const trimmedLegacyOrg = legacyOrganization.trim();
 
-  // Legacy mode: no entry contains '/' and the deprecated org setting is present
-  if (!hasNewFormatEntry && legacyOrganization) {
-    return [{ org: legacyOrganization, projects: projects.map(p => p.trim()).filter(Boolean) }];
+  // Determine whether entries use new org/project format by checking for
+  // valid slash-separated entries (ignoring malformed ones like "/" or "/proj")
+  const hasNewFormatEntry = projects.some(p => {
+    const t = p.trim();
+    const idx = t.indexOf('/');
+    return idx > 0 && idx < t.length - 1;
+  });
+
+  // Legacy mode: no entry contains a valid '/' and the deprecated org setting is present
+  if (!hasNewFormatEntry && trimmedLegacyOrg) {
+    return [{ org: trimmedLegacyOrg, projects: projects.map(p => p.trim()).filter(Boolean) }];
   }
 
   // Nothing to monitor
@@ -54,8 +62,8 @@ export function parseAdoProjectsConfig(
         orgMap.set(trimmed, { projects: [], wholeOrg: true });
       }
     } else {
-      const org = trimmed.substring(0, slashIndex);
-      const project = trimmed.substring(slashIndex + 1);
+      const org = trimmed.substring(0, slashIndex).trim();
+      const project = trimmed.substring(slashIndex + 1).trim();
       if (!org || !project) {
         continue; // skip malformed entries like "/", "org/", or "/project"
       }

@@ -136,7 +136,7 @@ export class AdoWorkItemProvider extends BaseProvider {
       }
 
       if (orgConfig.projects.length > 0 && validProjects.length === 0) {
-        logger.warn('All configured ADO projects are invalid — skipping fetch');
+        logger.warn(`All configured ADO projects are invalid for org ${orgConfig.org} — skipping fetch`);
         continue;
       }
 

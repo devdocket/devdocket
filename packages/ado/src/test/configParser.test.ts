@@ -23,6 +23,18 @@ describe('parseAdoProjectsConfig', () => {
         { org: 'myorg', projects: ['OnlyProject'] },
       ]);
     });
+
+    it('trims whitespace-only legacy org to empty (no providers)', () => {
+      const result = parseAdoProjectsConfig([], '   ');
+      expect(result).toEqual<OrgConfig[]>([]);
+    });
+
+    it('trims whitespace from legacy org value', () => {
+      const result = parseAdoProjectsConfig(['Proj'], '  myorg  ');
+      expect(result).toEqual<OrgConfig[]>([
+        { org: 'myorg', projects: ['Proj'] },
+      ]);
+    });
   });
 
   describe('new format parsing', () => {
@@ -121,6 +133,22 @@ describe('parseAdoProjectsConfig', () => {
     it('skips entry with leading slash (no org)', () => {
       const result = parseAdoProjectsConfig(['/project'], '');
       expect(result).toEqual<OrgConfig[]>([]);
+    });
+
+    it('malformed slash-only entry does not disable legacy fallback', () => {
+      const result = parseAdoProjectsConfig(['ProjectA', '/'], 'myorg');
+      // '/' is not a valid new-format entry, so legacy mode applies.
+      // The '/' passes through as a project name; downstream validation handles it.
+      expect(result).toEqual<OrgConfig[]>([
+        { org: 'myorg', projects: ['ProjectA', '/'] },
+      ]);
+    });
+
+    it('trims org and project parts after splitting', () => {
+      const result = parseAdoProjectsConfig(['org / proj'], '');
+      expect(result).toEqual<OrgConfig[]>([
+        { org: 'org', projects: ['proj'] },
+      ]);
     });
 
     it('handles entry with multiple slashes (first slash splits)', () => {
