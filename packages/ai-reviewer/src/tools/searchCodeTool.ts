@@ -26,9 +26,9 @@ export function registerSearchCodeTool(): vscode.Disposable {
       }
 
       try {
-        const args = ['grep', '-n', '--no-color', `-m`, String(limit), '--', pattern];
+        const args = ['grep', '-n', '--no-color', '-m', String(limit), '-e', pattern];
         if (fileGlob) {
-          args.push(fileGlob);
+          args.push('--', fileGlob);
         }
         const output = await gitExec(args, worktreePath);
 
