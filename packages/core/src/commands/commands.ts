@@ -143,6 +143,72 @@ async function batchTransition(
   }
 }
 
+/** Shared logic for batch-accepting discovered items (Inbox or Sources). */
+interface AcceptableItem {
+  providerId: string;
+  externalId: string;
+  title: string;
+  url?: string;
+  group?: string;
+}
+
+async function batchAcceptItems(
+  workGraph: WorkGraph,
+  stateStore: DiscoveredStateStore,
+  items: AcceptableItem[],
+  logLabel: string,
+): Promise<void> {
+  const stateUpdates: Array<{ providerId: string; externalId: string; state: InboxState }> = [];
+  const createdIds: string[] = [];
+  let failed = 0;
+
+  for (const item of items) {
+    const existing = workGraph.findItemByProvenance(item.providerId, item.externalId);
+    if (existing) {
+      stateUpdates.push({ providerId: item.providerId, externalId: item.externalId, state: 'accepted' });
+      continue;
+    }
+    try {
+      const createdItem = await workGraph.createItem(
+        { title: formatItemTitle(item) },
+        { providerId: item.providerId, externalId: item.externalId, url: item.url },
+      );
+      createdIds.push(createdItem.id);
+      stateUpdates.push({ providerId: item.providerId, externalId: item.externalId, state: 'accepted' });
+    } catch (err: unknown) {
+      failed++;
+      logger.error(`Failed to accept ${logLabel} "${item.title}"`, err);
+    }
+  }
+
+  if (stateUpdates.length > 0) {
+    try {
+      await stateStore.setStates(stateUpdates);
+    } catch (err: unknown) {
+      for (const id of createdIds) {
+        try { await workGraph.deleteItem(id); } catch (rollbackErr: unknown) {
+          logger.error('Failed to roll back created item after batch setStates failure', rollbackErr);
+        }
+      }
+      handleCommandError('Failed to update states after accepting items', err);
+      return;
+    }
+  }
+
+  const total = stateUpdates.length;
+  if (total > 0) {
+    const msg = failed > 0
+      ? `Accepted ${total} of ${total + failed} items to Queue`
+      : `Accepted ${total} item${total === 1 ? '' : 's'} to Queue`;
+    void vscode.window.showInformationMessage(msg);
+  }
+  if (failed > 0) {
+    void vscode.window.showErrorMessage(
+      `WorkCenter: Failed to accept ${failed} item(s); see Output for details`,
+    );
+  }
+}
+
 async function handleCreateItem(workGraph: WorkGraph): Promise<void> {
   const title = await vscode.window.showInputBox({
     prompt: 'Work item title',
@@ -354,57 +420,7 @@ async function handleAcceptFromInbox(
     return;
   }
 
-  // Batch accept: create work items, then batch-set states
-  const stateUpdates: Array<{ providerId: string; externalId: string; state: InboxState }> = [];
-  const createdIds: string[] = [];
-  let failed = 0;
-
-  for (const inboxItem of items) {
-    const existing = workGraph.findItemByProvenance(inboxItem.providerId, inboxItem.externalId);
-    if (existing) {
-      stateUpdates.push({ providerId: inboxItem.providerId, externalId: inboxItem.externalId, state: 'accepted' });
-      continue;
-    }
-    try {
-      const createdItem = await workGraph.createItem(
-        { title: formatItemTitle(inboxItem) },
-        { providerId: inboxItem.providerId, externalId: inboxItem.externalId, url: inboxItem.url },
-      );
-      createdIds.push(createdItem.id);
-      stateUpdates.push({ providerId: inboxItem.providerId, externalId: inboxItem.externalId, state: 'accepted' });
-    } catch (err: unknown) {
-      failed++;
-      logger.error(`Failed to accept inbox item "${inboxItem.title}"`, err);
-    }
-  }
-
-  if (stateUpdates.length > 0) {
-    try {
-      await stateStore.setStates(stateUpdates);
-    } catch (err: unknown) {
-      // Roll back all created work items
-      for (const id of createdIds) {
-        try { await workGraph.deleteItem(id); } catch (rollbackErr: unknown) {
-          logger.error('Failed to roll back created item after batch setStates failure', rollbackErr);
-        }
-      }
-      handleCommandError('Failed to update states after accepting items', err);
-      return;
-    }
-  }
-
-  const total = stateUpdates.length;
-  if (total > 0) {
-    const msg = failed > 0
-      ? `Accepted ${total} of ${total + failed} items to Queue`
-      : `Accepted ${total} item${total === 1 ? '' : 's'} to Queue`;
-    void vscode.window.showInformationMessage(msg);
-  }
-  if (failed > 0) {
-    void vscode.window.showErrorMessage(
-      `WorkCenter: Failed to accept ${failed} item(s); see Output for details`,
-    );
-  }
+  await batchAcceptItems(workGraph, stateStore, items, 'inbox item');
 }
 
 async function acceptSingleInboxItem(
@@ -502,56 +518,7 @@ async function handleAcceptFromSources(
     return;
   }
 
-  // Batch accept (mirrors batch accept from inbox)
-  const stateUpdates: Array<{ providerId: string; externalId: string; state: InboxState }> = [];
-  const createdIds: string[] = [];
-  let failed = 0;
-
-  for (const sourceItem of items) {
-    const existing = workGraph.findItemByProvenance(sourceItem.providerId, sourceItem.externalId);
-    if (existing) {
-      stateUpdates.push({ providerId: sourceItem.providerId, externalId: sourceItem.externalId, state: 'accepted' });
-      continue;
-    }
-    try {
-      const createdItem = await workGraph.createItem(
-        { title: formatItemTitle(sourceItem) },
-        { providerId: sourceItem.providerId, externalId: sourceItem.externalId, url: sourceItem.url },
-      );
-      createdIds.push(createdItem.id);
-      stateUpdates.push({ providerId: sourceItem.providerId, externalId: sourceItem.externalId, state: 'accepted' });
-    } catch (err: unknown) {
-      failed++;
-      logger.error(`Failed to accept source item "${sourceItem.title}"`, err);
-    }
-  }
-
-  if (stateUpdates.length > 0) {
-    try {
-      await stateStore.setStates(stateUpdates);
-    } catch (err: unknown) {
-      for (const id of createdIds) {
-        try { await workGraph.deleteItem(id); } catch (rollbackErr: unknown) {
-          logger.error('Failed to roll back created item after batch setStates failure', rollbackErr);
-        }
-      }
-      handleCommandError('Failed to update states after accepting items', err);
-      return;
-    }
-  }
-
-  const total = stateUpdates.length;
-  if (total > 0) {
-    const msg = failed > 0
-      ? `Accepted ${total} of ${total + failed} items to Queue`
-      : `Accepted ${total} item${total === 1 ? '' : 's'} to Queue`;
-    void vscode.window.showInformationMessage(msg);
-  }
-  if (failed > 0) {
-    void vscode.window.showErrorMessage(
-      `WorkCenter: Failed to accept ${failed} item(s); see Output for details`,
-    );
-  }
+  await batchAcceptItems(workGraph, stateStore, items, 'source item');
 }
 
 async function acceptSingleSourceItem(
