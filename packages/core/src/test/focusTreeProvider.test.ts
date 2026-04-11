@@ -113,26 +113,33 @@ describe('FocusTreeProvider', () => {
   });
 
   describe('getChildren', () => {
-    it('should return items sorted by sortOrder', () => {
+    it('should return items sorted by state priority then sortOrder', () => {
       const items = [
-        makeItem({ id: '2', title: 'Zebra', state: WorkItemState.InProgress, sortOrder: 0 }),
-        makeItem({ id: '1', title: 'Alpha', state: WorkItemState.Paused, sortOrder: 1 }),
+        makeItem({ id: '1', title: 'Paused-0', state: WorkItemState.Paused, sortOrder: 0 }),
+        makeItem({ id: '2', title: 'Active-0', state: WorkItemState.InProgress, sortOrder: 0 }),
+        makeItem({ id: '3', title: 'Active-1', state: WorkItemState.InProgress, sortOrder: 1 }),
+        makeItem({ id: '4', title: 'Paused-1', state: WorkItemState.Paused, sortOrder: 1 }),
       ];
       workGraph.getItemsByState.mockReturnValue(items);
 
       const children = provider.getChildren();
-      expect(children.map(c => c.title)).toEqual(['Zebra', 'Alpha']);
+      expect(children.map(c => c.title)).toEqual([
+        'Active-0', 'Active-1', 'Paused-0', 'Paused-1',
+      ]);
     });
 
-    it('should sort items without sortOrder after those with sortOrder', () => {
+    it('should sort items without sortOrder after those with sortOrder within the same state', () => {
       const items = [
-        makeItem({ id: '2', title: 'Zebra', state: WorkItemState.InProgress }),
-        makeItem({ id: '1', title: 'Alpha', state: WorkItemState.Paused, sortOrder: 0 }),
+        makeItem({ id: '1', title: 'Active-no-order', state: WorkItemState.InProgress }),
+        makeItem({ id: '2', title: 'Active-ordered', state: WorkItemState.InProgress, sortOrder: 0 }),
+        makeItem({ id: '3', title: 'Paused-ordered', state: WorkItemState.Paused, sortOrder: 0 }),
       ];
       workGraph.getItemsByState.mockReturnValue(items);
 
       const children = provider.getChildren();
-      expect(children.map(c => c.title)).toEqual(['Alpha', 'Zebra']);
+      expect(children.map(c => c.title)).toEqual([
+        'Active-ordered', 'Active-no-order', 'Paused-ordered',
+      ]);
     });
 
     it('should request InProgress and Paused states', () => {
