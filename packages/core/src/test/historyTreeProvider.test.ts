@@ -207,29 +207,29 @@ describe('HistoryTreeProvider', () => {
   });
 
   describe('contextValue', () => {
-    it('should set contextValue to historyItem.hasUrl for Done item with url', () => {
+    it('should set contextValue to historyItem.done.hasUrl for Done item with url', () => {
       const item = makeItem({ id: '1', title: 'X', url: 'https://example.com', state: WorkItemState.Done });
-      expect(provider.getTreeItem(item).contextValue).toBe('historyItem.hasUrl');
+      expect(provider.getTreeItem(item).contextValue).toBe('historyItem.done.hasUrl');
     });
 
-    it('should set contextValue to historyItem for Done item without url', () => {
+    it('should set contextValue to historyItem.done for Done item without url', () => {
       const item = makeItem({ id: '1', title: 'X', state: WorkItemState.Done });
-      expect(provider.getTreeItem(item).contextValue).toBe('historyItem');
+      expect(provider.getTreeItem(item).contextValue).toBe('historyItem.done');
     });
 
-    it('should set contextValue to historyItem.hasUrl for Archived item with url', () => {
+    it('should set contextValue to historyItem.archived.hasUrl for Archived item with url', () => {
       const item = makeItem({ id: '1', title: 'X', state: WorkItemState.Archived, url: 'https://github.com/issue/1' });
-      expect(provider.getTreeItem(item).contextValue).toBe('historyItem.hasUrl');
+      expect(provider.getTreeItem(item).contextValue).toBe('historyItem.archived.hasUrl');
     });
 
-    it('should set contextValue to historyItem for Archived item without url', () => {
+    it('should set contextValue to historyItem.archived for Archived item without url', () => {
       const item = makeItem({ id: '1', title: 'X', state: WorkItemState.Archived });
-      expect(provider.getTreeItem(item).contextValue).toBe('historyItem');
+      expect(provider.getTreeItem(item).contextValue).toBe('historyItem.archived');
     });
 
-    it('should set contextValue to historyItem when url is undefined', () => {
+    it('should set contextValue to historyItem.done when url is undefined', () => {
       const item = makeItem({ id: '1', title: 'X', state: WorkItemState.Done, url: undefined });
-      expect(provider.getTreeItem(item).contextValue).toBe('historyItem');
+      expect(provider.getTreeItem(item).contextValue).toBe('historyItem.done');
     });
   });
 

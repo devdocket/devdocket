@@ -6,7 +6,7 @@ import type { WorkGraph } from '../services/workGraph';
 import type { ActionRegistry } from '../services/actionRegistry';
 import type { DiscoveredStateStore } from '../storage/discoveredStateStore';
 import type { InboxItem, InboxProviderNode, InboxGroupNode } from '../views/inboxTreeProvider';
-import type { SourceItemNode } from '../views/sourcesTreeProvider';
+import type { SourceItemNode, SourceProviderNode, SourceGroupNode } from '../views/sourcesTreeProvider';
 import { WorkItemEditorPanel } from '../views/workItemEditorPanel';
 import { logger } from '../services/logger';
 
@@ -146,6 +146,7 @@ describe('registerCommands', () => {
       'workcenter.completeItem',
       'workcenter.pauseItem',
       'workcenter.resumeItem',
+      'workcenter.deleteItem',
       'workcenter.editItem',
       'workcenter.openInBrowser',
       'workcenter.runAction',
@@ -154,6 +155,7 @@ describe('registerCommands', () => {
       'workcenter.acceptFromInbox',
       'workcenter.dismissFromInbox',
       'workcenter.acceptFromSources',
+      'workcenter.dismissFromSources',
     ];
     for (const cmd of expected) {
       expect(commandHandlers.has(cmd), `missing command: ${cmd}`).toBe(true);
@@ -832,6 +834,381 @@ describe('registerCommands', () => {
       const groupNode: InboxGroupNode = { kind: 'group', providerId: 'github', groupName: 'org/repo', unseenCount: 3 };
 
       await invoke('workcenter.dismissFromInbox', providerNode, [providerNode, groupNode]);
+
+      expect(stateStore.setState).not.toHaveBeenCalled();
+      expect(stateStore.setStates).not.toHaveBeenCalled();
+    });
+  });
+
+  // ── batch state-transition commands (multi-select) ──────────────────
+
+  describe('batch acceptToFocus (multi-select)', () => {
+    it('transitions multiple items to InProgress', async () => {
+      const items = [{ id: 'wc-1' }, { id: 'wc-2' }, { id: 'wc-3' }];
+      await invoke('workcenter.acceptToFocus', items[0], items);
+
+      expect(workGraph.transitionState).toHaveBeenCalledTimes(3);
+      expect(workGraph.transitionState).toHaveBeenCalledWith('wc-1', WorkItemState.InProgress);
+      expect(workGraph.transitionState).toHaveBeenCalledWith('wc-2', WorkItemState.InProgress);
+      expect(workGraph.transitionState).toHaveBeenCalledWith('wc-3', WorkItemState.InProgress);
+      expect(vscode.window.showInformationMessage).toHaveBeenCalledWith('Moved 3 items to Focus');
+    });
+
+    it('uses single-item path when one item selected', async () => {
+      const item = { id: 'wc-1' };
+      await invoke('workcenter.acceptToFocus', item, [item]);
+
+      expect(workGraph.transitionState).toHaveBeenCalledWith('wc-1', WorkItemState.InProgress);
+      expect(vscode.window.showInformationMessage).not.toHaveBeenCalled();
+    });
+
+    it('continues after partial failure', async () => {
+      workGraph.transitionState
+        .mockResolvedValueOnce(undefined)
+        .mockRejectedValueOnce(new Error('bad state'))
+        .mockResolvedValueOnce(undefined);
+      const items = [{ id: 'wc-1' }, { id: 'wc-2' }, { id: 'wc-3' }];
+
+      await invoke('workcenter.acceptToFocus', items[0], items);
+
+      expect(workGraph.transitionState).toHaveBeenCalledTimes(3);
+      expect(vscode.window.showErrorMessage).toHaveBeenCalledWith(
+        expect.stringContaining('Failed to transition item wc-2'),
+      );
+      expect(vscode.window.showInformationMessage).toHaveBeenCalledWith('Moved 2 items to Focus');
+    });
+
+    it('does nothing when no items have ids', async () => {
+      await invoke('workcenter.acceptToFocus', {}, [{}]);
+      expect(workGraph.transitionState).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('batch archiveItem (multi-select)', () => {
+    it('archives multiple items', async () => {
+      const items = [{ id: 'wc-1' }, { id: 'wc-2' }];
+      await invoke('workcenter.archiveItem', items[0], items);
+
+      expect(workGraph.transitionState).toHaveBeenCalledTimes(2);
+      expect(workGraph.transitionState).toHaveBeenCalledWith('wc-1', WorkItemState.Archived);
+      expect(workGraph.transitionState).toHaveBeenCalledWith('wc-2', WorkItemState.Archived);
+      expect(vscode.window.showInformationMessage).toHaveBeenCalledWith('Archived 2 items');
+    });
+
+    it('uses single-item path when one item selected', async () => {
+      const item = { id: 'wc-1' };
+      await invoke('workcenter.archiveItem', item, [item]);
+
+      expect(workGraph.transitionState).toHaveBeenCalledWith('wc-1', WorkItemState.Archived);
+      expect(vscode.window.showInformationMessage).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('batch completeItem (multi-select)', () => {
+    it('completes multiple items', async () => {
+      const items = [{ id: 'wc-1' }, { id: 'wc-2' }];
+      await invoke('workcenter.completeItem', items[0], items);
+
+      expect(workGraph.transitionState).toHaveBeenCalledTimes(2);
+      expect(workGraph.transitionState).toHaveBeenCalledWith('wc-1', WorkItemState.Done);
+      expect(workGraph.transitionState).toHaveBeenCalledWith('wc-2', WorkItemState.Done);
+      expect(vscode.window.showInformationMessage).toHaveBeenCalledWith('Completed 2 items');
+    });
+
+    it('uses single-item path when one item selected', async () => {
+      const item = { id: 'wc-1' };
+      await invoke('workcenter.completeItem', item, [item]);
+
+      expect(workGraph.transitionState).toHaveBeenCalledWith('wc-1', WorkItemState.Done);
+      expect(vscode.window.showInformationMessage).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('batch pauseItem (multi-select)', () => {
+    it('pauses multiple items', async () => {
+      const items = [{ id: 'wc-1' }, { id: 'wc-2' }];
+      await invoke('workcenter.pauseItem', items[0], items);
+
+      expect(workGraph.transitionState).toHaveBeenCalledTimes(2);
+      expect(workGraph.transitionState).toHaveBeenCalledWith('wc-1', WorkItemState.Paused);
+      expect(workGraph.transitionState).toHaveBeenCalledWith('wc-2', WorkItemState.Paused);
+      expect(vscode.window.showInformationMessage).toHaveBeenCalledWith('Paused 2 items');
+    });
+
+    it('uses single-item path when one item selected', async () => {
+      const item = { id: 'wc-1' };
+      await invoke('workcenter.pauseItem', item, [item]);
+
+      expect(workGraph.transitionState).toHaveBeenCalledWith('wc-1', WorkItemState.Paused);
+      expect(vscode.window.showInformationMessage).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('batch resumeItem (multi-select)', () => {
+    it('resumes multiple items', async () => {
+      const items = [{ id: 'wc-1' }, { id: 'wc-2' }];
+      await invoke('workcenter.resumeItem', items[0], items);
+
+      expect(workGraph.transitionState).toHaveBeenCalledTimes(2);
+      expect(workGraph.transitionState).toHaveBeenCalledWith('wc-1', WorkItemState.InProgress);
+      expect(workGraph.transitionState).toHaveBeenCalledWith('wc-2', WorkItemState.InProgress);
+      expect(vscode.window.showInformationMessage).toHaveBeenCalledWith('Resumed 2 items');
+    });
+
+    it('uses single-item path when one item selected', async () => {
+      const item = { id: 'wc-1' };
+      await invoke('workcenter.resumeItem', item, [item]);
+
+      expect(workGraph.transitionState).toHaveBeenCalledWith('wc-1', WorkItemState.InProgress);
+      expect(vscode.window.showInformationMessage).not.toHaveBeenCalled();
+    });
+  });
+
+  // ── deleteItem ──────────────────────────────────────────────────────
+
+  describe('workcenter.deleteItem', () => {
+    it('deletes a single item', async () => {
+      await invoke('workcenter.deleteItem', { id: 'wc-1' });
+      expect(workGraph.deleteItem).toHaveBeenCalledWith('wc-1');
+    });
+
+    it('does nothing when item has no id', async () => {
+      await invoke('workcenter.deleteItem', {});
+      expect(workGraph.deleteItem).not.toHaveBeenCalled();
+    });
+
+    it('batch deletes multiple items', async () => {
+      const items = [{ id: 'wc-1' }, { id: 'wc-2' }, { id: 'wc-3' }];
+      await invoke('workcenter.deleteItem', items[0], items);
+
+      expect(workGraph.deleteItem).toHaveBeenCalledTimes(3);
+      expect(workGraph.deleteItem).toHaveBeenCalledWith('wc-1');
+      expect(workGraph.deleteItem).toHaveBeenCalledWith('wc-2');
+      expect(workGraph.deleteItem).toHaveBeenCalledWith('wc-3');
+      expect(vscode.window.showInformationMessage).toHaveBeenCalledWith('Deleted 3 items');
+    });
+
+    it('uses single-item path when one item selected', async () => {
+      const item = { id: 'wc-1' };
+      await invoke('workcenter.deleteItem', item, [item]);
+
+      expect(workGraph.deleteItem).toHaveBeenCalledWith('wc-1');
+      expect(vscode.window.showInformationMessage).not.toHaveBeenCalled();
+    });
+
+    it('continues after partial failure in batch', async () => {
+      workGraph.deleteItem
+        .mockResolvedValueOnce(undefined)
+        .mockRejectedValueOnce(new Error('not found'))
+        .mockResolvedValueOnce(undefined);
+      const items = [{ id: 'wc-1' }, { id: 'wc-2' }, { id: 'wc-3' }];
+
+      await invoke('workcenter.deleteItem', items[0], items);
+
+      expect(workGraph.deleteItem).toHaveBeenCalledTimes(3);
+      expect(vscode.window.showErrorMessage).toHaveBeenCalledWith(
+        expect.stringContaining('Failed to delete item wc-2'),
+      );
+      expect(vscode.window.showInformationMessage).toHaveBeenCalledWith('Deleted 2 items');
+    });
+
+    it('shows error when single delete fails', async () => {
+      workGraph.deleteItem.mockRejectedValue(new Error('db error'));
+      await invoke('workcenter.deleteItem', { id: 'wc-1' });
+
+      expect(vscode.window.showErrorMessage).toHaveBeenCalledWith(
+        'WorkCenter: Failed to delete item — db error',
+      );
+    });
+  });
+
+  // ── batch acceptFromSources (multi-select) ──────────────────────────
+
+  describe('workcenter.acceptFromSources (multi-select)', () => {
+    it('batch-accepts multiple source items', async () => {
+      const items = [
+        makeSourceItem({ externalId: 'ext-1', title: 'Issue 1' }),
+        makeSourceItem({ externalId: 'ext-2', title: 'Issue 2' }),
+      ];
+      workGraph.findItemByProvenance.mockReturnValue(undefined);
+      workGraph.createItem
+        .mockResolvedValueOnce(createWorkItem({ id: 'wc-1' }))
+        .mockResolvedValueOnce(createWorkItem({ id: 'wc-2' }));
+
+      await invoke('workcenter.acceptFromSources', items[0], items);
+
+      expect(workGraph.createItem).toHaveBeenCalledTimes(2);
+      expect(stateStore.setStates).toHaveBeenCalledWith([
+        { providerId: 'github', externalId: 'ext-1', state: 'accepted' },
+        { providerId: 'github', externalId: 'ext-2', state: 'accepted' },
+      ]);
+      expect(vscode.window.showInformationMessage).toHaveBeenCalledWith('Accepted 2 items to Queue');
+    });
+
+    it('skips already-accepted items in batch', async () => {
+      const items = [
+        makeSourceItem({ externalId: 'ext-1', title: 'Issue 1' }),
+        makeSourceItem({ externalId: 'ext-2', title: 'Issue 2' }),
+      ];
+      workGraph.findItemByProvenance
+        .mockReturnValueOnce(createWorkItem({ title: 'Already There' }))
+        .mockReturnValueOnce(undefined);
+      workGraph.createItem.mockResolvedValueOnce(createWorkItem({ id: 'wc-2' }));
+
+      await invoke('workcenter.acceptFromSources', items[0], items);
+
+      expect(workGraph.createItem).toHaveBeenCalledTimes(1);
+      expect(stateStore.setStates).toHaveBeenCalledWith([
+        { providerId: 'github', externalId: 'ext-1', state: 'accepted' },
+        { providerId: 'github', externalId: 'ext-2', state: 'accepted' },
+      ]);
+    });
+
+    it('rolls back all created items when batch setStates fails', async () => {
+      const items = [
+        makeSourceItem({ externalId: 'ext-1', title: 'Issue 1' }),
+        makeSourceItem({ externalId: 'ext-2', title: 'Issue 2' }),
+      ];
+      workGraph.findItemByProvenance.mockReturnValue(undefined);
+      workGraph.createItem
+        .mockResolvedValueOnce(createWorkItem({ id: 'wc-1' }))
+        .mockResolvedValueOnce(createWorkItem({ id: 'wc-2' }));
+      stateStore.setStates.mockRejectedValue(new Error('disk full'));
+
+      await invoke('workcenter.acceptFromSources', items[0], items);
+
+      expect(workGraph.deleteItem).toHaveBeenCalledWith('wc-1');
+      expect(workGraph.deleteItem).toHaveBeenCalledWith('wc-2');
+      expect(vscode.window.showErrorMessage).toHaveBeenCalledWith(
+        'WorkCenter: Failed to update states after accepting items — disk full',
+      );
+    });
+
+    it('continues processing after partial createItem failure', async () => {
+      const items = [
+        makeSourceItem({ externalId: 'ext-1', title: 'Issue 1' }),
+        makeSourceItem({ externalId: 'ext-2', title: 'Issue 2' }),
+        makeSourceItem({ externalId: 'ext-3', title: 'Issue 3' }),
+      ];
+      workGraph.findItemByProvenance.mockReturnValue(undefined);
+      workGraph.createItem
+        .mockResolvedValueOnce(createWorkItem({ id: 'wc-1' }))
+        .mockRejectedValueOnce(new Error('create failed'))
+        .mockResolvedValueOnce(createWorkItem({ id: 'wc-3' }));
+
+      await invoke('workcenter.acceptFromSources', items[0], items);
+
+      expect(workGraph.createItem).toHaveBeenCalledTimes(3);
+      expect(stateStore.setStates).toHaveBeenCalledWith([
+        { providerId: 'github', externalId: 'ext-1', state: 'accepted' },
+        { providerId: 'github', externalId: 'ext-3', state: 'accepted' },
+      ]);
+      expect(vscode.window.showErrorMessage).toHaveBeenCalledWith(
+        expect.stringContaining('Failed to accept source item "Issue 2"'),
+      );
+      expect(vscode.window.showInformationMessage).toHaveBeenCalledWith(
+        'Accepted 2 of 3 items to Queue',
+      );
+    });
+
+    it('uses single-item path when selectedItems has one item', async () => {
+      const item = makeSourceItem();
+      workGraph.findItemByProvenance.mockReturnValue(undefined);
+      workGraph.createItem.mockResolvedValue(createWorkItem());
+
+      await invoke('workcenter.acceptFromSources', item, [item]);
+
+      expect(stateStore.setState).toHaveBeenCalledWith('github', 'ext-2', 'accepted');
+      expect(stateStore.setStates).not.toHaveBeenCalled();
+    });
+
+    it('filters out non-item nodes from selectedItems', async () => {
+      const providerNode: SourceProviderNode = { kind: 'provider', providerId: 'github', label: 'GitHub' };
+      const groupNode: SourceGroupNode = { kind: 'group', providerId: 'github', groupName: 'org/repo' };
+      const sourceItem = makeSourceItem({ externalId: 'ext-1', title: 'Issue 1' });
+      workGraph.findItemByProvenance.mockReturnValue(undefined);
+      workGraph.createItem.mockResolvedValue(createWorkItem({ id: 'wc-1' }));
+
+      await invoke('workcenter.acceptFromSources', providerNode, [providerNode, groupNode, sourceItem]);
+
+      expect(stateStore.setState).toHaveBeenCalledWith('github', 'ext-1', 'accepted');
+      expect(workGraph.createItem).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  // ── dismissFromSources ──────────────────────────────────────────────
+
+  describe('workcenter.dismissFromSources', () => {
+    it('dismisses a single source item', async () => {
+      await invoke('workcenter.dismissFromSources', makeSourceItem());
+
+      expect(stateStore.setState).toHaveBeenCalledWith('github', 'ext-2', 'dismissed');
+    });
+
+    it('shows error when single dismiss fails', async () => {
+      stateStore.setState.mockRejectedValue(new Error('io error'));
+
+      await invoke('workcenter.dismissFromSources', makeSourceItem());
+
+      expect(vscode.window.showErrorMessage).toHaveBeenCalledWith(
+        'WorkCenter: Failed to dismiss item — io error',
+      );
+    });
+
+    it('batch-dismisses multiple source items', async () => {
+      const items = [
+        makeSourceItem({ externalId: 'ext-1' }),
+        makeSourceItem({ externalId: 'ext-2' }),
+      ];
+
+      await invoke('workcenter.dismissFromSources', items[0], items);
+
+      expect(stateStore.setStates).toHaveBeenCalledWith([
+        { providerId: 'github', externalId: 'ext-1', state: 'dismissed' },
+        { providerId: 'github', externalId: 'ext-2', state: 'dismissed' },
+      ]);
+      expect(vscode.window.showInformationMessage).toHaveBeenCalledWith('Dismissed 2 items');
+    });
+
+    it('shows error when batch setStates fails', async () => {
+      const items = [
+        makeSourceItem({ externalId: 'ext-1' }),
+        makeSourceItem({ externalId: 'ext-2' }),
+      ];
+      stateStore.setStates.mockRejectedValue(new Error('io error'));
+
+      await invoke('workcenter.dismissFromSources', items[0], items);
+
+      expect(vscode.window.showErrorMessage).toHaveBeenCalledWith(
+        'WorkCenter: Failed to dismiss items — io error',
+      );
+    });
+
+    it('uses single-item path when selectedItems has one item', async () => {
+      const item = makeSourceItem();
+
+      await invoke('workcenter.dismissFromSources', item, [item]);
+
+      expect(stateStore.setState).toHaveBeenCalledWith('github', 'ext-2', 'dismissed');
+      expect(stateStore.setStates).not.toHaveBeenCalled();
+    });
+
+    it('filters out non-item nodes from selectedItems', async () => {
+      const providerNode: SourceProviderNode = { kind: 'provider', providerId: 'github', label: 'GitHub' };
+      const groupNode: SourceGroupNode = { kind: 'group', providerId: 'github', groupName: 'org/repo' };
+      const sourceItem = makeSourceItem({ externalId: 'ext-1' });
+
+      await invoke('workcenter.dismissFromSources', providerNode, [providerNode, groupNode, sourceItem]);
+
+      expect(stateStore.setState).toHaveBeenCalledWith('github', 'ext-1', 'dismissed');
+      expect(stateStore.setStates).not.toHaveBeenCalled();
+    });
+
+    it('does nothing when selectedItems contains only non-item nodes', async () => {
+      const providerNode: SourceProviderNode = { kind: 'provider', providerId: 'github', label: 'GitHub' };
+      const groupNode: SourceGroupNode = { kind: 'group', providerId: 'github', groupName: 'org/repo' };
+
+      await invoke('workcenter.dismissFromSources', providerNode, [providerNode, groupNode]);
 
       expect(stateStore.setState).not.toHaveBeenCalled();
       expect(stateStore.setStates).not.toHaveBeenCalled();

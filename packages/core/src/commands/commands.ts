@@ -5,7 +5,7 @@ import { ActionRegistry } from '../services/actionRegistry';
 import { DiscoveredStateStore, type InboxState } from '../storage/discoveredStateStore';
 import { WorkItemEditorPanel } from '../views/workItemEditorPanel';
 import { InboxItem, type InboxElement } from '../views/inboxTreeProvider';
-import { SourceItemNode } from '../views/sourcesTreeProvider';
+import { SourceItemNode, type SourcesElement } from '../views/sourcesTreeProvider';
 import { logger } from '../services/logger';
 
 /**
@@ -22,6 +22,31 @@ function resolveInboxItems(item?: InboxElement, selectedItems?: InboxElement[]):
     return selectedItems.filter(isInboxItem);
   }
   if (isInboxItem(item)) {
+    return [item];
+  }
+  return [];
+}
+
+/** Resolves item IDs from VS Code multi-select args for WorkItem-based views. */
+function resolveItemIds(item?: { id?: string }, selectedItems?: { id?: string }[]): string[] {
+  if (selectedItems && selectedItems.length > 0) {
+    return selectedItems.map(i => i?.id).filter((id): id is string => !!id);
+  }
+  if (item?.id) {
+    return [item.id];
+  }
+  return [];
+}
+
+function isSourceItem(i?: SourcesElement): i is SourceItemNode {
+  return !!i && i.kind === 'item' && !!i.providerId && !!i.externalId;
+}
+
+function resolveSourceItems(item?: SourcesElement, selectedItems?: SourcesElement[]): SourceItemNode[] {
+  if (selectedItems && selectedItems.length > 0) {
+    return selectedItems.filter(isSourceItem);
+  }
+  if (isSourceItem(item)) {
     return [item];
   }
   return [];
@@ -65,6 +90,36 @@ function wrapCommand<T extends unknown[]>(label: string, fn: (...args: T) => Pro
 // Individual command handlers
 // ---------------------------------------------------------------------------
 
+/**
+ * Transitions multiple items to a target state. Single items use the direct
+ * path (errors bubble to wrapCommand). Batches continue on individual failures
+ * and show a summary message.
+ */
+async function batchTransition(
+  workGraph: WorkGraph,
+  ids: string[],
+  targetState: WorkItemState,
+  successMessage: (count: number) => string,
+): Promise<void> {
+  if (ids.length === 1) {
+    await workGraph.transitionState(ids[0], targetState);
+    return;
+  }
+  let failed = 0;
+  for (const id of ids) {
+    try {
+      await workGraph.transitionState(id, targetState);
+    } catch (err: unknown) {
+      failed++;
+      handleCommandError(`Failed to transition item ${id}`, err);
+    }
+  }
+  const succeeded = ids.length - failed;
+  if (succeeded > 0) {
+    void vscode.window.showInformationMessage(successMessage(succeeded));
+  }
+}
+
 async function handleCreateItem(workGraph: WorkGraph): Promise<void> {
   const title = await vscode.window.showInputBox({
     prompt: 'Work item title',
@@ -80,29 +135,39 @@ async function handleCreateItem(workGraph: WorkGraph): Promise<void> {
   void vscode.window.showInformationMessage(`WorkCenter: Created "${title.trim()}"`);
 }
 
-async function handleAcceptToFocus(workGraph: WorkGraph, item?: { id?: string }): Promise<void> {
-  if (!item?.id) { return; }
-  await workGraph.transitionState(item.id, WorkItemState.InProgress);
+async function handleAcceptToFocus(workGraph: WorkGraph, item?: { id?: string }, selectedItems?: { id?: string }[]): Promise<void> {
+  const ids = resolveItemIds(item, selectedItems);
+  if (ids.length === 0) { return; }
+  await batchTransition(workGraph, ids, WorkItemState.InProgress,
+    (n) => `Moved ${n} item${n === 1 ? '' : 's'} to Focus`);
 }
 
-async function handleArchiveItem(workGraph: WorkGraph, item?: { id?: string }): Promise<void> {
-  if (!item?.id) { return; }
-  await workGraph.transitionState(item.id, WorkItemState.Archived);
+async function handleArchiveItem(workGraph: WorkGraph, item?: { id?: string }, selectedItems?: { id?: string }[]): Promise<void> {
+  const ids = resolveItemIds(item, selectedItems);
+  if (ids.length === 0) { return; }
+  await batchTransition(workGraph, ids, WorkItemState.Archived,
+    (n) => `Archived ${n} item${n === 1 ? '' : 's'}`);
 }
 
-async function handleCompleteItem(workGraph: WorkGraph, item?: { id?: string }): Promise<void> {
-  if (!item?.id) { return; }
-  await workGraph.transitionState(item.id, WorkItemState.Done);
+async function handleCompleteItem(workGraph: WorkGraph, item?: { id?: string }, selectedItems?: { id?: string }[]): Promise<void> {
+  const ids = resolveItemIds(item, selectedItems);
+  if (ids.length === 0) { return; }
+  await batchTransition(workGraph, ids, WorkItemState.Done,
+    (n) => `Completed ${n} item${n === 1 ? '' : 's'}`);
 }
 
-async function handlePauseItem(workGraph: WorkGraph, item?: { id?: string }): Promise<void> {
-  if (!item?.id) { return; }
-  await workGraph.transitionState(item.id, WorkItemState.Paused);
+async function handlePauseItem(workGraph: WorkGraph, item?: { id?: string }, selectedItems?: { id?: string }[]): Promise<void> {
+  const ids = resolveItemIds(item, selectedItems);
+  if (ids.length === 0) { return; }
+  await batchTransition(workGraph, ids, WorkItemState.Paused,
+    (n) => `Paused ${n} item${n === 1 ? '' : 's'}`);
 }
 
-async function handleResumeItem(workGraph: WorkGraph, item?: { id?: string }): Promise<void> {
-  if (!item?.id) { return; }
-  await workGraph.transitionState(item.id, WorkItemState.InProgress);
+async function handleResumeItem(workGraph: WorkGraph, item?: { id?: string }, selectedItems?: { id?: string }[]): Promise<void> {
+  const ids = resolveItemIds(item, selectedItems);
+  if (ids.length === 0) { return; }
+  await batchTransition(workGraph, ids, WorkItemState.InProgress,
+    (n) => `Resumed ${n} item${n === 1 ? '' : 's'}`);
 }
 
 function handleEditItem(
@@ -190,6 +255,28 @@ async function handleMoveDown(workGraph: WorkGraph, item?: { id?: string }): Pro
     return;
   }
   await workGraph.moveItem(item.id, 'down');
+}
+
+async function handleDeleteItem(workGraph: WorkGraph, item?: { id?: string }, selectedItems?: { id?: string }[]): Promise<void> {
+  const ids = resolveItemIds(item, selectedItems);
+  if (ids.length === 0) { return; }
+  if (ids.length === 1) {
+    await workGraph.deleteItem(ids[0]);
+    return;
+  }
+  let failed = 0;
+  for (const id of ids) {
+    try {
+      await workGraph.deleteItem(id);
+    } catch (err: unknown) {
+      failed++;
+      handleCommandError(`Failed to delete item ${id}`, err);
+    }
+  }
+  const succeeded = ids.length - failed;
+  if (succeeded > 0) {
+    void vscode.window.showInformationMessage(`Deleted ${succeeded} item${succeeded === 1 ? '' : 's'}`);
+  }
 }
 
 async function handleAcceptFromInbox(
@@ -327,9 +414,69 @@ async function handleDismissFromInbox(
 async function handleAcceptFromSources(
   workGraph: WorkGraph,
   stateStore: DiscoveredStateStore,
-  item?: SourceItemNode,
+  item?: SourcesElement,
+  selectedItems?: SourcesElement[],
 ): Promise<void> {
-  if (!item?.providerId || !item?.externalId) { return; }
+  const items = resolveSourceItems(item, selectedItems);
+  if (items.length === 0) { return; }
+
+  if (items.length === 1) {
+    await acceptSingleSourceItem(workGraph, stateStore, items[0]);
+    return;
+  }
+
+  // Batch accept (mirrors batch accept from inbox)
+  const stateUpdates: Array<{ providerId: string; externalId: string; state: InboxState }> = [];
+  const createdIds: string[] = [];
+  let failed = 0;
+
+  for (const sourceItem of items) {
+    const existing = workGraph.findItemByProvenance(sourceItem.providerId, sourceItem.externalId);
+    if (existing) {
+      stateUpdates.push({ providerId: sourceItem.providerId, externalId: sourceItem.externalId, state: 'accepted' });
+      continue;
+    }
+    try {
+      const createdItem = await workGraph.createItem(
+        { title: formatItemTitle(sourceItem) },
+        { providerId: sourceItem.providerId, externalId: sourceItem.externalId, url: sourceItem.url },
+      );
+      createdIds.push(createdItem.id);
+      stateUpdates.push({ providerId: sourceItem.providerId, externalId: sourceItem.externalId, state: 'accepted' });
+    } catch (err: unknown) {
+      failed++;
+      handleCommandError(`Failed to accept source item "${sourceItem.title}"`, err);
+    }
+  }
+
+  if (stateUpdates.length > 0) {
+    try {
+      await stateStore.setStates(stateUpdates);
+    } catch (err: unknown) {
+      for (const id of createdIds) {
+        try { await workGraph.deleteItem(id); } catch (rollbackErr: unknown) {
+          logger.error('Failed to roll back created item after batch setStates failure', rollbackErr);
+        }
+      }
+      handleCommandError('Failed to update states after accepting items', err);
+      return;
+    }
+  }
+
+  const total = stateUpdates.length;
+  if (total > 0) {
+    const msg = failed > 0
+      ? `Accepted ${total} of ${total + failed} items to Queue`
+      : `Accepted ${total} item${total === 1 ? '' : 's'} to Queue`;
+    void vscode.window.showInformationMessage(msg);
+  }
+}
+
+async function acceptSingleSourceItem(
+  workGraph: WorkGraph,
+  stateStore: DiscoveredStateStore,
+  item: SourceItemNode,
+): Promise<void> {
   logger.info(`Accepting sources item: ${item.externalId}`);
   const existing = workGraph.findItemByProvenance(item.providerId, item.externalId);
   if (existing) {
@@ -356,13 +503,41 @@ async function handleAcceptFromSources(
   try {
     await stateStore.setState(item.providerId, item.externalId, 'accepted');
   } catch (err: unknown) {
-    // Roll back the created work item to prevent it appearing in Queue while still unseen in Sources
     try {
       await workGraph.deleteItem(createdItem.id);
     } catch (rollbackErr: unknown) {
       logger.error('Failed to roll back created item after setState failure', rollbackErr);
     }
     handleCommandError('Failed to update state after accepting item', err);
+  }
+}
+
+async function handleDismissFromSources(
+  stateStore: DiscoveredStateStore,
+  item?: SourcesElement,
+  selectedItems?: SourcesElement[],
+): Promise<void> {
+  const items = resolveSourceItems(item, selectedItems);
+  if (items.length === 0) { return; }
+
+  if (items.length === 1) {
+    try {
+      logger.info(`Dismissing source item: ${items[0].externalId}`);
+      await stateStore.setState(items[0].providerId, items[0].externalId, 'dismissed');
+    } catch (err: unknown) {
+      handleCommandError('Failed to dismiss item', err);
+    }
+    return;
+  }
+
+  try {
+    logger.info(`Batch dismissing ${items.length} source items`);
+    await stateStore.setStates(
+      items.map(i => ({ providerId: i.providerId, externalId: i.externalId, state: 'dismissed' as const }))
+    );
+    void vscode.window.showInformationMessage(`Dismissed ${items.length} items`);
+  } catch (err: unknown) {
+    handleCommandError('Failed to dismiss items', err);
   }
 }
 
@@ -380,15 +555,17 @@ export function registerCommands(
     vscode.commands.registerCommand('workcenter.createItem',
       wrapCommand('Failed to create item', () => handleCreateItem(workGraph))),
     vscode.commands.registerCommand('workcenter.acceptToFocus',
-      wrapCommand('Failed to focus item', (item) => handleAcceptToFocus(workGraph, item))),
+      wrapCommand('Failed to focus item', (item, selectedItems) => handleAcceptToFocus(workGraph, item, selectedItems))),
     vscode.commands.registerCommand('workcenter.archiveItem',
-      wrapCommand('Failed to archive item', (item) => handleArchiveItem(workGraph, item))),
+      wrapCommand('Failed to archive item', (item, selectedItems) => handleArchiveItem(workGraph, item, selectedItems))),
     vscode.commands.registerCommand('workcenter.completeItem',
-      wrapCommand('Failed to complete item', (item) => handleCompleteItem(workGraph, item))),
+      wrapCommand('Failed to complete item', (item, selectedItems) => handleCompleteItem(workGraph, item, selectedItems))),
     vscode.commands.registerCommand('workcenter.pauseItem',
-      wrapCommand('Failed to pause item', (item) => handlePauseItem(workGraph, item))),
+      wrapCommand('Failed to pause item', (item, selectedItems) => handlePauseItem(workGraph, item, selectedItems))),
     vscode.commands.registerCommand('workcenter.resumeItem',
-      wrapCommand('Failed to resume item', (item) => handleResumeItem(workGraph, item))),
+      wrapCommand('Failed to resume item', (item, selectedItems) => handleResumeItem(workGraph, item, selectedItems))),
+    vscode.commands.registerCommand('workcenter.deleteItem',
+      wrapCommand('Failed to delete item', (item, selectedItems) => handleDeleteItem(workGraph, item, selectedItems))),
     vscode.commands.registerCommand('workcenter.editItem',
       wrapCommand('Failed to open editor', (item) => handleEditItem(context, workGraph, item))),
     vscode.commands.registerCommand('workcenter.openInBrowser',
@@ -404,6 +581,8 @@ export function registerCommands(
     vscode.commands.registerCommand('workcenter.dismissFromInbox',
       wrapCommand('Failed to dismiss from inbox', (item: InboxElement, selectedItems?: InboxElement[]) => handleDismissFromInbox(stateStore, item, selectedItems))),
     vscode.commands.registerCommand('workcenter.acceptFromSources',
-      wrapCommand('Failed to accept from sources', (item: SourceItemNode) => handleAcceptFromSources(workGraph, stateStore, item))),
+      wrapCommand('Failed to accept from sources', (item: SourcesElement, selectedItems?: SourcesElement[]) => handleAcceptFromSources(workGraph, stateStore, item, selectedItems))),
+    vscode.commands.registerCommand('workcenter.dismissFromSources',
+      wrapCommand('Failed to dismiss from sources', (item: SourcesElement, selectedItems?: SourcesElement[]) => handleDismissFromSources(stateStore, item, selectedItems))),
   );
 }
