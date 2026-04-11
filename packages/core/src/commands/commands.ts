@@ -13,6 +13,8 @@ import { logger } from '../services/logger';
  * Resolves the effective list of inbox items from VS Code's multi-select command args.
  * When canSelectMany is enabled, VS Code passes InboxElement (the union type) in
  * selectedItems, which may include provider/group nodes — we filter to leaf items only.
+ * Falls back to the single context item when the filtered selection is empty or
+ * does not include the right-clicked item.
  */
 function isInboxItem(i?: InboxElement): i is InboxItem {
   return !!i && i.kind === 'item' && !!i.providerId && !!i.externalId;
@@ -20,7 +22,11 @@ function isInboxItem(i?: InboxElement): i is InboxItem {
 
 function resolveInboxItems(item?: InboxElement, selectedItems?: InboxElement[]): InboxItem[] {
   if (selectedItems && selectedItems.length > 0) {
-    return selectedItems.filter(isInboxItem);
+    const filtered = selectedItems.filter(isInboxItem);
+    if (filtered.length > 0 && (!isInboxItem(item) || filtered.some(
+      f => f.providerId === item.providerId && f.externalId === item.externalId))) {
+      return filtered;
+    }
   }
   if (isInboxItem(item)) {
     return [item];
@@ -28,10 +34,17 @@ function resolveInboxItems(item?: InboxElement, selectedItems?: InboxElement[]):
   return [];
 }
 
-/** Resolves item IDs from VS Code multi-select args for WorkItem-based views. */
+/**
+ * Resolves item IDs from VS Code multi-select args for WorkItem-based views.
+ * Falls back to the single context item when the filtered selection is empty or
+ * does not include the right-clicked item.
+ */
 function resolveItemIds(item?: { id?: string }, selectedItems?: { id?: string }[]): string[] {
   if (selectedItems && selectedItems.length > 0) {
-    return selectedItems.map(i => i?.id).filter((id): id is string => !!id);
+    const filtered = selectedItems.map(i => i?.id).filter((id): id is string => !!id);
+    if (filtered.length > 0 && (!item?.id || filtered.includes(item.id))) {
+      return filtered;
+    }
   }
   if (item?.id) {
     return [item.id];
@@ -45,7 +58,11 @@ function isSourceItem(i?: SourcesElement): i is SourceItemNode {
 
 function resolveSourceItems(item?: SourcesElement, selectedItems?: SourcesElement[]): SourceItemNode[] {
   if (selectedItems && selectedItems.length > 0) {
-    return selectedItems.filter(isSourceItem);
+    const filtered = selectedItems.filter(isSourceItem);
+    if (filtered.length > 0 && (!isSourceItem(item) || filtered.some(
+      f => f.providerId === item.providerId && f.externalId === item.externalId))) {
+      return filtered;
+    }
   }
   if (isSourceItem(item)) {
     return [item];

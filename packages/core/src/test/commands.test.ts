@@ -920,6 +920,16 @@ describe('registerCommands', () => {
       expect(stateStore.setState).not.toHaveBeenCalled();
       expect(stateStore.setStates).not.toHaveBeenCalled();
     });
+
+    it('falls back to context item when it is not in the selection', async () => {
+      const contextItem = makeInboxItem({ externalId: 'ext-ctx' });
+      const selectedItem = makeInboxItem({ externalId: 'ext-other' });
+
+      await invoke('workcenter.dismissFromInbox', contextItem, [selectedItem]);
+
+      expect(stateStore.setState).toHaveBeenCalledWith('github', 'ext-ctx', 'dismissed');
+      expect(stateStore.setStates).not.toHaveBeenCalled();
+    });
   });
 
   // ── batch state-transition commands (multi-select) ──────────────────
@@ -967,6 +977,13 @@ describe('registerCommands', () => {
     it('does nothing when no items have ids', async () => {
       await invoke('workcenter.acceptToFocus', {}, [{}]);
       expect(workGraph.transitionState).not.toHaveBeenCalled();
+    });
+
+    it('falls back to context item when it is not in selection', async () => {
+      await invoke('workcenter.acceptToFocus', { id: 'wc-ctx' }, [{ id: 'wc-other' }]);
+
+      expect(workGraph.transitionState).toHaveBeenCalledWith('wc-ctx', WorkItemState.InProgress);
+      expect(workGraph.transitionState).toHaveBeenCalledTimes(1);
     });
   });
 
@@ -1371,6 +1388,16 @@ describe('registerCommands', () => {
       await invoke('workcenter.dismissFromSources', providerNode, [providerNode, groupNode]);
 
       expect(stateStore.setState).not.toHaveBeenCalled();
+      expect(stateStore.setStates).not.toHaveBeenCalled();
+    });
+
+    it('falls back to context item when it is not in the selection', async () => {
+      const contextItem = makeSourceItem({ externalId: 'ext-ctx' });
+      const selectedItem = makeSourceItem({ externalId: 'ext-other' });
+
+      await invoke('workcenter.dismissFromSources', contextItem, [selectedItem]);
+
+      expect(stateStore.setState).toHaveBeenCalledWith('github', 'ext-ctx', 'dismissed');
       expect(stateStore.setStates).not.toHaveBeenCalled();
     });
   });
