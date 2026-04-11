@@ -312,19 +312,19 @@ mockFetch.mockImplementation(async (url: string) => {
 
 ### AiWalkthroughAction Tests (Issue #12)
 
-**Tests added:** 9 tests in `packages/ai-reviewer/src/test/aiWalkthroughAction.test.ts`
+**Tests added:** 14 tests in `packages/ai-reviewer/src/test/aiWalkthroughAction.test.ts`
 
-**Scope:** Walkthrough-specific behavior only — base class behavior (canRun, isPrUrl, parseGitHubPrUrl, fetchDiff, resolvePromptUri, sanitizePrUrl) is already covered by `aiReviewAction.test.ts`.
+**Scope:** The walkthrough action prepares a git worktree via RepoManager and opens the `@walkthrough` chat participant. Tests cover this flow, not the chat participant itself (tested separately in `walkthroughParticipant.test.ts`).
 
 **What's tested:**
 1. Identity — `id` is `'ai-reviewer.walkthrough'`, `label` is `'PR Walkthrough'`
-2. Default prompt — contains walkthrough-specific strings (`What This PR Does`, `File-by-File Walkthrough`, `The Big Picture`)
-3. Output header — document content starts with `# PR Walkthrough`
-4. Confirmation message — includes `'PR Walkthrough will send the PR diff'`
-5. Config section — reads from `workcenterAiWalkthrough` (not `workcenterAiReview`)
-6. Runtime instructions — LM message contains `'walkthrough header'` and PR URL
-7. No model warning — uses `'PR Walkthrough:'` prefix
+2. canRun — returns true for GitHub PR URLs, false for non-PR URLs, URLs with queries/fragments
+3. run — calls `repoManager.ensureWorktree` with the PR URL
+4. run — opens chat with correct `@walkthrough` query after preparing worktree
+5. run — shows error message when ensureWorktree fails
+6. run — does nothing when item has no URL
+7. run — respects cancellation token
 
-**Pattern:** Reuses identical mock setup from `aiReviewAction.test.ts` (stubGlobal fetch, authentication, lm, workspace, window mocks). No base class test duplication.
+**Pattern:** Uses a mock RepoManager injected via constructor. No base class test duplication — shared PR URL parsing is in `prUrl.ts`, tested via `repoManager.test.ts`.
 
 

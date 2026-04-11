@@ -12,17 +12,21 @@ Shared PR action logic (diff fetching, GitHub auth, LLM model selection, prompt 
 **Rationale:**
 - Eliminates code duplication across AI actions that all follow the same fetch-diff → confirm → analyze → display pattern
 - New actions require ~25 lines instead of ~240, reducing bug surface
-- Each action gets its own VS Code configuration section (`workcenterAiReview`, `workcenterAiWalkthrough`) for independent custom prompt paths
+- The code review action (`AiReviewAction`) has its own VS Code configuration section (`workcenterAiReview`) for a custom prompt path
+- The walkthrough action (`AiWalkthroughAction`) uses the `@walkthrough` chat participant with a built-in prompt and has no custom prompt config
 - Re-exporting `sanitizePrUrl` from `aiReviewAction.ts` preserves test backward compatibility without requiring test refactoring
 
 **Implementation:**
-- `packages/ai-reviewer/src/basePrAction.ts` — Added base class for shared PR action logic
+- `packages/ai-reviewer/src/basePrAction.ts` — Added base class for shared PR action logic (used by code review)
 - `packages/ai-reviewer/src/aiReviewAction.ts` — Refactored into a thin subclass of `BasePrAction`
-- `packages/ai-reviewer/src/aiWalkthroughAction.ts` — Added thin subclass for walkthrough generation
-- `packages/ai-reviewer/src/walkthroughPrompt.ts` — Added walkthrough prompt
-- `packages/ai-reviewer/src/defaultPrompt.ts` — Updated review prompt with all 10 superpowers items + Holistic Assessment + Codebase Consistency sections
-- `packages/ai-reviewer/src/extension.ts` — Updated to register both actions
-- `packages/ai-reviewer/package.json` — Updated metadata + `workcenterAiWalkthrough` config
+- `packages/ai-reviewer/src/aiWalkthroughAction.ts` — Added lightweight action that prepares worktree and opens `@walkthrough` chat
+- `packages/ai-reviewer/src/walkthroughParticipant.ts` — Chat participant with tool-use loop
+- `packages/ai-reviewer/src/walkthroughPrompt.ts` — Interactive walkthrough prompt builder
+- `packages/ai-reviewer/src/repoManager.ts` — Git clone + worktree management
+- `packages/ai-reviewer/src/tools/` — 6 LM tools for repo access
+- `packages/ai-reviewer/src/defaultPrompt.ts` — Updated review prompt with superpowers content
+- `packages/ai-reviewer/src/extension.ts` — Registers both actions, chat participant, and LM tools
+- `packages/ai-reviewer/package.json` — Updated metadata, added chatParticipants + languageModelTools contributions
 
 **Test Coverage:** 50 existing review action tests + 9 new walkthrough tests, all passing  
 **Result:** All 59 tests passing, build passes
