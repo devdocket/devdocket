@@ -16,7 +16,8 @@
     "onView:workcenter.queue",
     "onView:workcenter.focus",
     "onView:workcenter.sources",
-    "onView:workcenter.history"
+    "onView:workcenter.history",
+    "onCommand:workcenter.refresh"
   ],
   "main": "./dist/extension.js",
   "contributes": {
@@ -165,6 +166,18 @@
         "title": "Accept to Queue",
         "category": "WorkCenter",
         "icon": "$(arrow-right)"
+      },
+      {
+        "command": "workcenter.moveToQueue",
+        "title": "Move to Queue",
+        "category": "WorkCenter",
+        "icon": "$(arrow-left)"
+      },
+      {
+        "command": "workcenter.refresh",
+        "title": "Refresh",
+        "category": "WorkCenter",
+        "icon": "$(refresh)"
       }
     ],
     "menus": {
@@ -172,6 +185,11 @@
         {
           "command": "workcenter.createItem",
           "when": "view == workcenter.queue",
+          "group": "navigation"
+        },
+        {
+          "command": "workcenter.refresh",
+          "when": "view == workcenter.inbox || view == workcenter.sources",
           "group": "navigation"
         }
       ],
@@ -192,6 +210,11 @@
           "group": "inline"
         },
         {
+          "command": "workcenter.archiveItem",
+          "when": "view == workcenter.focus",
+          "group": "1_actions"
+        },
+        {
           "command": "workcenter.pauseItem",
           "when": "view == workcenter.focus && viewItem =~ /^active/",
           "group": "1_actions"
@@ -199,6 +222,11 @@
         {
           "command": "workcenter.resumeItem",
           "when": "view == workcenter.focus && viewItem =~ /^paused/",
+          "group": "1_actions"
+        },
+        {
+          "command": "workcenter.moveToQueue",
+          "when": "view == workcenter.focus && viewItem =~ /^(active|paused)/",
           "group": "1_actions"
         },
         {

@@ -4,6 +4,7 @@ import { WorkItemState, type WorkItem } from '../models/workItem';
 import { registerCommands, isSafeUrl } from '../commands/commands';
 import type { WorkGraph } from '../services/workGraph';
 import type { ActionRegistry } from '../services/actionRegistry';
+import type { ProviderRegistry } from '../services/providerRegistry';
 import type { DiscoveredStateStore } from '../storage/discoveredStateStore';
 import type { InboxItem } from '../views/inboxTreeProvider';
 import type { SourceItemNode } from '../views/sourcesTreeProvider';
@@ -86,6 +87,14 @@ function createMockStateStore(): { [K in keyof UsedStateStoreMethods]: Mock } {
   };
 }
 
+type UsedProviderRegistryMethods = Pick<ProviderRegistry, 'refreshAll'>;
+
+function createMockProviderRegistry(): { [K in keyof UsedProviderRegistryMethods]: Mock } {
+  return {
+    refreshAll: vi.fn().mockResolvedValue(undefined),
+  };
+}
+
 // ── test setup ───────────────────────────────────────────────────────
 
 // Capture handlers registered via vscode.commands.registerCommand
@@ -101,6 +110,7 @@ describe('registerCommands', () => {
   let workGraph: ReturnType<typeof createMockWorkGraph>;
   let actionRegistry: ReturnType<typeof createMockActionRegistry>;
   let stateStore: ReturnType<typeof createMockStateStore>;
+  let providerRegistry: ReturnType<typeof createMockProviderRegistry>;
   let ctx: vscode.ExtensionContext;
 
   beforeEach(() => {
@@ -121,9 +131,10 @@ describe('registerCommands', () => {
     workGraph = createMockWorkGraph();
     actionRegistry = createMockActionRegistry();
     stateStore = createMockStateStore();
+    providerRegistry = createMockProviderRegistry();
     ctx = createMockContext();
 
-    registerCommands(ctx, workGraph as any, actionRegistry as any, stateStore as any);
+    registerCommands(ctx, workGraph as any, actionRegistry as any, stateStore as any, providerRegistry as any);
   });
 
   // helper to invoke a registered command
@@ -139,6 +150,7 @@ describe('registerCommands', () => {
 
   it('registers all expected commands', () => {
     const expected = [
+      'workcenter.refresh',
       'workcenter.createItem',
       'workcenter.acceptToFocus',
       'workcenter.archiveItem',
@@ -152,6 +164,7 @@ describe('registerCommands', () => {
       'workcenter.moveDown',
       'workcenter.focusMoveUp',
       'workcenter.focusMoveDown',
+      'workcenter.moveToQueue',
       'workcenter.acceptFromInbox',
       'workcenter.dismissFromInbox',
       'workcenter.acceptFromSources',
@@ -163,6 +176,20 @@ describe('registerCommands', () => {
 
   it('pushes disposables into context.subscriptions', () => {
     expect(ctx.subscriptions.length).toBeGreaterThan(0);
+  });
+
+  // ── refresh ──────────────────────────────────────────────────────
+
+  describe('workcenter.refresh', () => {
+    it('calls providerRegistry.refreshAll and shows progress', async () => {
+      await invoke('workcenter.refresh');
+
+      expect(vscode.window.withProgress).toHaveBeenCalledWith(
+        expect.objectContaining({ location: vscode.ProgressLocation.Window }),
+        expect.any(Function),
+      );
+      expect(providerRegistry.refreshAll).toHaveBeenCalled();
+    });
   });
 
   // ── createItem ───────────────────────────────────────────────────
@@ -202,6 +229,7 @@ describe('registerCommands', () => {
       ['workcenter.completeItem', WorkItemState.Done],
       ['workcenter.pauseItem', WorkItemState.Paused],
       ['workcenter.resumeItem', WorkItemState.InProgress],
+      ['workcenter.moveToQueue', WorkItemState.New],
     ];
 
     for (const [cmd, expectedState] of transitions) {
