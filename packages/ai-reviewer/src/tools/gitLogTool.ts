@@ -16,7 +16,7 @@ export function registerGitLogTool(): vscode.Disposable {
       _token: vscode.CancellationToken,
     ) {
       const { worktreePath, filePath, maxCount } = options.input;
-      const limit = maxCount ?? 20;
+      const limit = Math.min(Math.max(1, maxCount ?? 20), 200);
 
       if (!validWorktreePaths.has(path.resolve(worktreePath))) {
         return new vscode.LanguageModelToolResult([
