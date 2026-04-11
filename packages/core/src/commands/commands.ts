@@ -171,9 +171,11 @@ async function handleResumeItem(workGraph: WorkGraph, item?: { id?: string }, se
     (n) => `Resumed ${n} item${n === 1 ? '' : 's'}`);
 }
 
-async function handleMoveToQueue(workGraph: WorkGraph, item?: { id?: string }): Promise<void> {
-  if (!item?.id) { return; }
-  await workGraph.transitionState(item.id, WorkItemState.New);
+async function handleMoveToQueue(workGraph: WorkGraph, item?: { id?: string }, selectedItems?: { id?: string }[]): Promise<void> {
+  const ids = resolveItemIds(item, selectedItems);
+  if (ids.length === 0) { return; }
+  await batchTransition(workGraph, ids, WorkItemState.New,
+    (n) => `Moved ${n} item${n === 1 ? '' : 's'} to Queue`);
 }
 
 function handleEditItem(
@@ -597,7 +599,7 @@ export function registerCommands(
     vscode.commands.registerCommand('workcenter.moveDown',
       wrapCommand('Failed to move item down', (item) => handleMoveDown(workGraph, item))),
     vscode.commands.registerCommand('workcenter.moveToQueue',
-      wrapCommand('Failed to move item to queue', (item) => handleMoveToQueue(workGraph, item))),
+      wrapCommand('Failed to move item to queue', (item, selectedItems) => handleMoveToQueue(workGraph, item, selectedItems))),
     vscode.commands.registerCommand('workcenter.acceptFromInbox',
       wrapCommand('Failed to accept from inbox', (item: InboxElement, selectedItems?: InboxElement[]) => handleAcceptFromInbox(workGraph, stateStore, item, selectedItems))),
     vscode.commands.registerCommand('workcenter.dismissFromInbox',

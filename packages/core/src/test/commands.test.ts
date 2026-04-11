@@ -992,6 +992,48 @@ describe('registerCommands', () => {
     });
   });
 
+  describe('batch moveToQueue (multi-select)', () => {
+    it('moves multiple items to Queue', async () => {
+      const items = [{ id: 'wc-1' }, { id: 'wc-2' }, { id: 'wc-3' }];
+      await invoke('workcenter.moveToQueue', items[0], items);
+
+      expect(workGraph.transitionState).toHaveBeenCalledTimes(3);
+      expect(workGraph.transitionState).toHaveBeenCalledWith('wc-1', WorkItemState.New);
+      expect(workGraph.transitionState).toHaveBeenCalledWith('wc-2', WorkItemState.New);
+      expect(workGraph.transitionState).toHaveBeenCalledWith('wc-3', WorkItemState.New);
+      expect(vscode.window.showInformationMessage).toHaveBeenCalledWith('Moved 3 items to Queue');
+    });
+
+    it('uses single-item path when one item selected', async () => {
+      const item = { id: 'wc-1' };
+      await invoke('workcenter.moveToQueue', item, [item]);
+
+      expect(workGraph.transitionState).toHaveBeenCalledWith('wc-1', WorkItemState.New);
+      expect(vscode.window.showInformationMessage).not.toHaveBeenCalled();
+    });
+
+    it('continues after partial failure', async () => {
+      workGraph.transitionState
+        .mockResolvedValueOnce(undefined)
+        .mockRejectedValueOnce(new Error('bad state'))
+        .mockResolvedValueOnce(undefined);
+      const items = [{ id: 'wc-1' }, { id: 'wc-2' }, { id: 'wc-3' }];
+
+      await invoke('workcenter.moveToQueue', items[0], items);
+
+      expect(workGraph.transitionState).toHaveBeenCalledTimes(3);
+      expect(vscode.window.showErrorMessage).toHaveBeenCalledWith(
+        expect.stringContaining('Failed to transition item wc-2'),
+      );
+      expect(vscode.window.showInformationMessage).toHaveBeenCalledWith('Moved 2 items to Queue');
+    });
+
+    it('does nothing when no items have ids', async () => {
+      await invoke('workcenter.moveToQueue', {}, [{}]);
+      expect(workGraph.transitionState).not.toHaveBeenCalled();
+    });
+  });
+
   // ── deleteItem ──────────────────────────────────────────────────────
 
   describe('workcenter.deleteItem', () => {
