@@ -53,11 +53,10 @@ export class QueueTreeProvider implements vscode.TreeDataProvider<QueueElement>,
 
   getChildren(element?: QueueElement): QueueElement[] {
     if (!element) {
-      const items = this.workGraph.getItemsByState(WorkItemState.New)
-        .sort((a, b) => (a.sortOrder ?? Number.MAX_SAFE_INTEGER) - (b.sortOrder ?? Number.MAX_SAFE_INTEGER));
+      const items = this.workGraph.getItemsByState(WorkItemState.New);
 
       if (this._layout === 'flat') {
-        return items;
+        return items.sort((a, b) => (a.sortOrder ?? Number.MAX_SAFE_INTEGER) - (b.sortOrder ?? Number.MAX_SAFE_INTEGER));
       }
 
       return this.groupByProvider(items);
