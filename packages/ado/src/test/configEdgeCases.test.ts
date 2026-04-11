@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
 import { authentication, workspace, extensions } from 'vscode';
 import { AdoWorkItemProvider } from '../adoWorkItemProvider';
 import { AdoPrReviewProvider } from '../adoPrReviewProvider';
+import { parseAdoProjectsConfig } from '../configParser';
 
 const mockFetch = vi.fn();
 
@@ -32,7 +33,7 @@ describe('ADO provider config edge cases', () => {
     });
 
     it('does not start timer for zero interval', () => {
-      const provider = new AdoWorkItemProvider('myorg', []);
+      const provider = new AdoWorkItemProvider([{ org: 'myorg', projects: [] }]);
       const spy = vi.spyOn(provider as any, 'refreshInBackground').mockResolvedValue(undefined);
 
       provider.startPeriodicRefresh(0);
@@ -43,7 +44,7 @@ describe('ADO provider config edge cases', () => {
     });
 
     it('does not start timer for negative interval', () => {
-      const provider = new AdoWorkItemProvider('myorg', []);
+      const provider = new AdoWorkItemProvider([{ org: 'myorg', projects: [] }]);
       const spy = vi.spyOn(provider as any, 'refreshInBackground').mockResolvedValue(undefined);
 
       provider.startPeriodicRefresh(-5);
@@ -54,7 +55,7 @@ describe('ADO provider config edge cases', () => {
     });
 
     it('does not start timer for NaN interval', () => {
-      const provider = new AdoWorkItemProvider('myorg', []);
+      const provider = new AdoWorkItemProvider([{ org: 'myorg', projects: [] }]);
       const spy = vi.spyOn(provider as any, 'refreshInBackground').mockResolvedValue(undefined);
 
       provider.startPeriodicRefresh(NaN);
@@ -65,7 +66,7 @@ describe('ADO provider config edge cases', () => {
     });
 
     it('does not start timer for Infinity', () => {
-      const provider = new AdoWorkItemProvider('myorg', []);
+      const provider = new AdoWorkItemProvider([{ org: 'myorg', projects: [] }]);
       const spy = vi.spyOn(provider as any, 'refreshInBackground').mockResolvedValue(undefined);
 
       provider.startPeriodicRefresh(Infinity);
@@ -76,7 +77,7 @@ describe('ADO provider config edge cases', () => {
     });
 
     it('clamps interval below 60s up to 60s', () => {
-      const provider = new AdoWorkItemProvider('myorg', []);
+      const provider = new AdoWorkItemProvider([{ org: 'myorg', projects: [] }]);
       const spy = vi.spyOn(provider as any, 'refreshInBackground').mockResolvedValue(undefined);
 
       provider.startPeriodicRefresh(10);
@@ -91,7 +92,7 @@ describe('ADO provider config edge cases', () => {
     });
 
     it('PR review provider also rejects NaN interval', () => {
-      const provider = new AdoPrReviewProvider('myorg', []);
+      const provider = new AdoPrReviewProvider([{ org: 'myorg', projects: [] }]);
       const spy = vi.spyOn(provider as any, 'refreshInBackground').mockResolvedValue(undefined);
 
       provider.startPeriodicRefresh(NaN);
@@ -102,7 +103,7 @@ describe('ADO provider config edge cases', () => {
     });
 
     it('PR review provider also rejects negative interval', () => {
-      const provider = new AdoPrReviewProvider('myorg', []);
+      const provider = new AdoPrReviewProvider([{ org: 'myorg', projects: [] }]);
       const spy = vi.spyOn(provider as any, 'refreshInBackground').mockResolvedValue(undefined);
 
       provider.startPeriodicRefresh(-100);
@@ -113,7 +114,7 @@ describe('ADO provider config edge cases', () => {
     });
 
     it('PR review provider also rejects Infinity interval', () => {
-      const provider = new AdoPrReviewProvider('myorg', []);
+      const provider = new AdoPrReviewProvider([{ org: 'myorg', projects: [] }]);
       const spy = vi.spyOn(provider as any, 'refreshInBackground').mockResolvedValue(undefined);
 
       provider.startPeriodicRefresh(Infinity);
@@ -125,24 +126,23 @@ describe('ADO provider config edge cases', () => {
   });
 
   describe('organization config edge cases', () => {
-    // Extension.ts checks: if (!org) { return; } — skips provider creation
+    // With the new config parser, providers are created when orgConfigs is non-empty
 
-    it('missing organization config falls back to empty string (providers skipped)', () => {
-      // config.get<string>('organization', '') returns '' when unset
-      const org = '';
-      expect(!org).toBe(true);
+    it('no configuration at all yields no org configs', () => {
+      const result = parseAdoProjectsConfig([], '');
+      expect(result).toHaveLength(0);
     });
 
-    it('whitespace-only organization is truthy (providers would be created)', () => {
-      // The extension checks if (!org) which does not trim whitespace
-      const org = '   ';
-      expect(!org).toBe(false);
+    it('legacy org alone yields one org config', () => {
+      const result = parseAdoProjectsConfig([], 'myorg');
+      expect(result).toHaveLength(1);
+      expect(result[0].org).toBe('myorg');
     });
   });
 
   describe('projects config edge cases', () => {
     it('empty string project results in org-level WIQL URL', async () => {
-      const provider = new AdoWorkItemProvider('myorg', ['']);
+      const provider = new AdoWorkItemProvider([{ org: 'myorg', projects: [''] }]);
 
       mockFetch.mockResolvedValueOnce({
         ok: true,
@@ -163,7 +163,7 @@ describe('ADO provider config edge cases', () => {
     });
 
     it('mix of empty and valid projects fetches both paths', async () => {
-      const provider = new AdoWorkItemProvider('myorg', ['', 'RealProject']);
+      const provider = new AdoWorkItemProvider([{ org: 'myorg', projects: ['', 'RealProject'] }]);
 
       mockFetch
         .mockResolvedValueOnce({
@@ -195,7 +195,7 @@ describe('ADO provider config edge cases', () => {
     });
 
     it('project with special characters is URL-encoded', async () => {
-      const provider = new AdoWorkItemProvider('myorg', ['My Project']);
+      const provider = new AdoWorkItemProvider([{ org: 'myorg', projects: ['My Project'] }]);
 
       mockFetch.mockResolvedValueOnce({
         ok: true,
@@ -215,7 +215,7 @@ describe('ADO provider config edge cases', () => {
     });
 
     it('no projects array falls back to org-level query', async () => {
-      const provider = new AdoWorkItemProvider('myorg', []);
+      const provider = new AdoWorkItemProvider([{ org: 'myorg', projects: [] }]);
 
       mockFetch.mockResolvedValueOnce({
         ok: true,
@@ -324,8 +324,9 @@ describe('ADO provider config edge cases', () => {
       }
     });
 
-    it('does not register providers when organization is empty', async () => {
+    it('does not register providers when no organizations are configured', async () => {
       configValues.organization = '';
+      configValues.projects = [];
 
       const { activate } = await import('../extension');
       await activate(context);
@@ -346,13 +347,14 @@ describe('ADO provider config edge cases', () => {
 
       expect(mockRegisterProvider).toHaveBeenCalledTimes(2);
 
-      // Change org to empty → providers should be torn down
+      // Clear both org and projects → providers should be torn down
       configValues.organization = '';
+      configValues.projects = [];
       for (const listener of configChangeListeners) {
         listener({ affectsConfiguration: (k: string) => k === 'workcenterAdo.organization' });
       }
 
-      // No new providers registered (org is empty now)
+      // No new providers registered (nothing configured)
       // The dispose calls happen internally — we verify no new registrations
       expect(mockRegisterProvider).toHaveBeenCalledTimes(2); // still 2 from initial
     });

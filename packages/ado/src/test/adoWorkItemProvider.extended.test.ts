@@ -49,7 +49,7 @@ describe('AdoWorkItemProvider — extended', () => {
     vi.clearAllMocks();
     mockFetch.mockReset();
     vi.stubGlobal('fetch', mockFetch);
-    provider = new AdoWorkItemProvider('myorg', ['MyProject']);
+    provider = new AdoWorkItemProvider([{ org: 'myorg', projects: ['MyProject'] }]);
     mockAuthSession();
 
     // Default fallback: states API calls return no terminal states (items pass through)
@@ -87,7 +87,7 @@ describe('AdoWorkItemProvider — extended', () => {
 
     it('URL-encodes org and project names with special characters', async () => {
       provider.dispose();
-      provider = new AdoWorkItemProvider('my org', ['My Project']);
+      provider = new AdoWorkItemProvider([{ org: 'my org', projects: ['My Project'] }]);
       mockAuthSession();
 
       mockFetch.mockResolvedValueOnce({
@@ -142,9 +142,9 @@ describe('AdoWorkItemProvider — extended', () => {
       // Only Active and New items should be published (Resolved is terminal)
       const items = listener.mock.calls[0][0];
       expect(items).toHaveLength(2);
-      expect(items.map((i: any) => i.externalId)).toContain('MyProject/1'); // Active
-      expect(items.map((i: any) => i.externalId)).toContain('MyProject/3'); // New
-      expect(items.map((i: any) => i.externalId)).not.toContain('MyProject/2'); // Resolved
+      expect(items.map((i: any) => i.externalId)).toContain('myorg/MyProject/1'); // Active
+      expect(items.map((i: any) => i.externalId)).toContain('myorg/MyProject/3'); // New
+      expect(items.map((i: any) => i.externalId)).not.toContain('myorg/MyProject/2'); // Resolved
     });
 
     it('handles multiple work item types with different state definitions', async () => {
@@ -397,7 +397,7 @@ describe('AdoWorkItemProvider — extended', () => {
 
     it('handles org-level query (no project)', async () => {
       provider.dispose();
-      provider = new AdoWorkItemProvider('myorg', []); // Empty projects array
+      provider = new AdoWorkItemProvider([{ org: 'myorg', projects: [] }]); // Empty projects array
       mockAuthSession();
 
       mockFetch.mockResolvedValueOnce({
@@ -596,7 +596,7 @@ describe('AdoWorkItemProvider — extended', () => {
   describe('multiple projects', () => {
     it('fetches work items for each configured project', async () => {
       provider.dispose();
-      provider = new AdoWorkItemProvider('myorg', ['ProjectA', 'ProjectB']);
+      provider = new AdoWorkItemProvider([{ org: 'myorg', projects: ['ProjectA', 'ProjectB'] }]);
       mockAuthSession();
 
       // ProjectA WIQL + detail
@@ -632,7 +632,7 @@ describe('AdoWorkItemProvider — extended', () => {
 
     it('reports multiple project failures', async () => {
       provider.dispose();
-      provider = new AdoWorkItemProvider('myorg', ['ProjectA', 'ProjectB']);
+      provider = new AdoWorkItemProvider([{ org: 'myorg', projects: ['ProjectA', 'ProjectB'] }]);
       mockAuthSession();
 
       mockFetch
@@ -648,7 +648,7 @@ describe('AdoWorkItemProvider — extended', () => {
 
     it('handles mix of successful and failed project fetches', async () => {
       provider.dispose();
-      provider = new AdoWorkItemProvider('myorg', ['GoodProject', 'BadProject']);
+      provider = new AdoWorkItemProvider([{ org: 'myorg', projects: ['GoodProject', 'BadProject'] }]);
       mockAuthSession();
 
       // GoodProject: success

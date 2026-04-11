@@ -1,6 +1,7 @@
 import * as vscode from 'vscode';
 import { AdoWorkItemProvider } from './adoWorkItemProvider';
 import { AdoPrReviewProvider } from './adoPrReviewProvider';
+import { parseAdoProjectsConfig } from './configParser';
 import { validateRefreshInterval } from '@workcenter/shared';
 import { initLogger, setLogLevel, logger, resolveLogLevel } from './logger';
 
@@ -69,13 +70,17 @@ export async function activate(_context: vscode.ExtensionContext): Promise<void>
     prProvider = undefined;
 
     const config = vscode.workspace.getConfiguration('workcenterAdo');
-    const org = config.get<string>('organization', '');
+    const legacyOrg = config.get<string>('organization', '');
     const projects = config.get<string[]>('projects', []);
 
-    if (!org) {
-      logger.info('No organization configured — set workcenterAdo.organization to enable ADO providers');
+    const orgConfigs = parseAdoProjectsConfig(projects, legacyOrg);
+
+    if (orgConfigs.length === 0) {
+      logger.info('No organizations configured — set workcenterAdo.projects to enable ADO providers');
       if (!orgWarningShown) {
-        vscode.window.showWarningMessage('WorkCenter ADO: Azure DevOps organization not configured. Set workcenterAdo.organization in settings.');
+        vscode.window.showWarningMessage(
+          'WorkCenter ADO: No Azure DevOps organizations configured. Add entries to workcenterAdo.projects (e.g. "myorg" or "myorg/myproject").',
+        );
         orgWarningShown = true;
       }
       return;
@@ -83,14 +88,14 @@ export async function activate(_context: vscode.ExtensionContext): Promise<void>
 
     orgWarningShown = false;
 
-    logger.debug(`Configuration: org=${org}, projects=[${projects.join(', ')}]`);
+    logger.debug(`Configuration: ${orgConfigs.map(c => c.projects.length > 0 ? c.projects.map(p => `${c.org}/${p}`).join(', ') : c.org).join('; ')}`);
 
     const intervalSeconds = validateRefreshInterval(
       config.get<number>('refreshIntervalSeconds', 300), logger,
     );
 
-    workItemProvider = new AdoWorkItemProvider(org, projects);
-    prProvider = new AdoPrReviewProvider(org, projects);
+    workItemProvider = new AdoWorkItemProvider(orgConfigs);
+    prProvider = new AdoPrReviewProvider(orgConfigs);
 
     workItemProvider.startPeriodicRefresh(intervalSeconds);
     prProvider.startPeriodicRefresh(intervalSeconds);

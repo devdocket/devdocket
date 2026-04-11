@@ -32,7 +32,7 @@ describe('AdoWorkItemProvider', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.stubGlobal('fetch', mockFetch);
-    provider = new AdoWorkItemProvider('myorg', ['MyProject']);
+    provider = new AdoWorkItemProvider([{ org: 'myorg', projects: ['MyProject'] }]);
 
     vi.mocked(authentication.getSession).mockResolvedValue({
       accessToken: 'test-token',
@@ -109,7 +109,7 @@ describe('AdoWorkItemProvider', () => {
     const items = listener.mock.calls[0][0];
     expect(items).toHaveLength(2);
     expect(items[0]).toEqual({
-      externalId: 'MyProject/1',
+      externalId: 'myorg/MyProject/1',
       title: 'User Story 1: Fix login bug',
       description: 'Description for 1',
       url: 'https://dev.azure.com/myorg/MyProject/_workitems/edit/1',
@@ -117,7 +117,7 @@ describe('AdoWorkItemProvider', () => {
       reason: 'assigned',
     });
     expect(items[1]).toEqual({
-      externalId: 'MyProject/2',
+      externalId: 'myorg/MyProject/2',
       title: 'Bug 2: Add search',
       description: 'Description for 2',
       url: 'https://dev.azure.com/myorg/MyProject/_workitems/edit/2',
@@ -401,7 +401,7 @@ describe('AdoWorkItemProvider', () => {
 
   it('uses org-level WIQL when no projects are configured', async () => {
     provider.dispose();
-    provider = new AdoWorkItemProvider('myorg', []);
+    provider = new AdoWorkItemProvider([{ org: 'myorg', projects: [] }]);
 
     mockFetch.mockResolvedValueOnce({
       ok: true,
@@ -420,7 +420,7 @@ describe('AdoWorkItemProvider', () => {
 
   it('fires empty items when org name is invalid', async () => {
     provider.dispose();
-    provider = new AdoWorkItemProvider('../evil', ['MyProject']);
+    provider = new AdoWorkItemProvider([{ org: '../evil', projects: ['MyProject'] }]);
 
     const listener = vi.fn();
     provider.onDidDiscoverItems(listener);
@@ -433,7 +433,7 @@ describe('AdoWorkItemProvider', () => {
 
   it('skips invalid projects and fetches only valid ones', async () => {
     provider.dispose();
-    provider = new AdoWorkItemProvider('myorg', ['ValidProject', '../bad', 'AlsoValid']);
+    provider = new AdoWorkItemProvider([{ org: 'myorg', projects: ['ValidProject', '../bad', 'AlsoValid'] }]);
 
     mockFetch
       .mockResolvedValueOnce({ ok: true, json: async () => createWiqlResponse([]) })
@@ -456,7 +456,7 @@ describe('AdoWorkItemProvider', () => {
 
   it('fires empty items when all configured projects are invalid', async () => {
     provider.dispose();
-    provider = new AdoWorkItemProvider('myorg', ['../bad', '?evil']);
+    provider = new AdoWorkItemProvider([{ org: 'myorg', projects: ['../bad', '?evil'] }]);
 
     const listener = vi.fn();
     provider.onDidDiscoverItems(listener);

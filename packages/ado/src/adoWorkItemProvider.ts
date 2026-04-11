@@ -1,6 +1,7 @@
 import * as vscode from 'vscode';
 import { BaseProvider, DiscoveredItem, isValidUrlSegment } from '@workcenter/shared';
 import { logger } from './logger';
+import { OrgConfig } from './configParser';
 
 // Azure DevOps WIQL query response
 interface WiqlResponse {
@@ -53,12 +54,10 @@ export class AdoWorkItemProvider extends BaseProvider {
   private _terminalStatesCache = new Map<string, Set<string>>();
 
   /**
-   * @param org      - The Azure DevOps organisation name.
-   * @param projects - Project names to query. An empty array queries the whole org.
+   * @param orgConfigs - One or more organization configurations to query.
    */
   constructor(
-    private readonly org: string,
-    private readonly projects: string[],
+    private readonly orgConfigs: OrgConfig[],
   ) {
     super(new vscode.EventEmitter<DiscoveredItem[]>());
   }
@@ -118,52 +117,52 @@ export class AdoWorkItemProvider extends BaseProvider {
   }
 
   private async fetchAndPublishWorkItems(accessToken: string, isUserTriggered: boolean): Promise<void> {
-    if (!isValidUrlSegment(this.org)) {
-      logger.warn('Skipping fetch: invalid ADO organization name', this.org);
-      this._onDidDiscoverItems.fire([]);
-      return;
-    }
-
-    const validProjects: string[] = [];
-    for (const project of this.projects) {
-      if (project === '' || isValidUrlSegment(project)) {
-        validProjects.push(project);
-      } else {
-        logger.warn('Skipping invalid ADO project name', project);
-      }
-    }
-
-    if (this.projects.length > 0 && validProjects.length === 0) {
-      logger.warn('All configured ADO projects are invalid — skipping fetch');
-      this._onDidDiscoverItems.fire([]);
-      return;
-    }
-
-    const projectList = validProjects.length > 0 ? validProjects : [''];
-    const results = await Promise.allSettled(
-      projectList.map(project => this.fetchWorkItemsForProject(accessToken, project)),
-    );
-
     const allItems: DiscoveredItem[] = [];
     const failures: string[] = [];
 
-    results.forEach((result, index) => {
-      if (result.status === 'fulfilled') {
-        const { items, failed } = result.value;
-        allItems.push(...items);
-        if (failed) {
-          failures.push(projectList[index] || this.org);
-        }
-      } else {
-        const failureTarget = projectList[index] || this.org;
-        failures.push(failureTarget);
-        const reason = (result as PromiseRejectedResult).reason;
-        logger.warn(
-          `Failed to fetch work items from ${failureTarget}: ` +
-          (reason instanceof Error ? reason.message : String(reason)),
-        );
+    for (const orgConfig of this.orgConfigs) {
+      if (!isValidUrlSegment(orgConfig.org)) {
+        logger.warn('Skipping fetch: invalid ADO organization name', orgConfig.org);
+        continue;
       }
-    });
+
+      const validProjects: string[] = [];
+      for (const project of orgConfig.projects) {
+        if (project === '' || isValidUrlSegment(project)) {
+          validProjects.push(project);
+        } else {
+          logger.warn('Skipping invalid ADO project name', project);
+        }
+      }
+
+      if (orgConfig.projects.length > 0 && validProjects.length === 0) {
+        logger.warn('All configured ADO projects are invalid — skipping fetch');
+        continue;
+      }
+
+      const projectList = validProjects.length > 0 ? validProjects : [''];
+      const results = await Promise.allSettled(
+        projectList.map(project => this.fetchWorkItemsForProject(accessToken, orgConfig.org, project)),
+      );
+
+      results.forEach((result, index) => {
+        if (result.status === 'fulfilled') {
+          const { items, failed } = result.value;
+          allItems.push(...items);
+          if (failed) {
+            failures.push(projectList[index] || orgConfig.org);
+          }
+        } else {
+          const failureTarget = projectList[index] || orgConfig.org;
+          failures.push(failureTarget);
+          const reason = (result as PromiseRejectedResult).reason;
+          logger.warn(
+            `Failed to fetch work items from ${failureTarget}: ` +
+            (reason instanceof Error ? reason.message : String(reason)),
+          );
+        }
+      });
+    }
 
     this._onDidDiscoverItems.fire(allItems);
     logger.info(`Discovered ${allItems.length} ADO work items`);
@@ -181,11 +180,12 @@ export class AdoWorkItemProvider extends BaseProvider {
 
   private async fetchWorkItemsForProject(
     token: string,
+    org: string,
     project: string,
   ): Promise<{ items: DiscoveredItem[]; failed: boolean }> {
-    logger.debug(`Fetching work items for project: ${project || this.org}`);
+    logger.debug(`Fetching work items for project: ${project || org}`);
     const projectPath = project ? `/${encodeURIComponent(project)}` : '';
-    const wiqlUrl = `https://dev.azure.com/${encodeURIComponent(this.org)}${projectPath}/_apis/wit/wiql?api-version=7.1`;
+    const wiqlUrl = `https://dev.azure.com/${encodeURIComponent(org)}${projectPath}/_apis/wit/wiql?api-version=7.1`;
 
     const wiqlQuery = `SELECT [System.Id] FROM WorkItems WHERE [System.AssignedTo] = @Me AND [System.State] <> 'Closed' AND [System.State] <> 'Removed'`;
 
@@ -200,13 +200,13 @@ export class AdoWorkItemProvider extends BaseProvider {
         body: JSON.stringify({ query: wiqlQuery }),
       });
     } catch (err) {
-      logger.error(`Network error querying work items for project "${project || this.org}":`, err);
+      logger.error(`Network error querying work items for project "${project || org}":`, err);
       return { items: [], failed: true };
     }
 
     if (!wiqlResponse.ok) {
-      logger.warn(`Failed to fetch work items for project: ${project || this.org}`);
-      logger.error(`WIQL query failed for project "${project || this.org}": ${wiqlResponse.status}`);
+      logger.warn(`Failed to fetch work items for project: ${project || org}`);
+      logger.error(`WIQL query failed for project "${project || org}": ${wiqlResponse.status}`);
       return { items: [], failed: true };
     }
 
@@ -230,7 +230,7 @@ export class AdoWorkItemProvider extends BaseProvider {
 
     for (let i = 0; i < ids.length; i += batchSize) {
       const batchIds = ids.slice(i, i + batchSize);
-      const detailUrl = `https://dev.azure.com/${encodeURIComponent(this.org)}/_apis/wit/workitems?ids=${batchIds.join(',')}&fields=System.Title,System.Description,System.TeamProject,System.WorkItemType,System.State&$expand=links&api-version=7.1`;
+      const detailUrl = `https://dev.azure.com/${encodeURIComponent(org)}/_apis/wit/workitems?ids=${batchIds.join(',')}&fields=System.Title,System.Description,System.TeamProject,System.WorkItemType,System.State&$expand=links&api-version=7.1`;
 
       let detailResponse: Response;
       try {
@@ -241,7 +241,7 @@ export class AdoWorkItemProvider extends BaseProvider {
         });
       } catch (err) {
         logger.error(
-          `Network error fetching work item details for ${project || this.org} (batch at index ${i}, ids ${batchIds[0]}-${batchIds[batchIds.length - 1]}):`,
+          `Network error fetching work item details for ${project || org} (batch at index ${i}, ids ${batchIds[0]}-${batchIds[batchIds.length - 1]}):`,
           err,
         );
         batchFailed = true;
@@ -267,13 +267,13 @@ export class AdoWorkItemProvider extends BaseProvider {
     }
 
     // Filter out items in terminal state categories
-    const activeWorkItems = await this.filterActiveItems(token, allWorkItems);
+    const activeWorkItems = await this.filterActiveItems(token, org, allWorkItems);
 
     const items: DiscoveredItem[] = activeWorkItems.map((wi) => {
       const projectName = wi.fields['System.TeamProject'];
       const wiType = wi.fields['System.WorkItemType'];
       return {
-        externalId: `${projectName}/${wi.id}`,
+        externalId: `${org}/${projectName}/${wi.id}`,
         title: `${wiType} ${wi.id}: ${wi.fields['System.Title']}`,
         description: wi.fields['System.Description']?.replace(/<[^>]*>/g, '')?.slice(0, 200),
         url: wi._links.html.href,
@@ -288,19 +288,21 @@ export class AdoWorkItemProvider extends BaseProvider {
   /**
    * Fetches terminal states for a given work item type by querying the ADO Work Item Type States API.
    * States with category 'Completed', 'Removed', or 'Resolved' are considered terminal.
-   * Results are cached per project/workItemType pair.
+   * Results are cached per org/project/workItemType triple.
    *
    * @param token - Access token for ADO API
+   * @param org - Organization name
    * @param project - Project name (empty string for org-level)
    * @param workItemType - Work item type name (e.g., 'Task', 'Bug', 'User Story')
    * @returns Set of terminal state names, or empty set on failure (fail open)
    */
   private async fetchTerminalStates(
     token: string,
+    org: string,
     project: string,
     workItemType: string,
   ): Promise<Set<string>> {
-    const cacheKey = `${project}/${workItemType}`;
+    const cacheKey = `${org}/${project}/${workItemType}`;
     
     // Check cache first
     const cached = this._terminalStatesCache.get(cacheKey);
@@ -310,7 +312,7 @@ export class AdoWorkItemProvider extends BaseProvider {
 
     // Build API URL
     const projectPath = project ? `/${encodeURIComponent(project)}` : '';
-    const statesUrl = `https://dev.azure.com/${encodeURIComponent(this.org)}${projectPath}/_apis/wit/workitemtypes/${encodeURIComponent(workItemType)}/states?api-version=7.1`;
+    const statesUrl = `https://dev.azure.com/${encodeURIComponent(org)}${projectPath}/_apis/wit/workitemtypes/${encodeURIComponent(workItemType)}/states?api-version=7.1`;
 
     let response: Response;
     try {
@@ -369,6 +371,7 @@ export class AdoWorkItemProvider extends BaseProvider {
    */
   private async filterActiveItems(
     token: string,
+    org: string,
     workItems: AdoWorkItem[],
   ): Promise<AdoWorkItem[]> {
     if (workItems.length === 0) {
@@ -398,7 +401,7 @@ export class AdoWorkItemProvider extends BaseProvider {
 
     const results = await Promise.all(
       entries.map(async ({ key, project, workItemType }) => {
-        const terminalStates = await this.fetchTerminalStates(token, project, workItemType);
+        const terminalStates = await this.fetchTerminalStates(token, org, project, workItemType);
         return { key, terminalStates };
       }),
     );
