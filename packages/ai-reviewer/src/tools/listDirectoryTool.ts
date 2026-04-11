@@ -44,12 +44,9 @@ export function registerListDirectoryTool(): vscode.Disposable {
         const uri = vscode.Uri.file(resolved);
         const entries = await vscode.workspace.fs.readDirectory(uri);
         const lines = entries.map(([name, type]) => {
-          const kind =
-            type === vscode.FileType.Directory
-              ? '[dir]'
-              : type === vscode.FileType.SymbolicLink
-                ? '[link]'
-                : '[file]';
+          const isSymbolicLink = (type & vscode.FileType.SymbolicLink) !== 0;
+          const isDirectory = (type & vscode.FileType.Directory) !== 0;
+          const kind = isSymbolicLink ? '[link]' : isDirectory ? '[dir]' : '[file]';
           return `${kind}  ${name}`;
         });
         return new vscode.LanguageModelToolResult([
