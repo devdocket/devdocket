@@ -115,6 +115,23 @@ export class InboxTreeProvider implements vscode.TreeDataProvider<InboxElement> 
     return this.readStateStore.add(key);
   }
 
+  /** Marks multiple items as seen in a single write operation. */
+  async markSeenBatch(items: Array<{ providerId: string; externalId: string }>): Promise<boolean> {
+    const keys = items.map(i => `${i.providerId}::${i.externalId}`);
+    let changed = false;
+    for (const key of keys) {
+      if (!this.seenItems.has(key)) {
+        this.seenItems.add(key);
+        changed = true;
+      }
+    }
+    if (changed) {
+      this._onDidMarkSeen.fire();
+    }
+    const newlyAdded = await this.readStateStore.addMany(keys);
+    return changed || newlyAdded.length > 0;
+  }
+
   getTreeItem(element: InboxElement): vscode.TreeItem {
     if (element.kind === 'provider') {
       const count = this.getUnseenCount(element.providerId);

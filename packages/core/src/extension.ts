@@ -124,12 +124,12 @@ function createTreeViews(
 
   const inboxSelectionSub = inboxTreeView.onDidChangeSelection((e) => {
     void (async () => {
-      let changed = false;
-      for (const item of e.selection) {
-        if (item.kind === 'item') {
-          changed = await inboxProvider.markSeen(item.providerId, item.externalId) || changed;
-        }
-      }
+      const items = e.selection.filter(
+        (item): item is { kind: 'item'; providerId: string; externalId: string } =>
+          item.kind === 'item',
+      );
+      if (items.length === 0) { return; }
+      const changed = await inboxProvider.markSeenBatch(items);
       if (changed) {
         inboxProvider.refresh();
       }
