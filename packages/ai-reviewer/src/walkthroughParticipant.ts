@@ -75,8 +75,8 @@ export class WalkthroughParticipant {
         response.markdown(`❌ Failed to prepare repository: ${msg}`);
         return { metadata: { phase: 'error' } };
       }
-      this.sessions.set(prUrl, info);
     }
+    this.sessions.set(prUrl, info);
 
     if (token.isCancellationRequested) return { metadata: { phase: 'error' } };
 
