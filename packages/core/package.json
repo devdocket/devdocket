@@ -138,13 +138,13 @@
       },
       {
         "command": "workcenter.focusMoveUp",
-        "title": "Move Up",
+        "title": "Move Up (Focus)",
         "category": "WorkCenter",
         "icon": "$(arrow-up)"
       },
       {
         "command": "workcenter.focusMoveDown",
-        "title": "Move Down",
+        "title": "Move Down (Focus)",
         "category": "WorkCenter",
         "icon": "$(arrow-down)"
       },
