@@ -1,5 +1,6 @@
 import * as vscode from 'vscode';
 import * as path from 'path';
+import * as fs from 'fs/promises';
 import { validWorktreePaths } from './worktreeRegistry';
 
 interface ListDirectoryInput {
@@ -42,16 +43,16 @@ export function registerListDirectoryTool(): vscode.Disposable {
       }
 
       try {
-        const uri = vscode.Uri.file(resolved);
-
-        // Reject symlinked directories to prevent reads escaping the worktree
-        const dirStat = await vscode.workspace.fs.stat(uri);
-        if (dirStat.type & vscode.FileType.SymbolicLink) {
+        // Resolve symlinks in all path segments and verify containment
+        const realPath = await fs.realpath(resolved);
+        const realRoot = await fs.realpath(worktreePath);
+        if (!realPath.startsWith(realRoot + path.sep) && realPath !== realRoot) {
           return new vscode.LanguageModelToolResult([
-            new vscode.LanguageModelTextPart('Symbolic links are not allowed for security reasons'),
+            new vscode.LanguageModelTextPart('Path escapes the worktree after resolving symlinks'),
           ]);
         }
 
+        const uri = vscode.Uri.file(resolved);
         const entries = await vscode.workspace.fs.readDirectory(uri);
         const lines = entries.map(([name, type]) => {
           const isSymbolicLink = (type & vscode.FileType.SymbolicLink) !== 0;

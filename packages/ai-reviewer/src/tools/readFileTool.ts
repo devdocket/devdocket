@@ -1,5 +1,6 @@
 import * as vscode from 'vscode';
 import * as path from 'path';
+import * as fs from 'fs/promises';
 import { validWorktreePaths } from './worktreeRegistry';
 
 function validateWorktreePath(worktreePath: string): string | undefined {
@@ -47,16 +48,18 @@ export function registerReadFileTool(): vscode.Disposable {
 
       try {
         const fullPath = path.join(worktreePath, filePath);
-        const uri = vscode.Uri.file(fullPath);
 
-        // Reject symlinks to prevent reads escaping the worktree
-        const stat = await vscode.workspace.fs.stat(uri);
-        if (stat.type & vscode.FileType.SymbolicLink) {
+        // Resolve symlinks in all path segments and verify the real path
+        // stays within the worktree root
+        const realPath = await fs.realpath(fullPath);
+        const realRoot = await fs.realpath(worktreePath);
+        if (!realPath.startsWith(realRoot + path.sep) && realPath !== realRoot) {
           return new vscode.LanguageModelToolResult([
-            new vscode.LanguageModelTextPart('Symbolic links are not allowed for security reasons'),
+            new vscode.LanguageModelTextPart('Path escapes the worktree after resolving symlinks'),
           ]);
         }
 
+        const uri = vscode.Uri.file(fullPath);
         const bytes = await vscode.workspace.fs.readFile(uri);
         const content = new TextDecoder('utf-8').decode(bytes);
         return new vscode.LanguageModelToolResult([
