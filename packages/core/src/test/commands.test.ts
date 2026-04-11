@@ -78,11 +78,12 @@ function createMockActionRegistry(): { [K in keyof UsedActionRegistryMethods]: M
   };
 }
 
-type UsedStateStoreMethods = Pick<DiscoveredStateStore, 'setState'>;
+type UsedStateStoreMethods = Pick<DiscoveredStateStore, 'setState' | 'setStates'>;
 
 function createMockStateStore(): { [K in keyof UsedStateStoreMethods]: Mock } {
   return {
     setState: vi.fn(),
+    setStates: vi.fn(),
   };
 }
 
@@ -650,6 +651,156 @@ describe('registerCommands', () => {
       expect(vscode.window.showErrorMessage).toHaveBeenCalledWith(
         'WorkCenter: Failed to dismiss item — raw string',
       );
+    });
+  });
+
+  // ── batch acceptFromInbox (multi-select) ──────────────────────────
+
+  describe('workcenter.acceptFromInbox (multi-select)', () => {
+    it('batch-accepts multiple items and shows summary', async () => {
+      const items = [
+        makeInboxItem({ externalId: 'ext-1', title: 'Issue 1' }),
+        makeInboxItem({ externalId: 'ext-2', title: 'Issue 2' }),
+      ];
+      workGraph.findItemByProvenance.mockReturnValue(undefined);
+      workGraph.createItem
+        .mockResolvedValueOnce(createWorkItem({ id: 'wc-1' }))
+        .mockResolvedValueOnce(createWorkItem({ id: 'wc-2' }));
+
+      await invoke('workcenter.acceptFromInbox', items[0], items);
+
+      expect(workGraph.createItem).toHaveBeenCalledTimes(2);
+      expect(stateStore.setStates).toHaveBeenCalledWith([
+        { providerId: 'github', externalId: 'ext-1', state: 'accepted' },
+        { providerId: 'github', externalId: 'ext-2', state: 'accepted' },
+      ]);
+      expect(vscode.window.showInformationMessage).toHaveBeenCalledWith(
+        'Accepted 2 items to Queue',
+      );
+    });
+
+    it('skips already-accepted items in batch', async () => {
+      const items = [
+        makeInboxItem({ externalId: 'ext-1', title: 'Issue 1' }),
+        makeInboxItem({ externalId: 'ext-2', title: 'Issue 2' }),
+      ];
+      workGraph.findItemByProvenance
+        .mockReturnValueOnce(createWorkItem({ title: 'Already There' }))
+        .mockReturnValueOnce(undefined);
+      workGraph.createItem.mockResolvedValueOnce(createWorkItem({ id: 'wc-2' }));
+
+      await invoke('workcenter.acceptFromInbox', items[0], items);
+
+      expect(workGraph.createItem).toHaveBeenCalledTimes(1);
+      expect(stateStore.setStates).toHaveBeenCalledWith([
+        { providerId: 'github', externalId: 'ext-1', state: 'accepted' },
+        { providerId: 'github', externalId: 'ext-2', state: 'accepted' },
+      ]);
+      expect(vscode.window.showInformationMessage).toHaveBeenCalledWith(
+        'Accepted 2 items to Queue',
+      );
+    });
+
+    it('rolls back all created items when batch setStates fails', async () => {
+      const items = [
+        makeInboxItem({ externalId: 'ext-1', title: 'Issue 1' }),
+        makeInboxItem({ externalId: 'ext-2', title: 'Issue 2' }),
+      ];
+      workGraph.findItemByProvenance.mockReturnValue(undefined);
+      workGraph.createItem
+        .mockResolvedValueOnce(createWorkItem({ id: 'wc-1' }))
+        .mockResolvedValueOnce(createWorkItem({ id: 'wc-2' }));
+      stateStore.setStates.mockRejectedValue(new Error('disk full'));
+
+      await invoke('workcenter.acceptFromInbox', items[0], items);
+
+      expect(workGraph.deleteItem).toHaveBeenCalledWith('wc-1');
+      expect(workGraph.deleteItem).toHaveBeenCalledWith('wc-2');
+      expect(vscode.window.showErrorMessage).toHaveBeenCalledWith(
+        'WorkCenter: Failed to update states after accepting items — disk full',
+      );
+    });
+
+    it('continues processing after partial createItem failure', async () => {
+      const items = [
+        makeInboxItem({ externalId: 'ext-1', title: 'Issue 1' }),
+        makeInboxItem({ externalId: 'ext-2', title: 'Issue 2' }),
+        makeInboxItem({ externalId: 'ext-3', title: 'Issue 3' }),
+      ];
+      workGraph.findItemByProvenance.mockReturnValue(undefined);
+      workGraph.createItem
+        .mockResolvedValueOnce(createWorkItem({ id: 'wc-1' }))
+        .mockRejectedValueOnce(new Error('create failed'))
+        .mockResolvedValueOnce(createWorkItem({ id: 'wc-3' }));
+
+      await invoke('workcenter.acceptFromInbox', items[0], items);
+
+      expect(workGraph.createItem).toHaveBeenCalledTimes(3);
+      expect(stateStore.setStates).toHaveBeenCalledWith([
+        { providerId: 'github', externalId: 'ext-1', state: 'accepted' },
+        { providerId: 'github', externalId: 'ext-3', state: 'accepted' },
+      ]);
+      expect(vscode.window.showErrorMessage).toHaveBeenCalledWith(
+        expect.stringContaining('Failed to accept inbox item "Issue 2"'),
+      );
+      expect(vscode.window.showInformationMessage).toHaveBeenCalledWith(
+        'Accepted 2 of 3 items to Queue',
+      );
+    });
+
+    it('uses single-item path when selectedItems has one item', async () => {
+      const item = makeInboxItem();
+      workGraph.findItemByProvenance.mockReturnValue(undefined);
+      workGraph.createItem.mockResolvedValue(createWorkItem());
+
+      await invoke('workcenter.acceptFromInbox', item, [item]);
+
+      expect(stateStore.setState).toHaveBeenCalledWith('github', 'ext-1', 'accepted');
+      expect(stateStore.setStates).not.toHaveBeenCalled();
+    });
+  });
+
+  // ── batch dismissFromInbox (multi-select) ─────────────────────────
+
+  describe('workcenter.dismissFromInbox (multi-select)', () => {
+    it('batch-dismisses multiple items and shows summary', async () => {
+      const items = [
+        makeInboxItem({ externalId: 'ext-1' }),
+        makeInboxItem({ externalId: 'ext-2' }),
+      ];
+
+      await invoke('workcenter.dismissFromInbox', items[0], items);
+
+      expect(stateStore.setStates).toHaveBeenCalledWith([
+        { providerId: 'github', externalId: 'ext-1', state: 'dismissed' },
+        { providerId: 'github', externalId: 'ext-2', state: 'dismissed' },
+      ]);
+      expect(vscode.window.showInformationMessage).toHaveBeenCalledWith(
+        'Dismissed 2 items',
+      );
+    });
+
+    it('shows error when batch setStates fails', async () => {
+      const items = [
+        makeInboxItem({ externalId: 'ext-1' }),
+        makeInboxItem({ externalId: 'ext-2' }),
+      ];
+      stateStore.setStates.mockRejectedValue(new Error('io error'));
+
+      await invoke('workcenter.dismissFromInbox', items[0], items);
+
+      expect(vscode.window.showErrorMessage).toHaveBeenCalledWith(
+        'WorkCenter: Failed to dismiss items — io error',
+      );
+    });
+
+    it('uses single-item path when selectedItems has one item', async () => {
+      const item = makeInboxItem();
+
+      await invoke('workcenter.dismissFromInbox', item, [item]);
+
+      expect(stateStore.setState).toHaveBeenCalledWith('github', 'ext-1', 'dismissed');
+      expect(stateStore.setStates).not.toHaveBeenCalled();
     });
   });
 

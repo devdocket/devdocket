@@ -2,11 +2,26 @@ import * as vscode from 'vscode';
 import { WorkItemState } from '../models/workItem';
 import { WorkGraph } from '../services/workGraph';
 import { ActionRegistry } from '../services/actionRegistry';
-import { DiscoveredStateStore } from '../storage/discoveredStateStore';
+import { DiscoveredStateStore, type InboxState } from '../storage/discoveredStateStore';
 import { WorkItemEditorPanel } from '../views/workItemEditorPanel';
-import { InboxItem } from '../views/inboxTreeProvider';
+import { InboxItem, type InboxElement } from '../views/inboxTreeProvider';
 import { SourceItemNode } from '../views/sourcesTreeProvider';
 import { logger } from '../services/logger';
+
+/**
+ * Resolves the effective list of inbox items from VS Code's multi-select command args.
+ * When canSelectMany is enabled, VS Code passes InboxElement (the union type) in
+ * selectedItems, which may include provider/group nodes — we filter to leaf items only.
+ */
+function resolveInboxItems(item?: InboxElement, selectedItems?: InboxElement[]): InboxItem[] {
+  if (selectedItems && selectedItems.length > 0) {
+    return selectedItems.filter((i): i is InboxItem => i.kind === 'item' && !!i.providerId);
+  }
+  if (item && item.kind === 'item' && item.providerId && item.externalId) {
+    return [item];
+  }
+  return [];
+}
 
 /** Builds a work-item title, optionally prefixed with the provider group. */
 function formatItemTitle(item: { group?: string; title: string }): string {
@@ -176,9 +191,70 @@ async function handleMoveDown(workGraph: WorkGraph, item?: { id?: string }): Pro
 async function handleAcceptFromInbox(
   workGraph: WorkGraph,
   stateStore: DiscoveredStateStore,
-  item?: InboxItem,
+  item?: InboxElement,
+  selectedItems?: InboxElement[],
 ): Promise<void> {
-  if (!item?.providerId || !item?.externalId) { return; }
+  const items = resolveInboxItems(item, selectedItems);
+  if (items.length === 0) { return; }
+
+  if (items.length === 1) {
+    await acceptSingleInboxItem(workGraph, stateStore, items[0]);
+    return;
+  }
+
+  // Batch accept: create work items, then batch-set states
+  const stateUpdates: Array<{ providerId: string; externalId: string; state: InboxState }> = [];
+  const createdIds: string[] = [];
+  let failed = 0;
+
+  for (const inboxItem of items) {
+    const existing = workGraph.findItemByProvenance(inboxItem.providerId, inboxItem.externalId);
+    if (existing) {
+      stateUpdates.push({ providerId: inboxItem.providerId, externalId: inboxItem.externalId, state: 'accepted' });
+      continue;
+    }
+    try {
+      const createdItem = await workGraph.createItem(
+        { title: formatItemTitle(inboxItem) },
+        { providerId: inboxItem.providerId, externalId: inboxItem.externalId, url: inboxItem.url },
+      );
+      createdIds.push(createdItem.id);
+      stateUpdates.push({ providerId: inboxItem.providerId, externalId: inboxItem.externalId, state: 'accepted' });
+    } catch (err: unknown) {
+      failed++;
+      handleCommandError(`Failed to accept inbox item "${inboxItem.title}"`, err);
+    }
+  }
+
+  if (stateUpdates.length > 0) {
+    try {
+      await stateStore.setStates(stateUpdates);
+    } catch (err: unknown) {
+      // Roll back all created work items
+      for (const id of createdIds) {
+        try { await workGraph.deleteItem(id); } catch (rollbackErr: unknown) {
+          logger.error('Failed to roll back created item after batch setState failure', rollbackErr);
+        }
+      }
+      handleCommandError('Failed to update states after accepting items', err);
+      return;
+    }
+  }
+
+  const total = stateUpdates.length;
+  if (total > 0) {
+    const msg = failed > 0
+      ? `Accepted ${total} of ${total + failed} items to Queue`
+      : `Accepted ${total} item${total === 1 ? '' : 's'} to Queue`;
+    void vscode.window.showInformationMessage(msg);
+  }
+}
+
+async function acceptSingleInboxItem(
+  workGraph: WorkGraph,
+  stateStore: DiscoveredStateStore,
+  item: InboxItem,
+): Promise<void> {
   logger.info(`Accepting inbox item: ${item.externalId} from ${item.providerId}`);
   const existing = workGraph.findItemByProvenance(item.providerId, item.externalId);
   if (existing) {
@@ -217,14 +293,30 @@ async function handleAcceptFromInbox(
 
 async function handleDismissFromInbox(
   stateStore: DiscoveredStateStore,
-  item?: InboxItem,
+  item?: InboxElement,
+  selectedItems?: InboxElement[],
 ): Promise<void> {
-  if (!item?.providerId || !item?.externalId) { return; }
+  const items = resolveInboxItems(item, selectedItems);
+  if (items.length === 0) { return; }
+
+  if (items.length === 1) {
+    try {
+      logger.info(`Dismissing inbox item: ${items[0].externalId}`);
+      await stateStore.setState(items[0].providerId, items[0].externalId, 'dismissed');
+    } catch (err: unknown) {
+      handleCommandError('Failed to dismiss item', err);
+    }
+    return;
+  }
+
   try {
-    logger.info(`Dismissing inbox item: ${item.externalId}`);
-    await stateStore.setState(item.providerId, item.externalId, 'dismissed');
+    logger.info(`Batch dismissing ${items.length} inbox items`);
+    await stateStore.setStates(
+      items.map(i => ({ providerId: i.providerId, externalId: i.externalId, state: 'dismissed' as const }))
+    );
+    void vscode.window.showInformationMessage(`Dismissed ${items.length} items`);
   } catch (err: unknown) {
-    handleCommandError('Failed to dismiss item', err);
+    handleCommandError('Failed to dismiss items', err);
   }
 }
 
@@ -304,9 +396,9 @@ export function registerCommands(
     vscode.commands.registerCommand('workcenter.moveDown',
       wrapCommand('Failed to move item down', (item) => handleMoveDown(workGraph, item))),
     vscode.commands.registerCommand('workcenter.acceptFromInbox',
-      wrapCommand('Failed to accept from inbox', (item: InboxItem) => handleAcceptFromInbox(workGraph, stateStore, item))),
+      wrapCommand('Failed to accept from inbox', (item: InboxElement, selectedItems?: InboxElement[]) => handleAcceptFromInbox(workGraph, stateStore, item, selectedItems))),
     vscode.commands.registerCommand('workcenter.dismissFromInbox',
-      wrapCommand('Failed to dismiss from inbox', (item: InboxItem) => handleDismissFromInbox(stateStore, item))),
+      wrapCommand('Failed to dismiss from inbox', (item: InboxElement, selectedItems?: InboxElement[]) => handleDismissFromInbox(stateStore, item, selectedItems))),
     vscode.commands.registerCommand('workcenter.acceptFromSources',
       wrapCommand('Failed to accept from sources', (item: SourceItemNode) => handleAcceptFromSources(workGraph, stateStore, item))),
   );
