@@ -126,7 +126,7 @@ Any of the following applied to an exported interface, type, class, or function 
 7. **Changing generic type parameters** (adding required generics, removing generics, changing constraints).
 8. **Moving an exported symbol** to a different module path without preserving the old path as a re-export.
 
-**Not breaking**: adding new optional properties, adding new exported symbols, adding new overload signatures, widening a return type, or adding new interfaces/types.
+**Usually not breaking**: adding new optional properties, adding new exported symbols, adding new interfaces/types, widening an existing parameter type to a supertype, or adding new overload signatures only when they are appended and do not overlap with existing overload resolution. **Note:** widening a return type is often breaking for TypeScript consumers.
 
 #### Code review requirements
 
