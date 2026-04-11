@@ -163,6 +163,10 @@ describe('FocusTreeProvider', () => {
   });
 
   describe('handleDrop', () => {
+    beforeEach(() => {
+      (window.showInformationMessage as ReturnType<typeof vi.fn>).mockClear();
+    });
+
     it('should reject drop when dragged item and target have different states', async () => {
       const inProgressItem = makeItem({ id: 'a', state: WorkItemState.InProgress });
       const pausedItem = makeItem({ id: 'b', state: WorkItemState.Paused });
