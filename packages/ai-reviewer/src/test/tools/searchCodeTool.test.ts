@@ -44,7 +44,7 @@ describe('searchCodeTool', () => {
 
       expect(execFile).toHaveBeenCalledWith(
         'git',
-        expect.arrayContaining(['grep', '-n', '--no-color', 'hello']),
+        expect.arrayContaining(['grep', '-n', '--no-color', '-e', 'hello']),
         expect.objectContaining({ cwd: '/mock/worktree' }),
         expect.any(Function),
       );
@@ -63,12 +63,14 @@ describe('searchCodeTool', () => {
         { isCancellationRequested: false } as never,
       );
 
-      expect(execFile).toHaveBeenCalledWith(
-        'git',
-        expect.arrayContaining(['--', '*.ts']),
-        expect.objectContaining({ cwd: '/mock/worktree' }),
-        expect.any(Function),
-      );
+      // -e before pattern, -- before pathspec
+      const args = vi.mocked(execFile).mock.calls[0][1] as string[];
+      const eIdx = args.indexOf('-e');
+      const dashIdx = args.indexOf('--');
+      expect(eIdx).toBeGreaterThan(-1);
+      expect(args[eIdx + 1]).toBe('hello');
+      expect(dashIdx).toBeGreaterThan(eIdx);
+      expect(args[dashIdx + 1]).toBe('*.ts');
     });
 
     it('truncates output exceeding maxResults', async () => {
