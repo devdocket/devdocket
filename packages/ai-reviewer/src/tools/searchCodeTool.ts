@@ -17,7 +17,7 @@ export function registerSearchCodeTool(): vscode.Disposable {
       _token: vscode.CancellationToken,
     ) {
       const { worktreePath, pattern, fileGlob, maxResults } = options.input;
-      const limit = maxResults ?? 50;
+      const limit = Math.min(Math.max(1, maxResults ?? 50), 500);
 
       if (!validWorktreePaths.has(path.resolve(worktreePath))) {
         return new vscode.LanguageModelToolResult([
@@ -26,7 +26,7 @@ export function registerSearchCodeTool(): vscode.Disposable {
       }
 
       try {
-        const args = ['grep', '-n', '--no-color', '--', pattern];
+        const args = ['grep', '-n', '--no-color', `-m`, String(limit), '--', pattern];
         if (fileGlob) {
           args.push(fileGlob);
         }
