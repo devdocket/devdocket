@@ -116,7 +116,7 @@ export class WalkthroughParticipant {
       const models = await vscode.lm.selectChatModels({ family: 'gpt-4o' });
       if (models.length === 0) {
         response.markdown('❌ No language model available. Please install GitHub Copilot.');
-        return {};
+        return { metadata: { phase: 'error' } };
       }
       model = models[0];
     }
