@@ -368,6 +368,7 @@ export class AdoWorkItemProvider extends BaseProvider {
    * and excludes items whose state is terminal.
    *
    * @param token - Access token for ADO API
+   * @param org - ADO organization name
    * @param workItems - All work items to filter
    * @returns Only work items in active states
    */
