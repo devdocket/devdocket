@@ -182,7 +182,7 @@ describe('registerCommands', () => {
       await invoke('workcenter.refresh');
 
       expect(vscode.window.withProgress).toHaveBeenCalledWith(
-        expect.objectContaining({ location: (vscode as any).ProgressLocation.Window }),
+        expect.objectContaining({ location: vscode.ProgressLocation.Window }),
         expect.any(Function),
       );
       expect(providerRegistry.refreshAll).toHaveBeenCalled();
