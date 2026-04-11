@@ -126,16 +126,13 @@ function normalizeProviderId(providerId: string | null | undefined): string | un
  * Items without a providerId (or with an empty/whitespace one) are grouped under "Other" (sorted last).
  */
 export function groupByProvider(items: WorkItem[]): ProviderGroupNode[] {
-  const groups = new Map<string | undefined, WorkItem[]>();
+  const seen = new Set<string | undefined>();
   for (const item of items) {
-    const key = normalizeProviderId(item.providerId);
-    const list = groups.get(key) ?? [];
-    list.push(item);
-    groups.set(key, list);
+    seen.add(normalizeProviderId(item.providerId));
   }
 
   const result: ProviderGroupNode[] = [];
-  for (const [providerId] of groups) {
+  for (const providerId of seen) {
     result.push({
       kind: 'providerGroup',
       label: providerId ?? 'Other',
@@ -189,7 +186,8 @@ export function createProviderGroupTreeItem(
   contextValue: string,
 ): vscode.TreeItem {
   const treeItem = new vscode.TreeItem(node.label, vscode.TreeItemCollapsibleState.Collapsed);
-  treeItem.id = `${prefix}::group::${node.providerId ?? '__other__'}`;
+  const idSuffix = node.providerId ? `provider:${node.providerId}` : 'other';
+  treeItem.id = `${prefix}::group::${idSuffix}`;
   treeItem.contextValue = contextValue;
   treeItem.iconPath = new vscode.ThemeIcon(node.providerId ? 'plug' : 'circle-filled');
   return treeItem;
