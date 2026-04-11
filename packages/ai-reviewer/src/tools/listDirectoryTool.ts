@@ -52,7 +52,7 @@ export function registerListDirectoryTool(): vscode.Disposable {
           ]);
         }
 
-        const uri = vscode.Uri.file(resolved);
+        const uri = vscode.Uri.file(realPath);
         const entries = await vscode.workspace.fs.readDirectory(uri);
         const lines = entries.map(([name, type]) => {
           const isSymbolicLink = (type & vscode.FileType.SymbolicLink) !== 0;

@@ -59,7 +59,7 @@ export function registerReadFileTool(): vscode.Disposable {
           ]);
         }
 
-        const uri = vscode.Uri.file(fullPath);
+        const uri = vscode.Uri.file(realPath);
         const bytes = await vscode.workspace.fs.readFile(uri);
         const content = new TextDecoder('utf-8').decode(bytes);
         return new vscode.LanguageModelToolResult([
