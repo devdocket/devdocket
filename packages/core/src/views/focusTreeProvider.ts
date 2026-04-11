@@ -42,7 +42,25 @@ export class FocusTreeProvider implements vscode.TreeDataProvider<WorkItem>, vsc
     return this.workGraph.getItemsByState(
       WorkItemState.InProgress,
       WorkItemState.Paused,
-    ).sort((a, b) => (a.sortOrder ?? Number.MAX_SAFE_INTEGER) - (b.sortOrder ?? Number.MAX_SAFE_INTEGER));
+    ).sort((a, b) => {
+      const statePriorityDifference = this.getFocusStatePriority(a.state) - this.getFocusStatePriority(b.state);
+      if (statePriorityDifference !== 0) {
+        return statePriorityDifference;
+      }
+
+      return (a.sortOrder ?? Number.MAX_SAFE_INTEGER) - (b.sortOrder ?? Number.MAX_SAFE_INTEGER);
+    });
+  }
+
+  private getFocusStatePriority(state: WorkItemState): number {
+    switch (state) {
+      case WorkItemState.InProgress:
+        return 0;
+      case WorkItemState.Paused:
+        return 1;
+      default:
+        return Number.MAX_SAFE_INTEGER;
+    }
   }
 
   private getStateLabel(state: WorkItemState): string {
