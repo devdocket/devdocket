@@ -559,6 +559,18 @@ describe('WorkGraph', () => {
       expect(graph.getItem(item.id)?.state).toBe(WorkItemState.New);
     });
 
+    it('assigns a fresh sortOrder when moving back to New', async () => {
+      const itemA = await graph.createItem({ title: 'A' });
+      const itemB = await graph.createItem({ title: 'B' });
+      // Move A to InProgress (leaves B in Queue with sortOrder 1)
+      await graph.transitionState(itemA.id, WorkItemState.InProgress);
+      // Move A back to New — should get sortOrder after B
+      await graph.transitionState(itemA.id, WorkItemState.New);
+      const returned = graph.getItem(itemA.id)!;
+      const remaining = graph.getItem(itemB.id)!;
+      expect(returned.sortOrder).toBeGreaterThan(remaining.sortOrder!);
+    });
+
     it('rejects InProgress → Archived (skipping Done)', async () => {
       const item = await graph.createItem({ title: 'Test' });
       await graph.transitionState(item.id, WorkItemState.InProgress);
