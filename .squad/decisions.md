@@ -7,7 +7,7 @@
 **Author:** Fenster (Extension Dev)  
 **Status:** Implemented
 
-Shared PR action logic (diff fetching, GitHub auth, LLM model selection, prompt loading with custom file support, workspace path validation) is extracted into `BasePrAction` in `basePrAction.ts`. Each new AI action (code review, walkthrough) extends this base class and provides only configuration properties and a `getRuntimeInstructions()` method.
+Shared PR action logic (diff fetching, GitHub auth, LLM model selection, prompt loading with custom file support, workspace path validation) is extracted into `BasePrAction` in `basePrAction.ts`. `AiReviewAction` extends this base class and provides configuration properties plus a `getRuntimeInstructions()` method, while `AiWalkthroughAction` is a standalone `WorkCenterAction` that prepares a worktree and opens the `@walkthrough` chat participant.
 
 **Rationale:**
 - Eliminates code duplication across AI actions that all follow the same fetch-diff → confirm → analyze → display pattern
@@ -28,7 +28,7 @@ Shared PR action logic (diff fetching, GitHub auth, LLM model selection, prompt 
 - `packages/ai-reviewer/src/extension.ts` — Registers both actions, chat participant, and LM tools
 - `packages/ai-reviewer/package.json` — Updated metadata, added chatParticipants + languageModelTools contributions
 
-**Test Coverage:** 50 existing review action tests + 9 new walkthrough tests, all passing  
+**Test Coverage:** Existing review action coverage plus new walkthrough, participant, tool, and RepoManager tests — all passing at implementation time
 **Result:** All 59 tests passing, build passes
 
 **References:**
