@@ -1,4 +1,5 @@
 import * as vscode from 'vscode';
+import { WorkItem } from '../models/workItem';
 
 export type ViewLayout = 'flat' | 'tree';
 
@@ -78,4 +79,100 @@ export function isProviderGroupNode(element: unknown): element is ProviderGroupN
     element !== null &&
     (element as Record<string, unknown>).kind === 'providerGroup'
   );
+}
+
+/**
+ * Composable layout state that fires a change event when the layout toggles.
+ * Providers own one of these instead of duplicating the getter/setter boilerplate.
+ */
+export class LayoutState {
+  private _layout: ViewLayout;
+
+  constructor(
+    defaultLayout: ViewLayout,
+    private readonly fireChange: () => void,
+  ) {
+    this._layout = defaultLayout;
+  }
+
+  get value(): ViewLayout { return this._layout; }
+  set value(next: ViewLayout) {
+    if (this._layout !== next) {
+      this._layout = next;
+      this.fireChange();
+    }
+  }
+}
+
+/**
+ * Group WorkItems by providerId into ProviderGroupNodes.
+ * Items without a providerId are grouped under "Other" (sorted last).
+ */
+export function groupByProvider(items: WorkItem[]): ProviderGroupNode[] {
+  const groups = new Map<string | undefined, WorkItem[]>();
+  for (const item of items) {
+    const key = item.providerId ?? undefined;
+    const list = groups.get(key) ?? [];
+    list.push(item);
+    groups.set(key, list);
+  }
+
+  const result: ProviderGroupNode[] = [];
+  for (const [providerId] of groups) {
+    result.push({
+      kind: 'providerGroup',
+      label: providerId ?? 'Other',
+      providerId,
+    });
+  }
+  return result.sort((a, b) => {
+    if (!a.providerId) { return 1; }
+    if (!b.providerId) { return -1; }
+    return a.label.localeCompare(b.label);
+  });
+}
+
+/**
+ * Common getChildren routing for providers that show WorkItems
+ * in either flat or tree (grouped-by-provider) mode.
+ *
+ * @param element   The tree element being expanded (undefined = root)
+ * @param getItems  Returns all relevant WorkItems for this view
+ * @param sortItems Sorts a flat list of items (view-specific ordering)
+ * @param layout    Current layout mode
+ */
+export function getTreeModeChildren(
+  element: WorkItem | ProviderGroupNode | undefined,
+  getItems: () => WorkItem[],
+  sortItems: (items: WorkItem[]) => WorkItem[],
+  layout: ViewLayout,
+): (WorkItem | ProviderGroupNode)[] {
+  if (!element) {
+    const items = getItems();
+    if (layout === 'flat') {
+      return sortItems(items);
+    }
+    return groupByProvider(items);
+  }
+
+  if (isProviderGroupNode(element)) {
+    return sortItems(
+      getItems().filter(i => (i.providerId ?? undefined) === element.providerId),
+    );
+  }
+
+  return [];
+}
+
+/** Create a TreeItem for a ProviderGroupNode with a view-specific id prefix and contextValue. */
+export function createProviderGroupTreeItem(
+  node: ProviderGroupNode,
+  prefix: string,
+  contextValue: string,
+): vscode.TreeItem {
+  const treeItem = new vscode.TreeItem(node.label, vscode.TreeItemCollapsibleState.Collapsed);
+  treeItem.id = `${prefix}::group::${node.providerId ?? '__other__'}`;
+  treeItem.contextValue = contextValue;
+  treeItem.iconPath = new vscode.ThemeIcon(node.providerId ? 'plug' : 'circle-filled');
+  return treeItem;
 }

@@ -1,7 +1,10 @@
 import * as vscode from 'vscode';
 import { WorkItem, WorkItemState } from '../models/workItem';
 import { WorkGraph } from '../services/workGraph';
-import { ViewLayout, ProviderGroupNode, isProviderGroupNode } from './viewLayout';
+import {
+  ViewLayout, ProviderGroupNode, isProviderGroupNode,
+  LayoutState, getTreeModeChildren, createProviderGroupTreeItem,
+} from './viewLayout';
 
 export type HistoryElement = WorkItem | ProviderGroupNode;
 
@@ -9,17 +12,13 @@ export class HistoryTreeProvider implements vscode.TreeDataProvider<HistoryEleme
   private readonly _onDidChangeTreeData = new vscode.EventEmitter<void>();
   readonly onDidChangeTreeData = this._onDidChangeTreeData.event;
   private readonly disposables: vscode.Disposable[] = [];
-  private _layout: ViewLayout = 'flat';
+  private readonly _layoutState: LayoutState;
 
-  get layout(): ViewLayout { return this._layout; }
-  set layout(value: ViewLayout) {
-    if (this._layout !== value) {
-      this._layout = value;
-      this._onDidChangeTreeData.fire();
-    }
-  }
+  get layout(): ViewLayout { return this._layoutState.value; }
+  set layout(value: ViewLayout) { this._layoutState.value = value; }
 
   constructor(private readonly workGraph: WorkGraph) {
+    this._layoutState = new LayoutState('flat', () => this._onDidChangeTreeData.fire());
     this.disposables.push(
       workGraph.onDidChange(() => this._onDidChangeTreeData.fire())
     );
@@ -31,11 +30,7 @@ export class HistoryTreeProvider implements vscode.TreeDataProvider<HistoryEleme
 
   getTreeItem(element: HistoryElement): vscode.TreeItem {
     if (isProviderGroupNode(element)) {
-      const treeItem = new vscode.TreeItem(element.label, vscode.TreeItemCollapsibleState.Collapsed);
-      treeItem.id = `history::group::${element.providerId ?? '__other__'}`;
-      treeItem.contextValue = 'historyGroup';
-      treeItem.iconPath = new vscode.ThemeIcon(element.providerId ? 'plug' : 'circle-filled');
-      return treeItem;
+      return createProviderGroupTreeItem(element, 'history', 'historyGroup');
     }
 
     const item = element;
@@ -49,50 +44,12 @@ export class HistoryTreeProvider implements vscode.TreeDataProvider<HistoryEleme
   }
 
   getChildren(element?: HistoryElement): HistoryElement[] {
-    if (!element) {
-      const items = this.workGraph.getItemsByState(
-        WorkItemState.Done,
-        WorkItemState.Archived,
-      );
-
-      if (this._layout === 'flat') {
-        return items.sort((a, b) => b.updatedAt - a.updatedAt);
-      }
-
-      return this.groupByProvider(items);
-    }
-
-    if (isProviderGroupNode(element)) {
-      return this.workGraph.getItemsByState(WorkItemState.Done, WorkItemState.Archived)
-        .filter(i => (i.providerId ?? undefined) === element.providerId)
-        .sort((a, b) => b.updatedAt - a.updatedAt);
-    }
-
-    return [];
-  }
-
-  private groupByProvider(items: WorkItem[]): ProviderGroupNode[] {
-    const groups = new Map<string | undefined, WorkItem[]>();
-    for (const item of items) {
-      const key = item.providerId ?? undefined;
-      const list = groups.get(key) ?? [];
-      list.push(item);
-      groups.set(key, list);
-    }
-
-    const result: ProviderGroupNode[] = [];
-    for (const [providerId] of groups) {
-      result.push({
-        kind: 'providerGroup',
-        label: providerId ?? 'Other',
-        providerId,
-      });
-    }
-    return result.sort((a, b) => {
-      if (!a.providerId) { return 1; }
-      if (!b.providerId) { return -1; }
-      return a.label.localeCompare(b.label);
-    });
+    return getTreeModeChildren(
+      element,
+      () => this.workGraph.getItemsByState(WorkItemState.Done, WorkItemState.Archived),
+      items => items.sort((a, b) => b.updatedAt - a.updatedAt),
+      this._layoutState.value,
+    );
   }
 
   private getStateLabel(state: WorkItemState): string {

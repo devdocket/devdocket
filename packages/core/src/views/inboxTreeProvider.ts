@@ -4,7 +4,7 @@ import { ProviderRegistry } from '../services/providerRegistry';
 import { DiscoveredStateStore } from '../storage/discoveredStateStore';
 import { ReadStateStore } from '../storage/readStateStore';
 import { logger } from '../services/logger';
-import { ViewLayout } from './viewLayout';
+import { ViewLayout, LayoutState } from './viewLayout';
 
 export interface InboxProviderNode {
   kind: 'provider';
@@ -41,21 +41,17 @@ export class InboxTreeProvider implements vscode.TreeDataProvider<InboxElement> 
   readonly onDidMarkSeen = this._onDidMarkSeen.event;
   private refreshTimer: ReturnType<typeof setTimeout> | undefined;
   static readonly REFRESH_DEBOUNCE_MS = 50;
-  private _layout: ViewLayout = 'tree';
+  private readonly _layoutState: LayoutState;
 
-  get layout(): ViewLayout { return this._layout; }
-  set layout(value: ViewLayout) {
-    if (this._layout !== value) {
-      this._layout = value;
-      this._onDidChangeTreeData.fire();
-    }
-  }
+  get layout(): ViewLayout { return this._layoutState.value; }
+  set layout(value: ViewLayout) { this._layoutState.value = value; }
 
   constructor(
     private readonly providerRegistry: ProviderRegistry,
     private readonly stateStore: DiscoveredStateStore,
     private readonly readStateStore: ReadStateStore,
   ) {
+    this._layoutState = new LayoutState('tree', () => this._onDidChangeTreeData.fire());
     this.disposables.push(
       providerRegistry.onDidChangeDiscoveredItems(() => this.scheduleRefresh()),
       stateStore.onDidChange(() => this.scheduleRefresh()),
@@ -187,7 +183,7 @@ export class InboxTreeProvider implements vscode.TreeDataProvider<InboxElement> 
 
   getChildren(element?: InboxElement): InboxElement[] {
     if (!element) {
-      if (this._layout === 'flat') {
+      if (this._layoutState.value === 'flat') {
         return this.getAllUnseenItems();
       }
       const result: InboxProviderNode[] = [];

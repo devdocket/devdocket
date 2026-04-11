@@ -2,7 +2,7 @@ import * as vscode from 'vscode';
 import { DiscoveredItem } from '../api/types';
 import { ProviderRegistry } from '../services/providerRegistry';
 import { DiscoveredStateStore } from '../storage/discoveredStateStore';
-import { ViewLayout } from './viewLayout';
+import { ViewLayout, LayoutState } from './viewLayout';
 
 export type SourcesElement = SourceProviderNode | SourceGroupNode | SourceItemNode;
 
@@ -32,20 +32,16 @@ export class SourcesTreeProvider implements vscode.TreeDataProvider<SourcesEleme
   private readonly _onDidChangeTreeData = new vscode.EventEmitter<void>();
   readonly onDidChangeTreeData = this._onDidChangeTreeData.event;
   private readonly disposables: vscode.Disposable[] = [];
-  private _layout: ViewLayout = 'tree';
+  private readonly _layoutState: LayoutState;
 
-  get layout(): ViewLayout { return this._layout; }
-  set layout(value: ViewLayout) {
-    if (this._layout !== value) {
-      this._layout = value;
-      this._onDidChangeTreeData.fire();
-    }
-  }
+  get layout(): ViewLayout { return this._layoutState.value; }
+  set layout(value: ViewLayout) { this._layoutState.value = value; }
 
   constructor(
     private readonly providerRegistry: ProviderRegistry,
     private readonly stateStore: DiscoveredStateStore,
   ) {
+    this._layoutState = new LayoutState('tree', () => this._onDidChangeTreeData.fire());
     this.disposables.push(
       providerRegistry.onDidChangeDiscoveredItems(() => this._onDidChangeTreeData.fire()),
       stateStore.onDidChange(() => this._onDidChangeTreeData.fire())
@@ -83,7 +79,7 @@ export class SourcesTreeProvider implements vscode.TreeDataProvider<SourcesEleme
 
   getChildren(element?: SourcesElement): SourcesElement[] {
     if (!element) {
-      if (this._layout === 'flat') {
+      if (this._layoutState.value === 'flat') {
         return this.getAllItems();
       }
       const result: SourceProviderNode[] = [];

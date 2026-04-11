@@ -1,7 +1,10 @@
 import * as vscode from 'vscode';
 import { WorkItem, WorkItemState } from '../models/workItem';
 import { WorkGraph } from '../services/workGraph';
-import { ViewLayout, ProviderGroupNode, isProviderGroupNode } from './viewLayout';
+import {
+  ViewLayout, ProviderGroupNode, isProviderGroupNode,
+  LayoutState, getTreeModeChildren, createProviderGroupTreeItem,
+} from './viewLayout';
 
 export type QueueElement = WorkItem | ProviderGroupNode;
 
@@ -13,17 +16,13 @@ export class QueueTreeProvider implements vscode.TreeDataProvider<QueueElement>,
   private readonly _onDidChangeTreeData = new vscode.EventEmitter<void>();
   readonly onDidChangeTreeData = this._onDidChangeTreeData.event;
   private readonly disposables: vscode.Disposable[] = [];
-  private _layout: ViewLayout = 'flat';
+  private readonly _layoutState: LayoutState;
 
-  get layout(): ViewLayout { return this._layout; }
-  set layout(value: ViewLayout) {
-    if (this._layout !== value) {
-      this._layout = value;
-      this._onDidChangeTreeData.fire();
-    }
-  }
+  get layout(): ViewLayout { return this._layoutState.value; }
+  set layout(value: ViewLayout) { this._layoutState.value = value; }
 
   constructor(private readonly workGraph: WorkGraph) {
+    this._layoutState = new LayoutState('flat', () => this._onDidChangeTreeData.fire());
     this.disposables.push(
       workGraph.onDidChange(() => this._onDidChangeTreeData.fire())
     );
@@ -33,11 +32,7 @@ export class QueueTreeProvider implements vscode.TreeDataProvider<QueueElement>,
 
   getTreeItem(element: QueueElement): vscode.TreeItem {
     if (isProviderGroupNode(element)) {
-      const treeItem = new vscode.TreeItem(element.label, vscode.TreeItemCollapsibleState.Collapsed);
-      treeItem.id = `queue::group::${element.providerId ?? '__other__'}`;
-      treeItem.contextValue = 'queueGroup';
-      treeItem.iconPath = new vscode.ThemeIcon(element.providerId ? 'plug' : 'circle-filled');
-      return treeItem;
+      return createProviderGroupTreeItem(element, 'queue', 'queueGroup');
     }
 
     const item = element;
@@ -51,49 +46,16 @@ export class QueueTreeProvider implements vscode.TreeDataProvider<QueueElement>,
     return treeItem;
   }
 
+  private readonly sortBySortOrder = (items: WorkItem[]): WorkItem[] =>
+    items.sort((a, b) => (a.sortOrder ?? Number.MAX_SAFE_INTEGER) - (b.sortOrder ?? Number.MAX_SAFE_INTEGER));
+
   getChildren(element?: QueueElement): QueueElement[] {
-    if (!element) {
-      const items = this.workGraph.getItemsByState(WorkItemState.New);
-
-      if (this._layout === 'flat') {
-        return items.sort((a, b) => (a.sortOrder ?? Number.MAX_SAFE_INTEGER) - (b.sortOrder ?? Number.MAX_SAFE_INTEGER));
-      }
-
-      return this.groupByProvider(items);
-    }
-
-    if (isProviderGroupNode(element)) {
-      return this.workGraph.getItemsByState(WorkItemState.New)
-        .filter(i => (i.providerId ?? undefined) === element.providerId)
-        .sort((a, b) => (a.sortOrder ?? Number.MAX_SAFE_INTEGER) - (b.sortOrder ?? Number.MAX_SAFE_INTEGER));
-    }
-
-    return [];
-  }
-
-  private groupByProvider(items: WorkItem[]): ProviderGroupNode[] {
-    const groups = new Map<string | undefined, WorkItem[]>();
-    for (const item of items) {
-      const key = item.providerId ?? undefined;
-      const list = groups.get(key) ?? [];
-      list.push(item);
-      groups.set(key, list);
-    }
-
-    const result: ProviderGroupNode[] = [];
-    for (const [providerId] of groups) {
-      result.push({
-        kind: 'providerGroup',
-        label: providerId ?? 'Other',
-        providerId,
-      });
-    }
-    return result.sort((a, b) => {
-      // "Other" group always goes last
-      if (!a.providerId) { return 1; }
-      if (!b.providerId) { return -1; }
-      return a.label.localeCompare(b.label);
-    });
+    return getTreeModeChildren(
+      element,
+      () => this.workGraph.getItemsByState(WorkItemState.New),
+      this.sortBySortOrder,
+      this._layoutState.value,
+    );
   }
 
   private buildTooltip(item: WorkItem): vscode.MarkdownString {
