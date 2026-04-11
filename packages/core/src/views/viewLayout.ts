@@ -29,20 +29,28 @@ export function getViewLayout(viewId: ViewId): ViewLayout {
 /** Toggle the layout for a view between flat and tree and persist the choice. */
 export async function toggleViewLayout(viewId: ViewId): Promise<void> {
   const config = vscode.workspace.getConfiguration('workcenter');
-  const raw: unknown = config.get('viewLayout');
-  const layouts: Record<string, string> = (raw && typeof raw === 'object' && !Array.isArray(raw))
-    ? { ...(raw as Record<string, string>) }
-    : {};
   const current = getViewLayout(viewId);
+
+  // Determine which scope to update and base the new value on that scope's data
+  const inspection = config.inspect('viewLayout');
+  let scopeValue: unknown;
+  let target: vscode.ConfigurationTarget;
+  if (inspection?.workspaceFolderValue !== undefined) {
+    scopeValue = inspection.workspaceFolderValue;
+    target = vscode.ConfigurationTarget.WorkspaceFolder;
+  } else if (inspection?.workspaceValue !== undefined) {
+    scopeValue = inspection.workspaceValue;
+    target = vscode.ConfigurationTarget.Workspace;
+  } else {
+    scopeValue = inspection?.globalValue;
+    target = vscode.ConfigurationTarget.Global;
+  }
+
+  const layouts: Record<string, string> = (scopeValue && typeof scopeValue === 'object' && !Array.isArray(scopeValue))
+    ? { ...(scopeValue as Record<string, string>) }
+    : {};
   layouts[viewId] = current === 'flat' ? 'tree' : 'flat';
 
-  // Update the most specific existing scope so the effective layout changes
-  const inspection = config.inspect('viewLayout');
-  const target = inspection?.workspaceFolderValue !== undefined
-    ? vscode.ConfigurationTarget.WorkspaceFolder
-    : inspection?.workspaceValue !== undefined
-      ? vscode.ConfigurationTarget.Workspace
-      : vscode.ConfigurationTarget.Global;
   await config.update('viewLayout', layouts, target);
 }
 
