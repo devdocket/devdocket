@@ -106,18 +106,23 @@ async function batchTransition(
     await workGraph.transitionState(ids[0], targetState);
     return;
   }
-  let failed = 0;
+  const failedIds: string[] = [];
   for (const id of ids) {
     try {
       await workGraph.transitionState(id, targetState);
     } catch (err: unknown) {
-      failed++;
-      handleCommandError(`Failed to transition item ${id}`, err);
+      failedIds.push(id);
+      logger.error(`Failed to transition item ${id}`, err);
     }
   }
-  const succeeded = ids.length - failed;
+  const succeeded = ids.length - failedIds.length;
   if (succeeded > 0) {
     void vscode.window.showInformationMessage(successMessage(succeeded));
+  }
+  if (failedIds.length > 0) {
+    void vscode.window.showErrorMessage(
+      `WorkCenter: Failed to transition ${failedIds.length} item(s); see Output for details`,
+    );
   }
 }
 

@@ -900,8 +900,12 @@ describe('registerCommands', () => {
       await invoke('workcenter.acceptToFocus', items[0], items);
 
       expect(workGraph.transitionState).toHaveBeenCalledTimes(3);
+      expect(logger.error).toHaveBeenCalledWith(
+        'Failed to transition item wc-2',
+        expect.any(Error),
+      );
       expect(vscode.window.showErrorMessage).toHaveBeenCalledWith(
-        expect.stringContaining('Failed to transition item wc-2'),
+        'WorkCenter: Failed to transition 1 item(s); see Output for details',
       );
       expect(vscode.window.showInformationMessage).toHaveBeenCalledWith('Moved 2 items to Focus');
     });
@@ -1022,8 +1026,12 @@ describe('registerCommands', () => {
       await invoke('workcenter.moveToQueue', items[0], items);
 
       expect(workGraph.transitionState).toHaveBeenCalledTimes(3);
+      expect(logger.error).toHaveBeenCalledWith(
+        'Failed to transition item wc-2',
+        expect.any(Error),
+      );
       expect(vscode.window.showErrorMessage).toHaveBeenCalledWith(
-        expect.stringContaining('Failed to transition item wc-2'),
+        'WorkCenter: Failed to transition 1 item(s); see Output for details',
       );
       expect(vscode.window.showInformationMessage).toHaveBeenCalledWith('Moved 2 items to Queue');
     });
