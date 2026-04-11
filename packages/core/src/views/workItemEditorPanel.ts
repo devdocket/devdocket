@@ -22,6 +22,8 @@ export class WorkItemEditorPanel {
   ): void {
     const existing = WorkItemEditorPanel.openPanels.get(item.id);
     if (existing) {
+      existing.panel.title = `Edit: ${item.title}`;
+      existing.update();
       existing.panel.reveal();
       return;
     }

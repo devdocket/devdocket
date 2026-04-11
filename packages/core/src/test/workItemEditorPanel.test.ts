@@ -248,6 +248,24 @@ describe('WorkItemEditorPanel', () => {
 
       expect(window.createWebviewPanel).toHaveBeenCalledTimes(2);
     });
+
+    it('should refresh content when reusing an existing panel', () => {
+      const item = makeItem({ id: 'refresh-1', title: 'Original Title', notes: 'Original Notes' });
+      const mock = createMockWebviewPanel();
+      const wg = createMockWorkGraph(item);
+      vi.mocked(window.createWebviewPanel).mockReturnValue(mock.panel as any);
+
+      const ctx = createMockContext();
+      WorkItemEditorPanel.open(ctx, wg as any, item);
+
+      // Simulate the item being updated in the work graph
+      const updatedItem = makeItem({ id: 'refresh-1', title: 'Updated Title', notes: 'Updated Notes' });
+      vi.mocked(wg.getItem).mockReturnValue(updatedItem);
+      WorkItemEditorPanel.open(ctx, wg as any, updatedItem);
+
+      expect(mock.panel.title).toBe('Edit: Updated Title');
+      expect(mock.panel.webview.html).toContain('Updated Title');
+    });
   });
 
   describe('HTML generation', () => {
