@@ -74,7 +74,7 @@ export async function activate(_context: vscode.ExtensionContext): Promise<void>
   prReviewRegistration = api.registerProvider(prReviewProvider);
 
   // Register the Start Work action
-  const startWorkAction = new StartWorkAction();
+  const startWorkAction = new StartWorkAction(_context.globalState);
   const actionDisposable = api.registerAction(startWorkAction);
 
   _context.subscriptions.push(

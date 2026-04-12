@@ -28,19 +28,31 @@ interface WorkCenterAction {
   run(item: WorkItem): Promise<void>;
 }
 
+interface ParsedExternalId {
+  repoKey: string;
+  issueNumber: string;
+}
+
 /**
  * WorkCenter action that bootstraps a development environment for a GitHub issue.
  *
  * When executed on a work item originating from the GitHub provider, it:
- * 1. Creates a feature branch from `origin/dev` (falling back to `origin/main` or `HEAD`).
- * 2. Creates a git worktree at a sibling directory of the repository.
- * 3. Opens the worktree in a new VS Code window.
+ * 1. Prompts the user for the local repository path (with cached defaults).
+ * 2. Creates a feature branch from `origin/dev` (falling back to `origin/main` or `HEAD`).
+ * 3. Creates a git worktree at a sibling directory of the repository.
+ * 4. Opens the worktree in a new VS Code window.
  *
  * Only available for items in the `InProgress` state from the `github` provider.
  */
 export class StartWorkAction implements WorkCenterAction {
   readonly id = 'github.startWork';
   readonly label = 'Start Work (Branch + Worktree)';
+
+  private readonly globalState: vscode.Memento;
+
+  constructor(globalState: vscode.Memento) {
+    this.globalState = globalState;
+  }
 
   /**
    * Returns `true` when the item is an in-progress GitHub issue.
@@ -57,26 +69,21 @@ export class StartWorkAction implements WorkCenterAction {
    * @param item - The work item to start working on.
    */
   async run(item: WorkItem): Promise<void> {
-    const issueNumber = this.extractIssueNumber(item.externalId);
-    if (!issueNumber) {
+    const parsed = this.parseExternalId(item.externalId);
+    if (!parsed) {
       void vscode.window.showErrorMessage('Could not determine issue number.');
       return;
     }
 
-    const branchName = this.generateBranchName(issueNumber, item.title);
+    const branchName = this.generateBranchName(parsed.issueNumber, item.title);
 
-    const workspaceFolders = vscode.workspace.workspaceFolders;
-    if (!workspaceFolders || workspaceFolders.length === 0) {
-      void vscode.window.showErrorMessage('WorkCenter: No workspace folder open. Open a repository first.');
+    const repoPath = await this.promptForRepoPath(parsed.repoKey);
+    if (!repoPath) {
       return;
     }
 
-    let repoPath: string;
-    try {
-      repoPath = await this.selectRepository(workspaceFolders);
-    } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : String(err);
-      void vscode.window.showErrorMessage(`WorkCenter: ${message}`);
+    const baseBranch = await this.promptForBaseBranch(parsed.repoKey);
+    if (!baseBranch) {
       return;
     }
 
@@ -88,25 +95,9 @@ export class StartWorkAction implements WorkCenterAction {
         return;
       }
 
-      // Create branch from remote tracking branch (prefer origin/dev, fallback to origin/main or default)
-      let baseBranch = 'origin/dev';
-      try {
-        await execFileAsync('git', ['rev-parse', '--verify', 'origin/dev'], { cwd: repoPath });
-      } catch {
-        // origin/dev doesn't exist, try origin/main
-        try {
-          await execFileAsync('git', ['rev-parse', '--verify', 'origin/main'], { cwd: repoPath });
-          baseBranch = 'origin/main';
-        } catch {
-          // Fall back to current HEAD
-          baseBranch = 'HEAD';
-        }
-      }
       await execFileAsync('git', ['branch', branchName, baseBranch], { cwd: repoPath });
       logger.info(`Starting work: creating branch ${branchName}`);
 
-      // Create worktree — let git worktree add fail naturally if the directory
-      // already exists, avoiding a TOCTOU race with a pre-check.
       const worktreePath = path.join(path.dirname(repoPath), branchName);
 
       // Check if worktree directory already exists
@@ -156,48 +147,80 @@ export class StartWorkAction implements WorkCenterAction {
     }
   }
 
-  private extractIssueNumber(externalId: string | undefined): string | undefined {
+  /**
+   * Parses the externalId format "owner/repo#123" into its components.
+   */
+  private parseExternalId(externalId: string | undefined): ParsedExternalId | undefined {
     if (!externalId) {
       return undefined;
     }
-    // externalId format: "owner/repo#123"
-    const match = externalId.match(/#(\d+)$/);
-    return match ? match[1] : undefined;
+    const match = externalId.match(/^(.+?)#(\d+)$/);
+    if (!match) {
+      return undefined;
+    }
+    return { repoKey: match[1], issueNumber: match[2] };
   }
 
-  private async selectRepository(workspaceFolders: readonly vscode.WorkspaceFolder[]): Promise<string> {
-    // Find all folders with .git (directory or file for worktrees)
-    const gitFolders = workspaceFolders.filter(folder => {
-      const gitPath = path.join(folder.uri.fsPath, '.git');
-      // existsSync returns true for both files and directories
-      return fs.existsSync(gitPath);
+  /**
+   * Prompts the user for a local repo path, pre-filling the last-used path for this repo.
+   * Caches the selection on success. Does not cache on cancel, empty input, or invalid path.
+   */
+  private async promptForRepoPath(repoKey: string): Promise<string | undefined> {
+    const cacheKey = `repoPath:${repoKey}`;
+    const cachedPath = this.globalState.get<string>(cacheKey);
+
+    const selectedPath = await vscode.window.showInputBox({
+      prompt: `Enter the local path to the git repository for ${repoKey}`,
+      value: cachedPath ?? '',
+      ignoreFocusOut: true,
     });
 
-    if (gitFolders.length === 0) {
-      throw new Error('No git repository found in workspace folders.');
+    if (selectedPath === undefined) {
+      return undefined;
     }
 
-    if (gitFolders.length === 1) {
-      return gitFolders[0].uri.fsPath;
+    const trimmedPath = selectedPath.trim();
+    if (!trimmedPath) {
+      void vscode.window.showErrorMessage('WorkCenter: No repository path provided.');
+      return undefined;
     }
 
-    // Multiple git repos: show quick pick
-    const selected = await vscode.window.showQuickPick(
-      gitFolders.map(folder => ({
-        label: folder.name,
-        detail: folder.uri.fsPath,
-        folder,
-      })),
-      {
-        placeHolder: 'Select repository to create work branch',
-      }
-    );
-
-    if (!selected) {
-      throw new Error('No repository selected.');
+    const gitPath = path.join(trimmedPath, '.git');
+    if (!fs.existsSync(gitPath)) {
+      void vscode.window.showErrorMessage(`WorkCenter: "${trimmedPath}" is not a git repository.`);
+      return undefined;
     }
 
-    return selected.folder.uri.fsPath;
+    await this.globalState.update(cacheKey, trimmedPath);
+    return trimmedPath;
+  }
+
+  /**
+   * Prompts the user for a base branch, pre-filling the last-used branch for this repo.
+   * Caches the selection on success. Does not cache on cancel or empty input.
+   */
+  private async promptForBaseBranch(repoKey: string): Promise<string | undefined> {
+    const cacheKey = `baseBranch:${repoKey}`;
+    const cachedBranch = this.globalState.get<string>(cacheKey);
+
+    const selectedBranch = await vscode.window.showInputBox({
+      prompt: `Enter the base branch for ${repoKey}`,
+      value: cachedBranch ?? '',
+      ignoreFocusOut: true,
+    });
+
+    if (selectedBranch === undefined) {
+      return undefined;
+    }
+
+    const trimmedBranch = selectedBranch.trim();
+    if (!trimmedBranch) {
+      void vscode.window.showErrorMessage('WorkCenter: No base branch provided.');
+      return undefined;
+    }
+
+    await this.globalState.update(cacheKey, trimmedBranch);
+    return trimmedBranch;
   }
 
   private generateBranchName(issueNumber: string, title: string): string {

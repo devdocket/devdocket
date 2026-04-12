@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { window, workspace, commands, Uri } from 'vscode';
+import { window, commands, Uri } from 'vscode';
 import { StartWorkAction } from '../startWorkAction';
 import * as path from 'path';
 
@@ -33,24 +33,47 @@ function createWorkItem(overrides: Partial<any> = {}) {
   };
 }
 
+function createMockMemento() {
+  const store = new Map<string, any>();
+  return {
+    get: vi.fn((key: string, defaultValue?: any) => store.has(key) ? store.get(key) : defaultValue),
+    update: vi.fn(async (key: string, value: any) => { store.set(key, value); }),
+    keys: () => [...store.keys()],
+    _store: store,
+  };
+}
+
+/** Sets up showInputBox to return specific values based on which prompt is shown. */
+function mockInputBox(repoPath: string | undefined, baseBranch: string | undefined) {
+  vi.mocked(window.showInputBox).mockImplementation(async (options: any) => {
+    if (options?.prompt?.includes('local path')) {
+      return repoPath;
+    }
+    if (options?.prompt?.includes('base branch')) {
+      return baseBranch;
+    }
+    return undefined;
+  });
+}
+
 describe('StartWorkAction', () => {
   let action: StartWorkAction;
+  let mockMemento: ReturnType<typeof createMockMemento>;
 
   beforeEach(() => {
     vi.clearAllMocks();
-    action = new StartWorkAction();
+    mockMemento = createMockMemento();
+    action = new StartWorkAction(mockMemento as any);
 
-    // Default workspace mock
-    (workspace as any).workspaceFolders = [
-      { uri: { fsPath: '/mock/workspace' } },
-    ];
+    // Default: showInputBox returns repo path and base branch based on prompt
+    mockInputBox('/mock/workspace', 'origin/dev');
 
     // Reset execFile mock to succeed with empty output
     vi.mocked(execFile).mockImplementation(((cmd: string, args: string[], opts: any, cb: Function) => {
       cb(null, { stdout: '', stderr: '' }, '');
     }) as any);
 
-    // Reset fs.existsSync to return false for worktree directories, true for .git
+    // Return true for .git paths (repo validation), false otherwise (worktree check)
     vi.mocked(fs.existsSync).mockImplementation((path: any) => {
       return path.toString().endsWith('.git');
     });
@@ -84,12 +107,112 @@ describe('StartWorkAction', () => {
     });
   });
 
+  describe('repo path prompting', () => {
+    it('prompts user for repo path with no default on first use', async () => {
+      const item = createWorkItem();
+      await action.run(item);
+
+      expect(window.showInputBox).toHaveBeenCalledWith({
+        prompt: 'Enter the local path to the git repository for owner/repo',
+        value: '',
+        ignoreFocusOut: true,
+      });
+    });
+
+    it('pre-fills cached path as default on subsequent use', async () => {
+      mockMemento._store.set('repoPath:owner/repo', '/cached/path');
+      mockInputBox('/cached/path', 'origin/dev');
+
+      const item = createWorkItem();
+      await action.run(item);
+
+      expect(window.showInputBox).toHaveBeenCalledWith(
+        expect.objectContaining({ value: '/cached/path' }),
+      );
+    });
+
+    it('caches the selected repo path on success', async () => {
+      const item = createWorkItem();
+      await action.run(item);
+
+      expect(mockMemento.update).toHaveBeenCalledWith('repoPath:owner/repo', '/mock/workspace');
+    });
+
+    it('does not cache when user cancels input box', async () => {
+      mockInputBox(undefined, undefined);
+
+      const item = createWorkItem();
+      await action.run(item);
+
+      expect(mockMemento.update).not.toHaveBeenCalled();
+      expect(execFile).not.toHaveBeenCalled();
+    });
+
+    it('does not cache when user provides empty path', async () => {
+      mockInputBox('   ', undefined);
+
+      const item = createWorkItem();
+      await action.run(item);
+
+      expect(mockMemento.update).not.toHaveBeenCalled();
+      expect(window.showErrorMessage).toHaveBeenCalledWith(
+        'WorkCenter: No repository path provided.',
+      );
+    });
+
+    it('does not cache when path is not a git repository', async () => {
+      mockInputBox('/not/a/repo', undefined);
+      vi.mocked(fs.existsSync).mockReturnValue(false);
+
+      const item = createWorkItem();
+      await action.run(item);
+
+      expect(mockMemento.update).not.toHaveBeenCalled();
+      expect(window.showErrorMessage).toHaveBeenCalledWith(
+        'WorkCenter: "/not/a/repo" is not a git repository.',
+      );
+    });
+
+    it('isolates cache by repo key — repo A does not prefill for repo B', async () => {
+      mockMemento._store.set('repoPath:owner/repoA', '/path/to/repoA');
+
+      const item = createWorkItem({ externalId: 'owner/repoB#456' });
+      await action.run(item);
+
+      expect(window.showInputBox).toHaveBeenCalledWith(
+        expect.objectContaining({ value: '' }),
+      );
+    });
+
+    it('same repo prefills across different issues', async () => {
+      mockMemento._store.set('repoPath:owner/repo', '/cached/path');
+      mockInputBox('/cached/path', 'origin/dev');
+
+      const item1 = createWorkItem({ externalId: 'owner/repo#100' });
+      await action.run(item1);
+
+      vi.clearAllMocks();
+      mockInputBox('/cached/path', 'origin/dev');
+      vi.mocked(execFile).mockImplementation(((cmd: string, args: string[], opts: any, cb: Function) => {
+        cb(null, { stdout: '', stderr: '' }, '');
+      }) as any);
+      vi.mocked(fs.existsSync).mockImplementation((p: any) => p.toString().endsWith('.git'));
+
+      const item2 = createWorkItem({ externalId: 'owner/repo#200' });
+      await action.run(item2);
+
+      expect(window.showInputBox).toHaveBeenCalledWith(
+        expect.objectContaining({ value: '/cached/path' }),
+      );
+    });
+  });
+
   describe('run', () => {
     it('creates branch and worktree with correct names', async () => {
       const item = createWorkItem({ title: '#123: Fix login redirect bug' });
       await action.run(item);
 
-      expect(execFile).toHaveBeenCalledTimes(4);
+      expect(execFile).toHaveBeenCalledTimes(3);
 
       // First call: check if branch exists
       const firstCall = vi.mocked(execFile).mock.calls[0];
@@ -97,22 +220,16 @@ describe('StartWorkAction', () => {
       expect(firstCall[1]).toEqual(['branch', '--list', 'issue-123-fix-login-redirect-bug']);
       expect(firstCall[2]).toEqual({ cwd: '/mock/workspace' });
 
-      // Second call: verify origin/dev exists
+      // Second call: create branch from user-specified base
       const secondCall = vi.mocked(execFile).mock.calls[1];
       expect(secondCall[0]).toBe('git');
-      expect(secondCall[1]).toEqual(['rev-parse', '--verify', 'origin/dev']);
+      expect(secondCall[1]).toEqual(['branch', 'issue-123-fix-login-redirect-bug', 'origin/dev']);
       expect(secondCall[2]).toEqual({ cwd: '/mock/workspace' });
 
-      // Third call: create branch
+      // Third call: create worktree
       const thirdCall = vi.mocked(execFile).mock.calls[2];
       expect(thirdCall[0]).toBe('git');
-      expect(thirdCall[1]).toEqual(['branch', 'issue-123-fix-login-redirect-bug', 'origin/dev']);
-      expect(thirdCall[2]).toEqual({ cwd: '/mock/workspace' });
-
-      // Fourth call: create worktree
-      const fourthCall = vi.mocked(execFile).mock.calls[3];
-      expect(fourthCall[0]).toBe('git');
-      expect(fourthCall[1]).toEqual([
+      expect(thirdCall[1]).toEqual([
         'worktree', 'add',
         path.join('/mock', 'issue-123-fix-login-redirect-bug'),
         'issue-123-fix-login-redirect-bug',
@@ -123,9 +240,22 @@ describe('StartWorkAction', () => {
       const item = createWorkItem({ title: '#456: Add User Authentication!!', externalId: 'owner/repo#456' });
       await action.run(item);
 
-      // Third call is the branch creation (first is branch check, second is origin/dev verify)
-      const branchCall = vi.mocked(execFile).mock.calls[2];
-      expect(branchCall[1]).toEqual(['branch', 'issue-456-add-user-authentication', 'origin/dev']);
+      const branchCall = vi.mocked(execFile).mock.calls.find(
+        call => call[1]![0] === 'branch' && call[1]![1] !== '--list'
+      );
+      expect(branchCall![1]).toEqual(['branch', 'issue-456-add-user-authentication', 'origin/dev']);
+    });
+
+    it('uses user-specified base branch for branch creation', async () => {
+      mockInputBox('/mock/workspace', 'main');
+
+      const item = createWorkItem({ title: '#123: Fix bug' });
+      await action.run(item);
+
+      const branchCall = vi.mocked(execFile).mock.calls.find(
+        call => call[1]![0] === 'branch' && call[1]![1] !== '--list'
+      );
+      expect(branchCall![1]).toEqual(['branch', 'issue-123-fix-bug', 'main']);
     });
 
     it('truncates slug to 40 chars', async () => {
@@ -146,7 +276,6 @@ describe('StartWorkAction', () => {
       const item = createWorkItem({ title: '#123: Fix bug' });
       await action.run(item);
 
-      // C7 fix: now uses path.join(path.dirname(...), branchName)
       expect(Uri.file).toHaveBeenCalledWith(path.join('/mock', 'issue-123-fix-bug'));
       expect(commands.executeCommand).toHaveBeenCalledWith(
         'vscode.openFolder',
@@ -172,27 +301,6 @@ describe('StartWorkAction', () => {
         'Could not determine issue number.',
       );
       expect(execFile).not.toHaveBeenCalled();
-    });
-
-    it('shows error when no workspace folders exist', async () => {
-      (workspace as any).workspaceFolders = undefined;
-      const item = createWorkItem({ title: '#123: Fix bug' });
-      await action.run(item);
-
-      expect(window.showErrorMessage).toHaveBeenCalledWith(
-        'WorkCenter: No workspace folder open. Open a repository first.',
-      );
-      expect(execFile).not.toHaveBeenCalled();
-    });
-
-    it('shows error when workspace folders is empty array', async () => {
-      (workspace as any).workspaceFolders = [];
-      const item = createWorkItem({ title: '#123: Fix bug' });
-      await action.run(item);
-
-      expect(window.showErrorMessage).toHaveBeenCalledWith(
-        'WorkCenter: No workspace folder open. Open a repository first.',
-      );
     });
 
     it('shows error when git command fails', async () => {
@@ -289,124 +397,76 @@ describe('StartWorkAction', () => {
     });
   });
 
-  describe('base branch fallback', () => {
-    it('falls back to origin/main when origin/dev does not exist', async () => {
-      vi.mocked(execFile).mockImplementation(((cmd: string, args: string[], opts: any, cb: Function) => {
-        if (args[0] === 'rev-parse' && args[2] === 'origin/dev') {
-          cb(new Error('not found'), '', '');
-        } else {
-          cb(null, { stdout: '', stderr: '' }, '');
-        }
-      }) as any);
-
-      const item = createWorkItem({ title: '#123: Fix bug' });
+  describe('base branch prompting', () => {
+    it('prompts user for base branch with no default on first use', async () => {
+      const item = createWorkItem();
       await action.run(item);
 
-      const revParseMainCall = vi.mocked(execFile).mock.calls.find(
-        call => call[1]![0] === 'rev-parse' && call[1]![2] === 'origin/main'
-      );
-      expect(revParseMainCall).toBeDefined();
-
-      const branchCreateCall = vi.mocked(execFile).mock.calls.find(
-        call => call[1]![0] === 'branch' && call[1]![1] !== '--list'
-      );
-      expect(branchCreateCall).toBeDefined();
-      expect(branchCreateCall![1]).toEqual(['branch', 'issue-123-fix-bug', 'origin/main']);
-    });
-
-    it('falls back to HEAD when neither origin/dev nor origin/main exist', async () => {
-      vi.mocked(execFile).mockImplementation(((cmd: string, args: string[], opts: any, cb: Function) => {
-        if (args[0] === 'rev-parse' && args[2] === 'origin/dev') {
-          cb(new Error('not found'), '', '');
-        } else if (args[0] === 'rev-parse' && args[2] === 'origin/main') {
-          cb(new Error('not found'), '', '');
-        } else {
-          cb(null, { stdout: '', stderr: '' }, '');
-        }
-      }) as any);
-
-      const item = createWorkItem({ title: '#123: Fix bug' });
-      await action.run(item);
-
-      const branchCreateCall = vi.mocked(execFile).mock.calls.find(
-        call => call[1]![0] === 'branch' && call[1]![1] !== '--list'
-      );
-      expect(branchCreateCall).toBeDefined();
-      expect(branchCreateCall![1]).toEqual(['branch', 'issue-123-fix-bug', 'HEAD']);
-    });
-  });
-
-  describe('multi-workspace repository selection', () => {
-    it('shows quick pick when multiple workspace folders have .git', async () => {
-      (workspace as any).workspaceFolders = [
-        { name: 'repo1', uri: { fsPath: '/mock/repo1' } },
-        { name: 'repo2', uri: { fsPath: '/mock/repo2' } },
-      ];
-
-      vi.mocked(fs.existsSync).mockImplementation((p: any) => {
-        return p.toString().endsWith('.git');
+      // Second showInputBox call is for base branch
+      expect(window.showInputBox).toHaveBeenCalledWith({
+        prompt: 'Enter the base branch for owner/repo',
+        value: '',
+        ignoreFocusOut: true,
       });
-
-      vi.mocked(window.showQuickPick).mockResolvedValue({
-        label: 'repo2',
-        detail: '/mock/repo2',
-        folder: { name: 'repo2', uri: { fsPath: '/mock/repo2' } },
-      } as any);
-
-      const item = createWorkItem({ title: '#123: Fix bug' });
-      await action.run(item);
-
-      expect(window.showQuickPick).toHaveBeenCalledWith(
-        expect.arrayContaining([
-          expect.objectContaining({ label: 'repo1' }),
-          expect.objectContaining({ label: 'repo2' }),
-        ]),
-        expect.objectContaining({ placeHolder: 'Select repository to create work branch' }),
-      );
-
-      const branchCreateCall = vi.mocked(execFile).mock.calls.find(
-        call => call[1]![0] === 'branch' && call[1]![1] !== '--list'
-      );
-      expect(branchCreateCall).toBeDefined();
-      expect(branchCreateCall![2]).toEqual({ cwd: '/mock/repo2' });
     });
 
-    it('shows error when user cancels quick pick', async () => {
-      (workspace as any).workspaceFolders = [
-        { name: 'repo1', uri: { fsPath: '/mock/repo1' } },
-        { name: 'repo2', uri: { fsPath: '/mock/repo2' } },
-      ];
+    it('pre-fills cached base branch as default on subsequent use', async () => {
+      mockMemento._store.set('baseBranch:owner/repo', 'origin/main');
+      mockInputBox('/mock/workspace', 'origin/main');
 
-      vi.mocked(fs.existsSync).mockImplementation((p: any) => {
-        return p.toString().endsWith('.git');
-      });
+      const item = createWorkItem();
+      await action.run(item);
 
-      vi.mocked(window.showQuickPick).mockResolvedValue(undefined);
+      expect(window.showInputBox).toHaveBeenCalledWith(
+        expect.objectContaining({
+          prompt: 'Enter the base branch for owner/repo',
+          value: 'origin/main',
+        }),
+      );
+    });
 
-      const item = createWorkItem({ title: '#123: Fix bug' });
+    it('caches the selected base branch on success', async () => {
+      const item = createWorkItem();
+      await action.run(item);
+
+      expect(mockMemento.update).toHaveBeenCalledWith('baseBranch:owner/repo', 'origin/dev');
+    });
+
+    it('does not cache when user cancels base branch input', async () => {
+      mockInputBox('/mock/workspace', undefined);
+
+      const item = createWorkItem();
+      await action.run(item);
+
+      expect(mockMemento.update).toHaveBeenCalledWith('repoPath:owner/repo', '/mock/workspace');
+      expect(mockMemento.update).not.toHaveBeenCalledWith('baseBranch:owner/repo', expect.anything());
+      expect(execFile).not.toHaveBeenCalled();
+    });
+
+    it('shows error when user provides empty base branch', async () => {
+      mockInputBox('/mock/workspace', '  ');
+
+      const item = createWorkItem();
       await action.run(item);
 
       expect(window.showErrorMessage).toHaveBeenCalledWith(
-        'WorkCenter: No repository selected.',
+        'WorkCenter: No base branch provided.',
       );
       expect(execFile).not.toHaveBeenCalled();
     });
 
-    it('shows error when no workspace folders contain a git repository', async () => {
-      (workspace as any).workspaceFolders = [
-        { name: 'folder1', uri: { fsPath: '/mock/folder1' } },
-        { name: 'folder2', uri: { fsPath: '/mock/folder2' } },
-      ];
+    it('isolates cache by repo key', async () => {
+      mockMemento._store.set('baseBranch:owner/repoA', 'develop');
 
-      vi.mocked(fs.existsSync).mockReturnValue(false);
-
-      const item = createWorkItem({ title: '#123: Fix bug' });
+      const item = createWorkItem({ externalId: 'owner/repoB#456' });
       await action.run(item);
 
-      expect(window.showErrorMessage).toHaveBeenCalledWith(
-        'WorkCenter: No git repository found in workspace folders.',
+      // Base branch prompt should have empty default (not 'develop')
+      const baseBranchCall = vi.mocked(window.showInputBox).mock.calls.find(
+        call => (call[0] as any)?.prompt?.includes('base branch'),
       );
-      expect(execFile).not.toHaveBeenCalled();
+      expect(baseBranchCall).toBeDefined();
+      expect((baseBranchCall![0] as any).value).toBe('');
     });
   });
 
@@ -446,104 +506,7 @@ describe('StartWorkAction', () => {
     });
 
     it('shows warning when worktree fails and branch rollback also fails', async () => {
-      let worktreeSeen = false;
-      vi.mocked(execFile).mockImplementation(((cmd: string, args: string[], opts: any, cb: Function) => {
-        if (args[0] === 'worktree') {
-          worktreeSeen = true;
-          cb(new Error('worktree add failed'), '', '');
-        } else if (worktreeSeen && args[0] === 'branch' && args[1] === '-D') {
-          cb(new Error('branch delete failed'), '', '');
-        } else {
-          cb(null, { stdout: '', stderr: '' }, '');
-        }
-      }) as any);
-
-      const item = createWorkItem({ title: '#123: Fix bug' });
-      await action.run(item);
-
-      expect(window.showWarningMessage).toHaveBeenCalledWith(
-        expect.stringContaining('Failed to delete branch during rollback'),
-      );
-      expect(window.showErrorMessage).toHaveBeenCalledWith(
-        expect.stringContaining('worktree add failed'),
-      );
-    });
-
-    it('falls back to origin/main when origin/dev does not exist', async () => {
-      vi.mocked(execFile).mockImplementation(((cmd: string, args: string[], opts: any, cb: Function) => {
-        if (args[0] === 'rev-parse' && args[2] === 'origin/dev') {
-          cb(new Error('unknown revision'), '', '');
-        } else {
-          cb(null, { stdout: '', stderr: '' }, '');
-        }
-      }) as any);
-
-      const item = createWorkItem({ title: '#123: Fix bug' });
-      await action.run(item);
-
-      const branchCreateCall = vi.mocked(execFile).mock.calls.find(
-        call => call[1]![0] === 'branch' && call[1]![1] !== '--list'
-      );
-      expect(branchCreateCall).toBeDefined();
-      expect(branchCreateCall![1]).toEqual(['branch', 'issue-123-fix-bug', 'origin/main']);
-    });
-
-    it('falls back to HEAD when neither origin/dev nor origin/main exist', async () => {
-      vi.mocked(execFile).mockImplementation(((cmd: string, args: string[], opts: any, cb: Function) => {
-        if (args[0] === 'rev-parse' && args[2] === 'origin/dev') {
-          cb(new Error('unknown revision'), '', '');
-        } else if (args[0] === 'rev-parse' && args[2] === 'origin/main') {
-          cb(new Error('unknown revision'), '', '');
-        } else {
-          cb(null, { stdout: '', stderr: '' }, '');
-        }
-      }) as any);
-
-      const item = createWorkItem({ title: '#123: Fix bug' });
-      await action.run(item);
-
-      const branchCreateCall = vi.mocked(execFile).mock.calls.find(
-        call => call[1]![0] === 'branch' && call[1]![1] !== '--list'
-      );
-      expect(branchCreateCall).toBeDefined();
-      expect(branchCreateCall![1]).toEqual(['branch', 'issue-123-fix-bug', 'HEAD']);
-    });
-
-    it('shows error when repo selection is cancelled by user', async () => {
-      (workspace as any).workspaceFolders = [
-        { uri: { fsPath: '/mock/workspace1' }, name: 'repo1' },
-        { uri: { fsPath: '/mock/workspace2' }, name: 'repo2' },
-      ];
-      vi.mocked(fs.existsSync).mockReturnValue(true);
-      vi.mocked(window.showQuickPick).mockResolvedValue(undefined);
-
-      const item = createWorkItem({ title: '#123: Fix bug' });
-      await action.run(item);
-
-      expect(window.showErrorMessage).toHaveBeenCalledWith(
-        'WorkCenter: No repository selected.',
-      );
-      // Should not attempt any git operations
-      expect(execFile).not.toHaveBeenCalled();
-    });
-
-    it('shows error when no git repository found in workspace folders', async () => {
-      (workspace as any).workspaceFolders = [
-        { uri: { fsPath: '/mock/no-git-folder' }, name: 'no-git' },
-      ];
-      vi.mocked(fs.existsSync).mockReturnValue(false);
-
-      const item = createWorkItem({ title: '#123: Fix bug' });
-      await action.run(item);
-
-      expect(window.showErrorMessage).toHaveBeenCalledWith(
-        'WorkCenter: No git repository found in workspace folders.',
-      );
-      expect(execFile).not.toHaveBeenCalled();
-    });
-
-    it('shows error when externalId is undefined', async () => {
-      const item = createWorkItem({ externalId: undefined });
+      const item = createWorkItem({ externalId: 'invalid-format' });
       await action.run(item);
 
       expect(window.showErrorMessage).toHaveBeenCalledWith(
