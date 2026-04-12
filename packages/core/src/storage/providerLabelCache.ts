@@ -33,7 +33,12 @@ export class ProviderLabelCache {
     }
 
     if (!stats.isFile()) {
-      logger.warn(`Provider label cache path is not a regular file: ${this.filePath}`);
+      logger.warn(`Provider label cache path is not a regular file: ${this.filePath} — removing`);
+      try {
+        await fs.promises.rm(this.filePath, { force: true });
+      } catch {
+        // Best-effort cleanup
+      }
       this.labels.clear();
       return;
     }
@@ -116,7 +121,10 @@ export class ProviderLabelCache {
   }
 
   private enqueue(op: () => Promise<void>): Promise<void> {
-    this.writeQueue = this.writeQueue.then(op, () => op());
+    this.writeQueue = this.writeQueue.then(op, error => {
+      logger.warn('Previous provider label cache write failed; continuing with next queued write.', error);
+      return op();
+    });
     return this.writeQueue;
   }
 

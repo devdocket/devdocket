@@ -67,7 +67,7 @@ export class ProviderRegistry {
     this.providers.set(provider.id, provider);
     if (this.labelCache) {
       void this.labelCache.set(provider.id, provider.label).catch(err => {
-        logger.debug('Failed to cache provider label', err);
+        logger.debug(`Failed to cache provider label for provider ${provider.id} (label: ${provider.label})`, err);
       });
     }
     if (!this.discoveredItems.has(provider.id)) {
