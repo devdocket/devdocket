@@ -1,5 +1,6 @@
 import * as fs from 'fs';
 import * as path from 'path';
+import { logger } from '../services/logger';
 
 /**
  * Persists a mapping of providerId → display label so that tree views
@@ -26,7 +27,7 @@ export class ProviderLabelCache {
         this.labels.clear();
         return;
       }
-      console.warn(`Failed to read provider label cache from ${this.filePath}:`, error);
+      logger.warn(`Failed to read provider label cache from ${this.filePath}:`, error);
       throw error;
     }
 
