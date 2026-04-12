@@ -625,7 +625,7 @@ interface Event<T> {
 ## Further Reading
 
 - [Extension API reference](./extension-api.md) — Detailed API walkthrough with additional examples
-- [`packages/github`](../packages/github/src/) — Production provider implementation (GitHub Issues, PR reviews, Start Work action)
+- [`packages/github`](../packages/github/src/) — Production provider implementation (GitHub Issues, PR reviews)
 - [`packages/ado`](../packages/ado/src/) — Azure DevOps provider implementation (work items, PR reviews)
 - [`packages/ai-reviewer`](../packages/ai-reviewer/src/) — Action-only extension that adds AI-powered code review for GitHub PR items
 - [`packages/shared`](../packages/shared/src/) — Internal shared package used by first-party providers. Includes `BaseProvider` (an abstract base class that handles periodic refresh, concurrency guards, and disposal), `validateRefreshInterval`, URL validation, and logging utilities. This package is not published for external use; third-party authors should implement equivalent logic themselves (see the [Periodic Refresh Pattern](#periodic-refresh-pattern) section)

@@ -158,7 +158,7 @@ Discovers items from GitHub via two sub-providers:
 - **GitHub PR Reviews** — Finds pull requests where you've been requested as a reviewer. Previously dismissed review requests will reappear if the PR is still active.
 
 **Actions:**
-- **Start Work (Branch + Worktree)** — Available on **New** GitHub issue items. Creates a feature branch, sets up a git worktree in a sibling directory, and opens it in a new VS Code window.
+- **Start Git Work (Branch + Worktree)** — Available on **InProgress** GitHub and ADO work items. Prompts for repository path and base branch (with cached defaults), creates a feature branch named `issue{num}`, sets up a git worktree in a sibling directory, and runs any configured post-worktree commands.
 
 **Configuration:**
 
