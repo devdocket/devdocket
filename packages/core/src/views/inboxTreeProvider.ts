@@ -230,7 +230,7 @@ export class InboxTreeProvider implements vscode.TreeDataProvider<InboxElement> 
       const result: InboxProviderNode[] = [];
       const allItems = this.providerRegistry.getAllDiscoveredItems();
       for (const [providerId] of allItems) {
-        if (this.getProviderChildren(providerId).length > 0) {
+        if (this.hasVisibleChildren(providerId)) {
           result.push({
             kind: 'provider',
             providerId,
@@ -265,6 +265,18 @@ export class InboxTreeProvider implements vscode.TreeDataProvider<InboxElement> 
       }
     }
     return result.sort((a, b) => a.title.localeCompare(b.title));
+  }
+
+  /** Quick check whether a provider has at least one unseen, filter-matching item. */
+  private hasVisibleChildren(providerId: string): boolean {
+    const items = this.providerRegistry.getDiscoveredItems(providerId);
+    for (const item of items) {
+      const state = this.stateStore.getState(providerId, item.externalId);
+      if (state !== undefined && state !== 'unseen') { continue; }
+      if (!this.matchesInboxFilter(item)) { continue; }
+      return true;
+    }
+    return false;
   }
 
   private getProviderChildren(providerId: string): (InboxGroupNode | InboxItem)[] {
