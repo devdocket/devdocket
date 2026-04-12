@@ -1,25 +1,39 @@
 import * as vscode from 'vscode';
 import { WorkItem, WorkItemState } from '../models/workItem';
 import { WorkGraph } from '../services/workGraph';
+import { ProviderRegistry } from '../services/providerRegistry';
+import {
+  WorkItemElement, WorkItemViewProvider, isProviderGroupNode, isSubGroupNode,
+} from './viewLayout';
+
+export type QueueElement = WorkItemElement;
 
 const DRAG_MIME_TYPE = 'application/vnd.code.tree.workcenter.queue';
 
-export class QueueTreeProvider implements vscode.TreeDataProvider<WorkItem>, vscode.TreeDragAndDropController<WorkItem> {
+export class QueueTreeProvider extends WorkItemViewProvider implements vscode.TreeDragAndDropController<QueueElement> {
   readonly dropMimeTypes = [DRAG_MIME_TYPE];
   readonly dragMimeTypes = [DRAG_MIME_TYPE];
-  private readonly _onDidChangeTreeData = new vscode.EventEmitter<void>();
-  readonly onDidChangeTreeData = this._onDidChangeTreeData.event;
-  private readonly disposables: vscode.Disposable[] = [];
+  protected readonly groupPrefix = 'queue';
+  protected readonly groupContextValue = 'queueGroup';
 
-  constructor(private readonly workGraph: WorkGraph) {
-    this.disposables.push(
-      workGraph.onDidChange(() => this._onDidChangeTreeData.fire())
+  constructor(workGraph: WorkGraph, providerRegistry?: ProviderRegistry) {
+    super(
+      workGraph,
+      'flat',
+      providerRegistry ? id => providerRegistry.getProviderLabel(id) : undefined,
+      providerRegistry?.onDidRegisterProvider,
     );
   }
 
-  refresh(): void { this._onDidChangeTreeData.fire(); }
+  protected getItems(): WorkItem[] {
+    return this.workGraph.getItemsByState(WorkItemState.New);
+  }
 
-  getTreeItem(item: WorkItem): vscode.TreeItem {
+  protected sortItems(items: WorkItem[]): WorkItem[] {
+    return items.sort((a, b) => (a.sortOrder ?? Number.MAX_SAFE_INTEGER) - (b.sortOrder ?? Number.MAX_SAFE_INTEGER));
+  }
+
+  protected createWorkItemTreeItem(item: WorkItem): vscode.TreeItem {
     const treeItem = new vscode.TreeItem(item.title, vscode.TreeItemCollapsibleState.None);
     treeItem.id = item.id;
     treeItem.description = item.providerId;
@@ -28,11 +42,6 @@ export class QueueTreeProvider implements vscode.TreeDataProvider<WorkItem>, vsc
     treeItem.iconPath = new vscode.ThemeIcon(item.providerId ? 'remote' : 'circle-filled');
     treeItem.command = { command: 'workcenter.editItem', title: 'Open Details', arguments: [item] };
     return treeItem;
-  }
-
-  getChildren(): WorkItem[] {
-    return this.workGraph.getItemsByState(WorkItemState.New)
-      .sort((a, b) => (a.sortOrder ?? Number.MAX_SAFE_INTEGER) - (b.sortOrder ?? Number.MAX_SAFE_INTEGER));
   }
 
   private buildTooltip(item: WorkItem): vscode.MarkdownString {
@@ -45,22 +54,23 @@ export class QueueTreeProvider implements vscode.TreeDataProvider<WorkItem>, vsc
     return md;
   }
 
-  handleDrag(source: readonly WorkItem[], dataTransfer: vscode.DataTransfer): void {
-    dataTransfer.set(DRAG_MIME_TYPE, new vscode.DataTransferItem(source.map(s => s.id)));
+  handleDrag(source: readonly QueueElement[], dataTransfer: vscode.DataTransfer): void {
+    const items = source.filter((s): s is WorkItem => !isProviderGroupNode(s) && !isSubGroupNode(s));
+    if (items.length === 0) { return; }
+    dataTransfer.set(DRAG_MIME_TYPE, new vscode.DataTransferItem(items.map(s => s.id)));
   }
 
-  async handleDrop(target: WorkItem | undefined, dataTransfer: vscode.DataTransfer): Promise<void> {
+  async handleDrop(target: QueueElement | undefined, dataTransfer: vscode.DataTransfer): Promise<void> {
     const transferItem = dataTransfer.get(DRAG_MIME_TYPE);
     if (!transferItem) { return; }
 
     const rawValue: unknown = transferItem.value;
     if (!Array.isArray(rawValue) || rawValue.length !== 1 || typeof rawValue[0] !== 'string') { return; }
 
-    const draggedIds: string[] = rawValue;
+    const draggedId: string = rawValue[0];
 
-    const draggedId = draggedIds[0];
-
-    if (!target) {
+    // Group node targets or no target → move to end
+    if (!target || isProviderGroupNode(target) || isSubGroupNode(target)) {
       await this.workGraph.moveToEnd(draggedId);
       return;
     }
@@ -68,10 +78,5 @@ export class QueueTreeProvider implements vscode.TreeDataProvider<WorkItem>, vsc
     if (draggedId === target.id) { return; }
 
     await this.workGraph.reorderItem(draggedId, target.id);
-  }
-
-  dispose(): void {
-    this._onDidChangeTreeData.dispose();
-    this.disposables.forEach(d => d.dispose());
   }
 }

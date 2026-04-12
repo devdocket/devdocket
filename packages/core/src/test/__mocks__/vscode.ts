@@ -162,8 +162,16 @@ class MockDisposable {
 const workspace = {
   getConfiguration: vi.fn().mockReturnValue({
     get: vi.fn((key: string, defaultValue?: any) => defaultValue),
+    update: vi.fn().mockResolvedValue(undefined),
+    inspect: vi.fn(() => undefined),
   }),
   onDidChangeConfiguration: vi.fn(() => ({ dispose: vi.fn() })),
+};
+
+const ConfigurationTarget = {
+  Global: 1,
+  Workspace: 2,
+  WorkspaceFolder: 3,
 };
 
 export {
@@ -177,6 +185,7 @@ export {
   MockDisposable as Disposable,
   TreeItemCollapsibleState,
   ViewColumn,
+  ConfigurationTarget,
   ProgressLocation,
   window,
   commands,

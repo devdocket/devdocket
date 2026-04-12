@@ -1,27 +1,45 @@
 import * as vscode from 'vscode';
 import { WorkItem, WorkItemState } from '../models/workItem';
 import { WorkGraph } from '../services/workGraph';
+import { ProviderRegistry } from '../services/providerRegistry';
+import {
+  WorkItemElement, WorkItemViewProvider, isProviderGroupNode, isSubGroupNode,
+} from './viewLayout';
 
 const DRAG_MIME_TYPE = 'application/vnd.code.tree.workcenter.focus';
 
-export class FocusTreeProvider implements vscode.TreeDataProvider<WorkItem>, vscode.TreeDragAndDropController<WorkItem> {
+export type FocusElement = WorkItemElement;
+
+export class FocusTreeProvider extends WorkItemViewProvider implements vscode.TreeDragAndDropController<FocusElement> {
   readonly dropMimeTypes = [DRAG_MIME_TYPE];
   readonly dragMimeTypes = [DRAG_MIME_TYPE];
-  private readonly _onDidChangeTreeData = new vscode.EventEmitter<void>();
-  readonly onDidChangeTreeData = this._onDidChangeTreeData.event;
-  private readonly disposables: vscode.Disposable[] = [];
+  protected readonly groupPrefix = 'focus';
+  protected readonly groupContextValue = 'focusGroup';
 
-  constructor(private readonly workGraph: WorkGraph) {
-    this.disposables.push(
-      workGraph.onDidChange(() => this._onDidChangeTreeData.fire())
+  constructor(workGraph: WorkGraph, providerRegistry?: ProviderRegistry) {
+    super(
+      workGraph,
+      'flat',
+      providerRegistry ? id => providerRegistry.getProviderLabel(id) : undefined,
+      providerRegistry?.onDidRegisterProvider,
     );
   }
 
-  refresh(): void {
-    this._onDidChangeTreeData.fire();
+  protected getItems(): WorkItem[] {
+    return this.workGraph.getItemsByState(WorkItemState.InProgress, WorkItemState.Paused);
   }
 
-  getTreeItem(item: WorkItem): vscode.TreeItem {
+  protected sortItems(items: WorkItem[]): WorkItem[] {
+    return items.sort((a, b) => {
+      const statePriorityDifference = this.getFocusStatePriority(a.state) - this.getFocusStatePriority(b.state);
+      if (statePriorityDifference !== 0) {
+        return statePriorityDifference;
+      }
+      return (a.sortOrder ?? Number.MAX_SAFE_INTEGER) - (b.sortOrder ?? Number.MAX_SAFE_INTEGER);
+    });
+  }
+
+  protected createWorkItemTreeItem(item: WorkItem): vscode.TreeItem {
     const treeItem = new vscode.TreeItem(item.title, vscode.TreeItemCollapsibleState.None);
     treeItem.id = item.id;
     treeItem.description = this.getStateLabel(item.state);
@@ -39,20 +57,6 @@ export class FocusTreeProvider implements vscode.TreeDataProvider<WorkItem>, vsc
     return treeItem;
   }
 
-  getChildren(): WorkItem[] {
-    return this.workGraph.getItemsByState(
-      WorkItemState.InProgress,
-      WorkItemState.Paused,
-    ).sort((a, b) => {
-      const statePriorityDifference = this.getFocusStatePriority(a.state) - this.getFocusStatePriority(b.state);
-      if (statePriorityDifference !== 0) {
-        return statePriorityDifference;
-      }
-
-      return (a.sortOrder ?? Number.MAX_SAFE_INTEGER) - (b.sortOrder ?? Number.MAX_SAFE_INTEGER);
-    });
-  }
-
   private getFocusStatePriority(state: WorkItemState): number {
     switch (state) {
       case WorkItemState.InProgress:
@@ -63,7 +67,6 @@ export class FocusTreeProvider implements vscode.TreeDataProvider<WorkItem>, vsc
         return Number.MAX_SAFE_INTEGER;
     }
   }
-
   private getStateLabel(state: WorkItemState): string {
     switch (state) {
       case WorkItemState.InProgress:
@@ -86,11 +89,13 @@ export class FocusTreeProvider implements vscode.TreeDataProvider<WorkItem>, vsc
     }
   }
 
-  handleDrag(source: readonly WorkItem[], dataTransfer: vscode.DataTransfer): void {
-    dataTransfer.set(DRAG_MIME_TYPE, new vscode.DataTransferItem(source.map(s => s.id)));
+  handleDrag(source: readonly FocusElement[], dataTransfer: vscode.DataTransfer): void {
+    const items = source.filter((s): s is WorkItem => !isProviderGroupNode(s) && !isSubGroupNode(s));
+    if (items.length === 0) { return; }
+    dataTransfer.set(DRAG_MIME_TYPE, new vscode.DataTransferItem(items.map(s => s.id)));
   }
 
-  async handleDrop(target: WorkItem | undefined, dataTransfer: vscode.DataTransfer): Promise<void> {
+  async handleDrop(target: FocusElement | undefined, dataTransfer: vscode.DataTransfer): Promise<void> {
     const transferItem = dataTransfer.get(DRAG_MIME_TYPE);
     if (!transferItem) { return; }
 
@@ -100,8 +105,8 @@ export class FocusTreeProvider implements vscode.TreeDataProvider<WorkItem>, vsc
     const draggedIds: string[] = rawValue;
     const draggedId = draggedIds[0];
 
-    if (!target) {
-      // moveToEnd is inherently state-scoped — no cross-state guard needed
+    // Group node targets or no target → move to end
+    if (!target || isProviderGroupNode(target) || isSubGroupNode(target)) {
       await this.workGraph.moveToEnd(draggedId);
       return;
     }
@@ -134,10 +139,5 @@ export class FocusTreeProvider implements vscode.TreeDataProvider<WorkItem>, vsc
     md.appendMarkdown(`**State:** ${item.state}\n\n`);
     md.appendMarkdown(`**Created:** ${new Date(item.createdAt).toLocaleString()}`);
     return md;
-  }
-
-  dispose(): void {
-    this._onDidChangeTreeData.dispose();
-    this.disposables.forEach(d => d.dispose());
   }
 }

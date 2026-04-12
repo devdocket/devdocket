@@ -2,6 +2,7 @@ import * as vscode from 'vscode';
 import { DiscoveredItem } from '../api/types';
 import { ProviderRegistry } from '../services/providerRegistry';
 import { DiscoveredStateStore } from '../storage/discoveredStateStore';
+import { ViewLayout, LayoutState } from './viewLayout';
 
 export type SourcesElement = SourceProviderNode | SourceGroupNode | SourceItemNode;
 
@@ -31,11 +32,16 @@ export class SourcesTreeProvider implements vscode.TreeDataProvider<SourcesEleme
   private readonly _onDidChangeTreeData = new vscode.EventEmitter<void>();
   readonly onDidChangeTreeData = this._onDidChangeTreeData.event;
   private readonly disposables: vscode.Disposable[] = [];
+  private readonly _layoutState: LayoutState;
+
+  get layout(): ViewLayout { return this._layoutState.value; }
+  set layout(value: ViewLayout) { this._layoutState.value = value; }
 
   constructor(
     private readonly providerRegistry: ProviderRegistry,
     private readonly stateStore: DiscoveredStateStore,
   ) {
+    this._layoutState = new LayoutState('tree', () => this._onDidChangeTreeData.fire());
     this.disposables.push(
       providerRegistry.onDidChangeDiscoveredItems(() => this._onDidChangeTreeData.fire()),
       stateStore.onDidChange(() => this._onDidChangeTreeData.fire())
@@ -73,6 +79,9 @@ export class SourcesTreeProvider implements vscode.TreeDataProvider<SourcesEleme
 
   getChildren(element?: SourcesElement): SourcesElement[] {
     if (!element) {
+      if (this._layoutState.value === 'flat') {
+        return this.getAllItems();
+      }
       const result: SourceProviderNode[] = [];
       const allItems = this.providerRegistry.getAllDiscoveredItems();
       for (const [providerId, items] of allItems) {
@@ -96,6 +105,17 @@ export class SourcesTreeProvider implements vscode.TreeDataProvider<SourcesEleme
     }
 
     return [];
+  }
+
+  private getAllItems(): SourceItemNode[] {
+    const result: SourceItemNode[] = [];
+    const allItems = this.providerRegistry.getAllDiscoveredItems();
+    for (const [providerId, items] of allItems) {
+      for (const item of items) {
+        result.push(this.toItemNode(providerId, item));
+      }
+    }
+    return result.sort((a, b) => a.title.localeCompare(b.title));
   }
 
   private getProviderChildren(providerId: string): SourcesElement[] {

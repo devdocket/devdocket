@@ -445,6 +445,66 @@ describe('activate()', () => {
       errorSpy.mockRestore();
     }
   });
+
+  // ------------------------------------------------------------------
+  // 18. Sets context keys for all five view layouts on activation
+  // ------------------------------------------------------------------
+  it('sets layout context keys for all five views on activation', async () => {
+    await activate(context);
+
+    const executeCommand = vscode.commands.executeCommand as ReturnType<typeof vi.fn>;
+    const setContextCalls = executeCommand.mock.calls.filter(
+      (c: any[]) => c[0] === 'setContext' && typeof c[1] === 'string' && c[1].endsWith('Layout'),
+    );
+
+    const contextKeys = setContextCalls.map((c: any[]) => c[1]);
+    expect(contextKeys).toContain('workcenter.inboxLayout');
+    expect(contextKeys).toContain('workcenter.queueLayout');
+    expect(contextKeys).toContain('workcenter.focusLayout');
+    expect(contextKeys).toContain('workcenter.historyLayout');
+    expect(contextKeys).toContain('workcenter.sourcesLayout');
+  });
+
+  // ------------------------------------------------------------------
+  // 19. Layout config change updates provider layouts and context keys
+  // ------------------------------------------------------------------
+  it('updates provider layouts and context keys on configuration change', async () => {
+    await activate(context);
+    await flushMicrotasks();
+
+    const executeCommand = vscode.commands.executeCommand as ReturnType<typeof vi.fn>;
+    executeCommand.mockClear();
+
+    // Simulate a configuration change for workcenter.viewLayout
+    const onDidChangeCfg = vscode.workspace.onDidChangeConfiguration as ReturnType<typeof vi.fn>;
+    // Find the viewLayout config listener (the last registered one)
+    const listeners = onDidChangeCfg.mock.calls.map((c: any[]) => c[0]);
+    expect(listeners.length).toBeGreaterThan(0);
+
+    // Mock getConfiguration to return a specific layout
+    (vscode.workspace.getConfiguration as ReturnType<typeof vi.fn>).mockReturnValue({
+      get: vi.fn((_key: string) => {
+        if (_key === 'viewLayout') { return { focus: 'tree', queue: 'tree' }; }
+        return undefined;
+      }),
+      update: vi.fn().mockResolvedValue(undefined),
+      inspect: vi.fn(() => undefined),
+    });
+
+    // Fire configuration change event on all listeners
+    for (const listener of listeners) {
+      listener({ affectsConfiguration: (section: string) => section === 'workcenter.viewLayout' });
+    }
+    await flushMicrotasks();
+
+    // setContext should have been called for all five views
+    const setContextCalls = executeCommand.mock.calls.filter(
+      (c: any[]) => c[0] === 'setContext' && typeof c[1] === 'string' && c[1].endsWith('Layout'),
+    );
+    const contextKeys = setContextCalls.map((c: any[]) => c[1]);
+    expect(contextKeys).toContain('workcenter.focusLayout');
+    expect(contextKeys).toContain('workcenter.queueLayout');
+  });
 });
 
 describe('deactivate()', () => {

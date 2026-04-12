@@ -8,6 +8,7 @@ import { WorkItemEditorPanel } from '../views/workItemEditorPanel';
 import { type InboxItem, type InboxElement } from '../views/inboxTreeProvider';
 import { type SourceItemNode, type SourcesElement } from '../views/sourcesTreeProvider';
 import { logger } from '../services/logger';
+import { toggleViewLayout } from '../views/viewLayout';
 
 /**
  * Resolves the effective list of inbox items from VS Code's multi-select command args.
@@ -445,7 +446,7 @@ async function acceptSingleInboxItem(
   try {
     createdItem = await workGraph.createItem(
       { title: formatItemTitle(item) },
-      { providerId: item.providerId, externalId: item.externalId, url: item.url },
+      { providerId: item.providerId, externalId: item.externalId, url: item.url, group: item.group },
     );
   } catch (err: unknown) {
     handleCommandError('Failed to accept inbox item', err);
@@ -543,7 +544,7 @@ async function acceptSingleSourceItem(
   try {
     createdItem = await workGraph.createItem(
       { title: formatItemTitle(item) },
-      { providerId: item.providerId, externalId: item.externalId, url: item.url },
+      { providerId: item.providerId, externalId: item.externalId, url: item.url, group: item.group },
     );
   } catch (err: unknown) {
     handleCommandError('Failed to accept sources item', err);
@@ -642,5 +643,15 @@ export function registerCommands(
       wrapCommand('Failed to accept from sources', (item: SourcesElement, selectedItems?: SourcesElement[]) => handleAcceptFromSources(workGraph, stateStore, item, selectedItems))),
     vscode.commands.registerCommand('workcenter.dismissFromSources',
       wrapCommand('Failed to dismiss from sources', (item: SourcesElement, selectedItems?: SourcesElement[]) => handleDismissFromSources(stateStore, item, selectedItems))),
+    vscode.commands.registerCommand('workcenter.toggleInboxLayout',
+      wrapCommand('Failed to toggle inbox layout', () => toggleViewLayout('inbox'))),
+    vscode.commands.registerCommand('workcenter.toggleQueueLayout',
+      wrapCommand('Failed to toggle queue layout', () => toggleViewLayout('queue'))),
+    vscode.commands.registerCommand('workcenter.toggleFocusLayout',
+      wrapCommand('Failed to toggle focus layout', () => toggleViewLayout('focus'))),
+    vscode.commands.registerCommand('workcenter.toggleHistoryLayout',
+      wrapCommand('Failed to toggle history layout', () => toggleViewLayout('history'))),
+    vscode.commands.registerCommand('workcenter.toggleSourcesLayout',
+      wrapCommand('Failed to toggle sources layout', () => toggleViewLayout('sources'))),
   );
 }
