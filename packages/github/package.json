@@ -34,6 +34,28 @@
           "type": "number",
           "default": 300,
           "description": "How often to refresh GitHub issues (in seconds). Minimum 60 seconds. Values below 60 are clamped."
+        },
+        "workcenterGithub.startWork.commands": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "command": {
+                "type": "string",
+                "description": "The executable to run."
+              },
+              "args": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                },
+                "description": "Arguments passed to the command. Use {path} as a placeholder for the worktree path."
+              }
+            },
+            "required": ["command"]
+          },
+          "default": [],
+          "description": "Commands to run after creating a worktree. Each entry specifies a command and optional args. Use {path} in args to reference the worktree path."
         }
       }
     }

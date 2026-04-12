@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { window, commands, Uri } from 'vscode';
+import { window, workspace } from 'vscode';
 import { StartWorkAction } from '../startWorkAction';
 import * as path from 'path';
 
@@ -67,6 +67,11 @@ describe('StartWorkAction', () => {
 
     // Default: showInputBox returns repo path and base branch based on prompt
     mockInputBox('/mock/workspace', 'origin/dev');
+
+    // Default: no post-worktree commands configured
+    vi.mocked(workspace.getConfiguration).mockReturnValue({
+      get: vi.fn((key: string, defaultValue?: any) => defaultValue),
+    } as any);
 
     // Reset execFile mock to succeed with empty output
     vi.mocked(execFile).mockImplementation(((cmd: string, args: string[], opts: any, cb: Function) => {
@@ -248,22 +253,71 @@ describe('StartWorkAction', () => {
       expect(branchCall![1]).toEqual(['branch', 'issue123', 'main']);
     });
 
-    it('opens new VS Code window at worktree path', async () => {
+    it('runs configured post-worktree commands with {path} replaced', async () => {
+      vi.mocked(workspace.getConfiguration).mockReturnValue({
+        get: vi.fn((key: string, defaultValue?: any) => {
+          if (key === 'startWork.commands') {
+            return [
+              { command: 'code', args: ['{path}'] },
+              { command: 'echo', args: ['opened', '{path}'] },
+            ];
+          }
+          return defaultValue;
+        }),
+      } as any);
+
       const item = createWorkItem({ title: '#123: Fix bug' });
       await action.run(item);
 
-      expect(Uri.file).toHaveBeenCalledWith(path.join('/mock', 'workspace-issue123'));
-      expect(commands.executeCommand).toHaveBeenCalledWith(
-        'vscode.openFolder',
-        expect.anything(),
-        { forceNewWindow: true },
+      const worktreePath = path.join('/mock', 'workspace-issue123');
+
+      // git calls (branch --list, branch create, worktree add) + 2 commands = 5
+      expect(execFile).toHaveBeenCalledTimes(5);
+
+      expect(execFile).toHaveBeenCalledWith(
+        'code', [worktreePath], { shell: true }, expect.any(Function),
+      );
+      expect(execFile).toHaveBeenCalledWith(
+        'echo', ['opened', worktreePath], { shell: true }, expect.any(Function),
       );
     });
 
-    it('shows success message after creating worktree', async () => {
+    it('shows warning but continues when a post-worktree command fails', async () => {
+      vi.mocked(workspace.getConfiguration).mockReturnValue({
+        get: vi.fn((key: string, defaultValue?: any) => {
+          if (key === 'startWork.commands') {
+            return [{ command: 'bad-cmd', args: [] }];
+          }
+          return defaultValue;
+        }),
+      } as any);
+
+      vi.mocked(execFile).mockImplementation(((cmd: string, args: string[], opts: any, cb: Function) => {
+        if (cmd === 'bad-cmd') {
+          cb(new Error('command not found'), '', '');
+        } else {
+          cb(null, { stdout: '', stderr: '' }, '');
+        }
+      }) as any);
+
       const item = createWorkItem({ title: '#123: Fix bug' });
       await action.run(item);
 
+      expect(window.showWarningMessage).toHaveBeenCalledWith(
+        expect.stringContaining('Command "bad-cmd" failed'),
+      );
+      // Should still show success message for worktree creation
+      expect(window.showInformationMessage).toHaveBeenCalledWith(
+        'WorkCenter: Created worktree for issue123',
+      );
+    });
+
+    it('succeeds with no post-worktree commands configured', async () => {
+      const item = createWorkItem({ title: '#123: Fix bug' });
+      await action.run(item);
+
+      // Only 3 git calls, no extra commands
+      expect(execFile).toHaveBeenCalledTimes(3);
       expect(window.showInformationMessage).toHaveBeenCalledWith(
         'WorkCenter: Created worktree for issue123',
       );

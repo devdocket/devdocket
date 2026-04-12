@@ -133,11 +133,24 @@ export class StartWorkAction implements WorkCenterAction {
 
       logger.info(`Created worktree at ${worktreePath}`);
 
-      // Open new VS Code window at worktree
-      const worktreeUri = vscode.Uri.file(worktreePath);
-      await vscode.commands.executeCommand('vscode.openFolder', worktreeUri, {
-        forceNewWindow: true,
-      });
+      // Run user-configured post-worktree commands
+      const commands = vscode.workspace.getConfiguration('workcenterGithub')
+        .get<{ command: string; args?: string[] }[]>('startWork.commands', []);
+
+      for (const cmd of commands) {
+        const resolvedArgs = (cmd.args ?? []).map(
+          arg => arg.replace(/\{path\}/g, worktreePath),
+        );
+        try {
+          await execFileAsync(cmd.command, resolvedArgs, { shell: true });
+        } catch (cmdErr) {
+          const cmdMessage = cmdErr instanceof Error ? cmdErr.message : String(cmdErr);
+          logger.error(`Post-worktree command failed: ${cmd.command}`, cmdErr);
+          void vscode.window.showWarningMessage(
+            `WorkCenter: Command "${cmd.command}" failed — ${cmdMessage}`,
+          );
+        }
+      }
 
       void vscode.window.showInformationMessage(
         `WorkCenter: Created worktree for ${branchName}`,
