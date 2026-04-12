@@ -279,7 +279,7 @@ export class AdoWorkItemProvider extends BaseProvider {
         title: `${wiType} ${wi.id}: ${wi.fields['System.Title']}`,
         description: wi.fields['System.Description']?.replace(/<[^>]*>/g, '')?.slice(0, 200),
         url: wi._links.html.href,
-        group: projectName,
+        group: `${org}/${projectName}`,
         reason: 'assigned',
       };
     });

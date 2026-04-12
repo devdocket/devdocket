@@ -673,7 +673,7 @@ describe('AdoWorkItemProvider — extended', () => {
 
       const items = listener.mock.calls[0][0];
       expect(items).toHaveLength(1);
-      expect(items[0].group).toBe('GoodProject');
+      expect(items[0].group).toBe('myorg/GoodProject');
 
       // Should warn about the failed project
       expect(window.showWarningMessage).toHaveBeenCalledWith(
