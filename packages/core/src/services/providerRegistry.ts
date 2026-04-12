@@ -118,7 +118,7 @@ export class ProviderRegistry {
    * Get the human-readable label for a provider.
    *
    * @param providerId - The provider identifier.
-   * @returns The provider's label, or the raw `providerId` if the provider is not registered.
+   * @returns The registered provider's live label if available; otherwise a cached label if one exists; otherwise the raw `providerId`.
    */
   getProviderLabel(providerId: string): string {
     return this.providers.get(providerId)?.label ?? this.labelCache?.get(providerId) ?? providerId;
