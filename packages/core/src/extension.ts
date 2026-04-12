@@ -78,8 +78,12 @@ async function loadStores(storagePath: string): Promise<{ workGraph: WorkGraph; 
   logger.debug('Loaded read state');
 
   const labelCache = new ProviderLabelCache(storagePath);
-  await labelCache.load();
-  logger.debug('Loaded provider label cache');
+  try {
+    await labelCache.load();
+    logger.debug('Loaded provider label cache');
+  } catch (err) {
+    logger.debug('Failed to load provider label cache; continuing with empty cache', err);
+  }
 
   return { workGraph: wg, stateStore: ss, readStateStore, labelCache };
 }
