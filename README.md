@@ -1,16 +1,20 @@
 # WorkCenter
 
+<p align="center">
+  <img src="packages/core/resources/workcenter-vortex.svg" alt="WorkCenter Logo" width="64" height="64" />
+</p>
+
 **A unified work hub inside VS Code.**
 
 WorkCenter is a VS Code extension that brings all of your work items — GitHub issues, Azure DevOps work items, PR review requests, investigations, follow-ups, and ad-hoc tasks — into a single, organized sidebar. Instead of juggling browser tabs, notification emails, and sticky notes, you manage everything from where you already write code.
 
 ## The Problem
 
-Developers constantly context-switch between tools. Issues live in GitHub, tasks live in Jira, review requests arrive by email, and ad-hoc follow-ups exist only in your head. Each tool has its own UI, its own notification model, and its own idea of "what's next." The result: work falls through the cracks, and you waste time just figuring out what to do.
+Developers constantly context-switch between tools. Issues live in GitHub, tasks live in Azure DevOps, review requests arrive by email, and ad-hoc follow-ups exist only in your head. Each tool has its own UI, its own notification model, and its own idea of "what's next." The result: work falls through the cracks, and you waste time just figuring out what to do.
 
 ## How WorkCenter Helps
 
-WorkCenter is **not** a replacement for GitHub Issues, Jira, or any other system of record. It is an **aggregation layer** that sits inside VS Code and gives you a personal, unified view of your work:
+WorkCenter is **not** a replacement for GitHub Issues, Azure DevOps, or any other system of record. It is an **aggregation layer** that sits inside VS Code and gives you a personal, unified view of your work:
 
 - **Providers** discover items from external sources (GitHub issues, Azure DevOps work items, PR reviews, and more in the future) and surface them automatically.
 - **You** decide what to accept, what to dismiss, and what to work on next.
