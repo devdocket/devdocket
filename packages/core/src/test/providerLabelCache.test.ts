@@ -72,14 +72,14 @@ describe('ProviderLabelCache', () => {
     expect(cache.get('not')).toBeUndefined();
   });
 
-  it('skips non-string values on load', async () => {
+  it('clears cache when non-string values are present on load', async () => {
     const filePath = path.join(tmpDir, 'provider-labels.json');
     await fs.writeFile(filePath, JSON.stringify({ github: 'GitHub Issues', bad: 42 }), 'utf-8');
 
     const cache = new ProviderLabelCache(tmpDir);
     await cache.load();
 
-    expect(cache.get('github')).toBe('GitHub Issues');
+    expect(cache.get('github')).toBeUndefined();
     expect(cache.get('bad')).toBeUndefined();
   });
 

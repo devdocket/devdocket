@@ -17,19 +17,44 @@ export class ProviderLabelCache {
 
   /** Load cached labels from disk. Safe to call even if the file does not exist. */
   async load(): Promise<void> {
+    let raw: string;
     try {
-      const raw = await fs.promises.readFile(this.filePath, 'utf-8');
-      const data: unknown = JSON.parse(raw);
-      if (data && typeof data === 'object' && !Array.isArray(data)) {
+      raw = await fs.promises.readFile(this.filePath, 'utf-8');
+    } catch (error) {
+      const fsError = error as NodeJS.ErrnoException;
+      if (fsError.code === 'ENOENT') {
         this.labels.clear();
-        for (const [key, value] of Object.entries(data as Record<string, unknown>)) {
-          if (typeof key === 'string' && typeof value === 'string') {
-            this.labels.set(key, value);
-          }
-        }
+        return;
       }
+      console.warn(`Failed to read provider label cache from ${this.filePath}:`, error);
+      throw error;
+    }
+
+    let data: unknown;
+    try {
+      data = JSON.parse(raw);
     } catch {
-      // File doesn't exist yet or is corrupted — start with empty cache
+      this.labels.clear();
+      return;
+    }
+
+    if (!data || typeof data !== 'object' || Array.isArray(data)) {
+      this.labels.clear();
+      return;
+    }
+
+    const nextLabels = new Map<string, string>();
+    for (const [key, value] of Object.entries(data as Record<string, unknown>)) {
+      if (typeof value !== 'string') {
+        this.labels.clear();
+        return;
+      }
+      nextLabels.set(key, value);
+    }
+
+    this.labels.clear();
+    for (const [key, value] of nextLabels) {
+      this.labels.set(key, value);
     }
   }
 
