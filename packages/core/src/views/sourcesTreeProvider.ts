@@ -105,7 +105,7 @@ export class SourcesTreeProvider implements vscode.TreeDataProvider<SourcesEleme
       const result: SourceProviderNode[] = [];
       const allItems = this.providerRegistry.getAllDiscoveredItems();
       for (const [providerId, items] of allItems) {
-        if (items.length > 0 && this.getProviderChildren(providerId).length > 0) {
+        if (items.length > 0 && this.hasVisibleChildren(providerId)) {
           result.push({
             kind: 'provider',
             providerId,
@@ -132,12 +132,20 @@ export class SourcesTreeProvider implements vscode.TreeDataProvider<SourcesEleme
     const allItems = this.providerRegistry.getAllDiscoveredItems();
     for (const [providerId, items] of allItems) {
       for (const item of items) {
-        const node = this.toItemNode(providerId, item);
-        if (!this.matchesSourceFilter(node)) { continue; }
-        result.push(node);
+        if (!this.matchesSourceFilter(item)) { continue; }
+        result.push(this.toItemNode(providerId, item));
       }
     }
     return result.sort((a, b) => a.title.localeCompare(b.title));
+  }
+
+  /** Quick check whether a provider has at least one filter-matching item. */
+  private hasVisibleChildren(providerId: string): boolean {
+    const items = this.providerRegistry.getDiscoveredItems(providerId);
+    for (const item of items) {
+      if (this.matchesSourceFilter(item)) { return true; }
+    }
+    return false;
   }
 
   private getProviderChildren(providerId: string): SourcesElement[] {
@@ -146,7 +154,7 @@ export class SourcesTreeProvider implements vscode.TreeDataProvider<SourcesEleme
     const ungrouped: DiscoveredItem[] = [];
 
     for (const item of items) {
-      if (!this.matchesSourceFilter(this.toItemNode(providerId, item))) { continue; }
+      if (!this.matchesSourceFilter(item)) { continue; }
       if (item.group) {
         const list = groups.get(item.group) ?? [];
         list.push(item);
@@ -176,9 +184,8 @@ export class SourcesTreeProvider implements vscode.TreeDataProvider<SourcesEleme
   private getGroupChildren(providerId: string, groupName: string): SourceItemNode[] {
     const items = this.providerRegistry.getDiscoveredItems(providerId);
     return items
-      .filter((item) => item.group === groupName)
+      .filter((item) => item.group === groupName && this.matchesSourceFilter(item))
       .map((item) => this.toItemNode(providerId, item))
-      .filter((node) => this.matchesSourceFilter(node))
       .sort((a, b) => a.title.localeCompare(b.title));
   }
 
