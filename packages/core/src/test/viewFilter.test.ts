@@ -31,7 +31,6 @@ function createMockProviderRegistry(discoveredItems: Map<string, any[]> = new Ma
 }
 
 function createMockStateStore() {
-  const states = new Map<string, string>();
   return {
     getState: vi.fn((_providerId: string, _externalId: string) => undefined as string | undefined),
     onDidChange: vi.fn(() => ({ dispose: vi.fn() })),
