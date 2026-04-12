@@ -1,7 +1,6 @@
 import * as vscode from 'vscode';
 import { GitHubIssueProvider } from './githubProvider';
 import { GitHubPrReviewProvider } from './githubPrReviewProvider';
-import { StartWorkAction } from './startWorkAction';
 import { validateRefreshInterval } from '@workcenter/shared';
 import { initLogger, setLogLevel, logger, resolveLogLevel } from './logger';
 
@@ -53,7 +52,7 @@ export async function activate(_context: vscode.ExtensionContext): Promise<void>
     return;
   }
 
-  if (!api || typeof api.registerProvider !== 'function' || typeof api.registerAction !== 'function') {
+  if (!api || typeof api.registerProvider !== 'function') {
     logger.error('Core extension API not available');
     return;
   }
@@ -72,14 +71,6 @@ export async function activate(_context: vscode.ExtensionContext): Promise<void>
   prReviewProvider = new GitHubPrReviewProvider();
   prReviewProvider.startPeriodicRefresh(intervalSeconds);
   prReviewRegistration = api.registerProvider(prReviewProvider);
-
-  // Register the Start Work action
-  const startWorkAction = new StartWorkAction();
-  const actionDisposable = api.registerAction(startWorkAction);
-
-  _context.subscriptions.push(
-    actionDisposable,
-  );
 
   logger.info('WorkCenter GitHub activated, registered 2 providers');
 }

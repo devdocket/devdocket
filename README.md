@@ -18,7 +18,7 @@ WorkCenter is **not** a replacement for GitHub Issues, Azure DevOps, or any othe
 
 - **Providers** discover items from external sources (GitHub issues, Azure DevOps work items, PR reviews, and more in the future) and surface them automatically.
 - **You** decide what to accept, what to dismiss, and what to work on next.
-- **Actions** let provider extensions automate workflows — like creating a branch and worktree for a GitHub issue with one click.
+- **Actions** let provider extensions automate workflows — like creating a branch and worktree for a work item with one click.
 
 ## Quick Start
 
@@ -44,6 +44,24 @@ After installing WorkCenter GitHub, configure which repositories to watch for is
 Leave `repos` empty to fetch all issues assigned to you across all repositories.
 
 > **Note:** The `repos` setting scopes both **issue discovery and PR review discovery**. When `repos` is empty, both fall back to global discovery (all issues assigned to you and all PRs where your review is requested, across all repositories).
+
+### Configuring Start Git Work
+
+The Start Git Work action creates a branch and worktree when you start working on a GitHub or ADO item. Configure commands to run after the worktree is created (e.g., opening an editor or terminal):
+
+```jsonc
+// settings.json (user-level only — workspace settings are not supported)
+{
+  "workcenterStartGitWork.commands": [
+    { "command": "code.cmd", "args": ["{path}"] },
+    { "command": "wt", "args": ["-d", "{path}"] }
+  ]
+}
+```
+
+Use `{path}` in args as a placeholder for the worktree path. Commands run in sequence; failures show a warning but don't block the action.
+
+> **Note:** On Windows, use the explicit `.cmd` extension for executables that are batch files (e.g., `code.cmd` instead of `code`).
 
 ## The Five-View Model
 
@@ -109,7 +127,7 @@ An action is an operation that runs on a work item. Actions appear in the **Run 
 
 | Action | Description |
 |--------|-------------|
-| **Start Work (Branch + Worktree)** | Creates a git branch and worktree for a GitHub issue, then opens a new VS Code window |
+| **Start Git Work (Branch + Worktree)** | Creates a git branch and worktree for a GitHub or ADO work item, then runs configured post-worktree commands |
 | **AI Code Review** | Analyzes the current diff using an AI model and posts review comments |
 
 ### Building Your Own
@@ -118,20 +136,22 @@ Provider and action extensions use a simple, well-defined API surface. See the [
 
 ## Architecture
 
-WorkCenter is a monorepo with four VS Code extensions and a shared library:
+WorkCenter is a monorepo with five VS Code extensions and a shared library:
 
 ```
 packages/
-├── core/          # WorkCenter — the hub extension (UI, lifecycle, plugin API)
-├── github/        # WorkCenter GitHub — provider for GitHub issues and PR reviews
-├── ado/           # WorkCenter ADO — provider for Azure DevOps work items and PR reviews
-├── ai-reviewer/   # AI code review action extension
-└── shared/        # Shared library (BaseProvider, URL validation, logger, refresh interval)
+├── core/              # WorkCenter — the hub extension (UI, lifecycle, plugin API)
+├── github/            # WorkCenter GitHub — provider for GitHub issues and PR reviews
+├── ado/               # WorkCenter ADO — provider for Azure DevOps work items and PR reviews
+├── start-git-work/    # Start Git Work — action for creating branches and worktrees
+├── ai-reviewer/       # AI code review action extension
+└── shared/            # Shared library (BaseProvider, URL validation, logger, refresh interval)
 ```
 
 - **`packages/core`** owns the five views, work item persistence, the editor panel, and the extension API (`WorkCenterApi`).
-- **`packages/github`** is a provider extension that discovers GitHub issues and PR reviews, and offers a "Start Work" action.
+- **`packages/github`** is a provider extension that discovers GitHub issues and PR reviews.
 - **`packages/ado`** is a provider extension that discovers Azure DevOps work items and PR reviews.
+- **`packages/start-git-work`** is an action extension that creates git branches and worktrees for work items from GitHub and ADO providers, with configurable post-worktree commands.
 - **`packages/ai-reviewer`** is an action extension that analyzes diffs using an AI model and posts review comments.
 - **`packages/shared`** contains the `BaseProvider` base class for consistent provider lifecycle management (periodic refresh, concurrency guards, disposal), URL validation helpers, a logger service, and refresh interval validation.
 

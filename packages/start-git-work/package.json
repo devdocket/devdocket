@@ -1,7 +1,7 @@
 {
-  "name": "workcenter-github",
-  "displayName": "WorkCenter GitHub",
-  "description": "GitHub provider for WorkCenter — discovers assigned issues and PR reviews.",
+  "name": "workcenter-start-git-work",
+  "displayName": "WorkCenter Start Git Work",
+  "description": "Start Git Work action for WorkCenter — creates git branches and worktrees for GitHub and Azure DevOps work items.",
   "version": "0.1.0",
   "publisher": "mthalman",
   "license": "MIT",
@@ -20,20 +20,30 @@
   "main": "./dist/extension.js",
   "contributes": {
     "configuration": {
-      "title": "WorkCenter GitHub",
+      "title": "WorkCenter Start Git Work",
       "properties": {
-        "workcenterGithub.repos": {
+        "workcenterStartGitWork.commands": {
           "type": "array",
+          "scope": "application",
           "items": {
-            "type": "string"
+            "type": "object",
+            "properties": {
+              "command": {
+                "type": "string",
+                "description": "The executable to run."
+              },
+              "args": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                },
+                "description": "Arguments passed to the command. Use {path} as a placeholder for the worktree path."
+              }
+            },
+            "required": ["command"]
           },
           "default": [],
-          "description": "GitHub repositories to watch (e.g. 'owner/repo'). Leave empty to fetch all assigned issues across all repositories."
-        },
-        "workcenterGithub.refreshIntervalSeconds": {
-          "type": "number",
-          "default": 300,
-          "description": "How often to refresh GitHub issues (in seconds). Minimum 60 seconds. Values below 60 are clamped."
+          "description": "Commands to run after creating a worktree. Each entry specifies a command and optional args. Use {path} in args to reference the worktree path."
         }
       }
     }

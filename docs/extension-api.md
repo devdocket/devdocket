@@ -428,5 +428,5 @@ For a complete, production-quality example, see the `packages/github` package in
 
 - [`githubProvider.ts`](../packages/github/src/githubProvider.ts) — Full provider with periodic refresh, GitHub API integration, and error handling.
 - [`githubPrReviewProvider.ts`](../packages/github/src/githubPrReviewProvider.ts) — Provider for PR review requests.
-- [`startWorkAction.ts`](../packages/github/src/startWorkAction.ts) — Action that creates a git branch and worktree for a GitHub issue.
+- [`startWorkAction.ts`](../packages/start-git-work/src/startWorkAction.ts) — Action that creates a git branch and worktree for GitHub and ADO work items.
 - [`extension.ts`](../packages/github/src/extension.ts) — Full activation flow showing API acquisition and registration.
