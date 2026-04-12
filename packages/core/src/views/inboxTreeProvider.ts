@@ -159,7 +159,9 @@ export class InboxTreeProvider implements vscode.TreeDataProvider<InboxElement> 
 
   getTreeItem(element: InboxElement): vscode.TreeItem {
     if (element.kind === 'provider') {
-      const count = this.getUnseenCount(element.providerId);
+      const count = this._filterText
+        ? this.getFilteredUnseenCount(element.providerId)
+        : this.getUnseenCount(element.providerId);
       const treeItem = new vscode.TreeItem(element.label, vscode.TreeItemCollapsibleState.Collapsed);
       treeItem.description = `${count}`;
       treeItem.id = `inbox::provider::${element.providerId}`;
@@ -334,6 +336,15 @@ export class InboxTreeProvider implements vscode.TreeDataProvider<InboxElement> 
       if (item.group !== groupName) { return false; }
       const state = this.stateStore.getState(providerId, item.externalId);
       return state === undefined || state === 'unseen';
+    }).length;
+  }
+
+  private getFilteredUnseenCount(providerId: string): number {
+    const items = this.providerRegistry.getDiscoveredItems(providerId);
+    return items.filter((item) => {
+      const state = this.stateStore.getState(providerId, item.externalId);
+      if (state !== undefined && state !== 'unseen') { return false; }
+      return this.matchesInboxFilter(this.toItemNode(providerId, item));
     }).length;
   }
 

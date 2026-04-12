@@ -321,83 +321,33 @@ export async function activate(context: vscode.ExtensionContext): Promise<WorkCe
   logger.info(`Command registration took ${Math.round(performance.now() - commandRegStart)}ms`);
 
   // Register filter commands for each view
-  context.subscriptions.push(
-    vscode.commands.registerCommand('workcenter.filterInbox', async () => {
-      const text = await vscode.window.showInputBox({
-        prompt: 'Filter Inbox items',
-        placeHolder: 'Type to filter…',
-        value: providers.inboxProvider.filterText,
-      });
-      if (text !== undefined) {
-        providers.inboxProvider.filterText = text;
-        void vscode.commands.executeCommand('setContext', 'workcenter.inboxFilterActive', text.trim().length > 0);
-      }
-    }),
-    vscode.commands.registerCommand('workcenter.clearInboxFilter', () => {
-      providers.inboxProvider.filterText = '';
-      void vscode.commands.executeCommand('setContext', 'workcenter.inboxFilterActive', false);
-    }),
-    vscode.commands.registerCommand('workcenter.filterQueue', async () => {
-      const text = await vscode.window.showInputBox({
-        prompt: 'Filter Queue items',
-        placeHolder: 'Type to filter…',
-        value: providers.queueProvider.filterText,
-      });
-      if (text !== undefined) {
-        providers.queueProvider.filterText = text;
-        void vscode.commands.executeCommand('setContext', 'workcenter.queueFilterActive', text.trim().length > 0);
-      }
-    }),
-    vscode.commands.registerCommand('workcenter.clearQueueFilter', () => {
-      providers.queueProvider.filterText = '';
-      void vscode.commands.executeCommand('setContext', 'workcenter.queueFilterActive', false);
-    }),
-    vscode.commands.registerCommand('workcenter.filterFocus', async () => {
-      const text = await vscode.window.showInputBox({
-        prompt: 'Filter Focus items',
-        placeHolder: 'Type to filter…',
-        value: providers.focusProvider.filterText,
-      });
-      if (text !== undefined) {
-        providers.focusProvider.filterText = text;
-        void vscode.commands.executeCommand('setContext', 'workcenter.focusFilterActive', text.trim().length > 0);
-      }
-    }),
-    vscode.commands.registerCommand('workcenter.clearFocusFilter', () => {
-      providers.focusProvider.filterText = '';
-      void vscode.commands.executeCommand('setContext', 'workcenter.focusFilterActive', false);
-    }),
-    vscode.commands.registerCommand('workcenter.filterHistory', async () => {
-      const text = await vscode.window.showInputBox({
-        prompt: 'Filter History items',
-        placeHolder: 'Type to filter…',
-        value: providers.historyProvider.filterText,
-      });
-      if (text !== undefined) {
-        providers.historyProvider.filterText = text;
-        void vscode.commands.executeCommand('setContext', 'workcenter.historyFilterActive', text.trim().length > 0);
-      }
-    }),
-    vscode.commands.registerCommand('workcenter.clearHistoryFilter', () => {
-      providers.historyProvider.filterText = '';
-      void vscode.commands.executeCommand('setContext', 'workcenter.historyFilterActive', false);
-    }),
-    vscode.commands.registerCommand('workcenter.filterSources', async () => {
-      const text = await vscode.window.showInputBox({
-        prompt: 'Filter Sources items',
-        placeHolder: 'Type to filter…',
-        value: providers.sourcesProvider.filterText,
-      });
-      if (text !== undefined) {
-        providers.sourcesProvider.filterText = text;
-        void vscode.commands.executeCommand('setContext', 'workcenter.sourcesFilterActive', text.trim().length > 0);
-      }
-    }),
-    vscode.commands.registerCommand('workcenter.clearSourcesFilter', () => {
-      providers.sourcesProvider.filterText = '';
-      void vscode.commands.executeCommand('setContext', 'workcenter.sourcesFilterActive', false);
-    }),
-  );
+  const filterViews = [
+    { name: 'Inbox', provider: providers.inboxProvider, key: 'inbox' },
+    { name: 'Queue', provider: providers.queueProvider, key: 'queue' },
+    { name: 'Focus', provider: providers.focusProvider, key: 'focus' },
+    { name: 'History', provider: providers.historyProvider, key: 'history' },
+    { name: 'Sources', provider: providers.sourcesProvider, key: 'sources' },
+  ] as const;
+
+  for (const { name, provider, key } of filterViews) {
+    context.subscriptions.push(
+      vscode.commands.registerCommand(`workcenter.filter${name}`, async () => {
+        const text = await vscode.window.showInputBox({
+          prompt: `Filter ${name} items`,
+          placeHolder: 'Type to filter…',
+          value: provider.filterText,
+        });
+        if (text !== undefined) {
+          provider.filterText = text;
+          void vscode.commands.executeCommand('setContext', `workcenter.${key}FilterActive`, text.trim().length > 0);
+        }
+      }),
+      vscode.commands.registerCommand(`workcenter.clear${name}Filter`, () => {
+        provider.filterText = '';
+        void vscode.commands.executeCommand('setContext', `workcenter.${key}FilterActive`, false);
+      }),
+    );
+  }
 
   // Set context keys and listen for layout changes
   const viewIds: ViewId[] = ['inbox', 'queue', 'focus', 'history', 'sources'];
