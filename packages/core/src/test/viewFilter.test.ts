@@ -7,7 +7,7 @@ import { FocusTreeProvider } from '../views/focusTreeProvider';
 import { HistoryTreeProvider } from '../views/historyTreeProvider';
 import { InboxTreeProvider } from '../views/inboxTreeProvider';
 import { SourcesTreeProvider } from '../views/sourcesTreeProvider';
-import { isProviderGroupNode, isSubGroupNode } from '../views/viewLayout';
+import { isProviderGroupNode } from '../views/viewLayout';
 
 function createMockStore(): ITaskStore {
   const items: Map<string, any> = new Map();
