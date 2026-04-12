@@ -35,7 +35,7 @@ export class ProviderLabelCache {
     if (!stats.isFile()) {
       logger.warn(`Provider label cache path is not a regular file: ${this.filePath} — removing`);
       try {
-        await fs.promises.rm(this.filePath, { force: true });
+        await fs.promises.rm(this.filePath, { recursive: true, force: true });
       } catch {
         // Best-effort cleanup
       }
