@@ -60,11 +60,11 @@ export class StartWorkAction implements WorkCenterAction {
     this.globalState = globalState;
   }
 
-  canRun(item: WorkItem): boolean {
+  canRun(item: Readonly<WorkItem>): boolean {
     return item.state === 'InProgress' && SUPPORTED_PROVIDERS.includes(item.providerId ?? '');
   }
 
-  async run(item: WorkItem): Promise<void> {
+  async run(item: Readonly<WorkItem>): Promise<void> {
     const parsed = this.parseExternalId(item.externalId);
     if (!parsed) {
       void vscode.window.showErrorMessage('Could not determine issue number.');
@@ -150,7 +150,7 @@ export class StartWorkAction implements WorkCenterAction {
               arg => arg.replace(/\{path\}/g, worktreePath),
             );
             try {
-              await execFileAsync(cmd.command, resolvedArgs);
+              await execFileAsync(cmd.command, resolvedArgs, { cwd: worktreePath });
             } catch (cmdErr) {
               const cmdMessage = cmdErr instanceof Error ? cmdErr.message : String(cmdErr);
               logger.error(`Post-worktree command failed: ${cmd.command}`, cmdErr);
