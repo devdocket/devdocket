@@ -48,6 +48,11 @@ export class ProviderLabelCache {
     try {
       raw = await fs.promises.readFile(this.filePath, 'utf-8');
     } catch (error) {
+      const fsError = error as NodeJS.ErrnoException;
+      if (fsError.code === 'ENOENT') {
+        this.labels.clear();
+        return;
+      }
       logger.warn(`Failed to read provider label cache from ${this.filePath}:`, error);
       throw error;
     }
