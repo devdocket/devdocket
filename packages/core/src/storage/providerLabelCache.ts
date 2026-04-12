@@ -1,6 +1,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import { logger } from '../services/logger';
+import { MAX_STORE_FILE_SIZE } from './limits';
 
 /**
  * Persists a mapping of providerId → display label so that tree views
@@ -18,15 +19,35 @@ export class ProviderLabelCache {
 
   /** Load cached labels from disk. Safe to call even if the file does not exist. */
   async load(): Promise<void> {
-    let raw: string;
+    let stats: fs.Stats;
     try {
-      raw = await fs.promises.readFile(this.filePath, 'utf-8');
+      stats = await fs.promises.stat(this.filePath);
     } catch (error) {
       const fsError = error as NodeJS.ErrnoException;
       if (fsError.code === 'ENOENT') {
         this.labels.clear();
         return;
       }
+      logger.warn(`Failed to stat provider label cache at ${this.filePath}:`, error);
+      throw error;
+    }
+
+    if (!stats.isFile()) {
+      logger.warn(`Provider label cache path is not a regular file: ${this.filePath}`);
+      this.labels.clear();
+      return;
+    }
+
+    if (stats.size > MAX_STORE_FILE_SIZE) {
+      logger.warn(`Provider label cache exceeds ${MAX_STORE_FILE_SIZE} bytes — resetting to empty`);
+      this.labels.clear();
+      return;
+    }
+
+    let raw: string;
+    try {
+      raw = await fs.promises.readFile(this.filePath, 'utf-8');
+    } catch (error) {
       logger.warn(`Failed to read provider label cache from ${this.filePath}:`, error);
       throw error;
     }
