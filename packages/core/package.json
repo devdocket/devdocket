@@ -17,7 +17,9 @@
     "onView:workcenter.focus",
     "onView:workcenter.sources",
     "onView:workcenter.history",
-    "onCommand:workcenter.refresh"
+    "onCommand:workcenter.refresh",
+    "onCommand:workcenter.dismissFromSources",
+    "onCommand:workcenter.deleteItem"
   ],
   "main": "./dist/extension.js",
   "contributes": {
@@ -168,6 +170,18 @@
         "icon": "$(arrow-right)"
       },
       {
+        "command": "workcenter.dismissFromSources",
+        "title": "Dismiss",
+        "category": "WorkCenter",
+        "icon": "$(close)"
+      },
+      {
+        "command": "workcenter.deleteItem",
+        "title": "Delete",
+        "category": "WorkCenter",
+        "icon": "$(trash)"
+      },
+      {
         "command": "workcenter.moveToQueue",
         "title": "Move to Queue",
         "category": "WorkCenter",
@@ -205,6 +219,11 @@
           "group": "1_actions"
         },
         {
+          "command": "workcenter.deleteItem",
+          "when": "view == workcenter.queue",
+          "group": "1_actions"
+        },
+        {
           "command": "workcenter.completeItem",
           "when": "view == workcenter.focus",
           "group": "inline"
@@ -231,32 +250,32 @@
         },
         {
           "command": "workcenter.moveUp",
-          "when": "view == workcenter.queue",
+          "when": "view == workcenter.queue && !listMultiSelection",
           "group": "3_reorder@1"
         },
         {
           "command": "workcenter.moveDown",
-          "when": "view == workcenter.queue",
+          "when": "view == workcenter.queue && !listMultiSelection",
           "group": "3_reorder@2"
         },
         {
           "command": "workcenter.focusMoveUp",
-          "when": "view == workcenter.focus",
+          "when": "view == workcenter.focus && !listMultiSelection",
           "group": "3_reorder@1"
         },
         {
           "command": "workcenter.focusMoveDown",
-          "when": "view == workcenter.focus",
+          "when": "view == workcenter.focus && !listMultiSelection",
           "group": "3_reorder@2"
         },
         {
           "command": "workcenter.openInBrowser",
-          "when": "viewItem =~ /hasUrl/",
+          "when": "viewItem =~ /hasUrl/ && !listMultiSelection",
           "group": "2_links"
         },
         {
           "command": "workcenter.runAction",
-          "when": "view == workcenter.queue || view == workcenter.focus",
+          "when": "(view == workcenter.queue || view == workcenter.focus) && !listMultiSelection",
           "group": "0_actions"
         },
         {
@@ -278,6 +297,26 @@
           "command": "workcenter.acceptFromSources",
           "when": "view == workcenter.sources && viewItem =~ /sourceItem/",
           "group": "inline"
+        },
+        {
+          "command": "workcenter.dismissFromSources",
+          "when": "view == workcenter.sources && viewItem =~ /sourceItem/",
+          "group": "inline"
+        },
+        {
+          "command": "workcenter.dismissFromSources",
+          "when": "view == workcenter.sources && viewItem =~ /sourceItem/",
+          "group": "1_actions"
+        },
+        {
+          "command": "workcenter.archiveItem",
+          "when": "view == workcenter.history && viewItem =~ /historyItem\\.done/",
+          "group": "1_actions"
+        },
+        {
+          "command": "workcenter.deleteItem",
+          "when": "view == workcenter.history",
+          "group": "1_actions"
         }
       ]
     }

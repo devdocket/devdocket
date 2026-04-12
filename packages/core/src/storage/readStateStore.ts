@@ -43,6 +43,32 @@ export class ReadStateStore {
     return added;
   }
 
+  /** Adds multiple keys in a single write. Returns keys that were newly added. */
+  async addMany(keys: string[]): Promise<string[]> {
+    if (keys.length === 0) { return []; }
+    if (!this.loaded) { await this.load(); }
+    const newlyAdded: string[] = [];
+    await this.enqueue(async () => {
+      for (const key of keys) {
+        if (!this.items.has(key)) {
+          this.items.add(key);
+          newlyAdded.push(key);
+        }
+      }
+      if (newlyAdded.length === 0) { return; }
+      try {
+        await this.writeFile();
+      } catch (err) {
+        for (const key of newlyAdded) {
+          this.items.delete(key);
+        }
+        newlyAdded.length = 0;
+        throw err;
+      }
+    });
+    return newlyAdded;
+  }
+
   keys(): IterableIterator<string> {
     return this.items.values();
   }

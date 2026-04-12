@@ -116,20 +116,20 @@ function createTreeViews(
   const sourcesProvider = new SourcesTreeProvider(providerRegistry, stateStore);
   const historyProvider = new HistoryTreeProvider(workGraph);
 
-  const inboxTreeView = vscode.window.createTreeView('workcenter.inbox', { treeDataProvider: inboxProvider });
-  const sourcesTreeView = vscode.window.createTreeView('workcenter.sources', { treeDataProvider: sourcesProvider });
-  const queueTreeView = vscode.window.createTreeView('workcenter.queue', { treeDataProvider: queueProvider, dragAndDropController: queueProvider });
-  const focusTreeView = vscode.window.createTreeView('workcenter.focus', { treeDataProvider: focusProvider, dragAndDropController: focusProvider });
-  const historyTreeView = vscode.window.createTreeView('workcenter.history', { treeDataProvider: historyProvider });
+  const inboxTreeView = vscode.window.createTreeView('workcenter.inbox', { treeDataProvider: inboxProvider, canSelectMany: true });
+  const sourcesTreeView = vscode.window.createTreeView('workcenter.sources', { treeDataProvider: sourcesProvider, canSelectMany: true });
+  const queueTreeView = vscode.window.createTreeView('workcenter.queue', { treeDataProvider: queueProvider, dragAndDropController: queueProvider, canSelectMany: true });
+  const focusTreeView = vscode.window.createTreeView('workcenter.focus', { treeDataProvider: focusProvider, dragAndDropController: focusProvider, canSelectMany: true });
+  const historyTreeView = vscode.window.createTreeView('workcenter.history', { treeDataProvider: historyProvider, canSelectMany: true });
 
   const inboxSelectionSub = inboxTreeView.onDidChangeSelection((e) => {
     void (async () => {
-      let changed = false;
-      for (const item of e.selection) {
-        if (item.kind === 'item') {
-          changed = await inboxProvider.markSeen(item.providerId, item.externalId) || changed;
-        }
-      }
+      const items = e.selection.filter(
+        (item): item is { kind: 'item'; providerId: string; externalId: string } =>
+          item.kind === 'item',
+      );
+      if (items.length === 0) { return; }
+      const changed = await inboxProvider.markSeenBatch(items);
       if (changed) {
         inboxProvider.refresh();
       }
