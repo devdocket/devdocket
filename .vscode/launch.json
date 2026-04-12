@@ -9,13 +9,15 @@
         "--extensionDevelopmentPath=${workspaceFolder}/packages/core",
         "--extensionDevelopmentPath=${workspaceFolder}/packages/github",
         "--extensionDevelopmentPath=${workspaceFolder}/packages/ado",
-        "--extensionDevelopmentPath=${workspaceFolder}/packages/ai-reviewer"
+        "--extensionDevelopmentPath=${workspaceFolder}/packages/ai-reviewer",
+        "--extensionDevelopmentPath=${workspaceFolder}/packages/start-git-work"
       ],
       "outFiles": [
         "${workspaceFolder}/packages/core/dist/**/*.js",
         "${workspaceFolder}/packages/github/dist/**/*.js",
         "${workspaceFolder}/packages/ado/dist/**/*.js",
-        "${workspaceFolder}/packages/ai-reviewer/dist/**/*.js"
+        "${workspaceFolder}/packages/ai-reviewer/dist/**/*.js",
+        "${workspaceFolder}/packages/start-git-work/dist/**/*.js"
       ],
       "preLaunchTask": "build all"
     }

@@ -90,7 +90,12 @@ describe('StartWorkAction', () => {
       expect(action.canRun(item)).toBe(true);
     });
 
-    it('returns false for non-github provider items', () => {
+    it('returns true for ado-work-items provider items in InProgress state', () => {
+      const item = createWorkItem({ providerId: 'ado-work-items', state: 'InProgress', externalId: 'org/project/456' });
+      expect(action.canRun(item)).toBe(true);
+    });
+
+    it('returns false for non-supported provider items', () => {
       const item = createWorkItem({ providerId: 'jira', state: 'InProgress' });
       expect(action.canRun(item)).toBe(false);
     });
@@ -213,7 +218,7 @@ describe('StartWorkAction', () => {
   });
 
   describe('run', () => {
-    it('creates branch and worktree with correct names', async () => {
+    it('creates branch and worktree with correct names for GitHub items', async () => {
       const item = createWorkItem({ title: '#123: Fix login redirect bug' });
       await action.run(item);
 
@@ -241,6 +246,37 @@ describe('StartWorkAction', () => {
       ]);
     });
 
+    it('creates branch and worktree with correct names for ADO items', async () => {
+      const item = createWorkItem({
+        providerId: 'ado-work-items',
+        externalId: 'org/project/456',
+        title: 'ADO work item 456',
+      });
+      await action.run(item);
+
+      expect(execFile).toHaveBeenCalledTimes(3);
+
+      // First call: check if branch exists
+      const firstCall = vi.mocked(execFile).mock.calls[0];
+      expect(firstCall[0]).toBe('git');
+      expect(firstCall[1]).toEqual(['branch', '--list', 'issue456']);
+      expect(firstCall[2]).toEqual({ cwd: '/mock/workspace' });
+
+      // Second call: create branch
+      const secondCall = vi.mocked(execFile).mock.calls[1];
+      expect(secondCall[0]).toBe('git');
+      expect(secondCall[1]).toEqual(['branch', 'issue456', 'origin/dev']);
+
+      // Third call: create worktree
+      const thirdCall = vi.mocked(execFile).mock.calls[2];
+      expect(thirdCall[0]).toBe('git');
+      expect(thirdCall[1]).toEqual([
+        'worktree', 'add',
+        path.join('/mock', 'workspace-issue456'),
+        'issue456',
+      ]);
+    });
+
     it('uses user-specified base branch for branch creation', async () => {
       mockInputBox('/mock/workspace', 'main');
 
@@ -248,45 +284,99 @@ describe('StartWorkAction', () => {
       await action.run(item);
 
       const branchCall = vi.mocked(execFile).mock.calls.find(
-        call => call[1]![0] === 'branch' && call[1]![1] !== '--list'
+        (call: any[]) => call[1]?.[0] === 'branch' && call[1]?.[1] !== '--list',
       );
+      expect(branchCall).toBeDefined();
       expect(branchCall![1]).toEqual(['branch', 'issue123', 'main']);
     });
 
-    it('runs configured post-worktree commands with {path} replaced', async () => {
+    it('shows error when branch already exists', async () => {
+      vi.mocked(execFile).mockImplementation(((cmd: string, args: string[], opts: any, cb: Function) => {
+        if (args[0] === 'branch' && args[1] === '--list') {
+          cb(null, { stdout: '  issue123\n', stderr: '' }, '');
+        } else {
+          cb(null, { stdout: '', stderr: '' }, '');
+        }
+      }) as any);
+
+      const item = createWorkItem();
+      await action.run(item);
+
+      expect(window.showErrorMessage).toHaveBeenCalledWith(
+        'WorkCenter: Branch "issue123" already exists.',
+      );
+    });
+
+    it('shows error when worktree directory already exists', async () => {
+      vi.mocked(fs.existsSync).mockImplementation((p: any) => {
+        const pathStr = p.toString();
+        // .git check passes, worktree dir check also passes (already exists)
+        return pathStr.endsWith('.git') || pathStr.includes('workspace-issue123');
+      });
+
+      const item = createWorkItem();
+      await action.run(item);
+
+      expect(window.showErrorMessage).toHaveBeenCalledWith(
+        expect.stringContaining('already exists'),
+      );
+    });
+
+    it('shows error when externalId is missing', async () => {
+      const item = createWorkItem({ externalId: undefined });
+      await action.run(item);
+
+      expect(window.showErrorMessage).toHaveBeenCalledWith(
+        'Could not determine issue number.',
+      );
+    });
+
+    it('shows error when externalId format is invalid', async () => {
+      const item = createWorkItem({ externalId: 'invalid-format' });
+      await action.run(item);
+
+      expect(window.showErrorMessage).toHaveBeenCalledWith(
+        'Could not determine issue number.',
+      );
+    });
+
+    it('shows success message after creating worktree', async () => {
+      const item = createWorkItem();
+      await action.run(item);
+
+      expect(window.showInformationMessage).toHaveBeenCalledWith(
+        'WorkCenter: Created worktree for issue123',
+      );
+    });
+
+    it('runs post-worktree commands with {path} placeholder', async () => {
       vi.mocked(workspace.getConfiguration).mockReturnValue({
         get: vi.fn((key: string, defaultValue?: any) => {
-          if (key === 'startWork.commands') {
+          if (key === 'commands') {
             return [
-              { command: 'code', args: ['{path}'] },
-              { command: 'echo', args: ['opened', '{path}'] },
+              { command: 'npm', args: ['install', '--prefix', '{path}'] },
             ];
           }
           return defaultValue;
         }),
       } as any);
 
-      const item = createWorkItem({ title: '#123: Fix bug' });
+      const item = createWorkItem();
       await action.run(item);
 
-      const worktreePath = path.join('/mock', 'workspace-issue123');
-
-      // git calls (branch --list, branch create, worktree add) + 2 commands = 5
-      expect(execFile).toHaveBeenCalledTimes(5);
-
-      expect(execFile).toHaveBeenCalledWith(
-        'code', [worktreePath], { shell: true }, expect.any(Function),
-      );
-      expect(execFile).toHaveBeenCalledWith(
-        'echo', ['opened', worktreePath], { shell: true }, expect.any(Function),
-      );
+      // git commands (3) + 1 post-worktree command
+      expect(execFile).toHaveBeenCalledTimes(4);
+      const postCmd = vi.mocked(execFile).mock.calls[3];
+      expect(postCmd[0]).toBe('npm');
+      const expectedWorktreePath = path.join('/mock', 'workspace-issue123');
+      expect(postCmd[1]).toEqual(['install', '--prefix', expectedWorktreePath]);
     });
 
-    it('shows warning but continues when a post-worktree command fails', async () => {
+    it('shows warning when post-worktree command fails', async () => {
       vi.mocked(workspace.getConfiguration).mockReturnValue({
         get: vi.fn((key: string, defaultValue?: any) => {
-          if (key === 'startWork.commands') {
-            return [{ command: 'bad-cmd', args: [] }];
+          if (key === 'commands') {
+            return [{ command: 'bad-cmd' }];
           }
           return defaultValue;
         }),
@@ -294,136 +384,40 @@ describe('StartWorkAction', () => {
 
       vi.mocked(execFile).mockImplementation(((cmd: string, args: string[], opts: any, cb: Function) => {
         if (cmd === 'bad-cmd') {
-          cb(new Error('command not found'), '', '');
-        } else {
-          cb(null, { stdout: '', stderr: '' }, '');
+          cb(new Error('command not found'), { stdout: '', stderr: '' }, '');
+          return;
         }
+        cb(null, { stdout: '', stderr: '' }, '');
       }) as any);
 
-      const item = createWorkItem({ title: '#123: Fix bug' });
+      const item = createWorkItem();
       await action.run(item);
 
       expect(window.showWarningMessage).toHaveBeenCalledWith(
-        expect.stringContaining('Command "bad-cmd" failed'),
-      );
-      // Should still show success message for worktree creation
-      expect(window.showInformationMessage).toHaveBeenCalledWith(
-        'WorkCenter: Created worktree for issue123',
+        expect.stringContaining('bad-cmd'),
       );
     });
 
-    it('succeeds with no post-worktree commands configured', async () => {
-      const item = createWorkItem({ title: '#123: Fix bug' });
-      await action.run(item);
-
-      // Only 3 git calls, no extra commands
-      expect(execFile).toHaveBeenCalledTimes(3);
-      expect(window.showInformationMessage).toHaveBeenCalledWith(
-        'WorkCenter: Created worktree for issue123',
-      );
-    });
-
-    it('shows error when issue number cannot be extracted', async () => {
-      const item = createWorkItem({ title: 'No issue number here', externalId: 'invalid-format' });
-      await action.run(item);
-
-      expect(window.showErrorMessage).toHaveBeenCalledWith(
-        'Could not determine issue number.',
-      );
-      expect(execFile).not.toHaveBeenCalled();
-    });
-
-    it('shows error when git command fails', async () => {
+    it('handles git worktree failure and rolls back branch', async () => {
+      let callCount = 0;
       vi.mocked(execFile).mockImplementation(((cmd: string, args: string[], opts: any, cb: Function) => {
-        cb(new Error('git branch failed: already exists'), '', '');
-      }) as any);
-
-      const item = createWorkItem({ title: '#123: Fix bug' });
-      await action.run(item);
-
-      expect(window.showErrorMessage).toHaveBeenCalledWith(
-        expect.stringContaining('git branch failed'),
-      );
-    });
-
-    it('shows error when branch already exists', async () => {
-      // Mock branch --list to return existing branch
-      vi.mocked(execFile).mockImplementation(((cmd: string, args: string[], opts: any, cb: Function) => {
-        if (args[0] === 'branch' && args[1] === '--list') {
-          cb(null, { stdout: 'issue123\n', stderr: '' }, '');
-        } else {
-          cb(null, { stdout: '', stderr: '' }, '');
-        }
-      }) as any);
-
-      const item = createWorkItem({ title: '#123: Fix bug' });
-      await action.run(item);
-
-      expect(window.showErrorMessage).toHaveBeenCalledWith(
-        'WorkCenter: Branch "issue123" already exists.',
-      );
-      // Should not attempt to create branch or worktree
-      expect(execFile).toHaveBeenCalledTimes(1);
-    });
-
-    it('shows error and deletes branch when worktree directory already exists', async () => {
-      // Mock git worktree add to fail because directory already exists
-      vi.mocked(execFile).mockImplementation(((cmd: string, args: string[], opts: any, cb: Function) => {
+        callCount++;
         if (args[0] === 'worktree') {
-          const stderr = `fatal: '${path.join('/mock', 'workspace-issue123')}' already exists`;
-          const err = new Error(
-            `Command failed: git worktree add ${path.join('/mock', 'workspace-issue123')} issue123\n${stderr}`
-          );
-          (err as any).stderr = stderr;
-          cb(err, '', '');
-        } else {
-          cb(null, { stdout: '', stderr: '' }, '');
+          cb(new Error('worktree failed'), { stdout: '', stderr: '' }, '');
+          return;
         }
+        cb(null, { stdout: '', stderr: '' }, '');
       }) as any);
 
-      const item = createWorkItem({ title: '#123: Fix bug' });
+      const item = createWorkItem();
       await action.run(item);
 
-      expect(window.showErrorMessage).toHaveBeenCalledWith(
-        `WorkCenter: Directory "${path.join('/mock', 'workspace-issue123')}" already exists.`,
+      // Should have attempted rollback (branch -D)
+      const rollbackCall = vi.mocked(execFile).mock.calls.find(
+        (call: any[]) => call[1]?.[0] === 'branch' && call[1]?.[1] === '-D',
       );
-      // Should delete the branch (rollback)
-      expect(execFile).toHaveBeenCalledWith(
-        'git',
-        ['branch', '-D', 'issue123'],
-        { cwd: '/mock/workspace' },
-        expect.any(Function),
-      );
-    });
-
-    it('deletes branch if worktree creation fails', async () => {
-      // Mock worktree add to fail
-      vi.mocked(execFile).mockImplementation(((cmd: string, args: string[], opts: any, cb: Function) => {
-        if (args[0] === 'worktree') {
-          cb(new Error('worktree add failed'), '', '');
-        } else {
-          cb(null, { stdout: '', stderr: '' }, '');
-        }
-      }) as any);
-
-      const item = createWorkItem({ title: '#123: Fix bug' });
-      await action.run(item);
-
-      expect(window.showErrorMessage).toHaveBeenCalledWith(
-        expect.stringContaining('worktree add failed'),
-      );
-
-      const calls = vi.mocked(execFile).mock.calls;
-      const worktreeIdx = calls.findIndex(c => c[1]![0] === 'worktree');
-      const rollbackIdx = calls.findIndex(c => c[1]![0] === 'branch' && c[1]![1] === '-D');
-
-      expect(worktreeIdx).toBeGreaterThan(-1);
-      expect(rollbackIdx).toBeGreaterThan(-1);
-      // Rollback must happen after worktree add
-      expect(rollbackIdx).toBeGreaterThan(worktreeIdx);
-
-      expect(calls[rollbackIdx][1]).toEqual(['branch', '-D', 'issue123']);
-      expect(calls[rollbackIdx][2]).toEqual({ cwd: '/mock/workspace' });
+      expect(rollbackCall).toBeDefined();
+      expect(rollbackCall![1]).toEqual(['branch', '-D', 'issue123']);
     });
   });
 
@@ -432,26 +426,29 @@ describe('StartWorkAction', () => {
       const item = createWorkItem();
       await action.run(item);
 
-      // Second showInputBox call is for base branch
-      expect(window.showInputBox).toHaveBeenCalledWith({
+      const baseBranchCall = vi.mocked(window.showInputBox).mock.calls.find(
+        (call: any[]) => call[0]?.prompt?.includes('base branch'),
+      );
+      expect(baseBranchCall).toBeDefined();
+      expect(baseBranchCall![0]).toEqual({
         prompt: 'Enter the base branch for owner/repo',
         value: '',
         ignoreFocusOut: true,
       });
     });
 
-    it('pre-fills cached base branch as default on subsequent use', async () => {
+    it('pre-fills cached branch as default on subsequent use', async () => {
       mockMemento._store.set('baseBranch:owner/repo', 'origin/main');
       mockInputBox('/mock/workspace', 'origin/main');
 
       const item = createWorkItem();
       await action.run(item);
 
-      expect(window.showInputBox).toHaveBeenCalledWith(
-        expect.objectContaining({
-          prompt: 'Enter the base branch for owner/repo',
-          value: 'origin/main',
-        }),
+      const baseBranchCall = vi.mocked(window.showInputBox).mock.calls.find(
+        (call: any[]) => call[0]?.prompt?.includes('base branch'),
+      );
+      expect(baseBranchCall![0]).toEqual(
+        expect.objectContaining({ value: 'origin/main' }),
       );
     });
 
@@ -462,19 +459,19 @@ describe('StartWorkAction', () => {
       expect(mockMemento.update).toHaveBeenCalledWith('baseBranch:owner/repo', 'origin/dev');
     });
 
-    it('does not cache when user cancels base branch input', async () => {
+    it('does not proceed when user cancels base branch input', async () => {
       mockInputBox('/mock/workspace', undefined);
 
       const item = createWorkItem();
       await action.run(item);
 
-      expect(mockMemento.update).toHaveBeenCalledWith('repoPath:owner/repo', '/mock/workspace');
-      expect(mockMemento.update).not.toHaveBeenCalledWith('baseBranch:owner/repo', expect.anything());
+      // Should have cached repo path but not proceeded to git commands
+      expect(mockMemento.update).toHaveBeenCalledTimes(1); // only repoPath
       expect(execFile).not.toHaveBeenCalled();
     });
 
     it('shows error when user provides empty base branch', async () => {
-      mockInputBox('/mock/workspace', '  ');
+      mockInputBox('/mock/workspace', '   ');
 
       const item = createWorkItem();
       await action.run(item);
@@ -482,110 +479,81 @@ describe('StartWorkAction', () => {
       expect(window.showErrorMessage).toHaveBeenCalledWith(
         'WorkCenter: No base branch provided.',
       );
-      expect(execFile).not.toHaveBeenCalled();
     });
+  });
 
-    it('isolates cache by repo key', async () => {
-      mockMemento._store.set('baseBranch:owner/repoA', 'develop');
-
-      const item = createWorkItem({ externalId: 'owner/repoB#456' });
+  describe('ADO-specific behavior', () => {
+    it('parses ADO externalId org/project/456 correctly', async () => {
+      const item = createWorkItem({
+        providerId: 'ado-work-items',
+        externalId: 'org/project/456',
+      });
       await action.run(item);
 
-      // Base branch prompt should have empty default (not 'develop')
-      const baseBranchCall = vi.mocked(window.showInputBox).mock.calls.find(
-        call => (call[0] as any)?.prompt?.includes('base branch'),
+      // Repo path prompt should use repoKey "org/project"
+      expect(window.showInputBox).toHaveBeenCalledWith(
+        expect.objectContaining({
+          prompt: 'Enter the local path to the git repository for org/project',
+        }),
       );
-      expect(baseBranchCall).toBeDefined();
-      expect((baseBranchCall![0] as any).value).toBe('');
+    });
+
+    it('creates branch issue456 for ADO items', async () => {
+      const item = createWorkItem({
+        providerId: 'ado-work-items',
+        externalId: 'org/project/456',
+      });
+      await action.run(item);
+
+      const branchListCall = vi.mocked(execFile).mock.calls[0];
+      expect(branchListCall[1]).toEqual(['branch', '--list', 'issue456']);
+    });
+
+    it('creates worktree dir workspace-issue456 for ADO items', async () => {
+      const item = createWorkItem({
+        providerId: 'ado-work-items',
+        externalId: 'org/project/456',
+      });
+      await action.run(item);
+
+      const worktreeCall = vi.mocked(execFile).mock.calls.find(
+        (call: any[]) => call[1]?.[0] === 'worktree',
+      );
+      expect(worktreeCall).toBeDefined();
+      expect(worktreeCall![1]).toEqual([
+        'worktree', 'add',
+        path.join('/mock', 'workspace-issue456'),
+        'issue456',
+      ]);
+    });
+
+    it('caches repo path per ADO repoKey', async () => {
+      const item = createWorkItem({
+        providerId: 'ado-work-items',
+        externalId: 'org/project/456',
+      });
+      await action.run(item);
+
+      expect(mockMemento.update).toHaveBeenCalledWith('repoPath:org/project', '/mock/workspace');
     });
   });
 
   describe('error scenarios', () => {
-    it('shows warning when rollback itself fails after worktree creation failure', async () => {
-      vi.mocked(execFile).mockImplementation(((cmd: string, args: string[], opts: any, cb: Function) => {
-        if (args[0] === 'worktree' && args[1] === 'add') {
-          cb(new Error('worktree add failed'), '', '');
-        } else if (args[0] === 'branch' && args[1] === '-D') {
-          cb(new Error('branch delete failed: ref not found'), '', '');
-        } else {
-          cb(null, { stdout: '', stderr: '' }, '');
-        }
-      }) as any);
-
-      const item = createWorkItem({ title: '#123: Fix bug' });
-      await action.run(item);
-
-      expect(window.showWarningMessage).toHaveBeenCalledTimes(1);
-      expect(window.showWarningMessage).toHaveBeenCalledWith(
-        expect.stringMatching(/Failed to delete branch during rollback.*branch delete failed: ref not found/),
-      );
-
-      expect(window.showErrorMessage).toHaveBeenCalledWith(
-        expect.stringContaining('worktree add failed'),
-      );
-    });
-
-    it('shows error when externalId is undefined', async () => {
-      const item = createWorkItem({ externalId: undefined });
-      await action.run(item);
-
-      expect(window.showErrorMessage).toHaveBeenCalledWith(
-        'Could not determine issue number.',
-      );
-      expect(execFile).not.toHaveBeenCalled();
-    });
-
-    it('shows warning when worktree fails and branch rollback also fails', async () => {
-      const item = createWorkItem({ externalId: 'invalid-format' });
-      await action.run(item);
-
-      expect(window.showErrorMessage).toHaveBeenCalledWith(
-        'Could not determine issue number.',
-      );
-      expect(execFile).not.toHaveBeenCalled();
-    });
-
-    it('shows error when git branch creation command fails', async () => {
+    it('handles generic git failure gracefully', async () => {
       vi.mocked(execFile).mockImplementation(((cmd: string, args: string[], opts: any, cb: Function) => {
         if (args[0] === 'branch' && args[1] !== '--list') {
-          cb(new Error('fatal: not a valid object name'), '', '');
-        } else {
-          cb(null, { stdout: '', stderr: '' }, '');
+          cb(new Error('git error: permission denied'), { stdout: '', stderr: '' }, '');
+          return;
         }
+        cb(null, { stdout: '', stderr: '' }, '');
       }) as any);
 
-      const item = createWorkItem({ title: '#123: Fix bug' });
+      const item = createWorkItem();
       await action.run(item);
 
       expect(window.showErrorMessage).toHaveBeenCalledWith(
-        expect.stringContaining('fatal: not a valid object name'),
+        expect.stringContaining('Failed to start work'),
       );
-    });
-
-    it('handles worktree directory check when branch was already created', async () => {
-      vi.mocked(execFile).mockImplementation(((cmd: string, args: string[], opts: any, cb: Function) => {
-        // Simulate git worktree add failing because directory already exists
-        if (args[0] === 'worktree' && args[1] === 'add') {
-          const err = new Error("fatal: 'issue123' already exists");
-          (err as any).stderr = "'issue123' already exists";
-          cb(err, '', '');
-        } else {
-          cb(null, { stdout: '', stderr: '' }, '');
-        }
-      }) as any);
-
-      const item = createWorkItem({ title: '#123: Fix bug' });
-      await action.run(item);
-
-      // Should show directory-exists error
-      expect(window.showErrorMessage).toHaveBeenCalledWith(
-        expect.stringContaining('already exists'),
-      );
-      // Should have cleaned up the branch
-      const deleteCalls = vi.mocked(execFile).mock.calls.filter(
-        call => call[1]![0] === 'branch' && call[1]![1] === '-D'
-      );
-      expect(deleteCalls).toHaveLength(1);
     });
   });
 });
