@@ -43,8 +43,24 @@ export class ProviderLabelCache {
     if (this.labels.get(providerId) === label) {
       return; // No change
     }
+    const hadPrevious = this.labels.has(providerId);
+    const previousLabel = this.labels.get(providerId);
     this.labels.set(providerId, label);
-    await this.enqueue(() => this.save());
+    await this.enqueue(async () => {
+      try {
+        await this.save();
+      } catch (error) {
+        // Roll back in-memory state so future set() calls retry persistence
+        if (this.labels.get(providerId) === label) {
+          if (hadPrevious && previousLabel !== undefined) {
+            this.labels.set(providerId, previousLabel);
+          } else {
+            this.labels.delete(providerId);
+          }
+        }
+        throw error;
+      }
+    });
   }
 
   private enqueue(op: () => Promise<void>): Promise<void> {
