@@ -40,7 +40,7 @@ describe('AdoPrReviewProvider — extended', () => {
     vi.clearAllMocks();
     mockFetch.mockReset();
     vi.stubGlobal('fetch', mockFetch);
-    provider = new AdoPrReviewProvider('myorg', ['MyProject']);
+    provider = new AdoPrReviewProvider([{ org: 'myorg', projects: ['MyProject'] }]);
     mockAuthSession();
   });
 
@@ -139,7 +139,7 @@ describe('AdoPrReviewProvider — extended', () => {
       // Should fire empty items and show warning
       expect(listener).toHaveBeenCalledWith([]);
       expect(window.showWarningMessage).toHaveBeenCalledWith(
-        expect.stringContaining('Failed to determine Azure DevOps user identity'),
+        expect.stringContaining('user identity'),
       );
     });
 
@@ -155,7 +155,7 @@ describe('AdoPrReviewProvider — extended', () => {
 
       expect(listener).toHaveBeenCalledWith([]);
       expect(window.showWarningMessage).toHaveBeenCalledWith(
-        expect.stringContaining('Failed to determine Azure DevOps user identity'),
+        expect.stringContaining('user identity'),
       );
     });
 
@@ -206,7 +206,7 @@ describe('AdoPrReviewProvider — extended', () => {
   describe('multiple projects', () => {
     it('fetches PRs for each configured project', async () => {
       provider.dispose();
-      provider = new AdoPrReviewProvider('myorg', ['ProjectA', 'ProjectB']);
+      provider = new AdoPrReviewProvider([{ org: 'myorg', projects: ['ProjectA', 'ProjectB'] }]);
       mockAuthSession();
 
       mockFetch
@@ -238,7 +238,7 @@ describe('AdoPrReviewProvider — extended', () => {
 
     it('reports multiple project failures', async () => {
       provider.dispose();
-      provider = new AdoPrReviewProvider('myorg', ['ProjA', 'ProjB']);
+      provider = new AdoPrReviewProvider([{ org: 'myorg', projects: ['ProjA', 'ProjB'] }]);
       mockAuthSession();
 
       mockFetch
@@ -249,13 +249,13 @@ describe('AdoPrReviewProvider — extended', () => {
       await provider.refresh();
 
       expect(window.showWarningMessage).toHaveBeenCalledWith(
-        expect.stringContaining('2 projects'),
+        expect.stringContaining('2 sources'),
       );
     });
 
     it('handles mixed success and failure across projects', async () => {
       provider.dispose();
-      provider = new AdoPrReviewProvider('myorg', ['GoodProj', 'BadProj']);
+      provider = new AdoPrReviewProvider([{ org: 'myorg', projects: ['GoodProj', 'BadProj'] }]);
       mockAuthSession();
 
       mockFetch
@@ -277,7 +277,7 @@ describe('AdoPrReviewProvider — extended', () => {
       expect(items[0].group).toBe('GoodProj/goodrepo');
 
       expect(window.showWarningMessage).toHaveBeenCalledWith(
-        expect.stringContaining('Failed to fetch PR reviews from BadProj'),
+        expect.stringContaining('BadProj'),
       );
     });
   });
@@ -312,7 +312,7 @@ describe('AdoPrReviewProvider — extended', () => {
   describe('URL construction', () => {
     it('URL-encodes org and project names with special characters', async () => {
       provider.dispose();
-      provider = new AdoPrReviewProvider('my org', ['My Project']);
+      provider = new AdoPrReviewProvider([{ org: 'my org', projects: ['My Project'] }]);
       mockAuthSession();
 
       mockFetch

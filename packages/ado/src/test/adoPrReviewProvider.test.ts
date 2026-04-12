@@ -23,7 +23,7 @@ describe('AdoPrReviewProvider', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.stubGlobal('fetch', mockFetch);
-    provider = new AdoPrReviewProvider('myorg', ['MyProject']);
+    provider = new AdoPrReviewProvider([{ org: 'myorg', projects: ['MyProject'] }]);
 
     vi.mocked(authentication.getSession).mockResolvedValue({
       accessToken: 'test-token',
@@ -147,7 +147,7 @@ describe('AdoPrReviewProvider', () => {
     const items = listener.mock.calls[0][0];
     expect(items).toHaveLength(1);
     expect(items[0]).toEqual({
-      externalId: 'MyProject/myrepo/101',
+      externalId: 'myorg/MyProject/myrepo/101',
       title: 'PR 101: Fix bug',
       description: 'Description for PR 101',
       url: 'https://dev.azure.com/myorg/MyProject/_git/myrepo/pullrequest/101',
@@ -255,9 +255,9 @@ describe('AdoPrReviewProvider', () => {
 
     const items = listener.mock.calls[0][0];
     expect(items).toHaveLength(2);
-    expect(items[0].externalId).toBe('ProjectA/repo1/1');
+    expect(items[0].externalId).toBe('myorg/ProjectA/repo1/1');
     expect(items[0].group).toBe('ProjectA/repo1');
-    expect(items[1].externalId).toBe('ProjectA/repo2/2');
+    expect(items[1].externalId).toBe('myorg/ProjectA/repo2/2');
     expect(items[1].group).toBe('ProjectA/repo2');
   });
 
@@ -310,7 +310,7 @@ describe('AdoPrReviewProvider', () => {
     await provider.refresh();
 
     expect(window.showWarningMessage).toHaveBeenCalledWith(
-      expect.stringContaining('Failed to determine Azure DevOps user identity'),
+      expect.stringContaining('user identity'),
     );
   });
 
@@ -352,7 +352,7 @@ describe('AdoPrReviewProvider', () => {
 
     expect(listener).toHaveBeenCalledWith([]);
     expect(window.showWarningMessage).toHaveBeenCalledWith(
-      expect.stringContaining('Failed to fetch PR reviews'),
+      expect.stringContaining('failed to fetch from'),
     );
   });
 
@@ -382,7 +382,7 @@ describe('AdoPrReviewProvider', () => {
 
   it('uses org-level PR URL when no projects are configured', async () => {
     provider.dispose();
-    provider = new AdoPrReviewProvider('myorg', []);
+    provider = new AdoPrReviewProvider([{ org: 'myorg', projects: [] }]);
 
     vi.mocked(authentication.getSession).mockResolvedValue({
       accessToken: 'test-token',
@@ -490,7 +490,7 @@ describe('AdoPrReviewProvider', () => {
 
   it('fires empty items when org name is invalid', async () => {
     provider.dispose();
-    provider = new AdoPrReviewProvider('../evil', ['MyProject']);
+    provider = new AdoPrReviewProvider([{ org: '../evil', projects: ['MyProject'] }]);
 
     const listener = vi.fn();
     provider.onDidDiscoverItems(listener);
@@ -503,7 +503,7 @@ describe('AdoPrReviewProvider', () => {
 
   it('skips invalid projects and fetches only valid ones', async () => {
     provider.dispose();
-    provider = new AdoPrReviewProvider('myorg', ['ValidProject', '../bad', 'AlsoValid']);
+    provider = new AdoPrReviewProvider([{ org: 'myorg', projects: ['ValidProject', '../bad', 'AlsoValid'] }]);
 
     // Connection data + 2 valid project PR fetches
     mockFetch
@@ -524,7 +524,7 @@ describe('AdoPrReviewProvider', () => {
 
   it('fires empty items when all configured projects are invalid', async () => {
     provider.dispose();
-    provider = new AdoPrReviewProvider('myorg', ['../bad', '?evil']);
+    provider = new AdoPrReviewProvider([{ org: 'myorg', projects: ['../bad', '?evil'] }]);
 
     // Connection data call still happens before project validation
     mockFetch.mockResolvedValueOnce({

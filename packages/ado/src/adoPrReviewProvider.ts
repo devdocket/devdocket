@@ -1,6 +1,7 @@
 import * as vscode from 'vscode';
 import { BaseProvider, DiscoveredItem, isValidUrlSegment } from '@workcenter/shared';
 import { logger } from './logger';
+import { OrgConfig } from './configParser';
 
 interface AdoPullRequest {
   pullRequestId: number;
@@ -33,16 +34,14 @@ export class AdoPrReviewProvider extends BaseProvider {
   readonly id = 'ado-pr-reviews';
   readonly label = 'Azure DevOps PR Reviews';
 
-  private _cachedUserId: string | undefined;
+  private _cachedUserIds = new Map<string, string>();
   private _cachedSessionAccountId: string | undefined;
 
   /**
-   * @param org      - The Azure DevOps organisation name.
-   * @param projects - Project names to query. An empty array queries the whole org.
+   * @param orgConfigs - One or more organization configurations to query.
    */
   constructor(
-    private readonly org: string,
-    private readonly projects: string[],
+    private readonly orgConfigs: OrgConfig[],
   ) {
     super(new vscode.EventEmitter<DiscoveredItem[]>());
   }
@@ -102,70 +101,78 @@ export class AdoPrReviewProvider extends BaseProvider {
   }
 
   private async fetchAndPublishPrs(accessToken: string, isUserTriggered: boolean, sessionAccountId: string): Promise<void> {
-    if (!isValidUrlSegment(this.org)) {
-      logger.warn('Skipping PR fetch: invalid ADO organization name', this.org);
-      this._onDidDiscoverItems.fire([]);
-      return;
-    }
-
-    const userId = await this.getUserId(accessToken, sessionAccountId);
-    if (!userId) {
-      const message = 'Failed to determine Azure DevOps user identity';
-      if (isUserTriggered) {
-        void vscode.window.showWarningMessage(`WorkCenter ADO: ${message}`);
-      }
-      logger.warn(message);
-      this._onDidDiscoverItems.fire([]);
-      return;
-    }
-
-    const validProjects: string[] = [];
-    for (const project of this.projects) {
-      if (project === '' || isValidUrlSegment(project)) {
-        validProjects.push(project);
-      } else {
-        logger.warn('Skipping invalid ADO project name', project);
-      }
-    }
-
-    if (this.projects.length > 0 && validProjects.length === 0) {
-      logger.warn('All configured ADO projects are invalid — skipping PR fetch');
-      this._onDidDiscoverItems.fire([]);
-      return;
-    }
-
-    const projectList = validProjects.length > 0 ? validProjects : [''];
-    const results = await Promise.allSettled(
-      projectList.map(project => this.fetchPrsForProject(accessToken, project, userId)),
-    );
-
     const allItems: DiscoveredItem[] = [];
-    const failures: string[] = [];
+    const identityFailures: string[] = [];
+    const fetchFailures: string[] = [];
 
-    results.forEach((result, index) => {
-      if (result.status === 'fulfilled') {
-        const { items, failed } = result.value;
-        allItems.push(...items);
-        if (failed) {
-          failures.push(projectList[index] || this.org);
-        }
-      } else {
-        const target = projectList[index] || this.org;
-        failures.push(target);
-        logger.error(
-          `Failed to fetch PR reviews from ${target}:`,
-          (result as PromiseRejectedResult).reason,
-        );
+    for (const orgConfig of this.orgConfigs) {
+      if (!isValidUrlSegment(orgConfig.org)) {
+        logger.warn('Skipping PR fetch: invalid ADO organization name', orgConfig.org);
+        continue;
       }
-    });
+
+      const userId = await this.getUserId(accessToken, orgConfig.org, sessionAccountId);
+      if (!userId) {
+        identityFailures.push(orgConfig.org);
+        logger.warn(`Failed to determine Azure DevOps user identity for org ${orgConfig.org}`);
+        continue;
+      }
+
+      const validProjects: string[] = [];
+      for (const project of orgConfig.projects) {
+        if (project === '' || isValidUrlSegment(project)) {
+          validProjects.push(project);
+        } else {
+          logger.warn('Skipping invalid ADO project name', project);
+        }
+      }
+
+      if (orgConfig.projects.length > 0 && validProjects.length === 0) {
+        logger.warn(`All configured ADO projects are invalid for org ${orgConfig.org} — skipping PR fetch`);
+        continue;
+      }
+
+      const projectList = validProjects.length > 0 ? validProjects : [''];
+      const results = await Promise.allSettled(
+        projectList.map(project => this.fetchPrsForProject(accessToken, orgConfig.org, project, userId)),
+      );
+
+      results.forEach((result, index) => {
+        const project = projectList[index];
+        const target = project ? `${orgConfig.org}/${project}` : orgConfig.org;
+
+        if (result.status === 'fulfilled') {
+          const { items, failed } = result.value;
+          allItems.push(...items);
+          if (failed) {
+            fetchFailures.push(target);
+          }
+        } else {
+          fetchFailures.push(target);
+          logger.error(
+            `Failed to fetch PR reviews from ${target}:`,
+            (result as PromiseRejectedResult).reason,
+          );
+        }
+      });
+    }
 
     this._onDidDiscoverItems.fire(allItems);
     logger.info(`Discovered ${allItems.length} ADO PR reviews`);
 
-    if (failures.length > 0) {
-      const message = failures.length === 1
-        ? `Failed to fetch PR reviews from ${failures[0]}`
-        : `Failed to fetch PR reviews from ${failures.length} projects`;
+    const messages: string[] = [];
+    if (identityFailures.length > 0) {
+      messages.push(`user identity failed for ${identityFailures.join(', ')}`);
+    }
+    if (fetchFailures.length > 0) {
+      messages.push(
+        fetchFailures.length === 1
+          ? `failed to fetch from ${fetchFailures[0]}`
+          : `failed to fetch from ${fetchFailures.length} sources`,
+      );
+    }
+    if (messages.length > 0) {
+      const message = `PR review errors: ${messages.join('; ')}`;
       if (isUserTriggered) {
         void vscode.window.showWarningMessage(`WorkCenter ADO: ${message}`);
       }
@@ -173,31 +180,36 @@ export class AdoPrReviewProvider extends BaseProvider {
     }
   }
 
-  private async getUserId(token: string, sessionAccountId: string): Promise<string | undefined> {
-    if (this._cachedUserId && this._cachedSessionAccountId === sessionAccountId) {
-      return this._cachedUserId;
+  private async getUserId(token: string, org: string, sessionAccountId: string): Promise<string | undefined> {
+    // If the auth account changed, clear all cached user IDs
+    if (this._cachedSessionAccountId !== sessionAccountId) {
+      this._cachedUserIds.clear();
+      this._cachedSessionAccountId = sessionAccountId;
+    }
+
+    const cached = this._cachedUserIds.get(org);
+    if (cached) {
+      return cached;
     }
 
     let response: Response;
     try {
       response = await fetch(
-        `https://dev.azure.com/${encodeURIComponent(this.org)}/_apis/connectiondata`,
+        `https://dev.azure.com/${encodeURIComponent(org)}/_apis/connectiondata`,
         {
           headers: { Authorization: `Bearer ${token}` },
         },
       );
     } catch (err) {
-      logger.error('Network error fetching connection data:', err);
-      this._cachedUserId = undefined;
-      this._cachedSessionAccountId = undefined;
+      logger.error(`Network error fetching connection data for org ${org}:`, err);
+      this._cachedUserIds.delete(org);
       return undefined;
     }
 
     if (!response.ok) {
       const body = await response.text().catch(() => '');
-      logger.error(`Failed to fetch connection data: ${response.status} ${body}`);
-      this._cachedUserId = undefined;
-      this._cachedSessionAccountId = undefined;
+      logger.error(`Failed to fetch connection data for org ${org}: ${response.status} ${body}`);
+      this._cachedUserIds.delete(org);
       return undefined;
     }
 
@@ -205,32 +217,30 @@ export class AdoPrReviewProvider extends BaseProvider {
     try {
       data = (await response.json()) as ConnectionData;
     } catch (err) {
-      logger.error('Failed to parse connection data response:', err);
-      this._cachedUserId = undefined;
-      this._cachedSessionAccountId = undefined;
+      logger.error(`Failed to parse connection data response for org ${org}:`, err);
+      this._cachedUserIds.delete(org);
       return undefined;
     }
 
     if (!data?.authenticatedUser?.id) {
-      this._cachedUserId = undefined;
-      this._cachedSessionAccountId = undefined;
+      this._cachedUserIds.delete(org);
       return undefined;
     }
 
-    this._cachedUserId = data.authenticatedUser.id;
-    this._cachedSessionAccountId = sessionAccountId;
-    logger.debug(`Resolved user ID: ${this._cachedUserId}`);
-    return this._cachedUserId;
+    this._cachedUserIds.set(org, data.authenticatedUser.id);
+    logger.debug(`Resolved user ID for org ${org}: ${data.authenticatedUser.id}`);
+    return data.authenticatedUser.id;
   }
 
   private async fetchPrsForProject(
     token: string,
+    org: string,
     project: string,
     reviewerId: string,
   ): Promise<{ items: DiscoveredItem[]; failed: boolean }> {
-    logger.debug(`Fetching PRs for project: ${project || this.org}`);
+    logger.debug(`Fetching PRs for project: ${project || org}`);
     const projectPath = project ? `/${encodeURIComponent(project)}` : '';
-    const url = `https://dev.azure.com/${encodeURIComponent(this.org)}${projectPath}/_apis/git/pullrequests?searchCriteria.reviewerId=${encodeURIComponent(reviewerId)}&searchCriteria.status=active&api-version=7.1`;
+    const url = `https://dev.azure.com/${encodeURIComponent(org)}${projectPath}/_apis/git/pullrequests?searchCriteria.reviewerId=${encodeURIComponent(reviewerId)}&searchCriteria.status=active&api-version=7.1`;
 
     const response = await fetch(url, {
       headers: {
@@ -239,8 +249,9 @@ export class AdoPrReviewProvider extends BaseProvider {
     });
 
     if (!response.ok) {
-      logger.warn(`Failed to fetch PRs for project: ${project || this.org}`);
-      logger.error(`PR fetch failed for project "${project}": ${response.status}`);
+      const target = project || org;
+      logger.warn(`Failed to fetch PRs for ${target}`);
+      logger.error(`PR fetch failed for ${target}: ${response.status}`);
       return { items: [], failed: true };
     }
 
@@ -248,15 +259,15 @@ export class AdoPrReviewProvider extends BaseProvider {
     try {
       prData = (await response.json()) as { value: AdoPullRequest[] };
     } catch (err) {
-      logger.error(`Failed to parse PR response for project "${project}":`, err);
+      logger.error(`Failed to parse PR response for ${project || org}:`, err);
       return { items: [], failed: true };
     }
     const items: DiscoveredItem[] = prData.value.map((pr) => {
       const projectName = pr.repository.project.name;
       const repoName = pr.repository.name;
-      const repoUrl = pr.repository.webUrl ?? `https://dev.azure.com/${encodeURIComponent(this.org)}/${encodeURIComponent(projectName)}/_git/${encodeURIComponent(repoName)}`;
+      const repoUrl = pr.repository.webUrl ?? `https://dev.azure.com/${encodeURIComponent(org)}/${encodeURIComponent(projectName)}/_git/${encodeURIComponent(repoName)}`;
       return {
-        externalId: `${projectName}/${repoName}/${pr.pullRequestId}`,
+        externalId: `${org}/${projectName}/${repoName}/${pr.pullRequestId}`,
         title: `PR ${pr.pullRequestId}: ${pr.title}`,
         description: pr.description?.slice(0, 200),
         url: `${repoUrl}/pullrequest/${pr.pullRequestId}`,
