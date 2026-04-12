@@ -50,6 +50,8 @@ export interface WorkItem {
   externalId?: string;
   /** URL to the item in its source system (e.g. GitHub issue page). */
   url?: string;
+  /** Optional grouping key for organizing items within a provider in tree views. */
+  group?: string;
   /** Ordering key within items of the same state. Lower values sort first. */
   sortOrder?: number;
   /** Epoch timestamp (ms) when the item was created. */

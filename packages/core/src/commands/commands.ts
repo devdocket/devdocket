@@ -219,7 +219,7 @@ async function handleAcceptFromInbox(
   try {
     createdItem = await workGraph.createItem(
       { title: formatItemTitle(item) },
-      { providerId: item.providerId, externalId: item.externalId, url: item.url },
+      { providerId: item.providerId, externalId: item.externalId, url: item.url, group: item.group },
     );
   } catch (err: unknown) {
     handleCommandError('Failed to accept inbox item', err);
@@ -285,7 +285,7 @@ async function handleAcceptFromSources(
   try {
     createdItem = await workGraph.createItem(
       { title: formatItemTitle(item) },
-      { providerId: item.providerId, externalId: item.externalId, url: item.url },
+      { providerId: item.providerId, externalId: item.externalId, url: item.url, group: item.group },
     );
   } catch (err: unknown) {
     handleCommandError('Failed to accept sources item', err);

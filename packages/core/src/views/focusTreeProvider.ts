@@ -3,7 +3,7 @@ import { WorkItem, WorkItemState } from '../models/workItem';
 import { WorkGraph } from '../services/workGraph';
 import { ProviderRegistry } from '../services/providerRegistry';
 import {
-  WorkItemElement, WorkItemViewProvider, isProviderGroupNode,
+  WorkItemElement, WorkItemViewProvider, isProviderGroupNode, isSubGroupNode,
 } from './viewLayout';
 
 const DRAG_MIME_TYPE = 'application/vnd.code.tree.workcenter.focus';
@@ -85,7 +85,7 @@ export class FocusTreeProvider extends WorkItemViewProvider implements vscode.Tr
   }
 
   handleDrag(source: readonly FocusElement[], dataTransfer: vscode.DataTransfer): void {
-    const items = source.filter((s): s is WorkItem => !isProviderGroupNode(s));
+    const items = source.filter((s): s is WorkItem => !isProviderGroupNode(s) && !isSubGroupNode(s));
     if (items.length === 0) { return; }
     dataTransfer.set(DRAG_MIME_TYPE, new vscode.DataTransferItem(items.map(s => s.id)));
   }
@@ -101,7 +101,7 @@ export class FocusTreeProvider extends WorkItemViewProvider implements vscode.Tr
     const draggedId = draggedIds[0];
 
     // Group node targets or no target → move to end
-    if (!target || isProviderGroupNode(target)) {
+    if (!target || isProviderGroupNode(target) || isSubGroupNode(target)) {
       await this.workGraph.moveToEnd(draggedId);
       return;
     }

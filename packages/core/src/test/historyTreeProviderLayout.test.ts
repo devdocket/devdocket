@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { EventEmitter, TreeItemCollapsibleState } from 'vscode';
 import { WorkItem, WorkItemState } from '../models/workItem';
 import { HistoryTreeProvider } from '../views/historyTreeProvider';
-import { isProviderGroupNode, ProviderGroupNode } from '../views/viewLayout';
+import { isProviderGroupNode, isSubGroupNode, ProviderGroupNode, SubGroupNode } from '../views/viewLayout';
 
 function createMockWorkGraph(items: WorkItem[] = []) {
   const emitter = new EventEmitter<void>();
@@ -130,6 +130,42 @@ describe('HistoryTreeProvider layout toggle', () => {
     it('returns empty for item node children', () => {
       const item = makeItem({ id: '1', title: 'X', state: WorkItemState.Done });
       expect(provider.getChildren(item)).toEqual([]);
+    });
+
+    it('groups items by sub-group within a provider', () => {
+      workGraph._setItems([
+        makeItem({ id: '1', title: 'Bug A', state: WorkItemState.Done, providerId: 'github', group: 'bugs' }),
+        makeItem({ id: '2', title: 'Bug B', state: WorkItemState.Done, providerId: 'github', group: 'bugs' }),
+        makeItem({ id: '3', title: 'Feature', state: WorkItemState.Done, providerId: 'github', group: 'features' }),
+        makeItem({ id: '4', title: 'Ungrouped', state: WorkItemState.Done, providerId: 'github' }),
+      ]);
+      const topLevel = provider.getChildren();
+      expect(topLevel).toHaveLength(1);
+
+      const providerChildren = provider.getChildren(topLevel[0]);
+      const subGroups = providerChildren.filter(c => isSubGroupNode(c)) as SubGroupNode[];
+      const directItems = providerChildren.filter(c => !isSubGroupNode(c));
+      expect(subGroups).toHaveLength(2);
+      expect(subGroups.map(g => g.groupName).sort()).toEqual(['bugs', 'features']);
+      expect(directItems).toHaveLength(1);
+    });
+
+    it('returns items for a sub-group', () => {
+      workGraph._setItems([
+        makeItem({ id: '1', title: 'Bug A', state: WorkItemState.Done, providerId: 'github', group: 'bugs' }),
+        makeItem({ id: '2', title: 'Bug B', state: WorkItemState.Archived, providerId: 'github', group: 'bugs' }),
+      ]);
+      const subGroup: SubGroupNode = { kind: 'subGroup', label: 'bugs', providerId: 'github', groupName: 'bugs' };
+      const children = provider.getChildren(subGroup);
+      expect(children).toHaveLength(2);
+    });
+
+    it('renders sub-group node with folder icon', () => {
+      const subGroup: SubGroupNode = { kind: 'subGroup', label: 'bugs', providerId: 'github', groupName: 'bugs' };
+      const treeItem = provider.getTreeItem(subGroup);
+      expect(treeItem.label).toBe('bugs');
+      expect(treeItem.collapsibleState).toBe(TreeItemCollapsibleState.Collapsed);
+      expect((treeItem.iconPath as any).id).toBe('folder');
     });
   });
 });

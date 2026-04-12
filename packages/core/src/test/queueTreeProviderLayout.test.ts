@@ -4,7 +4,7 @@ import { WorkGraph } from '../services/workGraph';
 import { WorkItemState } from '../models/workItem';
 import { ITaskStore } from '../storage/taskStore';
 import { QueueTreeProvider } from '../views/queueTreeProvider';
-import { isProviderGroupNode, ProviderGroupNode } from '../views/viewLayout';
+import { isProviderGroupNode, isSubGroupNode, ProviderGroupNode, SubGroupNode } from '../views/viewLayout';
 
 function createMockStore(): ITaskStore {
   const items: Map<string, any> = new Map();
@@ -121,6 +121,45 @@ describe('QueueTreeProvider layout toggle', () => {
     it('returns empty when no items exist', () => {
       const children = provider.getChildren();
       expect(children).toEqual([]);
+    });
+
+    it('groups items by sub-group within a provider', async () => {
+      await graph.createItem({ title: 'Bug A' }, { providerId: 'github', externalId: 'ext-1', group: 'bugs' });
+      await graph.createItem({ title: 'Bug B' }, { providerId: 'github', externalId: 'ext-2', group: 'bugs' });
+      await graph.createItem({ title: 'Feature C' }, { providerId: 'github', externalId: 'ext-3', group: 'features' });
+      await graph.createItem({ title: 'Ungrouped' }, { providerId: 'github', externalId: 'ext-4' });
+
+      const topLevel = provider.getChildren();
+      expect(topLevel).toHaveLength(1);
+      expect(isProviderGroupNode(topLevel[0])).toBe(true);
+
+      const providerChildren = provider.getChildren(topLevel[0]);
+      const subGroups = providerChildren.filter(c => isSubGroupNode(c)) as SubGroupNode[];
+      const directItems = providerChildren.filter(c => !isSubGroupNode(c));
+
+      expect(subGroups).toHaveLength(2);
+      expect(subGroups.map(g => g.groupName).sort()).toEqual(['bugs', 'features']);
+      expect(directItems).toHaveLength(1);
+      expect((directItems[0] as any).title).toBe('Ungrouped');
+    });
+
+    it('returns items for a sub-group', async () => {
+      await graph.createItem({ title: 'Bug A' }, { providerId: 'github', externalId: 'ext-1', group: 'bugs' });
+      await graph.createItem({ title: 'Bug B' }, { providerId: 'github', externalId: 'ext-2', group: 'bugs' });
+      await graph.createItem({ title: 'Feature C' }, { providerId: 'github', externalId: 'ext-3', group: 'features' });
+
+      const subGroup: SubGroupNode = { kind: 'subGroup', label: 'bugs', providerId: 'github', groupName: 'bugs' };
+      const children = provider.getChildren(subGroup);
+      expect(children).toHaveLength(2);
+      expect(children.every(c => !isSubGroupNode(c) && !isProviderGroupNode(c))).toBe(true);
+    });
+
+    it('renders sub-group node with folder icon', () => {
+      const subGroup: SubGroupNode = { kind: 'subGroup', label: 'bugs', providerId: 'github', groupName: 'bugs' };
+      const treeItem = provider.getTreeItem(subGroup);
+      expect(treeItem.label).toBe('bugs');
+      expect(treeItem.collapsibleState).toBe(TreeItemCollapsibleState.Collapsed);
+      expect((treeItem.iconPath as any).id).toBe('folder');
     });
   });
 });

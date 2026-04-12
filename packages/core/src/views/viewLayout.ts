@@ -159,6 +159,10 @@ export function groupByProvider(items: WorkItem[], labelResolver?: LabelResolver
  * Common getChildren routing for providers that show WorkItems
  * in either flat or tree (grouped-by-provider) mode.
  *
+ * Tree mode uses a two-level hierarchy matching the Inbox:
+ *   provider → sub-group (item.group) → items
+ * Items without a group appear directly under the provider node.
+ *
  * @param element        The tree element being expanded (undefined = root)
  * @param getItems       Returns all relevant WorkItems for this view
  * @param sortItems      Sorts a flat list of items (view-specific ordering)
@@ -166,12 +170,12 @@ export function groupByProvider(items: WorkItem[], labelResolver?: LabelResolver
  * @param labelResolver  Optional function that maps a providerId to a display name.
  */
 export function getTreeModeChildren(
-  element: WorkItem | ProviderGroupNode | undefined,
+  element: WorkItem | ProviderGroupNode | SubGroupNode | undefined,
   getItems: () => WorkItem[],
   sortItems: (items: WorkItem[]) => WorkItem[],
   layout: ViewLayout,
   labelResolver?: LabelResolver,
-): (WorkItem | ProviderGroupNode)[] {
+): (WorkItem | ProviderGroupNode | SubGroupNode)[] {
   if (!element) {
     const items = getItems();
     if (layout === 'flat') {
@@ -181,12 +185,58 @@ export function getTreeModeChildren(
   }
 
   if (isProviderGroupNode(element)) {
+    const providerItems = getItems().filter(
+      i => normalizeProviderId(i.providerId) === element.providerId,
+    );
+    return getProviderChildren(providerItems, element.providerId, sortItems);
+  }
+
+  if (isSubGroupNode(element)) {
     return sortItems(
-      getItems().filter(i => normalizeProviderId(i.providerId) === element.providerId),
+      getItems().filter(
+        i => normalizeProviderId(i.providerId) === element.providerId && i.group === element.groupName,
+      ),
     );
   }
 
   return [];
+}
+
+/**
+ * Build children for a provider group node: sub-group nodes for items that
+ * have a `group` value, plus ungrouped items rendered directly.
+ */
+function getProviderChildren(
+  items: WorkItem[],
+  providerId: string | undefined,
+  sortItems: (items: WorkItem[]) => WorkItem[],
+): (SubGroupNode | WorkItem)[] {
+  const groups = new Set<string>();
+  const ungrouped: WorkItem[] = [];
+
+  for (const item of items) {
+    if (item.group) {
+      groups.add(item.group);
+    } else {
+      ungrouped.push(item);
+    }
+  }
+
+  const result: (SubGroupNode | WorkItem)[] = [];
+
+  for (const groupName of groups) {
+    result.push({ kind: 'subGroup', label: groupName, providerId, groupName });
+  }
+
+  for (const item of sortItems(ungrouped)) {
+    result.push(item);
+  }
+
+  return result.sort((a, b) => {
+    const aLabel = isSubGroupNode(a) ? a.label : a.title;
+    const bLabel = isSubGroupNode(b) ? b.label : b.title;
+    return aLabel.localeCompare(bLabel);
+  });
 }
 
 /** Create a TreeItem for a ProviderGroupNode with a view-specific id prefix and contextValue. */
@@ -203,10 +253,42 @@ export function createProviderGroupTreeItem(
   return treeItem;
 }
 
+/** Create a TreeItem for a SubGroupNode. */
+export function createSubGroupTreeItem(
+  node: SubGroupNode,
+  prefix: string,
+): vscode.TreeItem {
+  const treeItem = new vscode.TreeItem(node.label, vscode.TreeItemCollapsibleState.Collapsed);
+  const providerPart = node.providerId ? `provider:${node.providerId}` : 'other';
+  treeItem.id = `${prefix}::subgroup::${providerPart}::${node.groupName}`;
+  treeItem.contextValue = `${prefix}SubGroup`;
+  treeItem.iconPath = new vscode.ThemeIcon('folder');
+  return treeItem;
+}
+
+/**
+ * Sub-group node within a provider group. Groups items that share the same
+ * `item.group` value under a provider node, mirroring the Inbox's two-level hierarchy.
+ */
+export interface SubGroupNode {
+  kind: 'subGroup';
+  label: string;
+  providerId: string | undefined;
+  groupName: string;
+}
+
+export function isSubGroupNode(element: unknown): element is SubGroupNode {
+  return (
+    typeof element === 'object' &&
+    element !== null &&
+    (element as Record<string, unknown>).kind === 'subGroup'
+  );
+}
+
 /**
  * Element type for providers that display WorkItems with optional provider grouping.
  */
-export type WorkItemElement = WorkItem | ProviderGroupNode;
+export type WorkItemElement = WorkItem | ProviderGroupNode | SubGroupNode;
 
 /**
  * Abstract base for Focus, Queue, and History tree providers.
@@ -253,6 +335,9 @@ export abstract class WorkItemViewProvider implements vscode.TreeDataProvider<Wo
   getTreeItem(element: WorkItemElement): vscode.TreeItem {
     if (isProviderGroupNode(element)) {
       return createProviderGroupTreeItem(element, this.groupPrefix, this.groupContextValue);
+    }
+    if (isSubGroupNode(element)) {
+      return createSubGroupTreeItem(element, this.groupPrefix);
     }
     return this.createWorkItemTreeItem(element);
   }
