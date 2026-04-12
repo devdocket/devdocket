@@ -66,11 +66,15 @@ export class ProviderLabelCache {
     try {
       data = JSON.parse(raw);
     } catch {
+      logger.warn('Failed to parse provider label cache — backing up and resetting to empty');
+      await this.backupInvalidFile();
       this.labels.clear();
       return;
     }
 
     if (!data || typeof data !== 'object' || Array.isArray(data)) {
+      logger.warn('Provider label cache does not contain a valid object — backing up and resetting to empty');
+      await this.backupInvalidFile();
       this.labels.clear();
       return;
     }
@@ -78,6 +82,8 @@ export class ProviderLabelCache {
     const nextLabels = new Map<string, string>();
     for (const [key, value] of Object.entries(data as Record<string, unknown>)) {
       if (typeof value !== 'string') {
+        logger.warn('Provider label cache contains non-string values — backing up and resetting to empty');
+        await this.backupInvalidFile();
         this.labels.clear();
         return;
       }
@@ -98,7 +104,8 @@ export class ProviderLabelCache {
   /** Update the cached label for a provider and persist to disk. */
   async set(providerId: string, label: string): Promise<void> {
     if (this.labels.get(providerId) === label) {
-      return; // No change
+      await this.writeQueue; // Ensure any in-flight writes have settled
+      return;
     }
     const hadPrevious = this.labels.has(providerId);
     const previousLabel = this.labels.get(providerId);
@@ -136,5 +143,15 @@ export class ProviderLabelCache {
     const dir = path.dirname(this.filePath);
     await fs.promises.mkdir(dir, { recursive: true });
     await fs.promises.writeFile(this.filePath, JSON.stringify(obj, null, 2), 'utf-8');
+  }
+
+  private async backupInvalidFile(): Promise<void> {
+    try {
+      const backupPath = `${this.filePath}.corrupt.${Date.now()}`;
+      await fs.promises.rename(this.filePath, backupPath);
+      logger.warn(`Backed up invalid provider label cache to ${backupPath}`);
+    } catch {
+      // Best-effort backup
+    }
   }
 }
