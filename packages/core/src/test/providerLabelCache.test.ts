@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import * as fs from 'fs/promises';
+import * as nodeFs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
 import { ProviderLabelCache } from '../storage/providerLabelCache';
@@ -87,15 +88,12 @@ describe('ProviderLabelCache', () => {
     const cache = new ProviderLabelCache(tmpDir);
     await cache.set('github', 'GitHub Issues');
 
-    const filePath = path.join(tmpDir, 'provider-labels.json');
-    const statBefore = await fs.stat(filePath);
+    const writeFileSpy = vi.spyOn(nodeFs.promises, 'writeFile');
 
-    // Wait a tiny bit so mtime would differ if written
-    await new Promise(r => setTimeout(r, 50));
     await cache.set('github', 'GitHub Issues'); // same value
 
-    const statAfter = await fs.stat(filePath);
-    expect(statAfter.mtimeMs).toBe(statBefore.mtimeMs);
+    expect(writeFileSpy).not.toHaveBeenCalled();
+    writeFileSpy.mockRestore();
   });
 
   it('creates storage directory if it does not exist', async () => {
