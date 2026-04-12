@@ -91,6 +91,16 @@ export class StartWorkAction implements WorkCenterAction {
           cancellable: false,
         },
         async (progress) => {
+          const repoBaseName = path.basename(repoPath);
+          const worktreeDirName = `${repoBaseName}-issue${parsed.itemNumber}`;
+          const worktreePath = path.join(path.dirname(repoPath), worktreeDirName);
+
+          // Fail fast if worktree directory already exists (before creating branch)
+          if (fs.existsSync(worktreePath)) {
+            void vscode.window.showErrorMessage(`WorkCenter: Directory "${worktreePath}" already exists.`);
+            return;
+          }
+
           progress.report({ message: 'Creating branch...' });
 
           // Check if branch already exists
@@ -102,17 +112,6 @@ export class StartWorkAction implements WorkCenterAction {
 
           await execFileAsync('git', ['branch', branchName, baseBranch], { cwd: repoPath });
           logger.info(`Starting work: creating branch ${branchName}`);
-
-          const repoBaseName = path.basename(repoPath);
-          const worktreeDirName = `${repoBaseName}-issue${parsed.itemNumber}`;
-          const worktreePath = path.join(path.dirname(repoPath), worktreeDirName);
-
-          // Check if worktree directory already exists
-          if (fs.existsSync(worktreePath)) {
-            await execFileAsync('git', ['branch', '-D', branchName], { cwd: repoPath });
-            void vscode.window.showErrorMessage(`WorkCenter: Directory "${worktreePath}" already exists.`);
-            return;
-          }
 
           progress.report({ message: 'Creating worktree...' });
 

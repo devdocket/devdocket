@@ -321,6 +321,8 @@ describe('StartWorkAction', () => {
       expect(window.showErrorMessage).toHaveBeenCalledWith(
         expect.stringContaining('already exists'),
       );
+      // Should not have created any branches (fail-fast before git operations)
+      expect(execFile).not.toHaveBeenCalled();
     });
 
     it('shows error when externalId is missing', async () => {
