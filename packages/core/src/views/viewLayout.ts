@@ -222,21 +222,16 @@ function getProviderChildren(
     }
   }
 
-  const result: (SubGroupNode | WorkItem)[] = [];
+  const subGroups: SubGroupNode[] = [];
 
   for (const groupName of groups) {
-    result.push({ kind: 'subGroup', label: groupName, providerId, groupName });
+    subGroups.push({ kind: 'subGroup', label: groupName, providerId, groupName });
   }
 
-  for (const item of sortItems(ungrouped)) {
-    result.push(item);
-  }
+  const sortedSubGroups = subGroups.sort((a, b) => a.label.localeCompare(b.label));
+  const sortedUngrouped = sortItems(ungrouped);
 
-  return result.sort((a, b) => {
-    const aLabel = isSubGroupNode(a) ? a.label : a.title;
-    const bLabel = isSubGroupNode(b) ? b.label : b.title;
-    return aLabel.localeCompare(bLabel);
-  });
+  return [...sortedSubGroups, ...sortedUngrouped];
 }
 
 /** Create a TreeItem for a ProviderGroupNode with a view-specific id prefix and contextValue. */
