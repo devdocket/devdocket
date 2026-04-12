@@ -22,10 +22,12 @@ cd packages/core && npm run watch
 
 ## Architecture
 
-WorkCenter is a VS Code extension that acts as a **hub** for managing work items from multiple sources. It's a monorepo with two extensions:
+WorkCenter is a VS Code extension that acts as a **hub** for managing work items from multiple sources. It's a monorepo with the following extensions:
 
 - **`packages/core`** — The WorkCenter extension. Owns the UI, work item lifecycle, and plugin API.
-- **`packages/github`** — A provider extension that discovers GitHub issues and offers a "Start Work" action (branch + worktree + new window).
+- **`packages/github`** — A provider extension that discovers GitHub issues and PR reviews.
+- **`packages/ado`** — A provider extension that discovers Azure DevOps work items and PR reviews.
+- **`packages/start-git-work`** — An action extension that creates git branches and worktrees for work items from GitHub and ADO providers.
 
 ### Data flow
 

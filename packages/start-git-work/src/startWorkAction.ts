@@ -16,6 +16,8 @@ interface WorkItem {
   providerId?: string;
   externalId?: string;
   url?: string;
+  group?: string;
+  sortOrder?: number;
   createdAt: number;
   updatedAt: number;
 }
@@ -24,8 +26,8 @@ interface WorkItem {
 interface WorkCenterAction {
   readonly id: string;
   readonly label: string;
-  canRun(item: WorkItem): boolean;
-  run(item: WorkItem): Promise<void>;
+  canRun(item: Readonly<WorkItem>): boolean;
+  run(item: Readonly<WorkItem>): Promise<void>;
 }
 
 interface ParsedExternalId {
@@ -148,7 +150,7 @@ export class StartWorkAction implements WorkCenterAction {
               arg => arg.replace(/\{path\}/g, worktreePath),
             );
             try {
-              await execFileAsync(cmd.command, resolvedArgs, { shell: true });
+              await execFileAsync(cmd.command, resolvedArgs);
             } catch (cmdErr) {
               const cmdMessage = cmdErr instanceof Error ? cmdErr.message : String(cmdErr);
               logger.error(`Post-worktree command failed: ${cmd.command}`, cmdErr);

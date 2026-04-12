@@ -5,8 +5,9 @@ import * as path from 'path';
 
 // Mock child_process
 vi.mock('child_process', () => ({
-  execFile: vi.fn((cmd: string, args: string[], opts: any, cb: Function) => {
-    cb(null, '', '');
+  execFile: vi.fn((cmd: string, args: string[], optsOrCb: any, cb?: Function) => {
+    const callback = typeof optsOrCb === 'function' ? optsOrCb : cb;
+    callback?.(null, '', '');
   }),
 }));
 
@@ -382,12 +383,13 @@ describe('StartWorkAction', () => {
         }),
       } as any);
 
-      vi.mocked(execFile).mockImplementation(((cmd: string, args: string[], opts: any, cb: Function) => {
+      vi.mocked(execFile).mockImplementation(((cmd: string, args: string[], optsOrCb: any, cb?: Function) => {
+        const callback = typeof optsOrCb === 'function' ? optsOrCb : cb;
         if (cmd === 'bad-cmd') {
-          cb(new Error('command not found'), { stdout: '', stderr: '' }, '');
+          callback?.(new Error('command not found'), { stdout: '', stderr: '' }, '');
           return;
         }
-        cb(null, { stdout: '', stderr: '' }, '');
+        callback?.(null, { stdout: '', stderr: '' }, '');
       }) as any);
 
       const item = createWorkItem();
