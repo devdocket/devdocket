@@ -13,7 +13,12 @@ export class HistoryTreeProvider extends WorkItemViewProvider {
   protected readonly groupContextValue = 'historyGroup';
 
   constructor(workGraph: WorkGraph, providerRegistry?: ProviderRegistry) {
-    super(workGraph, 'flat', providerRegistry ? id => providerRegistry.getProviderLabel(id) : undefined);
+    super(
+      workGraph,
+      'flat',
+      providerRegistry ? id => providerRegistry.getProviderLabel(id) : undefined,
+      providerRegistry?.onDidRegisterProvider,
+    );
   }
 
   protected getItems(): WorkItem[] {

@@ -17,7 +17,12 @@ export class FocusTreeProvider extends WorkItemViewProvider implements vscode.Tr
   protected readonly groupContextValue = 'focusGroup';
 
   constructor(workGraph: WorkGraph, providerRegistry?: ProviderRegistry) {
-    super(workGraph, 'flat', providerRegistry ? id => providerRegistry.getProviderLabel(id) : undefined);
+    super(
+      workGraph,
+      'flat',
+      providerRegistry ? id => providerRegistry.getProviderLabel(id) : undefined,
+      providerRegistry?.onDidRegisterProvider,
+    );
   }
 
   protected getItems(): WorkItem[] {

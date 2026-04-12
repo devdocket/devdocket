@@ -303,11 +303,17 @@ export abstract class WorkItemViewProvider implements vscode.TreeDataProvider<Wo
     protected readonly workGraph: import('../services/workGraph').WorkGraph,
     defaultLayout: ViewLayout,
     private readonly labelResolver?: LabelResolver,
+    providerChangeEvent?: import('vscode').Event<void>,
   ) {
     this._layoutState = new LayoutState(defaultLayout, () => this._onDidChangeTreeData.fire());
     this.disposables.push(
       workGraph.onDidChange(() => this._onDidChangeTreeData.fire()),
     );
+    if (providerChangeEvent) {
+      this.disposables.push(
+        providerChangeEvent(() => this._onDidChangeTreeData.fire()),
+      );
+    }
   }
 
   refresh(): void { this._onDidChangeTreeData.fire(); }

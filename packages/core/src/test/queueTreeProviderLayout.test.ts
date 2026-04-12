@@ -162,4 +162,42 @@ describe('QueueTreeProvider layout toggle', () => {
       expect((treeItem.iconPath as any).id).toBe('folder');
     });
   });
+
+  describe('provider registration refresh', () => {
+    it('refreshes tree when provider registers, updating group labels', async () => {
+      // Simulate the startup timing issue: labels resolve to raw IDs before providers register
+      const { EventEmitter } = await import('vscode');
+      const registrationEmitter = new EventEmitter<void>();
+      const labelMap = new Map<string, string>();
+      const lateRegistry = {
+        getProviderLabel: vi.fn((id: string) => labelMap.get(id) ?? id),
+        onDidRegisterProvider: registrationEmitter.event,
+      };
+
+      const lateProvider = new QueueTreeProvider(graph, lateRegistry as any);
+      lateProvider.layout = 'tree';
+
+      await graph.createItem({ title: 'Item' }, { providerId: 'github', externalId: 'ext-1' });
+
+      // Before provider registration: label falls back to raw providerId
+      const childrenBefore = lateProvider.getChildren();
+      expect(childrenBefore).toHaveLength(1);
+      expect((childrenBefore[0] as ProviderGroupNode).label).toBe('github');
+
+      // Simulate provider registering with a display name
+      labelMap.set('github', 'GitHub Issues');
+      const listener = vi.fn();
+      lateProvider.onDidChangeTreeData(listener);
+
+      registrationEmitter.fire();
+
+      // Tree should have refreshed
+      expect(listener).toHaveBeenCalled();
+
+      // After refresh: label resolves to display name
+      const childrenAfter = lateProvider.getChildren();
+      expect(childrenAfter).toHaveLength(1);
+      expect((childrenAfter[0] as ProviderGroupNode).label).toBe('GitHub Issues');
+    });
+  });
 });
