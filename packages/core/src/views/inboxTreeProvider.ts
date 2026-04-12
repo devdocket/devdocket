@@ -42,9 +42,30 @@ export class InboxTreeProvider implements vscode.TreeDataProvider<InboxElement> 
   private refreshTimer: ReturnType<typeof setTimeout> | undefined;
   static readonly REFRESH_DEBOUNCE_MS = 50;
   private readonly _layoutState: LayoutState;
+  private _filterText: string = '';
 
   get layout(): ViewLayout { return this._layoutState.value; }
   set layout(value: ViewLayout) { this._layoutState.value = value; }
+
+  get filterText(): string { return this._filterText; }
+  set filterText(value: string) {
+    const normalized = value.trim().toLowerCase();
+    if (this._filterText !== normalized) {
+      this._filterText = normalized;
+      this._onDidChangeTreeData.fire();
+    }
+  }
+
+  private matchesInboxFilter(item: { title: string; description?: string; reason?: string; group?: string }): boolean {
+    if (!this._filterText) { return true; }
+    const text = this._filterText;
+    return (
+      item.title.toLowerCase().includes(text) ||
+      (item.description?.toLowerCase().includes(text) ?? false) ||
+      (item.reason?.toLowerCase().includes(text) ?? false) ||
+      (item.group?.toLowerCase().includes(text) ?? false)
+    );
+  }
 
   constructor(
     private readonly providerRegistry: ProviderRegistry,
@@ -207,7 +228,7 @@ export class InboxTreeProvider implements vscode.TreeDataProvider<InboxElement> 
       const result: InboxProviderNode[] = [];
       const allItems = this.providerRegistry.getAllDiscoveredItems();
       for (const [providerId] of allItems) {
-        if (this.getUnseenCount(providerId) > 0) {
+        if (this.getProviderChildren(providerId).length > 0) {
           result.push({
             kind: 'provider',
             providerId,
@@ -236,7 +257,9 @@ export class InboxTreeProvider implements vscode.TreeDataProvider<InboxElement> 
       for (const item of items) {
         const state = this.stateStore.getState(providerId, item.externalId);
         if (state !== undefined && state !== 'unseen') { continue; }
-        result.push(this.toItemNode(providerId, item));
+        const node = this.toItemNode(providerId, item);
+        if (!this.matchesInboxFilter(node)) { continue; }
+        result.push(node);
       }
     }
     return result.sort((a, b) => a.title.localeCompare(b.title));
@@ -250,6 +273,9 @@ export class InboxTreeProvider implements vscode.TreeDataProvider<InboxElement> 
     for (const item of items) {
       const state = this.stateStore.getState(providerId, item.externalId);
       if (state !== undefined && state !== 'unseen') { continue; }
+
+      const node = this.toItemNode(providerId, item);
+      if (!this.matchesInboxFilter(node)) { continue; }
 
       if (item.group) {
         groupCounts.set(item.group, (groupCounts.get(item.group) ?? 0) + 1);
@@ -282,7 +308,9 @@ export class InboxTreeProvider implements vscode.TreeDataProvider<InboxElement> 
       if (item.group !== groupName) { continue; }
       const state = this.stateStore.getState(providerId, item.externalId);
       if (state !== undefined && state !== 'unseen') { continue; }
-      result.push(this.toItemNode(providerId, item));
+      const node = this.toItemNode(providerId, item);
+      if (!this.matchesInboxFilter(node)) { continue; }
+      result.push(node);
     }
     return result.sort((a, b) => a.title.localeCompare(b.title));
   }

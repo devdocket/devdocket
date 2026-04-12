@@ -235,6 +235,66 @@
         "title": "Refresh",
         "category": "WorkCenter",
         "icon": "$(refresh)"
+      },
+      {
+        "command": "workcenter.filterInbox",
+        "title": "Filter…",
+        "category": "WorkCenter",
+        "icon": "$(search)"
+      },
+      {
+        "command": "workcenter.clearInboxFilter",
+        "title": "Clear Filter",
+        "category": "WorkCenter",
+        "icon": "$(close)"
+      },
+      {
+        "command": "workcenter.filterQueue",
+        "title": "Filter…",
+        "category": "WorkCenter",
+        "icon": "$(search)"
+      },
+      {
+        "command": "workcenter.clearQueueFilter",
+        "title": "Clear Filter",
+        "category": "WorkCenter",
+        "icon": "$(close)"
+      },
+      {
+        "command": "workcenter.filterFocus",
+        "title": "Filter…",
+        "category": "WorkCenter",
+        "icon": "$(search)"
+      },
+      {
+        "command": "workcenter.clearFocusFilter",
+        "title": "Clear Filter",
+        "category": "WorkCenter",
+        "icon": "$(close)"
+      },
+      {
+        "command": "workcenter.filterHistory",
+        "title": "Filter…",
+        "category": "WorkCenter",
+        "icon": "$(search)"
+      },
+      {
+        "command": "workcenter.clearHistoryFilter",
+        "title": "Clear Filter",
+        "category": "WorkCenter",
+        "icon": "$(close)"
+      },
+      {
+        "command": "workcenter.filterSources",
+        "title": "Filter…",
+        "category": "WorkCenter",
+        "icon": "$(search)"
+      },
+      {
+        "command": "workcenter.clearSourcesFilter",
+        "title": "Clear Filter",
+        "category": "WorkCenter",
+        "icon": "$(close)"
       }
     ],
     "menus": {
@@ -272,6 +332,56 @@
         {
           "command": "workcenter.refresh",
           "when": "view == workcenter.inbox || view == workcenter.sources",
+          "group": "navigation"
+        },
+        {
+          "command": "workcenter.filterInbox",
+          "when": "view == workcenter.inbox",
+          "group": "navigation"
+        },
+        {
+          "command": "workcenter.clearInboxFilter",
+          "when": "view == workcenter.inbox && workcenter.inboxFilterActive",
+          "group": "navigation"
+        },
+        {
+          "command": "workcenter.filterQueue",
+          "when": "view == workcenter.queue",
+          "group": "navigation"
+        },
+        {
+          "command": "workcenter.clearQueueFilter",
+          "when": "view == workcenter.queue && workcenter.queueFilterActive",
+          "group": "navigation"
+        },
+        {
+          "command": "workcenter.filterFocus",
+          "when": "view == workcenter.focus",
+          "group": "navigation"
+        },
+        {
+          "command": "workcenter.clearFocusFilter",
+          "when": "view == workcenter.focus && workcenter.focusFilterActive",
+          "group": "navigation"
+        },
+        {
+          "command": "workcenter.filterHistory",
+          "when": "view == workcenter.history",
+          "group": "navigation"
+        },
+        {
+          "command": "workcenter.clearHistoryFilter",
+          "when": "view == workcenter.history && workcenter.historyFilterActive",
+          "group": "navigation"
+        },
+        {
+          "command": "workcenter.filterSources",
+          "when": "view == workcenter.sources",
+          "group": "navigation"
+        },
+        {
+          "command": "workcenter.clearSourcesFilter",
+          "when": "view == workcenter.sources && workcenter.sourcesFilterActive",
           "group": "navigation"
         }
       ],

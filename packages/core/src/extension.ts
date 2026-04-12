@@ -320,6 +320,85 @@ export async function activate(context: vscode.ExtensionContext): Promise<WorkCe
   registerCommands(context, wg, ar, ss, pr);
   logger.info(`Command registration took ${Math.round(performance.now() - commandRegStart)}ms`);
 
+  // Register filter commands for each view
+  context.subscriptions.push(
+    vscode.commands.registerCommand('workcenter.filterInbox', async () => {
+      const text = await vscode.window.showInputBox({
+        prompt: 'Filter Inbox items',
+        placeHolder: 'Type to filter…',
+        value: providers.inboxProvider.filterText,
+      });
+      if (text !== undefined) {
+        providers.inboxProvider.filterText = text;
+        void vscode.commands.executeCommand('setContext', 'workcenter.inboxFilterActive', text.trim().length > 0);
+      }
+    }),
+    vscode.commands.registerCommand('workcenter.clearInboxFilter', () => {
+      providers.inboxProvider.filterText = '';
+      void vscode.commands.executeCommand('setContext', 'workcenter.inboxFilterActive', false);
+    }),
+    vscode.commands.registerCommand('workcenter.filterQueue', async () => {
+      const text = await vscode.window.showInputBox({
+        prompt: 'Filter Queue items',
+        placeHolder: 'Type to filter…',
+        value: providers.queueProvider.filterText,
+      });
+      if (text !== undefined) {
+        providers.queueProvider.filterText = text;
+        void vscode.commands.executeCommand('setContext', 'workcenter.queueFilterActive', text.trim().length > 0);
+      }
+    }),
+    vscode.commands.registerCommand('workcenter.clearQueueFilter', () => {
+      providers.queueProvider.filterText = '';
+      void vscode.commands.executeCommand('setContext', 'workcenter.queueFilterActive', false);
+    }),
+    vscode.commands.registerCommand('workcenter.filterFocus', async () => {
+      const text = await vscode.window.showInputBox({
+        prompt: 'Filter Focus items',
+        placeHolder: 'Type to filter…',
+        value: providers.focusProvider.filterText,
+      });
+      if (text !== undefined) {
+        providers.focusProvider.filterText = text;
+        void vscode.commands.executeCommand('setContext', 'workcenter.focusFilterActive', text.trim().length > 0);
+      }
+    }),
+    vscode.commands.registerCommand('workcenter.clearFocusFilter', () => {
+      providers.focusProvider.filterText = '';
+      void vscode.commands.executeCommand('setContext', 'workcenter.focusFilterActive', false);
+    }),
+    vscode.commands.registerCommand('workcenter.filterHistory', async () => {
+      const text = await vscode.window.showInputBox({
+        prompt: 'Filter History items',
+        placeHolder: 'Type to filter…',
+        value: providers.historyProvider.filterText,
+      });
+      if (text !== undefined) {
+        providers.historyProvider.filterText = text;
+        void vscode.commands.executeCommand('setContext', 'workcenter.historyFilterActive', text.trim().length > 0);
+      }
+    }),
+    vscode.commands.registerCommand('workcenter.clearHistoryFilter', () => {
+      providers.historyProvider.filterText = '';
+      void vscode.commands.executeCommand('setContext', 'workcenter.historyFilterActive', false);
+    }),
+    vscode.commands.registerCommand('workcenter.filterSources', async () => {
+      const text = await vscode.window.showInputBox({
+        prompt: 'Filter Sources items',
+        placeHolder: 'Type to filter…',
+        value: providers.sourcesProvider.filterText,
+      });
+      if (text !== undefined) {
+        providers.sourcesProvider.filterText = text;
+        void vscode.commands.executeCommand('setContext', 'workcenter.sourcesFilterActive', text.trim().length > 0);
+      }
+    }),
+    vscode.commands.registerCommand('workcenter.clearSourcesFilter', () => {
+      providers.sourcesProvider.filterText = '';
+      void vscode.commands.executeCommand('setContext', 'workcenter.sourcesFilterActive', false);
+    }),
+  );
+
   // Set context keys and listen for layout changes
   const viewIds: ViewId[] = ['inbox', 'queue', 'focus', 'history', 'sources'];
   const providerMap: Record<ViewId, { layout: import('./views/viewLayout').ViewLayout }> = {

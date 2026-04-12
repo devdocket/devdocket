@@ -295,9 +295,31 @@ export abstract class WorkItemViewProvider implements vscode.TreeDataProvider<Wo
   readonly onDidChangeTreeData = this._onDidChangeTreeData.event;
   protected readonly disposables: vscode.Disposable[] = [];
   private readonly _layoutState: LayoutState;
+  private _filterText: string = '';
 
   get layout(): ViewLayout { return this._layoutState.value; }
   set layout(value: ViewLayout) { this._layoutState.value = value; }
+
+  get filterText(): string { return this._filterText; }
+  set filterText(value: string) {
+    const normalized = value.trim().toLowerCase();
+    if (this._filterText !== normalized) {
+      this._filterText = normalized;
+      this._onDidChangeTreeData.fire();
+    }
+  }
+
+  /** Test whether a WorkItem matches the current filter text. */
+  protected matchesFilter(item: WorkItem): boolean {
+    if (!this._filterText) { return true; }
+    const text = this._filterText;
+    return (
+      item.title.toLowerCase().includes(text) ||
+      (item.notes?.toLowerCase().includes(text) ?? false) ||
+      (item.providerId?.toLowerCase().includes(text) ?? false) ||
+      (item.group?.toLowerCase().includes(text) ?? false)
+    );
+  }
 
   constructor(
     protected readonly workGraph: import('../services/workGraph').WorkGraph,
@@ -346,7 +368,7 @@ export abstract class WorkItemViewProvider implements vscode.TreeDataProvider<Wo
   getChildren(element?: WorkItemElement): WorkItemElement[] {
     return getTreeModeChildren(
       element,
-      () => this.getItems(),
+      () => this.getItems().filter(item => this.matchesFilter(item)),
       items => this.sortItems(items),
       this._layoutState.value,
       this.labelResolver,

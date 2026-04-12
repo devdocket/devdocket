@@ -33,9 +33,29 @@ export class SourcesTreeProvider implements vscode.TreeDataProvider<SourcesEleme
   readonly onDidChangeTreeData = this._onDidChangeTreeData.event;
   private readonly disposables: vscode.Disposable[] = [];
   private readonly _layoutState: LayoutState;
+  private _filterText: string = '';
 
   get layout(): ViewLayout { return this._layoutState.value; }
   set layout(value: ViewLayout) { this._layoutState.value = value; }
+
+  get filterText(): string { return this._filterText; }
+  set filterText(value: string) {
+    const normalized = value.trim().toLowerCase();
+    if (this._filterText !== normalized) {
+      this._filterText = normalized;
+      this._onDidChangeTreeData.fire();
+    }
+  }
+
+  private matchesSourceFilter(item: { title: string; description?: string; group?: string }): boolean {
+    if (!this._filterText) { return true; }
+    const text = this._filterText;
+    return (
+      item.title.toLowerCase().includes(text) ||
+      (item.description?.toLowerCase().includes(text) ?? false) ||
+      (item.group?.toLowerCase().includes(text) ?? false)
+    );
+  }
 
   constructor(
     private readonly providerRegistry: ProviderRegistry,
@@ -85,7 +105,7 @@ export class SourcesTreeProvider implements vscode.TreeDataProvider<SourcesEleme
       const result: SourceProviderNode[] = [];
       const allItems = this.providerRegistry.getAllDiscoveredItems();
       for (const [providerId, items] of allItems) {
-        if (items.length > 0) {
+        if (items.length > 0 && this.getProviderChildren(providerId).length > 0) {
           result.push({
             kind: 'provider',
             providerId,
@@ -112,7 +132,9 @@ export class SourcesTreeProvider implements vscode.TreeDataProvider<SourcesEleme
     const allItems = this.providerRegistry.getAllDiscoveredItems();
     for (const [providerId, items] of allItems) {
       for (const item of items) {
-        result.push(this.toItemNode(providerId, item));
+        const node = this.toItemNode(providerId, item);
+        if (!this.matchesSourceFilter(node)) { continue; }
+        result.push(node);
       }
     }
     return result.sort((a, b) => a.title.localeCompare(b.title));
@@ -124,6 +146,7 @@ export class SourcesTreeProvider implements vscode.TreeDataProvider<SourcesEleme
     const ungrouped: DiscoveredItem[] = [];
 
     for (const item of items) {
+      if (!this.matchesSourceFilter(this.toItemNode(providerId, item))) { continue; }
       if (item.group) {
         const list = groups.get(item.group) ?? [];
         list.push(item);
@@ -155,6 +178,7 @@ export class SourcesTreeProvider implements vscode.TreeDataProvider<SourcesEleme
     return items
       .filter((item) => item.group === groupName)
       .map((item) => this.toItemNode(providerId, item))
+      .filter((node) => this.matchesSourceFilter(node))
       .sort((a, b) => a.title.localeCompare(b.title));
   }
 
