@@ -250,32 +250,32 @@
         },
         {
           "command": "workcenter.moveUp",
-          "when": "view == workcenter.queue",
+          "when": "view == workcenter.queue && !listMultiSelection",
           "group": "3_reorder@1"
         },
         {
           "command": "workcenter.moveDown",
-          "when": "view == workcenter.queue",
+          "when": "view == workcenter.queue && !listMultiSelection",
           "group": "3_reorder@2"
         },
         {
           "command": "workcenter.focusMoveUp",
-          "when": "view == workcenter.focus",
+          "when": "view == workcenter.focus && !listMultiSelection",
           "group": "3_reorder@1"
         },
         {
           "command": "workcenter.focusMoveDown",
-          "when": "view == workcenter.focus",
+          "when": "view == workcenter.focus && !listMultiSelection",
           "group": "3_reorder@2"
         },
         {
           "command": "workcenter.openInBrowser",
-          "when": "viewItem =~ /hasUrl/",
+          "when": "viewItem =~ /hasUrl/ && !listMultiSelection",
           "group": "2_links"
         },
         {
           "command": "workcenter.runAction",
-          "when": "view == workcenter.queue || view == workcenter.focus",
+          "when": "(view == workcenter.queue || view == workcenter.focus) && !listMultiSelection",
           "group": "0_actions"
         },
         {
