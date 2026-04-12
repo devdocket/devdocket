@@ -259,9 +259,8 @@ export class InboxTreeProvider implements vscode.TreeDataProvider<InboxElement> 
       for (const item of items) {
         const state = this.stateStore.getState(providerId, item.externalId);
         if (state !== undefined && state !== 'unseen') { continue; }
-        const node = this.toItemNode(providerId, item);
-        if (!this.matchesInboxFilter(node)) { continue; }
-        result.push(node);
+        if (!this.matchesInboxFilter(item)) { continue; }
+        result.push(this.toItemNode(providerId, item));
       }
     }
     return result.sort((a, b) => a.title.localeCompare(b.title));
@@ -288,8 +287,7 @@ export class InboxTreeProvider implements vscode.TreeDataProvider<InboxElement> 
       const state = this.stateStore.getState(providerId, item.externalId);
       if (state !== undefined && state !== 'unseen') { continue; }
 
-      const node = this.toItemNode(providerId, item);
-      if (!this.matchesInboxFilter(node)) { continue; }
+      if (!this.matchesInboxFilter(item)) { continue; }
 
       if (item.group) {
         groupCounts.set(item.group, (groupCounts.get(item.group) ?? 0) + 1);
@@ -322,9 +320,8 @@ export class InboxTreeProvider implements vscode.TreeDataProvider<InboxElement> 
       if (item.group !== groupName) { continue; }
       const state = this.stateStore.getState(providerId, item.externalId);
       if (state !== undefined && state !== 'unseen') { continue; }
-      const node = this.toItemNode(providerId, item);
-      if (!this.matchesInboxFilter(node)) { continue; }
-      result.push(node);
+      if (!this.matchesInboxFilter(item)) { continue; }
+      result.push(this.toItemNode(providerId, item));
     }
     return result.sort((a, b) => a.title.localeCompare(b.title));
   }
@@ -356,7 +353,7 @@ export class InboxTreeProvider implements vscode.TreeDataProvider<InboxElement> 
     return items.filter((item) => {
       const state = this.stateStore.getState(providerId, item.externalId);
       if (state !== undefined && state !== 'unseen') { return false; }
-      return this.matchesInboxFilter(this.toItemNode(providerId, item));
+      return this.matchesInboxFilter(item);
     }).length;
   }
 
