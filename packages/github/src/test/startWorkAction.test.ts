@@ -23,7 +23,7 @@ function createWorkItem(overrides: Partial<any> = {}) {
     id: 'wc-test-1',
     title: '#123: Fix login redirect bug',
     description: 'Some description',
-    state: 'New',
+    state: 'InProgress',
     providerId: 'github',
     externalId: 'owner/repo#123',
     url: 'https://github.com/owner/repo/issues/123',
@@ -57,24 +57,24 @@ describe('StartWorkAction', () => {
   });
 
   describe('canRun', () => {
-    it('returns true for github provider items in New state', () => {
-      const item = createWorkItem({ providerId: 'github', state: 'New' });
+    it('returns true for github provider items in InProgress state', () => {
+      const item = createWorkItem({ providerId: 'github', state: 'InProgress' });
       expect(action.canRun(item)).toBe(true);
     });
 
     it('returns false for non-github provider items', () => {
-      const item = createWorkItem({ providerId: 'jira', state: 'New' });
+      const item = createWorkItem({ providerId: 'jira', state: 'InProgress' });
       expect(action.canRun(item)).toBe(false);
     });
 
     it('returns false for items without a provider', () => {
-      const item = createWorkItem({ providerId: undefined, state: 'New' });
+      const item = createWorkItem({ providerId: undefined, state: 'InProgress' });
       expect(action.canRun(item)).toBe(false);
     });
 
-    it('returns false for non-New state items', () => {
-      const inProgress = createWorkItem({ state: 'InProgress' });
-      expect(action.canRun(inProgress)).toBe(false);
+    it('returns false for non-InProgress state items', () => {
+      const newItem = createWorkItem({ state: 'New' });
+      expect(action.canRun(newItem)).toBe(false);
 
       const done = createWorkItem({ state: 'Done' });
       expect(action.canRun(done)).toBe(false);

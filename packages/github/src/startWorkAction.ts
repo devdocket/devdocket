@@ -36,19 +36,19 @@ interface WorkCenterAction {
  * 2. Creates a git worktree at a sibling directory of the repository.
  * 3. Opens the worktree in a new VS Code window.
  *
- * Only available for items in the `New` state from the `github` provider.
+ * Only available for items in the `InProgress` state from the `github` provider.
  */
 export class StartWorkAction implements WorkCenterAction {
   readonly id = 'github.startWork';
   readonly label = 'Start Work (Branch + Worktree)';
 
   /**
-   * Returns `true` when the item is a new GitHub issue that can be started.
+   * Returns `true` when the item is an in-progress GitHub issue.
    * @param item - The work item to evaluate.
    * @returns Whether the action is applicable.
    */
   canRun(item: WorkItem): boolean {
-    return item.providerId === 'github' && item.state === 'New';
+    return item.providerId === 'github' && item.state === 'InProgress';
   }
 
   /**
