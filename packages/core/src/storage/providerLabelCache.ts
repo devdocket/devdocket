@@ -9,6 +9,7 @@ import * as path from 'path';
 export class ProviderLabelCache {
   private labels = new Map<string, string>();
   private readonly filePath: string;
+  private writeQueue: Promise<void> = Promise.resolve();
 
   constructor(storagePath: string) {
     this.filePath = path.join(storagePath, 'provider-labels.json');
@@ -43,7 +44,12 @@ export class ProviderLabelCache {
       return; // No change
     }
     this.labels.set(providerId, label);
-    await this.save();
+    await this.enqueue(() => this.save());
+  }
+
+  private enqueue(op: () => Promise<void>): Promise<void> {
+    this.writeQueue = this.writeQueue.then(op, () => op());
+    return this.writeQueue;
   }
 
   private async save(): Promise<void> {
