@@ -24,6 +24,7 @@
       "properties": {
         "workcenterStartGitWork.commands": {
           "type": "array",
+          "scope": "application",
           "items": {
             "type": "object",
             "properties": {
