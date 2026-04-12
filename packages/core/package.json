@@ -288,7 +288,7 @@
         },
         {
           "command": "workcenter.deleteItem",
-          "when": "view == workcenter.queue",
+          "when": "view == workcenter.queue && viewItem =~ /^queueItem/",
           "group": "1_actions"
         },
         {
@@ -383,7 +383,7 @@
         },
         {
           "command": "workcenter.deleteItem",
-          "when": "view == workcenter.history",
+          "when": "view == workcenter.history && viewItem =~ /^historyItem/",
           "group": "1_actions"
         }
       ]
