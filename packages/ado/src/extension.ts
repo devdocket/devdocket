@@ -1,6 +1,7 @@
 import * as vscode from 'vscode';
 import { AdoWorkItemProvider } from './adoWorkItemProvider';
 import { AdoPrReviewProvider } from './adoPrReviewProvider';
+import { parseAdoProjectsConfig } from './configParser';
 import { validateRefreshInterval } from '@workcenter/shared';
 import { initLogger, setLogLevel, logger, resolveLogLevel } from './logger';
 
@@ -69,28 +70,42 @@ export async function activate(_context: vscode.ExtensionContext): Promise<void>
     prProvider = undefined;
 
     const config = vscode.workspace.getConfiguration('workcenterAdo');
-    const org = config.get<string>('organization', '');
     const projects = config.get<string[]>('projects', []);
 
-    if (!org) {
-      logger.info('No organization configured — set workcenterAdo.organization to enable ADO providers');
-      if (!orgWarningShown) {
-        vscode.window.showWarningMessage('WorkCenter ADO: Azure DevOps organization not configured. Set workcenterAdo.organization in settings.');
-        orgWarningShown = true;
+    const orgConfigs = parseAdoProjectsConfig(projects);
+
+    if (orgConfigs.length === 0) {
+      const hasEntries = projects.some(p => p.trim().length > 0);
+      if (hasEntries) {
+        logger.info('All workcenterAdo.projects entries are invalid — entries must be "org" or "org/project"');
+        if (!orgWarningShown) {
+          void vscode.window.showWarningMessage(
+            'WorkCenter ADO: All workcenterAdo.projects entries are invalid. Each entry must be "org" or "org/project".',
+          );
+          orgWarningShown = true;
+        }
+      } else {
+        logger.info('No organizations configured — set workcenterAdo.projects to enable ADO providers');
+        if (!orgWarningShown) {
+          void vscode.window.showWarningMessage(
+            'WorkCenter ADO: No Azure DevOps organizations configured. Add entries to workcenterAdo.projects (e.g. "myorg" or "myorg/myproject").',
+          );
+          orgWarningShown = true;
+        }
       }
       return;
     }
 
     orgWarningShown = false;
 
-    logger.debug(`Configuration: org=${org}, projects=[${projects.join(', ')}]`);
+    logger.debug(`Configuration: ${orgConfigs.map(c => c.projects.length > 0 ? c.projects.map(p => `${c.org}/${p}`).join(', ') : c.org).join('; ')}`);
 
     const intervalSeconds = validateRefreshInterval(
       config.get<number>('refreshIntervalSeconds', 300), logger,
     );
 
-    workItemProvider = new AdoWorkItemProvider(org, projects);
-    prProvider = new AdoPrReviewProvider(org, projects);
+    workItemProvider = new AdoWorkItemProvider(orgConfigs);
+    prProvider = new AdoPrReviewProvider(orgConfigs);
 
     workItemProvider.startPeriodicRefresh(intervalSeconds);
     prProvider.startPeriodicRefresh(intervalSeconds);
@@ -106,7 +121,6 @@ export async function activate(_context: vscode.ExtensionContext): Promise<void>
   _context.subscriptions.push(
     vscode.workspace.onDidChangeConfiguration(e => {
       if (
-        e.affectsConfiguration('workcenterAdo.organization') ||
         e.affectsConfiguration('workcenterAdo.projects') ||
         e.affectsConfiguration('workcenterAdo.refreshIntervalSeconds')
       ) {

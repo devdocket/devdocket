@@ -22,18 +22,13 @@
     "configuration": {
       "title": "WorkCenter Azure DevOps",
       "properties": {
-        "workcenterAdo.organization": {
-          "type": "string",
-          "default": "",
-          "description": "Azure DevOps organization name"
-        },
         "workcenterAdo.projects": {
           "type": "array",
           "items": {
             "type": "string"
           },
           "default": [],
-          "description": "Azure DevOps projects to monitor. Leave empty to fetch assigned work items and PRs across the entire organization."
+          "description": "Azure DevOps organizations and projects to monitor. Each entry is either '<org>' (monitor entire organization) or '<org>/<project>' (monitor a specific project). Supports multiple organizations."
         },
         "workcenterAdo.refreshIntervalSeconds": {
           "type": "number",
