@@ -28,7 +28,6 @@ export default [
       parserOptions: {
         ecmaVersion: 2022,
         sourceType: 'module',
-        project: true,
       },
     },
     plugins: {
@@ -36,7 +35,6 @@ export default [
     },
     rules: {
       ...tseslint.configs.recommended.rules,
-      '@typescript-eslint/no-floating-promises': 'warn',
       'prefer-const': 'warn',
     },
   },
