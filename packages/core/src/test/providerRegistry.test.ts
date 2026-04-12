@@ -221,6 +221,54 @@ describe('ProviderRegistry', () => {
     expect(registry.getProviderLabel('unknown')).toBe('unknown');
   });
 
+  describe('getProviderLabel with label cache', () => {
+    function createMockLabelCache(entries?: Record<string, string>) {
+      const cache = new Map<string, string>(Object.entries(entries ?? {}));
+      return {
+        get: vi.fn((id: string) => cache.get(id)),
+        set: vi.fn(async (id: string, label: string) => { cache.set(id, label); }),
+        load: vi.fn(async () => {}),
+      };
+    }
+
+    it('falls back to cached label when provider is not registered', () => {
+      const labelCache = createMockLabelCache({ github: 'GitHub Issues' });
+      const reg = new ProviderRegistry(stateStore, labelCache as any);
+
+      expect(reg.getProviderLabel('github')).toBe('GitHub Issues');
+    });
+
+    it('returns raw id when neither provider nor cache has label', () => {
+      const labelCache = createMockLabelCache();
+      const reg = new ProviderRegistry(stateStore, labelCache as any);
+
+      expect(reg.getProviderLabel('unknown')).toBe('unknown');
+    });
+
+    it('prefers live provider label over cached label', () => {
+      const labelCache = createMockLabelCache({ gh: 'Old Label' });
+      const reg = new ProviderRegistry(stateStore, labelCache as any);
+      const provider = createMockProvider('gh'); // label is "Provider gh"
+      reg.register(provider);
+
+      expect(reg.getProviderLabel('gh')).toBe('Provider gh');
+    });
+
+    it('updates cache when provider registers', () => {
+      const labelCache = createMockLabelCache();
+      const reg = new ProviderRegistry(stateStore, labelCache as any);
+      const provider = createMockProvider('gh');
+      reg.register(provider);
+
+      expect(labelCache.set).toHaveBeenCalledWith('gh', 'Provider gh');
+    });
+
+    it('works without a label cache (undefined)', () => {
+      const reg = new ProviderRegistry(stateStore);
+      expect(reg.getProviderLabel('unknown')).toBe('unknown');
+    });
+  });
+
   it('returns empty array from getDiscoveredItems for unknown provider', () => {
     expect(registry.getDiscoveredItems('nonexistent')).toEqual([]);
   });

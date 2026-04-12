@@ -1,6 +1,7 @@
 import * as vscode from 'vscode';
 import { WorkCenterProvider, DiscoveredItem } from '../api/types';
 import { DiscoveredStateStore } from '../storage/discoveredStateStore';
+import { ProviderLabelCache } from '../storage/providerLabelCache';
 import { logger } from './logger';
 
 /**
@@ -45,6 +46,7 @@ export class ProviderRegistry {
 
   constructor(
     private readonly stateStore: DiscoveredStateStore,
+    private readonly labelCache?: ProviderLabelCache,
   ) {}
 
   /**
@@ -63,6 +65,9 @@ export class ProviderRegistry {
     }
 
     this.providers.set(provider.id, provider);
+    if (this.labelCache) {
+      void this.labelCache.set(provider.id, provider.label).catch(() => {});
+    }
     if (!this.discoveredItems.has(provider.id)) {
       this.discoveredItems.set(provider.id, []);
     }
@@ -114,7 +119,7 @@ export class ProviderRegistry {
    * @returns The provider's label, or the raw `providerId` if the provider is not registered.
    */
   getProviderLabel(providerId: string): string {
-    return this.providers.get(providerId)?.label ?? providerId;
+    return this.providers.get(providerId)?.label ?? this.labelCache?.get(providerId) ?? providerId;
   }
 
   /**

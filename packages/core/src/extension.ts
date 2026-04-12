@@ -4,6 +4,7 @@ import { WorkCenterApiImpl } from './api/workCenterApi';
 import { JsonTaskStore } from './storage/jsonTaskStore';
 import { DiscoveredStateStore } from './storage/discoveredStateStore';
 import { ReadStateStore } from './storage/readStateStore';
+import { ProviderLabelCache } from './storage/providerLabelCache';
 import { WorkGraph } from './services/workGraph';
 import { ProviderRegistry } from './services/providerRegistry';
 import { ActionRegistry } from './services/actionRegistry';
@@ -60,7 +61,7 @@ function initializeLogging(context: vscode.ExtensionContext): void {
   );
 }
 
-async function loadStores(storagePath: string): Promise<{ workGraph: WorkGraph; stateStore: DiscoveredStateStore; readStateStore: ReadStateStore }> {
+async function loadStores(storagePath: string): Promise<{ workGraph: WorkGraph; stateStore: DiscoveredStateStore; readStateStore: ReadStateStore; labelCache: ProviderLabelCache }> {
   const store = new JsonTaskStore(storagePath);
   const wg = new WorkGraph(store);
   workGraph = wg;
@@ -76,7 +77,11 @@ async function loadStores(storagePath: string): Promise<{ workGraph: WorkGraph; 
   await readStateStore.load();
   logger.debug('Loaded read state');
 
-  return { workGraph: wg, stateStore: ss, readStateStore };
+  const labelCache = new ProviderLabelCache(storagePath);
+  await labelCache.load();
+  logger.debug('Loaded provider label cache');
+
+  return { workGraph: wg, stateStore: ss, readStateStore, labelCache };
 }
 
 async function migrateDiscoveredState(workGraph: WorkGraph, stateStore: DiscoveredStateStore): Promise<void> {
@@ -281,10 +286,10 @@ export async function activate(context: vscode.ExtensionContext): Promise<WorkCe
 
   const initStart = performance.now();
   const storagePath = context.globalStorageUri.fsPath;
-  const { workGraph: wg, stateStore: ss, readStateStore } = await loadStores(storagePath);
+  const { workGraph: wg, stateStore: ss, readStateStore, labelCache } = await loadStores(storagePath);
   await migrateDiscoveredState(wg, ss);
 
-  const pr = new ProviderRegistry(ss);
+  const pr = new ProviderRegistry(ss, labelCache);
   providerRegistry = pr;
   const ar = new ActionRegistry();
   actionRegistry = ar;
