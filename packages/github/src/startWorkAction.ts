@@ -75,7 +75,7 @@ export class StartWorkAction implements WorkCenterAction {
       return;
     }
 
-    const branchName = this.generateBranchName(parsed.issueNumber, item.title);
+    const branchName = `issue${parsed.issueNumber}`;
 
     const repoPath = await this.promptForRepoPath(parsed.repoKey);
     if (!repoPath) {
@@ -98,7 +98,9 @@ export class StartWorkAction implements WorkCenterAction {
       await execFileAsync('git', ['branch', branchName, baseBranch], { cwd: repoPath });
       logger.info(`Starting work: creating branch ${branchName}`);
 
-      const worktreePath = path.join(path.dirname(repoPath), branchName);
+      const repoBaseName = path.basename(repoPath);
+      const worktreeDirName = `${repoBaseName}-issue${parsed.issueNumber}`;
+      const worktreePath = path.join(path.dirname(repoPath), worktreeDirName);
 
       // Check if worktree directory already exists
       if (fs.existsSync(worktreePath)) {
@@ -221,16 +223,5 @@ export class StartWorkAction implements WorkCenterAction {
 
     await this.globalState.update(cacheKey, trimmedBranch);
     return trimmedBranch;
-  }
-
-  private generateBranchName(issueNumber: string, title: string): string {
-    // "#123: Fix login redirect bug" → "issue-123-fix-login-redirect-bug"
-    const slug = title
-      .replace(/#\d+:\s*/, '')
-      .toLowerCase()
-      .replace(/[^a-z0-9]+/g, '-')
-      .replace(/^-|-$/g, '')
-      .slice(0, 40);
-    return slug ? `issue-${issueNumber}-${slug}` : `issue-${issueNumber}`;
   }
 }

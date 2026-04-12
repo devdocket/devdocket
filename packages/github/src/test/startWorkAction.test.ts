@@ -217,13 +217,13 @@ describe('StartWorkAction', () => {
       // First call: check if branch exists
       const firstCall = vi.mocked(execFile).mock.calls[0];
       expect(firstCall[0]).toBe('git');
-      expect(firstCall[1]).toEqual(['branch', '--list', 'issue-123-fix-login-redirect-bug']);
+      expect(firstCall[1]).toEqual(['branch', '--list', 'issue123']);
       expect(firstCall[2]).toEqual({ cwd: '/mock/workspace' });
 
       // Second call: create branch from user-specified base
       const secondCall = vi.mocked(execFile).mock.calls[1];
       expect(secondCall[0]).toBe('git');
-      expect(secondCall[1]).toEqual(['branch', 'issue-123-fix-login-redirect-bug', 'origin/dev']);
+      expect(secondCall[1]).toEqual(['branch', 'issue123', 'origin/dev']);
       expect(secondCall[2]).toEqual({ cwd: '/mock/workspace' });
 
       // Third call: create worktree
@@ -231,19 +231,9 @@ describe('StartWorkAction', () => {
       expect(thirdCall[0]).toBe('git');
       expect(thirdCall[1]).toEqual([
         'worktree', 'add',
-        path.join('/mock', 'issue-123-fix-login-redirect-bug'),
-        'issue-123-fix-login-redirect-bug',
+        path.join('/mock', 'workspace-issue123'),
+        'issue123',
       ]);
-    });
-
-    it('generates slug from title correctly', async () => {
-      const item = createWorkItem({ title: '#456: Add User Authentication!!', externalId: 'owner/repo#456' });
-      await action.run(item);
-
-      const branchCall = vi.mocked(execFile).mock.calls.find(
-        call => call[1]![0] === 'branch' && call[1]![1] !== '--list'
-      );
-      expect(branchCall![1]).toEqual(['branch', 'issue-456-add-user-authentication', 'origin/dev']);
     });
 
     it('uses user-specified base branch for branch creation', async () => {
@@ -255,28 +245,14 @@ describe('StartWorkAction', () => {
       const branchCall = vi.mocked(execFile).mock.calls.find(
         call => call[1]![0] === 'branch' && call[1]![1] !== '--list'
       );
-      expect(branchCall![1]).toEqual(['branch', 'issue-123-fix-bug', 'main']);
-    });
-
-    it('truncates slug to 40 chars', async () => {
-      const item = createWorkItem({
-        title: '#789: This is a very long title that should be truncated to forty characters maximum',
-        externalId: 'owner/repo#789',
-      });
-      await action.run(item);
-
-      const branchCall = vi.mocked(execFile).mock.calls[0];
-      const branchName = branchCall[1]![1] as string;
-      // "issue-789-" is 10 chars, slug part should be at most 40 chars
-      const slug = branchName.replace('issue-789-', '');
-      expect(slug.length).toBeLessThanOrEqual(40);
+      expect(branchCall![1]).toEqual(['branch', 'issue123', 'main']);
     });
 
     it('opens new VS Code window at worktree path', async () => {
       const item = createWorkItem({ title: '#123: Fix bug' });
       await action.run(item);
 
-      expect(Uri.file).toHaveBeenCalledWith(path.join('/mock', 'issue-123-fix-bug'));
+      expect(Uri.file).toHaveBeenCalledWith(path.join('/mock', 'workspace-issue123'));
       expect(commands.executeCommand).toHaveBeenCalledWith(
         'vscode.openFolder',
         expect.anything(),
@@ -289,7 +265,7 @@ describe('StartWorkAction', () => {
       await action.run(item);
 
       expect(window.showInformationMessage).toHaveBeenCalledWith(
-        'WorkCenter: Created worktree for issue-123-fix-bug',
+        'WorkCenter: Created worktree for issue123',
       );
     });
 
@@ -320,7 +296,7 @@ describe('StartWorkAction', () => {
       // Mock branch --list to return existing branch
       vi.mocked(execFile).mockImplementation(((cmd: string, args: string[], opts: any, cb: Function) => {
         if (args[0] === 'branch' && args[1] === '--list') {
-          cb(null, { stdout: 'issue-123-fix-bug\n', stderr: '' }, '');
+          cb(null, { stdout: 'issue123\n', stderr: '' }, '');
         } else {
           cb(null, { stdout: '', stderr: '' }, '');
         }
@@ -330,7 +306,7 @@ describe('StartWorkAction', () => {
       await action.run(item);
 
       expect(window.showErrorMessage).toHaveBeenCalledWith(
-        'WorkCenter: Branch "issue-123-fix-bug" already exists.',
+        'WorkCenter: Branch "issue123" already exists.',
       );
       // Should not attempt to create branch or worktree
       expect(execFile).toHaveBeenCalledTimes(1);
@@ -340,9 +316,9 @@ describe('StartWorkAction', () => {
       // Mock git worktree add to fail because directory already exists
       vi.mocked(execFile).mockImplementation(((cmd: string, args: string[], opts: any, cb: Function) => {
         if (args[0] === 'worktree') {
-          const stderr = `fatal: '${path.join('/mock', 'issue-123-fix-bug')}' already exists`;
+          const stderr = `fatal: '${path.join('/mock', 'workspace-issue123')}' already exists`;
           const err = new Error(
-            `Command failed: git worktree add ${path.join('/mock', 'issue-123-fix-bug')} issue-123-fix-bug\n${stderr}`
+            `Command failed: git worktree add ${path.join('/mock', 'workspace-issue123')} issue123\n${stderr}`
           );
           (err as any).stderr = stderr;
           cb(err, '', '');
@@ -355,12 +331,12 @@ describe('StartWorkAction', () => {
       await action.run(item);
 
       expect(window.showErrorMessage).toHaveBeenCalledWith(
-        `WorkCenter: Directory "${path.join('/mock', 'issue-123-fix-bug')}" already exists.`,
+        `WorkCenter: Directory "${path.join('/mock', 'workspace-issue123')}" already exists.`,
       );
       // Should delete the branch (rollback)
       expect(execFile).toHaveBeenCalledWith(
         'git',
-        ['branch', '-D', 'issue-123-fix-bug'],
+        ['branch', '-D', 'issue123'],
         { cwd: '/mock/workspace' },
         expect.any(Function),
       );
@@ -392,7 +368,7 @@ describe('StartWorkAction', () => {
       // Rollback must happen after worktree add
       expect(rollbackIdx).toBeGreaterThan(worktreeIdx);
 
-      expect(calls[rollbackIdx][1]).toEqual(['branch', '-D', 'issue-123-fix-bug']);
+      expect(calls[rollbackIdx][1]).toEqual(['branch', '-D', 'issue123']);
       expect(calls[rollbackIdx][2]).toEqual({ cwd: '/mock/workspace' });
     });
   });
@@ -536,8 +512,8 @@ describe('StartWorkAction', () => {
       vi.mocked(execFile).mockImplementation(((cmd: string, args: string[], opts: any, cb: Function) => {
         // Simulate git worktree add failing because directory already exists
         if (args[0] === 'worktree' && args[1] === 'add') {
-          const err = new Error("fatal: 'issue-123-fix-bug' already exists");
-          (err as any).stderr = "'issue-123-fix-bug' already exists";
+          const err = new Error("fatal: 'issue123' already exists");
+          (err as any).stderr = "'issue123' already exists";
           cb(err, '', '');
         } else {
           cb(null, { stdout: '', stderr: '' }, '');
