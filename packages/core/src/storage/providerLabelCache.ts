@@ -95,7 +95,7 @@ export class ProviderLabelCache {
   }
 
   private async save(): Promise<void> {
-    const obj: Record<string, string> = {};
+    const obj = Object.create(null) as Record<string, string>;
     for (const [key, value] of this.labels) {
       obj[key] = value;
     }
