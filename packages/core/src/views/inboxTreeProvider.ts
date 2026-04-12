@@ -344,7 +344,8 @@ export class InboxTreeProvider implements vscode.TreeDataProvider<InboxElement> 
     return items.filter((item) => {
       if (item.group !== groupName) { return false; }
       const state = this.stateStore.getState(providerId, item.externalId);
-      return state === undefined || state === 'unseen';
+      if (state !== undefined && state !== 'unseen') { return false; }
+      return this.matchesInboxFilter(item);
     }).length;
   }
 
