@@ -19,9 +19,6 @@ export function getEditorPanelHtml({ cspSource, item }: EditorHtmlOptions): stri
       --input-bg: var(--vscode-input-background);
       --input-fg: var(--vscode-input-foreground);
       --input-border: var(--vscode-input-border, transparent);
-      --btn-bg: var(--vscode-button-background);
-      --btn-fg: var(--vscode-button-foreground);
-      --btn-hover: var(--vscode-button-hoverBackground);
       --font: var(--vscode-font-family, sans-serif);
       --font-size: var(--vscode-font-size, 13px);
     }
