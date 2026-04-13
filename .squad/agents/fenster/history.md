@@ -77,6 +77,10 @@ Key files:
 - Migration logic runs on activation before tree registration to seed existing WorkItems as 'accepted'
 - Items with no persisted state default to 'unseen' — allows new providers to introduce items without re-surfacing old ones
 
+### Responsive CSS in Webview Panels
+- Editor panel body CSS in `editorPanelHtml.ts` uses `max-width: min(560px, 100%)` with `margin: 0 auto` for responsive centering — avoids overflow in narrow splits and wasted space in wide layouts
+- Percentage-based padding (`padding: 20px 5%`) scales with panel width instead of fixed pixel padding
+
 ## Code Review Fixes (2026-03-24)
 
 Fixed all Critical (C1-C7) and Important (I1-I8) issues from Keaton's review for PR #1:
