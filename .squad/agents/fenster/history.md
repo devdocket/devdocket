@@ -248,7 +248,7 @@ The queue view was displaying raw provider IDs (e.g., `github`, `ado`) in tree i
 
 ### Files Modified
 - `packages/core/src/views/queueTreeProvider.ts` — Updated tree item label rendering
-- `packages/core/src/views/baseWorkItemViewProvider.ts` — Extracted `getProviderLabel()` method for reuse across all views
+- `packages/core/src/views/viewLayout.ts` — Extracted `getProviderLabel()` method for reuse across all views
 
 ### Key Learnings
 - **Label centralization**: Extracting label lookup into the base class prevents duplication and ensures consistency. Any future view that needs provider labels automatically gets the same logic.
