@@ -394,7 +394,7 @@ Tests verify:
 6. Edge case: items with missing provider IDs
 
 ### Test Infrastructure Notes
-- Used existing `createMockProvider()` and `createMockStore()` patterns from Phase 2
+- Used the existing `createMockStore()` pattern from Phase 2 alongside a local `createMockProviderRegistry()` helper in `queueTreeProvider.test.ts`
 - No new test infrastructure required
 - All assertions validate both display layer and provider lookup mechanism
 
