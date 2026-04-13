@@ -89,7 +89,7 @@ Key files:
 **Key pattern:** Use `stateStore.getState.mockReturnValue()` to cycle through states on the same node, then compare icon IDs via Set uniqueness. No need for separate nodes.
 
 **File paths:**
-- Production: `packages/core/src/views/sourcesTreeProvider.ts` (line 69 — three-way ternary: accepted→check, dismissed→circle-slash, unseen→circle-outline)
+- Production: `packages/core/src/views/sourcesTreeProvider.ts` (`switch (state)` selects icons: accepted→check, dismissed→circle-slash, unseen→circle-outline)
 - Tests: `packages/core/src/test/sourcesTreeProvider.test.ts` (getTreeItem describe block)
 
 **Suite metrics:** 865 tests passing (29 test files), 0 failures.

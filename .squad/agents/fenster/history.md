@@ -259,5 +259,5 @@ Patterns documented in `.squad/decisions.md` under "Code Review Fix Patterns" (2
 ## Issue #231: Sources view dismissed icon (2025-07-23)
 
 ### Learnings
-- **Icon conditional pattern in Sources view**: `sourcesTreeProvider.ts` line 69 uses a chained ternary to map `InboxState` to ThemeIcon names: `accepted` → `check`, `dismissed` → `circle-slash`, `unseen` → `circle-outline`. Previously a simple binary ternary lumped dismissed and unseen together.
+- **Icon mapping in Sources view**: `packages/core/src/views/sourcesTreeProvider.ts` maps `InboxState` to `ThemeIcon` names via `switch (state)` in `getTreeItem()`: `accepted` → `check`, `dismissed` → `circle-slash`, `unseen` → `circle-outline`. Previously simpler branching lumped dismissed and unseen together.
 - **Key file**: `packages/core/src/views/sourcesTreeProvider.ts` — the `getTreeItem()` method for `item` kind elements assigns icons based on `stateStore.getState()` result.
