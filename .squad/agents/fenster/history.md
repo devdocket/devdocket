@@ -77,6 +77,11 @@ Key files:
 - Migration logic runs on activation before tree registration to seed existing WorkItems as 'accepted'
 - Items with no persisted state default to 'unseen' — allows new providers to introduce items without re-surfacing old ones
 
+### Emoji Removal in Tree Descriptions (Issue #229)
+- Tree item descriptions should use plain text labels, not Unicode emoji — emoji render inconsistently across platforms, fonts, and themes
+- Fixed in `packages/core/src/views/focusTreeProvider.ts` (`getStateLabel`) and `packages/core/src/views/historyTreeProvider.ts` (`getStateLabel`)
+- State is already conveyed by ThemeIcon (`debug-pause`, `check`, `archive`), so descriptions only need plain text: `"paused"`, `"done"`, `"archived"`
+
 ## Code Review Fixes (2026-03-24)
 
 Fixed all Critical (C1-C7) and Important (I1-I8) issues from Keaton's review for PR #1:

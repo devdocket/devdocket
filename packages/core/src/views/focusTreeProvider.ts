@@ -72,7 +72,7 @@ export class FocusTreeProvider extends WorkItemViewProvider implements vscode.Tr
       case WorkItemState.InProgress:
         return 'in progress';
       case WorkItemState.Paused:
-        return '⏸ paused';
+        return 'paused';
       default:
         return state;
     }

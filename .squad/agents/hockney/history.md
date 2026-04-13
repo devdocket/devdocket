@@ -374,3 +374,15 @@ mockFetch.mockImplementation(async (url: string) => {
 **Key learning:** The bug in issue #189 was present in the codebase. The root cause was explicit resurface logic (`resurfaceDismissed`) that reset dismissed items when they were rediscovered, causing them to reappear. The correct fix was to remove that resurface behavior; the tests now document the expected dismissed-state preservation and guard against future regressions.
 
 
+
+### Issue #229 — Emoji Description Tests Updated (2026-04-12)
+
+**Context:** Issue #229 replaced emoji characters in tree view descriptions with plain text for consistent rendering.
+
+**Files modified:**
+- `packages/core/src/test/focusTreeProvider.test.ts` — Updated assertion: `'⏸ paused'` → `'paused'`
+- `packages/core/src/test/historyTreeProvider.test.ts` — Updated assertions: `'✓ done'` → `'done'`, `'📦 archived'` → `'archived'`
+
+**Pattern:** Description assertions in tree provider tests live in `getTreeItem description` describe blocks. When production description format changes, update both the assertion value and the `it()` label to match.
+
+**Test suite:** 864 tests passing (29 files), 0 failures.
