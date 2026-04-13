@@ -140,7 +140,7 @@ export function getEditorPanelHtml({ cspSource, item }: EditorHtmlOptions): stri
 <body>
   <div class="heading-row">
     <h2 id="editor-heading">Edit Work Item</h2>
-    <span id="save-status"></span>
+    <span id="save-status" aria-live="polite"></span>
   </div>
   <div id="form" role="form" aria-labelledby="editor-heading">
     <div class="field">
@@ -188,7 +188,9 @@ ${item.providerId ? '      <span id="readonly-title-hint" class="hint">Title is 
     window.addEventListener('message', (event) => {
       const msg = event.data;
       if (msg && msg.type === 'saveResult') {
-        if (msg.success) {
+        if (msg.noop) {
+          statusEl.classList.remove('visible');
+        } else if (msg.success) {
           showStatus('Saved', 'saved');
           fadeTimer = setTimeout(() => {
             statusEl.classList.remove('visible');

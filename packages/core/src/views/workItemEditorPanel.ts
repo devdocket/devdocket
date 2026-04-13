@@ -163,8 +163,8 @@ export class WorkItemEditorPanel {
     this.saveQueue = this.saveQueue.then(async () => {
       try {
         const saved = await this.saveData(data);
-        if (saved && !this.disposed) {
-          void this.panel.webview.postMessage({ type: 'saveResult', success: true });
+        if (!this.disposed) {
+          void this.panel.webview.postMessage({ type: 'saveResult', success: true, noop: !saved });
         }
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
