@@ -47,15 +47,18 @@ function sanitizeLayouts(raw: unknown): Record<string, string> {
 export async function toggleViewLayout(viewId: ViewId): Promise<void> {
   const current = getViewLayout(viewId);
   const next = current === 'flat' ? 'tree' : 'flat';
-  await setViewLayout(viewId, next);
+  await applyViewLayout(viewId, next);
 }
 
 /** Set a specific layout for a view. No-ops if already in the requested layout. */
 export async function setViewLayout(viewId: ViewId, layout: ViewLayout): Promise<void> {
-  const current = getViewLayout(viewId);
-  if (current === layout) {
+  if (getViewLayout(viewId) === layout) {
     return;
   }
+  await applyViewLayout(viewId, layout);
+}
+
+async function applyViewLayout(viewId: ViewId, layout: ViewLayout): Promise<void> {
   const config = vscode.workspace.getConfiguration('workcenter');
 
   // Only target Workspace or Global scope. Workspace-folder scope requires a
