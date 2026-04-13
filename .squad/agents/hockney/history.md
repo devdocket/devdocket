@@ -377,11 +377,11 @@ mockFetch.mockImplementation(async (url: string) => {
 
 **Tests added:** 3 new tests in `packages/core/src/test/editorPanelHtml.test.ts` under `describe('source URL link')`:
 
-1. **renders a clickable link when item has a url** — Verifies `<a>` tag with `id="source-link"`, `data-url` attribute containing the URL, and "Open in source" text
+1. **renders a clickable link when item has a url** — Verifies `<button>` tag with `id="source-link"`, `data-url` attribute containing the URL, and "Open in source" text
 2. **does not render a link when item has no url** — Verifies no `source-link` element or "Open in source" text when `url` is undefined
 3. **escapes HTML entities in the url to prevent XSS** — Verifies `escapeAttr` prevents attribute breakout with `"><script>alert(1)</script>` payload
 
 **Implementation detail:** Fenster's implementation uses `data-url` + `postMessage({ type: 'openUrl' })` pattern (not a direct `href`), since VS Code webview CSP blocks external navigation. The `<button>` element provides native keyboard accessibility.
 
-**Test results:** 12 tests in editorPanelHtml.test.ts (up from 9), 868 total tests passing.
+**Test results:** 12 tests in editorPanelHtml.test.ts (up from 9), 871 core tests passing.
 
