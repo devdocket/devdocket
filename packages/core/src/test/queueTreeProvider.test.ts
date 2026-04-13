@@ -489,14 +489,14 @@ describe('QueueTreeProvider', () => {
       expect(providerRegistry.getProviderLabel).not.toHaveBeenCalled();
     });
 
-    it('should return undefined if resolver returns undefined', async () => {
+    it('should fall back to raw providerId if resolver returns undefined', async () => {
       (providerRegistry.getProviderLabel as ReturnType<typeof vi.fn>).mockReturnValue(undefined);
       const item = await graph.createItem(
         { title: 'Unknown provider' },
         { providerId: 'unknown', externalId: 'ext-1' },
       );
       const treeItem = providerWithResolver.getTreeItem(item);
-      expect(treeItem.description).toBeUndefined();
+      expect(treeItem.description).toBe('unknown');
     });
   });
 });
