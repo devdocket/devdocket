@@ -1,6 +1,7 @@
 import * as vscode from 'vscode';
 import { WorkCenterProvider, DiscoveredItem } from '../api/types';
 import { DiscoveredStateStore } from '../storage/discoveredStateStore';
+import { ProviderLabelCache } from '../storage/providerLabelCache';
 import { logger } from './logger';
 
 /**
@@ -45,6 +46,7 @@ export class ProviderRegistry {
 
   constructor(
     private readonly stateStore: DiscoveredStateStore,
+    private readonly labelCache?: ProviderLabelCache,
   ) {}
 
   /**
@@ -63,6 +65,11 @@ export class ProviderRegistry {
     }
 
     this.providers.set(provider.id, provider);
+    if (this.labelCache) {
+      void this.labelCache.set(provider.id, provider.label).catch(err => {
+        logger.debug(`Failed to cache provider label for provider ${provider.id} (label: ${provider.label})`, err);
+      });
+    }
     if (!this.discoveredItems.has(provider.id)) {
       this.discoveredItems.set(provider.id, []);
     }
@@ -111,10 +118,10 @@ export class ProviderRegistry {
    * Get the human-readable label for a provider.
    *
    * @param providerId - The provider identifier.
-   * @returns The provider's label, or the raw `providerId` if the provider is not registered.
+   * @returns The registered provider's live label if available; otherwise a cached label if one exists; otherwise the raw `providerId`.
    */
   getProviderLabel(providerId: string): string {
-    return this.providers.get(providerId)?.label ?? providerId;
+    return this.providers.get(providerId)?.label ?? this.labelCache?.get(providerId) ?? providerId;
   }
 
   /**
