@@ -243,6 +243,31 @@
         "icon": "$(list-flat)"
       },
       {
+        "command": "workcenter.toggleInboxLayout",
+        "title": "Toggle Inbox Layout",
+        "category": "WorkCenter"
+      },
+      {
+        "command": "workcenter.toggleQueueLayout",
+        "title": "Toggle Queue Layout",
+        "category": "WorkCenter"
+      },
+      {
+        "command": "workcenter.toggleFocusLayout",
+        "title": "Toggle Focus Layout",
+        "category": "WorkCenter"
+      },
+      {
+        "command": "workcenter.toggleHistoryLayout",
+        "title": "Toggle History Layout",
+        "category": "WorkCenter"
+      },
+      {
+        "command": "workcenter.toggleSourcesLayout",
+        "title": "Toggle Sources Layout",
+        "category": "WorkCenter"
+      },
+      {
         "command": "workcenter.dismissFromSources",
         "title": "Dismiss",
         "category": "WorkCenter",
@@ -370,6 +395,26 @@
         {
           "command": "workcenter.switchSourcesToFlat",
           "when": "workcenter.sourcesLayout == tree"
+        },
+        {
+          "command": "workcenter.toggleInboxLayout",
+          "when": "false"
+        },
+        {
+          "command": "workcenter.toggleQueueLayout",
+          "when": "false"
+        },
+        {
+          "command": "workcenter.toggleFocusLayout",
+          "when": "false"
+        },
+        {
+          "command": "workcenter.toggleHistoryLayout",
+          "when": "false"
+        },
+        {
+          "command": "workcenter.toggleSourcesLayout",
+          "when": "false"
         }
       ],
       "view/item/context": [
