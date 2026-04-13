@@ -374,3 +374,28 @@ mockFetch.mockImplementation(async (url: string) => {
 **Key learning:** The bug in issue #189 was present in the codebase. The root cause was explicit resurface logic (`resurfaceDismissed`) that reset dismissed items when they were rediscovered, causing them to reappear. The correct fix was to remove that resurface behavior; the tests now document the expected dismissed-state preservation and guard against future regressions.
 
 
+
+### Issue #215: Dynamic Title Resolution Tests (2026-04-13)
+
+**Tests added:** 19 new tests across 3 files
+- `queueTreeProvider.test.ts` — 7 resolveTitle tests (live title, persisted fallback, missing discovered item, empty provider, no registry, tooltip inclusion, tree refresh on discovered items change)
+- `focusTreeProvider.test.ts` — 6 resolveTitle tests (same scenarios for InProgress/Paused items)
+- `historyTreeProvider.test.ts` — 6 resolveTitle tests (same scenarios for Done/Archived items)
+
+**Total suite: 883 passed | 1 todo (884) across 29 test files.**
+
+**Implementation found already in place:**
+Fenster had already implemented the feature before tests were written:
+- `TitleResolver` type and `resolveTitle()` method added to `WorkItemViewProvider` base class in `viewLayout.ts`
+- All 3 subclasses (Queue, Focus, History) updated to call `this.resolveTitle(item)` instead of `item.title`
+- Constructor wiring passes `providerRegistry.getDiscoveredItems()` lookup as titleResolver callback
+- `onDidChangeDiscoveredItems` event wired to trigger tree refresh (so titles update dynamically)
+
+**Mock pattern:**
+- `createMockProviderRegistry()` helper with `Map<string, DiscoveredItem[]>` backing store, two EventEmitters (register + change), and `_fireChange()` trigger
+- Must import `EventEmitter` from vscode mock at top of file — `require('vscode')` fails in vitest mock environment
+
+**Key design:**
+- `TitleResolver` callback follows same pattern as existing `LabelResolver` — keeps base class decoupled from `ProviderRegistry`
+- Fallback chain: live discovered title → persisted `item.title` (when no provider, no discovered item, or no registry)
+- Tooltip also uses resolved title (passed as parameter to `buildTooltip`)

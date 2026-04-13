@@ -26,6 +26,7 @@ Key files:
 
 ## Learnings
 
+- **Dynamic title resolution for provider-backed items (#215):** Added `TitleResolver` type and `resolveTitle()` method to `WorkItemViewProvider` base class in `viewLayout.ts`. Mirrors the existing `LabelResolver` pattern — a closure `(providerId, externalId) => string | undefined` passed from subclass constructors via `ProviderRegistry.getDiscoveredItems()`. All three tree providers (Queue, Focus, History) now display live titles from the provider, falling back to persisted `item.title`. Also wired `onDidChangeDiscoveredItems` to refresh trees when provider data updates.
 - GitHub package (`packages/github/`) vscode mock lives at `packages/github/src/test/__mocks__/vscode.ts`, aliased in `vitest.config.ts` — mirrors core mock pattern but adds `authentication`, `workspace`, `extensions` mocks.
 - Mock includes: `authentication.getSession` (resolves with `{ accessToken: 'mock-token' }`), `workspace.getConfiguration` (returns `.get(key, default)` stub), `workspace.workspaceFolders`, `extensions.getExtension`, `commands.executeCommand`, `Uri.file`, `window.showErrorMessage`.
 - Root `npm install` handles all workspace deps via npm workspaces. Root `npm run build` runs esbuild in both packages.

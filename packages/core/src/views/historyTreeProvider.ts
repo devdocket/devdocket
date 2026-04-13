@@ -18,6 +18,8 @@ export class HistoryTreeProvider extends WorkItemViewProvider {
       'flat',
       providerRegistry ? id => providerRegistry.getProviderLabel(id) : undefined,
       providerRegistry?.onDidRegisterProvider,
+      providerRegistry ? (pid, eid) => providerRegistry.getDiscoveredItems(pid).find(d => d.externalId === eid)?.title : undefined,
+      providerRegistry?.onDidChangeDiscoveredItems,
     );
   }
 
@@ -30,9 +32,10 @@ export class HistoryTreeProvider extends WorkItemViewProvider {
   }
 
   protected createWorkItemTreeItem(item: WorkItem): vscode.TreeItem {
-    const treeItem = new vscode.TreeItem(item.title, vscode.TreeItemCollapsibleState.None);
+    const title = this.resolveTitle(item);
+    const treeItem = new vscode.TreeItem(title, vscode.TreeItemCollapsibleState.None);
     treeItem.description = this.getStateLabel(item.state);
-    treeItem.tooltip = this.buildTooltip(item);
+    treeItem.tooltip = this.buildTooltip(item, title);
     treeItem.iconPath = this.getIcon(item.state);
     let contextBase = 'historyItem';
     if (item.state === WorkItemState.Done) {
@@ -67,10 +70,10 @@ export class HistoryTreeProvider extends WorkItemViewProvider {
     }
   }
 
-  private buildTooltip(item: WorkItem): vscode.MarkdownString {
+  private buildTooltip(item: WorkItem, title: string): vscode.MarkdownString {
     const md = new vscode.MarkdownString();
     md.appendMarkdown(`**Title:** `);
-    md.appendText(item.title);
+    md.appendText(title);
     md.appendMarkdown(`\n\n`);
     if (item.notes) {
       md.appendMarkdown(`**Notes:** `);
