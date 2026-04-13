@@ -12,8 +12,8 @@ export function getEditorPanelHtml({ cspSource, item, providerDescription }: Edi
   const nonce = getNonce();
   const descriptionSection = providerDescription
     ? `    <div class="field">
-      <label>Provider Description</label>
-      <div class="provider-description">${escapeHtml(providerDescription)}</div>
+      <label id="provider-desc-label">Provider Description</label>
+      <div class="provider-description" role="note" aria-labelledby="provider-desc-label">${escapeHtml(providerDescription)}</div>
     </div>`
     : '';
   return /*html*/ `<!DOCTYPE html>
