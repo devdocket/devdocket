@@ -57,9 +57,7 @@ export function getEditorPanelHtml({ cspSource, item }: EditorHtmlOptions): stri
     #save-status.visible {
       opacity: 1;
     }
-    #save-status.saving {
-      color: var(--vscode-descriptionForeground, rgba(128,128,128,0.8));
-    }
+    #save-status.saving,
     #save-status.saved {
       color: var(--vscode-descriptionForeground, rgba(128,128,128,0.8));
     }

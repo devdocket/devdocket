@@ -92,7 +92,7 @@ export class WorkItemEditorPanel {
     });
   }
 
-  private async saveData(data: Record<string, string>): Promise<void> {
+  private async saveData(data: Record<string, string>): Promise<boolean> {
     const item = this.workGraph.getItem(this.itemId);
     if (!item) {
       throw new Error('Work item no longer exists. Your changes could not be saved.');
@@ -101,7 +101,7 @@ export class WorkItemEditorPanel {
 
     if (!item.providerId) {
       if (!data.title) {
-        return;
+        return false;
       }
       patch.title = data.title;
     }
@@ -111,13 +111,14 @@ export class WorkItemEditorPanel {
     }
 
     if (Object.keys(patch).length === 0) {
-      return;
+      return false;
     }
 
     await this.workGraph.updateItem(this.itemId, patch);
     if (!this.disposed && data.title && !item.providerId) {
       this.panel.title = `Edit: ${data.title}`;
     }
+    return true;
   }
 
   private update(): void {
@@ -161,14 +162,14 @@ export class WorkItemEditorPanel {
   private enqueueSave(data: Record<string, string>): void {
     this.saveQueue = this.saveQueue.then(async () => {
       try {
-        await this.saveData(data);
-        if (!this.disposed) {
-          this.panel.webview.postMessage({ type: 'saveResult', success: true });
+        const saved = await this.saveData(data);
+        if (saved && !this.disposed) {
+          void this.panel.webview.postMessage({ type: 'saveResult', success: true });
         }
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
         if (!this.disposed) {
-          this.panel.webview.postMessage({ type: 'saveResult', success: false, error: message });
+          void this.panel.webview.postMessage({ type: 'saveResult', success: false, error: message });
         }
         vscode.window.showErrorMessage(`Failed to save work item: ${message}`);
       }
