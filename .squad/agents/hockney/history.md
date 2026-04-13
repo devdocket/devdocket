@@ -379,7 +379,7 @@ mockFetch.mockImplementation(async (url: string) => {
 
 **Finding:** No existing tests in `editorPanelHtml.test.ts` assert on `560px`, `max-width`, or any CSS layout values. The 9 tests focus on CSP, nonce, HTML escaping, readonly behavior, and XSS prevention — all layout-agnostic. No test updates needed for Fenster's CSS change.
 
-**Status at review time:** Fenster had not yet pushed the production CSS change (line 35 of `editorPanelHtml.ts` still had `max-width: 560px`). All 864 core tests passing (29 test files, 0 failures).
+**Status at review time:** In the earlier commit reviewed, line 35 of `editorPanelHtml.ts` still had `max-width: 560px`; the PR later updated the production CSS to the responsive layout. All 864 core tests were passing at that review point (29 test files, 0 failures).
 
 **Key learning:** The editor panel tests were well-designed — they test security and correctness concerns without coupling to visual layout CSS, making them resilient to styling changes.
 

@@ -79,7 +79,7 @@ Key files:
 
 ### Responsive CSS in Webview Panels
 - Editor panel body CSS in `editorPanelHtml.ts` uses `max-width: min(560px, 100%)` with `margin: 0 auto` for responsive centering — avoids overflow in narrow splits and wasted space in wide layouts
-- Percentage-based padding (`padding: 20px 5%`) scales with panel width instead of fixed pixel padding
+- Responsive padding (`padding: 20px min(5%, 24px)`) scales with panel width while capping the horizontal padding instead of using only a fixed pixel value
 
 ## Code Review Fixes (2026-03-24)
 
