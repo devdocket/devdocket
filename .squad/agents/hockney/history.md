@@ -381,7 +381,7 @@ mockFetch.mockImplementation(async (url: string) => {
 2. **does not render a link when item has no url** — Verifies no `source-link` element or "Open in source" text when `url` is undefined
 3. **escapes HTML entities in the url to prevent XSS** — Verifies `escapeAttr` prevents attribute breakout with `"><script>alert(1)</script>` payload
 
-**Implementation detail:** Fenster's implementation uses `data-url` + `postMessage({ type: 'openUrl' })` pattern (not a direct `href`), since VS Code webview CSP blocks external navigation. The `<a>` tag uses `role="link"` and `tabindex="0"` for accessibility.
+**Implementation detail:** Fenster's implementation uses `data-url` + `postMessage({ type: 'openUrl' })` pattern (not a direct `href`), since VS Code webview CSP blocks external navigation. The `<button>` element provides native keyboard accessibility.
 
 **Test results:** 12 tests in editorPanelHtml.test.ts (up from 9), 868 total tests passing.
 
