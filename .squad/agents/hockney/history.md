@@ -389,8 +389,8 @@ mockFetch.mockImplementation(async (url: string) => {
 
 **Key observations:**
 - Fenster's implementation was already in place when I started — `enqueueSave()` already calls `postMessage({ type: 'saveResult', ... })` with `disposed` guard
-- The HTML template already had `<span id="save-status"></span>` and client-side JS to handle `saveResult` messages
-- Both mock panel helpers (`createMockWebviewPanel` and `createIntegrationWebviewPanel`) already had `postMessage: vi.fn()` mocked — confirming previous test infrastructure anticipated this pattern
+- This PR introduces `<span id="save-status">` in the HTML template and client-side JS to handle `saveResult` messages
+- Both mock panel helpers (`createMockWebviewPanel` and `createIntegrationWebviewPanel`) were updated with `postMessage: vi.fn()` mocking in this PR
 - The `disposed` guard on `postMessage` prevents sending messages to a closed panel, matching the existing pattern for `panel.title` updates
 
 

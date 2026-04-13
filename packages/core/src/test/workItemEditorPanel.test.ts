@@ -1176,6 +1176,24 @@ describe('WorkItemEditorPanel (integration with WorkGraph)', () => {
       });
     });
 
+    it('posts saveResult with noop flag when save has no changes', async () => {
+      // Create a provider-backed item — title is readonly, so only notes can change
+      const item = await graph.createItem({ title: 'Task' }, { providerId: 'test', externalId: 'e1' });
+      WorkItemEditorPanel.open(context, graph, item);
+
+      // Send autosave with no notes change — should be a no-op
+      mockPanel.webview._fireMessage({
+        type: 'autosave',
+        data: { title: 'Task' },
+      });
+
+      await vi.waitFor(() => {
+        expect(mockPanel.webview.postMessage).toHaveBeenCalledWith(
+          expect.objectContaining({ type: 'saveResult', success: true, noop: true }),
+        );
+      });
+    });
+
     it('posts saveResult failure when item was deleted', async () => {
       const item = await graph.createItem({ title: 'Task' });
       WorkItemEditorPanel.open(context, graph, item);
