@@ -77,6 +77,10 @@ Key files:
 - Migration logic runs on activation before tree registration to seed existing WorkItems as 'accepted'
 - Items with no persisted state default to 'unseen' — allows new providers to introduce items without re-surfacing old ones
 
+### Editor Panel HTML
+- The editor heading (`<h2 id="editor-heading">`) uses `escapeHtml(item.title)` instead of a generic "Edit Work Item" string — keeps it contextual while preserving `aria-labelledby` accessibility (Issue #221)
+- `escapeHtml` and `escapeAttr` are local helpers in `editorPanelHtml.ts` — use `escapeHtml` for text content, `escapeAttr` for attribute values
+
 ## Code Review Fixes (2026-03-24)
 
 Fixed all Critical (C1-C7) and Important (I1-I8) issues from Keaton's review for PR #1:
