@@ -244,7 +244,7 @@ Patterns documented in `.squad/decisions.md` under "Code Review Fix Patterns" (2
 **Status:** COMPLETE — Provider labels now display in queue view instead of raw IDs
 
 ### Summary
-The queue view was displaying raw provider IDs (e.g., `github`, `ado`) in tree items. Extracted `getProviderLabel()` method from `WorkItemViewProvider` base class and applied it in `QueueTreeProvider` to show human-readable labels (e.g., "GitHub", "Azure DevOps").
+The queue view was displaying raw provider IDs (e.g., `github`, `ado`) in tree items. Extracted `getProviderLabel()` method from `WorkItemViewProvider` base class and applied it in `QueueTreeProvider` to show human-readable labels (e.g., "GitHub Issues").
 
 ### Files Modified
 - `packages/core/src/views/queueTreeProvider.ts` — Updated tree item label rendering
