@@ -101,7 +101,7 @@ describe('getEditorPanelHtml', () => {
       const descLabelPattern = /<label[^>]*>.*?Provider Description.*?<\/label>/s;
       expect(html).not.toMatch(descLabelPattern);
       // CSS class exists in <style>, but no actual description div in body
-      expect(html).not.toContain('<div class="provider-description">');
+      expect(html).not.toContain('provider-desc-label');
     });
 
     it('does not render a description section when providerDescription is empty', () => {
