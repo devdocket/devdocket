@@ -319,10 +319,11 @@ export abstract class WorkItemViewProvider implements vscode.TreeDataProvider<Wo
   refresh(): void { this._onDidChangeTreeData.fire(); }
 
   protected getProviderLabel(providerId: string | undefined): string | undefined {
-    if (!providerId) {
-      return providerId;
+    const normalizedProviderId = providerId?.trim();
+    if (!normalizedProviderId) {
+      return undefined;
     }
-    return this.labelResolver?.(providerId) ?? providerId;
+    return this.labelResolver?.(normalizedProviderId) ?? normalizedProviderId;
   }
 
   /** Return the WorkItems this view cares about (before sorting). */
