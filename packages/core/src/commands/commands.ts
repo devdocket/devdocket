@@ -4,7 +4,7 @@ import { WorkGraph } from '../services/workGraph';
 import { ActionRegistry } from '../services/actionRegistry';
 import { ProviderRegistry } from '../services/providerRegistry';
 import { DiscoveredStateStore, type InboxState } from '../storage/discoveredStateStore';
-import { ProviderLabelCache } from '../storage/providerLabelCache';
+import type { ProviderLabelCache } from '../storage/providerLabelCache';
 import { WorkItemEditorPanel } from '../views/workItemEditorPanel';
 import { type InboxItem, type InboxElement } from '../views/inboxTreeProvider';
 import { type SourceItemNode, type SourcesElement } from '../views/sourcesTreeProvider';
