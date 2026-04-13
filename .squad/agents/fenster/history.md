@@ -26,6 +26,8 @@ Key files:
 
 ## Learnings
 
+- Layout toggle dynamic icons: VS Code requires separate command IDs for different icons. Pattern: register two commands per toggle (e.g., `switchXToTree` and `switchXToFlat`), each with its own icon. Use context keys (`workcenter.${id}Layout`) set on activation + config change listener in `extension.ts` (lines ~332-354). Menu entries use `when` clauses (e.g., `workcenter.inboxLayout == flat`) to show only the relevant command. Add `commandPalette` entries with matching `when` clauses to hide the irrelevant variant from the palette.
+  - Key files: `package.json` (commands, menus.view/title, menus.commandPalette), `commands.ts` (registrations), `extension.ts` (context key init + config listener), `viewLayout.ts` (toggle logic).
 - GitHub package (`packages/github/`) vscode mock lives at `packages/github/src/test/__mocks__/vscode.ts`, aliased in `vitest.config.ts` — mirrors core mock pattern but adds `authentication`, `workspace`, `extensions` mocks.
 - Mock includes: `authentication.getSession` (resolves with `{ accessToken: 'mock-token' }`), `workspace.getConfiguration` (returns `.get(key, default)` stub), `workspace.workspaceFolders`, `extensions.getExtension`, `commands.executeCommand`, `Uri.file`, `window.showErrorMessage`.
 - Root `npm install` handles all workspace deps via npm workspaces. Root `npm run build` runs esbuild in both packages.

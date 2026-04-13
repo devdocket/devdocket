@@ -373,4 +373,30 @@ mockFetch.mockImplementation(async (url: string) => {
 
 **Key learning:** The bug in issue #189 was present in the codebase. The root cause was explicit resurface logic (`resurfaceDismissed`) that reset dismissed items when they were rediscovered, causing them to reappear. The correct fix was to remove that resurface behavior; the tests now document the expected dismissed-state preservation and guard against future regressions.
 
+### Layout Toggle Visual Indicator Tests (Issue #230)
+
+**Issue:** Layout toggle button had no visual indicator of current mode. Fenster added context key setting (`workcenter.${id}Layout`) in `extension.ts` lines 332-354, fired on activation and on `workcenter.viewLayout` config changes.
+
+**Tests added:** 10 new tests across 2 files (9 in viewLayout.test.ts + 1 in extension.test.ts)
+
+**`viewLayout.test.ts`** — 9 new tests:
+- `toggleViewLayout — edge cases`: preserves sibling layouts, strips invalid view IDs, strips invalid layout values, reads globalValue scope correctly (4 tests)
+- `LayoutState`: fires on flat→tree, fires on tree→flat, no-op on same value, initializes with default, fires only on actual transitions (5 tests)
+
+**`extension.test.ts`** — 1 new test:
+- `sets correct default values for layout context keys`: verifies context key VALUES (not just presence) match defaults (inbox=tree, queue=flat, focus=flat, history=flat, sources=tree)
+- Enhanced existing config-change test (test 19) to verify context key VALUES after update (focus=tree, queue=tree, inbox=tree default, history=flat default)
+
+**Key files:**
+- `packages/core/src/views/viewLayout.ts` — `toggleViewLayout()`, `LayoutState`, `sanitizeLayouts()`
+- `packages/core/src/extension.ts` — Context key setting (lines 332-354)
+- `packages/core/src/test/viewLayout.test.ts` — 28 tests (was 19)
+- `packages/core/src/test/extension.test.ts` — 22 tests (was 21)
+
+**Test results:** 874 total tests passing (was 864, +10). No regressions.
+
+**Key patterns:**
+- `LayoutState` class testable in isolation — just pass a `vi.fn()` callback and assert fire count
+- `sanitizeLayouts()` is exercised indirectly via `toggleViewLayout()` — invalid entries in stored config are stripped when toggle persists
+- Context key values verified via `Object.fromEntries(setContextCalls.map(...))` pattern to build key→value map from `executeCommand` mock calls
 
