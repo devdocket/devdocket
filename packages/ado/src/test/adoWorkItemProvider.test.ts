@@ -113,7 +113,7 @@ describe('AdoWorkItemProvider', () => {
       title: 'User Story 1: Fix login bug',
       description: 'Description for 1',
       url: 'https://dev.azure.com/myorg/MyProject/_workitems/edit/1',
-      group: 'MyProject',
+      group: 'myorg/MyProject',
       reason: 'assigned',
     });
     expect(items[1]).toEqual({
@@ -121,7 +121,7 @@ describe('AdoWorkItemProvider', () => {
       title: 'Bug 2: Add search',
       description: 'Description for 2',
       url: 'https://dev.azure.com/myorg/MyProject/_workitems/edit/2',
-      group: 'MyProject',
+      group: 'myorg/MyProject',
       reason: 'assigned',
     });
   });
