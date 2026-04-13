@@ -373,6 +373,28 @@ describe('WorkItemEditorPanel', () => {
 
       expect(vscode.env.openExternal).not.toHaveBeenCalled();
     });
+
+    it('should not call openExternal for javascript: URL', () => {
+      const item = makeItem();
+      const workGraph = createMockWorkGraph(item);
+      const mock = createMockWebviewPanel();
+      openPanel(item, workGraph, mock);
+
+      mock.simulateMessage({ type: 'openUrl', url: 'javascript:alert(1)' });
+
+      expect(vscode.env.openExternal).not.toHaveBeenCalled();
+    });
+
+    it('should not call openExternal for data: URL', () => {
+      const item = makeItem();
+      const workGraph = createMockWorkGraph(item);
+      const mock = createMockWebviewPanel();
+      openPanel(item, workGraph, mock);
+
+      mock.simulateMessage({ type: 'openUrl', url: 'data:text/html,<h1>hi</h1>' });
+
+      expect(vscode.env.openExternal).not.toHaveBeenCalled();
+    });
   });
 
   describe('message handling (autosave)', () => {

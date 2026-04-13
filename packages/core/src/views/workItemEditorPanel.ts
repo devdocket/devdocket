@@ -2,6 +2,7 @@ import * as vscode from 'vscode';
 import { WorkItem, WorkItemInput } from '../models/workItem';
 import { WorkGraph } from '../services/workGraph';
 import { getEditorPanelHtml } from './editorPanelHtml';
+import { isSafeUrl } from '../commands/commands';
 
 export class WorkItemEditorPanel {
   private static readonly viewType = 'workcenter.editItem';
@@ -62,7 +63,10 @@ export class WorkItemEditorPanel {
 
     this.messageSubscription = this.panel.webview.onDidReceiveMessage((msg) => {
       if (msg?.type === 'openUrl' && typeof msg.url === 'string') {
-        vscode.env.openExternal(vscode.Uri.parse(msg.url));
+        const safeUrl = isSafeUrl(msg.url);
+        if (safeUrl) {
+          vscode.env.openExternal(vscode.Uri.parse(safeUrl.href));
+        }
         return;
       }
       if (msg?.type === 'autosave' && msg.data && typeof msg.data === 'object') {
