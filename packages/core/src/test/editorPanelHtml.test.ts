@@ -87,7 +87,7 @@ describe('getEditorPanelHtml', () => {
       const item = makeItem({ url: 'https://github.com/org/repo/issues/42' });
       const html = getEditorPanelHtml({ cspSource, item });
       expect(html).toContain('id="source-link"');
-      expect(html).toMatch(/<a\s[^>]*data-url="https:\/\/github\.com\/org\/repo\/issues\/42"/);
+      expect(html).toMatch(/<button\s[^>]*data-url="https:\/\/github\.com\/org\/repo\/issues\/42"/);
       expect(html).toContain('Open in source');
     });
 

@@ -118,7 +118,10 @@ export function getEditorPanelHtml({ cspSource, item }: EditorHtmlOptions): stri
       margin-bottom: 14px;
       color: var(--vscode-textLink-foreground);
       cursor: pointer;
-      text-decoration: none;
+      background: none;
+      border: none;
+      padding: 0;
+      font-family: inherit;
     }
     .source-link:hover {
       color: var(--vscode-textLink-activeForeground);
@@ -128,7 +131,7 @@ export function getEditorPanelHtml({ cspSource, item }: EditorHtmlOptions): stri
 </head>
 <body>
   <h2 id="editor-heading">Edit Work Item</h2>
-${item.url ? `  <a class="source-link" id="source-link" role="link" tabindex="0" data-url="${escapeAttr(item.url)}">↗ Open in source</a>` : ''}
+${item.url ? `  <button type="button" class="source-link" id="source-link" data-url="${escapeAttr(item.url)}">↗ Open in source</button>` : ''}
   <div id="form" role="form" aria-labelledby="editor-heading">
     <div class="field">
       <label for="title">Title</label>

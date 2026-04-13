@@ -2,7 +2,7 @@ import * as vscode from 'vscode';
 import { WorkItem, WorkItemInput } from '../models/workItem';
 import { WorkGraph } from '../services/workGraph';
 import { getEditorPanelHtml } from './editorPanelHtml';
-import { isSafeUrl } from '../commands/commands';
+import { isSafeUrl } from '../utils/url';
 
 export class WorkItemEditorPanel {
   private static readonly viewType = 'workcenter.editItem';
@@ -65,7 +65,7 @@ export class WorkItemEditorPanel {
       if (msg?.type === 'openUrl' && typeof msg.url === 'string') {
         const safeUrl = isSafeUrl(msg.url);
         if (safeUrl) {
-          vscode.env.openExternal(vscode.Uri.parse(safeUrl.href));
+          void vscode.env.openExternal(vscode.Uri.parse(safeUrl.href));
         }
         return;
       }
