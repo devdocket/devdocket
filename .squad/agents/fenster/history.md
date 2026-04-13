@@ -26,6 +26,8 @@ Key files:
 
 ## Learnings
 
+- **Editor metadata section (Issue #217):** Added a read-only metadata section to the editor panel HTML showing state (as a colored badge), provider name (when available via `ProviderLabelCache`), and created/updated timestamps. The `EditorHtmlOptions` interface gained an optional `providerLabel` field. When `providerLabel` is absent but `providerId` exists, the provider row is hidden — the label cache is the source of truth for display names. Threading the label cache required changes through `commands.ts` → `registerCommands()` → `handleEditItem()` → `WorkItemEditorPanel.open()`. State labels use human-friendly text (e.g. `InProgress` → `In Progress`) with CSS badge classes keyed to VS Code theme variables.
+
 - GitHub package (`packages/github/`) vscode mock lives at `packages/github/src/test/__mocks__/vscode.ts`, aliased in `vitest.config.ts` — mirrors core mock pattern but adds `authentication`, `workspace`, `extensions` mocks.
 - Mock includes: `authentication.getSession` (resolves with `{ accessToken: 'mock-token' }`), `workspace.getConfiguration` (returns `.get(key, default)` stub), `workspace.workspaceFolders`, `extensions.getExtension`, `commands.executeCommand`, `Uri.file`, `window.showErrorMessage`.
 - Root `npm install` handles all workspace deps via npm workspaces. Root `npm run build` runs esbuild in both packages.

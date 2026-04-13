@@ -19,10 +19,12 @@ export class WorkItemEditorPanel {
     context: vscode.ExtensionContext,
     workGraph: WorkGraph,
     item: WorkItem,
+    providerLabel?: string,
   ): void {
     const existing = WorkItemEditorPanel.openPanels.get(item.id);
     if (existing) {
       existing.panel.title = `Edit: ${item.title}`;
+      existing.providerLabel = providerLabel;
       existing.update();
       existing.panel.reveal();
       return;
@@ -35,7 +37,7 @@ export class WorkItemEditorPanel {
       { enableScripts: true, retainContextWhenHidden: true },
     );
 
-    const editor = new WorkItemEditorPanel(panel, workGraph, item.id);
+    const editor = new WorkItemEditorPanel(panel, workGraph, item.id, providerLabel);
     WorkItemEditorPanel.openPanels.set(item.id, editor);
     context.subscriptions.push({ dispose: () => editor.dispose() });
   }
@@ -53,6 +55,7 @@ export class WorkItemEditorPanel {
     panel: vscode.WebviewPanel,
     workGraph: WorkGraph,
     itemId: string,
+    private providerLabel?: string,
   ) {
     this.panel = panel;
     this.workGraph = workGraph;
@@ -133,6 +136,7 @@ export class WorkItemEditorPanel {
     return getEditorPanelHtml({
       cspSource: this.panel.webview.cspSource,
       item,
+      providerLabel: this.providerLabel,
     });
   }
 

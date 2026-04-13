@@ -373,4 +373,29 @@ mockFetch.mockImplementation(async (url: string) => {
 
 **Key learning:** The bug in issue #189 was present in the codebase. The root cause was explicit resurface logic (`resurfaceDismissed`) that reset dismissed items when they were rediscovered, causing them to reappear. The correct fix was to remove that resurface behavior; the tests now document the expected dismissed-state preservation and guard against future regressions.
 
+### Editor Metadata Section Tests (Issue #217)
+
+**Tests added:** 10 new tests in `packages/core/src/test/editorPanelHtml.test.ts` under `metadata section` describe block.
+
+**What's tested:**
+1. Metadata section exists with `class="metadata"` and `aria-label`
+2. State value rendered in metadata (uses display label, e.g. `InProgress` → `"In Progress"`)
+3. All 5 WorkItemState values render correct display labels
+4. Correct badge CSS class applied per state (badge-new, badge-inprogress, badge-paused, badge-done, badge-archived)
+5. Provider name shown when both `providerId` and `providerLabel` are provided
+6. Provider row hidden when `providerLabel` is not supplied (even with `providerId`)
+7. Provider row hidden for manual items (no `providerId`)
+8. Created timestamp rendered as formatted date (not raw epoch)
+9. Updated timestamp rendered as formatted date (not raw epoch)
+10. HTML entities escaped in provider label (XSS prevention)
+
+**Concurrent development challenge:** Fenster was actively editing `editorPanelHtml.ts` during test writing. The implementation changed between test runs (state label toggling between raw enum and display format, provider condition changing between `providerId`-only and `providerId && providerLabel`). Required re-reading source after each failed run to match the current implementation.
+
+**Key patterns:**
+- `getMetadataSection()` helper extracts metadata `<dl>` content for targeted assertions, avoiding false positives from other parts of the HTML
+- `EditorHtmlOptions` gained optional `providerLabel` parameter — provider row requires both `providerId` AND `providerLabel`
+- `stateLabel()` maps `InProgress` → `"In Progress"` (only non-trivial mapping); all other states use raw enum value
+- Timestamp tests use dates from 2024 and verify the year appears while raw epoch does NOT appear
+
+**Test results:** 875 tests passing (29 test files). 10 new tests, 9 existing tests unchanged.
 

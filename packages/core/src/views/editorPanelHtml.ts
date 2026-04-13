@@ -1,12 +1,14 @@
 import * as crypto from 'crypto';
-import { WorkItem } from '../models/workItem';
+import { WorkItem, WorkItemState } from '../models/workItem';
 
 export interface EditorHtmlOptions {
   cspSource: string;
   item: WorkItem;
+  /** Display label for the provider, shown only when item.providerId is set. */
+  providerLabel?: string;
 }
 
-export function getEditorPanelHtml({ cspSource, item }: EditorHtmlOptions): string {
+export function getEditorPanelHtml({ cspSource, item, providerLabel }: EditorHtmlOptions): string {
   const nonce = getNonce();
   return /*html*/ `<!DOCTYPE html>
 <html lang="en">
@@ -110,6 +112,61 @@ export function getEditorPanelHtml({ cspSource, item }: EditorHtmlOptions): stri
       margin-top: 2px;
       display: block;
     }
+    .metadata {
+      margin-top: 24px;
+      padding-top: 16px;
+      border-top: 1px solid var(--input-border);
+    }
+    .metadata-heading {
+      font-size: 0.8em;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      opacity: 0.7;
+      margin-bottom: 10px;
+    }
+    .metadata dl {
+      display: grid;
+      grid-template-columns: auto 1fr;
+      gap: 6px 16px;
+      align-items: baseline;
+      margin: 0;
+    }
+    .metadata dt {
+      font-size: 0.85em;
+      opacity: 0.7;
+    }
+    .metadata dd {
+      font-size: 0.85em;
+      margin: 0;
+    }
+    .badge {
+      display: inline-block;
+      padding: 1px 8px;
+      border-radius: 10px;
+      font-size: 0.85em;
+      font-weight: 500;
+    }
+    .badge-new {
+      background: var(--vscode-badge-background);
+      color: var(--vscode-badge-foreground);
+    }
+    .badge-inprogress {
+      background: var(--vscode-terminal-ansiGreen, #388a34);
+      color: #fff;
+    }
+    .badge-paused {
+      background: var(--vscode-editorWarning-foreground, #cca700);
+      color: #000;
+    }
+    .badge-done {
+      background: var(--vscode-testing-iconPassed, #73c991);
+      color: #000;
+    }
+    .badge-archived {
+      background: var(--vscode-disabledForeground, #888);
+      color: #fff;
+    }
   </style>
 </head>
 <body>
@@ -124,6 +181,19 @@ ${item.providerId ? '      <span id="readonly-title-hint" class="hint">Title is 
       <label for="notes">Notes</label>
       <textarea id="notes" placeholder="Add notes...">${escapeHtml(item.notes ?? '')}</textarea>
     </div>
+  </div>
+  <div class="metadata" aria-label="Item metadata">
+    <div class="metadata-heading">Details</div>
+    <dl>
+      <dt>State</dt>
+      <dd><span class="badge ${stateBadgeClass(item.state)}">${escapeHtml(stateLabel(item.state))}</span></dd>
+${item.providerId && providerLabel ? `      <dt>Provider</dt>
+      <dd>${escapeHtml(providerLabel)}</dd>` : ''}
+      <dt>Created</dt>
+      <dd>${escapeHtml(formatTimestamp(item.createdAt))}</dd>
+      <dt>Updated</dt>
+      <dd>${escapeHtml(formatTimestamp(item.updatedAt))}</dd>
+    </dl>
   </div>
   <script nonce="${nonce}">
     const vscode = acquireVsCodeApi();
@@ -162,6 +232,28 @@ ${item.providerId ? '      <span id="readonly-title-hint" class="hint">Title is 
 
 function getNonce(): string {
   return crypto.randomBytes(16).toString('hex');
+}
+
+function formatTimestamp(epoch: number): string {
+  const d = new Date(epoch);
+  return d.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' }) +
+    ' ' + d.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
+}
+
+function stateLabel(state: WorkItemState): string {
+  if (state === WorkItemState.InProgress) { return 'In Progress'; }
+  return state;
+}
+
+function stateBadgeClass(state: WorkItemState): string {
+  switch (state) {
+    case WorkItemState.New: return 'badge-new';
+    case WorkItemState.InProgress: return 'badge-inprogress';
+    case WorkItemState.Paused: return 'badge-paused';
+    case WorkItemState.Done: return 'badge-done';
+    case WorkItemState.Archived: return 'badge-archived';
+    default: return 'badge-new';
+  }
 }
 
 function escapeHtml(s: string): string {

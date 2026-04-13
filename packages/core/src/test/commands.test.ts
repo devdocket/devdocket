@@ -6,6 +6,7 @@ import type { WorkGraph } from '../services/workGraph';
 import type { ActionRegistry } from '../services/actionRegistry';
 import type { ProviderRegistry } from '../services/providerRegistry';
 import type { DiscoveredStateStore } from '../storage/discoveredStateStore';
+import type { ProviderLabelCache } from '../storage/providerLabelCache';
 import type { InboxItem, InboxProviderNode, InboxGroupNode } from '../views/inboxTreeProvider';
 import type { SourceItemNode, SourceProviderNode, SourceGroupNode } from '../views/sourcesTreeProvider';
 import { WorkItemEditorPanel } from '../views/workItemEditorPanel';
@@ -96,6 +97,14 @@ function createMockProviderRegistry(): { [K in keyof UsedProviderRegistryMethods
   };
 }
 
+type UsedLabelCacheMethods = Pick<ProviderLabelCache, 'get'>;
+
+function createMockLabelCache(): { [K in keyof UsedLabelCacheMethods]: Mock } {
+  return {
+    get: vi.fn(),
+  };
+}
+
 // ── test setup ───────────────────────────────────────────────────────
 
 // Capture handlers registered via vscode.commands.registerCommand
@@ -112,6 +121,7 @@ describe('registerCommands', () => {
   let actionRegistry: ReturnType<typeof createMockActionRegistry>;
   let stateStore: ReturnType<typeof createMockStateStore>;
   let providerRegistry: ReturnType<typeof createMockProviderRegistry>;
+  let labelCache: ReturnType<typeof createMockLabelCache>;
   let ctx: vscode.ExtensionContext;
 
   beforeEach(() => {
@@ -133,9 +143,10 @@ describe('registerCommands', () => {
     actionRegistry = createMockActionRegistry();
     stateStore = createMockStateStore();
     providerRegistry = createMockProviderRegistry();
+    labelCache = createMockLabelCache();
     ctx = createMockContext();
 
-    registerCommands(ctx, workGraph as any, actionRegistry as any, stateStore as any, providerRegistry as any);
+    registerCommands(ctx, workGraph as any, actionRegistry as any, stateStore as any, providerRegistry as any, labelCache as any);
   });
 
   // helper to invoke a registered command
@@ -261,7 +272,18 @@ describe('registerCommands', () => {
       invoke('workcenter.editItem', { id: item.id });
 
       expect(workGraph.getItem).toHaveBeenCalledWith(item.id);
-      expect(WorkItemEditorPanel.open).toHaveBeenCalledWith(ctx, workGraph, item);
+      expect(WorkItemEditorPanel.open).toHaveBeenCalledWith(ctx, workGraph, item, undefined);
+    });
+
+    it('passes provider label when item has providerId', () => {
+      const item = createWorkItem({ providerId: 'github' });
+      workGraph.getItem.mockReturnValue(item);
+      labelCache.get.mockReturnValue('GitHub Issues');
+
+      invoke('workcenter.editItem', { id: item.id });
+
+      expect(labelCache.get).toHaveBeenCalledWith('github');
+      expect(WorkItemEditorPanel.open).toHaveBeenCalledWith(ctx, workGraph, item, 'GitHub Issues');
     });
 
     it('does not open editor when item is not found', () => {
