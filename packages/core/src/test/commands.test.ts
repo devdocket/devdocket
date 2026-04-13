@@ -261,7 +261,7 @@ describe('registerCommands', () => {
       invoke('workcenter.editItem', { id: item.id });
 
       expect(workGraph.getItem).toHaveBeenCalledWith(item.id);
-      expect(WorkItemEditorPanel.open).toHaveBeenCalledWith(ctx, workGraph, item);
+      expect(WorkItemEditorPanel.open).toHaveBeenCalledWith(ctx, workGraph, providerRegistry, item);
     });
 
     it('does not open editor when item is not found', () => {

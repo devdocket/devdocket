@@ -81,4 +81,66 @@ describe('getEditorPanelHtml', () => {
     const nonce2 = html2.match(/nonce="([^"]+)"/)![1];
     expect(nonce1).not.toBe(nonce2);
   });
+
+  describe('provider description', () => {
+    it('renders a description section when providerDescription is provided', () => {
+      const html = getEditorPanelHtml({
+        cspSource,
+        item: makeItem({ providerId: 'github' }),
+        providerDescription: 'Fix the login bug on the main page',
+      });
+      expect(html).toContain('Fix the login bug on the main page');
+      expect(html).toContain('Provider Description');
+    });
+
+    it('does not render a description section when providerDescription is omitted', () => {
+      const html = getEditorPanelHtml({
+        cspSource,
+        item: makeItem({ providerId: 'github' }),
+      });
+      const descLabelPattern = /<label[^>]*>.*?Provider Description.*?<\/label>/s;
+      expect(html).not.toMatch(descLabelPattern);
+      // CSS class exists in <style>, but no actual description div in body
+      expect(html).not.toContain('<div class="provider-description">');
+    });
+
+    it('does not render a description section when providerDescription is empty', () => {
+      const html = getEditorPanelHtml({
+        cspSource,
+        item: makeItem({ providerId: 'github' }),
+        providerDescription: '',
+      });
+      const descLabelPattern = /<label[^>]*>.*?Provider Description.*?<\/label>/s;
+      expect(html).not.toMatch(descLabelPattern);
+    });
+
+    it('HTML-escapes the description to prevent XSS', () => {
+      const xss = '<img src=x onerror="alert(1)"> & "quotes"';
+      const html = getEditorPanelHtml({
+        cspSource,
+        item: makeItem({ providerId: 'github' }),
+        providerDescription: xss,
+      });
+      expect(html).not.toContain('<img src=x');
+      expect(html).toContain('&lt;img src=x');
+      expect(html).toContain('&amp;');
+    });
+
+    it('renders the description as a non-editable div, not an input or textarea', () => {
+      const html = getEditorPanelHtml({
+        cspSource,
+        item: makeItem({ providerId: 'github' }),
+        providerDescription: 'Some provider description',
+      });
+      // The description should be in a div (inherently read-only), not an input/textarea
+      const descIndex = html.indexOf('Some provider description');
+      expect(descIndex).toBeGreaterThan(-1);
+
+      const before = html.substring(0, descIndex);
+      const lastTagOpen = before.lastIndexOf('<');
+      const containingTag = html.substring(lastTagOpen, descIndex);
+      expect(containingTag).toMatch(/^<div\b/);
+      expect(containingTag).not.toMatch(/^<(input|textarea)\b/);
+    });
+  });
 });
