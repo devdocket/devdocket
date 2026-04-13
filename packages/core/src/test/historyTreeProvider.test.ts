@@ -1,7 +1,9 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { EventEmitter, TreeItemCollapsibleState } from 'vscode';
 import { WorkItem, WorkItemState } from '../models/workItem';
-import { HistoryTreeProvider } from '../views/historyTreeProvider';function createMockWorkGraph(items: WorkItem[] = []) {
+import { HistoryTreeProvider } from '../views/historyTreeProvider';
+
+function createMockWorkGraph(items: WorkItem[] = []) {
   const emitter = new EventEmitter<void>();
   return {
     getItemsByState: vi.fn((...states: WorkItemState[]) =>

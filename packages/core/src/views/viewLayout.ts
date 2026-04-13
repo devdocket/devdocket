@@ -135,12 +135,6 @@ export type LabelResolver = (providerId: string) => string;
 export type TitleResolver = (providerId: string, externalId: string) => string | undefined;
 
 /**
- * Resolves the live title for a provider-backed work item.
- * Returns the current title from the provider if available, or `undefined` to fall back to the persisted title.
- */
-export type TitleResolver = (providerId: string, externalId: string) => string | undefined;
-
-/**
  * Group WorkItems by providerId into ProviderGroupNodes.
  * Items without a providerId (or with an empty/whitespace one) are grouped under "Other" (sorted last).
  *
