@@ -32,6 +32,7 @@ Key files:
 - Both packages use esbuild with `--external:vscode --format=cjs --platform=node`.
 - Core has 38 tests (4 test files). GitHub package has test infra ready but no test files yet.
 - Key github source files: `githubProvider.ts` (fetches GitHub issues via REST API), `startWorkAction.ts` (creates git branch + worktree), `extension.ts` (acquires core API, registers provider + action).
+- **Save status feedback (#220):** Extension host → webview communication uses `panel.webview.postMessage({ type: 'saveResult', ... })`. Mock webview panels in tests need a `postMessage: vi.fn(async () => true)` stub. The webview listens via `window.addEventListener('message', ...)` and reads `event.data`. CSS transitions (opacity fade) + `setTimeout` handle the "Saved" fadeout. VS Code theme variables (`--vscode-descriptionForeground`, `--vscode-errorForeground`) keep styling consistent with the editor.
 
 ## Phase 2 Completion (2026-03-24)
 

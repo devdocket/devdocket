@@ -39,6 +39,33 @@ export function getEditorPanelHtml({ cspSource, item }: EditorHtmlOptions): stri
       font-weight: 600;
       margin-bottom: 16px;
     }
+    .heading-row {
+      display: flex;
+      align-items: baseline;
+      gap: 12px;
+      margin-bottom: 16px;
+    }
+    .heading-row h2 {
+      margin-bottom: 0;
+    }
+    #save-status {
+      font-size: 0.8em;
+      opacity: 0;
+      transition: opacity 0.3s ease;
+      white-space: nowrap;
+    }
+    #save-status.visible {
+      opacity: 1;
+    }
+    #save-status.saving {
+      color: var(--vscode-descriptionForeground, rgba(128,128,128,0.8));
+    }
+    #save-status.saved {
+      color: var(--vscode-descriptionForeground, rgba(128,128,128,0.8));
+    }
+    #save-status.error {
+      color: var(--vscode-errorForeground, #f44747);
+    }
     .field {
       margin-bottom: 14px;
     }
@@ -113,7 +140,10 @@ export function getEditorPanelHtml({ cspSource, item }: EditorHtmlOptions): stri
   </style>
 </head>
 <body>
-  <h2 id="editor-heading">Edit Work Item</h2>
+  <div class="heading-row">
+    <h2 id="editor-heading">Edit Work Item</h2>
+    <span id="save-status"></span>
+  </div>
   <div id="form" role="form" aria-labelledby="editor-heading">
     <div class="field">
       <label for="title">Title</label>
@@ -129,6 +159,15 @@ ${item.providerId ? '      <span id="readonly-title-hint" class="hint">Title is 
     const vscode = acquireVsCodeApi();
     const fields = ['title', 'notes'];
     let debounceTimer = null;
+    let fadeTimer = null;
+
+    const statusEl = document.getElementById('save-status');
+
+    function showStatus(text, className) {
+      if (fadeTimer) { clearTimeout(fadeTimer); fadeTimer = null; }
+      statusEl.textContent = text;
+      statusEl.className = className + ' visible';
+    }
 
     function getData() {
       return {
@@ -143,9 +182,24 @@ ${item.providerId ? '      <span id="readonly-title-hint" class="hint">Title is 
         const data = getData();
         const titleEl = document.getElementById('title');
         if (!data.title && titleEl instanceof HTMLInputElement && !titleEl.readOnly) return;
+        showStatus('Saving\u2026', 'saving');
         vscode.postMessage({ type: 'autosave', data });
       }, 500);
     }
+
+    window.addEventListener('message', (event) => {
+      const msg = event.data;
+      if (msg && msg.type === 'saveResult') {
+        if (msg.success) {
+          showStatus('Saved', 'saved');
+          fadeTimer = setTimeout(() => {
+            statusEl.classList.remove('visible');
+          }, 2000);
+        } else {
+          showStatus(msg.error || 'Save failed', 'error');
+        }
+      }
+    });
 
     fields.forEach(f => {
       const el = document.getElementById(f);

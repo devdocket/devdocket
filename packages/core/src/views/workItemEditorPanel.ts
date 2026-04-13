@@ -162,8 +162,14 @@ export class WorkItemEditorPanel {
     this.saveQueue = this.saveQueue.then(async () => {
       try {
         await this.saveData(data);
+        if (!this.disposed) {
+          this.panel.webview.postMessage({ type: 'saveResult', success: true });
+        }
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
+        if (!this.disposed) {
+          this.panel.webview.postMessage({ type: 'saveResult', success: false, error: message });
+        }
         vscode.window.showErrorMessage(`Failed to save work item: ${message}`);
       }
     });

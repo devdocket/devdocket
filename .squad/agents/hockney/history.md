@@ -373,4 +373,24 @@ mockFetch.mockImplementation(async (url: string) => {
 
 **Key learning:** The bug in issue #189 was present in the codebase. The root cause was explicit resurface logic (`resurfaceDismissed`) that reset dismissed items when they were rediscovered, causing them to reappear. The correct fix was to remove that resurface behavior; the tests now document the expected dismissed-state preservation and guard against future regressions.
 
+### Save Status Indicator Tests (Issue #220)
+
+**Context:** Fenster added a save-status indicator to the editor webview. The extension host posts `saveResult` messages (success/failure) back to the webview after each autosave. The webview shows "Saving..." during autosave and updates to "Saved" or displays an error.
+
+**Tests added:** 9 new tests across 2 files (864 → 873 total passing)
+
+**`editorPanelHtml.test.ts`** — 2 new tests:
+1. **contains a save-status element** — Verify the HTML includes an element with `id="save-status"`
+2. **save-status element is present for provider-owned items** — Verify provider items also get the status element
+
+**`workItemEditorPanel.test.ts`** — 5 unit + 3 integration tests:
+- Unit: **post saveResult success/failure**, **error message in saveResult**, **saveResult failure when item missing**
+- Integration: **saveResult success through real WorkGraph**, **saveResult failure on deleted item**, **error string included in failure**
+
+**Key observations:**
+- Fenster's implementation was already in place when I started — `enqueueSave()` already calls `postMessage({ type: 'saveResult', ... })` with `disposed` guard
+- The HTML template already had `<span id="save-status"></span>` and client-side JS to handle `saveResult` messages
+- Both mock panel helpers (`createMockWebviewPanel` and `createIntegrationWebviewPanel`) already had `postMessage: vi.fn()` mocked — confirming previous test infrastructure anticipated this pattern
+- The `disposed` guard on `postMessage` prevents sending messages to a closed panel, matching the existing pattern for `panel.title` updates
+
 
