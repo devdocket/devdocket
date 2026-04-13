@@ -27,7 +27,7 @@ Key files:
 ## Learnings
 
 - **Empty state messages** use VS Code's `viewsWelcome` contribution in `packages/core/package.json`. Each entry has a `view` (matching a view ID like `workcenter.inbox`) and `contents` (markdown string). VS Code displays these automatically when a TreeDataProvider returns no children. Command buttons use `[Label](command:commandId)` markdown syntax. No `when` clause needed — VS Code handles the empty-tree condition natively.
-- GitHub package (`packages/github/`) vscode mock lives at`packages/github/src/test/__mocks__/vscode.ts`, aliased in `vitest.config.ts` — mirrors core mock pattern but adds `authentication`, `workspace`, `extensions` mocks.
+- GitHub package (`packages/github/`) vscode mock lives at `packages/github/src/test/__mocks__/vscode.ts`, aliased in `vitest.config.ts` — mirrors core mock pattern but adds `authentication`, `workspace`, `extensions` mocks.
 - Mock includes: `authentication.getSession` (resolves with `{ accessToken: 'mock-token' }`), `workspace.getConfiguration` (returns `.get(key, default)` stub), `workspace.workspaceFolders`, `extensions.getExtension`, `commands.executeCommand`, `Uri.file`, `window.showErrorMessage`.
 - Root `npm install` handles all workspace deps via npm workspaces. Root `npm run build` runs esbuild in both packages.
 - Both packages use esbuild with `--external:vscode --format=cjs --platform=node`.
