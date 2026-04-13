@@ -239,6 +239,26 @@ Patterns documented in `.squad/decisions.md` under "Code Review Fix Patterns" (2
 - **Defensive async loading**: When a synchronous getter reads from an async-loaded cache, ensure the cache is loaded at every call site. Don't rely solely on initialization order guarantees.
 - **Test timing**: When production code adds an async operation to a previously-synchronous code path, tests that fire-and-forget events need to wait for async handlers to complete before asserting on side effects.
 
+## Issue #227: Queue View Provider Labels (2026-04-13)
+
+**Status:** COMPLETE — Provider labels now display in queue view instead of raw IDs
+
+### Summary
+The queue view was displaying raw provider IDs (e.g., `github`, `ado`) in tree items. Extracted `getProviderLabel()` method from `WorkItemViewProvider` base class and applied it in `QueueTreeProvider` to show human-readable labels (e.g., "GitHub", "Azure DevOps").
+
+### Files Modified
+- `packages/core/src/views/queueTreeProvider.ts` — Updated tree item label rendering
+- `packages/core/src/views/baseWorkItemViewProvider.ts` — Extracted `getProviderLabel()` method for reuse across all views
+
+### Key Learnings
+- **Label centralization**: Extracting label lookup into the base class prevents duplication and ensures consistency. Any future view that needs provider labels automatically gets the same logic.
+- **Provider registry lookup**: The `getProviderLabel()` method uses the `ProviderRegistry` to look up the display name. Falls back gracefully if provider not found.
+
+### Result
+- Build: ✅ Passes
+- Tests: 870 total (864 existing + 6 new from Hockney)
+- Commit: `f667e7d` — "Fix queue view to show provider label instead of raw ID (#227)"
+
 ## Issue #189: resurfaceDismissed removal (2025-01-24)
 
 ### Root Cause (Corrected)
