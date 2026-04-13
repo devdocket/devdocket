@@ -81,4 +81,28 @@ describe('getEditorPanelHtml', () => {
     const nonce2 = html2.match(/nonce="([^"]+)"/)![1];
     expect(nonce1).not.toBe(nonce2);
   });
+
+  describe('source URL link', () => {
+    it('renders a clickable link when item has a url', () => {
+      const item = makeItem({ url: 'https://github.com/org/repo/issues/42' });
+      const html = getEditorPanelHtml({ cspSource, item });
+      expect(html).toContain('id="source-link"');
+      expect(html).toMatch(/<a\s[^>]*data-url="https:\/\/github\.com\/org\/repo\/issues\/42"/);
+      expect(html).toContain('Open in source');
+    });
+
+    it('does not render a link when item has no url', () => {
+      const item = makeItem({ url: undefined });
+      const html = getEditorPanelHtml({ cspSource, item });
+      expect(html).not.toContain('id="source-link"');
+      expect(html).not.toContain('Open in source');
+    });
+
+    it('escapes HTML entities in the url to prevent XSS', () => {
+      const item = makeItem({ url: 'https://evil.com/"><script>alert(1)</script>' });
+      const html = getEditorPanelHtml({ cspSource, item });
+      expect(html).not.toContain('<script>alert(1)</script>');
+      expect(html).toContain('&quot;&gt;&lt;script&gt;alert(1)&lt;/script&gt;');
+    });
+  });
 });

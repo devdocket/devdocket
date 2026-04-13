@@ -110,10 +110,25 @@ export function getEditorPanelHtml({ cspSource, item }: EditorHtmlOptions): stri
       margin-top: 2px;
       display: block;
     }
+    .source-link {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      font-size: 0.85em;
+      margin-bottom: 14px;
+      color: var(--vscode-textLink-foreground);
+      cursor: pointer;
+      text-decoration: none;
+    }
+    .source-link:hover {
+      color: var(--vscode-textLink-activeForeground);
+      text-decoration: underline;
+    }
   </style>
 </head>
 <body>
   <h2 id="editor-heading">Edit Work Item</h2>
+${item.url ? `  <a class="source-link" id="source-link" role="link" tabindex="0" data-url="${escapeAttr(item.url)}">↗ Open in source</a>` : ''}
   <div id="form" role="form" aria-labelledby="editor-heading">
     <div class="field">
       <label for="title">Title</label>
@@ -155,6 +170,13 @@ ${item.providerId ? '      <span id="readonly-title-hint" class="hint">Title is 
         }
       }
     });
+
+    const sourceLink = document.getElementById('source-link');
+    if (sourceLink) {
+      sourceLink.addEventListener('click', () => {
+        vscode.postMessage({ type: 'openUrl', url: sourceLink.dataset.url });
+      });
+    }
   </script>
 </body>
 </html>`;

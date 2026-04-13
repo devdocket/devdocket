@@ -26,6 +26,7 @@ Key files:
 
 ## Learnings
 
+- **Editor panel source URL link (Issue #219):** Webview CSP has `default-src 'none'`, so `<a href>` tags won't navigate. Used `vscode.postMessage({ type: 'openUrl' })` from webview → extension host handles with `vscode.env.openExternal(vscode.Uri.parse(url))`. The link element uses `data-url` attribute (escaped via `escapeAttr`) and a JS click handler. Both `env.openExternal` and `Uri.parse` are already in the core vscode mock. The `editorPanelHtml.test.ts` already had 3 source-link tests pre-written; added 2 tests in `workItemEditorPanel.test.ts` for the message handler.
 - GitHub package (`packages/github/`) vscode mock lives at `packages/github/src/test/__mocks__/vscode.ts`, aliased in `vitest.config.ts` — mirrors core mock pattern but adds `authentication`, `workspace`, `extensions` mocks.
 - Mock includes: `authentication.getSession` (resolves with `{ accessToken: 'mock-token' }`), `workspace.getConfiguration` (returns `.get(key, default)` stub), `workspace.workspaceFolders`, `extensions.getExtension`, `commands.executeCommand`, `Uri.file`, `window.showErrorMessage`.
 - Root `npm install` handles all workspace deps via npm workspaces. Root `npm run build` runs esbuild in both packages.

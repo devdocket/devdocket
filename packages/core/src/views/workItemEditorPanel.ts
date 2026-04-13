@@ -61,6 +61,10 @@ export class WorkItemEditorPanel {
     this.update();
 
     this.messageSubscription = this.panel.webview.onDidReceiveMessage((msg) => {
+      if (msg?.type === 'openUrl' && typeof msg.url === 'string') {
+        vscode.env.openExternal(vscode.Uri.parse(msg.url));
+        return;
+      }
       if (msg?.type === 'autosave' && msg.data && typeof msg.data === 'object') {
         this.pendingData = msg.data;
         if (this.debounceTimer) {
