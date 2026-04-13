@@ -81,4 +81,15 @@ describe('getEditorPanelHtml', () => {
     const nonce2 = html2.match(/nonce="([^"]+)"/)![1];
     expect(nonce1).not.toBe(nonce2);
   });
+
+  it('contains a save-status element', () => {
+    const html = getEditorPanelHtml({ cspSource, item: makeItem() });
+    expect(html).toMatch(/id=["']save-status["']/);
+  });
+
+  it('save-status element is present for provider-owned items', () => {
+    const item = makeItem({ providerId: 'github' });
+    const html = getEditorPanelHtml({ cspSource, item });
+    expect(html).toMatch(/id=["']save-status["']/);
+  });
 });

@@ -34,6 +34,7 @@ function createMockWebviewPanel() {
         messageHandler = handler;
         return { dispose: vi.fn(() => { messageHandler = undefined; }) };
       }),
+      postMessage: vi.fn(async () => true),
     },
     onDidDispose: vi.fn((handler: DisposeHandler) => {
       disposeHandler = handler;
@@ -98,6 +99,7 @@ function createIntegrationWebviewPanel() {
         messageListeners.push(listener);
         return { dispose: vi.fn() };
       }),
+      postMessage: vi.fn(async () => true),
       _fireMessage: (msg: any) => { messageListeners.forEach(l => l(msg)); },
     },
     onDidDispose: vi.fn((listener: Function) => {
@@ -514,6 +516,84 @@ describe('WorkItemEditorPanel', () => {
 
       expect(window.showErrorMessage).toHaveBeenCalledWith(
         expect.stringContaining('string error'),
+      );
+    });
+
+    it('should post saveResult with success true after successful save', async () => {
+      const item = makeItem();
+      const workGraph = createMockWorkGraph(item);
+      const mock = createMockWebviewPanel();
+      openPanel(item, workGraph, mock);
+
+      mock.simulateMessage({
+        type: 'autosave',
+        data: { title: 'Updated', notes: 'notes' },
+      });
+      await vi.advanceTimersByTimeAsync(300);
+
+      expect(mock.panel.webview.postMessage).toHaveBeenCalledWith(
+        expect.objectContaining({ type: 'saveResult', success: true }),
+      );
+    });
+
+    it('should post saveResult with success false after failed save', async () => {
+      const item = makeItem();
+      const workGraph = createMockWorkGraph(item);
+      const mock = createMockWebviewPanel();
+      openPanel(item, workGraph, mock);
+
+      workGraph.updateItem.mockRejectedValue(new Error('write failed'));
+
+      mock.simulateMessage({
+        type: 'autosave',
+        data: { title: 'Test item', notes: '' },
+      });
+      await vi.advanceTimersByTimeAsync(300);
+
+      expect(mock.panel.webview.postMessage).toHaveBeenCalledWith(
+        expect.objectContaining({ type: 'saveResult', success: false }),
+      );
+    });
+
+    it('should include error message in saveResult on failure', async () => {
+      const item = makeItem();
+      const workGraph = createMockWorkGraph(item);
+      const mock = createMockWebviewPanel();
+      openPanel(item, workGraph, mock);
+
+      workGraph.updateItem.mockRejectedValue(new Error('disk full'));
+
+      mock.simulateMessage({
+        type: 'autosave',
+        data: { title: 'Test item', notes: '' },
+      });
+      await vi.advanceTimersByTimeAsync(300);
+
+      expect(mock.panel.webview.postMessage).toHaveBeenCalledWith(
+        expect.objectContaining({
+          type: 'saveResult',
+          success: false,
+          error: expect.stringContaining('disk full'),
+        }),
+      );
+    });
+
+    it('should post saveResult with success false when item no longer exists', async () => {
+      const item = makeItem();
+      const workGraph = createMockWorkGraph(item);
+      const mock = createMockWebviewPanel();
+      openPanel(item, workGraph, mock);
+
+      workGraph.getItem.mockReturnValue(undefined);
+
+      mock.simulateMessage({
+        type: 'autosave',
+        data: { title: 'New', notes: '' },
+      });
+      await vi.advanceTimersByTimeAsync(300);
+
+      expect(mock.panel.webview.postMessage).toHaveBeenCalledWith(
+        expect.objectContaining({ type: 'saveResult', success: false }),
       );
     });
 
@@ -1076,6 +1156,64 @@ describe('WorkItemEditorPanel (integration with WorkGraph)', () => {
       expect(() => {
         mockPanel.webview._fireMessage({ type: 'unknown', data: {} });
       }).not.toThrow();
+    });
+  });
+
+  describe('saveResult feedback', () => {
+    it('posts saveResult success after a successful save', async () => {
+      const item = await graph.createItem({ title: 'Task' });
+      WorkItemEditorPanel.open(context, graph, item);
+
+      mockPanel.webview._fireMessage({
+        type: 'autosave',
+        data: { title: 'Updated', notes: '' },
+      });
+
+      await vi.waitFor(() => {
+        expect(mockPanel.webview.postMessage).toHaveBeenCalledWith(
+          expect.objectContaining({ type: 'saveResult', success: true }),
+        );
+      });
+    });
+
+    it('posts saveResult failure when item was deleted', async () => {
+      const item = await graph.createItem({ title: 'Task' });
+      WorkItemEditorPanel.open(context, graph, item);
+
+      await graph.deleteItem(item.id);
+
+      mockPanel.webview._fireMessage({
+        type: 'autosave',
+        data: { title: 'Updated', notes: '' },
+      });
+
+      await vi.waitFor(() => {
+        expect(mockPanel.webview.postMessage).toHaveBeenCalledWith(
+          expect.objectContaining({ type: 'saveResult', success: false }),
+        );
+      });
+    });
+
+    it('includes error string in saveResult on failure', async () => {
+      const item = await graph.createItem({ title: 'Task' });
+      WorkItemEditorPanel.open(context, graph, item);
+
+      await graph.deleteItem(item.id);
+
+      mockPanel.webview._fireMessage({
+        type: 'autosave',
+        data: { title: 'Updated', notes: '' },
+      });
+
+      await vi.waitFor(() => {
+        expect(mockPanel.webview.postMessage).toHaveBeenCalledWith(
+          expect.objectContaining({
+            type: 'saveResult',
+            success: false,
+            error: expect.any(String),
+          }),
+        );
+      });
     });
   });
 
