@@ -383,6 +383,6 @@ mockFetch.mockImplementation(async (url: string) => {
 - `packages/core/src/test/focusTreeProvider.test.ts` — Updated assertion: `'⏸ paused'` → `'paused'`
 - `packages/core/src/test/historyTreeProvider.test.ts` — Updated assertions: `'✓ done'` → `'done'`, `'📦 archived'` → `'archived'`
 
-**Pattern:** Description assertions in tree provider tests live in `getTreeItem description` describe blocks. When production description format changes, update both the assertion value and the `it()` label to match.
+**Pattern:** Description assertions in tree provider tests live in `getTreeItem`-related describe blocks. When production description format changes, update both the assertion value and the `it()` label to match.
 
 **Test suite:** 864 tests passing (29 files), 0 failures.
