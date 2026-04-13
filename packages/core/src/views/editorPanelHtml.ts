@@ -31,7 +31,7 @@ export function getEditorPanelHtml({ cspSource, item }: EditorHtmlOptions): stri
       font-size: var(--font-size);
       color: var(--vscode-foreground);
       background: var(--vscode-editor-background);
-      padding: 20px 5%;
+      padding: 20px min(5%, 24px);
       max-width: min(560px, 100%);
       margin: 0 auto;
     }
