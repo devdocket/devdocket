@@ -140,7 +140,7 @@ export class WorkItemEditorPanel {
       const discovered = this.providerRegistry
         .getDiscoveredItems(item.providerId)
         .find((d) => d.externalId === item.externalId);
-      providerDescription = discovered?.description || undefined;
+      providerDescription = discovered?.description ?? undefined;
     }
     return getEditorPanelHtml({
       cspSource: this.panel.webview.cspSource,

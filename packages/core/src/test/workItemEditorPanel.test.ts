@@ -168,6 +168,19 @@ describe('WorkItemEditorPanel', () => {
 
       expect(mock.panel.onDidDispose).toHaveBeenCalledTimes(1);
     });
+
+    it('should pass provider description to HTML when discovered item has one', () => {
+      const item = makeItem({ providerId: 'gh', externalId: '42' });
+      const mock = createMockWebviewPanel();
+      const registry = createMockProviderRegistry();
+      vi.mocked(registry.getDiscoveredItems).mockReturnValue([
+        { externalId: '42', title: 'Bug', description: 'Fix the login page' } as any,
+      ]);
+      openPanel(item, createMockWorkGraph(item), mock, undefined, registry);
+
+      expect(registry.getDiscoveredItems).toHaveBeenCalledWith('gh');
+      expect(mock.panel.webview.html).toContain('Fix the login page');
+    });
   });
 
   describe('panel reuse', () => {

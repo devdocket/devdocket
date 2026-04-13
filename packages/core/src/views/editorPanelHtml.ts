@@ -4,7 +4,7 @@ import { WorkItem } from '../models/workItem';
 export interface EditorHtmlOptions {
   cspSource: string;
   item: WorkItem;
-  /** Read-only description from the provider, already HTML-escaped by the caller or escaped here. */
+  /** Read-only description from the provider. Will be HTML-escaped before rendering. */
   providerDescription?: string;
 }
 
