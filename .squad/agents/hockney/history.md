@@ -79,6 +79,21 @@ Key files:
 - `createMockStateStore()` with backing Map<string, string> and EventEmitter for testing onDidChange subscriptions
 - Migration tested by extracting the for-loop logic from extension.ts into a standalone `runMigration()` function
 
+### Issue #231 — Sources Distinct Icons Test Coverage (2026-07-25)
+
+**Tests updated:** 2 tests rewritten + 1 new test in `sourcesTreeProvider.test.ts`
+- Renamed "should render non-accepted item with circle-outline icon" → "should render unseen item with circle-outline icon" (clearer intent)
+- Updated dismissed test to assert `circle-slash` icon instead of `circle-outline`
+- Added "should use distinct icons for accepted, dismissed, and unseen states" — collects all three icons into a Set and asserts `size === 3`
+
+**Key pattern:** Use `stateStore.getState.mockReturnValue()` to cycle through states on the same node, then compare icon IDs via Set uniqueness. No need for separate nodes.
+
+**File paths:**
+- Production: `packages/core/src/views/sourcesTreeProvider.ts` (line 69 — three-way ternary: accepted→check, dismissed→circle-slash, unseen→circle-outline)
+- Tests: `packages/core/src/test/sourcesTreeProvider.test.ts` (getTreeItem describe block)
+
+**Suite metrics:** 865 tests passing (29 test files), 0 failures.
+
 **Edge cases found:**
 - DiscoveredStateStore: corrupted JSON on disk throws (not silently ignored) — only ENOENT is handled gracefully
 - DiscoveredStateStore: `mkdir({ recursive: true })` creates nested storage directories on first write

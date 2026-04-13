@@ -66,7 +66,7 @@ export class SourcesTreeProvider implements vscode.TreeDataProvider<SourcesEleme
       }
       case 'item': {
         const state = this.stateStore.getState(element.providerId, element.externalId);
-        const icon = state === 'accepted' ? 'check' : 'circle-outline';
+        const icon = state === 'accepted' ? 'check' : state === 'dismissed' ? 'circle-slash' : 'circle-outline';
         const treeItem = new vscode.TreeItem(element.title, vscode.TreeItemCollapsibleState.None);
         treeItem.description = state === 'dismissed' ? 'dismissed' : undefined;
         treeItem.tooltip = this.buildItemTooltip(element);

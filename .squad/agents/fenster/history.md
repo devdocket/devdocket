@@ -255,3 +255,9 @@ Patterns documented in `.squad/decisions.md` under "Code Review Fix Patterns" (2
 - **Dismissed means dismissed**: The original four-view design established that dismissed items are sticky. The `resurfaceDismissed` feature contradicted this core design principle.
 - **Root cause matters**: The first fix (defensive load) was plausible but wrong. The symptom (dismissed items reappearing) had a simpler explanation: code explicitly designed to resurface them.
 - **Reverting cleanly**: When reverting test changes, `git checkout <commit> -- <files>` is the safest approach to restore files to a known-good state before applying new targeted edits.
+
+## Issue #231: Sources view dismissed icon (2025-07-23)
+
+### Learnings
+- **Icon conditional pattern in Sources view**: `sourcesTreeProvider.ts` line 69 uses a chained ternary to map `InboxState` to ThemeIcon names: `accepted` → `check`, `dismissed` → `circle-slash`, `unseen` → `circle-outline`. Previously a simple binary ternary lumped dismissed and unseen together.
+- **Key file**: `packages/core/src/views/sourcesTreeProvider.ts` — the `getTreeItem()` method for `item` kind elements assigns icons based on `stateStore.getState()` result.
