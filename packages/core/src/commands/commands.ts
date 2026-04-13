@@ -8,7 +8,7 @@ import { WorkItemEditorPanel } from '../views/workItemEditorPanel';
 import { type InboxItem, type InboxElement } from '../views/inboxTreeProvider';
 import { type SourceItemNode, type SourcesElement } from '../views/sourcesTreeProvider';
 import { logger } from '../services/logger';
-import { toggleViewLayout } from '../views/viewLayout';
+import { toggleViewLayout, setViewLayout } from '../views/viewLayout';
 
 /**
  * Resolves the effective list of inbox items from VS Code's multi-select command args.
@@ -644,24 +644,35 @@ export function registerCommands(
     vscode.commands.registerCommand('workcenter.dismissFromSources',
       wrapCommand('Failed to dismiss from sources', (item: SourcesElement, selectedItems?: SourcesElement[]) => handleDismissFromSources(stateStore, item, selectedItems))),
     vscode.commands.registerCommand('workcenter.switchInboxToTree',
-      wrapCommand('Failed to switch inbox layout', () => toggleViewLayout('inbox'))),
+      wrapCommand('Failed to switch inbox layout', () => setViewLayout('inbox', 'tree'))),
     vscode.commands.registerCommand('workcenter.switchInboxToFlat',
-      wrapCommand('Failed to switch inbox layout', () => toggleViewLayout('inbox'))),
+      wrapCommand('Failed to switch inbox layout', () => setViewLayout('inbox', 'flat'))),
     vscode.commands.registerCommand('workcenter.switchQueueToTree',
-      wrapCommand('Failed to switch queue layout', () => toggleViewLayout('queue'))),
+      wrapCommand('Failed to switch queue layout', () => setViewLayout('queue', 'tree'))),
     vscode.commands.registerCommand('workcenter.switchQueueToFlat',
-      wrapCommand('Failed to switch queue layout', () => toggleViewLayout('queue'))),
+      wrapCommand('Failed to switch queue layout', () => setViewLayout('queue', 'flat'))),
     vscode.commands.registerCommand('workcenter.switchFocusToTree',
-      wrapCommand('Failed to switch focus layout', () => toggleViewLayout('focus'))),
+      wrapCommand('Failed to switch focus layout', () => setViewLayout('focus', 'tree'))),
     vscode.commands.registerCommand('workcenter.switchFocusToFlat',
-      wrapCommand('Failed to switch focus layout', () => toggleViewLayout('focus'))),
+      wrapCommand('Failed to switch focus layout', () => setViewLayout('focus', 'flat'))),
     vscode.commands.registerCommand('workcenter.switchHistoryToTree',
-      wrapCommand('Failed to switch history layout', () => toggleViewLayout('history'))),
+      wrapCommand('Failed to switch history layout', () => setViewLayout('history', 'tree'))),
     vscode.commands.registerCommand('workcenter.switchHistoryToFlat',
-      wrapCommand('Failed to switch history layout', () => toggleViewLayout('history'))),
+      wrapCommand('Failed to switch history layout', () => setViewLayout('history', 'flat'))),
     vscode.commands.registerCommand('workcenter.switchSourcesToTree',
-      wrapCommand('Failed to switch sources layout', () => toggleViewLayout('sources'))),
+      wrapCommand('Failed to switch sources layout', () => setViewLayout('sources', 'tree'))),
     vscode.commands.registerCommand('workcenter.switchSourcesToFlat',
+      wrapCommand('Failed to switch sources layout', () => setViewLayout('sources', 'flat'))),
+    // Backward-compatible aliases for old toggle commands (preserves existing keybindings)
+    vscode.commands.registerCommand('workcenter.toggleInboxLayout',
+      wrapCommand('Failed to switch inbox layout', () => toggleViewLayout('inbox'))),
+    vscode.commands.registerCommand('workcenter.toggleQueueLayout',
+      wrapCommand('Failed to switch queue layout', () => toggleViewLayout('queue'))),
+    vscode.commands.registerCommand('workcenter.toggleFocusLayout',
+      wrapCommand('Failed to switch focus layout', () => toggleViewLayout('focus'))),
+    vscode.commands.registerCommand('workcenter.toggleHistoryLayout',
+      wrapCommand('Failed to switch history layout', () => toggleViewLayout('history'))),
+    vscode.commands.registerCommand('workcenter.toggleSourcesLayout',
       wrapCommand('Failed to switch sources layout', () => toggleViewLayout('sources'))),
   );
 }
