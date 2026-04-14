@@ -1110,7 +1110,7 @@ describe('registerCommands', () => {
       expect(stateStore.setState).not.toHaveBeenCalled();
       expect(workGraph.transitionState).not.toHaveBeenCalled();
       expect(vscode.window.showErrorMessage).toHaveBeenCalledWith(
-        'WorkCenter: Failed to accept inbox item — disk full',
+        'WorkCenter: Failed to accept inbox item to Focus — disk full',
       );
     });
 

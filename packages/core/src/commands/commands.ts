@@ -517,7 +517,7 @@ async function acceptToFocusSingleInboxItem(
         { providerId: item.providerId, externalId: item.externalId, url: item.url, ...(group ? { group } : {}) },
       );
     } catch (err: unknown) {
-      handleCommandError('Failed to accept inbox item', err);
+      handleCommandError('Failed to accept inbox item to Focus', err);
       return;
     }
     try {
