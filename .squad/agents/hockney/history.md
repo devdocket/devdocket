@@ -388,4 +388,34 @@ mockFetch.mockImplementation(async (url: string) => {
 
 **Key learning:** The bug in issue #189 was present in the codebase. The root cause was explicit resurface logic (`resurfaceDismissed`) that reset dismissed items when they were rediscovered, causing them to reappear. The correct fix was to remove that resurface behavior; the tests now document the expected dismissed-state preservation and guard against future regressions.
 
+## Issue #227: Queue View Provider Labels (2026-04-13)
+
+**Status:** COMPLETE — Provider labels now display in queue view instead of raw IDs  
+**Tester:** Hockney
+
+### Summary
+Added 6 comprehensive test cases to `queueTreeProvider.test.ts` covering the queue view provider label display fix. Tests verify label rendering, provider lookup, and fallback behavior.
+
+### Files Modified
+- `packages/core/src/test/queueTreeProvider.test.ts` — 6 new tests added
+
+### Test Coverage
+Tests verify:
+1. Queue tree items display correct provider labels
+2. Label lookup falls back gracefully when provider not found
+3. Label formatting and display consistency
+4. Integration with `getProviderLabel()` method from base provider
+5. Multiple provider types (GitHub, ADO) correctly labeled
+6. Edge case: items with missing provider IDs
+
+### Test Infrastructure Notes
+- Used the existing `createMockStore()` pattern from Phase 2 alongside a local `createMockProviderRegistry()` helper in `queueTreeProvider.test.ts`
+- No new test infrastructure required
+- All assertions validate both display layer and provider lookup mechanism
+
+### Result
+- Tests added: 6 new test cases
+- Suite status: 870 tests passing (864 existing + 6 new)
+- Build: ✅ Passes
+- Commit: `f667e7d` — "Fix queue view to show provider label instead of raw ID (#227)"
 
