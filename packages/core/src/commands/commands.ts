@@ -478,7 +478,7 @@ async function acceptToFocusSingleInboxItem(
   let workItemId: string;
   const existing = workGraph.findItemByProvenance(item.providerId, item.externalId);
   if (existing) {
-    if (existing.state === WorkItemState.InProgress) {
+    if (existing.state === WorkItemState.InProgress || existing.state === WorkItemState.Paused) {
       try {
         await stateStore.setState(item.providerId, item.externalId, 'accepted');
       } catch (err: unknown) {
