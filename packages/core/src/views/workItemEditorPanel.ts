@@ -143,16 +143,21 @@ export class WorkItemEditorPanel {
     }
   }
 
-  private async handleTransition(targetState: WorkItemState): Promise<void> {
-    try {
-      await this.workGraph.transitionState(this.itemId, targetState);
-      if (!this.disposed) {
-        this.update();
+  private handleTransition(targetState: WorkItemState): void {
+    // Flush any unsaved edits so they aren't lost when update() regenerates HTML
+    this.flushPendingData();
+    // Serialize through saveQueue to avoid racing with in-flight autosaves
+    this.saveQueue = this.saveQueue.then(async () => {
+      try {
+        await this.workGraph.transitionState(this.itemId, targetState);
+        if (!this.disposed) {
+          this.update();
+        }
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        vscode.window.showErrorMessage(`Failed to transition work item: ${message}`);
       }
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      vscode.window.showErrorMessage(`Failed to transition work item: ${message}`);
-    }
+    });
   }
 
   private update(): void {
