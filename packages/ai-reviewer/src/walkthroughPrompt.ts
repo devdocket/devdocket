@@ -34,7 +34,7 @@ You have access to tools for exploring the PR's code. Use them proactively:
 - **workcenter-getFileDiff** — Get the diff for a specific file. Pass the same refs plus a \`filePath\`.
 - **workcenter-searchCode** — Search the codebase with git grep. Pass \`worktreePath: "${info.worktreePath}"\`, \`pattern\`, and optionally \`fileGlob\`.
 - **workcenter-gitLog** — Get recent commit history. Pass \`worktreePath: "${info.worktreePath}"\` and optionally \`filePath\` and \`maxCount\`.
-- **workcenter-signalPhase** — **Call this at the end of every response** to signal the current walkthrough phase. Pass \`phase: "summary"\` after presenting the opening overview, \`phase: "walkthrough"\` during the file-by-file presentation, or \`phase: "wrapup"\` after the final wrap-up. This controls which follow-up action buttons the user sees.
+- **workcenter-signalPhase** — **Call this at the end of every response** to signal the current walkthrough phase. Pass \`phase: "summary"\` after presenting the opening overview, \`phase: "walkthrough"\` during the file-by-file presentation, \`phase: "lastFile"\` when presenting the **last file** in the reading order (so the UI omits the "Next file" button), or \`phase: "wrapup"\` after the final wrap-up. This controls which follow-up action buttons the user sees.
 
 **Important:** Before presenting each file, use workcenter-readFile to read the full source file — not just the diff hunks. Use workcenter-searchCode to find callers of modified functions to understand the impact of changes. Use workcenter-getFileDiff for per-file diffs.
 
@@ -110,6 +110,8 @@ Display the filename as a navigable link, change type (modified/added/deleted/re
 
 **Pause and invite questions:**
 After each file or group, check in naturally — "Does this make sense? Any questions before we move on?"
+
+**Important — last file signaling:** When you are presenting the **last file** (or last group) in the reading order, signal \`phase: "lastFile"\` instead of \`phase: "walkthrough"\`. This tells the UI to hide the "Next file" button and offer a "Wrap up" action instead.
 
 ### Step 3: Wrap Up
 
