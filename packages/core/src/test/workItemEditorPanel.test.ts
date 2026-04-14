@@ -370,6 +370,53 @@ describe('WorkItemEditorPanel', () => {
     });
   });
 
+  describe('message handling (openUrl)', () => {
+    it('should open external URL when openUrl message is received', () => {
+      const item = makeItem({ url: 'https://github.com/org/repo/issues/42' });
+      const workGraph = createMockWorkGraph(item);
+      const mock = createMockWebviewPanel();
+      openPanel(item, workGraph, mock);
+
+      mock.simulateMessage({ type: 'openUrl', url: 'https://github.com/org/repo/issues/42' });
+
+      expect(vscode.env.openExternal).toHaveBeenCalledTimes(1);
+      expect(vscode.Uri.parse).toHaveBeenCalledWith('https://github.com/org/repo/issues/42');
+    });
+
+    it('should not call openExternal when url is not a string', () => {
+      const item = makeItem();
+      const workGraph = createMockWorkGraph(item);
+      const mock = createMockWebviewPanel();
+      openPanel(item, workGraph, mock);
+
+      mock.simulateMessage({ type: 'openUrl', url: 123 });
+
+      expect(vscode.env.openExternal).not.toHaveBeenCalled();
+    });
+
+    it('should not call openExternal for javascript: URL', () => {
+      const item = makeItem();
+      const workGraph = createMockWorkGraph(item);
+      const mock = createMockWebviewPanel();
+      openPanel(item, workGraph, mock);
+
+      mock.simulateMessage({ type: 'openUrl', url: 'javascript:alert(1)' });
+
+      expect(vscode.env.openExternal).not.toHaveBeenCalled();
+    });
+
+    it('should not call openExternal for data: URL', () => {
+      const item = makeItem();
+      const workGraph = createMockWorkGraph(item);
+      const mock = createMockWebviewPanel();
+      openPanel(item, workGraph, mock);
+
+      mock.simulateMessage({ type: 'openUrl', url: 'data:text/html,<h1>hi</h1>' });
+
+      expect(vscode.env.openExternal).not.toHaveBeenCalled();
+    });
+  });
+
   describe('message handling (autosave)', () => {
     beforeEach(() => {
       vi.useFakeTimers();
