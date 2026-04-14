@@ -309,13 +309,21 @@ describe('InboxTreeProvider', () => {
       expect((treeItem.iconPath as any).id).toBe('folder');
     });
 
-    it('should set description to group when inbox item has a group', () => {
+    it('should set description to group in flat layout', () => {
+      provider.layout = 'flat';
       const item: InboxItem = { kind: 'item', providerId: 'gh', externalId: '1', title: 'Bug', group: 'octocat/repo' };
       const treeItem = provider.getTreeItem(item);
       expect(treeItem.description).toBe('octocat/repo');
     });
 
+    it('should omit group description in tree layout', () => {
+      const item: InboxItem = { kind: 'item', providerId: 'gh', externalId: '1', title: 'Bug', group: 'octocat/repo' };
+      const treeItem = provider.getTreeItem(item);
+      expect(treeItem.description).toBeUndefined();
+    });
+
     it('should set description to undefined when inbox item has no group', () => {
+      provider.layout = 'flat';
       const item: InboxItem = { kind: 'item', providerId: 'gh', externalId: '1', title: 'Bug' };
       const treeItem = provider.getTreeItem(item);
       expect(treeItem.description).toBeUndefined();

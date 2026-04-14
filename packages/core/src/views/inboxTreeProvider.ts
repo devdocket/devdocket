@@ -161,7 +161,7 @@ export class InboxTreeProvider implements vscode.TreeDataProvider<InboxElement> 
 
     const treeItem = new vscode.TreeItem(element.title, vscode.TreeItemCollapsibleState.None);
     treeItem.id = `inbox::item::${element.providerId}::${element.externalId}`;
-    treeItem.description = element.group;
+    treeItem.description = this._layoutState.value === 'flat' ? element.group : undefined;
     treeItem.tooltip = this.buildTooltip(element);
     treeItem.contextValue = element.url ? 'inboxItem.hasUrl' : 'inboxItem';
     treeItem.iconPath = new vscode.ThemeIcon(isSeen ? 'circle-outline' : 'circle-filled');
