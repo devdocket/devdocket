@@ -1183,7 +1183,7 @@ describe('registerCommands', () => {
       await invoke('workcenter.acceptToFocusFromInbox', makeInboxItem());
 
       expect(vscode.window.showErrorMessage).toHaveBeenCalledWith(
-        'WorkCenter: Failed to update state for existing in-progress item — state error',
+        'WorkCenter: Failed to update state for existing focus item — state error',
       );
       expect(vscode.window.showInformationMessage).not.toHaveBeenCalled();
       expect(workGraph.transitionState).not.toHaveBeenCalled();

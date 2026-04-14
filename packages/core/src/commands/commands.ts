@@ -482,7 +482,7 @@ async function acceptToFocusSingleInboxItem(
       try {
         await stateStore.setState(item.providerId, item.externalId, 'accepted');
       } catch (err: unknown) {
-        handleCommandError('Failed to update state for existing in-progress item', err);
+        handleCommandError('Failed to update state for existing focus item', err);
         return;
       }
       void vscode.window.showInformationMessage('WorkCenter: Item is already in Focus');
