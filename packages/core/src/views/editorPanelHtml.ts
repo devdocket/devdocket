@@ -343,7 +343,7 @@ const TRANSITION_ACTIONS: Record<WorkItemState, ActionButton[]> = {
   [WorkItemState.Archived]: [],
 };
 
-/** Returns the action buttons available for the given state, derived from the state machine. */
+/** Returns the action buttons available for the given state, as defined by the editor's transition action map. */
 export function getTransitionActions(state: WorkItemState): ActionButton[] {
   return [...(TRANSITION_ACTIONS[state] ?? [])];
 }
