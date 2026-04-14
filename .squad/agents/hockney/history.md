@@ -413,6 +413,19 @@ mockFetch.mockImplementation(async (url: string) => {
 - Timestamp tests use dates from 2024 and verify the year appears while raw epoch does NOT appear
 
 **Test results:** 875 tests passing (29 test files). 10 new tests, 9 existing tests unchanged.
+### Editor Contextual Heading Tests (Issue #221)
+
+**Issue:** Replace static "Edit Work Item" heading with the work item's title in the editor panel.
+
+**Tests added:** 3 new tests in `editorPanelHtml.test.ts`:
+
+1. **shows item title in heading instead of generic text** — Verifies heading contains the item's title and no longer contains "Edit Work Item"
+2. **escapes special characters in heading title** — Verifies `<`, `>`, and `&` are HTML-escaped in the heading (uses `escapeHtml`, not `escapeAttr`, so quotes remain unescaped)
+3. **preserves editor-heading id attribute** — Verifies the `id="editor-heading"` and matching `aria-labelledby` are intact
+
+**Key learning:** The heading uses `escapeHtml()` (escapes `<`, `>`, `&`) not `escapeAttr()` (which additionally escapes `"`). This is correct since the title appears as element content, not an attribute value — quotes don't need escaping in element text.
+
+**Test results:** All 867 tests pass (12 in editorPanelHtml suite). Full core package green.
 ### Issue #222 — Responsive Editor Layout Test Review (2026-07-22)
 
 **Context:** Fenster is changing `editorPanelHtml.ts` to replace `max-width: 560px` with a responsive layout. Checked if existing tests assert on the old value.

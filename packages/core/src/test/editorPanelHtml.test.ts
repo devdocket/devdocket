@@ -80,6 +80,26 @@ describe('getEditorPanelHtml', () => {
     expect(html).not.toContain('Title is managed by the provider');
   });
 
+  it('shows item title in heading instead of generic text', () => {
+    const item = makeItem({ title: 'Fix login bug' });
+    const html = getEditorPanelHtml({ cspSource, item });
+    expect(html).toContain('<h2 id="editor-heading">Fix login bug</h2>');
+    expect(html).not.toContain('Edit Work Item');
+  });
+
+  it('escapes special characters in heading title', () => {
+    const item = makeItem({ title: 'Use <div> & "quotes"' });
+    const html = getEditorPanelHtml({ cspSource, item });
+    expect(html).toContain('<h2 id="editor-heading">Use &lt;div&gt; &amp; "quotes"</h2>');
+    expect(html).not.toContain('>Use <div>');
+  });
+
+  it('preserves editor-heading id attribute', () => {
+    const html = getEditorPanelHtml({ cspSource, item: makeItem() });
+    expect(html).toMatch(/<h2 id="editor-heading">/);
+    expect(html).toContain('aria-labelledby="editor-heading"');
+  });
+
   it('generates unique nonces across calls', () => {
     const html1 = getEditorPanelHtml({ cspSource, item: makeItem() });
     const html2 = getEditorPanelHtml({ cspSource, item: makeItem() });
