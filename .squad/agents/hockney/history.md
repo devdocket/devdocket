@@ -79,6 +79,21 @@ Key files:
 - `createMockStateStore()` with backing Map<string, string> and EventEmitter for testing onDidChange subscriptions
 - Migration tested by extracting the for-loop logic from extension.ts into a standalone `runMigration()` function
 
+### Issue #231 — Sources Distinct Icons Test Coverage (2026-07-25)
+
+**Tests updated:** 2 tests rewritten + 1 new test in `sourcesTreeProvider.test.ts`
+- Renamed "should render non-accepted item with circle-outline icon" → "should render unseen item with circle-outline icon" (clearer intent)
+- Updated dismissed test to assert `circle-slash` icon instead of `circle-outline`
+- Added "should use distinct icons for accepted, dismissed, and unseen states" — collects all three icons into a Set and asserts `size === 3`
+
+**Key pattern:** Use `stateStore.getState.mockReturnValue()` to cycle through states on the same node, then compare icon IDs via Set uniqueness. No need for separate nodes.
+
+**File paths:**
+- Production: `packages/core/src/views/sourcesTreeProvider.ts` (`switch (state)` selects icons: accepted→check, dismissed→circle-slash, unseen→circle-outline)
+- Tests: `packages/core/src/test/sourcesTreeProvider.test.ts` (getTreeItem describe block)
+
+**Suite metrics:** 865 tests passing (29 test files), 0 failures.
+
 **Edge cases found:**
 - DiscoveredStateStore: corrupted JSON on disk throws (not silently ignored) — only ENOENT is handled gracefully
 - DiscoveredStateStore: `mkdir({ recursive: true })` creates nested storage directories on first write
@@ -399,4 +414,46 @@ mockFetch.mockImplementation(async (url: string) => {
 - `LayoutState` class testable in isolation — just pass a `vi.fn()` callback and assert fire count
 - `sanitizeLayouts()` is exercised indirectly via `toggleViewLayout()` — invalid entries in stored config are stripped when toggle persists
 - Context key values verified via `Object.fromEntries(setContextCalls.map(...))` pattern to build key→value map from `executeCommand` mock calls
+## Issue #227: Queue View Provider Labels (2026-04-13)
 
+**Status:** COMPLETE — Provider labels now display in queue view instead of raw IDs  
+**Tester:** Hockney
+
+### Summary
+Added 6 comprehensive test cases to `queueTreeProvider.test.ts` covering the queue view provider label display fix. Tests verify label rendering, provider lookup, and fallback behavior.
+
+### Files Modified
+- `packages/core/src/test/queueTreeProvider.test.ts` — 6 new tests added
+
+### Test Coverage
+Tests verify:
+1. Queue tree items display correct provider labels
+2. Label lookup falls back gracefully when provider not found
+3. Label formatting and display consistency
+4. Integration with `getProviderLabel()` method from base provider
+5. Multiple provider types (GitHub, ADO) correctly labeled
+6. Edge case: items with missing provider IDs
+
+### Test Infrastructure Notes
+- Used the existing `createMockStore()` pattern from Phase 2 alongside a local `createMockProviderRegistry()` helper in `queueTreeProvider.test.ts`
+- No new test infrastructure required
+- All assertions validate both display layer and provider lookup mechanism
+
+### Result
+- Tests added: 6 new test cases
+- Suite status: 870 tests passing (864 existing + 6 new)
+- Build: ✅ Passes
+- Commit: `f667e7d` — "Fix queue view to show provider label instead of raw ID (#227)"
+
+
+### Issue #229 — Emoji Description Tests Updated (2026-04-12)
+
+**Context:** Issue #229 replaced emoji characters in tree view descriptions with plain text for consistent rendering.
+
+**Files modified:**
+- `packages/core/src/test/focusTreeProvider.test.ts` — Updated assertion: `'⏸ paused'` → `'paused'`
+- `packages/core/src/test/historyTreeProvider.test.ts` — Updated assertions: `'✓ done'` → `'done'`, `'📦 archived'` → `'archived'`
+
+**Pattern:** Description assertions in tree provider tests live in `getTreeItem`-related describe blocks. When production description format changes, update both the assertion value and the `it()` label to match.
+
+**Test suite:** 864 tests passing (29 files), 0 failures.

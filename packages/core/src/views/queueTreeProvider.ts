@@ -36,7 +36,7 @@ export class QueueTreeProvider extends WorkItemViewProvider implements vscode.Tr
   protected createWorkItemTreeItem(item: WorkItem): vscode.TreeItem {
     const treeItem = new vscode.TreeItem(item.title, vscode.TreeItemCollapsibleState.None);
     treeItem.id = item.id;
-    treeItem.description = item.providerId;
+    treeItem.description = this.getProviderLabel(item.providerId);
     treeItem.tooltip = this.buildTooltip(item);
     treeItem.contextValue = item.url ? 'queueItem.hasUrl' : 'queueItem';
     treeItem.iconPath = new vscode.ThemeIcon(item.providerId ? 'remote' : 'circle-filled');
