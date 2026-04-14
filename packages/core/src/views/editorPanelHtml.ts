@@ -321,36 +321,31 @@ interface ActionButton {
   style: 'primary' | 'secondary';
 }
 
+const TRANSITION_ACTIONS: Record<WorkItemState, ActionButton[]> = {
+  [WorkItemState.New]: [
+    { label: 'Start', targetState: WorkItemState.InProgress, style: 'primary' },
+    { label: 'Archive', targetState: WorkItemState.Archived, style: 'secondary' },
+  ],
+  [WorkItemState.InProgress]: [
+    { label: 'Complete', targetState: WorkItemState.Done, style: 'primary' },
+    { label: 'Pause', targetState: WorkItemState.Paused, style: 'secondary' },
+    { label: 'Return to Queue', targetState: WorkItemState.New, style: 'secondary' },
+    { label: 'Archive', targetState: WorkItemState.Archived, style: 'secondary' },
+  ],
+  [WorkItemState.Paused]: [
+    { label: 'Resume', targetState: WorkItemState.InProgress, style: 'primary' },
+    { label: 'Return to Queue', targetState: WorkItemState.New, style: 'secondary' },
+    { label: 'Archive', targetState: WorkItemState.Archived, style: 'secondary' },
+  ],
+  [WorkItemState.Done]: [
+    { label: 'Archive', targetState: WorkItemState.Archived, style: 'secondary' },
+  ],
+  [WorkItemState.Archived]: [],
+};
+
 /** Returns the action buttons available for the given state, derived from the state machine. */
 export function getTransitionActions(state: WorkItemState): ActionButton[] {
-  switch (state) {
-    case WorkItemState.New:
-      return [
-        { label: 'Start', targetState: WorkItemState.InProgress, style: 'primary' },
-        { label: 'Archive', targetState: WorkItemState.Archived, style: 'secondary' },
-      ];
-    case WorkItemState.InProgress:
-      return [
-        { label: 'Complete', targetState: WorkItemState.Done, style: 'primary' },
-        { label: 'Pause', targetState: WorkItemState.Paused, style: 'secondary' },
-        { label: 'Return to Queue', targetState: WorkItemState.New, style: 'secondary' },
-        { label: 'Archive', targetState: WorkItemState.Archived, style: 'secondary' },
-      ];
-    case WorkItemState.Paused:
-      return [
-        { label: 'Resume', targetState: WorkItemState.InProgress, style: 'primary' },
-        { label: 'Return to Queue', targetState: WorkItemState.New, style: 'secondary' },
-        { label: 'Archive', targetState: WorkItemState.Archived, style: 'secondary' },
-      ];
-    case WorkItemState.Done:
-      return [
-        { label: 'Archive', targetState: WorkItemState.Archived, style: 'secondary' },
-      ];
-    case WorkItemState.Archived:
-      return [];
-    default:
-      return [];
-  }
+  return TRANSITION_ACTIONS[state] ?? [];
 }
 
 function getActionsHtml(state: WorkItemState): string {
