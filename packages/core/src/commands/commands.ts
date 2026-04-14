@@ -481,14 +481,20 @@ async function acceptToFocusSingleInboxItem(
     if (existing.state === WorkItemState.InProgress) {
       try {
         await stateStore.setState(item.providerId, item.externalId, 'accepted');
-      } catch { /* best-effort */ }
+      } catch (err: unknown) {
+        handleCommandError('Failed to update state for existing in-progress item', err);
+        return;
+      }
       void vscode.window.showInformationMessage('WorkCenter: Item is already in Focus');
       return;
     }
     if (existing.state === WorkItemState.Done || existing.state === WorkItemState.Archived) {
       try {
         await stateStore.setState(item.providerId, item.externalId, 'accepted');
-      } catch { /* best-effort */ }
+      } catch (err: unknown) {
+        handleCommandError('Failed to update state for existing completed item', err);
+        return;
+      }
       void vscode.window.showWarningMessage(
         `WorkCenter: Item is ${existing.state} and cannot be moved to Focus`,
       );
