@@ -281,6 +281,15 @@ The queue view was displaying raw provider IDs (e.g., `github`, `ado`) in tree i
 - **Root cause matters**: The first fix (defensive load) was plausible but wrong. The symptom (dismissed items reappearing) had a simpler explanation: code explicitly designed to resurface them.
 - **Reverting cleanly**: When reverting test changes, `git checkout <commit> -- <files>` is the safest approach to restore files to a known-good state before applying new targeted edits.
 
+## Issue #223: Dead CSS and duplicated helpers cleanup (2025-07-23)
+
+### Changes
+- Removed unused CSS rules (`.actions`, `button.primary`, `button.primary:hover`, `button.secondary`) from `packages/core/src/views/editorPanelHtml.ts` — no HTML elements use these classes.
+- Removed dead `getNonce()` (private method), `escapeHtml()`, and `escapeAttr()` (module-level functions) from `packages/core/src/views/workItemEditorPanel.ts` — the actual implementations live in `editorPanelHtml.ts`.
+
+### Key Learnings
+- **Verify before removing**: Always grep the full `src/` tree for references before deleting code that looks dead. In this case, `editorPanelHtml.ts` has the real `getNonce`/`escapeHtml`/`escapeAttr` — the copies in `workItemEditorPanel.ts` were never called.
+- **CSS-in-template-literal cleanup**: CSS rules embedded in template literal strings won't trigger TS compiler errors when unused. Manual inspection of the HTML output is the only way to verify they're dead.
 ## Issue #231: Sources view dismissed icon (2025-07-23)
 
 ### Learnings
