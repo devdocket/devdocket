@@ -1,6 +1,7 @@
 import * as vscode from 'vscode';
 import { WorkItem, WorkItemInput } from '../models/workItem';
 import { WorkGraph } from '../services/workGraph';
+import { ProviderRegistry } from '../services/providerRegistry';
 import { getEditorPanelHtml } from './editorPanelHtml';
 import { isSafeUrl } from '../utils/url';
 
@@ -9,6 +10,7 @@ export class WorkItemEditorPanel {
   private static readonly openPanels = new Map<string, WorkItemEditorPanel>();
   private readonly panel: vscode.WebviewPanel;
   private readonly workGraph: WorkGraph;
+  private readonly providerRegistry: ProviderRegistry;
   private readonly itemId: string;
   private disposed = false;
   private debounceTimer: ReturnType<typeof setTimeout> | undefined;
@@ -19,6 +21,7 @@ export class WorkItemEditorPanel {
   static open(
     context: vscode.ExtensionContext,
     workGraph: WorkGraph,
+    providerRegistry: ProviderRegistry,
     item: WorkItem,
   ): void {
     const existing = WorkItemEditorPanel.openPanels.get(item.id);
@@ -36,7 +39,7 @@ export class WorkItemEditorPanel {
       { enableScripts: true, retainContextWhenHidden: true },
     );
 
-    const editor = new WorkItemEditorPanel(panel, workGraph, item.id);
+    const editor = new WorkItemEditorPanel(panel, workGraph, providerRegistry, item.id);
     WorkItemEditorPanel.openPanels.set(item.id, editor);
     context.subscriptions.push({ dispose: () => editor.dispose() });
   }
@@ -53,10 +56,12 @@ export class WorkItemEditorPanel {
   private constructor(
     panel: vscode.WebviewPanel,
     workGraph: WorkGraph,
+    providerRegistry: ProviderRegistry,
     itemId: string,
   ) {
     this.panel = panel;
     this.workGraph = workGraph;
+    this.providerRegistry = providerRegistry;
     this.itemId = itemId;
 
     this.update();
@@ -139,9 +144,17 @@ export class WorkItemEditorPanel {
   }
 
   private getHtml(item: WorkItem): string {
+    let providerDescription: string | undefined;
+    if (item.providerId && item.externalId) {
+      const discovered = this.providerRegistry
+        .getDiscoveredItems(item.providerId)
+        .find((d) => d.externalId === item.externalId);
+      providerDescription = discovered?.description ?? undefined;
+    }
     return getEditorPanelHtml({
       cspSource: this.panel.webview.cspSource,
       item,
+      providerDescription,
     });
   }
 
