@@ -102,7 +102,7 @@ export function getEditorPanelHtml({ cspSource, item, providerDescription }: Edi
   </style>
 </head>
 <body>
-  <h2 id="editor-heading">Edit Work Item</h2>
+  <h2 id="editor-heading">${escapeHtml(item.title)}</h2>
   <div id="form" role="form" aria-labelledby="editor-heading">
     <div class="field">
       <label for="title">Title</label>

@@ -867,8 +867,9 @@ describe('WorkItemEditorPanel (integration with WorkGraph)', () => {
       const item = await graph.createItem({ title: 'Task' });
       WorkItemEditorPanel.open(context, graph, createMockProviderRegistry() as any, item);
 
-      expect(mockPanel.webview.html).toContain('Edit Work Item');
+      expect(mockPanel.webview.html).not.toContain('Edit Work Item');
       expect(mockPanel.webview.html).toContain('Task');
+      expect(mockPanel.webview.html).toContain('id="editor-heading"');
     });
   });
 
