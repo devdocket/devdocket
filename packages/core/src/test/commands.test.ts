@@ -1461,7 +1461,7 @@ describe('registerCommands', () => {
         { providerId: 'github', externalId: 'ext-1', state: 'unseen' },
         { providerId: 'github', externalId: 'ext-2', state: 'unseen' },
       ]);
-      expect(vscode.window.showInformationMessage).toHaveBeenCalledWith('Restored 2 items to inbox');
+      expect(vscode.window.showInformationMessage).toHaveBeenCalledWith('Restored 2 items to Inbox');
     });
 
     it('shows error when batch setStates fails', async () => {

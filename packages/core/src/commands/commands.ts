@@ -622,7 +622,7 @@ async function handleUndismissFromSources(
     await stateStore.setStates(
       dismissedItems.map(i => ({ providerId: i.providerId, externalId: i.externalId, state: 'unseen' as const }))
     );
-    void vscode.window.showInformationMessage(`Restored ${dismissedItems.length} items to inbox`);
+    void vscode.window.showInformationMessage(`Restored ${dismissedItems.length} items to Inbox`);
   } catch (err: unknown) {
     handleCommandError('Failed to restore items to Inbox', err);
   }
@@ -705,7 +705,7 @@ export function registerCommands(
       wrapCommand('Failed to switch sources layout', () => setViewLayout('sources', 'flat'))),
     // Backward-compatible aliases for old toggle commands (preserves existing keybindings)
     vscode.commands.registerCommand('workcenter.toggleInboxLayout',
-      wrapCommand('Failed to switch Inbox layout', () => toggleViewLayout('inbox'))),
+      wrapCommand('Failed to switch inbox layout', () => toggleViewLayout('inbox'))),
     vscode.commands.registerCommand('workcenter.toggleQueueLayout',
       wrapCommand('Failed to switch queue layout', () => toggleViewLayout('queue'))),
     vscode.commands.registerCommand('workcenter.toggleFocusLayout',
