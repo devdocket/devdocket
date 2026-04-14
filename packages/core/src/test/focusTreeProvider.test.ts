@@ -84,6 +84,12 @@ describe('FocusTreeProvider', () => {
       const item = makeItem({ state: WorkItemState.InProgress, group: undefined });
       expect(provider.getTreeItem(item).description).toBe('in progress');
     });
+
+    it('should omit group in tree layout', () => {
+      provider.layout = 'tree';
+      const item = makeItem({ state: WorkItemState.InProgress, group: 'octocat/repo' });
+      expect(provider.getTreeItem(item).description).toBe('in progress');
+    });
   });
 
   describe('getTreeItem icon', () => {
