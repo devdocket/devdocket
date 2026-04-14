@@ -367,7 +367,9 @@ export abstract class WorkItemViewProvider implements vscode.TreeDataProvider<Wo
 
   /** Join non-empty description parts with a separator. */
   protected buildDescription(...parts: (string | undefined)[]): string | undefined {
-    const filtered = parts.filter((p): p is string => !!p);
+    const filtered = parts
+      .map(p => p?.trim())
+      .filter((p): p is string => p !== undefined && p.length > 0);
     return filtered.length > 0 ? filtered.join(' · ') : undefined;
   }
 
