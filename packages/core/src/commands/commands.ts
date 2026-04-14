@@ -173,7 +173,7 @@ async function batchAcceptItems(
     try {
       const createdItem = await workGraph.createItem(
         { title: formatItemTitle(item) },
-        { providerId: item.providerId, externalId: item.externalId, url: item.url },
+        { providerId: item.providerId, externalId: item.externalId, url: item.url, group: item.group },
       );
       createdIds.push(createdItem.id);
       stateUpdates.push({ providerId: item.providerId, externalId: item.externalId, state: 'accepted' });

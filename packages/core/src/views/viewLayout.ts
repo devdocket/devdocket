@@ -365,6 +365,12 @@ export abstract class WorkItemViewProvider implements vscode.TreeDataProvider<Wo
     return this.labelResolver?.(normalizedProviderId) ?? normalizedProviderId;
   }
 
+  /** Join non-empty description parts with a separator. */
+  protected buildDescription(...parts: (string | undefined)[]): string | undefined {
+    const filtered = parts.filter((p): p is string => !!p);
+    return filtered.length > 0 ? filtered.join(' · ') : undefined;
+  }
+
   /** Return the WorkItems this view cares about (before sorting). */
   protected abstract getItems(): WorkItem[];
 
