@@ -1230,7 +1230,7 @@ describe('WorkItemEditorPanel (integration with WorkGraph)', () => {
   describe('saveResult feedback', () => {
     it('posts saveResult success after a successful save', async () => {
       const item = await graph.createItem({ title: 'Task' });
-      WorkItemEditorPanel.open(context, graph, item);
+      WorkItemEditorPanel.open(context, graph, createMockProviderRegistry() as any, item);
 
       mockPanel.webview._fireMessage({
         type: 'autosave',
@@ -1247,7 +1247,7 @@ describe('WorkItemEditorPanel (integration with WorkGraph)', () => {
     it('posts saveResult with noop flag when save has no changes', async () => {
       // Create a provider-backed item — title is readonly, so only notes can change
       const item = await graph.createItem({ title: 'Task' }, { providerId: 'test', externalId: 'e1' });
-      WorkItemEditorPanel.open(context, graph, item);
+      WorkItemEditorPanel.open(context, graph, createMockProviderRegistry() as any, item);
 
       // Send autosave with no notes change — should be a no-op
       mockPanel.webview._fireMessage({
@@ -1264,7 +1264,7 @@ describe('WorkItemEditorPanel (integration with WorkGraph)', () => {
 
     it('posts saveResult failure when item was deleted', async () => {
       const item = await graph.createItem({ title: 'Task' });
-      WorkItemEditorPanel.open(context, graph, item);
+      WorkItemEditorPanel.open(context, graph, createMockProviderRegistry() as any, item);
 
       await graph.deleteItem(item.id);
 
@@ -1282,7 +1282,7 @@ describe('WorkItemEditorPanel (integration with WorkGraph)', () => {
 
     it('includes error string in saveResult on failure', async () => {
       const item = await graph.createItem({ title: 'Task' });
-      WorkItemEditorPanel.open(context, graph, item);
+      WorkItemEditorPanel.open(context, graph, createMockProviderRegistry() as any, item);
 
       await graph.deleteItem(item.id);
 
