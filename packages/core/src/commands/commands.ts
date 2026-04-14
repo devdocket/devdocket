@@ -469,6 +469,136 @@ async function acceptSingleInboxItem(
   }
 }
 
+async function acceptToFocusSingleInboxItem(
+  workGraph: WorkGraph,
+  stateStore: DiscoveredStateStore,
+  item: InboxItem,
+): Promise<void> {
+  logger.info(`Accepting inbox item to Focus: ${item.externalId} from ${item.providerId}`);
+  let workItemId: string;
+  const existing = workGraph.findItemByProvenance(item.providerId, item.externalId);
+  if (existing) {
+    workItemId = existing.id;
+    try {
+      await stateStore.setState(item.providerId, item.externalId, 'accepted');
+    } catch (err: unknown) {
+      handleCommandError('Failed to update state for existing accepted item', err);
+      return;
+    }
+  } else {
+    let createdItem: Awaited<ReturnType<typeof workGraph.createItem>>;
+    try {
+      createdItem = await workGraph.createItem(
+        { title: formatItemTitle(item) },
+        { providerId: item.providerId, externalId: item.externalId, url: item.url, group: item.group },
+      );
+    } catch (err: unknown) {
+      handleCommandError('Failed to accept inbox item', err);
+      return;
+    }
+    try {
+      await stateStore.setState(item.providerId, item.externalId, 'accepted');
+    } catch (err: unknown) {
+      try {
+        await workGraph.deleteItem(createdItem.id);
+      } catch (rollbackErr: unknown) {
+        logger.error('Failed to roll back created item after setState failure', rollbackErr);
+      }
+      handleCommandError('Failed to update state after accepting item', err);
+      return;
+    }
+    workItemId = createdItem.id;
+  }
+  await workGraph.transitionState(workItemId, WorkItemState.InProgress);
+}
+
+async function batchAcceptToFocusItems(
+  workGraph: WorkGraph,
+  stateStore: DiscoveredStateStore,
+  items: InboxItem[],
+): Promise<void> {
+  const stateUpdates: Array<{ providerId: string; externalId: string; state: InboxState }> = [];
+  const createdIds: string[] = [];
+  const allIds: string[] = [];
+  let failed = 0;
+
+  for (const item of items) {
+    const existing = workGraph.findItemByProvenance(item.providerId, item.externalId);
+    if (existing) {
+      stateUpdates.push({ providerId: item.providerId, externalId: item.externalId, state: 'accepted' });
+      allIds.push(existing.id);
+      continue;
+    }
+    try {
+      const createdItem = await workGraph.createItem(
+        { title: formatItemTitle(item) },
+        { providerId: item.providerId, externalId: item.externalId, url: item.url, group: item.group },
+      );
+      createdIds.push(createdItem.id);
+      allIds.push(createdItem.id);
+      stateUpdates.push({ providerId: item.providerId, externalId: item.externalId, state: 'accepted' });
+    } catch (err: unknown) {
+      failed++;
+      logger.error(`Failed to accept inbox item to Focus "${item.title}"`, err);
+    }
+  }
+
+  if (stateUpdates.length > 0) {
+    try {
+      await stateStore.setStates(stateUpdates);
+    } catch (err: unknown) {
+      for (const id of createdIds) {
+        try { await workGraph.deleteItem(id); } catch (rollbackErr: unknown) {
+          logger.error('Failed to roll back created item after batch setStates failure', rollbackErr);
+        }
+      }
+      handleCommandError('Failed to update states after accepting items', err);
+      return;
+    }
+  }
+
+  // Transition all successfully accepted items to InProgress
+  let transitionFailed = 0;
+  for (const id of allIds) {
+    try {
+      await workGraph.transitionState(id, WorkItemState.InProgress);
+    } catch (err: unknown) {
+      transitionFailed++;
+      logger.error(`Failed to transition item ${id} to Focus`, err);
+    }
+  }
+
+  const total = allIds.length;
+  if (total > 0) {
+    const msg = (failed > 0 || transitionFailed > 0)
+      ? `Accepted ${total} of ${total + failed} items to Focus`
+      : `Accepted ${total} item${total === 1 ? '' : 's'} to Focus`;
+    void vscode.window.showInformationMessage(msg);
+  }
+  if (failed > 0 || transitionFailed > 0) {
+    void vscode.window.showErrorMessage(
+      `WorkCenter: Failed to process ${failed + transitionFailed} item(s); see Output for details`,
+    );
+  }
+}
+
+async function handleAcceptToFocusFromInbox(
+  workGraph: WorkGraph,
+  stateStore: DiscoveredStateStore,
+  item?: InboxElement,
+  selectedItems?: InboxElement[],
+): Promise<void> {
+  const items = resolveInboxItems(item, selectedItems);
+  if (items.length === 0) { return; }
+
+  if (items.length === 1) {
+    await acceptToFocusSingleInboxItem(workGraph, stateStore, items[0]);
+    return;
+  }
+
+  await batchAcceptToFocusItems(workGraph, stateStore, items);
+}
+
 async function handleDismissFromInbox(
   stateStore: DiscoveredStateStore,
   item?: InboxElement,
@@ -642,6 +772,8 @@ export function registerCommands(
       wrapCommand('Failed to move item to queue', (item, selectedItems) => handleMoveToQueue(workGraph, item, selectedItems))),
     vscode.commands.registerCommand('workcenter.acceptFromInbox',
       wrapCommand('Failed to accept from inbox', (item: InboxElement, selectedItems?: InboxElement[]) => handleAcceptFromInbox(workGraph, stateStore, item, selectedItems))),
+    vscode.commands.registerCommand('workcenter.acceptToFocusFromInbox',
+      wrapCommand('Failed to accept to focus from inbox', (item: InboxElement, selectedItems?: InboxElement[]) => handleAcceptToFocusFromInbox(workGraph, stateStore, item, selectedItems))),
     vscode.commands.registerCommand('workcenter.dismissFromInbox',
       wrapCommand('Failed to dismiss from inbox', (item: InboxElement, selectedItems?: InboxElement[]) => handleDismissFromInbox(stateStore, item, selectedItems))),
     vscode.commands.registerCommand('workcenter.acceptFromSources',
