@@ -419,3 +419,15 @@ Tests verify:
 - Build: ✅ Passes
 - Commit: `f667e7d` — "Fix queue view to show provider label instead of raw ID (#227)"
 
+
+### Issue #229 — Emoji Description Tests Updated (2026-04-12)
+
+**Context:** Issue #229 replaced emoji characters in tree view descriptions with plain text for consistent rendering.
+
+**Files modified:**
+- `packages/core/src/test/focusTreeProvider.test.ts` — Updated assertion: `'⏸ paused'` → `'paused'`
+- `packages/core/src/test/historyTreeProvider.test.ts` — Updated assertions: `'✓ done'` → `'done'`, `'📦 archived'` → `'archived'`
+
+**Pattern:** Description assertions in tree provider tests live in `getTreeItem`-related describe blocks. When production description format changes, update both the assertion value and the `it()` label to match.
+
+**Test suite:** 864 tests passing (29 files), 0 failures.

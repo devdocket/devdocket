@@ -55,7 +55,7 @@ The Focus view shows items you are actively working on. Items here can be in one
 
 Items display a state label next to the title, with icons indicating status:
 - **in progress** — actively being worked on (shown with a ▶ play-circle icon)
-- **⏸ paused** — work is temporarily on hold (shown with a pause icon)
+- **paused** — work is temporarily on hold (shown with a pause icon)
 
 Clicking a Focus item opens the editor panel for that item.
 
@@ -92,8 +92,8 @@ Sources is a browsable library of everything providers know about, regardless of
 The History view shows completed and archived items, sorted by most recently updated (newest first). This provides a record of past work without cluttering the active views.
 
 Items display a state label next to the title:
-- **✓ done** — work that was completed (shown with a ✓ check icon)
-- **📦 archived** — items that were archived (shown with an archive icon)
+- **done** — work that was completed (shown with a check icon)
+- **archived** — items that were archived (shown with an archive icon)
 
 Clicking a History item opens the editor panel to view its details.
 
