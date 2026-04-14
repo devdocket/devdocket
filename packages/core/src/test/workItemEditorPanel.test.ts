@@ -53,6 +53,7 @@ function createMockWorkGraph(item?: WorkItem) {
   return {
     getItem: vi.fn((id: string) => (item && item.id === id ? item : undefined)),
     updateItem: vi.fn(async () => {}),
+    transitionState: vi.fn(async () => {}),
   };
 }
 
@@ -414,6 +415,74 @@ describe('WorkItemEditorPanel', () => {
       mock.simulateMessage({ type: 'openUrl', url: 'data:text/html,<h1>hi</h1>' });
 
       expect(vscode.env.openExternal).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('message handling (transitionState)', () => {
+    it('should call transitionState on workGraph with valid target state', async () => {
+      const item = makeItem({ state: WorkItemState.New });
+      const workGraph = createMockWorkGraph(item);
+      const mock = createMockWebviewPanel();
+      openPanel(item, workGraph, mock);
+
+      mock.simulateMessage({ type: 'transitionState', targetState: 'InProgress' });
+
+      await vi.waitFor(() => {
+        expect(workGraph.transitionState).toHaveBeenCalledWith('item-1', 'InProgress');
+      });
+    });
+
+    it('should refresh editor HTML after successful transition', async () => {
+      const item = makeItem({ state: WorkItemState.New });
+      const workGraph = createMockWorkGraph(item);
+      const mock = createMockWebviewPanel();
+      openPanel(item, workGraph, mock);
+
+      mock.simulateMessage({ type: 'transitionState', targetState: 'InProgress' });
+
+      await vi.waitFor(() => {
+        expect(workGraph.transitionState).toHaveBeenCalled();
+      });
+      expect(mock.panel.webview.html).toBeDefined();
+      expect(typeof mock.panel.webview.html).toBe('string');
+    });
+
+    it('should show error message when transition fails', async () => {
+      const item = makeItem({ state: WorkItemState.New });
+      const workGraph = createMockWorkGraph(item);
+      workGraph.transitionState.mockRejectedValueOnce(new Error('Invalid state transition'));
+      const mock = createMockWebviewPanel();
+      openPanel(item, workGraph, mock);
+
+      mock.simulateMessage({ type: 'transitionState', targetState: 'Done' });
+
+      await vi.waitFor(() => {
+        expect(vscode.window.showErrorMessage).toHaveBeenCalledWith(
+          expect.stringContaining('Invalid state transition'),
+        );
+      });
+    });
+
+    it('should ignore transitionState message with invalid target state', async () => {
+      const item = makeItem({ state: WorkItemState.New });
+      const workGraph = createMockWorkGraph(item);
+      const mock = createMockWebviewPanel();
+      openPanel(item, workGraph, mock);
+
+      await mock.simulateMessage({ type: 'transitionState', targetState: 'NotAState' });
+
+      expect(workGraph.transitionState).not.toHaveBeenCalled();
+    });
+
+    it('should ignore transitionState message when targetState is not a string', async () => {
+      const item = makeItem({ state: WorkItemState.New });
+      const workGraph = createMockWorkGraph(item);
+      const mock = createMockWebviewPanel();
+      openPanel(item, workGraph, mock);
+
+      await mock.simulateMessage({ type: 'transitionState', targetState: 42 });
+
+      expect(workGraph.transitionState).not.toHaveBeenCalled();
     });
   });
 

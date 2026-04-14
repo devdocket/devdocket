@@ -1,5 +1,5 @@
 import * as vscode from 'vscode';
-import { WorkItem, WorkItemInput } from '../models/workItem';
+import { WorkItem, WorkItemInput, WorkItemState } from '../models/workItem';
 import { WorkGraph } from '../services/workGraph';
 import { ProviderRegistry } from '../services/providerRegistry';
 import { getEditorPanelHtml } from './editorPanelHtml';
@@ -77,6 +77,13 @@ export class WorkItemEditorPanel {
         }
         return;
       }
+      if (msg?.type === 'transitionState' && typeof msg.targetState === 'string') {
+        const target = msg.targetState as WorkItemState;
+        if (Object.values(WorkItemState).includes(target)) {
+          void this.handleTransition(target);
+        }
+        return;
+      }
       if (msg?.type === 'autosave' && msg.data && typeof msg.data === 'object') {
         this.pendingData = msg.data;
         if (this.debounceTimer) {
@@ -133,6 +140,18 @@ export class WorkItemEditorPanel {
     await this.workGraph.updateItem(this.itemId, patch);
     if (!this.disposed && data.title && !item.providerId) {
       this.panel.title = `Edit: ${data.title}`;
+    }
+  }
+
+  private async handleTransition(targetState: WorkItemState): Promise<void> {
+    try {
+      await this.workGraph.transitionState(this.itemId, targetState);
+      if (!this.disposed) {
+        this.update();
+      }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      vscode.window.showErrorMessage(`Failed to transition work item: ${message}`);
     }
   }
 

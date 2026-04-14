@@ -173,6 +173,35 @@ export function getEditorPanelHtml({ cspSource, item, providerLabel, providerDes
       color: var(--vscode-textLink-activeForeground);
       text-decoration: underline;
     }
+    .actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 16px;
+      margin-bottom: 8px;
+    }
+    button.primary, button.secondary {
+      padding: 6px 14px;
+      border-radius: 3px;
+      font-family: var(--font);
+      font-size: var(--font-size);
+      cursor: pointer;
+      border: 1px solid transparent;
+    }
+    button.primary {
+      background: var(--vscode-button-background);
+      color: var(--vscode-button-foreground);
+    }
+    button.primary:hover {
+      background: var(--vscode-button-hoverBackground);
+    }
+    button.secondary {
+      background: var(--vscode-button-secondaryBackground);
+      color: var(--vscode-button-secondaryForeground);
+    }
+    button.secondary:hover {
+      background: var(--vscode-button-secondaryHoverBackground);
+    }
   </style>
 </head>
 <body>
@@ -190,6 +219,7 @@ ${descriptionSection}
       <textarea id="notes" placeholder="Add notes...">${escapeHtml(item.notes ?? '')}</textarea>
     </div>
   </div>
+${getActionsHtml(item.state)}
   <div class="metadata" aria-label="Item metadata">
     <div class="metadata-heading">Details</div>
     <dl>
@@ -240,6 +270,12 @@ ${item.providerId && providerLabel ? `      <dt>Provider</dt>
         vscode.postMessage({ type: 'openUrl', url: sourceLink.dataset.url });
       });
     }
+
+    document.querySelectorAll('.actions button[data-target-state]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        vscode.postMessage({ type: 'transitionState', targetState: btn.dataset.targetState });
+      });
+    });
   </script>
 </body>
 </html>`;
@@ -277,4 +313,56 @@ function escapeHtml(s: string): string {
 
 function escapeAttr(s: string): string {
   return escapeHtml(s).replace(/"/g, '&quot;');
+}
+
+interface ActionButton {
+  label: string;
+  targetState: WorkItemState;
+  style: 'primary' | 'secondary';
+}
+
+/** Returns the action buttons available for the given state, derived from the state machine. */
+export function getTransitionActions(state: WorkItemState): ActionButton[] {
+  switch (state) {
+    case WorkItemState.New:
+      return [
+        { label: 'Start', targetState: WorkItemState.InProgress, style: 'primary' },
+        { label: 'Archive', targetState: WorkItemState.Archived, style: 'secondary' },
+      ];
+    case WorkItemState.InProgress:
+      return [
+        { label: 'Complete', targetState: WorkItemState.Done, style: 'primary' },
+        { label: 'Pause', targetState: WorkItemState.Paused, style: 'secondary' },
+        { label: 'Return to Queue', targetState: WorkItemState.New, style: 'secondary' },
+        { label: 'Archive', targetState: WorkItemState.Archived, style: 'secondary' },
+      ];
+    case WorkItemState.Paused:
+      return [
+        { label: 'Resume', targetState: WorkItemState.InProgress, style: 'primary' },
+        { label: 'Return to Queue', targetState: WorkItemState.New, style: 'secondary' },
+        { label: 'Archive', targetState: WorkItemState.Archived, style: 'secondary' },
+      ];
+    case WorkItemState.Done:
+      return [
+        { label: 'Archive', targetState: WorkItemState.Archived, style: 'secondary' },
+      ];
+    case WorkItemState.Archived:
+      return [];
+    default:
+      return [];
+  }
+}
+
+function getActionsHtml(state: WorkItemState): string {
+  const actions = getTransitionActions(state);
+  if (actions.length === 0) {
+    return '';
+  }
+  const buttons = actions.map(
+    (a) =>
+      `<button type="button" class="${a.style}" data-target-state="${escapeAttr(a.targetState)}">${escapeHtml(a.label)}</button>`,
+  ).join('\n      ');
+  return `  <div class="actions" aria-label="State actions">
+      ${buttons}
+    </div>`;
 }

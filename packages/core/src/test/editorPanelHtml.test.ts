@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { getEditorPanelHtml } from '../views/editorPanelHtml';
+import { getEditorPanelHtml, getTransitionActions } from '../views/editorPanelHtml';
 import { WorkItem, WorkItemState } from '../models/workItem';
 
 function makeItem(overrides: Partial<WorkItem> = {}): WorkItem {
@@ -288,5 +288,102 @@ describe('getEditorPanelHtml', () => {
       expect(html).not.toContain('<script>alert(1)</script>');
       expect(html).toContain('&quot;&gt;&lt;script&gt;alert(1)&lt;/script&gt;');
     });
+  });
+
+  describe('state action buttons', () => {
+    it('renders Start and Archive buttons for New state', () => {
+      const item = makeItem({ state: WorkItemState.New });
+      const html = getEditorPanelHtml({ cspSource, item });
+      expect(html).toContain('class="actions"');
+      expect(html).toContain('data-target-state="InProgress"');
+      expect(html).toContain('>Start<');
+      expect(html).toContain('data-target-state="Archived"');
+      expect(html).toContain('>Archive<');
+    });
+
+    it('renders Complete, Pause, Return to Queue, and Archive for InProgress', () => {
+      const item = makeItem({ state: WorkItemState.InProgress });
+      const html = getEditorPanelHtml({ cspSource, item });
+      expect(html).toContain('data-target-state="Done"');
+      expect(html).toContain('>Complete<');
+      expect(html).toContain('data-target-state="Paused"');
+      expect(html).toContain('>Pause<');
+      expect(html).toContain('data-target-state="New"');
+      expect(html).toContain('>Return to Queue<');
+      expect(html).toContain('data-target-state="Archived"');
+    });
+
+    it('renders Resume, Return to Queue, and Archive for Paused', () => {
+      const item = makeItem({ state: WorkItemState.Paused });
+      const html = getEditorPanelHtml({ cspSource, item });
+      expect(html).toContain('data-target-state="InProgress"');
+      expect(html).toContain('>Resume<');
+      expect(html).toContain('data-target-state="New"');
+      expect(html).toContain('data-target-state="Archived"');
+    });
+
+    it('renders Archive button for Done state', () => {
+      const item = makeItem({ state: WorkItemState.Done });
+      const html = getEditorPanelHtml({ cspSource, item });
+      expect(html).toContain('data-target-state="Archived"');
+      expect(html).toContain('>Archive<');
+    });
+
+    it('renders no action buttons for Archived state', () => {
+      const item = makeItem({ state: WorkItemState.Archived });
+      const html = getEditorPanelHtml({ cspSource, item });
+      expect(html).not.toContain('class="actions"');
+    });
+
+    it('uses primary class for the main action button', () => {
+      const item = makeItem({ state: WorkItemState.New });
+      const html = getEditorPanelHtml({ cspSource, item });
+      expect(html).toMatch(/<button[^>]*class="primary"[^>]*data-target-state="InProgress"/);
+    });
+
+    it('uses secondary class for non-primary action buttons', () => {
+      const item = makeItem({ state: WorkItemState.New });
+      const html = getEditorPanelHtml({ cspSource, item });
+      expect(html).toMatch(/<button[^>]*class="secondary"[^>]*data-target-state="Archived"/);
+    });
+
+    it('includes aria-label on the actions container', () => {
+      const item = makeItem({ state: WorkItemState.InProgress });
+      const html = getEditorPanelHtml({ cspSource, item });
+      expect(html).toContain('aria-label="State actions"');
+    });
+  });
+});
+
+describe('getTransitionActions', () => {
+  it('returns correct actions for New state', () => {
+    const actions = getTransitionActions(WorkItemState.New);
+    expect(actions).toHaveLength(2);
+    expect(actions[0]).toEqual({ label: 'Start', targetState: WorkItemState.InProgress, style: 'primary' });
+    expect(actions[1]).toEqual({ label: 'Archive', targetState: WorkItemState.Archived, style: 'secondary' });
+  });
+
+  it('returns correct actions for InProgress state', () => {
+    const actions = getTransitionActions(WorkItemState.InProgress);
+    expect(actions).toHaveLength(4);
+    expect(actions.map(a => a.targetState)).toEqual([
+      WorkItemState.Done, WorkItemState.Paused, WorkItemState.New, WorkItemState.Archived,
+    ]);
+  });
+
+  it('returns correct actions for Paused state', () => {
+    const actions = getTransitionActions(WorkItemState.Paused);
+    expect(actions).toHaveLength(3);
+    expect(actions[0]).toEqual({ label: 'Resume', targetState: WorkItemState.InProgress, style: 'primary' });
+  });
+
+  it('returns correct actions for Done state', () => {
+    const actions = getTransitionActions(WorkItemState.Done);
+    expect(actions).toHaveLength(1);
+    expect(actions[0].targetState).toBe(WorkItemState.Archived);
+  });
+
+  it('returns empty array for Archived state', () => {
+    expect(getTransitionActions(WorkItemState.Archived)).toEqual([]);
   });
 });
