@@ -112,4 +112,28 @@ describe('getEditorPanelHtml', () => {
     const html = getEditorPanelHtml({ cspSource, item });
     expect(html).toMatch(/id=["']save-status["']/);
   });
+
+  describe('browser URL link', () => {
+    it('renders a clickable link when item has a url', () => {
+      const item = makeItem({ url: 'https://github.com/org/repo/issues/42' });
+      const html = getEditorPanelHtml({ cspSource, item });
+      expect(html).toContain('id="source-link"');
+      expect(html).toMatch(/<button\s[^>]*data-url="https:\/\/github\.com\/org\/repo\/issues\/42"/);
+      expect(html).toContain('Open in browser');
+    });
+
+    it('does not render a link when item has no url', () => {
+      const item = makeItem({ url: undefined });
+      const html = getEditorPanelHtml({ cspSource, item });
+      expect(html).not.toContain('id="source-link"');
+      expect(html).not.toContain('Open in browser');
+    });
+
+    it('escapes HTML entities in the url to prevent XSS', () => {
+      const item = makeItem({ url: 'https://evil.com/"><script>alert(1)</script>' });
+      const html = getEditorPanelHtml({ cspSource, item });
+      expect(html).not.toContain('<script>alert(1)</script>');
+      expect(html).toContain('&quot;&gt;&lt;script&gt;alert(1)&lt;/script&gt;');
+    });
+  });
 });
