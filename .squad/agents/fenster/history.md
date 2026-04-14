@@ -80,6 +80,10 @@ Key files:
 ### Responsive CSS in Webview Panels
 - Editor panel body CSS in `editorPanelHtml.ts` uses `max-width: min(560px, 100%)` with `margin: 0 auto` for responsive centering — avoids overflow in narrow splits and wasted space in wide layouts
 - Responsive padding (`padding: 20px min(5%, 24px)`) scales with panel width while capping the horizontal padding instead of using only a fixed pixel value
+### Emoji Removal in Tree Descriptions (Issue #229)
+- Tree item descriptions should use plain text labels, not Unicode emoji — emoji render inconsistently across platforms, fonts, and themes
+- Fixed in `packages/core/src/views/focusTreeProvider.ts` (`getStateLabel`) and `packages/core/src/views/historyTreeProvider.ts` (`getStateLabel`)
+- State is already conveyed by ThemeIcon (`debug-pause`, `check`, `archive`), so descriptions only need plain text: `"paused"`, `"done"`, `"archived"`
 
 ## Code Review Fixes (2026-03-24)
 
@@ -243,6 +247,26 @@ Patterns documented in `.squad/decisions.md` under "Code Review Fix Patterns" (2
 - **Defensive async loading**: When a synchronous getter reads from an async-loaded cache, ensure the cache is loaded at every call site. Don't rely solely on initialization order guarantees.
 - **Test timing**: When production code adds an async operation to a previously-synchronous code path, tests that fire-and-forget events need to wait for async handlers to complete before asserting on side effects.
 
+## Issue #227: Queue View Provider Labels (2026-04-13)
+
+**Status:** COMPLETE — Provider labels now display in queue view instead of raw IDs
+
+### Summary
+The queue view was displaying raw provider IDs (e.g., `github`, `ado`) in tree items. Extracted `getProviderLabel()` method from `WorkItemViewProvider` base class and applied it in `QueueTreeProvider` to show human-readable labels (e.g., "GitHub Issues").
+
+### Files Modified
+- `packages/core/src/views/queueTreeProvider.ts` — Updated tree item label rendering
+- `packages/core/src/views/viewLayout.ts` — Extracted `getProviderLabel()` method for reuse across all views
+
+### Key Learnings
+- **Label centralization**: Extracting label lookup into the base class prevents duplication and ensures consistency. Any future view that needs provider labels automatically gets the same logic.
+- **Provider registry lookup**: The `getProviderLabel()` method uses the `ProviderRegistry` to look up the display name. Falls back gracefully if provider not found.
+
+### Result
+- Build: ✅ Passes
+- Tests: 870 total (864 existing + 6 new from Hockney)
+- Commit: `f667e7d` — "Fix queue view to show provider label instead of raw ID (#227)"
+
 ## Issue #189: resurfaceDismissed removal (2025-01-24)
 
 ### Root Cause (Corrected)
@@ -259,3 +283,9 @@ Patterns documented in `.squad/decisions.md` under "Code Review Fix Patterns" (2
 - **Dismissed means dismissed**: The original four-view design established that dismissed items are sticky. The `resurfaceDismissed` feature contradicted this core design principle.
 - **Root cause matters**: The first fix (defensive load) was plausible but wrong. The symptom (dismissed items reappearing) had a simpler explanation: code explicitly designed to resurface them.
 - **Reverting cleanly**: When reverting test changes, `git checkout <commit> -- <files>` is the safest approach to restore files to a known-good state before applying new targeted edits.
+
+## Issue #231: Sources view dismissed icon (2025-07-23)
+
+### Learnings
+- **Icon mapping in Sources view**: `packages/core/src/views/sourcesTreeProvider.ts` maps `InboxState` to `ThemeIcon` names via `switch (state)` in `getTreeItem()`: `accepted` → `check`, `dismissed` → `circle-slash`, `unseen` → `circle-outline`. Previously simpler branching lumped dismissed and unseen together.
+- **Key file**: `packages/core/src/views/sourcesTreeProvider.ts` — the `getTreeItem()` method for `item` kind elements assigns icons based on `stateStore.getState()` result.
