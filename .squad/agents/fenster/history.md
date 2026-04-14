@@ -27,6 +27,8 @@ Key files:
 ## Learnings
 
 - **Editor panel source URL link (Issue #219):** Webview CSP has `default-src 'none'`, so direct navigation won't work. Used `vscode.postMessage({ type: 'openUrl' })` from webview → extension host validates with `isSafeUrl()` and opens via `vscode.env.openExternal()`. Renders as a `<button>` with `data-url` attribute (escaped via `escapeAttr`). Added 3 HTML tests in `editorPanelHtml.test.ts` and 4 message handler tests in `workItemEditorPanel.test.ts` (including javascript:/data: scheme rejection).
+- Layout toggle dynamic icons: VS Code requires separate command IDs for different icons. Pattern: register two commands per toggle (e.g., `switchXToTree` and `switchXToFlat`), each with its own icon. Use context keys (`workcenter.${id}Layout`) set on activation + config change listener in `extension.ts` (lines ~332-354). Menu entries use `when` clauses (e.g., `workcenter.inboxLayout == flat`) to show only the relevant command. Add `commandPalette` entries with matching `when` clauses to hide the irrelevant variant from the palette.
+  - Key files: `package.json` (commands, menus.view/title, menus.commandPalette), `commands.ts` (registrations), `extension.ts` (context key init + config listener), `viewLayout.ts` (toggle logic).
 - **Empty state messages** use VS Code's `viewsWelcome` contribution in `packages/core/package.json`. Each entry has a `view` (matching a view ID like `workcenter.inbox`) and `contents` (markdown string). VS Code displays these automatically when a TreeDataProvider returns no children. Command buttons use `[Label](command:commandId)` markdown syntax. No `when` clause needed — VS Code handles the empty-tree condition natively.
 - GitHub package (`packages/github/`) vscode mock lives at `packages/github/src/test/__mocks__/vscode.ts`, aliased in `vitest.config.ts` — mirrors core mock pattern but adds `authentication`, `workspace`, `extensions` mocks.
 - Mock includes: `authentication.getSession` (resolves with `{ accessToken: 'mock-token' }`), `workspace.getConfiguration` (returns `.get(key, default)` stub), `workspace.workspaceFolders`, `extensions.getExtension`, `commands.executeCommand`, `Uri.file`, `window.showErrorMessage`.
@@ -79,6 +81,9 @@ Key files:
 - Migration logic runs on activation before tree registration to seed existing WorkItems as 'accepted'
 - Items with no persisted state default to 'unseen' — allows new providers to introduce items without re-surfacing old ones
 
+### Responsive CSS in Webview Panels
+- Editor panel body CSS in `editorPanelHtml.ts` uses `max-width: min(560px, 100%)` with `margin: 0 auto` for responsive centering — avoids overflow in narrow splits and wasted space in wide layouts
+- Responsive padding (`padding: 20px min(5%, 24px)`) scales with panel width while capping the horizontal padding instead of using only a fixed pixel value
 ### Emoji Removal in Tree Descriptions (Issue #229)
 - Tree item descriptions should use plain text labels, not Unicode emoji — emoji render inconsistently across platforms, fonts, and themes
 - Fixed in `packages/core/src/views/focusTreeProvider.ts` (`getStateLabel`) and `packages/core/src/views/historyTreeProvider.ts` (`getStateLabel`)
