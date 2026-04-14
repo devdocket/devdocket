@@ -899,6 +899,19 @@ describe('registerCommands', () => {
         expect.objectContaining({ providerId: 'github', externalId: 'ext-2', group: 'octocat/other' }),
       );
     });
+
+    it('normalizes whitespace-only group to undefined in batch accept', async () => {
+      const items = [makeInboxItem({ externalId: 'ext-ws', title: 'Whitespace', group: '  ' })];
+      workGraph.findItemByProvenance.mockReturnValue(undefined);
+      workGraph.createItem.mockResolvedValueOnce(createWorkItem({ id: 'wc-ws' }));
+
+      await invoke('workcenter.acceptFromInbox', items[0], items);
+
+      expect(workGraph.createItem).toHaveBeenCalledWith(
+        { title: 'Whitespace' },
+        expect.objectContaining({ group: undefined }),
+      );
+    });
   });
 
   // ── batch dismissFromInbox (multi-select) ─────────────────────────
