@@ -103,7 +103,7 @@ export function getEditorPanelHtml({ cspSource, item }: EditorHtmlOptions): stri
   </style>
 </head>
 <body>
-  <h2 id="editor-heading">Edit Work Item</h2>
+  <h2 id="editor-heading">${escapeHtml(item.title)}</h2>
 ${item.url ? `  <button type="button" class="source-link" id="source-link" data-url="${escapeAttr(item.url)}">Open in browser</button>` : ''}
   <div id="form" role="form" aria-labelledby="editor-heading">
     <div class="field">

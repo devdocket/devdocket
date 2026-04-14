@@ -81,6 +81,9 @@ Key files:
 - Migration logic runs on activation before tree registration to seed existing WorkItems as 'accepted'
 - Items with no persisted state default to 'unseen' — allows new providers to introduce items without re-surfacing old ones
 
+### Editor Panel HTML
+- The editor heading (`<h2 id="editor-heading">`) uses `escapeHtml(item.title)` instead of a generic "Edit Work Item" string — keeps it contextual while preserving `aria-labelledby` accessibility (Issue #221)
+- `escapeHtml` and `escapeAttr` are local helpers in `editorPanelHtml.ts` — use `escapeHtml` for text content, `escapeAttr` for attribute values
 ### Responsive CSS in Webview Panels
 - Editor panel body CSS in `editorPanelHtml.ts` uses `max-width: min(560px, 100%)` with `margin: 0 auto` for responsive centering — avoids overflow in narrow splits and wasted space in wide layouts
 - Responsive padding (`padding: 20px min(5%, 24px)`) scales with panel width while capping the horizontal padding instead of using only a fixed pixel value
