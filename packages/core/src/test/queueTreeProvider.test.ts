@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { DataTransfer, DataTransferItem, MarkdownString, TreeItemCollapsibleState, EventEmitter } from 'vscode';
+import { DataTransfer, DataTransferItem, EventEmitter, MarkdownString, TreeItemCollapsibleState } from 'vscode';
 import { WorkGraph } from '../services/workGraph';
 import { WorkItemState } from '../models/workItem';
 import { ITaskStore } from '../storage/taskStore';
@@ -24,6 +24,7 @@ function createMockProviderRegistry(): ProviderRegistry {
       if (id === 'ado') return 'Azure DevOps';
       return id;
     }),
+    getDiscoveredItems: vi.fn(() => []),
     onDidRegisterProvider: emitter.event,
   } as any;
 }
@@ -411,6 +412,115 @@ describe('QueueTreeProvider', () => {
       await graph.createItem({ title: 'First' });
       await graph.createItem({ title: 'Second' });
       expect(listener).toHaveBeenCalledTimes(2);
+    });
+  });
+
+  describe('resolveTitle', () => {
+    function createMockProviderRegistry(discoveredItems: Map<string, Array<{ externalId: string; title: string }>> = new Map()) {
+      const emitter = new EventEmitter();
+      const changeEmitter = new EventEmitter();
+      return {
+        getProviderLabel: vi.fn((id: string) => id),
+        onDidRegisterProvider: emitter.event,
+        onDidChangeDiscoveredItems: changeEmitter.event,
+        getDiscoveredItems: vi.fn((providerId: string) => discoveredItems.get(providerId) ?? []),
+        _fireChange: () => changeEmitter.fire(),
+      };
+    }
+
+    it('shows live title from provider for provider-backed items', async () => {
+      const discovered = new Map([
+        ['github', [{ externalId: 'ext-1', title: 'Live Title from GitHub' }]],
+      ]);
+      const registry = createMockProviderRegistry(discovered);
+      const providerAwareProvider = new QueueTreeProvider(graph, registry as any);
+
+      const item = await graph.createItem(
+        { title: 'Persisted Title' },
+        { providerId: 'github', externalId: 'ext-1' },
+      );
+
+      const treeItem = providerAwareProvider.getTreeItem(item);
+      expect(treeItem.label).toBe('Live Title from GitHub');
+    });
+
+    it('shows persisted title for items without a provider', async () => {
+      const registry = createMockProviderRegistry();
+      const providerAwareProvider = new QueueTreeProvider(graph, registry as any);
+
+      const item = await graph.createItem({ title: 'Manual Task' });
+
+      const treeItem = providerAwareProvider.getTreeItem(item);
+      expect(treeItem.label).toBe('Manual Task');
+    });
+
+    it('falls back to persisted title when discovered item does not exist', async () => {
+      const discovered = new Map([
+        ['github', [{ externalId: 'different-id', title: 'Other Item' }]],
+      ]);
+      const registry = createMockProviderRegistry(discovered);
+      const providerAwareProvider = new QueueTreeProvider(graph, registry as any);
+
+      const item = await graph.createItem(
+        { title: 'Persisted Fallback' },
+        { providerId: 'github', externalId: 'ext-not-found' },
+      );
+
+      const treeItem = providerAwareProvider.getTreeItem(item);
+      expect(treeItem.label).toBe('Persisted Fallback');
+    });
+
+    it('falls back to persisted title when provider has no discovered items', async () => {
+      const registry = createMockProviderRegistry(new Map());
+      const providerAwareProvider = new QueueTreeProvider(graph, registry as any);
+
+      const item = await graph.createItem(
+        { title: 'Persisted Only' },
+        { providerId: 'github', externalId: 'ext-1' },
+      );
+
+      const treeItem = providerAwareProvider.getTreeItem(item);
+      expect(treeItem.label).toBe('Persisted Only');
+    });
+
+    it('uses persisted title when no providerRegistry is provided', async () => {
+      // provider is already created without registry in beforeEach
+      const item = await graph.createItem(
+        { title: 'No Registry' },
+        { providerId: 'github', externalId: 'ext-1' },
+      );
+
+      const treeItem = provider.getTreeItem(item);
+      expect(treeItem.label).toBe('No Registry');
+    });
+
+    it('includes resolved title in tooltip', async () => {
+      const discovered = new Map([
+        ['github', [{ externalId: 'ext-1', title: 'Live Tooltip Title' }]],
+      ]);
+      const registry = createMockProviderRegistry(discovered);
+      const providerAwareProvider = new QueueTreeProvider(graph, registry as any);
+
+      const item = await graph.createItem(
+        { title: 'Persisted Title' },
+        { providerId: 'github', externalId: 'ext-1' },
+      );
+
+      const treeItem = providerAwareProvider.getTreeItem(item);
+      expect(treeItem.tooltip.value).toContain('Live Tooltip Title');
+      expect(treeItem.tooltip.value).not.toContain('Persisted Title');
+    });
+
+    it('refreshes tree when discovered items change', async () => {
+      const discovered = new Map<string, Array<{ externalId: string; title: string }>>();
+      const registry = createMockProviderRegistry(discovered);
+      const providerAwareProvider = new QueueTreeProvider(graph, registry as any);
+
+      const listener = vi.fn();
+      providerAwareProvider.onDidChangeTreeData(listener);
+
+      registry._fireChange();
+      expect(listener).toHaveBeenCalledTimes(1);
     });
   });
 

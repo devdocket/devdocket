@@ -329,6 +329,95 @@ describe('HistoryTreeProvider', () => {
     });
   });
 
+  describe('resolveTitle', () => {
+    function createMockProviderRegistry(discoveredItems: Map<string, Array<{ externalId: string; title: string }>> = new Map()) {
+      const emitter = new EventEmitter();
+      const changeEmitter = new EventEmitter();
+      return {
+        getProviderLabel: vi.fn((id: string) => id),
+        onDidRegisterProvider: emitter.event,
+        onDidChangeDiscoveredItems: changeEmitter.event,
+        getDiscoveredItems: vi.fn((providerId: string) => discoveredItems.get(providerId) ?? []),
+        _fireChange: () => changeEmitter.fire(),
+      };
+    }
+
+    it('shows live title from provider for provider-backed items', () => {
+      const discovered = new Map([
+        ['github', [{ externalId: 'ext-1', title: 'Live History Title' }]],
+      ]);
+      const registry = createMockProviderRegistry(discovered);
+      const items = [
+        makeItem({ id: '1', title: 'Persisted Title', state: WorkItemState.Done, providerId: 'github', externalId: 'ext-1' }),
+      ];
+      const wg = createMockWorkGraph(items);
+      const providerWithRegistry = new HistoryTreeProvider(wg as any, registry as any);
+
+      const treeItem = providerWithRegistry.getTreeItem(items[0]);
+      expect(treeItem.label).toBe('Live History Title');
+    });
+
+    it('shows persisted title for items without a provider', () => {
+      const registry = createMockProviderRegistry();
+      const items = [
+        makeItem({ id: '1', title: 'Manual Done Item', state: WorkItemState.Done }),
+      ];
+      const wg = createMockWorkGraph(items);
+      const providerWithRegistry = new HistoryTreeProvider(wg as any, registry as any);
+
+      const treeItem = providerWithRegistry.getTreeItem(items[0]);
+      expect(treeItem.label).toBe('Manual Done Item');
+    });
+
+    it('falls back to persisted title when discovered item does not exist', () => {
+      const discovered = new Map([
+        ['github', [{ externalId: 'other-id', title: 'Wrong Item' }]],
+      ]);
+      const registry = createMockProviderRegistry(discovered);
+      const items = [
+        makeItem({ id: '1', title: 'Persisted Fallback', state: WorkItemState.Done, providerId: 'github', externalId: 'ext-missing' }),
+      ];
+      const wg = createMockWorkGraph(items);
+      const providerWithRegistry = new HistoryTreeProvider(wg as any, registry as any);
+
+      const treeItem = providerWithRegistry.getTreeItem(items[0]);
+      expect(treeItem.label).toBe('Persisted Fallback');
+    });
+
+    it('uses persisted title when no providerRegistry is provided', () => {
+      const item = makeItem({ id: '1', title: 'No Registry', state: WorkItemState.Done, providerId: 'github', externalId: 'ext-1' });
+      // provider from beforeEach has no registry
+      const treeItem = provider.getTreeItem(item);
+      expect(treeItem.label).toBe('No Registry');
+    });
+
+    it('works for Archived items too', () => {
+      const discovered = new Map([
+        ['github', [{ externalId: 'ext-archived', title: 'Live Archived Title' }]],
+      ]);
+      const registry = createMockProviderRegistry(discovered);
+      const items = [
+        makeItem({ id: '1', title: 'Old Title', state: WorkItemState.Archived, providerId: 'github', externalId: 'ext-archived' }),
+      ];
+      const wg = createMockWorkGraph(items);
+      const providerWithRegistry = new HistoryTreeProvider(wg as any, registry as any);
+
+      const treeItem = providerWithRegistry.getTreeItem(items[0]);
+      expect(treeItem.label).toBe('Live Archived Title');
+    });
+
+    it('refreshes tree when discovered items change', () => {
+      const registry = createMockProviderRegistry();
+      const providerWithRegistry = new HistoryTreeProvider(workGraph as any, registry as any);
+
+      const listener = vi.fn();
+      providerWithRegistry.onDidChangeTreeData(listener);
+
+      registry._fireChange();
+      expect(listener).toHaveBeenCalledTimes(1);
+    });
+  });
+
   describe('events', () => {
     it('should fire onDidChangeTreeData when workGraph changes', () => {
       const listener = vi.fn();

@@ -141,6 +141,13 @@ function normalizeProviderId(providerId: string | null | undefined): string | un
 export type LabelResolver = (providerId: string) => string;
 
 /**
+ * Looks up the live title for a provider-backed item.
+ * Returns `undefined` when the discovered item is not found,
+ * signalling the caller to fall back to the persisted title.
+ */
+export type TitleResolver = (providerId: string, externalId: string) => string | undefined;
+
+/**
  * Group WorkItems by providerId into ProviderGroupNodes.
  * Items without a providerId (or with an empty/whitespace one) are grouped under "Other" (sorted last).
  *
@@ -317,6 +324,8 @@ export abstract class WorkItemViewProvider implements vscode.TreeDataProvider<Wo
     defaultLayout: ViewLayout,
     private readonly labelResolver?: LabelResolver,
     providerChangeEvent?: import('vscode').Event<void>,
+    private readonly titleResolver?: TitleResolver,
+    discoveredItemsChangeEvent?: import('vscode').Event<void>,
   ) {
     this._layoutState = new LayoutState(defaultLayout, () => this._onDidChangeTreeData.fire());
     this.disposables.push(
@@ -327,6 +336,23 @@ export abstract class WorkItemViewProvider implements vscode.TreeDataProvider<Wo
         providerChangeEvent(() => this._onDidChangeTreeData.fire()),
       );
     }
+    if (discoveredItemsChangeEvent) {
+      this.disposables.push(
+        discoveredItemsChangeEvent(() => this._onDidChangeTreeData.fire()),
+      );
+    }
+  }
+
+  /**
+   * Resolve the display title for a work item.
+   * For provider-backed items, returns the live title from the provider if available;
+   * otherwise falls back to the persisted title.
+   */
+  protected resolveTitle(item: WorkItem): string {
+    if (item.providerId && item.externalId && this.titleResolver) {
+      return this.titleResolver(item.providerId, item.externalId) ?? item.title;
+    }
+    return item.title;
   }
 
   refresh(): void { this._onDidChangeTreeData.fire(); }
