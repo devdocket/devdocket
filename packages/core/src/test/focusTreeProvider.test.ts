@@ -65,9 +65,9 @@ describe('FocusTreeProvider', () => {
       expect(provider.getTreeItem(item).description).toBe('in progress');
     });
 
-    it('should show "⏸ paused" for Paused items', () => {
+    it('should show "paused" for Paused items', () => {
       const item = makeItem({ state: WorkItemState.Paused });
-      expect(provider.getTreeItem(item).description).toBe('⏸ paused');
+      expect(provider.getTreeItem(item).description).toBe('paused');
     });
   });
 
