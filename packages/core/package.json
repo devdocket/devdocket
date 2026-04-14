@@ -522,6 +522,11 @@
           "group": "inline"
         },
         {
+          "command": "workcenter.acceptFromInbox",
+          "when": "view == workcenter.inbox && viewItem =~ /inboxItem/",
+          "group": "1_actions"
+        },
+        {
           "command": "workcenter.acceptToFocusFromInbox",
           "when": "view == workcenter.inbox && viewItem =~ /inboxItem/",
           "group": "inline"
