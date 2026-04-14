@@ -80,6 +80,9 @@ Key files:
 - Migration logic runs on activation before tree registration to seed existing WorkItems as 'accepted'
 - Items with no persisted state default to 'unseen' — allows new providers to introduce items without re-surfacing old ones
 
+### Responsive CSS in Webview Panels
+- Editor panel body CSS in `editorPanelHtml.ts` uses `max-width: min(560px, 100%)` with `margin: 0 auto` for responsive centering — avoids overflow in narrow splits and wasted space in wide layouts
+- Responsive padding (`padding: 20px min(5%, 24px)`) scales with panel width while capping the horizontal padding instead of using only a fixed pixel value
 ### Emoji Removal in Tree Descriptions (Issue #229)
 - Tree item descriptions should use plain text labels, not Unicode emoji — emoji render inconsistently across platforms, fonts, and themes
 - Fixed in `packages/core/src/views/focusTreeProvider.ts` (`getStateLabel`) and `packages/core/src/views/historyTreeProvider.ts` (`getStateLabel`)
