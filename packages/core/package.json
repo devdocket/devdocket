@@ -85,6 +85,28 @@
         }
       ]
     },
+    "viewsWelcome": [
+      {
+        "view": "workcenter.inbox",
+        "contents": "No new items.\nProviders will discover items automatically."
+      },
+      {
+        "view": "workcenter.queue",
+        "contents": "No items in your queue.\nAccept items from Inbox or create one manually.\n[Create Work Item](command:workcenter.createItem)"
+      },
+      {
+        "view": "workcenter.focus",
+        "contents": "No active work.\nMove items from Queue to start working on them."
+      },
+      {
+        "view": "workcenter.history",
+        "contents": "Completed and archived items will appear here."
+      },
+      {
+        "view": "workcenter.sources",
+        "contents": "Discovered items from all providers will appear here."
+      }
+    ],
     "commands": [
       {
         "command": "workcenter.createItem",
