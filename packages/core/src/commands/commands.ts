@@ -605,22 +605,22 @@ async function handleUndismissFromSources(
 
   if (items.length === 1) {
     try {
-      logger.info(`Un-dismissing source item: ${items[0].externalId}`);
+      logger.info(`Restoring source item to inbox: ${items[0].externalId}`);
       await stateStore.setState(items[0].providerId, items[0].externalId, 'unseen');
     } catch (err: unknown) {
-      handleCommandError('Failed to un-dismiss item', err);
+      handleCommandError('Failed to restore item to Inbox', err);
     }
     return;
   }
 
   try {
-    logger.info(`Batch un-dismissing ${items.length} source items`);
+    logger.info(`Batch restoring ${items.length} source items to inbox`);
     await stateStore.setStates(
       items.map(i => ({ providerId: i.providerId, externalId: i.externalId, state: 'unseen' as const }))
     );
     void vscode.window.showInformationMessage(`Restored ${items.length} items to inbox`);
   } catch (err: unknown) {
-    handleCommandError('Failed to un-dismiss items', err);
+    handleCommandError('Failed to restore items to Inbox', err);
   }
 }
 
