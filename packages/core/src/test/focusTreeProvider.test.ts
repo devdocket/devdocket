@@ -196,6 +196,114 @@ describe('FocusTreeProvider', () => {
     });
   });
 
+  describe('resolveTitle', () => {
+    function createMockProviderRegistry(discoveredItems: Map<string, Array<{ externalId: string; title: string }>> = new Map()) {
+      const emitter = new EventEmitter();
+      const changeEmitter = new EventEmitter();
+      return {
+        getProviderLabel: vi.fn((id: string) => id),
+        onDidRegisterProvider: emitter.event,
+        onDidChangeDiscoveredItems: changeEmitter.event,
+        getDiscoveredItems: vi.fn((providerId: string) => discoveredItems.get(providerId) ?? []),
+        _fireChange: () => changeEmitter.fire(),
+      };
+    }
+
+    it('shows live title from provider for provider-backed items', () => {
+      const discovered = new Map([
+        ['github', [{ externalId: 'ext-1', title: 'Live Focus Title' }]],
+      ]);
+      const registry = createMockProviderRegistry(discovered);
+      const providerWithRegistry = new FocusTreeProvider(workGraph as any, registry as any);
+
+      const item = makeItem({
+        id: 'p1',
+        title: 'Persisted Title',
+        providerId: 'github',
+        externalId: 'ext-1',
+        state: WorkItemState.InProgress,
+      });
+
+      const treeItem = providerWithRegistry.getTreeItem(item);
+      expect(treeItem.label).toBe('Live Focus Title');
+    });
+
+    it('shows persisted title for items without a provider', () => {
+      const registry = createMockProviderRegistry();
+      const providerWithRegistry = new FocusTreeProvider(workGraph as any, registry as any);
+
+      const item = makeItem({ id: 'manual-1', title: 'Manual Focus Item' });
+
+      const treeItem = providerWithRegistry.getTreeItem(item);
+      expect(treeItem.label).toBe('Manual Focus Item');
+    });
+
+    it('falls back to persisted title when discovered item does not exist', () => {
+      const discovered = new Map([
+        ['github', [{ externalId: 'other-id', title: 'Wrong Item' }]],
+      ]);
+      const registry = createMockProviderRegistry(discovered);
+      const providerWithRegistry = new FocusTreeProvider(workGraph as any, registry as any);
+
+      const item = makeItem({
+        id: 'p2',
+        title: 'Persisted Fallback',
+        providerId: 'github',
+        externalId: 'ext-missing',
+        state: WorkItemState.InProgress,
+      });
+
+      const treeItem = providerWithRegistry.getTreeItem(item);
+      expect(treeItem.label).toBe('Persisted Fallback');
+    });
+
+    it('uses persisted title when no providerRegistry is provided', () => {
+      // provider (from beforeEach) has no registry
+      const item = makeItem({
+        id: 'p3',
+        title: 'No Registry Title',
+        providerId: 'github',
+        externalId: 'ext-1',
+        state: WorkItemState.InProgress,
+      });
+
+      const treeItem = provider.getTreeItem(item);
+      expect(treeItem.label).toBe('No Registry Title');
+    });
+
+    it('includes resolved title in tooltip', () => {
+      const discovered = new Map([
+        ['github', [{ externalId: 'ext-1', title: 'Live Tooltip Title' }]],
+      ]);
+      const registry = createMockProviderRegistry(discovered);
+      const providerWithRegistry = new FocusTreeProvider(workGraph as any, registry as any);
+
+      const item = makeItem({
+        id: 'p4',
+        title: 'Persisted Title',
+        providerId: 'github',
+        externalId: 'ext-1',
+        state: WorkItemState.InProgress,
+      });
+
+      const treeItem = providerWithRegistry.getTreeItem(item);
+      const tooltip = (treeItem.tooltip as any).value;
+      expect(tooltip).toContain('Live Tooltip Title');
+      expect(tooltip).not.toContain('Persisted Title');
+    });
+
+    it('refreshes tree when discovered items change', () => {
+      const registry = createMockProviderRegistry();
+      const providerWithRegistry = new FocusTreeProvider(workGraph as any, registry as any);
+
+      const listener = vi.fn();
+      providerWithRegistry.onDidChangeTreeData(listener);
+
+      registry._fireChange();
+      expect(listener).toHaveBeenCalledTimes(1);
+    });
+  });
+
   describe('drag/drop mime types', () => {
     it('exposes correct dropMimeTypes', () => {
       expect(provider.dropMimeTypes).toEqual([DRAG_MIME_TYPE]);

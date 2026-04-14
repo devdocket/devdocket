@@ -22,6 +22,8 @@ export class QueueTreeProvider extends WorkItemViewProvider implements vscode.Tr
       'flat',
       providerRegistry ? id => providerRegistry.getProviderLabel(id) : undefined,
       providerRegistry?.onDidRegisterProvider,
+      providerRegistry ? (pid, eid) => providerRegistry.getDiscoveredItems(pid).find(d => d.externalId === eid)?.title : undefined,
+      providerRegistry?.onDidChangeDiscoveredItems,
     );
   }
 
@@ -34,20 +36,21 @@ export class QueueTreeProvider extends WorkItemViewProvider implements vscode.Tr
   }
 
   protected createWorkItemTreeItem(item: WorkItem): vscode.TreeItem {
-    const treeItem = new vscode.TreeItem(item.title, vscode.TreeItemCollapsibleState.None);
+    const title = this.resolveTitle(item);
+    const treeItem = new vscode.TreeItem(title, vscode.TreeItemCollapsibleState.None);
     treeItem.id = item.id;
     treeItem.description = this.getProviderLabel(item.providerId);
-    treeItem.tooltip = this.buildTooltip(item);
+    treeItem.tooltip = this.buildTooltip(item, title);
     treeItem.contextValue = item.url ? 'queueItem.hasUrl' : 'queueItem';
     treeItem.iconPath = new vscode.ThemeIcon(item.providerId ? 'remote' : 'circle-filled');
     treeItem.command = { command: 'workcenter.editItem', title: 'Open Details', arguments: [item] };
     return treeItem;
   }
 
-  private buildTooltip(item: WorkItem): vscode.MarkdownString {
+  private buildTooltip(item: WorkItem, title: string): vscode.MarkdownString {
     const md = new vscode.MarkdownString();
     md.appendMarkdown(`**Title:** `);
-    md.appendText(item.title);
+    md.appendText(title);
     md.appendMarkdown(`\n\n`);
     if (item.notes) { md.appendText(`${item.notes}\n\n`); }
     md.appendMarkdown(`Created: ${new Date(item.createdAt).toLocaleString()}`);

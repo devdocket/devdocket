@@ -22,6 +22,8 @@ export class FocusTreeProvider extends WorkItemViewProvider implements vscode.Tr
       'flat',
       providerRegistry ? id => providerRegistry.getProviderLabel(id) : undefined,
       providerRegistry?.onDidRegisterProvider,
+      providerRegistry ? (pid, eid) => providerRegistry.getDiscoveredItems(pid).find(d => d.externalId === eid)?.title : undefined,
+      providerRegistry?.onDidChangeDiscoveredItems,
     );
   }
 
@@ -40,10 +42,11 @@ export class FocusTreeProvider extends WorkItemViewProvider implements vscode.Tr
   }
 
   protected createWorkItemTreeItem(item: WorkItem): vscode.TreeItem {
-    const treeItem = new vscode.TreeItem(item.title, vscode.TreeItemCollapsibleState.None);
+    const title = this.resolveTitle(item);
+    const treeItem = new vscode.TreeItem(title, vscode.TreeItemCollapsibleState.None);
     treeItem.id = item.id;
     treeItem.description = this.getStateLabel(item.state);
-    treeItem.tooltip = this.buildTooltip(item);
+    treeItem.tooltip = this.buildTooltip(item, title);
     treeItem.iconPath = this.getIcon(item.state);
 
     // contextValue controls which context menu items appear
@@ -126,10 +129,10 @@ export class FocusTreeProvider extends WorkItemViewProvider implements vscode.Tr
     await this.workGraph.reorderItem(draggedId, target.id);
   }
 
-  private buildTooltip(item: WorkItem): vscode.MarkdownString {
+  private buildTooltip(item: WorkItem, title: string): vscode.MarkdownString {
     const md = new vscode.MarkdownString();
     md.appendMarkdown(`**Title:** `);
-    md.appendText(item.title);
+    md.appendText(title);
     md.appendMarkdown(`\n\n`);
     if (item.notes) {
       md.appendMarkdown(`**Notes:** `);
