@@ -19,27 +19,17 @@ jobs:
         with:
           node-version: 22
 
-      - name: Install dependencies
-        run: npm ci
-
-      - name: Build
-        run: npm run build
-
       - name: Run tests
-        run: npm run test
+        run: node --test test/*.test.js
 
       - name: Validate version consistency
         run: |
           VERSION=$(node -e "console.log(require('./package.json').version)")
-          if [ -f CHANGELOG.md ] && ! grep -q "## \[$VERSION\]" CHANGELOG.md; then
+          if ! grep -q "## \[$VERSION\]" CHANGELOG.md 2>/dev/null; then
             echo "::error::Version $VERSION not found in CHANGELOG.md — update CHANGELOG.md before release"
             exit 1
           fi
-          if [ -f CHANGELOG.md ]; then
-            echo "✅ Version $VERSION validated in CHANGELOG.md"
-          else
-            echo "ℹ️ CHANGELOG.md not found — skipping validation"
-          fi
+          echo "✅ Version $VERSION validated in CHANGELOG.md"
 
       - name: Read version from package.json
         id: version
