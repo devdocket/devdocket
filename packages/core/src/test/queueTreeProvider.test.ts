@@ -1,9 +1,10 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { DataTransfer, DataTransferItem, MarkdownString, TreeItemCollapsibleState } from 'vscode';
+import { DataTransfer, DataTransferItem, MarkdownString, TreeItemCollapsibleState, EventEmitter } from 'vscode';
 import { WorkGraph } from '../services/workGraph';
 import { WorkItemState } from '../models/workItem';
 import { ITaskStore } from '../storage/taskStore';
 import { QueueTreeProvider } from '../views/queueTreeProvider';
+import { ProviderRegistry } from '../services/providerRegistry';
 
 function createMockStore(): ITaskStore {
   const items: Map<string, any> = new Map();
@@ -13,6 +14,18 @@ function createMockStore(): ITaskStore {
     saveAll: vi.fn(async (batch) => { for (const item of batch) { items.set(item.id, item); } }),
     delete: vi.fn(async (id) => { items.delete(id); }),
   };
+}
+
+function createMockProviderRegistry(): ProviderRegistry {
+  const emitter = new EventEmitter<void>();
+  return {
+    getProviderLabel: vi.fn((id: string) => {
+      if (id === 'github') return 'GitHub Issues';
+      if (id === 'ado') return 'Azure DevOps';
+      return id;
+    }),
+    onDidRegisterProvider: emitter.event,
+  } as any;
 }
 
 const DRAG_MIME_TYPE = 'application/vnd.code.tree.workcenter.queue';
@@ -96,7 +109,7 @@ describe('QueueTreeProvider', () => {
       expect(treeItem.collapsibleState).toBe(TreeItemCollapsibleState.None);
     });
 
-    it('sets description to providerId', async () => {
+    it('sets description to providerId when no label resolver', async () => {
       const item = await graph.createItem(
         { title: 'From provider' },
         { providerId: 'github', externalId: 'ext-1' },
@@ -424,6 +437,66 @@ describe('QueueTreeProvider', () => {
       await graph.createItem({ title: 'After dispose' });
 
       expect(listener).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('provider label resolution', () => {
+    let providerRegistry: ProviderRegistry;
+    let providerWithResolver: QueueTreeProvider;
+
+    beforeEach(async () => {
+      providerRegistry = createMockProviderRegistry();
+      providerWithResolver = new QueueTreeProvider(graph, providerRegistry);
+    });
+
+    it('should show resolved label instead of raw providerId for GitHub items', async () => {
+      const item = await graph.createItem(
+        { title: 'GitHub Issue' },
+        { providerId: 'github', externalId: 'issue-123' },
+      );
+      const treeItem = providerWithResolver.getTreeItem(item);
+      expect(treeItem.description).toBe('GitHub Issues');
+    });
+
+    it('should show resolved label instead of raw providerId for ADO items', async () => {
+      const item = await graph.createItem(
+        { title: 'ADO Work Item' },
+        { providerId: 'ado', externalId: 'workitem-456' },
+      );
+      const treeItem = providerWithResolver.getTreeItem(item);
+      expect(treeItem.description).toBe('Azure DevOps');
+    });
+
+    it('should show undefined description for items without providerId', async () => {
+      const item = await graph.createItem({ title: 'Manual item' });
+      const treeItem = providerWithResolver.getTreeItem(item);
+      expect(treeItem.description).toBeUndefined();
+    });
+
+    it('should call getProviderLabel with correct providerId', async () => {
+      const item = await graph.createItem(
+        { title: 'Test' },
+        { providerId: 'github', externalId: 'ext-1' },
+      );
+      providerWithResolver.getTreeItem(item);
+      expect(providerRegistry.getProviderLabel).toHaveBeenCalledWith('github');
+    });
+
+    it('should not call getProviderLabel for items without providerId', async () => {
+      const item = await graph.createItem({ title: 'Manual' });
+      (providerRegistry.getProviderLabel as ReturnType<typeof vi.fn>).mockClear();
+      providerWithResolver.getTreeItem(item);
+      expect(providerRegistry.getProviderLabel).not.toHaveBeenCalled();
+    });
+
+    it('should fall back to raw providerId if resolver returns undefined', async () => {
+      (providerRegistry.getProviderLabel as ReturnType<typeof vi.fn>).mockReturnValue(undefined);
+      const item = await graph.createItem(
+        { title: 'Unknown provider' },
+        { providerId: 'unknown', externalId: 'ext-1' },
+      );
+      const treeItem = providerWithResolver.getTreeItem(item);
+      expect(treeItem.description).toBe('unknown');
     });
   });
 });
