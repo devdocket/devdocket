@@ -388,6 +388,28 @@ mockFetch.mockImplementation(async (url: string) => {
 
 **Key learning:** The bug in issue #189 was present in the codebase. The root cause was explicit resurface logic (`resurfaceDismissed`) that reset dismissed items when they were rediscovered, causing them to reappear. The correct fix was to remove that resurface behavior; the tests now document the expected dismissed-state preservation and guard against future regressions.
 
+### Editor Contextual Heading Tests (Issue #221)
+
+**Issue:** Replace static "Edit Work Item" heading with the work item's title in the editor panel.
+
+**Tests added:** 3 new tests in `editorPanelHtml.test.ts`:
+
+1. **shows item title in heading instead of generic text** — Verifies heading contains the item's title and no longer contains "Edit Work Item"
+2. **escapes special characters in heading title** — Verifies `<`, `>`, and `&` are HTML-escaped in the heading (uses `escapeHtml`, not `escapeAttr`, so quotes remain unescaped)
+3. **preserves editor-heading id attribute** — Verifies the `id="editor-heading"` and matching `aria-labelledby` are intact
+
+**Key learning:** The heading uses `escapeHtml()` (escapes `<`, `>`, `&`) not `escapeAttr()` (which additionally escapes `"`). This is correct since the title appears as element content, not an attribute value — quotes don't need escaping in element text.
+
+**Test results:** All 867 tests pass (12 in editorPanelHtml suite). Full core package green.
+### Issue #222 — Responsive Editor Layout Test Review (2026-07-22)
+
+**Context:** Fenster is changing `editorPanelHtml.ts` to replace `max-width: 560px` with a responsive layout. Checked if existing tests assert on the old value.
+
+**Finding:** No existing tests in `editorPanelHtml.test.ts` assert on `560px`, `max-width`, or any CSS layout values. The 9 tests focus on CSP, nonce, HTML escaping, readonly behavior, and XSS prevention — all layout-agnostic. No test updates needed for Fenster's CSS change.
+
+**Status at review time:** In the earlier commit reviewed, line 35 of `editorPanelHtml.ts` still had `max-width: 560px`; the PR later updated the production CSS to the responsive layout. All 864 core tests were passing at that review point (29 test files, 0 failures).
+
+**Key learning:** The editor panel tests were well-designed — they test security and correctness concerns without coupling to visual layout CSS, making them resilient to styling changes.
 ### Layout Toggle Visual Indicator Tests (Issue #230)
 
 **Issue:** Layout toggle button had no visual indicator of current mode. Fenster added context key setting (`workcenter.${id}Layout`) in `extension.ts` lines 332-354, fired on activation and on `workcenter.viewLayout` config changes.

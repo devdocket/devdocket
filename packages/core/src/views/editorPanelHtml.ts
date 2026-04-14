@@ -28,8 +28,9 @@ export function getEditorPanelHtml({ cspSource, item }: EditorHtmlOptions): stri
       font-size: var(--font-size);
       color: var(--vscode-foreground);
       background: var(--vscode-editor-background);
-      padding: 20px;
-      max-width: 560px;
+      padding: 20px min(5%, 24px);
+      max-width: min(560px, 100%);
+      margin: 0 auto;
     }
     h2 {
       font-size: 1.2em;
@@ -85,7 +86,7 @@ export function getEditorPanelHtml({ cspSource, item }: EditorHtmlOptions): stri
   </style>
 </head>
 <body>
-  <h2 id="editor-heading">Edit Work Item</h2>
+  <h2 id="editor-heading">${escapeHtml(item.title)}</h2>
   <div id="form" role="form" aria-labelledby="editor-heading">
     <div class="field">
       <label for="title">Title</label>
