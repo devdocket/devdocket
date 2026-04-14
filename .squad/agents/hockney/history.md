@@ -413,6 +413,15 @@ mockFetch.mockImplementation(async (url: string) => {
 - Timestamp tests use dates from 2024 and verify the year appears while raw epoch does NOT appear
 
 **Test results:** 875 tests passing (29 test files). 10 new tests, 9 existing tests unchanged.
+### Issue #222 — Responsive Editor Layout Test Review (2026-07-22)
+
+**Context:** Fenster is changing `editorPanelHtml.ts` to replace `max-width: 560px` with a responsive layout. Checked if existing tests assert on the old value.
+
+**Finding:** No existing tests in `editorPanelHtml.test.ts` assert on `560px`, `max-width`, or any CSS layout values. The 9 tests focus on CSP, nonce, HTML escaping, readonly behavior, and XSS prevention — all layout-agnostic. No test updates needed for Fenster's CSS change.
+
+**Status at review time:** In the earlier commit reviewed, line 35 of `editorPanelHtml.ts` still had `max-width: 560px`; the PR later updated the production CSS to the responsive layout. All 864 core tests were passing at that review point (29 test files, 0 failures).
+
+**Key learning:** The editor panel tests were well-designed — they test security and correctness concerns without coupling to visual layout CSS, making them resilient to styling changes.
 ### Layout Toggle Visual Indicator Tests (Issue #230)
 
 **Issue:** Layout toggle button had no visual indicator of current mode. Fenster added context key setting (`workcenter.${id}Layout`) in `extension.ts` lines 332-354, fired on activation and on `workcenter.viewLayout` config changes.
