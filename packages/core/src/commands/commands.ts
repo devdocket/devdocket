@@ -478,6 +478,22 @@ async function acceptToFocusSingleInboxItem(
   let workItemId: string;
   const existing = workGraph.findItemByProvenance(item.providerId, item.externalId);
   if (existing) {
+    if (existing.state === WorkItemState.InProgress) {
+      try {
+        await stateStore.setState(item.providerId, item.externalId, 'accepted');
+      } catch { /* best-effort */ }
+      void vscode.window.showInformationMessage('WorkCenter: Item is already in Focus');
+      return;
+    }
+    if (existing.state === WorkItemState.Done || existing.state === WorkItemState.Archived) {
+      try {
+        await stateStore.setState(item.providerId, item.externalId, 'accepted');
+      } catch { /* best-effort */ }
+      void vscode.window.showWarningMessage(
+        `WorkCenter: Item is ${existing.state} and cannot be moved to Focus`,
+      );
+      return;
+    }
     workItemId = existing.id;
     try {
       await stateStore.setState(item.providerId, item.externalId, 'accepted');
@@ -509,7 +525,11 @@ async function acceptToFocusSingleInboxItem(
     }
     workItemId = createdItem.id;
   }
-  await workGraph.transitionState(workItemId, WorkItemState.InProgress);
+  try {
+    await workGraph.transitionState(workItemId, WorkItemState.InProgress);
+  } catch (err: unknown) {
+    handleCommandError('Failed to move item to Focus', err);
+  }
 }
 
 async function batchAcceptToFocusItems(
@@ -521,10 +541,23 @@ async function batchAcceptToFocusItems(
   const createdIds: string[] = [];
   const allIds: string[] = [];
   let failed = 0;
+  let skipped = 0;
 
   for (const item of items) {
     const existing = workGraph.findItemByProvenance(item.providerId, item.externalId);
     if (existing) {
+      if (existing.state === WorkItemState.InProgress) {
+        logger.info(`Skipping "${item.title}" — already in Focus`);
+        stateUpdates.push({ providerId: item.providerId, externalId: item.externalId, state: 'accepted' });
+        skipped++;
+        continue;
+      }
+      if (existing.state === WorkItemState.Done || existing.state === WorkItemState.Archived) {
+        logger.info(`Skipping "${item.title}" — item is ${existing.state} and cannot be moved to Focus`);
+        stateUpdates.push({ providerId: item.providerId, externalId: item.externalId, state: 'accepted' });
+        skipped++;
+        continue;
+      }
       stateUpdates.push({ providerId: item.providerId, externalId: item.externalId, state: 'accepted' });
       allIds.push(existing.id);
       continue;
@@ -568,11 +601,18 @@ async function batchAcceptToFocusItems(
     }
   }
 
-  const total = allIds.length;
-  if (total > 0) {
+  const succeeded = allIds.length - transitionFailed;
+  if (succeeded > 0 || skipped > 0) {
+    const parts: string[] = [];
+    if (succeeded > 0) {
+      parts.push(`Accepted ${succeeded} item${succeeded === 1 ? '' : 's'} to Focus`);
+    }
+    if (skipped > 0) {
+      parts.push(`${skipped} already in Focus or cannot be moved`);
+    }
     const msg = (failed > 0 || transitionFailed > 0)
-      ? `Accepted ${total} of ${total + failed} items to Focus`
-      : `Accepted ${total} item${total === 1 ? '' : 's'} to Focus`;
+      ? `${parts.join('; ')} (${failed + transitionFailed} failed)`
+      : parts.join('; ');
     void vscode.window.showInformationMessage(msg);
   }
   if (failed > 0 || transitionFailed > 0) {
