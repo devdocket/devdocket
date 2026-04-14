@@ -140,10 +140,28 @@ export function getEditorPanelHtml({ cspSource, item, providerLabel }: EditorHtm
       background: var(--vscode-disabledForeground, #888);
       color: #fff;
     }
+    .source-link {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      font-size: 0.85em;
+      margin-bottom: 14px;
+      color: var(--vscode-textLink-foreground);
+      cursor: pointer;
+      background: none;
+      border: none;
+      padding: 0;
+      font-family: inherit;
+    }
+    .source-link:hover {
+      color: var(--vscode-textLink-activeForeground);
+      text-decoration: underline;
+    }
   </style>
 </head>
 <body>
   <h2 id="editor-heading">${escapeHtml(item.title)}</h2>
+${item.url ? `  <button type="button" class="source-link" id="source-link" data-url="${escapeAttr(item.url)}">Open in browser</button>` : ''}
   <div id="form" role="form" aria-labelledby="editor-heading">
     <div class="field">
       <label for="title">Title</label>
@@ -198,6 +216,13 @@ ${item.providerId && providerLabel ? `      <dt>Provider</dt>
         }
       }
     });
+
+    const sourceLink = document.getElementById('source-link');
+    if (sourceLink) {
+      sourceLink.addEventListener('click', () => {
+        vscode.postMessage({ type: 'openUrl', url: sourceLink.dataset.url });
+      });
+    }
   </script>
 </body>
 </html>`;

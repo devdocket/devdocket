@@ -413,6 +413,17 @@ mockFetch.mockImplementation(async (url: string) => {
 - Timestamp tests use dates from 2024 and verify the year appears while raw epoch does NOT appear
 
 **Test results:** 875 tests passing (29 test files). 10 new tests, 9 existing tests unchanged.
+### Editor Source URL Link Tests (Issue #219)
+
+**Tests added:** 3 new tests in `packages/core/src/test/editorPanelHtml.test.ts` under `describe('source URL link')`:
+
+1. **renders a clickable link when item has a url** — Verifies `<button>` tag with `id="source-link"`, `data-url` attribute containing the URL, and "Open in source" text
+2. **does not render a link when item has no url** — Verifies no `source-link` element or "Open in source" text when `url` is undefined
+3. **escapes HTML entities in the url to prevent XSS** — Verifies `escapeAttr` prevents attribute breakout with `"><script>alert(1)</script>` payload
+
+**Implementation detail:** Fenster's implementation uses `data-url` + `postMessage({ type: 'openUrl' })` pattern (not a direct `href`), since VS Code webview CSP blocks external navigation. The `<button>` element provides native keyboard accessibility.
+
+**Test results:** 12 tests in editorPanelHtml.test.ts (up from 9), 871 core tests passing.
 ### Editor Contextual Heading Tests (Issue #221)
 
 **Issue:** Replace static "Edit Work Item" heading with the work item's title in the editor panel.
