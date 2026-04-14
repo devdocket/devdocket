@@ -388,6 +388,24 @@ mockFetch.mockImplementation(async (url: string) => {
 
 **Key learning:** The bug in issue #189 was present in the codebase. The root cause was explicit resurface logic (`resurfaceDismissed`) that reset dismissed items when they were rediscovered, causing them to reappear. The correct fix was to remove that resurface behavior; the tests now document the expected dismissed-state preservation and guard against future regressions.
 
+### Editor Panel Provider Description Tests (Issue #216)
+
+**Tests added:** 5 new tests in `packages/core/src/test/editorPanelHtml.test.ts` under `provider description` describe block.
+
+**What's tested:**
+1. **Renders description section when `providerDescription` is provided** — verifies text and "Provider Description" label appear
+2. **Does not render description section when `providerDescription` is omitted** — no `<label>` or `<div class="provider-description">` in body
+3. **Does not render description section when `providerDescription` is empty string** — empty string treated same as omitted
+4. **HTML-escapes description to prevent XSS** — `<img src=x onerror="alert(1)">` escaped to `&lt;img src=x`
+5. **Renders description as non-editable div** — description is in a `<div>`, not an `<input>` or `<textarea>`, making it inherently read-only
+
+**Implementation details (Fenster's code):**
+- `EditorHtmlOptions` gained optional `providerDescription?: string` field
+- Description rendered as `<div class="provider-description">` with `escapeHtml()` applied
+- CSS class `.provider-description` is always in `<style>` block (even when no description); tests check for `<div class="provider-description">` element in body, not the CSS class name
+- Description section injected between title and notes fields when present
+
+**Test results:** 14 editor panel tests passing, 869 total core tests passing.
 ### Editor Source URL Link Tests (Issue #219)
 
 **Tests added:** 3 new tests in `packages/core/src/test/editorPanelHtml.test.ts` under `describe('source URL link')`:

@@ -4,10 +4,18 @@ import { WorkItem } from '../models/workItem';
 export interface EditorHtmlOptions {
   cspSource: string;
   item: WorkItem;
+  /** Read-only description from the provider. Will be HTML-escaped before rendering. */
+  providerDescription?: string;
 }
 
-export function getEditorPanelHtml({ cspSource, item }: EditorHtmlOptions): string {
+export function getEditorPanelHtml({ cspSource, item, providerDescription }: EditorHtmlOptions): string {
   const nonce = getNonce();
+  const descriptionSection = providerDescription
+    ? `    <div class="field">
+      <label id="provider-desc-label">Provider Description</label>
+      <div class="provider-description" role="note" aria-labelledby="provider-desc-label">${escapeHtml(providerDescription)}</div>
+    </div>`
+    : '';
   return /*html*/ `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -83,6 +91,14 @@ export function getEditorPanelHtml({ cspSource, item }: EditorHtmlOptions): stri
       margin-top: 2px;
       display: block;
     }
+    .provider-description {
+      padding: 8px 10px;
+      border-left: 3px solid var(--vscode-textBlockQuote-border, var(--vscode-focusBorder));
+      background: var(--vscode-textBlockQuote-background, var(--vscode-editor-inactiveSelectionBackground, rgba(128,128,128,0.08)));
+      font-style: italic;
+      white-space: pre-wrap;
+      margin-top: 2px;
+    }
     .source-link {
       display: inline-flex;
       align-items: center;
@@ -111,6 +127,7 @@ ${item.url ? `  <button type="button" class="source-link" id="source-link" data-
       <input type="text" id="title" value="${escapeAttr(item.title)}" ${item.providerId ? 'readonly aria-readonly="true" aria-describedby="readonly-title-hint"' : ''} />
 ${item.providerId ? '      <span id="readonly-title-hint" class="hint">Title is managed by the provider</span>' : ''}
     </div>
+${descriptionSection}
     <div class="field">
       <label for="notes">Notes</label>
       <textarea id="notes" placeholder="Add notes...">${escapeHtml(item.notes ?? '')}</textarea>
