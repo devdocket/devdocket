@@ -271,6 +271,7 @@ async function handleMoveToQueue(workGraph: WorkGraph, item?: { id?: string }, s
 function handleEditItem(
   context: vscode.ExtensionContext,
   workGraph: WorkGraph,
+  providerRegistry: ProviderRegistry,
   labelCache: ProviderLabelCache,
   item?: { id?: string },
 ): void {
@@ -278,7 +279,7 @@ function handleEditItem(
   const workItem = workGraph.getItem(item.id);
   if (workItem) {
     const providerLabel = workItem.providerId ? labelCache.get(workItem.providerId) : undefined;
-    WorkItemEditorPanel.open(context, workGraph, workItem, providerLabel);
+    WorkItemEditorPanel.open(context, workGraph, providerRegistry, workItem, providerLabel);
   }
 }
 
@@ -624,7 +625,7 @@ export function registerCommands(
     vscode.commands.registerCommand('workcenter.deleteItem',
       wrapCommand('Failed to delete item', (item, selectedItems) => handleDeleteItem(workGraph, item, selectedItems))),
     vscode.commands.registerCommand('workcenter.editItem',
-      wrapCommand('Failed to open editor', (item) => handleEditItem(context, workGraph, labelCache, item))),
+      wrapCommand('Failed to open editor', (item) => handleEditItem(context, workGraph, providerRegistry, labelCache, item))),
     vscode.commands.registerCommand('workcenter.openInBrowser',
       wrapCommand('Failed to open in browser', (item) => handleOpenInBrowser(workGraph, item))),
     vscode.commands.registerCommand('workcenter.runAction',

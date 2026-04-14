@@ -64,14 +64,21 @@ function createMockContext() {
   } as any;
 }
 
+function createMockProviderRegistry() {
+  return {
+    getDiscoveredItems: vi.fn(() => []),
+  };
+}
+
 function openPanel(
   item: WorkItem,
   workGraph: ReturnType<typeof createMockWorkGraph>,
   mock: ReturnType<typeof createMockWebviewPanel>,
   context = createMockContext(),
+  providerRegistry = createMockProviderRegistry(),
 ) {
   vi.mocked(window.createWebviewPanel).mockReturnValue(mock.panel as any);
-  WorkItemEditorPanel.open(context, workGraph as any, item);
+  WorkItemEditorPanel.open(context, workGraph as any, providerRegistry as any, item);
   return context;
 }
 
@@ -161,6 +168,19 @@ describe('WorkItemEditorPanel', () => {
 
       expect(mock.panel.onDidDispose).toHaveBeenCalledTimes(1);
     });
+
+    it('should pass provider description to HTML when discovered item has one', () => {
+      const item = makeItem({ providerId: 'gh', externalId: '42' });
+      const mock = createMockWebviewPanel();
+      const registry = createMockProviderRegistry();
+      vi.mocked(registry.getDiscoveredItems).mockReturnValue([
+        { externalId: '42', title: 'Bug', description: 'Fix the login page' } as any,
+      ]);
+      openPanel(item, createMockWorkGraph(item), mock, undefined, registry);
+
+      expect(registry.getDiscoveredItems).toHaveBeenCalledWith('gh');
+      expect(mock.panel.webview.html).toContain('Fix the login page');
+    });
   });
 
   describe('panel reuse', () => {
@@ -170,8 +190,8 @@ describe('WorkItemEditorPanel', () => {
       vi.mocked(window.createWebviewPanel).mockReturnValue(mock.panel as any);
 
       const ctx = createMockContext();
-      WorkItemEditorPanel.open(ctx, createMockWorkGraph(item) as any, item);
-      WorkItemEditorPanel.open(ctx, createMockWorkGraph(item) as any, item);
+      WorkItemEditorPanel.open(ctx, createMockWorkGraph(item) as any, createMockProviderRegistry() as any, item);
+      WorkItemEditorPanel.open(ctx, createMockWorkGraph(item) as any, createMockProviderRegistry() as any, item);
 
       expect(window.createWebviewPanel).toHaveBeenCalledTimes(1);
       expect(mock.panel.reveal).toHaveBeenCalled();
@@ -190,8 +210,8 @@ describe('WorkItemEditorPanel', () => {
         .mockReturnValueOnce(mock2.panel as any);
 
       const ctx = createMockContext();
-      WorkItemEditorPanel.open(ctx, wg1 as any, item1);
-      WorkItemEditorPanel.open(ctx, wg2 as any, item2);
+      WorkItemEditorPanel.open(ctx, wg1 as any, createMockProviderRegistry() as any, item1);
+      WorkItemEditorPanel.open(ctx, wg2 as any, createMockProviderRegistry() as any, item2);
 
       expect(window.createWebviewPanel).toHaveBeenCalledTimes(2);
     });
@@ -206,9 +226,9 @@ describe('WorkItemEditorPanel', () => {
         .mockReturnValueOnce(mock2.panel as any);
 
       const ctx = createMockContext();
-      WorkItemEditorPanel.open(ctx, createMockWorkGraph(item) as any, item);
+      WorkItemEditorPanel.open(ctx, createMockWorkGraph(item) as any, createMockProviderRegistry() as any, item);
       mock1.simulateDispose();
-      WorkItemEditorPanel.open(ctx, createMockWorkGraph(item) as any, item);
+      WorkItemEditorPanel.open(ctx, createMockWorkGraph(item) as any, createMockProviderRegistry() as any, item);
 
       expect(window.createWebviewPanel).toHaveBeenCalledTimes(2);
     });
@@ -219,11 +239,11 @@ describe('WorkItemEditorPanel', () => {
       vi.mocked(window.createWebviewPanel).mockReturnValue(mock.panel as any);
 
       const ctx = createMockContext();
-      WorkItemEditorPanel.open(ctx, createMockWorkGraph(item) as any, item);
+      WorkItemEditorPanel.open(ctx, createMockWorkGraph(item) as any, createMockProviderRegistry() as any, item);
 
       expect(mock.panel.reveal).not.toHaveBeenCalled();
 
-      WorkItemEditorPanel.open(ctx, createMockWorkGraph(item) as any, item);
+      WorkItemEditorPanel.open(ctx, createMockWorkGraph(item) as any, createMockProviderRegistry() as any, item);
 
       expect(mock.panel.reveal).toHaveBeenCalledTimes(1);
       expect(mock.panel.reveal).toHaveBeenCalledWith();
@@ -239,12 +259,12 @@ describe('WorkItemEditorPanel', () => {
         .mockReturnValueOnce(mock2.panel as any);
 
       const ctx = createMockContext();
-      WorkItemEditorPanel.open(ctx, createMockWorkGraph(item) as any, item);
+      WorkItemEditorPanel.open(ctx, createMockWorkGraph(item) as any, createMockProviderRegistry() as any, item);
 
       // Dispose via context subscription (the dispose() method path)
       ctx.subscriptions[ctx.subscriptions.length - 1].dispose();
 
-      WorkItemEditorPanel.open(ctx, createMockWorkGraph(item) as any, item);
+      WorkItemEditorPanel.open(ctx, createMockWorkGraph(item) as any, createMockProviderRegistry() as any, item);
 
       expect(window.createWebviewPanel).toHaveBeenCalledTimes(2);
     });
@@ -256,12 +276,12 @@ describe('WorkItemEditorPanel', () => {
       vi.mocked(window.createWebviewPanel).mockReturnValue(mock.panel as any);
 
       const ctx = createMockContext();
-      WorkItemEditorPanel.open(ctx, wg as any, item);
+      WorkItemEditorPanel.open(ctx, wg as any, createMockProviderRegistry() as any, item);
 
       // Simulate the item being updated in the work graph
       const updatedItem = makeItem({ id: 'refresh-1', title: 'Updated Title', notes: 'Updated Notes' });
       vi.mocked(wg.getItem).mockReturnValue(updatedItem);
-      WorkItemEditorPanel.open(ctx, wg as any, updatedItem);
+      WorkItemEditorPanel.open(ctx, wg as any, createMockProviderRegistry() as any, updatedItem);
 
       expect(mock.panel.title).toBe('Edit: Updated Title');
       expect(mock.panel.webview.html).toContain('Updated Title');
@@ -872,7 +892,7 @@ describe('WorkItemEditorPanel (integration with WorkGraph)', () => {
   describe('open', () => {
     it('creates a webview panel with correct type and title', async () => {
       const item = await graph.createItem({ title: 'My Task' });
-      WorkItemEditorPanel.open(context, graph, item);
+      WorkItemEditorPanel.open(context, graph, createMockProviderRegistry() as any, item);
 
       expect(vscode.window.createWebviewPanel).toHaveBeenCalledWith(
         'workcenter.editItem',
@@ -884,7 +904,7 @@ describe('WorkItemEditorPanel (integration with WorkGraph)', () => {
 
     it('adds a disposable to context subscriptions', async () => {
       const item = await graph.createItem({ title: 'Task' });
-      WorkItemEditorPanel.open(context, graph, item);
+      WorkItemEditorPanel.open(context, graph, createMockProviderRegistry() as any, item);
 
       expect(context.subscriptions.length).toBe(1);
       expect(context.subscriptions[0]).toHaveProperty('dispose');
@@ -892,7 +912,7 @@ describe('WorkItemEditorPanel (integration with WorkGraph)', () => {
 
     it('sets webview HTML on creation', async () => {
       const item = await graph.createItem({ title: 'Task' });
-      WorkItemEditorPanel.open(context, graph, item);
+      WorkItemEditorPanel.open(context, graph, createMockProviderRegistry() as any, item);
 
       expect(mockPanel.webview.html).not.toContain('Edit Work Item');
       expect(mockPanel.webview.html).toContain('Task');
@@ -906,7 +926,7 @@ describe('WorkItemEditorPanel (integration with WorkGraph)', () => {
         { title: 'Provider Task' },
         { providerId: 'github', externalId: '42' },
       );
-      WorkItemEditorPanel.open(context, graph, item);
+      WorkItemEditorPanel.open(context, graph, createMockProviderRegistry() as any, item);
 
       const html = mockPanel.webview.html;
       const titleMatch = html.match(/<input[^>]*id="title"[^>]*>/);
@@ -917,7 +937,7 @@ describe('WorkItemEditorPanel (integration with WorkGraph)', () => {
 
     it('title field is editable for manual items', async () => {
       const item = await graph.createItem({ title: 'Manual Task' });
-      WorkItemEditorPanel.open(context, graph, item);
+      WorkItemEditorPanel.open(context, graph, createMockProviderRegistry() as any, item);
 
       const html = mockPanel.webview.html;
       const titleMatch = html.match(/<input[^>]*id="title"[^>]*>/);
@@ -931,7 +951,7 @@ describe('WorkItemEditorPanel (integration with WorkGraph)', () => {
         { title: 'Provider Task' },
         { providerId: 'github', externalId: '42' },
       );
-      WorkItemEditorPanel.open(context, graph, item);
+      WorkItemEditorPanel.open(context, graph, createMockProviderRegistry() as any, item);
 
       const html = mockPanel.webview.html;
       const notesMatch = html.match(/<textarea[^>]*id="notes"[^>]*>/);
@@ -941,7 +961,7 @@ describe('WorkItemEditorPanel (integration with WorkGraph)', () => {
 
     it('CSP meta tag includes nonce', async () => {
       const item = await graph.createItem({ title: 'Task' });
-      WorkItemEditorPanel.open(context, graph, item);
+      WorkItemEditorPanel.open(context, graph, createMockProviderRegistry() as any, item);
 
       const html = mockPanel.webview.html;
       expect(html).toMatch(/script-src 'nonce-[A-Za-z0-9]+'/);
@@ -949,7 +969,7 @@ describe('WorkItemEditorPanel (integration with WorkGraph)', () => {
 
     it('script tag includes nonce', async () => {
       const item = await graph.createItem({ title: 'Task' });
-      WorkItemEditorPanel.open(context, graph, item);
+      WorkItemEditorPanel.open(context, graph, createMockProviderRegistry() as any, item);
 
       const html = mockPanel.webview.html;
       expect(html).toMatch(/<script nonce="[A-Za-z0-9]+">/);
@@ -957,14 +977,14 @@ describe('WorkItemEditorPanel (integration with WorkGraph)', () => {
 
     it('CSP includes webview cspSource', async () => {
       const item = await graph.createItem({ title: 'Task' });
-      WorkItemEditorPanel.open(context, graph, item);
+      WorkItemEditorPanel.open(context, graph, createMockProviderRegistry() as any, item);
 
       expect(mockPanel.webview.html).toContain('mock-csp-source');
     });
 
     it('shows "Item not found" when item is missing', () => {
       const fakeItem = makeItem({ id: 'nonexistent' });
-      WorkItemEditorPanel.open(context, graph, fakeItem);
+      WorkItemEditorPanel.open(context, graph, createMockProviderRegistry() as any, fakeItem);
 
       expect(mockPanel.webview.html).toContain('Item not found.');
     });
@@ -973,7 +993,7 @@ describe('WorkItemEditorPanel (integration with WorkGraph)', () => {
   describe('HTML escaping', () => {
     it('escapes special characters in title', async () => {
       const item = await graph.createItem({ title: 'A & B <script>"alert"</script>' });
-      WorkItemEditorPanel.open(context, graph, item);
+      WorkItemEditorPanel.open(context, graph, createMockProviderRegistry() as any, item);
 
       const html = mockPanel.webview.html;
       expect(html).toContain('&amp;');
@@ -985,7 +1005,7 @@ describe('WorkItemEditorPanel (integration with WorkGraph)', () => {
 
     it('escapes special characters in notes', async () => {
       const item = await graph.createItem({ title: 'Task', notes: '<b>bold</b> & "quotes"' });
-      WorkItemEditorPanel.open(context, graph, item);
+      WorkItemEditorPanel.open(context, graph, createMockProviderRegistry() as any, item);
 
       const html = mockPanel.webview.html;
       expect(html).toContain('&lt;b&gt;bold&lt;/b&gt;');
@@ -994,7 +1014,7 @@ describe('WorkItemEditorPanel (integration with WorkGraph)', () => {
 
     it('renders empty notes without error', async () => {
       const item = await graph.createItem({ title: 'Task' });
-      WorkItemEditorPanel.open(context, graph, item);
+      WorkItemEditorPanel.open(context, graph, createMockProviderRegistry() as any, item);
 
       const html = mockPanel.webview.html;
       expect(html).toMatch(/<textarea id="notes" placeholder="Add notes..."><\/textarea>/);
@@ -1004,7 +1024,7 @@ describe('WorkItemEditorPanel (integration with WorkGraph)', () => {
   describe('saveData via autosave message', () => {
     it('updates title and notes for manual items', async () => {
       const item = await graph.createItem({ title: 'Original' });
-      WorkItemEditorPanel.open(context, graph, item);
+      WorkItemEditorPanel.open(context, graph, createMockProviderRegistry() as any, item);
 
       mockPanel.webview._fireMessage({
         type: 'autosave',
@@ -1020,7 +1040,7 @@ describe('WorkItemEditorPanel (integration with WorkGraph)', () => {
 
     it('updates panel title after saving for manual items', async () => {
       const item = await graph.createItem({ title: 'Original' });
-      WorkItemEditorPanel.open(context, graph, item);
+      WorkItemEditorPanel.open(context, graph, createMockProviderRegistry() as any, item);
 
       mockPanel.webview._fireMessage({
         type: 'autosave',
@@ -1035,7 +1055,7 @@ describe('WorkItemEditorPanel (integration with WorkGraph)', () => {
     it('ignores autosave with empty title for manual items', async () => {
       const item = await graph.createItem({ title: 'Original' });
       const saveCountBefore = vi.mocked(store.save).mock.calls.length;
-      WorkItemEditorPanel.open(context, graph, item);
+      WorkItemEditorPanel.open(context, graph, createMockProviderRegistry() as any, item);
 
       mockPanel.webview._fireMessage({
         type: 'autosave',
@@ -1052,7 +1072,7 @@ describe('WorkItemEditorPanel (integration with WorkGraph)', () => {
         { title: 'Provider Title' },
         { providerId: 'github', externalId: '99' },
       );
-      WorkItemEditorPanel.open(context, graph, item);
+      WorkItemEditorPanel.open(context, graph, createMockProviderRegistry() as any, item);
 
       mockPanel.webview._fireMessage({
         type: 'autosave',
@@ -1068,7 +1088,7 @@ describe('WorkItemEditorPanel (integration with WorkGraph)', () => {
 
     it('shows error when item no longer exists', async () => {
       const item = await graph.createItem({ title: 'Temp' });
-      WorkItemEditorPanel.open(context, graph, item);
+      WorkItemEditorPanel.open(context, graph, createMockProviderRegistry() as any, item);
 
       await graph.deleteItem(item.id);
 
@@ -1086,7 +1106,7 @@ describe('WorkItemEditorPanel (integration with WorkGraph)', () => {
 
     it('clears notes when empty string is sent', async () => {
       const item = await graph.createItem({ title: 'Task', notes: 'old notes' });
-      WorkItemEditorPanel.open(context, graph, item);
+      WorkItemEditorPanel.open(context, graph, createMockProviderRegistry() as any, item);
 
       mockPanel.webview._fireMessage({
         type: 'autosave',
@@ -1105,7 +1125,7 @@ describe('WorkItemEditorPanel (integration with WorkGraph)', () => {
         { providerId: 'github', externalId: '1' },
       );
       const saveCountBefore = vi.mocked(store.save).mock.calls.length;
-      WorkItemEditorPanel.open(context, graph, item);
+      WorkItemEditorPanel.open(context, graph, createMockProviderRegistry() as any, item);
 
       mockPanel.webview._fireMessage({
         type: 'autosave',
@@ -1119,7 +1139,7 @@ describe('WorkItemEditorPanel (integration with WorkGraph)', () => {
 
     it('ignores unknown message types', async () => {
       const item = await graph.createItem({ title: 'Task' });
-      WorkItemEditorPanel.open(context, graph, item);
+      WorkItemEditorPanel.open(context, graph, createMockProviderRegistry() as any, item);
 
       expect(() => {
         mockPanel.webview._fireMessage({ type: 'unknown', data: {} });
@@ -1130,7 +1150,7 @@ describe('WorkItemEditorPanel (integration with WorkGraph)', () => {
   describe('dispose', () => {
     it('dispose via context subscription cleans up panel', async () => {
       const item = await graph.createItem({ title: 'Task' });
-      WorkItemEditorPanel.open(context, graph, item);
+      WorkItemEditorPanel.open(context, graph, createMockProviderRegistry() as any, item);
 
       const sub = context.subscriptions[0] as vscode.Disposable;
       sub.dispose();
@@ -1140,7 +1160,7 @@ describe('WorkItemEditorPanel (integration with WorkGraph)', () => {
 
     it('dispose via onDidDispose cleans up message subscription', async () => {
       const item = await graph.createItem({ title: 'Task' });
-      WorkItemEditorPanel.open(context, graph, item);
+      WorkItemEditorPanel.open(context, graph, createMockProviderRegistry() as any, item);
 
       const msgDisposable = vi.mocked(mockPanel.webview.onDidReceiveMessage).mock.results[0].value;
 
@@ -1151,7 +1171,7 @@ describe('WorkItemEditorPanel (integration with WorkGraph)', () => {
 
     it('double dispose is safe', async () => {
       const item = await graph.createItem({ title: 'Task' });
-      WorkItemEditorPanel.open(context, graph, item);
+      WorkItemEditorPanel.open(context, graph, createMockProviderRegistry() as any, item);
 
       const sub = context.subscriptions[0] as vscode.Disposable;
       sub.dispose();

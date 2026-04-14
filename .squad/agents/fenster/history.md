@@ -293,6 +293,12 @@ The queue view was displaying raw provider IDs (e.g., `github`, `ado`) in tree i
 - **Root cause matters**: The first fix (defensive load) was plausible but wrong. The symptom (dismissed items reappearing) had a simpler explanation: code explicitly designed to resurface them.
 - **Reverting cleanly**: When reverting test changes, `git checkout <commit> -- <files>` is the safest approach to restore files to a known-good state before applying new targeted edits.
 
+### Issue #216 — Provider Description in Editor Panel
+- Editor panel HTML template is in `packages/core/src/views/editorPanelHtml.ts`, webview panel logic in `packages/core/src/views/workItemEditorPanel.ts`.
+- To add provider-sourced data to the editor, thread `ProviderRegistry` through `WorkItemEditorPanel.open()` → constructor → `getHtml()`, look up the `DiscoveredItem` by `providerId` + `externalId`, and pass the field as an optional prop to `getEditorPanelHtml()`.
+- The `EditorHtmlOptions` interface is the contract between the panel logic and HTML template — extend it with optional fields for new read-only data.
+- HTML-escape all provider-sourced strings via `escapeHtml()` before interpolation for XSS safety.
+- When adding a parameter to `WorkItemEditorPanel.open()`, every call site (including test helpers) must be updated — use a mock returning empty arrays for `getDiscoveredItems` in tests.
 ## Issue #223: Dead CSS and duplicated helpers cleanup (2025-07-23)
 
 ### Changes

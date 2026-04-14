@@ -272,7 +272,7 @@ describe('registerCommands', () => {
       invoke('workcenter.editItem', { id: item.id });
 
       expect(workGraph.getItem).toHaveBeenCalledWith(item.id);
-      expect(WorkItemEditorPanel.open).toHaveBeenCalledWith(ctx, workGraph, item, undefined);
+      expect(WorkItemEditorPanel.open).toHaveBeenCalledWith(ctx, workGraph, providerRegistry, item, undefined);
     });
 
     it('passes provider label when item has providerId', () => {
@@ -283,7 +283,7 @@ describe('registerCommands', () => {
       invoke('workcenter.editItem', { id: item.id });
 
       expect(labelCache.get).toHaveBeenCalledWith('github');
-      expect(WorkItemEditorPanel.open).toHaveBeenCalledWith(ctx, workGraph, item, 'GitHub Issues');
+      expect(WorkItemEditorPanel.open).toHaveBeenCalledWith(ctx, workGraph, providerRegistry, item, 'GitHub Issues');
     });
 
     it('does not open editor when item is not found', () => {
