@@ -407,6 +407,24 @@ mockFetch.mockImplementation(async (url: string) => {
 - This PR introduces `<span id="save-status">` in the HTML template and client-side JS to handle `saveResult` messages
 - Both mock panel helpers (`createMockWebviewPanel` and `createIntegrationWebviewPanel`) were updated with `postMessage: vi.fn()` mocking in this PR
 - The `disposed` guard on `postMessage` prevents sending messages to a closed panel, matching the existing pattern for `panel.title` updates
+### Issue #223 — Dead CSS & Helper Cleanup (2026-07-22)
+
+**Task:** Verify tests after Fenster removed dead CSS (`.actions`, `button.primary`, `button.secondary`) from `editorPanelHtml.ts` and dead helper functions (`getNonce()`, `escapeHtml()`, `escapeAttr()`) from `workItemEditorPanel.ts`.
+
+**Test changes:**
+- Updated 2 test names in `workItemEditorPanel.test.ts` to remove references to deleted functions:
+  - `'escapes special characters in title (via escapeAttr)'` → `'escapes special characters in title'`
+  - `'escapes special characters in notes (via escapeHtml)'` → `'escapes special characters in notes'`
+- No test logic changes needed — the tests validate HTML output behavior, not the removed functions directly
+- `editorPanelHtml.test.ts` (9 tests) unaffected — tests the live `getEditorPanelHtml()` which retains its own `escapeHtml`/`escapeAttr`
+
+**Key files:**
+- `packages/core/src/test/workItemEditorPanel.test.ts` — integration tests for the editor panel
+- `packages/core/src/test/editorPanelHtml.test.ts` — unit tests for HTML generation (unchanged)
+
+**Test results:** 864 passed, 29 test files, 0 failures.
+
+**Key learning:** When dead code is removed, test names referencing that code become misleading even if the test logic is still valid. Update test names to reflect current architecture — in this case, the escaping now lives solely in `editorPanelHtml.ts`, not in `workItemEditorPanel.ts`.
 
 ## Issue #227: Queue View Provider Labels (2026-04-13)
 
