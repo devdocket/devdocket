@@ -205,34 +205,89 @@
         "icon": "$(arrow-right)"
       },
       {
-        "command": "workcenter.toggleInboxLayout",
-        "title": "Toggle Inbox Layout",
+        "command": "workcenter.switchInboxToTree",
+        "title": "Switch Inbox to Tree Layout",
         "category": "WorkCenter",
         "icon": "$(list-tree)"
+      },
+      {
+        "command": "workcenter.switchInboxToFlat",
+        "title": "Switch Inbox to Flat Layout",
+        "category": "WorkCenter",
+        "icon": "$(list-flat)"
+      },
+      {
+        "command": "workcenter.switchQueueToTree",
+        "title": "Switch Queue to Tree Layout",
+        "category": "WorkCenter",
+        "icon": "$(list-tree)"
+      },
+      {
+        "command": "workcenter.switchQueueToFlat",
+        "title": "Switch Queue to Flat Layout",
+        "category": "WorkCenter",
+        "icon": "$(list-flat)"
+      },
+      {
+        "command": "workcenter.switchFocusToTree",
+        "title": "Switch Focus to Tree Layout",
+        "category": "WorkCenter",
+        "icon": "$(list-tree)"
+      },
+      {
+        "command": "workcenter.switchFocusToFlat",
+        "title": "Switch Focus to Flat Layout",
+        "category": "WorkCenter",
+        "icon": "$(list-flat)"
+      },
+      {
+        "command": "workcenter.switchHistoryToTree",
+        "title": "Switch History to Tree Layout",
+        "category": "WorkCenter",
+        "icon": "$(list-tree)"
+      },
+      {
+        "command": "workcenter.switchHistoryToFlat",
+        "title": "Switch History to Flat Layout",
+        "category": "WorkCenter",
+        "icon": "$(list-flat)"
+      },
+      {
+        "command": "workcenter.switchSourcesToTree",
+        "title": "Switch Sources to Tree Layout",
+        "category": "WorkCenter",
+        "icon": "$(list-tree)"
+      },
+      {
+        "command": "workcenter.switchSourcesToFlat",
+        "title": "Switch Sources to Flat Layout",
+        "category": "WorkCenter",
+        "icon": "$(list-flat)"
+      },
+      {
+        "command": "workcenter.toggleInboxLayout",
+        "title": "Toggle Inbox Layout",
+        "category": "WorkCenter"
       },
       {
         "command": "workcenter.toggleQueueLayout",
         "title": "Toggle Queue Layout",
-        "category": "WorkCenter",
-        "icon": "$(list-tree)"
+        "category": "WorkCenter"
       },
       {
         "command": "workcenter.toggleFocusLayout",
         "title": "Toggle Focus Layout",
-        "category": "WorkCenter",
-        "icon": "$(list-tree)"
+        "category": "WorkCenter"
       },
       {
         "command": "workcenter.toggleHistoryLayout",
         "title": "Toggle History Layout",
-        "category": "WorkCenter",
-        "icon": "$(list-tree)"
+        "category": "WorkCenter"
       },
       {
         "command": "workcenter.toggleSourcesLayout",
         "title": "Toggle Sources Layout",
-        "category": "WorkCenter",
-        "icon": "$(list-tree)"
+        "category": "WorkCenter"
       },
       {
         "command": "workcenter.dismissFromSources",
@@ -267,34 +322,121 @@
           "group": "navigation"
         },
         {
-          "command": "workcenter.toggleInboxLayout",
-          "when": "view == workcenter.inbox",
+          "command": "workcenter.switchInboxToTree",
+          "when": "view == workcenter.inbox && workcenter.inboxLayout == flat",
           "group": "navigation"
         },
         {
-          "command": "workcenter.toggleQueueLayout",
-          "when": "view == workcenter.queue",
+          "command": "workcenter.switchInboxToFlat",
+          "when": "view == workcenter.inbox && workcenter.inboxLayout == tree",
           "group": "navigation"
         },
         {
-          "command": "workcenter.toggleFocusLayout",
-          "when": "view == workcenter.focus",
+          "command": "workcenter.switchQueueToTree",
+          "when": "view == workcenter.queue && workcenter.queueLayout == flat",
           "group": "navigation"
         },
         {
-          "command": "workcenter.toggleHistoryLayout",
-          "when": "view == workcenter.history",
+          "command": "workcenter.switchQueueToFlat",
+          "when": "view == workcenter.queue && workcenter.queueLayout == tree",
           "group": "navigation"
         },
         {
-          "command": "workcenter.toggleSourcesLayout",
-          "when": "view == workcenter.sources",
+          "command": "workcenter.switchFocusToTree",
+          "when": "view == workcenter.focus && workcenter.focusLayout == flat",
+          "group": "navigation"
+        },
+        {
+          "command": "workcenter.switchFocusToFlat",
+          "when": "view == workcenter.focus && workcenter.focusLayout == tree",
+          "group": "navigation"
+        },
+        {
+          "command": "workcenter.switchHistoryToTree",
+          "when": "view == workcenter.history && workcenter.historyLayout == flat",
+          "group": "navigation"
+        },
+        {
+          "command": "workcenter.switchHistoryToFlat",
+          "when": "view == workcenter.history && workcenter.historyLayout == tree",
+          "group": "navigation"
+        },
+        {
+          "command": "workcenter.switchSourcesToTree",
+          "when": "view == workcenter.sources && workcenter.sourcesLayout == flat",
+          "group": "navigation"
+        },
+        {
+          "command": "workcenter.switchSourcesToFlat",
+          "when": "view == workcenter.sources && workcenter.sourcesLayout == tree",
           "group": "navigation"
         },
         {
           "command": "workcenter.refresh",
           "when": "view == workcenter.inbox || view == workcenter.sources",
           "group": "navigation"
+        }
+      ],
+      "commandPalette": [
+        {
+          "command": "workcenter.switchInboxToTree",
+          "when": "workcenter.inboxLayout == flat"
+        },
+        {
+          "command": "workcenter.switchInboxToFlat",
+          "when": "workcenter.inboxLayout == tree"
+        },
+        {
+          "command": "workcenter.switchQueueToTree",
+          "when": "workcenter.queueLayout == flat"
+        },
+        {
+          "command": "workcenter.switchQueueToFlat",
+          "when": "workcenter.queueLayout == tree"
+        },
+        {
+          "command": "workcenter.switchFocusToTree",
+          "when": "workcenter.focusLayout == flat"
+        },
+        {
+          "command": "workcenter.switchFocusToFlat",
+          "when": "workcenter.focusLayout == tree"
+        },
+        {
+          "command": "workcenter.switchHistoryToTree",
+          "when": "workcenter.historyLayout == flat"
+        },
+        {
+          "command": "workcenter.switchHistoryToFlat",
+          "when": "workcenter.historyLayout == tree"
+        },
+        {
+          "command": "workcenter.switchSourcesToTree",
+          "when": "workcenter.sourcesLayout == flat"
+        },
+        {
+          "command": "workcenter.switchSourcesToFlat",
+          "when": "workcenter.sourcesLayout == tree"
+        },
+        {
+          "command": "workcenter.toggleInboxLayout",
+          "when": "false"
+        },
+        {
+          "command": "workcenter.toggleQueueLayout",
+          "when": "false"
+        },
+        {
+          "command": "workcenter.toggleFocusLayout",
+          "when": "false"
+        },
+        {
+          "command": "workcenter.toggleHistoryLayout",
+          "when": "false"
+        },
+        {
+          "command": "workcenter.toggleSourcesLayout",
+          "when": "false"
         }
       ],
       "view/item/context": [
