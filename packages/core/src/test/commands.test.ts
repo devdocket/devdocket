@@ -179,6 +179,7 @@ describe('registerCommands', () => {
       'workcenter.focusMoveDown',
       'workcenter.moveToQueue',
       'workcenter.acceptFromInbox',
+      'workcenter.acceptToFocusFromInbox',
       'workcenter.dismissFromInbox',
       'workcenter.acceptFromSources',
       'workcenter.dismissFromSources',
@@ -1006,6 +1007,212 @@ describe('registerCommands', () => {
 
       expect(workGraph.transitionState).toHaveBeenCalledWith('wc-ctx', WorkItemState.InProgress);
       expect(workGraph.transitionState).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  // ── acceptToFocusFromInbox (single item) ───────────────────────────
+
+  describe('workcenter.acceptToFocusFromInbox', () => {
+    it('creates WorkItem, sets state to accepted, and transitions to InProgress for a new item', async () => {
+      const inboxItem = makeInboxItem();
+      const created = createWorkItem({ id: 'wc-new-1' });
+      workGraph.findItemByProvenance.mockReturnValue(undefined);
+      workGraph.createItem.mockResolvedValue(created);
+
+      await invoke('workcenter.acceptToFocusFromInbox', inboxItem);
+
+      expect(workGraph.createItem).toHaveBeenCalledWith(
+        { title: 'Inbox Issue' },
+        { providerId: 'github', externalId: 'ext-1', url: 'https://github.com/org/repo/issues/1' },
+      );
+      expect(stateStore.setState).toHaveBeenCalledWith('github', 'ext-1', 'accepted');
+      expect(workGraph.transitionState).toHaveBeenCalledWith('wc-new-1', WorkItemState.InProgress);
+    });
+
+    it('sets state to accepted and transitions existing New item to InProgress', async () => {
+      const existing = createWorkItem({ id: 'wc-exist', state: WorkItemState.New });
+      workGraph.findItemByProvenance.mockReturnValue(existing);
+
+      await invoke('workcenter.acceptToFocusFromInbox', makeInboxItem());
+
+      expect(workGraph.createItem).not.toHaveBeenCalled();
+      expect(stateStore.setState).toHaveBeenCalledWith('github', 'ext-1', 'accepted');
+      expect(workGraph.transitionState).toHaveBeenCalledWith('wc-exist', WorkItemState.InProgress);
+    });
+
+    it('shows info message and does not transition when item is already InProgress', async () => {
+      const existing = createWorkItem({ id: 'wc-focus', state: WorkItemState.InProgress });
+      workGraph.findItemByProvenance.mockReturnValue(existing);
+
+      await invoke('workcenter.acceptToFocusFromInbox', makeInboxItem());
+
+      expect(vscode.window.showInformationMessage).toHaveBeenCalledWith(
+        'WorkCenter: Item is already in Focus',
+      );
+      expect(workGraph.transitionState).not.toHaveBeenCalled();
+      expect(stateStore.setState).toHaveBeenCalledWith('github', 'ext-1', 'accepted');
+    });
+
+    it('shows warning and does not transition when item is Done', async () => {
+      const existing = createWorkItem({ id: 'wc-done', state: WorkItemState.Done });
+      workGraph.findItemByProvenance.mockReturnValue(existing);
+
+      await invoke('workcenter.acceptToFocusFromInbox', makeInboxItem());
+
+      expect(vscode.window.showWarningMessage).toHaveBeenCalledWith(
+        'WorkCenter: Item is Done and cannot be moved to Focus',
+      );
+      expect(workGraph.transitionState).not.toHaveBeenCalled();
+    });
+
+    it('shows warning and does not transition when item is Archived', async () => {
+      const existing = createWorkItem({ id: 'wc-arch', state: WorkItemState.Archived });
+      workGraph.findItemByProvenance.mockReturnValue(existing);
+
+      await invoke('workcenter.acceptToFocusFromInbox', makeInboxItem());
+
+      expect(vscode.window.showWarningMessage).toHaveBeenCalledWith(
+        'WorkCenter: Item is Archived and cannot be moved to Focus',
+      );
+      expect(workGraph.transitionState).not.toHaveBeenCalled();
+    });
+
+    it('returns early with no errors for empty selection', async () => {
+      await invoke('workcenter.acceptToFocusFromInbox', undefined);
+
+      expect(workGraph.findItemByProvenance).not.toHaveBeenCalled();
+      expect(workGraph.createItem).not.toHaveBeenCalled();
+      expect(stateStore.setState).not.toHaveBeenCalled();
+      expect(workGraph.transitionState).not.toHaveBeenCalled();
+    });
+  });
+
+  // ── batch acceptToFocusFromInbox (multi-select) ───────────────────
+
+  describe('workcenter.acceptToFocusFromInbox (multi-select)', () => {
+    it('batch-accepts items: creates, sets states, and transitions all to InProgress', async () => {
+      const items = [
+        makeInboxItem({ externalId: 'ext-1', title: 'Issue 1' }),
+        makeInboxItem({ externalId: 'ext-2', title: 'Issue 2' }),
+      ];
+      workGraph.findItemByProvenance.mockReturnValue(undefined);
+      workGraph.createItem
+        .mockResolvedValueOnce(createWorkItem({ id: 'wc-1' }))
+        .mockResolvedValueOnce(createWorkItem({ id: 'wc-2' }));
+
+      await invoke('workcenter.acceptToFocusFromInbox', items[0], items);
+
+      expect(workGraph.createItem).toHaveBeenCalledTimes(2);
+      expect(stateStore.setStates).toHaveBeenCalledWith([
+        { providerId: 'github', externalId: 'ext-1', state: 'accepted' },
+        { providerId: 'github', externalId: 'ext-2', state: 'accepted' },
+      ]);
+      expect(workGraph.transitionState).toHaveBeenCalledTimes(2);
+      expect(workGraph.transitionState).toHaveBeenCalledWith('wc-1', WorkItemState.InProgress);
+      expect(workGraph.transitionState).toHaveBeenCalledWith('wc-2', WorkItemState.InProgress);
+      expect(vscode.window.showInformationMessage).toHaveBeenCalledWith(
+        'Accepted 2 items to Focus',
+      );
+    });
+
+    it('continues processing when some createItem calls fail', async () => {
+      const items = [
+        makeInboxItem({ externalId: 'ext-1', title: 'Issue 1' }),
+        makeInboxItem({ externalId: 'ext-2', title: 'Issue 2' }),
+        makeInboxItem({ externalId: 'ext-3', title: 'Issue 3' }),
+      ];
+      workGraph.findItemByProvenance.mockReturnValue(undefined);
+      workGraph.createItem
+        .mockResolvedValueOnce(createWorkItem({ id: 'wc-1' }))
+        .mockRejectedValueOnce(new Error('create failed'))
+        .mockResolvedValueOnce(createWorkItem({ id: 'wc-3' }));
+
+      await invoke('workcenter.acceptToFocusFromInbox', items[0], items);
+
+      expect(workGraph.createItem).toHaveBeenCalledTimes(3);
+      expect(stateStore.setStates).toHaveBeenCalledWith([
+        { providerId: 'github', externalId: 'ext-1', state: 'accepted' },
+        { providerId: 'github', externalId: 'ext-3', state: 'accepted' },
+      ]);
+      expect(workGraph.transitionState).toHaveBeenCalledTimes(2);
+      expect(logger.error).toHaveBeenCalledWith(
+        'Failed to accept inbox item to Focus "Issue 2"',
+        expect.any(Error),
+      );
+      expect(vscode.window.showErrorMessage).toHaveBeenCalledWith(
+        'WorkCenter: Failed to process 1 item(s); see Output for details',
+      );
+    });
+
+    it('rolls back createdIds when batch setStates fails', async () => {
+      const items = [
+        makeInboxItem({ externalId: 'ext-1', title: 'Issue 1' }),
+        makeInboxItem({ externalId: 'ext-2', title: 'Issue 2' }),
+      ];
+      workGraph.findItemByProvenance.mockReturnValue(undefined);
+      workGraph.createItem
+        .mockResolvedValueOnce(createWorkItem({ id: 'wc-1' }))
+        .mockResolvedValueOnce(createWorkItem({ id: 'wc-2' }));
+      stateStore.setStates.mockRejectedValue(new Error('disk full'));
+
+      await invoke('workcenter.acceptToFocusFromInbox', items[0], items);
+
+      expect(workGraph.deleteItem).toHaveBeenCalledWith('wc-1');
+      expect(workGraph.deleteItem).toHaveBeenCalledWith('wc-2');
+      expect(workGraph.transitionState).not.toHaveBeenCalled();
+      expect(vscode.window.showErrorMessage).toHaveBeenCalledWith(
+        'WorkCenter: Failed to update states after accepting items — disk full',
+      );
+    });
+
+    it('shows correct counts when some transitions fail', async () => {
+      const items = [
+        makeInboxItem({ externalId: 'ext-1', title: 'Issue 1' }),
+        makeInboxItem({ externalId: 'ext-2', title: 'Issue 2' }),
+        makeInboxItem({ externalId: 'ext-3', title: 'Issue 3' }),
+      ];
+      workGraph.findItemByProvenance.mockReturnValue(undefined);
+      workGraph.createItem
+        .mockResolvedValueOnce(createWorkItem({ id: 'wc-1' }))
+        .mockResolvedValueOnce(createWorkItem({ id: 'wc-2' }))
+        .mockResolvedValueOnce(createWorkItem({ id: 'wc-3' }));
+      workGraph.transitionState
+        .mockResolvedValueOnce(undefined)
+        .mockRejectedValueOnce(new Error('bad state'))
+        .mockResolvedValueOnce(undefined);
+
+      await invoke('workcenter.acceptToFocusFromInbox', items[0], items);
+
+      expect(workGraph.transitionState).toHaveBeenCalledTimes(3);
+      expect(vscode.window.showInformationMessage).toHaveBeenCalledWith(
+        'Accepted 2 items to Focus (1 failed)',
+      );
+      expect(vscode.window.showErrorMessage).toHaveBeenCalledWith(
+        'WorkCenter: Failed to process 1 item(s); see Output for details',
+      );
+    });
+
+    it('skips existing items in non-transitionable states', async () => {
+      const items = [
+        makeInboxItem({ externalId: 'ext-1', title: 'Issue 1' }),
+        makeInboxItem({ externalId: 'ext-2', title: 'Issue 2' }),
+        makeInboxItem({ externalId: 'ext-3', title: 'Issue 3' }),
+      ];
+      workGraph.findItemByProvenance
+        .mockReturnValueOnce(createWorkItem({ id: 'wc-1', state: WorkItemState.InProgress }))
+        .mockReturnValueOnce(createWorkItem({ id: 'wc-2', state: WorkItemState.Done }))
+        .mockReturnValueOnce(undefined);
+      workGraph.createItem.mockResolvedValueOnce(createWorkItem({ id: 'wc-3' }));
+
+      await invoke('workcenter.acceptToFocusFromInbox', items[0], items);
+
+      expect(workGraph.createItem).toHaveBeenCalledTimes(1);
+      // Only wc-3 should be transitioned; wc-1 (InProgress) and wc-2 (Done) are skipped
+      expect(workGraph.transitionState).toHaveBeenCalledTimes(1);
+      expect(workGraph.transitionState).toHaveBeenCalledWith('wc-3', WorkItemState.InProgress);
+      expect(vscode.window.showInformationMessage).toHaveBeenCalledWith(
+        'Accepted 1 item to Focus; 2 already in Focus or cannot be moved',
+      );
     });
   });
 
