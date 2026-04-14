@@ -27,9 +27,6 @@ export function getEditorPanelHtml({ cspSource, item, providerDescription }: Edi
       --input-bg: var(--vscode-input-background);
       --input-fg: var(--vscode-input-foreground);
       --input-border: var(--vscode-input-border, transparent);
-      --btn-bg: var(--vscode-button-background);
-      --btn-fg: var(--vscode-button-foreground);
-      --btn-hover: var(--vscode-button-hoverBackground);
       --font: var(--vscode-font-family, sans-serif);
       --font-size: var(--vscode-font-size, 13px);
     }
@@ -80,31 +77,6 @@ export function getEditorPanelHtml({ cspSource, item, providerDescription }: Edi
     }
     .row .field {
       flex: 1;
-    }
-    .actions {
-      margin-top: 20px;
-      display: flex;
-      gap: 8px;
-    }
-    button {
-      padding: 6px 16px;
-      border: none;
-      border-radius: 3px;
-      cursor: pointer;
-      font-family: var(--font);
-      font-size: var(--font-size);
-    }
-    button.primary {
-      background: var(--btn-bg);
-      color: var(--btn-fg);
-    }
-    button.primary:hover {
-      background: var(--btn-hover);
-    }
-    button.secondary {
-      background: transparent;
-      color: var(--vscode-foreground);
-      border: 1px solid var(--input-border);
     }
     input[readonly], textarea[readonly] {
       color: var(--vscode-disabledForeground, var(--vscode-foreground));

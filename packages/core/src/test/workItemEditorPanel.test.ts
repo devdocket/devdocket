@@ -943,7 +943,7 @@ describe('WorkItemEditorPanel (integration with WorkGraph)', () => {
   });
 
   describe('HTML escaping', () => {
-    it('escapes special characters in title (via escapeAttr)', async () => {
+    it('escapes special characters in title', async () => {
       const item = await graph.createItem({ title: 'A & B <script>"alert"</script>' });
       WorkItemEditorPanel.open(context, graph, createMockProviderRegistry() as any, item);
 
@@ -955,7 +955,7 @@ describe('WorkItemEditorPanel (integration with WorkGraph)', () => {
       expect(html).not.toMatch(/value="[^"]*<script>/);
     });
 
-    it('escapes special characters in notes (via escapeHtml)', async () => {
+    it('escapes special characters in notes', async () => {
       const item = await graph.createItem({ title: 'Task', notes: '<b>bold</b> & "quotes"' });
       WorkItemEditorPanel.open(context, graph, createMockProviderRegistry() as any, item);
 
