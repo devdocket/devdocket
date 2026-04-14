@@ -553,7 +553,7 @@ async function batchAcceptToFocusItems(
   for (const item of items) {
     const existing = workGraph.findItemByProvenance(item.providerId, item.externalId);
     if (existing) {
-      if (existing.state === WorkItemState.InProgress) {
+      if (existing.state === WorkItemState.InProgress || existing.state === WorkItemState.Paused) {
         logger.info(`Skipping "${item.title}" — already in Focus`);
         stateUpdates.push({ providerId: item.providerId, externalId: item.externalId, state: 'accepted' });
         skipped++;
