@@ -82,20 +82,20 @@ describe('getEditorPanelHtml', () => {
     expect(nonce1).not.toBe(nonce2);
   });
 
-  describe('source URL link', () => {
+  describe('browser URL link', () => {
     it('renders a clickable link when item has a url', () => {
       const item = makeItem({ url: 'https://github.com/org/repo/issues/42' });
       const html = getEditorPanelHtml({ cspSource, item });
       expect(html).toContain('id="source-link"');
       expect(html).toMatch(/<button\s[^>]*data-url="https:\/\/github\.com\/org\/repo\/issues\/42"/);
-      expect(html).toContain('Open in source');
+      expect(html).toContain('Open in browser');
     });
 
     it('does not render a link when item has no url', () => {
       const item = makeItem({ url: undefined });
       const html = getEditorPanelHtml({ cspSource, item });
       expect(html).not.toContain('id="source-link"');
-      expect(html).not.toContain('Open in source');
+      expect(html).not.toContain('Open in browser');
     });
 
     it('escapes HTML entities in the url to prevent XSS', () => {
