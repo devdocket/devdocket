@@ -682,7 +682,7 @@ export function registerCommands(
     vscode.commands.registerCommand('workcenter.dismissFromSources',
       wrapCommand('Failed to dismiss from sources', (item: SourcesElement, selectedItems?: SourcesElement[]) => handleDismissFromSources(stateStore, item, selectedItems))),
     vscode.commands.registerCommand('workcenter.undismissFromSources',
-      wrapCommand('Failed to un-dismiss from sources', (item: SourcesElement, selectedItems?: SourcesElement[]) => handleUndismissFromSources(stateStore, item, selectedItems))),
+      wrapCommand('Failed to restore from sources', (item: SourcesElement, selectedItems?: SourcesElement[]) => handleUndismissFromSources(stateStore, item, selectedItems))),
     vscode.commands.registerCommand('workcenter.switchInboxToTree',
       wrapCommand('Failed to switch inbox layout', () => setViewLayout('inbox', 'tree'))),
     vscode.commands.registerCommand('workcenter.switchInboxToFlat',
@@ -705,7 +705,7 @@ export function registerCommands(
       wrapCommand('Failed to switch sources layout', () => setViewLayout('sources', 'flat'))),
     // Backward-compatible aliases for old toggle commands (preserves existing keybindings)
     vscode.commands.registerCommand('workcenter.toggleInboxLayout',
-      wrapCommand('Failed to switch inbox layout', () => toggleViewLayout('inbox'))),
+      wrapCommand('Failed to switch Inbox layout', () => toggleViewLayout('inbox'))),
     vscode.commands.registerCommand('workcenter.toggleQueueLayout',
       wrapCommand('Failed to switch queue layout', () => toggleViewLayout('queue'))),
     vscode.commands.registerCommand('workcenter.toggleFocusLayout',

@@ -86,7 +86,7 @@ function createMockStateStore(): { [K in keyof UsedStateStoreMethods]: Mock } {
   return {
     setState: vi.fn(),
     setStates: vi.fn(),
-    getState: vi.fn().mockReturnValue('dismissed'),
+    getState: vi.fn(),
   };
 }
 
@@ -1429,6 +1429,10 @@ describe('registerCommands', () => {
   // ── undismissFromSources─────────────────────────────────────────
 
   describe('workcenter.undismissFromSources', () => {
+    beforeEach(() => {
+      stateStore.getState.mockReturnValue('dismissed');
+    });
+
     it('restores a single dismissed source item to inbox', async () => {
       await invoke('workcenter.undismissFromSources', makeSourceItem());
 
