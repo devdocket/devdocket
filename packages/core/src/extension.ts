@@ -326,7 +326,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<WorkCe
   );
 
   const commandRegStart = performance.now();
-  registerCommands(context, wg, ar, ss, pr);
+  registerCommands(context, wg, ar, ss, pr, labelCache);
   logger.info(`Command registration took ${Math.round(performance.now() - commandRegStart)}ms`);
 
   // Set context keys and listen for layout changes

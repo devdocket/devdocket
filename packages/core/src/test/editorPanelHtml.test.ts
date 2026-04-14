@@ -15,6 +15,12 @@ function makeItem(overrides: Partial<WorkItem> = {}): WorkItem {
   };
 }
 
+/** Extract the metadata section from the HTML output for targeted assertions. */
+function getMetadataSection(html: string): string {
+  const match = html.match(/class="metadata"[\s\S]*?<\/dl>/);
+  return match ? match[0] : '';
+}
+
 describe('getEditorPanelHtml', () => {
   const cspSource = 'https://example.test';
 
@@ -100,6 +106,102 @@ describe('getEditorPanelHtml', () => {
     const nonce1 = html1.match(/nonce="([^"]+)"/)![1];
     const nonce2 = html2.match(/nonce="([^"]+)"/)![1];
     expect(nonce1).not.toBe(nonce2);
+  });
+
+  describe('metadata section', () => {
+    it('contains a metadata section with aria-label', () => {
+      const html = getEditorPanelHtml({ cspSource, item: makeItem() });
+      expect(html).toContain('class="metadata"');
+      expect(html).toContain('aria-label="Item metadata"');
+    });
+
+    it('renders item state value in metadata', () => {
+      const item = makeItem({ state: WorkItemState.InProgress });
+      const html = getEditorPanelHtml({ cspSource, item });
+      const metadata = getMetadataSection(html);
+      expect(metadata).toContain('State');
+      expect(metadata).toContain('In Progress');
+    });
+
+    it('renders each possible state value', () => {
+      const expectedLabels: Record<string, string> = {
+        [WorkItemState.New]: 'New',
+        [WorkItemState.InProgress]: 'In Progress',
+        [WorkItemState.Paused]: 'Paused',
+        [WorkItemState.Done]: 'Done',
+        [WorkItemState.Archived]: 'Archived',
+      };
+      for (const state of Object.values(WorkItemState)) {
+        const item = makeItem({ state });
+        const html = getEditorPanelHtml({ cspSource, item });
+        const metadata = getMetadataSection(html);
+        expect(metadata).toContain(expectedLabels[state]);
+      }
+    });
+
+    it('applies correct badge CSS class for each state', () => {
+      const expectedClasses: Record<string, string> = {
+        [WorkItemState.New]: 'badge-new',
+        [WorkItemState.InProgress]: 'badge-inprogress',
+        [WorkItemState.Paused]: 'badge-paused',
+        [WorkItemState.Done]: 'badge-done',
+        [WorkItemState.Archived]: 'badge-archived',
+      };
+      for (const state of Object.values(WorkItemState)) {
+        const item = makeItem({ state });
+        const html = getEditorPanelHtml({ cspSource, item });
+        const metadata = getMetadataSection(html);
+        expect(metadata).toContain(expectedClasses[state]);
+      }
+    });
+
+    it('shows provider name for provider-backed items when providerLabel is given', () => {
+      const item = makeItem({ providerId: 'github' });
+      const html = getEditorPanelHtml({ cspSource, item, providerLabel: 'GitHub' });
+      const metadata = getMetadataSection(html);
+      expect(metadata).toMatch(/Provider[\s\S]*?GitHub/);
+    });
+
+    it('hides provider row when providerLabel is not supplied', () => {
+      const item = makeItem({ providerId: 'github' });
+      const html = getEditorPanelHtml({ cspSource, item });
+      const metadata = getMetadataSection(html);
+      expect(metadata).not.toContain('Provider');
+    });
+
+    it('hides provider row for manual items', () => {
+      const item = makeItem({ providerId: undefined });
+      const html = getEditorPanelHtml({ cspSource, item });
+      const metadata = getMetadataSection(html);
+      expect(metadata).not.toContain('Provider');
+    });
+
+    it('renders created timestamp as formatted date', () => {
+      const ts = new Date(2024, 2, 10, 8, 45).getTime();
+      const item = makeItem({ createdAt: ts });
+      const html = getEditorPanelHtml({ cspSource, item });
+      const metadata = getMetadataSection(html);
+      expect(metadata).toContain('Created');
+      expect(metadata).toContain('2024');
+      expect(metadata).not.toContain(String(ts));
+    });
+
+    it('renders updated timestamp as formatted date', () => {
+      const ts = new Date(2024, 7, 22, 16, 0).getTime();
+      const item = makeItem({ updatedAt: ts });
+      const html = getEditorPanelHtml({ cspSource, item });
+      const metadata = getMetadataSection(html);
+      expect(metadata).toContain('Updated');
+      expect(metadata).toContain('2024');
+      expect(metadata).not.toContain(String(ts));
+    });
+
+    it('escapes HTML entities in provider label', () => {
+      const item = makeItem({ providerId: 'evil' });
+      const html = getEditorPanelHtml({ cspSource, item, providerLabel: '<script>alert("xss")</script>' });
+      expect(html).not.toContain('<script>alert("xss")');
+      expect(html).toContain('&lt;script&gt;');
+    });
   });
 
   describe('provider description', () => {

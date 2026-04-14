@@ -23,10 +23,12 @@ export class WorkItemEditorPanel {
     workGraph: WorkGraph,
     providerRegistry: ProviderRegistry,
     item: WorkItem,
+    providerLabel?: string,
   ): void {
     const existing = WorkItemEditorPanel.openPanels.get(item.id);
     if (existing) {
       existing.panel.title = `Edit: ${item.title}`;
+      existing.providerLabel = providerLabel;
       existing.update();
       existing.panel.reveal();
       return;
@@ -39,7 +41,7 @@ export class WorkItemEditorPanel {
       { enableScripts: true, retainContextWhenHidden: true },
     );
 
-    const editor = new WorkItemEditorPanel(panel, workGraph, providerRegistry, item.id);
+    const editor = new WorkItemEditorPanel(panel, workGraph, providerRegistry, item.id, providerLabel);
     WorkItemEditorPanel.openPanels.set(item.id, editor);
     context.subscriptions.push({ dispose: () => editor.dispose() });
   }
@@ -58,6 +60,7 @@ export class WorkItemEditorPanel {
     workGraph: WorkGraph,
     providerRegistry: ProviderRegistry,
     itemId: string,
+    private providerLabel?: string,
   ) {
     this.panel = panel;
     this.workGraph = workGraph;
@@ -153,6 +156,7 @@ export class WorkItemEditorPanel {
     return getEditorPanelHtml({
       cspSource: this.panel.webview.cspSource,
       item,
+      providerLabel: this.providerLabel,
       providerDescription,
     });
   }

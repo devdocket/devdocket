@@ -4,6 +4,7 @@ import { WorkGraph } from '../services/workGraph';
 import { ActionRegistry } from '../services/actionRegistry';
 import { ProviderRegistry } from '../services/providerRegistry';
 import { DiscoveredStateStore, type InboxState } from '../storage/discoveredStateStore';
+import type { ProviderLabelCache } from '../storage/providerLabelCache';
 import { WorkItemEditorPanel } from '../views/workItemEditorPanel';
 import { type InboxItem, type InboxElement } from '../views/inboxTreeProvider';
 import { type SourceItemNode, type SourcesElement } from '../views/sourcesTreeProvider';
@@ -271,12 +272,14 @@ function handleEditItem(
   context: vscode.ExtensionContext,
   workGraph: WorkGraph,
   providerRegistry: ProviderRegistry,
+  labelCache: ProviderLabelCache,
   item?: { id?: string },
 ): void {
   if (!item?.id) { return; }
   const workItem = workGraph.getItem(item.id);
   if (workItem) {
-    WorkItemEditorPanel.open(context, workGraph, providerRegistry, workItem);
+    const providerLabel = workItem.providerId ? labelCache.get(workItem.providerId) : undefined;
+    WorkItemEditorPanel.open(context, workGraph, providerRegistry, workItem, providerLabel);
   }
 }
 
@@ -602,6 +605,7 @@ export function registerCommands(
   actionRegistry: ActionRegistry,
   stateStore: DiscoveredStateStore,
   providerRegistry: ProviderRegistry,
+  labelCache: ProviderLabelCache,
 ): void {
   context.subscriptions.push(
     vscode.commands.registerCommand('workcenter.refresh',
@@ -621,7 +625,7 @@ export function registerCommands(
     vscode.commands.registerCommand('workcenter.deleteItem',
       wrapCommand('Failed to delete item', (item, selectedItems) => handleDeleteItem(workGraph, item, selectedItems))),
     vscode.commands.registerCommand('workcenter.editItem',
-      wrapCommand('Failed to open editor', (item) => handleEditItem(context, workGraph, providerRegistry, item))),
+      wrapCommand('Failed to open editor', (item) => handleEditItem(context, workGraph, providerRegistry, labelCache, item))),
     vscode.commands.registerCommand('workcenter.openInBrowser',
       wrapCommand('Failed to open in browser', (item) => handleOpenInBrowser(workGraph, item))),
     vscode.commands.registerCommand('workcenter.runAction',
