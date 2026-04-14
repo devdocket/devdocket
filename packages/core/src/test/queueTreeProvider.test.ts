@@ -24,6 +24,7 @@ function createMockProviderRegistry(): ProviderRegistry {
       if (id === 'ado') return 'Azure DevOps';
       return id;
     }),
+    getDiscoveredItems: vi.fn(() => []),
     onDidRegisterProvider: emitter.event,
   } as any;
 }
