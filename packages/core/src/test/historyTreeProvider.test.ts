@@ -171,7 +171,7 @@ describe('HistoryTreeProvider', () => {
       const treeItem = provider.getTreeItem(item);
 
       expect(treeItem.label).toBe('Completed task');
-      expect(treeItem.description).toBe('✓ done');
+      expect(treeItem.description).toBe('done');
       expect(treeItem.collapsibleState).toBe(TreeItemCollapsibleState.None);
       expect((treeItem.iconPath as any).id).toBe('check');
     });
@@ -181,7 +181,7 @@ describe('HistoryTreeProvider', () => {
       const treeItem = provider.getTreeItem(item);
 
       expect(treeItem.label).toBe('Old task');
-      expect(treeItem.description).toBe('📦 archived');
+      expect(treeItem.description).toBe('archived');
       expect((treeItem.iconPath as any).id).toBe('archive');
     });
 

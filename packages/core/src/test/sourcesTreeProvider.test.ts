@@ -284,7 +284,7 @@ describe('SourcesTreeProvider', () => {
       expect((treeItem.iconPath as any).id).toBe('check');
     });
 
-    it('should render non-accepted item with circle-outline icon', () => {
+    it('should render unseen item with circle-outline icon', () => {
       stateStore.getState.mockReturnValue('unseen');
 
       const node: SourceItemNode = {
@@ -294,15 +294,33 @@ describe('SourcesTreeProvider', () => {
       expect((treeItem.iconPath as any).id).toBe('circle-outline');
     });
 
-    it('should render dismissed item with circle-outline icon and dismissed description', () => {
+    it('should render dismissed item with circle-slash icon and dismissed description', () => {
       stateStore.getState.mockReturnValue('dismissed');
 
       const node: SourceItemNode = {
         kind: 'item', providerId: 'gh', externalId: '1', title: 'Dismissed Item',
       };
       const treeItem = provider.getTreeItem(node);
-      expect((treeItem.iconPath as any).id).toBe('circle-outline');
+      expect((treeItem.iconPath as any).id).toBe('circle-slash');
       expect(treeItem.description).toBe('dismissed');
+    });
+
+    it('should use distinct icons for accepted, dismissed, and unseen states', () => {
+      const node: SourceItemNode = {
+        kind: 'item', providerId: 'gh', externalId: '1', title: 'Test Item',
+      };
+
+      stateStore.getState.mockReturnValue('accepted');
+      const acceptedIcon = (provider.getTreeItem(node).iconPath as any).id;
+
+      stateStore.getState.mockReturnValue('dismissed');
+      const dismissedIcon = (provider.getTreeItem(node).iconPath as any).id;
+
+      stateStore.getState.mockReturnValue('unseen');
+      const unseenIcon = (provider.getTreeItem(node).iconPath as any).id;
+
+      const icons = new Set([acceptedIcon, dismissedIcon, unseenIcon]);
+      expect(icons.size).toBe(3);
     });
 
     it('should set contextValue with hasUrl when item has url', () => {
