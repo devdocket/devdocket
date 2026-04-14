@@ -203,6 +203,13 @@ describe('HistoryTreeProvider', () => {
       expect(treeItem.description).toBe('done');
     });
 
+    it('should omit group in tree layout', () => {
+      provider.layout = 'tree';
+      const item = makeItem({ id: '1', title: 'Done task', state: WorkItemState.Done, group: 'octocat/repo' });
+      const treeItem = provider.getTreeItem(item);
+      expect(treeItem.description).toBe('done');
+    });
+
     it('should use circle-outline icon for unexpected state', () => {
       const item = makeItem({ id: '1', title: 'X', state: WorkItemState.InProgress });
       const treeItem = provider.getTreeItem(item);
