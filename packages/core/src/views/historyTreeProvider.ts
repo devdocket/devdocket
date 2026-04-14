@@ -48,9 +48,9 @@ export class HistoryTreeProvider extends WorkItemViewProvider {
   private getStateLabel(state: WorkItemState): string {
     switch (state) {
       case WorkItemState.Done:
-        return '✓ done';
+        return 'done';
       case WorkItemState.Archived:
-        return '📦 archived';
+        return 'archived';
       default:
         return state;
     }
