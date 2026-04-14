@@ -446,11 +446,12 @@ async function acceptSingleInboxItem(
     }
     return;
   }
+  const group = item.group?.trim();
   let createdItem: Awaited<ReturnType<typeof workGraph.createItem>>;
   try {
     createdItem = await workGraph.createItem(
       { title: formatItemTitle(item) },
-      { providerId: item.providerId, externalId: item.externalId, url: item.url, ...(item.group ? { group: item.group } : {}) },
+      { providerId: item.providerId, externalId: item.externalId, url: item.url, ...(group ? { group } : {}) },
     );
   } catch (err: unknown) {
     handleCommandError('Failed to accept inbox item', err);
