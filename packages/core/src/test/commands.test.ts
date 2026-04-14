@@ -1085,6 +1085,137 @@ describe('registerCommands', () => {
       expect(stateStore.setState).not.toHaveBeenCalled();
       expect(workGraph.transitionState).not.toHaveBeenCalled();
     });
+
+    // ── failure / rollback paths ──────────────────────────────────────
+
+    it('surfaces error and makes no state changes when createItem throws', async () => {
+      workGraph.findItemByProvenance.mockReturnValue(undefined);
+      workGraph.createItem.mockRejectedValue(new Error('disk full'));
+
+      await invoke('workcenter.acceptToFocusFromInbox', makeInboxItem());
+
+      expect(stateStore.setState).not.toHaveBeenCalled();
+      expect(workGraph.transitionState).not.toHaveBeenCalled();
+      expect(vscode.window.showErrorMessage).toHaveBeenCalledWith(
+        'WorkCenter: Failed to accept inbox item — disk full',
+      );
+    });
+
+    it('rolls back created item via deleteItem when setState fails after createItem', async () => {
+      const created = createWorkItem({ id: 'wc-rollback' });
+      workGraph.findItemByProvenance.mockReturnValue(undefined);
+      workGraph.createItem.mockResolvedValue(created);
+      stateStore.setState.mockRejectedValue(new Error('state write failed'));
+
+      await invoke('workcenter.acceptToFocusFromInbox', makeInboxItem());
+
+      expect(workGraph.deleteItem).toHaveBeenCalledWith('wc-rollback');
+      expect(workGraph.transitionState).not.toHaveBeenCalled();
+      expect(vscode.window.showErrorMessage).toHaveBeenCalledWith(
+        'WorkCenter: Failed to update state after accepting item — state write failed',
+      );
+    });
+
+    it('logs rollback failure but still surfaces original setState error', async () => {
+      const created = createWorkItem({ id: 'wc-rollback-fail' });
+      workGraph.findItemByProvenance.mockReturnValue(undefined);
+      workGraph.createItem.mockResolvedValue(created);
+      stateStore.setState.mockRejectedValue(new Error('state write failed'));
+      workGraph.deleteItem.mockRejectedValue(new Error('delete also failed'));
+
+      await invoke('workcenter.acceptToFocusFromInbox', makeInboxItem());
+
+      expect(workGraph.deleteItem).toHaveBeenCalledWith('wc-rollback-fail');
+      expect(logger.error).toHaveBeenCalledWith(
+        'Failed to roll back created item after setState failure',
+        expect.any(Error),
+      );
+      expect(vscode.window.showErrorMessage).toHaveBeenCalledWith(
+        'WorkCenter: Failed to update state after accepting item — state write failed',
+      );
+    });
+
+    it('surfaces error when transitionState fails for a new item', async () => {
+      const created = createWorkItem({ id: 'wc-trans-fail' });
+      workGraph.findItemByProvenance.mockReturnValue(undefined);
+      workGraph.createItem.mockResolvedValue(created);
+      workGraph.transitionState.mockRejectedValue(new Error('bad transition'));
+
+      await invoke('workcenter.acceptToFocusFromInbox', makeInboxItem());
+
+      expect(stateStore.setState).toHaveBeenCalledWith('github', 'ext-1', 'accepted');
+      expect(vscode.window.showErrorMessage).toHaveBeenCalledWith(
+        'WorkCenter: Failed to move item to Focus — bad transition',
+      );
+    });
+
+    it('surfaces error when transitionState fails for an existing New item', async () => {
+      const existing = createWorkItem({ id: 'wc-exist-trans', state: WorkItemState.New });
+      workGraph.findItemByProvenance.mockReturnValue(existing);
+      workGraph.transitionState.mockRejectedValue(new Error('transition error'));
+
+      await invoke('workcenter.acceptToFocusFromInbox', makeInboxItem());
+
+      expect(stateStore.setState).toHaveBeenCalledWith('github', 'ext-1', 'accepted');
+      expect(vscode.window.showErrorMessage).toHaveBeenCalledWith(
+        'WorkCenter: Failed to move item to Focus — transition error',
+      );
+    });
+
+    it('returns early with error when setState fails for InProgress item', async () => {
+      const existing = createWorkItem({ id: 'wc-ip', state: WorkItemState.InProgress });
+      workGraph.findItemByProvenance.mockReturnValue(existing);
+      stateStore.setState.mockRejectedValue(new Error('state error'));
+
+      await invoke('workcenter.acceptToFocusFromInbox', makeInboxItem());
+
+      expect(vscode.window.showErrorMessage).toHaveBeenCalledWith(
+        'WorkCenter: Failed to update state for existing in-progress item — state error',
+      );
+      expect(vscode.window.showInformationMessage).not.toHaveBeenCalled();
+      expect(workGraph.transitionState).not.toHaveBeenCalled();
+    });
+
+    it('returns early with error when setState fails for Done item', async () => {
+      const existing = createWorkItem({ id: 'wc-done-err', state: WorkItemState.Done });
+      workGraph.findItemByProvenance.mockReturnValue(existing);
+      stateStore.setState.mockRejectedValue(new Error('state error'));
+
+      await invoke('workcenter.acceptToFocusFromInbox', makeInboxItem());
+
+      expect(vscode.window.showErrorMessage).toHaveBeenCalledWith(
+        'WorkCenter: Failed to update state for existing completed item — state error',
+      );
+      expect(vscode.window.showWarningMessage).not.toHaveBeenCalled();
+      expect(workGraph.transitionState).not.toHaveBeenCalled();
+    });
+
+    it('returns early with error when setState fails for Archived item', async () => {
+      const existing = createWorkItem({ id: 'wc-arch-err', state: WorkItemState.Archived });
+      workGraph.findItemByProvenance.mockReturnValue(existing);
+      stateStore.setState.mockRejectedValue(new Error('state error'));
+
+      await invoke('workcenter.acceptToFocusFromInbox', makeInboxItem());
+
+      expect(vscode.window.showErrorMessage).toHaveBeenCalledWith(
+        'WorkCenter: Failed to update state for existing completed item — state error',
+      );
+      expect(vscode.window.showWarningMessage).not.toHaveBeenCalled();
+      expect(workGraph.transitionState).not.toHaveBeenCalled();
+    });
+
+    it('returns early with error when setState fails for existing New item', async () => {
+      const existing = createWorkItem({ id: 'wc-new-err', state: WorkItemState.New });
+      workGraph.findItemByProvenance.mockReturnValue(existing);
+      stateStore.setState.mockRejectedValue(new Error('state error'));
+
+      await invoke('workcenter.acceptToFocusFromInbox', makeInboxItem());
+
+      expect(vscode.window.showErrorMessage).toHaveBeenCalledWith(
+        'WorkCenter: Failed to update state for existing accepted item — state error',
+      );
+      expect(workGraph.transitionState).not.toHaveBeenCalled();
+    });
   });
 
   // ── batch acceptToFocusFromInbox (multi-select) ───────────────────
