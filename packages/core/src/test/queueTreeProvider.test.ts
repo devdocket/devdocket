@@ -125,6 +125,24 @@ describe('QueueTreeProvider', () => {
       expect(treeItem.description).toBeUndefined();
     });
 
+    it('sets description to "provider · group" when item has providerId and group', async () => {
+      const registry = createMockProviderRegistry();
+      const queueWithRegistry = new QueueTreeProvider(graph, registry as any);
+      const item = await graph.createItem(
+        { title: 'Grouped' },
+        { providerId: 'github', externalId: 'ext-g1', group: 'octocat/repo' },
+      );
+      const treeItem = queueWithRegistry.getTreeItem(item);
+      expect(treeItem.description).toBe('GitHub Issues · octocat/repo');
+    });
+
+    it('sets description to group only when no providerId but group exists', async () => {
+      const item = await graph.createItem({ title: 'Manual grouped' });
+      (item as any).group = 'my-org/my-repo';
+      const treeItem = provider.getTreeItem(item);
+      expect(treeItem.description).toBe('my-org/my-repo');
+    });
+
     it('sets contextValue to "queueItem.hasUrl" when item has url', async () => {
       const item = await graph.createItem(
         { title: 'With URL' },

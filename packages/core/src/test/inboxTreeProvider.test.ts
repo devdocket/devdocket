@@ -309,6 +309,18 @@ describe('InboxTreeProvider', () => {
       expect((treeItem.iconPath as any).id).toBe('folder');
     });
 
+    it('should set description to group when inbox item has a group', () => {
+      const item: InboxItem = { kind: 'item', providerId: 'gh', externalId: '1', title: 'Bug', group: 'octocat/repo' };
+      const treeItem = provider.getTreeItem(item);
+      expect(treeItem.description).toBe('octocat/repo');
+    });
+
+    it('should set description to undefined when inbox item has no group', () => {
+      const item: InboxItem = { kind: 'item', providerId: 'gh', externalId: '1', title: 'Bug' };
+      const treeItem = provider.getTreeItem(item);
+      expect(treeItem.description).toBeUndefined();
+    });
+
     it('should set contextValue with hasUrl when item has url', () => {
       const item: InboxItem = { kind: 'item', providerId: 'gh', externalId: '1', title: 'X', url: 'https://example.com' };
       expect(provider.getTreeItem(item).contextValue).toBe('inboxItem.hasUrl');

@@ -69,6 +69,21 @@ describe('FocusTreeProvider', () => {
       const item = makeItem({ state: WorkItemState.Paused });
       expect(provider.getTreeItem(item).description).toBe('paused');
     });
+
+    it('should show "in progress · group" when item has a group', () => {
+      const item = makeItem({ state: WorkItemState.InProgress, group: 'octocat/repo' });
+      expect(provider.getTreeItem(item).description).toBe('in progress · octocat/repo');
+    });
+
+    it('should show "paused · group" when paused item has a group', () => {
+      const item = makeItem({ state: WorkItemState.Paused, group: 'octocat/repo' });
+      expect(provider.getTreeItem(item).description).toBe('paused · octocat/repo');
+    });
+
+    it('should show state only when group is undefined', () => {
+      const item = makeItem({ state: WorkItemState.InProgress, group: undefined });
+      expect(provider.getTreeItem(item).description).toBe('in progress');
+    });
   });
 
   describe('getTreeItem icon', () => {

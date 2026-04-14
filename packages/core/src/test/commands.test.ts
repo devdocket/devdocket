@@ -877,6 +877,28 @@ describe('registerCommands', () => {
       expect(stateStore.setState).toHaveBeenCalledWith('github', 'ext-1', 'accepted');
       expect(workGraph.createItem).toHaveBeenCalledTimes(1);
     });
+
+    it('passes group to createItem when batch-accepting items with group', async () => {
+      const items = [
+        makeInboxItem({ externalId: 'ext-1', title: 'Issue 1', group: 'octocat/repo' }),
+        makeInboxItem({ externalId: 'ext-2', title: 'Issue 2', group: 'octocat/other' }),
+      ];
+      workGraph.findItemByProvenance.mockReturnValue(undefined);
+      workGraph.createItem
+        .mockResolvedValueOnce(createWorkItem({ id: 'wc-1' }))
+        .mockResolvedValueOnce(createWorkItem({ id: 'wc-2' }));
+
+      await invoke('workcenter.acceptFromInbox', items[0], items);
+
+      expect(workGraph.createItem).toHaveBeenCalledWith(
+        { title: 'octocat/repo Issue 1' },
+        expect.objectContaining({ providerId: 'github', externalId: 'ext-1', group: 'octocat/repo' }),
+      );
+      expect(workGraph.createItem).toHaveBeenCalledWith(
+        { title: 'octocat/other Issue 2' },
+        expect.objectContaining({ providerId: 'github', externalId: 'ext-2', group: 'octocat/other' }),
+      );
+    });
   });
 
   // ── batch dismissFromInbox (multi-select) ─────────────────────────
