@@ -28,6 +28,7 @@ Key files:
 
 - Layout toggle dynamic icons: VS Code requires separate command IDs for different icons. Pattern: register two commands per toggle (e.g., `switchXToTree` and `switchXToFlat`), each with its own icon. Use context keys (`workcenter.${id}Layout`) set on activation + config change listener in `extension.ts` (lines ~332-354). Menu entries use `when` clauses (e.g., `workcenter.inboxLayout == flat`) to show only the relevant command. Add `commandPalette` entries with matching `when` clauses to hide the irrelevant variant from the palette.
   - Key files: `package.json` (commands, menus.view/title, menus.commandPalette), `commands.ts` (registrations), `extension.ts` (context key init + config listener), `viewLayout.ts` (toggle logic).
+- **Empty state messages** use VS Code's `viewsWelcome` contribution in `packages/core/package.json`. Each entry has a `view` (matching a view ID like `workcenter.inbox`) and `contents` (markdown string). VS Code displays these automatically when a TreeDataProvider returns no children. Command buttons use `[Label](command:commandId)` markdown syntax. No `when` clause needed — VS Code handles the empty-tree condition natively.
 - GitHub package (`packages/github/`) vscode mock lives at `packages/github/src/test/__mocks__/vscode.ts`, aliased in `vitest.config.ts` — mirrors core mock pattern but adds `authentication`, `workspace`, `extensions` mocks.
 - Mock includes: `authentication.getSession` (resolves with `{ accessToken: 'mock-token' }`), `workspace.getConfiguration` (returns `.get(key, default)` stub), `workspace.workspaceFolders`, `extensions.getExtension`, `commands.executeCommand`, `Uri.file`, `window.showErrorMessage`.
 - Root `npm install` handles all workspace deps via npm workspaces. Root `npm run build` runs esbuild in both packages.
@@ -283,6 +284,15 @@ The queue view was displaying raw provider IDs (e.g., `github`, `ado`) in tree i
 - **Root cause matters**: The first fix (defensive load) was plausible but wrong. The symptom (dismissed items reappearing) had a simpler explanation: code explicitly designed to resurface them.
 - **Reverting cleanly**: When reverting test changes, `git checkout <commit> -- <files>` is the safest approach to restore files to a known-good state before applying new targeted edits.
 
+## Issue #223: Dead CSS and duplicated helpers cleanup (2025-07-23)
+
+### Changes
+- Removed unused CSS rules (`.actions`, `button.primary`, `button.primary:hover`, `button.secondary`) from `packages/core/src/views/editorPanelHtml.ts` — no HTML elements use these classes.
+- Removed dead `getNonce()` (private method), `escapeHtml()`, and `escapeAttr()` (module-level functions) from `packages/core/src/views/workItemEditorPanel.ts` — the actual implementations live in `editorPanelHtml.ts`.
+
+### Key Learnings
+- **Verify before removing**: Always grep the full `src/` tree for references before deleting code that looks dead. In this case, `editorPanelHtml.ts` has the real `getNonce`/`escapeHtml`/`escapeAttr` — the copies in `workItemEditorPanel.ts` were never called.
+- **CSS-in-template-literal cleanup**: CSS rules embedded in template literal strings won't trigger TS compiler errors when unused. Manual inspection of the HTML output is the only way to verify they're dead.
 ## Issue #231: Sources view dismissed icon (2025-07-23)
 
 ### Learnings
