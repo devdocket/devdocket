@@ -338,6 +338,24 @@ describe('SourcesTreeProvider', () => {
       const treeItem = provider.getTreeItem(node);
       expect(treeItem.contextValue).toBe('sourceItem');
     });
+
+    it('should set contextValue with dismissed suffix for dismissed items', () => {
+      stateStore.getState.mockReturnValue('dismissed');
+      const node: SourceItemNode = {
+        kind: 'item', providerId: 'gh', externalId: '1', title: 'Item',
+      };
+      const treeItem = provider.getTreeItem(node);
+      expect(treeItem.contextValue).toBe('sourceItem.dismissed');
+    });
+
+    it('should set contextValue with hasUrl and dismissed suffix', () => {
+      stateStore.getState.mockReturnValue('dismissed');
+      const node: SourceItemNode = {
+        kind: 'item', providerId: 'gh', externalId: '1', title: 'Item', url: 'https://example.com',
+      };
+      const treeItem = provider.getTreeItem(node);
+      expect(treeItem.contextValue).toBe('sourceItem.hasUrl.dismissed');
+    });
   });
 
   describe('getTreeItem tooltip', () => {

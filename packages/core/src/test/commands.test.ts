@@ -182,6 +182,7 @@ describe('registerCommands', () => {
       'workcenter.dismissFromInbox',
       'workcenter.acceptFromSources',
       'workcenter.dismissFromSources',
+      'workcenter.undismissFromSources',
     ];
     for (const cmd of expected) {
       expect(commandHandlers.has(cmd), `missing command: ${cmd}`).toBe(true);
@@ -1420,6 +1421,95 @@ describe('registerCommands', () => {
       await invoke('workcenter.dismissFromSources', contextItem, [selectedItem]);
 
       expect(stateStore.setState).toHaveBeenCalledWith('github', 'ext-ctx', 'dismissed');
+      expect(stateStore.setStates).not.toHaveBeenCalled();
+    });
+  });
+
+  // ── undismissFromSources─────────────────────────────────────────
+
+  describe('workcenter.undismissFromSources', () => {
+    it('restores a single dismissed source item to inbox', async () => {
+      await invoke('workcenter.undismissFromSources', makeSourceItem());
+
+      expect(stateStore.setState).toHaveBeenCalledWith('github', 'ext-2', 'unseen');
+    });
+
+    it('shows error when single restore fails', async () => {
+      stateStore.setState.mockRejectedValue(new Error('io error'));
+
+      await invoke('workcenter.undismissFromSources', makeSourceItem());
+
+      expect(vscode.window.showErrorMessage).toHaveBeenCalledWith(
+        'WorkCenter: Failed to restore item to Inbox — io error',
+      );
+    });
+
+    it('batch-restores multiple dismissed source items', async () => {
+      const items = [
+        makeSourceItem({ externalId: 'ext-1' }),
+        makeSourceItem({ externalId: 'ext-2' }),
+      ];
+
+      await invoke('workcenter.undismissFromSources', items[0], items);
+
+      expect(stateStore.setStates).toHaveBeenCalledWith([
+        { providerId: 'github', externalId: 'ext-1', state: 'unseen' },
+        { providerId: 'github', externalId: 'ext-2', state: 'unseen' },
+      ]);
+      expect(vscode.window.showInformationMessage).toHaveBeenCalledWith('Restored 2 items to inbox');
+    });
+
+    it('shows error when batch setStates fails', async () => {
+      const items = [
+        makeSourceItem({ externalId: 'ext-1' }),
+        makeSourceItem({ externalId: 'ext-2' }),
+      ];
+      stateStore.setStates.mockRejectedValue(new Error('io error'));
+
+      await invoke('workcenter.undismissFromSources', items[0], items);
+
+      expect(vscode.window.showErrorMessage).toHaveBeenCalledWith(
+        'WorkCenter: Failed to restore items to Inbox — io error',
+      );
+    });
+
+    it('uses single-item path when selectedItems has one item', async () => {
+      const item = makeSourceItem();
+
+      await invoke('workcenter.undismissFromSources', item, [item]);
+
+      expect(stateStore.setState).toHaveBeenCalledWith('github', 'ext-2', 'unseen');
+      expect(stateStore.setStates).not.toHaveBeenCalled();
+    });
+
+    it('filters out non-item nodes from selectedItems', async () => {
+      const providerNode: SourceProviderNode = { kind: 'provider', providerId: 'github', label: 'GitHub' };
+      const groupNode: SourceGroupNode = { kind: 'group', providerId: 'github', groupName: 'org/repo' };
+      const sourceItem = makeSourceItem({ externalId: 'ext-1' });
+
+      await invoke('workcenter.undismissFromSources', providerNode, [providerNode, groupNode, sourceItem]);
+
+      expect(stateStore.setState).toHaveBeenCalledWith('github', 'ext-1', 'unseen');
+      expect(stateStore.setStates).not.toHaveBeenCalled();
+    });
+
+    it('does nothing when selectedItems contains only non-item nodes', async () => {
+      const providerNode: SourceProviderNode = { kind: 'provider', providerId: 'github', label: 'GitHub' };
+      const groupNode: SourceGroupNode = { kind: 'group', providerId: 'github', groupName: 'org/repo' };
+
+      await invoke('workcenter.undismissFromSources', providerNode, [providerNode, groupNode]);
+
+      expect(stateStore.setState).not.toHaveBeenCalled();
+      expect(stateStore.setStates).not.toHaveBeenCalled();
+    });
+
+    it('falls back to context item when it is not in the selection', async () => {
+      const contextItem = makeSourceItem({ externalId: 'ext-ctx' });
+      const selectedItem = makeSourceItem({ externalId: 'ext-other' });
+
+      await invoke('workcenter.undismissFromSources', contextItem, [selectedItem]);
+
+      expect(stateStore.setState).toHaveBeenCalledWith('github', 'ext-ctx', 'unseen');
       expect(stateStore.setStates).not.toHaveBeenCalled();
     });
   });
