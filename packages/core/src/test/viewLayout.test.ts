@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { workspace, ConfigurationTarget, window } from 'vscode';
-import { getViewLayout, toggleViewLayout, isProviderGroupNode, ProviderGroupNode } from '../views/viewLayout';
+import { getViewLayout, toggleViewLayout, isProviderGroupNode, ProviderGroupNode, LayoutState } from '../views/viewLayout';
 
 describe('viewLayout', () => {
   beforeEach(() => {
@@ -193,6 +193,130 @@ describe('viewLayout', () => {
     it('returns true for group node with undefined providerId', () => {
       const node: ProviderGroupNode = { kind: 'providerGroup', label: 'Other', providerId: undefined };
       expect(isProviderGroupNode(node)).toBe(true);
+    });
+  });
+
+  describe('toggleViewLayout — edge cases', () => {
+    it('preserves sibling view layouts when toggling one view', async () => {
+      const mockUpdate = vi.fn().mockResolvedValue(undefined);
+      (workspace.getConfiguration as ReturnType<typeof vi.fn>).mockReturnValue({
+        get: vi.fn((_key: string) => {
+          if (_key === 'viewLayout') { return { inbox: 'tree', queue: 'tree', focus: 'tree' }; }
+          return undefined;
+        }),
+        update: mockUpdate,
+        inspect: vi.fn(() => ({
+          globalValue: { inbox: 'tree', queue: 'tree', focus: 'tree' },
+        })),
+      });
+
+      await toggleViewLayout('inbox');
+      const persisted = mockUpdate.mock.calls[0][1];
+      expect(persisted.inbox).toBe('flat');
+      expect(persisted.queue).toBe('tree');
+      expect(persisted.focus).toBe('tree');
+    });
+
+    it('strips invalid view IDs from stored config during toggle', async () => {
+      const mockUpdate = vi.fn().mockResolvedValue(undefined);
+      (workspace.getConfiguration as ReturnType<typeof vi.fn>).mockReturnValue({
+        get: vi.fn((_key: string) => {
+          if (_key === 'viewLayout') { return { inbox: 'tree', bogusView: 'flat' }; }
+          return undefined;
+        }),
+        update: mockUpdate,
+        inspect: vi.fn(() => ({
+          globalValue: { inbox: 'tree', bogusView: 'flat' },
+        })),
+      });
+
+      await toggleViewLayout('inbox');
+      const persisted = mockUpdate.mock.calls[0][1];
+      expect(persisted.inbox).toBe('flat');
+      expect(persisted).not.toHaveProperty('bogusView');
+    });
+
+    it('strips invalid layout values from stored config during toggle', async () => {
+      const mockUpdate = vi.fn().mockResolvedValue(undefined);
+      (workspace.getConfiguration as ReturnType<typeof vi.fn>).mockReturnValue({
+        get: vi.fn((_key: string) => {
+          if (_key === 'viewLayout') { return { inbox: 'tree', focus: 'invalid' }; }
+          return undefined;
+        }),
+        update: mockUpdate,
+        inspect: vi.fn(() => ({
+          globalValue: { inbox: 'tree', focus: 'invalid' },
+        })),
+      });
+
+      await toggleViewLayout('inbox');
+      const persisted = mockUpdate.mock.calls[0][1];
+      expect(persisted.inbox).toBe('flat');
+      expect(persisted).not.toHaveProperty('focus');
+    });
+
+    it('reads from globalValue scope when no workspaceValue exists', async () => {
+      const mockUpdate = vi.fn().mockResolvedValue(undefined);
+      (workspace.getConfiguration as ReturnType<typeof vi.fn>).mockReturnValue({
+        get: vi.fn((_key: string) => {
+          if (_key === 'viewLayout') { return { history: 'tree' }; }
+          return undefined;
+        }),
+        update: mockUpdate,
+        inspect: vi.fn(() => ({
+          globalValue: { history: 'tree' },
+        })),
+      });
+
+      await toggleViewLayout('history');
+      expect(mockUpdate).toHaveBeenCalledWith(
+        'viewLayout',
+        expect.objectContaining({ history: 'flat' }),
+        ConfigurationTarget.Global,
+      );
+    });
+  });
+
+  describe('LayoutState', () => {
+    it('fires change callback on flat→tree transition', () => {
+      const onChange = vi.fn();
+      const state = new LayoutState('flat', onChange);
+
+      state.value = 'tree';
+      expect(onChange).toHaveBeenCalledTimes(1);
+      expect(state.value).toBe('tree');
+    });
+
+    it('fires change callback on tree→flat transition', () => {
+      const onChange = vi.fn();
+      const state = new LayoutState('tree', onChange);
+
+      state.value = 'flat';
+      expect(onChange).toHaveBeenCalledTimes(1);
+      expect(state.value).toBe('flat');
+    });
+
+    it('does not fire callback when set to same value', () => {
+      const onChange = vi.fn();
+      const state = new LayoutState('flat', onChange);
+
+      state.value = 'flat';
+      expect(onChange).not.toHaveBeenCalled();
+    });
+
+    it('initializes with the provided default layout', () => {
+      const state = new LayoutState('tree', vi.fn());
+      expect(state.value).toBe('tree');
+    });
+
+    it('fires callback on each actual transition', () => {
+      const onChange = vi.fn();
+      const state = new LayoutState('flat', onChange);
+
+      state.value = 'tree';
+      state.value = 'tree'; // no-op
+      state.value = 'flat';
+      expect(onChange).toHaveBeenCalledTimes(2);
     });
   });
 });

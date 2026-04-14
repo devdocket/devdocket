@@ -466,6 +466,25 @@ describe('activate()', () => {
   });
 
   // ------------------------------------------------------------------
+  // 18b. Context key values match view defaults on activation
+  // ------------------------------------------------------------------
+  it('sets correct default values for layout context keys', async () => {
+    await activate(context);
+
+    const executeCommand = vscode.commands.executeCommand as ReturnType<typeof vi.fn>;
+    const setContextCalls = executeCommand.mock.calls.filter(
+      (c: any[]) => c[0] === 'setContext' && typeof c[1] === 'string' && c[1].endsWith('Layout'),
+    );
+
+    const contextMap = Object.fromEntries(setContextCalls.map((c: any[]) => [c[1], c[2]]));
+    expect(contextMap['workcenter.inboxLayout']).toBe('tree');
+    expect(contextMap['workcenter.queueLayout']).toBe('flat');
+    expect(contextMap['workcenter.focusLayout']).toBe('flat');
+    expect(contextMap['workcenter.historyLayout']).toBe('flat');
+    expect(contextMap['workcenter.sourcesLayout']).toBe('tree');
+  });
+
+  // ------------------------------------------------------------------
   // 19. Layout config change updates provider layouts and context keys
   // ------------------------------------------------------------------
   it('updates provider layouts and context keys on configuration change', async () => {
@@ -504,6 +523,14 @@ describe('activate()', () => {
     const contextKeys = setContextCalls.map((c: any[]) => c[1]);
     expect(contextKeys).toContain('workcenter.focusLayout');
     expect(contextKeys).toContain('workcenter.queueLayout');
+
+    // Verify context key values reflect the updated layout
+    const contextMap = Object.fromEntries(setContextCalls.map((c: any[]) => [c[1], c[2]]));
+    expect(contextMap['workcenter.focusLayout']).toBe('tree');
+    expect(contextMap['workcenter.queueLayout']).toBe('tree');
+    // Views not in the override should still have their defaults
+    expect(contextMap['workcenter.inboxLayout']).toBe('tree');
+    expect(contextMap['workcenter.historyLayout']).toBe('flat');
   });
 });
 
