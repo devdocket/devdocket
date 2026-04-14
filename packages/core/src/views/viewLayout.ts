@@ -45,8 +45,21 @@ function sanitizeLayouts(raw: unknown): Record<string, string> {
 
 /** Toggle the layout for a view between flat and tree and persist the choice. */
 export async function toggleViewLayout(viewId: ViewId): Promise<void> {
-  const config = vscode.workspace.getConfiguration('workcenter');
   const current = getViewLayout(viewId);
+  const next = current === 'flat' ? 'tree' : 'flat';
+  await applyViewLayout(viewId, next);
+}
+
+/** Set a specific layout for a view. No-ops if already in the requested layout. */
+export async function setViewLayout(viewId: ViewId, layout: ViewLayout): Promise<void> {
+  if (getViewLayout(viewId) === layout) {
+    return;
+  }
+  await applyViewLayout(viewId, layout);
+}
+
+async function applyViewLayout(viewId: ViewId, layout: ViewLayout): Promise<void> {
+  const config = vscode.workspace.getConfiguration('workcenter');
 
   // Only target Workspace or Global scope. Workspace-folder scope requires a
   // resource URI that toggle commands don't have, so updating it without one
@@ -67,7 +80,7 @@ export async function toggleViewLayout(viewId: ViewId): Promise<void> {
     : vscode.ConfigurationTarget.Global;
 
   const layouts = sanitizeLayouts(scopeValue);
-  layouts[viewId] = current === 'flat' ? 'tree' : 'flat';
+  layouts[viewId] = layout;
 
   await config.update('viewLayout', layouts, target);
 }
