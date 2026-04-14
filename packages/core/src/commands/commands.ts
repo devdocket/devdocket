@@ -508,11 +508,12 @@ async function acceptToFocusSingleInboxItem(
       return;
     }
   } else {
+    const group = item.group?.trim();
     let createdItem: Awaited<ReturnType<typeof workGraph.createItem>>;
     try {
       createdItem = await workGraph.createItem(
         { title: formatItemTitle(item) },
-        { providerId: item.providerId, externalId: item.externalId, url: item.url, group: item.group },
+        { providerId: item.providerId, externalId: item.externalId, url: item.url, group: group || undefined },
       );
     } catch (err: unknown) {
       handleCommandError('Failed to accept inbox item', err);
