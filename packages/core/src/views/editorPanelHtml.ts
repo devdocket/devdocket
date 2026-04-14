@@ -345,7 +345,7 @@ const TRANSITION_ACTIONS: Record<WorkItemState, ActionButton[]> = {
 
 /** Returns the action buttons available for the given state, derived from the state machine. */
 export function getTransitionActions(state: WorkItemState): ActionButton[] {
-  return TRANSITION_ACTIONS[state] ?? [];
+  return [...(TRANSITION_ACTIONS[state] ?? [])];
 }
 
 function getActionsHtml(state: WorkItemState): string {
