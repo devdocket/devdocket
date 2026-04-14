@@ -81,7 +81,10 @@ export class SourcesTreeProvider implements vscode.TreeDataProvider<SourcesEleme
         const treeItem = new vscode.TreeItem(element.title, vscode.TreeItemCollapsibleState.None);
         treeItem.description = state === 'dismissed' ? 'dismissed' : undefined;
         treeItem.tooltip = this.buildItemTooltip(element);
-        treeItem.contextValue = element.url ? 'sourceItem.hasUrl' : 'sourceItem';
+        const parts = ['sourceItem'];
+        if (element.url) { parts.push('hasUrl'); }
+        if (state === 'dismissed') { parts.push('dismissed'); }
+        treeItem.contextValue = parts.join('.');
         treeItem.iconPath = new vscode.ThemeIcon(icon);
         return treeItem;
       }

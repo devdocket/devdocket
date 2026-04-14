@@ -595,6 +595,35 @@ async function handleDismissFromSources(
   }
 }
 
+async function handleUndismissFromSources(
+  stateStore: DiscoveredStateStore,
+  item?: SourcesElement,
+  selectedItems?: SourcesElement[],
+): Promise<void> {
+  const items = resolveSourceItems(item, selectedItems);
+  if (items.length === 0) { return; }
+
+  if (items.length === 1) {
+    try {
+      logger.info(`Un-dismissing source item: ${items[0].externalId}`);
+      await stateStore.setState(items[0].providerId, items[0].externalId, 'unseen');
+    } catch (err: unknown) {
+      handleCommandError('Failed to un-dismiss item', err);
+    }
+    return;
+  }
+
+  try {
+    logger.info(`Batch un-dismissing ${items.length} source items`);
+    await stateStore.setStates(
+      items.map(i => ({ providerId: i.providerId, externalId: i.externalId, state: 'unseen' as const }))
+    );
+    void vscode.window.showInformationMessage(`Restored ${items.length} items to inbox`);
+  } catch (err: unknown) {
+    handleCommandError('Failed to un-dismiss items', err);
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Registration
 // ---------------------------------------------------------------------------
@@ -648,6 +677,8 @@ export function registerCommands(
       wrapCommand('Failed to accept from sources', (item: SourcesElement, selectedItems?: SourcesElement[]) => handleAcceptFromSources(workGraph, stateStore, item, selectedItems))),
     vscode.commands.registerCommand('workcenter.dismissFromSources',
       wrapCommand('Failed to dismiss from sources', (item: SourcesElement, selectedItems?: SourcesElement[]) => handleDismissFromSources(stateStore, item, selectedItems))),
+    vscode.commands.registerCommand('workcenter.undismissFromSources',
+      wrapCommand('Failed to un-dismiss from sources', (item: SourcesElement, selectedItems?: SourcesElement[]) => handleUndismissFromSources(stateStore, item, selectedItems))),
     vscode.commands.registerCommand('workcenter.switchInboxToTree',
       wrapCommand('Failed to switch inbox layout', () => setViewLayout('inbox', 'tree'))),
     vscode.commands.registerCommand('workcenter.switchInboxToFlat',

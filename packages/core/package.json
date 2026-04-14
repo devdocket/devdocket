@@ -19,6 +19,7 @@
     "onView:workcenter.history",
     "onCommand:workcenter.refresh",
     "onCommand:workcenter.dismissFromSources",
+    "onCommand:workcenter.undismissFromSources",
     "onCommand:workcenter.deleteItem"
   ],
   "main": "./dist/extension.js",
@@ -296,6 +297,12 @@
         "icon": "$(close)"
       },
       {
+        "command": "workcenter.undismissFromSources",
+        "title": "Restore to Inbox",
+        "category": "WorkCenter",
+        "icon": "$(inbox)"
+      },
+      {
         "command": "workcenter.deleteItem",
         "title": "Delete",
         "category": "WorkCenter",
@@ -527,17 +534,27 @@
         },
         {
           "command": "workcenter.acceptFromSources",
-          "when": "view == workcenter.sources && viewItem =~ /sourceItem/",
+          "when": "view == workcenter.sources && viewItem =~ /sourceItem/ && viewItem =~ /^((?!dismissed).)*$/",
           "group": "inline"
         },
         {
           "command": "workcenter.dismissFromSources",
-          "when": "view == workcenter.sources && viewItem =~ /sourceItem/",
+          "when": "view == workcenter.sources && viewItem =~ /sourceItem/ && viewItem =~ /^((?!dismissed).)*$/",
           "group": "inline"
         },
         {
           "command": "workcenter.dismissFromSources",
-          "when": "view == workcenter.sources && viewItem =~ /sourceItem/",
+          "when": "view == workcenter.sources && viewItem =~ /sourceItem/ && viewItem =~ /^((?!dismissed).)*$/",
+          "group": "1_actions"
+        },
+        {
+          "command": "workcenter.undismissFromSources",
+          "when": "view == workcenter.sources && viewItem =~ /sourceItem/ && viewItem =~ /dismissed/",
+          "group": "inline"
+        },
+        {
+          "command": "workcenter.undismissFromSources",
+          "when": "view == workcenter.sources && viewItem =~ /sourceItem/ && viewItem =~ /dismissed/",
           "group": "1_actions"
         },
         {
