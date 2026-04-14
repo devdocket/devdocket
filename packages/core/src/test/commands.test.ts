@@ -1053,6 +1053,19 @@ describe('registerCommands', () => {
       expect(stateStore.setState).toHaveBeenCalledWith('github', 'ext-1', 'accepted');
     });
 
+    it('shows info message and does not transition when item is Paused', async () => {
+      const existing = createWorkItem({ id: 'wc-paused', state: WorkItemState.Paused });
+      workGraph.findItemByProvenance.mockReturnValue(existing);
+
+      await invoke('workcenter.acceptToFocusFromInbox', makeInboxItem());
+
+      expect(vscode.window.showInformationMessage).toHaveBeenCalledWith(
+        'WorkCenter: Item is already in Focus',
+      );
+      expect(workGraph.transitionState).not.toHaveBeenCalled();
+      expect(stateStore.setState).toHaveBeenCalledWith('github', 'ext-1', 'accepted');
+    });
+
     it('shows warning and does not transition when item is Done', async () => {
       const existing = createWorkItem({ id: 'wc-done', state: WorkItemState.Done });
       workGraph.findItemByProvenance.mockReturnValue(existing);
