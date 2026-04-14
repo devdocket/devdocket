@@ -80,12 +80,13 @@ function createMockActionRegistry(): { [K in keyof UsedActionRegistryMethods]: M
   };
 }
 
-type UsedStateStoreMethods = Pick<DiscoveredStateStore, 'setState' | 'setStates'>;
+type UsedStateStoreMethods = Pick<DiscoveredStateStore, 'setState' | 'setStates' | 'getState'>;
 
 function createMockStateStore(): { [K in keyof UsedStateStoreMethods]: Mock } {
   return {
     setState: vi.fn(),
     setStates: vi.fn(),
+    getState: vi.fn().mockReturnValue('dismissed'),
   };
 }
 
