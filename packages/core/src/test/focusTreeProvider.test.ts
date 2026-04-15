@@ -69,6 +69,27 @@ describe('FocusTreeProvider', () => {
       const item = makeItem({ state: WorkItemState.Paused });
       expect(provider.getTreeItem(item).description).toBe('paused');
     });
+
+    it('should show "group · in progress" when item has a group', () => {
+      const item = makeItem({ state: WorkItemState.InProgress, group: 'octocat/repo' });
+      expect(provider.getTreeItem(item).description).toBe('octocat/repo · in progress');
+    });
+
+    it('should show "group · paused" when paused item has a group', () => {
+      const item = makeItem({ state: WorkItemState.Paused, group: 'octocat/repo' });
+      expect(provider.getTreeItem(item).description).toBe('octocat/repo · paused');
+    });
+
+    it('should show state only when group is undefined', () => {
+      const item = makeItem({ state: WorkItemState.InProgress, group: undefined });
+      expect(provider.getTreeItem(item).description).toBe('in progress');
+    });
+
+    it('should omit group in tree layout', () => {
+      provider.layout = 'tree';
+      const item = makeItem({ state: WorkItemState.InProgress, group: 'octocat/repo' });
+      expect(provider.getTreeItem(item).description).toBe('in progress');
+    });
   });
 
   describe('getTreeItem icon', () => {
