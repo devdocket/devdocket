@@ -314,3 +314,10 @@ The queue view was displaying raw provider IDs (e.g., `github`, `ado`) in tree i
 ### Learnings
 - **Icon mapping in Sources view**: `packages/core/src/views/sourcesTreeProvider.ts` maps `InboxState` to `ThemeIcon` names via `switch (state)` in `getTreeItem()`: `accepted` → `check`, `dismissed` → `circle-slash`, `unseen` → `circle-outline`. Previously simpler branching lumped dismissed and unseen together.
 - **Key file**: `packages/core/src/views/sourcesTreeProvider.ts` — the `getTreeItem()` method for `item` kind elements assigns icons based on `stateStore.getState()` result.
+
+## Issue #252: Walkthrough last-file followup fix (2025-07-25)
+
+### Learnings
+- **Walkthrough phase signaling**: The `workcenter-signalPhase` virtual tool in `walkthroughParticipant.ts` controls which followup buttons VS Code displays after each LLM response. Phases map to different button sets in `provideFollowups()`.
+- **Adding a phase value**: To distinguish "last file" from "mid-walkthrough", added `lastFile` to the signalPhase enum. The prompt instructs the LLM to signal `lastFile` instead of `walkthrough` when presenting the final file in the reading order. This is simpler and more reliable than trying to track file indices in the participant code.
+- **Key files**: `walkthroughParticipant.ts` (phase enum + followup provider), `walkthroughPrompt.ts` (LLM instructions for when to signal each phase).

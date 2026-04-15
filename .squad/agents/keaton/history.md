@@ -134,4 +134,34 @@ Detailed findings and patterns documented in:
 - `.squad/decisions.md` — "Test Update Patterns" (2026-03-25)
 - `.squad/orchestration-log/` — Keaton, Fenster, Hockney review logs
 
+## Triage Round 1 — 18 Squad Issues (2026-07-23)
+
+**Status:** COMPLETE — All 18 issues routed and triage comments posted.
+
+### Routing Summary
+
+| Route | Count | Issues |
+|-------|-------|--------|
+| squad:fenster | 17 | 255, 254, 253, 252, 250, 249, 243, 240, 233, 232, 228, 226, 225, 219, 218, 217, 215 |
+| squad:keaton | 1 | 234 |
+
+### Key Decisions
+
+1. **Issue #234 (Done vs Archived)** — Routed to Keaton for architecture/UX decision. This requires clarifying state machine semantics (auto-archive? explicit? time-based?) before Fenster can implement. Will need a design decision in `.squad/decisions.md` before work begins.
+
+2. **Issue #253 & #254 (AI Actions)** — Both routed to Fenster. #253 (shared repo) is Large complexity and may unlock #254 (model selection). Fenster should evaluate sequencing.
+
+3. **Issue #225 (Onboarding)** — Marked Large complexity. This is a significant UX feature that might benefit from user research or early prototyping before full implementation.
+
+4. **Dependencies flagged:**
+   - #254, #253, #240 form a cluster around AI actions and URL handling
+   - #249 (Inbox→Focus shortcut) is independent but related to state machine changes
+   - #243 (re-requested reviews) requires new provider-level signals
+
+### Triage Process Notes
+
+- All 18 issues read via `gh issue view` and analyzed for scope/routing
+- Comments include: assignment, complexity (small/medium/large), category, dependencies, implementation notes
+- All comments posted safely with `--body-file` to avoid PowerShell backtick escaping issues
+
 

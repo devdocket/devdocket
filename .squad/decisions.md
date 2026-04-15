@@ -2,6 +2,51 @@
 
 ## Active Decisions
 
+### Triage Round 1 Summary — 18 Squad Issues (2026-04-14)
+
+**Lead:** Keaton  
+**Status:** COMPLETE
+
+Triaged all 18 open issues labeled `squad`. Routed 17 to squad:fenster (feature & bug implementation) and 1 to squad:keaton (architecture decision #234). All issues received triage comments with complexity assessment, category, and implementation notes.
+
+**Key Routing:**
+- **squad:fenster (17 issues):** Features and bugs across AI actions, UI enhancements, inbox/queue/focus flow, onboarding, and history visibility
+- **squad:keaton (1 issue):** #234 — Design decision for Done vs Archived state semantics
+
+**Complexity Breakdown:**
+- Small (5): #252, #228, #219, #217, #255
+- Medium (9): #254, #250, #249, #243, #240, #233, #232, #226, #218, #215
+- Large (3): #253, #225
+
+**Implementation Sequencing:** High-priority unblocked issues (#228, #219, #217, #252, #255) can start immediately. Large coordination issues (#253, #254, #240, #225, #226) require careful sequencing due to dependencies.
+
+**References:**
+- Issue #234 (Done vs Archived decision)
+- `.squad/agents/keaton/history.md` — Updated with triage outcomes
+
+---
+
+### Issue #234 — Done vs Archived Distinction (2026-04-14)
+
+**Lead:** Keaton  
+**Status:** DECISION REQUIRED
+
+Users are confused about the distinction between "Done" and "Archived" states in WorkCenter. Need to clarify:
+1. **Done → Archived lifecycle** — Should Done items automatically archive after N days, or require explicit user action?
+2. **User-facing semantics** — Is "Done" = finished vs "Archived" = never see again?
+3. **Provider closure signals** — Should GitHub issue closure auto-mark WorkCenter item Done?
+4. **History view organization** — Should Done and Archived appear together or in separate sections?
+
+**Current Model:** Two terminal states in WorkItem state machine (Done and Archived) but unclear user-facing purpose and transition rules.
+
+**Action Required:** Keaton to write design decision document clarifying semantics and transition rules, then Fenster implements based on clarified intent.
+
+**References:**
+- First issue to surface this UX confusion
+- Decision document location: `.squad/decisions.md` (this entry)
+
+---
+
 ### BasePrAction Extraction Pattern (2026-07-22)
 
 **Author:** Fenster (Extension Dev)  
