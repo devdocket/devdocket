@@ -26,6 +26,12 @@ Key files:
 
 ## Learnings
 
+- **Re-requested PR review resurfacing (Issue #243):** Added optional `version` field to `DiscoveredItem` (non-breaking API change). When `handleDiscoveredItems()` sees an `accepted` item whose version differs from the stored version, it resets state to `unseen` so the item reappears in Inbox. `DiscoveredStateRecord` also stores the version, and `DiscoveredStateStore` gained a `getVersion()` method. To avoid a flood of resurfaced items on initial deployment, version backfilling for pre-existing accepted items (stored version `undefined`) does NOT trigger resurfacing — it silently stores the version for future comparison. GitHub provider uses `updated_at` from the Search API as version; ADO provider uses `lastMergeSourceCommit.commitId`. Dismissed items are never resurfaced (per #189).
+
+- **Provider health indicator (Issue #233):** Added `ProviderHealthStatus` interface and health tracking to `ProviderRegistry`. The `refreshWithTimeout` method now tracks three outcomes: successful refresh → `healthy` with `lastRefreshTime` updated, error → `unhealthy` with error message, timeout → `unhealthy` with "Refresh timed out". A new `onDidChangeProviderHealth` event fires whenever health changes, driving tree view refreshes. Sources and Inbox tree providers show a `warning` ThemeIcon (with `problemsWarningIcon.foreground` color) on provider nodes when unhealthy, plus a `description: 'refresh failed'` string. Provider tooltips use `MarkdownString` to show last refresh time (via `formatRelativeTime` utility) and error details. Unhealthy providers with no cached items are still shown in Sources tree so the warning is visible. The `formatRelativeTime` utility lives at `src/utils/time.ts` and outputs "just now", "X minutes ago", "X hours ago", or a locale timestamp for 24h+.
+
+- **Create Item from URL (Issue #240):** Added `devdocket.createItemFromUrl` command that parses GitHub PR and ADO PR URLs, fetches details via REST API, and creates a pre-populated work item. Architecture: `urlParser.ts` handles regex-based URL parsing into typed descriptors (`GitHubPrUrl | AdoPrUrl`), `urlFetcher.ts` handles API calls with silent auth token injection (`vscode.authentication.getSession` with `{ silent: true }`). Items are created with `providerId: 'url-import'` and `externalId` set to the canonical URL. The input box validates URLs inline via `parseSourceUrl()` so users get immediate feedback. The command opens the editor panel after creation so users can review/edit the fetched details. Added as a navigation button in the Queue view title bar and in the Queue empty-state welcome content.
+
 - **Editor metadata section (Issue #217):** Added a read-only metadata section to the editor panel HTML showing state (as a colored badge), provider name (when available via `ProviderLabelCache`), and created/updated timestamps. The `EditorHtmlOptions` interface gained an optional `providerLabel` field. When `providerLabel` is absent but `providerId` exists, the provider row is hidden — the label cache is the source of truth for display names. Threading the label cache required changes through `commands.ts` → `registerCommands()` → `handleEditItem()` → `WorkItemEditorPanel.open()`. State labels use human-friendly text (e.g. `InProgress` → `In Progress`) with CSS badge classes keyed to VS Code theme variables.
 
 - **Dynamic title resolution for provider-backed items (#215):** Added `TitleResolver` type and `resolveTitle()` method to `WorkItemViewProvider` base class in `viewLayout.ts`. Mirrors the existing `LabelResolver` pattern — a closure `(providerId, externalId) => string | undefined` passed from subclass constructors via `ProviderRegistry.getDiscoveredItems()`. All three tree providers (Queue, Focus, History) now display live titles from the provider, falling back to persisted `item.title`. Also wired `onDidChangeDiscoveredItems` to refresh trees when provider data updates.
@@ -92,6 +98,22 @@ Key files:
 
 ### Editor Panel HTML
 - The editor heading (`<h2 id="editor-heading">`) uses `escapeHtml(item.title)` instead of a generic "Edit Work Item" string — keeps it contextual while preserving `aria-labelledby` accessibility (Issue #221)
+
+## Sprint Completion (2026-04-15)
+
+**Status:** COMPLETE — Three parallel features shipped and tested.
+
+### Issues Completed
+- **Issue #243 — Version-Based PR Review Resurface:** Added optional `version` field to `DiscoveredItem`. GitHub PR review provider sets `version` from `updated_at` (API Search), ADO sets from `lastMergeSourceCommit.commitId`. When `handleDiscoveredItems()` detects version change on `accepted` item, resets to `unseen`. Backfill for pre-existing items silently stores version without resurfacing. Dismissed items remain dismissed. All 1551 tests pass.
+
+- **Issue #233 — Provider Health Indicator:** `ProviderRegistry` tracks health with `ProviderHealthStatus` (status, lastRefreshTime, lastError). `refreshWithTimeout()` updates health: success → healthy, error/timeout → unhealthy. New `onDidChangeProviderHealth` event fires on changes. Sources and Inbox tree views show `warning` ThemeIcon on unhealthy providers with error tooltips. Unhealthy providers with 0 items still visible in Sources. All 970 tests pass.
+
+- **Issue #240 — Create Item from URL:** New command `devdocket.createItemFromUrl` parses GitHub PR and ADO PR URLs, fetches details via REST API with silent auth, creates pre-populated work items. Uses synthetic `providerId: 'url-import'` and canonical URL as `externalId` (non-colliding with provider IDs). Input box validates URLs inline. All tests pass.
+
+### Branches Pushed
+- `squad/243-pr-review-resurface`
+- `squad/233-provider-health`
+- `squad/240-create-from-url`
 - `escapeHtml` and `escapeAttr` are local helpers in `editorPanelHtml.ts` — use `escapeHtml` for text content, `escapeAttr` for attribute values
 ### Responsive CSS in Webview Panels
 - Editor panel body CSS in `editorPanelHtml.ts` uses `max-width: min(560px, 100%)` with `margin: 0 auto` for responsive centering — avoids overflow in narrow splits and wasted space in wide layouts

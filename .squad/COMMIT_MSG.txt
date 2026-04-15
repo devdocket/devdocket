@@ -1,0 +1,7 @@
+docs(squad): Log three completed issues — PR review resurface, provider health, create from URL
+
+- Issue #243: Version-based resurfacing for re-requested PR reviews (1551 tests)
+- Issue #233: Provider health indicator with visual warnings (970 tests)
+- Issue #240: Create work item from GitHub/ADO PR URLs (all tests pass)
+- Merged decision inbox entries to decisions.md
+- Updated Fenster history.md with sprint outcomes
