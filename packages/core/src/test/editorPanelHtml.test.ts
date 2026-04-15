@@ -68,7 +68,7 @@ describe('getEditorPanelHtml', () => {
 
   it('marks title readonly for provider-owned items', () => {
     const item = makeItem({ providerId: 'github' });
-    const html = getEditorPanelHtml({ cspSource, item });
+    const html = getEditorPanelHtml({ cspSource, item, titleReadonly: true });
     expect(html).toContain('readonly');
     expect(html).toContain('Title is managed by the provider');
   });

@@ -67,6 +67,7 @@ function createMockContext() {
 function createMockProviderRegistry() {
   return {
     getDiscoveredItems: vi.fn(() => []),
+    getProvider: vi.fn((id: string) => id ? { id } : undefined),
   };
 }
 

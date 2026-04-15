@@ -34,8 +34,8 @@ export function parseSourceUrl(url: string): ParsedUrl | undefined {
   if (ghMatch) {
     return {
       type: 'github-pr',
-      owner: ghMatch[1],
-      repo: ghMatch[2],
+      owner: safeDecodeComponent(ghMatch[1]),
+      repo: safeDecodeComponent(ghMatch[2]),
       number: parseInt(ghMatch[3], 10),
     };
   }
@@ -44,12 +44,21 @@ export function parseSourceUrl(url: string): ParsedUrl | undefined {
   if (adoMatch) {
     return {
       type: 'ado-pr',
-      org: adoMatch[1],
-      project: adoMatch[2],
-      repo: adoMatch[3],
+      org: safeDecodeComponent(adoMatch[1]),
+      project: safeDecodeComponent(adoMatch[2]),
+      repo: safeDecodeComponent(adoMatch[3]),
       id: parseInt(adoMatch[4], 10),
     };
   }
 
   return undefined;
+}
+
+/** Decode a percent-encoded URL path segment, returning the original on malformed input. */
+function safeDecodeComponent(value: string): string {
+  try {
+    return decodeURIComponent(value);
+  } catch {
+    return value;
+  }
 }

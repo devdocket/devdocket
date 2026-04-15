@@ -38,9 +38,14 @@ describe('parseSourceUrl', () => {
       expect(result).toEqual({ type: 'github-pr', owner: 'owner', repo: 'repo', number: 5 });
     });
 
-    it('handles URL-encoded owner/repo names', () => {
+    it('handles hyphenated owner/repo names', () => {
       const result = parseSourceUrl('https://github.com/my-org/my-repo/pull/10');
       expect(result).toEqual({ type: 'github-pr', owner: 'my-org', repo: 'my-repo', number: 10 });
+    });
+
+    it('decodes percent-encoded owner/repo names', () => {
+      const result = parseSourceUrl('https://github.com/my%20org/my%20repo/pull/10');
+      expect(result).toEqual({ type: 'github-pr', owner: 'my org', repo: 'my repo', number: 10 });
     });
   });
 
