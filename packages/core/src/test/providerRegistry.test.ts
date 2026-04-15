@@ -1085,5 +1085,45 @@ describe('ProviderRegistry', () => {
       );
       expect(stateStore.setStates).not.toHaveBeenCalled();
     });
+
+    it('keeps unseen item version in sync so acceptance snapshots latest version', async () => {
+      const provider = createMockProvider('gh');
+      registry.register(provider);
+
+      // Item is unseen with an old version stored
+      stateStore._set('gh', 'pr-1', 'unseen');
+      stateStore._setVersion('gh', 'pr-1', 'sha-old');
+
+      stateStore.setStates.mockClear();
+
+      // Provider re-fires with updated version
+      provider.fireItems([
+        { externalId: 'pr-1', title: 'PR 1', version: 'sha-new' },
+      ]);
+
+      await vi.waitFor(() => expect(stateStore.setStates).toHaveBeenCalled());
+      // Should update version while keeping state as unseen (backfill, not resurface)
+      expect(stateStore.setStates).toHaveBeenCalledWith([
+        { providerId: 'gh', externalId: 'pr-1', state: 'unseen', version: 'sha-new' },
+      ]);
+    });
+
+    it('backfills version for unseen item without stored version', async () => {
+      const provider = createMockProvider('gh');
+      registry.register(provider);
+
+      stateStore._set('gh', 'pr-1', 'unseen');
+
+      stateStore.setStates.mockClear();
+
+      provider.fireItems([
+        { externalId: 'pr-1', title: 'PR 1', version: 'sha-first' },
+      ]);
+
+      await vi.waitFor(() => expect(stateStore.setStates).toHaveBeenCalled());
+      expect(stateStore.setStates).toHaveBeenCalledWith([
+        { providerId: 'gh', externalId: 'pr-1', state: 'unseen', version: 'sha-first' },
+      ]);
+    });
   });
 });

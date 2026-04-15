@@ -240,6 +240,12 @@ export class ProviderRegistry {
           // Backfill version for pre-existing accepted item (no state change)
           versionBackfills.push({ providerId, externalId: item.externalId, state: 'accepted', version: item.version });
         }
+      } else if (existing === 'unseen' && item.version !== undefined) {
+        const storedVersion = this.stateStore.getVersion(providerId, item.externalId);
+        if (storedVersion === undefined || storedVersion !== item.version) {
+          // Keep unseen items' stored version in sync so later acceptance snapshots the latest version
+          versionBackfills.push({ providerId, externalId: item.externalId, state: 'unseen', version: item.version });
+        }
       }
     }
 
