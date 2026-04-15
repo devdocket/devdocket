@@ -375,7 +375,8 @@ export class WorkGraph {
 
   /**
    * Delete all history items (Done and Archived) whose `updatedAt` is older than the given age in days.
-   * Returns the number of items deleted.
+   * @returns `deleted` — number of items successfully removed; `failed` — number of items that
+   * could not be deleted (individual errors are logged and do not abort the batch).
    */
   async clearOldHistory(maxAgeDays: number): Promise<{ deleted: number; failed: number }> {
     if (!Number.isFinite(maxAgeDays) || maxAgeDays < 1) {
