@@ -529,4 +529,60 @@ describe('SourcesTreeProvider', () => {
       expect(listener).not.toHaveBeenCalled();
     });
   });
+
+  describe('unhealthy provider rendering', () => {
+    it('shows warning icon for unhealthy provider', () => {
+      registry._setItems('gh', [{ externalId: 'issue-1', title: 'Bug' }]);
+      registry.getProviderHealth.mockReturnValue({
+        status: 'unhealthy',
+        lastError: 'network error',
+        lastRefreshTime: new Date(0),
+      });
+
+      const node: SourceProviderNode = { kind: 'provider', providerId: 'gh', label: 'GitHub' };
+      const treeItem = provider.getTreeItem(node);
+      expect((treeItem.iconPath as any).id).toBe('warning');
+      expect(treeItem.description).toBe('refresh failed');
+    });
+
+    it('shows plug icon for healthy provider', () => {
+      registry._setItems('gh', [{ externalId: 'issue-1', title: 'Bug' }]);
+      registry.getProviderHealth.mockReturnValue({
+        status: 'healthy',
+        lastRefreshTime: new Date(),
+      });
+
+      const node: SourceProviderNode = { kind: 'provider', providerId: 'gh', label: 'GitHub' };
+      const treeItem = provider.getTreeItem(node);
+      expect((treeItem.iconPath as any).id).toBe('plug');
+    });
+
+    it('includes error message in tooltip for unhealthy provider', () => {
+      registry._setItems('gh', [{ externalId: 'issue-1', title: 'Bug' }]);
+      registry.getProviderHealth.mockReturnValue({
+        status: 'unhealthy',
+        lastError: 'connection refused',
+        lastRefreshTime: new Date(0),
+      });
+
+      const node: SourceProviderNode = { kind: 'provider', providerId: 'gh', label: 'GitHub' };
+      const treeItem = provider.getTreeItem(node);
+      expect(treeItem.tooltip).toBeInstanceOf(MarkdownString);
+      const md = treeItem.tooltip as MarkdownString;
+      expect(md.value).toContain('Refresh failed');
+      expect(md.value).toContain('connection refused');
+    });
+
+    it('shows unhealthy provider even with zero items', () => {
+      registry._setItems('gh', []);
+      registry.getProviderHealth.mockReturnValue({
+        status: 'unhealthy',
+        lastError: 'timeout',
+      });
+
+      const children = provider.getChildren();
+      expect(children).toHaveLength(1);
+      expect((children[0] as SourceProviderNode).providerId).toBe('gh');
+    });
+  });
 });
