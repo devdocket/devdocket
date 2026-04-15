@@ -66,7 +66,7 @@ describe('getEditorPanelHtml', () => {
     expect(html).toContain('&lt;b&gt;bold&lt;/b&gt; &amp; more');
   });
 
-  it('marks title readonly for provider-owned items', () => {
+  it('marks title readonly when titleReadonly is true', () => {
     const item = makeItem({ providerId: 'github' });
     const html = getEditorPanelHtml({ cspSource, item, titleReadonly: true });
     expect(html).toContain('readonly');
