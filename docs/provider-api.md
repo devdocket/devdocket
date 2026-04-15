@@ -1,6 +1,6 @@
-# WorkCenter Provider API Guide
+# DevDocket Provider API Guide
 
-WorkCenter is a VS Code extension that acts as a central hub for managing work items from multiple sources. Third-party extensions integrate with WorkCenter by registering **providers** (to discover items from external systems) and **actions** (to add capabilities that operate on work items).
+DevDocket is a VS Code extension that acts as a central hub for managing work items from multiple sources. Third-party extensions integrate with DevDocket by registering **providers** (to discover items from external systems) and **actions** (to add capabilities that operate on work items).
 
 This guide walks through the API surface and shows how to build a provider extension from scratch.
 
@@ -18,7 +18,7 @@ This guide walks through the API surface and shows how to build a provider exten
 
 ## Overview
 
-WorkCenter organizes work items through a lifecycle of views:
+DevDocket organizes work items through a lifecycle of views:
 
 | View | Purpose |
 |------|---------|
@@ -28,7 +28,7 @@ WorkCenter organizes work items through a lifecycle of views:
 | **History** | Completed and archived items |
 | **Sources** | A browsable library of everything providers know about |
 
-**Providers** feed items into this system by emitting `DiscoveredItem` arrays. For discovery views such as **Inbox** and **Sources**, item data is read live from the provider. When a user accepts an item, WorkCenter stores a snapshot of it as a `WorkItem`, and **Queue**, **Focus**, and **History** render that persisted data instead of always reading live from the provider.
+**Providers** feed items into this system by emitting `DiscoveredItem` arrays. For discovery views such as **Inbox** and **Sources**, item data is read live from the provider. When a user accepts an item, DevDocket stores a snapshot of it as a `WorkItem`, and **Queue**, **Focus**, and **History** render that persisted data instead of always reading live from the provider.
 
 **Actions** extend what users can do with work items. The context menu exposes a single `Run Action…` command, and the available actions shown in that quick pick are filtered per-item via a `canRun()` predicate.
 
@@ -38,27 +38,27 @@ WorkCenter organizes work items through a lifecycle of views:
 
 ### 1. Declare the Extension Dependency
 
-Add WorkCenter as an extension dependency in your `package.json` so VS Code activates it before your extension:
+Add DevDocket as an extension dependency in your `package.json` so VS Code activates it before your extension:
 
 ```jsonc
 // package.json
 {
-  "extensionDependencies": ["mthalman.workcenter"]
+  "extensionDependencies": ["mthalman.devdocket"]
 }
 ```
 
 ### 2. Acquire the API
 
-In your extension's `activate()` function, get the `WorkCenterApi` from the core extension:
+In your extension's `activate()` function, get the `DevDocketApi` from the core extension:
 
 ```ts
 import * as vscode from 'vscode';
 
 export async function activate(context: vscode.ExtensionContext): Promise<void> {
-  const coreExtension = vscode.extensions.getExtension('mthalman.workcenter');
+  const coreExtension = vscode.extensions.getExtension('mthalman.devdocket');
   if (!coreExtension) {
     vscode.window.showErrorMessage(
-      'WorkCenter core extension not found. Install "mthalman.workcenter".'
+      'DevDocket core extension not found. Install "mthalman.devdocket".'
     );
     return;
   }
@@ -72,7 +72,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : String(err);
     vscode.window.showErrorMessage(
-      `Failed to activate WorkCenter: ${message}`
+      `Failed to activate DevDocket: ${message}`
     );
     return;
   }
@@ -83,18 +83,18 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     typeof api.registerAction !== 'function'
   ) {
     vscode.window.showErrorMessage(
-      'WorkCenter API is unavailable or invalid. Update "mthalman.workcenter".'
+      'DevDocket API is unavailable or invalid. Update "mthalman.devdocket".'
     );
     return;
   }
 
-  // api is a WorkCenterApi — register providers and actions here
+  // api is a DevDocketApi — register providers and actions here
 }
 ```
 
 ### 3. Re-declare API Types
 
-Because provider extensions are separately packaged VS Code extensions, they cannot import types from the core package directly. Re-declare the interfaces your extension needs. (First-party providers in the WorkCenter monorepo use an internal shared package for this, but it is not published for external use.)
+Because provider extensions are separately packaged VS Code extensions, they cannot import types from the core package directly. Re-declare the interfaces your extension needs. (First-party providers in the DevDocket monorepo use an internal shared package for this, but it is not published for external use.)
 
 Copy the following declarations into your provider code:
 
@@ -115,7 +115,7 @@ interface DiscoveredItem {
   group?: string;
 }
 
-interface WorkCenterProvider {
+interface DevDocketProvider {
   readonly id: string;
   readonly label: string;
   readonly onDidDiscoverItems: Event<DiscoveredItem[]>;
@@ -127,7 +127,7 @@ interface WorkCenterProvider {
 
 ## Implementing a Provider
 
-A provider discovers items from an external source and reports them to WorkCenter via an event emitter.
+A provider discovers items from an external source and reports them to DevDocket via an event emitter.
 
 ### Full Example
 
@@ -150,14 +150,14 @@ interface Event<T> {
   (listener: (e: T) => void): Disposable;
 }
 
-interface WorkCenterProvider {
+interface DevDocketProvider {
   readonly id: string;
   readonly label: string;
   readonly onDidDiscoverItems: Event<DiscoveredItem[]>;
   refresh(token?: vscode.CancellationToken): Promise<void>;
 }
 
-class JiraProvider implements WorkCenterProvider {
+class JiraProvider implements DevDocketProvider {
   readonly id = 'jira';
   readonly label = 'Jira Issues';
 
@@ -233,8 +233,8 @@ class JiraProvider implements WorkCenterProvider {
 ### Key Points
 
 - **EventEmitter pattern** — Use `vscode.EventEmitter<DiscoveredItem[]>` to create the event. Expose its `.event` property as the readonly `onDidDiscoverItems`.
-- **`refresh()` is called by WorkCenter** — It is invoked automatically when the provider is registered for initial discovery. It must be safe to call multiple times. WorkCenter passes a `CancellationToken` and enforces a refresh timeout; providers should check `token.isCancellationRequested` before and during long-running operations.
-- **`externalId` must be unique per provider** — WorkCenter uses the combination of `providerId + externalId` to track inbox state. Use a stable identifier like `owner/repo#123` or `PROJECT/TICKET-42`.
+- **`refresh()` is called by DevDocket** — It is invoked automatically when the provider is registered for initial discovery. It must be safe to call multiple times. DevDocket passes a `CancellationToken` and enforces a refresh timeout; providers should check `token.isCancellationRequested` before and during long-running operations.
+- **`externalId` must be unique per provider** — DevDocket uses the combination of `providerId + externalId` to track inbox state. Use a stable identifier like `owner/repo#123` or `PROJECT/TICKET-42`.
 - **`group` is optional** — When set, items with the same group value are nested under a folder node in the Inbox and Sources views.
 - **Emit the full set every time** — Each `onDidDiscoverItems` emission replaces all previously known items for that provider. Emit everything currently relevant, not just deltas.
 
@@ -242,10 +242,10 @@ class JiraProvider implements WorkCenterProvider {
 
 For providers that poll an external API, set up a `setInterval` timer. Clamp the interval to a reasonable minimum (e.g., 60 seconds) and guard against overlapping refreshes.
 
-The `@workcenter/shared` package provides a `validateRefreshInterval(value, logger?)` helper that validates and clamps user-configured intervals. It handles non-numeric values, enforces a 60-second minimum, and returns 0 (disabled) for zero/negative input:
+The `@devdocket/shared` package provides a `validateRefreshInterval(value, logger?)` helper that validates and clamps user-configured intervals. It handles non-numeric values, enforces a 60-second minimum, and returns 0 (disabled) for zero/negative input:
 
 ```ts
-import { validateRefreshInterval } from '@workcenter/shared';
+import { validateRefreshInterval } from '@devdocket/shared';
 
 const config = vscode.workspace.getConfiguration('myExtension');
 const intervalSeconds = validateRefreshInterval(
@@ -326,14 +326,14 @@ interface WorkItem {
   updatedAt: number;
 }
 
-interface WorkCenterAction {
+interface DevDocketAction {
   readonly id: string;
   readonly label: string;
   canRun(item: WorkItem): boolean;
   run(item: WorkItem): Promise<void>;
 }
 
-class CreateBranchAction implements WorkCenterAction {
+class CreateBranchAction implements DevDocketAction {
   readonly id = 'jira.createBranch';
   readonly label = 'Create Feature Branch';
 
@@ -372,7 +372,7 @@ context.subscriptions.push(api.registerAction(action));
 
 ## Data Flow
 
-Understanding how items move through WorkCenter helps you build effective providers.
+Understanding how items move through DevDocket helps you build effective providers.
 
 ```mermaid
 flowchart TD
@@ -386,7 +386,7 @@ flowchart TD
 
 ### What gets persisted
 
-WorkCenter maintains two JSON files in its global storage:
+DevDocket maintains two JSON files in its global storage:
 
 | File | Contents |
 |------|----------|
@@ -395,7 +395,7 @@ WorkCenter maintains two JSON files in its global storage:
 
 **`DiscoveredItem` fields are not persisted in `discovered-state.json`.** That file stores only inbox state keyed by `providerId + externalId`, which keeps the discovery index lightweight.
 
-When a user **accepts** an item from Inbox or Sources, WorkCenter creates a new `WorkItem` in `workitems.json` using provider-backed data (such as title and URL) along with provenance metadata (`providerId`, `externalId`). Some fields may be normalized during acceptance — for example, grouped items have the group name prefixed to the stored title.
+When a user **accepts** an item from Inbox or Sources, DevDocket creates a new `WorkItem` in `workitems.json` using provider-backed data (such as title and URL) along with provenance metadata (`providerId`, `externalId`). Some fields may be normalized during acceptance — for example, grouped items have the group name prefixed to the stored title.
 
 ---
 
@@ -403,7 +403,7 @@ When a user **accepts** an item from Inbox or Sources, WorkCenter creates a new 
 
 ### Use unique, stable external IDs
 
-The `externalId` is the primary key WorkCenter uses (together with `providerId`) to track inbox state. It must be:
+The `externalId` is the primary key DevDocket uses (together with `providerId`) to track inbox state. It must be:
 - **Unique** within your provider
 - **Stable** across refreshes — the same real-world item must always produce the same `externalId`
 - **Deterministic** — avoid random suffixes or timestamps
@@ -419,12 +419,12 @@ Good patterns: `owner/repo#123`, `PROJECT-42`, `ticket/12345`
 
 ### Don't store provider item data
 
-WorkCenter reads `DiscoveredItem` data live from the provider. There is no need to persist item details on your side — just emit the current set on each refresh. This ensures discovery views such as Inbox and Sources show the latest provider data, while accepted items in Queue, Focus, and History continue to display their persisted `WorkItem` snapshots.
+DevDocket reads `DiscoveredItem` data live from the provider. There is no need to persist item details on your side — just emit the current set on each refresh. This ensures discovery views such as Inbox and Sources show the latest provider data, while accepted items in Queue, Focus, and History continue to display their persisted `WorkItem` snapshots.
 
 ### Dispose subscriptions properly
 
 - Push the `Disposable` returned by `registerProvider()` / `registerAction()` into `context.subscriptions`
-- Provider resources (timers, event emitters) are **not** disposed by WorkCenter — clean them up yourself
+- Provider resources (timers, event emitters) are **not** disposed by DevDocket — clean them up yourself
 - Use a `dispose()` method on your provider class and push it into `context.subscriptions`
 
 ```ts
@@ -444,34 +444,34 @@ Set the `group` field on `DiscoveredItem` to organize items under folder nodes i
 
 ## API Reference
 
-### `WorkCenterApi`
+### `DevDocketApi`
 
 The entry point returned by the core extension's `activate()` / `exports`.
 
 ```ts
-interface WorkCenterApi {
+interface DevDocketApi {
   /**
    * Register a provider that discovers items from an external source.
-   * WorkCenter calls provider.refresh() immediately upon registration.
+   * DevDocket calls provider.refresh() immediately upon registration.
    * @returns A Disposable that unregisters the provider when disposed.
    */
-  registerProvider(provider: WorkCenterProvider): Disposable;
+  registerProvider(provider: DevDocketProvider): Disposable;
 
   /**
    * Register an action that can be performed on work items.
    * Actions appear in the "Run Action…" quick pick menu.
    * @returns A Disposable that unregisters the action when disposed.
    */
-  registerAction(action: WorkCenterAction): Disposable;
+  registerAction(action: DevDocketAction): Disposable;
 }
 ```
 
-### `WorkCenterProvider`
+### `DevDocketProvider`
 
 Implemented by extensions that discover items from an external source.
 
 ```ts
-interface WorkCenterProvider {
+interface DevDocketProvider {
   /** Unique identifier for this provider (e.g., 'github', 'jira'). */
   readonly id: string;
 
@@ -485,9 +485,9 @@ interface WorkCenterProvider {
   readonly onDidDiscoverItems: Event<DiscoveredItem[]>;
 
   /**
-   * Called by WorkCenter on registration for initial discovery.
+   * Called by DevDocket on registration for initial discovery.
    * Must be safe to call multiple times. Providers should honor
-   * the cancellation token when practical — WorkCenter enforces
+   * the cancellation token when practical — DevDocket enforces
    * a refresh timeout and cancels the token if the provider takes
    * too long.
    */
@@ -503,7 +503,7 @@ Represents an item discovered by a provider.
 interface DiscoveredItem {
   /**
    * Unique identifier within the provider. Must be stable across refreshes.
-   * WorkCenter uses providerId + externalId to track inbox state.
+   * DevDocket uses providerId + externalId to track inbox state.
    */
   externalId: string;
 
@@ -524,12 +524,12 @@ interface DiscoveredItem {
 }
 ```
 
-### `WorkCenterAction`
+### `DevDocketAction`
 
 Implemented by extensions that add operations for work items.
 
 ```ts
-interface WorkCenterAction {
+interface DevDocketAction {
   /** Unique identifier for this action (e.g., 'github.startWork'). */
   readonly id: string;
 
@@ -555,7 +555,7 @@ The persisted work item model passed to actions.
 
 ```ts
 interface WorkItem {
-  /** Internal unique ID generated by WorkCenter. */
+  /** Internal unique ID generated by DevDocket. */
   id: string;
 
   /** User-visible title. */
@@ -576,7 +576,7 @@ interface WorkItem {
   /** URL associated with the item. */
   url?: string;
 
-  /** Ordering hint for the Queue view. Managed by WorkCenter. */
+  /** Ordering hint for the Queue view. Managed by DevDocket. */
   sortOrder?: number;
 
   /** Timestamp (ms since epoch) when the item was created. */

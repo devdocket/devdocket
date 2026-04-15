@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { initLogger, setLogLevel, logger, LogLevel, serializeArg } from '../services/logger';
-import { createLoggerService } from '@workcenter/shared';
+import { createLoggerService } from '@devdocket/shared';
 
 function createMockChannel() {
   return {
@@ -10,7 +10,7 @@ function createMockChannel() {
     show: vi.fn(),
     hide: vi.fn(),
     dispose: vi.fn(),
-    name: 'WorkCenter',
+    name: 'DevDocket',
     replace: vi.fn(),
   };
 }

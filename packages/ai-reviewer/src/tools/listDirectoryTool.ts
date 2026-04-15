@@ -9,7 +9,7 @@ interface ListDirectoryInput {
 }
 
 export function registerListDirectoryTool(): vscode.Disposable {
-  return vscode.lm.registerTool('workcenter-listDirectory', {
+  return vscode.lm.registerTool('devdocket-listDirectory', {
     async invoke(
       options: vscode.LanguageModelToolInvocationOptions<ListDirectoryInput>,
       _token: vscode.CancellationToken,

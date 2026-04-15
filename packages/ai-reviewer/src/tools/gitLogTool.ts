@@ -10,7 +10,7 @@ interface GitLogInput {
 }
 
 export function registerGitLogTool(): vscode.Disposable {
-  return vscode.lm.registerTool('workcenter-gitLog', {
+  return vscode.lm.registerTool('devdocket-gitLog', {
     async invoke(
       options: vscode.LanguageModelToolInvocationOptions<GitLogInput>,
       _token: vscode.CancellationToken,

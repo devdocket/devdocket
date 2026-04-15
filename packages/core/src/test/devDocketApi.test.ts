@@ -1,5 +1,5 @@
-import { WorkCenterApiImpl } from '../api/workCenterApi';
-import { WorkCenterProvider, WorkCenterAction, DiscoveredItem } from '../api/types';
+import { DevDocketApiImpl } from '../api/devDocketApi';
+import { DevDocketProvider, DevDocketAction, DiscoveredItem } from '../api/types';
 import { ProviderRegistry } from '../services/providerRegistry';
 import { ActionRegistry } from '../services/actionRegistry';
 import * as vscode from 'vscode';
@@ -27,7 +27,7 @@ function createMockStateStore() {
   } as unknown as import('../storage/discoveredStateStore').DiscoveredStateStore;
 }
 
-function createMockProvider(id: string): WorkCenterProvider {
+function createMockProvider(id: string): DevDocketProvider {
   const emitter = new vscode.EventEmitter<DiscoveredItem[]>();
   return {
     id,
@@ -37,7 +37,7 @@ function createMockProvider(id: string): WorkCenterProvider {
   };
 }
 
-function createMockAction(id: string): WorkCenterAction {
+function createMockAction(id: string): DevDocketAction {
   return {
     id,
     label: `Action ${id}`,
@@ -48,9 +48,9 @@ function createMockAction(id: string): WorkCenterAction {
 
 // Contract tests for the public API surface that provider extensions consume.
 // These intentionally overlap with registry-level tests to guard against
-// accidental wiring changes in WorkCenterApiImpl.
-describe('WorkCenterApiImpl', () => {
-  let api: WorkCenterApiImpl;
+// accidental wiring changes in DevDocketApiImpl.
+describe('DevDocketApiImpl', () => {
+  let api: DevDocketApiImpl;
   let providerRegistry: ProviderRegistry;
   let actionRegistry: ActionRegistry;
 
@@ -58,7 +58,7 @@ describe('WorkCenterApiImpl', () => {
     const stateStore = createMockStateStore();
     providerRegistry = new ProviderRegistry(stateStore);
     actionRegistry = new ActionRegistry();
-    api = new WorkCenterApiImpl(providerRegistry, actionRegistry);
+    api = new DevDocketApiImpl(providerRegistry, actionRegistry);
   });
 
   describe('registerProvider', () => {

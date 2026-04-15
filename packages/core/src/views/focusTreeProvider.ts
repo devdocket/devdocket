@@ -6,7 +6,7 @@ import {
   WorkItemElement, WorkItemViewProvider, isProviderGroupNode, isSubGroupNode,
 } from './viewLayout';
 
-const DRAG_MIME_TYPE = 'application/vnd.code.tree.workcenter.focus';
+const DRAG_MIME_TYPE = 'application/vnd.code.tree.devdocket.focus';
 
 export type FocusElement = WorkItemElement;
 
@@ -58,7 +58,7 @@ export class FocusTreeProvider extends WorkItemViewProvider implements vscode.Tr
       treeItem.contextValue = item.url ? 'active.hasUrl' : 'active';
     }
 
-    treeItem.command = { command: 'workcenter.editItem', title: 'Open Details', arguments: [item] };
+    treeItem.command = { command: 'devdocket.editItem', title: 'Open Details', arguments: [item] };
     return treeItem;
   }
 
@@ -123,7 +123,7 @@ export class FocusTreeProvider extends WorkItemViewProvider implements vscode.Tr
 
     if (draggedItem.state !== target.state) {
       void vscode.window.showInformationMessage(
-        'WorkCenter: Cannot reorder items across different states.'
+        'DevDocket: Cannot reorder items across different states.'
       );
       return;
     }

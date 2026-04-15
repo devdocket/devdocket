@@ -1,5 +1,5 @@
 import * as vscode from 'vscode';
-import type { WorkItem, WorkCenterAction } from './types';
+import type { WorkItem, DevDocketAction } from './types';
 import { parsePrUrl } from './prUrl';
 
 /**
@@ -25,7 +25,7 @@ export function sanitizePrUrl(url: string): string {
  * Base class for PR-based AI actions (code review, walkthrough, etc.).
  * Subclasses provide prompt content, labels, and runtime instructions.
  */
-export abstract class BasePrAction implements WorkCenterAction {
+export abstract class BasePrAction implements DevDocketAction {
   abstract readonly id: string;
   abstract readonly label: string;
 

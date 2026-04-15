@@ -1,7 +1,7 @@
 {
-  "name": "workcenter-ai-reviewer",
-  "displayName": "WorkCenter — AI Actions",
-  "description": "AI-powered code review and PR walkthrough actions for WorkCenter",
+  "name": "devdocket-ai-reviewer",
+  "displayName": "DevDocket — AI Actions",
+  "description": "AI-powered code review and PR walkthrough actions for DevDocket",
   "version": "0.1.0",
   "publisher": "mthalman",
   "license": "MIT",
@@ -12,7 +12,7 @@
     "Other"
   ],
   "extensionDependencies": [
-    "mthalman.workcenter"
+    "mthalman.devdocket"
   ],
   "activationEvents": [
     "onStartupFinished"
@@ -21,7 +21,7 @@
   "contributes": {
     "chatParticipants": [
       {
-        "id": "workcenter.walkthrough",
+        "id": "devdocket.walkthrough",
         "fullName": "AI Walkthrough",
         "name": "walkthrough",
         "description": "Interactive PR walkthrough — explains code changes step by step",
@@ -30,7 +30,7 @@
     ],
     "languageModelTools": [
       {
-        "name": "workcenter-readFile",
+        "name": "devdocket-readFile",
         "displayName": "Read File",
         "description": "Read the contents of a file in a PR worktree",
         "modelDescription": "Read the full contents of a file at the given path within a git worktree. Use this to examine source files, configuration, tests, or any other file in the repository.",
@@ -44,7 +44,7 @@
         }
       },
       {
-        "name": "workcenter-listDirectory",
+        "name": "devdocket-listDirectory",
         "displayName": "List Directory",
         "description": "List files and directories in a PR worktree",
         "modelDescription": "List files and subdirectories at a given path within a git worktree. Use this to explore the repository structure and discover files.",
@@ -58,7 +58,7 @@
         }
       },
       {
-        "name": "workcenter-getDiff",
+        "name": "devdocket-getDiff",
         "displayName": "Get PR Diff",
         "description": "Get the full unified diff for a PR",
         "modelDescription": "Get the full unified diff between the base and head refs of a pull request. Returns the complete set of changes across all files.",
@@ -73,7 +73,7 @@
         }
       },
       {
-        "name": "workcenter-getFileDiff",
+        "name": "devdocket-getFileDiff",
         "displayName": "Get File Diff",
         "description": "Get the unified diff for a specific file in a PR",
         "modelDescription": "Get the unified diff for a single file between the base and head refs of a pull request. Use this to examine changes to a specific file.",
@@ -89,7 +89,7 @@
         }
       },
       {
-        "name": "workcenter-gitLog",
+        "name": "devdocket-gitLog",
         "displayName": "Git Log",
         "description": "Get recent commit history, optionally for a specific file",
         "modelDescription": "Get recent git commit history in the worktree, optionally scoped to a specific file. Use this to understand the change history and context of the code.",
@@ -104,7 +104,7 @@
         }
       },
       {
-        "name": "workcenter-searchCode",
+        "name": "devdocket-searchCode",
         "displayName": "Search Code",
         "description": "Search for a pattern in the codebase using git grep",
         "modelDescription": "Search for a text pattern across the codebase using git grep. Use this to find callers, usages, related code, or any text pattern in the repository.",
@@ -121,9 +121,9 @@
       }
     ],
     "configuration": {
-      "title": "WorkCenter AI Actions",
+      "title": "DevDocket AI Actions",
       "properties": {
-        "workcenterAiReview.customPromptPath": {
+        "devdocketAiReview.customPromptPath": {
           "type": "string",
           "default": "",
           "description": "Path to a custom code review prompt file. The file content replaces the built-in review instructions sent to the language model. The PR diff is always appended automatically. Supports absolute paths and paths relative to the workspace folder (single-root workspaces only)."

@@ -64,7 +64,7 @@ describe('WalkthroughParticipant', () => {
       participant.register();
 
       expect(chat.createChatParticipant).toHaveBeenCalledWith(
-        'workcenter.walkthrough',
+        'devdocket.walkthrough',
         expect.any(Function),
       );
     });
@@ -231,7 +231,7 @@ describe('WalkthroughParticipant', () => {
         sendRequest: vi.fn()
           .mockResolvedValueOnce({
             stream: (async function* () {
-              yield new LanguageModelToolCallPart('call-1', 'workcenter-readFile', { worktreePath: '/mock', filePath: 'src/index.ts' });
+              yield new LanguageModelToolCallPart('call-1', 'devdocket-readFile', { worktreePath: '/mock', filePath: 'src/index.ts' });
             })(),
           })
           .mockResolvedValueOnce({
@@ -256,7 +256,7 @@ describe('WalkthroughParticipant', () => {
       await handler(request, context, response, token);
 
       expect(lm.invokeTool).toHaveBeenCalledWith(
-        'workcenter-readFile',
+        'devdocket-readFile',
         expect.objectContaining({ input: { worktreePath: '/mock', filePath: 'src/index.ts' } }),
         token,
       );
@@ -269,7 +269,7 @@ describe('WalkthroughParticipant', () => {
         sendRequest: vi.fn().mockResolvedValue({
           stream: (async function* () {
             yield new LanguageModelTextPart('Last file analysis.');
-            yield new LanguageModelToolCallPart('phase-2', 'workcenter-signalPhase', { phase: 'lastFile' });
+            yield new LanguageModelToolCallPart('phase-2', 'devdocket-signalPhase', { phase: 'lastFile' });
           })(),
         }),
       };
@@ -294,7 +294,7 @@ describe('WalkthroughParticipant', () => {
         sendRequest: vi.fn().mockResolvedValue({
           stream: (async function* () {
             yield new LanguageModelTextPart('Wrap-up complete.');
-            yield new LanguageModelToolCallPart('phase-1', 'workcenter-signalPhase', { phase: 'wrapup' });
+            yield new LanguageModelToolCallPart('phase-1', 'devdocket-signalPhase', { phase: 'wrapup' });
           })(),
         }),
       };

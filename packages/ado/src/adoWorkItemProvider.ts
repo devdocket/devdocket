@@ -1,5 +1,5 @@
 import * as vscode from 'vscode';
-import { BaseProvider, DiscoveredItem, isValidUrlSegment } from '@workcenter/shared';
+import { BaseProvider, DiscoveredItem, isValidUrlSegment } from '@devdocket/shared';
 import { logger } from './logger';
 import { OrgConfig } from './configParser';
 
@@ -36,7 +36,7 @@ const ADO_AUTH_SCOPE = '499b84ac-1321-427f-aa17-267ca6975798/.default';
 const TERMINAL_CATEGORIES: ReadonlySet<string> = new Set(['Completed', 'Removed', 'Resolved']);
 
 /**
- * WorkCenter provider that discovers Azure DevOps work items assigned to the
+ * DevDocket provider that discovers Azure DevOps work items assigned to the
  * current user.
  *
  * Uses the ADO REST API with WIQL queries and Microsoft authentication.
@@ -174,7 +174,7 @@ export class AdoWorkItemProvider extends BaseProvider {
         ? `Failed to fetch work items from ${failures[0]}`
         : `Failed to fetch work items from ${failures.length} sources`;
       if (isUserTriggered) {
-        void vscode.window.showWarningMessage(`WorkCenter ADO: ${message}`);
+        void vscode.window.showWarningMessage(`DevDocket ADO: ${message}`);
       }
       logger.warn(message);
     }

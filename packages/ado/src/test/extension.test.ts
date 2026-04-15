@@ -41,7 +41,7 @@ describe('extension activation', () => {
 
     // Default: organization configured
     vi.mocked(workspace.getConfiguration).mockImplementation((section?: string) => {
-      if (section === 'workcenterAdo') {
+      if (section === 'devdocketAdo') {
         return {
           get: vi.fn((key: string, defaultValue?: any) => {
             if (key === 'organization') return 'myorg';
@@ -51,7 +51,7 @@ describe('extension activation', () => {
           }),
         } as any;
       }
-      // workcenter config for log level
+      // devdocket config for log level
       return {
         get: vi.fn((_key: string, defaultValue?: any) => defaultValue),
       } as any;
@@ -142,7 +142,7 @@ describe('extension activation', () => {
 
   it('does not register providers when no organization is configured', async () => {
     vi.mocked(workspace.getConfiguration).mockImplementation((section?: string) => {
-      if (section === 'workcenterAdo') {
+      if (section === 'devdocketAdo') {
         return {
           get: vi.fn((key: string, defaultValue?: any) => {
             if (key === 'organization') return '';

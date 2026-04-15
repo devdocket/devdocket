@@ -60,7 +60,7 @@ const window = {
     show: vi.fn(),
     hide: vi.fn(),
     dispose: vi.fn(),
-    name: 'WorkCenter Start Git Work',
+    name: 'DevDocket Start Git Work',
     replace: vi.fn(),
   })),
 };

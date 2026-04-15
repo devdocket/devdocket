@@ -11,7 +11,7 @@ interface SearchCodeInput {
 }
 
 export function registerSearchCodeTool(): vscode.Disposable {
-  return vscode.lm.registerTool('workcenter-searchCode', {
+  return vscode.lm.registerTool('devdocket-searchCode', {
     async invoke(
       options: vscode.LanguageModelToolInvocationOptions<SearchCodeInput>,
       _token: vscode.CancellationToken,

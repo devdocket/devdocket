@@ -8,7 +8,7 @@ export interface OrgConfig {
 }
 
 /**
- * Parses the `workcenterAdo.projects` setting into a list of per-organization
+ * Parses the `devdocketAdo.projects` setting into a list of per-organization
  * configurations.
  *
  * Entries in `projects`:

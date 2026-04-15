@@ -51,9 +51,9 @@ describe('activate()', () => {
   });
 
   // ------------------------------------------------------------------
-  // 1. Returns a valid WorkCenterApi
+  // 1. Returns a valid DevDocketApi
   // ------------------------------------------------------------------
-  it('returns a WorkCenterApi with registerProvider and registerAction', async () => {
+  it('returns a DevDocketApi with registerProvider and registerAction', async () => {
     const api = await activate(context);
     expect(api).toBeDefined();
     expect(typeof api.registerProvider).toBe('function');
@@ -79,11 +79,11 @@ describe('activate()', () => {
     await activate(context);
     const createTreeView = vscode.window.createTreeView as ReturnType<typeof vi.fn>;
     const viewIds = createTreeView.mock.calls.map((c: any[]) => c[0]);
-    expect(viewIds).toContain('workcenter.inbox');
-    expect(viewIds).toContain('workcenter.queue');
-    expect(viewIds).toContain('workcenter.focus');
-    expect(viewIds).toContain('workcenter.sources');
-    expect(viewIds).toContain('workcenter.history');
+    expect(viewIds).toContain('devdocket.inbox');
+    expect(viewIds).toContain('devdocket.queue');
+    expect(viewIds).toContain('devdocket.focus');
+    expect(viewIds).toContain('devdocket.sources');
+    expect(viewIds).toContain('devdocket.history');
   });
 
   // ------------------------------------------------------------------
@@ -94,16 +94,16 @@ describe('activate()', () => {
     const registerCommand = vscode.commands.registerCommand as ReturnType<typeof vi.fn>;
     expect(registerCommand).toHaveBeenCalled();
     const commandIds = registerCommand.mock.calls.map((c: any[]) => c[0]) as string[];
-    expect(commandIds).toContain('workcenter.createItem');
-    expect(commandIds).toContain('workcenter.acceptFromInbox');
+    expect(commandIds).toContain('devdocket.createItem');
+    expect(commandIds).toContain('devdocket.acceptFromInbox');
   });
 
   // ------------------------------------------------------------------
   // 5. Creates an output channel
   // ------------------------------------------------------------------
-  it('creates an output channel named WorkCenter', async () => {
+  it('creates an output channel named DevDocket', async () => {
     await activate(context);
-    expect(vscode.window.createOutputChannel).toHaveBeenCalledWith('WorkCenter');
+    expect(vscode.window.createOutputChannel).toHaveBeenCalledWith('DevDocket');
   });
 
   // ------------------------------------------------------------------
@@ -114,7 +114,7 @@ describe('activate()', () => {
     await flushMicrotasks();
 
     const createTreeView = vscode.window.createTreeView as ReturnType<typeof vi.fn>;
-    const inboxCall = createTreeView.mock.calls.find((c: any[]) => c[0] === 'workcenter.inbox');
+    const inboxCall = createTreeView.mock.calls.find((c: any[]) => c[0] === 'devdocket.inbox');
     expect(inboxCall).toBeDefined();
     // The mock createTreeView returns an object with a badge property
     const inboxView = createTreeView.mock.results[
@@ -177,7 +177,7 @@ describe('activate()', () => {
     await flushMicrotasks();
 
     const createTreeView = vscode.window.createTreeView as ReturnType<typeof vi.fn>;
-    const inboxIdx = createTreeView.mock.calls.findIndex((c: any[]) => c[0] === 'workcenter.inbox');
+    const inboxIdx = createTreeView.mock.calls.findIndex((c: any[]) => c[0] === 'devdocket.inbox');
     expect(inboxIdx).toBeGreaterThanOrEqual(0);
     const inboxView = createTreeView.mock.results[inboxIdx].value;
 
@@ -274,9 +274,9 @@ describe('activate()', () => {
   // ------------------------------------------------------------------
   // 13. Log level configuration is read on activation
   // ------------------------------------------------------------------
-  it('reads workcenter.logLevel configuration', async () => {
+  it('reads devdocket.logLevel configuration', async () => {
     await activate(context);
-    expect(vscode.workspace.getConfiguration).toHaveBeenCalledWith('workcenter');
+    expect(vscode.workspace.getConfiguration).toHaveBeenCalledWith('devdocket');
   });
 
   // ------------------------------------------------------------------
@@ -288,17 +288,17 @@ describe('activate()', () => {
 
     const createTreeView = vscode.window.createTreeView as ReturnType<typeof vi.fn>;
 
-    const queueIdx = createTreeView.mock.calls.findIndex((c: any[]) => c[0] === 'workcenter.queue');
+    const queueIdx = createTreeView.mock.calls.findIndex((c: any[]) => c[0] === 'devdocket.queue');
     expect(queueIdx).toBeGreaterThanOrEqual(0);
     const queueView = createTreeView.mock.results[queueIdx].value;
     expect(queueView.message).toBe('No items in queue');
 
-    const focusIdx = createTreeView.mock.calls.findIndex((c: any[]) => c[0] === 'workcenter.focus');
+    const focusIdx = createTreeView.mock.calls.findIndex((c: any[]) => c[0] === 'devdocket.focus');
     expect(focusIdx).toBeGreaterThanOrEqual(0);
     const focusView = createTreeView.mock.results[focusIdx].value;
     expect(focusView.message).toBe('No active work');
 
-    const historyIdx = createTreeView.mock.calls.findIndex((c: any[]) => c[0] === 'workcenter.history');
+    const historyIdx = createTreeView.mock.calls.findIndex((c: any[]) => c[0] === 'devdocket.history');
     expect(historyIdx).toBeGreaterThanOrEqual(0);
     const historyView = createTreeView.mock.results[historyIdx].value;
     expect(historyView.message).toBe('No history items');
@@ -343,7 +343,7 @@ describe('activate()', () => {
     await flushMicrotasks();
 
     const createTreeView = vscode.window.createTreeView as ReturnType<typeof vi.fn>;
-    const sourcesIdx = createTreeView.mock.calls.findIndex((c: any[]) => c[0] === 'workcenter.sources');
+    const sourcesIdx = createTreeView.mock.calls.findIndex((c: any[]) => c[0] === 'devdocket.sources');
     const sourcesView = createTreeView.mock.results[sourcesIdx].value;
 
     // Make the sources view message setter throw to trigger the inner catch
@@ -380,7 +380,7 @@ describe('activate()', () => {
 
     // The coalescing flag should have been reset (by the finally block),
     // so a subsequent event should still trigger a UI update.
-    const inboxIdx = createTreeView.mock.calls.findIndex((c: any[]) => c[0] === 'workcenter.inbox');
+    const inboxIdx = createTreeView.mock.calls.findIndex((c: any[]) => c[0] === 'devdocket.inbox');
     const inboxView = createTreeView.mock.results[inboxIdx].value;
 
     let messageSetCount = 0;
@@ -458,11 +458,11 @@ describe('activate()', () => {
     );
 
     const contextKeys = setContextCalls.map((c: any[]) => c[1]);
-    expect(contextKeys).toContain('workcenter.inboxLayout');
-    expect(contextKeys).toContain('workcenter.queueLayout');
-    expect(contextKeys).toContain('workcenter.focusLayout');
-    expect(contextKeys).toContain('workcenter.historyLayout');
-    expect(contextKeys).toContain('workcenter.sourcesLayout');
+    expect(contextKeys).toContain('devdocket.inboxLayout');
+    expect(contextKeys).toContain('devdocket.queueLayout');
+    expect(contextKeys).toContain('devdocket.focusLayout');
+    expect(contextKeys).toContain('devdocket.historyLayout');
+    expect(contextKeys).toContain('devdocket.sourcesLayout');
   });
 
   // ------------------------------------------------------------------
@@ -477,11 +477,11 @@ describe('activate()', () => {
     );
 
     const contextMap = Object.fromEntries(setContextCalls.map((c: any[]) => [c[1], c[2]]));
-    expect(contextMap['workcenter.inboxLayout']).toBe('tree');
-    expect(contextMap['workcenter.queueLayout']).toBe('flat');
-    expect(contextMap['workcenter.focusLayout']).toBe('flat');
-    expect(contextMap['workcenter.historyLayout']).toBe('flat');
-    expect(contextMap['workcenter.sourcesLayout']).toBe('tree');
+    expect(contextMap['devdocket.inboxLayout']).toBe('tree');
+    expect(contextMap['devdocket.queueLayout']).toBe('flat');
+    expect(contextMap['devdocket.focusLayout']).toBe('flat');
+    expect(contextMap['devdocket.historyLayout']).toBe('flat');
+    expect(contextMap['devdocket.sourcesLayout']).toBe('tree');
   });
 
   // ------------------------------------------------------------------
@@ -494,7 +494,7 @@ describe('activate()', () => {
     const executeCommand = vscode.commands.executeCommand as ReturnType<typeof vi.fn>;
     executeCommand.mockClear();
 
-    // Simulate a configuration change for workcenter.viewLayout
+    // Simulate a configuration change for devdocket.viewLayout
     const onDidChangeCfg = vscode.workspace.onDidChangeConfiguration as ReturnType<typeof vi.fn>;
     // Find the viewLayout config listener (the last registered one)
     const listeners = onDidChangeCfg.mock.calls.map((c: any[]) => c[0]);
@@ -512,7 +512,7 @@ describe('activate()', () => {
 
     // Fire configuration change event on all listeners
     for (const listener of listeners) {
-      listener({ affectsConfiguration: (section: string) => section === 'workcenter.viewLayout' });
+      listener({ affectsConfiguration: (section: string) => section === 'devdocket.viewLayout' });
     }
     await flushMicrotasks();
 
@@ -521,16 +521,16 @@ describe('activate()', () => {
       (c: any[]) => c[0] === 'setContext' && typeof c[1] === 'string' && c[1].endsWith('Layout'),
     );
     const contextKeys = setContextCalls.map((c: any[]) => c[1]);
-    expect(contextKeys).toContain('workcenter.focusLayout');
-    expect(contextKeys).toContain('workcenter.queueLayout');
+    expect(contextKeys).toContain('devdocket.focusLayout');
+    expect(contextKeys).toContain('devdocket.queueLayout');
 
     // Verify context key values reflect the updated layout
     const contextMap = Object.fromEntries(setContextCalls.map((c: any[]) => [c[1], c[2]]));
-    expect(contextMap['workcenter.focusLayout']).toBe('tree');
-    expect(contextMap['workcenter.queueLayout']).toBe('tree');
+    expect(contextMap['devdocket.focusLayout']).toBe('tree');
+    expect(contextMap['devdocket.queueLayout']).toBe('tree');
     // Views not in the override should still have their defaults
-    expect(contextMap['workcenter.inboxLayout']).toBe('tree');
-    expect(contextMap['workcenter.historyLayout']).toBe('flat');
+    expect(contextMap['devdocket.inboxLayout']).toBe('tree');
+    expect(contextMap['devdocket.historyLayout']).toBe('flat');
   });
 });
 

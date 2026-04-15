@@ -1,20 +1,20 @@
-# WorkCenter
+# DevDocket
 
 <p align="center">
-  <img src="packages/core/resources/workcenter-vortex.svg" alt="WorkCenter Logo" width="64" height="64" />
+  <img src="packages/core/resources/devdocket.svg" alt="DevDocket Logo" width="64" height="64" />
 </p>
 
 **A unified work hub inside VS Code.**
 
-WorkCenter is a VS Code extension that brings all of your work items — GitHub issues, Azure DevOps work items, PR review requests, investigations, follow-ups, and ad-hoc tasks — into a single, organized sidebar. Instead of juggling browser tabs, notification emails, and sticky notes, you manage everything from where you already write code.
+DevDocket is a VS Code extension that brings all of your work items — GitHub issues, Azure DevOps work items, PR review requests, investigations, follow-ups, and ad-hoc tasks — into a single, organized sidebar. Instead of juggling browser tabs, notification emails, and sticky notes, you manage everything from where you already write code.
 
 ## The Problem
 
 Developers constantly context-switch between tools. Issues live in GitHub, tasks live in Azure DevOps, review requests arrive by email, and ad-hoc follow-ups exist only in your head. Each tool has its own UI, its own notification model, and its own idea of "what's next." The result: work falls through the cracks, and you waste time just figuring out what to do.
 
-## How WorkCenter Helps
+## How DevDocket Helps
 
-WorkCenter is **not** a replacement for GitHub Issues, Azure DevOps, or any other system of record. It is an **aggregation layer** that sits inside VS Code and gives you a personal, unified view of your work:
+DevDocket is **not** a replacement for GitHub Issues, Azure DevOps, or any other system of record. It is an **aggregation layer** that sits inside VS Code and gives you a personal, unified view of your work:
 
 - **Providers** discover items from external sources (GitHub issues, Azure DevOps work items, PR reviews, and more in the future) and surface them automatically.
 - **You** decide what to accept, what to dismiss, and what to work on next.
@@ -22,22 +22,22 @@ WorkCenter is **not** a replacement for GitHub Issues, Azure DevOps, or any othe
 
 ## Quick Start
 
-1. **Install WorkCenter** from the VS Code marketplace (`mthalman.workcenter`).
-2. **Install a provider** — for example, WorkCenter GitHub (`mthalman.workcenter-github`) to discover GitHub issues and PR review requests.
-3. **Open the WorkCenter sidebar** by clicking the WorkCenter icon in the activity bar.
+1. **Install DevDocket** from the VS Code marketplace (`mthalman.devdocket`).
+2. **Install a provider** — for example, DevDocket GitHub (`mthalman.devdocket-github`) to discover GitHub issues and PR review requests.
+3. **Open the DevDocket sidebar** by clicking the DevDocket icon in the activity bar.
 4. **Check your Inbox** — newly discovered items from providers appear here. Accept items to add them to your Queue, or dismiss them. Some providers may re-surface dismissed items if they remain relevant.
 5. **Work your Queue** — move items to Focus when you're ready to start, or create manual items with the ➕ button.
 6. **Stay focused** — the Focus view shows only what you're actively working on. Pause items or mark them complete as you go.
 
 ### Configuring the GitHub Provider
 
-After installing WorkCenter GitHub, configure which repositories to watch for issues:
+After installing DevDocket GitHub, configure which repositories to watch for issues:
 
 ```jsonc
 // settings.json
 {
-  "workcenterGithub.repos": ["owner/repo1", "owner/repo2"],
-  "workcenterGithub.refreshIntervalSeconds": 300
+  "devdocketGithub.repos": ["owner/repo1", "owner/repo2"],
+  "devdocketGithub.refreshIntervalSeconds": 300
 }
 ```
 
@@ -52,7 +52,7 @@ The Start Git Work action creates a branch and worktree when you start working o
 ```jsonc
 // settings.json (user-level only — workspace settings are not supported)
 {
-  "workcenterStartGitWork.commands": [
+  "devdocketStartGitWork.commands": [
     { "command": "code.cmd", "args": ["{path}"] },
     { "command": "wt", "args": ["-d", "{path}"] }
   ]
@@ -65,7 +65,7 @@ Use `{path}` in args as a placeholder for the worktree path. Commands run in seq
 
 ## The Five-View Model
 
-WorkCenter organizes work across five views in the sidebar:
+DevDocket organizes work across five views in the sidebar:
 
 ### Inbox
 
@@ -104,11 +104,11 @@ flowchart LR
 
 ## Plugin Ecosystem
 
-WorkCenter is built around an extensible plugin model with two extension points:
+DevDocket is built around an extensible plugin model with two extension points:
 
 ### Providers
 
-A provider discovers work items from an external source and reports them to WorkCenter. The core extension handles all UI — providers just emit data.
+A provider discovers work items from an external source and reports them to DevDocket. The core extension handles all UI — providers just emit data.
 
 **Built-in providers:**
 
@@ -136,32 +136,32 @@ Provider and action extensions use a simple, well-defined API surface. See the [
 
 ## Architecture
 
-WorkCenter is a monorepo with five VS Code extensions and a shared library:
+DevDocket is a monorepo with five VS Code extensions and a shared library:
 
 ```
 packages/
-├── core/              # WorkCenter — the hub extension (UI, lifecycle, plugin API)
-├── github/            # WorkCenter GitHub — provider for GitHub issues and PR reviews
-├── ado/               # WorkCenter ADO — provider for Azure DevOps work items and PR reviews
+├── core/              # DevDocket — the hub extension (UI, lifecycle, plugin API)
+├── github/            # DevDocket GitHub — provider for GitHub issues and PR reviews
+├── ado/               # DevDocket ADO — provider for Azure DevOps work items and PR reviews
 ├── start-git-work/    # Start Git Work — action for creating branches and worktrees
 ├── ai-reviewer/       # AI code review action extension
 └── shared/            # Shared library (BaseProvider, URL validation, logger, refresh interval)
 ```
 
-- **`packages/core`** owns the five views, work item persistence, the editor panel, and the extension API (`WorkCenterApi`).
+- **`packages/core`** owns the five views, work item persistence, the editor panel, and the extension API (`DevDocketApi`).
 - **`packages/github`** is a provider extension that discovers GitHub issues and PR reviews.
 - **`packages/ado`** is a provider extension that discovers Azure DevOps work items and PR reviews.
 - **`packages/start-git-work`** is an action extension that creates git branches and worktrees for work items from GitHub and ADO providers, with configurable post-worktree commands.
 - **`packages/ai-reviewer`** is an action extension that analyzes diffs using an AI model and posts review comments.
 - **`packages/shared`** contains the `BaseProvider` base class for consistent provider lifecycle management (periodic refresh, concurrency guards, disposal), URL validation helpers, a logger service, and refresh interval validation.
 
-Provider extensions extend `BaseProvider` from `@workcenter/shared` and depend on the core extension via `extensionDependencies`, acquiring the API at activation time. They do not import code from the core package directly — interfaces are re-declared to keep the extensions decoupled.
+Provider extensions extend `BaseProvider` from `@devdocket/shared` and depend on the core extension via `extensionDependencies`, acquiring the API at activation time. They do not import code from the core package directly — interfaces are re-declared to keep the extensions decoupled.
 
 ### Data Storage
 
-WorkCenter persists two JSON files in VS Code's `globalStorageUri`:
+DevDocket persists two JSON files in VS Code's `globalStorageUri`:
 
-- **`workitems.json`** — All accepted and manual work items with their lifecycle state, including the persisted fields WorkCenter stores at creation/accept time, such as the work item `title`, optional `url`, provider provenance (`providerId` and `externalId`), and any `notes`. Provider-derived values captured at accept time may become stale compared to live data from the provider.
+- **`workitems.json`** — All accepted and manual work items with their lifecycle state, including the persisted fields DevDocket stores at creation/accept time, such as the work item `title`, optional `url`, provider provenance (`providerId` and `externalId`), and any `notes`. Provider-derived values captured at accept time may become stale compared to live data from the provider.
 - **`discovered-state.json`** — A thin index tracking whether each discovered item has been accepted, dismissed, or not yet seen. This file does not store provider item fields; for inbox items, provider data is read live from the provider.
 
 ## Documentation

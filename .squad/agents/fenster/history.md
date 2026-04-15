@@ -2,7 +2,7 @@
 
 ## Core Context
 
-WorkCenter is a VS Code extension for managing work items. Phase 1 is complete:
+DevDocket is a VS Code extension for managing work items. Phase 1 is complete:
 - Queue view (new items) and Focus view (in-progress items) as tree data providers
 - Manual work item creation via input box, editing via webview panel with auto-save
 - 6-state WorkItem model (New, InProgress, Blocked, WaitingOn, Done, Archived)
@@ -30,9 +30,9 @@ Key files:
 
 - **Dynamic title resolution for provider-backed items (#215):** Added `TitleResolver` type and `resolveTitle()` method to `WorkItemViewProvider` base class in `viewLayout.ts`. Mirrors the existing `LabelResolver` pattern — a closure `(providerId, externalId) => string | undefined` passed from subclass constructors via `ProviderRegistry.getDiscoveredItems()`. All three tree providers (Queue, Focus, History) now display live titles from the provider, falling back to persisted `item.title`. Also wired `onDidChangeDiscoveredItems` to refresh trees when provider data updates.
 - **Editor panel source URL link (Issue #219):** Webview CSP has `default-src 'none'`, so direct navigation won't work. Used `vscode.postMessage({ type: 'openUrl' })` from webview → extension host validates with `isSafeUrl()` and opens via `vscode.env.openExternal()`. Renders as a `<button>` with `data-url` attribute (escaped via `escapeAttr`). Added 3 HTML tests in `editorPanelHtml.test.ts` and 4 message handler tests in `workItemEditorPanel.test.ts` (including javascript:/data: scheme rejection).
-- Layout toggle dynamic icons: VS Code requires separate command IDs for different icons. Pattern: register two commands per toggle (e.g., `switchXToTree` and `switchXToFlat`), each with its own icon. Use context keys (`workcenter.${id}Layout`) set on activation + config change listener in `extension.ts` (lines ~332-354). Menu entries use `when` clauses (e.g., `workcenter.inboxLayout == flat`) to show only the relevant command. Add `commandPalette` entries with matching `when` clauses to hide the irrelevant variant from the palette.
+- Layout toggle dynamic icons: VS Code requires separate command IDs for different icons. Pattern: register two commands per toggle (e.g., `switchXToTree` and `switchXToFlat`), each with its own icon. Use context keys (`devdocket.${id}Layout`) set on activation + config change listener in `extension.ts` (lines ~332-354). Menu entries use `when` clauses (e.g., `devdocket.inboxLayout == flat`) to show only the relevant command. Add `commandPalette` entries with matching `when` clauses to hide the irrelevant variant from the palette.
   - Key files: `package.json` (commands, menus.view/title, menus.commandPalette), `commands.ts` (registrations), `extension.ts` (context key init + config listener), `viewLayout.ts` (toggle logic).
-- **Empty state messages** use VS Code's `viewsWelcome` contribution in `packages/core/package.json`. Each entry has a `view` (matching a view ID like `workcenter.inbox`) and `contents` (markdown string). VS Code displays these automatically when a TreeDataProvider returns no children. Command buttons use `[Label](command:commandId)` markdown syntax. No `when` clause needed — VS Code handles the empty-tree condition natively.
+- **Empty state messages** use VS Code's `viewsWelcome` contribution in `packages/core/package.json`. Each entry has a `view` (matching a view ID like `devdocket.inbox`) and `contents` (markdown string). VS Code displays these automatically when a TreeDataProvider returns no children. Command buttons use `[Label](command:commandId)` markdown syntax. No `when` clause needed — VS Code handles the empty-tree condition natively.
 - GitHub package (`packages/github/`) vscode mock lives at `packages/github/src/test/__mocks__/vscode.ts`, aliased in `vitest.config.ts` — mirrors core mock pattern but adds `authentication`, `workspace`, `extensions` mocks.
 - Mock includes: `authentication.getSession` (resolves with `{ accessToken: 'mock-token' }`), `workspace.getConfiguration` (returns `.get(key, default)` stub), `workspace.workspaceFolders`, `extensions.getExtension`, `commands.executeCommand`, `Uri.file`, `window.showErrorMessage`.
 - Root `npm install` handles all workspace deps via npm workspaces. Root `npm run build` runs esbuild in both packages.
@@ -69,6 +69,12 @@ Key files:
 - `src/views/sourcesTreeProvider.ts` — hierarchical Provider → Group → Item tree
 
 ## Learnings (Updated 2026-03-24)
+
+### Bulk Rename: WorkCenter → DevDocket
+- Used an ordered replacement list (most-specific patterns first) to avoid partial-match corruption during the rename.
+- `.squad/` files must be excluded from bulk renames and handled separately to preserve team coordination state.
+- File renames (git mv) must be followed by import-path fixups; the bulk text replacement handled the import content, but the filenames themselves needed separate git mv commands.
+- The Python script approach worked well for 89 files; all 167 tests passed on first try after the rename.
 
 ### File Structure and Conventions
 - DiscoveredStateStore follows same ENOENT/mkdir pattern as JsonTaskStore for consistent file handling
@@ -236,7 +242,7 @@ Patterns documented in `.squad/decisions.md` under "Code Review Fix Patterns" (2
 - **Re-export for backward compatibility**: When extracting a function to a base module, re-export it from the original module (`export { sanitizePrUrl }` in `aiReviewAction.ts`) so existing test imports don't break.
 - **Enhanced default prompt**: `defaultPrompt.ts` now includes all 10 items from superpowers Step 3 (including "Don't flag what CI catches", enhanced false-positive guidance with "Never assert...deprecated", and "Context-shift analysis"). Also adds Holistic Assessment subsection, Codebase Consistency section, and "Using ✅ Verified" paragraph to Severity Classification.
 - **Extension registration**: `extension.ts` creates and registers both `AiReviewAction` and `AiWalkthroughAction` — each gets its own `api.registerAction()` call pushed to `context.subscriptions`.
-- **Configuration and prompt sourcing**: `AiReviewAction` uses the `workcenterAiReview` config section with `customPromptPath` in `package.json`. The walkthrough uses the `@walkthrough` chat participant with a built-in prompt — no separate config entry.
+- **Configuration and prompt sourcing**: `AiReviewAction` uses the `devdocketAiReview` config section with `customPromptPath` in `package.json`. The walkthrough uses the `@walkthrough` chat participant with a built-in prompt — no separate config entry.
 ## Issue #189: Dismissed items reappearing in inbox (2025-01-24)
 
 ### Root Cause
@@ -283,7 +289,7 @@ The queue view was displaying raw provider IDs (e.g., `github`, `ado`) in tree i
 - The ACTUAL root cause was `resurfaceDismissed = true` on PR review providers. This flag explicitly overwrote dismissed items back to `unseen` on every provider refresh in `handleDiscoveredItems()`. The previous fix (defensive `load()` call) addressed a non-existent race condition.
 
 ### Fix
-- Removed `resurfaceDismissed` property from: `WorkCenterProvider` interface (core, github, ai-reviewer), `BaseGitHubProvider` class, `GitHubPrReviewProvider`, `AdoPrReviewProvider`.
+- Removed `resurfaceDismissed` property from: `DevDocketProvider` interface (core, github, ai-reviewer), `BaseGitHubProvider` class, `GitHubPrReviewProvider`, `AdoPrReviewProvider`.
 - Removed the `resurface` variable and `else if (resurface && existing === 'dismissed')` branch from `handleDiscoveredItems()`.
 - Reverted the unnecessary `await this.stateStore.load()` and associated test changes from commit 15e237f.
 - Removed tests for resurfaceDismissed behavior across all packages.
@@ -318,6 +324,6 @@ The queue view was displaying raw provider IDs (e.g., `github`, `ado`) in tree i
 ## Issue #252: Walkthrough last-file followup fix (2025-07-25)
 
 ### Learnings
-- **Walkthrough phase signaling**: The `workcenter-signalPhase` virtual tool in `walkthroughParticipant.ts` controls which followup buttons VS Code displays after each LLM response. Phases map to different button sets in `provideFollowups()`.
+- **Walkthrough phase signaling**: The `devdocket-signalPhase` virtual tool in `walkthroughParticipant.ts` controls which followup buttons VS Code displays after each LLM response. Phases map to different button sets in `provideFollowups()`.
 - **Adding a phase value**: To distinguish "last file" from "mid-walkthrough", added `lastFile` to the signalPhase enum. The prompt instructs the LLM to signal `lastFile` instead of `walkthrough` when presenting the final file in the reading order. This is simpler and more reliable than trying to track file indices in the participant code.
 - **Key files**: `walkthroughParticipant.ts` (phase enum + followup provider), `walkthroughPrompt.ts` (LLM instructions for when to signal each phase).

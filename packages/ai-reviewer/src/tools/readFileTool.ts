@@ -32,7 +32,7 @@ function validatePath(worktreePath: string, filePath: string): string | undefine
 }
 
 export function registerReadFileTool(): vscode.Disposable {
-  return vscode.lm.registerTool('workcenter-readFile', {
+  return vscode.lm.registerTool('devdocket-readFile', {
     async invoke(
       options: vscode.LanguageModelToolInvocationOptions<ReadFileInput>,
       _token: vscode.CancellationToken,

@@ -1,6 +1,6 @@
 /**
- * Shared logging utilities used across all WorkCenter packages.
- * @module @workcenter/shared
+ * Shared logging utilities used across all DevDocket packages.
+ * @module @devdocket/shared
  */
 export { createLoggerService, LogLevel, resolveLogLevel, serializeArg } from './logger';
 export type { Logger, LogOutput, LoggerService } from './logger';

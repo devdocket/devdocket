@@ -16,7 +16,7 @@ vi.mock('fs/promises', async (importOriginal) => {
 let tmpDir: string;
 
 beforeEach(async () => {
-  tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'workcenter-concurrency-'));
+  tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'devdocket-concurrency-'));
 });
 
 afterEach(async () => {

@@ -1,6 +1,6 @@
 import type * as vscode from 'vscode';
 import { WorkItem } from '../models/workItem';
-import type { Disposable, Event, DiscoveredItem } from '@workcenter/shared';
+import type { Disposable, Event, DiscoveredItem } from '@devdocket/shared';
 
 // Re-export shared provider-facing types so existing imports from './api/types' keep working.
 export type { Disposable, Event, DiscoveredItem };
@@ -8,7 +8,7 @@ export type { Disposable, Event, DiscoveredItem };
 /**
  * A provider that discovers work items from an external source.
  *
- * Providers are registered via {@link WorkCenterApi.registerProvider} and emit
+ * Providers are registered via {@link DevDocketApi.registerProvider} and emit
  * {@link DiscoveredItem} arrays when new items are found. The core extension
  * reads discovered item metadata live from the provider and does not persist it;
  * only inbox state is persisted.
@@ -16,7 +16,7 @@ export type { Disposable, Event, DiscoveredItem };
  * @example
  * ```ts
  * const emitter = new vscode.EventEmitter<DiscoveredItem[]>();
- * const provider: WorkCenterProvider = {
+ * const provider: DevDocketProvider = {
  *   id: 'github',
  *   label: 'GitHub Issues',
  *   onDidDiscoverItems: emitter.event,
@@ -28,7 +28,7 @@ export type { Disposable, Event, DiscoveredItem };
  * api.registerProvider(provider);
  * ```
  */
-export interface WorkCenterProvider {
+export interface DevDocketProvider {
   /** Unique identifier for this provider (e.g. `'github'`). */
   readonly id: string;
   /** Human-readable display name shown in the UI. */
@@ -45,7 +45,7 @@ export interface WorkCenterProvider {
 /**
  * A context-menu action that can be run against a {@link WorkItem}.
  *
- * Actions are registered via {@link WorkCenterApi.registerAction} and surfaced
+ * Actions are registered via {@link DevDocketApi.registerAction} and surfaced
  * dynamically — {@link canRun} is called to determine visibility.
  *
  * ## Trust model
@@ -53,12 +53,12 @@ export interface WorkCenterProvider {
  * Actions receive a **read-only view** of the work item (`Readonly<WorkItem>`).
  * This is a TypeScript type-level restriction only; it does not create a
  * runtime snapshot or frozen copy of the item. Third-party extensions should
- * treat the object as immutable and use the WorkCenter API (e.g. VS Code
+ * treat the object as immutable and use the DevDocket API (e.g. VS Code
  * commands) rather than mutating the object.
  *
  * @example
  * ```ts
- * const action: WorkCenterAction = {
+ * const action: DevDocketAction = {
  *   id: 'start-work',
  *   label: 'Start Work',
  *   canRun: (item) => !!item.providerId,
@@ -67,7 +67,7 @@ export interface WorkCenterProvider {
  * api.registerAction(action);
  * ```
  */
-export interface WorkCenterAction {
+export interface DevDocketAction {
   /** Unique identifier for this action (e.g. `'start-work'`). */
   readonly id: string;
   /** Label shown in the context menu. */
@@ -88,15 +88,15 @@ export interface WorkCenterAction {
 }
 
 /**
- * Public API surface of the WorkCenter extension.
+ * Public API surface of the DevDocket extension.
  *
  * Obtain this API from the core extension by getting its extension wrapper via
- * `vscode.extensions.getExtension('mthalman.workcenter')`, then activating it
+ * `vscode.extensions.getExtension('mthalman.devdocket')`, then activating it
  * with `await extension.activate()` (or reading `extension.exports` after activation).
  *
  * @example
  * ```ts
- * const ext = vscode.extensions.getExtension<WorkCenterApi>('mthalman.workcenter');
+ * const ext = vscode.extensions.getExtension<DevDocketApi>('mthalman.devdocket');
  * const api = await ext?.activate();
  * if (api) {
  *   api.registerProvider(myProvider);
@@ -104,7 +104,7 @@ export interface WorkCenterAction {
  * }
  * ```
  */
-export interface WorkCenterApi {
+export interface DevDocketApi {
   /**
    * Register a work-item provider.
    *
@@ -115,15 +115,15 @@ export interface WorkCenterApi {
    * @param provider - The provider to register.
    * @returns A {@link Disposable} that unregisters the provider when disposed.
    */
-  registerProvider(provider: WorkCenterProvider): Disposable;
+  registerProvider(provider: DevDocketProvider): Disposable;
   /**
    * Register a contextual action for work items.
    *
-   * The action's {@link WorkCenterAction.canRun} method is evaluated per item
+   * The action's {@link DevDocketAction.canRun} method is evaluated per item
    * to determine whether it appears in context menus.
    *
    * @param action - The action to register.
    * @returns A {@link Disposable} that unregisters the action when disposed.
    */
-  registerAction(action: WorkCenterAction): Disposable;
+  registerAction(action: DevDocketAction): Disposable;
 }

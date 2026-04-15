@@ -10,7 +10,7 @@ interface GetDiffInput {
 }
 
 export function registerGetDiffTool(): vscode.Disposable {
-  return vscode.lm.registerTool('workcenter-getDiff', {
+  return vscode.lm.registerTool('devdocket-getDiff', {
     async invoke(
       options: vscode.LanguageModelToolInvocationOptions<GetDiffInput>,
       _token: vscode.CancellationToken,

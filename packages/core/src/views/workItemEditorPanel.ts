@@ -6,7 +6,7 @@ import { getEditorPanelHtml } from './editorPanelHtml';
 import { isSafeUrl } from '../utils/url';
 
 export class WorkItemEditorPanel {
-  private static readonly viewType = 'workcenter.editItem';
+  private static readonly viewType = 'devdocket.editItem';
   private static readonly openPanels = new Map<string, WorkItemEditorPanel>();
   private readonly panel: vscode.WebviewPanel;
   private readonly workGraph: WorkGraph;

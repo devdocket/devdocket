@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { EventEmitter } from 'vscode';
-import { WorkCenterProvider, DiscoveredItem } from '../api/types';
+import { DevDocketProvider, DiscoveredItem } from '../api/types';
 import { WorkGraph } from '../services/workGraph';
 import { ProviderRegistry } from '../services/providerRegistry';
 import { logger } from '../services/logger';
@@ -41,7 +41,7 @@ function createMockStateStore() {
   };
 }
 
-function createMockProvider(id: string): WorkCenterProvider & { fireItems: (items: DiscoveredItem[]) => void } {
+function createMockProvider(id: string): DevDocketProvider & { fireItems: (items: DiscoveredItem[]) => void } {
   const emitter = new EventEmitter<DiscoveredItem[]>();
   return {
     id,
@@ -409,7 +409,7 @@ describe('ProviderRegistry', () => {
         rejectRefresh = reject;
       });
       const emitter = new EventEmitter<DiscoveredItem[]>();
-      const provider: WorkCenterProvider & { fireItems: (items: DiscoveredItem[]) => void } = {
+      const provider: DevDocketProvider & { fireItems: (items: DiscoveredItem[]) => void } = {
         id,
         label: `Provider ${id}`,
         onDidDiscoverItems: emitter.event,

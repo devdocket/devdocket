@@ -2,7 +2,7 @@
 
 ## Core Context
 
-WorkCenter is a VS Code extension for managing work items. Phase 1 is complete:
+DevDocket is a VS Code extension for managing work items. Phase 1 is complete:
 - Queue view (new items) and Focus view (in-progress items) as tree data providers
 - Manual work item creation via input box, editing via webview panel with auto-save
 - 6-state WorkItem model (New, InProgress, Blocked, WaitingOn, Done, Archived)
@@ -44,7 +44,7 @@ Key files:
 
 **Testing pattern: accessing `followupProvider`** — After `participant.register()`, the mock `chat.createChatParticipant` return value has its `followupProvider` property set by production code. Access via `vi.mocked(chat.createChatParticipant).mock.results[0].value.followupProvider` to call `provideFollowups` directly with controlled `ChatResult` metadata.
 
-**Gotcha: multi-worktree environment** — Main worktree (`C:\repos\workcenter`) may be on a different branch. Use `git worktree add` to create a dedicated worktree for the target branch, install deps, run tests, commit, and push from there.
+**Gotcha: multi-worktree environment** — Main worktree (`C:\repos\devdocket`) may be on a different branch. Use `git worktree add` to create a dedicated worktree for the target branch, install deps, run tests, commit, and push from there.
 
 ### Phase 2 Test Writing (2026-03-24)
 
@@ -482,7 +482,7 @@ mockFetch.mockImplementation(async (url: string) => {
 **Key learning:** The editor panel tests were well-designed — they test security and correctness concerns without coupling to visual layout CSS, making them resilient to styling changes.
 ### Layout Toggle Visual Indicator Tests (Issue #230)
 
-**Issue:** Layout toggle button had no visual indicator of current mode. Fenster added context key setting (`workcenter.${id}Layout`) in `extension.ts` lines 332-354, fired on activation and on `workcenter.viewLayout` config changes.
+**Issue:** Layout toggle button had no visual indicator of current mode. Fenster added context key setting (`devdocket.${id}Layout`) in `extension.ts` lines 332-354, fired on activation and on `devdocket.viewLayout` config changes.
 
 **Tests added:** 10 new tests across 2 files (9 in viewLayout.test.ts + 1 in extension.test.ts)
 

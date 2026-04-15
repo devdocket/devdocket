@@ -28,15 +28,15 @@ The reader controls the pace. **Present one file (or group) at a time. After eac
 
 You have access to tools for exploring the PR's code. Use them proactively:
 
-- **workcenter-readFile** — Read the full contents of a file in the worktree. Always pass \`worktreePath: "${info.worktreePath}"\` and a relative \`filePath\`.
-- **workcenter-listDirectory** — List files and directories. Pass \`worktreePath: "${info.worktreePath}"\` and optionally \`dirPath\`.
-- **workcenter-getDiff** — Get the full unified diff for the PR. Pass \`worktreePath: "${info.worktreePath}"\`, \`baseRef: "${info.baseRef}"\`, \`headRef: "${info.headRef}"\`.
-- **workcenter-getFileDiff** — Get the diff for a specific file. Pass the same refs plus a \`filePath\`.
-- **workcenter-searchCode** — Search the codebase with git grep. Pass \`worktreePath: "${info.worktreePath}"\`, \`pattern\`, and optionally \`fileGlob\`.
-- **workcenter-gitLog** — Get recent commit history. Pass \`worktreePath: "${info.worktreePath}"\` and optionally \`filePath\` and \`maxCount\`.
-- **workcenter-signalPhase** — **Call this at the end of every response** to signal the current walkthrough phase. Pass \`phase: "summary"\` after presenting the opening overview, \`phase: "walkthrough"\` during the file-by-file presentation, \`phase: "lastFile"\` when presenting the **last file** in the reading order (so the UI omits the "Next file" button), or \`phase: "wrapup"\` after the final wrap-up. This controls which follow-up action buttons the user sees.
+- **devdocket-readFile** — Read the full contents of a file in the worktree. Always pass \`worktreePath: "${info.worktreePath}"\` and a relative \`filePath\`.
+- **devdocket-listDirectory** — List files and directories. Pass \`worktreePath: "${info.worktreePath}"\` and optionally \`dirPath\`.
+- **devdocket-getDiff** — Get the full unified diff for the PR. Pass \`worktreePath: "${info.worktreePath}"\`, \`baseRef: "${info.baseRef}"\`, \`headRef: "${info.headRef}"\`.
+- **devdocket-getFileDiff** — Get the diff for a specific file. Pass the same refs plus a \`filePath\`.
+- **devdocket-searchCode** — Search the codebase with git grep. Pass \`worktreePath: "${info.worktreePath}"\`, \`pattern\`, and optionally \`fileGlob\`.
+- **devdocket-gitLog** — Get recent commit history. Pass \`worktreePath: "${info.worktreePath}"\` and optionally \`filePath\` and \`maxCount\`.
+- **devdocket-signalPhase** — **Call this at the end of every response** to signal the current walkthrough phase. Pass \`phase: "summary"\` after presenting the opening overview, \`phase: "walkthrough"\` during the file-by-file presentation, \`phase: "lastFile"\` when presenting the **last file** in the reading order (so the UI omits the "Next file" button), or \`phase: "wrapup"\` after the final wrap-up. This controls which follow-up action buttons the user sees.
 
-**Important:** Before presenting each file, use workcenter-readFile to read the full source file — not just the diff hunks. Use workcenter-searchCode to find callers of modified functions to understand the impact of changes. Use workcenter-getFileDiff for per-file diffs.
+**Important:** Before presenting each file, use devdocket-readFile to read the full source file — not just the diff hunks. Use devdocket-searchCode to find callers of modified functions to understand the impact of changes. Use devdocket-getFileDiff for per-file diffs.
 
 ## Navigable Links
 
@@ -53,7 +53,7 @@ All file and line references should be navigable links.
 
 Start by getting the full PR diff to understand the scope:
 
-1. Use **workcenter-getDiff** to get the full diff
+1. Use **devdocket-getDiff** to get the full diff
 2. Analyze the diff to identify all changed files, lines added/removed, and change types
 
 Then present the opening summary:
@@ -94,9 +94,9 @@ For each file (or group):
 Display the filename as a navigable link, change type (modified/added/deleted/renamed), and line count (e.g., "+15 / -3").
 
 **Build Context:**
-- Use **workcenter-readFile** to read the full file to understand its role in the system
-- Use **workcenter-getFileDiff** to get the file-specific diff
-- Use **workcenter-searchCode** to find callers, references, and related code
+- Use **devdocket-readFile** to read the full file to understand its role in the system
+- Use **devdocket-getFileDiff** to get the file-specific diff
+- Use **devdocket-searchCode** to find callers, references, and related code
 - Understand what this file does — its purpose, its relationships to other files
 
 **Walk Through the Changes:**

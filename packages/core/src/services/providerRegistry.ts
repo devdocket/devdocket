@@ -1,11 +1,11 @@
 import * as vscode from 'vscode';
-import { WorkCenterProvider, DiscoveredItem } from '../api/types';
+import { DevDocketProvider, DiscoveredItem } from '../api/types';
 import { DiscoveredStateStore } from '../storage/discoveredStateStore';
 import { ProviderLabelCache } from '../storage/providerLabelCache';
 import { logger } from './logger';
 
 /**
- * Central registry for {@link WorkCenterProvider} instances.
+ * Central registry for {@link DevDocketProvider} instances.
  *
  * Manages provider lifecycle, tracks discovered items from each provider,
  * and coordinates inbox state persistence through the {@link DiscoveredStateStore}.
@@ -18,7 +18,7 @@ export class ProviderRegistry {
    * Excess items are truncated after logging a warning.
    */
   static readonly MAX_ITEMS_PER_PROVIDER = 10_000;
-  private readonly providers = new Map<string, WorkCenterProvider>();
+  private readonly providers = new Map<string, DevDocketProvider>();
   private readonly subscriptions = new Map<string, { dispose(): void }>();
   private readonly discoveredItems = new Map<string, DiscoveredItem[]>();
   private readonly _onDidChangeDiscoveredItems = new vscode.EventEmitter<void>();
@@ -52,14 +52,14 @@ export class ProviderRegistry {
   /**
    * Register a provider and trigger its initial refresh.
    *
-   * The provider's {@link WorkCenterProvider.onDidDiscoverItems} event is
+   * The provider's {@link DevDocketProvider.onDidDiscoverItems} event is
    * subscribed to so that future discoveries are automatically tracked.
    *
    * @param provider - The provider to register.
    * @returns A {@link vscode.Disposable} that unregisters the provider when disposed.
-   * @throws If a provider with the same {@link WorkCenterProvider.id} is already registered.
+   * @throws If a provider with the same {@link DevDocketProvider.id} is already registered.
    */
-  register(provider: WorkCenterProvider): vscode.Disposable {
+  register(provider: DevDocketProvider): vscode.Disposable {
     if (this.providers.has(provider.id)) {
       throw new Error(`Provider already registered: ${provider.id}`);
     }
@@ -110,7 +110,7 @@ export class ProviderRegistry {
    * @param id - The provider identifier to search for.
    * @returns The matching provider, or `undefined` if not registered.
    */
-  getProvider(id: string): WorkCenterProvider | undefined {
+  getProvider(id: string): DevDocketProvider | undefined {
     return this.providers.get(id);
   }
 
@@ -165,7 +165,7 @@ export class ProviderRegistry {
     }
   }
 
-  private refreshWithTimeout(provider: WorkCenterProvider): Promise<void> {
+  private refreshWithTimeout(provider: DevDocketProvider): Promise<void> {
     this.cancelPendingRefresh(provider.id);
     const cts = new vscode.CancellationTokenSource();
     const timeoutId = setTimeout(() => {

@@ -8,7 +8,7 @@ import {
 
 export type QueueElement = WorkItemElement;
 
-const DRAG_MIME_TYPE = 'application/vnd.code.tree.workcenter.queue';
+const DRAG_MIME_TYPE = 'application/vnd.code.tree.devdocket.queue';
 
 export class QueueTreeProvider extends WorkItemViewProvider implements vscode.TreeDragAndDropController<QueueElement> {
   readonly dropMimeTypes = [DRAG_MIME_TYPE];
@@ -45,7 +45,7 @@ export class QueueTreeProvider extends WorkItemViewProvider implements vscode.Tr
     treeItem.tooltip = this.buildTooltip(item, title);
     treeItem.contextValue = item.url ? 'queueItem.hasUrl' : 'queueItem';
     treeItem.iconPath = new vscode.ThemeIcon(item.providerId ? 'remote' : 'circle-filled');
-    treeItem.command = { command: 'workcenter.editItem', title: 'Open Details', arguments: [item] };
+    treeItem.command = { command: 'devdocket.editItem', title: 'Open Details', arguments: [item] };
     return treeItem;
   }
 
