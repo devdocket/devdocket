@@ -1,11 +1,11 @@
 import * as vscode from 'vscode';
 import { DiscoveredItem } from '../api/types';
-import { ProviderRegistry, ProviderHealthStatus } from '../services/providerRegistry';
+import { ProviderRegistry } from '../services/providerRegistry';
 import { DiscoveredStateStore } from '../storage/discoveredStateStore';
 import { ReadStateStore } from '../storage/readStateStore';
 import { logger } from '../services/logger';
 import { ViewLayout, LayoutState } from './viewLayout';
-import { formatRelativeTime } from '../utils/time';
+import { buildProviderTooltip } from './providerTooltip';
 
 export interface InboxProviderNode {
   kind: 'provider';
@@ -151,7 +151,7 @@ export class InboxTreeProvider implements vscode.TreeDataProvider<InboxElement> 
       } else {
         treeItem.iconPath = new vscode.ThemeIcon('plug');
       }
-      treeItem.tooltip = this.buildProviderTooltip(element.label, health);
+      treeItem.tooltip = buildProviderTooltip(element.label, health);
       return treeItem;
     }
 
@@ -331,23 +331,6 @@ export class InboxTreeProvider implements vscode.TreeDataProvider<InboxElement> 
 
   private formatReason(reason: string): string {
     return reason.replace(/_/g, ' ').replace(/^./, c => c.toUpperCase());
-  }
-
-  private buildProviderTooltip(label: string, health: ProviderHealthStatus): vscode.MarkdownString {
-    const md = new vscode.MarkdownString();
-    md.appendMarkdown(`**`);
-    md.appendText(label);
-    md.appendMarkdown(`**\n\n`);
-    if (health.lastRefreshTime) {
-      md.appendMarkdown(`Last refreshed: ${formatRelativeTime(health.lastRefreshTime)}\n\n`);
-    }
-    if (health.status === 'unhealthy' && health.lastError) {
-      md.appendMarkdown(`$(warning) **Refresh failed:** `);
-      md.appendText(health.lastError);
-      md.appendMarkdown(`\n\n`);
-    }
-    md.supportThemeIcons = true;
-    return md;
   }
 
   private buildFlatDescription(item: InboxItem): string | undefined {
