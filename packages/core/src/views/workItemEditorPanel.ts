@@ -117,9 +117,10 @@ export class WorkItemEditorPanel {
     if (!item) {
       throw new Error('Work item no longer exists. Your changes could not be saved.');
     }
+    const managed = this.isProviderManaged(item);
     const patch: Partial<WorkItemInput> = {};
 
-    if (!this.isProviderManaged(item)) {
+    if (!managed) {
       if (!data.title) {
         return;
       }
@@ -135,7 +136,7 @@ export class WorkItemEditorPanel {
     }
 
     await this.workGraph.updateItem(this.itemId, patch);
-    if (!this.disposed && data.title && !this.isProviderManaged(item)) {
+    if (!this.disposed && data.title && !managed) {
       this.panel.title = `Edit: ${data.title}`;
     }
   }
