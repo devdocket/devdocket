@@ -377,9 +377,9 @@ export class WorkGraph {
    * Delete all history items (Done and Archived) whose `updatedAt` is older than the given age in days.
    * Returns the number of items deleted.
    */
-  async clearOldHistory(maxAgeDays: number): Promise<number> {
+  async clearOldHistory(maxAgeDays: number): Promise<{ deleted: number; failed: number }> {
     if (!Number.isFinite(maxAgeDays) || maxAgeDays < 1) {
-      return 0;
+      return { deleted: 0, failed: 0 };
     }
     const days = Math.ceil(maxAgeDays);
     const cutoff = Date.now() - days * DAY_MS;
@@ -387,16 +387,18 @@ export class WorkGraph {
       .filter(item => item.updatedAt < cutoff);
 
     if (toDelete.length === 0) {
-      return 0;
+      return { deleted: 0, failed: 0 };
     }
 
     let deleted = 0;
+    let failed = 0;
     try {
       for (const item of toDelete) {
         try {
           await this.deleteItem(item.id, { silent: true });
           deleted++;
         } catch (err) {
+          failed++;
           logger.warn(`Failed to delete history item ${item.id}, skipping: ${err instanceof Error ? err.message : String(err)}`);
         }
       }
@@ -406,7 +408,7 @@ export class WorkGraph {
       }
     }
 
-    return deleted;
+    return { deleted, failed };
   }
 
   /** Permanently delete a work item from the store. */

@@ -407,10 +407,15 @@ async function handleClearHistory(workGraph: WorkGraph): Promise<void> {
   );
   if (confirm !== 'Delete') { return; }
 
-  const deleted = await workGraph.clearOldHistory(maxAgeDays);
-  if (deleted > 0) {
-    void vscode.window.showInformationMessage(`DevDocket: Cleared ${deleted} old history item${deleted === 1 ? '' : 's'}`);
-  } else {
+  const result = await workGraph.clearOldHistory(maxAgeDays);
+  if (result.failed > 0) {
+    void vscode.window.showErrorMessage(
+      `DevDocket: Failed to delete ${result.failed} item(s); see Output for details`,
+    );
+  }
+  if (result.deleted > 0) {
+    void vscode.window.showInformationMessage(`DevDocket: Cleared ${result.deleted} old history item${result.deleted === 1 ? '' : 's'}`);
+  } else if (result.failed === 0) {
     void vscode.window.showInformationMessage('DevDocket: No history items older than the threshold');
   }
 }

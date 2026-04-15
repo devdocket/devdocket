@@ -68,7 +68,7 @@ function createMockWorkGraph(): { [K in keyof UsedWorkGraphMethods]: Mock } {
     findItemByProvenance: vi.fn(),
     moveItem: vi.fn(),
     deleteItem: vi.fn(),
-    clearOldHistory: vi.fn(async () => 0),
+    clearOldHistory: vi.fn(async () => ({ deleted: 0, failed: 0 })),
   };
 }
 
@@ -1924,7 +1924,7 @@ describe('registerCommands', () => {
     it('shows confirmation dialog and clears old history', async () => {
       mockConfig(30);
       (vscode.window.showWarningMessage as Mock).mockResolvedValue('Delete');
-      workGraph.clearOldHistory.mockResolvedValue(5);
+      workGraph.clearOldHistory.mockResolvedValue({ deleted: 5, failed: 0 });
 
       await invoke('devdocket.clearHistory');
 
@@ -1951,7 +1951,7 @@ describe('registerCommands', () => {
     it('shows no-items message when nothing to clear', async () => {
       mockConfig(30);
       (vscode.window.showWarningMessage as Mock).mockResolvedValue('Delete');
-      workGraph.clearOldHistory.mockResolvedValue(0);
+      workGraph.clearOldHistory.mockResolvedValue({ deleted: 0, failed: 0 });
 
       await invoke('devdocket.clearHistory');
 
@@ -1963,7 +1963,7 @@ describe('registerCommands', () => {
     it('uses singular form for 1 day threshold', async () => {
       mockConfig(1);
       (vscode.window.showWarningMessage as Mock).mockResolvedValue('Delete');
-      workGraph.clearOldHistory.mockResolvedValue(1);
+      workGraph.clearOldHistory.mockResolvedValue({ deleted: 1, failed: 0 });
 
       await invoke('devdocket.clearHistory');
 
@@ -1980,7 +1980,7 @@ describe('registerCommands', () => {
     it('falls back to default 30 for invalid config values', async () => {
       mockConfig(NaN);
       (vscode.window.showWarningMessage as Mock).mockResolvedValue('Delete');
-      workGraph.clearOldHistory.mockResolvedValue(0);
+      workGraph.clearOldHistory.mockResolvedValue({ deleted: 0, failed: 0 });
 
       await invoke('devdocket.clearHistory');
 

@@ -642,9 +642,9 @@ describe('WorkGraph', () => {
       await createDoneItem(graph, 'Old', 60);
       await createDoneItem(graph, 'Recent', 5);
 
-      const deleted = await graph.clearOldHistory(30);
+      const result = await graph.clearOldHistory(30);
 
-      expect(deleted).toBe(1);
+      expect(result.deleted).toBe(1);
       expect(graph.getItemsByState(WorkItemState.Done)).toHaveLength(1);
       expect(graph.getItemsByState(WorkItemState.Done)[0].title).toBe('Recent');
     });
@@ -653,9 +653,9 @@ describe('WorkGraph', () => {
       await createArchivedItem(graph, 'Old archived', 90);
       await createDoneItem(graph, 'Recent done', 5);
 
-      const deleted = await graph.clearOldHistory(30);
+      const result = await graph.clearOldHistory(30);
 
-      expect(deleted).toBe(1);
+      expect(result.deleted).toBe(1);
       expect(graph.getItemsByState(WorkItemState.Archived)).toHaveLength(0);
     });
 
@@ -666,9 +666,9 @@ describe('WorkGraph', () => {
       await graph.transitionState(ip.id, WorkItemState.InProgress);
       (graph.getItem(ip.id)! as any).updatedAt = Date.now() - 60 * DAY_MS;
 
-      const deleted = await graph.clearOldHistory(30);
+      const result = await graph.clearOldHistory(30);
 
-      expect(deleted).toBe(0);
+      expect(result.deleted).toBe(0);
       expect(graph.getItem(item.id)).toBeDefined();
       expect(graph.getItem(ip.id)).toBeDefined();
     });
@@ -680,15 +680,15 @@ describe('WorkGraph', () => {
       await graph.transitionState(item.id, WorkItemState.Done);
       // updatedAt is recent (just transitioned)
 
-      const deleted = await graph.clearOldHistory(30);
+      const result = await graph.clearOldHistory(30);
 
-      expect(deleted).toBe(0);
+      expect(result.deleted).toBe(0);
       expect(graph.getItem(item.id)).toBeDefined();
     });
 
     it('returns 0 when no history items exist', async () => {
-      const deleted = await graph.clearOldHistory(30);
-      expect(deleted).toBe(0);
+      const result = await graph.clearOldHistory(30);
+      expect(result.deleted).toBe(0);
     });
 
     it('handles boundary: item exactly at cutoff is not deleted', async () => {
@@ -699,10 +699,10 @@ describe('WorkGraph', () => {
         const item = await createDoneItem(graph, 'Boundary', 30);
         (item as any).updatedAt = now - 30 * DAY_MS;
 
-        const deleted = await graph.clearOldHistory(30);
+        const result = await graph.clearOldHistory(30);
 
         // At exactly the cutoff, updatedAt === cutoff, filter is <, so not deleted
-        expect(deleted).toBe(0);
+        expect(result.deleted).toBe(0);
       } finally {
         vi.useRealTimers();
       }
@@ -722,9 +722,10 @@ describe('WorkGraph', () => {
         return origImpl(id);
       });
 
-      const deleted = await graph.clearOldHistory(30);
+      const result = await graph.clearOldHistory(30);
 
-      expect(deleted).toBe(1);
+      expect(result.deleted).toBe(1);
+      expect(result.failed).toBe(1);
       expect(callCount).toBe(2);
       // Old1 should still exist (delete failed before items.delete ran)
       expect(graph.getItem(old1.id)).toBeDefined();
