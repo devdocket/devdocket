@@ -49,6 +49,12 @@
             "sources": { "type": "string", "enum": ["flat", "tree"], "default": "tree" }
           },
           "additionalProperties": false
+        },
+        "devdocket.historyClearDays": {
+          "type": "number",
+          "default": 30,
+          "minimum": 1,
+          "description": "Age threshold in days for the Clear Old History command. Items older than this are removed."
         }
       }
     },
@@ -308,6 +314,12 @@
         "icon": "$(trash)"
       },
       {
+        "command": "devdocket.clearHistory",
+        "title": "Clear Old History",
+        "category": "DevDocket",
+        "icon": "$(clear-all)"
+      },
+      {
         "command": "devdocket.moveToQueue",
         "title": "Move to Queue",
         "category": "DevDocket",
@@ -365,6 +377,11 @@
         {
           "command": "devdocket.switchHistoryToFlat",
           "when": "view == devdocket.history && devdocket.historyLayout == tree",
+          "group": "navigation"
+        },
+        {
+          "command": "devdocket.clearHistory",
+          "when": "view == devdocket.history",
           "group": "navigation"
         },
         {

@@ -371,6 +371,26 @@ export class WorkGraph {
     }
   }
 
+  /**
+   * Delete all history items (Done and Archived) whose `updatedAt` is older than the given age in days.
+   * Returns the number of items deleted.
+   */
+  async clearOldHistory(maxAgeDays: number): Promise<number> {
+    const cutoff = Date.now() - maxAgeDays * 24 * 60 * 60 * 1000;
+    const toDelete = this.getItemsByState(WorkItemState.Done, WorkItemState.Archived)
+      .filter(item => item.updatedAt < cutoff);
+
+    if (toDelete.length === 0) {
+      return 0;
+    }
+
+    for (const item of toDelete) {
+      await this.deleteItem(item.id);
+    }
+
+    return toDelete.length;
+  }
+
   /** Permanently delete a work item from the store. */
   async deleteItem(id: string): Promise<void> {
     const item = this.items.get(id);
