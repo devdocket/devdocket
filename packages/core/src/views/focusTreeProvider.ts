@@ -72,16 +72,6 @@ export class FocusTreeProvider extends WorkItemViewProvider implements vscode.Tr
         return Number.MAX_SAFE_INTEGER;
     }
   }
-  private getStateLabel(state: WorkItemState): string {
-    switch (state) {
-      case WorkItemState.InProgress:
-        return 'in progress';
-      case WorkItemState.Paused:
-        return 'paused';
-      default:
-        return state;
-    }
-  }
 
   private getIcon(state: WorkItemState): vscode.ThemeIcon {
     switch (state) {
