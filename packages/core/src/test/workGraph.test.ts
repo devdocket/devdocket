@@ -692,14 +692,20 @@ describe('WorkGraph', () => {
     });
 
     it('handles boundary: item exactly at cutoff is not deleted', async () => {
-      const item = await createDoneItem(graph, 'Boundary', 30);
-      // Set updatedAt to exactly the cutoff (not strictly less than)
-      (item as any).updatedAt = Date.now() - 30 * DAY_MS;
+      vi.useFakeTimers();
+      const now = new Date('2025-06-15T12:00:00Z').getTime();
+      vi.setSystemTime(now);
+      try {
+        const item = await createDoneItem(graph, 'Boundary', 30);
+        (item as any).updatedAt = now - 30 * DAY_MS;
 
-      const deleted = await graph.clearOldHistory(30);
+        const deleted = await graph.clearOldHistory(30);
 
-      // At exactly the cutoff, updatedAt === cutoff, filter is <, so not deleted
-      expect(deleted).toBe(0);
+        // At exactly the cutoff, updatedAt === cutoff, filter is <, so not deleted
+        expect(deleted).toBe(0);
+      } finally {
+        vi.useRealTimers();
+      }
     });
 
     it('continues deleting after a single item fails', async () => {
