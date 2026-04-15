@@ -381,7 +381,7 @@ export class WorkGraph {
     if (!Number.isFinite(maxAgeDays) || maxAgeDays < 1) {
       return 0;
     }
-    const days = Math.round(maxAgeDays);
+    const days = Math.ceil(maxAgeDays);
     const cutoff = Date.now() - days * DAY_MS;
     const toDelete = this.getItemsByState(WorkItemState.Done, WorkItemState.Archived)
       .filter(item => item.updatedAt < cutoff);
