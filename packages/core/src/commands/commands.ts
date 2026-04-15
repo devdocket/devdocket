@@ -451,7 +451,7 @@ async function acceptSingleInboxItem(
   try {
     createdItem = await workGraph.createItem(
       { title: formatItemTitle(item) },
-      { providerId: item.providerId, externalId: item.externalId, url: item.url, ...(group ? { group } : {}) },
+      { providerId: item.providerId, externalId: item.externalId, url: item.url, group: group || undefined },
     );
   } catch (err: unknown) {
     handleCommandError('Failed to accept inbox item', err);
@@ -514,7 +514,7 @@ async function acceptToFocusSingleInboxItem(
     try {
       createdItem = await workGraph.createItem(
         { title: formatItemTitle(item) },
-        { providerId: item.providerId, externalId: item.externalId, url: item.url, ...(group ? { group } : {}) },
+        { providerId: item.providerId, externalId: item.externalId, url: item.url, group: group || undefined },
       );
     } catch (err: unknown) {
       handleCommandError('Failed to accept inbox item to Focus', err);
@@ -574,7 +574,7 @@ async function batchAcceptToFocusItems(
     try {
       const createdItem = await workGraph.createItem(
         { title: formatItemTitle(item) },
-        { providerId: item.providerId, externalId: item.externalId, url: item.url, ...(group ? { group } : {}) },
+        { providerId: item.providerId, externalId: item.externalId, url: item.url, group: group || undefined },
       );
       createdIds.push(createdItem.id);
       allIds.push(createdItem.id);
@@ -728,7 +728,7 @@ async function acceptSingleSourceItem(
   try {
     createdItem = await workGraph.createItem(
       { title: formatItemTitle(item) },
-      { providerId: item.providerId, externalId: item.externalId, url: item.url, ...(group ? { group } : {}) },
+      { providerId: item.providerId, externalId: item.externalId, url: item.url, group: group || undefined },
     );
   } catch (err: unknown) {
     handleCommandError('Failed to accept sources item', err);
