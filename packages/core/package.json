@@ -51,7 +51,7 @@
           "additionalProperties": false
         },
         "devdocket.historyClearDays": {
-          "type": "number",
+          "type": "integer",
           "default": 30,
           "minimum": 1,
           "description": "Age threshold in days for the Clear Old History command. Items older than this are removed."
