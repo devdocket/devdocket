@@ -143,14 +143,16 @@ describe('QueueTreeProvider', () => {
       expect(treeItem.description).toBe('my-org/my-repo');
     });
 
-    it('sets description to undefined in tree layout', async () => {
-      provider.layout = 'tree';
+    it('sets description to provider label in tree layout', async () => {
+      const registry = createMockProviderRegistry();
+      const queueWithRegistry = new QueueTreeProvider(graph, registry as any);
+      queueWithRegistry.layout = 'tree';
       const item = await graph.createItem(
         { title: 'Tree item' },
         { providerId: 'github', externalId: 'ext-tree', group: 'octocat/repo' },
       );
-      const treeItem = provider.getTreeItem(item);
-      expect(treeItem.description).toBeUndefined();
+      const treeItem = queueWithRegistry.getTreeItem(item);
+      expect(treeItem.description).toBe('GitHub Issues');
     });
 
     it('sets contextValue to "queueItem.hasUrl" when item has url', async () => {
