@@ -41,7 +41,7 @@ export class ProviderRegistry {
   /** Fired when new unseen items are added to the inbox, with the count of new items. */
   readonly onDidAddNewUnseenItems = this._onDidAddNewUnseenItems.event;
   private readonly _onDidChangeProviderHealth = new vscode.EventEmitter<string>();
-  /** Fired when a provider's health status changes, with the provider ID. */
+  /** Fired when a provider's health info changes (status, lastError, or lastRefreshTime), with the provider ID. */
   readonly onDidChangeProviderHealth = this._onDidChangeProviderHealth.event;
   private readonly healthStatus = new Map<string, ProviderHealthStatus>();
   private readonly _loadingProviders = new Set<string>();
