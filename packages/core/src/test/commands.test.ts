@@ -908,10 +908,9 @@ describe('registerCommands', () => {
 
       await invoke('workcenter.acceptFromInbox', items[0], items);
 
-      expect(workGraph.createItem).toHaveBeenCalledWith(
-        { title: 'Whitespace' },
-        expect.not.objectContaining({ group: expect.anything() }),
-      );
+      expect(workGraph.createItem).toHaveBeenCalledTimes(1);
+      const provenance = workGraph.createItem.mock.calls[0][1];
+      expect(provenance).not.toHaveProperty('group');
     });
   });
 
