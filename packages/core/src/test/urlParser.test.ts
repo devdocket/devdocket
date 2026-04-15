@@ -47,6 +47,11 @@ describe('parseSourceUrl', () => {
       const result = parseSourceUrl('https://github.com/my%20org/my%20repo/pull/10');
       expect(result).toEqual({ type: 'github-pr', owner: 'my org', repo: 'my repo', number: 10 });
     });
+
+    it('handles mixed-case scheme and hostname', () => {
+      const result = parseSourceUrl('HTTPS://GitHub.COM/owner/repo/pull/99');
+      expect(result).toEqual({ type: 'github-pr', owner: 'owner', repo: 'repo', number: 99 });
+    });
   });
 
   describe('Azure DevOps PR URLs', () => {
