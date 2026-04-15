@@ -39,6 +39,13 @@ export class WalkthroughParticipant {
       ];
     }
 
+    if (phase === 'lastFile') {
+      return [
+        { prompt: 'Go deeper — show callers and related code', label: '🔍 Go deeper' },
+        { prompt: 'Wrap up — show the final summary', label: '✅ Wrap up' },
+      ];
+    }
+
     // During file-by-file walkthrough (default)
     return [
       { prompt: 'Continue to the next file', label: '▶️ Next file' },
@@ -138,8 +145,8 @@ export class WalkthroughParticipant {
           properties: {
             phase: {
               type: 'string' as const,
-              enum: ['summary', 'walkthrough', 'wrapup'],
-              description: 'Current phase: "summary" after presenting the opening overview, "walkthrough" during file-by-file presentation, "wrapup" after the final wrap-up.',
+              enum: ['summary', 'walkthrough', 'lastFile', 'wrapup'],
+              description: 'Current phase: "summary" after presenting the opening overview, "walkthrough" during file-by-file presentation, "lastFile" when presenting the last file in the reading order, "wrapup" after the final wrap-up.',
             },
           },
           required: ['phase'],

@@ -30,6 +30,22 @@ Key files:
 
 ## Learnings
 
+### PR #256 — provideFollowups + lastFile Phase Tests (2026-07-23)
+
+**Tests added:** 7 new tests in `packages/ai-reviewer/src/test/walkthroughParticipant.test.ts` (12 → 19)
+
+**New describe block: `provideFollowups`** — 6 tests covering all phase→button mappings:
+- `summary` → 3 buttons (Start walkthrough, Adjust order, Skip to wrap-up)
+- `lastFile` → 2 buttons (Go deeper, Wrap up) — new phase added in PR #252
+- `walkthrough` → 3 buttons (Next file, Go deeper, Wrap up)
+- `wrapup` / `error` / `no-url` → empty array
+
+**New handleRequest test:** `signalPhase with lastFile updates ChatResult metadata` — mirrors existing `wrapup` signalPhase test pattern.
+
+**Testing pattern: accessing `followupProvider`** — After `participant.register()`, the mock `chat.createChatParticipant` return value has its `followupProvider` property set by production code. Access via `vi.mocked(chat.createChatParticipant).mock.results[0].value.followupProvider` to call `provideFollowups` directly with controlled `ChatResult` metadata.
+
+**Gotcha: multi-worktree environment** — Main worktree (`C:\repos\workcenter`) may be on a different branch. Use `git worktree add` to create a dedicated worktree for the target branch, install deps, run tests, commit, and push from there.
+
 ### Phase 2 Test Writing (2026-03-24)
 
 **Tests added:** 42 new tests across 4 files (19 core + 23 github)

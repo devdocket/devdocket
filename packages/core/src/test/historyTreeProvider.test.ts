@@ -185,6 +185,57 @@ describe('HistoryTreeProvider', () => {
       expect((treeItem.iconPath as any).id).toBe('archive');
     });
 
+    it('should show "group · done" when Done item has a group', () => {
+      const item = makeItem({ id: '1', title: 'Done task', state: WorkItemState.Done, group: 'octocat/repo' });
+      const treeItem = provider.getTreeItem(item);
+      expect(treeItem.description).toBe('octocat/repo · done');
+    });
+
+    it('should show "group · archived" when Archived item has a group', () => {
+      const item = makeItem({ id: '1', title: 'Old task', state: WorkItemState.Archived, group: 'octocat/repo' });
+      const treeItem = provider.getTreeItem(item);
+      expect(treeItem.description).toBe('octocat/repo · archived');
+    });
+
+    it('should show "group · providerLabel · done" when item has group and providerId', () => {
+      const mockRegistry = {
+        getProviderLabel: vi.fn((id: string) => id === 'github' ? 'GitHub Issues' : id),
+        onDidRegisterProvider: new EventEmitter<void>().event,
+        getDiscoveredItems: vi.fn(() => []),
+        onDidChangeDiscoveredItems: new EventEmitter<void>().event,
+      };
+      const providerWithRegistry = new HistoryTreeProvider(workGraph as any, mockRegistry as any);
+      const item = makeItem({ id: '1', title: 'PR fix', state: WorkItemState.Done, group: 'octocat/repo', providerId: 'github' });
+      const treeItem = providerWithRegistry.getTreeItem(item);
+      expect(treeItem.description).toBe('octocat/repo · GitHub Issues · done');
+    });
+
+    it('should show "providerLabel · done" when item has providerId but no group', () => {
+      const mockRegistry = {
+        getProviderLabel: vi.fn((id: string) => id === 'github' ? 'GitHub Issues' : id),
+        onDidRegisterProvider: new EventEmitter<void>().event,
+        getDiscoveredItems: vi.fn(() => []),
+        onDidChangeDiscoveredItems: new EventEmitter<void>().event,
+      };
+      const providerWithRegistry = new HistoryTreeProvider(workGraph as any, mockRegistry as any);
+      const item = makeItem({ id: '1', title: 'Task', state: WorkItemState.Done, providerId: 'github' });
+      const treeItem = providerWithRegistry.getTreeItem(item);
+      expect(treeItem.description).toBe('GitHub Issues · done');
+    });
+
+    it('should show state only when group is undefined', () => {
+      const item = makeItem({ id: '1', title: 'Task', state: WorkItemState.Done, group: undefined });
+      const treeItem = provider.getTreeItem(item);
+      expect(treeItem.description).toBe('done');
+    });
+
+    it('should omit group in tree layout', () => {
+      provider.layout = 'tree';
+      const item = makeItem({ id: '1', title: 'Done task', state: WorkItemState.Done, group: 'octocat/repo' });
+      const treeItem = provider.getTreeItem(item);
+      expect(treeItem.description).toBe('done');
+    });
+
     it('should use circle-outline icon for unexpected state', () => {
       const item = makeItem({ id: '1', title: 'X', state: WorkItemState.InProgress });
       const treeItem = provider.getTreeItem(item);
