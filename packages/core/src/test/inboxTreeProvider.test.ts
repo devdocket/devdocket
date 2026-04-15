@@ -770,4 +770,60 @@ describe('InboxTreeProvider', () => {
       }
     });
   });
+
+  describe('unhealthy provider rendering', () => {
+    it('shows warning icon for unhealthy provider', () => {
+      registry._setItems('gh', [{ externalId: 'issue-1', title: 'Bug' }]);
+      registry.getProviderHealth.mockReturnValue({
+        status: 'unhealthy',
+        lastError: 'network error',
+        lastRefreshTime: new Date(0),
+      });
+
+      const node = providerNode('gh');
+      const treeItem = provider.getTreeItem(node);
+      expect((treeItem.iconPath as any).id).toBe('warning');
+    });
+
+    it('shows plug icon for healthy provider', () => {
+      registry._setItems('gh', [{ externalId: 'issue-1', title: 'Bug' }]);
+      registry.getProviderHealth.mockReturnValue({
+        status: 'healthy',
+        lastRefreshTime: new Date(),
+      });
+
+      const node = providerNode('gh');
+      const treeItem = provider.getTreeItem(node);
+      expect((treeItem.iconPath as any).id).toBe('plug');
+    });
+
+    it('includes error message in tooltip for unhealthy provider', () => {
+      registry._setItems('gh', [{ externalId: 'issue-1', title: 'Bug' }]);
+      registry.getProviderHealth.mockReturnValue({
+        status: 'unhealthy',
+        lastError: 'connection refused',
+        lastRefreshTime: new Date(0),
+      });
+
+      const node = providerNode('gh');
+      const treeItem = provider.getTreeItem(node);
+      expect(treeItem.tooltip).toBeInstanceOf(MarkdownString);
+      const md = treeItem.tooltip as MarkdownString;
+      expect(md.value).toContain('Refresh failed');
+      expect(md.value).toContain('connection refused');
+    });
+
+    it('shows unhealthy provider even with zero unseen items', () => {
+      registry._setItems('gh', [{ externalId: 'issue-1', title: 'Bug' }]);
+      stateStore._set('gh', 'issue-1', 'accepted');
+      registry.getProviderHealth.mockReturnValue({
+        status: 'unhealthy',
+        lastError: 'timeout',
+      });
+
+      const children = provider.getChildren();
+      expect(children).toHaveLength(1);
+      expect((children[0] as InboxProviderNode).providerId).toBe('gh');
+    });
+  });
 });
