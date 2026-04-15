@@ -4,6 +4,8 @@ import { WorkItem, WorkItemInput, WorkItemState } from '../models/workItem';
 import { ITaskStore } from '../storage/taskStore';
 import { logger } from './logger';
 
+const DAY_MS = 24 * 60 * 60 * 1000;
+
 const VALID_TRANSITIONS: ReadonlyMap<WorkItemState, ReadonlySet<WorkItemState>> = new Map([
   [WorkItemState.New, new Set([WorkItemState.InProgress, WorkItemState.Archived])],
   [WorkItemState.InProgress, new Set([WorkItemState.Paused, WorkItemState.Done, WorkItemState.New, WorkItemState.Archived])],
@@ -380,7 +382,7 @@ export class WorkGraph {
       return 0;
     }
     const days = Math.round(maxAgeDays);
-    const cutoff = Date.now() - days * 24 * 60 * 60 * 1000;
+    const cutoff = Date.now() - days * DAY_MS;
     const toDelete = this.getItemsByState(WorkItemState.Done, WorkItemState.Archived)
       .filter(item => item.updatedAt < cutoff);
 
