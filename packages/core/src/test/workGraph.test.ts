@@ -712,15 +712,14 @@ describe('WorkGraph', () => {
       const old1 = await createDoneItem(graph, 'Old1', 60);
       await createDoneItem(graph, 'Old2', 60);
 
-      // Make store.delete fail for the first item
+      const origImpl = (store.delete as ReturnType<typeof vi.fn>).getMockImplementation()!;
       let callCount = 0;
-      const origDelete = store.delete as ReturnType<typeof vi.fn>;
-      origDelete.mockImplementation(async (id: string) => {
+      (store.delete as ReturnType<typeof vi.fn>).mockImplementation(async (id: string) => {
         callCount++;
         if (id === old1.id) {
           throw new Error('disk full');
         }
-        // Default: succeed (item already removed from mock store by WorkGraph)
+        return origImpl(id);
       });
 
       const deleted = await graph.clearOldHistory(30);
