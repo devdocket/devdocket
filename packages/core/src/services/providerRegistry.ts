@@ -256,7 +256,7 @@ export class ProviderRegistry {
       lastError: status === 'unhealthy' ? lastError : undefined,
     };
     this.healthStatus.set(providerId, next);
-    if (!this._disposed) {
+    if (!this._disposed && (prev?.status !== next.status || prev?.lastError !== next.lastError)) {
       this._onDidChangeProviderHealth.fire(providerId);
     }
   }

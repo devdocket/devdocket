@@ -198,8 +198,11 @@ export class SourcesTreeProvider implements vscode.TreeDataProvider<SourcesEleme
       md.appendMarkdown(`Last refreshed: ${formatRelativeTime(health.lastRefreshTime)}\n\n`);
     }
     if (health.status === 'unhealthy' && health.lastError) {
-      md.appendMarkdown(`$(warning) **Refresh failed:** ${health.lastError}\n\n`);
+      md.appendMarkdown(`$(warning) **Refresh failed:** `);
+      md.appendText(health.lastError);
+      md.appendMarkdown(`\n\n`);
     }
+    md.supportThemeIcons = true;
     return md;
   }
 
