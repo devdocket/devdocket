@@ -1,6 +1,6 @@
 /**
  * Format a Date as a human-readable relative time string (e.g. "2 minutes ago").
- * Falls back to an absolute timestamp for durations longer than 24 hours.
+ * Falls back to an absolute timestamp for durations of 24 hours or more.
  */
 export function formatRelativeTime(date: Date): string {
   const now = Date.now();
