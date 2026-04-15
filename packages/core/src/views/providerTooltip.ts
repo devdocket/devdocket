@@ -12,7 +12,9 @@ export function buildProviderTooltip(label: string, health: ProviderHealthStatus
   md.appendText(label);
   md.appendMarkdown(`**\n\n`);
   if (health.lastRefreshTime) {
-    md.appendMarkdown(`Last refreshed: ${formatRelativeTime(health.lastRefreshTime)}\n\n`);
+    md.appendMarkdown(`Last refreshed: `);
+    md.appendText(formatRelativeTime(health.lastRefreshTime));
+    md.appendMarkdown(`\n\n`);
   }
   if (health.status === 'unhealthy' && health.lastError) {
     md.appendMarkdown(`$(warning) **Refresh failed:** `);
