@@ -108,6 +108,10 @@ export class WorkItemEditorPanel {
     });
   }
 
+  private isProviderManaged(item: WorkItem): boolean {
+    return !!(item.providerId && this.providerRegistry.getProvider(item.providerId));
+  }
+
   private async saveData(data: Record<string, string>): Promise<void> {
     const item = this.workGraph.getItem(this.itemId);
     if (!item) {
@@ -115,7 +119,7 @@ export class WorkItemEditorPanel {
     }
     const patch: Partial<WorkItemInput> = {};
 
-    if (!item.providerId) {
+    if (!this.isProviderManaged(item)) {
       if (!data.title) {
         return;
       }
@@ -131,7 +135,7 @@ export class WorkItemEditorPanel {
     }
 
     await this.workGraph.updateItem(this.itemId, patch);
-    if (!this.disposed && data.title && !item.providerId) {
+    if (!this.disposed && data.title && !this.isProviderManaged(item)) {
       this.panel.title = `Edit: ${data.title}`;
     }
   }
@@ -158,6 +162,7 @@ export class WorkItemEditorPanel {
       item,
       providerLabel: this.providerLabel,
       providerDescription,
+      titleReadonly: this.isProviderManaged(item),
     });
   }
 
