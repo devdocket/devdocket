@@ -189,9 +189,13 @@ export class GitHubPrReviewProvider extends BaseGitHubProvider {
             if (data.head?.sha) {
               result.set(pr.html_url, data.head.sha);
             }
+          } else {
+            logger.debug(
+              `Failed to fetch head SHA for PR ${pr.html_url}: ${response.status} ${response.statusText}`,
+            );
           }
-        } catch {
-          // Silently skip — version tracking is best-effort
+        } catch (error) {
+          logger.debug(`Failed to fetch head SHA for PR ${pr.html_url}: ${String(error)}`);
         }
       }
     };
