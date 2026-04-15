@@ -11,6 +11,8 @@ import type { InboxItem, InboxProviderNode, InboxGroupNode } from '../views/inbo
 import type { SourceItemNode, SourceProviderNode, SourceGroupNode } from '../views/sourcesTreeProvider';
 import { WorkItemEditorPanel } from '../views/workItemEditorPanel';
 import { logger } from '../services/logger';
+import { parseSourceUrl } from '../services/urlParser';
+import { fetchItemDetails } from '../services/urlFetcher';
 
 vi.mock('../services/logger', () => ({
   logger: {
@@ -18,6 +20,14 @@ vi.mock('../services/logger', () => ({
     warn: vi.fn(),
     error: vi.fn(),
   },
+}));
+
+vi.mock('../services/urlParser', () => ({
+  parseSourceUrl: vi.fn(),
+}));
+
+vi.mock('../services/urlFetcher', () => ({
+  fetchItemDetails: vi.fn(),
 }));
 
 // ── helpers ──────────────────────────────────────────────────────────
@@ -183,6 +193,7 @@ describe('registerCommands', () => {
       'devdocket.dismissFromInbox',
       'devdocket.acceptFromSources',
       'devdocket.dismissFromSources',
+      'devdocket.createItemFromUrl',
     ];
     for (const cmd of expected) {
       expect(commandHandlers.has(cmd), `missing command: ${cmd}`).toBe(true);
@@ -232,6 +243,68 @@ describe('registerCommands', () => {
       await invoke('devdocket.createItem');
 
       expect(workGraph.createItem).not.toHaveBeenCalled();
+    });
+  });
+
+  // ── createItemFromUrl ───────────────────────────────────────────
+
+  describe('devdocket.createItemFromUrl', () => {
+    const fakeDetails = {
+      title: 'owner/repo#42: Fix bug',
+      notes: 'Description',
+      url: 'https://github.com/owner/repo/pull/42',
+      group: 'owner/repo',
+    };
+
+    beforeEach(() => {
+      vi.mocked(parseSourceUrl).mockReturnValue({ type: 'github-pr', owner: 'owner', repo: 'repo', number: 42 });
+      vi.mocked(fetchItemDetails).mockResolvedValue(fakeDetails);
+      workGraph.findItemByProvenance.mockReturnValue(undefined);
+      workGraph.createItem.mockResolvedValue(createWorkItem({ providerId: 'url-import', externalId: fakeDetails.url }));
+    });
+
+    it('creates item when user provides a valid URL', async () => {
+      (vscode.window.showInputBox as Mock).mockResolvedValue('https://github.com/owner/repo/pull/42');
+      await invoke('devdocket.createItemFromUrl');
+
+      expect(workGraph.createItem).toHaveBeenCalled();
+      expect(vscode.window.showInformationMessage).toHaveBeenCalledWith(
+        expect.stringContaining('Created'),
+      );
+    });
+
+    it('does nothing when user cancels the input box', async () => {
+      (vscode.window.showInputBox as Mock).mockResolvedValue(undefined);
+      await invoke('devdocket.createItemFromUrl');
+
+      expect(workGraph.createItem).not.toHaveBeenCalled();
+      expect(fetchItemDetails).not.toHaveBeenCalled();
+    });
+
+    it('opens existing item instead of creating duplicate', async () => {
+      const existing = createWorkItem({ id: 'existing-1', providerId: 'url-import' });
+      workGraph.findItemByProvenance.mockReturnValue(existing);
+      (vscode.window.showInputBox as Mock).mockResolvedValue('https://github.com/owner/repo/pull/42');
+      await invoke('devdocket.createItemFromUrl');
+
+      expect(workGraph.createItem).not.toHaveBeenCalled();
+      expect(WorkItemEditorPanel.open).toHaveBeenCalledWith(
+        expect.anything(), expect.anything(), expect.anything(), existing, undefined,
+      );
+      expect(vscode.window.showInformationMessage).toHaveBeenCalledWith(
+        'DevDocket: Item already exists for this URL',
+      );
+    });
+
+    it('shows error for unsupported URL format', async () => {
+      vi.mocked(parseSourceUrl).mockReturnValue(undefined);
+      (vscode.window.showInputBox as Mock).mockResolvedValue('https://invalid.com/something');
+      await invoke('devdocket.createItemFromUrl');
+
+      expect(workGraph.createItem).not.toHaveBeenCalled();
+      expect(vscode.window.showErrorMessage).toHaveBeenCalledWith(
+        'DevDocket: Unsupported URL format',
+      );
     });
   });
 
