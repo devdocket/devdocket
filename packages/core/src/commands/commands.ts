@@ -254,9 +254,22 @@ async function handleCreateItemFromUrl(
   }
 
   const details = await vscode.window.withProgress(
-    { location: vscode.ProgressLocation.Notification, title: 'DevDocket: Fetching item details…' },
-    () => fetchItemDetails(parsed),
+    { location: vscode.ProgressLocation.Notification, title: 'DevDocket: Fetching item details…', cancellable: true },
+    (_progress, token) => {
+      const controller = new AbortController();
+      token.onCancellationRequested(() => controller.abort());
+      return fetchItemDetails(parsed, controller.signal);
+    },
   );
+
+  // Prevent duplicate items for the same URL
+  const existing = workGraph.findItemByProvenance('url-import', details.url);
+  if (existing) {
+    const providerLabel = existing.providerId ? labelCache.get(existing.providerId) : undefined;
+    WorkItemEditorPanel.open(context, workGraph, providerRegistry, existing, providerLabel);
+    void vscode.window.showInformationMessage('DevDocket: Item already exists for this URL');
+    return;
+  }
 
   const createdItem = await workGraph.createItem(
     { title: details.title, notes: details.notes },

@@ -19,16 +19,16 @@ export interface FetchedItemDetails {
  * Fetch details for a parsed source URL.
  * Throws on network or API errors with a user-friendly message.
  */
-export async function fetchItemDetails(parsed: ParsedUrl): Promise<FetchedItemDetails> {
+export async function fetchItemDetails(parsed: ParsedUrl, signal?: AbortSignal): Promise<FetchedItemDetails> {
   switch (parsed.type) {
     case 'github-pr':
-      return fetchGitHubPr(parsed.owner, parsed.repo, parsed.number);
+      return fetchGitHubPr(parsed.owner, parsed.repo, parsed.number, signal);
     case 'ado-pr':
-      return fetchAdoPr(parsed.org, parsed.project, parsed.repo, parsed.id);
+      return fetchAdoPr(parsed.org, parsed.project, parsed.repo, parsed.id, signal);
   }
 }
 
-async function fetchGitHubPr(owner: string, repo: string, number: number): Promise<FetchedItemDetails> {
+async function fetchGitHubPr(owner: string, repo: string, number: number, signal?: AbortSignal): Promise<FetchedItemDetails> {
   const apiUrl = `https://api.github.com/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/pulls/${number}`;
   const headers: Record<string, string> = {
     'Accept': 'application/vnd.github+json',
@@ -45,10 +45,13 @@ async function fetchGitHubPr(owner: string, repo: string, number: number): Promi
     logger.debug('No GitHub auth session available, using unauthenticated request');
   }
 
-  const response = await fetch(apiUrl, { headers });
+  const response = await fetch(apiUrl, { headers, signal });
   if (!response.ok) {
     if (response.status === 404) {
       throw new Error(`GitHub PR not found: ${owner}/${repo}#${number}. It may be private or deleted.`);
+    }
+    if (response.status === 401 || response.status === 403) {
+      throw new Error(`GitHub access denied for ${owner}/${repo}#${number}. The repo may be private — sign in to GitHub in VS Code, or check rate limits.`);
     }
     throw new Error(`GitHub API error: ${response.status} ${response.statusText}`);
   }
@@ -63,7 +66,7 @@ async function fetchGitHubPr(owner: string, repo: string, number: number): Promi
   };
 }
 
-async function fetchAdoPr(org: string, project: string, repo: string, id: number): Promise<FetchedItemDetails> {
+async function fetchAdoPr(org: string, project: string, repo: string, id: number, signal?: AbortSignal): Promise<FetchedItemDetails> {
   const apiUrl = `https://dev.azure.com/${encodeURIComponent(org)}/${encodeURIComponent(project)}/_apis/git/repositories/${encodeURIComponent(repo)}/pullrequests/${id}?api-version=7.1`;
   const headers: Record<string, string> = {
     'Accept': 'application/json',
@@ -82,7 +85,7 @@ async function fetchAdoPr(org: string, project: string, repo: string, id: number
     logger.debug('No Azure DevOps auth session available, using unauthenticated request');
   }
 
-  const response = await fetch(apiUrl, { headers });
+  const response = await fetch(apiUrl, { headers, signal });
   if (!response.ok) {
     if (response.status === 404) {
       throw new Error(`ADO PR not found: ${org}/${project}/${repo}!${id}. It may be private or deleted.`);

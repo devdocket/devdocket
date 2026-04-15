@@ -1,0 +1,127 @@
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { fetchItemDetails } from '../services/urlFetcher';
+import type { ParsedUrl } from '../services/urlParser';
+
+vi.mock('../services/logger', () => ({
+  logger: { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() },
+}));
+
+// Store original fetch so we can restore it
+const originalFetch = globalThis.fetch;
+
+describe('fetchItemDetails', () => {
+  let mockFetch: ReturnType<typeof vi.fn>;
+
+  beforeEach(() => {
+    mockFetch = vi.fn();
+    globalThis.fetch = mockFetch;
+  });
+
+  afterEach(() => {
+    globalThis.fetch = originalFetch;
+  });
+
+  describe('GitHub PR', () => {
+    const parsed: ParsedUrl = { type: 'github-pr', owner: 'octocat', repo: 'hello', number: 42 };
+
+    it('returns details on successful fetch', async () => {
+      mockFetch.mockResolvedValue({
+        ok: true,
+        json: async () => ({ title: 'Fix bug', body: 'Some description', html_url: 'https://github.com/octocat/hello/pull/42' }),
+      });
+
+      const result = await fetchItemDetails(parsed);
+      expect(result).toEqual({
+        title: 'octocat/hello#42: Fix bug',
+        notes: 'Some description',
+        url: 'https://github.com/octocat/hello/pull/42',
+        group: 'octocat/hello',
+      });
+    });
+
+    it('uses empty string for null body', async () => {
+      mockFetch.mockResolvedValue({
+        ok: true,
+        json: async () => ({ title: 'No body', body: null, html_url: 'https://github.com/octocat/hello/pull/42' }),
+      });
+
+      const result = await fetchItemDetails(parsed);
+      expect(result.notes).toBe('');
+    });
+
+    it('throws on 404', async () => {
+      mockFetch.mockResolvedValue({ ok: false, status: 404, statusText: 'Not Found' });
+      await expect(fetchItemDetails(parsed)).rejects.toThrow(/not found/i);
+    });
+
+    it('throws with auth message on 403', async () => {
+      mockFetch.mockResolvedValue({ ok: false, status: 403, statusText: 'Forbidden' });
+      await expect(fetchItemDetails(parsed)).rejects.toThrow(/access denied/i);
+    });
+
+    it('throws with auth message on 401', async () => {
+      mockFetch.mockResolvedValue({ ok: false, status: 401, statusText: 'Unauthorized' });
+      await expect(fetchItemDetails(parsed)).rejects.toThrow(/access denied/i);
+    });
+
+    it('throws generic error on other status codes', async () => {
+      mockFetch.mockResolvedValue({ ok: false, status: 500, statusText: 'Internal Server Error' });
+      await expect(fetchItemDetails(parsed)).rejects.toThrow(/GitHub API error: 500/);
+    });
+
+    it('passes abort signal to fetch', async () => {
+      const controller = new AbortController();
+      mockFetch.mockResolvedValue({
+        ok: true,
+        json: async () => ({ title: 'T', body: null, html_url: 'https://github.com/o/r/pull/1' }),
+      });
+
+      await fetchItemDetails(parsed, controller.signal);
+      expect(mockFetch).toHaveBeenCalledWith(expect.any(String), expect.objectContaining({ signal: controller.signal }));
+    });
+  });
+
+  describe('ADO PR', () => {
+    const parsed: ParsedUrl = { type: 'ado-pr', org: 'myorg', project: 'myproj', repo: 'myrepo', id: 7 };
+
+    it('returns details on successful fetch', async () => {
+      mockFetch.mockResolvedValue({
+        ok: true,
+        json: async () => ({ title: 'ADO fix', description: 'ADO desc' }),
+      });
+
+      const result = await fetchItemDetails(parsed);
+      expect(result).toEqual({
+        title: 'myorg/myproj#7: ADO fix',
+        notes: 'ADO desc',
+        url: 'https://dev.azure.com/myorg/myproj/_git/myrepo/pullrequest/7',
+        group: 'myorg/myproj',
+      });
+    });
+
+    it('uses empty string for null description', async () => {
+      mockFetch.mockResolvedValue({
+        ok: true,
+        json: async () => ({ title: 'No desc', description: null }),
+      });
+
+      const result = await fetchItemDetails(parsed);
+      expect(result.notes).toBe('');
+    });
+
+    it('throws on 404', async () => {
+      mockFetch.mockResolvedValue({ ok: false, status: 404, statusText: 'Not Found' });
+      await expect(fetchItemDetails(parsed)).rejects.toThrow(/not found/i);
+    });
+
+    it('throws with auth message on 401', async () => {
+      mockFetch.mockResolvedValue({ ok: false, status: 401, statusText: 'Unauthorized' });
+      await expect(fetchItemDetails(parsed)).rejects.toThrow(/authentication required/i);
+    });
+
+    it('throws with auth message on 403', async () => {
+      mockFetch.mockResolvedValue({ ok: false, status: 403, statusText: 'Forbidden' });
+      await expect(fetchItemDetails(parsed)).rejects.toThrow(/authentication required/i);
+    });
+  });
+});
