@@ -9,7 +9,7 @@ describe('ProviderLabelCache', () => {
   let tmpDir: string;
 
   beforeEach(async () => {
-    tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'workcenter-label-cache-test-'));
+    tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'devdocket-label-cache-test-'));
   });
 
   afterEach(async () => {

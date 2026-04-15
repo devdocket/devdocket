@@ -1,18 +1,18 @@
-import { WorkCenterApi, WorkCenterProvider, WorkCenterAction, Disposable } from './types';
+import { DevDocketApi, DevDocketProvider, DevDocketAction, Disposable } from './types';
 import { ProviderRegistry } from '../services/providerRegistry';
 import { ActionRegistry } from '../services/actionRegistry';
 
-export class WorkCenterApiImpl implements WorkCenterApi {
+export class DevDocketApiImpl implements DevDocketApi {
   constructor(
     private readonly providerRegistry: ProviderRegistry,
     private readonly actionRegistry: ActionRegistry,
   ) {}
 
-  registerProvider(provider: WorkCenterProvider): Disposable {
+  registerProvider(provider: DevDocketProvider): Disposable {
     return this.providerRegistry.register(provider);
   }
 
-  registerAction(action: WorkCenterAction): Disposable {
+  registerAction(action: DevDocketAction): Disposable {
     return this.actionRegistry.register(action);
   }
 }

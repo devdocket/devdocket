@@ -1,6 +1,6 @@
 # Project Context
 
-- **Project:** workcenter
+- **Project:** devdocket
 - **Created:** 2026-03-23
 
 ## Core Context

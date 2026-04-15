@@ -20,7 +20,7 @@ export interface DiscoveredItem {
   reason?: string;
 }
 
-export interface WorkCenterProvider {
+export interface DevDocketProvider {
   readonly id: string;
   readonly label: string;
   readonly onDidDiscoverItems: Event<DiscoveredItem[]>;
@@ -36,7 +36,7 @@ export interface GitHubIssue {
   pull_request?: unknown;
 }
 
-export abstract class BaseGitHubProvider implements WorkCenterProvider {
+export abstract class BaseGitHubProvider implements DevDocketProvider {
   abstract readonly id: string;
   abstract readonly label: string;
 
@@ -96,7 +96,7 @@ export abstract class BaseGitHubProvider implements WorkCenterProvider {
         if (isUserTriggered) {
           const message = err instanceof Error ? err.message : String(err);
           logger.error('GitHub authentication failed', err);
-          vscode.window.showWarningMessage(`WorkCenter GitHub: Authentication failed — ${message}`);
+          vscode.window.showWarningMessage(`DevDocket GitHub: Authentication failed — ${message}`);
         } else {
           logger.warn('GitHub authentication failed during background refresh', err);
         }

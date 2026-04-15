@@ -8,7 +8,7 @@ export class AiReviewAction extends BasePrAction {
   readonly id = 'ai-reviewer.review';
   readonly label = 'AI Code Review';
 
-  protected readonly configSection = 'workcenterAiReview';
+  protected readonly configSection = 'devdocketAiReview';
   protected readonly defaultPromptContent = DEFAULT_REVIEW_PROMPT;
   protected readonly progressTitle = 'AI Code Review';
   protected readonly outputHeader = '# AI Code Review\n\n';

@@ -59,7 +59,7 @@ const window = {
     show: vi.fn(),
     hide: vi.fn(),
     dispose: vi.fn(),
-    name: 'WorkCenter ADO',
+    name: 'DevDocket ADO',
     replace: vi.fn(),
   })),
 };

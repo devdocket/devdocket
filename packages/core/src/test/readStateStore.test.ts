@@ -12,7 +12,7 @@ describe('ReadStateStore', () => {
   let store: ReadStateStore;
 
   beforeEach(async () => {
-    tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'workcenter-readstate-test-'));
+    tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'devdocket-readstate-test-'));
     store = new ReadStateStore(tmpDir);
   });
 

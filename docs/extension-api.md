@@ -1,31 +1,31 @@
-# WorkCenter Extension API
+# DevDocket Extension API
 
-This document describes the WorkCenter extension API for developers building provider extensions or action plugins. Providers discover work items from external sources; actions operate on work items to automate workflows.
+This document describes the DevDocket extension API for developers building provider extensions or action plugins. Providers discover work items from external sources; actions operate on work items to automate workflows.
 
 ## Getting Started
 
 ### Extension Dependency
 
-Your extension must declare a dependency on WorkCenter so that VS Code activates WorkCenter first:
+Your extension must declare a dependency on DevDocket so that VS Code activates DevDocket first:
 
 ```jsonc
 // package.json
 {
-  "extensionDependencies": ["mthalman.workcenter"]
+  "extensionDependencies": ["mthalman.devdocket"]
 }
 ```
 
 ### Acquiring the API
 
-In your extension's `activate()` function, acquire the `WorkCenterApi` from the core extension:
+In your extension's `activate()` function, acquire the `DevDocketApi` from the core extension:
 
 ```ts
 import * as vscode from 'vscode';
 
 export async function activate(context: vscode.ExtensionContext): Promise<void> {
-  const coreExtension = vscode.extensions.getExtension('mthalman.workcenter');
+  const coreExtension = vscode.extensions.getExtension('mthalman.devdocket');
   if (!coreExtension) {
-    vscode.window.showErrorMessage('WorkCenter core extension not found. Please install and enable "mthalman.workcenter".');
+    vscode.window.showErrorMessage('DevDocket core extension not found. Please install and enable "mthalman.devdocket".');
     return;
   }
 
@@ -35,8 +35,8 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
       ? coreExtension.exports
       : await coreExtension.activate();
   } catch (error) {
-    console.error('Failed to activate WorkCenter core extension', error);
-    vscode.window.showErrorMessage('Failed to activate WorkCenter core extension. See logs for details.');
+    console.error('Failed to activate DevDocket core extension', error);
+    vscode.window.showErrorMessage('Failed to activate DevDocket core extension. See logs for details.');
     return;
   }
 
@@ -45,30 +45,30 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     typeof (api as any).registerProvider !== 'function' ||
     typeof (api as any).registerAction !== 'function'
   ) {
-    console.error('WorkCenter API is not in the expected shape', api);
-    vscode.window.showErrorMessage('WorkCenter API is unavailable or invalid. Please check that "mthalman.workcenter" is up to date.');
+    console.error('DevDocket API is not in the expected shape', api);
+    vscode.window.showErrorMessage('DevDocket API is unavailable or invalid. Please check that "mthalman.devdocket" is up to date.');
     return;
   }
 
-  const workCenterApi = api as {
+  const devDocketApi = api as {
     registerProvider: (provider: unknown) => vscode.Disposable;
     registerAction: (action: unknown) => vscode.Disposable;
   };
 
-  // workCenterApi is a WorkCenterApi instance — use it to register providers and actions
+  // devDocketApi is a DevDocketApi instance — use it to register providers and actions
 }
 ```
 
-## WorkCenterApi
+## DevDocketApi
 
 The API surface is intentionally small:
 
 ```ts
 import * as vscode from 'vscode';
 
-interface WorkCenterApi {
-  registerProvider(provider: WorkCenterProvider): vscode.Disposable;
-  registerAction(action: WorkCenterAction): vscode.Disposable;
+interface DevDocketApi {
+  registerProvider(provider: DevDocketProvider): vscode.Disposable;
+  registerAction(action: DevDocketAction): vscode.Disposable;
 }
 ```
 
@@ -76,14 +76,14 @@ Both methods return a `vscode.Disposable`. Push it into `context.subscriptions` 
 
 ## Providers
 
-A provider discovers items from an external source (e.g., GitHub issues, Jira tickets, email) and reports them to WorkCenter.
+A provider discovers items from an external source (e.g., GitHub issues, Jira tickets, email) and reports them to DevDocket.
 
-### WorkCenterProvider Interface
+### DevDocketProvider Interface
 
 ```ts
 import * as vscode from 'vscode';
 
-interface WorkCenterProvider {
+interface DevDocketProvider {
   /** Unique identifier for this provider (e.g., 'github', 'jira'). */
   readonly id: string;
 
@@ -97,7 +97,7 @@ interface WorkCenterProvider {
   readonly onDidDiscoverItems: vscode.Event<DiscoveredItem[]>;
 
   /**
-   * Called by WorkCenter during initial registration/activation (for initial
+   * Called by DevDocket during initial registration/activation (for initial
    * discovery) and whenever the user requests a manual refresh. Must be safe
    * to call multiple times and during extension activation.
    */
@@ -114,7 +114,7 @@ interface DiscoveredItem {
   /**
    * Unique identifier for this item within the provider.
    * Must be stable across refreshes (e.g., 'owner/repo#123').
-   * WorkCenter uses providerId + externalId to track inbox state.
+   * DevDocket uses providerId + externalId to track inbox state.
    */
   externalId: string;
 
@@ -140,8 +140,8 @@ interface DiscoveredItem {
 
 - `externalId` must be unique per provider and stable across refreshes. A good pattern is `owner/repo#123`.
 - Each `onDidDiscoverItems` emission replaces the provider's entire item set. Emit all current items, not just changes.
-- `DiscoveredItem` data is not stored as a persisted record; WorkCenter tracks only the inbox state (`unseen`, `accepted`, `dismissed`) for discovered items in `discovered-state.json`.
-- When a user accepts an item from Inbox/Sources, WorkCenter creates and persists a new `WorkItem` in `workitems.json` that includes a snapshot of the item's `title`, along with its `providerId`/`externalId`/`url` as provenance metadata.
+- `DiscoveredItem` data is not stored as a persisted record; DevDocket tracks only the inbox state (`unseen`, `accepted`, `dismissed`) for discovered items in `discovered-state.json`.
+- When a user accepts an item from Inbox/Sources, DevDocket creates and persists a new `WorkItem` in `workitems.json` that includes a snapshot of the item's `title`, along with its `providerId`/`externalId`/`url` as provenance metadata.
 - Use `group` to organize items in the Sources tree. Items with the same group value are nested under a folder.
 
 ### Registering a Provider
@@ -156,10 +156,10 @@ context.subscriptions.push(disposable);
 
 An action is an operation that can be performed on a work item. Actions are surfaced dynamically in the **Run Action…** quick pick menu on Queue and Focus items.
 
-### WorkCenterAction Interface
+### DevDocketAction Interface
 
 ```ts
-interface WorkCenterAction {
+interface DevDocketAction {
   /** Unique identifier for this action (e.g., 'github.startWork'). */
   readonly id: string;
 
@@ -180,7 +180,7 @@ interface WorkCenterAction {
 }
 ```
 
-> **Note:** `canRun` and `run` receive `Readonly<WorkItem>`. Actions should treat work items as immutable and use WorkCenter commands to make changes rather than mutating the object directly.
+> **Note:** `canRun` and `run` receive `Readonly<WorkItem>`. Actions should treat work items as immutable and use DevDocket commands to make changes rather than mutating the object directly.
 
 ### Registering an Action
 
@@ -196,7 +196,7 @@ When an action receives a `WorkItem`, it has access to these fields:
 
 ```ts
 interface WorkItem {
-  /** Internal unique ID generated by WorkCenter (e.g., 'wc-m3x9k2-a7b3c1'). */
+  /** Internal unique ID generated by DevDocket (e.g., 'wc-m3x9k2-a7b3c1'). */
   id: string;
 
   /** User-visible title. */
@@ -218,8 +218,8 @@ interface WorkItem {
   url?: string;
 
   /**
-   * Optional ordering hint used by WorkCenter to sort items in the Queue view.
-   * Typically managed by WorkCenter; extensions generally do not need to set this.
+   * Optional ordering hint used by DevDocket to sort items in the Queue view.
+   * Typically managed by DevDocket; extensions generally do not need to set this.
    */
   sortOrder?: number;
 
@@ -265,7 +265,7 @@ Each provider is capped at **10,000 discovered items** per refresh. If a provide
 
 ### Readonly WorkItem in Actions
 
-`canRun()` and `run()` receive `Readonly<WorkItem>`. Actions must not mutate the work item object directly. To update a work item's state, use the appropriate WorkCenter VS Code commands (e.g., `workcenter.startWork`, `workcenter.completeWork`).
+`canRun()` and `run()` receive `Readonly<WorkItem>`. Actions must not mutate the work item object directly. To update a work item's state, use the appropriate DevDocket VS Code commands (e.g., `devdocket.startWork`, `devdocket.completeWork`).
 
 ### URL Validation
 
@@ -298,14 +298,14 @@ interface Event<T> {
   (listener: (e: T) => void): Disposable;
 }
 
-interface WorkCenterProvider {
+interface DevDocketProvider {
   readonly id: string;
   readonly label: string;
   readonly onDidDiscoverItems: Event<DiscoveredItem[]>;
   refresh(): Promise<void>;
 }
 
-class MyTaskProvider implements WorkCenterProvider {
+class MyTaskProvider implements DevDocketProvider {
   readonly id = 'my-tasks';
   readonly label = 'My Tasks';
 
@@ -340,7 +340,7 @@ class MyTaskProvider implements WorkCenterProvider {
 
 // In your activate() function:
 export async function activate(context: vscode.ExtensionContext): Promise<void> {
-  const coreExtension = vscode.extensions.getExtension('mthalman.workcenter');
+  const coreExtension = vscode.extensions.getExtension('mthalman.devdocket');
   if (!coreExtension) {
     return;
   }
@@ -352,7 +352,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   const provider = new MyTaskProvider();
   const registration = api.registerProvider(provider);
 
-  // Provider owns its own disposal — WorkCenter does not call provider.dispose().
+  // Provider owns its own disposal — DevDocket does not call provider.dispose().
   // Push both the registration and provider into subscriptions for cleanup.
   context.subscriptions.push(registration);
   context.subscriptions.push({ dispose: () => provider.dispose() });
@@ -390,14 +390,14 @@ interface WorkItem {
   updatedAt: number;
 }
 
-interface WorkCenterAction {
+interface DevDocketAction {
   readonly id: string;
   readonly label: string;
   canRun(item: Readonly<WorkItem>): boolean;
   run(item: Readonly<WorkItem>): Promise<void>;
 }
 
-class OpenDashboardAction implements WorkCenterAction {
+class OpenDashboardAction implements DevDocketAction {
   readonly id = 'my-tasks.openDashboard';
   readonly label = 'Open in Dashboard';
 
@@ -424,7 +424,7 @@ context.subscriptions.push(api.registerAction(action));
 
 ## Real-World Reference
 
-For a complete, production-quality example, see the `packages/github` package in the WorkCenter repository:
+For a complete, production-quality example, see the `packages/github` package in the DevDocket repository:
 
 - [`githubProvider.ts`](../packages/github/src/githubProvider.ts) — Full provider with periodic refresh, GitHub API integration, and error handling.
 - [`githubPrReviewProvider.ts`](../packages/github/src/githubPrReviewProvider.ts) — Provider for PR review requests.

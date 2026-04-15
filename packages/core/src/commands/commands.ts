@@ -92,7 +92,7 @@ export function isSafeUrl(url: string): URL | null {
 function handleCommandError(context: string, err: unknown): void {
   logger.error(context, err);
   const detail = err instanceof Error ? err.message : String(err);
-  void vscode.window.showErrorMessage(`WorkCenter: ${context} — ${detail}`);
+  void vscode.window.showErrorMessage(`DevDocket: ${context} — ${detail}`);
 }
 
 /** Wrap a command handler so unhandled errors are logged and shown to the user. */
@@ -140,7 +140,7 @@ async function batchTransition(
   }
   if (failedIds.length > 0) {
     void vscode.window.showErrorMessage(
-      `WorkCenter: Failed to transition ${failedIds.length} item(s); see Output for details`,
+      `DevDocket: Failed to transition ${failedIds.length} item(s); see Output for details`,
     );
   }
 }
@@ -206,7 +206,7 @@ async function batchAcceptItems(
   }
   if (failed > 0) {
     void vscode.window.showErrorMessage(
-      `WorkCenter: Failed to accept ${failed} item(s); see Output for details`,
+      `DevDocket: Failed to accept ${failed} item(s); see Output for details`,
     );
   }
 }
@@ -223,7 +223,7 @@ async function handleCreateItem(workGraph: WorkGraph): Promise<void> {
 
   logger.info(`Creating new work item: ${title.trim()}`);
   await workGraph.createItem({ title: title.trim() });
-  void vscode.window.showInformationMessage(`WorkCenter: Created "${title.trim()}"`);
+  void vscode.window.showInformationMessage(`DevDocket: Created "${title.trim()}"`);
 }
 
 async function handleAcceptToFocus(workGraph: WorkGraph, item?: { id?: string }, selectedItems?: { id?: string }[]): Promise<void> {
@@ -285,7 +285,7 @@ function handleEditItem(
 
 async function handleOpenInBrowser(workGraph: WorkGraph, item?: { id?: string; url?: string }): Promise<void> {
   if (!item || (!item.id && !item.url)) {
-    void vscode.window.showWarningMessage('WorkCenter: Select an item to open in the browser.');
+    void vscode.window.showWarningMessage('DevDocket: Select an item to open in the browser.');
     return;
   }
   const workItem = item.id ? workGraph.getItem(item.id) : undefined;
@@ -336,7 +336,7 @@ async function handleRunAction(
       } catch (err: unknown) {
         logger.error('Action failed: ' + selected.label, err);
         const detail = err instanceof Error ? err.message : String(err);
-        void vscode.window.showErrorMessage(`WorkCenter: Action "${selected.label}" failed — ${detail}`);
+        void vscode.window.showErrorMessage(`DevDocket: Action "${selected.label}" failed — ${detail}`);
       }
     }
   }
@@ -344,7 +344,7 @@ async function handleRunAction(
 
 async function handleMoveUp(workGraph: WorkGraph, item?: { id?: string }): Promise<void> {
   if (!item?.id) {
-    void vscode.window.showInformationMessage('WorkCenter: Select an item in the Queue to move.');
+    void vscode.window.showInformationMessage('DevDocket: Select an item in the Queue to move.');
     return;
   }
   await workGraph.moveItem(item.id, 'up');
@@ -352,7 +352,7 @@ async function handleMoveUp(workGraph: WorkGraph, item?: { id?: string }): Promi
 
 async function handleMoveDown(workGraph: WorkGraph, item?: { id?: string }): Promise<void> {
   if (!item?.id) {
-    void vscode.window.showInformationMessage('WorkCenter: Select an item in the Queue to move.');
+    void vscode.window.showInformationMessage('DevDocket: Select an item in the Queue to move.');
     return;
   }
   await workGraph.moveItem(item.id, 'down');
@@ -390,14 +390,14 @@ async function handleDeleteItem(workGraph: WorkGraph, item?: { id?: string }, se
   }
   if (failedIds.length > 0) {
     void vscode.window.showErrorMessage(
-      `WorkCenter: Failed to delete ${failedIds.length} item(s); see Output for details`,
+      `DevDocket: Failed to delete ${failedIds.length} item(s); see Output for details`,
     );
   }
 }
 
 async function handleFocusMoveUp(workGraph: WorkGraph, item?: { id?: string }): Promise<void> {
   if (!item?.id) {
-    void vscode.window.showInformationMessage('WorkCenter: Select an item in Focus to move.');
+    void vscode.window.showInformationMessage('DevDocket: Select an item in Focus to move.');
     return;
   }
   await workGraph.moveItem(item.id, 'up');
@@ -405,7 +405,7 @@ async function handleFocusMoveUp(workGraph: WorkGraph, item?: { id?: string }): 
 
 async function handleFocusMoveDown(workGraph: WorkGraph, item?: { id?: string }): Promise<void> {
   if (!item?.id) {
-    void vscode.window.showInformationMessage('WorkCenter: Select an item in Focus to move.');
+    void vscode.window.showInformationMessage('DevDocket: Select an item in Focus to move.');
     return;
   }
   await workGraph.moveItem(item.id, 'down');
@@ -437,7 +437,7 @@ async function acceptSingleInboxItem(
   const existing = workGraph.findItemByProvenance(item.providerId, item.externalId);
   if (existing) {
     void vscode.window.showInformationMessage(
-      `WorkCenter: Item already accepted as "${existing.title}"`
+      `DevDocket: Item already accepted as "${existing.title}"`
     );
     try {
       await stateStore.setState(item.providerId, item.externalId, 'accepted');
@@ -491,7 +491,7 @@ async function acceptToFocusSingleInboxItem(
         handleCommandError('Failed to update state for existing focus item', err);
         return;
       }
-      void vscode.window.showInformationMessage('WorkCenter: Item is already in Focus');
+      void vscode.window.showInformationMessage('DevDocket: Item is already in Focus');
       return;
     }
     if (existing.state === WorkItemState.Done || existing.state === WorkItemState.Archived) {
@@ -502,7 +502,7 @@ async function acceptToFocusSingleInboxItem(
         return;
       }
       void vscode.window.showWarningMessage(
-        `WorkCenter: Item is ${existing.state} and cannot be moved to Focus`,
+        `DevDocket: Item is ${existing.state} and cannot be moved to Focus`,
       );
       return;
     }
@@ -641,7 +641,7 @@ async function batchAcceptToFocusItems(
   }
   if (failed > 0 || transitionFailed > 0) {
     void vscode.window.showErrorMessage(
-      `WorkCenter: Failed to process ${failed + transitionFailed} item(s); see Output for details`,
+      `DevDocket: Failed to process ${failed + transitionFailed} item(s); see Output for details`,
     );
   }
 }
@@ -697,7 +697,7 @@ async function handleRefresh(providerRegistry: ProviderRegistry): Promise<void> 
   await vscode.window.withProgress(
     {
       location: vscode.ProgressLocation.Window,
-      title: 'WorkCenter: Refreshing…',
+      title: 'DevDocket: Refreshing…',
     },
     () => providerRegistry.refreshAll(),
   );
@@ -734,7 +734,7 @@ async function acceptSingleSourceItem(
       handleCommandError('Failed to update state for existing item', err);
     }
     void vscode.window.showInformationMessage(
-      `WorkCenter: Item already accepted as "${existing.title}"`
+      `DevDocket: Item already accepted as "${existing.title}"`
     );
     return;
   }
@@ -808,78 +808,78 @@ export function registerCommands(
   labelCache: ProviderLabelCache,
 ): void {
   context.subscriptions.push(
-    vscode.commands.registerCommand('workcenter.refresh',
+    vscode.commands.registerCommand('devdocket.refresh',
       wrapCommand('Failed to refresh', () => handleRefresh(providerRegistry))),
-    vscode.commands.registerCommand('workcenter.createItem',
+    vscode.commands.registerCommand('devdocket.createItem',
       wrapCommand('Failed to create item', () => handleCreateItem(workGraph))),
-    vscode.commands.registerCommand('workcenter.acceptToFocus',
+    vscode.commands.registerCommand('devdocket.acceptToFocus',
       wrapCommand('Failed to focus item', (item, selectedItems) => handleAcceptToFocus(workGraph, item, selectedItems))),
-    vscode.commands.registerCommand('workcenter.archiveItem',
+    vscode.commands.registerCommand('devdocket.archiveItem',
       wrapCommand('Failed to archive item', (item, selectedItems) => handleArchiveItem(workGraph, item, selectedItems))),
-    vscode.commands.registerCommand('workcenter.completeItem',
+    vscode.commands.registerCommand('devdocket.completeItem',
       wrapCommand('Failed to complete item', (item, selectedItems) => handleCompleteItem(workGraph, item, selectedItems))),
-    vscode.commands.registerCommand('workcenter.pauseItem',
+    vscode.commands.registerCommand('devdocket.pauseItem',
       wrapCommand('Failed to pause item', (item, selectedItems) => handlePauseItem(workGraph, item, selectedItems))),
-    vscode.commands.registerCommand('workcenter.resumeItem',
+    vscode.commands.registerCommand('devdocket.resumeItem',
       wrapCommand('Failed to resume item', (item, selectedItems) => handleResumeItem(workGraph, item, selectedItems))),
-    vscode.commands.registerCommand('workcenter.deleteItem',
+    vscode.commands.registerCommand('devdocket.deleteItem',
       wrapCommand('Failed to delete item', (item, selectedItems) => handleDeleteItem(workGraph, item, selectedItems))),
-    vscode.commands.registerCommand('workcenter.editItem',
+    vscode.commands.registerCommand('devdocket.editItem',
       wrapCommand('Failed to open editor', (item) => handleEditItem(context, workGraph, providerRegistry, labelCache, item))),
-    vscode.commands.registerCommand('workcenter.openInBrowser',
+    vscode.commands.registerCommand('devdocket.openInBrowser',
       wrapCommand('Failed to open in browser', (item) => handleOpenInBrowser(workGraph, item))),
-    vscode.commands.registerCommand('workcenter.runAction',
+    vscode.commands.registerCommand('devdocket.runAction',
       wrapCommand('Failed to run action', (item) => handleRunAction(workGraph, actionRegistry, item))),
-    vscode.commands.registerCommand('workcenter.moveUp',
+    vscode.commands.registerCommand('devdocket.moveUp',
       wrapCommand('Failed to move item up', (item) => handleMoveUp(workGraph, item))),
-    vscode.commands.registerCommand('workcenter.moveDown',
+    vscode.commands.registerCommand('devdocket.moveDown',
       wrapCommand('Failed to move item down', (item) => handleMoveDown(workGraph, item))),
-    vscode.commands.registerCommand('workcenter.focusMoveUp',
+    vscode.commands.registerCommand('devdocket.focusMoveUp',
       wrapCommand('Failed to move focus item up', (item) => handleFocusMoveUp(workGraph, item))),
-    vscode.commands.registerCommand('workcenter.focusMoveDown',
+    vscode.commands.registerCommand('devdocket.focusMoveDown',
       wrapCommand('Failed to move focus item down', (item) => handleFocusMoveDown(workGraph, item))),
-    vscode.commands.registerCommand('workcenter.moveToQueue',
+    vscode.commands.registerCommand('devdocket.moveToQueue',
       wrapCommand('Failed to move item to queue', (item, selectedItems) => handleMoveToQueue(workGraph, item, selectedItems))),
-    vscode.commands.registerCommand('workcenter.acceptFromInbox',
+    vscode.commands.registerCommand('devdocket.acceptFromInbox',
       wrapCommand('Failed to accept from inbox', (item: InboxElement, selectedItems?: InboxElement[]) => handleAcceptFromInbox(workGraph, stateStore, item, selectedItems))),
-    vscode.commands.registerCommand('workcenter.acceptToFocusFromInbox',
+    vscode.commands.registerCommand('devdocket.acceptToFocusFromInbox',
       wrapCommand('Failed to accept to focus from inbox', (item: InboxElement, selectedItems?: InboxElement[]) => handleAcceptToFocusFromInbox(workGraph, stateStore, item, selectedItems))),
-    vscode.commands.registerCommand('workcenter.dismissFromInbox',
+    vscode.commands.registerCommand('devdocket.dismissFromInbox',
       wrapCommand('Failed to dismiss from inbox', (item: InboxElement, selectedItems?: InboxElement[]) => handleDismissFromInbox(stateStore, item, selectedItems))),
-    vscode.commands.registerCommand('workcenter.acceptFromSources',
+    vscode.commands.registerCommand('devdocket.acceptFromSources',
       wrapCommand('Failed to accept from sources', (item: SourcesElement, selectedItems?: SourcesElement[]) => handleAcceptFromSources(workGraph, stateStore, item, selectedItems))),
-    vscode.commands.registerCommand('workcenter.dismissFromSources',
+    vscode.commands.registerCommand('devdocket.dismissFromSources',
       wrapCommand('Failed to dismiss from sources', (item: SourcesElement, selectedItems?: SourcesElement[]) => handleDismissFromSources(stateStore, item, selectedItems))),
-    vscode.commands.registerCommand('workcenter.switchInboxToTree',
+    vscode.commands.registerCommand('devdocket.switchInboxToTree',
       wrapCommand('Failed to switch inbox layout', () => setViewLayout('inbox', 'tree'))),
-    vscode.commands.registerCommand('workcenter.switchInboxToFlat',
+    vscode.commands.registerCommand('devdocket.switchInboxToFlat',
       wrapCommand('Failed to switch inbox layout', () => setViewLayout('inbox', 'flat'))),
-    vscode.commands.registerCommand('workcenter.switchQueueToTree',
+    vscode.commands.registerCommand('devdocket.switchQueueToTree',
       wrapCommand('Failed to switch queue layout', () => setViewLayout('queue', 'tree'))),
-    vscode.commands.registerCommand('workcenter.switchQueueToFlat',
+    vscode.commands.registerCommand('devdocket.switchQueueToFlat',
       wrapCommand('Failed to switch queue layout', () => setViewLayout('queue', 'flat'))),
-    vscode.commands.registerCommand('workcenter.switchFocusToTree',
+    vscode.commands.registerCommand('devdocket.switchFocusToTree',
       wrapCommand('Failed to switch focus layout', () => setViewLayout('focus', 'tree'))),
-    vscode.commands.registerCommand('workcenter.switchFocusToFlat',
+    vscode.commands.registerCommand('devdocket.switchFocusToFlat',
       wrapCommand('Failed to switch focus layout', () => setViewLayout('focus', 'flat'))),
-    vscode.commands.registerCommand('workcenter.switchHistoryToTree',
+    vscode.commands.registerCommand('devdocket.switchHistoryToTree',
       wrapCommand('Failed to switch history layout', () => setViewLayout('history', 'tree'))),
-    vscode.commands.registerCommand('workcenter.switchHistoryToFlat',
+    vscode.commands.registerCommand('devdocket.switchHistoryToFlat',
       wrapCommand('Failed to switch history layout', () => setViewLayout('history', 'flat'))),
-    vscode.commands.registerCommand('workcenter.switchSourcesToTree',
+    vscode.commands.registerCommand('devdocket.switchSourcesToTree',
       wrapCommand('Failed to switch sources layout', () => setViewLayout('sources', 'tree'))),
-    vscode.commands.registerCommand('workcenter.switchSourcesToFlat',
+    vscode.commands.registerCommand('devdocket.switchSourcesToFlat',
       wrapCommand('Failed to switch sources layout', () => setViewLayout('sources', 'flat'))),
     // Backward-compatible aliases for old toggle commands (preserves existing keybindings)
-    vscode.commands.registerCommand('workcenter.toggleInboxLayout',
+    vscode.commands.registerCommand('devdocket.toggleInboxLayout',
       wrapCommand('Failed to switch inbox layout', () => toggleViewLayout('inbox'))),
-    vscode.commands.registerCommand('workcenter.toggleQueueLayout',
+    vscode.commands.registerCommand('devdocket.toggleQueueLayout',
       wrapCommand('Failed to switch queue layout', () => toggleViewLayout('queue'))),
-    vscode.commands.registerCommand('workcenter.toggleFocusLayout',
+    vscode.commands.registerCommand('devdocket.toggleFocusLayout',
       wrapCommand('Failed to switch focus layout', () => toggleViewLayout('focus'))),
-    vscode.commands.registerCommand('workcenter.toggleHistoryLayout',
+    vscode.commands.registerCommand('devdocket.toggleHistoryLayout',
       wrapCommand('Failed to switch history layout', () => toggleViewLayout('history'))),
-    vscode.commands.registerCommand('workcenter.toggleSourcesLayout',
+    vscode.commands.registerCommand('devdocket.toggleSourcesLayout',
       wrapCommand('Failed to switch sources layout', () => toggleViewLayout('sources'))),
   );
 }

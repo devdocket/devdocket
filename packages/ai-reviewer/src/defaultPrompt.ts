@@ -1,5 +1,5 @@
 // Default code review prompt adapted from the code-review skill.
-// Users can override this by setting workcenterAiReview.customPromptPath.
+// Users can override this by setting devdocketAiReview.customPromptPath.
 
 export const DEFAULT_REVIEW_PROMPT = `# Code Review
 

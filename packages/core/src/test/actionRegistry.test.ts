@@ -1,9 +1,9 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { WorkCenterAction } from '../api/types';
+import { DevDocketAction } from '../api/types';
 import { WorkItem, WorkItemState } from '../models/workItem';
 import { ActionRegistry } from '../services/actionRegistry';
 
-function createMockAction(id: string, canRunFn: (item: WorkItem) => boolean = () => true): WorkCenterAction {
+function createMockAction(id: string, canRunFn: (item: WorkItem) => boolean = () => true): DevDocketAction {
   return {
     id,
     label: `Action ${id}`,
@@ -127,7 +127,7 @@ describe('ActionRegistry', () => {
 
   it('canRun receives the correct work item', () => {
     const canRunSpy = vi.fn(() => true);
-    const action: WorkCenterAction = {
+    const action: DevDocketAction = {
       id: 'spy-action',
       label: 'Spy Action',
       canRun: canRunSpy,

@@ -1,5 +1,5 @@
 import * as vscode from 'vscode';
-import { BaseProvider, DiscoveredItem, isValidUrlSegment } from '@workcenter/shared';
+import { BaseProvider, DiscoveredItem, isValidUrlSegment } from '@devdocket/shared';
 import { logger } from './logger';
 import { OrgConfig } from './configParser';
 
@@ -23,7 +23,7 @@ interface ConnectionData {
 const ADO_AUTH_SCOPE = '499b84ac-1321-427f-aa17-267ca6975798/.default';
 
 /**
- * WorkCenter provider that discovers Azure DevOps pull requests where the
+ * DevDocket provider that discovers Azure DevOps pull requests where the
  * current user is listed as a reviewer.
  *
  * Uses the ADO Git Pull Requests API filtered by `reviewerId`. The user's
@@ -174,7 +174,7 @@ export class AdoPrReviewProvider extends BaseProvider {
     if (messages.length > 0) {
       const message = `PR review errors: ${messages.join('; ')}`;
       if (isUserTriggered) {
-        void vscode.window.showWarningMessage(`WorkCenter ADO: ${message}`);
+        void vscode.window.showWarningMessage(`DevDocket ADO: ${message}`);
       }
       logger.warn(message);
     }

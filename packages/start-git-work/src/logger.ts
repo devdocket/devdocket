@@ -1,6 +1,6 @@
-import { createLoggerService } from '@workcenter/shared';
+import { createLoggerService } from '@devdocket/shared';
 
-export { LogLevel, resolveLogLevel, serializeArg } from '@workcenter/shared';
+export { LogLevel, resolveLogLevel, serializeArg } from '@devdocket/shared';
 
 const service = createLoggerService();
 

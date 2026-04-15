@@ -10,7 +10,7 @@ export class WalkthroughParticipant {
   /** Register the chat participant. Returns disposable. */
   register(): vscode.Disposable {
     const participant = vscode.chat.createChatParticipant(
-      'workcenter.walkthrough',
+      'devdocket.walkthrough',
       this.handleRequest.bind(this),
     );
     participant.iconPath = new vscode.ThemeIcon('book');
@@ -128,17 +128,17 @@ export class WalkthroughParticipant {
       model = models[0];
     }
 
-    // Gather workcenter tools + the phase-signaling tool
+    // Gather devdocket tools + the phase-signaling tool
     const tools = [
       ...vscode.lm.tools
-        .filter((t: vscode.LanguageModelToolInformation) => t.name.startsWith('workcenter-') && t.inputSchema)
+        .filter((t: vscode.LanguageModelToolInformation) => t.name.startsWith('devdocket-') && t.inputSchema)
         .map((t: vscode.LanguageModelToolInformation) => ({
           name: t.name,
           description: t.description,
           inputSchema: t.inputSchema as Record<string, unknown>,
         })),
       {
-        name: 'workcenter-signalPhase',
+        name: 'devdocket-signalPhase',
         description: 'Signal the current walkthrough phase so the UI can show appropriate follow-up actions. Call this at the end of every response.',
         inputSchema: {
           type: 'object' as const,
@@ -176,7 +176,7 @@ export class WalkthroughParticipant {
           assistantParts.push(part);
 
           // Handle phase signal locally — not a real tool call, don't trigger another loop
-          if (part.name === 'workcenter-signalPhase') {
+          if (part.name === 'devdocket-signalPhase') {
             const input = part.input as { phase?: string };
             if (input.phase) {
               phase = input.phase;

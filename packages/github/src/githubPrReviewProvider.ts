@@ -8,7 +8,7 @@ interface GitHubSearchResponse {
 }
 
 /**
- * WorkCenter provider that discovers GitHub pull requests where the current
+ * DevDocket provider that discovers GitHub pull requests where the current
  * user has been requested as a reviewer.
  *
  * Uses the GitHub Search API (`review-requested:@me`) to find open PRs.
@@ -42,7 +42,7 @@ export class GitHubPrReviewProvider extends BaseGitHubProvider {
         ? `Failed to fetch PR review requests from ${failures[0]}`
         : `Failed to fetch PR review requests from ${failures.length} repositories`;
       if (isUserTriggered) {
-        vscode.window.showWarningMessage(`WorkCenter GitHub: ${message}`);
+        vscode.window.showWarningMessage(`DevDocket GitHub: ${message}`);
       } else {
         logger.warn(message);
       }
@@ -50,7 +50,7 @@ export class GitHubPrReviewProvider extends BaseGitHubProvider {
   }
 
   private getConfiguredRepos(): string[] {
-    const config = vscode.workspace.getConfiguration('workcenterGithub');
+    const config = vscode.workspace.getConfiguration('devdocketGithub');
     return config.get<string[]>('repos', []);
   }
 

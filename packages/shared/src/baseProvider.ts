@@ -37,7 +37,7 @@ export interface EventEmitterLike<T> {
 }
 
 /**
- * Base class for WorkCenter providers that need periodic refresh.
+ * Base class for DevDocket providers that need periodic refresh.
  * Owns the EventEmitter lifecycle, refresh timer, concurrency guard, and dispose logic.
  */
 export abstract class BaseProvider {

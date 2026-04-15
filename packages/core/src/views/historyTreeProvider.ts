@@ -46,7 +46,7 @@ export class HistoryTreeProvider extends WorkItemViewProvider {
       contextBase = 'historyItem.archived';
     }
     treeItem.contextValue = item.url ? `${contextBase}.hasUrl` : contextBase;
-    treeItem.command = { command: 'workcenter.editItem', title: 'Open Details', arguments: [item] };
+    treeItem.command = { command: 'devdocket.editItem', title: 'Open Details', arguments: [item] };
     return treeItem;
   }
 

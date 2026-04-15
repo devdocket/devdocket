@@ -31,10 +31,10 @@ Triaged all 18 open issues labeled `squad`. Routed 17 to squad:fenster (feature 
 **Lead:** Keaton  
 **Status:** DECISION REQUIRED
 
-Users are confused about the distinction between "Done" and "Archived" states in WorkCenter. Need to clarify:
+Users are confused about the distinction between "Done" and "Archived" states in DevDocket. Need to clarify:
 1. **Done → Archived lifecycle** — Should Done items automatically archive after N days, or require explicit user action?
 2. **User-facing semantics** — Is "Done" = finished vs "Archived" = never see again?
-3. **Provider closure signals** — Should GitHub issue closure auto-mark WorkCenter item Done?
+3. **Provider closure signals** — Should GitHub issue closure auto-mark DevDocket item Done?
 4. **History view organization** — Should Done and Archived appear together or in separate sections?
 
 **Current Model:** Two terminal states in WorkItem state machine (Done and Archived) but unclear user-facing purpose and transition rules.
@@ -52,12 +52,12 @@ Users are confused about the distinction between "Done" and "Archived" states in
 **Author:** Fenster (Extension Dev)  
 **Status:** Implemented
 
-Shared PR action logic (diff fetching, GitHub auth, LLM model selection, prompt loading with custom file support, workspace path validation) is extracted into `BasePrAction` in `basePrAction.ts`. `AiReviewAction` extends this base class and provides configuration properties plus a `getRuntimeInstructions()` method, while `AiWalkthroughAction` is a standalone `WorkCenterAction` that prepares a worktree and opens the `@walkthrough` chat participant.
+Shared PR action logic (diff fetching, GitHub auth, LLM model selection, prompt loading with custom file support, workspace path validation) is extracted into `BasePrAction` in `basePrAction.ts`. `AiReviewAction` extends this base class and provides configuration properties plus a `getRuntimeInstructions()` method, while `AiWalkthroughAction` is a standalone `DevDocketAction` that prepares a worktree and opens the `@walkthrough` chat participant.
 
 **Rationale:**
 - Eliminates code duplication across AI actions that all follow the same fetch-diff → confirm → analyze → display pattern
 - New actions require ~25 lines instead of ~240, reducing bug surface
-- The code review action (`AiReviewAction`) has its own VS Code configuration section (`workcenterAiReview`) for a custom prompt path
+- The code review action (`AiReviewAction`) has its own VS Code configuration section (`devdocketAiReview`) for a custom prompt path
 - The walkthrough action (`AiWalkthroughAction`) uses the `@walkthrough` chat participant with a built-in prompt and has no custom prompt config
 - Re-exporting `sanitizePrUrl` from `aiReviewAction.ts` preserves test backward compatibility without requiring test refactoring
 

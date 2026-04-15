@@ -1,10 +1,10 @@
-# WorkCenter UX Guide
+# DevDocket UX Guide
 
-WorkCenter is a VS Code extension that provides a unified hub for managing work items from multiple sources. This guide covers the five-view model, data flow, available actions, and provider configuration.
+DevDocket is a VS Code extension that provides a unified hub for managing work items from multiple sources. This guide covers the five-view model, data flow, available actions, and provider configuration.
 
 ## The Five Views
 
-WorkCenter organizes work across five views, accessible from the WorkCenter activity bar icon.
+DevDocket organizes work across five views, accessible from the DevDocket activity bar icon.
 
 ### Inbox
 
@@ -16,7 +16,7 @@ Each provider's items are grouped under the provider name with a count of unseen
 
 **Badge:** The Inbox view displays a badge on its tab showing the count of unseen items that you haven't clicked on yet.
 
-**Notifications:** When new items arrive in the Inbox, a notification appears with a **Show Inbox** button. This can be disabled via the `workcenter.showInboxNotifications` setting.
+**Notifications:** When new items arrive in the Inbox, a notification appears with a **Show Inbox** button. This can be disabled via the `devdocket.showInboxNotifications` setting.
 
 **Available actions on Inbox items:**
 
@@ -107,7 +107,7 @@ Clicking a History item opens the editor panel to view its details.
 
 ## Data Flow
 
-Items flow through WorkCenter in a defined progression:
+Items flow through DevDocket in a defined progression:
 
 ```mermaid
 flowchart TD
@@ -130,12 +130,12 @@ flowchart TD
 
 To create a work item manually:
 
-1. Open the **Queue** view in the WorkCenter sidebar.
+1. Open the **Queue** view in the DevDocket sidebar.
 2. Click the **➕** (Create Work Item) button in the Queue title bar.
 3. Enter a title in the input box (required).
 4. The item appears in the Queue in the **New** state.
 
-Manually created items exist only within WorkCenter — they aren't linked to any provider.
+Manually created items exist only within DevDocket — they aren't linked to any provider.
 
 ## Editor Panel
 
@@ -148,9 +148,9 @@ The editor **auto-saves** as you type — there is no save button. The panel tit
 
 ## Providers
 
-WorkCenter supports multiple provider extensions that discover work items from external systems. Each provider is a separate VS Code extension that depends on the core WorkCenter extension.
+DevDocket supports multiple provider extensions that discover work items from external systems. Each provider is a separate VS Code extension that depends on the core DevDocket extension.
 
-### GitHub Provider (`workcenter-github`)
+### GitHub Provider (`devdocket-github`)
 
 Discovers items from GitHub via two sub-providers:
 
@@ -164,10 +164,10 @@ Discovers items from GitHub via two sub-providers:
 
 | Setting | Type | Default | Description |
 |---------|------|---------|-------------|
-| `workcenterGithub.repos` | `string[]` | `[]` | GitHub repositories to watch (e.g., `owner/repo`). Leave empty to fetch all assigned issues across all repositories. |
-| `workcenterGithub.refreshIntervalSeconds` | `number` | `300` | How often to refresh GitHub data (in seconds). Minimum 60 seconds; values below 60 are clamped. |
+| `devdocketGithub.repos` | `string[]` | `[]` | GitHub repositories to watch (e.g., `owner/repo`). Leave empty to fetch all assigned issues across all repositories. |
+| `devdocketGithub.refreshIntervalSeconds` | `number` | `300` | How often to refresh GitHub data (in seconds). Minimum 60 seconds; values below 60 are clamped. |
 
-### Azure DevOps Provider (`workcenter-ado`)
+### Azure DevOps Provider (`devdocket-ado`)
 
 Discovers items from Azure DevOps via two sub-providers:
 
@@ -178,11 +178,11 @@ Discovers items from Azure DevOps via two sub-providers:
 
 | Setting | Type | Default | Description |
 |---------|------|---------|-------------|
-| `workcenterAdo.organization` | `string` | `""` | Azure DevOps organization name (required to enable the provider). |
-| `workcenterAdo.projects` | `string[]` | `[]` | Projects to monitor. Leave empty to fetch across the entire organization. |
-| `workcenterAdo.refreshIntervalSeconds` | `number` | `300` | How often to refresh ADO data (in seconds). Minimum 60 seconds; set to 0 or negative to disable periodic refresh. |
+| `devdocketAdo.organization` | `string` | `""` | Azure DevOps organization name (required to enable the provider). |
+| `devdocketAdo.projects` | `string[]` | `[]` | Projects to monitor. Leave empty to fetch across the entire organization. |
+| `devdocketAdo.refreshIntervalSeconds` | `number` | `300` | How often to refresh ADO data (in seconds). Minimum 60 seconds; set to 0 or negative to disable periodic refresh. |
 
-### AI Code Review (`workcenter-ai-reviewer`)
+### AI Code Review (`devdocket-ai-reviewer`)
 
 Registers an **AI Code Review** action that can be run on any work item whose URL points to a GitHub pull request. When triggered via **Run Action…**, it fetches the PR diff and sends it to a VS Code language model for review.
 
@@ -190,18 +190,18 @@ Registers an **AI Code Review** action that can be run on any work item whose UR
 
 | Setting | Type | Default | Description |
 |---------|------|---------|-------------|
-| `workcenterAiReview.customPromptPath` | `string` | `""` | Path to a custom code review prompt file. Replaces the built-in review instructions. The PR diff is always appended automatically. Supports absolute paths and workspace-relative paths. |
+| `devdocketAiReview.customPromptPath` | `string` | `""` | Path to a custom code review prompt file. Replaces the built-in review instructions. The PR diff is always appended automatically. Supports absolute paths and workspace-relative paths. |
 
 ## Core Configuration
 
 | Setting | Type | Default | Description |
 |---------|------|---------|-------------|
-| `workcenter.logLevel` | `string` | `"info"` | Log level for the WorkCenter output channel. Valid values: `debug`, `info`, `warn`, `error`. |
-| `workcenter.showInboxNotifications` | `boolean` | `true` | Show a notification when new items arrive in the Inbox. |
+| `devdocket.logLevel` | `string` | `"info"` | Log level for the DevDocket output channel. Valid values: `debug`, `info`, `warn`, `error`. |
+| `devdocket.showInboxNotifications` | `boolean` | `true` | Show a notification when new items arrive in the Inbox. |
 
 ## Keyboard Shortcuts
 
-WorkCenter provides chorded keyboard shortcuts using the **Ctrl+Alt+D** prefix. All shortcuts are scoped to WorkCenter views — they only activate when a WorkCenter view has focus.
+DevDocket provides chorded keyboard shortcuts using the **Ctrl+Alt+D** prefix. All shortcuts are scoped to DevDocket views — they only activate when a DevDocket view has focus.
 
 To use a shortcut, press **Ctrl+Alt+D**, release, then press the second key.
 

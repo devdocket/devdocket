@@ -3,7 +3,7 @@ import { EventEmitter, DataTransfer, DataTransferItem, window } from 'vscode';
 import { WorkItem, WorkItemState } from '../models/workItem';
 import { FocusTreeProvider } from '../views/focusTreeProvider';
 
-const DRAG_MIME_TYPE = 'application/vnd.code.tree.workcenter.focus';
+const DRAG_MIME_TYPE = 'application/vnd.code.tree.devdocket.focus';
 
 function createMockWorkGraph() {
   const emitter = new EventEmitter<void>();
@@ -352,7 +352,7 @@ describe('FocusTreeProvider', () => {
 
       expect(workGraph.reorderItem).not.toHaveBeenCalled();
       expect(window.showInformationMessage).toHaveBeenCalledWith(
-        'WorkCenter: Cannot reorder items across different states.'
+        'DevDocket: Cannot reorder items across different states.'
       );
     });
 

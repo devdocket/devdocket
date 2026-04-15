@@ -1,4 +1,4 @@
-# WorkCenter VS Code Extension Agent Instructions
+# DevDocket VS Code Extension Agent Instructions
 
 ## Build & Test
 
@@ -22,9 +22,9 @@ cd packages/core && npm run watch
 
 ## Architecture
 
-WorkCenter is a VS Code extension that acts as a **hub** for managing work items from multiple sources. It's a monorepo with the following extensions:
+DevDocket is a VS Code extension that acts as a **hub** for managing work items from multiple sources. It's a monorepo with the following extensions:
 
-- **`packages/core`** — The WorkCenter extension. Owns the UI, work item lifecycle, and plugin API.
+- **`packages/core`** — The DevDocket extension. Owns the UI, work item lifecycle, and plugin API.
 - **`packages/github`** — A provider extension that discovers GitHub issues and PR reviews.
 - **`packages/ado`** — A provider extension that discovers Azure DevOps work items and PR reviews.
 - **`packages/start-git-work`** — An action extension that creates git branches and worktrees for work items from GitHub and ADO providers.
@@ -58,12 +58,12 @@ Providers (GitHub, future)          User (manual)
 
 ### Extension API
 
-The core extension returns `WorkCenterApi` from `activate()`. Provider extensions acquire it via `vscode.extensions.getExtension('mthalman.workcenter')`.
+The core extension returns `DevDocketApi` from `activate()`. Provider extensions acquire it via `vscode.extensions.getExtension('mthalman.devdocket')`.
 
 ```ts
-interface WorkCenterApi {
-  registerProvider(provider: WorkCenterProvider): Disposable;
-  registerAction(action: WorkCenterAction): Disposable;
+interface DevDocketApi {
+  registerProvider(provider: DevDocketProvider): Disposable;
+  registerAction(action: DevDocketAction): Disposable;
 }
 ```
 
@@ -110,10 +110,10 @@ During code review (via `superpowers:code-reviewer` or manual review), **any cha
 
 These files define the contract that provider extensions depend on:
 
-- `packages/core/src/api/types.ts` — `WorkCenterApi`, `WorkCenterProvider`, `WorkCenterAction`, and re-exported shared types (`Disposable`, `Event`, `DiscoveredItem`)
-- `packages/core/src/models/workItem.ts` — `WorkItem` and `WorkItemState` (`WorkItem` is exposed to action implementors via `WorkCenterAction.canRun` / `run`, and references `WorkItemState`)
+- `packages/core/src/api/types.ts` — `DevDocketApi`, `DevDocketProvider`, `DevDocketAction`, and re-exported shared types (`Disposable`, `Event`, `DiscoveredItem`)
+- `packages/core/src/models/workItem.ts` — `WorkItem` and `WorkItemState` (`WorkItem` is exposed to action implementors via `DevDocketAction.canRun` / `run`, and references `WorkItemState`)
 - `packages/shared/src/baseProvider.ts` — `DiscoveredItem`, `Disposable`, `Event`, `EventEmitterLike`, `BaseProvider`
-- `packages/shared/src/index.ts` — all symbols exported from this barrel are considered public API surface of `@workcenter/shared`
+- `packages/shared/src/index.ts` — all symbols exported from this barrel are considered public API surface of `@devdocket/shared`
 
 #### What constitutes a breaking change
 

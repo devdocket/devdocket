@@ -2,7 +2,7 @@
 
 ## Core Context
 
-WorkCenter is a VS Code extension for managing work items. Phase 1 is complete:
+DevDocket is a VS Code extension for managing work items. Phase 1 is complete:
 - Queue view (new items) and Focus view (in-progress items) as tree data providers
 - Manual work item creation via input box, editing via webview panel with auto-save
 - 6-state WorkItem model (New, InProgress, Blocked, WaitingOn, Done, Archived)
@@ -35,7 +35,7 @@ Key files:
 - DiscoveredItemRecords are never deleted by provider refresh (only added/updated) — prevents dismissed items from re-spamming Inbox
 - Naming: rename existing `InboxTreeProvider` → `QueueTreeProvider` first, THEN create new `InboxTreeProvider`
 - Decision record: `.squad/decisions/inbox/keaton-four-view-review.md`
-- Key files reviewed: `types.ts`, `providerRegistry.ts`, `workItem.ts`, `inboxTreeProvider.ts`, `focusTreeProvider.ts`, `extension.ts`, `package.json`, `workGraph.ts`, `commands.ts`, `workCenterApi.ts`, `githubProvider.ts`
+- Key files reviewed: `types.ts`, `providerRegistry.ts`, `workItem.ts`, `inboxTreeProvider.ts`, `focusTreeProvider.ts`, `extension.ts`, `package.json`, `workGraph.ts`, `commands.ts`, `devDocketApi.ts`, `githubProvider.ts`
 
 ## Phase 3 Four-View Implementation (2026-03-24)
 

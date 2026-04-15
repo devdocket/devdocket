@@ -16,14 +16,14 @@ export interface WorkItem {
   updatedAt: number;
 }
 
-export interface WorkCenterAction {
+export interface DevDocketAction {
   readonly id: string;
   readonly label: string;
   canRun(item: WorkItem): boolean;
   run(item: WorkItem): Promise<void>;
 }
 
-export interface WorkCenterProvider {
+export interface DevDocketProvider {
   readonly id: string;
   readonly label: string;
   readonly onDidDiscoverItems: Event<DiscoveredItem[]>;
@@ -42,7 +42,7 @@ export interface DiscoveredItem {
   group?: string;
 }
 
-export interface WorkCenterApi {
-  registerProvider(provider: WorkCenterProvider): Disposable;
-  registerAction(action: WorkCenterAction): Disposable;
+export interface DevDocketApi {
+  registerProvider(provider: DevDocketProvider): Disposable;
+  registerAction(action: DevDocketAction): Disposable;
 }

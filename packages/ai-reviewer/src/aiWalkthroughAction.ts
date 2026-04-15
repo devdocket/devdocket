@@ -1,9 +1,9 @@
 import * as vscode from 'vscode';
-import type { WorkItem, WorkCenterAction } from './types';
+import type { WorkItem, DevDocketAction } from './types';
 import { RepoManager } from './repoManager';
 import { parsePrUrl } from './prUrl';
 
-export class AiWalkthroughAction implements WorkCenterAction {
+export class AiWalkthroughAction implements DevDocketAction {
   readonly id = 'ai-reviewer.walkthrough';
   readonly label = 'AI Walkthrough';
 

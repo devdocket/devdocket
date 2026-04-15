@@ -1,18 +1,18 @@
 import * as vscode from 'vscode';
-import { isValidGitHubRepo } from '@workcenter/shared';
+import { isValidGitHubRepo } from '@devdocket/shared';
 import { logger } from './logger';
 import { parseRepoFromUrls } from './parseRepo';
 import { BaseGitHubProvider, DiscoveredItem, GitHubIssue } from './baseGithubProvider';
 
 /**
- * WorkCenter provider that discovers GitHub issues assigned to the current user.
+ * DevDocket provider that discovers GitHub issues assigned to the current user.
  *
  * Issues are fetched via the GitHub REST API using VS Code's built-in GitHub
  * authentication. When configured repos are specified, only those repos are
  * queried; otherwise all assigned issues across GitHub are returned.
  *
  * Supports periodic background refresh and emits discovered items through
- * the {@link WorkCenterProvider.onDidDiscoverItems} event.
+ * the {@link DevDocketProvider.onDidDiscoverItems} event.
  */
 export class GitHubIssueProvider extends BaseGitHubProvider {
   readonly id = 'github';
@@ -43,7 +43,7 @@ export class GitHubIssueProvider extends BaseGitHubProvider {
         ? `Failed to fetch issues from ${failures[0]}`
         : `Failed to fetch issues from ${failures.length} repositories`;
       if (isUserTriggered) {
-        void vscode.window.showWarningMessage(`WorkCenter GitHub: ${message}`);
+        void vscode.window.showWarningMessage(`DevDocket GitHub: ${message}`);
       } else {
         logger.warn(message);
       }
@@ -51,7 +51,7 @@ export class GitHubIssueProvider extends BaseGitHubProvider {
   }
 
   private getConfiguredRepos(): string[] {
-    const config = vscode.workspace.getConfiguration('workcenterGithub');
+    const config = vscode.workspace.getConfiguration('devdocketGithub');
     return config.get<string[]>('repos', []);
   }
 

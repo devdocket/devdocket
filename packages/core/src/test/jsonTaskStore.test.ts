@@ -13,7 +13,7 @@ describe('JsonTaskStore', () => {
   let store: JsonTaskStore;
 
   beforeEach(async () => {
-    tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'workcenter-test-'));
+    tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'devdocket-test-'));
     store = new JsonTaskStore(tmpDir);
   });
 

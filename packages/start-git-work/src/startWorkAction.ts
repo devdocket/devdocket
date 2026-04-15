@@ -23,7 +23,7 @@ interface WorkItem {
 }
 
 // Re-declared to match core API contract — separate extension cannot import core types directly
-interface WorkCenterAction {
+interface DevDocketAction {
   readonly id: string;
   readonly label: string;
   canRun(item: Readonly<WorkItem>): boolean;
@@ -38,7 +38,7 @@ interface ParsedExternalId {
 const SUPPORTED_PROVIDERS = ['github', 'ado-work-items'];
 
 /**
- * WorkCenter action that bootstraps a development environment for a work item.
+ * DevDocket action that bootstraps a development environment for a work item.
  *
  * Supports items from both GitHub and Azure DevOps providers.
  * When executed on a work item it:
@@ -50,7 +50,7 @@ const SUPPORTED_PROVIDERS = ['github', 'ado-work-items'];
  *
  * Only available for items in the `InProgress` state from supported providers.
  */
-export class StartWorkAction implements WorkCenterAction {
+export class StartWorkAction implements DevDocketAction {
   readonly id = 'startGitWork';
   readonly label = 'Start Git Work (Branch + Worktree)';
 
@@ -97,7 +97,7 @@ export class StartWorkAction implements WorkCenterAction {
 
           // Fail fast if worktree directory already exists (before creating branch)
           if (fs.existsSync(worktreePath)) {
-            void vscode.window.showErrorMessage(`WorkCenter: Directory "${worktreePath}" already exists.`);
+            void vscode.window.showErrorMessage(`DevDocket: Directory "${worktreePath}" already exists.`);
             return;
           }
 
@@ -106,7 +106,7 @@ export class StartWorkAction implements WorkCenterAction {
           // Check if branch already exists
           const { stdout: branchList } = await execFileAsync('git', ['branch', '--list', branchName], { cwd: repoPath });
           if (branchList.trim()) {
-            void vscode.window.showErrorMessage(`WorkCenter: Branch "${branchName}" already exists.`);
+            void vscode.window.showErrorMessage(`DevDocket: Branch "${branchName}" already exists.`);
             return;
           }
 
@@ -125,13 +125,13 @@ export class StartWorkAction implements WorkCenterAction {
               await execFileAsync('git', ['branch', '-D', branchName], { cwd: repoPath });
             } catch (rollbackErr) {
               const rollbackMessage = rollbackErr instanceof Error ? rollbackErr.message : String(rollbackErr);
-              void vscode.window.showWarningMessage(`WorkCenter: Failed to delete branch during rollback — ${rollbackMessage}`);
+              void vscode.window.showWarningMessage(`DevDocket: Failed to delete branch during rollback — ${rollbackMessage}`);
             }
 
             const errMsg = worktreeErr instanceof Error ? worktreeErr.message : String(worktreeErr);
             const errStderr = (worktreeErr as any)?.stderr ?? '';
             if (errMsg.includes('already exists') || errStderr.includes('already exists')) {
-              void vscode.window.showErrorMessage(`WorkCenter: Directory "${worktreePath}" already exists.`);
+              void vscode.window.showErrorMessage(`DevDocket: Directory "${worktreePath}" already exists.`);
               return;
             }
             throw worktreeErr;
@@ -140,7 +140,7 @@ export class StartWorkAction implements WorkCenterAction {
           logger.info(`Created worktree at ${worktreePath}`);
 
           // Run user-configured post-worktree commands
-          const commands = vscode.workspace.getConfiguration('workcenterStartGitWork')
+          const commands = vscode.workspace.getConfiguration('devdocketStartGitWork')
             .get<{ command: string; args?: string[] }[]>('commands', []);
 
           for (const cmd of commands) {
@@ -154,20 +154,20 @@ export class StartWorkAction implements WorkCenterAction {
               const cmdMessage = cmdErr instanceof Error ? cmdErr.message : String(cmdErr);
               logger.error(`Post-worktree command failed: ${cmd.command}`, cmdErr);
               void vscode.window.showWarningMessage(
-                `WorkCenter: Command "${cmd.command}" failed — ${cmdMessage}`,
+                `DevDocket: Command "${cmd.command}" failed — ${cmdMessage}`,
               );
             }
           }
 
           void vscode.window.showInformationMessage(
-            `WorkCenter: Created worktree for ${branchName}`,
+            `DevDocket: Created worktree for ${branchName}`,
           );
         },
       );
     } catch (err: unknown) {
       logger.error('Failed to start work', err);
       const message = err instanceof Error ? err.message : String(err);
-      void vscode.window.showErrorMessage(`WorkCenter: Failed to start work — ${message}`);
+      void vscode.window.showErrorMessage(`DevDocket: Failed to start work — ${message}`);
     }
   }
 
@@ -217,13 +217,13 @@ export class StartWorkAction implements WorkCenterAction {
 
     const trimmedPath = selectedPath.trim();
     if (!trimmedPath) {
-      void vscode.window.showErrorMessage('WorkCenter: No repository path provided.');
+      void vscode.window.showErrorMessage('DevDocket: No repository path provided.');
       return undefined;
     }
 
     const gitPath = path.join(trimmedPath, '.git');
     if (!fs.existsSync(gitPath)) {
-      void vscode.window.showErrorMessage(`WorkCenter: "${trimmedPath}" is not a git repository.`);
+      void vscode.window.showErrorMessage(`DevDocket: "${trimmedPath}" is not a git repository.`);
       return undefined;
     }
 
@@ -251,7 +251,7 @@ export class StartWorkAction implements WorkCenterAction {
 
     const trimmedBranch = selectedBranch.trim();
     if (!trimmedBranch) {
-      void vscode.window.showErrorMessage('WorkCenter: No base branch provided.');
+      void vscode.window.showErrorMessage('DevDocket: No base branch provided.');
       return undefined;
     }
 

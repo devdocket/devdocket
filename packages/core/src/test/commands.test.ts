@@ -162,27 +162,27 @@ describe('registerCommands', () => {
 
   it('registers all expected commands', () => {
     const expected = [
-      'workcenter.refresh',
-      'workcenter.createItem',
-      'workcenter.acceptToFocus',
-      'workcenter.archiveItem',
-      'workcenter.completeItem',
-      'workcenter.pauseItem',
-      'workcenter.resumeItem',
-      'workcenter.deleteItem',
-      'workcenter.editItem',
-      'workcenter.openInBrowser',
-      'workcenter.runAction',
-      'workcenter.moveUp',
-      'workcenter.moveDown',
-      'workcenter.focusMoveUp',
-      'workcenter.focusMoveDown',
-      'workcenter.moveToQueue',
-      'workcenter.acceptFromInbox',
-      'workcenter.acceptToFocusFromInbox',
-      'workcenter.dismissFromInbox',
-      'workcenter.acceptFromSources',
-      'workcenter.dismissFromSources',
+      'devdocket.refresh',
+      'devdocket.createItem',
+      'devdocket.acceptToFocus',
+      'devdocket.archiveItem',
+      'devdocket.completeItem',
+      'devdocket.pauseItem',
+      'devdocket.resumeItem',
+      'devdocket.deleteItem',
+      'devdocket.editItem',
+      'devdocket.openInBrowser',
+      'devdocket.runAction',
+      'devdocket.moveUp',
+      'devdocket.moveDown',
+      'devdocket.focusMoveUp',
+      'devdocket.focusMoveDown',
+      'devdocket.moveToQueue',
+      'devdocket.acceptFromInbox',
+      'devdocket.acceptToFocusFromInbox',
+      'devdocket.dismissFromInbox',
+      'devdocket.acceptFromSources',
+      'devdocket.dismissFromSources',
     ];
     for (const cmd of expected) {
       expect(commandHandlers.has(cmd), `missing command: ${cmd}`).toBe(true);
@@ -195,9 +195,9 @@ describe('registerCommands', () => {
 
   // ── refresh ──────────────────────────────────────────────────────
 
-  describe('workcenter.refresh', () => {
+  describe('devdocket.refresh', () => {
     it('calls providerRegistry.refreshAll and shows progress', async () => {
-      await invoke('workcenter.refresh');
+      await invoke('devdocket.refresh');
 
       expect(vscode.window.withProgress).toHaveBeenCalledWith(
         expect.objectContaining({ location: vscode.ProgressLocation.Window }),
@@ -209,27 +209,27 @@ describe('registerCommands', () => {
 
   // ── createItem ───────────────────────────────────────────────────
 
-  describe('workcenter.createItem', () => {
+  describe('devdocket.createItem', () => {
     it('creates item when user provides a title', async () => {
       (vscode.window.showInputBox as Mock).mockResolvedValue('My Task');
-      await invoke('workcenter.createItem');
+      await invoke('devdocket.createItem');
 
       expect(workGraph.createItem).toHaveBeenCalledWith({ title: 'My Task' });
       expect(vscode.window.showInformationMessage).toHaveBeenCalledWith(
-        'WorkCenter: Created "My Task"',
+        'DevDocket: Created "My Task"',
       );
     });
 
     it('trims whitespace from the title', async () => {
       (vscode.window.showInputBox as Mock).mockResolvedValue('  Padded  ');
-      await invoke('workcenter.createItem');
+      await invoke('devdocket.createItem');
 
       expect(workGraph.createItem).toHaveBeenCalledWith({ title: 'Padded' });
     });
 
     it('does nothing when user cancels the input box', async () => {
       (vscode.window.showInputBox as Mock).mockResolvedValue(undefined);
-      await invoke('workcenter.createItem');
+      await invoke('devdocket.createItem');
 
       expect(workGraph.createItem).not.toHaveBeenCalled();
     });
@@ -239,12 +239,12 @@ describe('registerCommands', () => {
 
   describe('state-transition commands', () => {
     const transitions: [string, WorkItemState][] = [
-      ['workcenter.acceptToFocus', WorkItemState.InProgress],
-      ['workcenter.archiveItem', WorkItemState.Archived],
-      ['workcenter.completeItem', WorkItemState.Done],
-      ['workcenter.pauseItem', WorkItemState.Paused],
-      ['workcenter.resumeItem', WorkItemState.InProgress],
-      ['workcenter.moveToQueue', WorkItemState.New],
+      ['devdocket.acceptToFocus', WorkItemState.InProgress],
+      ['devdocket.archiveItem', WorkItemState.Archived],
+      ['devdocket.completeItem', WorkItemState.Done],
+      ['devdocket.pauseItem', WorkItemState.Paused],
+      ['devdocket.resumeItem', WorkItemState.InProgress],
+      ['devdocket.moveToQueue', WorkItemState.New],
     ];
 
     for (const [cmd, expectedState] of transitions) {
@@ -256,21 +256,21 @@ describe('registerCommands', () => {
 
     it('shows error when transitionState throws', async () => {
       workGraph.transitionState.mockRejectedValue(new Error('db crash'));
-      await invoke('workcenter.archiveItem', { id: 'wc-1' });
+      await invoke('devdocket.archiveItem', { id: 'wc-1' });
       expect(vscode.window.showErrorMessage).toHaveBeenCalledWith(
-        'WorkCenter: Failed to archive item — db crash',
+        'DevDocket: Failed to archive item — db crash',
       );
     });
   });
 
   // ── editItem ─────────────────────────────────────────────────────
 
-  describe('workcenter.editItem', () => {
+  describe('devdocket.editItem', () => {
     it('opens editor panel when item exists', () => {
       const item = createWorkItem();
       workGraph.getItem.mockReturnValue(item);
 
-      invoke('workcenter.editItem', { id: item.id });
+      invoke('devdocket.editItem', { id: item.id });
 
       expect(workGraph.getItem).toHaveBeenCalledWith(item.id);
       expect(WorkItemEditorPanel.open).toHaveBeenCalledWith(ctx, workGraph, providerRegistry, item, undefined);
@@ -281,7 +281,7 @@ describe('registerCommands', () => {
       workGraph.getItem.mockReturnValue(item);
       labelCache.get.mockReturnValue('GitHub Issues');
 
-      invoke('workcenter.editItem', { id: item.id });
+      invoke('devdocket.editItem', { id: item.id });
 
       expect(labelCache.get).toHaveBeenCalledWith('github');
       expect(WorkItemEditorPanel.open).toHaveBeenCalledWith(ctx, workGraph, providerRegistry, item, 'GitHub Issues');
@@ -289,7 +289,7 @@ describe('registerCommands', () => {
 
     it('does not open editor when item is not found', () => {
       workGraph.getItem.mockReturnValue(undefined);
-      invoke('workcenter.editItem', { id: 'missing' });
+      invoke('devdocket.editItem', { id: 'missing' });
 
       expect(workGraph.getItem).toHaveBeenCalledWith('missing');
       expect(WorkItemEditorPanel.open).not.toHaveBeenCalled();
@@ -298,12 +298,12 @@ describe('registerCommands', () => {
 
   // ── openInBrowser ────────────────────────────────────────────────
 
-  describe('workcenter.openInBrowser', () => {
+  describe('devdocket.openInBrowser', () => {
     it('opens workItem url when found', async () => {
       const item = createWorkItem({ url: 'https://example.com' });
       workGraph.getItem.mockReturnValue(item);
 
-      await invoke('workcenter.openInBrowser', { id: item.id });
+      await invoke('devdocket.openInBrowser', { id: item.id });
 
       expect(vscode.env.openExternal).toHaveBeenCalled();
       expect(vscode.Uri.parse).toHaveBeenCalledWith('https://example.com/');
@@ -312,7 +312,7 @@ describe('registerCommands', () => {
     it('falls back to item.url when workItem has no url', async () => {
       workGraph.getItem.mockReturnValue(createWorkItem({ url: undefined }));
 
-      await invoke('workcenter.openInBrowser', { id: 'wc-1', url: 'https://fallback.com' });
+      await invoke('devdocket.openInBrowser', { id: 'wc-1', url: 'https://fallback.com' });
 
       expect(vscode.Uri.parse).toHaveBeenCalledWith('https://fallback.com/');
       expect(vscode.env.openExternal).toHaveBeenCalled();
@@ -321,7 +321,7 @@ describe('registerCommands', () => {
     it('does nothing when neither source has a url', async () => {
       workGraph.getItem.mockReturnValue(createWorkItem({ url: undefined }));
 
-      await invoke('workcenter.openInBrowser', { id: 'wc-1' });
+      await invoke('devdocket.openInBrowser', { id: 'wc-1' });
 
       expect(vscode.env.openExternal).not.toHaveBeenCalled();
     });
@@ -329,7 +329,7 @@ describe('registerCommands', () => {
     it('does nothing when item not found and tree item has no url', async () => {
       workGraph.getItem.mockReturnValue(undefined);
 
-      await invoke('workcenter.openInBrowser', { id: 'wc-gone' });
+      await invoke('devdocket.openInBrowser', { id: 'wc-gone' });
 
       expect(vscode.env.openExternal).not.toHaveBeenCalled();
     });
@@ -337,7 +337,7 @@ describe('registerCommands', () => {
     it('falls back to tree node url when workItem is not found', async () => {
       workGraph.getItem.mockReturnValue(undefined);
 
-      await invoke('workcenter.openInBrowser', { id: 'wc-gone', url: 'https://tree-fallback.com' });
+      await invoke('devdocket.openInBrowser', { id: 'wc-gone', url: 'https://tree-fallback.com' });
 
       expect(vscode.Uri.parse).toHaveBeenCalledWith('https://tree-fallback.com/');
       expect(vscode.env.openExternal).toHaveBeenCalled();
@@ -347,7 +347,7 @@ describe('registerCommands', () => {
       const item = createWorkItem({ url: 'javascript:alert(1)' });
       workGraph.getItem.mockReturnValue(item);
 
-      await invoke('workcenter.openInBrowser', { id: item.id });
+      await invoke('devdocket.openInBrowser', { id: item.id });
 
       expect(vscode.window.showWarningMessage).toHaveBeenCalledWith(
         'Cannot open non-web URL: javascript:alert(1)',
@@ -359,7 +359,7 @@ describe('registerCommands', () => {
       const item = createWorkItem({ url: 'data:text/html,<h1>hi</h1>' });
       workGraph.getItem.mockReturnValue(item);
 
-      await invoke('workcenter.openInBrowser', { id: item.id });
+      await invoke('devdocket.openInBrowser', { id: item.id });
 
       expect(vscode.window.showWarningMessage).toHaveBeenCalledWith(
         expect.stringContaining('Cannot open non-web URL'),
@@ -371,7 +371,7 @@ describe('registerCommands', () => {
       const item = createWorkItem({ url: 'file:///etc/passwd' });
       workGraph.getItem.mockReturnValue(item);
 
-      await invoke('workcenter.openInBrowser', { id: item.id });
+      await invoke('devdocket.openInBrowser', { id: item.id });
 
       expect(vscode.window.showWarningMessage).toHaveBeenCalledWith(
         expect.stringContaining('Cannot open non-web URL'),
@@ -380,7 +380,7 @@ describe('registerCommands', () => {
     });
 
     it('opens url from item without id (Inbox/Sources items)', async () => {
-      await invoke('workcenter.openInBrowser', { url: 'https://provider-item.com' });
+      await invoke('devdocket.openInBrowser', { url: 'https://provider-item.com' });
 
       expect(workGraph.getItem).not.toHaveBeenCalled();
       expect(vscode.Uri.parse).toHaveBeenCalledWith('https://provider-item.com/');
@@ -388,7 +388,7 @@ describe('registerCommands', () => {
     });
 
     it('rejects unsafe url-only item (Inbox/Sources)', async () => {
-      await invoke('workcenter.openInBrowser', { url: 'javascript:alert(1)' });
+      await invoke('devdocket.openInBrowser', { url: 'javascript:alert(1)' });
 
       expect(vscode.window.showWarningMessage).toHaveBeenCalledWith(
         expect.stringContaining('Cannot open non-web URL'),
@@ -397,10 +397,10 @@ describe('registerCommands', () => {
     });
 
     it('shows warning when item has neither id nor url', async () => {
-      await invoke('workcenter.openInBrowser', {});
+      await invoke('devdocket.openInBrowser', {});
 
       expect(vscode.window.showWarningMessage).toHaveBeenCalledWith(
-        'WorkCenter: Select an item to open in the browser.',
+        'DevDocket: Select an item to open in the browser.',
       );
       expect(vscode.env.openExternal).not.toHaveBeenCalled();
     });
@@ -408,11 +408,11 @@ describe('registerCommands', () => {
 
   // ── runAction ────────────────────────────────────────────────────
 
-  describe('workcenter.runAction', () => {
+  describe('devdocket.runAction', () => {
     it('does nothing when item is not found', async () => {
       workGraph.getItem.mockReturnValue(undefined);
 
-      await invoke('workcenter.runAction', { id: 'missing' });
+      await invoke('devdocket.runAction', { id: 'missing' });
 
       expect(actionRegistry.getActionsFor).not.toHaveBeenCalled();
     });
@@ -422,7 +422,7 @@ describe('registerCommands', () => {
       workGraph.getItem.mockReturnValue(item);
       actionRegistry.getActionsFor.mockReturnValue([]);
 
-      await invoke('workcenter.runAction', { id: item.id });
+      await invoke('devdocket.runAction', { id: item.id });
 
       expect(vscode.window.showInformationMessage).toHaveBeenCalledWith(
         'No actions available for this item.',
@@ -441,7 +441,7 @@ describe('registerCommands', () => {
         actionId: 'act-1',
       });
 
-      await invoke('workcenter.runAction', { id: item.id });
+      await invoke('devdocket.runAction', { id: item.id });
 
       expect(action.run).toHaveBeenCalledWith(item);
     });
@@ -454,7 +454,7 @@ describe('registerCommands', () => {
       actionRegistry.getActionsFor.mockReturnValue([action]);
       (vscode.window.showQuickPick as Mock).mockResolvedValue(undefined);
 
-      await invoke('workcenter.runAction', { id: item.id });
+      await invoke('devdocket.runAction', { id: item.id });
 
       expect(action.run).not.toHaveBeenCalled();
     });
@@ -476,10 +476,10 @@ describe('registerCommands', () => {
         actionId: 'fail',
       });
 
-      await invoke('workcenter.runAction', { id: item.id });
+      await invoke('devdocket.runAction', { id: item.id });
 
       expect(vscode.window.showErrorMessage).toHaveBeenCalledWith(
-        'WorkCenter: Action "Broken" failed — boom',
+        'DevDocket: Action "Broken" failed — boom',
       );
     });
 
@@ -500,65 +500,65 @@ describe('registerCommands', () => {
         actionId: 'fail2',
       });
 
-      await invoke('workcenter.runAction', { id: item.id });
+      await invoke('devdocket.runAction', { id: item.id });
 
       expect(vscode.window.showErrorMessage).toHaveBeenCalledWith(
-        'WorkCenter: Action "StringErr" failed — string error',
+        'DevDocket: Action "StringErr" failed — string error',
       );
     });
   });
 
   // ── moveUp / moveDown ────────────────────────────────────────────
 
-  describe('workcenter.moveUp', () => {
+  describe('devdocket.moveUp', () => {
     it('calls workGraph.moveItem with "up"', () => {
-      invoke('workcenter.moveUp', { id: 'wc-1' });
+      invoke('devdocket.moveUp', { id: 'wc-1' });
       expect(workGraph.moveItem).toHaveBeenCalledWith('wc-1', 'up');
     });
 
     it('shows info message when item is null', () => {
-      invoke('workcenter.moveUp', null);
+      invoke('devdocket.moveUp', null);
       expect(vscode.window.showInformationMessage).toHaveBeenCalledWith(
-        'WorkCenter: Select an item in the Queue to move.',
+        'DevDocket: Select an item in the Queue to move.',
       );
       expect(workGraph.moveItem).not.toHaveBeenCalled();
     });
 
     it('shows info message when item has no id', () => {
-      invoke('workcenter.moveUp', {});
+      invoke('devdocket.moveUp', {});
       expect(vscode.window.showInformationMessage).toHaveBeenCalledWith(
-        'WorkCenter: Select an item in the Queue to move.',
+        'DevDocket: Select an item in the Queue to move.',
       );
       expect(workGraph.moveItem).not.toHaveBeenCalled();
     });
   });
 
-  describe('workcenter.moveDown', () => {
+  describe('devdocket.moveDown', () => {
     it('calls workGraph.moveItem with "down"', () => {
-      invoke('workcenter.moveDown', { id: 'wc-1' });
+      invoke('devdocket.moveDown', { id: 'wc-1' });
       expect(workGraph.moveItem).toHaveBeenCalledWith('wc-1', 'down');
     });
 
     it('shows info message when item is undefined', () => {
-      invoke('workcenter.moveDown', undefined);
+      invoke('devdocket.moveDown', undefined);
       expect(vscode.window.showInformationMessage).toHaveBeenCalledWith(
-        'WorkCenter: Select an item in the Queue to move.',
+        'DevDocket: Select an item in the Queue to move.',
       );
       expect(workGraph.moveItem).not.toHaveBeenCalled();
     });
 
     it('shows info message when item is null', () => {
-      invoke('workcenter.moveDown', null);
+      invoke('devdocket.moveDown', null);
       expect(vscode.window.showInformationMessage).toHaveBeenCalledWith(
-        'WorkCenter: Select an item in the Queue to move.',
+        'DevDocket: Select an item in the Queue to move.',
       );
       expect(workGraph.moveItem).not.toHaveBeenCalled();
     });
 
     it('shows info message when item has no id', () => {
-      invoke('workcenter.moveDown', {});
+      invoke('devdocket.moveDown', {});
       expect(vscode.window.showInformationMessage).toHaveBeenCalledWith(
-        'WorkCenter: Select an item in the Queue to move.',
+        'DevDocket: Select an item in the Queue to move.',
       );
       expect(workGraph.moveItem).not.toHaveBeenCalled();
     });
@@ -566,47 +566,47 @@ describe('registerCommands', () => {
 
   // ── focusMoveUp / focusMoveDown ─────────────────────────────────
 
-  describe('workcenter.focusMoveUp', () => {
+  describe('devdocket.focusMoveUp', () => {
     it('calls workGraph.moveItem with "up"', () => {
-      invoke('workcenter.focusMoveUp', { id: 'wc-1' });
+      invoke('devdocket.focusMoveUp', { id: 'wc-1' });
       expect(workGraph.moveItem).toHaveBeenCalledWith('wc-1', 'up');
     });
 
     it('shows info message when item is null', () => {
-      invoke('workcenter.focusMoveUp', null);
+      invoke('devdocket.focusMoveUp', null);
       expect(vscode.window.showInformationMessage).toHaveBeenCalledWith(
-        'WorkCenter: Select an item in Focus to move.',
+        'DevDocket: Select an item in Focus to move.',
       );
       expect(workGraph.moveItem).not.toHaveBeenCalled();
     });
 
     it('shows info message when item has no id', () => {
-      invoke('workcenter.focusMoveUp', {});
+      invoke('devdocket.focusMoveUp', {});
       expect(vscode.window.showInformationMessage).toHaveBeenCalledWith(
-        'WorkCenter: Select an item in Focus to move.',
+        'DevDocket: Select an item in Focus to move.',
       );
       expect(workGraph.moveItem).not.toHaveBeenCalled();
     });
   });
 
-  describe('workcenter.focusMoveDown', () => {
+  describe('devdocket.focusMoveDown', () => {
     it('calls workGraph.moveItem with "down"', () => {
-      invoke('workcenter.focusMoveDown', { id: 'wc-1' });
+      invoke('devdocket.focusMoveDown', { id: 'wc-1' });
       expect(workGraph.moveItem).toHaveBeenCalledWith('wc-1', 'down');
     });
 
     it('shows info message when item is undefined', () => {
-      invoke('workcenter.focusMoveDown', undefined);
+      invoke('devdocket.focusMoveDown', undefined);
       expect(vscode.window.showInformationMessage).toHaveBeenCalledWith(
-        'WorkCenter: Select an item in Focus to move.',
+        'DevDocket: Select an item in Focus to move.',
       );
       expect(workGraph.moveItem).not.toHaveBeenCalled();
     });
 
     it('shows info message when item has no id', () => {
-      invoke('workcenter.focusMoveDown', {});
+      invoke('devdocket.focusMoveDown', {});
       expect(vscode.window.showInformationMessage).toHaveBeenCalledWith(
-        'WorkCenter: Select an item in Focus to move.',
+        'DevDocket: Select an item in Focus to move.',
       );
       expect(workGraph.moveItem).not.toHaveBeenCalled();
     });
@@ -614,12 +614,12 @@ describe('registerCommands', () => {
 
   // ── acceptFromInbox ──────────────────────────────────────────────
 
-  describe('workcenter.acceptFromInbox', () => {
+  describe('devdocket.acceptFromInbox', () => {
     it('creates a work item and sets state to accepted', async () => {
       const inboxItem = makeInboxItem();
       workGraph.findItemByProvenance.mockReturnValue(undefined);
 
-      await invoke('workcenter.acceptFromInbox', inboxItem);
+      await invoke('devdocket.acceptFromInbox', inboxItem);
 
       expect(workGraph.createItem).toHaveBeenCalledWith(
         { title: 'Inbox Issue' },
@@ -632,7 +632,7 @@ describe('registerCommands', () => {
       const inboxItem = makeInboxItem({ group: 'org/repo' });
       workGraph.findItemByProvenance.mockReturnValue(undefined);
 
-      await invoke('workcenter.acceptFromInbox', inboxItem);
+      await invoke('devdocket.acceptFromInbox', inboxItem);
 
       expect(workGraph.createItem).toHaveBeenCalledWith(
         { title: 'org/repo Inbox Issue' },
@@ -644,7 +644,7 @@ describe('registerCommands', () => {
       const inboxItem = makeInboxItem({ group: '  ' });
       workGraph.findItemByProvenance.mockReturnValue(undefined);
 
-      await invoke('workcenter.acceptFromInbox', inboxItem);
+      await invoke('devdocket.acceptFromInbox', inboxItem);
 
       expect(workGraph.createItem).toHaveBeenCalledWith(
         { title: 'Inbox Issue' },
@@ -656,11 +656,11 @@ describe('registerCommands', () => {
       const existing = createWorkItem({ title: 'Already There' });
       workGraph.findItemByProvenance.mockReturnValue(existing);
 
-      await invoke('workcenter.acceptFromInbox', makeInboxItem());
+      await invoke('devdocket.acceptFromInbox', makeInboxItem());
 
       expect(workGraph.createItem).not.toHaveBeenCalled();
       expect(vscode.window.showInformationMessage).toHaveBeenCalledWith(
-        'WorkCenter: Item already accepted as "Already There"',
+        'DevDocket: Item already accepted as "Already There"',
       );
       expect(stateStore.setState).toHaveBeenCalledWith('github', 'ext-1', 'accepted');
     });
@@ -670,13 +670,13 @@ describe('registerCommands', () => {
       workGraph.findItemByProvenance.mockReturnValue(existing);
       stateStore.setState.mockRejectedValue(new Error('write fail'));
 
-      await invoke('workcenter.acceptFromInbox', makeInboxItem());
+      await invoke('devdocket.acceptFromInbox', makeInboxItem());
 
       expect(vscode.window.showInformationMessage).toHaveBeenCalledWith(
-        'WorkCenter: Item already accepted as "Already There"',
+        'DevDocket: Item already accepted as "Already There"',
       );
       expect(vscode.window.showErrorMessage).toHaveBeenCalledWith(
-        'WorkCenter: Failed to update state for existing accepted item — write fail',
+        'DevDocket: Failed to update state for existing accepted item — write fail',
       );
     });
 
@@ -684,10 +684,10 @@ describe('registerCommands', () => {
       workGraph.findItemByProvenance.mockReturnValue(undefined);
       workGraph.createItem.mockRejectedValue(new Error('store error'));
 
-      await invoke('workcenter.acceptFromInbox', makeInboxItem());
+      await invoke('devdocket.acceptFromInbox', makeInboxItem());
 
       expect(vscode.window.showErrorMessage).toHaveBeenCalledWith(
-        'WorkCenter: Failed to accept inbox item — store error',
+        'DevDocket: Failed to accept inbox item — store error',
       );
       expect(stateStore.setState).not.toHaveBeenCalled();
     });
@@ -698,11 +698,11 @@ describe('registerCommands', () => {
       workGraph.createItem.mockResolvedValue(createdItem);
       stateStore.setState.mockRejectedValue(new Error('disk full'));
 
-      await invoke('workcenter.acceptFromInbox', makeInboxItem());
+      await invoke('devdocket.acceptFromInbox', makeInboxItem());
 
       expect(workGraph.deleteItem).toHaveBeenCalledWith('wc-new-1');
       expect(vscode.window.showErrorMessage).toHaveBeenCalledWith(
-        'WorkCenter: Failed to update state after accepting item — disk full',
+        'DevDocket: Failed to update state after accepting item — disk full',
       );
     });
 
@@ -713,7 +713,7 @@ describe('registerCommands', () => {
       stateStore.setState.mockRejectedValue(new Error('disk full'));
       workGraph.deleteItem.mockRejectedValue(new Error('delete failed'));
 
-      await invoke('workcenter.acceptFromInbox', makeInboxItem());
+      await invoke('devdocket.acceptFromInbox', makeInboxItem());
 
       expect(workGraph.deleteItem).toHaveBeenCalledWith('wc-new-2');
       expect(logger.error).toHaveBeenCalledWith(
@@ -721,17 +721,17 @@ describe('registerCommands', () => {
         expect.any(Error),
       );
       expect(vscode.window.showErrorMessage).toHaveBeenCalledWith(
-        'WorkCenter: Failed to update state after accepting item — disk full',
+        'DevDocket: Failed to update state after accepting item — disk full',
       );
     });
   });
 
   // ── dismissFromInbox ─────────────────────────────────────────────
 
-  describe('workcenter.dismissFromInbox', () => {
+  describe('devdocket.dismissFromInbox', () => {
     it('sets state to dismissed', async () => {
       const inboxItem = makeInboxItem();
-      await invoke('workcenter.dismissFromInbox', inboxItem);
+      await invoke('devdocket.dismissFromInbox', inboxItem);
 
       expect(stateStore.setState).toHaveBeenCalledWith('github', 'ext-1', 'dismissed');
     });
@@ -739,27 +739,27 @@ describe('registerCommands', () => {
     it('shows error when setState fails', async () => {
       stateStore.setState.mockRejectedValue(new Error('io error'));
 
-      await invoke('workcenter.dismissFromInbox', makeInboxItem());
+      await invoke('devdocket.dismissFromInbox', makeInboxItem());
 
       expect(vscode.window.showErrorMessage).toHaveBeenCalledWith(
-        'WorkCenter: Failed to dismiss item — io error',
+        'DevDocket: Failed to dismiss item — io error',
       );
     });
 
     it('shows stringified error for non-Error throw', async () => {
       stateStore.setState.mockRejectedValue('raw string');
 
-      await invoke('workcenter.dismissFromInbox', makeInboxItem());
+      await invoke('devdocket.dismissFromInbox', makeInboxItem());
 
       expect(vscode.window.showErrorMessage).toHaveBeenCalledWith(
-        'WorkCenter: Failed to dismiss item — raw string',
+        'DevDocket: Failed to dismiss item — raw string',
       );
     });
   });
 
   // ── batch acceptFromInbox (multi-select) ──────────────────────────
 
-  describe('workcenter.acceptFromInbox (multi-select)', () => {
+  describe('devdocket.acceptFromInbox (multi-select)', () => {
     it('batch-accepts multiple items and shows summary', async () => {
       const items = [
         makeInboxItem({ externalId: 'ext-1', title: 'Issue 1' }),
@@ -770,7 +770,7 @@ describe('registerCommands', () => {
         .mockResolvedValueOnce(createWorkItem({ id: 'wc-1' }))
         .mockResolvedValueOnce(createWorkItem({ id: 'wc-2' }));
 
-      await invoke('workcenter.acceptFromInbox', items[0], items);
+      await invoke('devdocket.acceptFromInbox', items[0], items);
 
       expect(workGraph.createItem).toHaveBeenCalledTimes(2);
       expect(stateStore.setStates).toHaveBeenCalledWith([
@@ -792,7 +792,7 @@ describe('registerCommands', () => {
         .mockReturnValueOnce(undefined);
       workGraph.createItem.mockResolvedValueOnce(createWorkItem({ id: 'wc-2' }));
 
-      await invoke('workcenter.acceptFromInbox', items[0], items);
+      await invoke('devdocket.acceptFromInbox', items[0], items);
 
       expect(workGraph.createItem).toHaveBeenCalledTimes(1);
       expect(stateStore.setStates).toHaveBeenCalledWith([
@@ -815,12 +815,12 @@ describe('registerCommands', () => {
         .mockResolvedValueOnce(createWorkItem({ id: 'wc-2' }));
       stateStore.setStates.mockRejectedValue(new Error('disk full'));
 
-      await invoke('workcenter.acceptFromInbox', items[0], items);
+      await invoke('devdocket.acceptFromInbox', items[0], items);
 
       expect(workGraph.deleteItem).toHaveBeenCalledWith('wc-1');
       expect(workGraph.deleteItem).toHaveBeenCalledWith('wc-2');
       expect(vscode.window.showErrorMessage).toHaveBeenCalledWith(
-        'WorkCenter: Failed to update states after accepting items — disk full',
+        'DevDocket: Failed to update states after accepting items — disk full',
       );
     });
 
@@ -836,7 +836,7 @@ describe('registerCommands', () => {
         .mockRejectedValueOnce(new Error('create failed'))
         .mockResolvedValueOnce(createWorkItem({ id: 'wc-3' }));
 
-      await invoke('workcenter.acceptFromInbox', items[0], items);
+      await invoke('devdocket.acceptFromInbox', items[0], items);
 
       expect(workGraph.createItem).toHaveBeenCalledTimes(3);
       expect(stateStore.setStates).toHaveBeenCalledWith([
@@ -848,7 +848,7 @@ describe('registerCommands', () => {
         expect.any(Error),
       );
       expect(vscode.window.showErrorMessage).toHaveBeenCalledWith(
-        'WorkCenter: Failed to accept 1 item(s); see Output for details',
+        'DevDocket: Failed to accept 1 item(s); see Output for details',
       );
       expect(vscode.window.showInformationMessage).toHaveBeenCalledWith(
         'Accepted 2 of 3 items to Queue',
@@ -860,7 +860,7 @@ describe('registerCommands', () => {
       workGraph.findItemByProvenance.mockReturnValue(undefined);
       workGraph.createItem.mockResolvedValue(createWorkItem());
 
-      await invoke('workcenter.acceptFromInbox', item, [item]);
+      await invoke('devdocket.acceptFromInbox', item, [item]);
 
       expect(stateStore.setState).toHaveBeenCalledWith('github', 'ext-1', 'accepted');
       expect(stateStore.setStates).not.toHaveBeenCalled();
@@ -873,7 +873,7 @@ describe('registerCommands', () => {
       workGraph.findItemByProvenance.mockReturnValue(undefined);
       workGraph.createItem.mockResolvedValue(createWorkItem({ id: 'wc-1' }));
 
-      await invoke('workcenter.acceptFromInbox', providerNode, [providerNode, groupNode, inboxItem]);
+      await invoke('devdocket.acceptFromInbox', providerNode, [providerNode, groupNode, inboxItem]);
 
       expect(stateStore.setState).toHaveBeenCalledWith('github', 'ext-1', 'accepted');
       expect(workGraph.createItem).toHaveBeenCalledTimes(1);
@@ -889,7 +889,7 @@ describe('registerCommands', () => {
         .mockResolvedValueOnce(createWorkItem({ id: 'wc-1' }))
         .mockResolvedValueOnce(createWorkItem({ id: 'wc-2' }));
 
-      await invoke('workcenter.acceptFromInbox', items[0], items);
+      await invoke('devdocket.acceptFromInbox', items[0], items);
 
       expect(workGraph.createItem).toHaveBeenCalledWith(
         { title: 'octocat/repo Issue 1' },
@@ -906,7 +906,7 @@ describe('registerCommands', () => {
       workGraph.findItemByProvenance.mockReturnValue(undefined);
       workGraph.createItem.mockResolvedValueOnce(createWorkItem({ id: 'wc-ws' }));
 
-      await invoke('workcenter.acceptFromInbox', items[0], items);
+      await invoke('devdocket.acceptFromInbox', items[0], items);
 
       expect(workGraph.createItem).toHaveBeenCalledTimes(1);
       const provenance = workGraph.createItem.mock.calls[0][1];
@@ -916,14 +916,14 @@ describe('registerCommands', () => {
 
   // ── batch dismissFromInbox (multi-select) ─────────────────────────
 
-  describe('workcenter.dismissFromInbox (multi-select)', () => {
+  describe('devdocket.dismissFromInbox (multi-select)', () => {
     it('batch-dismisses multiple items and shows summary', async () => {
       const items = [
         makeInboxItem({ externalId: 'ext-1' }),
         makeInboxItem({ externalId: 'ext-2' }),
       ];
 
-      await invoke('workcenter.dismissFromInbox', items[0], items);
+      await invoke('devdocket.dismissFromInbox', items[0], items);
 
       expect(stateStore.setStates).toHaveBeenCalledWith([
         { providerId: 'github', externalId: 'ext-1', state: 'dismissed' },
@@ -941,17 +941,17 @@ describe('registerCommands', () => {
       ];
       stateStore.setStates.mockRejectedValue(new Error('io error'));
 
-      await invoke('workcenter.dismissFromInbox', items[0], items);
+      await invoke('devdocket.dismissFromInbox', items[0], items);
 
       expect(vscode.window.showErrorMessage).toHaveBeenCalledWith(
-        'WorkCenter: Failed to dismiss items — io error',
+        'DevDocket: Failed to dismiss items — io error',
       );
     });
 
     it('uses single-item path when selectedItems has one item', async () => {
       const item = makeInboxItem();
 
-      await invoke('workcenter.dismissFromInbox', item, [item]);
+      await invoke('devdocket.dismissFromInbox', item, [item]);
 
       expect(stateStore.setState).toHaveBeenCalledWith('github', 'ext-1', 'dismissed');
       expect(stateStore.setStates).not.toHaveBeenCalled();
@@ -962,7 +962,7 @@ describe('registerCommands', () => {
       const groupNode: InboxGroupNode = { kind: 'group', providerId: 'github', groupName: 'org/repo', unseenCount: 3 };
       const inboxItem = makeInboxItem({ externalId: 'ext-1' });
 
-      await invoke('workcenter.dismissFromInbox', providerNode, [providerNode, groupNode, inboxItem]);
+      await invoke('devdocket.dismissFromInbox', providerNode, [providerNode, groupNode, inboxItem]);
 
       expect(stateStore.setState).toHaveBeenCalledWith('github', 'ext-1', 'dismissed');
       expect(stateStore.setStates).not.toHaveBeenCalled();
@@ -972,7 +972,7 @@ describe('registerCommands', () => {
       const providerNode: InboxProviderNode = { kind: 'provider', providerId: 'github', label: 'GitHub' };
       const groupNode: InboxGroupNode = { kind: 'group', providerId: 'github', groupName: 'org/repo', unseenCount: 3 };
 
-      await invoke('workcenter.dismissFromInbox', providerNode, [providerNode, groupNode]);
+      await invoke('devdocket.dismissFromInbox', providerNode, [providerNode, groupNode]);
 
       expect(stateStore.setState).not.toHaveBeenCalled();
       expect(stateStore.setStates).not.toHaveBeenCalled();
@@ -982,7 +982,7 @@ describe('registerCommands', () => {
       const contextItem = makeInboxItem({ externalId: 'ext-ctx' });
       const selectedItem = makeInboxItem({ externalId: 'ext-other' });
 
-      await invoke('workcenter.dismissFromInbox', contextItem, [selectedItem]);
+      await invoke('devdocket.dismissFromInbox', contextItem, [selectedItem]);
 
       expect(stateStore.setState).toHaveBeenCalledWith('github', 'ext-ctx', 'dismissed');
       expect(stateStore.setStates).not.toHaveBeenCalled();
@@ -994,7 +994,7 @@ describe('registerCommands', () => {
   describe('batch acceptToFocus (multi-select)', () => {
     it('transitions multiple items to InProgress', async () => {
       const items = [{ id: 'wc-1' }, { id: 'wc-2' }, { id: 'wc-3' }];
-      await invoke('workcenter.acceptToFocus', items[0], items);
+      await invoke('devdocket.acceptToFocus', items[0], items);
 
       expect(workGraph.transitionState).toHaveBeenCalledTimes(3);
       expect(workGraph.transitionState).toHaveBeenCalledWith('wc-1', WorkItemState.InProgress);
@@ -1005,7 +1005,7 @@ describe('registerCommands', () => {
 
     it('uses single-item path when one item selected', async () => {
       const item = { id: 'wc-1' };
-      await invoke('workcenter.acceptToFocus', item, [item]);
+      await invoke('devdocket.acceptToFocus', item, [item]);
 
       expect(workGraph.transitionState).toHaveBeenCalledWith('wc-1', WorkItemState.InProgress);
       expect(vscode.window.showInformationMessage).not.toHaveBeenCalled();
@@ -1018,7 +1018,7 @@ describe('registerCommands', () => {
         .mockResolvedValueOnce(undefined);
       const items = [{ id: 'wc-1' }, { id: 'wc-2' }, { id: 'wc-3' }];
 
-      await invoke('workcenter.acceptToFocus', items[0], items);
+      await invoke('devdocket.acceptToFocus', items[0], items);
 
       expect(workGraph.transitionState).toHaveBeenCalledTimes(3);
       expect(logger.error).toHaveBeenCalledWith(
@@ -1026,18 +1026,18 @@ describe('registerCommands', () => {
         expect.any(Error),
       );
       expect(vscode.window.showErrorMessage).toHaveBeenCalledWith(
-        'WorkCenter: Failed to transition 1 item(s); see Output for details',
+        'DevDocket: Failed to transition 1 item(s); see Output for details',
       );
       expect(vscode.window.showInformationMessage).toHaveBeenCalledWith('Moved 2 items to Focus');
     });
 
     it('does nothing when no items have ids', async () => {
-      await invoke('workcenter.acceptToFocus', {}, [{}]);
+      await invoke('devdocket.acceptToFocus', {}, [{}]);
       expect(workGraph.transitionState).not.toHaveBeenCalled();
     });
 
     it('falls back to context item when it is not in selection', async () => {
-      await invoke('workcenter.acceptToFocus', { id: 'wc-ctx' }, [{ id: 'wc-other' }]);
+      await invoke('devdocket.acceptToFocus', { id: 'wc-ctx' }, [{ id: 'wc-other' }]);
 
       expect(workGraph.transitionState).toHaveBeenCalledWith('wc-ctx', WorkItemState.InProgress);
       expect(workGraph.transitionState).toHaveBeenCalledTimes(1);
@@ -1046,14 +1046,14 @@ describe('registerCommands', () => {
 
   // ── acceptToFocusFromInbox (single item) ───────────────────────────
 
-  describe('workcenter.acceptToFocusFromInbox', () => {
+  describe('devdocket.acceptToFocusFromInbox', () => {
     it('creates WorkItem, sets state to accepted, and transitions to InProgress for a new item', async () => {
       const inboxItem = makeInboxItem();
       const created = createWorkItem({ id: 'wc-new-1' });
       workGraph.findItemByProvenance.mockReturnValue(undefined);
       workGraph.createItem.mockResolvedValue(created);
 
-      await invoke('workcenter.acceptToFocusFromInbox', inboxItem);
+      await invoke('devdocket.acceptToFocusFromInbox', inboxItem);
 
       expect(workGraph.createItem).toHaveBeenCalledWith(
         { title: 'Inbox Issue' },
@@ -1067,7 +1067,7 @@ describe('registerCommands', () => {
       const existing = createWorkItem({ id: 'wc-exist', state: WorkItemState.New });
       workGraph.findItemByProvenance.mockReturnValue(existing);
 
-      await invoke('workcenter.acceptToFocusFromInbox', makeInboxItem());
+      await invoke('devdocket.acceptToFocusFromInbox', makeInboxItem());
 
       expect(workGraph.createItem).not.toHaveBeenCalled();
       expect(stateStore.setState).toHaveBeenCalledWith('github', 'ext-1', 'accepted');
@@ -1078,10 +1078,10 @@ describe('registerCommands', () => {
       const existing = createWorkItem({ id: 'wc-focus', state: WorkItemState.InProgress });
       workGraph.findItemByProvenance.mockReturnValue(existing);
 
-      await invoke('workcenter.acceptToFocusFromInbox', makeInboxItem());
+      await invoke('devdocket.acceptToFocusFromInbox', makeInboxItem());
 
       expect(vscode.window.showInformationMessage).toHaveBeenCalledWith(
-        'WorkCenter: Item is already in Focus',
+        'DevDocket: Item is already in Focus',
       );
       expect(workGraph.transitionState).not.toHaveBeenCalled();
       expect(stateStore.setState).toHaveBeenCalledWith('github', 'ext-1', 'accepted');
@@ -1091,10 +1091,10 @@ describe('registerCommands', () => {
       const existing = createWorkItem({ id: 'wc-paused', state: WorkItemState.Paused });
       workGraph.findItemByProvenance.mockReturnValue(existing);
 
-      await invoke('workcenter.acceptToFocusFromInbox', makeInboxItem());
+      await invoke('devdocket.acceptToFocusFromInbox', makeInboxItem());
 
       expect(vscode.window.showInformationMessage).toHaveBeenCalledWith(
-        'WorkCenter: Item is already in Focus',
+        'DevDocket: Item is already in Focus',
       );
       expect(workGraph.transitionState).not.toHaveBeenCalled();
       expect(stateStore.setState).toHaveBeenCalledWith('github', 'ext-1', 'accepted');
@@ -1104,10 +1104,10 @@ describe('registerCommands', () => {
       const existing = createWorkItem({ id: 'wc-done', state: WorkItemState.Done });
       workGraph.findItemByProvenance.mockReturnValue(existing);
 
-      await invoke('workcenter.acceptToFocusFromInbox', makeInboxItem());
+      await invoke('devdocket.acceptToFocusFromInbox', makeInboxItem());
 
       expect(vscode.window.showWarningMessage).toHaveBeenCalledWith(
-        'WorkCenter: Item is Done and cannot be moved to Focus',
+        'DevDocket: Item is Done and cannot be moved to Focus',
       );
       expect(workGraph.transitionState).not.toHaveBeenCalled();
     });
@@ -1116,16 +1116,16 @@ describe('registerCommands', () => {
       const existing = createWorkItem({ id: 'wc-arch', state: WorkItemState.Archived });
       workGraph.findItemByProvenance.mockReturnValue(existing);
 
-      await invoke('workcenter.acceptToFocusFromInbox', makeInboxItem());
+      await invoke('devdocket.acceptToFocusFromInbox', makeInboxItem());
 
       expect(vscode.window.showWarningMessage).toHaveBeenCalledWith(
-        'WorkCenter: Item is Archived and cannot be moved to Focus',
+        'DevDocket: Item is Archived and cannot be moved to Focus',
       );
       expect(workGraph.transitionState).not.toHaveBeenCalled();
     });
 
     it('returns early with no errors for empty selection', async () => {
-      await invoke('workcenter.acceptToFocusFromInbox', undefined);
+      await invoke('devdocket.acceptToFocusFromInbox', undefined);
 
       expect(workGraph.findItemByProvenance).not.toHaveBeenCalled();
       expect(workGraph.createItem).not.toHaveBeenCalled();
@@ -1139,12 +1139,12 @@ describe('registerCommands', () => {
       workGraph.findItemByProvenance.mockReturnValue(undefined);
       workGraph.createItem.mockRejectedValue(new Error('disk full'));
 
-      await invoke('workcenter.acceptToFocusFromInbox', makeInboxItem());
+      await invoke('devdocket.acceptToFocusFromInbox', makeInboxItem());
 
       expect(stateStore.setState).not.toHaveBeenCalled();
       expect(workGraph.transitionState).not.toHaveBeenCalled();
       expect(vscode.window.showErrorMessage).toHaveBeenCalledWith(
-        'WorkCenter: Failed to accept inbox item to Focus — disk full',
+        'DevDocket: Failed to accept inbox item to Focus — disk full',
       );
     });
 
@@ -1154,12 +1154,12 @@ describe('registerCommands', () => {
       workGraph.createItem.mockResolvedValue(created);
       stateStore.setState.mockRejectedValue(new Error('state write failed'));
 
-      await invoke('workcenter.acceptToFocusFromInbox', makeInboxItem());
+      await invoke('devdocket.acceptToFocusFromInbox', makeInboxItem());
 
       expect(workGraph.deleteItem).toHaveBeenCalledWith('wc-rollback');
       expect(workGraph.transitionState).not.toHaveBeenCalled();
       expect(vscode.window.showErrorMessage).toHaveBeenCalledWith(
-        'WorkCenter: Failed to update state after accepting item — state write failed',
+        'DevDocket: Failed to update state after accepting item — state write failed',
       );
     });
 
@@ -1170,7 +1170,7 @@ describe('registerCommands', () => {
       stateStore.setState.mockRejectedValue(new Error('state write failed'));
       workGraph.deleteItem.mockRejectedValue(new Error('delete also failed'));
 
-      await invoke('workcenter.acceptToFocusFromInbox', makeInboxItem());
+      await invoke('devdocket.acceptToFocusFromInbox', makeInboxItem());
 
       expect(workGraph.deleteItem).toHaveBeenCalledWith('wc-rollback-fail');
       expect(logger.error).toHaveBeenCalledWith(
@@ -1178,7 +1178,7 @@ describe('registerCommands', () => {
         expect.any(Error),
       );
       expect(vscode.window.showErrorMessage).toHaveBeenCalledWith(
-        'WorkCenter: Failed to update state after accepting item — state write failed',
+        'DevDocket: Failed to update state after accepting item — state write failed',
       );
     });
 
@@ -1188,11 +1188,11 @@ describe('registerCommands', () => {
       workGraph.createItem.mockResolvedValue(created);
       workGraph.transitionState.mockRejectedValue(new Error('bad transition'));
 
-      await invoke('workcenter.acceptToFocusFromInbox', makeInboxItem());
+      await invoke('devdocket.acceptToFocusFromInbox', makeInboxItem());
 
       expect(stateStore.setState).toHaveBeenCalledWith('github', 'ext-1', 'accepted');
       expect(vscode.window.showErrorMessage).toHaveBeenCalledWith(
-        'WorkCenter: Failed to move item to Focus — bad transition',
+        'DevDocket: Failed to move item to Focus — bad transition',
       );
     });
 
@@ -1201,11 +1201,11 @@ describe('registerCommands', () => {
       workGraph.findItemByProvenance.mockReturnValue(existing);
       workGraph.transitionState.mockRejectedValue(new Error('transition error'));
 
-      await invoke('workcenter.acceptToFocusFromInbox', makeInboxItem());
+      await invoke('devdocket.acceptToFocusFromInbox', makeInboxItem());
 
       expect(stateStore.setState).toHaveBeenCalledWith('github', 'ext-1', 'accepted');
       expect(vscode.window.showErrorMessage).toHaveBeenCalledWith(
-        'WorkCenter: Failed to move item to Focus — transition error',
+        'DevDocket: Failed to move item to Focus — transition error',
       );
     });
 
@@ -1214,10 +1214,10 @@ describe('registerCommands', () => {
       workGraph.findItemByProvenance.mockReturnValue(existing);
       stateStore.setState.mockRejectedValue(new Error('state error'));
 
-      await invoke('workcenter.acceptToFocusFromInbox', makeInboxItem());
+      await invoke('devdocket.acceptToFocusFromInbox', makeInboxItem());
 
       expect(vscode.window.showErrorMessage).toHaveBeenCalledWith(
-        'WorkCenter: Failed to update state for existing focus item — state error',
+        'DevDocket: Failed to update state for existing focus item — state error',
       );
       expect(vscode.window.showInformationMessage).not.toHaveBeenCalled();
       expect(workGraph.transitionState).not.toHaveBeenCalled();
@@ -1228,10 +1228,10 @@ describe('registerCommands', () => {
       workGraph.findItemByProvenance.mockReturnValue(existing);
       stateStore.setState.mockRejectedValue(new Error('state error'));
 
-      await invoke('workcenter.acceptToFocusFromInbox', makeInboxItem());
+      await invoke('devdocket.acceptToFocusFromInbox', makeInboxItem());
 
       expect(vscode.window.showErrorMessage).toHaveBeenCalledWith(
-        'WorkCenter: Failed to update state for existing completed item — state error',
+        'DevDocket: Failed to update state for existing completed item — state error',
       );
       expect(vscode.window.showWarningMessage).not.toHaveBeenCalled();
       expect(workGraph.transitionState).not.toHaveBeenCalled();
@@ -1242,10 +1242,10 @@ describe('registerCommands', () => {
       workGraph.findItemByProvenance.mockReturnValue(existing);
       stateStore.setState.mockRejectedValue(new Error('state error'));
 
-      await invoke('workcenter.acceptToFocusFromInbox', makeInboxItem());
+      await invoke('devdocket.acceptToFocusFromInbox', makeInboxItem());
 
       expect(vscode.window.showErrorMessage).toHaveBeenCalledWith(
-        'WorkCenter: Failed to update state for existing completed item — state error',
+        'DevDocket: Failed to update state for existing completed item — state error',
       );
       expect(vscode.window.showWarningMessage).not.toHaveBeenCalled();
       expect(workGraph.transitionState).not.toHaveBeenCalled();
@@ -1256,10 +1256,10 @@ describe('registerCommands', () => {
       workGraph.findItemByProvenance.mockReturnValue(existing);
       stateStore.setState.mockRejectedValue(new Error('state error'));
 
-      await invoke('workcenter.acceptToFocusFromInbox', makeInboxItem());
+      await invoke('devdocket.acceptToFocusFromInbox', makeInboxItem());
 
       expect(vscode.window.showErrorMessage).toHaveBeenCalledWith(
-        'WorkCenter: Failed to update state for existing accepted item — state error',
+        'DevDocket: Failed to update state for existing accepted item — state error',
       );
       expect(workGraph.transitionState).not.toHaveBeenCalled();
     });
@@ -1267,7 +1267,7 @@ describe('registerCommands', () => {
 
   // ── batch acceptToFocusFromInbox (multi-select) ───────────────────
 
-  describe('workcenter.acceptToFocusFromInbox (multi-select)', () => {
+  describe('devdocket.acceptToFocusFromInbox (multi-select)', () => {
     it('batch-accepts items: creates, sets states, and transitions all to InProgress', async () => {
       const items = [
         makeInboxItem({ externalId: 'ext-1', title: 'Issue 1' }),
@@ -1278,7 +1278,7 @@ describe('registerCommands', () => {
         .mockResolvedValueOnce(createWorkItem({ id: 'wc-1' }))
         .mockResolvedValueOnce(createWorkItem({ id: 'wc-2' }));
 
-      await invoke('workcenter.acceptToFocusFromInbox', items[0], items);
+      await invoke('devdocket.acceptToFocusFromInbox', items[0], items);
 
       expect(workGraph.createItem).toHaveBeenCalledTimes(2);
       expect(stateStore.setStates).toHaveBeenCalledWith([
@@ -1305,7 +1305,7 @@ describe('registerCommands', () => {
         .mockRejectedValueOnce(new Error('create failed'))
         .mockResolvedValueOnce(createWorkItem({ id: 'wc-3' }));
 
-      await invoke('workcenter.acceptToFocusFromInbox', items[0], items);
+      await invoke('devdocket.acceptToFocusFromInbox', items[0], items);
 
       expect(workGraph.createItem).toHaveBeenCalledTimes(3);
       expect(stateStore.setStates).toHaveBeenCalledWith([
@@ -1318,7 +1318,7 @@ describe('registerCommands', () => {
         expect.any(Error),
       );
       expect(vscode.window.showErrorMessage).toHaveBeenCalledWith(
-        'WorkCenter: Failed to process 1 item(s); see Output for details',
+        'DevDocket: Failed to process 1 item(s); see Output for details',
       );
     });
 
@@ -1333,13 +1333,13 @@ describe('registerCommands', () => {
         .mockResolvedValueOnce(createWorkItem({ id: 'wc-2' }));
       stateStore.setStates.mockRejectedValue(new Error('disk full'));
 
-      await invoke('workcenter.acceptToFocusFromInbox', items[0], items);
+      await invoke('devdocket.acceptToFocusFromInbox', items[0], items);
 
       expect(workGraph.deleteItem).toHaveBeenCalledWith('wc-1');
       expect(workGraph.deleteItem).toHaveBeenCalledWith('wc-2');
       expect(workGraph.transitionState).not.toHaveBeenCalled();
       expect(vscode.window.showErrorMessage).toHaveBeenCalledWith(
-        'WorkCenter: Failed to update states after accepting items — disk full',
+        'DevDocket: Failed to update states after accepting items — disk full',
       );
     });
 
@@ -1359,14 +1359,14 @@ describe('registerCommands', () => {
         .mockRejectedValueOnce(new Error('bad state'))
         .mockResolvedValueOnce(undefined);
 
-      await invoke('workcenter.acceptToFocusFromInbox', items[0], items);
+      await invoke('devdocket.acceptToFocusFromInbox', items[0], items);
 
       expect(workGraph.transitionState).toHaveBeenCalledTimes(3);
       expect(vscode.window.showInformationMessage).toHaveBeenCalledWith(
         'Accepted 2 items to Focus (1 failed)',
       );
       expect(vscode.window.showErrorMessage).toHaveBeenCalledWith(
-        'WorkCenter: Failed to process 1 item(s); see Output for details',
+        'DevDocket: Failed to process 1 item(s); see Output for details',
       );
     });
 
@@ -1382,7 +1382,7 @@ describe('registerCommands', () => {
         .mockReturnValueOnce(undefined);
       workGraph.createItem.mockResolvedValueOnce(createWorkItem({ id: 'wc-3' }));
 
-      await invoke('workcenter.acceptToFocusFromInbox', items[0], items);
+      await invoke('devdocket.acceptToFocusFromInbox', items[0], items);
 
       expect(workGraph.createItem).toHaveBeenCalledTimes(1);
       // Only wc-3 should be transitioned; wc-1 (InProgress) and wc-2 (Done) are skipped
@@ -1397,7 +1397,7 @@ describe('registerCommands', () => {
   describe('batch archiveItem (multi-select)', () => {
     it('archives multiple items', async () => {
       const items = [{ id: 'wc-1' }, { id: 'wc-2' }];
-      await invoke('workcenter.archiveItem', items[0], items);
+      await invoke('devdocket.archiveItem', items[0], items);
 
       expect(workGraph.transitionState).toHaveBeenCalledTimes(2);
       expect(workGraph.transitionState).toHaveBeenCalledWith('wc-1', WorkItemState.Archived);
@@ -1407,7 +1407,7 @@ describe('registerCommands', () => {
 
     it('uses single-item path when one item selected', async () => {
       const item = { id: 'wc-1' };
-      await invoke('workcenter.archiveItem', item, [item]);
+      await invoke('devdocket.archiveItem', item, [item]);
 
       expect(workGraph.transitionState).toHaveBeenCalledWith('wc-1', WorkItemState.Archived);
       expect(vscode.window.showInformationMessage).not.toHaveBeenCalled();
@@ -1417,7 +1417,7 @@ describe('registerCommands', () => {
   describe('batch completeItem (multi-select)', () => {
     it('completes multiple items', async () => {
       const items = [{ id: 'wc-1' }, { id: 'wc-2' }];
-      await invoke('workcenter.completeItem', items[0], items);
+      await invoke('devdocket.completeItem', items[0], items);
 
       expect(workGraph.transitionState).toHaveBeenCalledTimes(2);
       expect(workGraph.transitionState).toHaveBeenCalledWith('wc-1', WorkItemState.Done);
@@ -1427,7 +1427,7 @@ describe('registerCommands', () => {
 
     it('uses single-item path when one item selected', async () => {
       const item = { id: 'wc-1' };
-      await invoke('workcenter.completeItem', item, [item]);
+      await invoke('devdocket.completeItem', item, [item]);
 
       expect(workGraph.transitionState).toHaveBeenCalledWith('wc-1', WorkItemState.Done);
       expect(vscode.window.showInformationMessage).not.toHaveBeenCalled();
@@ -1437,7 +1437,7 @@ describe('registerCommands', () => {
   describe('batch pauseItem (multi-select)', () => {
     it('pauses multiple items', async () => {
       const items = [{ id: 'wc-1' }, { id: 'wc-2' }];
-      await invoke('workcenter.pauseItem', items[0], items);
+      await invoke('devdocket.pauseItem', items[0], items);
 
       expect(workGraph.transitionState).toHaveBeenCalledTimes(2);
       expect(workGraph.transitionState).toHaveBeenCalledWith('wc-1', WorkItemState.Paused);
@@ -1447,7 +1447,7 @@ describe('registerCommands', () => {
 
     it('uses single-item path when one item selected', async () => {
       const item = { id: 'wc-1' };
-      await invoke('workcenter.pauseItem', item, [item]);
+      await invoke('devdocket.pauseItem', item, [item]);
 
       expect(workGraph.transitionState).toHaveBeenCalledWith('wc-1', WorkItemState.Paused);
       expect(vscode.window.showInformationMessage).not.toHaveBeenCalled();
@@ -1457,7 +1457,7 @@ describe('registerCommands', () => {
   describe('batch resumeItem (multi-select)', () => {
     it('resumes multiple items', async () => {
       const items = [{ id: 'wc-1' }, { id: 'wc-2' }];
-      await invoke('workcenter.resumeItem', items[0], items);
+      await invoke('devdocket.resumeItem', items[0], items);
 
       expect(workGraph.transitionState).toHaveBeenCalledTimes(2);
       expect(workGraph.transitionState).toHaveBeenCalledWith('wc-1', WorkItemState.InProgress);
@@ -1467,7 +1467,7 @@ describe('registerCommands', () => {
 
     it('uses single-item path when one item selected', async () => {
       const item = { id: 'wc-1' };
-      await invoke('workcenter.resumeItem', item, [item]);
+      await invoke('devdocket.resumeItem', item, [item]);
 
       expect(workGraph.transitionState).toHaveBeenCalledWith('wc-1', WorkItemState.InProgress);
       expect(vscode.window.showInformationMessage).not.toHaveBeenCalled();
@@ -1477,7 +1477,7 @@ describe('registerCommands', () => {
   describe('batch moveToQueue (multi-select)', () => {
     it('moves multiple items to Queue', async () => {
       const items = [{ id: 'wc-1' }, { id: 'wc-2' }, { id: 'wc-3' }];
-      await invoke('workcenter.moveToQueue', items[0], items);
+      await invoke('devdocket.moveToQueue', items[0], items);
 
       expect(workGraph.transitionState).toHaveBeenCalledTimes(3);
       expect(workGraph.transitionState).toHaveBeenCalledWith('wc-1', WorkItemState.New);
@@ -1488,7 +1488,7 @@ describe('registerCommands', () => {
 
     it('uses single-item path when one item selected', async () => {
       const item = { id: 'wc-1' };
-      await invoke('workcenter.moveToQueue', item, [item]);
+      await invoke('devdocket.moveToQueue', item, [item]);
 
       expect(workGraph.transitionState).toHaveBeenCalledWith('wc-1', WorkItemState.New);
       expect(vscode.window.showInformationMessage).not.toHaveBeenCalled();
@@ -1501,7 +1501,7 @@ describe('registerCommands', () => {
         .mockResolvedValueOnce(undefined);
       const items = [{ id: 'wc-1' }, { id: 'wc-2' }, { id: 'wc-3' }];
 
-      await invoke('workcenter.moveToQueue', items[0], items);
+      await invoke('devdocket.moveToQueue', items[0], items);
 
       expect(workGraph.transitionState).toHaveBeenCalledTimes(3);
       expect(logger.error).toHaveBeenCalledWith(
@@ -1509,26 +1509,26 @@ describe('registerCommands', () => {
         expect.any(Error),
       );
       expect(vscode.window.showErrorMessage).toHaveBeenCalledWith(
-        'WorkCenter: Failed to transition 1 item(s); see Output for details',
+        'DevDocket: Failed to transition 1 item(s); see Output for details',
       );
       expect(vscode.window.showInformationMessage).toHaveBeenCalledWith('Moved 2 items to Queue');
     });
 
     it('does nothing when no items have ids', async () => {
-      await invoke('workcenter.moveToQueue', {}, [{}]);
+      await invoke('devdocket.moveToQueue', {}, [{}]);
       expect(workGraph.transitionState).not.toHaveBeenCalled();
     });
   });
 
   // ── deleteItem ──────────────────────────────────────────────────────
 
-  describe('workcenter.deleteItem', () => {
+  describe('devdocket.deleteItem', () => {
     beforeEach(() => {
       (vscode.window.showWarningMessage as Mock).mockResolvedValue('Delete');
     });
 
     it('deletes a single item after confirmation', async () => {
-      await invoke('workcenter.deleteItem', { id: 'wc-1' });
+      await invoke('devdocket.deleteItem', { id: 'wc-1' });
       expect(vscode.window.showWarningMessage).toHaveBeenCalledWith(
         'Delete item? This cannot be undone.',
         { modal: true },
@@ -1539,18 +1539,18 @@ describe('registerCommands', () => {
 
     it('does nothing when user cancels confirmation', async () => {
       (vscode.window.showWarningMessage as Mock).mockResolvedValue(undefined);
-      await invoke('workcenter.deleteItem', { id: 'wc-1' });
+      await invoke('devdocket.deleteItem', { id: 'wc-1' });
       expect(workGraph.deleteItem).not.toHaveBeenCalled();
     });
 
     it('does nothing when item has no id', async () => {
-      await invoke('workcenter.deleteItem', {});
+      await invoke('devdocket.deleteItem', {});
       expect(workGraph.deleteItem).not.toHaveBeenCalled();
     });
 
     it('batch deletes multiple items after confirmation', async () => {
       const items = [{ id: 'wc-1' }, { id: 'wc-2' }, { id: 'wc-3' }];
-      await invoke('workcenter.deleteItem', items[0], items);
+      await invoke('devdocket.deleteItem', items[0], items);
 
       expect(vscode.window.showWarningMessage).toHaveBeenCalledWith(
         'Delete 3 items? This cannot be undone.',
@@ -1566,7 +1566,7 @@ describe('registerCommands', () => {
 
     it('uses single-item path when one item selected', async () => {
       const item = { id: 'wc-1' };
-      await invoke('workcenter.deleteItem', item, [item]);
+      await invoke('devdocket.deleteItem', item, [item]);
 
       expect(workGraph.deleteItem).toHaveBeenCalledWith('wc-1');
       expect(vscode.window.showInformationMessage).not.toHaveBeenCalled();
@@ -1579,7 +1579,7 @@ describe('registerCommands', () => {
         .mockResolvedValueOnce(undefined);
       const items = [{ id: 'wc-1' }, { id: 'wc-2' }, { id: 'wc-3' }];
 
-      await invoke('workcenter.deleteItem', items[0], items);
+      await invoke('devdocket.deleteItem', items[0], items);
 
       expect(workGraph.deleteItem).toHaveBeenCalledTimes(3);
       expect(logger.error).toHaveBeenCalledWith(
@@ -1587,24 +1587,24 @@ describe('registerCommands', () => {
         expect.any(Error),
       );
       expect(vscode.window.showErrorMessage).toHaveBeenCalledWith(
-        'WorkCenter: Failed to delete 1 item(s); see Output for details',
+        'DevDocket: Failed to delete 1 item(s); see Output for details',
       );
       expect(vscode.window.showInformationMessage).toHaveBeenCalledWith('Deleted 2 items');
     });
 
     it('shows error when single delete fails', async () => {
       workGraph.deleteItem.mockRejectedValue(new Error('db error'));
-      await invoke('workcenter.deleteItem', { id: 'wc-1' });
+      await invoke('devdocket.deleteItem', { id: 'wc-1' });
 
       expect(vscode.window.showErrorMessage).toHaveBeenCalledWith(
-        'WorkCenter: Failed to delete item — db error',
+        'DevDocket: Failed to delete item — db error',
       );
     });
   });
 
   // ── batch acceptFromSources (multi-select) ──────────────────────────
 
-  describe('workcenter.acceptFromSources (multi-select)', () => {
+  describe('devdocket.acceptFromSources (multi-select)', () => {
     it('batch-accepts multiple source items', async () => {
       const items = [
         makeSourceItem({ externalId: 'ext-1', title: 'Issue 1' }),
@@ -1615,7 +1615,7 @@ describe('registerCommands', () => {
         .mockResolvedValueOnce(createWorkItem({ id: 'wc-1' }))
         .mockResolvedValueOnce(createWorkItem({ id: 'wc-2' }));
 
-      await invoke('workcenter.acceptFromSources', items[0], items);
+      await invoke('devdocket.acceptFromSources', items[0], items);
 
       expect(workGraph.createItem).toHaveBeenCalledTimes(2);
       expect(stateStore.setStates).toHaveBeenCalledWith([
@@ -1635,7 +1635,7 @@ describe('registerCommands', () => {
         .mockReturnValueOnce(undefined);
       workGraph.createItem.mockResolvedValueOnce(createWorkItem({ id: 'wc-2' }));
 
-      await invoke('workcenter.acceptFromSources', items[0], items);
+      await invoke('devdocket.acceptFromSources', items[0], items);
 
       expect(workGraph.createItem).toHaveBeenCalledTimes(1);
       expect(stateStore.setStates).toHaveBeenCalledWith([
@@ -1655,12 +1655,12 @@ describe('registerCommands', () => {
         .mockResolvedValueOnce(createWorkItem({ id: 'wc-2' }));
       stateStore.setStates.mockRejectedValue(new Error('disk full'));
 
-      await invoke('workcenter.acceptFromSources', items[0], items);
+      await invoke('devdocket.acceptFromSources', items[0], items);
 
       expect(workGraph.deleteItem).toHaveBeenCalledWith('wc-1');
       expect(workGraph.deleteItem).toHaveBeenCalledWith('wc-2');
       expect(vscode.window.showErrorMessage).toHaveBeenCalledWith(
-        'WorkCenter: Failed to update states after accepting items — disk full',
+        'DevDocket: Failed to update states after accepting items — disk full',
       );
     });
 
@@ -1676,7 +1676,7 @@ describe('registerCommands', () => {
         .mockRejectedValueOnce(new Error('create failed'))
         .mockResolvedValueOnce(createWorkItem({ id: 'wc-3' }));
 
-      await invoke('workcenter.acceptFromSources', items[0], items);
+      await invoke('devdocket.acceptFromSources', items[0], items);
 
       expect(workGraph.createItem).toHaveBeenCalledTimes(3);
       expect(stateStore.setStates).toHaveBeenCalledWith([
@@ -1688,7 +1688,7 @@ describe('registerCommands', () => {
         expect.any(Error),
       );
       expect(vscode.window.showErrorMessage).toHaveBeenCalledWith(
-        'WorkCenter: Failed to accept 1 item(s); see Output for details',
+        'DevDocket: Failed to accept 1 item(s); see Output for details',
       );
       expect(vscode.window.showInformationMessage).toHaveBeenCalledWith(
         'Accepted 2 of 3 items to Queue',
@@ -1700,7 +1700,7 @@ describe('registerCommands', () => {
       workGraph.findItemByProvenance.mockReturnValue(undefined);
       workGraph.createItem.mockResolvedValue(createWorkItem());
 
-      await invoke('workcenter.acceptFromSources', item, [item]);
+      await invoke('devdocket.acceptFromSources', item, [item]);
 
       expect(stateStore.setState).toHaveBeenCalledWith('github', 'ext-2', 'accepted');
       expect(stateStore.setStates).not.toHaveBeenCalled();
@@ -1713,7 +1713,7 @@ describe('registerCommands', () => {
       workGraph.findItemByProvenance.mockReturnValue(undefined);
       workGraph.createItem.mockResolvedValue(createWorkItem({ id: 'wc-1' }));
 
-      await invoke('workcenter.acceptFromSources', providerNode, [providerNode, groupNode, sourceItem]);
+      await invoke('devdocket.acceptFromSources', providerNode, [providerNode, groupNode, sourceItem]);
 
       expect(stateStore.setState).toHaveBeenCalledWith('github', 'ext-1', 'accepted');
       expect(workGraph.createItem).toHaveBeenCalledTimes(1);
@@ -1722,9 +1722,9 @@ describe('registerCommands', () => {
 
   // ── dismissFromSources ──────────────────────────────────────────────
 
-  describe('workcenter.dismissFromSources', () => {
+  describe('devdocket.dismissFromSources', () => {
     it('dismisses a single source item', async () => {
-      await invoke('workcenter.dismissFromSources', makeSourceItem());
+      await invoke('devdocket.dismissFromSources', makeSourceItem());
 
       expect(stateStore.setState).toHaveBeenCalledWith('github', 'ext-2', 'dismissed');
     });
@@ -1732,10 +1732,10 @@ describe('registerCommands', () => {
     it('shows error when single dismiss fails', async () => {
       stateStore.setState.mockRejectedValue(new Error('io error'));
 
-      await invoke('workcenter.dismissFromSources', makeSourceItem());
+      await invoke('devdocket.dismissFromSources', makeSourceItem());
 
       expect(vscode.window.showErrorMessage).toHaveBeenCalledWith(
-        'WorkCenter: Failed to dismiss item — io error',
+        'DevDocket: Failed to dismiss item — io error',
       );
     });
 
@@ -1745,7 +1745,7 @@ describe('registerCommands', () => {
         makeSourceItem({ externalId: 'ext-2' }),
       ];
 
-      await invoke('workcenter.dismissFromSources', items[0], items);
+      await invoke('devdocket.dismissFromSources', items[0], items);
 
       expect(stateStore.setStates).toHaveBeenCalledWith([
         { providerId: 'github', externalId: 'ext-1', state: 'dismissed' },
@@ -1761,17 +1761,17 @@ describe('registerCommands', () => {
       ];
       stateStore.setStates.mockRejectedValue(new Error('io error'));
 
-      await invoke('workcenter.dismissFromSources', items[0], items);
+      await invoke('devdocket.dismissFromSources', items[0], items);
 
       expect(vscode.window.showErrorMessage).toHaveBeenCalledWith(
-        'WorkCenter: Failed to dismiss items — io error',
+        'DevDocket: Failed to dismiss items — io error',
       );
     });
 
     it('uses single-item path when selectedItems has one item', async () => {
       const item = makeSourceItem();
 
-      await invoke('workcenter.dismissFromSources', item, [item]);
+      await invoke('devdocket.dismissFromSources', item, [item]);
 
       expect(stateStore.setState).toHaveBeenCalledWith('github', 'ext-2', 'dismissed');
       expect(stateStore.setStates).not.toHaveBeenCalled();
@@ -1782,7 +1782,7 @@ describe('registerCommands', () => {
       const groupNode: SourceGroupNode = { kind: 'group', providerId: 'github', groupName: 'org/repo' };
       const sourceItem = makeSourceItem({ externalId: 'ext-1' });
 
-      await invoke('workcenter.dismissFromSources', providerNode, [providerNode, groupNode, sourceItem]);
+      await invoke('devdocket.dismissFromSources', providerNode, [providerNode, groupNode, sourceItem]);
 
       expect(stateStore.setState).toHaveBeenCalledWith('github', 'ext-1', 'dismissed');
       expect(stateStore.setStates).not.toHaveBeenCalled();
@@ -1792,7 +1792,7 @@ describe('registerCommands', () => {
       const providerNode: SourceProviderNode = { kind: 'provider', providerId: 'github', label: 'GitHub' };
       const groupNode: SourceGroupNode = { kind: 'group', providerId: 'github', groupName: 'org/repo' };
 
-      await invoke('workcenter.dismissFromSources', providerNode, [providerNode, groupNode]);
+      await invoke('devdocket.dismissFromSources', providerNode, [providerNode, groupNode]);
 
       expect(stateStore.setState).not.toHaveBeenCalled();
       expect(stateStore.setStates).not.toHaveBeenCalled();
@@ -1802,7 +1802,7 @@ describe('registerCommands', () => {
       const contextItem = makeSourceItem({ externalId: 'ext-ctx' });
       const selectedItem = makeSourceItem({ externalId: 'ext-other' });
 
-      await invoke('workcenter.dismissFromSources', contextItem, [selectedItem]);
+      await invoke('devdocket.dismissFromSources', contextItem, [selectedItem]);
 
       expect(stateStore.setState).toHaveBeenCalledWith('github', 'ext-ctx', 'dismissed');
       expect(stateStore.setStates).not.toHaveBeenCalled();
@@ -1811,12 +1811,12 @@ describe('registerCommands', () => {
 
   // ── acceptFromSources────────────────────────────────────────────
 
-  describe('workcenter.acceptFromSources', () => {
+  describe('devdocket.acceptFromSources', () => {
     it('creates a work item and sets state to accepted for new item', async () => {
       const sourceItem = makeSourceItem();
       workGraph.findItemByProvenance.mockReturnValue(undefined);
 
-      await invoke('workcenter.acceptFromSources', sourceItem);
+      await invoke('devdocket.acceptFromSources', sourceItem);
 
       expect(workGraph.createItem).toHaveBeenCalledWith(
         { title: 'Source Issue' },
@@ -1829,12 +1829,12 @@ describe('registerCommands', () => {
       const existing = createWorkItem({ title: 'Existing' });
       workGraph.findItemByProvenance.mockReturnValue(existing);
 
-      await invoke('workcenter.acceptFromSources', makeSourceItem());
+      await invoke('devdocket.acceptFromSources', makeSourceItem());
 
       expect(workGraph.createItem).not.toHaveBeenCalled();
       expect(stateStore.setState).toHaveBeenCalledWith('github', 'ext-2', 'accepted');
       expect(vscode.window.showInformationMessage).toHaveBeenCalledWith(
-        'WorkCenter: Item already accepted as "Existing"',
+        'DevDocket: Item already accepted as "Existing"',
       );
     });
 
@@ -1843,13 +1843,13 @@ describe('registerCommands', () => {
       workGraph.findItemByProvenance.mockReturnValue(existing);
       stateStore.setState.mockRejectedValue(new Error('write fail'));
 
-      await invoke('workcenter.acceptFromSources', makeSourceItem());
+      await invoke('devdocket.acceptFromSources', makeSourceItem());
 
       expect(vscode.window.showInformationMessage).toHaveBeenCalledWith(
-        'WorkCenter: Item already accepted as "Existing"',
+        'DevDocket: Item already accepted as "Existing"',
       );
       expect(vscode.window.showErrorMessage).toHaveBeenCalledWith(
-        'WorkCenter: Failed to update state for existing item — write fail',
+        'DevDocket: Failed to update state for existing item — write fail',
       );
     });
 
@@ -1857,10 +1857,10 @@ describe('registerCommands', () => {
       workGraph.findItemByProvenance.mockReturnValue(undefined);
       workGraph.createItem.mockRejectedValue(new Error('store error'));
 
-      await invoke('workcenter.acceptFromSources', makeSourceItem());
+      await invoke('devdocket.acceptFromSources', makeSourceItem());
 
       expect(vscode.window.showErrorMessage).toHaveBeenCalledWith(
-        'WorkCenter: Failed to accept sources item — store error',
+        'DevDocket: Failed to accept sources item — store error',
       );
     });
 
@@ -1868,7 +1868,7 @@ describe('registerCommands', () => {
       const sourceItem = makeSourceItem({ group: 'myorg/myrepo' });
       workGraph.findItemByProvenance.mockReturnValue(undefined);
 
-      await invoke('workcenter.acceptFromSources', sourceItem);
+      await invoke('devdocket.acceptFromSources', sourceItem);
 
       expect(workGraph.createItem).toHaveBeenCalledWith(
         { title: 'myorg/myrepo Source Issue' },
@@ -1882,11 +1882,11 @@ describe('registerCommands', () => {
       workGraph.createItem.mockResolvedValue(createdItem);
       stateStore.setState.mockRejectedValue(new Error('disk full'));
 
-      await invoke('workcenter.acceptFromSources', makeSourceItem());
+      await invoke('devdocket.acceptFromSources', makeSourceItem());
 
       expect(workGraph.deleteItem).toHaveBeenCalledWith('wc-new-3');
       expect(vscode.window.showErrorMessage).toHaveBeenCalledWith(
-        'WorkCenter: Failed to update state after accepting item — disk full',
+        'DevDocket: Failed to update state after accepting item — disk full',
       );
     });
 
@@ -1897,7 +1897,7 @@ describe('registerCommands', () => {
       stateStore.setState.mockRejectedValue(new Error('disk full'));
       workGraph.deleteItem.mockRejectedValue(new Error('delete failed'));
 
-      await invoke('workcenter.acceptFromSources', makeSourceItem());
+      await invoke('devdocket.acceptFromSources', makeSourceItem());
 
       expect(workGraph.deleteItem).toHaveBeenCalledWith('wc-new-4');
       expect(logger.error).toHaveBeenCalledWith(
@@ -1905,7 +1905,7 @@ describe('registerCommands', () => {
         expect.any(Error),
       );
       expect(vscode.window.showErrorMessage).toHaveBeenCalledWith(
-        'WorkCenter: Failed to update state after accepting item — disk full',
+        'DevDocket: Failed to update state after accepting item — disk full',
       );
     });
   });

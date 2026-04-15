@@ -55,7 +55,7 @@ The plugin API (registerProvider, registerAction) has no caller identity verific
 #### Decision
 1. **Provider ID squatting** — Document the trust model rather than attempt runtime verification (VS Code provides no caller context). Elevate registration logs from `info` to `warn` for admin auditability.
 2. **Unbounded provider data** — Enforce `MAX_ITEMS_PER_PROVIDER = 10,000` at the ingestion boundary in `handleDiscoveredItems`. Truncate silently (after logging a warning) rather than rejecting the entire batch.
-3. **Action data access** — Use `Readonly<WorkItem>` in the `WorkCenterAction` interface to prevent accidental mutation. This is compile-time only (no runtime freeze), which is acceptable for the extension-to-extension trust level.
+3. **Action data access** — Use `Readonly<WorkItem>` in the `DevDocketAction` interface to prevent accidental mutation. This is compile-time only (no runtime freeze), which is acceptable for the extension-to-extension trust level.
 
 #### Alternatives Considered
 - **Runtime Object.freeze** on WorkItem before passing to actions — rejected as unnecessary overhead; TypeScript's type system is sufficient for the cooperative trust model between VS Code extensions.
@@ -109,7 +109,7 @@ Remove the `resurfaceDismissed` feature entirely. Dismissed items should **never
 
 ### What Changed
 
-- Removed `resurfaceDismissed` from `WorkCenterProvider` interface in core, github, ado, and ai-reviewer packages
+- Removed `resurfaceDismissed` from `DevDocketProvider` interface in core, github, ado, and ai-reviewer packages
 - Removed the resurface logic from `ProviderRegistry.handleDiscoveredItems()`
 - Removed the property from `BaseGitHubProvider`, `GitHubPrReviewProvider`, and `AdoPrReviewProvider`
 - Removed all related tests and documentation
@@ -130,4 +130,4 @@ Remove the `resurfaceDismissed` feature entirely. Dismissed items should **never
 
 - 13 files changed, ~500 lines removed
 - All 1174 tests pass
-- Compile-time breaking change for external providers that still set `resurfaceDismissed`: removing the optional property from the exported `WorkCenterProvider` type will fail TypeScript excess property checks for object-literal providers. This is an intentional breaking change.
+- Compile-time breaking change for external providers that still set `resurfaceDismissed`: removing the optional property from the exported `DevDocketProvider` type will fail TypeScript excess property checks for object-literal providers. This is an intentional breaking change.

@@ -1,7 +1,7 @@
 import * as vscode from 'vscode';
 import { GitHubIssueProvider } from './githubProvider';
 import { GitHubPrReviewProvider } from './githubPrReviewProvider';
-import { validateRefreshInterval } from '@workcenter/shared';
+import { validateRefreshInterval } from '@devdocket/shared';
 import { initLogger, setLogLevel, logger, resolveLogLevel } from './logger';
 
 let issueProvider: GitHubIssueProvider | undefined;
@@ -10,10 +10,10 @@ let providerRegistration: vscode.Disposable | undefined;
 let prReviewRegistration: vscode.Disposable | undefined;
 
 export async function activate(_context: vscode.ExtensionContext): Promise<void> {
-  const outputChannel = vscode.window.createOutputChannel('WorkCenter GitHub');
+  const outputChannel = vscode.window.createOutputChannel('DevDocket GitHub');
   _context.subscriptions.push(outputChannel);
 
-  const logLevelConfig = vscode.workspace.getConfiguration('workcenter').get<string>('logLevel', 'info');
+  const logLevelConfig = vscode.workspace.getConfiguration('devdocket').get<string>('logLevel', 'info');
   initLogger(outputChannel, resolveLogLevel(logLevelConfig));
   if (!['debug', 'info', 'warn', 'error'].includes(logLevelConfig)) {
     logger.warn(`Invalid log level '${logLevelConfig}', falling back to 'info'. Valid values: debug, info, warn, error`);
@@ -21,8 +21,8 @@ export async function activate(_context: vscode.ExtensionContext): Promise<void>
 
   _context.subscriptions.push(
     vscode.workspace.onDidChangeConfiguration(e => {
-      if (e.affectsConfiguration('workcenter.logLevel')) {
-        const newLevel = vscode.workspace.getConfiguration('workcenter').get<string>('logLevel', 'info');
+      if (e.affectsConfiguration('devdocket.logLevel')) {
+        const newLevel = vscode.workspace.getConfiguration('devdocket').get<string>('logLevel', 'info');
         setLogLevel(resolveLogLevel(newLevel));
         if (!['debug', 'info', 'warn', 'error'].includes(newLevel)) {
           logger.warn(`Invalid log level '${newLevel}', falling back to 'info'. Valid values: debug, info, warn, error`);
@@ -31,10 +31,10 @@ export async function activate(_context: vscode.ExtensionContext): Promise<void>
     }),
   );
 
-  logger.info('WorkCenter GitHub activating...');
+  logger.info('DevDocket GitHub activating...');
 
-  // Acquire the WorkCenter API from the core extension
-  const coreExtension = vscode.extensions.getExtension('mthalman.workcenter');
+  // Acquire the DevDocket API from the core extension
+  const coreExtension = vscode.extensions.getExtension('mthalman.devdocket');
   if (!coreExtension) {
     logger.error('Core extension not found');
     return;
@@ -48,7 +48,7 @@ export async function activate(_context: vscode.ExtensionContext): Promise<void>
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : String(err);
     logger.error(`Failed to activate core extension — ${message}`);
-    void vscode.window.showErrorMessage(`WorkCenter GitHub: Failed to activate core extension — ${message}`);
+    void vscode.window.showErrorMessage(`DevDocket GitHub: Failed to activate core extension — ${message}`);
     return;
   }
 
@@ -59,7 +59,7 @@ export async function activate(_context: vscode.ExtensionContext): Promise<void>
 
   // Register the GitHub issue provider
   issueProvider = new GitHubIssueProvider();
-  const config = vscode.workspace.getConfiguration('workcenterGithub');
+  const config = vscode.workspace.getConfiguration('devdocketGithub');
   const intervalSeconds = validateRefreshInterval(
     config.get<number>('refreshIntervalSeconds', 300), logger,
   );
@@ -72,14 +72,14 @@ export async function activate(_context: vscode.ExtensionContext): Promise<void>
   prReviewProvider.startPeriodicRefresh(intervalSeconds);
   prReviewRegistration = api.registerProvider(prReviewProvider);
 
-  logger.info('WorkCenter GitHub activated, registered 2 providers');
+  logger.info('DevDocket GitHub activated, registered 2 providers');
 }
 
 export function deactivate(): void {
-  logger.info('WorkCenter GitHub deactivating...');
+  logger.info('DevDocket GitHub deactivating...');
   providerRegistration?.dispose();
   prReviewRegistration?.dispose();
   issueProvider?.dispose();
   prReviewProvider?.dispose();
-  logger.info('WorkCenter GitHub deactivated');
+  logger.info('DevDocket GitHub deactivated');
 }

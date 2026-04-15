@@ -12,7 +12,7 @@ describe('DiscoveredStateStore', () => {
   let store: DiscoveredStateStore;
 
   beforeEach(async () => {
-    tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'workcenter-state-test-'));
+    tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'devdocket-state-test-'));
     store = new DiscoveredStateStore(tmpDir);
   });
 

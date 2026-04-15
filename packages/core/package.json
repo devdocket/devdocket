@@ -1,6 +1,6 @@
 {
-  "name": "workcenter",
-  "displayName": "WorkCenter",
+  "name": "devdocket",
+  "displayName": "DevDocket",
   "description": "A central hub for managing work across pull requests, issues, investigations, and follow-ups.",
   "version": "0.1.0",
   "publisher": "mthalman",
@@ -12,32 +12,32 @@
     "Other"
   ],
   "activationEvents": [
-    "onView:workcenter.inbox",
-    "onView:workcenter.queue",
-    "onView:workcenter.focus",
-    "onView:workcenter.sources",
-    "onView:workcenter.history",
-    "onCommand:workcenter.refresh",
-    "onCommand:workcenter.dismissFromSources",
-    "onCommand:workcenter.deleteItem"
+    "onView:devdocket.inbox",
+    "onView:devdocket.queue",
+    "onView:devdocket.focus",
+    "onView:devdocket.sources",
+    "onView:devdocket.history",
+    "onCommand:devdocket.refresh",
+    "onCommand:devdocket.dismissFromSources",
+    "onCommand:devdocket.deleteItem"
   ],
   "main": "./dist/extension.js",
   "contributes": {
     "configuration": {
-      "title": "WorkCenter",
+      "title": "DevDocket",
       "properties": {
-        "workcenter.logLevel": {
+        "devdocket.logLevel": {
           "type": "string",
           "enum": ["debug", "info", "warn", "error"],
           "default": "info",
-          "description": "Log level for WorkCenter output channel"
+          "description": "Log level for DevDocket output channel"
         },
-        "workcenter.showInboxNotifications": {
+        "devdocket.showInboxNotifications": {
           "type": "boolean",
           "default": true,
           "description": "Show a notification when new items arrive in the Inbox"
         },
-        "workcenter.viewLayout": {
+        "devdocket.viewLayout": {
           "type": "object",
           "default": {},
           "description": "Per-view layout mode. Keys are view names (inbox, queue, focus, history, sources) and values are 'flat' or 'tree'.",
@@ -55,554 +55,554 @@
     "viewsContainers": {
       "activitybar": [
         {
-          "id": "workcenter",
-          "title": "WorkCenter",
-          "icon": "resources/workcenter.svg"
+          "id": "devdocket",
+          "title": "DevDocket",
+          "icon": "resources/devdocket.svg"
         }
       ]
     },
     "views": {
-      "workcenter": [
+      "devdocket": [
         {
-          "id": "workcenter.inbox",
+          "id": "devdocket.inbox",
           "name": "Inbox"
         },
         {
-          "id": "workcenter.queue",
+          "id": "devdocket.queue",
           "name": "Queue"
         },
         {
-          "id": "workcenter.focus",
+          "id": "devdocket.focus",
           "name": "Focus"
         },
         {
-          "id": "workcenter.history",
+          "id": "devdocket.history",
           "name": "History"
         },
         {
-          "id": "workcenter.sources",
+          "id": "devdocket.sources",
           "name": "Sources"
         }
       ]
     },
     "viewsWelcome": [
       {
-        "view": "workcenter.inbox",
+        "view": "devdocket.inbox",
         "contents": "No new items.\nProviders will discover items automatically."
       },
       {
-        "view": "workcenter.queue",
-        "contents": "No items in your queue.\nAccept items from Inbox or create one manually.\n[Create Work Item](command:workcenter.createItem)"
+        "view": "devdocket.queue",
+        "contents": "No items in your queue.\nAccept items from Inbox or create one manually.\n[Create Work Item](command:devdocket.createItem)"
       },
       {
-        "view": "workcenter.focus",
+        "view": "devdocket.focus",
         "contents": "No active work.\nMove items from Queue to start working on them."
       },
       {
-        "view": "workcenter.history",
+        "view": "devdocket.history",
         "contents": "Completed and archived items will appear here."
       },
       {
-        "view": "workcenter.sources",
+        "view": "devdocket.sources",
         "contents": "Discovered items from all providers will appear here."
       }
     ],
     "commands": [
       {
-        "command": "workcenter.createItem",
+        "command": "devdocket.createItem",
         "title": "Create Work Item",
-        "category": "WorkCenter",
+        "category": "DevDocket",
         "icon": "$(add)"
       },
       {
-        "command": "workcenter.acceptToFocus",
+        "command": "devdocket.acceptToFocus",
         "title": "Move to Focus",
-        "category": "WorkCenter",
+        "category": "DevDocket",
         "icon": "$(arrow-right)"
       },
       {
-        "command": "workcenter.archiveItem",
+        "command": "devdocket.archiveItem",
         "title": "Archive",
-        "category": "WorkCenter",
+        "category": "DevDocket",
         "icon": "$(archive)"
       },
       {
-        "command": "workcenter.completeItem",
+        "command": "devdocket.completeItem",
         "title": "Complete",
-        "category": "WorkCenter",
+        "category": "DevDocket",
         "icon": "$(check)"
       },
       {
-        "command": "workcenter.pauseItem",
+        "command": "devdocket.pauseItem",
         "title": "Pause",
-        "category": "WorkCenter",
+        "category": "DevDocket",
         "icon": "$(debug-pause)"
       },
       {
-        "command": "workcenter.resumeItem",
+        "command": "devdocket.resumeItem",
         "title": "Resume",
-        "category": "WorkCenter",
+        "category": "DevDocket",
         "icon": "$(debug-continue)"
       },
       {
-        "command": "workcenter.editItem",
+        "command": "devdocket.editItem",
         "title": "Edit Work Item",
-        "category": "WorkCenter",
+        "category": "DevDocket",
         "icon": "$(edit)"
       },
       {
-        "command": "workcenter.openInBrowser",
+        "command": "devdocket.openInBrowser",
         "title": "Open in Browser",
-        "category": "WorkCenter",
+        "category": "DevDocket",
         "icon": "$(link-external)"
       },
       {
-        "command": "workcenter.runAction",
+        "command": "devdocket.runAction",
         "title": "Run Action…",
-        "category": "WorkCenter",
+        "category": "DevDocket",
         "icon": "$(play)"
       },
       {
-        "command": "workcenter.moveUp",
+        "command": "devdocket.moveUp",
         "title": "Move Up",
-        "category": "WorkCenter",
+        "category": "DevDocket",
         "icon": "$(arrow-up)"
       },
       {
-        "command": "workcenter.moveDown",
+        "command": "devdocket.moveDown",
         "title": "Move Down",
-        "category": "WorkCenter",
+        "category": "DevDocket",
         "icon": "$(arrow-down)"
       },
       {
-        "command": "workcenter.focusMoveUp",
+        "command": "devdocket.focusMoveUp",
         "title": "Move Up",
-        "category": "WorkCenter",
+        "category": "DevDocket",
         "icon": "$(arrow-up)"
       },
       {
-        "command": "workcenter.focusMoveDown",
+        "command": "devdocket.focusMoveDown",
         "title": "Move Down",
-        "category": "WorkCenter",
+        "category": "DevDocket",
         "icon": "$(arrow-down)"
       },
       {
-        "command": "workcenter.acceptFromInbox",
+        "command": "devdocket.acceptFromInbox",
         "title": "Accept to Queue",
-        "category": "WorkCenter",
+        "category": "DevDocket",
         "icon": "$(arrow-right)"
       },
       {
-        "command": "workcenter.acceptToFocusFromInbox",
+        "command": "devdocket.acceptToFocusFromInbox",
         "title": "Accept to Focus",
-        "category": "WorkCenter",
+        "category": "DevDocket",
         "icon": "$(rocket)"
       },
       {
-        "command": "workcenter.dismissFromInbox",
+        "command": "devdocket.dismissFromInbox",
         "title": "Dismiss",
-        "category": "WorkCenter",
+        "category": "DevDocket",
         "icon": "$(close)"
       },
       {
-        "command": "workcenter.acceptFromSources",
+        "command": "devdocket.acceptFromSources",
         "title": "Accept to Queue",
-        "category": "WorkCenter",
+        "category": "DevDocket",
         "icon": "$(arrow-right)"
       },
       {
-        "command": "workcenter.switchInboxToTree",
+        "command": "devdocket.switchInboxToTree",
         "title": "Switch Inbox to Tree Layout",
-        "category": "WorkCenter",
+        "category": "DevDocket",
         "icon": "$(list-tree)"
       },
       {
-        "command": "workcenter.switchInboxToFlat",
+        "command": "devdocket.switchInboxToFlat",
         "title": "Switch Inbox to Flat Layout",
-        "category": "WorkCenter",
+        "category": "DevDocket",
         "icon": "$(list-flat)"
       },
       {
-        "command": "workcenter.switchQueueToTree",
+        "command": "devdocket.switchQueueToTree",
         "title": "Switch Queue to Tree Layout",
-        "category": "WorkCenter",
+        "category": "DevDocket",
         "icon": "$(list-tree)"
       },
       {
-        "command": "workcenter.switchQueueToFlat",
+        "command": "devdocket.switchQueueToFlat",
         "title": "Switch Queue to Flat Layout",
-        "category": "WorkCenter",
+        "category": "DevDocket",
         "icon": "$(list-flat)"
       },
       {
-        "command": "workcenter.switchFocusToTree",
+        "command": "devdocket.switchFocusToTree",
         "title": "Switch Focus to Tree Layout",
-        "category": "WorkCenter",
+        "category": "DevDocket",
         "icon": "$(list-tree)"
       },
       {
-        "command": "workcenter.switchFocusToFlat",
+        "command": "devdocket.switchFocusToFlat",
         "title": "Switch Focus to Flat Layout",
-        "category": "WorkCenter",
+        "category": "DevDocket",
         "icon": "$(list-flat)"
       },
       {
-        "command": "workcenter.switchHistoryToTree",
+        "command": "devdocket.switchHistoryToTree",
         "title": "Switch History to Tree Layout",
-        "category": "WorkCenter",
+        "category": "DevDocket",
         "icon": "$(list-tree)"
       },
       {
-        "command": "workcenter.switchHistoryToFlat",
+        "command": "devdocket.switchHistoryToFlat",
         "title": "Switch History to Flat Layout",
-        "category": "WorkCenter",
+        "category": "DevDocket",
         "icon": "$(list-flat)"
       },
       {
-        "command": "workcenter.switchSourcesToTree",
+        "command": "devdocket.switchSourcesToTree",
         "title": "Switch Sources to Tree Layout",
-        "category": "WorkCenter",
+        "category": "DevDocket",
         "icon": "$(list-tree)"
       },
       {
-        "command": "workcenter.switchSourcesToFlat",
+        "command": "devdocket.switchSourcesToFlat",
         "title": "Switch Sources to Flat Layout",
-        "category": "WorkCenter",
+        "category": "DevDocket",
         "icon": "$(list-flat)"
       },
       {
-        "command": "workcenter.toggleInboxLayout",
+        "command": "devdocket.toggleInboxLayout",
         "title": "Toggle Inbox Layout",
-        "category": "WorkCenter"
+        "category": "DevDocket"
       },
       {
-        "command": "workcenter.toggleQueueLayout",
+        "command": "devdocket.toggleQueueLayout",
         "title": "Toggle Queue Layout",
-        "category": "WorkCenter"
+        "category": "DevDocket"
       },
       {
-        "command": "workcenter.toggleFocusLayout",
+        "command": "devdocket.toggleFocusLayout",
         "title": "Toggle Focus Layout",
-        "category": "WorkCenter"
+        "category": "DevDocket"
       },
       {
-        "command": "workcenter.toggleHistoryLayout",
+        "command": "devdocket.toggleHistoryLayout",
         "title": "Toggle History Layout",
-        "category": "WorkCenter"
+        "category": "DevDocket"
       },
       {
-        "command": "workcenter.toggleSourcesLayout",
+        "command": "devdocket.toggleSourcesLayout",
         "title": "Toggle Sources Layout",
-        "category": "WorkCenter"
+        "category": "DevDocket"
       },
       {
-        "command": "workcenter.dismissFromSources",
+        "command": "devdocket.dismissFromSources",
         "title": "Dismiss",
-        "category": "WorkCenter",
+        "category": "DevDocket",
         "icon": "$(close)"
       },
       {
-        "command": "workcenter.deleteItem",
+        "command": "devdocket.deleteItem",
         "title": "Delete",
-        "category": "WorkCenter",
+        "category": "DevDocket",
         "icon": "$(trash)"
       },
       {
-        "command": "workcenter.moveToQueue",
+        "command": "devdocket.moveToQueue",
         "title": "Move to Queue",
-        "category": "WorkCenter",
+        "category": "DevDocket",
         "icon": "$(arrow-left)"
       },
       {
-        "command": "workcenter.refresh",
+        "command": "devdocket.refresh",
         "title": "Refresh",
-        "category": "WorkCenter",
+        "category": "DevDocket",
         "icon": "$(refresh)"
       }
     ],
     "menus": {
       "view/title": [
         {
-          "command": "workcenter.createItem",
-          "when": "view == workcenter.queue",
+          "command": "devdocket.createItem",
+          "when": "view == devdocket.queue",
           "group": "navigation"
         },
         {
-          "command": "workcenter.switchInboxToTree",
-          "when": "view == workcenter.inbox && workcenter.inboxLayout == flat",
+          "command": "devdocket.switchInboxToTree",
+          "when": "view == devdocket.inbox && devdocket.inboxLayout == flat",
           "group": "navigation"
         },
         {
-          "command": "workcenter.switchInboxToFlat",
-          "when": "view == workcenter.inbox && workcenter.inboxLayout == tree",
+          "command": "devdocket.switchInboxToFlat",
+          "when": "view == devdocket.inbox && devdocket.inboxLayout == tree",
           "group": "navigation"
         },
         {
-          "command": "workcenter.switchQueueToTree",
-          "when": "view == workcenter.queue && workcenter.queueLayout == flat",
+          "command": "devdocket.switchQueueToTree",
+          "when": "view == devdocket.queue && devdocket.queueLayout == flat",
           "group": "navigation"
         },
         {
-          "command": "workcenter.switchQueueToFlat",
-          "when": "view == workcenter.queue && workcenter.queueLayout == tree",
+          "command": "devdocket.switchQueueToFlat",
+          "when": "view == devdocket.queue && devdocket.queueLayout == tree",
           "group": "navigation"
         },
         {
-          "command": "workcenter.switchFocusToTree",
-          "when": "view == workcenter.focus && workcenter.focusLayout == flat",
+          "command": "devdocket.switchFocusToTree",
+          "when": "view == devdocket.focus && devdocket.focusLayout == flat",
           "group": "navigation"
         },
         {
-          "command": "workcenter.switchFocusToFlat",
-          "when": "view == workcenter.focus && workcenter.focusLayout == tree",
+          "command": "devdocket.switchFocusToFlat",
+          "when": "view == devdocket.focus && devdocket.focusLayout == tree",
           "group": "navigation"
         },
         {
-          "command": "workcenter.switchHistoryToTree",
-          "when": "view == workcenter.history && workcenter.historyLayout == flat",
+          "command": "devdocket.switchHistoryToTree",
+          "when": "view == devdocket.history && devdocket.historyLayout == flat",
           "group": "navigation"
         },
         {
-          "command": "workcenter.switchHistoryToFlat",
-          "when": "view == workcenter.history && workcenter.historyLayout == tree",
+          "command": "devdocket.switchHistoryToFlat",
+          "when": "view == devdocket.history && devdocket.historyLayout == tree",
           "group": "navigation"
         },
         {
-          "command": "workcenter.switchSourcesToTree",
-          "when": "view == workcenter.sources && workcenter.sourcesLayout == flat",
+          "command": "devdocket.switchSourcesToTree",
+          "when": "view == devdocket.sources && devdocket.sourcesLayout == flat",
           "group": "navigation"
         },
         {
-          "command": "workcenter.switchSourcesToFlat",
-          "when": "view == workcenter.sources && workcenter.sourcesLayout == tree",
+          "command": "devdocket.switchSourcesToFlat",
+          "when": "view == devdocket.sources && devdocket.sourcesLayout == tree",
           "group": "navigation"
         },
         {
-          "command": "workcenter.refresh",
-          "when": "view == workcenter.inbox || view == workcenter.sources",
+          "command": "devdocket.refresh",
+          "when": "view == devdocket.inbox || view == devdocket.sources",
           "group": "navigation"
         }
       ],
       "commandPalette": [
         {
-          "command": "workcenter.switchInboxToTree",
-          "when": "workcenter.inboxLayout == flat"
+          "command": "devdocket.switchInboxToTree",
+          "when": "devdocket.inboxLayout == flat"
         },
         {
-          "command": "workcenter.switchInboxToFlat",
-          "when": "workcenter.inboxLayout == tree"
+          "command": "devdocket.switchInboxToFlat",
+          "when": "devdocket.inboxLayout == tree"
         },
         {
-          "command": "workcenter.switchQueueToTree",
-          "when": "workcenter.queueLayout == flat"
+          "command": "devdocket.switchQueueToTree",
+          "when": "devdocket.queueLayout == flat"
         },
         {
-          "command": "workcenter.switchQueueToFlat",
-          "when": "workcenter.queueLayout == tree"
+          "command": "devdocket.switchQueueToFlat",
+          "when": "devdocket.queueLayout == tree"
         },
         {
-          "command": "workcenter.switchFocusToTree",
-          "when": "workcenter.focusLayout == flat"
+          "command": "devdocket.switchFocusToTree",
+          "when": "devdocket.focusLayout == flat"
         },
         {
-          "command": "workcenter.switchFocusToFlat",
-          "when": "workcenter.focusLayout == tree"
+          "command": "devdocket.switchFocusToFlat",
+          "when": "devdocket.focusLayout == tree"
         },
         {
-          "command": "workcenter.switchHistoryToTree",
-          "when": "workcenter.historyLayout == flat"
+          "command": "devdocket.switchHistoryToTree",
+          "when": "devdocket.historyLayout == flat"
         },
         {
-          "command": "workcenter.switchHistoryToFlat",
-          "when": "workcenter.historyLayout == tree"
+          "command": "devdocket.switchHistoryToFlat",
+          "when": "devdocket.historyLayout == tree"
         },
         {
-          "command": "workcenter.switchSourcesToTree",
-          "when": "workcenter.sourcesLayout == flat"
+          "command": "devdocket.switchSourcesToTree",
+          "when": "devdocket.sourcesLayout == flat"
         },
         {
-          "command": "workcenter.switchSourcesToFlat",
-          "when": "workcenter.sourcesLayout == tree"
+          "command": "devdocket.switchSourcesToFlat",
+          "when": "devdocket.sourcesLayout == tree"
         },
         {
-          "command": "workcenter.toggleInboxLayout",
+          "command": "devdocket.toggleInboxLayout",
           "when": "false"
         },
         {
-          "command": "workcenter.toggleQueueLayout",
+          "command": "devdocket.toggleQueueLayout",
           "when": "false"
         },
         {
-          "command": "workcenter.toggleFocusLayout",
+          "command": "devdocket.toggleFocusLayout",
           "when": "false"
         },
         {
-          "command": "workcenter.toggleHistoryLayout",
+          "command": "devdocket.toggleHistoryLayout",
           "when": "false"
         },
         {
-          "command": "workcenter.toggleSourcesLayout",
+          "command": "devdocket.toggleSourcesLayout",
           "when": "false"
         }
       ],
       "view/item/context": [
         {
-          "command": "workcenter.acceptToFocus",
-          "when": "view == workcenter.queue && viewItem =~ /^queueItem/",
+          "command": "devdocket.acceptToFocus",
+          "when": "view == devdocket.queue && viewItem =~ /^queueItem/",
           "group": "inline"
         },
         {
-          "command": "workcenter.archiveItem",
-          "when": "view == workcenter.queue && viewItem =~ /^queueItem/",
+          "command": "devdocket.archiveItem",
+          "when": "view == devdocket.queue && viewItem =~ /^queueItem/",
           "group": "1_actions"
         },
         {
-          "command": "workcenter.deleteItem",
-          "when": "view == workcenter.queue && viewItem =~ /^queueItem/",
+          "command": "devdocket.deleteItem",
+          "when": "view == devdocket.queue && viewItem =~ /^queueItem/",
           "group": "1_actions"
         },
         {
-          "command": "workcenter.completeItem",
-          "when": "view == workcenter.focus && viewItem =~ /^(active|paused)/",
+          "command": "devdocket.completeItem",
+          "when": "view == devdocket.focus && viewItem =~ /^(active|paused)/",
           "group": "inline"
         },
         {
-          "command": "workcenter.archiveItem",
-          "when": "view == workcenter.focus && viewItem =~ /^(active|paused)/",
+          "command": "devdocket.archiveItem",
+          "when": "view == devdocket.focus && viewItem =~ /^(active|paused)/",
           "group": "1_actions"
         },
         {
-          "command": "workcenter.pauseItem",
-          "when": "view == workcenter.focus && viewItem =~ /^active/",
+          "command": "devdocket.pauseItem",
+          "when": "view == devdocket.focus && viewItem =~ /^active/",
           "group": "1_actions"
         },
         {
-          "command": "workcenter.resumeItem",
-          "when": "view == workcenter.focus && viewItem =~ /^paused/",
+          "command": "devdocket.resumeItem",
+          "when": "view == devdocket.focus && viewItem =~ /^paused/",
           "group": "1_actions"
         },
         {
-          "command": "workcenter.moveToQueue",
-          "when": "view == workcenter.focus && viewItem =~ /^(active|paused)/",
+          "command": "devdocket.moveToQueue",
+          "when": "view == devdocket.focus && viewItem =~ /^(active|paused)/",
           "group": "1_actions"
         },
         {
-          "command": "workcenter.moveUp",
-          "when": "view == workcenter.queue && viewItem =~ /^queueItem/ && !listMultiSelection",
+          "command": "devdocket.moveUp",
+          "when": "view == devdocket.queue && viewItem =~ /^queueItem/ && !listMultiSelection",
           "group": "3_reorder@1"
         },
         {
-          "command": "workcenter.moveDown",
-          "when": "view == workcenter.queue && viewItem =~ /^queueItem/ && !listMultiSelection",
+          "command": "devdocket.moveDown",
+          "when": "view == devdocket.queue && viewItem =~ /^queueItem/ && !listMultiSelection",
           "group": "3_reorder@2"
         },
         {
-          "command": "workcenter.focusMoveUp",
-          "when": "view == workcenter.focus && viewItem =~ /^(active|paused)/ && !listMultiSelection",
+          "command": "devdocket.focusMoveUp",
+          "when": "view == devdocket.focus && viewItem =~ /^(active|paused)/ && !listMultiSelection",
           "group": "3_reorder@1"
         },
         {
-          "command": "workcenter.focusMoveDown",
-          "when": "view == workcenter.focus && viewItem =~ /^(active|paused)/ && !listMultiSelection",
+          "command": "devdocket.focusMoveDown",
+          "when": "view == devdocket.focus && viewItem =~ /^(active|paused)/ && !listMultiSelection",
           "group": "3_reorder@2"
         },
         {
-          "command": "workcenter.openInBrowser",
+          "command": "devdocket.openInBrowser",
           "when": "viewItem =~ /hasUrl/ && !listMultiSelection",
           "group": "2_links"
         },
         {
-          "command": "workcenter.runAction",
-          "when": "((view == workcenter.queue && viewItem =~ /^queueItem/) || (view == workcenter.focus && viewItem =~ /^(active|paused)/)) && !listMultiSelection",
+          "command": "devdocket.runAction",
+          "when": "((view == devdocket.queue && viewItem =~ /^queueItem/) || (view == devdocket.focus && viewItem =~ /^(active|paused)/)) && !listMultiSelection",
           "group": "0_actions"
         },
         {
-          "command": "workcenter.acceptFromInbox",
-          "when": "view == workcenter.inbox && viewItem =~ /inboxItem/",
+          "command": "devdocket.acceptFromInbox",
+          "when": "view == devdocket.inbox && viewItem =~ /inboxItem/",
           "group": "inline"
         },
         {
-          "command": "workcenter.acceptFromInbox",
-          "when": "view == workcenter.inbox && viewItem =~ /inboxItem/",
+          "command": "devdocket.acceptFromInbox",
+          "when": "view == devdocket.inbox && viewItem =~ /inboxItem/",
           "group": "1_actions"
         },
         {
-          "command": "workcenter.dismissFromInbox",
-          "when": "view == workcenter.inbox && viewItem =~ /inboxItem/",
+          "command": "devdocket.dismissFromInbox",
+          "when": "view == devdocket.inbox && viewItem =~ /inboxItem/",
           "group": "inline"
         },
         {
-          "command": "workcenter.dismissFromInbox",
-          "when": "view == workcenter.inbox && viewItem =~ /inboxItem/",
+          "command": "devdocket.dismissFromInbox",
+          "when": "view == devdocket.inbox && viewItem =~ /inboxItem/",
           "group": "1_actions"
         },
         {
-          "command": "workcenter.acceptToFocusFromInbox",
-          "when": "view == workcenter.inbox && viewItem =~ /inboxItem/",
+          "command": "devdocket.acceptToFocusFromInbox",
+          "when": "view == devdocket.inbox && viewItem =~ /inboxItem/",
           "group": "1_actions"
         },
         {
-          "command": "workcenter.acceptFromSources",
-          "when": "view == workcenter.sources && viewItem =~ /sourceItem/",
+          "command": "devdocket.acceptFromSources",
+          "when": "view == devdocket.sources && viewItem =~ /sourceItem/",
           "group": "inline"
         },
         {
-          "command": "workcenter.dismissFromSources",
-          "when": "view == workcenter.sources && viewItem =~ /sourceItem/",
+          "command": "devdocket.dismissFromSources",
+          "when": "view == devdocket.sources && viewItem =~ /sourceItem/",
           "group": "inline"
         },
         {
-          "command": "workcenter.dismissFromSources",
-          "when": "view == workcenter.sources && viewItem =~ /sourceItem/",
+          "command": "devdocket.dismissFromSources",
+          "when": "view == devdocket.sources && viewItem =~ /sourceItem/",
           "group": "1_actions"
         },
         {
-          "command": "workcenter.archiveItem",
-          "when": "view == workcenter.history && viewItem =~ /historyItem\\.done/",
+          "command": "devdocket.archiveItem",
+          "when": "view == devdocket.history && viewItem =~ /historyItem\\.done/",
           "group": "1_actions"
         },
         {
-          "command": "workcenter.deleteItem",
-          "when": "view == workcenter.history && viewItem =~ /^historyItem/",
+          "command": "devdocket.deleteItem",
+          "when": "view == devdocket.history && viewItem =~ /^historyItem/",
           "group": "1_actions"
         }
       ]
     },
     "keybindings": [
       {
-        "command": "workcenter.createItem",
+        "command": "devdocket.createItem",
         "key": "ctrl+alt+d n",
-        "when": "focusedView =~ /workcenter/"
+        "when": "focusedView =~ /devdocket/"
       },
       {
-        "command": "workcenter.completeItem",
+        "command": "devdocket.completeItem",
         "key": "ctrl+alt+d d",
-        "when": "focusedView =~ /workcenter/"
+        "when": "focusedView =~ /devdocket/"
       },
       {
-        "command": "workcenter.pauseItem",
+        "command": "devdocket.pauseItem",
         "key": "ctrl+alt+d p",
-        "when": "focusedView =~ /workcenter/"
+        "when": "focusedView =~ /devdocket/"
       },
       {
-        "command": "workcenter.resumeItem",
+        "command": "devdocket.resumeItem",
         "key": "ctrl+alt+d u",
-        "when": "focusedView =~ /workcenter/"
+        "when": "focusedView =~ /devdocket/"
       },
       {
-        "command": "workcenter.acceptToFocus",
+        "command": "devdocket.acceptToFocus",
         "key": "ctrl+alt+d f",
-        "when": "focusedView =~ /workcenter/"
+        "when": "focusedView =~ /devdocket/"
       },
       {
-        "command": "workcenter.moveToQueue",
+        "command": "devdocket.moveToQueue",
         "key": "ctrl+alt+d q",
-        "when": "focusedView =~ /workcenter/"
+        "when": "focusedView =~ /devdocket/"
       },
       {
-        "command": "workcenter.refresh",
+        "command": "devdocket.refresh",
         "key": "ctrl+alt+d r",
-        "when": "focusedView =~ /workcenter/"
+        "when": "focusedView =~ /devdocket/"
       }
     ]
   },
@@ -616,7 +616,7 @@
     "test:watch": "vitest"
   },
   "dependencies": {
-    "@workcenter/shared": "*"
+    "@devdocket/shared": "*"
   },
   "devDependencies": {
     "@types/node": "^20.11.0",

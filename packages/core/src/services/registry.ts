@@ -8,7 +8,7 @@ import { logger } from './logger';
  *
  * The VS Code extension API does not expose caller identity when an extension
  * invokes another extension's API. This means we cannot verify *which* extension
- * is registering a given item — any extension that obtains the WorkCenter API
+ * is registering a given item — any extension that obtains the DevDocket API
  * can register a provider or action with any `id`.
  *
  * Mitigation: the registry rejects duplicate IDs and logs every registration at

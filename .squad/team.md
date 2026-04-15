@@ -1,6 +1,6 @@
 # Squad Team
 
-> WorkCenter — VS Code extension for managing work items (issues, investigations, follow-ups)
+> DevDocket — VS Code extension for managing work items (issues, investigations, follow-ups)
 
 ## Coordinator
 
@@ -20,7 +20,7 @@
 
 ## Project Context
 
-- **Project:** WorkCenter
+- **Project:** DevDocket
 - **User:** Matt Thalman
 - **Stack:** TypeScript, VS Code Extension API, esbuild, vitest
 - **Phase:** Phase 1 complete (Queue/Focus views, manual item creation, JSON storage, WorkGraph, 19 tests)

@@ -15,7 +15,7 @@ const VIEW_DEFAULTS: Record<ViewId, ViewLayout> = {
 
 /** Read the persisted layout for a given view, falling back to its default. */
 export function getViewLayout(viewId: ViewId): ViewLayout {
-  const config = vscode.workspace.getConfiguration('workcenter');
+  const config = vscode.workspace.getConfiguration('devdocket');
   const layoutsRaw: unknown = config.get('viewLayout');
   const layouts = (layoutsRaw && typeof layoutsRaw === 'object' && !Array.isArray(layoutsRaw))
     ? layoutsRaw as Record<string, unknown>
@@ -59,7 +59,7 @@ export async function setViewLayout(viewId: ViewId, layout: ViewLayout): Promise
 }
 
 async function applyViewLayout(viewId: ViewId, layout: ViewLayout): Promise<void> {
-  const config = vscode.workspace.getConfiguration('workcenter');
+  const config = vscode.workspace.getConfiguration('devdocket');
 
   // Only target Workspace or Global scope. Workspace-folder scope requires a
   // resource URI that toggle commands don't have, so updating it without one
@@ -69,7 +69,7 @@ async function applyViewLayout(viewId: ViewId, layout: ViewLayout): Promise<void
   if (inspection?.workspaceFolderValue !== undefined) {
     void vscode.window.showWarningMessage(
       'A workspace-folder setting is overriding the layout for this view. ' +
-      'Update or remove "workcenter.viewLayout" in your folder settings to use the toggle.',
+      'Update or remove "devdocket.viewLayout" in your folder settings to use the toggle.',
     );
   }
 

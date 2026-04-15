@@ -59,7 +59,7 @@ const window = {
     show: vi.fn(),
     hide: vi.fn(),
     dispose: vi.fn(),
-    name: 'WorkCenter GitHub',
+    name: 'DevDocket GitHub',
     replace: vi.fn(),
   })),
 };

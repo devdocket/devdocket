@@ -167,7 +167,7 @@ describe('StartWorkAction', () => {
 
       expect(mockMemento.update).not.toHaveBeenCalled();
       expect(window.showErrorMessage).toHaveBeenCalledWith(
-        'WorkCenter: No repository path provided.',
+        'DevDocket: No repository path provided.',
       );
     });
 
@@ -180,7 +180,7 @@ describe('StartWorkAction', () => {
 
       expect(mockMemento.update).not.toHaveBeenCalled();
       expect(window.showErrorMessage).toHaveBeenCalledWith(
-        'WorkCenter: "/not/a/repo" is not a git repository.',
+        'DevDocket: "/not/a/repo" is not a git repository.',
       );
     });
 
@@ -304,7 +304,7 @@ describe('StartWorkAction', () => {
       await action.run(item);
 
       expect(window.showErrorMessage).toHaveBeenCalledWith(
-        'WorkCenter: Branch "issue123" already exists.',
+        'DevDocket: Branch "issue123" already exists.',
       );
     });
 
@@ -348,7 +348,7 @@ describe('StartWorkAction', () => {
       await action.run(item);
 
       expect(window.showInformationMessage).toHaveBeenCalledWith(
-        'WorkCenter: Created worktree for issue123',
+        'DevDocket: Created worktree for issue123',
       );
     });
 
@@ -481,7 +481,7 @@ describe('StartWorkAction', () => {
       await action.run(item);
 
       expect(window.showErrorMessage).toHaveBeenCalledWith(
-        'WorkCenter: No base branch provided.',
+        'DevDocket: No base branch provided.',
       );
     });
   });

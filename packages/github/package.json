@@ -1,7 +1,7 @@
 {
-  "name": "workcenter-github",
-  "displayName": "WorkCenter GitHub",
-  "description": "GitHub provider for WorkCenter — discovers assigned issues and PR reviews.",
+  "name": "devdocket-github",
+  "displayName": "DevDocket GitHub",
+  "description": "GitHub provider for DevDocket — discovers assigned issues and PR reviews.",
   "version": "0.1.0",
   "publisher": "mthalman",
   "license": "MIT",
@@ -12,7 +12,7 @@
     "Other"
   ],
   "extensionDependencies": [
-    "mthalman.workcenter"
+    "mthalman.devdocket"
   ],
   "activationEvents": [
     "onStartupFinished"
@@ -20,9 +20,9 @@
   "main": "./dist/extension.js",
   "contributes": {
     "configuration": {
-      "title": "WorkCenter GitHub",
+      "title": "DevDocket GitHub",
       "properties": {
-        "workcenterGithub.repos": {
+        "devdocketGithub.repos": {
           "type": "array",
           "items": {
             "type": "string"
@@ -30,7 +30,7 @@
           "default": [],
           "description": "GitHub repositories to watch (e.g. 'owner/repo'). Leave empty to fetch all assigned issues across all repositories."
         },
-        "workcenterGithub.refreshIntervalSeconds": {
+        "devdocketGithub.refreshIntervalSeconds": {
           "type": "number",
           "default": 300,
           "description": "How often to refresh GitHub issues (in seconds). Minimum 60 seconds. Values below 60 are clamped."
@@ -47,7 +47,7 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@workcenter/shared": "*"
+    "@devdocket/shared": "*"
   },
   "devDependencies": {
     "@types/node": "^20.11.0",

@@ -230,36 +230,36 @@ describe('ADO provider config edge cases', () => {
   });
 
   describe('config change events', () => {
-    // Extension.ts listens for changes to workcenterAdo.* keys
+    // Extension.ts listens for changes to devdocketAdo.* keys
     // and calls configureProviders() to dispose/recreate providers
 
     it('affectsConfiguration matches all ADO config keys', () => {
       const relevantKeys = [
-        'workcenterAdo.projects',
-        'workcenterAdo.refreshIntervalSeconds',
+        'devdocketAdo.projects',
+        'devdocketAdo.refreshIntervalSeconds',
       ];
 
       for (const key of relevantKeys) {
         const event = { affectsConfiguration: (k: string) => k === key };
         const shouldReconfigure =
-          event.affectsConfiguration('workcenterAdo.projects') ||
-          event.affectsConfiguration('workcenterAdo.refreshIntervalSeconds');
+          event.affectsConfiguration('devdocketAdo.projects') ||
+          event.affectsConfiguration('devdocketAdo.refreshIntervalSeconds');
         expect(shouldReconfigure).toBe(true);
       }
     });
 
     it('unrelated config changes do not trigger reconfiguration', () => {
       const unrelatedKeys = [
-        'workcenter.logLevel',
-        'workcenterGithub.repos',
+        'devdocket.logLevel',
+        'devdocketGithub.repos',
         'editor.fontSize',
       ];
 
       for (const key of unrelatedKeys) {
         const event = { affectsConfiguration: (k: string) => k === key };
         const shouldReconfigure =
-          event.affectsConfiguration('workcenterAdo.projects') ||
-          event.affectsConfiguration('workcenterAdo.refreshIntervalSeconds');
+          event.affectsConfiguration('devdocketAdo.projects') ||
+          event.affectsConfiguration('devdocketAdo.refreshIntervalSeconds');
         expect(shouldReconfigure).toBe(false);
       }
     });
@@ -281,7 +281,7 @@ describe('ADO provider config edge cases', () => {
 
       vi.mocked(workspace.getConfiguration).mockImplementation((section?: string) => ({
         get: vi.fn((key: string, defaultValue?: any) => {
-          if (section === 'workcenterAdo') {
+          if (section === 'devdocketAdo') {
             return configValues[key] ?? defaultValue;
           }
           return defaultValue;
@@ -339,7 +339,7 @@ describe('ADO provider config edge cases', () => {
       // Change projects
       configValues.projects = ['myorg/NewProject'];
       for (const listener of configChangeListeners) {
-        listener({ affectsConfiguration: (k: string) => k === 'workcenterAdo.projects' });
+        listener({ affectsConfiguration: (k: string) => k === 'devdocketAdo.projects' });
       }
 
       // New providers registered
@@ -355,7 +355,7 @@ describe('ADO provider config edge cases', () => {
       configValues.refreshIntervalSeconds = 0;
       for (const listener of configChangeListeners) {
         listener({
-          affectsConfiguration: (k: string) => k === 'workcenterAdo.refreshIntervalSeconds',
+          affectsConfiguration: (k: string) => k === 'devdocketAdo.refreshIntervalSeconds',
         });
       }
 

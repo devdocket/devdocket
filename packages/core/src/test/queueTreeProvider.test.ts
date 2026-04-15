@@ -29,7 +29,7 @@ function createMockProviderRegistry(): ProviderRegistry {
   } as any;
 }
 
-const DRAG_MIME_TYPE = 'application/vnd.code.tree.workcenter.queue';
+const DRAG_MIME_TYPE = 'application/vnd.code.tree.devdocket.queue';
 
 describe('QueueTreeProvider', () => {
   let store: ITaskStore;

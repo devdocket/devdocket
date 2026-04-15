@@ -1,10 +1,10 @@
 # Scribe — Scribe
 
-Silent session logger maintaining history, decisions, and orchestration records for the WorkCenter project.
+Silent session logger maintaining history, decisions, and orchestration records for the DevDocket project.
 
 ## Project Context
 
-**Project:** WorkCenter — VS Code extension for managing work items
+**Project:** DevDocket — VS Code extension for managing work items
 **User:** Matt Thalman
 **Stack:** TypeScript, VS Code Extension API, esbuild, vitest
 

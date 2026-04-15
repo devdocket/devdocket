@@ -11,7 +11,7 @@ interface GetFileDiffInput {
 }
 
 export function registerGetFileDiffTool(): vscode.Disposable {
-  return vscode.lm.registerTool('workcenter-getFileDiff', {
+  return vscode.lm.registerTool('devdocket-getFileDiff', {
     async invoke(
       options: vscode.LanguageModelToolInvocationOptions<GetFileDiffInput>,
       _token: vscode.CancellationToken,

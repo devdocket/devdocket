@@ -1,6 +1,6 @@
 import * as vscode from 'vscode';
-import { WorkCenterApi } from './api/types';
-import { WorkCenterApiImpl } from './api/workCenterApi';
+import { DevDocketApi } from './api/types';
+import { DevDocketApiImpl } from './api/devDocketApi';
 import { JsonTaskStore } from './storage/jsonTaskStore';
 import { DiscoveredStateStore } from './storage/discoveredStateStore';
 import { ReadStateStore } from './storage/readStateStore';
@@ -19,7 +19,7 @@ import { getInboxUnseenCount } from './services/inboxBadge';
 import { getViewLayout, ViewId } from './views/viewLayout';
 import { performance } from 'perf_hooks';
 
-export type { WorkCenterApi, WorkCenterProvider, WorkCenterAction, DiscoveredItem, Disposable } from './api/types';
+export type { DevDocketApi, DevDocketProvider, DevDocketAction, DiscoveredItem, Disposable } from './api/types';
 export { logger } from './services/logger';
 
 /** Wrap an event callback so unhandled errors (sync or async) are logged instead of crashing. */
@@ -39,10 +39,10 @@ let workGraph: WorkGraph | undefined;
 let stateStore: DiscoveredStateStore | undefined;
 
 function initializeLogging(context: vscode.ExtensionContext): void {
-  const outputChannel = vscode.window.createOutputChannel('WorkCenter');
+  const outputChannel = vscode.window.createOutputChannel('DevDocket');
   context.subscriptions.push(outputChannel);
 
-  const logLevelConfig = vscode.workspace.getConfiguration('workcenter').get<string>('logLevel', 'info');
+  const logLevelConfig = vscode.workspace.getConfiguration('devdocket').get<string>('logLevel', 'info');
   initLogger(outputChannel, resolveLogLevel(logLevelConfig));
   if (!['debug', 'info', 'warn', 'error'].includes(logLevelConfig)) {
     logger.warn(`Invalid log level '${logLevelConfig}', falling back to 'info'. Valid values: debug, info, warn, error`);
@@ -50,8 +50,8 @@ function initializeLogging(context: vscode.ExtensionContext): void {
 
   context.subscriptions.push(
     vscode.workspace.onDidChangeConfiguration(safeHandler('Error handling configuration change', (e) => {
-      if (e.affectsConfiguration('workcenter.logLevel')) {
-        const newLevel = vscode.workspace.getConfiguration('workcenter').get<string>('logLevel', 'info');
+      if (e.affectsConfiguration('devdocket.logLevel')) {
+        const newLevel = vscode.workspace.getConfiguration('devdocket').get<string>('logLevel', 'info');
         setLogLevel(resolveLogLevel(newLevel));
         if (!['debug', 'info', 'warn', 'error'].includes(newLevel)) {
           logger.warn(`Invalid log level '${newLevel}', falling back to 'info'. Valid values: debug, info, warn, error`);
@@ -133,11 +133,11 @@ function createTreeViews(
   sourcesProvider.layout = getViewLayout('sources');
   historyProvider.layout = getViewLayout('history');
 
-  const inboxTreeView = vscode.window.createTreeView('workcenter.inbox', { treeDataProvider: inboxProvider, canSelectMany: true });
-  const sourcesTreeView = vscode.window.createTreeView('workcenter.sources', { treeDataProvider: sourcesProvider, canSelectMany: true });
-  const queueTreeView = vscode.window.createTreeView('workcenter.queue', { treeDataProvider: queueProvider, dragAndDropController: queueProvider, canSelectMany: true });
-  const focusTreeView = vscode.window.createTreeView('workcenter.focus', { treeDataProvider: focusProvider, dragAndDropController: focusProvider, canSelectMany: true });
-  const historyTreeView = vscode.window.createTreeView('workcenter.history', { treeDataProvider: historyProvider, canSelectMany: true });
+  const inboxTreeView = vscode.window.createTreeView('devdocket.inbox', { treeDataProvider: inboxProvider, canSelectMany: true });
+  const sourcesTreeView = vscode.window.createTreeView('devdocket.sources', { treeDataProvider: sourcesProvider, canSelectMany: true });
+  const queueTreeView = vscode.window.createTreeView('devdocket.queue', { treeDataProvider: queueProvider, dragAndDropController: queueProvider, canSelectMany: true });
+  const focusTreeView = vscode.window.createTreeView('devdocket.focus', { treeDataProvider: focusProvider, dragAndDropController: focusProvider, canSelectMany: true });
+  const historyTreeView = vscode.window.createTreeView('devdocket.history', { treeDataProvider: historyProvider, canSelectMany: true });
 
   const inboxSelectionSub = inboxTreeView.onDidChangeSelection((e) => {
     void (async () => {
@@ -248,16 +248,16 @@ function wireEvents(
   }));
   const newItemsSub = providerRegistry.onDidAddNewUnseenItems(safeHandler('Error handling new unseen items notification', (newCount) => {
     if (!initialLoadComplete) { return; }
-    const config = vscode.workspace.getConfiguration('workcenter');
+    const config = vscode.workspace.getConfiguration('devdocket');
     const showNotifications = config.get<boolean>('showInboxNotifications', true);
     if (showNotifications && newCount > 0) {
       void vscode.window.showInformationMessage(
-        `WorkCenter: ${newCount} new item${newCount === 1 ? '' : 's'} in Inbox`,
+        `DevDocket: ${newCount} new item${newCount === 1 ? '' : 's'} in Inbox`,
         'Show Inbox'
       ).then(
         action => {
           if (action === 'Show Inbox') {
-            vscode.commands.executeCommand('workcenter.inbox.focus').then(
+            vscode.commands.executeCommand('devdocket.inbox.focus').then(
               undefined,
               () => { /* view focus is best-effort */ }
             );
@@ -274,19 +274,19 @@ function wireEvents(
 }
 
 /**
- * Activate the WorkCenter extension.
+ * Activate the DevDocket extension.
  *
  * Initialises storage, loads persisted work items and discovered-item state,
  * registers all tree views (Inbox, Queue, Focus, History, Sources), and
- * returns the public {@link WorkCenterApi} for provider extensions to consume.
+ * returns the public {@link DevDocketApi} for provider extensions to consume.
  *
  * @param context - The VS Code extension context provided at activation.
  * @returns The public API used by provider extensions to register providers and actions.
  */
-export async function activate(context: vscode.ExtensionContext): Promise<WorkCenterApi> {
+export async function activate(context: vscode.ExtensionContext): Promise<DevDocketApi> {
   const activationStart = performance.now();
   initializeLogging(context);
-  logger.info('WorkCenter activating...');
+  logger.info('DevDocket activating...');
 
   const initStart = performance.now();
   const storagePath = context.globalStorageUri.fsPath;
@@ -297,7 +297,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<WorkCe
   providerRegistry = pr;
   const ar = new ActionRegistry();
   actionRegistry = ar;
-  const api = new WorkCenterApiImpl(pr, ar);
+  const api = new DevDocketApiImpl(pr, ar);
   logger.info(`Store + service init took ${Math.round(performance.now() - initStart)}ms`);
 
   const treeViewStart = performance.now();
@@ -339,35 +339,35 @@ export async function activate(context: vscode.ExtensionContext): Promise<WorkCe
     sources: providers.sourcesProvider,
   };
   for (const id of viewIds) {
-    void vscode.commands.executeCommand('setContext', `workcenter.${id}Layout`, getViewLayout(id));
+    void vscode.commands.executeCommand('setContext', `devdocket.${id}Layout`, getViewLayout(id));
   }
   context.subscriptions.push(
     vscode.workspace.onDidChangeConfiguration(safeHandler('Error handling viewLayout configuration change', (e) => {
-      if (e.affectsConfiguration('workcenter.viewLayout')) {
+      if (e.affectsConfiguration('devdocket.viewLayout')) {
         for (const id of viewIds) {
           const layout = getViewLayout(id);
           providerMap[id].layout = layout;
-          void vscode.commands.executeCommand('setContext', `workcenter.${id}Layout`, layout);
+          void vscode.commands.executeCommand('setContext', `devdocket.${id}Layout`, layout);
         }
       }
     })),
   );
 
-  logger.info(`WorkCenter activated in ${Math.round(performance.now() - activationStart)}ms`);
+  logger.info(`DevDocket activated in ${Math.round(performance.now() - activationStart)}ms`);
   return api;
 }
 
 /**
- * Deactivate the WorkCenter extension.
+ * Deactivate the DevDocket extension.
  *
  * All resources are disposed automatically via `context.subscriptions`,
  * so this function is intentionally a no-op.
  */
 export function deactivate(): void {
-  logger.info('WorkCenter deactivating...');
+  logger.info('DevDocket deactivating...');
   providerRegistry?.dispose();
   actionRegistry?.dispose();
   workGraph?.dispose();
   stateStore?.dispose();
-  logger.info('WorkCenter deactivated');
+  logger.info('DevDocket deactivated');
 }

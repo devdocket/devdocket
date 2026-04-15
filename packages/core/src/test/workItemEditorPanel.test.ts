@@ -137,7 +137,7 @@ describe('WorkItemEditorPanel', () => {
       openPanel(item, createMockWorkGraph(item), mock);
 
       expect(window.createWebviewPanel).toHaveBeenCalledWith(
-        'workcenter.editItem',
+        'devdocket.editItem',
         'Edit: My Task',
         ViewColumn.One,
         { enableScripts: true, retainContextWhenHidden: true },
@@ -895,7 +895,7 @@ describe('WorkItemEditorPanel (integration with WorkGraph)', () => {
       WorkItemEditorPanel.open(context, graph, createMockProviderRegistry() as any, item);
 
       expect(vscode.window.createWebviewPanel).toHaveBeenCalledWith(
-        'workcenter.editItem',
+        'devdocket.editItem',
         `Edit: My Task`,
         vscode.ViewColumn.One,
         { enableScripts: true, retainContextWhenHidden: true },
