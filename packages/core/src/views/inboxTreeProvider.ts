@@ -327,7 +327,7 @@ export class InboxTreeProvider implements vscode.TreeDataProvider<InboxElement> 
   private buildFlatDescription(item: InboxItem): string | undefined {
     const parts = [
       item.group?.trim(),
-      this.providerRegistry.getProviderLabel(item.providerId),
+      this.providerRegistry.getProviderLabel(item.providerId)?.trim(),
     ].filter((p): p is string => p !== undefined && p.length > 0);
     return parts.length > 0 ? parts.join(' · ') : undefined;
   }
