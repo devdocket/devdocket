@@ -201,7 +201,7 @@ Registers an **AI Code Review** action that can be run on any work item whose UR
 
 ## Keyboard Shortcuts
 
-DevDocket provides chorded keyboard shortcuts using the **Ctrl+Alt+D** prefix. All shortcuts are scoped to DevDocket views — they only activate when a DevDocket view has focus.
+WorkCenter provides chorded keyboard shortcuts using the **Ctrl+Alt+D** prefix. All shortcuts are scoped to WorkCenter views — they only activate when a WorkCenter view has focus.
 
 To use a shortcut, press **Ctrl+Alt+D**, release, then press the second key.
 
