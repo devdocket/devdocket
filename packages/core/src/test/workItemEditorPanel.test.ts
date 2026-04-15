@@ -947,6 +947,22 @@ describe('WorkItemEditorPanel (integration with WorkGraph)', () => {
       expect(html).not.toContain('Title is managed by the provider');
     });
 
+    it('title field is editable for unregistered provider IDs like url-import', async () => {
+      const item = await graph.createItem(
+        { title: 'Imported Task' },
+        { providerId: 'url-import', externalId: 'https://example.com/pr/1' },
+      );
+      const registry = createMockProviderRegistry();
+      vi.mocked(registry.getProvider).mockReturnValue(undefined);
+      WorkItemEditorPanel.open(context, graph, registry as any, item);
+
+      const html = mockPanel.webview.html;
+      const titleMatch = html.match(/<input[^>]*id="title"[^>]*>/);
+      expect(titleMatch).toBeTruthy();
+      expect(titleMatch![0]).not.toContain('readonly');
+      expect(html).not.toContain('Title is managed by the provider');
+    });
+
     it('notes field is always editable', async () => {
       const item = await graph.createItem(
         { title: 'Provider Task' },
