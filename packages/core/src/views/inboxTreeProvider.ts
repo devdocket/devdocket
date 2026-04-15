@@ -218,7 +218,8 @@ export class InboxTreeProvider implements vscode.TreeDataProvider<InboxElement> 
       const result: InboxProviderNode[] = [];
       const allItems = this.providerRegistry.getAllDiscoveredItems();
       for (const [providerId] of allItems) {
-        if (this.getUnseenCount(providerId) > 0) {
+        const health = this.providerRegistry.getProviderHealth(providerId);
+        if (this.getUnseenCount(providerId) > 0 || health.status === 'unhealthy') {
           result.push({
             kind: 'provider',
             providerId,
@@ -334,7 +335,9 @@ export class InboxTreeProvider implements vscode.TreeDataProvider<InboxElement> 
 
   private buildProviderTooltip(label: string, health: ProviderHealthStatus): vscode.MarkdownString {
     const md = new vscode.MarkdownString();
-    md.appendMarkdown(`**${label}**\n\n`);
+    md.appendMarkdown(`**`);
+    md.appendText(label);
+    md.appendMarkdown(`**\n\n`);
     if (health.lastRefreshTime) {
       md.appendMarkdown(`Last refreshed: ${formatRelativeTime(health.lastRefreshTime)}\n\n`);
     }

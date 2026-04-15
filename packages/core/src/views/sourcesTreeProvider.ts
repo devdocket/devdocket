@@ -193,7 +193,9 @@ export class SourcesTreeProvider implements vscode.TreeDataProvider<SourcesEleme
 
   private buildProviderTooltip(label: string, health: ProviderHealthStatus): vscode.MarkdownString {
     const md = new vscode.MarkdownString();
-    md.appendMarkdown(`**${label}**\n\n`);
+    md.appendMarkdown(`**`);
+    md.appendText(label);
+    md.appendMarkdown(`**\n\n`);
     if (health.lastRefreshTime) {
       md.appendMarkdown(`Last refreshed: ${formatRelativeTime(health.lastRefreshTime)}\n\n`);
     }
