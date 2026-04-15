@@ -85,10 +85,10 @@ describe('FocusTreeProvider', () => {
       expect(provider.getTreeItem(item).description).toBe('in progress');
     });
 
-    it('should omit group in tree layout', () => {
+    it('should show group in tree layout', () => {
       provider.layout = 'tree';
       const item = makeItem({ state: WorkItemState.InProgress, group: 'octocat/repo' });
-      expect(provider.getTreeItem(item).description).toBe('in progress');
+      expect(provider.getTreeItem(item).description).toBe('octocat/repo · in progress');
     });
   });
 
