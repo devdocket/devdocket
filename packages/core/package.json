@@ -527,11 +527,6 @@
           "group": "1_actions"
         },
         {
-          "command": "workcenter.acceptToFocusFromInbox",
-          "when": "view == workcenter.inbox && viewItem =~ /inboxItem/",
-          "group": "inline"
-        },
-        {
           "command": "workcenter.dismissFromInbox",
           "when": "view == workcenter.inbox && viewItem =~ /inboxItem/",
           "group": "inline"
