@@ -36,7 +36,7 @@ export class HistoryTreeProvider extends WorkItemViewProvider {
     const treeItem = new vscode.TreeItem(title, vscode.TreeItemCollapsibleState.None);
     treeItem.description = this.layout === 'tree'
       ? this.buildDescription(this.getStateLabel(item.state))
-      : this.buildDescription(item.group, this.getStateLabel(item.state));
+      : this.buildDescription(item.group, this.getProviderLabel(item.providerId), this.getStateLabel(item.state));
     treeItem.tooltip = this.buildTooltip(item, title);
     treeItem.iconPath = this.getIcon(item.state);
     let contextBase = 'historyItem';

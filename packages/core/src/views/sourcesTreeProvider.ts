@@ -1,7 +1,7 @@
 import * as vscode from 'vscode';
 import { DiscoveredItem } from '../api/types';
 import { ProviderRegistry } from '../services/providerRegistry';
-import { DiscoveredStateStore } from '../storage/discoveredStateStore';
+import { DiscoveredStateStore, InboxState } from '../storage/discoveredStateStore';
 import { ViewLayout, LayoutState } from './viewLayout';
 
 export type SourcesElement = SourceProviderNode | SourceGroupNode | SourceItemNode;
@@ -79,7 +79,7 @@ export class SourcesTreeProvider implements vscode.TreeDataProvider<SourcesEleme
             break;
         }
         const treeItem = new vscode.TreeItem(element.title, vscode.TreeItemCollapsibleState.None);
-        treeItem.description = state === 'dismissed' ? 'dismissed' : undefined;
+        treeItem.description = this.buildItemDescription(element.providerId, state);
         treeItem.tooltip = this.buildItemTooltip(element);
         treeItem.contextValue = element.url ? 'sourceItem.hasUrl' : 'sourceItem';
         treeItem.iconPath = new vscode.ThemeIcon(icon);
@@ -179,6 +179,16 @@ export class SourcesTreeProvider implements vscode.TreeDataProvider<SourcesEleme
       url: item.url,
       group: item.group,
     };
+  }
+
+  private buildItemDescription(providerId: string, state: InboxState | undefined): string | undefined {
+    const parts: string[] = [];
+    if (this._layoutState.value === 'flat') {
+      const label = this.providerRegistry.getProviderLabel(providerId);
+      if (label) { parts.push(label); }
+    }
+    if (state === 'dismissed') { parts.push('dismissed'); }
+    return parts.length > 0 ? parts.join(' · ') : undefined;
   }
 
   private buildItemTooltip(item: SourceItemNode): vscode.MarkdownString {
