@@ -376,7 +376,11 @@ export class WorkGraph {
    * Returns the number of items deleted.
    */
   async clearOldHistory(maxAgeDays: number): Promise<number> {
-    const cutoff = Date.now() - maxAgeDays * 24 * 60 * 60 * 1000;
+    if (!Number.isFinite(maxAgeDays) || maxAgeDays < 1) {
+      return 0;
+    }
+    const days = Math.round(maxAgeDays);
+    const cutoff = Date.now() - days * 24 * 60 * 60 * 1000;
     const toDelete = this.getItemsByState(WorkItemState.Done, WorkItemState.Archived)
       .filter(item => item.updatedAt < cutoff);
 
