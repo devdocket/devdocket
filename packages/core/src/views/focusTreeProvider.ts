@@ -46,8 +46,8 @@ export class FocusTreeProvider extends WorkItemViewProvider implements vscode.Tr
     const treeItem = new vscode.TreeItem(title, vscode.TreeItemCollapsibleState.None);
     treeItem.id = item.id;
     treeItem.description = this.layout === 'tree'
-      ? this.buildDescription(item.group, this.getStateLabel(item.state))
-      : this.buildDescription(item.group, this.getProviderLabel(item.providerId), this.getStateLabel(item.state));
+      ? undefined
+      : this.buildDescription(item.group, this.getProviderLabel(item.providerId));
     treeItem.tooltip = this.buildTooltip(item, title);
     treeItem.iconPath = this.getIcon(item.state);
 

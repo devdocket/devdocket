@@ -315,6 +315,16 @@ describe('SourcesTreeProvider', () => {
       expect(treeItem.description).toBe('GitHub Issues');
     });
 
+    it('should show group and provider label in flat layout', () => {
+      registry._setLabel('gh', 'GitHub Issues');
+      provider.layout = 'flat';
+      const node: SourceItemNode = {
+        kind: 'item', providerId: 'gh', externalId: '1', title: 'Item', group: 'octocat/repo',
+      };
+      const treeItem = provider.getTreeItem(node);
+      expect(treeItem.description).toBe('octocat/repo · GitHub Issues');
+    });
+
     it('should show provider label and dismissed in flat layout', () => {
       registry._setLabel('gh', 'GitHub Issues');
       stateStore.getState.mockReturnValue('dismissed');
@@ -324,6 +334,17 @@ describe('SourcesTreeProvider', () => {
       };
       const treeItem = provider.getTreeItem(node);
       expect(treeItem.description).toBe('GitHub Issues · dismissed');
+    });
+
+    it('should show group, provider label, and dismissed in flat layout', () => {
+      registry._setLabel('gh', 'GitHub Issues');
+      stateStore.getState.mockReturnValue('dismissed');
+      provider.layout = 'flat';
+      const node: SourceItemNode = {
+        kind: 'item', providerId: 'gh', externalId: '1', title: 'Dismissed Item', group: 'octocat/repo',
+      };
+      const treeItem = provider.getTreeItem(node);
+      expect(treeItem.description).toBe('octocat/repo · GitHub Issues · dismissed');
     });
 
     it('should omit provider label in tree layout', () => {

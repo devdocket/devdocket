@@ -79,7 +79,7 @@ export class SourcesTreeProvider implements vscode.TreeDataProvider<SourcesEleme
             break;
         }
         const treeItem = new vscode.TreeItem(element.title, vscode.TreeItemCollapsibleState.None);
-        treeItem.description = this.buildItemDescription(element.providerId, state);
+        treeItem.description = this.buildItemDescription(element.providerId, element.group, state);
         treeItem.tooltip = this.buildItemTooltip(element);
         treeItem.contextValue = element.url ? 'sourceItem.hasUrl' : 'sourceItem';
         treeItem.iconPath = new vscode.ThemeIcon(icon);
@@ -181,9 +181,11 @@ export class SourcesTreeProvider implements vscode.TreeDataProvider<SourcesEleme
     };
   }
 
-  private buildItemDescription(providerId: string, state: InboxState | undefined): string | undefined {
+  private buildItemDescription(providerId: string, group: string | undefined, state: InboxState | undefined): string | undefined {
     const parts: string[] = [];
     if (this._layoutState.value === 'flat') {
+      const groupLabel = group?.trim();
+      if (groupLabel && groupLabel.length > 0) { parts.push(groupLabel); }
       const label = this.providerRegistry.getProviderLabel(providerId)?.trim();
       if (label && label.length > 0) { parts.push(label); }
     }

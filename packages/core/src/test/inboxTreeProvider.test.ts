@@ -316,10 +316,10 @@ describe('InboxTreeProvider', () => {
       expect(treeItem.description).toBe('octocat/repo · gh');
     });
 
-    it('should show group in tree layout description', () => {
+    it('should show undefined description in tree layout', () => {
       const item: InboxItem = { kind: 'item', providerId: 'gh', externalId: '1', title: 'Bug', group: 'octocat/repo' };
       const treeItem = provider.getTreeItem(item);
-      expect(treeItem.description).toBe('octocat/repo');
+      expect(treeItem.description).toBeUndefined();
     });
 
     it('should set description to provider label in flat layout when no group', () => {
