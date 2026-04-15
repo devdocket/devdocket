@@ -10,7 +10,7 @@ import { type InboxItem, type InboxElement } from '../views/inboxTreeProvider';
 import { type SourceItemNode, type SourcesElement } from '../views/sourcesTreeProvider';
 import { logger } from '../services/logger';
 import { parseSourceUrl } from '../services/urlParser';
-import { fetchItemDetails } from '../services/urlFetcher';
+import { fetchItemDetails, type FetchedItemDetails } from '../services/urlFetcher';
 import { toggleViewLayout, setViewLayout } from '../views/viewLayout';
 
 /**
@@ -253,7 +253,7 @@ async function handleCreateItemFromUrl(
     return;
   }
 
-  let details;
+  let details: FetchedItemDetails;
   try {
     details = await vscode.window.withProgress(
       { location: vscode.ProgressLocation.Notification, title: 'DevDocket: Fetching item details…', cancellable: true },
