@@ -1,6 +1,6 @@
 import * as vscode from 'vscode';
 import { DevDocketProvider, DiscoveredItem } from '../api/types';
-import { DiscoveredStateStore } from '../storage/discoveredStateStore';
+import { DiscoveredStateStore, InboxState } from '../storage/discoveredStateStore';
 import { ProviderLabelCache } from '../storage/providerLabelCache';
 import { logger } from './logger';
 
@@ -223,18 +223,32 @@ export class ProviderRegistry {
     }
     logger.info(`Provider ${providerId} discovered ${items.length} items`);
     this.discoveredItems.set(providerId, items);
-    const updates: Array<{ providerId: string; externalId: string; state: 'unseen' }> = [];
+
+    const newUnseenUpdates: Array<{ providerId: string; externalId: string; state: 'unseen'; version?: string }> = [];
+    const versionBackfills: Array<{ providerId: string; externalId: string; state: InboxState; version?: string }> = [];
+
     for (const item of items) {
       const existing = this.stateStore.getState(providerId, item.externalId);
       if (existing === undefined) {
-        updates.push({ providerId, externalId: item.externalId, state: 'unseen' });
+        newUnseenUpdates.push({ providerId, externalId: item.externalId, state: 'unseen', version: item.version });
+      } else if (existing === 'accepted' && item.version !== undefined) {
+        const storedVersion = this.stateStore.getVersion(providerId, item.externalId);
+        if (storedVersion !== undefined && storedVersion !== item.version) {
+          // Version changed since last acceptance — resurface in Inbox
+          newUnseenUpdates.push({ providerId, externalId: item.externalId, state: 'unseen', version: item.version });
+        } else if (storedVersion === undefined) {
+          // Backfill version for pre-existing accepted item (no state change)
+          versionBackfills.push({ providerId, externalId: item.externalId, state: 'accepted', version: item.version });
+        }
       }
     }
-    if (updates.length > 0) {
+
+    const allUpdates = [...newUnseenUpdates, ...versionBackfills];
+    if (allUpdates.length > 0) {
       try {
-        await this.stateStore.setStates(updates);
-        if (!this._disposed) {
-          this._onDidAddNewUnseenItems.fire(updates.length);
+        await this.stateStore.setStates(allUpdates);
+        if (!this._disposed && newUnseenUpdates.length > 0) {
+          this._onDidAddNewUnseenItems.fire(newUnseenUpdates.length);
         }
       } catch (err) {
         logger.error('Failed to persist discovered states', err);

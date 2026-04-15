@@ -16,6 +16,8 @@ export interface DiscoveredStateRecord {
   providerId: string;
   externalId: string;
   inboxState: InboxState;
+  /** Version identifier used to detect when a previously accepted item needs re-attention. */
+  version?: string;
 }
 
 /**
@@ -77,13 +79,23 @@ export class DiscoveredStateStore {
   }
 
   /**
+   * Returns the stored version for a discovered item, or `undefined` if not set.
+   * @param providerId - The provider that discovered the item.
+   * @param externalId - The provider-scoped item identifier.
+   */
+  getVersion(providerId: string, externalId: string): string | undefined {
+    return this.cache.get(this.key(providerId, externalId))?.version;
+  }
+
+  /**
    * Sets the inbox state for a single discovered item and persists to disk.
    * @param providerId - The provider that discovered the item.
    * @param externalId - The provider-scoped item identifier.
    * @param state      - The new inbox state.
+   * @param version    - Optional version identifier for resurfacing detection.
    * @throws If the write to disk fails (cache is rolled back on error).
    */
-  async setState(providerId: string, externalId: string, state: InboxState): Promise<void> {
+  async setState(providerId: string, externalId: string, state: InboxState, version?: string): Promise<void> {
     logger.debug(`Setting state for ${providerId}/${externalId} to ${state}`);
     await this.enqueue(async () => {
       if (!this.loaded) {
@@ -91,7 +103,10 @@ export class DiscoveredStateStore {
       }
       const k = this.key(providerId, externalId);
       const previousValue = this.cache.get(k);
-      const newRecord = { providerId, externalId, inboxState: state };
+      const newRecord: DiscoveredStateRecord = { providerId, externalId, inboxState: state };
+      if (version !== undefined) {
+        newRecord.version = version;
+      }
       this.cache.set(k, newRecord);
       try {
         await this.writeFile();
@@ -109,10 +124,10 @@ export class DiscoveredStateStore {
 
   /**
    * Sets the inbox state for multiple discovered items in a single serialized write.
-   * @param items - Array of items with their new states.
+   * @param items - Array of items with their new states and optional versions.
    * @throws If the write to disk fails (cache is rolled back on error).
    */
-  async setStates(items: Array<{ providerId: string; externalId: string; state: InboxState }>): Promise<void> {
+  async setStates(items: Array<{ providerId: string; externalId: string; state: InboxState; version?: string }>): Promise<void> {
     await this.enqueue(async () => {
       if (!this.loaded) {
         await this.load();
@@ -121,7 +136,11 @@ export class DiscoveredStateStore {
       for (const item of items) {
         const k = this.key(item.providerId, item.externalId);
         rollback.set(k, this.cache.get(k));
-        this.cache.set(k, { providerId: item.providerId, externalId: item.externalId, inboxState: item.state });
+        const newRecord: DiscoveredStateRecord = { providerId: item.providerId, externalId: item.externalId, inboxState: item.state };
+        if (item.version !== undefined) {
+          newRecord.version = item.version;
+        }
+        this.cache.set(k, newRecord);
       }
       try {
         await this.writeFile();

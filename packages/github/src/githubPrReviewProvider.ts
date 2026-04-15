@@ -32,6 +32,7 @@ export class GitHubPrReviewProvider extends BaseGitHubProvider {
         url: pr.html_url,
         group: repoName,
         reason: 'review_requested',
+        version: pr.updated_at,
       };
     });
 

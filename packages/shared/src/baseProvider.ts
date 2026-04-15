@@ -27,6 +27,13 @@ export interface DiscoveredItem {
   group?: string;
   /** Optional notification reason explaining why this item was surfaced (e.g. `"assigned"`, `"review_requested"`). */
   reason?: string;
+  /**
+   * Optional version identifier that changes when the item needs re-attention.
+   * When a previously accepted item reappears with a different version,
+   * it is resurfaced in the Inbox as unseen. Useful for PR reviews where
+   * a re-requested review should create a new inbox cycle.
+   */
+  version?: string;
 }
 
 /** Matches the subset of vscode.EventEmitter used by providers. */

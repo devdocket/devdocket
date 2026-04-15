@@ -12,6 +12,9 @@ interface AdoPullRequest {
     project: { name: string };
     webUrl?: string;
   };
+  lastMergeSourceCommit?: {
+    commitId: string;
+  };
 }
 
 // Response from the ADO connection data API
@@ -273,6 +276,7 @@ export class AdoPrReviewProvider extends BaseProvider {
         url: `${repoUrl}/pullrequest/${pr.pullRequestId}`,
         group: `${projectName}/${repoName}`,
         reason: 'review_requested',
+        version: pr.lastMergeSourceCommit?.commitId,
       };
     });
 
