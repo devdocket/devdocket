@@ -256,7 +256,14 @@ export class ProviderRegistry {
       lastError: status === 'unhealthy' ? lastError : undefined,
     };
     this.healthStatus.set(providerId, next);
-    if (!this._disposed && (prev?.status !== next.status || prev?.lastError !== next.lastError)) {
+    const prevRefreshTime = prev?.lastRefreshTime?.getTime();
+    const nextRefreshTime = next.lastRefreshTime?.getTime();
+    if (
+      !this._disposed &&
+      (prev?.status !== next.status ||
+        prev?.lastError !== next.lastError ||
+        prevRefreshTime !== nextRefreshTime)
+    ) {
       this._onDidChangeProviderHealth.fire(providerId);
     }
   }

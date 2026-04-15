@@ -1022,7 +1022,7 @@ describe('ProviderRegistry', () => {
       expect(listener).toHaveBeenCalledWith('evented');
     });
 
-    it('does not fire onDidChangeProviderHealth when status is unchanged', async () => {
+    it('fires onDidChangeProviderHealth when lastRefreshTime changes even if status is same', async () => {
       const provider = createMockProvider('stable');
       registry.register(provider);
       // First refresh resolves immediately → healthy
@@ -1032,10 +1032,10 @@ describe('ProviderRegistry', () => {
       registry.onDidChangeProviderHealth(listener);
 
       // Trigger another refresh — also resolves immediately → healthy again
+      // but lastRefreshTime changes, so the event should fire
       await registry.refreshAll();
 
-      // Should not fire because status stayed 'healthy'
-      expect(listener).not.toHaveBeenCalled();
+      expect(listener).toHaveBeenCalledWith('stable');
     });
 
     it('clears health status when provider is unregistered', async () => {
