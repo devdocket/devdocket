@@ -910,7 +910,7 @@ describe('registerCommands', () => {
 
       expect(workGraph.createItem).toHaveBeenCalledWith(
         { title: 'Whitespace' },
-        expect.objectContaining({ group: undefined }),
+        expect.not.objectContaining({ group: expect.anything() }),
       );
     });
   });
