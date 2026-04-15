@@ -555,37 +555,37 @@
     "keybindings": [
       {
         "command": "workcenter.createItem",
-        "key": "ctrl+alt+w n",
+        "key": "ctrl+alt+d n",
         "when": "focusedView =~ /workcenter/"
       },
       {
         "command": "workcenter.completeItem",
-        "key": "ctrl+alt+w d",
+        "key": "ctrl+alt+d d",
         "when": "focusedView =~ /workcenter/"
       },
       {
         "command": "workcenter.pauseItem",
-        "key": "ctrl+alt+w p",
+        "key": "ctrl+alt+d p",
         "when": "focusedView =~ /workcenter/"
       },
       {
         "command": "workcenter.resumeItem",
-        "key": "ctrl+alt+w u",
+        "key": "ctrl+alt+d u",
         "when": "focusedView =~ /workcenter/"
       },
       {
         "command": "workcenter.acceptToFocus",
-        "key": "ctrl+alt+w f",
+        "key": "ctrl+alt+d f",
         "when": "focusedView =~ /workcenter/"
       },
       {
         "command": "workcenter.moveToQueue",
-        "key": "ctrl+alt+w q",
+        "key": "ctrl+alt+d q",
         "when": "focusedView =~ /workcenter/"
       },
       {
         "command": "workcenter.refresh",
-        "key": "ctrl+alt+w r",
+        "key": "ctrl+alt+d r",
         "when": "focusedView =~ /workcenter/"
       }
     ]
