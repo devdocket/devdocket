@@ -454,6 +454,45 @@ describe('SourcesTreeProvider', () => {
       const groupNames = children.map((c) => (c as SourceGroupNode).groupName);
       expect(groupNames).toEqual(['Alpha', 'Mike', 'Zulu']);
     });
+
+    it('should trim whitespace from group names when grouping', () => {
+      registry._setItems('gh', [
+        { externalId: '1', title: 'Issue A', group: ' repo-one ' },
+        { externalId: '2', title: 'Issue B', group: 'repo-one' },
+      ]);
+
+      const providerNode: SourceProviderNode = { kind: 'provider', providerId: 'gh', label: 'GH' };
+      const children = provider.getChildren(providerNode);
+      expect(children).toHaveLength(1);
+      expect(children[0].kind).toBe('group');
+      expect((children[0] as SourceGroupNode).groupName).toBe('repo-one');
+    });
+
+    it('should treat whitespace-only group as ungrouped', () => {
+      registry._setItems('gh', [
+        { externalId: '1', title: 'Whitespace', group: '  ' },
+        { externalId: '2', title: 'Normal', group: 'repo' },
+      ]);
+
+      const providerNode: SourceProviderNode = { kind: 'provider', providerId: 'gh', label: 'GH' };
+      const children = provider.getChildren(providerNode);
+      expect(children).toHaveLength(2);
+      const group = children.find(c => c.kind === 'group') as SourceGroupNode;
+      const item = children.find(c => c.kind === 'item') as SourceItemNode;
+      expect(group.groupName).toBe('repo');
+      expect(item.title).toBe('Whitespace');
+    });
+
+    it('should show trimmed group in flat layout description', () => {
+      registry._setLabel('gh', 'GitHub Issues');
+      provider.layout = 'flat';
+      registry._setItems('gh', [
+        { externalId: '1', title: 'Item', group: '  octocat/repo  ' },
+      ]);
+      const children = provider.getChildren();
+      const treeItem = provider.getTreeItem(children[0]);
+      expect(treeItem.description).toBe('octocat/repo · GitHub Issues');
+    });
   });
 
   describe('dispose', () => {
