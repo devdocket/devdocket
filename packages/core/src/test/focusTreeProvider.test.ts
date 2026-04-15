@@ -90,6 +90,20 @@ describe('FocusTreeProvider', () => {
       const item = makeItem({ state: WorkItemState.InProgress, group: 'octocat/repo' });
       expect(provider.getTreeItem(item).description).toBe('octocat/repo · in progress');
     });
+
+    it('should show group, provider label, and state in flat layout with registry', () => {
+      const emitter = new EventEmitter();
+      const changeEmitter = new EventEmitter();
+      const registry = {
+        getProviderLabel: vi.fn((id: string) => id === 'github' ? 'GitHub Issues' : id),
+        onDidRegisterProvider: emitter.event,
+        onDidChangeDiscoveredItems: changeEmitter.event,
+        getDiscoveredItems: vi.fn(() => []),
+      };
+      const focusWithRegistry = new FocusTreeProvider(workGraph as any, registry as any);
+      const item = makeItem({ state: WorkItemState.InProgress, group: 'octocat/repo', providerId: 'github' });
+      expect(focusWithRegistry.getTreeItem(item).description).toBe('octocat/repo · GitHub Issues · in progress');
+    });
   });
 
   describe('getTreeItem icon', () => {
