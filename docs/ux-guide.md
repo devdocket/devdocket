@@ -198,3 +198,19 @@ Registers an **AI Code Review** action that can be run on any work item whose UR
 |---------|------|---------|-------------|
 | `workcenter.logLevel` | `string` | `"info"` | Log level for the WorkCenter output channel. Valid values: `debug`, `info`, `warn`, `error`. |
 | `workcenter.showInboxNotifications` | `boolean` | `true` | Show a notification when new items arrive in the Inbox. |
+
+## Keyboard Shortcuts
+
+WorkCenter provides chorded keyboard shortcuts using the **Ctrl+Alt+D** prefix. All shortcuts are scoped to WorkCenter views — they only activate when a WorkCenter view has focus.
+
+To use a shortcut, press **Ctrl+Alt+D**, release, then press the second key.
+
+| Shortcut | Action | Description |
+|----------|--------|-------------|
+| `Ctrl+Alt+D`, `N` | Create Work Item | Opens the input box to create a new item in the Queue |
+| `Ctrl+Alt+D`, `D` | Complete Item | Marks the focused item as **Done** and moves it to History |
+| `Ctrl+Alt+D`, `P` | Pause Item | Pauses an active (in progress) item in Focus |
+| `Ctrl+Alt+D`, `U` | Resume Item | Resumes a paused item in Focus |
+| `Ctrl+Alt+D`, `F` | Move to Focus | Moves the selected work item to Focus (**In Progress**) |
+| `Ctrl+Alt+D`, `Q` | Move to Queue | Moves an item to the Queue |
+| `Ctrl+Alt+D`, `R` | Refresh | Refreshes all provider data |

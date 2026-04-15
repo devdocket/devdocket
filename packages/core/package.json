@@ -551,7 +551,44 @@
           "group": "1_actions"
         }
       ]
-    }
+    },
+    "keybindings": [
+      {
+        "command": "workcenter.createItem",
+        "key": "ctrl+alt+d n",
+        "when": "focusedView =~ /workcenter/"
+      },
+      {
+        "command": "workcenter.completeItem",
+        "key": "ctrl+alt+d d",
+        "when": "focusedView =~ /workcenter/"
+      },
+      {
+        "command": "workcenter.pauseItem",
+        "key": "ctrl+alt+d p",
+        "when": "focusedView =~ /workcenter/"
+      },
+      {
+        "command": "workcenter.resumeItem",
+        "key": "ctrl+alt+d u",
+        "when": "focusedView =~ /workcenter/"
+      },
+      {
+        "command": "workcenter.acceptToFocus",
+        "key": "ctrl+alt+d f",
+        "when": "focusedView =~ /workcenter/"
+      },
+      {
+        "command": "workcenter.moveToQueue",
+        "key": "ctrl+alt+d q",
+        "when": "focusedView =~ /workcenter/"
+      },
+      {
+        "command": "workcenter.refresh",
+        "key": "ctrl+alt+d r",
+        "when": "focusedView =~ /workcenter/"
+      }
+    ]
   },
   "scripts": {
     "vscode:prepublish": "npm run build:prod",
