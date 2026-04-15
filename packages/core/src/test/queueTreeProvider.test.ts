@@ -125,7 +125,7 @@ describe('QueueTreeProvider', () => {
       expect(treeItem.description).toBeUndefined();
     });
 
-    it('sets description to "provider · group" when item has providerId and group', async () => {
+    it('sets description to "group · provider" when item has providerId and group', async () => {
       const registry = createMockProviderRegistry();
       const queueWithRegistry = new QueueTreeProvider(graph, registry as any);
       const item = await graph.createItem(
