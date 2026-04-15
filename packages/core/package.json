@@ -534,17 +534,17 @@
         },
         {
           "command": "workcenter.acceptFromSources",
-          "when": "view == workcenter.sources && viewItem =~ /sourceItem/ && viewItem =~ /^((?!dismissed).)*$/",
+          "when": "view == workcenter.sources && viewItem =~ /^sourceItem(\\.hasUrl)?$/",
           "group": "inline"
         },
         {
           "command": "workcenter.dismissFromSources",
-          "when": "view == workcenter.sources && viewItem =~ /sourceItem/ && viewItem =~ /^((?!dismissed).)*$/",
+          "when": "view == workcenter.sources && viewItem =~ /^sourceItem(\\.hasUrl)?$/",
           "group": "inline"
         },
         {
           "command": "workcenter.dismissFromSources",
-          "when": "view == workcenter.sources && viewItem =~ /sourceItem/ && viewItem =~ /^((?!dismissed).)*$/",
+          "when": "view == workcenter.sources && viewItem =~ /^sourceItem(\\.hasUrl)?$/",
           "group": "1_actions"
         },
         {
