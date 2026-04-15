@@ -9,6 +9,8 @@ import { WorkItemEditorPanel } from '../views/workItemEditorPanel';
 import { type InboxItem, type InboxElement } from '../views/inboxTreeProvider';
 import { type SourceItemNode, type SourcesElement } from '../views/sourcesTreeProvider';
 import { logger } from '../services/logger';
+import { parseSourceUrl } from '../services/urlParser';
+import { fetchItemDetails } from '../services/urlFetcher';
 import { toggleViewLayout, setViewLayout } from '../views/viewLayout';
 
 /**
@@ -224,6 +226,46 @@ async function handleCreateItem(workGraph: WorkGraph): Promise<void> {
   logger.info(`Creating new work item: ${title.trim()}`);
   await workGraph.createItem({ title: title.trim() });
   void vscode.window.showInformationMessage(`DevDocket: Created "${title.trim()}"`);
+}
+
+async function handleCreateItemFromUrl(
+  context: vscode.ExtensionContext,
+  workGraph: WorkGraph,
+  providerRegistry: ProviderRegistry,
+  labelCache: ProviderLabelCache,
+): Promise<void> {
+  const url = await vscode.window.showInputBox({
+    prompt: 'Enter a GitHub PR or Azure DevOps PR URL',
+    placeHolder: 'https://github.com/owner/repo/pull/123',
+    validateInput: (value) => {
+      if (!value.trim()) { return 'URL is required'; }
+      if (!parseSourceUrl(value)) {
+        return 'Unsupported URL format. Supported: GitHub PRs, Azure DevOps PRs';
+      }
+      return undefined;
+    },
+  });
+  if (!url) { return; }
+
+  const parsed = parseSourceUrl(url);
+  if (!parsed) {
+    void vscode.window.showErrorMessage('DevDocket: Unsupported URL format');
+    return;
+  }
+
+  const details = await vscode.window.withProgress(
+    { location: vscode.ProgressLocation.Notification, title: 'DevDocket: Fetching item details…' },
+    () => fetchItemDetails(parsed),
+  );
+
+  const createdItem = await workGraph.createItem(
+    { title: details.title, notes: details.notes },
+    { providerId: 'url-import', externalId: details.url, url: details.url, group: details.group },
+  );
+
+  const providerLabel = createdItem.providerId ? labelCache.get(createdItem.providerId) : undefined;
+  WorkItemEditorPanel.open(context, workGraph, providerRegistry, createdItem, providerLabel);
+  void vscode.window.showInformationMessage(`DevDocket: Created "${details.title}"`);
 }
 
 async function handleAcceptToFocus(workGraph: WorkGraph, item?: { id?: string }, selectedItems?: { id?: string }[]): Promise<void> {
@@ -812,6 +854,8 @@ export function registerCommands(
       wrapCommand('Failed to refresh', () => handleRefresh(providerRegistry))),
     vscode.commands.registerCommand('devdocket.createItem',
       wrapCommand('Failed to create item', () => handleCreateItem(workGraph))),
+    vscode.commands.registerCommand('devdocket.createItemFromUrl',
+      wrapCommand('Failed to create item from URL', () => handleCreateItemFromUrl(context, workGraph, providerRegistry, labelCache))),
     vscode.commands.registerCommand('devdocket.acceptToFocus',
       wrapCommand('Failed to focus item', (item, selectedItems) => handleAcceptToFocus(workGraph, item, selectedItems))),
     vscode.commands.registerCommand('devdocket.archiveItem',
