@@ -178,8 +178,7 @@ Discovers items from Azure DevOps via two sub-providers:
 
 | Setting | Type | Default | Description |
 |---------|------|---------|-------------|
-| `devdocketAdo.organization` | `string` | `""` | Azure DevOps organization name (required to enable the provider). |
-| `devdocketAdo.projects` | `string[]` | `[]` | Projects to monitor. Leave empty to fetch across the entire organization. |
+| `devdocketAdo.projects` | `string[]` | `[]` | Organizations and projects to monitor. Use `<org>` to monitor an entire organization, or `<org>/<project>` for specific projects. |
 | `devdocketAdo.refreshIntervalSeconds` | `number` | `300` | How often to refresh ADO data (in seconds). Minimum 60 seconds; set to 0 or negative to disable periodic refresh. |
 
 ### AI Code Review (`devdocket-ai-reviewer`)
