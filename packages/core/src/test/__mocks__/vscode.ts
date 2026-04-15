@@ -17,11 +17,12 @@ class MockEventEmitter {
 }
 
 class MockThemeIcon {
-  constructor(public id: string) {}
+  constructor(public id: string, public color?: any) {}
 }
 
 class MockMarkdownString {
   value = '';
+  supportThemeIcons = false;
   appendMarkdown(text: string) { this.value += text; }
   appendText(text: string) { this.value += text; }
 }
@@ -168,6 +169,10 @@ const workspace = {
   onDidChangeConfiguration: vi.fn(() => ({ dispose: vi.fn() })),
 };
 
+class MockThemeColor {
+  constructor(public id: string) {}
+}
+
 const ConfigurationTarget = {
   Global: 1,
   Workspace: 2,
@@ -177,6 +182,7 @@ const ConfigurationTarget = {
 export {
   MockEventEmitter as EventEmitter,
   MockThemeIcon as ThemeIcon,
+  MockThemeColor as ThemeColor,
   MockMarkdownString as MarkdownString,
   MockTreeItem as TreeItem,
   MockDataTransferItem as DataTransferItem,
