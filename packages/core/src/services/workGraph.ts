@@ -411,7 +411,10 @@ export class WorkGraph {
     return { deleted, failed };
   }
 
-  /** Permanently delete a work item from the store. */
+  /**
+   * Permanently delete a work item from the store.
+   * @param options.silent When true, suppresses the `onDidChange` event (used for batch operations).
+   */
   async deleteItem(id: string, options?: { silent?: boolean }): Promise<void> {
     const item = this.items.get(id);
     await this.store.delete(id);
