@@ -34,8 +34,7 @@ export interface GitHubIssue {
   body?: string;
   html_url: string;
   repository_url: string;
-  pull_request?: unknown;
-  updated_at?: string;
+  pull_request?: { url: string };
 }
 
 export abstract class BaseGitHubProvider implements DevDocketProvider {

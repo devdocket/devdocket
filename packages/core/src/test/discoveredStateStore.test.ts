@@ -877,4 +877,83 @@ describe('DiscoveredStateStore', () => {
       expect(records[0].providerId).toBe('gh');
     });
   });
+
+  // ── Version tracking ─────────────────────────────────────────────
+
+  describe('version tracking', () => {
+    it('should store and retrieve version via setState', async () => {
+      await store.setState('gh', 'pr-1', 'unseen', 'sha-abc');
+      expect(store.getVersion('gh', 'pr-1')).toBe('sha-abc');
+    });
+
+    it('should return undefined version for item without version', async () => {
+      await store.setState('gh', 'pr-1', 'unseen');
+      expect(store.getVersion('gh', 'pr-1')).toBeUndefined();
+    });
+
+    it('should preserve existing version when setState called without version', async () => {
+      await store.setState('gh', 'pr-1', 'unseen', 'sha-abc');
+      await store.setState('gh', 'pr-1', 'accepted');
+      expect(store.getVersion('gh', 'pr-1')).toBe('sha-abc');
+    });
+
+    it('should overwrite version when setState called with new version', async () => {
+      await store.setState('gh', 'pr-1', 'unseen', 'sha-old');
+      await store.setState('gh', 'pr-1', 'unseen', 'sha-new');
+      expect(store.getVersion('gh', 'pr-1')).toBe('sha-new');
+    });
+
+    it('should persist version to disk', async () => {
+      await store.setState('gh', 'pr-1', 'unseen', 'sha-abc');
+
+      const filePath = path.join(tmpDir, 'discovered-state.json');
+      const raw = await fs.readFile(filePath, 'utf-8');
+      const parsed = JSON.parse(raw);
+      expect(parsed[0].version).toBe('sha-abc');
+    });
+
+    it('should load version from disk', async () => {
+      const filePath = path.join(tmpDir, 'discovered-state.json');
+      await fs.mkdir(tmpDir, { recursive: true });
+      await fs.writeFile(filePath, JSON.stringify([
+        { providerId: 'gh', externalId: 'pr-1', inboxState: 'accepted', version: 'sha-disk' },
+      ]));
+
+      const freshStore = new DiscoveredStateStore(tmpDir);
+      await freshStore.load();
+      expect(freshStore.getVersion('gh', 'pr-1')).toBe('sha-disk');
+      freshStore.dispose();
+    });
+
+    it('should preserve version in setStates when not provided', async () => {
+      await store.setState('gh', 'pr-1', 'unseen', 'sha-abc');
+      await store.setStates([
+        { providerId: 'gh', externalId: 'pr-1', state: 'accepted' },
+      ]);
+      expect(store.getVersion('gh', 'pr-1')).toBe('sha-abc');
+    });
+
+    it('should update version in setStates when provided', async () => {
+      await store.setState('gh', 'pr-1', 'unseen', 'sha-old');
+      await store.setStates([
+        { providerId: 'gh', externalId: 'pr-1', state: 'unseen', version: 'sha-new' },
+      ]);
+      expect(store.getVersion('gh', 'pr-1')).toBe('sha-new');
+    });
+
+    it('should skip records with non-string version during load', async () => {
+      const filePath = path.join(tmpDir, 'discovered-state.json');
+      await fs.mkdir(tmpDir, { recursive: true });
+      await fs.writeFile(filePath, JSON.stringify([
+        { providerId: 'gh', externalId: 'pr-1', inboxState: 'accepted', version: 42 },
+        { providerId: 'gh', externalId: 'pr-2', inboxState: 'accepted', version: 'valid' },
+      ]));
+
+      const freshStore = new DiscoveredStateStore(tmpDir);
+      const records = await freshStore.loadAll();
+      expect(records).toHaveLength(1);
+      expect(records[0].externalId).toBe('pr-2');
+      freshStore.dispose();
+    });
+  });
 });

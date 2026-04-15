@@ -23,6 +23,10 @@ export class GitHubPrReviewProvider extends BaseGitHubProvider {
     const { prs, failures } = await this.fetchReviewRequestedPrs(accessToken, repos);
 
     logger.info(`Discovered ${prs.length} PR review requests`);
+
+    // Fetch head commit SHAs for precise version tracking
+    const headShas = await this.fetchHeadShas(accessToken, prs);
+
     const items: DiscoveredItem[] = prs.map((pr) => {
       const repoName = this.parseRepo(pr);
       return {
@@ -32,7 +36,7 @@ export class GitHubPrReviewProvider extends BaseGitHubProvider {
         url: pr.html_url,
         group: repoName,
         reason: 'review_requested',
-        version: pr.updated_at,
+        version: headShas.get(pr.html_url),
       };
     });
 
@@ -153,6 +157,49 @@ export class GitHubPrReviewProvider extends BaseGitHubProvider {
 
     const data = (await response.json()) as GitHubSearchResponse;
     return { prs: data.items, failed: false };
+  }
+
+  /**
+   * Fetches the HEAD commit SHA for each PR via the REST API.
+   * Uses the `pull_request.url` from search results to avoid constructing URLs.
+   * Best-effort: failures are silently skipped (version will be undefined).
+   */
+  private async fetchHeadShas(token: string, prs: GitHubIssue[]): Promise<Map<string, string>> {
+    const result = new Map<string, string>();
+    const prsWithApiUrl = prs.filter(pr => pr.pull_request?.url);
+    if (prsWithApiUrl.length === 0) {
+      return result;
+    }
+
+    let nextIndex = 0;
+    const runWorker = async (): Promise<void> => {
+      while (nextIndex < prsWithApiUrl.length) {
+        const currentIndex = nextIndex++;
+        const pr = prsWithApiUrl[currentIndex];
+        try {
+          const response = await fetch(pr.pull_request!.url, {
+            headers: {
+              Authorization: `Bearer ${token}`,
+              Accept: 'application/vnd.github+json',
+              'X-GitHub-Api-Version': '2022-11-28',
+            },
+          });
+          if (response.ok) {
+            const data = (await response.json()) as { head?: { sha?: string } };
+            if (data.head?.sha) {
+              result.set(pr.html_url, data.head.sha);
+            }
+          }
+        } catch {
+          // Silently skip — version tracking is best-effort
+        }
+      }
+    };
+
+    const workerCount = Math.min(3, prsWithApiUrl.length);
+    await Promise.all(Array.from({ length: workerCount }, () => runWorker()));
+
+    return result;
   }
 
   protected override parseRepo(issue: GitHubIssue): string {

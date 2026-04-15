@@ -38,6 +38,9 @@ function validateDiscoveredStateRecord(value: unknown, index: number): string | 
   if (typeof obj.inboxState !== 'string' || !validInboxStates.has(obj.inboxState)) {
     return `Record at index ${index} has invalid "inboxState": ${JSON.stringify(obj.inboxState)}`;
   }
+  if ('version' in obj && typeof obj.version !== 'string') {
+    return `Record at index ${index} has invalid "version": expected string`;
+  }
   return undefined;
 }
 
@@ -106,6 +109,9 @@ export class DiscoveredStateStore {
       const newRecord: DiscoveredStateRecord = { providerId, externalId, inboxState: state };
       if (version !== undefined) {
         newRecord.version = version;
+      } else if (previousValue?.version !== undefined) {
+        // Preserve existing version when caller doesn't supply one
+        newRecord.version = previousValue.version;
       }
       this.cache.set(k, newRecord);
       try {
@@ -136,9 +142,13 @@ export class DiscoveredStateStore {
       for (const item of items) {
         const k = this.key(item.providerId, item.externalId);
         rollback.set(k, this.cache.get(k));
+        const previousRecord = this.cache.get(k);
         const newRecord: DiscoveredStateRecord = { providerId: item.providerId, externalId: item.externalId, inboxState: item.state };
         if (item.version !== undefined) {
           newRecord.version = item.version;
+        } else if (previousRecord?.version !== undefined) {
+          // Preserve existing version when caller doesn't supply one
+          newRecord.version = previousRecord.version;
         }
         this.cache.set(k, newRecord);
       }
