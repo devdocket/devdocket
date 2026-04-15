@@ -265,7 +265,7 @@ Each provider is capped at **10,000 discovered items** per refresh. If a provide
 
 ### Readonly WorkItem in Actions
 
-`canRun()` and `run()` receive `Readonly<WorkItem>`. Actions must not mutate the work item object directly. To update a work item's state, use the appropriate DevDocket VS Code commands (e.g., `devdocket.startWork`, `devdocket.completeWork`).
+`canRun()` and `run()` receive `Readonly<WorkItem>`. Actions must not mutate the work item object directly. To update a work item's state, use the appropriate DevDocket VS Code commands (e.g., `devdocket.acceptToFocus`, `devdocket.completeItem`).
 
 ### URL Validation
 
