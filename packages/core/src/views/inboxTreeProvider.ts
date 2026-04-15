@@ -163,7 +163,7 @@ export class InboxTreeProvider implements vscode.TreeDataProvider<InboxElement> 
     treeItem.id = `inbox::item::${element.providerId}::${element.externalId}`;
     treeItem.description = this._layoutState.value === 'flat'
       ? this.buildFlatDescription(element)
-      : element.group?.trim() || undefined;
+      : element.group;
     treeItem.tooltip = this.buildTooltip(element);
     treeItem.contextValue = element.url ? 'inboxItem.hasUrl' : 'inboxItem';
     treeItem.iconPath = new vscode.ThemeIcon(isSeen ? 'circle-outline' : 'circle-filled');
@@ -254,8 +254,9 @@ export class InboxTreeProvider implements vscode.TreeDataProvider<InboxElement> 
       const state = this.stateStore.getState(providerId, item.externalId);
       if (state !== undefined && state !== 'unseen') { continue; }
 
-      if (item.group) {
-        groupCounts.set(item.group, (groupCounts.get(item.group) ?? 0) + 1);
+      if (item.group?.trim()) {
+        const normalizedGroup = item.group.trim();
+        groupCounts.set(normalizedGroup, (groupCounts.get(normalizedGroup) ?? 0) + 1);
       } else {
         ungrouped.push(item);
       }
@@ -298,7 +299,7 @@ export class InboxTreeProvider implements vscode.TreeDataProvider<InboxElement> 
       title: item.title,
       description: item.description,
       url: item.url,
-      group: item.group,
+      group: item.group?.trim() || undefined,
       reason: item.reason,
     };
   }
