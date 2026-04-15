@@ -397,7 +397,8 @@ async function handleDeleteItem(workGraph: WorkGraph, item?: { id?: string }, se
 
 async function handleClearHistory(workGraph: WorkGraph): Promise<void> {
   const config = vscode.workspace.getConfiguration('devdocket');
-  const maxAgeDays = config.get<number>('historyClearDays', 30);
+  const raw = config.get<number>('historyClearDays', 30);
+  const maxAgeDays = Number.isFinite(raw) && raw >= 1 ? Math.round(raw) : 30;
 
   const confirm = await vscode.window.showWarningMessage(
     `Delete all history items older than ${maxAgeDays} day${maxAgeDays === 1 ? '' : 's'}?`,
