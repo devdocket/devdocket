@@ -440,12 +440,12 @@ describe('WorkItemEditorPanel', () => {
 
       const initialGetItemCallCount = workGraph.getItem.mock.calls.length;
 
-      mock.simulateMessage({ type: 'transitionState', targetState: 'InProgress' });
+      await mock.simulateMessage({ type: 'transitionState', targetState: 'InProgress' });
 
       await vi.waitFor(() => {
-        expect(workGraph.transitionState).toHaveBeenCalled();
+        expect(workGraph.transitionState).toHaveBeenCalledWith('item-1', 'InProgress');
+        expect(workGraph.getItem.mock.calls.length).toBeGreaterThan(initialGetItemCallCount);
       });
-      expect(workGraph.getItem.mock.calls.length).toBeGreaterThan(initialGetItemCallCount);
       expect(mock.panel.webview.html).toBeDefined();
       expect(typeof mock.panel.webview.html).toBe('string');
     });
