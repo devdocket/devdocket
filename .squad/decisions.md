@@ -2,6 +2,59 @@
 
 ## Active Decisions
 
+### Issue #250 — Show group context in all tree view descriptions (2026-07-24)
+
+**Issue:** #250  
+**Author:** Fenster (Extension Dev)  
+**Status:** Implemented
+
+Inbox items displayed only their title without any repository/project context. Other views (Queue, Focus, History) showed provider labels but not the specific repo/project. Users working across multiple repos found items like "Fix bug #42" ambiguous.
+
+**Decision:** Show the `DiscoveredItem.group` field (e.g., `contoso/webapp`) in tree item descriptions across all views, in both flat and tree layout modes.
+
+- **Inbox**: `group` in tree mode; `group · provider` in flat mode
+- **Queue**: `group` in tree mode; `group · provider` in flat mode
+- **Focus**: `group · state` in tree mode; `group · provider · state` in flat mode
+- **History**: `group · state` in tree mode; `group · provider · state` in flat mode
+
+**Rationale:**
+- The `group` field is already populated by GitHub (`org/repo`) and ADO (`org/project`) providers
+- `buildDescription()` gracefully filters undefined values, so items without a group are unaffected
+- Minor redundancy in tree mode is acceptable for better scanability
+
+**References:**
+- Branch: `squad/250-inbox-show-context`
+- Test coverage: All 970 tests pass
+
+---
+
+### Issue #232 — History Cleanup via Clear Old History Command (2026-07-24)
+
+**Issue:** #232  
+**Author:** Fenster (Extension Dev)  
+**Status:** Implemented
+
+The History view grows unbounded as items are completed/archived. Heavy users accumulate hundreds of items with no way to manage them.
+
+**Decision:** Added a "Clear Old History" command (`devdocket.clearHistory`) that removes Done and Archived items older than `devdocket.historyClearDays` (default: 30 days). The threshold is based on `updatedAt` timestamp.
+
+**Key design choices:**
+1. **Threshold uses `updatedAt`, not `createdAt`**: An item that was recently archived (even if created long ago) should be retained.
+2. **No ITaskStore changes**: `clearOldHistory()` reuses `WorkGraph.deleteItem()` in a loop rather than adding batch-delete to the store interface.
+3. **Modal confirmation**: Uses `vscode.window.showWarningMessage` with `{ modal: true }` to prevent accidental mass deletion.
+
+**What was NOT implemented:**
+- **Auto-pruning / max history size**: Automatic deletion risks surprising users
+- **Text filter/search**: VS Code's native tree view filtering already provides text search
+
+**References:**
+- Branch: `squad/232-history-cleanup`
+- `packages/core/src/services/workGraph.ts` — `clearOldHistory()` method
+- `packages/core/src/commands/commands.ts` — `handleClearHistory()` handler
+- `packages/core/package.json` — configuration + command + menu contributions
+
+---
+
 ### Triage Round 1 Summary — 18 Squad Issues (2026-04-14)
 
 **Lead:** Keaton  
