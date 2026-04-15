@@ -1,6 +1,0 @@
-docs(squad): Process orchestration for Fenster issues #249, #250, #232
-
-- Wrote orchestration log entries for 3 completed agent tasks
-- Merged decision inbox files into decisions.md (2 decisions: show group context, clear history)
-- Deleted processed inbox files (5 files)
-- Updated Fenster history with learnings from issues #250 and #232
