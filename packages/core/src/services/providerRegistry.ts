@@ -4,6 +4,16 @@ import { DiscoveredStateStore } from '../storage/discoveredStateStore';
 import { ProviderLabelCache } from '../storage/providerLabelCache';
 import { logger } from './logger';
 
+/** Health status of a single provider's most recent refresh attempt. */
+export interface ProviderHealthStatus {
+  /** Whether the last refresh succeeded or failed. */
+  status: 'healthy' | 'unhealthy' | 'unknown';
+  /** When the last successful refresh completed. */
+  lastRefreshTime?: Date;
+  /** Human-readable error message from the last failed refresh, if any. */
+  lastError?: string;
+}
+
 /**
  * Central registry for {@link DevDocketProvider} instances.
  *
@@ -30,6 +40,10 @@ export class ProviderRegistry {
   private readonly _onDidAddNewUnseenItems = new vscode.EventEmitter<number>();
   /** Fired when new unseen items are added to the inbox, with the count of new items. */
   readonly onDidAddNewUnseenItems = this._onDidAddNewUnseenItems.event;
+  private readonly _onDidChangeProviderHealth = new vscode.EventEmitter<string>();
+  /** Fired when a provider's health status changes, with the provider ID. */
+  readonly onDidChangeProviderHealth = this._onDidChangeProviderHealth.event;
+  private readonly healthStatus = new Map<string, ProviderHealthStatus>();
   private readonly _loadingProviders = new Set<string>();
   private readonly _pendingRefreshes = new Map<string, { cts: vscode.CancellationTokenSource; timeoutId: ReturnType<typeof setTimeout> }>();
   private _disposed = false;
@@ -97,6 +111,7 @@ export class ProviderRegistry {
       this.subscriptions.get(provider.id)?.dispose();
       this.subscriptions.delete(provider.id);
       this.discoveredItems.delete(provider.id);
+      this.healthStatus.delete(provider.id);
       this._loadingProviders.delete(provider.id);
       if (!this._disposed) {
         this._onDidChangeDiscoveredItems.fire();
@@ -122,6 +137,16 @@ export class ProviderRegistry {
    */
   getProviderLabel(providerId: string): string {
     return this.providers.get(providerId)?.label ?? this.labelCache?.get(providerId) ?? providerId;
+  }
+
+  /**
+   * Get the health status for a provider.
+   *
+   * @param providerId - The provider identifier.
+   * @returns The health status, or a default 'unknown' status if not yet tracked.
+   */
+  getProviderHealth(providerId: string): ProviderHealthStatus {
+    return this.healthStatus.get(providerId) ?? { status: 'unknown' };
   }
 
   /**
@@ -168,9 +193,11 @@ export class ProviderRegistry {
   private refreshWithTimeout(provider: DevDocketProvider): Promise<void> {
     this.cancelPendingRefresh(provider.id);
     const cts = new vscode.CancellationTokenSource();
+    let timedOut = false;
     const timeoutId = setTimeout(() => {
       if (this.providers.has(provider.id)) {
         logger.warn(`Provider "${provider.id}" refresh timed out after ${ProviderRegistry.REFRESH_TIMEOUT_MS}ms`);
+        timedOut = true;
       }
       cts.cancel();
     }, ProviderRegistry.REFRESH_TIMEOUT_MS);
@@ -178,14 +205,26 @@ export class ProviderRegistry {
     this._pendingRefreshes.set(provider.id, entry);
 
     const refreshPromise = provider.refresh(cts.token)
+      .then(() => {
+        if (!cts.token.isCancellationRequested) {
+          this.updateHealth(provider.id, 'healthy');
+        }
+      })
       .catch((err: unknown) => {
         if (!cts.token.isCancellationRequested) {
           logger.error(`Provider "${provider.id}" refresh failed`, err);
+          const message = err instanceof Error ? err.message : String(err);
+          this.updateHealth(provider.id, 'unhealthy', message);
         }
       });
 
     const cancelledPromise = new Promise<void>((resolve) => {
-      cts.token.onCancellationRequested(() => resolve());
+      cts.token.onCancellationRequested(() => {
+        if (timedOut) {
+          this.updateHealth(provider.id, 'unhealthy', 'Refresh timed out');
+        }
+        resolve();
+      });
     });
 
     return Promise.race([refreshPromise, cancelledPromise])
@@ -206,6 +245,19 @@ export class ProviderRegistry {
       pending.cts.cancel();
       // CTS is disposed in refreshWithTimeout's finally block
       this._pendingRefreshes.delete(providerId);
+    }
+  }
+
+  private updateHealth(providerId: string, status: 'healthy' | 'unhealthy', lastError?: string): void {
+    const prev = this.healthStatus.get(providerId);
+    const next: ProviderHealthStatus = {
+      status,
+      lastRefreshTime: status === 'healthy' ? new Date() : prev?.lastRefreshTime,
+      lastError: status === 'unhealthy' ? lastError : undefined,
+    };
+    this.healthStatus.set(providerId, next);
+    if (!this._disposed) {
+      this._onDidChangeProviderHealth.fire(providerId);
     }
   }
 
@@ -263,5 +315,6 @@ export class ProviderRegistry {
     this._onDidChangeDiscoveredItems.dispose();
     this._onDidRegisterProvider.dispose();
     this._onDidAddNewUnseenItems.dispose();
+    this._onDidChangeProviderHealth.dispose();
   }
 }

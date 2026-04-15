@@ -30,13 +30,16 @@ function createMockProviderRegistry() {
   const items = new Map<string, DiscoveredItem[]>();
   const labels = new Map<string, string>();
   const emitter = new EventEmitter<void>();
+  const healthEmitter = new EventEmitter<string>();
   let _loading = false;
   return {
     get loading() { return _loading; },
     getAllDiscoveredItems: vi.fn(() => items),
     getDiscoveredItems: vi.fn((id: string) => items.get(id) ?? []),
     getProviderLabel: vi.fn((id: string) => labels.get(id) ?? id),
+    getProviderHealth: vi.fn(() => ({ status: 'unknown' as const })),
     onDidChangeDiscoveredItems: emitter.event,
+    onDidChangeProviderHealth: healthEmitter.event,
     _setItems: (providerId: string, discoveredItems: DiscoveredItem[]) => {
       items.set(providerId, discoveredItems);
     },

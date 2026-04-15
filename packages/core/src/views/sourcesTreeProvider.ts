@@ -1,8 +1,9 @@
 import * as vscode from 'vscode';
 import { DiscoveredItem } from '../api/types';
-import { ProviderRegistry } from '../services/providerRegistry';
+import { ProviderRegistry, ProviderHealthStatus } from '../services/providerRegistry';
 import { DiscoveredStateStore, InboxState } from '../storage/discoveredStateStore';
 import { ViewLayout, LayoutState } from './viewLayout';
+import { formatRelativeTime } from '../utils/time';
 
 export type SourcesElement = SourceProviderNode | SourceGroupNode | SourceItemNode;
 
@@ -44,6 +45,7 @@ export class SourcesTreeProvider implements vscode.TreeDataProvider<SourcesEleme
     this._layoutState = new LayoutState('tree', () => this._onDidChangeTreeData.fire());
     this.disposables.push(
       providerRegistry.onDidChangeDiscoveredItems(() => this._onDidChangeTreeData.fire()),
+      providerRegistry.onDidChangeProviderHealth(() => this._onDidChangeTreeData.fire()),
       stateStore.onDidChange(() => this._onDidChangeTreeData.fire())
     );
   }
@@ -53,9 +55,16 @@ export class SourcesTreeProvider implements vscode.TreeDataProvider<SourcesEleme
   getTreeItem(element: SourcesElement): vscode.TreeItem {
     switch (element.kind) {
       case 'provider': {
+        const health = this.providerRegistry.getProviderHealth(element.providerId);
         const treeItem = new vscode.TreeItem(element.label, vscode.TreeItemCollapsibleState.Collapsed);
         treeItem.contextValue = 'sourceProvider';
-        treeItem.iconPath = new vscode.ThemeIcon('plug');
+        if (health.status === 'unhealthy') {
+          treeItem.iconPath = new vscode.ThemeIcon('warning', new vscode.ThemeColor('problemsWarningIcon.foreground'));
+          treeItem.description = 'refresh failed';
+        } else {
+          treeItem.iconPath = new vscode.ThemeIcon('plug');
+        }
+        treeItem.tooltip = this.buildProviderTooltip(element.label, health);
         return treeItem;
       }
       case 'group': {
@@ -96,7 +105,8 @@ export class SourcesTreeProvider implements vscode.TreeDataProvider<SourcesEleme
       const result: SourceProviderNode[] = [];
       const allItems = this.providerRegistry.getAllDiscoveredItems();
       for (const [providerId, items] of allItems) {
-        if (items.length > 0) {
+        const health = this.providerRegistry.getProviderHealth(providerId);
+        if (items.length > 0 || health.status === 'unhealthy') {
           result.push({
             kind: 'provider',
             providerId,
@@ -179,6 +189,18 @@ export class SourcesTreeProvider implements vscode.TreeDataProvider<SourcesEleme
       url: item.url,
       group: item.group,
     };
+  }
+
+  private buildProviderTooltip(label: string, health: ProviderHealthStatus): vscode.MarkdownString {
+    const md = new vscode.MarkdownString();
+    md.appendMarkdown(`**${label}**\n\n`);
+    if (health.lastRefreshTime) {
+      md.appendMarkdown(`Last refreshed: ${formatRelativeTime(health.lastRefreshTime)}\n\n`);
+    }
+    if (health.status === 'unhealthy' && health.lastError) {
+      md.appendMarkdown(`$(warning) **Refresh failed:** ${health.lastError}\n\n`);
+    }
+    return md;
   }
 
   private buildItemDescription(providerId: string, state: InboxState | undefined): string | undefined {

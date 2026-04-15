@@ -1,10 +1,11 @@
 import * as vscode from 'vscode';
 import { DiscoveredItem } from '../api/types';
-import { ProviderRegistry } from '../services/providerRegistry';
+import { ProviderRegistry, ProviderHealthStatus } from '../services/providerRegistry';
 import { DiscoveredStateStore } from '../storage/discoveredStateStore';
 import { ReadStateStore } from '../storage/readStateStore';
 import { logger } from '../services/logger';
 import { ViewLayout, LayoutState } from './viewLayout';
+import { formatRelativeTime } from '../utils/time';
 
 export interface InboxProviderNode {
   kind: 'provider';
@@ -54,6 +55,7 @@ export class InboxTreeProvider implements vscode.TreeDataProvider<InboxElement> 
     this._layoutState = new LayoutState('tree', () => this._onDidChangeTreeData.fire());
     this.disposables.push(
       providerRegistry.onDidChangeDiscoveredItems(() => this.scheduleRefresh()),
+      providerRegistry.onDidChangeProviderHealth(() => this.scheduleRefresh()),
       stateStore.onDidChange(() => this.scheduleRefresh()),
     );
   }
@@ -139,11 +141,17 @@ export class InboxTreeProvider implements vscode.TreeDataProvider<InboxElement> 
   getTreeItem(element: InboxElement): vscode.TreeItem {
     if (element.kind === 'provider') {
       const count = this.getUnseenCount(element.providerId);
+      const health = this.providerRegistry.getProviderHealth(element.providerId);
       const treeItem = new vscode.TreeItem(element.label, vscode.TreeItemCollapsibleState.Collapsed);
       treeItem.description = `${count}`;
       treeItem.id = `inbox::provider::${element.providerId}`;
       treeItem.contextValue = 'inboxProvider';
-      treeItem.iconPath = new vscode.ThemeIcon('plug');
+      if (health.status === 'unhealthy') {
+        treeItem.iconPath = new vscode.ThemeIcon('warning', new vscode.ThemeColor('problemsWarningIcon.foreground'));
+      } else {
+        treeItem.iconPath = new vscode.ThemeIcon('plug');
+      }
+      treeItem.tooltip = this.buildProviderTooltip(element.label, health);
       return treeItem;
     }
 
@@ -322,6 +330,18 @@ export class InboxTreeProvider implements vscode.TreeDataProvider<InboxElement> 
 
   private formatReason(reason: string): string {
     return reason.replace(/_/g, ' ').replace(/^./, c => c.toUpperCase());
+  }
+
+  private buildProviderTooltip(label: string, health: ProviderHealthStatus): vscode.MarkdownString {
+    const md = new vscode.MarkdownString();
+    md.appendMarkdown(`**${label}**\n\n`);
+    if (health.lastRefreshTime) {
+      md.appendMarkdown(`Last refreshed: ${formatRelativeTime(health.lastRefreshTime)}\n\n`);
+    }
+    if (health.status === 'unhealthy' && health.lastError) {
+      md.appendMarkdown(`$(warning) **Refresh failed:** ${health.lastError}\n\n`);
+    }
+    return md;
   }
 
   private buildFlatDescription(item: InboxItem): string | undefined {

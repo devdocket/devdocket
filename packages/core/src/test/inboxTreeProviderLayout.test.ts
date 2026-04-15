@@ -31,12 +31,15 @@ function createMockProviderRegistry() {
   const items = new Map<string, DiscoveredItem[]>();
   const labels = new Map<string, string>();
   const emitter = new EventEmitter<void>();
+  const healthEmitter = new EventEmitter<string>();
   return {
     loading: false,
     getAllDiscoveredItems: vi.fn(() => items),
     getDiscoveredItems: vi.fn((id: string) => items.get(id) ?? []),
     getProviderLabel: vi.fn((id: string) => labels.get(id) ?? id),
+    getProviderHealth: vi.fn(() => ({ status: 'unknown' as const })),
     onDidChangeDiscoveredItems: emitter.event,
+    onDidChangeProviderHealth: healthEmitter.event,
     _setItems: (pid: string, list: DiscoveredItem[]) => { items.set(pid, list); },
     _setLabel: (pid: string, label: string) => { labels.set(pid, label); },
     _fire: () => emitter.fire(),
