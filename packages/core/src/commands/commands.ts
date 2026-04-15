@@ -632,7 +632,7 @@ async function batchAcceptToFocusItems(
       parts.push(`Accepted ${succeeded} item${succeeded === 1 ? '' : 's'} to Focus`);
     }
     if (skipped > 0) {
-      parts.push(`${skipped} already in Focus or cannot be moved`);
+      parts.push(`${skipped} item${skipped === 1 ? '' : 's'} already in Focus or cannot be moved`);
     }
     const msg = (failed > 0 || transitionFailed > 0)
       ? `${parts.join('; ')} (${failed + transitionFailed} failed)`

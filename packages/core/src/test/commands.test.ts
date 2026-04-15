@@ -1389,7 +1389,7 @@ describe('registerCommands', () => {
       expect(workGraph.transitionState).toHaveBeenCalledTimes(1);
       expect(workGraph.transitionState).toHaveBeenCalledWith('wc-3', WorkItemState.InProgress);
       expect(vscode.window.showInformationMessage).toHaveBeenCalledWith(
-        'Accepted 1 item to Focus; 2 already in Focus or cannot be moved',
+        'Accepted 1 item to Focus; 2 items already in Focus or cannot be moved',
       );
     });
   });
