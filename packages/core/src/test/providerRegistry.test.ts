@@ -1031,9 +1031,13 @@ describe('ProviderRegistry', () => {
       const listener = vi.fn();
       registry.onDidChangeProviderHealth(listener);
 
-      // Trigger another refresh — also resolves immediately → healthy again
-      // but lastRefreshTime changes, so the event should fire
-      await registry.refreshAll();
+      // Guarantee a different timestamp on next refresh
+      const spy = vi.spyOn(Date, 'now').mockReturnValue(Date.now() + 1000);
+      try {
+        await registry.refreshAll();
+      } finally {
+        spy.mockRestore();
+      }
 
       expect(listener).toHaveBeenCalledWith('stable');
     });
