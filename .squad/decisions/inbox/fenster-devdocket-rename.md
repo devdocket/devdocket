@@ -15,7 +15,7 @@ The project is being rebranded from "WorkCenter" to "DevDocket". This required a
 
 ## Result
 - 93 files changed across all packages, docs, and `.squad/` files. All tests pass, build succeeds.
-- No remaining "workcenter" or "WorkCenter" references in tracked source files.
+- No remaining "workcenter" or "WorkCenter" references in tracked source, documentation, or `.squad/` files. Some non-source metadata (e.g., stale lockfile entries) may retain historical references.
 
 ## Team Impact
 - All extension IDs now use `devdocket` prefix (e.g., `mthalman.devdocket`, `mthalman.devdocket-github`).
