@@ -162,7 +162,7 @@ export class GitHubPrReviewProvider extends BaseGitHubProvider {
   /**
    * Fetches the HEAD commit SHA for each PR via the REST API.
    * Uses the `pull_request.url` from search results to avoid constructing URLs.
-   * Best-effort: failures are silently skipped (version will be undefined).
+   * Best-effort: failures are logged at debug level and skipped (version will be undefined).
    */
   private async fetchHeadShas(token: string, prs: GitHubIssue[]): Promise<Map<string, string>> {
     const result = new Map<string, string>();
