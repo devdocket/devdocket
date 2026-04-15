@@ -306,6 +306,17 @@ describe('registerCommands', () => {
         'DevDocket: Unsupported URL format',
       );
     });
+
+    it('silently returns when user cancels fetch (AbortError)', async () => {
+      const abortError = new Error('The operation was aborted');
+      abortError.name = 'AbortError';
+      vi.mocked(fetchItemDetails).mockRejectedValue(abortError);
+      (vscode.window.showInputBox as Mock).mockResolvedValue('https://github.com/owner/repo/pull/42');
+      await invoke('devdocket.createItemFromUrl');
+
+      expect(workGraph.createItem).not.toHaveBeenCalled();
+      expect(vscode.window.showErrorMessage).not.toHaveBeenCalled();
+    });
   });
 
   // ── simple state-transition commands ─────────────────────────────
