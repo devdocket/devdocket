@@ -211,6 +211,6 @@ To use a shortcut, press **Ctrl+Alt+D**, release, then press the second key.
 | `Ctrl+Alt+D`, `D` | Complete Item | Marks the focused item as **Done** and moves it to History |
 | `Ctrl+Alt+D`, `P` | Pause Item | Pauses an active (in progress) item in Focus |
 | `Ctrl+Alt+D`, `U` | Resume Item | Resumes a paused item in Focus |
-| `Ctrl+Alt+D`, `F` | Accept to Focus | Accepts an Inbox item directly to Focus (skipping Queue) |
+| `Ctrl+Alt+D`, `F` | Move to Focus | Moves the selected work item to Focus (**In Progress**) |
 | `Ctrl+Alt+D`, `Q` | Move to Queue | Moves an item to the Queue |
 | `Ctrl+Alt+D`, `R` | Refresh | Refreshes all provider data |
