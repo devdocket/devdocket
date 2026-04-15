@@ -25,7 +25,6 @@ export class WorkGraph {
   /** Lazily-built index of items grouped by state; nulled on any mutation to {@link items}. */
   private stateCache: Map<WorkItemState, WorkItem[]> | null = null;
   private readonly _onDidChange = new vscode.EventEmitter<void>();
-  private _suppressChangeEvents = false;
   /**
    * Fires when this graph changes through public mutation operations exposed by {@link WorkGraph},
    * except for internal maintenance or normalization work that may update items without emitting
@@ -386,18 +385,16 @@ export class WorkGraph {
     }
 
     let deleted = 0;
-    this._suppressChangeEvents = true;
     try {
       for (const item of toDelete) {
         try {
-          await this.deleteItem(item.id);
+          await this.deleteItem(item.id, { silent: true });
           deleted++;
         } catch (err) {
           logger.warn(`Failed to delete history item ${item.id}, skipping`);
         }
       }
     } finally {
-      this._suppressChangeEvents = false;
       if (deleted > 0) {
         this._onDidChange.fire();
       }
@@ -407,7 +404,7 @@ export class WorkGraph {
   }
 
   /** Permanently delete a work item from the store. */
-  async deleteItem(id: string): Promise<void> {
+  async deleteItem(id: string, options?: { silent?: boolean }): Promise<void> {
     const item = this.items.get(id);
     await this.store.delete(id);
     if (item?.providerId && item?.externalId) {
@@ -444,7 +441,7 @@ export class WorkGraph {
     }
     this.items.delete(id);
     this.invalidateStateCache();
-    if (!this._suppressChangeEvents) {
+    if (!options?.silent) {
       this._onDidChange.fire();
     }
     logger.info(`Deleted work item: ${id}`);
