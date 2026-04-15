@@ -870,7 +870,7 @@ export function registerCommands(
       wrapCommand('Failed to switch sources layout', () => setViewLayout('sources', 'tree'))),
     vscode.commands.registerCommand('devdocket.switchSourcesToFlat',
       wrapCommand('Failed to switch sources layout', () => setViewLayout('sources', 'flat'))),
-    // Backward-compatible aliases for old toggle commands (preserves existing keybindings)
+    // Toggle commands — cycle between flat and tree layouts via a single command
     vscode.commands.registerCommand('devdocket.toggleInboxLayout',
       wrapCommand('Failed to switch inbox layout', () => toggleViewLayout('inbox'))),
     vscode.commands.registerCommand('devdocket.toggleQueueLayout',
