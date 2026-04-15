@@ -131,15 +131,13 @@ export class SourcesTreeProvider implements vscode.TreeDataProvider<SourcesEleme
 
   private getProviderChildren(providerId: string): SourcesElement[] {
     const items = this.providerRegistry.getDiscoveredItems(providerId);
-    const groups = new Map<string, DiscoveredItem[]>();
+    const groups = new Set<string>();
     const ungrouped: DiscoveredItem[] = [];
 
     for (const item of items) {
       const normalizedGroup = item.group?.trim();
       if (normalizedGroup) {
-        const list = groups.get(normalizedGroup) ?? [];
-        list.push(item);
-        groups.set(normalizedGroup, list);
+        groups.add(normalizedGroup);
       } else {
         ungrouped.push(item);
       }
@@ -147,7 +145,7 @@ export class SourcesTreeProvider implements vscode.TreeDataProvider<SourcesEleme
 
     const result: SourcesElement[] = [];
 
-    for (const [groupName] of groups) {
+    for (const groupName of groups) {
       result.push({ kind: 'group', providerId, groupName });
     }
 
