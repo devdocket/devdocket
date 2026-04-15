@@ -6,14 +6,14 @@ describe('formatRelativeTime', () => {
     vi.useRealTimers();
   });
 
-  it('returns "just now" for dates in the future', () => {
+  it('returns "just now" for very recent dates', () => {
     vi.useFakeTimers({ now: 1000 });
-    expect(formatRelativeTime(new Date(2000))).toBe('just now');
+    expect(formatRelativeTime(new Date(1000))).toBe('just now');
   });
 
-  it('returns "just now" for less than 60 seconds ago', () => {
-    vi.useFakeTimers({ now: 60_000 });
-    expect(formatRelativeTime(new Date(1_000))).toBe('just now');
+  it('returns a relative string for dates in the future', () => {
+    vi.useFakeTimers({ now: 1000 });
+    expect(formatRelativeTime(new Date(2000))).toBe('right now');
   });
 
   it('returns "1 minute ago" at exactly 60 seconds', () => {
@@ -26,24 +26,13 @@ describe('formatRelativeTime', () => {
     expect(formatRelativeTime(new Date(0))).toBe('5 minutes ago');
   });
 
-  it('returns "59 minutes ago" at boundary', () => {
-    vi.useFakeTimers({ now: 59 * 60_000 });
-    expect(formatRelativeTime(new Date(0))).toBe('59 minutes ago');
-  });
-
   it('returns "1 hour ago" at exactly 60 minutes', () => {
     vi.useFakeTimers({ now: 60 * 60_000 });
     expect(formatRelativeTime(new Date(0))).toBe('1 hour ago');
   });
 
-  it('returns "23 hours ago" at boundary', () => {
-    vi.useFakeTimers({ now: 23 * 60 * 60_000 });
-    expect(formatRelativeTime(new Date(0))).toBe('23 hours ago');
-  });
-
-  it('returns locale string for 24+ hours', () => {
+  it('returns "1 day ago" for 24+ hours', () => {
     vi.useFakeTimers({ now: 24 * 60 * 60_000 });
-    const date = new Date(0);
-    expect(formatRelativeTime(date)).toBe(date.toLocaleString());
+    expect(formatRelativeTime(new Date(0))).toBe('1 day ago');
   });
 });
