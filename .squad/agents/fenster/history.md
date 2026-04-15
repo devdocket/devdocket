@@ -70,7 +70,7 @@ Key files:
 
 ## Learnings (Updated 2026-03-24)
 
-### Bulk Rename: DevDocket → DevDocket
+### Bulk Rename: WorkCenter → DevDocket
 - Used an ordered replacement list (most-specific patterns first) to avoid partial-match corruption during the rename.
 - `.squad/` files must be excluded from bulk renames and handled separately to preserve team coordination state.
 - File renames (git mv) must be followed by import-path fixups; the bulk text replacement handled the import content, but the filenames themselves needed separate git mv commands.
