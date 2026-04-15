@@ -726,9 +726,12 @@ describe('WorkGraph', () => {
       const deleted = await graph.clearOldHistory(30);
 
       expect(deleted).toBe(1);
-      // Old1 should still exist (delete failed and store.delete rolled back)
-      // Old2 should be deleted
       expect(callCount).toBe(2);
+      // Old1 should still exist (delete failed before items.delete ran)
+      expect(graph.getItem(old1.id)).toBeDefined();
+      // Old2 should be deleted
+      expect(graph.getItemsByState(WorkItemState.Done)).toHaveLength(1);
+      expect(graph.getItemsByState(WorkItemState.Done)[0].id).toBe(old1.id);
     });
 
     it('fires onDidChange only once for batch deletion', async () => {
