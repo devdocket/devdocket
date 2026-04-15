@@ -193,6 +193,12 @@
         "icon": "$(arrow-right)"
       },
       {
+        "command": "workcenter.acceptToFocusFromInbox",
+        "title": "Accept to Focus",
+        "category": "WorkCenter",
+        "icon": "$(rocket)"
+      },
+      {
         "command": "workcenter.dismissFromInbox",
         "title": "Dismiss",
         "category": "WorkCenter",
@@ -516,12 +522,22 @@
           "group": "inline"
         },
         {
+          "command": "workcenter.acceptFromInbox",
+          "when": "view == workcenter.inbox && viewItem =~ /inboxItem/",
+          "group": "1_actions"
+        },
+        {
           "command": "workcenter.dismissFromInbox",
           "when": "view == workcenter.inbox && viewItem =~ /inboxItem/",
           "group": "inline"
         },
         {
           "command": "workcenter.dismissFromInbox",
+          "when": "view == workcenter.inbox && viewItem =~ /inboxItem/",
+          "group": "1_actions"
+        },
+        {
+          "command": "workcenter.acceptToFocusFromInbox",
           "when": "view == workcenter.inbox && viewItem =~ /inboxItem/",
           "group": "1_actions"
         },
