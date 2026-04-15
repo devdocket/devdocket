@@ -81,7 +81,7 @@ Your active work. Items here are things you're actively working on or paused. Th
 
 ### History
 
-Completed and archived items. The History view gives you a record of finished work — useful for standups, status updates, and recalling what you've done. Use the **Clear Old History** command (in the History title bar) to remove items older than a configurable threshold — see the `devdocket.historyClearDays` setting.
+Completed and archived items. The History view gives you a record of finished work — useful for standups, status updates, and recalling what you've done.
 
 ### Sources
 
