@@ -184,8 +184,8 @@ export class SourcesTreeProvider implements vscode.TreeDataProvider<SourcesEleme
   private buildItemDescription(providerId: string, state: InboxState | undefined): string | undefined {
     const parts: string[] = [];
     if (this._layoutState.value === 'flat') {
-      const label = this.providerRegistry.getProviderLabel(providerId);
-      if (label) { parts.push(label); }
+      const label = this.providerRegistry.getProviderLabel(providerId)?.trim();
+      if (label && label.length > 0) { parts.push(label); }
     }
     if (state === 'dismissed') { parts.push('dismissed'); }
     return parts.length > 0 ? parts.join(' · ') : undefined;
