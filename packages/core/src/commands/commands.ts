@@ -279,9 +279,10 @@ async function handleCreateItemFromUrl(
     return;
   }
 
+  const group = details.group?.trim() || undefined;
   const createdItem = await workGraph.createItem(
     { title: details.title, notes: details.notes },
-    { providerId: 'url-import', externalId: details.url, url: details.url, group: details.group },
+    { providerId: 'url-import', externalId: details.url, url: details.url, ...(group ? { group } : {}) },
   );
 
   const providerLabel = createdItem.providerId ? labelCache.get(createdItem.providerId) : undefined;
