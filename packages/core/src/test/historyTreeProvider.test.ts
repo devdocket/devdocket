@@ -185,16 +185,16 @@ describe('HistoryTreeProvider', () => {
       expect((treeItem.iconPath as any).id).toBe('archive');
     });
 
-    it('should show "done · group" when Done item has a group', () => {
+    it('should show "group · done" when Done item has a group', () => {
       const item = makeItem({ id: '1', title: 'Done task', state: WorkItemState.Done, group: 'octocat/repo' });
       const treeItem = provider.getTreeItem(item);
-      expect(treeItem.description).toBe('done · octocat/repo');
+      expect(treeItem.description).toBe('octocat/repo · done');
     });
 
-    it('should show "archived · group" when Archived item has a group', () => {
+    it('should show "group · archived" when Archived item has a group', () => {
       const item = makeItem({ id: '1', title: 'Old task', state: WorkItemState.Archived, group: 'octocat/repo' });
       const treeItem = provider.getTreeItem(item);
-      expect(treeItem.description).toBe('archived · octocat/repo');
+      expect(treeItem.description).toBe('octocat/repo · archived');
     });
 
     it('should show state only when group is undefined', () => {

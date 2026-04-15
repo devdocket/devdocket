@@ -70,14 +70,14 @@ describe('FocusTreeProvider', () => {
       expect(provider.getTreeItem(item).description).toBe('paused');
     });
 
-    it('should show "in progress · group" when item has a group', () => {
+    it('should show "group · in progress" when item has a group', () => {
       const item = makeItem({ state: WorkItemState.InProgress, group: 'octocat/repo' });
-      expect(provider.getTreeItem(item).description).toBe('in progress · octocat/repo');
+      expect(provider.getTreeItem(item).description).toBe('octocat/repo · in progress');
     });
 
-    it('should show "paused · group" when paused item has a group', () => {
+    it('should show "group · paused" when paused item has a group', () => {
       const item = makeItem({ state: WorkItemState.Paused, group: 'octocat/repo' });
-      expect(provider.getTreeItem(item).description).toBe('paused · octocat/repo');
+      expect(provider.getTreeItem(item).description).toBe('octocat/repo · paused');
     });
 
     it('should show state only when group is undefined', () => {

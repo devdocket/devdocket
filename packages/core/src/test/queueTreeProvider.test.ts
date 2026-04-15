@@ -133,7 +133,7 @@ describe('QueueTreeProvider', () => {
         { providerId: 'github', externalId: 'ext-g1', group: 'octocat/repo' },
       );
       const treeItem = queueWithRegistry.getTreeItem(item);
-      expect(treeItem.description).toBe('GitHub Issues · octocat/repo');
+      expect(treeItem.description).toBe('octocat/repo · GitHub Issues');
     });
 
     it('sets description to group only when no providerId but group exists', async () => {
