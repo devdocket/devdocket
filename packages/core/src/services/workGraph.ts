@@ -395,7 +395,7 @@ export class WorkGraph {
           await this.deleteItem(item.id, { silent: true });
           deleted++;
         } catch (err) {
-          logger.warn(`Failed to delete history item ${item.id}, skipping`);
+          logger.warn(`Failed to delete history item ${item.id}, skipping: ${err instanceof Error ? err.message : String(err)}`);
         }
       }
     } finally {
