@@ -129,10 +129,10 @@ export class WalkthroughParticipant {
         }
       }
     }
-    this.log.info(`Built message array: ${messages.length} messages (1 system + ${context.history.length} history + 1 user)`);
 
     // Add current user message
     messages.push(vscode.LanguageModelChatMessage.User(request.prompt));
+    this.log.info(`Built message array: ${messages.length} messages (1 system + ${messages.length - 2} history + 1 user)`);
 
     // Select model
     let model: vscode.LanguageModelChat;
