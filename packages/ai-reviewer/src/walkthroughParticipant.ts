@@ -191,7 +191,7 @@ export class WalkthroughParticipant {
 
     while (!token.isCancellationRequested && iterations < maxIterations) {
       iterations++;
-      this.log.info(`Tool-use loop iteration ${iterations} — sending ${loopMessages.length} messages to model`);
+      this.log.debug(`Tool-use loop iteration ${iterations} — sending ${loopMessages.length} messages to model`);
 
       let chatResponse: vscode.LanguageModelChatResponse;
       try {
@@ -229,7 +229,7 @@ export class WalkthroughParticipant {
           }
 
           hasToolCalls = true;
-          this.log.info(`Tool call: ${part.name} (callId: ${part.callId})`);
+          this.log.debug(`Tool call: ${part.name} (callId: ${part.callId})`);
           try {
             this.log.debug(`Tool input: ${JSON.stringify(part.input)}`);
           } catch {
@@ -244,7 +244,7 @@ export class WalkthroughParticipant {
               },
               token,
             );
-            this.log.info(`Tool ${part.name} completed successfully`);
+            this.log.debug(`Tool ${part.name} completed successfully`);
             toolResults.push({ callId: part.callId, content: result.content });
           } catch (err) {
             const errMsg = err instanceof Error ? err.message : String(err);
@@ -257,7 +257,7 @@ export class WalkthroughParticipant {
         }
       }
 
-      this.log.info(`Iteration ${iterations} complete — ${assistantParts.length} parts, ${toolResults.length} tool results, hasToolCalls: ${hasToolCalls}`);
+      this.log.debug(`Iteration ${iterations} complete — ${assistantParts.length} parts, ${toolResults.length} tool results, hasToolCalls: ${hasToolCalls}`);
 
       // Add the complete assistant turn + all tool results to conversation
       if (assistantParts.length > 0) {

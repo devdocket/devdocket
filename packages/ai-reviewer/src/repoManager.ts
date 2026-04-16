@@ -74,7 +74,8 @@ export class RepoManager {
     const cloneExists = await this.directoryExists(clonePath);
     this.log.debug(`Clone directory exists: ${cloneExists}`);
     if (!cloneExists) {
-      this.log.info(`Cloning ${cloneUrl} to ${clonePath}`);
+      this.log.info('Cloning repository');
+      this.log.debug(`Clone destination: ${clonePath}`);
       await vscode.workspace.fs.createDirectory(
         vscode.Uri.file(path.dirname(clonePath)),
       );
@@ -130,7 +131,8 @@ export class RepoManager {
 
     // Create worktree if it doesn't exist yet
     if (!worktreeExists) {
-      this.log.info(`Creating worktree at ${worktreePath} from ${headRef}`);
+      this.log.info('Creating worktree');
+      this.log.debug(`Worktree destination: ${worktreePath}, ref: ${headRef}`);
       await gitExec(
         ['worktree', 'add', worktreePath, headRef],
         clonePath,
@@ -166,7 +168,7 @@ export class RepoManager {
 
   /** Remove a single worktree. */
   async removeWorktree(prUrl: string): Promise<void> {
-    this.log.info(`removeWorktree called — prUrl: ${prUrl}`);
+    this.log.debug(`removeWorktree called — prUrl: ${prUrl}`);
     const parts = parsePrUrl(prUrl);
     if (!parts) return;
 
