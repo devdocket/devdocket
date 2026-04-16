@@ -236,7 +236,7 @@ async function handleCreateItemFromUrl(
 ): Promise<void> {
   const url = await vscode.window.showInputBox({
     prompt: 'Enter a GitHub PR/issue or Azure DevOps PR/work item URL',
-    placeHolder: 'https://github.com/owner/repo/pull/123 or /issues/123',
+    placeHolder: 'https://github.com/owner/repo/pull/123 or https://github.com/owner/repo/issues/123',
     validateInput: (value) => {
       if (!value.trim()) { return 'URL is required'; }
       if (!parseSourceUrl(value)) {
