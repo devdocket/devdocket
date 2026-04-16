@@ -173,7 +173,7 @@ async function fetchGitHubIssue(owner: string, repo: string, number: number, sig
 
 async function fetchAdoPr(org: string, project: string, repo: string, id: number, signal?: AbortSignal): Promise<FetchedItemDetails> {
   const apiUrl = `https://dev.azure.com/${encodeURIComponent(org)}/${encodeURIComponent(project)}/_apis/git/repositories/${encodeURIComponent(repo)}/pullrequests/${id}?api-version=7.1`;
-  const label = `ADO PR ${org}/${project}/${repo}!${id}`;
+  const label = `ADO PR ${org}/${project}/${repo}#${id}`;
   const headers = await getAdoHeaders();
 
   let response = await fetch(apiUrl, { headers, signal });
