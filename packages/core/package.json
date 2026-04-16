@@ -20,7 +20,8 @@
     "onCommand:devdocket.refresh",
     "onCommand:devdocket.dismissFromSources",
     "onCommand:devdocket.deleteItem",
-    "onCommand:devdocket.createItemFromUrl"
+    "onCommand:devdocket.createItemFromUrl",
+    "onCommand:devdocket.clearHistory"
   ],
   "main": "./dist/extension.js",
   "contributes": {
@@ -29,7 +30,12 @@
       "properties": {
         "devdocket.logLevel": {
           "type": "string",
-          "enum": ["debug", "info", "warn", "error"],
+          "enum": [
+            "debug",
+            "info",
+            "warn",
+            "error"
+          ],
           "default": "info",
           "description": "Log level for DevDocket output channel"
         },
@@ -43,13 +49,54 @@
           "default": {},
           "description": "Per-view layout mode. Keys are view names (inbox, queue, focus, history, sources) and values are 'flat' or 'tree'.",
           "properties": {
-            "inbox": { "type": "string", "enum": ["flat", "tree"], "default": "tree" },
-            "queue": { "type": "string", "enum": ["flat", "tree"], "default": "flat" },
-            "focus": { "type": "string", "enum": ["flat", "tree"], "default": "flat" },
-            "history": { "type": "string", "enum": ["flat", "tree"], "default": "flat" },
-            "sources": { "type": "string", "enum": ["flat", "tree"], "default": "tree" }
+            "inbox": {
+              "type": "string",
+              "enum": [
+                "flat",
+                "tree"
+              ],
+              "default": "tree"
+            },
+            "queue": {
+              "type": "string",
+              "enum": [
+                "flat",
+                "tree"
+              ],
+              "default": "flat"
+            },
+            "focus": {
+              "type": "string",
+              "enum": [
+                "flat",
+                "tree"
+              ],
+              "default": "flat"
+            },
+            "history": {
+              "type": "string",
+              "enum": [
+                "flat",
+                "tree"
+              ],
+              "default": "flat"
+            },
+            "sources": {
+              "type": "string",
+              "enum": [
+                "flat",
+                "tree"
+              ],
+              "default": "tree"
+            }
           },
           "additionalProperties": false
+        },
+        "devdocket.historyClearDays": {
+          "type": "integer",
+          "default": 30,
+          "minimum": 1,
+          "description": "Age threshold in days for the Clear Old History command. Items older than this are removed."
         }
       }
     },
@@ -315,6 +362,12 @@
         "icon": "$(trash)"
       },
       {
+        "command": "devdocket.clearHistory",
+        "title": "Clear Old History",
+        "category": "DevDocket",
+        "icon": "$(clear-all)"
+      },
+      {
         "command": "devdocket.moveToQueue",
         "title": "Move to Queue",
         "category": "DevDocket",
@@ -377,6 +430,11 @@
         {
           "command": "devdocket.switchHistoryToFlat",
           "when": "view == devdocket.history && devdocket.historyLayout == tree",
+          "group": "navigation"
+        },
+        {
+          "command": "devdocket.clearHistory",
+          "when": "view == devdocket.history",
           "group": "navigation"
         },
         {
@@ -628,7 +686,8 @@
     "test:watch": "vitest"
   },
   "dependencies": {
-    "@devdocket/shared": "*"
+    "@devdocket/shared": "*",
+    "timeago.js": "^4.0.2"
   },
   "devDependencies": {
     "@types/node": "^20.11.0",

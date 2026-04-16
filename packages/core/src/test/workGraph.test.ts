@@ -616,4 +616,136 @@ describe('WorkGraph', () => {
       expect(graph.getItem(item.id)?.state).toBe(WorkItemState.Archived);
     });
   });
+
+  describe('clearOldHistory', () => {
+    const DAY_MS = 24 * 60 * 60 * 1000;
+
+    async function createDoneItem(g: WorkGraph, title: string, daysAgo: number) {
+      const item = await g.createItem({ title });
+      await g.transitionState(item.id, WorkItemState.InProgress);
+      await g.transitionState(item.id, WorkItemState.Done);
+      // Backdated updatedAt to simulate age
+      const updated = g.getItem(item.id)!;
+      (updated as any).updatedAt = Date.now() - daysAgo * DAY_MS;
+      return updated;
+    }
+
+    async function createArchivedItem(g: WorkGraph, title: string, daysAgo: number) {
+      const item = await createDoneItem(g, title, daysAgo);
+      await g.transitionState(item.id, WorkItemState.Archived);
+      const updated = g.getItem(item.id)!;
+      (updated as any).updatedAt = Date.now() - daysAgo * DAY_MS;
+      return updated;
+    }
+
+    it('deletes items older than threshold', async () => {
+      await createDoneItem(graph, 'Old', 60);
+      await createDoneItem(graph, 'Recent', 5);
+
+      const result = await graph.clearOldHistory(30);
+
+      expect(result.deleted).toBe(1);
+      expect(graph.getItemsByState(WorkItemState.Done)).toHaveLength(1);
+      expect(graph.getItemsByState(WorkItemState.Done)[0].title).toBe('Recent');
+    });
+
+    it('deletes Archived items older than threshold', async () => {
+      await createArchivedItem(graph, 'Old archived', 90);
+      await createDoneItem(graph, 'Recent done', 5);
+
+      const result = await graph.clearOldHistory(30);
+
+      expect(result.deleted).toBe(1);
+      expect(graph.getItemsByState(WorkItemState.Archived)).toHaveLength(0);
+    });
+
+    it('does not affect InProgress or New items', async () => {
+      const item = await graph.createItem({ title: 'New item' });
+      (item as any).updatedAt = Date.now() - 60 * DAY_MS;
+      const ip = await graph.createItem({ title: 'In progress' });
+      await graph.transitionState(ip.id, WorkItemState.InProgress);
+      (graph.getItem(ip.id)! as any).updatedAt = Date.now() - 60 * DAY_MS;
+
+      const result = await graph.clearOldHistory(30);
+
+      expect(result.deleted).toBe(0);
+      expect(graph.getItem(item.id)).toBeDefined();
+      expect(graph.getItem(ip.id)).toBeDefined();
+    });
+
+    it('uses updatedAt not createdAt for cutoff', async () => {
+      const item = await graph.createItem({ title: 'Old created, recently updated' });
+      (item as any).createdAt = Date.now() - 90 * DAY_MS;
+      await graph.transitionState(item.id, WorkItemState.InProgress);
+      await graph.transitionState(item.id, WorkItemState.Done);
+      // updatedAt is recent (just transitioned)
+
+      const result = await graph.clearOldHistory(30);
+
+      expect(result.deleted).toBe(0);
+      expect(graph.getItem(item.id)).toBeDefined();
+    });
+
+    it('returns 0 when no history items exist', async () => {
+      const result = await graph.clearOldHistory(30);
+      expect(result.deleted).toBe(0);
+    });
+
+    it('handles boundary: item exactly at cutoff is not deleted', async () => {
+      vi.useFakeTimers();
+      const now = new Date('2025-06-15T12:00:00Z').getTime();
+      vi.setSystemTime(now);
+      try {
+        const item = await createDoneItem(graph, 'Boundary', 30);
+        (item as any).updatedAt = now - 30 * DAY_MS;
+
+        const result = await graph.clearOldHistory(30);
+
+        // At exactly the cutoff, updatedAt === cutoff, filter is <, so not deleted
+        expect(result.deleted).toBe(0);
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('continues deleting after a single item fails', async () => {
+      const old1 = await createDoneItem(graph, 'Old1', 60);
+      await createDoneItem(graph, 'Old2', 60);
+
+      const origImpl = (store.delete as ReturnType<typeof vi.fn>).getMockImplementation()!;
+      let callCount = 0;
+      (store.delete as ReturnType<typeof vi.fn>).mockImplementation(async (id: string) => {
+        callCount++;
+        if (id === old1.id) {
+          throw new Error('disk full');
+        }
+        return origImpl(id);
+      });
+
+      const result = await graph.clearOldHistory(30);
+
+      expect(result.deleted).toBe(1);
+      expect(result.failed).toBe(1);
+      expect(callCount).toBe(2);
+      // Old1 should still exist (delete failed before items.delete ran)
+      expect(graph.getItem(old1.id)).toBeDefined();
+      // Old2 should be deleted
+      expect(graph.getItemsByState(WorkItemState.Done)).toHaveLength(1);
+      expect(graph.getItemsByState(WorkItemState.Done)[0].id).toBe(old1.id);
+    });
+
+    it('fires onDidChange only once for batch deletion', async () => {
+      await createDoneItem(graph, 'Old1', 60);
+      await createDoneItem(graph, 'Old2', 60);
+      await createDoneItem(graph, 'Old3', 60);
+
+      const changeSpy = vi.fn();
+      graph.onDidChange(changeSpy);
+      changeSpy.mockClear();
+
+      await graph.clearOldHistory(30);
+
+      expect(changeSpy).toHaveBeenCalledTimes(1);
+    });
+  });
 });

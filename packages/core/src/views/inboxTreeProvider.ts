@@ -5,6 +5,7 @@ import { DiscoveredStateStore } from '../storage/discoveredStateStore';
 import { ReadStateStore } from '../storage/readStateStore';
 import { logger } from '../services/logger';
 import { ViewLayout, LayoutState } from './viewLayout';
+import { buildProviderTooltip } from './providerTooltip';
 
 export interface InboxProviderNode {
   kind: 'provider';
@@ -54,6 +55,7 @@ export class InboxTreeProvider implements vscode.TreeDataProvider<InboxElement> 
     this._layoutState = new LayoutState('tree', () => this._onDidChangeTreeData.fire());
     this.disposables.push(
       providerRegistry.onDidChangeDiscoveredItems(() => this.scheduleRefresh()),
+      providerRegistry.onDidChangeProviderHealth(() => this.scheduleRefresh()),
       stateStore.onDidChange(() => this.scheduleRefresh()),
     );
   }
@@ -139,11 +141,17 @@ export class InboxTreeProvider implements vscode.TreeDataProvider<InboxElement> 
   getTreeItem(element: InboxElement): vscode.TreeItem {
     if (element.kind === 'provider') {
       const count = this.getUnseenCount(element.providerId);
+      const health = this.providerRegistry.getProviderHealth(element.providerId);
       const treeItem = new vscode.TreeItem(element.label, vscode.TreeItemCollapsibleState.Collapsed);
       treeItem.description = `${count}`;
       treeItem.id = `inbox::provider::${element.providerId}`;
       treeItem.contextValue = 'inboxProvider';
-      treeItem.iconPath = new vscode.ThemeIcon('plug');
+      if (health.status === 'unhealthy') {
+        treeItem.iconPath = new vscode.ThemeIcon('warning', new vscode.ThemeColor('problemsWarningIcon.foreground'));
+      } else {
+        treeItem.iconPath = new vscode.ThemeIcon('plug');
+      }
+      treeItem.tooltip = buildProviderTooltip(element.label, health);
       return treeItem;
     }
 
@@ -210,7 +218,8 @@ export class InboxTreeProvider implements vscode.TreeDataProvider<InboxElement> 
       const result: InboxProviderNode[] = [];
       const allItems = this.providerRegistry.getAllDiscoveredItems();
       for (const [providerId] of allItems) {
-        if (this.getUnseenCount(providerId) > 0) {
+        const health = this.providerRegistry.getProviderHealth(providerId);
+        if (this.getUnseenCount(providerId) > 0 || health.status === 'unhealthy') {
           result.push({
             kind: 'provider',
             providerId,
@@ -254,8 +263,9 @@ export class InboxTreeProvider implements vscode.TreeDataProvider<InboxElement> 
       const state = this.stateStore.getState(providerId, item.externalId);
       if (state !== undefined && state !== 'unseen') { continue; }
 
-      if (item.group) {
-        groupCounts.set(item.group, (groupCounts.get(item.group) ?? 0) + 1);
+      if (item.group?.trim()) {
+        const normalizedGroup = item.group.trim();
+        groupCounts.set(normalizedGroup, (groupCounts.get(normalizedGroup) ?? 0) + 1);
       } else {
         ungrouped.push(item);
       }
@@ -282,7 +292,7 @@ export class InboxTreeProvider implements vscode.TreeDataProvider<InboxElement> 
     const items = this.providerRegistry.getDiscoveredItems(providerId);
     const result: InboxItem[] = [];
     for (const item of items) {
-      if (item.group !== groupName) { continue; }
+      if (item.group?.trim() !== groupName) { continue; }
       const state = this.stateStore.getState(providerId, item.externalId);
       if (state !== undefined && state !== 'unseen') { continue; }
       result.push(this.toItemNode(providerId, item));
@@ -298,7 +308,7 @@ export class InboxTreeProvider implements vscode.TreeDataProvider<InboxElement> 
       title: item.title,
       description: item.description,
       url: item.url,
-      group: item.group,
+      group: item.group?.trim() || undefined,
       reason: item.reason,
     };
   }
@@ -306,7 +316,7 @@ export class InboxTreeProvider implements vscode.TreeDataProvider<InboxElement> 
   private getGroupUnseenCount(providerId: string, groupName: string): number {
     const items = this.providerRegistry.getDiscoveredItems(providerId);
     return items.filter((item) => {
-      if (item.group !== groupName) { return false; }
+      if (item.group?.trim() !== groupName) { return false; }
       const state = this.stateStore.getState(providerId, item.externalId);
       return state === undefined || state === 'unseen';
     }).length;

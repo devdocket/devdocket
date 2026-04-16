@@ -7,9 +7,15 @@ import { registerAllTools } from './tools';
 import type { DevDocketApi } from './types';
 
 export async function activate(context: vscode.ExtensionContext): Promise<void> {
+  const log = vscode.window.createOutputChannel('DevDocket AI Review', { log: true });
+  context.subscriptions.push(log);
+
+  log.info('Activating DevDocket AI Reviewer extension');
+
   const coreExtension = vscode.extensions.getExtension<DevDocketApi>('mthalman.devdocket');
   if (!coreExtension) {
     const msg = 'DevDocket AI Reviewer: core extension not found. Install the DevDocket extension.';
+    log.error(msg);
     console.error(msg);
     vscode.window.showErrorMessage(msg);
     return;
@@ -22,6 +28,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
       : await coreExtension.activate();
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : String(err);
+    log.error(`Failed to activate core extension: ${message}`);
     console.error(`DevDocket AI Reviewer: Failed to activate core extension — ${message}`);
     vscode.window.showErrorMessage(`DevDocket AI Reviewer: Failed to activate core extension — ${message}`);
     return;
@@ -29,6 +36,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 
   if (!api || typeof api.registerAction !== 'function') {
     const msg = 'DevDocket AI Reviewer: core extension API not available';
+    log.error(msg);
     console.error(msg);
     vscode.window.showErrorMessage(msg);
     return;
@@ -37,19 +45,25 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   // Register code review action (unchanged)
   const reviewAction = new AiReviewAction();
   context.subscriptions.push(api.registerAction(reviewAction));
+  log.info('Registered AI Code Review action');
 
   // Set up walkthrough infrastructure
-  const repoManager = new RepoManager(context.globalStorageUri);
-  const walkthroughAction = new AiWalkthroughAction(repoManager);
+  const repoManager = new RepoManager(context.globalStorageUri, log);
+  const walkthroughAction = new AiWalkthroughAction(repoManager, log);
   context.subscriptions.push(api.registerAction(walkthroughAction));
+  log.info('Registered AI Walkthrough action');
 
   // Register LM tools
   const toolDisposables = registerAllTools();
   toolDisposables.forEach(d => context.subscriptions.push(d));
+  log.info(`Registered ${toolDisposables.length} LM tools`);
 
   // Register chat participant
-  const participant = new WalkthroughParticipant(repoManager);
+  const participant = new WalkthroughParticipant(repoManager, log);
   context.subscriptions.push(participant.register());
+  log.info('Registered @walkthrough chat participant');
+
+  log.info('DevDocket AI Reviewer activation complete');
 }
 
 export function deactivate(): void {

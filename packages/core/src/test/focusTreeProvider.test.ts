@@ -60,35 +60,49 @@ describe('FocusTreeProvider', () => {
   });
 
   describe('getTreeItem description', () => {
-    it('should show "in progress" for InProgress items', () => {
+    it('should show undefined description for InProgress items without group', () => {
       const item = makeItem({ state: WorkItemState.InProgress });
-      expect(provider.getTreeItem(item).description).toBe('in progress');
+      expect(provider.getTreeItem(item).description).toBeUndefined();
     });
 
-    it('should show "paused" for Paused items', () => {
+    it('should show undefined description for Paused items without group', () => {
       const item = makeItem({ state: WorkItemState.Paused });
-      expect(provider.getTreeItem(item).description).toBe('paused');
+      expect(provider.getTreeItem(item).description).toBeUndefined();
     });
 
-    it('should show "group · in progress" when item has a group', () => {
+    it('should show group in flat layout when item has a group', () => {
       const item = makeItem({ state: WorkItemState.InProgress, group: 'octocat/repo' });
-      expect(provider.getTreeItem(item).description).toBe('octocat/repo · in progress');
+      expect(provider.getTreeItem(item).description).toBe('octocat/repo');
     });
 
-    it('should show "group · paused" when paused item has a group', () => {
+    it('should show group in flat layout for paused item', () => {
       const item = makeItem({ state: WorkItemState.Paused, group: 'octocat/repo' });
-      expect(provider.getTreeItem(item).description).toBe('octocat/repo · paused');
+      expect(provider.getTreeItem(item).description).toBe('octocat/repo');
     });
 
-    it('should show state only when group is undefined', () => {
+    it('should show undefined when group is undefined', () => {
       const item = makeItem({ state: WorkItemState.InProgress, group: undefined });
-      expect(provider.getTreeItem(item).description).toBe('in progress');
+      expect(provider.getTreeItem(item).description).toBeUndefined();
     });
 
-    it('should omit group in tree layout', () => {
+    it('should show undefined in tree layout', () => {
       provider.layout = 'tree';
       const item = makeItem({ state: WorkItemState.InProgress, group: 'octocat/repo' });
-      expect(provider.getTreeItem(item).description).toBe('in progress');
+      expect(provider.getTreeItem(item).description).toBeUndefined();
+    });
+
+    it('should show group and provider label in flat layout with registry', () => {
+      const emitter = new EventEmitter();
+      const changeEmitter = new EventEmitter();
+      const registry = {
+        getProviderLabel: vi.fn((id: string) => id === 'github' ? 'GitHub Issues' : id),
+        onDidRegisterProvider: emitter.event,
+        onDidChangeDiscoveredItems: changeEmitter.event,
+        getDiscoveredItems: vi.fn(() => []),
+      };
+      const focusWithRegistry = new FocusTreeProvider(workGraph as any, registry as any);
+      const item = makeItem({ state: WorkItemState.InProgress, group: 'octocat/repo', providerId: 'github' });
+      expect(focusWithRegistry.getTreeItem(item).description).toBe('octocat/repo · GitHub Issues');
     });
   });
 

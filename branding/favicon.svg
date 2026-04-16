@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16">
+  <!-- Favicon: simplified for 16x16 legibility -->
+  <!-- Bold D - single color, no gradient for crisp rendering -->
+  <path d="M3 1 L3 15 L9 15 C13 15 15 12 15 8 C15 4 13 1 9 1 Z" fill="#10B981"/>
+  <!-- Inner cutout -->
+  <path d="M5.5 3.5 L5.5 12.5 L8.5 12.5 C11 12.5 12.5 10.5 12.5 8 C12.5 5.5 11 3.5 8.5 3.5 Z" fill="#FFFFFF"/>
+  <!-- Simplified slots - only 2 for clarity at small size -->
+  <rect x="6.5" y="5.5" width="4" height="1.5" rx="0.5" fill="#10B981"/>
+  <rect x="6.5" y="9" width="3" height="1.5" rx="0.5" fill="#10B981"/>
+</svg>

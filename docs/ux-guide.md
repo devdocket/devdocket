@@ -101,9 +101,16 @@ Clicking a History item opens the editor panel to view its details.
 
 | Action | Description |
 |--------|-------------|
+| **Clear Old History** | Removes history items older than a configurable threshold (title bar button) |
 | **Open in Browser** | Opens the item's URL in your default browser (if the item has a URL) |
 
-> **Note:** History items are in terminal states, so no state-changing commands are available.
+#### Clear Old History
+
+The **Clear Old History** command (available from the History view title bar) bulk-removes history items that have not been updated within a configurable number of days. A confirmation dialog shows the threshold before proceeding.
+
+The age threshold is controlled by the `devdocket.historyClearDays` setting (default: **30** days). Only items whose last modification is older than the threshold are removed.
+
+> **Note:** History items are in terminal states, so no state-changing commands are available beyond clearing old items.
 
 ## Data Flow
 
@@ -197,6 +204,7 @@ Registers an **AI Code Review** action that can be run on any work item whose UR
 |---------|------|---------|-------------|
 | `devdocket.logLevel` | `string` | `"info"` | Log level for the DevDocket output channel. Valid values: `debug`, `info`, `warn`, `error`. |
 | `devdocket.showInboxNotifications` | `boolean` | `true` | Show a notification when new items arrive in the Inbox. |
+| `devdocket.historyClearDays` | `integer` | `30` | Age threshold in days for the **Clear Old History** command. Items in History whose last modification is older than this many days are removed. Minimum: 1. |
 
 ## Keyboard Shortcuts
 

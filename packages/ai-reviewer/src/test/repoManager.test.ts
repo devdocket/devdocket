@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { authentication, workspace } from 'vscode';
+import { authentication, workspace, mockLogOutputChannel } from 'vscode';
 import { RepoManager, parsePrUrl } from '../repoManager';
 
 // Mock child_process
@@ -12,7 +12,7 @@ vi.mock('child_process', () => ({
 import { execFile } from 'child_process';
 
 function createRepoManager(): RepoManager {
-  return new RepoManager({ fsPath: '/mock/storage' } as never);
+  return new RepoManager({ fsPath: '/mock/storage' } as never, mockLogOutputChannel as never);
 }
 
 describe('parsePrUrl', () => {
