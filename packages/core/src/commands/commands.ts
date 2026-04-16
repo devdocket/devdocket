@@ -270,12 +270,12 @@ async function handleCreateItemFromUrl(
     throw error;
   }
 
-  // Prevent duplicate items for the same URL
+  // Prevent duplicate items for the same provider-backed source item
   const existing = workGraph.findItemByProvenance(details.providerId, details.externalId);
   if (existing) {
     const providerLabel = existing.providerId ? labelCache.get(existing.providerId) : undefined;
     WorkItemEditorPanel.open(context, workGraph, providerRegistry, existing, providerLabel);
-    void vscode.window.showInformationMessage('DevDocket: Item already exists for this URL');
+    void vscode.window.showInformationMessage('DevDocket: Item already exists for this source item');
     return;
   }
 

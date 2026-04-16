@@ -296,7 +296,7 @@ describe('registerCommands', () => {
         expect.anything(), expect.anything(), expect.anything(), existing, undefined,
       );
       expect(vscode.window.showInformationMessage).toHaveBeenCalledWith(
-        'DevDocket: Item already exists for this URL',
+        'DevDocket: Item already exists for this source item',
       );
     });
 
