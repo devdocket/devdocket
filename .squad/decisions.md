@@ -2,6 +2,183 @@
 
 ## Active Decisions
 
+### Issue #243 — Version-Based Resurfacing for Re-Requested PR Reviews (2026-04-15)
+
+**Issue:** #243  
+**Author:** Fenster (Extension Dev)  
+**Status:** Implemented
+
+## Problem
+
+When a PR review is re-requested after the user has completed their review (Done/Archived), the same `externalId` is already in the state store as `accepted`. The item never reappears in the Inbox.
+
+## Decision
+
+Added an optional `version` field to `DiscoveredItem` that providers set to a value that changes when the item needs re-attention. When `handleDiscoveredItems()` processes an `accepted` item whose stored version differs from the incoming version, it resets the state to `unseen`.
+
+### Version sources by provider
+
+- **GitHub PR Reviews:** `updated_at` from the Search API — changes when the PR is updated (including review re-requests)
+- **ADO PR Reviews:** `lastMergeSourceCommit.commitId` — changes when the PR author pushes new commits (the typical trigger for re-review)
+
+### Key design choices
+
+1. **Optional field (non-breaking):** `version` is optional on `DiscoveredItem`, so existing providers are unaffected.
+2. **Backfill without resurfacing:** When a pre-existing accepted item first receives a version (no stored version yet), the version is silently stored without changing state. This prevents a flood of resurfaced items on initial deployment.
+3. **Dismissed items stay dismissed:** Version changes on dismissed items are ignored, preserving the fix from #189.
+4. **Unseen items unchanged:** If an item is already unseen, version changes don't trigger any action.
+
+### What was NOT implemented
+
+- **Dismissed-item resurfacing:** Deliberately excluded — dismissed means "not interested," regardless of version changes.
+- **Separate version-only update method:** Backfills are batched into the same `setStates` call with the existing state, avoiding additional API surface.
+
+## References
+
+- Branch: `squad/243-pr-review-resurface`
+- `packages/shared/src/baseProvider.ts` — `DiscoveredItem.version`
+- `packages/core/src/services/providerRegistry.ts` — `handleDiscoveredItems()` version logic
+- `packages/core/src/storage/discoveredStateStore.ts` — `getVersion()`, version persistence
+- Issue #189 — dismissed items fix (preserved)
+
+---
+
+### Issue #233 — Provider Health Indicator Design (2026-04-15)
+
+**Issue:** #233  
+**Author:** Fenster (Extension Dev)  
+**Status:** Implemented
+
+## Context
+
+When a provider's background refresh fails (network timeout, auth failure, rate limit), the UI showed no indication. Items from the last successful refresh remained displayed, giving a false sense of currency.
+
+## Decision
+
+Track provider health in `ProviderRegistry` and surface it visually in Sources and Inbox tree views.
+
+### Health tracking
+
+- `ProviderHealthStatus` interface with `status` ('healthy' | 'unhealthy' | 'unknown'), `lastRefreshTime`, and `lastError`
+- Health updated inside `refreshWithTimeout`: success → healthy, error → unhealthy with message, timeout → unhealthy with "Refresh timed out"
+- `onDidChangeProviderHealth` event drives UI reactivity
+- Health data is cleaned up on provider unregister
+
+### Visual indicators
+
+- **Warning icon:** Provider nodes show `warning` ThemeIcon (yellow, via `problemsWarningIcon.foreground`) when unhealthy
+- **Description:** Provider nodes show "refresh failed" text when unhealthy
+- **Tooltip:** Provider nodes always show a tooltip with provider name, last successful refresh time (relative), and error details when unhealthy
+- **Unhealthy providers with 0 items:** Still shown in Sources tree so the warning is visible
+
+### What was NOT implemented
+
+- **Status bar item:** Considered but deferred — the tree view indicators are sufficient and don't clutter the status bar for users who don't use providers
+- **Auto-retry with backoff:** Out of scope — providers already handle their own periodic refresh via `BaseProvider.startPeriodicRefresh`
+- **Persisting health state:** Health is transient (in-memory only) since it reflects the current session's connectivity
+
+## References
+
+- Branch: `squad/233-provider-health`
+- `packages/core/src/services/providerRegistry.ts` — `ProviderHealthStatus`, health tracking
+- `packages/core/src/views/sourcesTreeProvider.ts` — warning icon + tooltip
+- `packages/core/src/views/inboxTreeProvider.ts` — warning icon + tooltip
+- `packages/core/src/utils/time.ts` — `formatRelativeTime` utility
+
+---
+
+### Issue #240 — URL-Imported Items Use Synthetic Provider ID (2026-04-15)
+
+**Issue:** #240  
+**Author:** Fenster (Extension Dev)  
+**Status:** Implemented
+
+## Context
+
+The "Create Item from URL" command creates work items from GitHub/ADO PR URLs. These items need a `providerId` and `externalId` for provenance tracking, but they don't come from a registered provider extension.
+
+## Decision
+
+Use `providerId: 'url-import'` and `externalId: <canonical URL>` for URL-imported items.
+
+## Rationale
+
+- Using the canonical URL as `externalId` is unique and stable — it won't collide with provider-assigned external IDs (which use `owner/repo#number` format)
+- A synthetic `providerId` clearly distinguishes manually imported items from provider-discovered ones
+- This avoids coupling the core extension to provider-specific ID formats
+- If a provider later discovers the same PR, the different `externalId` format means no collision — both can coexist (the user may want to track it independently)
+
+## Alternatives Considered
+
+1. **No providerId/externalId:** Would work but loses the ability to detect duplicates or link back to the source
+2. **Match provider ID format:** Would require the core to know about GitHub/ADO provider ID formats, creating tight coupling
+3. **Use `providerId: 'github'`/`'ado'`:** Would conflict with the actual provider extensions' namespace
+
+## Trade-offs
+
+- URL-imported items won't automatically merge with provider-discovered items for the same PR
+- The `url-import` provider won't have a display label in the label cache (falls back to showing nothing)
+
+## References
+
+- Branch: `squad/240-create-from-url`
+- `packages/core/src/commands/createItemFromUrl.ts` — URL parser, REST API fetcher, work item creation
+
+---
+
+### Issue #250 — Show group context in all tree view descriptions (2026-07-24)
+
+**Issue:** #250  
+**Author:** Fenster (Extension Dev)  
+**Status:** Implemented
+
+Inbox items displayed only their title without any repository/project context. Other views (Queue, Focus, History) showed provider labels but not the specific repo/project. Users working across multiple repos found items like "Fix bug #42" ambiguous.
+
+**Decision:** Show the `DiscoveredItem.group` field (e.g., `contoso/webapp`) in tree item descriptions across all views, in both flat and tree layout modes.
+
+- **Inbox**: `group` in tree mode; `group · provider` in flat mode
+- **Queue**: `group` in tree mode; `group · provider` in flat mode
+- **Focus**: `group · state` in tree mode; `group · provider · state` in flat mode
+- **History**: `group · state` in tree mode; `group · provider · state` in flat mode
+
+**Rationale:**
+- The `group` field is already populated by GitHub (`org/repo`) and ADO (`org/project`) providers
+- `buildDescription()` gracefully filters undefined values, so items without a group are unaffected
+- Minor redundancy in tree mode is acceptable for better scanability
+
+**References:**
+- Branch: `squad/250-inbox-show-context`
+- Test coverage: All 970 tests pass
+
+---
+
+### Issue #232 — History Cleanup via Clear Old History Command (2026-07-24)
+
+**Issue:** #232  
+**Author:** Fenster (Extension Dev)  
+**Status:** Implemented
+
+The History view grows unbounded as items are completed/archived. Heavy users accumulate hundreds of items with no way to manage them.
+
+**Decision:** Added a "Clear Old History" command (`devdocket.clearHistory`) that removes Done and Archived items older than `devdocket.historyClearDays` (default: 30 days). The threshold is based on `updatedAt` timestamp.
+
+**Key design choices:**
+1. **Threshold uses `updatedAt`, not `createdAt`**: An item that was recently archived (even if created long ago) should be retained.
+2. **No ITaskStore changes**: `clearOldHistory()` reuses `WorkGraph.deleteItem()` in a loop rather than adding batch-delete to the store interface.
+3. **Modal confirmation**: Uses `vscode.window.showWarningMessage` with `{ modal: true }` to prevent accidental mass deletion.
+
+**What was NOT implemented:**
+- **Auto-pruning / max history size**: Automatic deletion risks surprising users
+- **Text filter/search**: VS Code's native tree view filtering already provides text search
+
+**References:**
+- Branch: `squad/232-history-cleanup`
+- `packages/core/src/services/workGraph.ts` — `clearOldHistory()` method
+- `packages/core/src/commands/commands.ts` — `handleClearHistory()` handler
+- `packages/core/package.json` — configuration + command + menu contributions
+
+---
+
 ### Triage Round 1 Summary — 18 Squad Issues (2026-04-14)
 
 **Lead:** Keaton  

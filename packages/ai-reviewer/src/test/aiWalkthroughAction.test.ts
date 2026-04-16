@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { window, commands } from 'vscode';
+import { window, commands, mockLogOutputChannel } from 'vscode';
 import { AiWalkthroughAction } from '../aiWalkthroughAction';
 import type { RepoManager } from '../repoManager';
 
@@ -46,7 +46,7 @@ describe('AiWalkthroughAction', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockRepoManager = createMockRepoManager();
-    action = new AiWalkthroughAction(mockRepoManager);
+    action = new AiWalkthroughAction(mockRepoManager, mockLogOutputChannel as never);
 
     vi.mocked(window.withProgress).mockImplementation(async (_options: unknown, task: Function) => {
       const progress = { report: vi.fn() };
@@ -162,7 +162,7 @@ describe('AiWalkthroughAction', () => {
   describe('constructor', () => {
     it('requires repoManager', () => {
       const rm = createMockRepoManager();
-      const a = new AiWalkthroughAction(rm);
+      const a = new AiWalkthroughAction(rm, mockLogOutputChannel as never);
       expect(a).toBeDefined();
       expect(a.id).toBe('ai-reviewer.walkthrough');
     });

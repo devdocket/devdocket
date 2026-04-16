@@ -26,6 +26,12 @@ Key files:
 
 ## Learnings
 
+- **Re-requested PR review resurfacing (Issue #243):** Added optional `version` field to `DiscoveredItem` (non-breaking API change). When `handleDiscoveredItems()` sees an `accepted` item whose version differs from the stored version, it resets state to `unseen` so the item reappears in Inbox. `DiscoveredStateRecord` also stores the version, and `DiscoveredStateStore` gained a `getVersion()` method. To avoid a flood of resurfaced items on initial deployment, version backfilling for pre-existing accepted items (stored version `undefined`) does NOT trigger resurfacing — it silently stores the version for future comparison. GitHub provider uses `updated_at` from the Search API as version; ADO provider uses `lastMergeSourceCommit.commitId`. Dismissed items are never resurfaced (per #189).
+
+- **Provider health indicator (Issue #233):** Added `ProviderHealthStatus` interface and health tracking to `ProviderRegistry`. The `refreshWithTimeout` method now tracks three outcomes: successful refresh → `healthy` with `lastRefreshTime` updated, error → `unhealthy` with error message, timeout → `unhealthy` with "Refresh timed out". A new `onDidChangeProviderHealth` event fires whenever health changes, driving tree view refreshes. Sources and Inbox tree providers show a `warning` ThemeIcon (with `problemsWarningIcon.foreground` color) on provider nodes when unhealthy, plus a `description: 'refresh failed'` string. Provider tooltips use `MarkdownString` to show last refresh time (via `formatRelativeTime` utility) and error details. Unhealthy providers with no cached items are still shown in Sources tree so the warning is visible. The `formatRelativeTime` utility lives at `src/utils/time.ts` and outputs "just now", "X minutes ago", "X hours ago", or a locale timestamp for 24h+.
+
+- **Create Item from URL (Issue #240):** Added `devdocket.createItemFromUrl` command that parses GitHub PR and ADO PR URLs, fetches details via REST API, and creates a pre-populated work item. Architecture: `urlParser.ts` handles regex-based URL parsing into typed descriptors (`GitHubPrUrl | AdoPrUrl`), `urlFetcher.ts` handles API calls with silent auth token injection (`vscode.authentication.getSession` with `{ silent: true }`). Items are created with `providerId: 'url-import'` and `externalId` set to the canonical URL. The input box validates URLs inline via `parseSourceUrl()` so users get immediate feedback. The command opens the editor panel after creation so users can review/edit the fetched details. Added as a navigation button in the Queue view title bar and in the Queue empty-state welcome content.
+
 - **Editor metadata section (Issue #217):** Added a read-only metadata section to the editor panel HTML showing state (as a colored badge), provider name (when available via `ProviderLabelCache`), and created/updated timestamps. The `EditorHtmlOptions` interface gained an optional `providerLabel` field. When `providerLabel` is absent but `providerId` exists, the provider row is hidden — the label cache is the source of truth for display names. Threading the label cache required changes through `commands.ts` → `registerCommands()` → `handleEditItem()` → `WorkItemEditorPanel.open()`. State labels use human-friendly text (e.g. `InProgress` → `In Progress`) with CSS badge classes keyed to VS Code theme variables.
 
 - **Dynamic title resolution for provider-backed items (#215):** Added `TitleResolver` type and `resolveTitle()` method to `WorkItemViewProvider` base class in `viewLayout.ts`. Mirrors the existing `LabelResolver` pattern — a closure `(providerId, externalId) => string | undefined` passed from subclass constructors via `ProviderRegistry.getDiscoveredItems()`. All three tree providers (Queue, Focus, History) now display live titles from the provider, falling back to persisted `item.title`. Also wired `onDidChangeDiscoveredItems` to refresh trees when provider data updates.
@@ -92,12 +98,52 @@ Key files:
 
 ### Editor Panel HTML
 - The editor heading (`<h2 id="editor-heading">`) uses `escapeHtml(item.title)` instead of a generic "Edit Work Item" string — keeps it contextual while preserving `aria-labelledby` accessibility (Issue #221)
+
+## Sprint Completion (2026-04-15)
+
+**Status:** COMPLETE — Three parallel features shipped and tested.
+
+### Issues Completed
+- **Issue #243 — Version-Based PR Review Resurface:** Added optional `version` field to `DiscoveredItem`. GitHub PR review provider sets `version` from `updated_at` (API Search), ADO sets from `lastMergeSourceCommit.commitId`. When `handleDiscoveredItems()` detects version change on `accepted` item, resets to `unseen`. Backfill for pre-existing items silently stores version without resurfacing. Dismissed items remain dismissed. All 1551 tests pass.
+
+- **Issue #233 — Provider Health Indicator:** `ProviderRegistry` tracks health with `ProviderHealthStatus` (status, lastRefreshTime, lastError). `refreshWithTimeout()` updates health: success → healthy, error/timeout → unhealthy. New `onDidChangeProviderHealth` event fires on changes. Sources and Inbox tree views show `warning` ThemeIcon on unhealthy providers with error tooltips. Unhealthy providers with 0 items still visible in Sources. All 970 tests pass.
+
+- **Issue #240 — Create Item from URL:** New command `devdocket.createItemFromUrl` parses GitHub PR and ADO PR URLs, fetches details via REST API with silent auth, creates pre-populated work items. Uses synthetic `providerId: 'url-import'` and canonical URL as `externalId` (non-colliding with provider IDs). Input box validates URLs inline. All tests pass.
+
+### Branches Pushed
+- `squad/243-pr-review-resurface`
+- `squad/233-provider-health`
+- `squad/240-create-from-url`
 - `escapeHtml` and `escapeAttr` are local helpers in `editorPanelHtml.ts` — use `escapeHtml` for text content, `escapeAttr` for attribute values
 ### Responsive CSS in Webview Panels
 - Editor panel body CSS in `editorPanelHtml.ts` uses `max-width: min(560px, 100%)` with `margin: 0 auto` for responsive centering — avoids overflow in narrow splits and wasted space in wide layouts
 - Responsive padding (`padding: 20px min(5%, 24px)`) scales with panel width while capping the horizontal padding instead of using only a fixed pixel value
 ### Emoji Removal in Tree Descriptions (Issue #229)
 - Tree item descriptions should use plain text labels, not Unicode emoji — emoji render inconsistently across platforms, fonts, and themes
+
+## Issue #250: Show group context across all tree views (2026-07-24)
+
+**Status:** COMPLETE — All 4 tree providers updated, 970 tests pass
+
+- **Group field visibility**: Added `DiscoveredItem.group` (e.g., `contoso/webapp`) to tree item descriptions in Inbox, Queue, Focus, and History views
+- **Layout-aware descriptions**:
+  - Tree mode: `group` shown inline (minor redundancy acceptable for scanability)
+  - Flat mode: `group` + provider in description for context
+- **Focus view inconsistency fix**: Focus flat mode was missing provider label — added it for parity with other views
+- **buildDescription() utility**: Gracefully filters undefined values, so items without group are unaffected
+- **Implementation**: Changes across `inboxTreeProvider.ts`, `queueTreeProvider.ts`, `focusTreeProvider.ts`, `historyTreeProvider.ts`
+- **Pattern learned**: The `group` field is consistently populated by providers (GitHub: `org/repo`, ADO: `org/project`), making cross-provider consistency straightforward
+
+## Issue #232: Clear Old History command (2026-07-24)
+
+**Status:** COMPLETE — All tests pass, branch squad/232-history-cleanup
+
+- **Feature**: `devdocket.clearHistory` command removes Done and Archived items older than `devdocket.historyClearDays` (default: 30 days)
+- **Time semantics**: Threshold based on `updatedAt` (not `createdAt`) — respects recent state changes
+- **Storage integration**: Reuses `WorkGraph.deleteItem()` in a loop rather than adding batch-delete API; simplifies ITaskStore interface and preserves provenance cleanup logic
+- **Safety**: Modal confirmation dialog (`vscode.window.showWarningMessage`) prevents accidental mass deletion
+- **Alternatives rejected**: Auto-pruning (surprising to users), text filter (VS Code's native `Ctrl+F` already provides this)
+- **Key files**: `workGraph.ts` (`clearOldHistory` method), `commands.ts` (handler), `package.json` (config + command + menu)
 - Fixed in `packages/core/src/views/focusTreeProvider.ts` (`getStateLabel`) and `packages/core/src/views/historyTreeProvider.ts` (`getStateLabel`)
 - State is already conveyed by ThemeIcon (`debug-pause`, `check`, `archive`), so descriptions only need plain text: `"paused"`, `"done"`, `"archived"`
 
@@ -327,3 +373,45 @@ The queue view was displaying raw provider IDs (e.g., `github`, `ado`) in tree i
 - **Walkthrough phase signaling**: The `devdocket-signalPhase` virtual tool in `walkthroughParticipant.ts` controls which followup buttons VS Code displays after each LLM response. Phases map to different button sets in `provideFollowups()`.
 - **Adding a phase value**: To distinguish "last file" from "mid-walkthrough", added `lastFile` to the signalPhase enum. The prompt instructs the LLM to signal `lastFile` instead of `walkthrough` when presenting the final file in the reading order. This is simpler and more reliable than trying to track file indices in the participant code.
 - **Key files**: `walkthroughParticipant.ts` (phase enum + followup provider), `walkthroughPrompt.ts` (LLM instructions for when to signal each phase).
+
+## Issue #249: Accept to Focus from Inbox — already shipped (2025-07-28)
+
+### Outcome
+Feature was already implemented and merged to `dev` via commit `41cf035` (PR #258) before this Squad session. No work needed.
+
+### Learnings
+- **Accept-to-Focus inbox pattern**: `acceptToFocusSingleInboxItem()` creates a WorkItem (or finds existing), sets stateStore to `accepted`, then transitions to `InProgress` in a single flow. Rollback deletes created item if setState fails. Existing focus items show info message; done/archived items show warning.
+- **Batch accept pattern**: `batchAcceptToFocusItems()` collects stateUpdates in an array, then calls `stateStore.setStates()` once at the end. Tracks succeeded/skipped/failed counters for user-facing summary message.
+- **Menu group for inbox actions**: Inline buttons use `group: "inline"`, context menu uses `group: "1_actions"`. The rocket icon `$(rocket)` differentiates "Accept to Focus" from the standard arrow `$(arrow-right)` used for "Accept to Queue".
+
+## Issue #232: Clear Old History command (2026-07-28)
+
+### Summary
+Added `devdocket.clearHistory` command to remove Done/Archived items older than a configurable threshold. Uses `devdocket.historyClearDays` setting (default 30 days). Button appears in History view title bar with `$(clear-all)` icon.
+
+### Implementation
+- `WorkGraph.clearOldHistory(maxAgeDays)` — filters history items by `updatedAt` against a computed epoch cutoff, then deletes matching items via existing `deleteItem()` method.
+- `handleClearHistory()` command handler — reads `historyClearDays` config, shows modal confirmation dialog, calls `clearOldHistory()`, and reports result count.
+- `package.json` — added `devdocket.historyClearDays` config property (number, min 1, default 30), `devdocket.clearHistory` command with `$(clear-all)` icon, and view/title menu entry for History view.
+
+### Key Learnings
+- **Reusing deleteItem for batch operations**: Rather than adding a separate batch-delete to ITaskStore, `clearOldHistory` iterates and calls `deleteItem()` for each item. This reuses the existing provenance index cleanup logic (handling duplicate counts, etc.) and keeps the store interface unchanged.
+- **Config-driven thresholds**: Using VS Code's `workspace.getConfiguration()` lets users customize the age threshold without code changes. The `minimum: 1` constraint in package.json prevents invalid zero/negative values.
+- **No API surface changes**: The `clearOldHistory` method is on `WorkGraph` (internal), not exposed through `DevDocketApi`. The `ITaskStore` interface remains unchanged.
+
+## Issue #250: Inbox items show org/repo context (2026-07-24)
+
+### Summary
+All tree views now show the `DiscoveredItem.group` field (org/repo or org/project) in tree item descriptions, giving users immediate context about where items came from.
+
+### Changes
+- **Inbox tree mode**: Shows `group` as description (was `undefined`)
+- **Queue tree mode**: Shows `group` as description (was `undefined`)
+- **Focus tree mode**: Shows `group · state` (was `state` only)
+- **Focus flat mode**: Shows `group · provider · state` (was `group · state` — added provider label for consistency with Queue/History)
+- **History tree mode**: Shows `group · state` (was `state` only)
+
+### Key Learnings
+- **`buildDescription()` filters gracefully**: The base class helper filters out undefined/empty parts, so adding `item.group` to the argument list is safe for items without a group — they simply don't show it.
+- **Consistency across views**: Focus flat mode was the only view missing the provider label in its description. Adding it aligned Focus with Queue and History patterns.
+- **Tree mode redundancy is acceptable**: In tree mode, group is also visible as a SubGroupNode parent. Showing it in the description too is mildly redundant but provides better scanability when users are looking at individual items.

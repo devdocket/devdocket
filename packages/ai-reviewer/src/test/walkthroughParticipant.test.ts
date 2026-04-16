@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { chat, lm, LanguageModelTextPart, LanguageModelToolCallPart, ChatRequestTurn } from 'vscode';
+import { chat, lm, LanguageModelTextPart, LanguageModelToolCallPart, ChatRequestTurn, mockLogOutputChannel } from 'vscode';
 import { WalkthroughParticipant } from '../walkthroughParticipant';
 import type { RepoManager, WorktreeInfo } from '../repoManager';
 
@@ -56,7 +56,7 @@ describe('WalkthroughParticipant', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockRepoManager = createMockRepoManager();
-    participant = new WalkthroughParticipant(mockRepoManager);
+    participant = new WalkthroughParticipant(mockRepoManager, mockLogOutputChannel as never);
   });
 
   describe('register', () => {
