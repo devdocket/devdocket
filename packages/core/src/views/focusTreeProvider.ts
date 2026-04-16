@@ -3,7 +3,7 @@ import { WorkItem, WorkItemState } from '../models/workItem';
 import { WorkGraph } from '../services/workGraph';
 import { ProviderRegistry } from '../services/providerRegistry';
 import {
-  WorkItemElement, WorkItemViewProvider, isProviderGroupNode, isSubGroupNode,
+  WorkItemElement, WorkItemViewProvider, SubGroupNode, isProviderGroupNode, isSubGroupNode,
 } from './viewLayout';
 
 const DRAG_MIME_TYPE = 'application/vnd.code.tree.devdocket.focus';
@@ -46,8 +46,8 @@ export class FocusTreeProvider extends WorkItemViewProvider implements vscode.Tr
     const treeItem = new vscode.TreeItem(title, vscode.TreeItemCollapsibleState.None);
     treeItem.id = item.id;
     treeItem.description = this.layout === 'tree'
-      ? this.buildDescription(this.getStateLabel(item.state))
-      : this.buildDescription(item.group, this.getStateLabel(item.state));
+      ? undefined
+      : this.buildDescription(item.group, this.getProviderLabel(item.providerId));
     treeItem.tooltip = this.buildTooltip(item, title);
     treeItem.iconPath = this.getIcon(item.state);
 
@@ -62,6 +62,49 @@ export class FocusTreeProvider extends WorkItemViewProvider implements vscode.Tr
     return treeItem;
   }
 
+  getChildren(element?: FocusElement): FocusElement[] {
+    if (!element) {
+      const items = this.getItems();
+      if (this.layout === 'flat') {
+        return this.sortItems(items);
+      }
+      return this.getGroupRootChildren(items);
+    }
+
+    if (isSubGroupNode(element)) {
+      return this.sortItems(
+        this.getItems().filter(i => (i.group?.trim() || undefined) === element.groupName),
+      );
+    }
+
+    return [];
+  }
+
+  /** Group items by `item.group` (repo name) at the top level in tree mode. */
+  private getGroupRootChildren(items: WorkItem[]): (SubGroupNode | WorkItem)[] {
+    const groups = new Set<string>();
+    const ungrouped: WorkItem[] = [];
+
+    for (const item of items) {
+      const g = item.group?.trim();
+      if (g) {
+        groups.add(g);
+      } else {
+        ungrouped.push(item);
+      }
+    }
+
+    const subGroups: SubGroupNode[] = [];
+    for (const groupName of groups) {
+      subGroups.push({ kind: 'subGroup', label: groupName, providerId: undefined, groupName });
+    }
+
+    const sortedSubGroups = subGroups.sort((a, b) => a.label.localeCompare(b.label));
+    const sortedUngrouped = this.sortItems(ungrouped);
+
+    return [...sortedSubGroups, ...sortedUngrouped];
+  }
+
   private getFocusStatePriority(state: WorkItemState): number {
     switch (state) {
       case WorkItemState.InProgress:
@@ -70,16 +113,6 @@ export class FocusTreeProvider extends WorkItemViewProvider implements vscode.Tr
         return 1;
       default:
         return Number.MAX_SAFE_INTEGER;
-    }
-  }
-  private getStateLabel(state: WorkItemState): string {
-    switch (state) {
-      case WorkItemState.InProgress:
-        return 'in progress';
-      case WorkItemState.Paused:
-        return 'paused';
-      default:
-        return state;
     }
   }
 

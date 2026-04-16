@@ -88,7 +88,7 @@ export class SourcesTreeProvider implements vscode.TreeDataProvider<SourcesEleme
             break;
         }
         const treeItem = new vscode.TreeItem(element.title, vscode.TreeItemCollapsibleState.None);
-        treeItem.description = this.buildItemDescription(element.providerId, state);
+        treeItem.description = this.buildItemDescription(element.providerId, element.group, state);
         treeItem.tooltip = this.buildItemTooltip(element);
         treeItem.contextValue = element.url ? 'sourceItem.hasUrl' : 'sourceItem';
         treeItem.iconPath = new vscode.ThemeIcon(icon);
@@ -141,14 +141,13 @@ export class SourcesTreeProvider implements vscode.TreeDataProvider<SourcesEleme
 
   private getProviderChildren(providerId: string): SourcesElement[] {
     const items = this.providerRegistry.getDiscoveredItems(providerId);
-    const groups = new Map<string, DiscoveredItem[]>();
+    const groups = new Set<string>();
     const ungrouped: DiscoveredItem[] = [];
 
     for (const item of items) {
-      if (item.group) {
-        const list = groups.get(item.group) ?? [];
-        list.push(item);
-        groups.set(item.group, list);
+      const normalizedGroup = item.group?.trim();
+      if (normalizedGroup) {
+        groups.add(normalizedGroup);
       } else {
         ungrouped.push(item);
       }
@@ -156,7 +155,7 @@ export class SourcesTreeProvider implements vscode.TreeDataProvider<SourcesEleme
 
     const result: SourcesElement[] = [];
 
-    for (const [groupName] of groups) {
+    for (const groupName of groups) {
       result.push({ kind: 'group', providerId, groupName });
     }
 
@@ -174,7 +173,7 @@ export class SourcesTreeProvider implements vscode.TreeDataProvider<SourcesEleme
   private getGroupChildren(providerId: string, groupName: string): SourceItemNode[] {
     const items = this.providerRegistry.getDiscoveredItems(providerId);
     return items
-      .filter((item) => item.group === groupName)
+      .filter((item) => item.group?.trim() === groupName)
       .map((item) => this.toItemNode(providerId, item))
       .sort((a, b) => a.title.localeCompare(b.title));
   }
@@ -187,13 +186,15 @@ export class SourcesTreeProvider implements vscode.TreeDataProvider<SourcesEleme
       title: item.title,
       description: item.description,
       url: item.url,
-      group: item.group,
+      group: item.group?.trim() || undefined,
     };
   }
 
-  private buildItemDescription(providerId: string, state: InboxState | undefined): string | undefined {
+  private buildItemDescription(providerId: string, group: string | undefined, state: InboxState | undefined): string | undefined {
     const parts: string[] = [];
     if (this._layoutState.value === 'flat') {
+      const groupLabel = group?.trim();
+      if (groupLabel && groupLabel.length > 0) { parts.push(groupLabel); }
       const label = this.providerRegistry.getProviderLabel(providerId)?.trim();
       if (label && label.length > 0) { parts.push(label); }
     }

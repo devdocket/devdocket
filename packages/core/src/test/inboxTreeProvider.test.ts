@@ -262,6 +262,33 @@ describe('InboxTreeProvider', () => {
       expect(children[0].kind).toBe('item');
       expect((children[0] as InboxItem).title).toBe('Ungrouped');
     });
+
+    it('should trim whitespace from group names when grouping', () => {
+      registry._setItems('gh', [
+        { externalId: '1', title: 'Issue A', group: ' repo-one ' },
+        { externalId: '2', title: 'Issue B', group: 'repo-one' },
+      ]);
+
+      const children = provider.getChildren(providerNode('gh'));
+      expect(children).toHaveLength(1);
+      expect(children[0].kind).toBe('group');
+      expect((children[0] as InboxGroupNode).groupName).toBe('repo-one');
+      expect((children[0] as InboxGroupNode).unseenCount).toBe(2);
+    });
+
+    it('should treat whitespace-only group as ungrouped', () => {
+      registry._setItems('gh', [
+        { externalId: '1', title: 'Whitespace', group: '  ' },
+        { externalId: '2', title: 'Normal', group: 'repo' },
+      ]);
+
+      const children = provider.getChildren(providerNode('gh'));
+      expect(children).toHaveLength(2);
+      const group = children.find(c => c.kind === 'group') as InboxGroupNode;
+      const item = children.find(c => c.kind === 'item') as InboxItem;
+      expect(group.groupName).toBe('repo');
+      expect(item.title).toBe('Whitespace');
+    });
   });
 
   describe('getTreeItem', () => {
@@ -319,7 +346,7 @@ describe('InboxTreeProvider', () => {
       expect(treeItem.description).toBe('octocat/repo · gh');
     });
 
-    it('should omit group description in tree layout', () => {
+    it('should show undefined description in tree layout', () => {
       const item: InboxItem = { kind: 'item', providerId: 'gh', externalId: '1', title: 'Bug', group: 'octocat/repo' };
       const treeItem = provider.getTreeItem(item);
       expect(treeItem.description).toBeUndefined();

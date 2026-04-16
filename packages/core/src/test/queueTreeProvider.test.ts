@@ -143,7 +143,7 @@ describe('QueueTreeProvider', () => {
       expect(treeItem.description).toBe('my-org/my-repo');
     });
 
-    it('omits description in tree layout since items are nested under provider group', async () => {
+    it('shows undefined description in tree layout', async () => {
       const registry = createMockProviderRegistry();
       const queueWithRegistry = new QueueTreeProvider(graph, registry as any);
       queueWithRegistry.layout = 'tree';
