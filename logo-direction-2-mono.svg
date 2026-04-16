@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128">
+  <!-- Stacked layers representing organized docket -->
+  <!-- Bottom layer -->
+  <rect x="20" y="80" width="88" height="16" rx="4" fill="#000000" opacity="0.4"/>
+  <!-- Middle layer -->
+  <rect x="16" y="56" width="96" height="20" rx="5" fill="#000000" opacity="0.65"/>
+  <!-- Top layer - main focus -->
+  <rect x="12" y="28" width="104" height="24" rx="6" fill="#000000"/>
+  <!-- Accent notch on top layer suggesting active/current item -->
+  <rect x="20" y="34" width="6" height="12" rx="2" fill="#FFFFFF"/>
+  <!-- Second notch -->
+  <rect x="32" y="34" width="50" height="5" rx="2" fill="#FFFFFF" opacity="0.9"/>
+  <rect x="32" y="43" width="30" height="3" rx="1" fill="#FFFFFF" opacity="0.6"/>
+</svg>
