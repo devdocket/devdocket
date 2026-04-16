@@ -78,7 +78,7 @@ export class WalkthroughParticipant {
       );
       return { metadata: { phase: 'no-url' } };
     }
-    this.log.info(`Extracted PR URL: ${prUrl}`);
+    this.log.debug(`Extracted PR URL: ${prUrl}`);
 
     // Ensure worktree
     let info = this.sessions.get(prUrl) ?? this.repoManager.getWorktreeInfo(prUrl);
