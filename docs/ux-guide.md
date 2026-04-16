@@ -204,7 +204,7 @@ Registers an **AI Code Review** action that can be run on any work item whose UR
 |---------|------|---------|-------------|
 | `devdocket.logLevel` | `string` | `"info"` | Log level for the DevDocket output channel. Valid values: `debug`, `info`, `warn`, `error`. |
 | `devdocket.showInboxNotifications` | `boolean` | `true` | Show a notification when new items arrive in the Inbox. |
-| `devdocket.historyClearDays` | `integer` | `30` | Age threshold in days for the **Clear Old History** command. Items in History whose last state change is older than this many days are removed. Minimum: 1. |
+| `devdocket.historyClearDays` | `integer` | `30` | Age threshold in days for the **Clear Old History** command. Items in History whose last modification is older than this many days are removed. Minimum: 1. |
 
 ## Keyboard Shortcuts
 
