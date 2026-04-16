@@ -1,7 +1,8 @@
 /**
- * Fetches work item details from source URLs (GitHub PRs, ADO PRs).
+ * Fetches work item details from source URLs (GitHub PRs/issues, ADO PRs/work items).
  * Uses public REST APIs where possible, falling back to authenticated
  * requests when a VS Code auth session is available.
+ * On 404, retries with interactive auth to handle private repos.
  */
 
 import * as vscode from 'vscode';
@@ -26,19 +27,21 @@ export async function fetchItemDetails(parsed: ParsedUrl, signal?: AbortSignal):
   switch (parsed.type) {
     case 'github-pr':
       return fetchGitHubPr(parsed.owner, parsed.repo, parsed.number, signal);
+    case 'github-issue':
+      return fetchGitHubIssue(parsed.owner, parsed.repo, parsed.number, signal);
     case 'ado-pr':
       return fetchAdoPr(parsed.org, parsed.project, parsed.repo, parsed.id, signal);
+    case 'ado-workitem':
+      return fetchAdoWorkItem(parsed.org, parsed.project, parsed.id, signal);
   }
 }
 
-async function fetchGitHubPr(owner: string, repo: string, number: number, signal?: AbortSignal): Promise<FetchedItemDetails> {
-  const apiUrl = `https://api.github.com/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/pulls/${number}`;
+/** Try silent GitHub auth first; on 404 retry with interactive auth prompt. */
+async function getGitHubHeaders(signal?: AbortSignal): Promise<Record<string, string>> {
   const headers: Record<string, string> = {
     'Accept': 'application/vnd.github+json',
     'User-Agent': 'DevDocket-VSCode',
   };
-
-  // Try to get a GitHub auth token for private repos
   try {
     const session = await vscode.authentication.getSession('github', ['repo'], { silent: true });
     if (session) {
@@ -47,20 +50,119 @@ async function fetchGitHubPr(owner: string, repo: string, number: number, signal
   } catch {
     logger.debug('No GitHub auth session available, using unauthenticated request');
   }
+  return headers;
+}
 
-  const response = await fetch(apiUrl, { headers, signal });
-  if (!response.ok) {
-    if (response.status === 404) {
-      throw new Error(`GitHub PR not found: ${owner}/${repo}#${number}. It may be private or deleted.`);
+async function retryGitHubWithAuth(apiUrl: string, signal?: AbortSignal): Promise<Response | undefined> {
+  try {
+    const session = await vscode.authentication.getSession('github', ['repo'], { createIfNone: true });
+    if (session) {
+      const headers: Record<string, string> = {
+        'Accept': 'application/vnd.github+json',
+        'User-Agent': 'DevDocket-VSCode',
+        'Authorization': `Bearer ${session.accessToken}`,
+      };
+      return await fetch(apiUrl, { headers, signal });
     }
-    if (response.status === 401 || response.status === 403) {
-      throw new Error(`GitHub access denied for ${owner}/${repo}#${number}. The repo may be private — sign in to GitHub in VS Code, or check rate limits.`);
+  } catch {
+    logger.debug('User declined GitHub authentication prompt');
+  }
+  return undefined;
+}
+
+/** Try silent ADO auth first; on 404 retry with interactive auth prompt. */
+async function getAdoHeaders(signal?: AbortSignal): Promise<Record<string, string>> {
+  const headers: Record<string, string> = {
+    'Accept': 'application/json',
+    'User-Agent': 'DevDocket-VSCode',
+  };
+  try {
+    const session = await vscode.authentication.getSession('microsoft', [ADO_AUTH_SCOPE], { silent: true });
+    if (session) {
+      headers['Authorization'] = `Bearer ${session.accessToken}`;
     }
-    throw new Error(`GitHub API error: ${response.status} ${response.statusText}`);
+  } catch {
+    logger.debug('No Azure DevOps auth session available, using unauthenticated request');
+  }
+  return headers;
+}
+
+async function retryAdoWithAuth(apiUrl: string, signal?: AbortSignal): Promise<Response | undefined> {
+  try {
+    const session = await vscode.authentication.getSession('microsoft', [ADO_AUTH_SCOPE], { createIfNone: true });
+    if (session) {
+      const headers: Record<string, string> = {
+        'Accept': 'application/json',
+        'User-Agent': 'DevDocket-VSCode',
+        'Authorization': `Bearer ${session.accessToken}`,
+      };
+      return await fetch(apiUrl, { headers, signal });
+    }
+  } catch {
+    logger.debug('User declined Azure DevOps authentication prompt');
+  }
+  return undefined;
+}
+
+function handleGitHubError(response: Response, label: string): never {
+  if (response.status === 404) {
+    throw new Error(`${label} not found. It may be private or deleted.`);
+  }
+  if (response.status === 401 || response.status === 403) {
+    throw new Error(`GitHub access denied for ${label}. The repo may be private — sign in to GitHub in VS Code, or check rate limits.`);
+  }
+  throw new Error(`GitHub API error: ${response.status} ${response.statusText}`);
+}
+
+function handleAdoError(response: Response, label: string): never {
+  if (response.status === 404) {
+    throw new Error(`${label} not found. It may be private or deleted.`);
+  }
+  if (response.status === 401 || response.status === 403) {
+    throw new Error(`ADO authentication required for ${label}. Sign in to Azure DevOps in VS Code.`);
+  }
+  throw new Error(`Azure DevOps API error: ${response.status} ${response.statusText}`);
+}
+
+async function fetchGitHubPr(owner: string, repo: string, number: number, signal?: AbortSignal): Promise<FetchedItemDetails> {
+  const apiUrl = `https://api.github.com/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/pulls/${number}`;
+  const label = `GitHub PR ${owner}/${repo}#${number}`;
+  const headers = await getGitHubHeaders(signal);
+
+  let response = await fetch(apiUrl, { headers, signal });
+
+  // On 404, retry with interactive auth in case the repo is private
+  if (response.status === 404) {
+    const retryResponse = await retryGitHubWithAuth(apiUrl, signal);
+    if (retryResponse) { response = retryResponse; }
   }
 
-  const data = await response.json() as { title: string; body: string | null; html_url: string };
+  if (!response.ok) { handleGitHubError(response, label); }
 
+  const data = await response.json() as { title: string; body: string | null; html_url: string };
+  return {
+    title: `${owner}/${repo}#${number}: ${data.title}`,
+    notes: data.body ?? '',
+    url: data.html_url,
+    group: `${owner}/${repo}`,
+  };
+}
+
+async function fetchGitHubIssue(owner: string, repo: string, number: number, signal?: AbortSignal): Promise<FetchedItemDetails> {
+  const apiUrl = `https://api.github.com/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/issues/${number}`;
+  const label = `GitHub issue ${owner}/${repo}#${number}`;
+  const headers = await getGitHubHeaders(signal);
+
+  let response = await fetch(apiUrl, { headers, signal });
+
+  if (response.status === 404) {
+    const retryResponse = await retryGitHubWithAuth(apiUrl, signal);
+    if (retryResponse) { response = retryResponse; }
+  }
+
+  if (!response.ok) { handleGitHubError(response, label); }
+
+  const data = await response.json() as { title: string; body: string | null; html_url: string };
   return {
     title: `${owner}/${repo}#${number}: ${data.title}`,
     notes: data.body ?? '',
@@ -71,40 +173,47 @@ async function fetchGitHubPr(owner: string, repo: string, number: number, signal
 
 async function fetchAdoPr(org: string, project: string, repo: string, id: number, signal?: AbortSignal): Promise<FetchedItemDetails> {
   const apiUrl = `https://dev.azure.com/${encodeURIComponent(org)}/${encodeURIComponent(project)}/_apis/git/repositories/${encodeURIComponent(repo)}/pullrequests/${id}?api-version=7.1`;
-  const headers: Record<string, string> = {
-    'Accept': 'application/json',
-    'User-Agent': 'DevDocket-VSCode',
-  };
+  const label = `ADO PR ${org}/${project}/${repo}!${id}`;
+  const headers = await getAdoHeaders(signal);
 
-  // Try to get an Azure DevOps auth token
-  try {
-    const session = await vscode.authentication.getSession('microsoft', [
-      ADO_AUTH_SCOPE,
-    ], { silent: true });
-    if (session) {
-      headers['Authorization'] = `Bearer ${session.accessToken}`;
-    }
-  } catch {
-    logger.debug('No Azure DevOps auth session available, using unauthenticated request');
+  let response = await fetch(apiUrl, { headers, signal });
+
+  if (response.status === 404) {
+    const retryResponse = await retryAdoWithAuth(apiUrl, signal);
+    if (retryResponse) { response = retryResponse; }
   }
 
-  const response = await fetch(apiUrl, { headers, signal });
-  if (!response.ok) {
-    if (response.status === 404) {
-      throw new Error(`ADO PR not found: ${org}/${project}/${repo}!${id}. It may be private or deleted.`);
-    }
-    if (response.status === 401 || response.status === 403) {
-      throw new Error(`ADO authentication required for ${org}/${project}. Sign in to Azure DevOps in VS Code.`);
-    }
-    throw new Error(`Azure DevOps API error: ${response.status} ${response.statusText}`);
-  }
+  if (!response.ok) { handleAdoError(response, label); }
 
   const data = await response.json() as { title: string; description: string | null };
   const htmlUrl = `https://dev.azure.com/${encodeURIComponent(org)}/${encodeURIComponent(project)}/_git/${encodeURIComponent(repo)}/pullrequest/${id}`;
-
   return {
     title: `${org}/${project}#${id}: ${data.title}`,
     notes: data.description ?? '',
+    url: htmlUrl,
+    group: `${org}/${project}`,
+  };
+}
+
+async function fetchAdoWorkItem(org: string, project: string, id: number, signal?: AbortSignal): Promise<FetchedItemDetails> {
+  const apiUrl = `https://dev.azure.com/${encodeURIComponent(org)}/${encodeURIComponent(project)}/_apis/wit/workitems/${id}?api-version=7.1`;
+  const label = `ADO work item ${org}/${project}#${id}`;
+  const headers = await getAdoHeaders(signal);
+
+  let response = await fetch(apiUrl, { headers, signal });
+
+  if (response.status === 404) {
+    const retryResponse = await retryAdoWithAuth(apiUrl, signal);
+    if (retryResponse) { response = retryResponse; }
+  }
+
+  if (!response.ok) { handleAdoError(response, label); }
+
+  const data = await response.json() as { fields: { 'System.Title': string; 'System.Description': string | null } };
+  const htmlUrl = `https://dev.azure.com/${encodeURIComponent(org)}/${encodeURIComponent(project)}/_workitems/edit/${id}`;
+  return {
+    title: `${org}/${project}#${id}: ${data.fields['System.Title']}`,
+    notes: data.fields['System.Description'] ?? '',
     url: htmlUrl,
     group: `${org}/${project}`,
   };

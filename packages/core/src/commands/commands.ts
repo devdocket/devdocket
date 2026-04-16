@@ -235,12 +235,12 @@ async function handleCreateItemFromUrl(
   labelCache: ProviderLabelCache,
 ): Promise<void> {
   const url = await vscode.window.showInputBox({
-    prompt: 'Enter a GitHub PR or Azure DevOps PR URL',
-    placeHolder: 'https://github.com/owner/repo/pull/123',
+    prompt: 'Enter a GitHub PR/issue or Azure DevOps PR/work item URL',
+    placeHolder: 'https://github.com/owner/repo/pull/123 or /issues/123',
     validateInput: (value) => {
       if (!value.trim()) { return 'URL is required'; }
       if (!parseSourceUrl(value)) {
-        return 'Unsupported URL format. Supported: GitHub PRs, Azure DevOps PRs';
+        return 'Unsupported URL format. Supported: GitHub PRs and issues, Azure DevOps PRs and work items';
       }
       return undefined;
     },
