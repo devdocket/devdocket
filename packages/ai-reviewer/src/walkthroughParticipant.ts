@@ -230,7 +230,11 @@ export class WalkthroughParticipant {
 
           hasToolCalls = true;
           this.log.info(`Tool call: ${part.name} (callId: ${part.callId})`);
-          this.log.debug(`Tool input: ${JSON.stringify(part.input)}`);
+          try {
+            this.log.debug(`Tool input: ${JSON.stringify(part.input)}`);
+          } catch {
+            this.log.debug(`Tool input: [unserializable]`);
+          }
           try {
             const result = await vscode.lm.invokeTool(
               part.name,
