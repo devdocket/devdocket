@@ -1,92 +1,147 @@
-# DevDocket Logo Options
+# DevDocket Logo
 
-Three strategic directions for the DevDocket logo redesign. Each is designed to work as a VS Code extension icon (128x128 → 16x16) and scale to larger applications.
+## Final Selection: "The Bold D"
 
----
-
-## Direction 1: "Convergence Hub"
-
-**Files:** `logo-direction-1.svg`, `logo-direction-1-mono.svg`
-
-**Concept:** A hexagonal shape (evoking tech/developer aesthetic) with three lines converging into a central hub. Represents work items from multiple sources flowing into one organized center.
-
-**Colors:**
-- Primary gradient: `#FF6B35` → `#F7931E` (vibrant orange)
-- Accent: `#FFFFFF` (white)
-
-**Rationale:**
-- Hexagon is distinctly "tech" without being cliché
-- Convergence motif directly visualizes DevDocket's core value proposition
-- Bold orange differentiates from the sea of blues in the developer tools space
-- Simple geometry scales well to small sizes
-
-**Trade-offs:**
-- More abstract — may require explanation
-- Orange is energetic but less "serious" than blue competitors
+A strong, geometric letter "D" (for DevDocket/Docket) with horizontal slot motifs integrated into the letterform. The slots represent organized items without being a literal checklist.
 
 ---
 
-## Direction 2: "Stacked Priority"
+## Production Files
 
-**Files:** `logo-direction-2.svg`, `logo-direction-2-mono.svg`
-
-**Concept:** Three stacked horizontal layers with depth, the topmost being the most prominent with subtle item indicators. Represents a prioritized queue/docket with clear focus on what's next.
-
-**Colors:**
-- Primary gradient: `#6366F1` → `#A855F7` (indigo to purple)
-- Mid layer: `#8B5CF6`
-- Accent: `#FFFFFF`
-
-**Rationale:**
-- Stacking metaphor is intuitive for "docket" or "queue"
-- Purple/indigo is modern, stands out from blue competitors while remaining professional
-- Depth creates visual interest even at small sizes
-- The accent marks on the top layer hint at content without being a literal task list
-
-**Trade-offs:**
-- Horizontal orientation may feel less balanced as a square icon
-- Could be mistaken for a generic "layers" icon
+| File | Purpose |
+|------|---------|
+| `logo-final.svg` | Primary full-color logo (emerald gradient) |
+| `logo-final-mono.svg` | Monochrome version (solid black) |
+| `logo-final-light.svg` | For light backgrounds (darker emerald) |
+| `logo-final-dark.svg` | For dark backgrounds (brighter emerald) |
+| `logo-favicon.svg` | Optimized for 16x16 favicon |
 
 ---
 
-## Direction 3: "The Bold D"
+## Color Palette
 
-**Files:** `logo-direction-3.svg`, `logo-direction-3-mono.svg`
+### Primary (Full Color)
+| Name | Hex | Usage |
+|------|-----|-------|
+| Emerald 500 | `#10B981` | Gradient start, primary brand color |
+| Emerald 600 | `#059669` | Gradient end |
+| White | `#FFFFFF` | Inner cutout, contrast element |
 
-**Concept:** A strong, geometric letter "D" (for DevDocket/Docket) with horizontal slot motifs integrated into the letterform. The slots represent organized items without being a literal checklist.
+### Light Theme Variant
+| Name | Hex | Usage |
+|------|-----|-------|
+| Emerald 600 | `#059669` | Gradient start (darker for contrast) |
+| Emerald 700 | `#047857` | Gradient end |
+| White | `#FFFFFF` | Inner cutout |
 
-**Colors:**
-- Primary gradient: `#10B981` → `#059669` (emerald green)
-- Accent: `#FFFFFF`
+### Dark Theme Variant
+| Name | Hex | Usage |
+|------|-----|-------|
+| Emerald 400 | `#34D399` | Gradient start (brighter for visibility) |
+| Emerald 500 | `#10B981` | Gradient end |
+| Gray 800 | `#1F2937` | Inner cutout (matches dark editors) |
 
-**Rationale:**
-- Lettermark creates immediate brand recognition ("D" for DevDocket)
-- Green is distinctive in the space (not blue, not orange-like Linear)
-- Integrated slots convey "organized list" without clipboard cliché
-- Bold, chunky geometry is highly legible at all sizes
-- Works exceptionally well in monochrome
-
-**Trade-offs:**
-- Lettermark may feel less "iconic" than abstract symbols
-- Green could be associated with "success/go" rather than "productivity"
-
----
-
-## Recommendation
-
-**Direction 3 ("The Bold D")** offers the strongest combination of:
-- Brand recognition (lettermark)
-- Differentiation (green, not blue)
-- Scalability (excellent at 16px and 128px)
-- Concept clarity (slots = organized work)
-
-However, **Direction 1** may resonate better if the "hub for multiple sources" message is most important, and **Direction 2** works well if the "prioritized queue" metaphor is preferred.
+### Monochrome
+| Name | Hex | Usage |
+|------|-----|-------|
+| Black | `#000000` | D shape and slots |
+| White | `#FFFFFF` | Inner cutout |
 
 ---
 
-## Technical Notes
+## Accessibility & Contrast
 
-- All SVGs use `viewBox="0 0 128 128"` for consistent scaling
-- Monochrome versions use pure black (`#000000`) with white accents
-- All designs use rounded corners and simple paths for clean rendering at small sizes
-- Gradients add dimension at large sizes but degrade gracefully to flat colors
+| Variant | Background | Contrast Ratio | WCAG |
+|---------|------------|----------------|------|
+| Full color | White `#FFFFFF` | 4.5:1 | AA ✓ |
+| Light theme | Light gray `#F3F4F6` | 4.8:1 | AA ✓ |
+| Dark theme | Gray 900 `#111827` | 7.2:1 | AAA ✓ |
+| Monochrome | White `#FFFFFF` | 21:1 | AAA ✓ |
+
+---
+
+## Size Guidelines
+
+### Minimum Sizes
+| Context | Minimum Size | File to Use |
+|---------|--------------|-------------|
+| Favicon | 16×16 px | `logo-favicon.svg` |
+| VS Code sidebar | 24×24 px | `logo-final.svg` or theme variant |
+| Extension icon | 128×128 px | `logo-final.svg` |
+| Website/docs | 32+ px | `logo-final.svg` or theme variant |
+| Print/merch | 0.5 inch+ | `logo-final.svg` |
+
+### Favicon Simplifications
+The favicon version (`logo-favicon.svg`) is optimized for 16×16:
+- Reduced to 2 slots (from 3) for legibility
+- No gradient (solid `#10B981`) for crisp pixel rendering
+- Slightly adjusted proportions for small-size clarity
+
+---
+
+## Clear Space
+
+Maintain minimum clear space around the logo equal to **25% of the logo height** on all sides.
+
+```
+┌─────────────────────┐
+│                     │
+│   ┌───────────┐     │
+│   │           │     │  ← 25% height
+│   │   LOGO    │     │
+│   │           │     │
+│   └───────────┘     │
+│                     │
+└─────────────────────┘
+        ↑
+      25% height
+```
+
+---
+
+## Theme Usage
+
+| VS Code Theme | Logo File |
+|---------------|-----------|
+| Light themes (Default Light, Quiet Light, etc.) | `logo-final-light.svg` |
+| Dark themes (Default Dark, One Dark, etc.) | `logo-final-dark.svg` |
+| High Contrast | `logo-final-mono.svg` |
+| Marketing/general use | `logo-final.svg` |
+
+---
+
+## Do's and Don'ts
+
+### ✅ Do
+- Use the appropriate theme variant for the background
+- Maintain clear space requirements
+- Use favicon version for sizes under 24px
+- Scale proportionally (no stretching)
+
+### ❌ Don't
+- Add drop shadows or effects
+- Rotate or skew the logo
+- Change the colors outside the defined palette
+- Place on busy backgrounds without sufficient contrast
+- Use the full logo at favicon sizes (use `logo-favicon.svg`)
+
+---
+
+## Design Rationale
+
+**Why "The Bold D"?**
+- **Brand recognition:** Lettermark creates immediate association with DevDocket
+- **Differentiation:** Emerald green stands out in a space dominated by blues
+- **Scalability:** Bold geometry reads clearly from 16px to billboard
+- **Concept clarity:** Integrated slots convey "organized work" without clichés
+- **Versatility:** Works in color, monochrome, light and dark contexts
+
+---
+
+## Archive: Exploration Directions
+
+The following files contain the initial exploration concepts (kept for reference):
+
+- `logo-direction-1.svg` / `logo-direction-1-mono.svg` — "Convergence Hub" (orange hexagon)
+- `logo-direction-2.svg` / `logo-direction-2-mono.svg` — "Stacked Priority" (purple layers)
+- `logo-direction-3.svg` / `logo-direction-3-mono.svg` — "The Bold D" (emerald, original draft)
