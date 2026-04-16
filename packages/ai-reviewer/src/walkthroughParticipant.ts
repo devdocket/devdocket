@@ -217,7 +217,7 @@ export class WalkthroughParticipant {
           // Handle phase signal locally — not a real tool call, don't trigger another loop
           if (part.name === 'devdocket-signalPhase') {
             const input = part.input as { phase?: string };
-            this.log.info(`Phase signal: ${input.phase}`);
+            this.log.debug(`Phase signal: ${input.phase}`);
             if (input.phase) {
               phase = input.phase;
             }
