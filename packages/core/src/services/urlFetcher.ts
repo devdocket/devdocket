@@ -37,7 +37,7 @@ export async function fetchItemDetails(parsed: ParsedUrl, signal?: AbortSignal):
 }
 
 /** Try silent GitHub auth first; on 404 retry with interactive auth prompt. */
-async function getGitHubHeaders(signal?: AbortSignal): Promise<Record<string, string>> {
+async function getGitHubHeaders(): Promise<Record<string, string>> {
   const headers: Record<string, string> = {
     'Accept': 'application/vnd.github+json',
     'User-Agent': 'DevDocket-VSCode',
@@ -71,7 +71,7 @@ async function retryGitHubWithAuth(apiUrl: string, signal?: AbortSignal): Promis
 }
 
 /** Try silent ADO auth first; on 404 retry with interactive auth prompt. */
-async function getAdoHeaders(signal?: AbortSignal): Promise<Record<string, string>> {
+async function getAdoHeaders(): Promise<Record<string, string>> {
   const headers: Record<string, string> = {
     'Accept': 'application/json',
     'User-Agent': 'DevDocket-VSCode',
@@ -127,12 +127,12 @@ function handleAdoError(response: Response, label: string): never {
 async function fetchGitHubPr(owner: string, repo: string, number: number, signal?: AbortSignal): Promise<FetchedItemDetails> {
   const apiUrl = `https://api.github.com/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/pulls/${number}`;
   const label = `GitHub PR ${owner}/${repo}#${number}`;
-  const headers = await getGitHubHeaders(signal);
+  const headers = await getGitHubHeaders();
 
   let response = await fetch(apiUrl, { headers, signal });
 
   // On 404, retry with interactive auth in case the repo is private
-  if (response.status === 404) {
+  if (response.status === 404 && !signal?.aborted) {
     const retryResponse = await retryGitHubWithAuth(apiUrl, signal);
     if (retryResponse) { response = retryResponse; }
   }
@@ -151,11 +151,11 @@ async function fetchGitHubPr(owner: string, repo: string, number: number, signal
 async function fetchGitHubIssue(owner: string, repo: string, number: number, signal?: AbortSignal): Promise<FetchedItemDetails> {
   const apiUrl = `https://api.github.com/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/issues/${number}`;
   const label = `GitHub issue ${owner}/${repo}#${number}`;
-  const headers = await getGitHubHeaders(signal);
+  const headers = await getGitHubHeaders();
 
   let response = await fetch(apiUrl, { headers, signal });
 
-  if (response.status === 404) {
+  if (response.status === 404 && !signal?.aborted) {
     const retryResponse = await retryGitHubWithAuth(apiUrl, signal);
     if (retryResponse) { response = retryResponse; }
   }
@@ -174,11 +174,11 @@ async function fetchGitHubIssue(owner: string, repo: string, number: number, sig
 async function fetchAdoPr(org: string, project: string, repo: string, id: number, signal?: AbortSignal): Promise<FetchedItemDetails> {
   const apiUrl = `https://dev.azure.com/${encodeURIComponent(org)}/${encodeURIComponent(project)}/_apis/git/repositories/${encodeURIComponent(repo)}/pullrequests/${id}?api-version=7.1`;
   const label = `ADO PR ${org}/${project}/${repo}!${id}`;
-  const headers = await getAdoHeaders(signal);
+  const headers = await getAdoHeaders();
 
   let response = await fetch(apiUrl, { headers, signal });
 
-  if (response.status === 404) {
+  if (response.status === 404 && !signal?.aborted) {
     const retryResponse = await retryAdoWithAuth(apiUrl, signal);
     if (retryResponse) { response = retryResponse; }
   }
@@ -198,11 +198,11 @@ async function fetchAdoPr(org: string, project: string, repo: string, id: number
 async function fetchAdoWorkItem(org: string, project: string, id: number, signal?: AbortSignal): Promise<FetchedItemDetails> {
   const apiUrl = `https://dev.azure.com/${encodeURIComponent(org)}/${encodeURIComponent(project)}/_apis/wit/workitems/${id}?api-version=7.1`;
   const label = `ADO work item ${org}/${project}#${id}`;
-  const headers = await getAdoHeaders(signal);
+  const headers = await getAdoHeaders();
 
   let response = await fetch(apiUrl, { headers, signal });
 
-  if (response.status === 404) {
+  if (response.status === 404 && !signal?.aborted) {
     const retryResponse = await retryAdoWithAuth(apiUrl, signal);
     if (retryResponse) { response = retryResponse; }
   }

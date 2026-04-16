@@ -123,6 +123,52 @@ describe('fetchItemDetails', () => {
       const headers = mockFetch.mock.calls[0][1].headers;
       expect(headers['Authorization']).toBeUndefined();
     });
+
+    it('retries with interactive auth on 404 and succeeds', async () => {
+      // First call: silent auth returns no session, fetch returns 404
+      // Second call: interactive auth returns a session, retry fetch succeeds
+      vi.mocked(authentication.getSession)
+        .mockResolvedValueOnce(undefined as any) // silent auth — no session
+        .mockResolvedValueOnce({
+          accessToken: 'interactive-token',
+          id: 'test',
+          account: { id: '1', label: 'user' },
+          scopes: ['repo'],
+        });
+      mockFetch
+        .mockResolvedValueOnce({ ok: false, status: 404, statusText: 'Not Found' })
+        .mockResolvedValueOnce({
+          ok: true,
+          json: async () => ({ title: 'Private PR', body: 'secret', html_url: 'https://github.com/octocat/hello/pull/42' }),
+        });
+
+      const result = await fetchItemDetails(parsed);
+      expect(result.title).toBe('octocat/hello#42: Private PR');
+      expect(result.notes).toBe('secret');
+      expect(mockFetch).toHaveBeenCalledTimes(2);
+      // Second fetch should have the interactive auth token
+      const retryHeaders = mockFetch.mock.calls[1][1].headers;
+      expect(retryHeaders['Authorization']).toBe('Bearer interactive-token');
+    });
+
+    it('skips auth retry when signal is already aborted', async () => {
+      const controller = new AbortController();
+      controller.abort();
+      vi.mocked(authentication.getSession)
+        .mockResolvedValueOnce(undefined as any)
+        .mockResolvedValueOnce({
+          accessToken: 'should-not-use',
+          id: 'test',
+          account: { id: '1', label: 'user' },
+          scopes: ['repo'],
+        });
+      mockFetch.mockResolvedValue({ ok: false, status: 404, statusText: 'Not Found' });
+
+      await expect(fetchItemDetails(parsed, controller.signal)).rejects.toThrow(/not found/i);
+      expect(mockFetch).toHaveBeenCalledTimes(1);
+      // Silent auth is called once; interactive auth (createIfNone) should never be called
+      expect(authentication.getSession).toHaveBeenCalledTimes(1);
+    });
   });
 
   describe('ADO PR', () => {
@@ -211,6 +257,48 @@ describe('fetchItemDetails', () => {
       await fetchItemDetails(parsed);
       const headers = mockFetch.mock.calls[0][1].headers;
       expect(headers['Authorization']).toBeUndefined();
+    });
+
+    it('retries with interactive auth on 404 and succeeds', async () => {
+      vi.mocked(authentication.getSession)
+        .mockResolvedValueOnce(undefined as any) // silent auth — no session
+        .mockResolvedValueOnce({
+          accessToken: 'ado-interactive-token',
+          id: 'test',
+          account: { id: '1', label: 'user' },
+          scopes: ['499b84ac-1321-427f-aa17-267ca6975798/.default'],
+        });
+      mockFetch
+        .mockResolvedValueOnce({ ok: false, status: 404, statusText: 'Not Found' })
+        .mockResolvedValueOnce({
+          ok: true,
+          json: async () => ({ title: 'Private ADO PR', description: 'secret ado' }),
+        });
+
+      const result = await fetchItemDetails(parsed);
+      expect(result.title).toBe('myorg/myproj#7: Private ADO PR');
+      expect(result.notes).toBe('secret ado');
+      expect(mockFetch).toHaveBeenCalledTimes(2);
+      const retryHeaders = mockFetch.mock.calls[1][1].headers;
+      expect(retryHeaders['Authorization']).toBe('Bearer ado-interactive-token');
+    });
+
+    it('skips auth retry when signal is already aborted', async () => {
+      const controller = new AbortController();
+      controller.abort();
+      vi.mocked(authentication.getSession)
+        .mockResolvedValueOnce(undefined as any)
+        .mockResolvedValueOnce({
+          accessToken: 'should-not-use',
+          id: 'test',
+          account: { id: '1', label: 'user' },
+          scopes: ['499b84ac-1321-427f-aa17-267ca6975798/.default'],
+        });
+      mockFetch.mockResolvedValue({ ok: false, status: 404, statusText: 'Not Found' });
+
+      await expect(fetchItemDetails(parsed, controller.signal)).rejects.toThrow(/not found/i);
+      expect(mockFetch).toHaveBeenCalledTimes(1);
+      expect(authentication.getSession).toHaveBeenCalledTimes(1);
     });
   });
 });
