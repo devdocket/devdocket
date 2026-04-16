@@ -1,17 +1,16 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" width="16" height="16">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128">
   <defs>
-    <mask id="list" maskUnits="userSpaceOnUse" x="0" y="0" width="16" height="16">
-      <rect width="16" height="16" fill="white"/>
-      <line x1="6.8" y1="6.85" x2="9.2" y2="6.85" stroke="black" stroke-width="0.8" stroke-linecap="round"/>
-      <line x1="6.8" y1="8" x2="9.2" y2="8" stroke="black" stroke-width="0.8" stroke-linecap="round"/>
-      <line x1="6.8" y1="9.15" x2="9.2" y2="9.15" stroke="black" stroke-width="0.8" stroke-linecap="round"/>
-    </mask>
+    <linearGradient id="devdocket-gradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#10B981"/>
+      <stop offset="100%" stop-color="#059669"/>
+    </linearGradient>
   </defs>
-  <g mask="url(#list)">
-    <path d="M 8 2 C 11 2 13 4 13 6.5 C 13 9 11 10 8.5 10 C 7 10 6 9 6 7.5 C 6 6.5 6.5 6 7.5 6" 
-          stroke="#C5C5C5" stroke-width="2.5" fill="none" stroke-linecap="round"/>
-    <path d="M 8 14 C 5 14 3 12 3 9.5 C 3 7 5 6 7.5 6 C 9 6 10 7 10 8.5 C 10 9.5 9.5 10 8.5 10" 
-          stroke="#C5C5C5" stroke-width="2.5" fill="none" stroke-linecap="round"/>
-    <rect x="6.2" y="6" width="3.6" height="4" rx="0.5" fill="#C5C5C5"/>
-  </g>
+  <!-- Bold D letterform -->
+  <path d="M24 12 L24 116 L70 116 C102 116 116 92 116 64 C116 36 102 12 70 12 Z" fill="url(#devdocket-gradient)"/>
+  <!-- Inner cutout creating D shape -->
+  <path d="M44 32 L44 96 L66 96 C86 96 96 82 96 64 C96 46 86 32 66 32 Z" fill="#FFFFFF"/>
+  <!-- Docket slots - three horizontal lines -->
+  <rect x="50" y="44" width="30" height="7" rx="2" fill="url(#devdocket-gradient)"/>
+  <rect x="50" y="60" width="22" height="7" rx="2" fill="url(#devdocket-gradient)"/>
+  <rect x="50" y="76" width="26" height="7" rx="2" fill="url(#devdocket-gradient)"/>
 </svg>

@@ -2,11 +2,11 @@
   <!-- Dark theme: bright emerald D on transparent (for dark backgrounds) -->
   <defs>
     <linearGradient id="devdocket-dark" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" stop-color="#34D399"/>
-      <stop offset="100%" stop-color="#10B981"/>
+      <stop offset="0%" stop-color="#10B981"/>
+      <stop offset="100%" stop-color="#059669"/>
     </linearGradient>
   </defs>
-  <!-- Bold D letterform - brighter emerald for dark backgrounds -->
+  <!-- Bold D letterform - emerald for dark backgrounds -->
   <path d="M24 12 L24 116 L70 116 C102 116 116 92 116 64 C116 36 102 12 70 12 Z" fill="url(#devdocket-dark)"/>
   <!-- Inner cutout - dark fill for contrast on dark bg -->
   <path d="M44 32 L44 96 L66 96 C86 96 96 82 96 64 C96 46 86 32 66 32 Z" fill="#1F2937"/>

@@ -97,7 +97,7 @@
         {
           "id": "devdocket",
           "title": "DevDocket",
-          "icon": "resources/devdocket.svg"
+          "icon": "../../branding/logo.svg"
         }
       ]
     },
