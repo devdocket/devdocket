@@ -401,7 +401,7 @@ async function handleClearHistory(workGraph: WorkGraph): Promise<void> {
   const maxAgeDays = Number.isFinite(raw) && raw >= 1 ? Math.ceil(raw) : 30;
 
   const confirm = await vscode.window.showWarningMessage(
-    `Delete all history items older than ${maxAgeDays} day${maxAgeDays === 1 ? '' : 's'}?`,
+    `Delete all history items older than ${maxAgeDays} day${maxAgeDays === 1 ? '' : 's'}? This cannot be undone.`,
     { modal: true },
     'Delete',
   );

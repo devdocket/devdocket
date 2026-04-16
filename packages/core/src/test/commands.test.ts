@@ -1968,7 +1968,7 @@ describe('registerCommands', () => {
       await invoke('devdocket.clearHistory');
 
       expect(vscode.window.showWarningMessage).toHaveBeenCalledWith(
-        expect.stringContaining('older than 1 day?'),
+        expect.stringContaining('older than 1 day'),
         { modal: true },
         'Delete',
       );
