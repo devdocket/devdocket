@@ -16,6 +16,8 @@ export interface FetchedItemDetails {
   title: string;
   notes: string;
   url: string;
+  /** Provider-format identifier for deduplication (matches what the live provider emits). */
+  externalId: string;
   group: string;
   providerId: string;
 }
@@ -145,6 +147,7 @@ async function fetchGitHubPr(owner: string, repo: string, number: number, signal
     title: `${owner}/${repo}#${number}: ${data.title}`,
     notes: data.body ?? '',
     url: data.html_url,
+    externalId: `${owner}/${repo}#${number}`,
     group: `${owner}/${repo}`,
     providerId: 'github-pr-reviews',
   };
@@ -169,6 +172,7 @@ async function fetchGitHubIssue(owner: string, repo: string, number: number, sig
     title: `${owner}/${repo}#${number}: ${data.title}`,
     notes: data.body ?? '',
     url: data.html_url,
+    externalId: `${owner}/${repo}#${number}`,
     group: `${owner}/${repo}`,
     providerId: 'github',
   };
@@ -194,6 +198,7 @@ async function fetchAdoPr(org: string, project: string, repo: string, id: number
     title: `${org}/${project}#${id}: ${data.title}`,
     notes: data.description ?? '',
     url: htmlUrl,
+    externalId: `${org}/${project}/${repo}/${id}`,
     group: `${org}/${project}`,
     providerId: 'ado-pr-reviews',
   };
@@ -219,6 +224,7 @@ async function fetchAdoWorkItem(org: string, project: string, id: number, signal
     title: `${org}/${project}#${id}: ${data.fields['System.Title']}`,
     notes: data.fields['System.Description'] ?? '',
     url: htmlUrl,
+    externalId: `${org}/${project}/${id}`,
     group: `${org}/${project}`,
     providerId: 'ado-work-items',
   };

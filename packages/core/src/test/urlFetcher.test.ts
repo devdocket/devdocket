@@ -38,6 +38,7 @@ describe('fetchItemDetails', () => {
         title: 'octocat/hello#42: Fix bug',
         notes: 'Some description',
         url: 'https://github.com/octocat/hello/pull/42',
+        externalId: 'octocat/hello#42',
         group: 'octocat/hello',
         providerId: 'github-pr-reviews',
       });
@@ -186,6 +187,7 @@ describe('fetchItemDetails', () => {
         title: 'myorg/myproj#7: ADO fix',
         notes: 'ADO desc',
         url: 'https://dev.azure.com/myorg/myproj/_git/myrepo/pullrequest/7',
+        externalId: 'myorg/myproj/myrepo/7',
         group: 'myorg/myproj',
         providerId: 'ado-pr-reviews',
       });
@@ -318,6 +320,7 @@ describe('fetchItemDetails', () => {
         title: 'octocat/hello#10: Bug report',
         notes: 'Steps to reproduce',
         url: 'https://github.com/octocat/hello/issues/10',
+        externalId: 'octocat/hello#10',
         group: 'octocat/hello',
         providerId: 'github',
       });
@@ -392,6 +395,7 @@ describe('fetchItemDetails', () => {
         title: 'myorg/myproj#99: User story',
         notes: 'As a user...',
         url: 'https://dev.azure.com/myorg/myproj/_workitems/edit/99',
+        externalId: 'myorg/myproj/99',
         group: 'myorg/myproj',
         providerId: 'ado-work-items',
       });

@@ -271,7 +271,7 @@ async function handleCreateItemFromUrl(
   }
 
   // Prevent duplicate items for the same URL
-  const existing = workGraph.findItemByProvenance(details.providerId, details.url);
+  const existing = workGraph.findItemByProvenance(details.providerId, details.externalId);
   if (existing) {
     const providerLabel = existing.providerId ? labelCache.get(existing.providerId) : undefined;
     WorkItemEditorPanel.open(context, workGraph, providerRegistry, existing, providerLabel);
@@ -282,7 +282,7 @@ async function handleCreateItemFromUrl(
   const group = details.group?.trim() || undefined;
   const createdItem = await workGraph.createItem(
     { title: details.title, notes: details.notes },
-    { providerId: details.providerId, externalId: details.url, url: details.url, ...(group ? { group } : {}) },
+    { providerId: details.providerId, externalId: details.externalId, url: details.url, ...(group ? { group } : {}) },
   );
 
   const providerLabel = createdItem.providerId ? labelCache.get(createdItem.providerId) : undefined;

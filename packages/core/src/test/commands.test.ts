@@ -255,6 +255,7 @@ describe('registerCommands', () => {
       title: 'owner/repo#42: Fix bug',
       notes: 'Description',
       url: 'https://github.com/owner/repo/pull/42',
+      externalId: 'owner/repo#42',
       group: 'owner/repo',
       providerId: 'github-pr-reviews',
     };
@@ -263,7 +264,7 @@ describe('registerCommands', () => {
       vi.mocked(parseSourceUrl).mockReturnValue({ type: 'github-pr', owner: 'owner', repo: 'repo', number: 42 });
       vi.mocked(fetchItemDetails).mockResolvedValue(fakeDetails);
       workGraph.findItemByProvenance.mockReturnValue(undefined);
-      workGraph.createItem.mockResolvedValue(createWorkItem({ providerId: 'github-pr-reviews', externalId: fakeDetails.url }));
+      workGraph.createItem.mockResolvedValue(createWorkItem({ providerId: 'github-pr-reviews', externalId: fakeDetails.externalId }));
     });
 
     it('creates item when user provides a valid URL', async () => {
@@ -319,6 +320,17 @@ describe('registerCommands', () => {
 
       expect(workGraph.createItem).not.toHaveBeenCalled();
       expect(vscode.window.showErrorMessage).not.toHaveBeenCalled();
+    });
+
+    it('propagates non-abort fetch errors to wrapCommand handler', async () => {
+      vi.mocked(fetchItemDetails).mockRejectedValue(new Error('GitHub PR owner/repo#42 not found. It may be private or deleted.'));
+      (vscode.window.showInputBox as Mock).mockResolvedValue('https://github.com/owner/repo/pull/42');
+      await invoke('devdocket.createItemFromUrl');
+
+      expect(workGraph.createItem).not.toHaveBeenCalled();
+      expect(vscode.window.showErrorMessage).toHaveBeenCalledWith(
+        expect.stringContaining('not found'),
+      );
     });
   });
 
