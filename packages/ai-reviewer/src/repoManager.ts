@@ -33,36 +33,48 @@ function gitAuth(args: string[], cwd: string, token: string): Promise<string> {
 export class RepoManager {
   private worktrees = new Map<string, WorktreeInfo>();
 
-  constructor(private readonly storageUri: vscode.Uri) {}
+  constructor(
+    private readonly storageUri: vscode.Uri,
+    private readonly log: vscode.LogOutputChannel,
+  ) {}
 
   /** Clone repo if needed, create worktree if needed, fetch + checkout PR branch. */
   async ensureWorktree(prUrl: string): Promise<WorktreeInfo> {
+    this.log.info(`ensureWorktree called — prUrl: ${prUrl}`);
     const parts = parsePrUrl(prUrl);
     if (!parts) {
+      this.log.error(`Invalid GitHub PR URL: ${prUrl}`);
       throw new Error(`Invalid GitHub PR URL: ${prUrl}`);
     }
 
     const { org, repo, prNumber } = parts;
     const key = `${org}/${repo}#${prNumber}`;
+    this.log.info(`Parsed PR: org=${org}, repo=${repo}, prNumber=${prNumber}`);
 
     const repoDir = `${org}-${repo}`;
     const repoBase = path.join(this.storageUri.fsPath, 'repos', repoDir);
     const clonePath = path.join(repoBase, 'clone');
     const worktreePath = path.join(repoBase, 'worktrees', `pr-${prNumber}`);
+    this.log.debug(`Paths — clonePath: ${clonePath}, worktreePath: ${worktreePath}`);
 
     // Get GitHub auth token
+    this.log.info('Requesting GitHub auth session');
     const session = await vscode.authentication.getSession('github', ['repo'], {
       createIfNone: true,
     });
     if (!session) {
+      this.log.error('GitHub authentication not available');
       throw new Error('GitHub authentication required');
     }
+    this.log.info(`GitHub auth obtained — account: ${session.account?.label ?? 'unknown'}`);
 
     const cloneUrl = `https://github.com/${org}/${repo}.git`;
 
     // Clone if needed (token injected transiently, not persisted in remote)
     const cloneExists = await this.directoryExists(clonePath);
+    this.log.debug(`Clone directory exists: ${cloneExists}`);
     if (!cloneExists) {
+      this.log.info(`Cloning ${cloneUrl} to ${clonePath}`);
       await vscode.workspace.fs.createDirectory(
         vscode.Uri.file(path.dirname(clonePath)),
       );
@@ -71,49 +83,59 @@ export class RepoManager {
         path.dirname(clonePath),
         session.accessToken,
       );
+      this.log.info('Clone complete');
     }
 
     // Fetch PR metadata from GitHub API to get base ref
+    this.log.info('Fetching PR metadata from GitHub API');
     const prMeta = await this.fetchPrMetadata(org, repo, prNumber, session.accessToken);
     const baseRef = prMeta.baseRef;
     const headRef = `pr-${prNumber}`;
+    this.log.info(`PR metadata — baseRef: ${baseRef}, headSha: ${prMeta.headSha}, local headRef: ${headRef}`);
 
     // Fetch PR head ref and base branch
     const worktreeExists = await this.directoryExists(worktreePath);
+    this.log.debug(`Worktree directory exists: ${worktreeExists}`);
     if (worktreeExists) {
-      // Worktree already exists — fetch to FETCH_HEAD to avoid
-      // "refusing to fetch into branch checked out" error, then update in-place
+      this.log.info('Updating existing worktree — fetching PR head');
       await gitAuth(
         ['fetch', 'origin', `pull/${prNumber}/head`],
         worktreePath,
         session.accessToken,
       );
       await gitExec(['reset', '--hard', 'FETCH_HEAD'], worktreePath);
+      this.log.info('Worktree updated');
     } else {
-      // First time — create the local branch and worktree
+      this.log.info('Creating new worktree — fetching PR head');
       await gitAuth(
         ['fetch', 'origin', `pull/${prNumber}/head:${headRef}`],
         clonePath,
         session.accessToken,
       );
+      this.log.info('PR head fetched');
     }
 
     // Fetch base branch for diffs (validate ref from API)
     if (/^-|\s/.test(baseRef)) {
+      this.log.error(`Invalid base ref from GitHub API: ${baseRef}`);
       throw new Error(`Invalid base ref from GitHub API: ${baseRef}`);
     }
+    this.log.info(`Fetching base branch: ${baseRef}`);
     await gitAuth(
       ['fetch', 'origin', `refs/heads/${baseRef}:refs/remotes/origin/${baseRef}`],
       clonePath,
       session.accessToken,
     );
+    this.log.info('Base branch fetched');
 
     // Create worktree if it doesn't exist yet
     if (!worktreeExists) {
+      this.log.info(`Creating worktree at ${worktreePath} from ${headRef}`);
       await gitExec(
         ['worktree', 'add', worktreePath, headRef],
         clonePath,
       );
+      this.log.info('Worktree created');
     }
 
     const info: WorktreeInfo = {
@@ -128,6 +150,7 @@ export class RepoManager {
 
     this.worktrees.set(key, info);
     validWorktreePaths.add(path.resolve(worktreePath));
+    this.log.info(`ensureWorktree complete — worktree ready at ${worktreePath}`);
     return info;
   }
 
@@ -136,25 +159,33 @@ export class RepoManager {
     const parts = parsePrUrl(prUrl);
     if (!parts) return undefined;
     const key = `${parts.org}/${parts.repo}#${parts.prNumber}`;
-    return this.worktrees.get(key);
+    const info = this.worktrees.get(key);
+    this.log.debug(`getWorktreeInfo(${key}) — ${info ? 'hit' : 'miss'}`);
+    return info;
   }
 
   /** Remove a single worktree. */
   async removeWorktree(prUrl: string): Promise<void> {
+    this.log.info(`removeWorktree called — prUrl: ${prUrl}`);
     const parts = parsePrUrl(prUrl);
     if (!parts) return;
 
     const key = `${parts.org}/${parts.repo}#${parts.prNumber}`;
     const info = this.worktrees.get(key);
-    if (!info) return;
+    if (!info) {
+      this.log.info(`removeWorktree — no cached worktree for ${key}`);
+      return;
+    }
 
     await gitExec(['worktree', 'remove', '--force', info.worktreePath], info.clonePath);
     validWorktreePaths.delete(path.resolve(info.worktreePath));
     this.worktrees.delete(key);
+    this.log.info(`Worktree removed for ${key}`);
   }
 
   /** Remove entire clone + all worktrees for a repo. */
   async removeRepo(org: string, repo: string): Promise<void> {
+    this.log.info(`removeRepo called — ${org}/${repo}`);
     // Collect entries first to avoid mutation during iteration
     const toRemove = [...this.worktrees.entries()]
       .filter(([, info]) => info.org === org && info.repo === repo);
@@ -162,8 +193,9 @@ export class RepoManager {
     for (const [key, info] of toRemove) {
       try {
         await gitExec(['worktree', 'remove', '--force', info.worktreePath], info.clonePath);
+        this.log.info(`Removed worktree for ${key}`);
       } catch {
-        // Worktree may already be gone
+        this.log.warn(`Worktree for ${key} already gone — skipping`);
       }
       validWorktreePaths.delete(path.resolve(info.worktreePath));
       this.worktrees.delete(key);
@@ -176,8 +208,9 @@ export class RepoManager {
         recursive: true,
         useTrash: false,
       });
+      this.log.info(`Deleted repo directory: ${repoBase}`);
     } catch {
-      // Directory may not exist
+      this.log.debug(`Repo directory not found (already cleaned): ${repoBase}`);
     }
   }
 

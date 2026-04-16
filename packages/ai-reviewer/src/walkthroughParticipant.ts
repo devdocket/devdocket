@@ -5,10 +5,14 @@ import { buildWalkthroughPrompt } from './walkthroughPrompt';
 export class WalkthroughParticipant {
   private sessions = new Map<string, WorktreeInfo>();
 
-  constructor(private readonly repoManager: RepoManager) {}
+  constructor(
+    private readonly repoManager: RepoManager,
+    private readonly log: vscode.LogOutputChannel,
+  ) {}
 
   /** Register the chat participant. Returns disposable. */
   register(): vscode.Disposable {
+    this.log.info('Creating @walkthrough chat participant');
     const participant = vscode.chat.createChatParticipant(
       'devdocket.walkthrough',
       this.handleRequest.bind(this),
@@ -17,6 +21,7 @@ export class WalkthroughParticipant {
     participant.followupProvider = {
       provideFollowups: this.provideFollowups.bind(this),
     };
+    this.log.info('@walkthrough chat participant created successfully');
     return participant;
   }
 
@@ -61,34 +66,47 @@ export class WalkthroughParticipant {
     response: vscode.ChatResponseStream,
     token: vscode.CancellationToken,
   ): Promise<vscode.ChatResult> {
+    this.log.debug(`handleRequest called — prompt: "${request.prompt}", history turns: ${context.history.length}`);
+
     // Parse PR URL from the prompt
     const prUrl = this.extractPrUrl(request.prompt, context);
     if (!prUrl) {
+      this.log.warn('No PR URL found in prompt or history');
       response.markdown(
         'Please provide a GitHub PR URL to walk through. For example:\n\n' +
         '> Walk me through this PR: https://github.com/owner/repo/pull/42',
       );
       return { metadata: { phase: 'no-url' } };
     }
+    this.log.info(`Extracted PR URL: ${prUrl}`);
 
     // Ensure worktree
     let info = this.sessions.get(prUrl) ?? this.repoManager.getWorktreeInfo(prUrl);
     if (!info) {
+      this.log.info('No cached worktree info — preparing worktree');
       response.progress('Cloning repository and preparing worktree…');
       try {
         info = await this.repoManager.ensureWorktree(prUrl);
+        this.log.info(`Worktree ready at ${info.worktreePath}`);
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
+        this.log.error(`Worktree preparation failed: ${msg}`);
         response.markdown(`❌ Failed to prepare repository: ${msg}`);
         return { metadata: { phase: 'error' } };
       }
+    } else {
+      this.log.info(`Using cached worktree at ${info.worktreePath}`);
     }
     this.sessions.set(prUrl, info);
 
-    if (token.isCancellationRequested) return { metadata: { phase: 'error' } };
+    if (token.isCancellationRequested) {
+      this.log.info('Request cancelled before model invocation');
+      return { metadata: { phase: 'error' } };
+    }
 
     // Build system prompt
     const systemPrompt = buildWalkthroughPrompt(info);
+    this.log.debug(`System prompt length: ${systemPrompt.length} chars`);
 
     // Build messages array
     const messages: vscode.LanguageModelChatMessage[] = [
@@ -111,6 +129,7 @@ export class WalkthroughParticipant {
         }
       }
     }
+    this.log.info(`Built message array: ${messages.length} messages (1 system + ${context.history.length} history + 1 user)`);
 
     // Add current user message
     messages.push(vscode.LanguageModelChatMessage.User(request.prompt));
@@ -118,20 +137,28 @@ export class WalkthroughParticipant {
     // Select model
     let model: vscode.LanguageModelChat;
     if (request.model) {
+      this.log.info(`Using request-provided model: ${request.model.id}`);
       model = request.model;
     } else {
+      this.log.info('No request model — selecting gpt-4o family');
       const models = await vscode.lm.selectChatModels({ family: 'gpt-4o' });
+      this.log.info(`selectChatModels({ family: 'gpt-4o' }) returned ${models.length} model(s): ${models.map(m => m.id).join(', ')}`);
       if (models.length === 0) {
+        this.log.error('No language model available');
         response.markdown('❌ No language model available. Please install GitHub Copilot.');
         return { metadata: { phase: 'error' } };
       }
       model = models[0];
     }
+    this.log.info(`Selected model: ${model.id} (vendor: ${model.vendor}, family: ${model.family})`);
 
     // Gather devdocket tools + the phase-signaling tool
+    const registeredTools = vscode.lm.tools
+      .filter((t: vscode.LanguageModelToolInformation) => t.name.startsWith('devdocket-') && t.inputSchema);
+    this.log.info(`Found ${registeredTools.length} devdocket-* LM tools: ${registeredTools.map(t => t.name).join(', ')}`);
+
     const tools = [
-      ...vscode.lm.tools
-        .filter((t: vscode.LanguageModelToolInformation) => t.name.startsWith('devdocket-') && t.inputSchema)
+      ...registeredTools
         .map((t: vscode.LanguageModelToolInformation) => ({
           name: t.name,
           description: t.description,
@@ -153,16 +180,28 @@ export class WalkthroughParticipant {
         },
       },
     ];
+    this.log.info(`Total tools passed to model: ${tools.length} (${tools.map(t => t.name).join(', ')})`);
 
     // Tool-use loop
     const loopMessages = [...messages];
     const maxIterations = 20;
     let iterations = 0;
     let phase = context.history.length === 0 ? 'summary' : 'walkthrough';
+    this.log.info(`Starting tool-use loop — initial phase: ${phase}, maxIterations: ${maxIterations}`);
 
     while (!token.isCancellationRequested && iterations < maxIterations) {
       iterations++;
-      const chatResponse = await model.sendRequest(loopMessages, { tools }, token);
+      this.log.info(`Tool-use loop iteration ${iterations} — sending ${loopMessages.length} messages to model`);
+
+      let chatResponse: vscode.LanguageModelChatResponse;
+      try {
+        chatResponse = await model.sendRequest(loopMessages, { tools }, token);
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        this.log.error(`model.sendRequest failed on iteration ${iterations}: ${msg}`);
+        response.markdown(`\n\n❌ Model request failed: ${msg}`);
+        return { metadata: { phase: 'error' } };
+      }
 
       let hasToolCalls = false;
       const assistantParts: (vscode.LanguageModelTextPart | vscode.LanguageModelToolCallPart)[] = [];
@@ -178,6 +217,7 @@ export class WalkthroughParticipant {
           // Handle phase signal locally — not a real tool call, don't trigger another loop
           if (part.name === 'devdocket-signalPhase') {
             const input = part.input as { phase?: string };
+            this.log.info(`Phase signal: ${input.phase}`);
             if (input.phase) {
               phase = input.phase;
             }
@@ -189,6 +229,8 @@ export class WalkthroughParticipant {
           }
 
           hasToolCalls = true;
+          this.log.info(`Tool call: ${part.name} (callId: ${part.callId})`);
+          this.log.debug(`Tool input: ${JSON.stringify(part.input)}`);
           try {
             const result = await vscode.lm.invokeTool(
               part.name,
@@ -198,9 +240,11 @@ export class WalkthroughParticipant {
               },
               token,
             );
+            this.log.info(`Tool ${part.name} completed successfully`);
             toolResults.push({ callId: part.callId, content: result.content });
           } catch (err) {
             const errMsg = err instanceof Error ? err.message : String(err);
+            this.log.error(`Tool ${part.name} failed: ${errMsg}`);
             toolResults.push({
               callId: part.callId,
               content: [new vscode.LanguageModelTextPart(`Error: ${errMsg}`)],
@@ -208,6 +252,8 @@ export class WalkthroughParticipant {
           }
         }
       }
+
+      this.log.info(`Iteration ${iterations} complete — ${assistantParts.length} parts, ${toolResults.length} tool results, hasToolCalls: ${hasToolCalls}`);
 
       // Add the complete assistant turn + all tool results to conversation
       if (assistantParts.length > 0) {
@@ -221,9 +267,19 @@ export class WalkthroughParticipant {
         }
       }
 
-      if (!hasToolCalls) break;
+      if (!hasToolCalls) {
+        this.log.info(`No tool calls in iteration ${iterations} — exiting loop`);
+        break;
+      }
     }
 
+    if (token.isCancellationRequested) {
+      this.log.info('Request cancelled during tool-use loop');
+    }
+    if (iterations >= maxIterations) {
+      this.log.warn(`Reached max iterations (${maxIterations})`);
+    }
+    this.log.info(`handleRequest complete — final phase: ${phase}, total iterations: ${iterations}`);
     return { metadata: { phase } };
   }
 

@@ -58,6 +58,24 @@ const FileType = {
   SymbolicLink: 64,
 };
 
+const mockLogOutputChannel = {
+  info: vi.fn(),
+  warn: vi.fn(),
+  error: vi.fn(),
+  debug: vi.fn(),
+  trace: vi.fn(),
+  append: vi.fn(),
+  appendLine: vi.fn(),
+  clear: vi.fn(),
+  show: vi.fn(),
+  hide: vi.fn(),
+  dispose: vi.fn(),
+  name: 'DevDocket AI Review',
+  logLevel: 2,
+  onDidChangeLogLevel: vi.fn(),
+  replace: vi.fn(),
+};
+
 const window = {
   showInputBox: vi.fn(),
   showInformationMessage: vi.fn(),
@@ -67,6 +85,7 @@ const window = {
   showTextDocument: vi.fn(),
   registerTreeDataProvider: vi.fn(() => ({ dispose: vi.fn() })),
   createWebviewPanel: vi.fn(),
+  createOutputChannel: vi.fn(() => mockLogOutputChannel),
   withProgress: vi.fn(async (options: unknown, task: Function) => {
     const progress = { report: vi.fn() };
     const token = { isCancellationRequested: false, onCancellationRequested: vi.fn() };
@@ -229,6 +248,7 @@ export {
   TreeItemCollapsibleState,
   ProgressLocation,
   FileType,
+  mockLogOutputChannel,
   window,
   commands,
   env,
