@@ -106,9 +106,9 @@ Clicking a History item opens the editor panel to view its details.
 
 #### Clear Old History
 
-The **Clear Old History** command (available from the History view title bar) bulk-removes history items that have been in a terminal state longer than a configurable number of days. A confirmation dialog shows the threshold before proceeding.
+The **Clear Old History** command (available from the History view title bar) bulk-removes history items that have not been updated within a configurable number of days. A confirmation dialog shows the threshold before proceeding.
 
-The age threshold is controlled by the `devdocket.historyClearDays` setting (default: **30** days). Only items whose last state change is older than the threshold are removed.
+The age threshold is controlled by the `devdocket.historyClearDays` setting (default: **30** days). Only items whose last modification is older than the threshold are removed.
 
 > **Note:** History items are in terminal states, so no state-changing commands are available beyond clearing old items.
 
