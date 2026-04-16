@@ -208,7 +208,7 @@ export class RepoManager {
         recursive: true,
         useTrash: false,
       });
-      this.log.info(`Deleted repo directory: ${repoBase}`);
+      this.log.debug(`Deleted repo directory: ${repoBase}`);
     } catch {
       this.log.debug(`Repo directory not found (already cleaned): ${repoBase}`);
     }
