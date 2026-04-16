@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { authentication } from 'vscode';
 import { fetchItemDetails } from '../services/urlFetcher';
 import type { ParsedUrl } from '../services/urlParser';
 
@@ -15,10 +16,12 @@ describe('fetchItemDetails', () => {
   beforeEach(() => {
     mockFetch = vi.fn();
     globalThis.fetch = mockFetch;
+    vi.mocked(authentication.getSession).mockResolvedValue(undefined as any);
   });
 
   afterEach(() => {
     globalThis.fetch = originalFetch;
+    vi.restoreAllMocks();
   });
 
   describe('GitHub PR', () => {
@@ -79,6 +82,47 @@ describe('fetchItemDetails', () => {
       await fetchItemDetails(parsed, controller.signal);
       expect(mockFetch).toHaveBeenCalledWith(expect.any(String), expect.objectContaining({ signal: controller.signal }));
     });
+
+    it('includes auth token in request when session is available', async () => {
+      vi.mocked(authentication.getSession).mockResolvedValue({
+        accessToken: 'gh-token-123',
+        id: 'test',
+        account: { id: '1', label: 'user' },
+        scopes: ['repo'],
+      });
+      mockFetch.mockResolvedValue({
+        ok: true,
+        json: async () => ({ title: 'T', body: null, html_url: 'https://github.com/o/r/pull/1' }),
+      });
+
+      await fetchItemDetails(parsed);
+      expect(authentication.getSession).toHaveBeenCalledWith('github', ['repo'], { silent: true });
+      const headers = mockFetch.mock.calls[0][1].headers;
+      expect(headers['Authorization']).toBe('Bearer gh-token-123');
+    });
+
+    it('omits auth header when no session is available', async () => {
+      mockFetch.mockResolvedValue({
+        ok: true,
+        json: async () => ({ title: 'T', body: null, html_url: 'https://github.com/o/r/pull/1' }),
+      });
+
+      await fetchItemDetails(parsed);
+      const headers = mockFetch.mock.calls[0][1].headers;
+      expect(headers['Authorization']).toBeUndefined();
+    });
+
+    it('falls back to unauthenticated when getSession throws', async () => {
+      vi.mocked(authentication.getSession).mockRejectedValue(new Error('auth unavailable'));
+      mockFetch.mockResolvedValue({
+        ok: true,
+        json: async () => ({ title: 'T', body: null, html_url: 'https://github.com/o/r/pull/1' }),
+      });
+
+      await fetchItemDetails(parsed);
+      const headers = mockFetch.mock.calls[0][1].headers;
+      expect(headers['Authorization']).toBeUndefined();
+    });
   });
 
   describe('ADO PR', () => {
@@ -122,6 +166,51 @@ describe('fetchItemDetails', () => {
     it('throws with auth message on 403', async () => {
       mockFetch.mockResolvedValue({ ok: false, status: 403, statusText: 'Forbidden' });
       await expect(fetchItemDetails(parsed)).rejects.toThrow(/authentication required/i);
+    });
+
+    it('includes auth token in request when session is available', async () => {
+      vi.mocked(authentication.getSession).mockResolvedValue({
+        accessToken: 'ado-token-456',
+        id: 'test',
+        account: { id: '1', label: 'user' },
+        scopes: ['499b84ac-1321-427f-aa17-267ca6975798/.default'],
+      });
+      mockFetch.mockResolvedValue({
+        ok: true,
+        json: async () => ({ title: 'T', description: null }),
+      });
+
+      await fetchItemDetails(parsed);
+      expect(authentication.getSession).toHaveBeenCalledWith(
+        'microsoft',
+        ['499b84ac-1321-427f-aa17-267ca6975798/.default'],
+        { silent: true },
+      );
+      const headers = mockFetch.mock.calls[0][1].headers;
+      expect(headers['Authorization']).toBe('Bearer ado-token-456');
+    });
+
+    it('omits auth header when no session is available', async () => {
+      mockFetch.mockResolvedValue({
+        ok: true,
+        json: async () => ({ title: 'T', description: null }),
+      });
+
+      await fetchItemDetails(parsed);
+      const headers = mockFetch.mock.calls[0][1].headers;
+      expect(headers['Authorization']).toBeUndefined();
+    });
+
+    it('falls back to unauthenticated when getSession throws', async () => {
+      vi.mocked(authentication.getSession).mockRejectedValue(new Error('auth unavailable'));
+      mockFetch.mockResolvedValue({
+        ok: true,
+        json: async () => ({ title: 'T', description: null }),
+      });
+
+      await fetchItemDetails(parsed);
+      const headers = mockFetch.mock.calls[0][1].headers;
+      expect(headers['Authorization']).toBeUndefined();
     });
   });
 });

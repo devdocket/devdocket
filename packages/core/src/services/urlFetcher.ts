@@ -8,6 +8,9 @@ import * as vscode from 'vscode';
 import { type ParsedUrl } from './urlParser';
 import { logger } from './logger';
 
+// Azure DevOps resource ID — must match the scope used by the ADO provider package
+const ADO_AUTH_SCOPE = '499b84ac-1321-427f-aa17-267ca6975798/.default';
+
 export interface FetchedItemDetails {
   title: string;
   notes: string;
@@ -76,7 +79,7 @@ async function fetchAdoPr(org: string, project: string, repo: string, id: number
   // Try to get an Azure DevOps auth token
   try {
     const session = await vscode.authentication.getSession('microsoft', [
-      'https://app.vssps.visualstudio.com/.default',
+      ADO_AUTH_SCOPE,
     ], { silent: true });
     if (session) {
       headers['Authorization'] = `Bearer ${session.accessToken}`;
