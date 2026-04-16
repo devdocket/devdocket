@@ -150,7 +150,7 @@ export class RepoManager {
 
     this.worktrees.set(key, info);
     validWorktreePaths.add(path.resolve(worktreePath));
-    this.log.info(`ensureWorktree complete — worktree ready at ${worktreePath}`);
+    this.log.debug(`ensureWorktree complete — worktree ready at ${worktreePath}`);
     return info;
   }
 
