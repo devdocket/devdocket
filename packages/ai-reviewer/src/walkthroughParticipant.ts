@@ -87,7 +87,7 @@ export class WalkthroughParticipant {
       response.progress('Cloning repository and preparing worktree…');
       try {
         info = await this.repoManager.ensureWorktree(prUrl);
-        this.log.info(`Worktree ready at ${info.worktreePath}`);
+        this.log.debug(`Worktree ready at ${info.worktreePath}`);
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
         this.log.error(`Worktree preparation failed: ${msg}`);
@@ -95,7 +95,7 @@ export class WalkthroughParticipant {
         return { metadata: { phase: 'error' } };
       }
     } else {
-      this.log.info(`Using cached worktree at ${info.worktreePath}`);
+      this.log.debug(`Using cached worktree at ${info.worktreePath}`);
     }
     this.sessions.set(prUrl, info);
 
