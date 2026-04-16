@@ -40,7 +40,7 @@ export class RepoManager {
 
   /** Clone repo if needed, create worktree if needed, fetch + checkout PR branch. */
   async ensureWorktree(prUrl: string): Promise<WorktreeInfo> {
-    this.log.info(`ensureWorktree called — prUrl: ${prUrl}`);
+    this.log.debug(`ensureWorktree called — prUrl: ${prUrl}`);
     const parts = parsePrUrl(prUrl);
     if (!parts) {
       this.log.error(`Invalid GitHub PR URL: ${prUrl}`);
