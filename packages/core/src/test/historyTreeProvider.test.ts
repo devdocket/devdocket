@@ -229,7 +229,7 @@ describe('HistoryTreeProvider', () => {
       expect(treeItem.description).toBe('done');
     });
 
-    it('should omit group in tree layout', () => {
+    it('should show state label in tree layout', () => {
       provider.layout = 'tree';
       const item = makeItem({ id: '1', title: 'Done task', state: WorkItemState.Done, group: 'octocat/repo' });
       const treeItem = provider.getTreeItem(item);

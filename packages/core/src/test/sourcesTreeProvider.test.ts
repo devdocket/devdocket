@@ -28,11 +28,14 @@ function createMockProviderRegistry() {
   const items = new Map<string, DiscoveredItem[]>();
   const labels = new Map<string, string>();
   const emitter = new EventEmitter<void>();
+  const healthEmitter = new EventEmitter<string>();
   return {
     getAllDiscoveredItems: vi.fn(() => items),
     getDiscoveredItems: vi.fn((id: string) => items.get(id) ?? []),
     getProviderLabel: vi.fn((id: string) => labels.get(id) ?? id),
+    getProviderHealth: vi.fn(() => ({ status: 'unknown' as const })),
     onDidChangeDiscoveredItems: emitter.event,
+    onDidChangeProviderHealth: healthEmitter.event,
     _setItems: (providerId: string, discoveredItems: DiscoveredItem[]) => {
       items.set(providerId, discoveredItems);
     },
@@ -315,6 +318,16 @@ describe('SourcesTreeProvider', () => {
       expect(treeItem.description).toBe('GitHub Issues');
     });
 
+    it('should show group and provider label in flat layout', () => {
+      registry._setLabel('gh', 'GitHub Issues');
+      provider.layout = 'flat';
+      const node: SourceItemNode = {
+        kind: 'item', providerId: 'gh', externalId: '1', title: 'Item', group: 'octocat/repo',
+      };
+      const treeItem = provider.getTreeItem(node);
+      expect(treeItem.description).toBe('octocat/repo · GitHub Issues');
+    });
+
     it('should show provider label and dismissed in flat layout', () => {
       registry._setLabel('gh', 'GitHub Issues');
       stateStore.getState.mockReturnValue('dismissed');
@@ -324,6 +337,17 @@ describe('SourcesTreeProvider', () => {
       };
       const treeItem = provider.getTreeItem(node);
       expect(treeItem.description).toBe('GitHub Issues · dismissed');
+    });
+
+    it('should show group, provider label, and dismissed in flat layout', () => {
+      registry._setLabel('gh', 'GitHub Issues');
+      stateStore.getState.mockReturnValue('dismissed');
+      provider.layout = 'flat';
+      const node: SourceItemNode = {
+        kind: 'item', providerId: 'gh', externalId: '1', title: 'Dismissed Item', group: 'octocat/repo',
+      };
+      const treeItem = provider.getTreeItem(node);
+      expect(treeItem.description).toBe('octocat/repo · GitHub Issues · dismissed');
     });
 
     it('should omit provider label in tree layout', () => {
@@ -433,6 +457,45 @@ describe('SourcesTreeProvider', () => {
       const groupNames = children.map((c) => (c as SourceGroupNode).groupName);
       expect(groupNames).toEqual(['Alpha', 'Mike', 'Zulu']);
     });
+
+    it('should trim whitespace from group names when grouping', () => {
+      registry._setItems('gh', [
+        { externalId: '1', title: 'Issue A', group: ' repo-one ' },
+        { externalId: '2', title: 'Issue B', group: 'repo-one' },
+      ]);
+
+      const providerNode: SourceProviderNode = { kind: 'provider', providerId: 'gh', label: 'GH' };
+      const children = provider.getChildren(providerNode);
+      expect(children).toHaveLength(1);
+      expect(children[0].kind).toBe('group');
+      expect((children[0] as SourceGroupNode).groupName).toBe('repo-one');
+    });
+
+    it('should treat whitespace-only group as ungrouped', () => {
+      registry._setItems('gh', [
+        { externalId: '1', title: 'Whitespace', group: '  ' },
+        { externalId: '2', title: 'Normal', group: 'repo' },
+      ]);
+
+      const providerNode: SourceProviderNode = { kind: 'provider', providerId: 'gh', label: 'GH' };
+      const children = provider.getChildren(providerNode);
+      expect(children).toHaveLength(2);
+      const group = children.find(c => c.kind === 'group') as SourceGroupNode;
+      const item = children.find(c => c.kind === 'item') as SourceItemNode;
+      expect(group.groupName).toBe('repo');
+      expect(item.title).toBe('Whitespace');
+    });
+
+    it('should show trimmed group in flat layout description', () => {
+      registry._setLabel('gh', 'GitHub Issues');
+      provider.layout = 'flat';
+      registry._setItems('gh', [
+        { externalId: '1', title: 'Item', group: '  octocat/repo  ' },
+      ]);
+      const children = provider.getChildren();
+      const treeItem = provider.getTreeItem(children[0]);
+      expect(treeItem.description).toBe('octocat/repo · GitHub Issues');
+    });
   });
 
   describe('dispose', () => {
@@ -524,6 +587,62 @@ describe('SourcesTreeProvider', () => {
       registry._fire();
       stateStore._fire();
       expect(listener).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('unhealthy provider rendering', () => {
+    it('shows warning icon for unhealthy provider', () => {
+      registry._setItems('gh', [{ externalId: 'issue-1', title: 'Bug' }]);
+      registry.getProviderHealth.mockReturnValue({
+        status: 'unhealthy',
+        lastError: 'network error',
+        lastRefreshTime: new Date(0),
+      });
+
+      const node: SourceProviderNode = { kind: 'provider', providerId: 'gh', label: 'GitHub' };
+      const treeItem = provider.getTreeItem(node);
+      expect((treeItem.iconPath as any).id).toBe('warning');
+      expect(treeItem.description).toBe('refresh failed');
+    });
+
+    it('shows plug icon for healthy provider', () => {
+      registry._setItems('gh', [{ externalId: 'issue-1', title: 'Bug' }]);
+      registry.getProviderHealth.mockReturnValue({
+        status: 'healthy',
+        lastRefreshTime: new Date(),
+      });
+
+      const node: SourceProviderNode = { kind: 'provider', providerId: 'gh', label: 'GitHub' };
+      const treeItem = provider.getTreeItem(node);
+      expect((treeItem.iconPath as any).id).toBe('plug');
+    });
+
+    it('includes error message in tooltip for unhealthy provider', () => {
+      registry._setItems('gh', [{ externalId: 'issue-1', title: 'Bug' }]);
+      registry.getProviderHealth.mockReturnValue({
+        status: 'unhealthy',
+        lastError: 'connection refused',
+        lastRefreshTime: new Date(0),
+      });
+
+      const node: SourceProviderNode = { kind: 'provider', providerId: 'gh', label: 'GitHub' };
+      const treeItem = provider.getTreeItem(node);
+      expect(treeItem.tooltip).toBeInstanceOf(MarkdownString);
+      const md = treeItem.tooltip as MarkdownString;
+      expect(md.value).toContain('Refresh failed');
+      expect(md.value).toContain('connection refused');
+    });
+
+    it('shows unhealthy provider even with zero items', () => {
+      registry._setItems('gh', []);
+      registry.getProviderHealth.mockReturnValue({
+        status: 'unhealthy',
+        lastError: 'timeout',
+      });
+
+      const children = provider.getChildren();
+      expect(children).toHaveLength(1);
+      expect((children[0] as SourceProviderNode).providerId).toBe('gh');
     });
   });
 });

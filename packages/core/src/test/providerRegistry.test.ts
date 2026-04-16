@@ -1126,4 +1126,147 @@ describe('ProviderRegistry', () => {
       ]);
     });
   });
+
+  describe('health tracking', () => {
+    function nextTick(): Promise<void> {
+      return new Promise(resolve => setTimeout(resolve, 0));
+    }
+
+    function createDeferredProvider(id: string) {
+      let resolveRefresh!: () => void;
+      let rejectRefresh!: (err: Error) => void;
+      const refreshPromise = new Promise<void>((resolve, reject) => {
+        resolveRefresh = resolve;
+        rejectRefresh = reject;
+      });
+      const emitter = new EventEmitter<DiscoveredItem[]>();
+      const provider: DevDocketProvider & { fireItems: (items: DiscoveredItem[]) => void } = {
+        id,
+        label: `Provider ${id}`,
+        onDidDiscoverItems: emitter.event,
+        refresh: vi.fn(() => refreshPromise),
+        fireItems: (items) => emitter.fire(items),
+      };
+      return { provider, resolveRefresh, rejectRefresh };
+    }
+
+    it('reports unknown health before first refresh completes', () => {
+      const { provider } = createDeferredProvider('pending');
+      registry.register(provider);
+      expect(registry.getProviderHealth('pending')).toEqual({ status: 'unknown' });
+    });
+
+    it('sets healthy status after successful refresh', async () => {
+      const { provider, resolveRefresh } = createDeferredProvider('ok');
+      registry.register(provider);
+
+      resolveRefresh();
+      await nextTick();
+
+      const health = registry.getProviderHealth('ok');
+      expect(health.status).toBe('healthy');
+      expect(health.lastRefreshTime).toBeInstanceOf(Date);
+      expect(health.lastError).toBeUndefined();
+    });
+
+    it('sets unhealthy status with error message after failed refresh', async () => {
+      const { provider, rejectRefresh } = createDeferredProvider('fail');
+      registry.register(provider);
+
+      rejectRefresh(new Error('network error'));
+      await nextTick();
+
+      const health = registry.getProviderHealth('fail');
+      expect(health.status).toBe('unhealthy');
+      expect(health.lastError).toBe('network error');
+    });
+
+    it('sets unhealthy status on timeout', async () => {
+      vi.useFakeTimers();
+      try {
+        const neverResolve = new Promise<void>(() => {});
+        const emitter = new EventEmitter<DiscoveredItem[]>();
+        const provider: DevDocketProvider = {
+          id: 'slow',
+          label: 'Slow Provider',
+          onDidDiscoverItems: emitter.event,
+          refresh: vi.fn(() => neverResolve),
+        };
+        registry.register(provider);
+
+        // Advance past the timeout
+        vi.advanceTimersByTime(ProviderRegistry.REFRESH_TIMEOUT_MS + 100);
+        await vi.runAllTimersAsync();
+
+        const health = registry.getProviderHealth('slow');
+        expect(health.status).toBe('unhealthy');
+        expect(health.lastError).toBe('Refresh timed out');
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('fires onDidChangeProviderHealth on status change', async () => {
+      const { provider, resolveRefresh } = createDeferredProvider('evented');
+      registry.register(provider);
+
+      const listener = vi.fn();
+      registry.onDidChangeProviderHealth(listener);
+
+      resolveRefresh();
+      await nextTick();
+
+      expect(listener).toHaveBeenCalledWith('evented');
+    });
+
+    it('fires onDidChangeProviderHealth when lastRefreshTime changes even if status is same', async () => {
+      const provider = createMockProvider('stable');
+      registry.register(provider);
+      // First refresh resolves immediately → healthy
+      await nextTick();
+
+      const listener = vi.fn();
+      registry.onDidChangeProviderHealth(listener);
+
+      // Guarantee a different timestamp on next refresh
+      const spy = vi.spyOn(Date, 'now').mockReturnValue(Date.now() + 1000);
+      try {
+        await registry.refreshAll();
+      } finally {
+        spy.mockRestore();
+      }
+
+      expect(listener).toHaveBeenCalledWith('stable');
+    });
+
+    it('clears health status when provider is unregistered', async () => {
+      const provider = createMockProvider('temp');
+      const disposable = registry.register(provider);
+      await nextTick();
+
+      expect(registry.getProviderHealth('temp').status).toBe('healthy');
+
+      disposable.dispose();
+      expect(registry.getProviderHealth('temp')).toEqual({ status: 'unknown' });
+    });
+
+    it('preserves lastRefreshTime from previous healthy state on failure', async () => {
+      const provider = createMockProvider('flaky');
+      registry.register(provider);
+      await nextTick();
+
+      const healthyTime = registry.getProviderHealth('flaky').lastRefreshTime;
+      expect(healthyTime).toBeInstanceOf(Date);
+
+      // Now trigger a failed refresh
+      vi.mocked(provider.refresh).mockRejectedValueOnce(new Error('oops'));
+      await registry.refreshAll();
+
+      const health = registry.getProviderHealth('flaky');
+      expect(health.status).toBe('unhealthy');
+      expect(health.lastError).toBe('oops');
+      // lastRefreshTime is preserved from the last healthy refresh
+      expect(health.lastRefreshTime).toEqual(healthyTime);
+    });
+  });
 });

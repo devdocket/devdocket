@@ -1,7 +1,7 @@
 # DevDocket
 
 <p align="center">
-  <img src="packages/core/resources/devdocket.svg" alt="DevDocket Logo" width="64" height="64" />
+  <img src="branding/logo.svg" alt="DevDocket Logo" width="64" height="64" />
 </p>
 
 **A unified work hub inside VS Code.**
