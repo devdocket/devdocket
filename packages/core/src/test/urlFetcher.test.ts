@@ -301,4 +301,150 @@ describe('fetchItemDetails', () => {
       expect(authentication.getSession).toHaveBeenCalledTimes(1);
     });
   });
+
+  describe('GitHub Issue', () => {
+    const parsed: ParsedUrl = { type: 'github-issue', owner: 'octocat', repo: 'hello', number: 10 };
+
+    it('returns details on successful fetch', async () => {
+      mockFetch.mockResolvedValue({
+        ok: true,
+        json: async () => ({ title: 'Bug report', body: 'Steps to reproduce', html_url: 'https://github.com/octocat/hello/issues/10' }),
+      });
+
+      const result = await fetchItemDetails(parsed);
+      expect(result).toEqual({
+        title: 'octocat/hello#10: Bug report',
+        notes: 'Steps to reproduce',
+        url: 'https://github.com/octocat/hello/issues/10',
+        group: 'octocat/hello',
+      });
+    });
+
+    it('uses empty string for null body', async () => {
+      mockFetch.mockResolvedValue({
+        ok: true,
+        json: async () => ({ title: 'No body', body: null, html_url: 'https://github.com/octocat/hello/issues/10' }),
+      });
+
+      const result = await fetchItemDetails(parsed);
+      expect(result.notes).toBe('');
+    });
+
+    it('throws on 404', async () => {
+      mockFetch.mockResolvedValue({ ok: false, status: 404, statusText: 'Not Found' });
+      await expect(fetchItemDetails(parsed)).rejects.toThrow(/not found/i);
+    });
+
+    it('throws with auth message on 403', async () => {
+      mockFetch.mockResolvedValue({ ok: false, status: 403, statusText: 'Forbidden' });
+      await expect(fetchItemDetails(parsed)).rejects.toThrow(/access denied/i);
+    });
+
+    it('calls correct API endpoint', async () => {
+      mockFetch.mockResolvedValue({
+        ok: true,
+        json: async () => ({ title: 'T', body: null, html_url: 'https://github.com/octocat/hello/issues/10' }),
+      });
+
+      await fetchItemDetails(parsed);
+      expect(mockFetch).toHaveBeenCalledWith(
+        'https://api.github.com/repos/octocat/hello/issues/10',
+        expect.any(Object),
+      );
+    });
+
+    it('retries with interactive auth on 404 and succeeds', async () => {
+      vi.mocked(authentication.getSession)
+        .mockResolvedValueOnce(undefined as any)
+        .mockResolvedValueOnce({
+          accessToken: 'interactive-token',
+          id: 'test',
+          account: { id: '1', label: 'user' },
+          scopes: ['repo'],
+        });
+      mockFetch
+        .mockResolvedValueOnce({ ok: false, status: 404, statusText: 'Not Found' })
+        .mockResolvedValueOnce({
+          ok: true,
+          json: async () => ({ title: 'Private Issue', body: 'secret', html_url: 'https://github.com/octocat/hello/issues/10' }),
+        });
+
+      const result = await fetchItemDetails(parsed);
+      expect(result.title).toBe('octocat/hello#10: Private Issue');
+      expect(mockFetch).toHaveBeenCalledTimes(2);
+    });
+  });
+
+  describe('ADO Work Item', () => {
+    const parsed: ParsedUrl = { type: 'ado-workitem', org: 'myorg', project: 'myproj', id: 99 };
+
+    it('returns details on successful fetch', async () => {
+      mockFetch.mockResolvedValue({
+        ok: true,
+        json: async () => ({ fields: { 'System.Title': 'User story', 'System.Description': 'As a user...' } }),
+      });
+
+      const result = await fetchItemDetails(parsed);
+      expect(result).toEqual({
+        title: 'myorg/myproj#99: User story',
+        notes: 'As a user...',
+        url: 'https://dev.azure.com/myorg/myproj/_workitems/edit/99',
+        group: 'myorg/myproj',
+      });
+    });
+
+    it('uses empty string for null description', async () => {
+      mockFetch.mockResolvedValue({
+        ok: true,
+        json: async () => ({ fields: { 'System.Title': 'No desc', 'System.Description': null } }),
+      });
+
+      const result = await fetchItemDetails(parsed);
+      expect(result.notes).toBe('');
+    });
+
+    it('throws on 404', async () => {
+      mockFetch.mockResolvedValue({ ok: false, status: 404, statusText: 'Not Found' });
+      await expect(fetchItemDetails(parsed)).rejects.toThrow(/not found/i);
+    });
+
+    it('throws with auth message on 401', async () => {
+      mockFetch.mockResolvedValue({ ok: false, status: 401, statusText: 'Unauthorized' });
+      await expect(fetchItemDetails(parsed)).rejects.toThrow(/authentication required/i);
+    });
+
+    it('calls correct API endpoint', async () => {
+      mockFetch.mockResolvedValue({
+        ok: true,
+        json: async () => ({ fields: { 'System.Title': 'T', 'System.Description': null } }),
+      });
+
+      await fetchItemDetails(parsed);
+      expect(mockFetch).toHaveBeenCalledWith(
+        'https://dev.azure.com/myorg/myproj/_apis/wit/workitems/99?api-version=7.1',
+        expect.any(Object),
+      );
+    });
+
+    it('retries with interactive auth on 404 and succeeds', async () => {
+      vi.mocked(authentication.getSession)
+        .mockResolvedValueOnce(undefined as any)
+        .mockResolvedValueOnce({
+          accessToken: 'ado-interactive-token',
+          id: 'test',
+          account: { id: '1', label: 'user' },
+          scopes: ['499b84ac-1321-427f-aa17-267ca6975798/.default'],
+        });
+      mockFetch
+        .mockResolvedValueOnce({ ok: false, status: 404, statusText: 'Not Found' })
+        .mockResolvedValueOnce({
+          ok: true,
+          json: async () => ({ fields: { 'System.Title': 'Private WI', 'System.Description': 'secret' } }),
+        });
+
+      const result = await fetchItemDetails(parsed);
+      expect(result.title).toBe('myorg/myproj#99: Private WI');
+      expect(mockFetch).toHaveBeenCalledTimes(2);
+    });
+  });
 });
