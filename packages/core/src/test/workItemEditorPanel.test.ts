@@ -947,10 +947,10 @@ describe('WorkItemEditorPanel (integration with WorkGraph)', () => {
       expect(html).not.toContain('Title is managed by the provider');
     });
 
-    it('title field is editable for unregistered provider IDs like url-import', async () => {
+    it('title field is editable for unregistered provider IDs', async () => {
       const item = await graph.createItem(
         { title: 'Imported Task' },
-        { providerId: 'url-import', externalId: 'https://example.com/pr/1' },
+        { providerId: 'non-existent-provider', externalId: 'https://example.com/pr/1' },
       );
       const registry = createMockProviderRegistry();
       vi.mocked(registry.getProvider).mockReturnValue(undefined);

@@ -236,7 +236,7 @@ async function handleCreateItemFromUrl(
 ): Promise<void> {
   const url = await vscode.window.showInputBox({
     prompt: 'Enter a GitHub PR/issue or Azure DevOps PR/work item URL',
-    placeHolder: 'https://github.com/owner/repo/pull/123 or https://github.com/owner/repo/issues/123',
+    placeHolder: 'https://github.com/owner/repo/pull/123',
     validateInput: (value) => {
       if (!value.trim()) { return 'URL is required'; }
       if (!parseSourceUrl(value)) {
@@ -271,7 +271,7 @@ async function handleCreateItemFromUrl(
   }
 
   // Prevent duplicate items for the same URL
-  const existing = workGraph.findItemByProvenance('url-import', details.url);
+  const existing = workGraph.findItemByProvenance(details.providerId, details.url);
   if (existing) {
     const providerLabel = existing.providerId ? labelCache.get(existing.providerId) : undefined;
     WorkItemEditorPanel.open(context, workGraph, providerRegistry, existing, providerLabel);
@@ -282,7 +282,7 @@ async function handleCreateItemFromUrl(
   const group = details.group?.trim() || undefined;
   const createdItem = await workGraph.createItem(
     { title: details.title, notes: details.notes },
-    { providerId: 'url-import', externalId: details.url, url: details.url, ...(group ? { group } : {}) },
+    { providerId: details.providerId, externalId: details.url, url: details.url, ...(group ? { group } : {}) },
   );
 
   const providerLabel = createdItem.providerId ? labelCache.get(createdItem.providerId) : undefined;

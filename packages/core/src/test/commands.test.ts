@@ -256,13 +256,14 @@ describe('registerCommands', () => {
       notes: 'Description',
       url: 'https://github.com/owner/repo/pull/42',
       group: 'owner/repo',
+      providerId: 'github-pr-reviews',
     };
 
     beforeEach(() => {
       vi.mocked(parseSourceUrl).mockReturnValue({ type: 'github-pr', owner: 'owner', repo: 'repo', number: 42 });
       vi.mocked(fetchItemDetails).mockResolvedValue(fakeDetails);
       workGraph.findItemByProvenance.mockReturnValue(undefined);
-      workGraph.createItem.mockResolvedValue(createWorkItem({ providerId: 'url-import', externalId: fakeDetails.url }));
+      workGraph.createItem.mockResolvedValue(createWorkItem({ providerId: 'github-pr-reviews', externalId: fakeDetails.url }));
     });
 
     it('creates item when user provides a valid URL', async () => {
@@ -284,7 +285,7 @@ describe('registerCommands', () => {
     });
 
     it('opens existing item instead of creating duplicate', async () => {
-      const existing = createWorkItem({ id: 'existing-1', providerId: 'url-import' });
+      const existing = createWorkItem({ id: 'existing-1', providerId: 'github-pr-reviews' });
       workGraph.findItemByProvenance.mockReturnValue(existing);
       (vscode.window.showInputBox as Mock).mockResolvedValue('https://github.com/owner/repo/pull/42');
       await invoke('devdocket.createItemFromUrl');

@@ -17,6 +17,7 @@ export interface FetchedItemDetails {
   notes: string;
   url: string;
   group: string;
+  providerId: string;
 }
 
 /**
@@ -145,6 +146,7 @@ async function fetchGitHubPr(owner: string, repo: string, number: number, signal
     notes: data.body ?? '',
     url: data.html_url,
     group: `${owner}/${repo}`,
+    providerId: 'github-pr-reviews',
   };
 }
 
@@ -168,6 +170,7 @@ async function fetchGitHubIssue(owner: string, repo: string, number: number, sig
     notes: data.body ?? '',
     url: data.html_url,
     group: `${owner}/${repo}`,
+    providerId: 'github',
   };
 }
 
@@ -192,6 +195,7 @@ async function fetchAdoPr(org: string, project: string, repo: string, id: number
     notes: data.description ?? '',
     url: htmlUrl,
     group: `${org}/${project}`,
+    providerId: 'ado-pr-reviews',
   };
 }
 
@@ -216,5 +220,6 @@ async function fetchAdoWorkItem(org: string, project: string, id: number, signal
     notes: data.fields['System.Description'] ?? '',
     url: htmlUrl,
     group: `${org}/${project}`,
+    providerId: 'ado-work-items',
   };
 }

@@ -39,6 +39,7 @@ describe('fetchItemDetails', () => {
         notes: 'Some description',
         url: 'https://github.com/octocat/hello/pull/42',
         group: 'octocat/hello',
+        providerId: 'github-pr-reviews',
       });
     });
 
@@ -186,6 +187,7 @@ describe('fetchItemDetails', () => {
         notes: 'ADO desc',
         url: 'https://dev.azure.com/myorg/myproj/_git/myrepo/pullrequest/7',
         group: 'myorg/myproj',
+        providerId: 'ado-pr-reviews',
       });
     });
 
@@ -317,6 +319,7 @@ describe('fetchItemDetails', () => {
         notes: 'Steps to reproduce',
         url: 'https://github.com/octocat/hello/issues/10',
         group: 'octocat/hello',
+        providerId: 'github',
       });
     });
 
@@ -390,6 +393,7 @@ describe('fetchItemDetails', () => {
         notes: 'As a user...',
         url: 'https://dev.azure.com/myorg/myproj/_workitems/edit/99',
         group: 'myorg/myproj',
+        providerId: 'ado-work-items',
       });
     });
 
