@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { EventEmitter, TreeItemCollapsibleState } from 'vscode';
 import { WorkItem, WorkItemState } from '../models/workItem';
 import { FocusTreeProvider } from '../views/focusTreeProvider';
-import { isProviderGroupNode, isSubGroupNode, ProviderGroupNode, SubGroupNode } from '../views/viewLayout';
+import { isSubGroupNode, SubGroupNode } from '../views/viewLayout';
 
 function createMockWorkGraph() {
   const emitter = new EventEmitter<void>();
@@ -56,93 +56,84 @@ describe('FocusTreeProvider layout toggle', () => {
       provider.layout = 'tree';
     });
 
-    it('returns provider group nodes with display names at top level', () => {
+    it('returns group nodes by item.group at top level', () => {
       const items = [
-        makeItem({ id: '1', title: 'A', providerId: 'github', state: WorkItemState.InProgress }),
-        makeItem({ id: '2', title: 'B', providerId: 'jira', state: WorkItemState.Paused }),
+        makeItem({ id: '1', title: 'A', providerId: 'github', state: WorkItemState.InProgress, group: 'contoso/webapp' }),
+        makeItem({ id: '2', title: 'B', providerId: 'jira', state: WorkItemState.Paused, group: 'myorg/api' }),
       ];
       workGraph.getItemsByState.mockReturnValue(items);
       const children = provider.getChildren();
       expect(children).toHaveLength(2);
-      expect(children.every(c => isProviderGroupNode(c))).toBe(true);
-      const labels = children.map(c => (c as ProviderGroupNode).label);
-      expect(labels).toContain('GitHub');
-      expect(labels).toContain('Jira');
+      expect(children.every(c => isSubGroupNode(c))).toBe(true);
+      const labels = children.map(c => (c as SubGroupNode).label);
+      expect(labels).toContain('contoso/webapp');
+      expect(labels).toContain('myorg/api');
     });
 
-    it('groups items without providerId under "Other"', () => {
+    it('shows ungrouped items directly at root alongside group nodes', () => {
       const items = [
-        makeItem({ id: '1', title: 'Manual', state: WorkItemState.InProgress }),
+        makeItem({ id: '1', title: 'Ungrouped', state: WorkItemState.InProgress }),
+        makeItem({ id: '2', title: 'Grouped', state: WorkItemState.InProgress, group: 'contoso/webapp' }),
       ];
       workGraph.getItemsByState.mockReturnValue(items);
       const children = provider.getChildren();
-      expect(children).toHaveLength(1);
-      expect((children[0] as ProviderGroupNode).label).toBe('Other');
-    });
-
-    it('returns items for a provider group', () => {
-      const items = [
-        makeItem({ id: '1', title: 'A', providerId: 'github', state: WorkItemState.InProgress }),
-        makeItem({ id: '2', title: 'B', providerId: 'jira', state: WorkItemState.Paused }),
-      ];
-      workGraph.getItemsByState.mockReturnValue(items);
-      const group: ProviderGroupNode = { kind: 'providerGroup', label: 'github', providerId: 'github' };
-      const children = provider.getChildren(group);
-      expect(children.length).toBeGreaterThanOrEqual(1);
-    });
-
-    it('renders group node correctly', () => {
-      const group: ProviderGroupNode = { kind: 'providerGroup', label: 'GitHub', providerId: 'github' };
-      const treeItem = provider.getTreeItem(group);
-      expect(treeItem.label).toBe('GitHub');
-      expect(treeItem.collapsibleState).toBe(TreeItemCollapsibleState.Collapsed);
-      expect(treeItem.contextValue).toBe('focusGroup');
-      expect((treeItem.iconPath as any).id).toBe('plug');
-    });
-
-    it('renders "Other" group with circle-filled icon', () => {
-      const group: ProviderGroupNode = { kind: 'providerGroup', label: 'Other', providerId: undefined };
-      const treeItem = provider.getTreeItem(group);
-      expect((treeItem.iconPath as any).id).toBe('circle-filled');
-    });
-
-    it('groups items by sub-group within a provider', () => {
-      const items = [
-        makeItem({ id: '1', title: 'Bug A', providerId: 'github', state: WorkItemState.InProgress, group: 'bugs' }),
-        makeItem({ id: '2', title: 'Bug B', providerId: 'github', state: WorkItemState.InProgress, group: 'bugs' }),
-        makeItem({ id: '3', title: 'Feature', providerId: 'github', state: WorkItemState.Paused, group: 'features' }),
-        makeItem({ id: '4', title: 'Ungrouped', providerId: 'github', state: WorkItemState.InProgress }),
-      ];
-      workGraph.getItemsByState.mockReturnValue(items);
-      const topLevel = provider.getChildren();
-      expect(topLevel).toHaveLength(1);
-
-      const providerChildren = provider.getChildren(topLevel[0]);
-      const subGroups = providerChildren.filter(c => isSubGroupNode(c)) as SubGroupNode[];
-      const directItems = providerChildren.filter(c => !isSubGroupNode(c));
-      expect(subGroups).toHaveLength(2);
-      expect(subGroups.map(g => g.groupName).sort()).toEqual(['bugs', 'features']);
+      expect(children).toHaveLength(2);
+      const groups = children.filter(c => isSubGroupNode(c)) as SubGroupNode[];
+      const directItems = children.filter(c => !isSubGroupNode(c)) as WorkItem[];
+      expect(groups).toHaveLength(1);
+      expect(groups[0].groupName).toBe('contoso/webapp');
       expect(directItems).toHaveLength(1);
+      expect(directItems[0].title).toBe('Ungrouped');
     });
 
-    it('returns items for a sub-group', () => {
+    it('returns items for a group node', () => {
       const items = [
-        makeItem({ id: '1', title: 'Bug A', providerId: 'github', state: WorkItemState.InProgress, group: 'bugs' }),
-        makeItem({ id: '2', title: 'Bug B', providerId: 'github', state: WorkItemState.InProgress, group: 'bugs' }),
-        makeItem({ id: '3', title: 'Feature', providerId: 'github', state: WorkItemState.Paused, group: 'features' }),
+        makeItem({ id: '1', title: 'A', providerId: 'github', state: WorkItemState.InProgress, group: 'contoso/webapp' }),
+        makeItem({ id: '2', title: 'B', providerId: 'github', state: WorkItemState.InProgress, group: 'contoso/webapp' }),
+        makeItem({ id: '3', title: 'C', providerId: 'github', state: WorkItemState.Paused, group: 'myorg/api' }),
       ];
       workGraph.getItemsByState.mockReturnValue(items);
-      const subGroup: SubGroupNode = { kind: 'subGroup', label: 'bugs', providerId: 'github', groupName: 'bugs' };
-      const children = provider.getChildren(subGroup);
+      const group: SubGroupNode = { kind: 'subGroup', label: 'contoso/webapp', providerId: undefined, groupName: 'contoso/webapp' };
+      const children = provider.getChildren(group);
       expect(children).toHaveLength(2);
     });
 
-    it('renders sub-group node with folder icon', () => {
-      const subGroup: SubGroupNode = { kind: 'subGroup', label: 'bugs', providerId: 'github', groupName: 'bugs' };
-      const treeItem = provider.getTreeItem(subGroup);
-      expect(treeItem.label).toBe('bugs');
+    it('renders group node with folder icon', () => {
+      const group: SubGroupNode = { kind: 'subGroup', label: 'contoso/webapp', providerId: undefined, groupName: 'contoso/webapp' };
+      const treeItem = provider.getTreeItem(group);
+      expect(treeItem.label).toBe('contoso/webapp');
       expect(treeItem.collapsibleState).toBe(TreeItemCollapsibleState.Collapsed);
       expect((treeItem.iconPath as any).id).toBe('folder');
+    });
+
+    it('sorts group nodes alphabetically', () => {
+      const items = [
+        makeItem({ id: '1', title: 'A', state: WorkItemState.InProgress, group: 'z-repo' }),
+        makeItem({ id: '2', title: 'B', state: WorkItemState.InProgress, group: 'a-repo' }),
+      ];
+      workGraph.getItemsByState.mockReturnValue(items);
+      const children = provider.getChildren();
+      expect((children[0] as SubGroupNode).label).toBe('a-repo');
+      expect((children[1] as SubGroupNode).label).toBe('z-repo');
+    });
+
+    it('returns empty for item node children', () => {
+      const item = makeItem({ id: '1', title: 'X', state: WorkItemState.InProgress });
+      expect(provider.getChildren(item)).toEqual([]);
+    });
+
+    it('normalizes whitespace-only groups as ungrouped', () => {
+      const items = [
+        makeItem({ id: '1', title: 'Whitespace', state: WorkItemState.InProgress, group: '   ' }),
+        makeItem({ id: '2', title: 'Grouped', state: WorkItemState.InProgress, group: 'contoso/webapp' }),
+      ];
+      workGraph.getItemsByState.mockReturnValue(items);
+      const children = provider.getChildren();
+      const groups = children.filter(c => isSubGroupNode(c)) as SubGroupNode[];
+      const directItems = children.filter(c => !isSubGroupNode(c)) as WorkItem[];
+      expect(groups).toHaveLength(1);
+      expect(groups[0].groupName).toBe('contoso/webapp');
+      expect(directItems).toHaveLength(1);
     });
   });
 });
