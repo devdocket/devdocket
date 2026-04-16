@@ -66,7 +66,7 @@ export class RepoManager {
       this.log.error('GitHub authentication not available');
       throw new Error('GitHub authentication required');
     }
-    this.log.info(`GitHub auth obtained — account: ${session.account?.label ?? 'unknown'}`);
+    this.log.debug(`GitHub auth obtained — account: ${session.account?.label ?? 'unknown'}`);
 
     const cloneUrl = `https://github.com/${org}/${repo}.git`;
 
