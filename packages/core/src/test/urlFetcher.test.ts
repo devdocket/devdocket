@@ -179,7 +179,7 @@ describe('fetchItemDetails', () => {
     it('returns details on successful fetch', async () => {
       mockFetch.mockResolvedValue({
         ok: true,
-        json: async () => ({ title: 'ADO fix', description: 'ADO desc' }),
+        json: async () => ({ title: 'ADO fix', description: 'ADO desc', repository: { name: 'myrepo', project: { name: 'myproj' } } }),
       });
 
       const result = await fetchItemDetails(parsed);
@@ -196,11 +196,22 @@ describe('fetchItemDetails', () => {
     it('uses empty string for null description', async () => {
       mockFetch.mockResolvedValue({
         ok: true,
-        json: async () => ({ title: 'No desc', description: null }),
+        json: async () => ({ title: 'No desc', description: null, repository: { name: 'myrepo', project: { name: 'myproj' } } }),
       });
 
       const result = await fetchItemDetails(parsed);
       expect(result.notes).toBe('');
+    });
+
+    it('uses canonical names from API for externalId', async () => {
+      mockFetch.mockResolvedValue({
+        ok: true,
+        json: async () => ({ title: 'PR', description: null, repository: { name: 'MyRepo', project: { name: 'My Project' } } }),
+      });
+
+      const result = await fetchItemDetails(parsed);
+      expect(result.externalId).toBe('myorg/My Project/MyRepo/7');
+      expect(result.group).toBe('myorg/My Project');
     });
 
     it('throws on 404', async () => {
@@ -227,7 +238,7 @@ describe('fetchItemDetails', () => {
       });
       mockFetch.mockResolvedValue({
         ok: true,
-        json: async () => ({ title: 'T', description: null }),
+        json: async () => ({ title: 'T', description: null, repository: { name: 'myrepo', project: { name: 'myproj' } } }),
       });
 
       await fetchItemDetails(parsed);
@@ -243,7 +254,7 @@ describe('fetchItemDetails', () => {
     it('omits auth header when no session is available', async () => {
       mockFetch.mockResolvedValue({
         ok: true,
-        json: async () => ({ title: 'T', description: null }),
+        json: async () => ({ title: 'T', description: null, repository: { name: 'myrepo', project: { name: 'myproj' } } }),
       });
 
       await fetchItemDetails(parsed);
@@ -255,7 +266,7 @@ describe('fetchItemDetails', () => {
       vi.mocked(authentication.getSession).mockRejectedValue(new Error('auth unavailable'));
       mockFetch.mockResolvedValue({
         ok: true,
-        json: async () => ({ title: 'T', description: null }),
+        json: async () => ({ title: 'T', description: null, repository: { name: 'myrepo', project: { name: 'myproj' } } }),
       });
 
       await fetchItemDetails(parsed);
@@ -276,7 +287,7 @@ describe('fetchItemDetails', () => {
         .mockResolvedValueOnce({ ok: false, status: 404, statusText: 'Not Found' })
         .mockResolvedValueOnce({
           ok: true,
-          json: async () => ({ title: 'Private ADO PR', description: 'secret ado' }),
+          json: async () => ({ title: 'Private ADO PR', description: 'secret ado', repository: { name: 'myrepo', project: { name: 'myproj' } } }),
         });
 
       const result = await fetchItemDetails(parsed);
@@ -387,7 +398,7 @@ describe('fetchItemDetails', () => {
     it('returns details on successful fetch', async () => {
       mockFetch.mockResolvedValue({
         ok: true,
-        json: async () => ({ fields: { 'System.Title': 'User story', 'System.Description': 'As a user...' } }),
+        json: async () => ({ fields: { 'System.Title': 'User story', 'System.Description': 'As a user...', 'System.TeamProject': 'myproj' } }),
       });
 
       const result = await fetchItemDetails(parsed);
@@ -401,10 +412,21 @@ describe('fetchItemDetails', () => {
       });
     });
 
+    it('uses canonical project name from API for externalId', async () => {
+      mockFetch.mockResolvedValue({
+        ok: true,
+        json: async () => ({ fields: { 'System.Title': 'WI', 'System.Description': null, 'System.TeamProject': 'My Project' } }),
+      });
+
+      const result = await fetchItemDetails(parsed);
+      expect(result.externalId).toBe('myorg/My Project/99');
+      expect(result.group).toBe('myorg/My Project');
+    });
+
     it('uses empty string for null description', async () => {
       mockFetch.mockResolvedValue({
         ok: true,
-        json: async () => ({ fields: { 'System.Title': 'No desc', 'System.Description': null } }),
+        json: async () => ({ fields: { 'System.Title': 'No desc', 'System.Description': null, 'System.TeamProject': 'myproj' } }),
       });
 
       const result = await fetchItemDetails(parsed);
@@ -424,7 +446,7 @@ describe('fetchItemDetails', () => {
     it('calls correct API endpoint', async () => {
       mockFetch.mockResolvedValue({
         ok: true,
-        json: async () => ({ fields: { 'System.Title': 'T', 'System.Description': null } }),
+        json: async () => ({ fields: { 'System.Title': 'T', 'System.Description': null, 'System.TeamProject': 'myproj' } }),
       });
 
       await fetchItemDetails(parsed);
@@ -447,7 +469,7 @@ describe('fetchItemDetails', () => {
         .mockResolvedValueOnce({ ok: false, status: 404, statusText: 'Not Found' })
         .mockResolvedValueOnce({
           ok: true,
-          json: async () => ({ fields: { 'System.Title': 'Private WI', 'System.Description': 'secret' } }),
+          json: async () => ({ fields: { 'System.Title': 'Private WI', 'System.Description': 'secret', 'System.TeamProject': 'myproj' } }),
         });
 
       const result = await fetchItemDetails(parsed);

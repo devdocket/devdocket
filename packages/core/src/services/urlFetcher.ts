@@ -192,14 +192,16 @@ async function fetchAdoPr(org: string, project: string, repo: string, id: number
 
   if (!response.ok) { handleAdoError(response, label); }
 
-  const data = await response.json() as { title: string; description: string | null };
+  const data = await response.json() as { title: string; description: string | null; repository: { name: string; project: { name: string } } };
+  const projectName = data.repository.project.name;
+  const repoName = data.repository.name;
   const htmlUrl = `https://dev.azure.com/${encodeURIComponent(org)}/${encodeURIComponent(project)}/_git/${encodeURIComponent(repo)}/pullrequest/${id}`;
   return {
-    title: `${org}/${project}#${id}: ${data.title}`,
+    title: `${org}/${projectName}#${id}: ${data.title}`,
     notes: data.description ?? '',
     url: htmlUrl,
-    externalId: `${org}/${project}/${repo}/${id}`,
-    group: `${org}/${project}`,
+    externalId: `${org}/${projectName}/${repoName}/${id}`,
+    group: `${org}/${projectName}`,
     providerId: 'ado-pr-reviews',
   };
 }
@@ -218,14 +220,15 @@ async function fetchAdoWorkItem(org: string, project: string, id: number, signal
 
   if (!response.ok) { handleAdoError(response, label); }
 
-  const data = await response.json() as { fields: { 'System.Title': string; 'System.Description': string | null } };
+  const data = await response.json() as { fields: { 'System.Title': string; 'System.Description': string | null; 'System.TeamProject': string } };
+  const teamProject = data.fields['System.TeamProject'];
   const htmlUrl = `https://dev.azure.com/${encodeURIComponent(org)}/${encodeURIComponent(project)}/_workitems/edit/${id}`;
   return {
-    title: `${org}/${project}#${id}: ${data.fields['System.Title']}`,
+    title: `${org}/${teamProject}#${id}: ${data.fields['System.Title']}`,
     notes: data.fields['System.Description'] ?? '',
     url: htmlUrl,
-    externalId: `${org}/${project}/${id}`,
-    group: `${org}/${project}`,
+    externalId: `${org}/${teamProject}/${id}`,
+    group: `${org}/${teamProject}`,
     providerId: 'ado-work-items',
   };
 }
