@@ -19,7 +19,7 @@ export class AiWalkthroughAction implements DevDocketAction {
   }
 
   async run(item: WorkItem): Promise<void> {
-    this.log.info(`AiWalkthroughAction.run — url: ${item.url ?? '(none)'}`);
+    this.log.debug(`AiWalkthroughAction.run — url: ${item.url ?? '(none)'}`);
     if (!item.url) return;
 
     await vscode.window.withProgress(
