@@ -28,7 +28,12 @@
       "properties": {
         "devdocket.logLevel": {
           "type": "string",
-          "enum": ["debug", "info", "warn", "error"],
+          "enum": [
+            "debug",
+            "info",
+            "warn",
+            "error"
+          ],
           "default": "info",
           "description": "Log level for DevDocket output channel"
         },
@@ -42,11 +47,46 @@
           "default": {},
           "description": "Per-view layout mode. Keys are view names (inbox, queue, focus, history, sources) and values are 'flat' or 'tree'.",
           "properties": {
-            "inbox": { "type": "string", "enum": ["flat", "tree"], "default": "tree" },
-            "queue": { "type": "string", "enum": ["flat", "tree"], "default": "flat" },
-            "focus": { "type": "string", "enum": ["flat", "tree"], "default": "flat" },
-            "history": { "type": "string", "enum": ["flat", "tree"], "default": "flat" },
-            "sources": { "type": "string", "enum": ["flat", "tree"], "default": "tree" }
+            "inbox": {
+              "type": "string",
+              "enum": [
+                "flat",
+                "tree"
+              ],
+              "default": "tree"
+            },
+            "queue": {
+              "type": "string",
+              "enum": [
+                "flat",
+                "tree"
+              ],
+              "default": "flat"
+            },
+            "focus": {
+              "type": "string",
+              "enum": [
+                "flat",
+                "tree"
+              ],
+              "default": "flat"
+            },
+            "history": {
+              "type": "string",
+              "enum": [
+                "flat",
+                "tree"
+              ],
+              "default": "flat"
+            },
+            "sources": {
+              "type": "string",
+              "enum": [
+                "flat",
+                "tree"
+              ],
+              "default": "tree"
+            }
           },
           "additionalProperties": false
         }
@@ -616,7 +656,8 @@
     "test:watch": "vitest"
   },
   "dependencies": {
-    "@devdocket/shared": "*"
+    "@devdocket/shared": "*",
+    "timeago.js": "^4.0.2"
   },
   "devDependencies": {
     "@types/node": "^20.11.0",
