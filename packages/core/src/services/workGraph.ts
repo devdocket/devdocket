@@ -4,6 +4,8 @@ import { WorkItem, WorkItemInput, WorkItemState } from '../models/workItem';
 import { ITaskStore } from '../storage/taskStore';
 import { logger } from './logger';
 
+const DAY_MS = 24 * 60 * 60 * 1000;
+
 const VALID_TRANSITIONS: ReadonlyMap<WorkItemState, ReadonlySet<WorkItemState>> = new Map([
   [WorkItemState.New, new Set([WorkItemState.InProgress, WorkItemState.Archived])],
   [WorkItemState.InProgress, new Set([WorkItemState.Paused, WorkItemState.Done, WorkItemState.New, WorkItemState.Archived])],
@@ -371,8 +373,50 @@ export class WorkGraph {
     }
   }
 
-  /** Permanently delete a work item from the store. */
-  async deleteItem(id: string): Promise<void> {
+  /**
+   * Delete all history items (Done and Archived) whose `updatedAt` is older than the given age in days.
+   * @returns `deleted` — number of items successfully removed; `failed` — number of items that
+   * could not be deleted (individual errors are logged and do not abort the batch).
+   */
+  async clearOldHistory(maxAgeDays: number): Promise<{ deleted: number; failed: number }> {
+    if (!Number.isFinite(maxAgeDays) || maxAgeDays < 1) {
+      return { deleted: 0, failed: 0 };
+    }
+    const days = Math.ceil(maxAgeDays);
+    const cutoff = Date.now() - days * DAY_MS;
+    const toDelete = this.getItemsByState(WorkItemState.Done, WorkItemState.Archived)
+      .filter(item => item.updatedAt < cutoff);
+
+    if (toDelete.length === 0) {
+      return { deleted: 0, failed: 0 };
+    }
+
+    let deleted = 0;
+    let failed = 0;
+    try {
+      for (const item of toDelete) {
+        try {
+          await this.deleteItem(item.id, { silent: true });
+          deleted++;
+        } catch (err) {
+          failed++;
+          logger.warn(`Failed to delete history item ${item.id}, skipping: ${err instanceof Error ? err.message : String(err)}`);
+        }
+      }
+    } finally {
+      if (deleted > 0) {
+        this._onDidChange.fire();
+      }
+    }
+
+    return { deleted, failed };
+  }
+
+  /**
+   * Permanently delete a work item from the store.
+   * @param options.silent When true, suppresses the `onDidChange` event (used for batch operations).
+   */
+  async deleteItem(id: string, options?: { silent?: boolean }): Promise<void> {
     const item = this.items.get(id);
     await this.store.delete(id);
     if (item?.providerId && item?.externalId) {
@@ -409,7 +453,9 @@ export class WorkGraph {
     }
     this.items.delete(id);
     this.invalidateStateCache();
-    this._onDidChange.fire();
+    if (!options?.silent) {
+      this._onDidChange.fire();
+    }
     logger.info(`Deleted work item: ${id}`);
   }
 

@@ -395,6 +395,31 @@ async function handleDeleteItem(workGraph: WorkGraph, item?: { id?: string }, se
   }
 }
 
+async function handleClearHistory(workGraph: WorkGraph): Promise<void> {
+  const config = vscode.workspace.getConfiguration('devdocket');
+  const raw = config.get<number>('historyClearDays', 30);
+  const maxAgeDays = Number.isFinite(raw) && raw >= 1 ? Math.ceil(raw) : 30;
+
+  const confirm = await vscode.window.showWarningMessage(
+    `Delete all history items older than ${maxAgeDays} day${maxAgeDays === 1 ? '' : 's'}? This cannot be undone.`,
+    { modal: true },
+    'Delete',
+  );
+  if (confirm !== 'Delete') { return; }
+
+  const result = await workGraph.clearOldHistory(maxAgeDays);
+  if (result.failed > 0) {
+    void vscode.window.showErrorMessage(
+      `DevDocket: Failed to delete ${result.failed} item(s); see Output for details`,
+    );
+  }
+  if (result.deleted > 0) {
+    void vscode.window.showInformationMessage(`DevDocket: Cleared ${result.deleted} old history item${result.deleted === 1 ? '' : 's'}`);
+  } else if (result.failed === 0) {
+    void vscode.window.showInformationMessage('DevDocket: No history items older than the threshold');
+  }
+}
+
 async function handleFocusMoveUp(workGraph: WorkGraph, item?: { id?: string }): Promise<void> {
   if (!item?.id) {
     void vscode.window.showInformationMessage('DevDocket: Select an item in Focus to move.');
@@ -824,6 +849,8 @@ export function registerCommands(
       wrapCommand('Failed to resume item', (item, selectedItems) => handleResumeItem(workGraph, item, selectedItems))),
     vscode.commands.registerCommand('devdocket.deleteItem',
       wrapCommand('Failed to delete item', (item, selectedItems) => handleDeleteItem(workGraph, item, selectedItems))),
+    vscode.commands.registerCommand('devdocket.clearHistory',
+      wrapCommand('Failed to clear history', () => handleClearHistory(workGraph))),
     vscode.commands.registerCommand('devdocket.editItem',
       wrapCommand('Failed to open editor', (item) => handleEditItem(context, workGraph, providerRegistry, labelCache, item))),
     vscode.commands.registerCommand('devdocket.openInBrowser',

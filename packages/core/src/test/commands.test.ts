@@ -57,7 +57,7 @@ function makeSourceItem(overrides: Partial<SourceItemNode> = {}): SourceItemNode
 
 type UsedWorkGraphMethods = Pick<
   WorkGraph,
-  'transitionState' | 'getItem' | 'createItem' | 'findItemByProvenance' | 'moveItem' | 'deleteItem'
+  'transitionState' | 'getItem' | 'createItem' | 'findItemByProvenance' | 'moveItem' | 'deleteItem' | 'clearOldHistory'
 >;
 
 function createMockWorkGraph(): { [K in keyof UsedWorkGraphMethods]: Mock } {
@@ -68,6 +68,7 @@ function createMockWorkGraph(): { [K in keyof UsedWorkGraphMethods]: Mock } {
     findItemByProvenance: vi.fn(),
     moveItem: vi.fn(),
     deleteItem: vi.fn(),
+    clearOldHistory: vi.fn(async () => ({ deleted: 0, failed: 0 })),
   };
 }
 
@@ -183,6 +184,7 @@ describe('registerCommands', () => {
       'devdocket.dismissFromInbox',
       'devdocket.acceptFromSources',
       'devdocket.dismissFromSources',
+      'devdocket.clearHistory',
     ];
     for (const cmd of expected) {
       expect(commandHandlers.has(cmd), `missing command: ${cmd}`).toBe(true);
@@ -1909,9 +1911,83 @@ describe('registerCommands', () => {
       );
     });
   });
-});
 
-// ── isSafeUrl (unit tests) ───────────────────────────────────────────
+  describe('devdocket.clearHistory', () => {
+    function mockConfig(value: any = 30) {
+      (vscode.workspace.getConfiguration as Mock).mockReturnValue({
+        get: vi.fn((_key: string, _def?: any) => value),
+        update: vi.fn(),
+        inspect: vi.fn(),
+      });
+    }
+
+    it('shows confirmation dialog and clears old history', async () => {
+      mockConfig(30);
+      (vscode.window.showWarningMessage as Mock).mockResolvedValue('Delete');
+      workGraph.clearOldHistory.mockResolvedValue({ deleted: 5, failed: 0 });
+
+      await invoke('devdocket.clearHistory');
+
+      expect(vscode.window.showWarningMessage).toHaveBeenCalledWith(
+        expect.stringContaining('older than 30 day'),
+        { modal: true },
+        'Delete',
+      );
+      expect(workGraph.clearOldHistory).toHaveBeenCalledWith(30);
+      expect(vscode.window.showInformationMessage).toHaveBeenCalledWith(
+        expect.stringContaining('5 old history items'),
+      );
+    });
+
+    it('does nothing when user cancels confirmation', async () => {
+      mockConfig(30);
+      (vscode.window.showWarningMessage as Mock).mockResolvedValue(undefined);
+
+      await invoke('devdocket.clearHistory');
+
+      expect(workGraph.clearOldHistory).not.toHaveBeenCalled();
+    });
+
+    it('shows no-items message when nothing to clear', async () => {
+      mockConfig(30);
+      (vscode.window.showWarningMessage as Mock).mockResolvedValue('Delete');
+      workGraph.clearOldHistory.mockResolvedValue({ deleted: 0, failed: 0 });
+
+      await invoke('devdocket.clearHistory');
+
+      expect(vscode.window.showInformationMessage).toHaveBeenCalledWith(
+        expect.stringContaining('No history items older'),
+      );
+    });
+
+    it('uses singular form for 1 day threshold', async () => {
+      mockConfig(1);
+      (vscode.window.showWarningMessage as Mock).mockResolvedValue('Delete');
+      workGraph.clearOldHistory.mockResolvedValue({ deleted: 1, failed: 0 });
+
+      await invoke('devdocket.clearHistory');
+
+      expect(vscode.window.showWarningMessage).toHaveBeenCalledWith(
+        expect.stringContaining('older than 1 day'),
+        { modal: true },
+        'Delete',
+      );
+      expect(vscode.window.showInformationMessage).toHaveBeenCalledWith(
+        expect.stringContaining('1 old history item'),
+      );
+    });
+
+    it('falls back to default 30 for invalid config values', async () => {
+      mockConfig(NaN);
+      (vscode.window.showWarningMessage as Mock).mockResolvedValue('Delete');
+      workGraph.clearOldHistory.mockResolvedValue({ deleted: 0, failed: 0 });
+
+      await invoke('devdocket.clearHistory');
+
+      expect(workGraph.clearOldHistory).toHaveBeenCalledWith(30);
+    });
+  });
+});
 
 describe('isSafeUrl', () => {
   it('accepts http:// URLs', () => {
