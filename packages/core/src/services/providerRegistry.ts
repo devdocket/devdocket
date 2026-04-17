@@ -1,5 +1,5 @@
 import * as vscode from 'vscode';
-import { DevDocketProvider, DiscoveredItem } from '../api/types';
+import { DevDocketProvider, DiscoveredItem, type ResolvedItem } from '../api/types';
 import { DiscoveredStateStore, InboxState } from '../storage/discoveredStateStore';
 import { ProviderLabelCache } from '../storage/providerLabelCache';
 import { logger } from './logger';
@@ -166,6 +166,26 @@ export class ProviderRegistry {
    */
   getAllDiscoveredItems(): Map<string, DiscoveredItem[]> {
     return this.discoveredItems;
+  }
+
+  /**
+   * Ask each registered provider to resolve a URL.
+   * Returns the first successful result, or `undefined` if no provider recognises the URL.
+   */
+  async resolveUrl(url: string, signal?: AbortSignal): Promise<ResolvedItem | undefined> {
+    for (const provider of this.providers.values()) {
+      if (typeof provider.resolveUrl !== 'function') { continue; }
+      try {
+        const result = await provider.resolveUrl(url, signal);
+        if (result) { return { ...result, providerId: provider.id }; }
+      } catch (error) {
+        if (error instanceof Error && error.name === 'AbortError') { throw error; }
+        // Provider recognised the URL but failed (e.g. 404, auth error) — surface to user
+        logger.warn(`Provider ${provider.id} failed to resolve URL`, error);
+        throw error;
+      }
+    }
+    return undefined;
   }
 
   /**

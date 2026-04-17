@@ -9,6 +9,7 @@ import { WorkItemEditorPanel } from '../views/workItemEditorPanel';
 import { type InboxItem, type InboxElement } from '../views/inboxTreeProvider';
 import { type SourceItemNode, type SourcesElement } from '../views/sourcesTreeProvider';
 import { logger } from '../services/logger';
+import type { ResolvedItem } from '../api/types';
 import { toggleViewLayout, setViewLayout } from '../views/viewLayout';
 
 /**
@@ -224,6 +225,64 @@ async function handleCreateItem(workGraph: WorkGraph): Promise<void> {
   logger.info(`Creating new work item: ${title.trim()}`);
   await workGraph.createItem({ title: title.trim() });
   void vscode.window.showInformationMessage(`DevDocket: Created "${title.trim()}"`);
+}
+
+async function handleCreateItemFromUrl(
+  context: vscode.ExtensionContext,
+  workGraph: WorkGraph,
+  providerRegistry: ProviderRegistry,
+  labelCache: ProviderLabelCache,
+): Promise<void> {
+  const url = await vscode.window.showInputBox({
+    prompt: 'Enter a URL to create a work item from',
+  });
+  if (!url?.trim()) { return; }
+
+  if (!isSafeUrl(url.trim())) {
+    void vscode.window.showErrorMessage('DevDocket: Please enter a valid HTTP or HTTPS URL');
+    return;
+  }
+
+  let details: ResolvedItem | undefined;
+  try {
+    details = await vscode.window.withProgress(
+      { location: vscode.ProgressLocation.Notification, title: 'DevDocket: Fetching item details…', cancellable: true },
+      (_progress, token) => {
+        const controller = new AbortController();
+        token.onCancellationRequested(() => controller.abort());
+        return providerRegistry.resolveUrl(url.trim(), controller.signal);
+      },
+    );
+  } catch (error) {
+    if (error instanceof Error && error.name === 'AbortError') {
+      return;
+    }
+    throw error;
+  }
+
+  if (!details) {
+    void vscode.window.showErrorMessage('DevDocket: No provider recognised this URL');
+    return;
+  }
+
+  // Prevent duplicate items for the same provider-backed source item
+  const existing = workGraph.findItemByProvenance(details.providerId, details.externalId);
+  if (existing) {
+    const providerLabel = existing.providerId ? labelCache.get(existing.providerId) : undefined;
+    WorkItemEditorPanel.open(context, workGraph, providerRegistry, existing, providerLabel);
+    void vscode.window.showInformationMessage('DevDocket: Item already exists for this source item');
+    return;
+  }
+
+  const group = details.group?.trim() || undefined;
+  const createdItem = await workGraph.createItem(
+    { title: details.title, notes: details.notes },
+    { providerId: details.providerId, externalId: details.externalId, url: details.url, ...(group ? { group } : {}) },
+  );
+
+  const providerLabel = createdItem.providerId ? labelCache.get(createdItem.providerId) : undefined;
+  WorkItemEditorPanel.open(context, workGraph, providerRegistry, createdItem, providerLabel);
+  void vscode.window.showInformationMessage(`DevDocket: Created "${details.title}"`);
 }
 
 async function handleAcceptToFocus(workGraph: WorkGraph, item?: { id?: string }, selectedItems?: { id?: string }[]): Promise<void> {
@@ -837,6 +896,8 @@ export function registerCommands(
       wrapCommand('Failed to refresh', () => handleRefresh(providerRegistry))),
     vscode.commands.registerCommand('devdocket.createItem',
       wrapCommand('Failed to create item', () => handleCreateItem(workGraph))),
+    vscode.commands.registerCommand('devdocket.createItemFromUrl',
+      wrapCommand('Failed to create item from URL', () => handleCreateItemFromUrl(context, workGraph, providerRegistry, labelCache))),
     vscode.commands.registerCommand('devdocket.acceptToFocus',
       wrapCommand('Failed to focus item', (item, selectedItems) => handleAcceptToFocus(workGraph, item, selectedItems))),
     vscode.commands.registerCommand('devdocket.archiveItem',

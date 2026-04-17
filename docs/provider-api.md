@@ -120,6 +120,16 @@ interface DevDocketProvider {
   readonly label: string;
   readonly onDidDiscoverItems: Event<DiscoveredItem[]>;
   refresh(token?: vscode.CancellationToken): Promise<void>;
+  resolveUrl?(url: string, signal?: AbortSignal): Promise<ResolvedItem | undefined>;
+}
+
+interface ResolvedItem {
+  title: string;
+  notes: string;
+  url: string;
+  externalId: string;
+  group?: string;
+  providerId: string;
 }
 ```
 
@@ -155,6 +165,16 @@ interface DevDocketProvider {
   readonly label: string;
   readonly onDidDiscoverItems: Event<DiscoveredItem[]>;
   refresh(token?: vscode.CancellationToken): Promise<void>;
+  resolveUrl?(url: string, signal?: AbortSignal): Promise<ResolvedItem | undefined>;
+}
+
+interface ResolvedItem {
+  title: string;
+  notes: string;
+  url: string;
+  externalId: string;
+  group?: string;
+  providerId: string;
 }
 
 class JiraProvider implements DevDocketProvider {
@@ -216,6 +236,30 @@ class JiraProvider implements DevDocketProvider {
     this._onDidDiscoverItems.dispose();
   }
 
+  // Optional: support "Create Item from URL" for Jira ticket URLs
+  async resolveUrl(url: string): Promise<ResolvedItem | undefined> {
+    const match = url.match(/\/browse\/(([A-Z]+)-(\d+))$/);
+    if (!match) { return undefined; }
+    const [, key, project] = match;
+    const ticket = await this.fetchTicket(key);
+    if (!ticket) { return undefined; }
+    return {
+      title: `${key}: ${ticket.summary}`,
+      notes: ticket.description ?? '',
+      url,
+      externalId: `${project}/${key}`,
+      group: project,
+      providerId: this.id,
+    };
+  }
+
+  private async fetchTicket(_key: string): Promise<
+    { summary: string; description?: string } | undefined
+  > {
+    // Replace with your actual API call
+    return undefined;
+  }
+
   private async fetchTickets(): Promise<
     Array<{
       key: string;
@@ -236,6 +280,7 @@ class JiraProvider implements DevDocketProvider {
 - **`refresh()` is called by DevDocket** — It is invoked automatically when the provider is registered for initial discovery. It must be safe to call multiple times. DevDocket passes a `CancellationToken` and enforces a refresh timeout; providers should check `token.isCancellationRequested` before and during long-running operations.
 - **`externalId` must be unique per provider** — DevDocket uses the combination of `providerId + externalId` to track inbox state. Use a stable identifier like `owner/repo#123` or `PROJECT/TICKET-42`.
 - **`group` is optional** — When set, items with the same group value are nested under a folder node in the Inbox and Sources views.
+- **`resolveUrl()` is optional** — Implement it to let users create work items by pasting a URL (e.g. from a browser). When the user runs the "Create Item from URL" command, DevDocket asks each registered provider to resolve the URL. The first provider that returns a `ResolvedItem` wins. If your provider doesn't recognise the URL, return `undefined`.
 - **Emit the full set every time** — Each `onDidDiscoverItems` emission replaces all previously known items for that provider. Emit everything currently relevant, not just deltas.
 
 ### Periodic Refresh Pattern
@@ -492,6 +537,43 @@ interface DevDocketProvider {
    * too long.
    */
   refresh(token?: vscode.CancellationToken): Promise<void>;
+
+  /**
+   * Attempt to resolve a URL into an item this provider can manage.
+   * Return a ResolvedItem if the URL matches a pattern your provider
+   * owns (e.g. a GitHub issue URL), or undefined if not recognised.
+   * Optional — providers that don't support URL import omit this.
+   *
+   * @param url - The raw URL entered by the user.
+   * @param signal - Optional AbortSignal for cancellation.
+   */
+  resolveUrl?(url: string, signal?: AbortSignal): Promise<ResolvedItem | undefined>;
+}
+```
+
+### `ResolvedItem`
+
+Returned by `resolveUrl()` when a provider recognises a URL. Contains enough detail for DevDocket to create a work item.
+
+```ts
+interface ResolvedItem {
+  /** Display title for the work item (e.g. '#42: Fix login bug'). */
+  title: string;
+
+  /** Body or description to store as the work item's notes. */
+  notes: string;
+
+  /** URL linking back to the item in the source system. */
+  url: string;
+
+  /** Provider-scoped unique ID for deduplication (e.g. 'owner/repo#42'). */
+  externalId: string;
+
+  /** Optional grouping key for UI organisation (e.g. 'owner/repo'). */
+  group?: string;
+
+  /** The provider ID that owns this item (typically `this.id`). */
+  providerId: string;
 }
 ```
 

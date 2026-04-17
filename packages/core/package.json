@@ -20,6 +20,7 @@
     "onCommand:devdocket.refresh",
     "onCommand:devdocket.dismissFromSources",
     "onCommand:devdocket.deleteItem",
+    "onCommand:devdocket.createItemFromUrl",
     "onCommand:devdocket.clearHistory"
   ],
   "main": "./dist/extension.js",
@@ -139,7 +140,7 @@
       },
       {
         "view": "devdocket.queue",
-        "contents": "No items in your queue.\nAccept items from Inbox or create one manually.\n[Create Work Item](command:devdocket.createItem)"
+        "contents": "No items in your queue.\nAccept items from Inbox or create one manually.\n[Create Work Item](command:devdocket.createItem)\n[Create from URL](command:devdocket.createItemFromUrl)"
       },
       {
         "view": "devdocket.focus",
@@ -160,6 +161,12 @@
         "title": "Create Work Item",
         "category": "DevDocket",
         "icon": "$(add)"
+      },
+      {
+        "command": "devdocket.createItemFromUrl",
+        "title": "Create Item from URL",
+        "category": "DevDocket",
+        "icon": "$(link)"
       },
       {
         "command": "devdocket.acceptToFocus",
@@ -377,6 +384,11 @@
       "view/title": [
         {
           "command": "devdocket.createItem",
+          "when": "view == devdocket.queue",
+          "group": "navigation"
+        },
+        {
+          "command": "devdocket.createItemFromUrl",
           "when": "view == devdocket.queue",
           "group": "navigation"
         },

@@ -1,5 +1,8 @@
 import * as vscode from 'vscode';
+import type { ResolvedItem } from '@devdocket/shared';
 import { logger } from './logger';
+
+export type { ResolvedItem };
 
 // Re-declared to match core API contract — separate extension cannot import core types directly
 export interface Disposable {
@@ -27,6 +30,7 @@ export interface DevDocketProvider {
   readonly label: string;
   readonly onDidDiscoverItems: Event<DiscoveredItem[]>;
   refresh(token?: vscode.CancellationToken): Promise<void>;
+  resolveUrl?(url: string, signal?: AbortSignal): Promise<ResolvedItem | undefined>;
 }
 
 export interface GitHubIssue {
@@ -144,6 +148,67 @@ export abstract class BaseGitHubProvider implements DevDocketProvider {
       return ((acc << 5) - acc) + char.charCodeAt(0) | 0;
     }, 0);
     return `unknown-repo-${Math.abs(hash).toString(36)}`;
+  }
+
+  /** Get GitHub API headers, attaching auth if a silent session is available. */
+  protected async getHeaders(): Promise<Record<string, string>> {
+    const headers: Record<string, string> = {
+      'Accept': 'application/vnd.github+json',
+      'User-Agent': 'DevDocket-VSCode',
+      'X-GitHub-Api-Version': '2022-11-28',
+    };
+    try {
+      const session = await vscode.authentication.getSession('github', ['repo'], { silent: true });
+      if (session) {
+        headers['Authorization'] = `Bearer ${session.accessToken}`;
+      }
+    } catch {
+      logger.debug('No GitHub auth session available, using unauthenticated request');
+    }
+    return headers;
+  }
+
+  /** Retry a request with interactive auth (prompts user to sign in). */
+  protected async retryWithAuth(apiUrl: string, signal?: AbortSignal): Promise<Response | undefined> {
+    try {
+      const session = await vscode.authentication.getSession('github', ['repo'], { createIfNone: true });
+      if (session) {
+        return await fetch(apiUrl, {
+          headers: {
+            'Accept': 'application/vnd.github+json',
+            'User-Agent': 'DevDocket-VSCode',
+            'X-GitHub-Api-Version': '2022-11-28',
+            'Authorization': `Bearer ${session.accessToken}`,
+          },
+          signal,
+        });
+      }
+    } catch {
+      logger.debug('User declined GitHub authentication prompt');
+    }
+    return undefined;
+  }
+
+  /** Throw a descriptive error for a non-ok GitHub API response. */
+  protected throwApiError(response: Response, label: string): never {
+    if (response.status === 404) {
+      throw new Error(`${label} not found. It may be private or deleted.`);
+    }
+    if (response.status === 401 || response.status === 403) {
+      throw new Error(`GitHub access denied for ${label}. The repo may be private — sign in to GitHub in VS Code, or check rate limits.`);
+    }
+    throw new Error(`GitHub API error: ${response.status} ${response.statusText}`);
+  }
+
+  /** Extract canonical owner/repo from a GitHub html_url. */
+  protected parseCanonicalRepo(htmlUrl: string, fallbackOwner: string, fallbackRepo: string): string {
+    const match = htmlUrl.match(/^https?:\/\/github\.com\/([^/]+)\/([^/]+)\//i);
+    return match ? `${match[1]}/${match[2]}` : `${fallbackOwner}/${fallbackRepo}`;
+  }
+
+  /** Decode a percent-encoded URL path segment, returning the original on malformed input. */
+  protected static safeDecodeComponent(value: string): string {
+    try { return decodeURIComponent(value); } catch { return value; }
   }
 
   dispose(): void {

@@ -1,7 +1,8 @@
 import * as vscode from 'vscode';
-import { BaseProvider, DiscoveredItem, isValidUrlSegment } from '@devdocket/shared';
+import { BaseProvider, DiscoveredItem, isValidUrlSegment, type ResolvedItem } from '@devdocket/shared';
 import { logger } from './logger';
 import { OrgConfig } from './configParser';
+import { getAdoHeaders, retryAdoWithAuth, throwAdoApiError, safeDecodeComponent } from './adoAuth';
 
 // Azure DevOps WIQL query response
 interface WiqlResponse {
@@ -431,4 +432,56 @@ export class AdoWorkItemProvider extends BaseProvider {
     return activeItems;
   }
 
+  private static readonly ADO_WORKITEM_PATTERN = /^https?:\/\/dev\.azure\.com\/([^/]+)\/([^/]+)\/_workitems\/edit\/(\d+)\b/i;
+
+  async resolveUrl(url: string, signal?: AbortSignal): Promise<ResolvedItem | undefined> {
+    const match = url.trim().match(AdoWorkItemProvider.ADO_WORKITEM_PATTERN);
+    if (!match) { return undefined; }
+    const [, rawOrg, rawProject, idStr] = match;
+    const org = safeDecodeComponent(rawOrg);
+    const project = safeDecodeComponent(rawProject);
+    const id = parseInt(idStr, 10);
+
+    const apiUrl = `https://dev.azure.com/${encodeURIComponent(org)}/${encodeURIComponent(project)}/_apis/wit/workitems/${id}?api-version=7.1`;
+    const headers = await getAdoHeaders();
+    const wasAuthenticated = 'Authorization' in headers;
+
+    let response = await fetch(apiUrl, { headers, signal });
+
+    if (response.status === 404 && !wasAuthenticated && !signal?.aborted) {
+      const retryResponse = await retryAdoWithAuth(apiUrl, signal);
+      if (retryResponse) { response = retryResponse; }
+    }
+
+    if (!response.ok) {
+      throwAdoApiError(response, `ADO work item ${org}/${project}#${id}`);
+    }
+
+    const data = await response.json() as { fields: { 'System.Title': string; 'System.Description': string | null; 'System.TeamProject': string } };
+    const teamProject = data.fields['System.TeamProject'];
+    const htmlUrl = `https://dev.azure.com/${encodeURIComponent(org)}/${encodeURIComponent(teamProject)}/_workitems/edit/${id}`;
+    return {
+      title: `#${id}: ${data.fields['System.Title']}`,
+      notes: this.stripHtml(data.fields['System.Description'] ?? ''),
+      url: htmlUrl,
+      externalId: `${org}/${teamProject}/${id}`,
+      group: `${org}/${teamProject}`,
+      providerId: this.id,
+    };
+  }
+
+  private stripHtml(html: string): string {
+    return html
+      .replace(/<br\s*\/?>/gi, '\n')
+      .replace(/<\/p>/gi, '\n')
+      .replace(/<[^>]+>/g, '')
+      .replace(/&amp;/g, '&')
+      .replace(/&lt;/g, '<')
+      .replace(/&gt;/g, '>')
+      .replace(/&quot;/g, '"')
+      .replace(/&#39;/g, "'")
+      .replace(/&nbsp;/g, ' ')
+      .replace(/\n{3,}/g, '\n\n')
+      .trim();
+  }
 }

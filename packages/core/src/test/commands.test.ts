@@ -90,11 +90,12 @@ function createMockStateStore(): { [K in keyof UsedStateStoreMethods]: Mock } {
   };
 }
 
-type UsedProviderRegistryMethods = Pick<ProviderRegistry, 'refreshAll'>;
+type UsedProviderRegistryMethods = Pick<ProviderRegistry, 'refreshAll' | 'resolveUrl'>;
 
 function createMockProviderRegistry(): { [K in keyof UsedProviderRegistryMethods]: Mock } {
   return {
     refreshAll: vi.fn().mockResolvedValue(undefined),
+    resolveUrl: vi.fn().mockResolvedValue(undefined),
   };
 }
 
@@ -184,6 +185,7 @@ describe('registerCommands', () => {
       'devdocket.dismissFromInbox',
       'devdocket.acceptFromSources',
       'devdocket.dismissFromSources',
+      'devdocket.createItemFromUrl',
       'devdocket.clearHistory',
     ];
     for (const cmd of expected) {
@@ -234,6 +236,91 @@ describe('registerCommands', () => {
       await invoke('devdocket.createItem');
 
       expect(workGraph.createItem).not.toHaveBeenCalled();
+    });
+  });
+
+  // ── createItemFromUrl ───────────────────────────────────────────
+
+  describe('devdocket.createItemFromUrl', () => {
+    const fakeDetails = {
+      title: '#42: Fix bug',
+      notes: 'Description',
+      url: 'https://github.com/owner/repo/pull/42',
+      externalId: 'owner/repo#42',
+      group: 'owner/repo',
+      providerId: 'github-pr-reviews',
+    };
+
+    beforeEach(() => {
+      providerRegistry.resolveUrl.mockResolvedValue(fakeDetails);
+      workGraph.findItemByProvenance.mockReturnValue(undefined);
+      workGraph.createItem.mockResolvedValue(createWorkItem({ providerId: 'github-pr-reviews', externalId: fakeDetails.externalId }));
+    });
+
+    it('creates item when user provides a valid URL', async () => {
+      (vscode.window.showInputBox as Mock).mockResolvedValue('https://github.com/owner/repo/pull/42');
+      await invoke('devdocket.createItemFromUrl');
+
+      expect(workGraph.createItem).toHaveBeenCalled();
+      expect(vscode.window.showInformationMessage).toHaveBeenCalledWith(
+        expect.stringContaining('Created'),
+      );
+    });
+
+    it('does nothing when user cancels the input box', async () => {
+      (vscode.window.showInputBox as Mock).mockResolvedValue(undefined);
+      await invoke('devdocket.createItemFromUrl');
+
+      expect(workGraph.createItem).not.toHaveBeenCalled();
+      expect(providerRegistry.resolveUrl).not.toHaveBeenCalled();
+    });
+
+    it('opens existing item instead of creating duplicate', async () => {
+      const existing = createWorkItem({ id: 'existing-1', providerId: 'github-pr-reviews' });
+      workGraph.findItemByProvenance.mockReturnValue(existing);
+      (vscode.window.showInputBox as Mock).mockResolvedValue('https://github.com/owner/repo/pull/42');
+      await invoke('devdocket.createItemFromUrl');
+
+      expect(workGraph.createItem).not.toHaveBeenCalled();
+      expect(WorkItemEditorPanel.open).toHaveBeenCalledWith(
+        expect.anything(), expect.anything(), expect.anything(), existing, undefined,
+      );
+      expect(vscode.window.showInformationMessage).toHaveBeenCalledWith(
+        'DevDocket: Item already exists for this source item',
+      );
+    });
+
+    it('shows error when no provider recognises the URL', async () => {
+      providerRegistry.resolveUrl.mockResolvedValue(undefined);
+      (vscode.window.showInputBox as Mock).mockResolvedValue('https://invalid.com/something');
+      await invoke('devdocket.createItemFromUrl');
+
+      expect(workGraph.createItem).not.toHaveBeenCalled();
+      expect(vscode.window.showErrorMessage).toHaveBeenCalledWith(
+        'DevDocket: No provider recognised this URL',
+      );
+    });
+
+    it('silently returns when user cancels fetch (AbortError)', async () => {
+      const abortError = new Error('The operation was aborted');
+      abortError.name = 'AbortError';
+      providerRegistry.resolveUrl.mockRejectedValue(abortError);
+      (vscode.window.showInputBox as Mock).mockResolvedValue('https://github.com/owner/repo/pull/42');
+      await invoke('devdocket.createItemFromUrl');
+
+      expect(workGraph.createItem).not.toHaveBeenCalled();
+      expect(vscode.window.showErrorMessage).not.toHaveBeenCalled();
+    });
+
+    it('propagates non-abort fetch errors to wrapCommand handler', async () => {
+      providerRegistry.resolveUrl.mockRejectedValue(new Error('GitHub PR owner/repo#42 not found. It may be private or deleted.'));
+      (vscode.window.showInputBox as Mock).mockResolvedValue('https://github.com/owner/repo/pull/42');
+      await invoke('devdocket.createItemFromUrl');
+
+      expect(workGraph.createItem).not.toHaveBeenCalled();
+      expect(vscode.window.showErrorMessage).toHaveBeenCalledWith(
+        expect.stringContaining('not found'),
+      );
     });
   });
 

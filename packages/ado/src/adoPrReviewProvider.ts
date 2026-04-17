@@ -1,7 +1,8 @@
 import * as vscode from 'vscode';
-import { BaseProvider, DiscoveredItem, isValidUrlSegment } from '@devdocket/shared';
+import { BaseProvider, DiscoveredItem, isValidUrlSegment, type ResolvedItem } from '@devdocket/shared';
 import { logger } from './logger';
 import { OrgConfig } from './configParser';
+import { getAdoHeaders, retryAdoWithAuth, throwAdoApiError, safeDecodeComponent } from './adoAuth';
 
 interface AdoPullRequest {
   pullRequestId: number;
@@ -284,5 +285,43 @@ export class AdoPrReviewProvider extends BaseProvider {
     return { items, failed: false };
   }
 
+  private static readonly ADO_PR_PATTERN = /^https?:\/\/dev\.azure\.com\/([^/]+)\/([^/]+)\/_git\/([^/]+)\/pullrequest\/(\d+)\b/i;
 
+  async resolveUrl(url: string, signal?: AbortSignal): Promise<ResolvedItem | undefined> {
+    const match = url.trim().match(AdoPrReviewProvider.ADO_PR_PATTERN);
+    if (!match) { return undefined; }
+    const [, rawOrg, rawProject, rawRepo, idStr] = match;
+    const org = safeDecodeComponent(rawOrg);
+    const project = safeDecodeComponent(rawProject);
+    const repo = safeDecodeComponent(rawRepo);
+    const id = parseInt(idStr, 10);
+
+    const apiUrl = `https://dev.azure.com/${encodeURIComponent(org)}/${encodeURIComponent(project)}/_apis/git/repositories/${encodeURIComponent(repo)}/pullrequests/${id}?api-version=7.1`;
+    const headers = await getAdoHeaders();
+    const wasAuthenticated = 'Authorization' in headers;
+
+    let response = await fetch(apiUrl, { headers, signal });
+
+    if (response.status === 404 && !wasAuthenticated && !signal?.aborted) {
+      const retryResponse = await retryAdoWithAuth(apiUrl, signal);
+      if (retryResponse) { response = retryResponse; }
+    }
+
+    if (!response.ok) {
+      throwAdoApiError(response, `ADO PR ${org}/${project}/${repo}#${id}`);
+    }
+
+    const data = await response.json() as { title: string; description: string | null; repository: { name: string; project: { name: string } } };
+    const projectName = data.repository.project.name;
+    const repoName = data.repository.name;
+    const htmlUrl = `https://dev.azure.com/${encodeURIComponent(org)}/${encodeURIComponent(projectName)}/_git/${encodeURIComponent(repoName)}/pullrequest/${id}`;
+    return {
+      title: `#${id}: ${data.title}`,
+      notes: data.description ?? '',
+      url: htmlUrl,
+      externalId: `${org}/${projectName}/${repoName}/${id}`,
+      group: `${projectName}/${repoName}`,
+      providerId: this.id,
+    };
+  }
 }

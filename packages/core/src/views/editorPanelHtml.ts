@@ -8,9 +8,11 @@ export interface EditorHtmlOptions {
   providerLabel?: string;
   /** Read-only description from the provider. Will be HTML-escaped before rendering. */
   providerDescription?: string;
+  /** When true, the title field is read-only (managed by a live provider). */
+  titleReadonly?: boolean;
 }
 
-export function getEditorPanelHtml({ cspSource, item, providerLabel, providerDescription }: EditorHtmlOptions): string {
+export function getEditorPanelHtml({ cspSource, item, providerLabel, providerDescription, titleReadonly }: EditorHtmlOptions): string {
   const nonce = getNonce();
   const descriptionSection = providerDescription
     ? `    <div class="field">
@@ -181,8 +183,8 @@ ${item.url ? `  <button type="button" class="source-link" id="source-link" data-
   <div id="form" role="form" aria-labelledby="editor-heading">
     <div class="field">
       <label for="title">Title</label>
-      <input type="text" id="title" value="${escapeAttr(item.title)}" ${item.providerId ? 'readonly aria-readonly="true" aria-describedby="readonly-title-hint"' : ''} />
-${item.providerId ? '      <span id="readonly-title-hint" class="hint">Title is managed by the provider</span>' : ''}
+      <input type="text" id="title" value="${escapeAttr(item.title)}" ${titleReadonly ? 'readonly aria-readonly="true" aria-describedby="readonly-title-hint"' : ''} />
+${titleReadonly ? '      <span id="readonly-title-hint" class="hint">Title is managed by the provider</span>' : ''}
     </div>
 ${descriptionSection}
     <div class="field">

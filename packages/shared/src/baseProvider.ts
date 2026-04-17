@@ -43,6 +43,19 @@ export interface DiscoveredItem {
   resurfaceVersion?: string;
 }
 
+/**
+ * Result returned by a provider's `resolveUrl` method when it recognises a URL.
+ * Contains enough detail for the core extension to create a work item.
+ */
+export interface ResolvedItem {
+  title: string;
+  notes: string;
+  url: string;
+  externalId: string;
+  group?: string;
+  providerId: string;
+}
+
 /** Matches the subset of vscode.EventEmitter used by providers. */
 export interface EventEmitterLike<T> {
   event: Event<T>;

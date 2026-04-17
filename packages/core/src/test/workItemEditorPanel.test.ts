@@ -67,6 +67,7 @@ function createMockContext() {
 function createMockProviderRegistry() {
   return {
     getDiscoveredItems: vi.fn(() => []),
+    getProvider: vi.fn((id: string) => id ? { id } : undefined),
   };
 }
 
@@ -307,10 +308,11 @@ describe('WorkItemEditorPanel', () => {
       expect(mock.panel.webview.html).toContain('Item not found');
     });
 
-    it('should render readonly title for provider items', () => {
-      const item = makeItem({ providerId: 'github' });
+    it('should render readonly title when provider is registered', () => {
+      const item = makeItem({ providerId: 'github', externalId: 'ext-1' });
       const mock = createMockWebviewPanel();
-      openPanel(item, createMockWorkGraph(item), mock);
+      const registry = createMockProviderRegistry();
+      openPanel(item, createMockWorkGraph(item), mock, undefined, registry);
 
       expect(mock.panel.webview.html).toMatch(/<input\b(?=[^>]*\bid="title")(?=[^>]*\breadonly)[^>]*>/);
       expect(mock.panel.webview.html).toContain('Title is managed by the provider');
@@ -459,11 +461,13 @@ describe('WorkItemEditorPanel', () => {
       expect(mock.panel.title).toBe('Edit: Updated Title');
     });
 
-    it('should not update panel title for provider items', async () => {
-      const item = makeItem({ title: 'Provider Title', providerId: 'github' });
+    it('should not update panel title for provider-managed items', async () => {
+      const item = makeItem({ title: 'Provider Title', providerId: 'github', externalId: 'ext-1' });
       const workGraph = createMockWorkGraph(item);
       const mock = createMockWebviewPanel();
-      openPanel(item, workGraph, mock);
+      const registry = createMockProviderRegistry();
+      vi.mocked(registry.getDiscoveredItems).mockReturnValue([{ externalId: 'ext-1', title: 'Provider Title', url: '' }]);
+      openPanel(item, workGraph, mock, undefined, registry);
       mock.panel.title = 'Edit: Provider Title';
 
       mock.simulateMessage({
@@ -491,11 +495,13 @@ describe('WorkItemEditorPanel', () => {
       expect(workGraph.updateItem).not.toHaveBeenCalled();
     });
 
-    it('should save notes only for provider items', async () => {
-      const item = makeItem({ providerId: 'github', title: 'Provider Item' });
+    it('should save notes only for provider-managed items', async () => {
+      const item = makeItem({ providerId: 'github', title: 'Provider Item', externalId: 'ext-1' });
       const workGraph = createMockWorkGraph(item);
       const mock = createMockWebviewPanel();
-      openPanel(item, workGraph, mock);
+      const registry = createMockProviderRegistry();
+      vi.mocked(registry.getDiscoveredItems).mockReturnValue([{ externalId: 'ext-1', title: 'Provider Item', url: '' }]);
+      openPanel(item, workGraph, mock, undefined, registry);
 
       mock.simulateMessage({
         type: 'autosave',
@@ -596,11 +602,13 @@ describe('WorkItemEditorPanel', () => {
       expect(workGraph.updateItem).not.toHaveBeenCalled();
     });
 
-    it('should not call updateItem when patch is empty (provider item with no notes change)', async () => {
-      const item = makeItem({ providerId: 'github', title: 'Provider Item' });
+    it('should not call updateItem when patch is empty (provider-managed item with no notes change)', async () => {
+      const item = makeItem({ providerId: 'github', title: 'Provider Item', externalId: 'ext-1' });
       const workGraph = createMockWorkGraph(item);
       const mock = createMockWebviewPanel();
-      openPanel(item, workGraph, mock);
+      const registry = createMockProviderRegistry();
+      vi.mocked(registry.getDiscoveredItems).mockReturnValue([{ externalId: 'ext-1', title: 'Provider Item', url: '' }]);
+      openPanel(item, workGraph, mock, undefined, registry);
 
       // Simulate message without 'notes' key in data
       mock.simulateMessage({
@@ -921,12 +929,13 @@ describe('WorkItemEditorPanel (integration with WorkGraph)', () => {
   });
 
   describe('HTML generation', () => {
-    it('title field is readonly for provider items', async () => {
+    it('title field is readonly when provider is registered', async () => {
       const item = await graph.createItem(
         { title: 'Provider Task' },
         { providerId: 'github', externalId: '42' },
       );
-      WorkItemEditorPanel.open(context, graph, createMockProviderRegistry() as any, item);
+      const registry = createMockProviderRegistry();
+      WorkItemEditorPanel.open(context, graph, registry as any, item);
 
       const html = mockPanel.webview.html;
       const titleMatch = html.match(/<input[^>]*id="title"[^>]*>/);
@@ -944,6 +953,38 @@ describe('WorkItemEditorPanel (integration with WorkGraph)', () => {
       expect(titleMatch).toBeTruthy();
       expect(titleMatch![0]).not.toContain('readonly');
       expect(html).not.toContain('Title is managed by the provider');
+    });
+
+    it('title field is editable for unregistered provider IDs', async () => {
+      const item = await graph.createItem(
+        { title: 'Imported Task' },
+        { providerId: 'non-existent-provider', externalId: 'https://example.com/pr/1' },
+      );
+      const registry = createMockProviderRegistry();
+      vi.mocked(registry.getProvider).mockReturnValue(undefined);
+      WorkItemEditorPanel.open(context, graph, registry as any, item);
+
+      const html = mockPanel.webview.html;
+      const titleMatch = html.match(/<input[^>]*id="title"[^>]*>/);
+      expect(titleMatch).toBeTruthy();
+      expect(titleMatch![0]).not.toContain('readonly');
+      expect(html).not.toContain('Title is managed by the provider');
+    });
+
+    it('title field is readonly when provider is registered even if item is not discovered', async () => {
+      const item = await graph.createItem(
+        { title: 'URL Imported PR' },
+        { providerId: 'github', externalId: 'owner/repo#999' },
+      );
+      const registry = createMockProviderRegistry();
+      vi.mocked(registry.getDiscoveredItems).mockReturnValue([]);
+      WorkItemEditorPanel.open(context, graph, registry as any, item);
+
+      const html = mockPanel.webview.html;
+      const titleMatch = html.match(/<input[^>]*id="title"[^>]*>/);
+      expect(titleMatch).toBeTruthy();
+      expect(titleMatch![0]).toContain('readonly');
+      expect(html).toContain('Title is managed by the provider');
     });
 
     it('notes field is always editable', async () => {
@@ -1067,12 +1108,14 @@ describe('WorkItemEditorPanel (integration with WorkGraph)', () => {
       expect(graph.getItem(item.id)!.title).toBe('Original');
     });
 
-    it('provider items cannot change title, only notes', async () => {
+    it('provider-managed items cannot change title, only notes', async () => {
       const item = await graph.createItem(
         { title: 'Provider Title' },
         { providerId: 'github', externalId: '99' },
       );
-      WorkItemEditorPanel.open(context, graph, createMockProviderRegistry() as any, item);
+      const registry = createMockProviderRegistry();
+      vi.mocked(registry.getDiscoveredItems).mockReturnValue([{ externalId: '99', title: 'Provider Title', url: '' }]);
+      WorkItemEditorPanel.open(context, graph, registry as any, item);
 
       mockPanel.webview._fireMessage({
         type: 'autosave',
@@ -1082,6 +1125,26 @@ describe('WorkItemEditorPanel (integration with WorkGraph)', () => {
       await vi.waitFor(() => {
         const updated = graph.getItem(item.id);
         expect(updated!.title).toBe('Provider Title');
+        expect(updated!.notes).toBe('My notes');
+      });
+    });
+
+    it('registered-but-not-discovered provider items are read-only', async () => {
+      const item = await graph.createItem(
+        { title: 'Original Title' },
+        { providerId: 'github', externalId: 'owner/repo#999' },
+      );
+      // Provider is registered but has not discovered this item — still read-only
+      WorkItemEditorPanel.open(context, graph, createMockProviderRegistry() as any, item);
+
+      mockPanel.webview._fireMessage({
+        type: 'autosave',
+        data: { title: 'Attempted Change', notes: 'My notes' },
+      });
+
+      await vi.waitFor(() => {
+        const updated = graph.getItem(item.id);
+        expect(updated!.title).toBe('Original Title');
         expect(updated!.notes).toBe('My notes');
       });
     });
@@ -1119,13 +1182,15 @@ describe('WorkItemEditorPanel (integration with WorkGraph)', () => {
       });
     });
 
-    it('skips save when provider item patch is empty', async () => {
+    it('skips save when provider-managed item patch is empty', async () => {
       const item = await graph.createItem(
         { title: 'Provider' },
         { providerId: 'github', externalId: '1' },
       );
       const saveCountBefore = vi.mocked(store.save).mock.calls.length;
-      WorkItemEditorPanel.open(context, graph, createMockProviderRegistry() as any, item);
+      const registry = createMockProviderRegistry();
+      vi.mocked(registry.getDiscoveredItems).mockReturnValue([{ externalId: '1', title: 'Provider', url: '' }]);
+      WorkItemEditorPanel.open(context, graph, registry as any, item);
 
       mockPanel.webview._fireMessage({
         type: 'autosave',

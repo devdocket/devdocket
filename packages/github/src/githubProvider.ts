@@ -2,7 +2,7 @@ import * as vscode from 'vscode';
 import { isValidGitHubRepo } from '@devdocket/shared';
 import { logger } from './logger';
 import { parseRepoFromUrls } from './parseRepo';
-import { BaseGitHubProvider, DiscoveredItem, GitHubIssue } from './baseGithubProvider';
+import { BaseGitHubProvider, DiscoveredItem, GitHubIssue, type ResolvedItem } from './baseGithubProvider';
 
 /**
  * DevDocket provider that discovers GitHub issues assigned to the current user.
@@ -48,6 +48,43 @@ export class GitHubIssueProvider extends BaseGitHubProvider {
         logger.warn(message);
       }
     }
+  }
+
+  private static readonly GITHUB_ISSUE_PATTERN = /^https?:\/\/github\.com\/([^/]+)\/([^/]+)\/issues\/(\d+)\b/i;
+
+  async resolveUrl(url: string, signal?: AbortSignal): Promise<ResolvedItem | undefined> {
+    const match = url.trim().match(GitHubIssueProvider.GITHUB_ISSUE_PATTERN);
+    if (!match) { return undefined; }
+    const [, rawOwner, rawRepo, numStr] = match;
+    const owner = BaseGitHubProvider.safeDecodeComponent(rawOwner);
+    const repo = BaseGitHubProvider.safeDecodeComponent(rawRepo);
+    const number = parseInt(numStr, 10);
+
+    const apiUrl = `https://api.github.com/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/issues/${number}`;
+    const headers = await this.getHeaders();
+    const wasAuthenticated = 'Authorization' in headers;
+
+    let response = await fetch(apiUrl, { headers, signal });
+
+    if (response.status === 404 && !wasAuthenticated && !signal?.aborted) {
+      const retryResponse = await this.retryWithAuth(apiUrl, signal);
+      if (retryResponse) { response = retryResponse; }
+    }
+
+    if (!response.ok) {
+      this.throwApiError(response, `GitHub issue ${owner}/${repo}#${number}`);
+    }
+
+    const data = await response.json() as { title: string; body: string | null; html_url: string };
+    const canonicalRepo = this.parseCanonicalRepo(data.html_url, owner, repo);
+    return {
+      title: `#${number}: ${data.title}`,
+      notes: data.body ?? '',
+      url: data.html_url,
+      externalId: `${canonicalRepo}#${number}`,
+      group: canonicalRepo,
+      providerId: this.id,
+    };
   }
 
   private getConfiguredRepos(): string[] {

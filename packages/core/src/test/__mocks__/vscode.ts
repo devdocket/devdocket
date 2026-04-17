@@ -179,6 +179,10 @@ const ConfigurationTarget = {
   WorkspaceFolder: 3,
 };
 
+const authentication = {
+  getSession: vi.fn().mockResolvedValue(undefined),
+};
+
 export {
   MockEventEmitter as EventEmitter,
   MockThemeIcon as ThemeIcon,
@@ -198,4 +202,5 @@ export {
   env,
   Uri,
   workspace,
+  authentication,
 };
