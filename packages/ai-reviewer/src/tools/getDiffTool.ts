@@ -4,9 +4,13 @@ import { gitExec } from './gitUtils';
 import { validWorktreePaths } from './worktreeRegistry';
 
 /** Maximum characters of diff output before truncation.
- *  Large PRs can produce multi-MB diffs that overflow the model's context window,
- *  causing tool_use/tool_result mismatch errors on the next iteration. */
-export const MAX_DIFF_LENGTH = 100_000;
+ *  Keep below the walkthrough tool-result limit (MAX_TOOL_RESULT_LENGTH)
+ *  so this tool's own truncation footer and stat framing survive
+ *  end-to-end without being re-truncated downstream.
+ *  Large PRs can produce multi-MB diffs that overflow the model's context
+ *  window, causing tool_use/tool_result mismatch errors on the next
+ *  iteration. */
+export const MAX_DIFF_LENGTH = 75_000;
 
 interface GetDiffInput {
   worktreePath: string;
