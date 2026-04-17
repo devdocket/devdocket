@@ -1,5 +1,4 @@
 import * as vscode from 'vscode';
-import type { ResolvedItem } from '@devdocket/shared';
 import { logger } from './logger';
 
 // Re-declared to match core API contract — separate extension cannot import core types directly

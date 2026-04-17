@@ -9,6 +9,7 @@ import { WorkItemEditorPanel } from '../views/workItemEditorPanel';
 import { type InboxItem, type InboxElement } from '../views/inboxTreeProvider';
 import { type SourceItemNode, type SourcesElement } from '../views/sourcesTreeProvider';
 import { logger } from '../services/logger';
+import type { ResolvedItem } from '../api/types';
 import { toggleViewLayout, setViewLayout } from '../views/viewLayout';
 
 /**
@@ -238,7 +239,7 @@ async function handleCreateItemFromUrl(
   });
   if (!url?.trim()) { return; }
 
-  let details: { title: string; notes: string; url: string; externalId: string; group: string; providerId: string } | undefined;
+  let details: ResolvedItem | undefined;
   try {
     details = await vscode.window.withProgress(
       { location: vscode.ProgressLocation.Notification, title: 'DevDocket: Fetching item details…', cancellable: true },
