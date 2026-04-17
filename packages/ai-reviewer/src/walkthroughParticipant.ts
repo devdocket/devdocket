@@ -2,6 +2,10 @@ import * as vscode from 'vscode';
 import { RepoManager, type WorktreeInfo } from './repoManager';
 import { buildWalkthroughPrompt } from './walkthroughPrompt';
 
+/** Maximum characters per tool-result text part in the conversation.
+ *  Prevents any single tool result from overflowing the model's context window. */
+const MAX_TOOL_RESULT_LENGTH = 80_000;
+
 export class WalkthroughParticipant {
   private sessions = new Map<string, WorktreeInfo>();
 
@@ -245,7 +249,7 @@ export class WalkthroughParticipant {
               token,
             );
             this.log.debug(`Tool ${part.name} completed successfully`);
-            toolResults.push({ callId: part.callId, content: result.content });
+            toolResults.push({ callId: part.callId, content: truncateToolContent(result.content) });
           } catch (err) {
             const errMsg = err instanceof Error ? err.message : String(err);
             this.log.error(`Tool ${part.name} failed: ${errMsg}`);
@@ -309,4 +313,20 @@ export class WalkthroughParticipant {
 
     return undefined;
   }
+}
+
+/** Truncate oversized text parts in tool result content to stay within
+ *  the model's context budget. Non-text parts are passed through. */
+function truncateToolContent(
+  content: (vscode.LanguageModelTextPart | vscode.LanguageModelToolResultPart)[],
+): (vscode.LanguageModelTextPart | vscode.LanguageModelToolResultPart)[] {
+  return content.map((part) => {
+    if (part instanceof vscode.LanguageModelTextPart && part.value.length > MAX_TOOL_RESULT_LENGTH) {
+      return new vscode.LanguageModelTextPart(
+        part.value.slice(0, MAX_TOOL_RESULT_LENGTH) +
+        '\n\n(truncated — content exceeded context budget)',
+      );
+    }
+    return part;
+  });
 }
