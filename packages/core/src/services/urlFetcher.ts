@@ -40,11 +40,9 @@ export async function fetchItemDetails(parsed: ParsedUrl, signal?: AbortSignal):
     }
   } catch (error) {
     if (error instanceof Error && error.name === 'AbortError') { throw error; }
+    if (error instanceof ApiError) { throw error; }
     // Re-wrap low-level errors (network failures, JSON parse errors) with a user-friendly message
     const label = formatLabel(parsed);
-    if (error instanceof Error && error.message.startsWith(label.split(' ')[0])) {
-      throw error; // Already a user-friendly error from handleGitHubError/handleAdoError
-    }
     throw new Error(`Failed to fetch ${label}: ${error instanceof Error ? error.message : String(error)}`);
   }
 }
@@ -126,24 +124,32 @@ async function retryAdoWithAuth(apiUrl: string, signal?: AbortSignal): Promise<R
   return undefined;
 }
 
+/** Marker class for errors that already have user-friendly messages. */
+class ApiError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'ApiError';
+  }
+}
+
 function handleGitHubError(response: Response, label: string): never {
   if (response.status === 404) {
-    throw new Error(`${label} not found. It may be private or deleted.`);
+    throw new ApiError(`${label} not found. It may be private or deleted.`);
   }
   if (response.status === 401 || response.status === 403) {
-    throw new Error(`GitHub access denied for ${label}. The repo may be private — sign in to GitHub in VS Code, or check rate limits.`);
+    throw new ApiError(`GitHub access denied for ${label}. The repo may be private — sign in to GitHub in VS Code, or check rate limits.`);
   }
-  throw new Error(`GitHub API error: ${response.status} ${response.statusText}`);
+  throw new ApiError(`GitHub API error: ${response.status} ${response.statusText}`);
 }
 
 function handleAdoError(response: Response, label: string): never {
   if (response.status === 404) {
-    throw new Error(`${label} not found. It may be private or deleted.`);
+    throw new ApiError(`${label} not found. It may be private or deleted.`);
   }
   if (response.status === 401 || response.status === 403) {
-    throw new Error(`ADO authentication required for ${label}. Sign in to Azure DevOps in VS Code.`);
+    throw new ApiError(`ADO authentication required for ${label}. Sign in to Azure DevOps in VS Code.`);
   }
-  throw new Error(`Azure DevOps API error: ${response.status} ${response.statusText}`);
+  throw new ApiError(`Azure DevOps API error: ${response.status} ${response.statusText}`);
 }
 
 async function fetchGitHubPr(owner: string, repo: string, number: number, signal?: AbortSignal): Promise<FetchedItemDetails> {
