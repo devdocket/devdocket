@@ -20,29 +20,19 @@ All persistent stores (`JsonTaskStore`, `DiscoveredStateStore`) use an internal 
 
 **Pattern:**
 ```typescript
-export class JsonTaskStore implements ITaskStore {
-  private writeQueue: Promise<void> = Promise.resolve();
-  private cache: Map<string, WorkItem> | null = null;
+// Both stores use an enqueue() helper that chains onto writeQueue:
+private writeQueue: Promise<void> = Promise.resolve();
 
-  async save(item: WorkItem): Promise<void> {
-    // Chain new write onto the queue
-    this.writeQueue = this.writeQueue.then(async () => {
-      // Update cache first, then persist to disk; rollback cache on failure
-      this.cache?.set(item.id, item);
-      try {
-        await fs.writeFile(this.filePath, JSON.stringify(...), 'utf-8');
-      } catch (err) {
-        this.cache?.delete(item.id);
-        throw err;
-      }
-    });
-    
-    return this.writeQueue;
-  }
+private enqueue(op: () => Promise<void>): Promise<void> {
+  this.writeQueue = this.writeQueue.then(op, (err: unknown) => {
+    logger.warn('Previous write operation failed, continuing queue', err);
+    return op();
+  });
+  return this.writeQueue;
 }
 ```
 
-> **Note:** Both stores use a **cache-first-then-persist** approach with rollback: the in-memory cache is updated before the disk write, and rolled back if the write fails. This ensures the cache is always available for reads during the async write. The actual implementation uses a private `enqueue()` helper — refer to the real stores for full error handling.
+> **Note:** Both stores serialize writes via `enqueue()` and rollback the cache on failure, but they differ in ordering. `DiscoveredStateStore` is **cache-first** (updates the cache, then writes to disk; rolls back the cache on write failure). `JsonTaskStore` is **disk-first** (writes to disk, then updates the cache; rolls back on failure). Refer to the real stores for full error handling.
 
 **When creating a new store:** Always include `private writeQueue: Promise<void> = Promise.resolve()` and chain all writes through it.
 
@@ -78,8 +68,6 @@ export interface DiscoveredStateRecord {
   providerId: string;
   externalId: string;
   inboxState: InboxState;  // Only this is stored
-  version?: string;
-  resurfaceVersion?: string;  // Secondary version tracked independently from version
 }
 
 // Item data (title, description, url) is always read live from provider:
@@ -90,8 +78,6 @@ export interface DiscoveredItem {
   url?: string;
   group?: string;
   reason?: string;
-  version?: string;  // Version triggers resurfacing when changed
-  resurfaceVersion?: string;  // Secondary version for independent resurfacing
 }
 ```
 
@@ -194,7 +180,7 @@ npm run watch       # Watch mode
 
 ### Error Handling
 
-- **Logging:** Use the shared `logger` service (injected or imported from `@devdocket/shared`)
+- **Logging:** Use the `logger` instance from each package's local `logger` module (e.g., `import { logger } from '../services/logger'`). Each module creates its logger via `createLoggerService()` from `@devdocket/shared`.
 - **Error recovery:** Log errors to the output channel but don't crash — use `.catch(err => logger.error(...))`
 - **Store operations:** Return `Promise<void>` or `Promise<T>`; throw on unrecoverable errors (bad JSON, disk full)
 - **Provider refreshes:** Wrap in try/catch, fire `onDidChangeProviderHealth` event on failure
@@ -225,7 +211,7 @@ void provider.refresh().catch(err => {
 - **Files:** camelCase (e.g., `workGraph.ts`, `jsonTaskStore.ts`)
 - **Classes:** PascalCase (e.g., `WorkGraph`, `JsonTaskStore`, `ProviderRegistry`)
 - **Interfaces:** PascalCase, optionally prefixed with `I` (e.g., `ITaskStore`)
-- **Functions/methods:** camelCase (e.g., `createItem()`, `acceptItem()`)
+- **Functions/methods:** camelCase (e.g., `createItem()`, `setState()`)
 - **Constants:** UPPER_SNAKE_CASE (e.g., `MAX_ITEMS_PER_PROVIDER = 10_000`)
 - **Private members:** Prefix with `_` (e.g., `_onDidChange`, `_disposed`)
 - **Event emitters:** Prefix with `_onDid` (e.g., `_onDidChangeDiscoveredItems`)
@@ -248,20 +234,18 @@ async setState(providerId: string, externalId: string, state: InboxState): Promi
 ```typescript
 // ADO providers extend the shared BaseProvider (packages/shared/src/baseProvider.ts)
 export class AdoWorkItemProvider extends BaseProvider {
-  constructor(private client: AdoClient) {
-    const emitter = new vscode.EventEmitter<DiscoveredItem[]>();
-    super(emitter);
+  constructor(private readonly orgConfigs: OrgConfig[]) {
+    super(new vscode.EventEmitter<DiscoveredItem[]>());
   }
 
   async refresh(): Promise<void> { await this.doBackgroundRefresh(); }
 
   protected async doBackgroundRefresh(): Promise<void> {
-    const items = await this.client.getWorkItems();
+    const items = await this.fetchWorkItems();
     this._onDidDiscoverItems.fire(items.map(wi => ({
       externalId: String(wi.id),
       title: wi.title,
       url: wi.url,
-      version: wi.changedDate,
     })));
   }
 }
@@ -282,7 +266,6 @@ export class MyGitHubProvider extends BaseGitHubProvider {
       externalId: String(issue.number),
       title: issue.title,
       url: issue.html_url,
-      version: issue.updated_at,
     })));
   }
 }
