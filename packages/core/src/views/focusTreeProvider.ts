@@ -15,6 +15,7 @@ export class FocusTreeProvider extends WorkItemViewProvider implements vscode.Tr
   readonly dragMimeTypes = [DRAG_MIME_TYPE];
   protected readonly groupPrefix = 'focus';
   protected readonly groupContextValue = 'focusGroup';
+  private _groupCountsCache: Map<string, number> | undefined;
 
   constructor(workGraph: WorkGraph, providerRegistry?: ProviderRegistry) {
     super(
@@ -41,6 +42,23 @@ export class FocusTreeProvider extends WorkItemViewProvider implements vscode.Tr
     });
   }
 
+  refresh(): void {
+    this._groupCountsCache = undefined;
+    super.refresh();
+  }
+
+  private ensureGroupCountsCache(): Map<string, number> {
+    if (!this._groupCountsCache) {
+      const counts = new Map<string, number>();
+      for (const item of this.getItems()) {
+        const normalizedGroup = item.group?.trim() || '';
+        counts.set(normalizedGroup, (counts.get(normalizedGroup) ?? 0) + 1);
+      }
+      this._groupCountsCache = counts;
+    }
+    return this._groupCountsCache;
+  }
+
   protected createWorkItemTreeItem(item: WorkItem): vscode.TreeItem {
     const title = this.resolveTitle(item);
     const treeItem = new vscode.TreeItem(title, vscode.TreeItemCollapsibleState.None);
@@ -64,9 +82,8 @@ export class FocusTreeProvider extends WorkItemViewProvider implements vscode.Tr
 
   getTreeItem(element: FocusElement): vscode.TreeItem {
     if (isSubGroupNode(element)) {
-      const count = this.getItems().filter(
-        i => (i.group?.trim() || undefined) === element.groupName
-      ).length;
+      const counts = this.ensureGroupCountsCache();
+      const count = counts.get(element.groupName) ?? 0;
       return createSubGroupTreeItem(element, this.groupPrefix, count);
     }
     return super.getTreeItem(element);
