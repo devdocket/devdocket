@@ -35,7 +35,7 @@ describe('fetchItemDetails', () => {
 
       const result = await fetchItemDetails(parsed);
       expect(result).toEqual({
-        title: 'Fix bug',
+        title: '#42: Fix bug',
         notes: 'Some description',
         url: 'https://github.com/octocat/hello/pull/42',
         externalId: 'octocat/hello#42',
@@ -145,7 +145,7 @@ describe('fetchItemDetails', () => {
         });
 
       const result = await fetchItemDetails(parsed);
-      expect(result.title).toBe('Private PR');
+      expect(result.title).toBe('#42: Private PR');
       expect(result.notes).toBe('secret');
       expect(mockFetch).toHaveBeenCalledTimes(2);
       // Second fetch should have the interactive auth token
@@ -199,7 +199,7 @@ describe('fetchItemDetails', () => {
 
       const result = await fetchItemDetails(parsed);
       expect(result).toEqual({
-        title: 'ADO fix',
+        title: 'PR 7: ADO fix',
         notes: 'ADO desc',
         url: 'https://dev.azure.com/myorg/myproj/_git/myrepo/pullrequest/7',
         externalId: 'myorg/myproj/myrepo/7',
@@ -306,7 +306,7 @@ describe('fetchItemDetails', () => {
         });
 
       const result = await fetchItemDetails(parsed);
-      expect(result.title).toBe('Private ADO PR');
+      expect(result.title).toBe('PR 7: Private ADO PR');
       expect(result.notes).toBe('secret ado');
       expect(mockFetch).toHaveBeenCalledTimes(2);
       const retryHeaders = mockFetch.mock.calls[1][1].headers;
@@ -343,7 +343,7 @@ describe('fetchItemDetails', () => {
 
       const result = await fetchItemDetails(parsed);
       expect(result).toEqual({
-        title: 'Bug report',
+        title: '#10: Bug report',
         notes: 'Steps to reproduce',
         url: 'https://github.com/octocat/hello/issues/10',
         externalId: 'octocat/hello#10',
@@ -402,7 +402,7 @@ describe('fetchItemDetails', () => {
         });
 
       const result = await fetchItemDetails(parsed);
-      expect(result.title).toBe('Private Issue');
+      expect(result.title).toBe('#10: Private Issue');
       expect(mockFetch).toHaveBeenCalledTimes(2);
     });
   });
@@ -413,12 +413,12 @@ describe('fetchItemDetails', () => {
     it('returns details on successful fetch', async () => {
       mockFetch.mockResolvedValue({
         ok: true,
-        json: async () => ({ fields: { 'System.Title': 'User story', 'System.Description': 'As a user...', 'System.TeamProject': 'myproj' } }),
+        json: async () => ({ fields: { 'System.Title': 'User story', 'System.Description': 'As a user...', 'System.TeamProject': 'myproj', 'System.WorkItemType': 'User Story' } }),
       });
 
       const result = await fetchItemDetails(parsed);
       expect(result).toEqual({
-        title: 'User story',
+        title: 'User Story 99: User story',
         notes: 'As a user...',
         url: 'https://dev.azure.com/myorg/myproj/_workitems/edit/99',
         externalId: 'myorg/myproj/99',
@@ -430,7 +430,7 @@ describe('fetchItemDetails', () => {
     it('uses canonical project name from API for externalId', async () => {
       mockFetch.mockResolvedValue({
         ok: true,
-        json: async () => ({ fields: { 'System.Title': 'WI', 'System.Description': null, 'System.TeamProject': 'My Project' } }),
+        json: async () => ({ fields: { 'System.Title': 'WI', 'System.Description': null, 'System.TeamProject': 'My Project', 'System.WorkItemType': 'Task' } }),
       });
 
       const result = await fetchItemDetails(parsed);
@@ -441,7 +441,7 @@ describe('fetchItemDetails', () => {
     it('uses empty string for null description', async () => {
       mockFetch.mockResolvedValue({
         ok: true,
-        json: async () => ({ fields: { 'System.Title': 'No desc', 'System.Description': null, 'System.TeamProject': 'myproj' } }),
+        json: async () => ({ fields: { 'System.Title': 'No desc', 'System.Description': null, 'System.TeamProject': 'myproj', 'System.WorkItemType': 'Bug' } }),
       });
 
       const result = await fetchItemDetails(parsed);
@@ -451,7 +451,7 @@ describe('fetchItemDetails', () => {
     it('strips HTML tags from description', async () => {
       mockFetch.mockResolvedValue({
         ok: true,
-        json: async () => ({ fields: { 'System.Title': 'HTML desc', 'System.Description': '<p>As a <b>user</b></p><p>I want &amp; need</p>', 'System.TeamProject': 'myproj' } }),
+        json: async () => ({ fields: { 'System.Title': 'HTML desc', 'System.Description': '<p>As a <b>user</b></p><p>I want &amp; need</p>', 'System.TeamProject': 'myproj', 'System.WorkItemType': 'User Story' } }),
       });
 
       const result = await fetchItemDetails(parsed);
@@ -471,7 +471,7 @@ describe('fetchItemDetails', () => {
     it('calls correct API endpoint', async () => {
       mockFetch.mockResolvedValue({
         ok: true,
-        json: async () => ({ fields: { 'System.Title': 'T', 'System.Description': null, 'System.TeamProject': 'myproj' } }),
+        json: async () => ({ fields: { 'System.Title': 'T', 'System.Description': null, 'System.TeamProject': 'myproj', 'System.WorkItemType': 'Task' } }),
       });
 
       await fetchItemDetails(parsed);
@@ -494,11 +494,11 @@ describe('fetchItemDetails', () => {
         .mockResolvedValueOnce({ ok: false, status: 404, statusText: 'Not Found' })
         .mockResolvedValueOnce({
           ok: true,
-          json: async () => ({ fields: { 'System.Title': 'Private WI', 'System.Description': 'secret', 'System.TeamProject': 'myproj' } }),
+          json: async () => ({ fields: { 'System.Title': 'Private WI', 'System.Description': 'secret', 'System.TeamProject': 'myproj', 'System.WorkItemType': 'Bug' } }),
         });
 
       const result = await fetchItemDetails(parsed);
-      expect(result.title).toBe('Private WI');
+      expect(result.title).toBe('Bug 99: Private WI');
       expect(mockFetch).toHaveBeenCalledTimes(2);
     });
   });

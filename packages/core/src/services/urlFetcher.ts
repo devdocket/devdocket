@@ -172,7 +172,7 @@ async function fetchGitHubPr(owner: string, repo: string, number: number, signal
   // Use canonical owner/repo from API response URL for consistent externalId
   const { canonicalOwner, canonicalRepo } = parseGitHubHtmlUrl(data.html_url, owner, repo);
   return {
-    title: data.title,
+    title: `#${number}: ${data.title}`,
     notes: data.body ?? '',
     url: data.html_url,
     externalId: `${canonicalOwner}/${canonicalRepo}#${number}`,
@@ -199,7 +199,7 @@ async function fetchGitHubIssue(owner: string, repo: string, number: number, sig
   const data = await response.json() as { title: string; body: string | null; html_url: string };
   const { canonicalOwner, canonicalRepo } = parseGitHubHtmlUrl(data.html_url, owner, repo);
   return {
-    title: data.title,
+    title: `#${number}: ${data.title}`,
     notes: data.body ?? '',
     url: data.html_url,
     externalId: `${canonicalOwner}/${canonicalRepo}#${number}`,
@@ -228,7 +228,7 @@ async function fetchAdoPr(org: string, project: string, repo: string, id: number
   const repoName = data.repository.name;
   const htmlUrl = `https://dev.azure.com/${encodeURIComponent(org)}/${encodeURIComponent(projectName)}/_git/${encodeURIComponent(repoName)}/pullrequest/${id}`;
   return {
-    title: data.title,
+    title: `PR ${id}: ${data.title}`,
     notes: data.description ?? '',
     url: htmlUrl,
     externalId: `${org}/${projectName}/${repoName}/${id}`,
@@ -252,11 +252,12 @@ async function fetchAdoWorkItem(org: string, project: string, id: number, signal
 
   if (!response.ok) { handleAdoError(response, label); }
 
-  const data = await response.json() as { fields: { 'System.Title': string; 'System.Description': string | null; 'System.TeamProject': string } };
+  const data = await response.json() as { fields: { 'System.Title': string; 'System.Description': string | null; 'System.TeamProject': string; 'System.WorkItemType': string } };
   const teamProject = data.fields['System.TeamProject'];
+  const wiType = data.fields['System.WorkItemType'];
   const htmlUrl = `https://dev.azure.com/${encodeURIComponent(org)}/${encodeURIComponent(teamProject)}/_workitems/edit/${id}`;
   return {
-    title: data.fields['System.Title'],
+    title: `${wiType} ${id}: ${data.fields['System.Title']}`,
     notes: stripHtml(data.fields['System.Description'] ?? ''),
     url: htmlUrl,
     externalId: `${org}/${teamProject}/${id}`,
