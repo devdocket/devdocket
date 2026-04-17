@@ -254,7 +254,7 @@ async function fetchAdoWorkItem(org: string, project: string, id: number, signal
 
   const data = await response.json() as { fields: { 'System.Title': string; 'System.Description': string | null; 'System.TeamProject': string } };
   const teamProject = data.fields['System.TeamProject'];
-  const htmlUrl = `https://dev.azure.com/${encodeURIComponent(org)}/${encodeURIComponent(project)}/_workitems/edit/${id}`;
+  const htmlUrl = `https://dev.azure.com/${encodeURIComponent(org)}/${encodeURIComponent(teamProject)}/_workitems/edit/${id}`;
   return {
     title: data.fields['System.Title'],
     notes: stripHtml(data.fields['System.Description'] ?? ''),
