@@ -208,19 +208,19 @@ const timeoutId = setTimeout(() => {
 const entry = { cts, timeoutId };
 this._pendingRefreshes.set(provider.id, entry);
 
-const refreshPromise = provider.refresh(cts.token).then(
-  () => {
+const refreshPromise = provider.refresh(cts.token)
+  .then(() => {
     if (!cts.token.isCancellationRequested) {
       this.updateHealth(provider.id, 'healthy');
     }
-  },
-  (err: unknown) => {
+  })
+  .catch((err: unknown) => {
     if (!cts.token.isCancellationRequested) {
+      logger.error(`Provider "${provider.id}" refresh failed`, err);
       const message = err instanceof Error ? err.message : String(err);
       this.updateHealth(provider.id, 'unhealthy', message);
     }
-  }
-);
+  });
 
 const cancelledPromise = new Promise<void>((resolve) => {
   cts.token.onCancellationRequested(() => {
