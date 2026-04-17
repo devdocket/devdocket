@@ -279,7 +279,7 @@ export class AdoPrReviewProvider extends BaseProvider {
         url: `${repoUrl}/pullrequest/${pr.pullRequestId}`,
         group: `${projectName}/${repoName}`,
         reason: 'review_requested',
-        state: pr.status,
+        ...(pr.status ? { state: pr.status } : {}),
         version: resurfaceOnNewVersion ? pr.lastMergeSourceCommit?.commitId : undefined,
       };
     });
