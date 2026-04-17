@@ -1,6 +1,6 @@
 import * as vscode from 'vscode';
 import { DevDocketProvider, DiscoveredItem, type ResolvedItem } from '../api/types';
-import { DiscoveredStateStore } from '../storage/discoveredStateStore';
+import { DiscoveredStateStore, InboxState } from '../storage/discoveredStateStore';
 import { ProviderLabelCache } from '../storage/providerLabelCache';
 import { logger } from './logger';
 
@@ -300,18 +300,72 @@ export class ProviderRegistry {
     }
     logger.info(`Provider ${providerId} discovered ${items.length} items`);
     this.discoveredItems.set(providerId, items);
-    const updates: Array<{ providerId: string; externalId: string; state: 'unseen' }> = [];
+
+    const newUnseenUpdates: Array<{ providerId: string; externalId: string; state: 'unseen'; version?: string; resurfaceVersion?: string }> = [];
+    const versionBackfills: Array<{ providerId: string; externalId: string; state: InboxState; version?: string; resurfaceVersion?: string }> = [];
+
     for (const item of items) {
       const existing = this.stateStore.getState(providerId, item.externalId);
       if (existing === undefined) {
-        updates.push({ providerId, externalId: item.externalId, state: 'unseen' });
+        const update: typeof newUnseenUpdates[number] = { providerId, externalId: item.externalId, state: 'unseen' };
+        if (item.version !== undefined) { update.version = item.version; }
+        if (item.resurfaceVersion !== undefined) { update.resurfaceVersion = item.resurfaceVersion; }
+        newUnseenUpdates.push(update);
+      } else if (existing === 'accepted') {
+        let shouldResurface = false;
+        let needsBackfill = false;
+
+        if (item.version !== undefined) {
+          const storedVersion = this.stateStore.getVersion(providerId, item.externalId);
+          if (storedVersion !== undefined && storedVersion !== item.version) {
+            shouldResurface = true;
+          } else if (storedVersion === undefined) {
+            needsBackfill = true;
+          }
+        }
+
+        if (item.resurfaceVersion !== undefined) {
+          const storedRV = this.stateStore.getResurfaceVersion(providerId, item.externalId);
+          if (storedRV !== undefined && storedRV !== item.resurfaceVersion) {
+            shouldResurface = true;
+          } else if (storedRV === undefined) {
+            needsBackfill = true;
+          }
+        }
+
+        if (shouldResurface) {
+          const update: typeof newUnseenUpdates[number] = { providerId, externalId: item.externalId, state: 'unseen' };
+          if (item.version !== undefined) { update.version = item.version; }
+          if (item.resurfaceVersion !== undefined) { update.resurfaceVersion = item.resurfaceVersion; }
+          newUnseenUpdates.push(update);
+        } else if (needsBackfill) {
+          const update: typeof versionBackfills[number] = { providerId, externalId: item.externalId, state: 'accepted' };
+          if (item.version !== undefined) { update.version = item.version; }
+          if (item.resurfaceVersion !== undefined) { update.resurfaceVersion = item.resurfaceVersion; }
+          versionBackfills.push(update);
+        }
+      } else if (existing === 'unseen') {
+        if (item.version !== undefined || item.resurfaceVersion !== undefined) {
+          const storedVersion = this.stateStore.getVersion(providerId, item.externalId);
+          const storedRV = this.stateStore.getResurfaceVersion(providerId, item.externalId);
+          const versionChanged = item.version !== undefined && (storedVersion === undefined || storedVersion !== item.version);
+          const rvChanged = item.resurfaceVersion !== undefined && (storedRV === undefined || storedRV !== item.resurfaceVersion);
+          if (versionChanged || rvChanged) {
+            const update: typeof versionBackfills[number] = { providerId, externalId: item.externalId, state: 'unseen' };
+            if (item.version !== undefined) { update.version = item.version; }
+            if (item.resurfaceVersion !== undefined) { update.resurfaceVersion = item.resurfaceVersion; }
+            versionBackfills.push(update);
+          }
+        }
       }
     }
-    if (updates.length > 0) {
+
+    const allUpdates = [...newUnseenUpdates, ...versionBackfills];
+    if (allUpdates.length > 0) {
       try {
-        await this.stateStore.setStates(updates);
-        if (!this._disposed) {
-          this._onDidAddNewUnseenItems.fire(updates.length);
+        await this.stateStore.setStates(allUpdates);
+        if (!this._disposed && newUnseenUpdates.length > 0) {
+          this._onDidAddNewUnseenItems.fire(newUnseenUpdates.length);
         }
       } catch (err) {
         logger.error('Failed to persist discovered states', err);

@@ -19,6 +19,8 @@ export interface DiscoveredItem {
   url?: string;
   group?: string;
   reason?: string;
+  version?: string;
+  resurfaceVersion?: string;
 }
 
 export interface DevDocketProvider {
@@ -34,7 +36,7 @@ export interface GitHubIssue {
   body?: string;
   html_url: string;
   repository_url: string;
-  pull_request?: unknown;
+  pull_request?: { url: string };
 }
 
 export abstract class BaseGitHubProvider implements DevDocketProvider {

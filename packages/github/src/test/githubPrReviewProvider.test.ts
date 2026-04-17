@@ -15,6 +15,13 @@ function createMockPr(number: number, title: string, repo = 'owner/repo') {
   };
 }
 
+function createMockPrWithApi(number: number, title: string, repo = 'owner/repo') {
+  return {
+    ...createMockPr(number, title, repo),
+    pull_request: { url: `https://api.github.com/repos/${repo}/pulls/${number}` },
+  };
+}
+
 describe('GitHubPrReviewProvider', () => {
   let provider: GitHubPrReviewProvider;
 
@@ -27,6 +34,17 @@ describe('GitHubPrReviewProvider', () => {
 
     mockChannel = { appendLine: vi.fn() };
     initLogger(mockChannel as any, LogLevel.Debug);
+
+    // Disable resurfacing features by default so existing tests aren't affected
+    // by extra API calls. Tests for resurfacing override this.
+    vi.mocked(workspace.getConfiguration).mockReturnValue({
+      get: vi.fn((key: string, defaultValue?: any) => {
+        if (key === 'resurfaceOnNewVersion' || key === 'resurfaceOnReRequestedReview') {
+          return false;
+        }
+        return defaultValue;
+      }),
+    } as any);
 
     // Default: auth session returns a token
     vi.mocked(authentication.getSession).mockResolvedValue({
@@ -422,6 +440,9 @@ describe('GitHubPrReviewProvider', () => {
           if (key === 'repos') {
             return repos;
           }
+          if (key === 'resurfaceOnNewVersion' || key === 'resurfaceOnReRequestedReview') {
+            return false;
+          }
           return defaultValue;
         }),
       } as any);
@@ -527,6 +548,296 @@ describe('GitHubPrReviewProvider', () => {
       const listener = vi.fn();
       provider.onDidDiscoverItems(listener);
       await expect(provider.refresh()).resolves.toBeUndefined();
+    });
+  });
+
+  describe('resurfacing configuration', () => {
+    function mockConfig(overrides: Record<string, any>) {
+      vi.mocked(workspace.getConfiguration).mockReturnValue({
+        get: vi.fn((key: string, defaultValue?: any) => {
+          if (key in overrides) {
+            return overrides[key];
+          }
+          return defaultValue;
+        }),
+      } as any);
+    }
+
+    afterEach(() => {
+      vi.mocked(workspace.getConfiguration).mockReset();
+    });
+
+    it('skips head SHA fetch when resurfaceOnNewVersion is false', async () => {
+      mockConfig({ resurfaceOnNewVersion: false, resurfaceOnReRequestedReview: false });
+
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          items: [createMockPrWithApi(1, 'PR 1')],
+        }),
+      });
+
+      const listener = vi.fn();
+      provider.onDidDiscoverItems(listener);
+      await provider.refresh();
+
+      const items = listener.mock.calls[0][0];
+      expect(items).toHaveLength(1);
+      expect(items[0].version).toBeUndefined();
+      // Only 1 fetch call (search), no head SHA or timeline calls
+      expect(mockFetch).toHaveBeenCalledTimes(1);
+    });
+
+    it('fetches head SHA when resurfaceOnNewVersion is true', async () => {
+      mockConfig({ resurfaceOnNewVersion: true, resurfaceOnReRequestedReview: false });
+
+      mockFetch
+        .mockResolvedValueOnce({
+          ok: true,
+          json: async () => ({
+            items: [createMockPrWithApi(1, 'PR 1')],
+          }),
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          json: async () => ({ head: { sha: 'abc123' } }),
+        });
+
+      const listener = vi.fn();
+      provider.onDidDiscoverItems(listener);
+      await provider.refresh();
+
+      const items = listener.mock.calls[0][0];
+      expect(items[0].version).toBe('abc123');
+    });
+
+    it('fetches timeline when resurfaceOnReRequestedReview is true', async () => {
+      mockConfig({ resurfaceOnNewVersion: false, resurfaceOnReRequestedReview: true });
+
+      mockFetch
+        // Search API
+        .mockResolvedValueOnce({
+          ok: true,
+          json: async () => ({
+            items: [createMockPrWithApi(1, 'PR 1')],
+          }),
+        })
+        // GET /user
+        .mockResolvedValueOnce({
+          ok: true,
+          json: async () => ({ login: 'testuser' }),
+        })
+        // Timeline
+        .mockResolvedValueOnce({
+          ok: true,
+          json: async () => ([
+            {
+              event: 'review_requested',
+              created_at: '2024-01-15T10:30:00Z',
+              requested_reviewer: { login: 'testuser' },
+            },
+          ]),
+        });
+
+      const listener = vi.fn();
+      provider.onDidDiscoverItems(listener);
+      await provider.refresh();
+
+      const items = listener.mock.calls[0][0];
+      expect(items[0].version).toBeUndefined();
+      expect(items[0].resurfaceVersion).toBe('2024-01-15T10:30:00Z');
+    });
+
+    it('uses latest review_requested event for resurfaceVersion', async () => {
+      mockConfig({ resurfaceOnNewVersion: false, resurfaceOnReRequestedReview: true });
+
+      mockFetch
+        .mockResolvedValueOnce({
+          ok: true,
+          json: async () => ({
+            items: [createMockPrWithApi(1, 'PR 1')],
+          }),
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          json: async () => ({ login: 'testuser' }),
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          json: async () => ([
+            {
+              event: 'review_requested',
+              created_at: '2024-01-10T10:00:00Z',
+              requested_reviewer: { login: 'testuser' },
+            },
+            {
+              event: 'review_requested',
+              created_at: '2024-01-15T10:30:00Z',
+              requested_reviewer: { login: 'testuser' },
+            },
+          ]),
+        });
+
+      const listener = vi.fn();
+      provider.onDidDiscoverItems(listener);
+      await provider.refresh();
+
+      const items = listener.mock.calls[0][0];
+      expect(items[0].resurfaceVersion).toBe('2024-01-15T10:30:00Z');
+    });
+
+    it('ignores review_requested events for other users', async () => {
+      mockConfig({ resurfaceOnNewVersion: false, resurfaceOnReRequestedReview: true });
+
+      mockFetch
+        .mockResolvedValueOnce({
+          ok: true,
+          json: async () => ({
+            items: [createMockPrWithApi(1, 'PR 1')],
+          }),
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          json: async () => ({ login: 'testuser' }),
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          json: async () => ([
+            {
+              event: 'review_requested',
+              created_at: '2024-01-15T10:30:00Z',
+              requested_reviewer: { login: 'otheruser' },
+            },
+          ]),
+        });
+
+      const listener = vi.fn();
+      provider.onDidDiscoverItems(listener);
+      await provider.refresh();
+
+      const items = listener.mock.calls[0][0];
+      expect(items[0].resurfaceVersion).toBeUndefined();
+    });
+
+    it('skips timeline fetch when fetchCurrentUser fails', async () => {
+      mockConfig({ resurfaceOnNewVersion: false, resurfaceOnReRequestedReview: true });
+
+      mockFetch
+        .mockResolvedValueOnce({
+          ok: true,
+          json: async () => ({
+            items: [createMockPrWithApi(1, 'PR 1')],
+          }),
+        })
+        // /user fails
+        .mockResolvedValueOnce({ ok: false, status: 401 });
+
+      const listener = vi.fn();
+      provider.onDidDiscoverItems(listener);
+      await provider.refresh();
+
+      const items = listener.mock.calls[0][0];
+      expect(items[0].resurfaceVersion).toBeUndefined();
+      // 2 calls: search + failed /user. No timeline call.
+      expect(mockFetch).toHaveBeenCalledTimes(2);
+    });
+
+    it('handles timeline fetch failure gracefully', async () => {
+      mockConfig({ resurfaceOnNewVersion: false, resurfaceOnReRequestedReview: true });
+
+      mockFetch
+        .mockResolvedValueOnce({
+          ok: true,
+          json: async () => ({
+            items: [createMockPrWithApi(1, 'PR 1')],
+          }),
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          json: async () => ({ login: 'testuser' }),
+        })
+        // Timeline fails
+        .mockResolvedValueOnce({ ok: false, status: 403 });
+
+      const listener = vi.fn();
+      provider.onDidDiscoverItems(listener);
+      await provider.refresh();
+
+      const items = listener.mock.calls[0][0];
+      expect(items[0].resurfaceVersion).toBeUndefined();
+    });
+
+    it('caches current user login across refreshes', async () => {
+      mockConfig({ resurfaceOnNewVersion: false, resurfaceOnReRequestedReview: true });
+
+      // First refresh
+      mockFetch
+        .mockResolvedValueOnce({
+          ok: true,
+          json: async () => ({ items: [createMockPrWithApi(1, 'PR 1')] }),
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          json: async () => ({ login: 'testuser' }),
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          json: async () => ([]),
+        });
+
+      await provider.refresh();
+      mockFetch.mockClear();
+
+      // Second refresh — should NOT call /user again
+      mockFetch
+        .mockResolvedValueOnce({
+          ok: true,
+          json: async () => ({ items: [createMockPrWithApi(2, 'PR 2')] }),
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          json: async () => ([]),
+        });
+
+      await provider.refresh();
+
+      // Only search + timeline, no /user call
+      expect(mockFetch).toHaveBeenCalledTimes(2);
+      const urls = mockFetch.mock.calls.map((c: any[]) => c[0] as string);
+      expect(urls.some((u: string) => u.includes('/user'))).toBe(false);
+    });
+
+    it('case-insensitive login matching for review_requested events', async () => {
+      mockConfig({ resurfaceOnNewVersion: false, resurfaceOnReRequestedReview: true });
+
+      mockFetch
+        .mockResolvedValueOnce({
+          ok: true,
+          json: async () => ({
+            items: [createMockPrWithApi(1, 'PR 1')],
+          }),
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          json: async () => ({ login: 'TestUser' }),
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          json: async () => ([
+            {
+              event: 'review_requested',
+              created_at: '2024-01-15T10:30:00Z',
+              requested_reviewer: { login: 'testuser' },
+            },
+          ]),
+        });
+
+      const listener = vi.fn();
+      provider.onDidDiscoverItems(listener);
+      await provider.refresh();
+
+      const items = listener.mock.calls[0][0];
+      expect(items[0].resurfaceVersion).toBe('2024-01-15T10:30:00Z');
     });
   });
 });
