@@ -67,7 +67,12 @@ Items in the Inbox and Sources views are **live references** to the provider's i
 export interface DiscoveredStateRecord {
   providerId: string;
   externalId: string;
-  inboxState: InboxState;  // Only this is stored
+  inboxState: InboxState;
+  /** Version identifier used to detect when a previously accepted item needs re-attention. */
+  version?: string;
+  /** Secondary version identifier tracked independently from `version`. */
+  resurfaceVersion?: string;
+  // Only inboxState, version, and resurfaceVersion are persisted — not item data
 }
 
 // Item data (title, description, url) is always read live from provider:
@@ -78,6 +83,10 @@ export interface DiscoveredItem {
   url?: string;
   group?: string;
   reason?: string;
+  /** Optional version that triggers resurfacing when it changes for an accepted item. */
+  version?: string;
+  /** Optional secondary version for independent resurfacing (e.g. re-requested reviews). */
+  resurfaceVersion?: string;
 }
 ```
 
@@ -219,14 +228,39 @@ void provider.refresh().catch(err => {
 
 ## Examples
 
-**Storage write with writeQueue:**
+**Storage write with enqueue() and rollback:**
 ```typescript
-async setState(providerId: string, externalId: string, state: InboxState): Promise<void> {
-  this.writeQueue = this.writeQueue.then(async () => {
-    this.cache.set(this.key(providerId, externalId), { providerId, externalId, inboxState: state });
-    await fs.writeFile(this.filePath, JSON.stringify(Array.from(this.cache.values())));
+async setState(providerId: string, externalId: string, state: InboxState, version?: string): Promise<void> {
+  logger.debug(`Setting state for ${providerId}/${externalId} to ${state}`);
+  await this.enqueue(async () => {
+    if (!this.loaded) {
+      await this.load();
+    }
+    const k = this.key(providerId, externalId);
+    const previousValue = this.cache.get(k);
+    const newRecord: DiscoveredStateRecord = { providerId, externalId, inboxState: state };
+    if (version !== undefined) {
+      newRecord.version = version;
+    } else if (previousValue?.version !== undefined) {
+      newRecord.version = previousValue.version;
+    }
+    if (previousValue?.resurfaceVersion !== undefined) {
+      newRecord.resurfaceVersion = previousValue.resurfaceVersion;
+    }
+    this.cache.set(k, newRecord);
+    try {
+      await this.writeFile();
+    } catch (err) {
+      // Rollback cache on write failure
+      if (previousValue) {
+        this.cache.set(k, previousValue);
+      } else {
+        this.cache.delete(k);
+      }
+      throw err;
+    }
   });
-  return this.writeQueue;
+  this._onDidChange.fire();
 }
 ```
 
