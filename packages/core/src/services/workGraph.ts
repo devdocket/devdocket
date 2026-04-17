@@ -232,15 +232,10 @@ export class WorkGraph {
       );
     }
     const updated: WorkItem = { ...item, state: newState, updatedAt: Date.now() };
-    // When returning to Queue, assign a fresh sortOrder to avoid collisions
+    // When returning to Queue, assign a fresh sortOrder based on the current Queue contents,
+    // excluding the moving item, to avoid skipping indices.
     if (newState === WorkItemState.New) {
-      const originalItem = this.items.get(id)!;
-      this.items.set(id, updated);
-      this.invalidateStateCache();
       updated.sortOrder = this.nextSortOrder(WorkItemState.New);
-      // Restore original state — the unconditional items.set after save handles the real commit
-      this.items.set(id, originalItem);
-      this.invalidateStateCache();
     }
     await this.store.save(updated);
     this.items.set(id, updated);
