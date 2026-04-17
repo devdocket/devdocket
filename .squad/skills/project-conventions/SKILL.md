@@ -224,9 +224,9 @@ void provider.refresh().catch(err => {
 - **Interfaces:** PascalCase, optionally prefixed with `I` (e.g., `ITaskStore`)
 - **Functions/methods:** camelCase (e.g., `createItem()`, `setState()`)
 - **Constants:** UPPER_SNAKE_CASE (e.g., `MAX_ITEMS_PER_PROVIDER = 10_000`)
-- **Private members:** Prefix with `_` (e.g., `_onDidChange`, `_disposed`)
-- **Event emitters:** Prefix with `_onDid` (e.g., `_onDidChangeDiscoveredItems`)
-- **Public events:** Remove `_` prefix (e.g., `onDidChangeDiscoveredItems`)
+- **Private members:** Generally camelCase without `_`; underscores are used selectively for established patterns such as private event emitters and some internal flags
+- **Private event emitters:** Prefix with `_onDid` (e.g., `_onDidChangeDiscoveredItems`)
+- **Public events:** Expose the corresponding event without the `_` prefix (e.g., `onDidChangeDiscoveredItems`)
 
 ## Examples
 
