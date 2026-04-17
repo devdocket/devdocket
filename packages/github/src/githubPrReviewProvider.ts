@@ -24,6 +24,7 @@ export class GitHubPrReviewProvider extends BaseGitHubProvider {
   readonly label = 'GitHub PR Reviews';
 
   private _cachedCurrentUser: string | undefined;
+  private _cachedCurrentUserToken: string | undefined;
 
   protected async fetchAndPublish(accessToken: string, isUserTriggered: boolean): Promise<void> {
     logger.info('Fetching PR review requests...');
@@ -235,7 +236,7 @@ export class GitHubPrReviewProvider extends BaseGitHubProvider {
    * Returns undefined on failure.
    */
   private async fetchCurrentUser(token: string): Promise<string | undefined> {
-    if (this._cachedCurrentUser) {
+    if (this._cachedCurrentUser && this._cachedCurrentUserToken === token) {
       return this._cachedCurrentUser;
     }
 
@@ -251,6 +252,7 @@ export class GitHubPrReviewProvider extends BaseGitHubProvider {
         const data = (await response.json()) as { login?: string };
         if (data.login) {
           this._cachedCurrentUser = data.login;
+          this._cachedCurrentUserToken = token;
           return data.login;
         }
       }
@@ -279,6 +281,9 @@ export class GitHubPrReviewProvider extends BaseGitHubProvider {
         const currentIdx = nextIndex++;
         const pr = prs[currentIdx];
         try {
+          // Only fetches the first page (100 events). For PRs with very extensive
+          // activity the latest review_requested event could be missed — an acceptable
+          // trade-off to limit API calls.
           const timelineUrl = `${pr.repository_url}/issues/${pr.number}/timeline?per_page=100`;
           const response = await fetch(timelineUrl, {
             headers: {

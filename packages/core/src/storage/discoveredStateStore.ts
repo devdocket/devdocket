@@ -110,6 +110,12 @@ export class DiscoveredStateStore {
    * @param externalId - The provider-scoped item identifier.
    * @param state      - The new inbox state.
    * @param version    - Optional version identifier for resurfacing detection.
+   *
+   * Note: `resurfaceVersion` is only settable via `setStates()`, not here.
+   * This method preserves any existing `resurfaceVersion` from the previous record.
+   * This is intentional: `setState()` is used by UI commands (accept/dismiss)
+   * which should not alter version tracking.
+   *
    * @throws If the write to disk fails (cache is rolled back on error).
    */
   async setState(providerId: string, externalId: string, state: InboxState, version?: string): Promise<void> {
