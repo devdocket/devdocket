@@ -27,15 +27,34 @@ export interface FetchedItemDetails {
  * Throws on network or API errors with a user-friendly message.
  */
 export async function fetchItemDetails(parsed: ParsedUrl, signal?: AbortSignal): Promise<FetchedItemDetails> {
+  try {
+    switch (parsed.type) {
+      case 'github-pr':
+        return await fetchGitHubPr(parsed.owner, parsed.repo, parsed.number, signal);
+      case 'github-issue':
+        return await fetchGitHubIssue(parsed.owner, parsed.repo, parsed.number, signal);
+      case 'ado-pr':
+        return await fetchAdoPr(parsed.org, parsed.project, parsed.repo, parsed.id, signal);
+      case 'ado-workitem':
+        return await fetchAdoWorkItem(parsed.org, parsed.project, parsed.id, signal);
+    }
+  } catch (error) {
+    if (error instanceof Error && error.name === 'AbortError') { throw error; }
+    // Re-wrap low-level errors (network failures, JSON parse errors) with a user-friendly message
+    const label = formatLabel(parsed);
+    if (error instanceof Error && error.message.startsWith(label.split(' ')[0])) {
+      throw error; // Already a user-friendly error from handleGitHubError/handleAdoError
+    }
+    throw new Error(`Failed to fetch ${label}: ${error instanceof Error ? error.message : String(error)}`);
+  }
+}
+
+function formatLabel(parsed: ParsedUrl): string {
   switch (parsed.type) {
-    case 'github-pr':
-      return fetchGitHubPr(parsed.owner, parsed.repo, parsed.number, signal);
-    case 'github-issue':
-      return fetchGitHubIssue(parsed.owner, parsed.repo, parsed.number, signal);
-    case 'ado-pr':
-      return fetchAdoPr(parsed.org, parsed.project, parsed.repo, parsed.id, signal);
-    case 'ado-workitem':
-      return fetchAdoWorkItem(parsed.org, parsed.project, parsed.id, signal);
+    case 'github-pr': return `GitHub PR ${parsed.owner}/${parsed.repo}#${parsed.number}`;
+    case 'github-issue': return `GitHub issue ${parsed.owner}/${parsed.repo}#${parsed.number}`;
+    case 'ado-pr': return `ADO PR ${parsed.org}/${parsed.project}/${parsed.repo}#${parsed.id}`;
+    case 'ado-workitem': return `ADO work item ${parsed.org}/${parsed.project}#${parsed.id}`;
   }
 }
 
