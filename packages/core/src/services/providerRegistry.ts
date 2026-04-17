@@ -180,7 +180,9 @@ export class ProviderRegistry {
         if (result) { return { ...result, providerId: provider.id }; }
       } catch (error) {
         if (error instanceof Error && error.name === 'AbortError') { throw error; }
+        // Provider recognised the URL but failed (e.g. 404, auth error) — surface to user
         logger.warn(`Provider ${provider.id} failed to resolve URL`, error);
+        throw error;
       }
     }
     return undefined;
