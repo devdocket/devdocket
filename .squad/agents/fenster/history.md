@@ -27,6 +27,7 @@ Key files:
 ## Learnings
 
 - **Re-requested PR review resurfacing (Issue #243):** Added optional `version` field to `DiscoveredItem` (non-breaking API change). When `handleDiscoveredItems()` sees an `accepted` item whose version differs from the stored version, it resets state to `unseen` so the item reappears in Inbox. `DiscoveredStateRecord` also stores the version, and `DiscoveredStateStore` gained a `getVersion()` method. To avoid a flood of resurfaced items on initial deployment, version backfilling for pre-existing accepted items (stored version `undefined`) does NOT trigger resurfacing — it silently stores the version for future comparison. GitHub provider uses `updated_at` from the Search API as version; ADO provider uses `lastMergeSourceCommit.commitId`. Dismissed items are never resurfaced (per #189).
+- **TypeScript LSP config for Copilot CLI:** Added `.github/lsp.json` to configure `typescript-language-server --stdio` for `.ts`/`.tsx` files. This enables Copilot CLI to use LSP-based code intelligence (go-to-definition, hover, diagnostics) when working in the repo, rather than relying solely on grep/glob.
 
 - **Provider health indicator (Issue #233):** Added `ProviderHealthStatus` interface and health tracking to `ProviderRegistry`. The `refreshWithTimeout` method now tracks three outcomes: successful refresh → `healthy` with `lastRefreshTime` updated, error → `unhealthy` with error message, timeout → `unhealthy` with "Refresh timed out". A new `onDidChangeProviderHealth` event fires whenever health changes, driving tree view refreshes. Sources and Inbox tree providers show a `warning` ThemeIcon (with `problemsWarningIcon.foreground` color) on provider nodes when unhealthy, plus a `description: 'refresh failed'` string. Provider tooltips use `MarkdownString` to show last refresh time (via `formatRelativeTime` utility) and error details. Unhealthy providers with no cached items are still shown in Sources tree so the warning is visible. The `formatRelativeTime` utility lives at `src/utils/time.ts` and outputs "just now", "X minutes ago", "X hours ago", or a locale timestamp for 24h+.
 
@@ -307,6 +308,24 @@ Patterns documented in `.squad/decisions.md` under "Code Review Fix Patterns" (2
 
 ### Key Learning
 - **Defensive async loading**: When a synchronous getter reads from an async-loaded cache, ensure the cache is loaded at every call site. Don't rely solely on initialization order guarantees.
+
+## Documenting Project Conventions (2026-04-17)
+
+### Task
+Updated `.squad/skills/project-conventions/SKILL.md` with real patterns extracted directly from the codebase.
+
+### Learnings
+- **Storage & Serialization Pattern**: `JsonTaskStore` and `DiscoveredStateStore` both use a `writeQueue: Promise<void>` chain to serialize disk writes and prevent concurrent file corruption. This is critical because VS Code runs extension code in a single thread where async operations can interleave.
+- **Event-Driven Architecture**: All state changes follow mutate → save → fire → refresh. When a work item moves to a new state, the UI and providers refresh via EventEmitter callbacks. This decoupling keeps services independent and testable.
+- **Provider Items as References**: Only the `inboxState` enum is persisted in `discovered-state.json`. Item data (title, description, url) is always read live from the provider's in-memory Map. This keeps data fresh without needing to refetch or update persisted state when a source item changes.
+- **Monorepo with Tight Coupling**: Despite being a monorepo, the packages have clear boundaries. Core owns the UI and API surface (`packages/core/src/api/types.ts`), shared owns reusable types (`packages/shared/src/index.ts`), and providers import the public API surface but don't depend on core's internal services.
+- **Vitest with VS Code Mocking**: The vscode module is aliased in `vitest.config.ts` to a custom mock in `src/test/__mocks__/vscode.ts` built with `vi.fn()`. All VS Code APIs (window, commands, workspace, etc.) are mocked here. Tests run outside VS Code in Node.js — they never load the real vscode module.
+- **esbuild Build Pipeline**: CJS format, external vscode, sourcemaps enabled. The build is lightweight and fast — no webpack, no complex loaders. The sourcemap makes debugging straightforward.
+- **Naming & File Structure**: camelCase for files, PascalCase for classes, UPPER_SNAKE_CASE for constants. Files grouped by purpose (services/, storage/, views/, api/) not by type (classes/, interfaces/). This makes the codebase easy to navigate.
+- **Error Handling Strategy**: Errors are caught and logged via the shared `logger` service, never left unhandled. Provider refresh failures fire an `onDidChangeProviderHealth` event so the UI can show a warning. Store operation failures surface descriptive error messages to help users debug (e.g., "custom prompt path is outside workspace").
+
+### Updated Files
+- `.squad/skills/project-conventions/SKILL.md` — Replaced template with 8 real patterns (Storage, Events, Provider Items, Monorepo, Testing, Build, Type Safety, Error Handling), naming conventions, file structure guide, and concrete code examples.
 - **Test timing**: When production code adds an async operation to a previously-synchronous code path, tests that fire-and-forget events need to wait for async handlers to complete before asserting on side effects.
 
 ## Issue #227: Queue View Provider Labels (2026-04-13)
