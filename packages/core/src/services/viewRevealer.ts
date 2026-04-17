@@ -3,7 +3,9 @@ import { WorkItem, WorkItemState } from '../models/workItem';
 import { WorkGraph } from './workGraph';
 import { logger } from './logger';
 
-type WorkItemTreeView = vscode.TreeView<WorkItem | unknown>;
+// WorkItem | unknown simplifies to unknown; we use the alias for readability
+// at call sites — reveal() matches elements via TreeItem.id, not type identity.
+type WorkItemTreeView = vscode.TreeView<unknown>;
 
 /**
  * Reveals a work item in the appropriate destination tree view after
@@ -65,7 +67,7 @@ export class ViewRevealer {
 
   private async doReveal(view: WorkItemTreeView, item: WorkItem): Promise<void> {
     try {
-      await view.reveal(item, { select: true, focus: false, expand: true });
+      await view.reveal(item, { select: true, focus: false });
     } catch (err: unknown) {
       logger.debug('Auto-reveal failed (view may not be visible)', err);
     }
