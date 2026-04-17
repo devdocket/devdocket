@@ -201,7 +201,7 @@ ${descriptionSection}
       <dd><span class="badge ${stateBadgeClass(item.state)}">${escapeHtml(stateLabel(item.state))}</span></dd>
 ${item.providerId && providerLabel ? `      <dt>Provider</dt>
       <dd>${escapeHtml(providerLabel)}</dd>` : ''}
-${providerState ? `      <dt>Provider State</dt>
+${providerState && item.providerId ? `      <dt>Provider State</dt>
       <dd>${escapeHtml(providerState)}</dd>` : ''}
       <dt>Created</dt>
       <dd>${escapeHtml(formatTimestamp(item.createdAt))}</dd>
