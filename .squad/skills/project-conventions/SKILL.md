@@ -61,7 +61,7 @@ await stateStore.setState(item.providerId, item.externalId, 'accepted');
 
 Items in the Inbox and Sources views are **live references** to the provider's in-memory data. Only the **inbox state enum** (`unseen | accepted | dismissed`) is persisted in `discovered-state.json`.
 
-**Why:** Keeps data fresh. If a GitHub issue title changes, the UI immediately shows the latest title without needing to refetch or update persisted state.
+**Why:** Keeps persisted state minimal and avoids storing duplicated item data. If a GitHub issue title changes, the UI reflects the latest title after the next provider refresh (periodic or user-triggered), without requiring any persisted-state update or migration.
 
 **Pattern:**
 ```typescript
