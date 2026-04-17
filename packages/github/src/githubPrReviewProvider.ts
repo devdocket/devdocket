@@ -53,16 +53,19 @@ export class GitHubPrReviewProvider extends BaseGitHubProvider {
 
     const items: DiscoveredItem[] = prs.map((pr) => {
       const repoName = this.parseRepo(pr);
-      return {
+      const item: DiscoveredItem = {
         externalId: `${repoName}#${pr.number}`,
         title: `#${pr.number}: ${pr.title}`,
         description: pr.body?.slice(0, 200),
         url: pr.html_url,
         group: repoName,
         reason: 'review_requested',
-        version: headShas.get(pr.html_url),
-        resurfaceVersion: reRequestTimes.get(pr.html_url),
       };
+      const headSha = headShas.get(pr.html_url);
+      if (headSha !== undefined) { item.version = headSha; }
+      const reRequestTime = reRequestTimes.get(pr.html_url);
+      if (reRequestTime !== undefined) { item.resurfaceVersion = reRequestTime; }
+      return item;
     });
 
     this._onDidDiscoverItems.fire(items);
