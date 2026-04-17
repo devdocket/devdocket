@@ -313,10 +313,19 @@ export class AdoWorkItemProvider extends BaseProvider {
     super(new vscode.EventEmitter<DiscoveredItem[]>());
   }
 
-  async refresh(): Promise<void> { await this.doBackgroundRefresh(); }
+  // User-triggered refresh may prompt for auth / create credentials if needed.
+  async refresh(): Promise<void> {
+    const items = await this.fetchWorkItems({ createIfNone: true });
+    this._onDidDiscoverItems.fire(items.map(wi => ({
+      externalId: String(wi.id),
+      title: wi.title,
+      url: wi.url,
+    })));
+  }
 
+  // Background refresh must stay non-interactive.
   protected async doBackgroundRefresh(): Promise<void> {
-    const items = await this.fetchWorkItems();
+    const items = await this.fetchWorkItems({ createIfNone: false });
     this._onDidDiscoverItems.fire(items.map(wi => ({
       externalId: String(wi.id),
       title: wi.title,
