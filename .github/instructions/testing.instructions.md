@@ -19,10 +19,13 @@ cd packages/core && npx vitest run src/test/workGraph.test.ts
 
 ## vscode Module Mocking
 
-Tests run outside VS Code via **vitest**. The `vscode` import is aliased to a mock module in each package's `vitest.config.ts`:
+Tests run outside VS Code via **vitest**. The `vscode` import is aliased to `src/test/__mocks__/vscode.ts` in each package's `vitest.config.ts` under `resolve.alias`. Current packages with vscode mocks:
 
 - **Core:** `packages/core/src/test/__mocks__/vscode.ts`
 - **GitHub:** `packages/github/src/test/__mocks__/vscode.ts`
+- **ADO:** `packages/ado/src/test/__mocks__/vscode.ts`
+- **AI-Reviewer:** `packages/ai-reviewer/src/test/__mocks__/vscode.ts`
+- **Start-Git-Work:** `packages/start-git-work/src/test/__mocks__/vscode.ts`
 
 The alias is configured in `vitest.config.ts` under `resolve.alias`, mapping `'vscode'` to the mock file path.
 

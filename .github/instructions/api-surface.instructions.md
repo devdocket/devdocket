@@ -1,5 +1,5 @@
 ---
-applyTo: "packages/core/src/api/**,packages/shared/src/**"
+applyTo: "packages/core/src/api/**,packages/shared/src/**,packages/core/src/models/**"
 ---
 
 # Extension API Breaking Change Detection
@@ -20,7 +20,7 @@ These files define the contract that provider extensions depend on:
 Any of the following applied to an exported interface, type, class, or function is a **breaking change**:
 
 1. **Removing** a method, property, exported symbol, or enum member.
-2. **Renaming** an exported symbol or enum member.
+2. **Renaming** an exported symbol or enum member (type, interface, function, class, constant, enum value).
 3. **Adding a required parameter** to an existing method or function (optional is safe).
 4. **Changing the type** of an existing parameter, property, or return value in a way that is not a supertype widening.
 5. **Changing an interface from optional to required** for any property (e.g. `foo?: string` → `foo: string`).
@@ -28,7 +28,7 @@ Any of the following applied to an exported interface, type, class, or function 
 7. **Changing generic type parameters** (adding required generics, removing generics, changing constraints).
 8. **Moving an exported symbol** to a different module path without preserving the old path as a re-export.
 
-**Usually not breaking**: adding new optional properties, adding new exported symbols, adding new interfaces/types, widening an existing parameter type to a supertype, or adding new overload signatures that don't overlap with existing resolution. **Note:** widening a return type is often breaking for TypeScript consumers.
+**Usually not breaking**: adding new optional properties, adding new exported symbols, adding new interfaces/types, widening an existing parameter type to a supertype, or adding new overload signatures only when they are appended and do not overlap with existing overload resolution. **Note:** widening a return type is often breaking for TypeScript consumers.
 
 ## Code Review Requirements
 

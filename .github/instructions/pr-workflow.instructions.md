@@ -18,8 +18,11 @@ Run Copilot PR review via `copilot-pr-review` skill, fix comments (one commit pe
 - **Never skip or shortcut the process.** Every PR goes through all phases.
 - **Any code change re-triggers the local loop** — whether from code review, Copilot feedback, CI fix, or conflict resolution.
 - **Use `superpowers:code-reviewer` agent** for code review, not a generic code-review agent.
+- **Use merge commits, not rebase.** When resolving merge conflicts or syncing with `dev`, use `git merge origin/dev` instead of `git rebase`. This preserves commit history and avoids force-push issues.
 - When working on multiple issues in parallel, each issue goes through this full cycle independently in its own worktree.
 - **Default branch is `dev`.** All PRs target `dev`.
+
+> **Note:** The `create-pr`, `copilot-pr-review`, and `superpowers:code-reviewer` references above are Copilot CLI skills and agents — they are available automatically when using Copilot CLI in this repository.
 
 ## Without Copilot CLI
 
