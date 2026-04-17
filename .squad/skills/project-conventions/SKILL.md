@@ -38,12 +38,13 @@ private enqueue(op: () => Promise<void>): Promise<void> {
 
 ### Event-Driven Architecture
 
-State changes follow a **mutate → save → fire → refresh** cycle. When a WorkItem state changes:
+State changes follow a **mutate → save → fire → refresh** cycle. When a WorkItem or inbox state changes:
 1. Mutate the in-memory object
 2. Persist to disk via the store
 3. Fire an `onDidChange` event
-4. Providers refresh their discovered items
-5. UI tree data providers refresh
+4. UI tree data providers refresh in response to the event
+
+> **Note:** Provider refreshes are separate — they happen on a periodic schedule or via explicit user-triggered refresh commands. State-store events (e.g., accepting/dismissing inbox items) drive UI view refreshes but do not trigger provider refreshes.
 
 **Example:** Accepting an inbox item (from `commands.ts`):
 ```typescript
