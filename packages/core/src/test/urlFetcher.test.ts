@@ -171,6 +171,21 @@ describe('fetchItemDetails', () => {
       // Silent auth is called once; interactive auth (createIfNone) should never be called
       expect(authentication.getSession).toHaveBeenCalledTimes(1);
     });
+
+    it('skips auth retry on 404 when already authenticated', async () => {
+      vi.mocked(authentication.getSession).mockResolvedValue({
+        accessToken: 'existing-token',
+        id: 'test',
+        account: { id: '1', label: 'user' },
+        scopes: ['repo'],
+      });
+      mockFetch.mockResolvedValue({ ok: false, status: 404, statusText: 'Not Found' });
+
+      await expect(fetchItemDetails(parsed)).rejects.toThrow(/not found/i);
+      expect(mockFetch).toHaveBeenCalledTimes(1);
+      // Silent auth is called once; interactive auth should not be called since we were already authenticated
+      expect(authentication.getSession).toHaveBeenCalledTimes(1);
+    });
   });
 
   describe('ADO PR', () => {
@@ -188,7 +203,7 @@ describe('fetchItemDetails', () => {
         notes: 'ADO desc',
         url: 'https://dev.azure.com/myorg/myproj/_git/myrepo/pullrequest/7',
         externalId: 'myorg/myproj/myrepo/7',
-        group: 'myorg/myproj',
+        group: 'myproj/myrepo',
         providerId: 'ado-pr-reviews',
       });
     });
@@ -211,7 +226,7 @@ describe('fetchItemDetails', () => {
 
       const result = await fetchItemDetails(parsed);
       expect(result.externalId).toBe('myorg/My Project/MyRepo/7');
-      expect(result.group).toBe('myorg/My Project');
+      expect(result.group).toBe('My Project/MyRepo');
     });
 
     it('throws on 404', async () => {

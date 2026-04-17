@@ -131,11 +131,12 @@ async function fetchGitHubPr(owner: string, repo: string, number: number, signal
   const apiUrl = `https://api.github.com/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/pulls/${number}`;
   const label = `GitHub PR ${owner}/${repo}#${number}`;
   const headers = await getGitHubHeaders();
+  const wasAuthenticated = 'Authorization' in headers;
 
   let response = await fetch(apiUrl, { headers, signal });
 
-  // On 404, retry with interactive auth in case the repo is private
-  if (response.status === 404 && !signal?.aborted) {
+  // On 404, retry with interactive auth in case the repo is private and we weren't already authenticated
+  if (response.status === 404 && !wasAuthenticated && !signal?.aborted) {
     const retryResponse = await retryGitHubWithAuth(apiUrl, signal);
     if (retryResponse) { response = retryResponse; }
   }
@@ -157,10 +158,11 @@ async function fetchGitHubIssue(owner: string, repo: string, number: number, sig
   const apiUrl = `https://api.github.com/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/issues/${number}`;
   const label = `GitHub issue ${owner}/${repo}#${number}`;
   const headers = await getGitHubHeaders();
+  const wasAuthenticated = 'Authorization' in headers;
 
   let response = await fetch(apiUrl, { headers, signal });
 
-  if (response.status === 404 && !signal?.aborted) {
+  if (response.status === 404 && !wasAuthenticated && !signal?.aborted) {
     const retryResponse = await retryGitHubWithAuth(apiUrl, signal);
     if (retryResponse) { response = retryResponse; }
   }
@@ -182,10 +184,11 @@ async function fetchAdoPr(org: string, project: string, repo: string, id: number
   const apiUrl = `https://dev.azure.com/${encodeURIComponent(org)}/${encodeURIComponent(project)}/_apis/git/repositories/${encodeURIComponent(repo)}/pullrequests/${id}?api-version=7.1`;
   const label = `ADO PR ${org}/${project}/${repo}#${id}`;
   const headers = await getAdoHeaders();
+  const wasAuthenticated = 'Authorization' in headers;
 
   let response = await fetch(apiUrl, { headers, signal });
 
-  if (response.status === 404 && !signal?.aborted) {
+  if (response.status === 404 && !wasAuthenticated && !signal?.aborted) {
     const retryResponse = await retryAdoWithAuth(apiUrl, signal);
     if (retryResponse) { response = retryResponse; }
   }
@@ -201,7 +204,7 @@ async function fetchAdoPr(org: string, project: string, repo: string, id: number
     notes: data.description ?? '',
     url: htmlUrl,
     externalId: `${org}/${projectName}/${repoName}/${id}`,
-    group: `${org}/${projectName}`,
+    group: `${projectName}/${repoName}`,
     providerId: 'ado-pr-reviews',
   };
 }
@@ -210,10 +213,11 @@ async function fetchAdoWorkItem(org: string, project: string, id: number, signal
   const apiUrl = `https://dev.azure.com/${encodeURIComponent(org)}/${encodeURIComponent(project)}/_apis/wit/workitems/${id}?api-version=7.1`;
   const label = `ADO work item ${org}/${project}#${id}`;
   const headers = await getAdoHeaders();
+  const wasAuthenticated = 'Authorization' in headers;
 
   let response = await fetch(apiUrl, { headers, signal });
 
-  if (response.status === 404 && !signal?.aborted) {
+  if (response.status === 404 && !wasAuthenticated && !signal?.aborted) {
     const retryResponse = await retryAdoWithAuth(apiUrl, signal);
     if (retryResponse) { response = retryResponse; }
   }
