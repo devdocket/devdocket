@@ -135,6 +135,13 @@ function normalizeProviderId(providerId: string | null | undefined): string | un
 }
 
 /**
+ * Normalize a group name: treat empty/whitespace-only strings the same as undefined.
+ */
+function normalizeGroup(group: string | null | undefined): string | undefined {
+  return group?.trim() || undefined;
+}
+
+/**
  * Resolves a raw providerId to a human-friendly display name.
  * When not supplied, the raw providerId is used as-is.
  */
@@ -214,7 +221,7 @@ export function getTreeModeChildren(
   if (isSubGroupNode(element)) {
     return sortItems(
       getItems().filter(
-        i => normalizeProviderId(i.providerId) === element.providerId && i.group === element.groupName,
+        i => normalizeProviderId(i.providerId) === element.providerId && normalizeGroup(i.group) === element.groupName,
       ),
     );
   }
@@ -235,8 +242,9 @@ function getProviderChildren(
   const ungrouped: WorkItem[] = [];
 
   for (const item of items) {
-    if (item.group) {
-      groups.add(item.group);
+    const normalizedGroup = normalizeGroup(item.group);
+    if (normalizedGroup) {
+      groups.add(normalizedGroup);
     } else {
       ungrouped.push(item);
     }
@@ -259,12 +267,16 @@ export function createProviderGroupTreeItem(
   node: ProviderGroupNode,
   prefix: string,
   contextValue: string,
+  count?: number,
 ): vscode.TreeItem {
   const treeItem = new vscode.TreeItem(node.label, vscode.TreeItemCollapsibleState.Collapsed);
   const idSuffix = node.providerId ? `provider:${node.providerId}` : 'other';
   treeItem.id = `${prefix}::group::${idSuffix}`;
   treeItem.contextValue = contextValue;
   treeItem.iconPath = new vscode.ThemeIcon(node.providerId ? 'plug' : 'circle-filled');
+  if (count !== undefined) {
+    treeItem.description = `${count}`;
+  }
   return treeItem;
 }
 
@@ -272,12 +284,16 @@ export function createProviderGroupTreeItem(
 export function createSubGroupTreeItem(
   node: SubGroupNode,
   prefix: string,
+  count?: number,
 ): vscode.TreeItem {
   const treeItem = new vscode.TreeItem(node.label, vscode.TreeItemCollapsibleState.Collapsed);
   const providerPart = node.providerId ? `provider:${node.providerId}` : 'other';
   treeItem.id = `${prefix}::subgroup::${providerPart}::${node.groupName}`;
   treeItem.contextValue = `${prefix}SubGroup`;
   treeItem.iconPath = new vscode.ThemeIcon('folder');
+  if (count !== undefined) {
+    treeItem.description = `${count}`;
+  }
   return treeItem;
 }
 
@@ -315,6 +331,7 @@ export abstract class WorkItemViewProvider implements vscode.TreeDataProvider<Wo
   readonly onDidChangeTreeData = this._onDidChangeTreeData.event;
   protected readonly disposables: vscode.Disposable[] = [];
   private readonly _layoutState: LayoutState;
+  private _countsCache: Map<string, number> | undefined;
 
   get layout(): ViewLayout { return this._layoutState.value; }
   set layout(value: ViewLayout) { this._layoutState.value = value; }
@@ -327,18 +344,30 @@ export abstract class WorkItemViewProvider implements vscode.TreeDataProvider<Wo
     private readonly titleResolver?: TitleResolver,
     discoveredItemsChangeEvent?: import('vscode').Event<void>,
   ) {
-    this._layoutState = new LayoutState(defaultLayout, () => this._onDidChangeTreeData.fire());
+    this._layoutState = new LayoutState(defaultLayout, () => {
+      this._countsCache = undefined;
+      this._onDidChangeTreeData.fire();
+    });
     this.disposables.push(
-      workGraph.onDidChange(() => this._onDidChangeTreeData.fire()),
+      workGraph.onDidChange(() => {
+        this._countsCache = undefined;
+        this._onDidChangeTreeData.fire();
+      }),
     );
     if (providerChangeEvent) {
       this.disposables.push(
-        providerChangeEvent(() => this._onDidChangeTreeData.fire()),
+        providerChangeEvent(() => {
+          this._countsCache = undefined;
+          this._onDidChangeTreeData.fire();
+        }),
       );
     }
     if (discoveredItemsChangeEvent) {
       this.disposables.push(
-        discoveredItemsChangeEvent(() => this._onDidChangeTreeData.fire()),
+        discoveredItemsChangeEvent(() => {
+          this._countsCache = undefined;
+          this._onDidChangeTreeData.fire();
+        }),
       );
     }
   }
@@ -355,7 +384,10 @@ export abstract class WorkItemViewProvider implements vscode.TreeDataProvider<Wo
     return item.title;
   }
 
-  refresh(): void { this._onDidChangeTreeData.fire(); }
+  refresh(): void {
+    this._countsCache = undefined;
+    this._onDidChangeTreeData.fire();
+  }
 
   protected getProviderLabel(providerId: string | undefined): string | undefined {
     const normalizedProviderId = providerId?.trim();
@@ -388,12 +420,42 @@ export abstract class WorkItemViewProvider implements vscode.TreeDataProvider<Wo
   /** Create a TreeItem for a WorkItem (not a group node). */
   protected abstract createWorkItemTreeItem(item: WorkItem): vscode.TreeItem;
 
+  private ensureCountsCache(): Map<string, number> {
+    if (!this._countsCache) {
+      const counts = new Map<string, number>();
+      for (const item of this.getItems()) {
+        const providerKey = `provider:${normalizeProviderId(item.providerId) ?? ''}`;
+        counts.set(providerKey, (counts.get(providerKey) ?? 0) + 1);
+
+        // Build both keys: one with providerId (for Queue/History) and one without (for Focus)
+        const normalizedGroup = normalizeGroup(item.group) ?? '';
+        const groupKeyWithProvider = `group:${normalizeProviderId(item.providerId) ?? ''}:${normalizedGroup}`;
+        counts.set(groupKeyWithProvider, (counts.get(groupKeyWithProvider) ?? 0) + 1);
+
+        const groupKeyOnly = `group-only:${normalizedGroup}`;
+        counts.set(groupKeyOnly, (counts.get(groupKeyOnly) ?? 0) + 1);
+      }
+      this._countsCache = counts;
+    }
+    return this._countsCache;
+  }
+
   getTreeItem(element: WorkItemElement): vscode.TreeItem {
     if (isProviderGroupNode(element)) {
-      return createProviderGroupTreeItem(element, this.groupPrefix, this.groupContextValue);
+      const counts = this.ensureCountsCache();
+      const providerKey = `provider:${element.providerId ?? ''}`;
+      const count = counts.get(providerKey) ?? 0;
+      return createProviderGroupTreeItem(element, this.groupPrefix, this.groupContextValue, count);
     }
     if (isSubGroupNode(element)) {
-      return createSubGroupTreeItem(element, this.groupPrefix);
+      const counts = this.ensureCountsCache();
+      // When providerId is undefined (Focus view), count by group name only
+      // When providerId is defined (Queue/History), count by provider + group
+      const groupKey = element.providerId !== undefined
+        ? `group:${element.providerId}:${element.groupName}`
+        : `group-only:${element.groupName}`;
+      const count = counts.get(groupKey) ?? 0;
+      return createSubGroupTreeItem(element, this.groupPrefix, count);
     }
     return this.createWorkItemTreeItem(element);
   }

@@ -617,6 +617,46 @@ describe('SourcesTreeProvider', () => {
       expect((treeItem.iconPath as any).id).toBe('plug');
     });
 
+    it('shows item count for healthy provider', () => {
+      registry._setItems('gh', [
+        { externalId: 'issue-1', title: 'Bug A' },
+        { externalId: 'issue-2', title: 'Bug B' },
+        { externalId: 'issue-3', title: 'Feature C' }
+      ]);
+      registry.getProviderHealth.mockReturnValue({
+        status: 'healthy',
+        lastRefreshTime: new Date(),
+      });
+
+      const node: SourceProviderNode = { kind: 'provider', providerId: 'gh', label: 'GitHub' };
+      const treeItem = provider.getTreeItem(node);
+      expect(treeItem.description).toBe('3');
+    });
+
+    it('shows item count in group description', () => {
+      registry._setItems('gh', [
+        { externalId: 'issue-1', title: 'Bug A', group: 'bugs' },
+        { externalId: 'issue-2', title: 'Bug B', group: 'bugs' },
+        { externalId: 'issue-3', title: 'Feature C', group: 'features' }
+      ]);
+
+      const node: SourceGroupNode = { kind: 'group', providerId: 'gh', groupName: 'bugs' };
+      const treeItem = provider.getTreeItem(node);
+      expect(treeItem.description).toBe('2');
+    });
+
+    it('normalizes whitespace-only groups for count computation', () => {
+      registry._setItems('gh', [
+        { externalId: 'issue-1', title: 'Bug A', group: 'valid' },
+        { externalId: 'issue-2', title: 'Bug B', group: '   ' },
+        { externalId: 'issue-3', title: 'Bug C' }
+      ]);
+
+      const validNode: SourceGroupNode = { kind: 'group', providerId: 'gh', groupName: 'valid' };
+      const validTreeItem = provider.getTreeItem(validNode);
+      expect(validTreeItem.description).toBe('1');
+    });
+
     it('includes error message in tooltip for unhealthy provider', () => {
       registry._setItems('gh', [{ externalId: 'issue-1', title: 'Bug' }]);
       registry.getProviderHealth.mockReturnValue({

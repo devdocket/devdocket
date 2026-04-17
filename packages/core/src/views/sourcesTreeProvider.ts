@@ -34,6 +34,7 @@ export class SourcesTreeProvider implements vscode.TreeDataProvider<SourcesEleme
   readonly onDidChangeTreeData = this._onDidChangeTreeData.event;
   private readonly disposables: vscode.Disposable[] = [];
   private readonly _layoutState: LayoutState;
+  private _countsCache: Map<string, number> | undefined;
 
   get layout(): ViewLayout { return this._layoutState.value; }
   set layout(value: ViewLayout) { this._layoutState.value = value; }
@@ -42,15 +43,51 @@ export class SourcesTreeProvider implements vscode.TreeDataProvider<SourcesEleme
     private readonly providerRegistry: ProviderRegistry,
     private readonly stateStore: DiscoveredStateStore,
   ) {
-    this._layoutState = new LayoutState('tree', () => this._onDidChangeTreeData.fire());
+    this._layoutState = new LayoutState('tree', () => {
+      this._countsCache = undefined;
+      this._onDidChangeTreeData.fire();
+    });
     this.disposables.push(
-      providerRegistry.onDidChangeDiscoveredItems(() => this._onDidChangeTreeData.fire()),
-      providerRegistry.onDidChangeProviderHealth(() => this._onDidChangeTreeData.fire()),
-      stateStore.onDidChange(() => this._onDidChangeTreeData.fire())
+      providerRegistry.onDidChangeDiscoveredItems(() => {
+        this._countsCache = undefined;
+        this._onDidChangeTreeData.fire();
+      }),
+      providerRegistry.onDidChangeProviderHealth(() => {
+        this._countsCache = undefined;
+        this._onDidChangeTreeData.fire();
+      }),
+      stateStore.onDidChange(() => {
+        this._countsCache = undefined;
+        this._onDidChangeTreeData.fire();
+      })
     );
   }
 
-  refresh(): void { this._onDidChangeTreeData.fire(); }
+  refresh(): void {
+    this._countsCache = undefined;
+    this._onDidChangeTreeData.fire();
+  }
+
+  private ensureCountsCache(): Map<string, number> {
+    if (!this._countsCache) {
+      const counts = new Map<string, number>();
+      const allItems = this.providerRegistry.getAllDiscoveredItems();
+      for (const [providerId, items] of allItems) {
+        const providerKey = `provider:${providerId}`;
+        counts.set(providerKey, items.length);
+
+        for (const item of items) {
+          const normalizedGroup = item.group?.trim();
+          if (normalizedGroup) {
+            const groupKey = `group:${providerId}:${normalizedGroup}`;
+            counts.set(groupKey, (counts.get(groupKey) ?? 0) + 1);
+          }
+        }
+      }
+      this._countsCache = counts;
+    }
+    return this._countsCache;
+  }
 
   getTreeItem(element: SourcesElement): vscode.TreeItem {
     switch (element.kind) {
@@ -62,14 +99,22 @@ export class SourcesTreeProvider implements vscode.TreeDataProvider<SourcesEleme
           treeItem.iconPath = new vscode.ThemeIcon('warning', new vscode.ThemeColor('problemsWarningIcon.foreground'));
           treeItem.description = 'refresh failed';
         } else {
+          const counts = this.ensureCountsCache();
+          const providerKey = `provider:${element.providerId}`;
+          const count = counts.get(providerKey) ?? 0;
           treeItem.iconPath = new vscode.ThemeIcon('plug');
+          treeItem.description = `${count}`;
         }
         treeItem.tooltip = buildProviderTooltip(element.label, health);
         return treeItem;
       }
       case 'group': {
+        const counts = this.ensureCountsCache();
+        const groupKey = `group:${element.providerId}:${element.groupName}`;
+        const count = counts.get(groupKey) ?? 0;
         const treeItem = new vscode.TreeItem(element.groupName, vscode.TreeItemCollapsibleState.Collapsed);
         treeItem.contextValue = 'sourceGroup';
+        treeItem.description = `${count}`;
         treeItem.iconPath = new vscode.ThemeIcon('folder');
         return treeItem;
       }
