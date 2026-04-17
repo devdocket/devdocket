@@ -10,8 +10,8 @@ const VALID_TRANSITIONS: ReadonlyMap<WorkItemState, ReadonlySet<WorkItemState>> 
   [WorkItemState.New, new Set([WorkItemState.InProgress, WorkItemState.Archived])],
   [WorkItemState.InProgress, new Set([WorkItemState.Paused, WorkItemState.Done, WorkItemState.New, WorkItemState.Archived])],
   [WorkItemState.Paused, new Set([WorkItemState.InProgress, WorkItemState.New, WorkItemState.Archived])],
-  [WorkItemState.Done, new Set([WorkItemState.Archived])],
-  [WorkItemState.Archived, new Set<WorkItemState>()],
+  [WorkItemState.Done, new Set([WorkItemState.Archived, WorkItemState.New])],
+  [WorkItemState.Archived, new Set([WorkItemState.New])],
 ]);
 
 /**
@@ -232,9 +232,14 @@ export class WorkGraph {
       );
     }
     const updated: WorkItem = { ...item, state: newState, updatedAt: Date.now() };
-    // When returning to Queue, assign a fresh sortOrder to avoid collisions
+    // When returning to Queue, assign a fresh sortOrder based on the current pre-transition
+    // Queue contents. Reuse nextSortOrder but also account for the item's own sortOrder
+    // to avoid reusing the same value when moving back to Queue multiple times.
     if (newState === WorkItemState.New) {
-      updated.sortOrder = this.nextSortOrder(WorkItemState.New);
+      updated.sortOrder = Math.max(
+        this.nextSortOrder(WorkItemState.New),
+        (item.sortOrder ?? -1) + 1
+      );
     }
     await this.store.save(updated);
     this.items.set(id, updated);

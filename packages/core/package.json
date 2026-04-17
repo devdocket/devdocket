@@ -627,6 +627,11 @@
           "group": "1_actions"
         },
         {
+          "command": "devdocket.moveToQueue",
+          "when": "view == devdocket.history && viewItem =~ /^historyItem/",
+          "group": "1_actions"
+        },
+        {
           "command": "devdocket.archiveItem",
           "when": "view == devdocket.history && viewItem =~ /historyItem\\.done/",
           "group": "1_actions"
