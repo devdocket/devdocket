@@ -322,9 +322,11 @@ export function truncateToolContent(
 ): (vscode.LanguageModelTextPart | vscode.LanguageModelToolResultPart)[] {
   return content.map((part) => {
     if (part instanceof vscode.LanguageModelTextPart && part.value.length > MAX_TOOL_RESULT_LENGTH) {
+      const truncationNotice =
+        `\n\n(truncated from ${part.value.length.toLocaleString()} chars — content exceeded context budget)`;
+      const sliceLength = Math.max(0, MAX_TOOL_RESULT_LENGTH - truncationNotice.length);
       return new vscode.LanguageModelTextPart(
-        part.value.slice(0, MAX_TOOL_RESULT_LENGTH) +
-        `\n\n(truncated from ${part.value.length.toLocaleString()} chars — content exceeded context budget)`,
+        part.value.slice(0, sliceLength) + truncationNotice,
       );
     }
     return part;
