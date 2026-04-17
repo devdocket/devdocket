@@ -53,6 +53,7 @@ export class GitHubPrReviewProvider extends BaseGitHubProvider {
 
     const items: DiscoveredItem[] = prs.map((pr) => {
       const repoName = this.parseRepo(pr);
+      const prState = pr.pull_request?.merged_at ? 'merged' : pr.state;
       const item: DiscoveredItem = {
         externalId: `${repoName}#${pr.number}`,
         title: `#${pr.number}: ${pr.title}`,
@@ -60,6 +61,7 @@ export class GitHubPrReviewProvider extends BaseGitHubProvider {
         url: pr.html_url,
         group: repoName,
         reason: 'review_requested',
+        state: prState,
       };
       const headSha = headShas.get(pr.html_url);
       if (headSha !== undefined) { item.version = headSha; }

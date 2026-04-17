@@ -8,6 +8,7 @@ interface AdoPullRequest {
   pullRequestId: number;
   title: string;
   description?: string;
+  status?: string;
   repository: {
     name: string;
     project: { name: string };
@@ -278,6 +279,7 @@ export class AdoPrReviewProvider extends BaseProvider {
         url: `${repoUrl}/pullrequest/${pr.pullRequestId}`,
         group: `${projectName}/${repoName}`,
         reason: 'review_requested',
+        state: pr.status,
         version: resurfaceOnNewVersion ? pr.lastMergeSourceCommit?.commitId : undefined,
       };
     });
