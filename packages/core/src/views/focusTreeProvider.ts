@@ -27,17 +27,10 @@ export class FocusTreeProvider extends WorkItemViewProvider implements vscode.Tr
       providerRegistry?.onDidChangeDiscoveredItems,
     );
     this.disposables.push(
-      workGraph.onDidChange(() => {
+      this.onDidChangeTreeData(() => {
         this._groupCountsCache = undefined;
       }),
     );
-    if (providerRegistry) {
-      this.disposables.push(
-        providerRegistry.onDidChangeDiscoveredItems(() => {
-          this._groupCountsCache = undefined;
-        }),
-      );
-    }
   }
 
   protected getItems(): WorkItem[] {
