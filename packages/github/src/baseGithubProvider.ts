@@ -1,5 +1,8 @@
 import * as vscode from 'vscode';
+import type { ResolvedItem } from '@devdocket/shared';
 import { logger } from './logger';
+
+export type { ResolvedItem };
 
 // Re-declared to match core API contract — separate extension cannot import core types directly
 export interface Disposable {
@@ -28,16 +31,6 @@ export interface DevDocketProvider {
   readonly onDidDiscoverItems: Event<DiscoveredItem[]>;
   refresh(token?: vscode.CancellationToken): Promise<void>;
   resolveUrl?(url: string, signal?: AbortSignal): Promise<ResolvedItem | undefined>;
-}
-
-// SYNC-WITH: packages/shared/src/baseProvider.ts:ResolvedItem
-export interface ResolvedItem {
-  title: string;
-  notes: string;
-  url: string;
-  externalId: string;
-  group?: string;
-  providerId: string;
 }
 
 export interface GitHubIssue {
