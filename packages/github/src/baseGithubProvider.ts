@@ -19,6 +19,7 @@ export interface DiscoveredItem {
   group?: string;
   reason?: string;
   version?: string;
+  resurfaceVersion?: string;
 }
 
 export interface DevDocketProvider {

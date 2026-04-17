@@ -456,6 +456,67 @@ describe('AdoPrReviewProvider — extended', () => {
     });
   });
 
+  describe('resurfacing configuration', () => {
+    it('omits version when resurfaceOnNewVersion is false', async () => {
+      const { workspace } = await import('vscode');
+      vi.mocked(workspace.getConfiguration).mockReturnValue({
+        get: vi.fn((key: string, defaultValue?: any) => {
+          if (key === 'resurfaceOnNewVersion') {
+            return false;
+          }
+          return defaultValue;
+        }),
+      } as any);
+
+      const prWithCommit = {
+        ...createMockPr(1, 'PR with commit'),
+        lastMergeSourceCommit: { commitId: 'abc123' },
+      };
+
+      mockFetch
+        .mockResolvedValueOnce(mockConnectionData())
+        .mockResolvedValueOnce({
+          ok: true,
+          json: async () => ({ value: [prWithCommit] }),
+        });
+
+      const listener = vi.fn();
+      provider.onDidDiscoverItems(listener);
+      await provider.refresh();
+
+      const items = listener.mock.calls[0][0];
+      expect(items).toHaveLength(1);
+      expect(items[0].version).toBeUndefined();
+
+      // Restore default workspace mock
+      vi.mocked(workspace.getConfiguration).mockReturnValue({
+        get: vi.fn((_key: string, defaultValue?: any) => defaultValue),
+      } as any);
+    });
+
+    it('includes version when resurfaceOnNewVersion is true (default)', async () => {
+      const prWithCommit = {
+        ...createMockPr(1, 'PR with commit'),
+        lastMergeSourceCommit: { commitId: 'abc123' },
+      };
+
+      mockFetch
+        .mockResolvedValueOnce(mockConnectionData())
+        .mockResolvedValueOnce({
+          ok: true,
+          json: async () => ({ value: [prWithCommit] }),
+        });
+
+      const listener = vi.fn();
+      provider.onDidDiscoverItems(listener);
+      await provider.refresh();
+
+      const items = listener.mock.calls[0][0];
+      expect(items).toHaveLength(1);
+      expect(items[0].version).toBe('abc123');
+    });
+  });
+
   describe('PR URL construction in results', () => {
     it('constructs URL from org/project/repo when webUrl is undefined', async () => {
       const prWithoutWebUrl = {

@@ -283,27 +283,49 @@ export class ProviderRegistry {
     logger.info(`Provider ${providerId} discovered ${items.length} items`);
     this.discoveredItems.set(providerId, items);
 
-    const newUnseenUpdates: Array<{ providerId: string; externalId: string; state: 'unseen'; version?: string }> = [];
-    const versionBackfills: Array<{ providerId: string; externalId: string; state: InboxState; version?: string }> = [];
+    const newUnseenUpdates: Array<{ providerId: string; externalId: string; state: 'unseen'; version?: string; resurfaceVersion?: string }> = [];
+    const versionBackfills: Array<{ providerId: string; externalId: string; state: InboxState; version?: string; resurfaceVersion?: string }> = [];
 
     for (const item of items) {
       const existing = this.stateStore.getState(providerId, item.externalId);
       if (existing === undefined) {
-        newUnseenUpdates.push({ providerId, externalId: item.externalId, state: 'unseen', version: item.version });
-      } else if (existing === 'accepted' && item.version !== undefined) {
-        const storedVersion = this.stateStore.getVersion(providerId, item.externalId);
-        if (storedVersion !== undefined && storedVersion !== item.version) {
-          // Version changed since last acceptance — resurface in Inbox
-          newUnseenUpdates.push({ providerId, externalId: item.externalId, state: 'unseen', version: item.version });
-        } else if (storedVersion === undefined) {
-          // Backfill version for pre-existing accepted item (no state change)
-          versionBackfills.push({ providerId, externalId: item.externalId, state: 'accepted', version: item.version });
+        newUnseenUpdates.push({ providerId, externalId: item.externalId, state: 'unseen', version: item.version, resurfaceVersion: item.resurfaceVersion });
+      } else if (existing === 'accepted') {
+        let shouldResurface = false;
+        let needsBackfill = false;
+
+        if (item.version !== undefined) {
+          const storedVersion = this.stateStore.getVersion(providerId, item.externalId);
+          if (storedVersion !== undefined && storedVersion !== item.version) {
+            shouldResurface = true;
+          } else if (storedVersion === undefined) {
+            needsBackfill = true;
+          }
         }
-      } else if (existing === 'unseen' && item.version !== undefined) {
-        const storedVersion = this.stateStore.getVersion(providerId, item.externalId);
-        if (storedVersion === undefined || storedVersion !== item.version) {
-          // Keep unseen items' stored version in sync so later acceptance snapshots the latest version
-          versionBackfills.push({ providerId, externalId: item.externalId, state: 'unseen', version: item.version });
+
+        if (item.resurfaceVersion !== undefined) {
+          const storedRV = this.stateStore.getResurfaceVersion(providerId, item.externalId);
+          if (storedRV !== undefined && storedRV !== item.resurfaceVersion) {
+            shouldResurface = true;
+          } else if (storedRV === undefined) {
+            needsBackfill = true;
+          }
+        }
+
+        if (shouldResurface) {
+          newUnseenUpdates.push({ providerId, externalId: item.externalId, state: 'unseen', version: item.version, resurfaceVersion: item.resurfaceVersion });
+        } else if (needsBackfill) {
+          versionBackfills.push({ providerId, externalId: item.externalId, state: 'accepted', version: item.version, resurfaceVersion: item.resurfaceVersion });
+        }
+      } else if (existing === 'unseen') {
+        if (item.version !== undefined || item.resurfaceVersion !== undefined) {
+          const storedVersion = this.stateStore.getVersion(providerId, item.externalId);
+          const storedRV = this.stateStore.getResurfaceVersion(providerId, item.externalId);
+          const versionChanged = item.version !== undefined && (storedVersion === undefined || storedVersion !== item.version);
+          const rvChanged = item.resurfaceVersion !== undefined && (storedRV === undefined || storedRV !== item.resurfaceVersion);
+          if (versionChanged || rvChanged) {
+            versionBackfills.push({ providerId, externalId: item.externalId, state: 'unseen', version: item.version, resurfaceVersion: item.resurfaceVersion });
+          }
         }
       }
     }

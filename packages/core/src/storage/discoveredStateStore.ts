@@ -18,6 +18,8 @@ export interface DiscoveredStateRecord {
   inboxState: InboxState;
   /** Version identifier used to detect when a previously accepted item needs re-attention. */
   version?: string;
+  /** Secondary version identifier tracked independently from `version`. */
+  resurfaceVersion?: string;
 }
 
 /**
@@ -40,6 +42,9 @@ function validateDiscoveredStateRecord(value: unknown, index: number): string | 
   }
   if ('version' in obj && typeof obj.version !== 'string') {
     return `Record at index ${index} has invalid "version": expected string`;
+  }
+  if ('resurfaceVersion' in obj && typeof obj.resurfaceVersion !== 'string') {
+    return `Record at index ${index} has invalid "resurfaceVersion": expected string`;
   }
   return undefined;
 }
@@ -91,6 +96,15 @@ export class DiscoveredStateStore {
   }
 
   /**
+   * Returns the stored resurface version for a discovered item, or `undefined` if not set.
+   * @param providerId - The provider that discovered the item.
+   * @param externalId - The provider-scoped item identifier.
+   */
+  getResurfaceVersion(providerId: string, externalId: string): string | undefined {
+    return this.cache.get(this.key(providerId, externalId))?.resurfaceVersion;
+  }
+
+  /**
    * Sets the inbox state for a single discovered item and persists to disk.
    * @param providerId - The provider that discovered the item.
    * @param externalId - The provider-scoped item identifier.
@@ -113,6 +127,9 @@ export class DiscoveredStateStore {
         // Preserve existing version when caller doesn't supply one
         newRecord.version = previousValue.version;
       }
+      if (previousValue?.resurfaceVersion !== undefined) {
+        newRecord.resurfaceVersion = previousValue.resurfaceVersion;
+      }
       this.cache.set(k, newRecord);
       try {
         await this.writeFile();
@@ -133,7 +150,7 @@ export class DiscoveredStateStore {
    * @param items - Array of items with their new states and optional versions.
    * @throws If the write to disk fails (cache is rolled back on error).
    */
-  async setStates(items: Array<{ providerId: string; externalId: string; state: InboxState; version?: string }>): Promise<void> {
+  async setStates(items: Array<{ providerId: string; externalId: string; state: InboxState; version?: string; resurfaceVersion?: string }>): Promise<void> {
     await this.enqueue(async () => {
       if (!this.loaded) {
         await this.load();
@@ -149,6 +166,11 @@ export class DiscoveredStateStore {
         } else if (previousRecord?.version !== undefined) {
           // Preserve existing version when caller doesn't supply one
           newRecord.version = previousRecord.version;
+        }
+        if (item.resurfaceVersion !== undefined) {
+          newRecord.resurfaceVersion = item.resurfaceVersion;
+        } else if (previousRecord?.resurfaceVersion !== undefined) {
+          newRecord.resurfaceVersion = previousRecord.resurfaceVersion;
         }
         this.cache.set(k, newRecord);
       }

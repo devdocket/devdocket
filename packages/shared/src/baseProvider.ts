@@ -31,9 +31,16 @@ export interface DiscoveredItem {
    * Optional version identifier that changes when the item needs re-attention.
    * When a previously accepted item reappears with a different version,
    * it is resurfaced in the Inbox as unseen. Useful for PR reviews where
-   * a re-requested review should create a new inbox cycle.
+   * new commits should create a new inbox cycle.
    */
   version?: string;
+  /**
+   * Optional secondary version that independently triggers resurfacing.
+   * Behaves the same as `version` but is tracked separately, allowing
+   * providers to detect multiple independent change signals (e.g. new
+   * commits via `version` and re-requested reviews via `resurfaceVersion`).
+   */
+  resurfaceVersion?: string;
 }
 
 /** Matches the subset of vscode.EventEmitter used by providers. */

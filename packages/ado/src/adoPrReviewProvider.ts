@@ -265,6 +265,7 @@ export class AdoPrReviewProvider extends BaseProvider {
       logger.error(`Failed to parse PR response for ${project || org}:`, err);
       return { items: [], failed: true };
     }
+    const resurfaceOnNewVersion = vscode.workspace.getConfiguration('devdocketAdo').get<boolean>('resurfaceOnNewVersion', true);
     const items: DiscoveredItem[] = prData.value.map((pr) => {
       const projectName = pr.repository.project.name;
       const repoName = pr.repository.name;
@@ -276,7 +277,7 @@ export class AdoPrReviewProvider extends BaseProvider {
         url: `${repoUrl}/pullrequest/${pr.pullRequestId}`,
         group: `${projectName}/${repoName}`,
         reason: 'review_requested',
-        version: pr.lastMergeSourceCommit?.commitId,
+        version: resurfaceOnNewVersion ? pr.lastMergeSourceCommit?.commitId : undefined,
       };
     });
 
