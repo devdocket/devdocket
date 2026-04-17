@@ -127,7 +127,7 @@ packages/
   - `npm run test -w packages/core` — Single package
   - `cd packages/core && npx vitest run src/test/workGraph.test.ts` — Single file
 
-**VS Code mocking:** The `vscode` module is aliased in each package's `vitest.config.ts`:
+**VS Code mocking:** The `vscode` module is aliased in each extension package's `vitest.config.ts` (core, github, ado, ai-reviewer, start-git-work — but not shared, which doesn't depend on vscode):
 ```typescript
 // vitest.config.ts
 alias: {
