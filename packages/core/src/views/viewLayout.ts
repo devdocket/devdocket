@@ -331,6 +331,7 @@ export abstract class WorkItemViewProvider implements vscode.TreeDataProvider<Wo
   readonly onDidChangeTreeData = this._onDidChangeTreeData.event;
   protected readonly disposables: vscode.Disposable[] = [];
   private readonly _layoutState: LayoutState;
+  private _countsCache: Map<string, number> | undefined;
 
   get layout(): ViewLayout { return this._layoutState.value; }
   set layout(value: ViewLayout) { this._layoutState.value = value; }
@@ -343,18 +344,30 @@ export abstract class WorkItemViewProvider implements vscode.TreeDataProvider<Wo
     private readonly titleResolver?: TitleResolver,
     discoveredItemsChangeEvent?: import('vscode').Event<void>,
   ) {
-    this._layoutState = new LayoutState(defaultLayout, () => this._onDidChangeTreeData.fire());
+    this._layoutState = new LayoutState(defaultLayout, () => {
+      this._countsCache = undefined;
+      this._onDidChangeTreeData.fire();
+    });
     this.disposables.push(
-      workGraph.onDidChange(() => this._onDidChangeTreeData.fire()),
+      workGraph.onDidChange(() => {
+        this._countsCache = undefined;
+        this._onDidChangeTreeData.fire();
+      }),
     );
     if (providerChangeEvent) {
       this.disposables.push(
-        providerChangeEvent(() => this._onDidChangeTreeData.fire()),
+        providerChangeEvent(() => {
+          this._countsCache = undefined;
+          this._onDidChangeTreeData.fire();
+        }),
       );
     }
     if (discoveredItemsChangeEvent) {
       this.disposables.push(
-        discoveredItemsChangeEvent(() => this._onDidChangeTreeData.fire()),
+        discoveredItemsChangeEvent(() => {
+          this._countsCache = undefined;
+          this._onDidChangeTreeData.fire();
+        }),
       );
     }
   }
@@ -371,7 +384,10 @@ export abstract class WorkItemViewProvider implements vscode.TreeDataProvider<Wo
     return item.title;
   }
 
-  refresh(): void { this._onDidChangeTreeData.fire(); }
+  refresh(): void {
+    this._countsCache = undefined;
+    this._onDidChangeTreeData.fire();
+  }
 
   protected getProviderLabel(providerId: string | undefined): string | undefined {
     const normalizedProviderId = providerId?.trim();
@@ -404,17 +420,32 @@ export abstract class WorkItemViewProvider implements vscode.TreeDataProvider<Wo
   /** Create a TreeItem for a WorkItem (not a group node). */
   protected abstract createWorkItemTreeItem(item: WorkItem): vscode.TreeItem;
 
+  private ensureCountsCache(): Map<string, number> {
+    if (!this._countsCache) {
+      const counts = new Map<string, number>();
+      for (const item of this.getItems()) {
+        const providerKey = `provider:${normalizeProviderId(item.providerId) ?? ''}`;
+        counts.set(providerKey, (counts.get(providerKey) ?? 0) + 1);
+
+        const groupKey = `group:${normalizeProviderId(item.providerId) ?? ''}:${normalizeGroup(item.group) ?? ''}`;
+        counts.set(groupKey, (counts.get(groupKey) ?? 0) + 1);
+      }
+      this._countsCache = counts;
+    }
+    return this._countsCache;
+  }
+
   getTreeItem(element: WorkItemElement): vscode.TreeItem {
     if (isProviderGroupNode(element)) {
-      const count = this.getItems().filter(
-        i => normalizeProviderId(i.providerId) === element.providerId
-      ).length;
+      const counts = this.ensureCountsCache();
+      const providerKey = `provider:${element.providerId ?? ''}`;
+      const count = counts.get(providerKey) ?? 0;
       return createProviderGroupTreeItem(element, this.groupPrefix, this.groupContextValue, count);
     }
     if (isSubGroupNode(element)) {
-      const count = this.getItems().filter(
-        i => normalizeProviderId(i.providerId) === element.providerId && normalizeGroup(i.group) === element.groupName
-      ).length;
+      const counts = this.ensureCountsCache();
+      const groupKey = `group:${element.providerId ?? ''}:${element.groupName}`;
+      const count = counts.get(groupKey) ?? 0;
       return createSubGroupTreeItem(element, this.groupPrefix, count);
     }
     return this.createWorkItemTreeItem(element);
