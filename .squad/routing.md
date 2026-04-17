@@ -17,6 +17,11 @@ How to decide who handles what.
 | Test infrastructure | Hockney | Mocks, fixtures, test utilities, vitest config |
 | Quality review | Hockney | Review implementations for testability and coverage |
 | Session logging | Scribe | Automatic — never needs routing |
+| Work monitoring | Ralph | Scan GitHub for untriaged issues, failing CI, review feedback, approved PRs |
+
+## Ralph Startup
+
+Before Ralph begins any work cycle, he **must** read `.squad/decisions.md` and apply all recorded directives. This ensures project-specific overrides (e.g., worktree usage, PR workflow) are respected.
 
 ## Issue Routing
 
