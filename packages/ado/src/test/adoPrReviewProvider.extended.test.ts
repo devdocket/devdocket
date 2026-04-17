@@ -457,6 +457,13 @@ describe('AdoPrReviewProvider — extended', () => {
   });
 
   describe('resurfacing configuration', () => {
+    afterEach(async () => {
+      const { workspace } = await import('vscode');
+      vi.mocked(workspace.getConfiguration).mockReturnValue({
+        get: vi.fn((_key: string, defaultValue?: any) => defaultValue),
+      } as any);
+    });
+
     it('omits version when resurfaceOnNewVersion is false', async () => {
       const { workspace } = await import('vscode');
       vi.mocked(workspace.getConfiguration).mockReturnValue({
@@ -487,11 +494,6 @@ describe('AdoPrReviewProvider — extended', () => {
       const items = listener.mock.calls[0][0];
       expect(items).toHaveLength(1);
       expect(items[0].version).toBeUndefined();
-
-      // Restore default workspace mock
-      vi.mocked(workspace.getConfiguration).mockReturnValue({
-        get: vi.fn((_key: string, defaultValue?: any) => defaultValue),
-      } as any);
     });
 
     it('includes version when resurfaceOnNewVersion is true (default)', async () => {
