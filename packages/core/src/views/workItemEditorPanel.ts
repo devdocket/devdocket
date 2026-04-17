@@ -109,11 +109,7 @@ export class WorkItemEditorPanel {
   }
 
   private isProviderManaged(item: WorkItem): boolean {
-    if (!item.providerId || !item.externalId) { return false; }
-    if (!this.providerRegistry.getProvider(item.providerId)) { return false; }
-    // Only treat as provider-managed if the provider has actually discovered this item
-    return this.providerRegistry.getDiscoveredItems(item.providerId)
-      .some(d => d.externalId === item.externalId);
+    return !!(item.providerId && this.providerRegistry.getProvider(item.providerId));
   }
 
   private async saveData(data: Record<string, string>): Promise<void> {
