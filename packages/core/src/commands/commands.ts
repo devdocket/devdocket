@@ -9,8 +9,6 @@ import { WorkItemEditorPanel } from '../views/workItemEditorPanel';
 import { type InboxItem, type InboxElement } from '../views/inboxTreeProvider';
 import { type SourceItemNode, type SourcesElement } from '../views/sourcesTreeProvider';
 import { logger } from '../services/logger';
-import { parseSourceUrl } from '../services/urlParser';
-import { fetchItemDetails, type FetchedItemDetails } from '../services/urlFetcher';
 import { toggleViewLayout, setViewLayout } from '../views/viewLayout';
 
 /**
@@ -235,32 +233,19 @@ async function handleCreateItemFromUrl(
   labelCache: ProviderLabelCache,
 ): Promise<void> {
   const url = await vscode.window.showInputBox({
-    prompt: 'Enter a GitHub PR/issue or Azure DevOps PR/work item URL',
+    prompt: 'Enter a URL to create a work item from',
     placeHolder: 'https://github.com/owner/repo/pull/123',
-    validateInput: (value) => {
-      if (!value.trim()) { return 'URL is required'; }
-      if (!parseSourceUrl(value)) {
-        return 'Unsupported URL format. Supported: GitHub PRs and issues, Azure DevOps PRs and work items';
-      }
-      return undefined;
-    },
   });
-  if (!url) { return; }
+  if (!url?.trim()) { return; }
 
-  const parsed = parseSourceUrl(url);
-  if (!parsed) {
-    void vscode.window.showErrorMessage('DevDocket: Unsupported URL format');
-    return;
-  }
-
-  let details: FetchedItemDetails;
+  let details: { title: string; notes: string; url: string; externalId: string; group: string; providerId: string } | undefined;
   try {
     details = await vscode.window.withProgress(
       { location: vscode.ProgressLocation.Notification, title: 'DevDocket: Fetching item details…', cancellable: true },
       (_progress, token) => {
         const controller = new AbortController();
         token.onCancellationRequested(() => controller.abort());
-        return fetchItemDetails(parsed, controller.signal);
+        return providerRegistry.resolveUrl(url.trim(), controller.signal);
       },
     );
   } catch (error) {
@@ -268,6 +253,11 @@ async function handleCreateItemFromUrl(
       return;
     }
     throw error;
+  }
+
+  if (!details) {
+    void vscode.window.showErrorMessage('DevDocket: No provider recognised this URL');
+    return;
   }
 
   // Prevent duplicate items for the same provider-backed source item

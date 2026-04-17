@@ -1,5 +1,5 @@
 import * as vscode from 'vscode';
-import { BaseProvider, DiscoveredItem, isValidUrlSegment } from '@devdocket/shared';
+import { BaseProvider, DiscoveredItem, isValidUrlSegment, type ResolvedItem } from '@devdocket/shared';
 import { logger } from './logger';
 import { OrgConfig } from './configParser';
 
@@ -279,5 +279,67 @@ export class AdoPrReviewProvider extends BaseProvider {
     return { items, failed: false };
   }
 
+  private static readonly ADO_PR_PATTERN = /^https?:\/\/dev\.azure\.com\/([^/]+)\/([^/]+)\/_git\/([^/]+)\/pullrequest\/(\d+)\b/i;
 
+  async resolveUrl(url: string, signal?: AbortSignal): Promise<ResolvedItem | undefined> {
+    const match = url.trim().match(AdoPrReviewProvider.ADO_PR_PATTERN);
+    if (!match) { return undefined; }
+    const [, org, project, repo, idStr] = match.map(s => {
+      try { return decodeURIComponent(s); } catch { return s; }
+    });
+    const id = parseInt(idStr, 10);
+
+    const apiUrl = `https://dev.azure.com/${encodeURIComponent(org)}/${encodeURIComponent(project)}/_apis/git/repositories/${encodeURIComponent(repo)}/pullrequests/${id}?api-version=7.1`;
+    const headers = await this.getAdoHeaders();
+    const wasAuthenticated = 'Authorization' in headers;
+
+    let response = await fetch(apiUrl, { headers, signal });
+
+    if (response.status === 404 && !wasAuthenticated && !signal?.aborted) {
+      const retryResponse = await this.retryAdoWithAuth(apiUrl, signal);
+      if (retryResponse) { response = retryResponse; }
+    }
+
+    if (!response.ok) {
+      const label = `ADO PR ${org}/${project}/${repo}#${id}`;
+      if (response.status === 404) { throw new Error(`${label} not found. It may be private or deleted.`); }
+      if (response.status === 401 || response.status === 403) { throw new Error(`ADO authentication required for ${label}. Sign in to Azure DevOps in VS Code.`); }
+      throw new Error(`Azure DevOps API error: ${response.status} ${response.statusText}`);
+    }
+
+    const data = await response.json() as { title: string; description: string | null; repository: { name: string; project: { name: string } } };
+    const projectName = data.repository.project.name;
+    const repoName = data.repository.name;
+    const htmlUrl = `https://dev.azure.com/${encodeURIComponent(org)}/${encodeURIComponent(projectName)}/_git/${encodeURIComponent(repoName)}/pullrequest/${id}`;
+    return {
+      title: `#${id}: ${data.title}`,
+      notes: data.description ?? '',
+      url: htmlUrl,
+      externalId: `${org}/${projectName}/${repoName}/${id}`,
+      group: `${projectName}/${repoName}`,
+      providerId: this.id,
+    };
+  }
+
+  private async getAdoHeaders(): Promise<Record<string, string>> {
+    const headers: Record<string, string> = { 'Accept': 'application/json', 'User-Agent': 'DevDocket-VSCode' };
+    try {
+      const session = await vscode.authentication.getSession('microsoft', [ADO_AUTH_SCOPE], { silent: true });
+      if (session) { headers['Authorization'] = `Bearer ${session.accessToken}`; }
+    } catch { /* no session available */ }
+    return headers;
+  }
+
+  private async retryAdoWithAuth(apiUrl: string, signal?: AbortSignal): Promise<Response | undefined> {
+    try {
+      const session = await vscode.authentication.getSession('microsoft', [ADO_AUTH_SCOPE], { createIfNone: true });
+      if (session) {
+        return await fetch(apiUrl, {
+          headers: { 'Accept': 'application/json', 'User-Agent': 'DevDocket-VSCode', 'Authorization': `Bearer ${session.accessToken}` },
+          signal,
+        });
+      }
+    } catch { /* user declined */ }
+    return undefined;
+  }
 }

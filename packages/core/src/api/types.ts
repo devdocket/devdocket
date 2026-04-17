@@ -1,9 +1,9 @@
 import type * as vscode from 'vscode';
 import { WorkItem } from '../models/workItem';
-import type { Disposable, Event, DiscoveredItem } from '@devdocket/shared';
+import type { Disposable, Event, DiscoveredItem, ResolvedItem } from '@devdocket/shared';
 
 // Re-export shared provider-facing types so existing imports from './api/types' keep working.
-export type { Disposable, Event, DiscoveredItem };
+export type { Disposable, Event, DiscoveredItem, ResolvedItem };
 
 /**
  * A provider that discovers work items from an external source.
@@ -40,6 +40,18 @@ export interface DevDocketProvider {
    * Implementations should fire {@link onDidDiscoverItems} with the results.
    */
   refresh(token?: vscode.CancellationToken): Promise<void>;
+  /**
+   * Attempt to resolve a URL into an item this provider can manage.
+   *
+   * Providers that support URL import should parse the URL and, if it
+   * matches a pattern they own (e.g. a GitHub issue URL), fetch the
+   * item details and return a {@link ResolvedItem}. Return `undefined`
+   * if the URL is not recognised by this provider.
+   *
+   * @param url - The raw URL entered by the user.
+   * @param signal - Optional abort signal for cancellation.
+   */
+  resolveUrl?(url: string, signal?: AbortSignal): Promise<ResolvedItem | undefined>;
 }
 
 /**

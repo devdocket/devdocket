@@ -11,8 +11,6 @@ import type { InboxItem, InboxProviderNode, InboxGroupNode } from '../views/inbo
 import type { SourceItemNode, SourceProviderNode, SourceGroupNode } from '../views/sourcesTreeProvider';
 import { WorkItemEditorPanel } from '../views/workItemEditorPanel';
 import { logger } from '../services/logger';
-import { parseSourceUrl } from '../services/urlParser';
-import { fetchItemDetails } from '../services/urlFetcher';
 
 vi.mock('../services/logger', () => ({
   logger: {
@@ -20,14 +18,6 @@ vi.mock('../services/logger', () => ({
     warn: vi.fn(),
     error: vi.fn(),
   },
-}));
-
-vi.mock('../services/urlParser', () => ({
-  parseSourceUrl: vi.fn(),
-}));
-
-vi.mock('../services/urlFetcher', () => ({
-  fetchItemDetails: vi.fn(),
 }));
 
 // ── helpers ──────────────────────────────────────────────────────────
@@ -100,11 +90,12 @@ function createMockStateStore(): { [K in keyof UsedStateStoreMethods]: Mock } {
   };
 }
 
-type UsedProviderRegistryMethods = Pick<ProviderRegistry, 'refreshAll'>;
+type UsedProviderRegistryMethods = Pick<ProviderRegistry, 'refreshAll' | 'resolveUrl'>;
 
 function createMockProviderRegistry(): { [K in keyof UsedProviderRegistryMethods]: Mock } {
   return {
     refreshAll: vi.fn().mockResolvedValue(undefined),
+    resolveUrl: vi.fn().mockResolvedValue(undefined),
   };
 }
 
@@ -261,8 +252,7 @@ describe('registerCommands', () => {
     };
 
     beforeEach(() => {
-      vi.mocked(parseSourceUrl).mockReturnValue({ type: 'github-pr', owner: 'owner', repo: 'repo', number: 42 });
-      vi.mocked(fetchItemDetails).mockResolvedValue(fakeDetails);
+      providerRegistry.resolveUrl.mockResolvedValue(fakeDetails);
       workGraph.findItemByProvenance.mockReturnValue(undefined);
       workGraph.createItem.mockResolvedValue(createWorkItem({ providerId: 'github-pr-reviews', externalId: fakeDetails.externalId }));
     });
@@ -282,7 +272,7 @@ describe('registerCommands', () => {
       await invoke('devdocket.createItemFromUrl');
 
       expect(workGraph.createItem).not.toHaveBeenCalled();
-      expect(fetchItemDetails).not.toHaveBeenCalled();
+      expect(providerRegistry.resolveUrl).not.toHaveBeenCalled();
     });
 
     it('opens existing item instead of creating duplicate', async () => {
@@ -300,21 +290,21 @@ describe('registerCommands', () => {
       );
     });
 
-    it('shows error for unsupported URL format', async () => {
-      vi.mocked(parseSourceUrl).mockReturnValue(undefined);
+    it('shows error when no provider recognises the URL', async () => {
+      providerRegistry.resolveUrl.mockResolvedValue(undefined);
       (vscode.window.showInputBox as Mock).mockResolvedValue('https://invalid.com/something');
       await invoke('devdocket.createItemFromUrl');
 
       expect(workGraph.createItem).not.toHaveBeenCalled();
       expect(vscode.window.showErrorMessage).toHaveBeenCalledWith(
-        'DevDocket: Unsupported URL format',
+        'DevDocket: No provider recognised this URL',
       );
     });
 
     it('silently returns when user cancels fetch (AbortError)', async () => {
       const abortError = new Error('The operation was aborted');
       abortError.name = 'AbortError';
-      vi.mocked(fetchItemDetails).mockRejectedValue(abortError);
+      providerRegistry.resolveUrl.mockRejectedValue(abortError);
       (vscode.window.showInputBox as Mock).mockResolvedValue('https://github.com/owner/repo/pull/42');
       await invoke('devdocket.createItemFromUrl');
 
@@ -323,7 +313,7 @@ describe('registerCommands', () => {
     });
 
     it('propagates non-abort fetch errors to wrapCommand handler', async () => {
-      vi.mocked(fetchItemDetails).mockRejectedValue(new Error('GitHub PR owner/repo#42 not found. It may be private or deleted.'));
+      providerRegistry.resolveUrl.mockRejectedValue(new Error('GitHub PR owner/repo#42 not found. It may be private or deleted.'));
       (vscode.window.showInputBox as Mock).mockResolvedValue('https://github.com/owner/repo/pull/42');
       await invoke('devdocket.createItemFromUrl');
 

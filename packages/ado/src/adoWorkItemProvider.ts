@@ -1,5 +1,5 @@
 import * as vscode from 'vscode';
-import { BaseProvider, DiscoveredItem, isValidUrlSegment } from '@devdocket/shared';
+import { BaseProvider, DiscoveredItem, isValidUrlSegment, type ResolvedItem } from '@devdocket/shared';
 import { logger } from './logger';
 import { OrgConfig } from './configParser';
 
@@ -431,4 +431,81 @@ export class AdoWorkItemProvider extends BaseProvider {
     return activeItems;
   }
 
+  private static readonly ADO_WORKITEM_PATTERN = /^https?:\/\/dev\.azure\.com\/([^/]+)\/([^/]+)\/_workitems\/edit\/(\d+)\b/i;
+
+  async resolveUrl(url: string, signal?: AbortSignal): Promise<ResolvedItem | undefined> {
+    const match = url.trim().match(AdoWorkItemProvider.ADO_WORKITEM_PATTERN);
+    if (!match) { return undefined; }
+    const [, org, project, idStr] = match.map(s => {
+      try { return decodeURIComponent(s); } catch { return s; }
+    });
+    const id = parseInt(idStr, 10);
+
+    const apiUrl = `https://dev.azure.com/${encodeURIComponent(org)}/${encodeURIComponent(project)}/_apis/wit/workitems/${id}?api-version=7.1`;
+    const headers = await this.getAdoHeaders();
+    const wasAuthenticated = 'Authorization' in headers;
+
+    let response = await fetch(apiUrl, { headers, signal });
+
+    if (response.status === 404 && !wasAuthenticated && !signal?.aborted) {
+      const retryResponse = await this.retryAdoWithAuth(apiUrl, signal);
+      if (retryResponse) { response = retryResponse; }
+    }
+
+    if (!response.ok) {
+      const label = `ADO work item ${org}/${project}#${id}`;
+      if (response.status === 404) { throw new Error(`${label} not found. It may be private or deleted.`); }
+      if (response.status === 401 || response.status === 403) { throw new Error(`ADO authentication required for ${label}. Sign in to Azure DevOps in VS Code.`); }
+      throw new Error(`Azure DevOps API error: ${response.status} ${response.statusText}`);
+    }
+
+    const data = await response.json() as { fields: { 'System.Title': string; 'System.Description': string | null; 'System.TeamProject': string } };
+    const teamProject = data.fields['System.TeamProject'];
+    const htmlUrl = `https://dev.azure.com/${encodeURIComponent(org)}/${encodeURIComponent(teamProject)}/_workitems/edit/${id}`;
+    return {
+      title: `#${id}: ${data.fields['System.Title']}`,
+      notes: this.stripHtml(data.fields['System.Description'] ?? ''),
+      url: htmlUrl,
+      externalId: `${org}/${teamProject}/${id}`,
+      group: `${org}/${teamProject}`,
+      providerId: this.id,
+    };
+  }
+
+  private stripHtml(html: string): string {
+    return html
+      .replace(/<br\s*\/?>/gi, '\n')
+      .replace(/<\/p>/gi, '\n')
+      .replace(/<[^>]+>/g, '')
+      .replace(/&amp;/g, '&')
+      .replace(/&lt;/g, '<')
+      .replace(/&gt;/g, '>')
+      .replace(/&quot;/g, '"')
+      .replace(/&#39;/g, "'")
+      .replace(/&nbsp;/g, ' ')
+      .replace(/\n{3,}/g, '\n\n')
+      .trim();
+  }
+
+  private async getAdoHeaders(): Promise<Record<string, string>> {
+    const headers: Record<string, string> = { 'Accept': 'application/json', 'User-Agent': 'DevDocket-VSCode' };
+    try {
+      const session = await vscode.authentication.getSession('microsoft', [ADO_AUTH_SCOPE], { silent: true });
+      if (session) { headers['Authorization'] = `Bearer ${session.accessToken}`; }
+    } catch { /* no session available */ }
+    return headers;
+  }
+
+  private async retryAdoWithAuth(apiUrl: string, signal?: AbortSignal): Promise<Response | undefined> {
+    try {
+      const session = await vscode.authentication.getSession('microsoft', [ADO_AUTH_SCOPE], { createIfNone: true });
+      if (session) {
+        return await fetch(apiUrl, {
+          headers: { 'Accept': 'application/json', 'User-Agent': 'DevDocket-VSCode', 'Authorization': `Bearer ${session.accessToken}` },
+          signal,
+        });
+      }
+    } catch { /* user declined */ }
+    return undefined;
+  }
 }

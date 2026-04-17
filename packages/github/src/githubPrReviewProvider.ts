@@ -1,4 +1,5 @@
 import * as vscode from 'vscode';
+import type { ResolvedItem } from '@devdocket/shared';
 import { logger } from './logger';
 import { parseRepoFromUrls } from './parseRepo';
 import { BaseGitHubProvider, DiscoveredItem, GitHubIssue } from './baseGithubProvider';
@@ -47,6 +48,41 @@ export class GitHubPrReviewProvider extends BaseGitHubProvider {
         logger.warn(message);
       }
     }
+  }
+
+  private static readonly GITHUB_PR_PATTERN = /^https?:\/\/github\.com\/([^/]+)\/([^/]+)\/pull\/(\d+)\b/i;
+
+  async resolveUrl(url: string, signal?: AbortSignal): Promise<ResolvedItem | undefined> {
+    const match = url.trim().match(GitHubPrReviewProvider.GITHUB_PR_PATTERN);
+    if (!match) { return undefined; }
+    const [, owner, repo, numStr] = match;
+    const number = parseInt(numStr, 10);
+
+    const apiUrl = `https://api.github.com/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/pulls/${number}`;
+    const headers = await this.getHeaders();
+    const wasAuthenticated = 'Authorization' in headers;
+
+    let response = await fetch(apiUrl, { headers, signal });
+
+    if (response.status === 404 && !wasAuthenticated && !signal?.aborted) {
+      const retryResponse = await this.retryWithAuth(apiUrl, signal);
+      if (retryResponse) { response = retryResponse; }
+    }
+
+    if (!response.ok) {
+      this.throwApiError(response, `GitHub PR ${owner}/${repo}#${number}`);
+    }
+
+    const data = await response.json() as { title: string; body: string | null; html_url: string };
+    const canonicalRepo = this.parseCanonicalRepo(data.html_url, owner, repo);
+    return {
+      title: `#${number}: ${data.title}`,
+      notes: data.body ?? '',
+      url: data.html_url,
+      externalId: `${canonicalRepo}#${number}`,
+      group: canonicalRepo,
+      providerId: this.id,
+    };
   }
 
   private getConfiguredRepos(): string[] {
