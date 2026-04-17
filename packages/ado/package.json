@@ -38,7 +38,7 @@
         "devdocketAdo.resurfaceOnNewVersion": {
           "type": "boolean",
           "default": true,
-          "description": "Resurface accepted PR reviews when new iterations are pushed."
+          "description": "Resurface PR reviews when new iterations are pushed."
         }
       }
     }

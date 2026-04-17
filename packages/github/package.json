@@ -38,12 +38,12 @@
         "devdocketGithub.resurfaceOnNewVersion": {
           "type": "boolean",
           "default": true,
-          "description": "Resurface accepted PR reviews when new commits are pushed."
+          "description": "Resurface PR reviews when new commits are pushed."
         },
         "devdocketGithub.resurfaceOnReRequestedReview": {
           "type": "boolean",
           "default": true,
-          "description": "Resurface accepted PR reviews when review is explicitly re-requested."
+          "description": "Resurface PR reviews when review is explicitly re-requested."
         }
       }
     }
