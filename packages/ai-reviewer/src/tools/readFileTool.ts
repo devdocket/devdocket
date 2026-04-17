@@ -67,6 +67,36 @@ export function registerReadFileTool(): vscode.Disposable {
         ]);
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
+        const isNotFound =
+          msg.includes('ENOENT') ||
+          msg.includes('FileNotFound') ||
+          msg.includes('no such file');
+        if (isNotFound) {
+          let siblings = '';
+          try {
+            const parentRel = path.dirname(filePath);
+            const parentFull = path.join(worktreePath, parentRel);
+            // Resolve symlinks and ensure parent stays within the worktree
+            const realParent = await fs.realpath(parentFull);
+            const realRoot = await fs.realpath(worktreePath);
+            if (realParent.startsWith(realRoot + path.sep) || realParent === realRoot) {
+              const parentUri = vscode.Uri.file(realParent);
+              const entries = await vscode.workspace.fs.readDirectory(parentUri);
+              if (entries.length > 0) {
+                const allNames = entries.map(([name]: [string, unknown]) => path.posix.join(parentRel.replace(/\\/g, '/'), name));
+                const displayNames = allNames.length > 30
+                  ? [...allNames.slice(0, 30), `... and ${allNames.length - 30} more files`]
+                  : allNames;
+                siblings = `\nFiles in '${parentRel}':\n${displayNames.join('\n')}\nUse one of these exact paths.`;
+              }
+            }
+          } catch {
+            // parent dir doesn't exist, can't be resolved safely, or is outside the worktree — skip listing
+          }
+          return new vscode.LanguageModelToolResult([
+            new vscode.LanguageModelTextPart(`Error: file not found at '${filePath}'.${siblings}`),
+          ]);
+        }
         return new vscode.LanguageModelToolResult([
           new vscode.LanguageModelTextPart(`Error reading file: ${msg}`),
         ]);

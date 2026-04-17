@@ -102,7 +102,7 @@ describe('readFileTool', () => {
       vi.mocked(fs.realpath).mockImplementation((p: unknown) =>
         Promise.resolve(path.resolve(String(p))),
       );
-      vi.mocked(workspace.fs.readFile).mockRejectedValue(new Error('File not found'));
+      vi.mocked(workspace.fs.readFile).mockRejectedValue(new Error('Permission denied'));
 
       const { lm } = await import('vscode');
       registerReadFileTool();
@@ -110,13 +110,42 @@ describe('readFileTool', () => {
 
       const result = await handler.invoke(
         {
-          input: { worktreePath: '/mock/worktree', filePath: 'nonexistent.ts' },
+          input: { worktreePath: '/mock/worktree', filePath: 'restricted.ts' },
           toolInvocationToken: undefined,
         } as never,
         { isCancellationRequested: false } as never,
       );
 
-      expect(result).toBeDefined();
+      const text = (result as { content: Array<{ value: string }> }).content[0].value;
+      expect(text).toContain('Error reading file:');
+    });
+
+    it('returns file-not-found error with sibling listing on ENOENT', async () => {
+      vi.mocked(fs.realpath).mockImplementation((p: unknown) =>
+        Promise.resolve(path.resolve(String(p))),
+      );
+      vi.mocked(workspace.fs.readFile).mockRejectedValue(new Error('ENOENT: no such file'));
+      vi.mocked(workspace.fs.readDirectory).mockResolvedValue([
+        ['CliHelper.cs', 1],
+        ['Program.cs', 1],
+      ] as never);
+
+      const { lm } = await import('vscode');
+      registerReadFileTool();
+      const handler = vi.mocked(lm.registerTool).mock.calls[0][1];
+
+      const result = await handler.invoke(
+        {
+          input: { worktreePath: '/mock/worktree', filePath: 'src/Wrong/Path.cs' },
+          toolInvocationToken: undefined,
+        } as never,
+        { isCancellationRequested: false } as never,
+      );
+
+      const text = (result as { content: Array<{ value: string }> }).content[0].value;
+      expect(text).toContain("Error: file not found at 'src/Wrong/Path.cs'");
+      expect(text).toContain('src/Wrong/CliHelper.cs');
+      expect(text).toContain('src/Wrong/Program.cs');
     });
   });
 });

@@ -45,8 +45,49 @@ export function registerGetFileDiffTool(): vscode.Disposable {
           ['diff', '--no-color', `${baseRef}...${headRef}`, '--', filePath],
           worktreePath,
         );
+        if (!output) {
+          // Use git to check if the file is tracked, avoiding filesystem
+          // operations that could follow symlinks outside the worktree.
+          let fileKnown = false;
+          try {
+            const lsOutput = await gitExec(['ls-files', '--', filePath], worktreePath);
+            fileKnown = lsOutput.trim().length > 0;
+          } catch {
+            // ignore — best-effort check
+          }
+          if (!fileKnown) {
+            let changedFiles = '';
+            try {
+              changedFiles = await gitExec(
+                ['diff', '--name-only', `${baseRef}...${headRef}`],
+                worktreePath,
+              );
+            } catch {
+              // ignore — best-effort listing
+            }
+            const fileList = changedFiles.trim();
+            let displayList = fileList;
+            if (fileList) {
+              const lines = fileList.split('\n');
+              if (lines.length > 30) {
+                displayList = [...lines.slice(0, 30), `... and ${lines.length - 30} more files`].join('\n');
+              }
+            }
+            const suggestion = displayList
+              ? `\nThe changed files in this PR are:\n${displayList}\nUse these exact paths when calling tools.`
+              : '\nVerify the path matches the diff output exactly (paths shown after a/ and b/ in diff headers).';
+            return new vscode.LanguageModelToolResult([
+              new vscode.LanguageModelTextPart(
+                `Error: file not found at '${filePath}'.${suggestion}`,
+              ),
+            ]);
+          }
+          return new vscode.LanguageModelToolResult([
+            new vscode.LanguageModelTextPart('(no diff for this file)'),
+          ]);
+        }
         return new vscode.LanguageModelToolResult([
-          new vscode.LanguageModelTextPart(output || '(no diff for this file)'),
+          new vscode.LanguageModelTextPart(output),
         ]);
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);

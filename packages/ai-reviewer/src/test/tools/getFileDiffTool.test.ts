@@ -77,5 +77,79 @@ describe('getFileDiffTool', () => {
       expect(execFile).not.toHaveBeenCalled();
       expect(result).toBeDefined();
     });
+
+    it('returns error with changed file list when diff is empty and file not tracked', async () => {
+      vi.mocked(execFile).mockImplementation(
+        (_cmd: string, args: string[], _opts: unknown, cb: Function) => {
+          if (args.includes('--name-only')) {
+            cb(null, 'src/real/file1.ts\nsrc/real/file2.ts\n', '');
+          } else if (args.includes('ls-files')) {
+            // File is not tracked
+            cb(null, '', '');
+          } else {
+            cb(null, '', '');
+          }
+          return undefined as never;
+        },
+      );
+
+      const { lm } = await import('vscode');
+      registerGetFileDiffTool();
+      const handler = vi.mocked(lm.registerTool).mock.calls[0][1];
+
+      const result = await handler.invoke(
+        {
+          input: {
+            worktreePath: '/mock/worktree',
+            baseRef: 'origin/main',
+            headRef: 'pr-42',
+            filePath: 'src/nonexistent.ts',
+          },
+          toolInvocationToken: undefined,
+        } as never,
+        { isCancellationRequested: false } as never,
+      );
+
+      const text = (result as any).content[0].value;
+      expect(text).toContain('Error: file not found');
+      expect(text).toContain('src/nonexistent.ts');
+      expect(text).toContain('src/real/file1.ts');
+      expect(text).toContain('src/real/file2.ts');
+      expect(text).toContain('Use these exact paths');
+    });
+
+    it('returns no-diff message when diff is empty but file is tracked', async () => {
+      vi.mocked(execFile).mockImplementation(
+        (_cmd: string, args: string[], _opts: unknown, cb: Function) => {
+          if (args.includes('ls-files')) {
+            // File is tracked
+            cb(null, 'src/unchanged.ts\n', '');
+          } else {
+            cb(null, '', '');
+          }
+          return undefined as never;
+        },
+      );
+
+      const { lm } = await import('vscode');
+      registerGetFileDiffTool();
+      const handler = vi.mocked(lm.registerTool).mock.calls[0][1];
+
+      const result = await handler.invoke(
+        {
+          input: {
+            worktreePath: '/mock/worktree',
+            baseRef: 'origin/main',
+            headRef: 'pr-42',
+            filePath: 'src/unchanged.ts',
+          },
+          toolInvocationToken: undefined,
+        } as never,
+        { isCancellationRequested: false } as never,
+      );
+
+      const text = (result as any).content[0].value;
+      expect(text).toBe('(no diff for this file)');
+    });
   });
 });
