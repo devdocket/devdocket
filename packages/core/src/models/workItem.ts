@@ -5,14 +5,17 @@
  *
  * ```
  * New → InProgress → Done → Archived
- * ↑         ↕         ↗
- * │       Paused ────┘
- * └──────────┘
- * └──────────────────────→ Archived
+ * ↑         ↕         ↑
+ * │       Paused ────┤
+ * └──────────┘       │
+ * └──────────────────┴─────────────┘
+ *           └──────────────────────→ Archived
  * ```
  *
  * InProgress and Paused may transition back to New (returning to Queue).
- * Both InProgress and Paused may also transition directly to Archived
+ * Done and Archived may also transition back to New (for re-work after
+ * discovering the item was not actually complete).
+ * InProgress, Paused, and Done may transition directly to Archived
  * (for abandoned or no-longer-relevant work).
  */
 export enum WorkItemState {
