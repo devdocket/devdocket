@@ -128,7 +128,7 @@ interface ResolvedItem {
   notes: string;
   url: string;
   externalId: string;
-  group: string;
+  group?: string;
   providerId: string;
 }
 ```
@@ -173,7 +173,7 @@ interface ResolvedItem {
   notes: string;
   url: string;
   externalId: string;
-  group: string;
+  group?: string;
   providerId: string;
 }
 
@@ -569,8 +569,8 @@ interface ResolvedItem {
   /** Provider-scoped unique ID for deduplication (e.g. 'owner/repo#42'). */
   externalId: string;
 
-  /** Grouping key for UI organisation (e.g. 'owner/repo'). */
-  group: string;
+  /** Optional grouping key for UI organisation (e.g. 'owner/repo'). */
+  group?: string;
 
   /** The provider ID that owns this item (typically `this.id`). */
   providerId: string;
