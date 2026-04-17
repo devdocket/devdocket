@@ -14,7 +14,7 @@ DevDocket is a **TypeScript monorepo** for a VS Code extension that manages work
 
 ### Storage & Serialization: WriteQueue Pattern
 
-All persistent stores (`JsonTaskStore`, `DiscoveredStateStore`) use an internal **promise chain** to serialize writes and prevent concurrent file corruption.
+All JSON-backed stores in core (for example, `JsonTaskStore`, `DiscoveredStateStore`, `ReadStateStore`, and `ProviderLabelCache`) use an internal **promise chain** to serialize writes and prevent concurrent file corruption.
 
 **Why:** VS Code extensions run in a single-threaded Node.js environment, but async operations can interleave. A writeQueue ensures all disk writes happen sequentially.
 
