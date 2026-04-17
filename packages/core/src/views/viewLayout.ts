@@ -427,8 +427,13 @@ export abstract class WorkItemViewProvider implements vscode.TreeDataProvider<Wo
         const providerKey = `provider:${normalizeProviderId(item.providerId) ?? ''}`;
         counts.set(providerKey, (counts.get(providerKey) ?? 0) + 1);
 
-        const groupKey = `group:${normalizeProviderId(item.providerId) ?? ''}:${normalizeGroup(item.group) ?? ''}`;
-        counts.set(groupKey, (counts.get(groupKey) ?? 0) + 1);
+        // Build both keys: one with providerId (for Queue/History) and one without (for Focus)
+        const normalizedGroup = normalizeGroup(item.group) ?? '';
+        const groupKeyWithProvider = `group:${normalizeProviderId(item.providerId) ?? ''}:${normalizedGroup}`;
+        counts.set(groupKeyWithProvider, (counts.get(groupKeyWithProvider) ?? 0) + 1);
+
+        const groupKeyOnly = `group-only:${normalizedGroup}`;
+        counts.set(groupKeyOnly, (counts.get(groupKeyOnly) ?? 0) + 1);
       }
       this._countsCache = counts;
     }
@@ -444,7 +449,11 @@ export abstract class WorkItemViewProvider implements vscode.TreeDataProvider<Wo
     }
     if (isSubGroupNode(element)) {
       const counts = this.ensureCountsCache();
-      const groupKey = `group:${element.providerId ?? ''}:${element.groupName}`;
+      // When providerId is undefined (Focus view), count by group name only
+      // When providerId is defined (Queue/History), count by provider + group
+      const groupKey = element.providerId !== undefined
+        ? `group:${element.providerId}:${element.groupName}`
+        : `group-only:${element.groupName}`;
       const count = counts.get(groupKey) ?? 0;
       return createSubGroupTreeItem(element, this.groupPrefix, count);
     }

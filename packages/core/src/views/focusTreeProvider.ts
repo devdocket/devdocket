@@ -3,7 +3,7 @@ import { WorkItem, WorkItemState } from '../models/workItem';
 import { WorkGraph } from '../services/workGraph';
 import { ProviderRegistry } from '../services/providerRegistry';
 import {
-  WorkItemElement, WorkItemViewProvider, SubGroupNode, isProviderGroupNode, isSubGroupNode, createSubGroupTreeItem,
+  WorkItemElement, WorkItemViewProvider, SubGroupNode, isProviderGroupNode, isSubGroupNode,
 } from './viewLayout';
 
 const DRAG_MIME_TYPE = 'application/vnd.code.tree.devdocket.focus';
@@ -15,7 +15,6 @@ export class FocusTreeProvider extends WorkItemViewProvider implements vscode.Tr
   readonly dragMimeTypes = [DRAG_MIME_TYPE];
   protected readonly groupPrefix = 'focus';
   protected readonly groupContextValue = 'focusGroup';
-  private _groupCountsCache: Map<string, number> | undefined;
 
   constructor(workGraph: WorkGraph, providerRegistry?: ProviderRegistry) {
     super(
@@ -25,11 +24,6 @@ export class FocusTreeProvider extends WorkItemViewProvider implements vscode.Tr
       providerRegistry?.onDidRegisterProvider,
       providerRegistry ? (pid, eid) => providerRegistry.getDiscoveredItems(pid).find(d => d.externalId === eid)?.title : undefined,
       providerRegistry?.onDidChangeDiscoveredItems,
-    );
-    this.disposables.push(
-      this.onDidChangeTreeData(() => {
-        this._groupCountsCache = undefined;
-      }),
     );
   }
 
@@ -45,23 +39,6 @@ export class FocusTreeProvider extends WorkItemViewProvider implements vscode.Tr
       }
       return (a.sortOrder ?? Number.MAX_SAFE_INTEGER) - (b.sortOrder ?? Number.MAX_SAFE_INTEGER);
     });
-  }
-
-  refresh(): void {
-    this._groupCountsCache = undefined;
-    super.refresh();
-  }
-
-  private ensureGroupCountsCache(): Map<string, number> {
-    if (!this._groupCountsCache) {
-      const counts = new Map<string, number>();
-      for (const item of this.getItems()) {
-        const normalizedGroup = item.group?.trim() || '';
-        counts.set(normalizedGroup, (counts.get(normalizedGroup) ?? 0) + 1);
-      }
-      this._groupCountsCache = counts;
-    }
-    return this._groupCountsCache;
   }
 
   protected createWorkItemTreeItem(item: WorkItem): vscode.TreeItem {
@@ -83,15 +60,6 @@ export class FocusTreeProvider extends WorkItemViewProvider implements vscode.Tr
 
     treeItem.command = { command: 'devdocket.editItem', title: 'Open Details', arguments: [item] };
     return treeItem;
-  }
-
-  getTreeItem(element: FocusElement): vscode.TreeItem {
-    if (isSubGroupNode(element)) {
-      const counts = this.ensureGroupCountsCache();
-      const count = counts.get(element.groupName) ?? 0;
-      return createSubGroupTreeItem(element, this.groupPrefix, count);
-    }
-    return super.getTreeItem(element);
   }
 
   getChildren(element?: FocusElement): FocusElement[] {
