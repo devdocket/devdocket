@@ -506,15 +506,14 @@ describe('WorkGraph', () => {
       expect(graph.getItem(item.id)?.state).toBe(WorkItemState.New);
     });
 
-    it('rejects Done → New', async () => {
+    it('allows Done → New (move back to queue)', async () => {
       const item = await graph.createItem({ title: 'Test' });
       await graph.transitionState(item.id, WorkItemState.InProgress);
       await graph.transitionState(item.id, WorkItemState.Done);
       vi.mocked(store.save).mockClear();
-      await expect(graph.transitionState(item.id, WorkItemState.New))
-        .rejects.toThrow('Invalid state transition');
-      expect(store.save).not.toHaveBeenCalled();
-      expect(graph.getItem(item.id)?.state).toBe(WorkItemState.Done);
+      await graph.transitionState(item.id, WorkItemState.New);
+      expect(store.save).toHaveBeenCalled();
+      expect(graph.getItem(item.id)?.state).toBe(WorkItemState.New);
     });
 
     it('rejects Done → InProgress', async () => {
@@ -528,16 +527,15 @@ describe('WorkGraph', () => {
       expect(graph.getItem(item.id)?.state).toBe(WorkItemState.Done);
     });
 
-    it('rejects Archived → New', async () => {
+    it('allows Archived → New (move back to queue)', async () => {
       const item = await graph.createItem({ title: 'Test' });
       await graph.transitionState(item.id, WorkItemState.InProgress);
       await graph.transitionState(item.id, WorkItemState.Done);
       await graph.transitionState(item.id, WorkItemState.Archived);
       vi.mocked(store.save).mockClear();
-      await expect(graph.transitionState(item.id, WorkItemState.New))
-        .rejects.toThrow('Invalid state transition');
-      expect(store.save).not.toHaveBeenCalled();
-      expect(graph.getItem(item.id)?.state).toBe(WorkItemState.Archived);
+      await graph.transitionState(item.id, WorkItemState.New);
+      expect(store.save).toHaveBeenCalled();
+      expect(graph.getItem(item.id)?.state).toBe(WorkItemState.New);
     });
 
     it('allows InProgress → New (move to queue)', async () => {
@@ -614,6 +612,162 @@ describe('WorkGraph', () => {
       // Done → Archived
       await graph.transitionState(item.id, WorkItemState.Archived);
       expect(graph.getItem(item.id)?.state).toBe(WorkItemState.Archived);
+    });
+  });
+
+  describe('move from History back to Queue', () => {
+    it('moving Done item back to Queue appears in Queue view', async () => {
+      const item = await graph.createItem({ title: 'Rework item' });
+      await graph.transitionState(item.id, WorkItemState.InProgress);
+      await graph.transitionState(item.id, WorkItemState.Done);
+
+      // Verify in History (Done state)
+      const historyItems = graph.getItemsByState(WorkItemState.Done, WorkItemState.Archived);
+      expect(historyItems).toHaveLength(1);
+      expect(historyItems[0].id).toBe(item.id);
+
+      // Move back to Queue
+      await graph.transitionState(item.id, WorkItemState.New);
+
+      // Verify in Queue view
+      const queueItems = graph.getItemsByState(WorkItemState.New);
+      expect(queueItems).toHaveLength(1);
+      expect(queueItems[0].id).toBe(item.id);
+    });
+
+    it('moving Archived item back to Queue appears in Queue view', async () => {
+      const item = await graph.createItem({ title: 'Archived rework' });
+      await graph.transitionState(item.id, WorkItemState.InProgress);
+      await graph.transitionState(item.id, WorkItemState.Done);
+      await graph.transitionState(item.id, WorkItemState.Archived);
+
+      // Verify in History (Archived state)
+      const historyItems = graph.getItemsByState(WorkItemState.Done, WorkItemState.Archived);
+      expect(historyItems).toHaveLength(1);
+
+      // Move back to Queue
+      await graph.transitionState(item.id, WorkItemState.New);
+
+      // Verify in Queue view
+      const queueItems = graph.getItemsByState(WorkItemState.New);
+      expect(queueItems).toHaveLength(1);
+      expect(queueItems[0].id).toBe(item.id);
+    });
+
+    it('item no longer appears in History after move to Queue', async () => {
+      const item = await graph.createItem({ title: 'Done item' });
+      await graph.transitionState(item.id, WorkItemState.InProgress);
+      await graph.transitionState(item.id, WorkItemState.Done);
+
+      // Move back to Queue
+      await graph.transitionState(item.id, WorkItemState.New);
+
+      // Verify NOT in History
+      const historyItems = graph.getItemsByState(WorkItemState.Done, WorkItemState.Archived);
+      expect(historyItems).toHaveLength(0);
+    });
+
+    it('Done → New assigns fresh sortOrder at end of Queue', async () => {
+      const a = await graph.createItem({ title: 'A' });
+      const b = await graph.createItem({ title: 'B' });
+      const c = await graph.createItem({ title: 'C' });
+      await graph.transitionState(a.id, WorkItemState.InProgress);
+      await graph.transitionState(a.id, WorkItemState.Done);
+
+      // Move Done item back to Queue
+      await graph.transitionState(a.id, WorkItemState.New);
+
+      const queueItems = graph.getItemsByState(WorkItemState.New)
+        .sort((x, y) => (x.sortOrder ?? 0) - (y.sortOrder ?? 0));
+      expect(queueItems.map(i => i.title)).toEqual(['B', 'C', 'A']);
+      expect(graph.getItem(a.id)!.sortOrder).toBeGreaterThan(graph.getItem(c.id)!.sortOrder!);
+    });
+
+    it('Archived → New assigns fresh sortOrder at end of Queue', async () => {
+      const a = await graph.createItem({ title: 'A' });
+      const b = await graph.createItem({ title: 'B' });
+      await graph.transitionState(a.id, WorkItemState.InProgress);
+      await graph.transitionState(a.id, WorkItemState.Done);
+      await graph.transitionState(a.id, WorkItemState.Archived);
+
+      // Move Archived item back to Queue
+      await graph.transitionState(a.id, WorkItemState.New);
+
+      const queueItems = graph.getItemsByState(WorkItemState.New)
+        .sort((x, y) => (x.sortOrder ?? 0) - (y.sortOrder ?? 0));
+      expect(queueItems.map(i => i.title)).toEqual(['B', 'A']);
+      expect(graph.getItem(a.id)!.sortOrder).toBeGreaterThan(graph.getItem(b.id)!.sortOrder!);
+    });
+
+    it('moving same Done item back to Queue twice works', async () => {
+      const other = await graph.createItem({ title: 'Other item' });
+      const item = await graph.createItem({ title: 'Rework twice' });
+      await graph.transitionState(item.id, WorkItemState.InProgress);
+      await graph.transitionState(item.id, WorkItemState.Done);
+
+      // First move back to Queue (should be after 'Other item')
+      await graph.transitionState(item.id, WorkItemState.New);
+      expect(graph.getItem(item.id)?.state).toBe(WorkItemState.New);
+      const firstSortOrder = graph.getItem(item.id)!.sortOrder;
+      expect(firstSortOrder).toBeGreaterThan(graph.getItem(other.id)!.sortOrder!);
+
+      // Complete again
+      await graph.transitionState(item.id, WorkItemState.InProgress);
+      await graph.transitionState(item.id, WorkItemState.Done);
+
+      // Second move back to Queue (should get an even higher sortOrder)
+      await graph.transitionState(item.id, WorkItemState.New);
+      expect(graph.getItem(item.id)?.state).toBe(WorkItemState.New);
+      const secondSortOrder = graph.getItem(item.id)!.sortOrder;
+      expect(secondSortOrder).toBeGreaterThan(firstSortOrder!);
+    });
+
+    it('fires onDidChange when moving History item to Queue', async () => {
+      const item = await graph.createItem({ title: 'Test' });
+      await graph.transitionState(item.id, WorkItemState.InProgress);
+      await graph.transitionState(item.id, WorkItemState.Done);
+
+      const listener = vi.fn();
+      graph.onDidChange(listener);
+
+      await graph.transitionState(item.id, WorkItemState.New);
+      expect(listener).toHaveBeenCalledTimes(1);
+    });
+
+    it('moving Done item to Queue updates sortOrder only', async () => {
+      const item = await graph.createItem({ title: 'Original title', notes: 'Original notes' });
+      await graph.transitionState(item.id, WorkItemState.InProgress);
+      await graph.transitionState(item.id, WorkItemState.Done);
+
+      await graph.transitionState(item.id, WorkItemState.New);
+
+      const updated = graph.getItem(item.id)!;
+      expect(updated.title).toBe('Original title');
+      expect(updated.notes).toBe('Original notes');
+      expect(updated.sortOrder).toBeGreaterThanOrEqual(0);
+    });
+
+    it('multiple Done items moved back to Queue maintain relative order', async () => {
+      const a = await graph.createItem({ title: 'A' });
+      const b = await graph.createItem({ title: 'B' });
+      const c = await graph.createItem({ title: 'C' });
+
+      // Complete all three
+      await graph.transitionState(a.id, WorkItemState.InProgress);
+      await graph.transitionState(a.id, WorkItemState.Done);
+      await graph.transitionState(b.id, WorkItemState.InProgress);
+      await graph.transitionState(b.id, WorkItemState.Done);
+      await graph.transitionState(c.id, WorkItemState.InProgress);
+      await graph.transitionState(c.id, WorkItemState.Done);
+
+      // Move back in order A, then B
+      await graph.transitionState(a.id, WorkItemState.New);
+      await graph.transitionState(b.id, WorkItemState.New);
+
+      const queueItems = graph.getItemsByState(WorkItemState.New)
+        .sort((x, y) => (x.sortOrder ?? 0) - (y.sortOrder ?? 0));
+      expect(queueItems.map(i => i.title)).toEqual(['A', 'B']);
+      expect(graph.getItem(a.id)!.sortOrder).toBeLessThan(graph.getItem(b.id)!.sortOrder!);
     });
   });
 
