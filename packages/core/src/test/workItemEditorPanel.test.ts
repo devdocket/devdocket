@@ -973,6 +973,23 @@ describe('WorkItemEditorPanel (integration with WorkGraph)', () => {
       expect(html).not.toContain('Title is managed by the provider');
     });
 
+    it('title field is editable when provider is registered but item is not discovered', async () => {
+      const item = await graph.createItem(
+        { title: 'URL Imported PR' },
+        { providerId: 'github', externalId: 'owner/repo#999' },
+      );
+      const registry = createMockProviderRegistry();
+      // Provider is registered (getProvider returns truthy) but has not discovered this item
+      vi.mocked(registry.getDiscoveredItems).mockReturnValue([]);
+      WorkItemEditorPanel.open(context, graph, registry as any, item);
+
+      const html = mockPanel.webview.html;
+      const titleMatch = html.match(/<input[^>]*id="title"[^>]*>/);
+      expect(titleMatch).toBeTruthy();
+      expect(titleMatch![0]).not.toContain('readonly');
+      expect(html).not.toContain('Title is managed by the provider');
+    });
+
     it('notes field is always editable', async () => {
       const item = await graph.createItem(
         { title: 'Provider Task' },
@@ -1111,6 +1128,26 @@ describe('WorkItemEditorPanel (integration with WorkGraph)', () => {
       await vi.waitFor(() => {
         const updated = graph.getItem(item.id);
         expect(updated!.title).toBe('Provider Title');
+        expect(updated!.notes).toBe('My notes');
+      });
+    });
+
+    it('registered-but-not-discovered items allow title changes', async () => {
+      const item = await graph.createItem(
+        { title: 'Original Title' },
+        { providerId: 'github', externalId: 'owner/repo#999' },
+      );
+      // Provider is registered but has not discovered this item
+      WorkItemEditorPanel.open(context, graph, createMockProviderRegistry() as any, item);
+
+      mockPanel.webview._fireMessage({
+        type: 'autosave',
+        data: { title: 'Updated Title', notes: 'My notes' },
+      });
+
+      await vi.waitFor(() => {
+        const updated = graph.getItem(item.id);
+        expect(updated!.title).toBe('Updated Title');
         expect(updated!.notes).toBe('My notes');
       });
     });
