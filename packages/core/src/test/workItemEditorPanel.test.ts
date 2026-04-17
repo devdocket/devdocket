@@ -308,11 +308,10 @@ describe('WorkItemEditorPanel', () => {
       expect(mock.panel.webview.html).toContain('Item not found');
     });
 
-    it('should render readonly title for provider items discovered by the provider', () => {
+    it('should render readonly title when provider is registered', () => {
       const item = makeItem({ providerId: 'github', externalId: 'ext-1' });
       const mock = createMockWebviewPanel();
       const registry = createMockProviderRegistry();
-      vi.mocked(registry.getDiscoveredItems).mockReturnValue([{ externalId: 'ext-1', title: item.title, url: '' }]);
       openPanel(item, createMockWorkGraph(item), mock, undefined, registry);
 
       expect(mock.panel.webview.html).toMatch(/<input\b(?=[^>]*\bid="title")(?=[^>]*\breadonly)[^>]*>/);
@@ -930,13 +929,12 @@ describe('WorkItemEditorPanel (integration with WorkGraph)', () => {
   });
 
   describe('HTML generation', () => {
-    it('title field is readonly for provider items discovered by the provider', async () => {
+    it('title field is readonly when provider is registered', async () => {
       const item = await graph.createItem(
         { title: 'Provider Task' },
         { providerId: 'github', externalId: '42' },
       );
       const registry = createMockProviderRegistry();
-      vi.mocked(registry.getDiscoveredItems).mockReturnValue([{ externalId: '42', title: 'Provider Task', url: '' }]);
       WorkItemEditorPanel.open(context, graph, registry as any, item);
 
       const html = mockPanel.webview.html;
