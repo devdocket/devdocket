@@ -234,8 +234,16 @@ export class WorkGraph {
     const updated: WorkItem = { ...item, state: newState, updatedAt: Date.now() };
     // When returning to Queue, assign a fresh sortOrder based on the current pre-transition
     // Queue contents. This is computed before this.items is updated with the new state.
+    // Also account for the item's own sortOrder if it was previously in Queue, to avoid
+    // reusing the same value when moving back to Queue multiple times.
     if (newState === WorkItemState.New) {
-      updated.sortOrder = this.nextSortOrder(WorkItemState.New);
+      const queueItems = this.getItemsByState(WorkItemState.New);
+      const maxOrder = Math.max(
+        queueItems.length - 1,
+        queueItems.reduce((max, i) => Math.max(max, i.sortOrder ?? -1), -1),
+        item.sortOrder ?? -1  // Include the moving item's current sortOrder
+      );
+      updated.sortOrder = maxOrder + 1;
     }
     await this.store.save(updated);
     this.items.set(id, updated);
