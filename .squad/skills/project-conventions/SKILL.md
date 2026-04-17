@@ -102,10 +102,12 @@ packages/
   core/               — Main DevDocket extension (UI, work lifecycle, plugin API)
     src/
       services/      — ProviderRegistry, ActionRegistry, WorkGraph, logger
+      commands/      — VS Code command handlers (accept, dismiss, focus, etc.)
       storage/       — JsonTaskStore, DiscoveredStateStore, stores with writeQueue
       models/        — WorkItem state machine
       views/         — Tree data providers (Inbox, Queue, Focus, History, Sources)
       api/           — Public API types (DevDocketApi, DevDocketProvider)
+      utils/         — Shared utility functions
       test/
         __mocks__/   — Mocked vscode module (via vitest.config.ts alias)
         *.test.ts    — Unit/integration tests
