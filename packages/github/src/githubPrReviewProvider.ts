@@ -301,7 +301,10 @@ export class GitHubPrReviewProvider extends BaseGitHubProvider {
                 event.requested_reviewer?.login?.toLowerCase() === currentUserLogin.toLowerCase() &&
                 event.created_at
               ) {
-                latestReRequest = event.created_at;
+                // Track the maximum timestamp rather than relying on array order
+                if (!latestReRequest || event.created_at > latestReRequest) {
+                  latestReRequest = event.created_at;
+                }
               }
             }
             if (latestReRequest) {
