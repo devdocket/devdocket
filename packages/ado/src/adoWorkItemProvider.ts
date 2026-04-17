@@ -2,7 +2,7 @@ import * as vscode from 'vscode';
 import { BaseProvider, DiscoveredItem, isValidUrlSegment, type ResolvedItem } from '@devdocket/shared';
 import { logger } from './logger';
 import { OrgConfig } from './configParser';
-import { getAdoHeaders, retryAdoWithAuth, throwAdoApiError } from './adoAuth';
+import { getAdoHeaders, retryAdoWithAuth, throwAdoApiError, safeDecodeComponent } from './adoAuth';
 
 // Azure DevOps WIQL query response
 interface WiqlResponse {
@@ -437,9 +437,9 @@ export class AdoWorkItemProvider extends BaseProvider {
   async resolveUrl(url: string, signal?: AbortSignal): Promise<ResolvedItem | undefined> {
     const match = url.trim().match(AdoWorkItemProvider.ADO_WORKITEM_PATTERN);
     if (!match) { return undefined; }
-    const [, org, project, idStr] = match.map(s => {
-      try { return decodeURIComponent(s); } catch { return s; }
-    });
+    const [, rawOrg, rawProject, idStr] = match;
+    const org = safeDecodeComponent(rawOrg);
+    const project = safeDecodeComponent(rawProject);
     const id = parseInt(idStr, 10);
 
     const apiUrl = `https://dev.azure.com/${encodeURIComponent(org)}/${encodeURIComponent(project)}/_apis/wit/workitems/${id}?api-version=7.1`;

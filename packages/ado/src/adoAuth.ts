@@ -26,6 +26,11 @@ export async function retryAdoWithAuth(apiUrl: string, signal?: AbortSignal): Pr
   return undefined;
 }
 
+/** Safely decode a URI component, returning the original value if malformed. */
+export function safeDecodeComponent(value: string): string {
+  try { return decodeURIComponent(value); } catch { return value; }
+}
+
 /** Throw a descriptive error for a non-ok ADO API response. */
 export function throwAdoApiError(response: Response, label: string): never {
   if (response.status === 404) { throw new Error(`${label} not found. It may be private or deleted.`); }

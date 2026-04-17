@@ -213,6 +213,11 @@ export abstract class BaseGitHubProvider implements DevDocketProvider {
     return match ? `${match[1]}/${match[2]}` : `${fallbackOwner}/${fallbackRepo}`;
   }
 
+  /** Decode a percent-encoded URL path segment, returning the original on malformed input. */
+  protected static safeDecodeComponent(value: string): string {
+    try { return decodeURIComponent(value); } catch { return value; }
+  }
+
   dispose(): void {
     this.stopPeriodicRefresh();
     this._onDidDiscoverItems.dispose();

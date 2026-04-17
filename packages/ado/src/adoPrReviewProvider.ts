@@ -2,7 +2,7 @@ import * as vscode from 'vscode';
 import { BaseProvider, DiscoveredItem, isValidUrlSegment, type ResolvedItem } from '@devdocket/shared';
 import { logger } from './logger';
 import { OrgConfig } from './configParser';
-import { getAdoHeaders, retryAdoWithAuth, throwAdoApiError } from './adoAuth';
+import { getAdoHeaders, retryAdoWithAuth, throwAdoApiError, safeDecodeComponent } from './adoAuth';
 
 interface AdoPullRequest {
   pullRequestId: number;
@@ -290,9 +290,10 @@ export class AdoPrReviewProvider extends BaseProvider {
   async resolveUrl(url: string, signal?: AbortSignal): Promise<ResolvedItem | undefined> {
     const match = url.trim().match(AdoPrReviewProvider.ADO_PR_PATTERN);
     if (!match) { return undefined; }
-    const [, org, project, repo, idStr] = match.map(s => {
-      try { return decodeURIComponent(s); } catch { return s; }
-    });
+    const [, rawOrg, rawProject, rawRepo, idStr] = match;
+    const org = safeDecodeComponent(rawOrg);
+    const project = safeDecodeComponent(rawProject);
+    const repo = safeDecodeComponent(rawRepo);
     const id = parseInt(idStr, 10);
 
     const apiUrl = `https://dev.azure.com/${encodeURIComponent(org)}/${encodeURIComponent(project)}/_apis/git/repositories/${encodeURIComponent(repo)}/pullrequests/${id}?api-version=7.1`;

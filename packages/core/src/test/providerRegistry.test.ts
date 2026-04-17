@@ -1425,4 +1425,113 @@ describe('ProviderRegistry', () => {
       expect(health.lastRefreshTime).toEqual(healthyTime);
     });
   });
+
+  describe('resolveUrl', () => {
+    function nextTick(): Promise<void> {
+      return new Promise(resolve => setTimeout(resolve, 0));
+    }
+
+    it('returns undefined when no providers support resolveUrl', async () => {
+      const provider = createMockProvider('basic');
+      registry.register(provider);
+      await nextTick();
+
+      const result = await registry.resolveUrl('https://example.com/item/1');
+      expect(result).toBeUndefined();
+    });
+
+    it('returns result from the first provider that resolves', async () => {
+      const p1 = createMockProvider('a');
+      (p1 as any).resolveUrl = vi.fn(async () => undefined);
+      const p2 = createMockProvider('b');
+      (p2 as any).resolveUrl = vi.fn(async () => ({
+        title: 'Issue 1',
+        notes: 'body',
+        url: 'https://example.com/1',
+        externalId: '1',
+        providerId: 'ignored',
+      }));
+      registry.register(p1);
+      registry.register(p2);
+      await nextTick();
+
+      const result = await registry.resolveUrl('https://example.com/1');
+      expect(result).toEqual({
+        title: 'Issue 1',
+        notes: 'body',
+        url: 'https://example.com/1',
+        externalId: '1',
+        providerId: 'b',
+      });
+      expect((p1 as any).resolveUrl).toHaveBeenCalled();
+    });
+
+    it('overrides providerId with the provider id', async () => {
+      const p1 = createMockProvider('real-id');
+      (p1 as any).resolveUrl = vi.fn(async () => ({
+        title: 'T',
+        notes: 'N',
+        url: 'https://u',
+        externalId: 'e',
+        providerId: 'wrong-id',
+      }));
+      registry.register(p1);
+      await nextTick();
+
+      const result = await registry.resolveUrl('https://u');
+      expect(result?.providerId).toBe('real-id');
+    });
+
+    it('re-throws AbortError without trying remaining providers', async () => {
+      const p1 = createMockProvider('a');
+      const abortError = new Error('Aborted');
+      abortError.name = 'AbortError';
+      (p1 as any).resolveUrl = vi.fn(async () => { throw abortError; });
+      const p2 = createMockProvider('b');
+      (p2 as any).resolveUrl = vi.fn(async () => ({
+        title: 'T', notes: 'N', url: 'https://u', externalId: 'e', providerId: 'b',
+      }));
+      registry.register(p1);
+      registry.register(p2);
+      await nextTick();
+
+      await expect(registry.resolveUrl('https://u')).rejects.toThrow('Aborted');
+      expect((p2 as any).resolveUrl).not.toHaveBeenCalled();
+    });
+
+    it('re-throws non-abort errors from a provider', async () => {
+      const p1 = createMockProvider('a');
+      (p1 as any).resolveUrl = vi.fn(async () => { throw new Error('API error'); });
+      registry.register(p1);
+      await nextTick();
+
+      await expect(registry.resolveUrl('https://u')).rejects.toThrow('API error');
+    });
+
+    it('skips providers without resolveUrl and continues', async () => {
+      const p1 = createMockProvider('no-resolve');
+      const p2 = createMockProvider('has-resolve');
+      (p2 as any).resolveUrl = vi.fn(async () => ({
+        title: 'T', notes: 'N', url: 'https://u', externalId: 'e', providerId: 'has-resolve',
+      }));
+      registry.register(p1);
+      registry.register(p2);
+      await nextTick();
+
+      const result = await registry.resolveUrl('https://u');
+      expect(result).toBeDefined();
+      expect(result?.providerId).toBe('has-resolve');
+    });
+
+    it('passes signal to the provider', async () => {
+      const p1 = createMockProvider('sig');
+      (p1 as any).resolveUrl = vi.fn(async () => undefined);
+      registry.register(p1);
+      await nextTick();
+
+      const signal = AbortSignal.abort();
+      await registry.resolveUrl('https://u', signal);
+      expect((p1 as any).resolveUrl).toHaveBeenCalledWith('https://u', signal);
+    });
+  });
 });
