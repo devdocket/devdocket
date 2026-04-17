@@ -205,8 +205,10 @@ const timeoutId = setTimeout(() => {
   timedOut = true;
   cts.cancel();
 }, ProviderRegistry.REFRESH_TIMEOUT_MS);
+const entry = { cts, timeoutId };
+this._pendingRefreshes.set(provider.id, entry);
 
-provider.refresh(cts.token).then(
+const refreshPromise = provider.refresh(cts.token).then(
   () => {
     if (!cts.token.isCancellationRequested) {
       this.updateHealth(provider.id, 'healthy');
@@ -220,11 +222,24 @@ provider.refresh(cts.token).then(
   }
 );
 
-cts.token.onCancellationRequested(() => {
-  if (timedOut) {
-    this.updateHealth(provider.id, 'unhealthy', 'Refresh timed out');
-  }
+const cancelledPromise = new Promise<void>((resolve) => {
+  cts.token.onCancellationRequested(() => {
+    if (timedOut) {
+      this.updateHealth(provider.id, 'unhealthy', 'Refresh timed out');
+    }
+    resolve();
+  });
 });
+
+// Race refresh against cancellation so the promise settles on timeout
+return Promise.race([refreshPromise, cancelledPromise])
+  .finally(() => {
+    clearTimeout(timeoutId);
+    if (this._pendingRefreshes.get(provider.id) === entry) {
+      this._pendingRefreshes.delete(provider.id);
+    }
+    cts.dispose();
+  });
 // updateHealth(providerId, 'healthy' | 'unhealthy', lastError?) sets
 // lastRefreshTime internally and fires _onDidChangeProviderHealth when status changes
 ```
