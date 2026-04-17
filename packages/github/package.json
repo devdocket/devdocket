@@ -34,6 +34,16 @@
           "type": "number",
           "default": 300,
           "description": "How often to refresh GitHub issues (in seconds). Minimum 60 seconds. Values below 60 are clamped."
+        },
+        "devdocketGithub.resurfaceOnNewVersion": {
+          "type": "boolean",
+          "default": true,
+          "description": "Resurface PR reviews when new commits are pushed."
+        },
+        "devdocketGithub.resurfaceOnReRequestedReview": {
+          "type": "boolean",
+          "default": true,
+          "description": "Resurface PR reviews when review is explicitly re-requested."
         }
       }
     }

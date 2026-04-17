@@ -7,6 +7,12 @@ interface GitHubSearchResponse {
   items: GitHubIssue[];
 }
 
+interface TimelineEvent {
+  event?: string;
+  created_at?: string;
+  requested_reviewer?: { login?: string };
+}
+
 /**
  * DevDocket provider that discovers GitHub pull requests where the current
  * user has been requested as a reviewer.
@@ -17,15 +23,37 @@ export class GitHubPrReviewProvider extends BaseGitHubProvider {
   readonly id = 'github-pr-reviews';
   readonly label = 'GitHub PR Reviews';
 
+  private _cachedCurrentUser: string | undefined;
+  private _cachedCurrentUserToken: string | undefined;
+
   protected async fetchAndPublish(accessToken: string, isUserTriggered: boolean): Promise<void> {
     logger.info('Fetching PR review requests...');
     const repos = this.getConfiguredRepos();
     const { prs, failures } = await this.fetchReviewRequestedPrs(accessToken, repos);
 
     logger.info(`Discovered ${prs.length} PR review requests`);
+
+    const config = vscode.workspace.getConfiguration('devdocketGithub');
+    const resurfaceOnNewVersion = config.get<boolean>('resurfaceOnNewVersion', true);
+    const resurfaceOnReRequestedReview = config.get<boolean>('resurfaceOnReRequestedReview', true);
+
+    // Fetch head commit SHAs for precise version tracking
+    const headShas = resurfaceOnNewVersion
+      ? await this.fetchHeadShas(accessToken, prs)
+      : new Map<string, string>();
+
+    // Fetch re-request timestamps for review re-request detection
+    let reRequestTimes = new Map<string, string>();
+    if (resurfaceOnReRequestedReview && prs.length > 0) {
+      const currentUser = await this.fetchCurrentUser(accessToken);
+      if (currentUser) {
+        reRequestTimes = await this.fetchReRequestTimes(accessToken, prs, currentUser);
+      }
+    }
+
     const items: DiscoveredItem[] = prs.map((pr) => {
       const repoName = this.parseRepo(pr);
-      return {
+      const item: DiscoveredItem = {
         externalId: `${repoName}#${pr.number}`,
         title: `#${pr.number}: ${pr.title}`,
         description: pr.body?.slice(0, 200),
@@ -33,6 +61,11 @@ export class GitHubPrReviewProvider extends BaseGitHubProvider {
         group: repoName,
         reason: 'review_requested',
       };
+      const headSha = headShas.get(pr.html_url);
+      if (headSha !== undefined) { item.version = headSha; }
+      const reRequestTime = reRequestTimes.get(pr.html_url);
+      if (reRequestTime !== undefined) { item.resurfaceVersion = reRequestTime; }
+      return item;
     });
 
     this._onDidDiscoverItems.fire(items);
@@ -152,6 +185,149 @@ export class GitHubPrReviewProvider extends BaseGitHubProvider {
 
     const data = (await response.json()) as GitHubSearchResponse;
     return { prs: data.items, failed: false };
+  }
+
+  /**
+   * Fetches the HEAD commit SHA for each PR via the REST API.
+   * Uses the `pull_request.url` from search results to avoid constructing URLs.
+   * Best-effort: failures are logged at debug level and skipped (version will be undefined).
+   */
+  private async fetchHeadShas(token: string, prs: GitHubIssue[]): Promise<Map<string, string>> {
+    const result = new Map<string, string>();
+    const prsWithApiUrl = prs.filter(pr => pr.pull_request?.url);
+    if (prsWithApiUrl.length === 0) {
+      return result;
+    }
+
+    let nextIndex = 0;
+    const runWorker = async (): Promise<void> => {
+      while (nextIndex < prsWithApiUrl.length) {
+        const currentIndex = nextIndex++;
+        const pr = prsWithApiUrl[currentIndex];
+        try {
+          const response = await fetch(pr.pull_request!.url, {
+            headers: {
+              Authorization: `Bearer ${token}`,
+              Accept: 'application/vnd.github+json',
+              'X-GitHub-Api-Version': '2022-11-28',
+            },
+          });
+          if (response.ok) {
+            const data = (await response.json()) as { head?: { sha?: string } };
+            if (data.head?.sha) {
+              result.set(pr.html_url, data.head.sha);
+            }
+          } else {
+            logger.debug(
+              `Failed to fetch head SHA for PR ${pr.html_url}: ${response.status} ${response.statusText}`,
+            );
+          }
+        } catch (error) {
+          logger.debug(`Failed to fetch head SHA for PR ${pr.html_url}: ${String(error)}`);
+        }
+      }
+    };
+
+    const workerCount = Math.min(3, prsWithApiUrl.length);
+    await Promise.all(Array.from({ length: workerCount }, () => runWorker()));
+
+    return result;
+  }
+
+  /**
+   * Fetches the authenticated user's login name. Cached for the lifetime of the provider.
+   * Returns undefined on failure.
+   */
+  private async fetchCurrentUser(token: string): Promise<string | undefined> {
+    if (this._cachedCurrentUser && this._cachedCurrentUserToken === token) {
+      return this._cachedCurrentUser;
+    }
+
+    try {
+      const response = await fetch('https://api.github.com/user', {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          Accept: 'application/vnd.github+json',
+          'X-GitHub-Api-Version': '2022-11-28',
+        },
+      });
+      if (response.ok) {
+        const data = (await response.json()) as { login?: string };
+        if (data.login) {
+          this._cachedCurrentUser = data.login;
+          this._cachedCurrentUserToken = token;
+          return data.login;
+        }
+      }
+      logger.debug(`Failed to fetch current user: ${response.status}`);
+    } catch (error) {
+      logger.debug(`Failed to fetch current user: ${String(error)}`);
+    }
+    return undefined;
+  }
+
+  /**
+   * For each PR, fetches timeline events and finds the latest `review_requested`
+   * event directed at the current user. Returns a map of PR html_url → timestamp.
+   * Best-effort: failures are logged at debug level and skipped.
+   */
+  private async fetchReRequestTimes(
+    token: string,
+    prs: GitHubIssue[],
+    currentUserLogin: string,
+  ): Promise<Map<string, string>> {
+    const result = new Map<string, string>();
+
+    let nextIndex = 0;
+    const runWorker = async (): Promise<void> => {
+      while (nextIndex < prs.length) {
+        const currentIdx = nextIndex++;
+        const pr = prs[currentIdx];
+        try {
+          // Only fetches the first page (100 events). For PRs with very extensive
+          // activity the latest review_requested event could be missed — an acceptable
+          // trade-off to limit API calls.
+          const timelineUrl = `${pr.repository_url}/issues/${pr.number}/timeline?per_page=100`;
+          const response = await fetch(timelineUrl, {
+            headers: {
+              Authorization: `Bearer ${token}`,
+              Accept: 'application/vnd.github+json',
+              'X-GitHub-Api-Version': '2022-11-28',
+            },
+          });
+          if (response.ok) {
+            const events = (await response.json()) as TimelineEvent[];
+            let latestReRequest: string | undefined;
+            for (const event of events) {
+              if (
+                event.event === 'review_requested' &&
+                event.requested_reviewer?.login?.toLowerCase() === currentUserLogin.toLowerCase() &&
+                event.created_at
+              ) {
+                // Track the maximum timestamp rather than relying on array order
+                if (!latestReRequest || event.created_at > latestReRequest) {
+                  latestReRequest = event.created_at;
+                }
+              }
+            }
+            if (latestReRequest) {
+              result.set(pr.html_url, latestReRequest);
+            }
+          } else {
+            logger.debug(
+              `Failed to fetch timeline for PR ${pr.html_url}: ${response.status}`,
+            );
+          }
+        } catch (error) {
+          logger.debug(`Failed to fetch timeline for PR ${pr.html_url}: ${String(error)}`);
+        }
+      }
+    };
+
+    const workerCount = Math.min(3, prs.length);
+    await Promise.all(Array.from({ length: workerCount }, () => runWorker()));
+
+    return result;
   }
 
   protected override parseRepo(issue: GitHubIssue): string {
