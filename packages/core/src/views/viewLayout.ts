@@ -135,6 +135,13 @@ function normalizeProviderId(providerId: string | null | undefined): string | un
 }
 
 /**
+ * Normalize a group name: treat empty/whitespace-only strings the same as undefined.
+ */
+function normalizeGroup(group: string | null | undefined): string | undefined {
+  return group?.trim() || undefined;
+}
+
+/**
  * Resolves a raw providerId to a human-friendly display name.
  * When not supplied, the raw providerId is used as-is.
  */
@@ -214,7 +221,7 @@ export function getTreeModeChildren(
   if (isSubGroupNode(element)) {
     return sortItems(
       getItems().filter(
-        i => normalizeProviderId(i.providerId) === element.providerId && i.group === element.groupName,
+        i => normalizeProviderId(i.providerId) === element.providerId && normalizeGroup(i.group) === element.groupName,
       ),
     );
   }
@@ -235,8 +242,9 @@ function getProviderChildren(
   const ungrouped: WorkItem[] = [];
 
   for (const item of items) {
-    if (item.group) {
-      groups.add(item.group);
+    const normalizedGroup = normalizeGroup(item.group);
+    if (normalizedGroup) {
+      groups.add(normalizedGroup);
     } else {
       ungrouped.push(item);
     }
@@ -405,7 +413,7 @@ export abstract class WorkItemViewProvider implements vscode.TreeDataProvider<Wo
     }
     if (isSubGroupNode(element)) {
       const count = this.getItems().filter(
-        i => normalizeProviderId(i.providerId) === element.providerId && (i.group?.trim() || undefined) === element.groupName
+        i => normalizeProviderId(i.providerId) === element.providerId && normalizeGroup(i.group) === element.groupName
       ).length;
       return createSubGroupTreeItem(element, this.groupPrefix, count);
     }
