@@ -236,29 +236,48 @@ async setState(providerId: string, externalId: string, state: InboxState): Promi
 }
 ```
 
-**Provider with periodic refresh (using BaseProvider):**
+**Provider with periodic refresh (using BaseProvider — ADO providers):**
 ```typescript
-export class GitHubProvider extends BaseProvider {
-  constructor(private client: GitHubClient) {
+// ADO providers extend the shared BaseProvider (packages/shared/src/baseProvider.ts)
+export class AdoWorkItemProvider extends BaseProvider {
+  constructor(private client: AdoClient) {
     const emitter = new vscode.EventEmitter<DiscoveredItem[]>();
     super(emitter);
   }
 
-  async refresh(): Promise<void> {
-    const issues = await this.client.getIssues();
+  async refresh(): Promise<void> { await this.doBackgroundRefresh(); }
+
+  protected async doBackgroundRefresh(): Promise<void> {
+    const items = await this.client.getWorkItems();
+    this._onDidDiscoverItems.fire(items.map(wi => ({
+      externalId: String(wi.id),
+      title: wi.title,
+      url: wi.url,
+      version: wi.changedDate,
+    })));
+  }
+}
+```
+
+**GitHub providers use their own base class:**
+```typescript
+// GitHub providers extend BaseGitHubProvider which implements DevDocketProvider
+// directly (packages/github/src/baseGithubProvider.ts) — they do NOT extend
+// the shared BaseProvider.
+export class MyGitHubProvider extends BaseGitHubProvider {
+  readonly id = 'my-github';
+  readonly label = 'My GitHub Items';
+
+  protected async fetchAndPublish(accessToken: string): Promise<void> {
+    const issues = await fetchIssues(accessToken);
     this._onDidDiscoverItems.fire(issues.map(issue => ({
       externalId: String(issue.number),
       title: issue.title,
       url: issue.html_url,
-      version: issue.updated_at,  // Resurface if issue changes
+      version: issue.updated_at,
     })));
   }
 }
-
-// Usage:
-const provider = new GitHubProvider(client);
-provider.startPeriodicRefresh(300);  // Refresh every 5 minutes
-api.registerProvider(provider);
 ```
 
 **Test with mocked VS Code:**
