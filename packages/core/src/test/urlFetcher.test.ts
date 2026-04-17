@@ -448,6 +448,16 @@ describe('fetchItemDetails', () => {
       expect(result.notes).toBe('');
     });
 
+    it('strips HTML tags from description', async () => {
+      mockFetch.mockResolvedValue({
+        ok: true,
+        json: async () => ({ fields: { 'System.Title': 'HTML desc', 'System.Description': '<p>As a <b>user</b></p><p>I want &amp; need</p>', 'System.TeamProject': 'myproj' } }),
+      });
+
+      const result = await fetchItemDetails(parsed);
+      expect(result.notes).toBe('As a user\nI want & need');
+    });
+
     it('throws on 404', async () => {
       mockFetch.mockResolvedValue({ ok: false, status: 404, statusText: 'Not Found' });
       await expect(fetchItemDetails(parsed)).rejects.toThrow(/not found/i);

@@ -254,10 +254,26 @@ async function fetchAdoWorkItem(org: string, project: string, id: number, signal
   const htmlUrl = `https://dev.azure.com/${encodeURIComponent(org)}/${encodeURIComponent(project)}/_workitems/edit/${id}`;
   return {
     title: data.fields['System.Title'],
-    notes: data.fields['System.Description'] ?? '',
+    notes: stripHtml(data.fields['System.Description'] ?? ''),
     url: htmlUrl,
     externalId: `${org}/${teamProject}/${id}`,
     group: `${org}/${teamProject}`,
     providerId: 'ado-work-items',
   };
+}
+
+/** Strip HTML tags and decode common entities for plain-text display. */
+function stripHtml(html: string): string {
+  return html
+    .replace(/<br\s*\/?>/gi, '\n')
+    .replace(/<\/p>/gi, '\n')
+    .replace(/<[^>]+>/g, '')
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/&nbsp;/g, ' ')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
 }
