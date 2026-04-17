@@ -61,6 +61,7 @@ async function getGitHubHeaders(): Promise<Record<string, string>> {
   const headers: Record<string, string> = {
     'Accept': 'application/vnd.github+json',
     'User-Agent': 'DevDocket-VSCode',
+    'X-GitHub-Api-Version': '2022-11-28',
   };
   try {
     const session = await vscode.authentication.getSession('github', ['repo'], { silent: true });
@@ -80,6 +81,7 @@ async function retryGitHubWithAuth(apiUrl: string, signal?: AbortSignal): Promis
       const headers: Record<string, string> = {
         'Accept': 'application/vnd.github+json',
         'User-Agent': 'DevDocket-VSCode',
+        'X-GitHub-Api-Version': '2022-11-28',
         'Authorization': `Bearer ${session.accessToken}`,
       };
       return await fetch(apiUrl, { headers, signal });
