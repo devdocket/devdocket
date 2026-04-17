@@ -371,5 +371,5 @@ describe('WorkItemEditorPanel', () => {
 - **Persisting provider item data:** Don't cache mutable provider fields like `title`, `description`, or `url` from discovered items. Persist only the `externalId`, inbox state, and optional `version` / `resurfaceVersion` markers. Fetch live item data from the provider.
 - **Ignoring vscode mock in tests:** Don't try to use the real vscode module in vitest tests. The alias prevents it. Always mock VS Code APIs in test setup.
 - **Blocking the event loop:** Don't use synchronous operations (e.g., `JSON.stringify()` on huge objects) on the main thread. Keep stores responsive.
-- **Creating stores without error handling:** All store operations should include try/catch and log errors via the logger service.
+- **Misplacing store error handling responsibilities:** Don't require every store operation to catch and log all errors internally. For recoverable parse/shape issues, log and fall back inside the store. For write failures, roll back any in-memory changes and rethrow; callers are responsible for catching, logging, and showing user-facing error messages.
 - **Unregistering providers without cleanup:** Always return a Disposable from `register()` that unsubscribes from the provider's onDidDiscoverItems event.
