@@ -2,6 +2,16 @@
 
 ## Active Decisions
 
+### 2026-04-17T18:00:02Z: User directive
+
+**By:** Matt Thalman (via Copilot)
+
+**What:** The coordinator must not do deep codebase exploration, multi-file reading, or detailed implementation planning itself. Fetch the issue description (via `gh issue view`), then immediately dispatch to the assigned agent with the issue context. The agent owns exploration, planning, and implementation. The coordinator's job is routing and supervision, not engineering.
+
+**Why:** User request — captured for team memory
+
+---
+
 ### 2026-04-17T12:20:36Z: User directive
 
 **By:** Matt Thalman (via Copilot)
