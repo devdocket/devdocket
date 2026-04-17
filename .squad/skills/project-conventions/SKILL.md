@@ -194,18 +194,39 @@ npm run watch       # Watch mode
 - **Logging:** Use the `logger` instance from each package's local `logger` module (e.g., `import { logger } from '../services/logger'`). Each module creates its logger via `createLoggerService()` from `@devdocket/shared`.
 - **Error recovery:** Log errors to the output channel but don't crash — use `.catch(err => logger.error(...))`
 - **Store operations:** Return `Promise<void>` or `Promise<T>`; treat malformed JSON or invalid persisted shape as recoverable by logging, backing up the invalid file, and resetting to empty/default state. Reserve throwing for unexpected filesystem or similar errors that cannot be recovered locally.
-- **Provider health tracking:** Provider refresh failures and timeouts are tracked centrally by `ProviderRegistry` via `refreshWithTimeout()` and `updateHealth()`. The registry fires `onDidChangeProviderHealth` when status changes. Providers themselves may catch/log errors internally and not reject `refresh()`, so health tracking belongs in the registry, not in individual provider catch blocks.
+- **Provider health tracking:** Provider refresh failures and timeouts are tracked centrally by `ProviderRegistry` via `refreshWithTimeout()` and `updateHealth()`. The registry fires `onDidChangeProviderHealth` when status changes. **Important:** If a provider catches errors internally and resolves `refresh()` successfully, the registry will treat the refresh as healthy (since it only observes a resolved promise). Provider implementations should let refresh failures reject (or rethrow after logging) so registry health tracking works correctly.
 
 **Example (registry-owned health tracking):**
 ```typescript
 // In ProviderRegistry.refreshWithTimeout():
-try {
-  await Promise.race([provider.refresh(), timeout]);
-  this.updateHealth(provider.id, { status: 'healthy', lastRefreshTime: new Date() });
-} catch (err) {
-  this.updateHealth(provider.id, { status: 'unhealthy', lastError: err.message });
-}
-// updateHealth() fires this._onDidChangeProviderHealth when status changes
+const cts = new vscode.CancellationTokenSource();
+let timedOut = false;
+const timeoutId = setTimeout(() => {
+  timedOut = true;
+  cts.cancel();
+}, ProviderRegistry.REFRESH_TIMEOUT_MS);
+
+provider.refresh(cts.token).then(
+  () => {
+    if (!cts.token.isCancellationRequested) {
+      this.updateHealth(provider.id, 'healthy');
+    }
+  },
+  (err: unknown) => {
+    if (!cts.token.isCancellationRequested) {
+      const message = err instanceof Error ? err.message : String(err);
+      this.updateHealth(provider.id, 'unhealthy', message);
+    }
+  }
+);
+
+cts.token.onCancellationRequested(() => {
+  if (timedOut) {
+    this.updateHealth(provider.id, 'unhealthy', 'Refresh timed out');
+  }
+});
+// updateHealth(providerId, 'healthy' | 'unhealthy', lastError?) sets
+// lastRefreshTime internally and fires _onDidChangeProviderHealth when status changes
 ```
 
 ### File Structure Conventions
