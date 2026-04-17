@@ -65,16 +65,21 @@ export function registerGetDiffTool(): vscode.Disposable {
           // best-effort — proceed without stat
         }
 
-        const framing = stat ? `## Diff stat summary\n\n${stat}\n\n` : '';
-        // Reserve space for the stat and framing text so total output
-        // stays within MAX_DIFF_LENGTH.
-        const diffBudget = Math.max(MAX_DIFF_LENGTH - framing.length - 200, Math.floor(MAX_DIFF_LENGTH * 0.8));
+        const footer = '\n\n(truncated — use devdocket-getFileDiff to read individual file diffs)';
+        // Ensure at least half the budget goes to actual diff content.
+        // If the stat is too large, skip it to preserve diff context.
+        const minDiffBudget = Math.floor(MAX_DIFF_LENGTH / 2);
+        const statSection = stat ? `## Diff stat summary\n\n${stat}\n\n` : '';
+        const framing = statSection.length + footer.length + 200 > MAX_DIFF_LENGTH - minDiffBudget
+          ? '' // stat too large — skip it
+          : statSection;
+        const diffBudget = Math.max(0, MAX_DIFF_LENGTH - framing.length - footer.length - 200);
         const truncatedDiff = output.slice(0, diffBudget);
         const parts = [
           framing,
           `## Diff (truncated — ${output.length.toLocaleString()} chars total, showing first ${diffBudget.toLocaleString()})\n\n`,
           truncatedDiff,
-          '\n\n(truncated — use devdocket-getFileDiff to read individual file diffs)',
+          footer,
         ];
 
         return new vscode.LanguageModelToolResult([
