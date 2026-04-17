@@ -232,8 +232,8 @@ export class WorkGraph {
       );
     }
     const updated: WorkItem = { ...item, state: newState, updatedAt: Date.now() };
-    // When returning to Queue, assign a fresh sortOrder based on the current Queue contents,
-    // excluding the moving item, to avoid skipping indices.
+    // When returning to Queue, assign a fresh sortOrder based on the current pre-transition
+    // Queue contents. This is computed before this.items is updated with the new state.
     if (newState === WorkItemState.New) {
       updated.sortOrder = this.nextSortOrder(WorkItemState.New);
     }
