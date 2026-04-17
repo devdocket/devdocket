@@ -259,6 +259,43 @@ const worktreePath = path.join(path.dirname(repoPath), branchName);
 
 Test patterns documented in `.squad/decisions.md` under "Test Update Patterns" (2026-03-25).
 
+### Issue #275 — History-to-Queue State Transition Tests (2025-01-29)
+
+**Feature:** Allow moving items from History (Done/Archived) back to Queue (New state) for re-work.
+
+**Tests added:** 11 tests across 2 sections in `packages/core/src/test/workGraph.test.ts`:
+- **2 updated tests in "state transition validation":**
+  - Changed "rejects Done → New" to "allows Done → New (move back to queue)"
+  - Changed "rejects Archived → New" to "allows Archived → New (move back to queue)"
+- **9 new tests in "move from History back to Queue" describe block:**
+  - Moving Done item back to Queue appears in Queue view
+  - Moving Archived item back to Queue appears in Queue view
+  - Item no longer appears in History after move to Queue
+  - Done → New assigns fresh sortOrder at end of Queue
+  - Archived → New assigns fresh sortOrder at end of Queue
+  - Moving same Done item back to Queue twice works (with other items in Queue)
+  - Fires onDidChange when moving History item to Queue
+  - Moving Done item to Queue updates sortOrder only (preserves title/notes)
+  - Multiple Done items moved back to Queue maintain relative order
+
+**Test patterns:**
+- Verified items appear in correct view after state transitions using `getItemsByState()`
+- Checked sortOrder assignment for items returning to Queue (should be at end)
+- Multi-state query pattern: `graph.getItemsByState(WorkItemState.Done, WorkItemState.Archived)` for History view
+- Edge case testing: repeated moves, concurrent moves, order preservation
+
+**Edge case discovered:** When testing repeated moves of a single item, must have other items in Queue to verify monotonically increasing sortOrder. Without other items, both moves get sortOrder 0, making the assertion fail.
+
+**Fix:** Added `other` item to Queue before testing repeated moves, ensuring sortOrder increases on each return.
+
+**Test results:** All 1071 tests passing, 1 todo. Total suite: 30 test files passing.
+
+**File paths:**
+- Tests: `packages/core/src/test/workGraph.test.ts` (lines ~509-730)
+- Implementation: `packages/core/src/services/workGraph.ts` (VALID_TRANSITIONS map, transitionState method with sortOrder logic)
+
+**Multi-worktree workflow confirmed:** Worked in dedicated worktree `C:\repos\devdocket-275` on branch `squad/275-history-to-queue` while main worktree was on different branch. Used `git worktree add` pattern successfully.
+
 ### ADO Work Item State Exclusion Testing (2025-05-16) — SUPERSEDED
 
 **Note:** This initial approach (hardcoding `Resolved` and `Done` in WIQL) was replaced by state-category-based filtering. See "ADO State Category Filtering Tests" below for the current approach. WIQL now only excludes `Closed` and `Removed` for performance; all other non-active states are filtered via the ADO Work Item Type States API.
