@@ -9,7 +9,12 @@ vi.mock('child_process', () => ({
   }),
 }));
 
+vi.mock('fs', () => ({
+  existsSync: vi.fn(() => true),
+}));
+
 import { execFile } from 'child_process';
+import { existsSync } from 'fs';
 
 describe('getFileDiffTool', () => {
   beforeEach(() => {
@@ -76,6 +81,67 @@ describe('getFileDiffTool', () => {
       // Should not have called git
       expect(execFile).not.toHaveBeenCalled();
       expect(result).toBeDefined();
+    });
+
+    it('returns error when diff is empty and file does not exist', async () => {
+      vi.mocked(execFile).mockImplementation(
+        (_cmd: string, _args: string[], _opts: unknown, cb: Function) => {
+          cb(null, '', '');
+          return undefined as never;
+        },
+      );
+      vi.mocked(existsSync).mockReturnValue(false);
+
+      const { lm } = await import('vscode');
+      registerGetFileDiffTool();
+      const handler = vi.mocked(lm.registerTool).mock.calls[0][1];
+
+      const result = await handler.invoke(
+        {
+          input: {
+            worktreePath: '/mock/worktree',
+            baseRef: 'origin/main',
+            headRef: 'pr-42',
+            filePath: 'src/nonexistent.ts',
+          },
+          toolInvocationToken: undefined,
+        } as never,
+        { isCancellationRequested: false } as never,
+      );
+
+      const text = (result as any).content[0].value;
+      expect(text).toContain('Error: file not found');
+      expect(text).toContain('src/nonexistent.ts');
+    });
+
+    it('returns no-diff message when diff is empty but file exists', async () => {
+      vi.mocked(execFile).mockImplementation(
+        (_cmd: string, _args: string[], _opts: unknown, cb: Function) => {
+          cb(null, '', '');
+          return undefined as never;
+        },
+      );
+      vi.mocked(existsSync).mockReturnValue(true);
+
+      const { lm } = await import('vscode');
+      registerGetFileDiffTool();
+      const handler = vi.mocked(lm.registerTool).mock.calls[0][1];
+
+      const result = await handler.invoke(
+        {
+          input: {
+            worktreePath: '/mock/worktree',
+            baseRef: 'origin/main',
+            headRef: 'pr-42',
+            filePath: 'src/unchanged.ts',
+          },
+          toolInvocationToken: undefined,
+        } as never,
+        { isCancellationRequested: false } as never,
+      );
+
+      const text = (result as any).content[0].value;
+      expect(text).toBe('(no diff for this file)');
     });
   });
 });

@@ -1,5 +1,6 @@
 import * as vscode from 'vscode';
 import * as path from 'path';
+import * as fs from 'fs';
 import { gitExec } from './gitUtils';
 import { validWorktreePaths } from './worktreeRegistry';
 
@@ -45,8 +46,21 @@ export function registerGetFileDiffTool(): vscode.Disposable {
           ['diff', '--no-color', `${baseRef}...${headRef}`, '--', filePath],
           worktreePath,
         );
+        if (!output) {
+          const fullPath = path.join(worktreePath, normalized);
+          if (!fs.existsSync(fullPath)) {
+            return new vscode.LanguageModelToolResult([
+              new vscode.LanguageModelTextPart(
+                `Error: file not found at '${filePath}'. Verify the path matches the diff output exactly (paths shown after a/ and b/ in diff headers).`,
+              ),
+            ]);
+          }
+          return new vscode.LanguageModelToolResult([
+            new vscode.LanguageModelTextPart('(no diff for this file)'),
+          ]);
+        }
         return new vscode.LanguageModelToolResult([
-          new vscode.LanguageModelTextPart(output || '(no diff for this file)'),
+          new vscode.LanguageModelTextPart(output),
         ]);
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
