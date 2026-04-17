@@ -289,7 +289,10 @@ export class ProviderRegistry {
     for (const item of items) {
       const existing = this.stateStore.getState(providerId, item.externalId);
       if (existing === undefined) {
-        newUnseenUpdates.push({ providerId, externalId: item.externalId, state: 'unseen', version: item.version, resurfaceVersion: item.resurfaceVersion });
+        const update: typeof newUnseenUpdates[number] = { providerId, externalId: item.externalId, state: 'unseen' };
+        if (item.version !== undefined) { update.version = item.version; }
+        if (item.resurfaceVersion !== undefined) { update.resurfaceVersion = item.resurfaceVersion; }
+        newUnseenUpdates.push(update);
       } else if (existing === 'accepted') {
         let shouldResurface = false;
         let needsBackfill = false;
@@ -313,9 +316,15 @@ export class ProviderRegistry {
         }
 
         if (shouldResurface) {
-          newUnseenUpdates.push({ providerId, externalId: item.externalId, state: 'unseen', version: item.version, resurfaceVersion: item.resurfaceVersion });
+          const update: typeof newUnseenUpdates[number] = { providerId, externalId: item.externalId, state: 'unseen' };
+          if (item.version !== undefined) { update.version = item.version; }
+          if (item.resurfaceVersion !== undefined) { update.resurfaceVersion = item.resurfaceVersion; }
+          newUnseenUpdates.push(update);
         } else if (needsBackfill) {
-          versionBackfills.push({ providerId, externalId: item.externalId, state: 'accepted', version: item.version, resurfaceVersion: item.resurfaceVersion });
+          const update: typeof versionBackfills[number] = { providerId, externalId: item.externalId, state: 'accepted' };
+          if (item.version !== undefined) { update.version = item.version; }
+          if (item.resurfaceVersion !== undefined) { update.resurfaceVersion = item.resurfaceVersion; }
+          versionBackfills.push(update);
         }
       } else if (existing === 'unseen') {
         if (item.version !== undefined || item.resurfaceVersion !== undefined) {
@@ -324,7 +333,10 @@ export class ProviderRegistry {
           const versionChanged = item.version !== undefined && (storedVersion === undefined || storedVersion !== item.version);
           const rvChanged = item.resurfaceVersion !== undefined && (storedRV === undefined || storedRV !== item.resurfaceVersion);
           if (versionChanged || rvChanged) {
-            versionBackfills.push({ providerId, externalId: item.externalId, state: 'unseen', version: item.version, resurfaceVersion: item.resurfaceVersion });
+            const update: typeof versionBackfills[number] = { providerId, externalId: item.externalId, state: 'unseen' };
+            if (item.version !== undefined) { update.version = item.version; }
+            if (item.resurfaceVersion !== undefined) { update.resurfaceVersion = item.resurfaceVersion; }
+            versionBackfills.push(update);
           }
         }
       }
