@@ -186,7 +186,7 @@ npm run watch       # Watch mode
 - The main public API surface lives in `packages/core/src/api/types.ts`, which defines key interfaces such as `DevDocketProvider`, `DevDocketAction`, and `DevDocketApi`
 - `packages/core/src/api/types.ts` also re-exports selected shared types from `packages/shared/src/`
 - Shared/reusable types include `DiscoveredItem`, `Disposable`, `Event`, `EventEmitterLike`
-- Each package has its own `tsconfig.json` with strict mode enabled
+- Packages that define their own `tsconfig.json` (such as `packages/core/`) use strict TypeScript settings; `packages/shared/` does not have a per-package `tsconfig.json` and is consumed as shared source/types rather than built independently
 - WorkItem state machine uses enums: `WorkItemState.New | InProgress | Paused | Done | Archived`
 
 ### Error Handling
