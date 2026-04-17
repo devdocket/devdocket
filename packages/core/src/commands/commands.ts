@@ -235,7 +235,6 @@ async function handleCreateItemFromUrl(
 ): Promise<void> {
   const url = await vscode.window.showInputBox({
     prompt: 'Enter a URL to create a work item from',
-    placeHolder: 'https://github.com/owner/repo/pull/123',
   });
   if (!url?.trim()) { return; }
 
