@@ -56,6 +56,7 @@ export class SourcesTreeProvider implements vscode.TreeDataProvider<SourcesEleme
     switch (element.kind) {
       case 'provider': {
         const health = this.providerRegistry.getProviderHealth(element.providerId);
+        const count = this.providerRegistry.getDiscoveredItems(element.providerId).length;
         const treeItem = new vscode.TreeItem(element.label, vscode.TreeItemCollapsibleState.Collapsed);
         treeItem.contextValue = 'sourceProvider';
         if (health.status === 'unhealthy') {
@@ -63,13 +64,17 @@ export class SourcesTreeProvider implements vscode.TreeDataProvider<SourcesEleme
           treeItem.description = 'refresh failed';
         } else {
           treeItem.iconPath = new vscode.ThemeIcon('plug');
+          treeItem.description = `${count}`;
         }
         treeItem.tooltip = buildProviderTooltip(element.label, health);
         return treeItem;
       }
       case 'group': {
+        const items = this.providerRegistry.getDiscoveredItems(element.providerId);
+        const count = items.filter((item) => item.group?.trim() === element.groupName).length;
         const treeItem = new vscode.TreeItem(element.groupName, vscode.TreeItemCollapsibleState.Collapsed);
         treeItem.contextValue = 'sourceGroup';
+        treeItem.description = `${count}`;
         treeItem.iconPath = new vscode.ThemeIcon('folder');
         return treeItem;
       }

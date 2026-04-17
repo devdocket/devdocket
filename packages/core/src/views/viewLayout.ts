@@ -259,12 +259,16 @@ export function createProviderGroupTreeItem(
   node: ProviderGroupNode,
   prefix: string,
   contextValue: string,
+  count?: number,
 ): vscode.TreeItem {
   const treeItem = new vscode.TreeItem(node.label, vscode.TreeItemCollapsibleState.Collapsed);
   const idSuffix = node.providerId ? `provider:${node.providerId}` : 'other';
   treeItem.id = `${prefix}::group::${idSuffix}`;
   treeItem.contextValue = contextValue;
   treeItem.iconPath = new vscode.ThemeIcon(node.providerId ? 'plug' : 'circle-filled');
+  if (count !== undefined) {
+    treeItem.description = `${count}`;
+  }
   return treeItem;
 }
 
@@ -272,12 +276,16 @@ export function createProviderGroupTreeItem(
 export function createSubGroupTreeItem(
   node: SubGroupNode,
   prefix: string,
+  count?: number,
 ): vscode.TreeItem {
   const treeItem = new vscode.TreeItem(node.label, vscode.TreeItemCollapsibleState.Collapsed);
   const providerPart = node.providerId ? `provider:${node.providerId}` : 'other';
   treeItem.id = `${prefix}::subgroup::${providerPart}::${node.groupName}`;
   treeItem.contextValue = `${prefix}SubGroup`;
   treeItem.iconPath = new vscode.ThemeIcon('folder');
+  if (count !== undefined) {
+    treeItem.description = `${count}`;
+  }
   return treeItem;
 }
 
@@ -390,10 +398,16 @@ export abstract class WorkItemViewProvider implements vscode.TreeDataProvider<Wo
 
   getTreeItem(element: WorkItemElement): vscode.TreeItem {
     if (isProviderGroupNode(element)) {
-      return createProviderGroupTreeItem(element, this.groupPrefix, this.groupContextValue);
+      const count = this.getItems().filter(
+        i => normalizeProviderId(i.providerId) === element.providerId
+      ).length;
+      return createProviderGroupTreeItem(element, this.groupPrefix, this.groupContextValue, count);
     }
     if (isSubGroupNode(element)) {
-      return createSubGroupTreeItem(element, this.groupPrefix);
+      const count = this.getItems().filter(
+        i => normalizeProviderId(i.providerId) === element.providerId && i.group === element.groupName
+      ).length;
+      return createSubGroupTreeItem(element, this.groupPrefix, count);
     }
     return this.createWorkItemTreeItem(element);
   }
