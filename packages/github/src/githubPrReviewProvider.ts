@@ -87,7 +87,9 @@ export class GitHubPrReviewProvider extends BaseGitHubProvider {
   async resolveUrl(url: string, signal?: AbortSignal): Promise<ResolvedItem | undefined> {
     const match = url.trim().match(GitHubPrReviewProvider.GITHUB_PR_PATTERN);
     if (!match) { return undefined; }
-    const [, owner, repo, numStr] = match;
+    const [, rawOwner, rawRepo, numStr] = match;
+    const owner = safeDecodeComponent(rawOwner);
+    const repo = safeDecodeComponent(rawRepo);
     const number = parseInt(numStr, 10);
 
     const apiUrl = `https://api.github.com/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/pulls/${number}`;
@@ -368,4 +370,8 @@ export class GitHubPrReviewProvider extends BaseGitHubProvider {
   protected override parseRepo(issue: GitHubIssue): string {
     return parseRepoFromUrls(issue.html_url, issue.repository_url);
   }
+}
+
+function safeDecodeComponent(value: string): string {
+  try { return decodeURIComponent(value); } catch { return value; }
 }

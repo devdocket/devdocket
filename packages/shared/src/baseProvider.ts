@@ -52,7 +52,7 @@ export interface ResolvedItem {
   notes: string;
   url: string;
   externalId: string;
-  group: string;
+  group?: string;
   providerId: string;
 }
 

@@ -55,7 +55,9 @@ export class GitHubIssueProvider extends BaseGitHubProvider {
   async resolveUrl(url: string, signal?: AbortSignal): Promise<ResolvedItem | undefined> {
     const match = url.trim().match(GitHubIssueProvider.GITHUB_ISSUE_PATTERN);
     if (!match) { return undefined; }
-    const [, owner, repo, numStr] = match;
+    const [, rawOwner, rawRepo, numStr] = match;
+    const owner = safeDecodeComponent(rawOwner);
+    const repo = safeDecodeComponent(rawRepo);
     const number = parseInt(numStr, 10);
 
     const apiUrl = `https://api.github.com/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/issues/${number}`;
@@ -231,4 +233,8 @@ export class GitHubIssueProvider extends BaseGitHubProvider {
     return match ? match[1] : null;
   }
 
+}
+
+function safeDecodeComponent(value: string): string {
+  try { return decodeURIComponent(value); } catch { return value; }
 }

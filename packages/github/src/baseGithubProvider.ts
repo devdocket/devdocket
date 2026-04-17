@@ -30,12 +30,13 @@ export interface DevDocketProvider {
   resolveUrl?(url: string, signal?: AbortSignal): Promise<ResolvedItem | undefined>;
 }
 
+// SYNC-WITH: packages/shared/src/baseProvider.ts:ResolvedItem
 export interface ResolvedItem {
   title: string;
   notes: string;
   url: string;
   externalId: string;
-  group: string;
+  group?: string;
   providerId: string;
 }
 
