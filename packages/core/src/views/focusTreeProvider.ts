@@ -3,7 +3,7 @@ import { WorkItem, WorkItemState } from '../models/workItem';
 import { WorkGraph } from '../services/workGraph';
 import { ProviderRegistry } from '../services/providerRegistry';
 import {
-  WorkItemElement, WorkItemViewProvider, SubGroupNode, isProviderGroupNode, isSubGroupNode,
+  WorkItemElement, WorkItemViewProvider, SubGroupNode, isProviderGroupNode, isSubGroupNode, createSubGroupTreeItem,
 } from './viewLayout';
 
 const DRAG_MIME_TYPE = 'application/vnd.code.tree.devdocket.focus';
@@ -60,6 +60,16 @@ export class FocusTreeProvider extends WorkItemViewProvider implements vscode.Tr
 
     treeItem.command = { command: 'devdocket.editItem', title: 'Open Details', arguments: [item] };
     return treeItem;
+  }
+
+  getTreeItem(element: FocusElement): vscode.TreeItem {
+    if (isSubGroupNode(element)) {
+      const count = this.getItems().filter(
+        i => (i.group?.trim() || undefined) === element.groupName
+      ).length;
+      return createSubGroupTreeItem(element, this.groupPrefix, count);
+    }
+    return super.getTreeItem(element);
   }
 
   getChildren(element?: FocusElement): FocusElement[] {

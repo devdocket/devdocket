@@ -56,13 +56,13 @@ export class SourcesTreeProvider implements vscode.TreeDataProvider<SourcesEleme
     switch (element.kind) {
       case 'provider': {
         const health = this.providerRegistry.getProviderHealth(element.providerId);
-        const count = this.providerRegistry.getDiscoveredItems(element.providerId).length;
         const treeItem = new vscode.TreeItem(element.label, vscode.TreeItemCollapsibleState.Collapsed);
         treeItem.contextValue = 'sourceProvider';
         if (health.status === 'unhealthy') {
           treeItem.iconPath = new vscode.ThemeIcon('warning', new vscode.ThemeColor('problemsWarningIcon.foreground'));
           treeItem.description = 'refresh failed';
         } else {
+          const count = this.providerRegistry.getDiscoveredItems(element.providerId).length;
           treeItem.iconPath = new vscode.ThemeIcon('plug');
           treeItem.description = `${count}`;
         }

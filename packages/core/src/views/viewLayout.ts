@@ -405,7 +405,7 @@ export abstract class WorkItemViewProvider implements vscode.TreeDataProvider<Wo
     }
     if (isSubGroupNode(element)) {
       const count = this.getItems().filter(
-        i => normalizeProviderId(i.providerId) === element.providerId && i.group === element.groupName
+        i => normalizeProviderId(i.providerId) === element.providerId && (i.group?.trim() || undefined) === element.groupName
       ).length;
       return createSubGroupTreeItem(element, this.groupPrefix, count);
     }
