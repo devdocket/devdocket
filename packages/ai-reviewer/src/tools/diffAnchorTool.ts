@@ -21,7 +21,7 @@ export function registerDiffAnchorTool(): vscode.Disposable {
 
       try {
         // Normalize to forward slashes to match GitHub's path format
-        const normalizedPath = filePath.trim().replace(/\\/g, '/');
+        const normalizedPath = filePath.replace(/\\/g, '/');
         const hash = crypto.createHash('sha256').update(normalizedPath, 'utf8').digest('hex');
         return new vscode.LanguageModelToolResult([
           new vscode.LanguageModelTextPart(hash),
