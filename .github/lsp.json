@@ -5,7 +5,9 @@
       "args": ["--stdio"],
       "fileExtensions": {
         ".ts": "typescript",
-        ".tsx": "typescript"
+        ".tsx": "typescriptreact",
+        ".js": "javascript",
+        ".jsx": "javascriptreact"
       }
     }
   }
