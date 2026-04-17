@@ -5,10 +5,10 @@
  *
  * ```
  * New → InProgress ⇄ Paused
- * ↑         ↓
- * │       Done
+ * ↑         ↓           ↑
+ * │       Done ────────┤
  * │         ↓
- * └─────Archived
+ * └───── Archived
  * ```
  *
  * Valid transitions:
