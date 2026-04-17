@@ -193,7 +193,7 @@ npm run watch       # Watch mode
 
 - **Logging:** Use the `logger` instance from each package's local `logger` module (e.g., `import { logger } from '../services/logger'`). Each module creates its logger via `createLoggerService()` from `@devdocket/shared`.
 - **Error recovery:** Log errors to the output channel but don't crash — use `.catch(err => logger.error(...))`
-- **Store operations:** Return `Promise<void>` or `Promise<T>`; throw on unrecoverable errors (bad JSON, disk full)
+- **Store operations:** Return `Promise<void>` or `Promise<T>`; treat malformed JSON or invalid persisted shape as recoverable by logging, backing up the invalid file, and resetting to empty/default state. Reserve throwing for unexpected filesystem or similar errors that cannot be recovered locally.
 - **Provider refreshes:** Wrap in try/catch, fire `onDidChangeProviderHealth` event on failure
 
 **Example:**
