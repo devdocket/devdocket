@@ -2,6 +2,76 @@
 
 ## Active Decisions
 
+### 2026-04-17T12:20:36Z: User directive
+
+**By:** Matt Thalman (via Copilot)
+
+**What:** Always use git worktrees for parallel issue work. When Ralph spawns multiple agents to work on separate issues simultaneously, each agent should work in its own worktree for full isolation.
+
+**Why:** User request — captured for team memory
+
+---
+
+### 2026-04-15T20:02:05Z: User directive
+
+**By:** Matt Thalman (via Copilot)
+
+**What:** Never include the branch name in the PR title. PR titles should be descriptive of the change, not reference branch names, issue numbers, or other metadata.
+
+**Why:** User request — captured for team memory
+
+---
+
+### 2026-04-15T20:01:13Z: User directive
+
+**By:** Matt Thalman (via Copilot)
+
+**What:** Never include the issue number in the PR title. Issue numbers belong in the PR description only (via Closes #N).
+
+**Why:** User request — captured for team memory
+
+---
+
+### 2026-04-15T19:58:00Z: User directive
+
+**By:** Matt Thalman (via Copilot)
+
+**What:** Never include the issue number in a commit message. Issue references belong in the PR description only.
+
+**Why:** User request — captured for team memory
+
+---
+
+### 2026-04-15T19:57:47Z: User directive
+
+**By:** Matt Thalman (via Copilot)
+
+**What:** All PRs should reference in their description the issue they're fixing.
+
+**Why:** User request — captured for team memory
+
+---
+
+### 2026-04-15T19:26:30Z: User directive
+
+**By:** Matt Thalman (via Copilot)
+
+**What:** Each phase of the create-pr lifecycle between agents should be independent. Start remote review cycles while other agents are still doing local loops. No serialization between agents.
+
+**Why:** User request — captured for team memory
+
+---
+
+### 2026-04-15T19:13:21Z: User directive
+
+**By:** Matt Thalman (via Copilot)
+
+**What:** When Ralph is finished implementing a fix, he should run the create-pr skill (exactly, to the letter). The review loop mentioned in that skill needs to be done in an agent in parallel with other tasks.
+
+**Why:** User request — captured for team memory
+
+---
+
 ### Issue #243 — Version-Based Resurfacing for Re-Requested PR Reviews (2026-04-15)
 
 **Issue:** #243  
