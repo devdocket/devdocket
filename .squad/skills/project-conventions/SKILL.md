@@ -50,11 +50,15 @@ State changes follow a **mutate → save → fire → refresh** cycle. When a Wo
 4. Providers refresh their discovered items
 5. UI tree data providers refresh
 
-**Example:** Moving a work item from Inbox to Queue:
+**Example:** Accepting an inbox item (from `commands.ts`):
 ```typescript
-// In ProviderRegistry.acceptItem()
-await this.stateStore.setState(providerId, externalId, 'accepted');
-this._onDidChangeDiscoveredItems.fire();  // Providers and UI listen for this
+// In acceptSingleInboxItem() — called by the accept command handler
+const createdItem = await workGraph.createItem(
+  { title: formatItemTitle(item) },
+  { providerId: item.providerId, externalId: item.externalId, url: item.url },
+);
+await stateStore.setState(item.providerId, item.externalId, 'accepted');
+// stateStore fires onDidChange → UI refreshes
 ```
 
 ### Provider Items: References, Not Copies
