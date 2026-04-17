@@ -177,7 +177,7 @@ export function getEditorPanelHtml({ cspSource, item, providerLabel, providerDes
   </style>
 </head>
 <body>
-  <h2 id="editor-heading">${item.url ? `<a href="#" class="title-link" id="title-link" data-url="${escapeAttr(item.url)}" title="Open in browser">${escapeHtml(item.title)}</a>` : escapeHtml(item.title)}</h2>
+  <h2 id="editor-heading">${item.url ? `<a href="${escapeAttr(item.url)}" class="title-link" id="title-link" data-url="${escapeAttr(item.url)}" title="Open in browser">${escapeHtml(item.title)}</a>` : escapeHtml(item.title)}</h2>
   <div id="form" role="form" aria-labelledby="editor-heading">
     <div class="field">
       <label for="title">Title</label>
