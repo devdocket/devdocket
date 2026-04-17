@@ -271,8 +271,9 @@ describe('getEditorPanelHtml', () => {
       const item = makeItem({ url: 'https://github.com/org/repo/issues/42' });
       const html = getEditorPanelHtml({ cspSource, item });
       expect(html).toContain('id="title-link"');
-      expect(html).toMatch(/<a\s[^>]*data-url="https:\/\/github\.com\/org\/repo\/issues\/42"/);
-      expect(html).not.toContain('Open in browser');
+      expect(html).toMatch(/<a\s[^>]*href="#"[^>]*data-url="https:\/\/github\.com\/org\/repo\/issues\/42"/);
+      expect(html).toContain('title="Open in browser"');
+      expect(html).not.toContain('Open in browser</');
     });
 
     it('renders plain title text when item has no url', () => {

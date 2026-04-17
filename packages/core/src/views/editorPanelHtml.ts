@@ -167,10 +167,17 @@ export function getEditorPanelHtml({ cspSource, item, providerLabel, providerDes
       color: var(--vscode-textLink-activeForeground);
       text-decoration: underline;
     }
+    .title-link:focus,
+    .title-link:focus-visible {
+      color: var(--vscode-textLink-activeForeground);
+      text-decoration: underline;
+      outline: 1px solid var(--vscode-focusBorder);
+      outline-offset: 2px;
+    }
   </style>
 </head>
 <body>
-  <h2 id="editor-heading">${item.url ? `<a class="title-link" id="title-link" data-url="${escapeAttr(item.url)}">${escapeHtml(item.title)}</a>` : escapeHtml(item.title)}</h2>
+  <h2 id="editor-heading">${item.url ? `<a href="#" class="title-link" id="title-link" data-url="${escapeAttr(item.url)}" title="Open in browser">${escapeHtml(item.title)}</a>` : escapeHtml(item.title)}</h2>
   <div id="form" role="form" aria-labelledby="editor-heading">
     <div class="field">
       <label for="title">Title</label>
