@@ -252,7 +252,7 @@ describe('registerCommands', () => {
 
   describe('devdocket.createItemFromUrl', () => {
     const fakeDetails = {
-      title: 'owner/repo#42: Fix bug',
+      title: 'Fix bug',
       notes: 'Description',
       url: 'https://github.com/owner/repo/pull/42',
       externalId: 'owner/repo#42',

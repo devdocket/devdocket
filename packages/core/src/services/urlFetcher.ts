@@ -144,7 +144,7 @@ async function fetchGitHubPr(owner: string, repo: string, number: number, signal
 
   const data = await response.json() as { title: string; body: string | null; html_url: string };
   return {
-    title: `${owner}/${repo}#${number}: ${data.title}`,
+    title: data.title,
     notes: data.body ?? '',
     url: data.html_url,
     externalId: `${owner}/${repo}#${number}`,
@@ -169,7 +169,7 @@ async function fetchGitHubIssue(owner: string, repo: string, number: number, sig
 
   const data = await response.json() as { title: string; body: string | null; html_url: string };
   return {
-    title: `${owner}/${repo}#${number}: ${data.title}`,
+    title: data.title,
     notes: data.body ?? '',
     url: data.html_url,
     externalId: `${owner}/${repo}#${number}`,
@@ -197,7 +197,7 @@ async function fetchAdoPr(org: string, project: string, repo: string, id: number
   const repoName = data.repository.name;
   const htmlUrl = `https://dev.azure.com/${encodeURIComponent(org)}/${encodeURIComponent(project)}/_git/${encodeURIComponent(repo)}/pullrequest/${id}`;
   return {
-    title: `${org}/${projectName}#${id}: ${data.title}`,
+    title: data.title,
     notes: data.description ?? '',
     url: htmlUrl,
     externalId: `${org}/${projectName}/${repoName}/${id}`,
@@ -224,7 +224,7 @@ async function fetchAdoWorkItem(org: string, project: string, id: number, signal
   const teamProject = data.fields['System.TeamProject'];
   const htmlUrl = `https://dev.azure.com/${encodeURIComponent(org)}/${encodeURIComponent(project)}/_workitems/edit/${id}`;
   return {
-    title: `${org}/${teamProject}#${id}: ${data.fields['System.Title']}`,
+    title: data.fields['System.Title'],
     notes: data.fields['System.Description'] ?? '',
     url: htmlUrl,
     externalId: `${org}/${teamProject}/${id}`,

@@ -35,7 +35,7 @@ describe('fetchItemDetails', () => {
 
       const result = await fetchItemDetails(parsed);
       expect(result).toEqual({
-        title: 'octocat/hello#42: Fix bug',
+        title: 'Fix bug',
         notes: 'Some description',
         url: 'https://github.com/octocat/hello/pull/42',
         externalId: 'octocat/hello#42',
@@ -145,7 +145,7 @@ describe('fetchItemDetails', () => {
         });
 
       const result = await fetchItemDetails(parsed);
-      expect(result.title).toBe('octocat/hello#42: Private PR');
+      expect(result.title).toBe('Private PR');
       expect(result.notes).toBe('secret');
       expect(mockFetch).toHaveBeenCalledTimes(2);
       // Second fetch should have the interactive auth token
@@ -184,7 +184,7 @@ describe('fetchItemDetails', () => {
 
       const result = await fetchItemDetails(parsed);
       expect(result).toEqual({
-        title: 'myorg/myproj#7: ADO fix',
+        title: 'ADO fix',
         notes: 'ADO desc',
         url: 'https://dev.azure.com/myorg/myproj/_git/myrepo/pullrequest/7',
         externalId: 'myorg/myproj/myrepo/7',
@@ -291,7 +291,7 @@ describe('fetchItemDetails', () => {
         });
 
       const result = await fetchItemDetails(parsed);
-      expect(result.title).toBe('myorg/myproj#7: Private ADO PR');
+      expect(result.title).toBe('Private ADO PR');
       expect(result.notes).toBe('secret ado');
       expect(mockFetch).toHaveBeenCalledTimes(2);
       const retryHeaders = mockFetch.mock.calls[1][1].headers;
@@ -328,7 +328,7 @@ describe('fetchItemDetails', () => {
 
       const result = await fetchItemDetails(parsed);
       expect(result).toEqual({
-        title: 'octocat/hello#10: Bug report',
+        title: 'Bug report',
         notes: 'Steps to reproduce',
         url: 'https://github.com/octocat/hello/issues/10',
         externalId: 'octocat/hello#10',
@@ -387,7 +387,7 @@ describe('fetchItemDetails', () => {
         });
 
       const result = await fetchItemDetails(parsed);
-      expect(result.title).toBe('octocat/hello#10: Private Issue');
+      expect(result.title).toBe('Private Issue');
       expect(mockFetch).toHaveBeenCalledTimes(2);
     });
   });
@@ -403,7 +403,7 @@ describe('fetchItemDetails', () => {
 
       const result = await fetchItemDetails(parsed);
       expect(result).toEqual({
-        title: 'myorg/myproj#99: User story',
+        title: 'User story',
         notes: 'As a user...',
         url: 'https://dev.azure.com/myorg/myproj/_workitems/edit/99',
         externalId: 'myorg/myproj/99',
@@ -473,7 +473,7 @@ describe('fetchItemDetails', () => {
         });
 
       const result = await fetchItemDetails(parsed);
-      expect(result.title).toBe('myorg/myproj#99: Private WI');
+      expect(result.title).toBe('Private WI');
       expect(mockFetch).toHaveBeenCalledTimes(2);
     });
   });
