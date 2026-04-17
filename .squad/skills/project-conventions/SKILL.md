@@ -353,7 +353,7 @@ describe('WorkItemEditorPanel', () => {
 ## Anti-Patterns
 
 - **Direct file I/O without writeQueue:** Don't use `fs.writeFileSync()` or multiple `await fs.writeFile()` calls in parallel. Always chain through `writeQueue`.
-- **Persisting provider item data:** Don't cache title, description, or url from discovered items. Store only the external ID and inbox state. Fetch live data from the provider.
+- **Persisting provider item data:** Don't cache mutable provider fields like `title`, `description`, or `url` from discovered items. Persist only the `externalId`, inbox state, and optional `version` / `resurfaceVersion` markers. Fetch live item data from the provider.
 - **Ignoring vscode mock in tests:** Don't try to use the real vscode module in vitest tests. The alias prevents it. Always mock VS Code APIs in test setup.
 - **Blocking the event loop:** Don't use synchronous operations (e.g., `JSON.stringify()` on huge objects) on the main thread. Keep stores responsive.
 - **Creating stores without error handling:** All store operations should include try/catch and log errors via the logger service.
