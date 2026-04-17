@@ -288,5 +288,19 @@ describe('getEditorPanelHtml', () => {
       expect(html).not.toContain('<script>alert(1)</script>');
       expect(html).toContain('&quot;&gt;&lt;script&gt;alert(1)&lt;/script&gt;');
     });
+
+    it('does not render a hyperlink for javascript: URLs', () => {
+      const item = makeItem({ url: 'javascript:alert(1)' });
+      const html = getEditorPanelHtml({ cspSource, item });
+      expect(html).not.toContain('id="title-link"');
+      expect(html).not.toContain('href=');
+    });
+
+    it('does not render a hyperlink for data: URLs', () => {
+      const item = makeItem({ url: 'data:text/html,<h1>hi</h1>' });
+      const html = getEditorPanelHtml({ cspSource, item });
+      expect(html).not.toContain('id="title-link"');
+      expect(html).not.toContain('href=');
+    });
   });
 });
