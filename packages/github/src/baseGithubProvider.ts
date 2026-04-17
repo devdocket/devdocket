@@ -41,7 +41,7 @@ export interface GitHubIssue {
   state?: string;
   html_url: string;
   repository_url: string;
-  pull_request?: { url: string; merged_at?: string | null };
+  pull_request?: { url: string };
 }
 
 export abstract class BaseGitHubProvider implements DevDocketProvider {
