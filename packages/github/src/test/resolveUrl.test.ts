@@ -96,7 +96,7 @@ describe('resolveUrl', () => {
       expect(result?.externalId).toBe('owner/repo#456');
     });
 
-    it('handles URL-encoded owner and repo names', async () => {
+    it('handles hyphenated owner and repo names', async () => {
       mockFetch.mockResolvedValueOnce({
         ok: true,
         status: 200,
@@ -387,7 +387,7 @@ describe('resolveUrl', () => {
       expect(result?.title).toBe('#222: Mixed case PR');
     });
 
-    it('handles URL-encoded owner and repo names', async () => {
+    it('handles hyphenated owner and repo names', async () => {
       mockFetch.mockResolvedValueOnce({
         ok: true,
         status: 200,
