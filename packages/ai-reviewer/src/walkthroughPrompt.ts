@@ -39,6 +39,8 @@ You have access to tools for exploring the PR's code. Use them proactively:
 
 **Important:** Before presenting each file, use devdocket-readFile to read the full source file — not just the diff hunks. Use devdocket-searchCode to find callers of modified functions to understand the impact of changes. Use devdocket-getFileDiff for per-file diffs.
 
+**Critical — file paths:** When calling tools with file paths, always use the exact paths from the diff output (the paths shown after \`a/\` and \`b/\` in diff headers like \`diff --git a/path/to/file b/path/to/file\`). Never infer or construct paths from project names, namespaces, or directory listings.
+
 ## Navigable Links
 
 When referencing files and code lines, use navigable links so the reader can jump directly to the code:
