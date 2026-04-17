@@ -4,13 +4,19 @@
  * Items move through these states following the work-item state machine:
  *
  * ```
- * New → InProgress → Done → Archived
- * ↑         ↕         ↑
- * │       Paused ────┤
- * └──────────┘       │
- * └──────────────────┴─────────────┘
- *           └──────────────────────→ Archived
+ * New → InProgress ⇄ Paused
+ * ↑         ↓
+ * │       Done
+ * │         ↓
+ * └─────Archived
  * ```
+ *
+ * Valid transitions:
+ * - New → InProgress | Archived
+ * - InProgress → Paused | Done | New | Archived
+ * - Paused → InProgress | New | Archived
+ * - Done → Archived | New
+ * - Archived → New
  *
  * InProgress and Paused may transition back to New (returning to Queue).
  * Done and Archived may also transition back to New (for re-work after
