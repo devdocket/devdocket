@@ -177,7 +177,7 @@ export class ProviderRegistry {
       if (typeof provider.resolveUrl !== 'function') { continue; }
       try {
         const result = await provider.resolveUrl(url, signal);
-        if (result) { return result; }
+        if (result) { return { ...result, providerId: provider.id }; }
       } catch (error) {
         if (error instanceof Error && error.name === 'AbortError') { throw error; }
         logger.warn(`Provider ${provider.id} failed to resolve URL`, error);
