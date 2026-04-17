@@ -169,12 +169,14 @@ async function fetchGitHubPr(owner: string, repo: string, number: number, signal
   if (!response.ok) { handleGitHubError(response, label); }
 
   const data = await response.json() as { title: string; body: string | null; html_url: string };
+  // Use canonical owner/repo from API response URL for consistent externalId
+  const { canonicalOwner, canonicalRepo } = parseGitHubHtmlUrl(data.html_url, owner, repo);
   return {
     title: data.title,
     notes: data.body ?? '',
     url: data.html_url,
-    externalId: `${owner}/${repo}#${number}`,
-    group: `${owner}/${repo}`,
+    externalId: `${canonicalOwner}/${canonicalRepo}#${number}`,
+    group: `${canonicalOwner}/${canonicalRepo}`,
     providerId: 'github-pr-reviews',
   };
 }
@@ -195,12 +197,13 @@ async function fetchGitHubIssue(owner: string, repo: string, number: number, sig
   if (!response.ok) { handleGitHubError(response, label); }
 
   const data = await response.json() as { title: string; body: string | null; html_url: string };
+  const { canonicalOwner, canonicalRepo } = parseGitHubHtmlUrl(data.html_url, owner, repo);
   return {
     title: data.title,
     notes: data.body ?? '',
     url: data.html_url,
-    externalId: `${owner}/${repo}#${number}`,
-    group: `${owner}/${repo}`,
+    externalId: `${canonicalOwner}/${canonicalRepo}#${number}`,
+    group: `${canonicalOwner}/${canonicalRepo}`,
     providerId: 'github',
   };
 }
@@ -223,7 +226,7 @@ async function fetchAdoPr(org: string, project: string, repo: string, id: number
   const data = await response.json() as { title: string; description: string | null; repository: { name: string; project: { name: string } } };
   const projectName = data.repository.project.name;
   const repoName = data.repository.name;
-  const htmlUrl = `https://dev.azure.com/${encodeURIComponent(org)}/${encodeURIComponent(project)}/_git/${encodeURIComponent(repo)}/pullrequest/${id}`;
+  const htmlUrl = `https://dev.azure.com/${encodeURIComponent(org)}/${encodeURIComponent(projectName)}/_git/${encodeURIComponent(repoName)}/pullrequest/${id}`;
   return {
     title: data.title,
     notes: data.description ?? '',
@@ -276,4 +279,13 @@ function stripHtml(html: string): string {
     .replace(/&nbsp;/g, ' ')
     .replace(/\n{3,}/g, '\n\n')
     .trim();
+}
+
+/** Extract canonical owner/repo from a GitHub html_url, falling back to the provided values. */
+function parseGitHubHtmlUrl(htmlUrl: string, fallbackOwner: string, fallbackRepo: string): { canonicalOwner: string; canonicalRepo: string } {
+  const match = htmlUrl.match(/^https?:\/\/github\.com\/([^/]+)\/([^/]+)\//i);
+  if (match) {
+    return { canonicalOwner: match[1], canonicalRepo: match[2] };
+  }
+  return { canonicalOwner: fallbackOwner, canonicalRepo: fallbackRepo };
 }
