@@ -49,9 +49,22 @@ export function registerGetFileDiffTool(): vscode.Disposable {
         if (!output) {
           const fullPath = path.join(worktreePath, normalized);
           if (!fs.existsSync(fullPath)) {
+            let changedFiles = '';
+            try {
+              changedFiles = await gitExec(
+                ['diff', '--name-only', `${baseRef}...${headRef}`],
+                worktreePath,
+              );
+            } catch {
+              // ignore — best-effort listing
+            }
+            const fileList = changedFiles.trim();
+            const suggestion = fileList
+              ? `\nThe changed files in this PR are:\n${fileList}\nUse these exact paths when calling tools.`
+              : '\nVerify the path matches the diff output exactly (paths shown after a/ and b/ in diff headers).';
             return new vscode.LanguageModelToolResult([
               new vscode.LanguageModelTextPart(
-                `Error: file not found at '${filePath}'. Verify the path matches the diff output exactly (paths shown after a/ and b/ in diff headers).`,
+                `Error: file not found at '${filePath}'.${suggestion}`,
               ),
             ]);
           }

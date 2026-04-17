@@ -83,10 +83,16 @@ describe('getFileDiffTool', () => {
       expect(result).toBeDefined();
     });
 
-    it('returns error when diff is empty and file does not exist', async () => {
+    it('returns error with changed file list when diff is empty and file does not exist', async () => {
+      let callCount = 0;
       vi.mocked(execFile).mockImplementation(
-        (_cmd: string, _args: string[], _opts: unknown, cb: Function) => {
-          cb(null, '', '');
+        (_cmd: string, args: string[], _opts: unknown, cb: Function) => {
+          callCount++;
+          if (args.includes('--name-only')) {
+            cb(null, 'src/real/file1.ts\nsrc/real/file2.ts\n', '');
+          } else {
+            cb(null, '', '');
+          }
           return undefined as never;
         },
       );
@@ -112,6 +118,9 @@ describe('getFileDiffTool', () => {
       const text = (result as any).content[0].value;
       expect(text).toContain('Error: file not found');
       expect(text).toContain('src/nonexistent.ts');
+      expect(text).toContain('src/real/file1.ts');
+      expect(text).toContain('src/real/file2.ts');
+      expect(text).toContain('Use these exact paths');
     });
 
     it('returns no-diff message when diff is empty but file exists', async () => {
