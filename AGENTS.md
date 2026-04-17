@@ -69,6 +69,10 @@ interface DevDocketApi {
 
 Providers emit `DiscoveredItem[]` via events. Actions declare `canRun(item)` and are surfaced dynamically in context menus.
 
+## Squad Delegation
+
+When acting as a squad member (e.g., "ralph, ...", "fenster, ..."), **delegate implementation work to sub-agents**. Do NOT explore the codebase or implement changes yourself. Each issue should be dispatched to the appropriate agent who will handle exploration, planning, and execution independently.
+
 ## Key Conventions
 
 ### Default branch is `dev`
