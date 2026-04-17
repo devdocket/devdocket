@@ -194,15 +194,18 @@ npm run watch       # Watch mode
 - **Logging:** Use the `logger` instance from each package's local `logger` module (e.g., `import { logger } from '../services/logger'`). Each module creates its logger via `createLoggerService()` from `@devdocket/shared`.
 - **Error recovery:** Log errors to the output channel but don't crash — use `.catch(err => logger.error(...))`
 - **Store operations:** Return `Promise<void>` or `Promise<T>`; treat malformed JSON or invalid persisted shape as recoverable by logging, backing up the invalid file, and resetting to empty/default state. Reserve throwing for unexpected filesystem or similar errors that cannot be recovered locally.
-- **Provider refreshes:** Wrap in try/catch, fire `onDidChangeProviderHealth` event on failure
+- **Provider health tracking:** Provider refresh failures and timeouts are tracked centrally by `ProviderRegistry` via `refreshWithTimeout()` and `updateHealth()`. The registry fires `onDidChangeProviderHealth` when status changes. Providers themselves may catch/log errors internally and not reject `refresh()`, so health tracking belongs in the registry, not in individual provider catch blocks.
 
-**Example:**
+**Example (registry-owned health tracking):**
 ```typescript
-void provider.refresh().catch(err => {
-  logger.error(`Provider ${provider.id} refresh failed`, err);
-  this.healthStatus.set(provider.id, { status: 'unhealthy', lastError: err.message });
-  this._onDidChangeProviderHealth.fire(provider.id);
-});
+// In ProviderRegistry.refreshWithTimeout():
+try {
+  await Promise.race([provider.refresh(), timeout]);
+  this.updateHealth(provider.id, { status: 'healthy', lastRefreshTime: new Date() });
+} catch (err) {
+  this.updateHealth(provider.id, { status: 'unhealthy', lastError: err.message });
+}
+// updateHealth() fires this._onDidChangeProviderHealth when status changes
 ```
 
 ### File Structure Conventions
