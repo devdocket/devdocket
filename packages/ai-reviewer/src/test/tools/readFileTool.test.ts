@@ -144,8 +144,8 @@ describe('readFileTool', () => {
 
       const text = (result as { content: Array<{ value: string }> }).content[0].value;
       expect(text).toContain("Error: file not found at 'src/Wrong/Path.cs'");
-      expect(text).toContain('CliHelper.cs');
-      expect(text).toContain('Program.cs');
+      expect(text).toContain('src/Wrong/CliHelper.cs');
+      expect(text).toContain('src/Wrong/Program.cs');
     });
   });
 });

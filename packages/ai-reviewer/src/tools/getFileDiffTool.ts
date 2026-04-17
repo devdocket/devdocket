@@ -59,8 +59,15 @@ export function registerGetFileDiffTool(): vscode.Disposable {
               // ignore — best-effort listing
             }
             const fileList = changedFiles.trim();
-            const suggestion = fileList
-              ? `\nThe changed files in this PR are:\n${fileList}\nUse these exact paths when calling tools.`
+            let displayList = fileList;
+            if (fileList) {
+              const lines = fileList.split('\n');
+              if (lines.length > 30) {
+                displayList = [...lines.slice(0, 30), `... and ${lines.length - 30} more files`].join('\n');
+              }
+            }
+            const suggestion = displayList
+              ? `\nThe changed files in this PR are:\n${displayList}\nUse these exact paths when calling tools.`
               : '\nVerify the path matches the diff output exactly (paths shown after a/ and b/ in diff headers).';
             return new vscode.LanguageModelToolResult([
               new vscode.LanguageModelTextPart(

@@ -70,7 +70,6 @@ export function registerReadFileTool(): vscode.Disposable {
         const isNotFound =
           msg.includes('ENOENT') ||
           msg.includes('FileNotFound') ||
-          msg.includes('not found') ||
           msg.includes('no such file');
         if (isNotFound) {
           let siblings = '';
@@ -80,7 +79,7 @@ export function registerReadFileTool(): vscode.Disposable {
             const parentUri = vscode.Uri.file(parentFull);
             const entries = await vscode.workspace.fs.readDirectory(parentUri);
             if (entries.length > 0) {
-              const names = entries.map(([name]: [string, unknown]) => name).join('\n');
+              const names = entries.map(([name]: [string, unknown]) => path.posix.join(parentRel.replace(/\\/g, '/'), name)).join('\n');
               siblings = `\nFiles in '${parentRel}':\n${names}\nUse one of these exact paths.`;
             }
           } catch {

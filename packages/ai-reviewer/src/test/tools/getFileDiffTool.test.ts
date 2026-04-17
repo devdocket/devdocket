@@ -84,10 +84,8 @@ describe('getFileDiffTool', () => {
     });
 
     it('returns error with changed file list when diff is empty and file does not exist', async () => {
-      let callCount = 0;
       vi.mocked(execFile).mockImplementation(
         (_cmd: string, args: string[], _opts: unknown, cb: Function) => {
-          callCount++;
           if (args.includes('--name-only')) {
             cb(null, 'src/real/file1.ts\nsrc/real/file2.ts\n', '');
           } else {
