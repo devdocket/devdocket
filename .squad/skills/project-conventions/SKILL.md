@@ -27,16 +27,17 @@ export class JsonTaskStore implements ITaskStore {
   async save(item: WorkItem): Promise<void> {
     // Chain new write onto the queue
     this.writeQueue = this.writeQueue.then(async () => {
-      // Update cache first (in-memory)
-      this.cache?.set(item.id, item);
-      // Then write to disk
+      // Write to disk first, then update cache on success
       await fs.writeFile(this.filePath, JSON.stringify(...), 'utf-8');
+      this.cache?.set(item.id, item);
     });
     
     return this.writeQueue;
   }
 }
 ```
+
+> **Note:** The actual implementation includes rollback logic and uses a private `enqueue()` helper. This example is simplified — refer to the real `JsonTaskStore` for error handling.
 
 **When creating a new store:** Always include `private writeQueue: Promise<void> = Promise.resolve()` and chain all writes through it.
 
@@ -105,6 +106,7 @@ packages/
       index.ts           — Barrel export (public API surface)
   github/            — GitHub provider extension
   ado/               — Azure DevOps provider extension
+  ai-reviewer/       — AI review plugin extension
   start-git-work/    — Action extension for git branch/worktree creation
 ```
 

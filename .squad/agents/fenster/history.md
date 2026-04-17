@@ -308,6 +308,7 @@ Patterns documented in `.squad/decisions.md` under "Code Review Fix Patterns" (2
 
 ### Key Learning
 - **Defensive async loading**: When a synchronous getter reads from an async-loaded cache, ensure the cache is loaded at every call site. Don't rely solely on initialization order guarantees.
+- **Test timing**: When production code adds an async operation to a previously-synchronous code path, tests that fire-and-forget events need to wait for async handlers to complete before asserting on side effects.
 
 ## Documenting Project Conventions (2026-04-17)
 
@@ -318,7 +319,7 @@ Updated `.squad/skills/project-conventions/SKILL.md` with real patterns extracte
 - **Storage & Serialization Pattern**: `JsonTaskStore` and `DiscoveredStateStore` both use a `writeQueue: Promise<void>` chain to serialize disk writes and prevent concurrent file corruption. This is critical because VS Code runs extension code in a single thread where async operations can interleave.
 - **Event-Driven Architecture**: All state changes follow mutate → save → fire → refresh. When a work item moves to a new state, the UI and providers refresh via EventEmitter callbacks. This decoupling keeps services independent and testable.
 - **Provider Items as References**: Only the `inboxState` enum is persisted in `discovered-state.json`. Item data (title, description, url) is always read live from the provider's in-memory Map. This keeps data fresh without needing to refetch or update persisted state when a source item changes.
-- **Monorepo with Tight Coupling**: Despite being a monorepo, the packages have clear boundaries. Core owns the UI and API surface (`packages/core/src/api/types.ts`), shared owns reusable types (`packages/shared/src/index.ts`), and providers import the public API surface but don't depend on core's internal services.
+- **Monorepo with Clear Package Boundaries**: Despite being a monorepo, the packages have clear boundaries. Core owns the UI and API surface (`packages/core/src/api/types.ts`), shared owns reusable types (`packages/shared/src/index.ts`), and providers import the public API surface but don't depend on core's internal services.
 - **Vitest with VS Code Mocking**: The vscode module is aliased in `vitest.config.ts` to a custom mock in `src/test/__mocks__/vscode.ts` built with `vi.fn()`. All VS Code APIs (window, commands, workspace, etc.) are mocked here. Tests run outside VS Code in Node.js — they never load the real vscode module.
 - **esbuild Build Pipeline**: CJS format, external vscode, sourcemaps enabled. The build is lightweight and fast — no webpack, no complex loaders. The sourcemap makes debugging straightforward.
 - **Naming & File Structure**: camelCase for files, PascalCase for classes, UPPER_SNAKE_CASE for constants. Files grouped by purpose (services/, storage/, views/, api/) not by type (classes/, interfaces/). This makes the codebase easy to navigate.
@@ -326,7 +327,6 @@ Updated `.squad/skills/project-conventions/SKILL.md` with real patterns extracte
 
 ### Updated Files
 - `.squad/skills/project-conventions/SKILL.md` — Replaced template with 8 real patterns (Storage, Events, Provider Items, Monorepo, Testing, Build, Type Safety, Error Handling), naming conventions, file structure guide, and concrete code examples.
-- **Test timing**: When production code adds an async operation to a previously-synchronous code path, tests that fire-and-forget events need to wait for async handlers to complete before asserting on side effects.
 
 ## Issue #227: Queue View Provider Labels (2026-04-13)
 
