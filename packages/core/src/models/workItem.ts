@@ -4,11 +4,11 @@
  * Items move through these states following the work-item state machine:
  *
  * ```
- * New → InProgress ⇄ Paused
- * ↑         ↓           ↑
- * │       Done ────────┤
- * │         ↓
- * └───── Archived
+ * New ⇄ InProgress ⇄ Paused
+ *  ↑        ↓
+ *  ↑      Done
+ *  ↑        ↓
+ *  └──── Archived
  * ```
  *
  * Valid transitions:
