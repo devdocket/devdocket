@@ -2,6 +2,7 @@ import * as vscode from 'vscode';
 import { BaseProvider, DiscoveredItem, isValidUrlSegment, type ResolvedItem } from '@devdocket/shared';
 import { logger } from './logger';
 import { OrgConfig } from './configParser';
+import { getAdoHeaders, retryAdoWithAuth, throwAdoApiError } from './adoAuth';
 
 // Azure DevOps WIQL query response
 interface WiqlResponse {
@@ -442,21 +443,18 @@ export class AdoWorkItemProvider extends BaseProvider {
     const id = parseInt(idStr, 10);
 
     const apiUrl = `https://dev.azure.com/${encodeURIComponent(org)}/${encodeURIComponent(project)}/_apis/wit/workitems/${id}?api-version=7.1`;
-    const headers = await this.getAdoHeaders();
+    const headers = await getAdoHeaders();
     const wasAuthenticated = 'Authorization' in headers;
 
     let response = await fetch(apiUrl, { headers, signal });
 
     if (response.status === 404 && !wasAuthenticated && !signal?.aborted) {
-      const retryResponse = await this.retryAdoWithAuth(apiUrl, signal);
+      const retryResponse = await retryAdoWithAuth(apiUrl, signal);
       if (retryResponse) { response = retryResponse; }
     }
 
     if (!response.ok) {
-      const label = `ADO work item ${org}/${project}#${id}`;
-      if (response.status === 404) { throw new Error(`${label} not found. It may be private or deleted.`); }
-      if (response.status === 401 || response.status === 403) { throw new Error(`ADO authentication required for ${label}. Sign in to Azure DevOps in VS Code.`); }
-      throw new Error(`Azure DevOps API error: ${response.status} ${response.statusText}`);
+      throwAdoApiError(response, `ADO work item ${org}/${project}#${id}`);
     }
 
     const data = await response.json() as { fields: { 'System.Title': string; 'System.Description': string | null; 'System.TeamProject': string } };
@@ -485,27 +483,5 @@ export class AdoWorkItemProvider extends BaseProvider {
       .replace(/&nbsp;/g, ' ')
       .replace(/\n{3,}/g, '\n\n')
       .trim();
-  }
-
-  private async getAdoHeaders(): Promise<Record<string, string>> {
-    const headers: Record<string, string> = { 'Accept': 'application/json', 'User-Agent': 'DevDocket-VSCode' };
-    try {
-      const session = await vscode.authentication.getSession('microsoft', [ADO_AUTH_SCOPE], { silent: true });
-      if (session) { headers['Authorization'] = `Bearer ${session.accessToken}`; }
-    } catch { /* no session available */ }
-    return headers;
-  }
-
-  private async retryAdoWithAuth(apiUrl: string, signal?: AbortSignal): Promise<Response | undefined> {
-    try {
-      const session = await vscode.authentication.getSession('microsoft', [ADO_AUTH_SCOPE], { createIfNone: true });
-      if (session) {
-        return await fetch(apiUrl, {
-          headers: { 'Accept': 'application/json', 'User-Agent': 'DevDocket-VSCode', 'Authorization': `Bearer ${session.accessToken}` },
-          signal,
-        });
-      }
-    } catch { /* user declined */ }
-    return undefined;
   }
 }
