@@ -238,6 +238,11 @@ async function handleCreateItemFromUrl(
   });
   if (!url?.trim()) { return; }
 
+  if (!isSafeUrl(url.trim())) {
+    void vscode.window.showErrorMessage('DevDocket: Please enter a valid HTTP or HTTPS URL');
+    return;
+  }
+
   let details: ResolvedItem | undefined;
   try {
     details = await vscode.window.withProgress(

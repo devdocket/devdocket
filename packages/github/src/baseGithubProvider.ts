@@ -27,6 +27,16 @@ export interface DevDocketProvider {
   readonly label: string;
   readonly onDidDiscoverItems: Event<DiscoveredItem[]>;
   refresh(token?: vscode.CancellationToken): Promise<void>;
+  resolveUrl?(url: string, signal?: AbortSignal): Promise<ResolvedItem | undefined>;
+}
+
+export interface ResolvedItem {
+  title: string;
+  notes: string;
+  url: string;
+  externalId: string;
+  group: string;
+  providerId: string;
 }
 
 export interface GitHubIssue {

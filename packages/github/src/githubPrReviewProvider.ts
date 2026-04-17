@@ -1,8 +1,7 @@
 import * as vscode from 'vscode';
-import type { ResolvedItem } from '@devdocket/shared';
 import { logger } from './logger';
 import { parseRepoFromUrls } from './parseRepo';
-import { BaseGitHubProvider, DiscoveredItem, GitHubIssue } from './baseGithubProvider';
+import { BaseGitHubProvider, DiscoveredItem, GitHubIssue, type ResolvedItem } from './baseGithubProvider';
 
 interface GitHubSearchResponse {
   items: GitHubIssue[];

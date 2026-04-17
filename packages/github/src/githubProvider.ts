@@ -1,9 +1,8 @@
 import * as vscode from 'vscode';
 import { isValidGitHubRepo } from '@devdocket/shared';
-import type { ResolvedItem } from '@devdocket/shared';
 import { logger } from './logger';
 import { parseRepoFromUrls } from './parseRepo';
-import { BaseGitHubProvider, DiscoveredItem, GitHubIssue } from './baseGithubProvider';
+import { BaseGitHubProvider, DiscoveredItem, GitHubIssue, type ResolvedItem } from './baseGithubProvider';
 
 /**
  * DevDocket provider that discovers GitHub issues assigned to the current user.
