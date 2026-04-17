@@ -32,7 +32,7 @@ private enqueue(op: () => Promise<void>): Promise<void> {
 }
 ```
 
-> **Note:** Both stores serialize writes via `enqueue()` and rollback the cache on failure, but they differ in ordering. `DiscoveredStateStore` is **cache-first** (updates the cache, then writes to disk; rolls back the cache on write failure). `JsonTaskStore` is **disk-first** (writes to disk, then updates the cache; rolls back on failure). Refer to the real stores for full error handling.
+> **Note:** Both stores serialize writes via `enqueue()` and use rollback on write failure, but their update ordering differs. `DiscoveredStateStore` is consistently **cache-first** (updates the cache, then writes to disk; rolls back the cache on write failure). `JsonTaskStore` uses **operation-specific ordering**: `save`/`saveAll` are **disk-first** (write to disk, then update the cache), while `delete()` is **cache-first** (updates the cache, then persists, with rollback on failure). Refer to the real stores for full error handling.
 
 **When creating a new store:** Always include `private writeQueue: Promise<void> = Promise.resolve()` and chain all writes through it.
 
