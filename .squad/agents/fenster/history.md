@@ -26,6 +26,17 @@ Key files:
 
 ## Learnings
 
+### 2026-04-17 Round 1 — Parallel Multi-Issue Sprint
+
+**Issues #275 & #273 completed in tandem** with test coverage from Hockney:
+- **Issue #275 (History→Queue):** Implemented state transitions allowing archived items to return to active queue. Added sortOrder fix and menu entry. All 1071 tests pass.
+- **Issue #273 (Tree node counts):** Added child count badges to all tree views (Queue, Focus, History, Sources) following established Inbox pattern. Updated ViewLayout and tree providers consistently.
+- **Test coverage:** Hockney wrote 11 new tests for #275, validating state membership and event ordering.
+
+**Pattern:** Parallel agent dispatch (Fenster on two issues, Hockney on tests) reduced serial dependencies and verified implementation against tests synchronously.
+
+---
+
 - **Re-requested PR review resurfacing (Issue #243):** Added optional `version` field to `DiscoveredItem` (non-breaking API change). When `handleDiscoveredItems()` sees an `accepted` item whose version differs from the stored version, it resets state to `unseen` so the item reappears in Inbox. `DiscoveredStateRecord` also stores the version, and `DiscoveredStateStore` gained a `getVersion()` method. To avoid a flood of resurfaced items on initial deployment, version backfilling for pre-existing accepted items (stored version `undefined`) does NOT trigger resurfacing — it silently stores the version for future comparison. GitHub provider uses `updated_at` from the Search API as version; ADO provider uses `lastMergeSourceCommit.commitId`. Dismissed items are never resurfaced (per #189).
 - **TypeScript LSP config for Copilot CLI:** Configured `typescript-language-server --stdio` for `.ts`/`.tsx` files via `.github/lsp.json` (added in a separate branch/PR). This enables Copilot CLI to use LSP-based code intelligence (go-to-definition, hover, diagnostics) when working in the repo, rather than relying solely on grep/glob.
 
@@ -434,3 +445,30 @@ All tree views now show the `DiscoveredItem.group` field (org/repo or org/projec
 - **`buildDescription()` filters gracefully**: The base class helper filters out undefined/empty parts, so adding `item.group` to the argument list is safe for items without a group — they simply don't show it.
 - **Consistency across views**: Focus flat mode was the only view missing the provider label in its description. Adding it aligned Focus with Queue and History patterns.
 - **Tree mode redundancy is acceptable**: In tree mode, group is also visible as a SubGroupNode parent. Showing it in the description too is mildly redundant but provides better scanability when users are looking at individual items.
+
+
+## Issue #273: Tree node counts (2026-04-17)
+
+**Status:** COMPLETE — All tree views show leaf child counts on parent nodes
+
+- **Pattern**: Inbox view already showed counts on parent/group nodes; applied the same pattern to Queue, Focus, History, and Sources views
+- **Queue, Focus, History**: Updated WorkItemViewProvider.getTreeItem() to calculate counts dynamically and pass to helper functions
+- **Sources**: Added count display to provider and group nodes; unhealthy providers still show 'refresh failed' instead of count
+- **Helper function signatures**: Modified createProviderGroupTreeItem() and createSubGroupTreeItem() in iewLayout.ts to accept optional count parameter
+- **Description format**: Parent nodes show count as (N) in the description field, matching Inbox pattern exactly
+- **Key files**: packages/core/src/views/viewLayout.ts, packages/core/src/views/sourcesTreeProvider.ts`n- **All tests pass**: 1063 tests passed, including existing test that verified 'refresh failed' for unhealthy Sources provider nodes
+
+
+## Issue #275: Allow moving items from History back to Queue (2026-04-17)
+
+**Status:** COMPLETE — All tests pass, branch squad/275-history-to-queue
+
+- **Feature**: Added state transitions from Done and Archived back to New, allowing users to move completed/archived items back to Queue for rework
+- **State machine updates**: Updated VALID_TRANSITIONS map in workGraph.ts to allow Done → New and Archived → New
+- **Menu integration**: Added "Move to Queue" context menu entry for all History items (both Done and Archived) in package.json
+- **sortOrder handling**: When transitioning to New state, the item gets a fresh sortOrder at the end of Queue to prevent collisions
+- **Bug fix**: Fixed race condition where 
+extSortOrder() was computed before the in-memory state was updated, causing sortOrder collisions on repeated transitions. Solution: update 	his.items and invalidate cache before calling 
+extSortOrder()
+- **Command reuse**: The existing handleMoveToQueue command handler and moveToQueue command registration worked out-of-box — only needed to add the menu entry and state transitions
+- **Test coverage**: Existing tests in workGraph.test.ts already covered this feature, including edge cases like moving the same item back to Queue multiple times

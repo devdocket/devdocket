@@ -30,6 +30,14 @@ Key files:
 
 ## Learnings
 
+### 2026-04-17 Round 1 — Test Support for Parallel Sprint
+
+**Issue #275 tests completed:** Wrote 11 new tests in `packages/core/src/test/workGraph.test.ts` supporting Fenster's History→Queue state transition work. Tests validate Queue membership, sort ordering, and event firing. All 1071 tests pass.
+
+**Pattern:** Concurrent test writing enabled Fenster to implement two features in parallel while Hockney validated the more complex state transitions (#275) with full test coverage.
+
+---
+
 ### PR #256 — provideFollowups + lastFile Phase Tests (2026-07-23)
 
 **Tests added:** 7 new tests in `packages/ai-reviewer/src/test/walkthroughParticipant.test.ts` (12 → 19)
