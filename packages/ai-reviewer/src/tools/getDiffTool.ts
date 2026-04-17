@@ -71,12 +71,18 @@ export function registerGetDiffTool(): vscode.Disposable {
 
         const footer = '\n\n(truncated — use devdocket-getFileDiff to read individual file diffs)';
         // Ensure at least half the budget goes to actual diff content.
-        // If the stat is too large, skip it to preserve diff context.
+        // If the stat is too large, truncate it to fit the available space.
         const minDiffBudget = Math.floor(MAX_DIFF_LENGTH / 2);
-        const statSection = stat ? `## Diff stat summary\n\n${stat}\n\n` : '';
-        const framing = statSection.length + footer.length + 200 > MAX_DIFF_LENGTH - minDiffBudget
-          ? '' // stat too large — skip it
-          : statSection;
+        const statPrefix = '## Diff stat summary\n\n';
+        const statSuffix = '\n\n';
+        const maxStatLength = MAX_DIFF_LENGTH - minDiffBudget - footer.length - 200 - statPrefix.length - statSuffix.length;
+        let framing = '';
+        if (stat && maxStatLength > 0) {
+          const trimmedStat = stat.length <= maxStatLength
+            ? stat
+            : stat.slice(0, maxStatLength) + '\n(stat truncated)';
+          framing = `${statPrefix}${trimmedStat}${statSuffix}`;
+        }
         const diffBudget = Math.max(0, MAX_DIFF_LENGTH - framing.length - footer.length - 200);
         const truncatedDiff = output.slice(0, diffBudget);
         const parts = [
