@@ -161,6 +161,43 @@ describe('QueueTreeProvider layout toggle', () => {
       expect(treeItem.collapsibleState).toBe(TreeItemCollapsibleState.Collapsed);
       expect((treeItem.iconPath as any).id).toBe('folder');
     });
+
+    it('shows item count in provider group description', async () => {
+      await graph.createItem({ title: 'A' }, { providerId: 'github', externalId: 'ext-1' });
+      await graph.createItem({ title: 'B' }, { providerId: 'github', externalId: 'ext-2' });
+      await graph.createItem({ title: 'C' }, { providerId: 'jira', externalId: 'ext-3' });
+
+      const groups = provider.getChildren() as ProviderGroupNode[];
+      const githubGroup = groups.find(g => g.providerId === 'github')!;
+      const treeItem = provider.getTreeItem(githubGroup);
+      expect(treeItem.description).toBe('2');
+    });
+
+    it('shows item count in sub-group description', async () => {
+      await graph.createItem({ title: 'Bug A' }, { providerId: 'github', externalId: 'ext-1', group: 'bugs' });
+      await graph.createItem({ title: 'Bug B' }, { providerId: 'github', externalId: 'ext-2', group: 'bugs' });
+      await graph.createItem({ title: 'Feature C' }, { providerId: 'github', externalId: 'ext-3', group: 'features' });
+
+      const topLevel = provider.getChildren();
+      const providerChildren = provider.getChildren(topLevel[0]);
+      const bugsSubGroup = providerChildren.find(c => isSubGroupNode(c) && (c as SubGroupNode).groupName === 'bugs') as SubGroupNode;
+      const treeItem = provider.getTreeItem(bugsSubGroup);
+      expect(treeItem.description).toBe('2');
+    });
+
+    it('normalizes whitespace-only groups as ungrouped for counts', async () => {
+      await graph.createItem({ title: 'A' }, { providerId: 'github', externalId: 'ext-1', group: 'valid' });
+      await graph.createItem({ title: 'B' }, { providerId: 'github', externalId: 'ext-2', group: '   ' });
+      await graph.createItem({ title: 'C' }, { providerId: 'github', externalId: 'ext-3' });
+
+      const topLevel = provider.getChildren();
+      const providerChildren = provider.getChildren(topLevel[0]);
+      const subGroups = providerChildren.filter(c => isSubGroupNode(c));
+      const directItems = providerChildren.filter(c => !isSubGroupNode(c));
+
+      expect(subGroups).toHaveLength(1);
+      expect(directItems).toHaveLength(2);
+    });
   });
 
   describe('provider registration refresh', () => {
