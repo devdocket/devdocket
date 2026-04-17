@@ -79,6 +79,7 @@ export interface DiscoveredStateRecord {
   externalId: string;
   inboxState: InboxState;  // Only this is stored
   version?: string;
+  resurfaceVersion?: string;  // Secondary version tracked independently from version
 }
 
 // Item data (title, description, url) is always read live from provider:
