@@ -956,4 +956,87 @@ describe('DiscoveredStateStore', () => {
       freshStore.dispose();
     });
   });
+
+  // ── ResurfaceVersion tracking ─────────────────────────────────────
+
+  describe('resurfaceVersion tracking', () => {
+    it('should store and retrieve resurfaceVersion via setStates', async () => {
+      await store.setStates([
+        { providerId: 'gh', externalId: 'pr-1', state: 'unseen', resurfaceVersion: 'rv-abc' },
+      ]);
+      expect(store.getResurfaceVersion('gh', 'pr-1')).toBe('rv-abc');
+    });
+
+    it('should return undefined resurfaceVersion for item without it', async () => {
+      await store.setState('gh', 'pr-1', 'unseen');
+      expect(store.getResurfaceVersion('gh', 'pr-1')).toBeUndefined();
+    });
+
+    it('should preserve existing resurfaceVersion when setState called without it', async () => {
+      await store.setStates([
+        { providerId: 'gh', externalId: 'pr-1', state: 'unseen', resurfaceVersion: 'rv-abc' },
+      ]);
+      await store.setState('gh', 'pr-1', 'accepted');
+      expect(store.getResurfaceVersion('gh', 'pr-1')).toBe('rv-abc');
+    });
+
+    it('should preserve resurfaceVersion in setStates when not provided', async () => {
+      await store.setStates([
+        { providerId: 'gh', externalId: 'pr-1', state: 'unseen', resurfaceVersion: 'rv-abc' },
+      ]);
+      await store.setStates([
+        { providerId: 'gh', externalId: 'pr-1', state: 'accepted' },
+      ]);
+      expect(store.getResurfaceVersion('gh', 'pr-1')).toBe('rv-abc');
+    });
+
+    it('should update resurfaceVersion in setStates when provided', async () => {
+      await store.setStates([
+        { providerId: 'gh', externalId: 'pr-1', state: 'unseen', resurfaceVersion: 'rv-old' },
+      ]);
+      await store.setStates([
+        { providerId: 'gh', externalId: 'pr-1', state: 'unseen', resurfaceVersion: 'rv-new' },
+      ]);
+      expect(store.getResurfaceVersion('gh', 'pr-1')).toBe('rv-new');
+    });
+
+    it('should persist resurfaceVersion to disk', async () => {
+      await store.setStates([
+        { providerId: 'gh', externalId: 'pr-1', state: 'unseen', resurfaceVersion: 'rv-abc' },
+      ]);
+
+      const filePath = path.join(tmpDir, 'discovered-state.json');
+      const raw = await fs.readFile(filePath, 'utf-8');
+      const parsed = JSON.parse(raw);
+      expect(parsed[0].resurfaceVersion).toBe('rv-abc');
+    });
+
+    it('should load resurfaceVersion from disk', async () => {
+      const filePath = path.join(tmpDir, 'discovered-state.json');
+      await fs.mkdir(tmpDir, { recursive: true });
+      await fs.writeFile(filePath, JSON.stringify([
+        { providerId: 'gh', externalId: 'pr-1', inboxState: 'accepted', resurfaceVersion: 'rv-disk' },
+      ]));
+
+      const freshStore = new DiscoveredStateStore(tmpDir);
+      await freshStore.load();
+      expect(freshStore.getResurfaceVersion('gh', 'pr-1')).toBe('rv-disk');
+      freshStore.dispose();
+    });
+
+    it('should skip records with non-string resurfaceVersion during load', async () => {
+      const filePath = path.join(tmpDir, 'discovered-state.json');
+      await fs.mkdir(tmpDir, { recursive: true });
+      await fs.writeFile(filePath, JSON.stringify([
+        { providerId: 'gh', externalId: 'pr-1', inboxState: 'accepted', resurfaceVersion: 99 },
+        { providerId: 'gh', externalId: 'pr-2', inboxState: 'accepted', resurfaceVersion: 'valid' },
+      ]));
+
+      const freshStore = new DiscoveredStateStore(tmpDir);
+      const records = await freshStore.loadAll();
+      expect(records).toHaveLength(1);
+      expect(records[0].externalId).toBe('pr-2');
+      freshStore.dispose();
+    });
+  });
 });
