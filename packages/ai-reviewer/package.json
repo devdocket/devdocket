@@ -118,6 +118,19 @@
           },
           "required": ["worktreePath", "pattern"]
         }
+      },
+      {
+        "name": "devdocket-diffAnchor",
+        "displayName": "Diff Anchor Hash",
+        "description": "Compute SHA-256 anchor hash for a file path in a GitHub PR diff URL",
+        "modelDescription": "Compute the SHA-256 hex digest of a file path, for use as the anchor fragment in GitHub PR diff URLs (e.g. #diff-{hash}). Call this tool whenever you need to generate a link to a file in the PR diff view. Never attempt to compute SHA-256 yourself.",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "filePath": { "type": "string", "description": "Relative file path as shown in the diff (e.g. 'src/index.ts')" }
+          },
+          "required": ["filePath"]
+        }
       }
     ],
     "configuration": {

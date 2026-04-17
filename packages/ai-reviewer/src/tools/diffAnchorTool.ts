@@ -15,14 +15,23 @@ export function registerDiffAnchorTool(): vscode.Disposable {
       const { filePath } = options.input;
       if (!filePath || typeof filePath !== 'string') {
         return new vscode.LanguageModelToolResult([
-          new vscode.LanguageModelTextPart('Error: filePath is required and must be a non-empty string'),
+          new vscode.LanguageModelTextPart('Error computing diff anchor: filePath is required and must be a non-empty string'),
         ]);
       }
 
-      const hash = crypto.createHash('sha256').update(filePath, 'utf8').digest('hex');
-      return new vscode.LanguageModelToolResult([
-        new vscode.LanguageModelTextPart(hash),
-      ]);
+      try {
+        // Normalize to forward slashes to match GitHub's path format
+        const normalizedPath = filePath.replace(/\\/g, '/');
+        const hash = crypto.createHash('sha256').update(normalizedPath, 'utf8').digest('hex');
+        return new vscode.LanguageModelToolResult([
+          new vscode.LanguageModelTextPart(hash),
+        ]);
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        return new vscode.LanguageModelToolResult([
+          new vscode.LanguageModelTextPart(`Error computing diff anchor: ${msg}`),
+        ]);
+      }
     },
   });
 }
