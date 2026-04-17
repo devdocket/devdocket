@@ -27,9 +27,14 @@ export class JsonTaskStore implements ITaskStore {
   async save(item: WorkItem): Promise<void> {
     // Chain new write onto the queue
     this.writeQueue = this.writeQueue.then(async () => {
-      // Write to disk first, then update cache on success
-      await fs.writeFile(this.filePath, JSON.stringify(...), 'utf-8');
+      // Update cache first, then persist to disk; rollback cache on failure
       this.cache?.set(item.id, item);
+      try {
+        await fs.writeFile(this.filePath, JSON.stringify(...), 'utf-8');
+      } catch (err) {
+        this.cache?.delete(item.id);
+        throw err;
+      }
     });
     
     return this.writeQueue;
@@ -37,7 +42,7 @@ export class JsonTaskStore implements ITaskStore {
 }
 ```
 
-> **Note:** The actual implementation includes rollback logic and uses a private `enqueue()` helper. This example is simplified — refer to the real `JsonTaskStore` for error handling.
+> **Note:** Both stores use a **cache-first-then-persist** approach with rollback: the in-memory cache is updated before the disk write, and rolled back if the write fails. This ensures the cache is always available for reads during the async write. The actual implementation uses a private `enqueue()` helper — refer to the real stores for full error handling.
 
 **When creating a new store:** Always include `private writeQueue: Promise<void> = Promise.resolve()` and chain all writes through it.
 
