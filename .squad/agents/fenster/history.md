@@ -49,11 +49,28 @@ DevDocket is a VS Code extension monorepo for managing work items from multiple 
 - **Build:** esbuild, CJS, `--external:vscode`, sourcemaps. Root `npm install` + `npm run build`.
 
 ### Completed Issues
-#275 (History→Queue transitions), #273 (tree counts), #250 (group context), #249 (accept-to-focus, pre-shipped), #243 (version resurfacing), #240 (create from URL), #233 (provider health), #232 (clear history), #231 (sources icons), #230 (layout toggle), #229 (emoji removal), #227 (provider labels), #223 (dead code cleanup), #222 (responsive layout), #221 (contextual heading), #219 (source URL link), #217 (editor metadata), #216 (provider description), #215 (dynamic titles), #189 (dismissed fix), #178 (ADO filtering), #158 (markdown injection), #157 (API trust boundary), #156 (URL sanitization), #155 (URL scheme validation), #154 (crypto.randomUUID), #153 (JSON validation), #152 (path traversal fix), #12 (AI PR actions), bulk rename (WorkCenter→DevDocket)
+#282 (provider state in editor), #281 (clickable title), #275 (History→Queue transitions),#273 (tree counts), #250 (group context), #249 (accept-to-focus, pre-shipped), #243 (version resurfacing), #240 (create from URL), #233 (provider health), #232 (clear history), #231 (sources icons), #230 (layout toggle), #229 (emoji removal), #227 (provider labels), #223 (dead code cleanup), #222 (responsive layout), #221 (contextual heading), #219 (source URL link), #217 (editor metadata), #216 (provider description), #215 (dynamic titles), #189 (dismissed fix), #178 (ADO filtering), #158 (markdown injection), #157 (API trust boundary), #156 (URL sanitization), #155 (URL scheme validation), #154 (crypto.randomUUID), #153 (JSON validation), #152 (path traversal fix), #12 (AI PR actions), bulk rename (WorkCenter→DevDocket)
 
 > Full issue-level learnings archived to `history-archive.md`
 
 ## Learnings
+
+### 2026-04-17 Round 2 — Issue #281 (Clickable Title Hyperlink)
+
+**PR #293:** Made the editor panel title a clickable hyperlink instead of a separate "Open in browser" button.
+- **Key pattern:** Webview hyperlinks use `<a>` with real `href` + `data-url`, but click handler calls `e.preventDefault()` + `postMessage({ type: 'openUrl' })` for VS Code's `openExternal`. The `href` attribute enables copy-link-address and screen reader access.
+- **Security:** Title link rendering is gated by `isSafeUrl()` — unsafe schemes (javascript:, data:) render plain text. This prevents unsafe URLs from appearing in `href` even though the `postMessage` handler also validates.
+- **Accessibility:** `<a href="...">` is keyboard-focusable. Added `:focus`/`:focus-visible` CSS styles with `outline` for visible focus indicator. Added `title="Open in browser"` tooltip for discoverability.
+- **Files changed:** `packages/core/src/views/editorPanelHtml.ts` (source), `packages/core/src/test/editorPanelHtml.test.ts` (tests). Now imports `isSafeUrl` from `../utils/url`.
+
+### 2026-04-17 Round 3 — Issue #282 (Provider State in Editor)
+
+**PR #295:** Added upstream provider state display to the item editor panel metadata section.
+- **Pattern:** Added optional `state?: string` to `DiscoveredItem` (non-breaking API change). Each provider populates it from their API response — GitHub issues use `issue.state`, ADO work items use `System.State`, ADO PRs use `pr.status`.
+- **Conditional inclusion:** Use spread `...(value ? { state: value } : {})` or conditional assignment `if (value) { item.state = value; }` to avoid emitting `state: undefined` on discovered items. This prevents `toEqual` test mismatches and keeps the data clean.
+- **Guard pattern:** Provider State row in the editor metadata is gated on both `providerState` and `item.providerId` for defensive consistency with the Provider row guard.
+- **Merged-state detection:** Initially added `pull_request.merged_at` check for GitHub PRs but removed it — the Search API only returns `state:open` PRs so `merged_at` would never fire. Use `pr.state` directly.
+- **Files changed:** `packages/shared/src/baseProvider.ts`, `packages/github/src/baseGithubProvider.ts`, all 4 provider files, `packages/core/src/views/editorPanelHtml.ts`, `packages/core/src/views/workItemEditorPanel.ts`.
 
 ### 2026-04-17 Round 1 — Parallel Multi-Issue Sprint
 
