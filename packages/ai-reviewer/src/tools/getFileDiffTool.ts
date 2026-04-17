@@ -1,6 +1,5 @@
 import * as vscode from 'vscode';
 import * as path from 'path';
-import * as fs from 'fs';
 import { gitExec } from './gitUtils';
 import { validWorktreePaths } from './worktreeRegistry';
 
@@ -47,8 +46,16 @@ export function registerGetFileDiffTool(): vscode.Disposable {
           worktreePath,
         );
         if (!output) {
-          const fullPath = path.join(worktreePath, normalized);
-          if (!fs.existsSync(fullPath)) {
+          // Use git to check if the file is tracked, avoiding filesystem
+          // operations that could follow symlinks outside the worktree.
+          let fileKnown = false;
+          try {
+            const lsOutput = await gitExec(['ls-files', '--', filePath], worktreePath);
+            fileKnown = lsOutput.trim().length > 0;
+          } catch {
+            // ignore — best-effort check
+          }
+          if (!fileKnown) {
             let changedFiles = '';
             try {
               changedFiles = await gitExec(

@@ -9,12 +9,7 @@ vi.mock('child_process', () => ({
   }),
 }));
 
-vi.mock('fs', () => ({
-  existsSync: vi.fn(() => true),
-}));
-
 import { execFile } from 'child_process';
-import { existsSync } from 'fs';
 
 describe('getFileDiffTool', () => {
   beforeEach(() => {
@@ -83,18 +78,20 @@ describe('getFileDiffTool', () => {
       expect(result).toBeDefined();
     });
 
-    it('returns error with changed file list when diff is empty and file does not exist', async () => {
+    it('returns error with changed file list when diff is empty and file not tracked', async () => {
       vi.mocked(execFile).mockImplementation(
         (_cmd: string, args: string[], _opts: unknown, cb: Function) => {
           if (args.includes('--name-only')) {
             cb(null, 'src/real/file1.ts\nsrc/real/file2.ts\n', '');
+          } else if (args.includes('ls-files')) {
+            // File is not tracked
+            cb(null, '', '');
           } else {
             cb(null, '', '');
           }
           return undefined as never;
         },
       );
-      vi.mocked(existsSync).mockReturnValue(false);
 
       const { lm } = await import('vscode');
       registerGetFileDiffTool();
@@ -121,14 +118,18 @@ describe('getFileDiffTool', () => {
       expect(text).toContain('Use these exact paths');
     });
 
-    it('returns no-diff message when diff is empty but file exists', async () => {
+    it('returns no-diff message when diff is empty but file is tracked', async () => {
       vi.mocked(execFile).mockImplementation(
-        (_cmd: string, _args: string[], _opts: unknown, cb: Function) => {
-          cb(null, '', '');
+        (_cmd: string, args: string[], _opts: unknown, cb: Function) => {
+          if (args.includes('ls-files')) {
+            // File is tracked
+            cb(null, 'src/unchanged.ts\n', '');
+          } else {
+            cb(null, '', '');
+          }
           return undefined as never;
         },
       );
-      vi.mocked(existsSync).mockReturnValue(true);
 
       const { lm } = await import('vscode');
       registerGetFileDiffTool();
