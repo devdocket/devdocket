@@ -294,7 +294,7 @@ export class MyGitHubProvider extends BaseGitHubProvider {
   readonly id = 'my-github';
   readonly label = 'My GitHub Items';
 
-  protected async fetchAndPublish(accessToken: string): Promise<void> {
+  protected async fetchAndPublish(accessToken: string, isUserTriggered: boolean): Promise<void> {
     const issues = await fetchIssues(accessToken);
     this._onDidDiscoverItems.fire(issues.map(issue => ({
       externalId: String(issue.number),
