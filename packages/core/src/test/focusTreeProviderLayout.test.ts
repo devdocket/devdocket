@@ -106,6 +106,32 @@ describe('FocusTreeProvider layout toggle', () => {
       expect((treeItem.iconPath as any).id).toBe('folder');
     });
 
+    it('shows item count in group description', () => {
+      const items = [
+        makeItem({ id: '1', title: 'A', state: WorkItemState.InProgress, group: 'contoso/webapp' }),
+        makeItem({ id: '2', title: 'B', state: WorkItemState.InProgress, group: 'contoso/webapp' }),
+        makeItem({ id: '3', title: 'C', state: WorkItemState.InProgress, group: 'fabrikam/api' }),
+      ];
+      workGraph.getItemsByState.mockReturnValue(items);
+
+      const group: SubGroupNode = { kind: 'subGroup', label: 'contoso/webapp', providerId: undefined, groupName: 'contoso/webapp' };
+      const treeItem = provider.getTreeItem(group);
+      expect(treeItem.description).toBe('2');
+    });
+
+    it('normalizes whitespace in group name for count computation', () => {
+      const items = [
+        makeItem({ id: '1', title: 'A', state: WorkItemState.InProgress, group: 'valid-group' }),
+        makeItem({ id: '2', title: 'B', state: WorkItemState.InProgress, group: 'valid-group  ' }),
+        makeItem({ id: '3', title: 'C', state: WorkItemState.InProgress, group: '  valid-group' }),
+      ];
+      workGraph.getItemsByState.mockReturnValue(items);
+
+      const group: SubGroupNode = { kind: 'subGroup', label: 'valid-group', providerId: undefined, groupName: 'valid-group' };
+      const treeItem = provider.getTreeItem(group);
+      expect(treeItem.description).toBe('3');
+    });
+
     it('sorts group nodes alphabetically', () => {
       const items = [
         makeItem({ id: '1', title: 'A', state: WorkItemState.InProgress, group: 'z-repo' }),
