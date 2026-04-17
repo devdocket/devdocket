@@ -65,10 +65,14 @@ export function registerGetDiffTool(): vscode.Disposable {
           // best-effort — proceed without stat
         }
 
-        const truncatedDiff = output.slice(0, MAX_DIFF_LENGTH);
+        const framing = stat ? `## Diff stat summary\n\n${stat}\n\n` : '';
+        // Reserve space for the stat and framing text so total output
+        // stays within MAX_DIFF_LENGTH.
+        const diffBudget = Math.max(MAX_DIFF_LENGTH - framing.length - 200, Math.floor(MAX_DIFF_LENGTH * 0.8));
+        const truncatedDiff = output.slice(0, diffBudget);
         const parts = [
-          stat ? `## Diff stat summary\n\n${stat}\n\n` : '',
-          `## Diff (truncated — ${output.length.toLocaleString()} chars total, showing first ${MAX_DIFF_LENGTH.toLocaleString()})\n\n`,
+          framing,
+          `## Diff (truncated — ${output.length.toLocaleString()} chars total, showing first ${diffBudget.toLocaleString()})\n\n`,
           truncatedDiff,
           '\n\n(truncated — use devdocket-getFileDiff to read individual file diffs)',
         ];
