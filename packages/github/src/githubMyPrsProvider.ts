@@ -248,28 +248,29 @@ export class GitHubMyPrsProvider extends BaseGitHubProvider {
     }
 
     // Build a map of latest review decision per reviewer (by user ID).
-    // Only APPROVED and CHANGES_REQUESTED count as decisions;
-    // COMMENTED, PENDING, and DISMISSED are informational only.
+    // APPROVED, CHANGES_REQUESTED, and DISMISSED are tracked;
+    // COMMENTED and PENDING are informational only.
+    // A DISMISSED review neutralizes the reviewer's previous decision.
     const latestByReviewer = new Map<number, PrReview>();
     for (const review of reviews) {
       const userId = review.user?.id;
       if (userId === undefined || !review.state) {
         continue;
       }
-      if (review.state !== 'APPROVED' && review.state !== 'CHANGES_REQUESTED') {
+      if (review.state !== 'APPROVED' && review.state !== 'CHANGES_REQUESTED' && review.state !== 'DISMISSED') {
         continue;
       }
 
       const existing = latestByReviewer.get(userId);
-      if (
-        !existing ||
-        (review.submitted_at && existing.submitted_at && review.submitted_at > existing.submitted_at)
-      ) {
+      const reviewSubmittedAt = review.submitted_at ?? '';
+      const existingSubmittedAt = existing?.submitted_at ?? '';
+      if (!existing || reviewSubmittedAt > existingSubmittedAt) {
         latestByReviewer.set(userId, review);
       }
     }
 
-    const decisions = [...latestByReviewer.values()];
+    // Filter out reviewers whose latest decision is DISMISSED (clears prior decision)
+    const decisions = [...latestByReviewer.values()].filter(r => r.state !== 'DISMISSED');
     const hasChangesRequested = decisions.some(r => r.state === 'CHANGES_REQUESTED');
     const hasApproval = decisions.some(r => r.state === 'APPROVED');
 

@@ -352,7 +352,7 @@ describe('GitHubMyPrsProvider.determinePrStatus', () => {
     expect(status).toBe('Changes requested');
   });
 
-  it('ignores DISMISSED reviews', () => {
+  it('treats DISMISSED as neutralizing prior decision', () => {
     const status = GitHubMyPrsProvider.determinePrStatus(
       { draft: false },
       [
@@ -360,9 +360,8 @@ describe('GitHubMyPrsProvider.determinePrStatus', () => {
         { user: { id: 1 }, state: 'DISMISSED', submitted_at: '2025-01-02T00:00:00Z' },
       ],
     );
-    // DISMISSED doesn't override — the previous CHANGES_REQUESTED still stands
-    // but since DISMISSED is filtered out, the CHANGES_REQUESTED is the latest decision
-    expect(status).toBe('Changes requested');
+    // DISMISSED clears the reviewer's prior decision but review activity still exists
+    expect(status).toBe('Review received');
   });
 
   it('returns Review received when only DISMISSED reviews exist', () => {
@@ -389,5 +388,17 @@ describe('GitHubMyPrsProvider.determinePrStatus', () => {
       [{ user: { id: 1 }, state: 'APPROVED', submitted_at: '2025-01-01T00:00:00Z' }],
     );
     expect(status).toBe('Draft');
+  });
+
+  it('handles reviews with missing submitted_at', () => {
+    const status = GitHubMyPrsProvider.determinePrStatus(
+      { draft: false, mergeable_state: 'clean' },
+      [
+        { user: { id: 1 }, state: 'CHANGES_REQUESTED' },
+        { user: { id: 1 }, state: 'APPROVED', submitted_at: '2025-01-02T00:00:00Z' },
+      ],
+    );
+    // The APPROVED review with a timestamp should override the earlier one without
+    expect(status).toBe('Ready to merge');
   });
 });
