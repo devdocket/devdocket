@@ -159,7 +159,7 @@ describe('CleanupHandler', () => {
       expect(message).toContain('branch');
     });
 
-    it('does nothing when user selects No', async () => {
+    it('clears metadata when user selects No', async () => {
       mockMemento._store.set(metadataKey('item-1'), DEFAULT_METADATA);
       vi.mocked(fs.existsSync).mockImplementation((p: any) => {
         return p.toString() === DEFAULT_METADATA.worktreePath;
@@ -173,9 +173,11 @@ describe('CleanupHandler', () => {
       expect(execFile).not.toHaveBeenCalledWith(
         'git', expect.arrayContaining(['worktree', 'remove']), expect.anything(), expect.anything(),
       );
+      // Should clear metadata so we don't ask again
+      expect(mockMemento.update).toHaveBeenCalledWith(metadataKey('item-1'), undefined);
     });
 
-    it('does nothing when user dismisses the dialog', async () => {
+    it('clears metadata when user dismisses the dialog', async () => {
       mockMemento._store.set(metadataKey('item-1'), DEFAULT_METADATA);
       vi.mocked(fs.existsSync).mockImplementation((p: any) => {
         return p.toString() === DEFAULT_METADATA.worktreePath;
@@ -189,6 +191,8 @@ describe('CleanupHandler', () => {
       expect(execFile).not.toHaveBeenCalledWith(
         'git', expect.arrayContaining(['worktree', 'remove']), expect.anything(), expect.anything(),
       );
+      // Should clear metadata so we don't ask again
+      expect(mockMemento.update).toHaveBeenCalledWith(metadataKey('item-1'), undefined);
     });
 
     it('removes worktree and deletes branch when user selects Yes', async () => {
