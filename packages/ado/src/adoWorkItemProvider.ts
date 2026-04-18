@@ -460,11 +460,10 @@ export class AdoWorkItemProvider extends BaseProvider {
       const parts = id.split('/');
       if (parts.length < 3) { return null; }
       const numStr = parts[parts.length - 1];
+      if (!/^\d+$/.test(numStr)) { return null; }
       const num = parseInt(numStr, 10);
-      if (isNaN(num)) { return null; }
       const org = parts[0];
-      const project = parts.slice(1, parts.length - 1).join('/');
-      return { id, org, project, workItemId: num };
+      return { id, org, workItemId: num };
     }).filter((p): p is NonNullable<typeof p> => p !== null);
 
     if (parsed.length === 0) { return []; }
