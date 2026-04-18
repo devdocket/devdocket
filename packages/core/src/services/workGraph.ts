@@ -418,6 +418,79 @@ export class WorkGraph {
   }
 
   /**
+   * Delete all history items (Done and Archived), regardless of age.
+   * @returns `deleted` — number of items successfully removed; `failed` — number of items that
+   * could not be deleted (individual errors are logged and do not abort the batch).
+   */
+  async clearAllHistory(): Promise<{ deleted: number; failed: number }> {
+    const toDelete = this.getItemsByState(WorkItemState.Done, WorkItemState.Archived);
+    if (toDelete.length === 0) {
+      return { deleted: 0, failed: 0 };
+    }
+
+    let deleted = 0;
+    let failed = 0;
+    try {
+      for (const item of toDelete) {
+        try {
+          await this.deleteItem(item.id, { silent: true });
+          deleted++;
+        } catch (err) {
+          failed++;
+          logger.warn(`Failed to delete history item ${item.id}, skipping: ${err instanceof Error ? err.message : String(err)}`);
+        }
+      }
+    } finally {
+      if (deleted > 0) {
+        this._onDidChange.fire();
+      }
+    }
+
+    return { deleted, failed };
+  }
+
+  /**
+   * Trim history to the most recent `maxItems` items (by `updatedAt`).
+   * Items beyond the limit are deleted, oldest first.
+   * A `maxItems` of 0 or less is treated as unlimited (no pruning).
+   * @returns `deleted` — number of items pruned; `failed` — number that could not be deleted.
+   */
+  async pruneHistory(maxItems: number): Promise<{ deleted: number; failed: number }> {
+    if (!Number.isFinite(maxItems) || maxItems <= 0) {
+      return { deleted: 0, failed: 0 };
+    }
+
+    const historyItems = this.getItemsByState(WorkItemState.Done, WorkItemState.Archived);
+    if (historyItems.length <= maxItems) {
+      return { deleted: 0, failed: 0 };
+    }
+
+    // Sort by updatedAt descending — keep the most recent
+    historyItems.sort((a, b) => b.updatedAt - a.updatedAt);
+    const toDelete = historyItems.slice(maxItems);
+
+    let deleted = 0;
+    let failed = 0;
+    try {
+      for (const item of toDelete) {
+        try {
+          await this.deleteItem(item.id, { silent: true });
+          deleted++;
+        } catch (err) {
+          failed++;
+          logger.warn(`Failed to prune history item ${item.id}, skipping: ${err instanceof Error ? err.message : String(err)}`);
+        }
+      }
+    } finally {
+      if (deleted > 0) {
+        this._onDidChange.fire();
+      }
+    }
+
+    return { deleted, failed };
+  }
+
+  /**
    * Permanently delete a work item from the store.
    * @param options.silent When true, suppresses the `onDidChange` event (used for batch operations).
    */

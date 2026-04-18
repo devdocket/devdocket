@@ -273,6 +273,16 @@ function wireEvents(
   return [discoveredSub, newItemsSub, providerRegSub, stateStoreSub, markSeenSub, workGraphSub];
 }
 
+/** Read maxHistoryItems from config and prune history if a limit is set. */
+async function autoTrimHistory(wg: WorkGraph): Promise<void> {
+  const maxItems = vscode.workspace.getConfiguration('devdocket').get<number>('maxHistoryItems', 0);
+  if (!maxItems || maxItems <= 0) { return; }
+  const result = await wg.pruneHistory(maxItems);
+  if (result.deleted > 0) {
+    logger.info(`Auto-pruned ${result.deleted} old history item(s) (limit: ${maxItems})`);
+  }
+}
+
 /**
  * Activate the DevDocket extension.
  *
@@ -292,6 +302,9 @@ export async function activate(context: vscode.ExtensionContext): Promise<DevDoc
   const storagePath = context.globalStorageUri.fsPath;
   const { workGraph: wg, stateStore: ss, readStateStore, labelCache } = await loadStores(storagePath);
   await migrateDiscoveredState(wg, ss);
+
+  // Auto-prune history on startup if a max limit is configured
+  await autoTrimHistory(wg);
 
   const pr = new ProviderRegistry(ss, labelCache);
   providerRegistry = pr;
@@ -328,6 +341,11 @@ export async function activate(context: vscode.ExtensionContext): Promise<DevDoc
   const commandRegStart = performance.now();
   registerCommands(context, wg, ar, ss, pr, labelCache);
   logger.info(`Command registration took ${Math.round(performance.now() - commandRegStart)}ms`);
+
+  // Auto-prune history when items change (e.g. after completing/archiving)
+  context.subscriptions.push(
+    wg.onDidChange(safeHandler('Error auto-trimming history', () => autoTrimHistory(wg))),
+  );
 
   // Set context keys and listen for layout changes
   const viewIds: ViewId[] = ['inbox', 'queue', 'focus', 'history', 'sources'];

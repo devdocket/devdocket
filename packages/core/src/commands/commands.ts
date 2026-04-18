@@ -479,6 +479,27 @@ async function handleClearHistory(workGraph: WorkGraph): Promise<void> {
   }
 }
 
+async function handleClearAllHistory(workGraph: WorkGraph): Promise<void> {
+  const confirm = await vscode.window.showWarningMessage(
+    'Delete all history items? This cannot be undone.',
+    { modal: true },
+    'Delete',
+  );
+  if (confirm !== 'Delete') { return; }
+
+  const result = await workGraph.clearAllHistory();
+  if (result.failed > 0) {
+    void vscode.window.showErrorMessage(
+      `DevDocket: Failed to delete ${result.failed} item(s); see Output for details`,
+    );
+  }
+  if (result.deleted > 0) {
+    void vscode.window.showInformationMessage(`DevDocket: Cleared ${result.deleted} history item${result.deleted === 1 ? '' : 's'}`);
+  } else if (result.failed === 0) {
+    void vscode.window.showInformationMessage('DevDocket: No history items to clear');
+  }
+}
+
 async function handleFocusMoveUp(workGraph: WorkGraph, item?: { id?: string }): Promise<void> {
   if (!item?.id) {
     void vscode.window.showInformationMessage('DevDocket: Select an item in Focus to move.');
@@ -912,6 +933,8 @@ export function registerCommands(
       wrapCommand('Failed to delete item', (item, selectedItems) => handleDeleteItem(workGraph, item, selectedItems))),
     vscode.commands.registerCommand('devdocket.clearHistory',
       wrapCommand('Failed to clear history', () => handleClearHistory(workGraph))),
+    vscode.commands.registerCommand('devdocket.clearAllHistory',
+      wrapCommand('Failed to clear all history', () => handleClearAllHistory(workGraph))),
     vscode.commands.registerCommand('devdocket.editItem',
       wrapCommand('Failed to open editor', (item) => handleEditItem(context, workGraph, providerRegistry, labelCache, item))),
     vscode.commands.registerCommand('devdocket.openInBrowser',

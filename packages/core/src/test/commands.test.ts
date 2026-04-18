@@ -57,7 +57,7 @@ function makeSourceItem(overrides: Partial<SourceItemNode> = {}): SourceItemNode
 
 type UsedWorkGraphMethods = Pick<
   WorkGraph,
-  'transitionState' | 'getItem' | 'createItem' | 'findItemByProvenance' | 'moveItem' | 'deleteItem' | 'clearOldHistory'
+  'transitionState' | 'getItem' | 'createItem' | 'findItemByProvenance' | 'moveItem' | 'deleteItem' | 'clearOldHistory' | 'clearAllHistory'
 >;
 
 function createMockWorkGraph(): { [K in keyof UsedWorkGraphMethods]: Mock } {
@@ -69,6 +69,7 @@ function createMockWorkGraph(): { [K in keyof UsedWorkGraphMethods]: Mock } {
     moveItem: vi.fn(),
     deleteItem: vi.fn(),
     clearOldHistory: vi.fn(async () => ({ deleted: 0, failed: 0 })),
+    clearAllHistory: vi.fn(async () => ({ deleted: 0, failed: 0 })),
   };
 }
 
@@ -187,6 +188,7 @@ describe('registerCommands', () => {
       'devdocket.dismissFromSources',
       'devdocket.createItemFromUrl',
       'devdocket.clearHistory',
+      'devdocket.clearAllHistory',
     ];
     for (const cmd of expected) {
       expect(commandHandlers.has(cmd), `missing command: ${cmd}`).toBe(true);
@@ -2072,6 +2074,69 @@ describe('registerCommands', () => {
       await invoke('devdocket.clearHistory');
 
       expect(workGraph.clearOldHistory).toHaveBeenCalledWith(30);
+    });
+  });
+
+  describe('devdocket.clearAllHistory', () => {
+    it('shows confirmation dialog and clears all history', async () => {
+      (vscode.window.showWarningMessage as Mock).mockResolvedValue('Delete');
+      workGraph.clearAllHistory.mockResolvedValue({ deleted: 3, failed: 0 });
+
+      await invoke('devdocket.clearAllHistory');
+
+      expect(vscode.window.showWarningMessage).toHaveBeenCalledWith(
+        'Delete all history items? This cannot be undone.',
+        { modal: true },
+        'Delete',
+      );
+      expect(workGraph.clearAllHistory).toHaveBeenCalled();
+      expect(vscode.window.showInformationMessage).toHaveBeenCalledWith(
+        expect.stringContaining('3 history items'),
+      );
+    });
+
+    it('does nothing when user cancels confirmation', async () => {
+      (vscode.window.showWarningMessage as Mock).mockResolvedValue(undefined);
+
+      await invoke('devdocket.clearAllHistory');
+
+      expect(workGraph.clearAllHistory).not.toHaveBeenCalled();
+    });
+
+    it('shows no-items message when nothing to clear', async () => {
+      (vscode.window.showWarningMessage as Mock).mockResolvedValue('Delete');
+      workGraph.clearAllHistory.mockResolvedValue({ deleted: 0, failed: 0 });
+
+      await invoke('devdocket.clearAllHistory');
+
+      expect(vscode.window.showInformationMessage).toHaveBeenCalledWith(
+        expect.stringContaining('No history items to clear'),
+      );
+    });
+
+    it('shows error when some items fail to delete', async () => {
+      (vscode.window.showWarningMessage as Mock).mockResolvedValue('Delete');
+      workGraph.clearAllHistory.mockResolvedValue({ deleted: 2, failed: 1 });
+
+      await invoke('devdocket.clearAllHistory');
+
+      expect(vscode.window.showErrorMessage).toHaveBeenCalledWith(
+        expect.stringContaining('Failed to delete 1 item(s)'),
+      );
+    });
+
+    it('uses singular form for 1 item', async () => {
+      (vscode.window.showWarningMessage as Mock).mockResolvedValue('Delete');
+      workGraph.clearAllHistory.mockResolvedValue({ deleted: 1, failed: 0 });
+
+      await invoke('devdocket.clearAllHistory');
+
+      expect(vscode.window.showInformationMessage).toHaveBeenCalledWith(
+        expect.stringContaining('1 history item'),
+      );
+      expect(vscode.window.showInformationMessage).toHaveBeenCalledWith(
+        expect.not.stringContaining('1 history items'),
+      );
     });
   });
 });

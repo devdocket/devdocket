@@ -902,4 +902,160 @@ describe('WorkGraph', () => {
       expect(changeSpy).toHaveBeenCalledTimes(1);
     });
   });
+
+  describe('clearAllHistory', () => {
+    it('deletes all Done and Archived items', async () => {
+      const a = await graph.createItem({ title: 'Done item' });
+      await graph.transitionState(a.id, WorkItemState.InProgress);
+      await graph.transitionState(a.id, WorkItemState.Done);
+      const b = await graph.createItem({ title: 'Archived item' });
+      await graph.transitionState(b.id, WorkItemState.InProgress);
+      await graph.transitionState(b.id, WorkItemState.Done);
+      await graph.transitionState(b.id, WorkItemState.Archived);
+
+      const result = await graph.clearAllHistory();
+
+      expect(result.deleted).toBe(2);
+      expect(result.failed).toBe(0);
+      expect(graph.getItemsByState(WorkItemState.Done, WorkItemState.Archived)).toHaveLength(0);
+    });
+
+    it('does not affect non-history items', async () => {
+      const newItem = await graph.createItem({ title: 'New' });
+      const ipItem = await graph.createItem({ title: 'In Progress' });
+      await graph.transitionState(ipItem.id, WorkItemState.InProgress);
+      const doneItem = await graph.createItem({ title: 'Done' });
+      await graph.transitionState(doneItem.id, WorkItemState.InProgress);
+      await graph.transitionState(doneItem.id, WorkItemState.Done);
+
+      await graph.clearAllHistory();
+
+      expect(graph.getItem(newItem.id)).toBeDefined();
+      expect(graph.getItem(ipItem.id)).toBeDefined();
+      expect(graph.getItem(doneItem.id)).toBeUndefined();
+    });
+
+    it('returns 0 when no history items exist', async () => {
+      await graph.createItem({ title: 'New' });
+
+      const result = await graph.clearAllHistory();
+
+      expect(result.deleted).toBe(0);
+      expect(result.failed).toBe(0);
+    });
+
+    it('fires onDidChange only once for batch deletion', async () => {
+      const a = await graph.createItem({ title: 'A' });
+      await graph.transitionState(a.id, WorkItemState.InProgress);
+      await graph.transitionState(a.id, WorkItemState.Done);
+      const b = await graph.createItem({ title: 'B' });
+      await graph.transitionState(b.id, WorkItemState.InProgress);
+      await graph.transitionState(b.id, WorkItemState.Done);
+
+      const changeSpy = vi.fn();
+      graph.onDidChange(changeSpy);
+      changeSpy.mockClear();
+
+      await graph.clearAllHistory();
+
+      expect(changeSpy).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  describe('pruneHistory', () => {
+    async function createHistoryItem(g: WorkGraph, title: string, updatedAtOffset: number) {
+      const item = await g.createItem({ title });
+      await g.transitionState(item.id, WorkItemState.InProgress);
+      await g.transitionState(item.id, WorkItemState.Done);
+      const updated = g.getItem(item.id)!;
+      (updated as any).updatedAt = Date.now() + updatedAtOffset;
+      return updated;
+    }
+
+    it('keeps only the most recent N items', async () => {
+      await createHistoryItem(graph, 'Oldest', -3000);
+      await createHistoryItem(graph, 'Middle', -2000);
+      await createHistoryItem(graph, 'Newest', -1000);
+
+      const result = await graph.pruneHistory(2);
+
+      expect(result.deleted).toBe(1);
+      expect(result.failed).toBe(0);
+      const remaining = graph.getItemsByState(WorkItemState.Done);
+      expect(remaining).toHaveLength(2);
+      expect(remaining.map(i => i.title).sort()).toEqual(['Middle', 'Newest']);
+    });
+
+    it('does nothing when under the limit', async () => {
+      await createHistoryItem(graph, 'A', -1000);
+      await createHistoryItem(graph, 'B', -2000);
+
+      const result = await graph.pruneHistory(5);
+
+      expect(result.deleted).toBe(0);
+      expect(graph.getItemsByState(WorkItemState.Done)).toHaveLength(2);
+    });
+
+    it('does nothing when maxItems is 0 (unlimited)', async () => {
+      await createHistoryItem(graph, 'A', -1000);
+
+      const result = await graph.pruneHistory(0);
+
+      expect(result.deleted).toBe(0);
+    });
+
+    it('does nothing when maxItems is negative', async () => {
+      await createHistoryItem(graph, 'A', -1000);
+
+      const result = await graph.pruneHistory(-1);
+
+      expect(result.deleted).toBe(0);
+    });
+
+    it('handles exactly at limit (no pruning needed)', async () => {
+      await createHistoryItem(graph, 'A', -1000);
+      await createHistoryItem(graph, 'B', -2000);
+
+      const result = await graph.pruneHistory(2);
+
+      expect(result.deleted).toBe(0);
+    });
+
+    it('prunes both Done and Archived items', async () => {
+      await createHistoryItem(graph, 'Old Done', -3000);
+      const archived = await createHistoryItem(graph, 'Old Archived', -4000);
+      await graph.transitionState(archived.id, WorkItemState.Archived);
+      (graph.getItem(archived.id)! as any).updatedAt = Date.now() - 4000;
+      await createHistoryItem(graph, 'Recent', -500);
+
+      const result = await graph.pruneHistory(1);
+
+      expect(result.deleted).toBe(2);
+      const remaining = graph.getItemsByState(WorkItemState.Done, WorkItemState.Archived);
+      expect(remaining).toHaveLength(1);
+      expect(remaining[0].title).toBe('Recent');
+    });
+
+    it('fires onDidChange only once for batch pruning', async () => {
+      await createHistoryItem(graph, 'A', -3000);
+      await createHistoryItem(graph, 'B', -2000);
+      await createHistoryItem(graph, 'C', -1000);
+
+      const changeSpy = vi.fn();
+      graph.onDidChange(changeSpy);
+      changeSpy.mockClear();
+
+      await graph.pruneHistory(1);
+
+      expect(changeSpy).toHaveBeenCalledTimes(1);
+    });
+
+    it('handles NaN maxItems gracefully', async () => {
+      await createHistoryItem(graph, 'A', -1000);
+
+      const result = await graph.pruneHistory(NaN);
+
+      expect(result.deleted).toBe(0);
+    });
+  });
 });

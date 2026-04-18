@@ -97,6 +97,12 @@
           "default": 30,
           "minimum": 1,
           "description": "Age threshold in days for the Clear Old History command. Items older than this are removed."
+        },
+        "devdocket.maxHistoryItems": {
+          "type": "integer",
+          "default": 0,
+          "minimum": 0,
+          "description": "Maximum number of items to keep in History. Oldest items are pruned automatically when the limit is exceeded. Set to 0 for unlimited."
         }
       }
     },
@@ -368,6 +374,12 @@
         "icon": "$(clear-all)"
       },
       {
+        "command": "devdocket.clearAllHistory",
+        "title": "Clear All History",
+        "category": "DevDocket",
+        "icon": "$(trash)"
+      },
+      {
         "command": "devdocket.moveToQueue",
         "title": "Move to Queue",
         "category": "DevDocket",
@@ -436,6 +448,11 @@
           "command": "devdocket.clearHistory",
           "when": "view == devdocket.history",
           "group": "navigation"
+        },
+        {
+          "command": "devdocket.clearAllHistory",
+          "when": "view == devdocket.history",
+          "group": "2_clear"
         },
         {
           "command": "devdocket.switchSourcesToTree",
