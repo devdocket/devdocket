@@ -26,18 +26,19 @@ export class WalkthroughCache {
   private normalizeKey(prUrl: string): string {
     try {
       const parsed = new URL(prUrl);
+      const hostname = parsed.hostname.toLowerCase();
       const segments = parsed.pathname.split('/').filter(Boolean);
       if (
-        parsed.hostname.toLowerCase() === 'github.com' &&
+        hostname === 'github.com' &&
         segments.length >= 4 &&
-        segments[2] === 'pull'
+        segments[2].toLowerCase() === 'pull'
       ) {
         const [owner, repo, , pullNumber] = segments;
-        return `${parsed.protocol}//${parsed.host}/${owner}/${repo}/pull/${pullNumber}`;
+        return `${parsed.protocol}//${hostname}/${owner.toLowerCase()}/${repo.toLowerCase()}/pull/${pullNumber}`;
       }
       // Non-GitHub URLs: strip query/fragment only
       const pathname = parsed.pathname.replace(/\/+$/, '') || '/';
-      return `${parsed.protocol}//${parsed.host}${pathname}`;
+      return `${parsed.protocol}//${hostname}${pathname}`;
     } catch {
       return prUrl;
     }

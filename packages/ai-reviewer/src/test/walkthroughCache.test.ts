@@ -125,5 +125,12 @@ describe('WalkthroughCache', () => {
       cache.setFindings('not-a-url', 'data');
       expect(cache.getFindings('not-a-url')).toBe('data');
     });
+
+    it('normalizes case-insensitive owner/repo in GitHub URLs', () => {
+      const cache = new WalkthroughCache();
+      cache.setFindings('https://github.com/Owner/Repo/pull/42', 'findings');
+      expect(cache.getFindings('https://github.com/owner/repo/pull/42')).toBe('findings');
+      expect(cache.getFindings('https://github.com/OWNER/REPO/pull/42')).toBe('findings');
+    });
   });
 });
