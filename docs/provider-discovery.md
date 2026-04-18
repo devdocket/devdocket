@@ -28,7 +28,7 @@ An issue appears when **all** of the following are true:
 | **Assigned to you** | You are listed as an assignee on the issue |
 | **Open state** | The issue is not closed |
 | **Not a pull request** | Only issues appear here, not PRs |
-| **Repository match** | If `devdocketGithub.repos` is configured, only issues from those repos appear. Otherwise, all your assigned issues across all repositories are included. |
+| **Repository match** | If `devdocketGithub.repos` is configured, only issues from those repos appear. Otherwise, assigned issues across all repositories are included (up to 1,000 items due to pagination limits). |
 
 ### Configuration
 
