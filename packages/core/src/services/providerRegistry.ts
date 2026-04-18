@@ -337,10 +337,10 @@ export class ProviderRegistry {
     logger.info(`Provider ${providerId} discovered ${items.length} items`);
 
     // Snapshot previous IDs before replacing, for fallback disappearance detection.
+    // Always update — even when prevItems is empty — to avoid stale snapshots from
+    // an earlier non-empty refresh persisting across an empty intermediate refresh.
     const prevItems = this.discoveredItems.get(providerId) ?? [];
-    if (prevItems.length > 0) {
-      this.previousDiscoveredIds.set(providerId, new Set(prevItems.map(i => i.externalId)));
-    }
+    this.previousDiscoveredIds.set(providerId, new Set(prevItems.map(i => i.externalId)));
     this.lastRefreshTruncated.set(providerId, wasTruncated);
     this.discoveredItems.set(providerId, items);
 
