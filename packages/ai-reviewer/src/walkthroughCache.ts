@@ -43,27 +43,25 @@ export class WalkthroughCache {
     }
   }
 
-  /** Store/replace all findings for a PR. */
+  /** Store/replace all findings for a PR, truncating oversized content. */
   setFindings(prUrl: string, content: string): void {
     const key = this.normalizeKey(prUrl);
     // Delete first so re-insertion moves the key to the end (Map insertion order)
     this.findings.delete(key);
-    this.findings.set(key, content);
+    this.findings.set(key, this.capContent(content));
     this.evictIfNeeded();
   }
 
-  /** Append content to existing findings for a PR (accumulates across turns). */
+  /**
+   * Append content to existing findings for a PR (accumulates across turns),
+   * truncating to keep the most recent MAX_ENTRY_LENGTH characters.
+   */
   appendFindings(prUrl: string, content: string): void {
     const key = this.normalizeKey(prUrl);
-    let existing = this.findings.get(key) ?? '';
-    existing += content;
-    // Cap per-entry length to prevent unbounded growth from long walkthroughs
-    if (existing.length > MAX_ENTRY_LENGTH) {
-      existing = existing.slice(existing.length - MAX_ENTRY_LENGTH);
-    }
+    const combined = (this.findings.get(key) ?? '') + content;
     // Delete + set to refresh insertion order
     this.findings.delete(key);
-    this.findings.set(key, existing);
+    this.findings.set(key, this.capContent(combined));
     this.evictIfNeeded();
   }
 
@@ -85,6 +83,12 @@ export class WalkthroughCache {
   /** Number of cached entries (exposed for testing). */
   get size(): number {
     return this.findings.size;
+  }
+
+  /** Cap content to the per-entry limit, keeping the most recent characters. */
+  private capContent(content: string): string {
+    if (content.length <= MAX_ENTRY_LENGTH) return content;
+    return content.slice(content.length - MAX_ENTRY_LENGTH);
   }
 
   /** Remove the oldest entry when the cache exceeds the limit. */
