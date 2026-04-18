@@ -27,6 +27,7 @@ export class WalkthroughCache {
     try {
       const parsed = new URL(prUrl);
       const hostname = parsed.hostname.toLowerCase();
+      const host = parsed.port ? `${hostname}:${parsed.port}` : hostname;
       const segments = parsed.pathname.split('/').filter(Boolean);
       if (
         hostname === 'github.com' &&
@@ -34,11 +35,11 @@ export class WalkthroughCache {
         segments[2].toLowerCase() === 'pull'
       ) {
         const [owner, repo, , pullNumber] = segments;
-        return `${parsed.protocol}//${hostname}/${owner.toLowerCase()}/${repo.toLowerCase()}/pull/${pullNumber}`;
+        return `${parsed.protocol}//${host}/${owner.toLowerCase()}/${repo.toLowerCase()}/pull/${pullNumber}`;
       }
       // Non-GitHub URLs: strip query/fragment only
       const pathname = parsed.pathname.replace(/\/+$/, '') || '/';
-      return `${parsed.protocol}//${hostname}${pathname}`;
+      return `${parsed.protocol}//${host}${pathname}`;
     } catch {
       return prUrl;
     }
