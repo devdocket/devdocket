@@ -1,6 +1,6 @@
 import * as vscode from 'vscode';
 import type { WorkItem } from './types';
-import { BasePrAction } from './basePrAction';
+import { BasePrAction, sanitizePrUrl } from './basePrAction';
 import { RepoManager } from './repoManager';
 
 export class AiWalkthroughAction extends BasePrAction {
@@ -42,9 +42,10 @@ export class AiWalkthroughAction extends BasePrAction {
     }
 
     this.log.info('Opening chat with @walkthrough participant');
+    const safeUrl = sanitizePrUrl(item.url!);
     await vscode.commands.executeCommand('workbench.action.chat.newChat');
     await vscode.commands.executeCommand('workbench.action.chat.open', {
-      query: `@walkthrough Walk me through this PR: ${item.url}`,
+      query: `@walkthrough Walk me through this PR: ${safeUrl}`,
     });
     this.log.info('Chat opened');
   }
