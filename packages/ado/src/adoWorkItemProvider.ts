@@ -458,11 +458,11 @@ export class AdoWorkItemProvider extends BaseProvider {
     // Parse external IDs: "org/project/id"
     const parsed = externalIds.map(id => {
       const parts = id.split('/');
-      if (parts.length < 3) { return null; }
-      const numStr = parts[parts.length - 1];
+      if (parts.length !== 3) { return null; }
+      const [org, , numStr] = parts;
+      if (!isValidUrlSegment(org)) { return null; }
       if (!/^\d+$/.test(numStr)) { return null; }
       const num = parseInt(numStr, 10);
-      const org = parts[0];
       return { id, org, workItemId: num };
     }).filter((p): p is NonNullable<typeof p> => p !== null);
 
