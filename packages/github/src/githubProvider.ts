@@ -88,6 +88,76 @@ export class GitHubIssueProvider extends BaseGitHubProvider {
     };
   }
 
+  /**
+   * Check which of the given external IDs correspond to closed GitHub issues.
+   * Uses concurrent individual API calls with a worker pool since the GitHub
+   * REST API has no batch issue-get endpoint.
+   */
+  async getClosedItems(externalIds: string[], signal?: AbortSignal): Promise<string[]> {
+    if (externalIds.length === 0) { return []; }
+
+    let session: vscode.AuthenticationSession | undefined;
+    try {
+      session = await vscode.authentication.getSession('github', ['repo'], { silent: true });
+    } catch {
+      logger.debug('No GitHub auth session for getClosedItems');
+    }
+    if (!session) { return []; }
+    const token = session.accessToken;
+
+    // Parse external IDs: "owner/repo#number"
+    const parsed = externalIds.map(id => {
+      const hashIdx = id.lastIndexOf('#');
+      if (hashIdx === -1) { return null; }
+      const repo = id.substring(0, hashIdx);
+      const num = parseInt(id.substring(hashIdx + 1), 10);
+      if (isNaN(num)) { return null; }
+      return { id, repo, number: num };
+    }).filter((p): p is NonNullable<typeof p> => p !== null);
+
+    if (parsed.length === 0) { return []; }
+
+    const closedIds: string[] = [];
+    let nextIndex = 0;
+
+    const runWorker = async (): Promise<void> => {
+      while (nextIndex < parsed.length) {
+        if (signal?.aborted) { break; }
+        const currentIndex = nextIndex++;
+        const item = parsed[currentIndex];
+        try {
+          const response = await fetch(
+            `https://api.github.com/repos/${item.repo}/issues/${item.number}`,
+            {
+              headers: {
+                Authorization: `Bearer ${token}`,
+                Accept: 'application/vnd.github+json',
+                'X-GitHub-Api-Version': '2022-11-28',
+              },
+              signal,
+            },
+          );
+          if (response.ok) {
+            const data = await response.json() as { state?: string };
+            if (data.state === 'closed') {
+              closedIds.push(item.id);
+            }
+          } else {
+            logger.debug(`Failed to check issue ${item.id}: ${response.status}`);
+          }
+        } catch (err) {
+          if (signal?.aborted) { break; }
+          logger.debug(`Failed to check issue ${item.id}: ${String(err)}`);
+        }
+      }
+    };
+
+    const workerCount = Math.min(5, parsed.length);
+    await Promise.all(Array.from({ length: workerCount }, () => runWorker()));
+
+    return closedIds;
+  }
+
   private getConfiguredRepos(): string[] {
     const config = vscode.workspace.getConfiguration('devdocketGithub');
     return config.get<string[]>('repos', []);
