@@ -105,7 +105,7 @@ This means items are correctly filtered regardless of your process template. For
 
 | Setting | Default | Description |
 |---------|---------|-------------|
-| `devdocketAdo.projects` | `[]` | Organizations and projects to monitor. Each entry is `<org>` (entire organization) or `<org>/<project>` (specific project). |
+| `devdocketAdo.projects` | `[]` | Organizations and projects to monitor. Each entry is `<org>` (entire organization) or `<org>/<project>` (specific project). At least one entry is required for the ADO providers to discover items. |
 | `devdocketAdo.refreshIntervalSeconds` | `300` (5 min) | How often to poll for changes. Minimum 60 seconds. Set to 0 to disable. |
 
 ### What does NOT cause work items to appear
@@ -134,9 +134,9 @@ A PR review appears when **all** of the following are true:
 
 | Setting | Default | Description |
 |---------|---------|-------------|
-| `devdocketAdo.projects` | `[]` | Same org/project filter as ADO Work Items. |
+| `devdocketAdo.projects` | `[]` | Same org/project filter as ADO Work Items. At least one entry is required. |
 | `devdocketAdo.refreshIntervalSeconds` | `300` (5 min) | Shared with ADO Work Items. |
-| `devdocketAdo.resurfaceOnNewVersion` | `true` | When enabled, a PR you've already accepted reappears in your Inbox if new iterations (commits) are pushed. |
+| `devdocketAdo.resurfaceOnNewVersion` | `true` | When enabled, a PR you've already accepted reappears in your Inbox if new iterations (commits) are pushed. Note: ADO does not support re-request-based resurfacing (unlike GitHub). |
 
 ### What does NOT cause ADO PR reviews to appear
 
@@ -210,7 +210,7 @@ Some providers track **versions** of discovered items. When a version changes on
 
 1. **Not authenticated** — Ensure you're signed into GitHub or Microsoft in VS Code. DevDocket uses VS Code's built-in authentication. Background refreshes won't prompt for sign-in; trigger a manual refresh to get the auth prompt.
 2. **Wrong repository/project config** — Verify `devdocketGithub.repos` or `devdocketAdo.projects` includes the correct repositories or organizations. Leave the setting empty to include everything.
-3. **Invalid format** — Repository entries must be in `owner/repo` format (GitHub) or `org` / `org/project` format (ADO). Malformed entries are silently skipped.
+3. **Invalid format** — Repository entries must be in `owner/repo` format (GitHub) or `org` / `org/project` format (ADO). Malformed entries are skipped (GitHub logs a warning to the output channel; ADO skips silently).
 4. **Item already dismissed** — Dismissed items never reappear. Check the Sources view to see all items the provider knows about, regardless of inbox state.
 5. **Terminal state** — ADO work items in Closed, Done, Removed, or other terminal states are excluded.
 6. **Provider unhealthy** — Check the Sources view for providers showing "refresh failed". This indicates an authentication or network issue.
