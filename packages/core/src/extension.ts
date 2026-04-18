@@ -274,22 +274,27 @@ function wireEvents(
 
   // Auto-complete: after each provider refresh, scan all WorkGraph items with
   // that providerId and check whether their external items are closed/merged.
-  // Per-provider guard prevents overlapping runs from concurrent refreshes.
-  const autoCompleteInFlight = new Set<string>();
+  // Per-provider guard prevents overlapping runs; AbortController cancels in-flight checks.
+  const autoCompleteControllers = new Map<string, AbortController>();
   const autoCompleteSub = providerRegistry.onDidRefreshProvider(safeHandler('Error handling auto-complete', async (providerId) => {
     const config = vscode.workspace.getConfiguration('devdocket');
     if (!config.get<boolean>('autoCompleteOnClose', true)) {
       return;
     }
-    if (autoCompleteInFlight.has(providerId)) {
-      return;
+    // Abort any in-flight check for this provider
+    const prev = autoCompleteControllers.get(providerId);
+    if (prev) {
+      prev.abort();
     }
-    autoCompleteInFlight.add(providerId);
+    const controller = new AbortController();
+    autoCompleteControllers.set(providerId, controller);
     try {
-      const completedTitles = await checkAutoComplete(providerId, workGraph, providerRegistry);
+      const completedTitles = await checkAutoComplete(providerId, workGraph, providerRegistry, controller.signal);
       showAutoCompleteNotification(completedTitles);
     } finally {
-      autoCompleteInFlight.delete(providerId);
+      if (autoCompleteControllers.get(providerId) === controller) {
+        autoCompleteControllers.delete(providerId);
+      }
     }
   }));
 

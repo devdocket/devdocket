@@ -21,6 +21,7 @@ export async function checkAutoComplete(
   providerId: string,
   workGraph: WorkGraph,
   providerRegistry: ProviderRegistry,
+  signal?: AbortSignal,
 ): Promise<string[]> {
   // Collect all work items linked to this provider in auto-completable states
   const candidates = workGraph.getAll().filter(
@@ -37,7 +38,7 @@ export async function checkAutoComplete(
     // Provider supports batch status checks — covers imported items too
     try {
       const externalIds = [...new Set(candidates.map(item => item.externalId!))];
-      const result = await provider.getClosedItems(externalIds);
+      const result = await provider.getClosedItems(externalIds, signal);
       closedIds = new Set(result);
     } catch (err) {
       logger.error(`Provider "${providerId}" getClosedItems failed, skipping auto-complete`, err);
