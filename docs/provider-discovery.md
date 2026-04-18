@@ -209,7 +209,7 @@ Some providers track **versions** of discovered items. When a version changes on
 **Items not appearing?** Check these common causes:
 
 1. **Not authenticated** — Ensure you're signed into GitHub or Microsoft in VS Code. DevDocket uses VS Code's built-in authentication. Background refreshes won't prompt for sign-in; trigger a manual refresh to get the auth prompt.
-2. **Wrong repository/project config** — Verify `devdocketGithub.repos` or `devdocketAdo.projects` includes the correct repositories or organizations. Leave the setting empty to include everything.
+2. **Wrong repository/project config** — Verify `devdocketGithub.repos` or `devdocketAdo.projects` includes the correct repositories or organizations. For GitHub, leaving `devdocketGithub.repos` empty includes all repositories. For ADO, at least one entry in `devdocketAdo.projects` is required — an empty list disables ADO discovery entirely.
 3. **Invalid format** — Repository entries must be in `owner/repo` format (GitHub) or `org` / `org/project` format (ADO). Malformed entries are skipped (GitHub logs a warning to the output channel; ADO skips silently).
 4. **Item already dismissed** — Dismissed items never reappear. Check the Sources view to see all items the provider knows about, regardless of inbox state.
 5. **Terminal state** — ADO work items in Closed, Done, Removed, or other terminal states are excluded.
