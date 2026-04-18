@@ -57,6 +57,9 @@ export abstract class BasePrAction implements DevDocketAction {
   async run(item: WorkItem): Promise<void> {
     if (!item.url) return;
 
+    const model = await selectModel(this.progressTitle);
+    if (!model) return;
+
     await vscode.window.withProgress(
       {
         location: vscode.ProgressLocation.Notification,
@@ -79,10 +82,6 @@ export abstract class BasePrAction implements DevDocketAction {
           'Continue',
         );
         if (proceed !== 'Continue' || token.isCancellationRequested) return;
-
-        progress.report({ message: 'Selecting model...' });
-        const model = await selectModel(this.progressTitle);
-        if (!model || token.isCancellationRequested) return;
 
         progress.report({ message: 'Analyzing changes...' });
 

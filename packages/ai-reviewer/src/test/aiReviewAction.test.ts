@@ -197,10 +197,24 @@ describe('AiReviewAction', () => {
       expect(window.showWarningMessage).toHaveBeenCalledWith(
         'AI Code Review: No language model available. Install GitHub Copilot.',
       );
+      // Model selection happens before withProgress, so progress is never shown
+      expect(window.withProgress).not.toHaveBeenCalled();
     });
 
     it('does nothing when item has no URL', async () => {
       const item = createWorkItem({ url: undefined });
+      await action.run(item);
+
+      expect(window.withProgress).not.toHaveBeenCalled();
+    });
+
+    it('aborts when user cancels model selection', async () => {
+      const model1 = { id: 'm1', name: 'A', vendor: 'v', family: 'f', sendRequest: vi.fn() };
+      const model2 = { id: 'm2', name: 'B', vendor: 'v', family: 'f', sendRequest: vi.fn() };
+      vi.mocked(lm.selectChatModels).mockResolvedValue([model1, model2]);
+      vi.mocked(window.showQuickPick).mockResolvedValue(undefined as never);
+
+      const item = createWorkItem();
       await action.run(item);
 
       expect(window.withProgress).not.toHaveBeenCalled();
