@@ -194,11 +194,11 @@ export class AdoPipelineProvider extends BaseProvider {
     // Emit only non-completed builds as DiscoveredItems
     const activeBuilds = allBuilds.filter(b => b.status !== 'completed');
     const items: DiscoveredItem[] = activeBuilds.map(build => ({
-      externalId: `pipelines:${build.project.name}/builds/${build.id}`,
+      externalId: `pipelines:${build._org ?? ''}/${build.project.name}/builds/${build.id}`,
       title: `${build.definition.name} #${build.buildNumber}`,
       description: `${formatBranch(build.sourceBranch)} · ${build.status}`,
       url: build._links.web.href,
-      group: build.project.name,
+      group: build._org ? `${build._org}/${build.project.name}` : build.project.name,
       state: build.status,
     }));
 

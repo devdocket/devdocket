@@ -101,11 +101,11 @@ describe('AdoPipelineProvider', () => {
     const items = listener.mock.calls[0][0];
     // Only non-completed builds should be emitted
     expect(items).toHaveLength(2);
-    expect(items[0].externalId).toBe('pipelines:MyProject/builds/1');
+    expect(items[0].externalId).toBe('pipelines:myorg/MyProject/builds/1');
     expect(items[0].title).toBe('CI Pipeline #20240115.1');
-    expect(items[0].group).toBe('MyProject');
+    expect(items[0].group).toBe('myorg/MyProject');
     expect(items[0].state).toBe('inProgress');
-    expect(items[1].externalId).toBe('pipelines:MyProject/builds/2');
+    expect(items[1].externalId).toBe('pipelines:myorg/MyProject/builds/2');
     expect(items[1].title).toBe('Deploy #20240115.2');
   });
 
