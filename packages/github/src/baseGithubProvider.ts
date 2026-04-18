@@ -253,7 +253,8 @@ export abstract class BaseGitHubProvider implements DevDocketProvider {
 
     if (parsed.length === 0) { return []; }
 
-    const closedIds: string[] = [];
+    // Track which IDs are closed; use a Set so worker order doesn't affect results
+    const closedSet = new Set<string>();
     let nextIndex = 0;
 
     const runWorker = async (): Promise<void> => {
@@ -277,7 +278,7 @@ export abstract class BaseGitHubProvider implements DevDocketProvider {
           if (response.ok) {
             const data = await response.json() as { state?: string };
             if (data.state === 'closed') {
-              closedIds.push(item.id);
+              closedSet.add(item.id);
             }
           } else {
             logger.debug(`Failed to check ${apiType} ${item.id}: ${response.status}`);
@@ -292,7 +293,8 @@ export abstract class BaseGitHubProvider implements DevDocketProvider {
     const workerCount = Math.min(5, parsed.length);
     await Promise.all(Array.from({ length: workerCount }, () => runWorker()));
 
-    return closedIds;
+    // Return in input order for deterministic results
+    return parsed.filter(p => closedSet.has(p.id)).map(p => p.id);
   }
 
   dispose(): void {
