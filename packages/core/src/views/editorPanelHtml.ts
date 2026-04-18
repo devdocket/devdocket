@@ -9,11 +9,13 @@ export interface EditorHtmlOptions {
   providerLabel?: string;
   /** Read-only description from the provider. Will be HTML-escaped before rendering. */
   providerDescription?: string;
+  /** Upstream state from the provider (e.g. "open", "closed", "Active"). Will be HTML-escaped. */
+  providerState?: string;
   /** When true, the title field is read-only (managed by a live provider). */
   titleReadonly?: boolean;
 }
 
-export function getEditorPanelHtml({ cspSource, item, providerLabel, providerDescription, titleReadonly }: EditorHtmlOptions): string {
+export function getEditorPanelHtml({ cspSource, item, providerLabel, providerDescription, providerState, titleReadonly }: EditorHtmlOptions): string {
   const nonce = getNonce();
   const descriptionSection = providerDescription
     ? `    <div class="field">
@@ -198,6 +200,8 @@ ${descriptionSection}
       <dd><span class="badge ${stateBadgeClass(item.state)}">${escapeHtml(stateLabel(item.state))}</span></dd>
 ${item.providerId && providerLabel ? `      <dt>Provider</dt>
       <dd>${escapeHtml(providerLabel)}</dd>` : ''}
+${providerState && item.providerId ? `      <dt>Provider State</dt>
+      <dd>${escapeHtml(providerState)}</dd>` : ''}
       <dt>Created</dt>
       <dd>${escapeHtml(formatTimestamp(item.createdAt))}</dd>
       <dt>Updated</dt>

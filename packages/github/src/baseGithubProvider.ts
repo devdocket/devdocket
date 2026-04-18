@@ -21,6 +21,7 @@ export interface DiscoveredItem {
   url?: string;
   group?: string;
   reason?: string;
+  state?: string;
   version?: string;
   resurfaceVersion?: string;
 }
@@ -37,6 +38,7 @@ export interface GitHubIssue {
   number: number;
   title: string;
   body?: string;
+  state?: string;
   html_url: string;
   repository_url: string;
   pull_request?: { url: string };

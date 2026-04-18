@@ -266,6 +266,51 @@ describe('getEditorPanelHtml', () => {
     });
   });
 
+  describe('provider state', () => {
+    it('should render Provider State row when providerState is provided for a provider-backed item', () => {
+      const item = makeItem({ providerId: 'github' });
+      const html = getEditorPanelHtml({ cspSource, item, providerState: 'open' });
+      const metadata = getMetadataSection(html);
+      expect(metadata).toContain('Provider State');
+      expect(metadata).toContain('open');
+    });
+
+    it('should omit Provider State row when providerState is not supplied', () => {
+      const item = makeItem({ providerId: 'github' });
+      const html = getEditorPanelHtml({ cspSource, item });
+      const metadata = getMetadataSection(html);
+      expect(metadata).not.toContain('Provider State');
+    });
+
+    it('should omit Provider State row when providerState is undefined', () => {
+      const item = makeItem({ providerId: 'github' });
+      const html = getEditorPanelHtml({ cspSource, item, providerState: undefined });
+      const metadata = getMetadataSection(html);
+      expect(metadata).not.toContain('Provider State');
+    });
+
+    it('should omit Provider State row when providerState is empty string', () => {
+      const item = makeItem({ providerId: 'github' });
+      const html = getEditorPanelHtml({ cspSource, item, providerState: '' });
+      const metadata = getMetadataSection(html);
+      expect(metadata).not.toContain('Provider State');
+    });
+
+    it('should omit Provider State row for manual items even when providerState is given', () => {
+      const item = makeItem({ providerId: undefined });
+      const html = getEditorPanelHtml({ cspSource, item, providerState: 'open' });
+      const metadata = getMetadataSection(html);
+      expect(metadata).not.toContain('Provider State');
+    });
+
+    it('should HTML-escape providerState to prevent XSS', () => {
+      const item = makeItem({ providerId: 'github' });
+      const html = getEditorPanelHtml({ cspSource, item, providerState: '<script>alert("xss")</script>' });
+      expect(html).not.toContain('<script>alert("xss")');
+      expect(html).toContain('&lt;script&gt;');
+    });
+  });
+
   describe('browser URL link', () => {
     it('renders the title as a clickable hyperlink when item has a url', () => {
       const item = makeItem({ url: 'https://github.com/org/repo/issues/42' });
