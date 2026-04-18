@@ -54,6 +54,7 @@ export class GitHubMyPrsProvider extends BaseGitHubProvider {
         description: pr.body?.slice(0, 200),
         url: pr.html_url,
         group: repoName,
+        reason: 'authored',
         state: status,
       };
     });
