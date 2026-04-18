@@ -1,7 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { window, workspace, authentication, lm, Uri, LanguageModelTextPart, mockLogOutputChannel } from 'vscode';
 import { AiReviewAction, sanitizePrUrl } from '../aiReviewAction';
-import { WalkthroughCache } from '../walkthroughCache';
 import type { RepoManager } from '../repoManager';
 
 function createWorkItem(overrides: Partial<Record<string, unknown>> = {}) {
@@ -46,7 +45,6 @@ function createMockSendRequest(text = 'Review feedback here') {
 describe('AiReviewAction', () => {
   let action: AiReviewAction;
   let mockRepoManager: RepoManager;
-  let walkthroughCache: WalkthroughCache;
 
   afterEach(() => {
     vi.unstubAllGlobals();
@@ -56,8 +54,7 @@ describe('AiReviewAction', () => {
     vi.clearAllMocks();
     vi.stubGlobal('fetch', vi.fn());
     mockRepoManager = createMockRepoManager();
-    walkthroughCache = new WalkthroughCache();
-    action = new AiReviewAction(mockRepoManager, walkthroughCache, mockLogOutputChannel as never);
+    action = new AiReviewAction(mockRepoManager, mockLogOutputChannel as never);
 
     // Reset default mocks
     vi.mocked(authentication.getSession).mockResolvedValue({ accessToken: 'mock-token' } as never);
@@ -604,56 +601,6 @@ describe('AiReviewAction', () => {
       expect(userMsg.content).toContain('devdocket-searchCode');
     });
 
-    it('includes walkthrough findings when available', async () => {
-      walkthroughCache.setFindings(
-        'https://github.com/owner/repo/pull/42',
-        'The PR refactors the auth module...',
-      );
-
-      const sendRequest = createMockSendRequest('Review with context');
-      vi.mocked(lm.selectChatModels).mockResolvedValue([{ sendRequest }]);
-
-      const token = { isCancellationRequested: false, onCancellationRequested: vi.fn() };
-      await action.analyzeWithTools(
-        'diff', 'https://github.com/owner/repo/pull/42', worktreeInfo as never, token as never,
-      );
-
-      const userMsg = sendRequest.mock.calls[0][0][0];
-      expect(userMsg.content).toContain('Prior Walkthrough Analysis');
-      // Findings are serialized as JSON to prevent prompt injection
-      expect(userMsg.content).toContain('The PR refactors the auth module...');
-      expect(userMsg.content).toContain('untrusted');
-    });
-
-    it('does not include walkthrough section when no findings exist', async () => {
-      const sendRequest = createMockSendRequest('Review');
-      vi.mocked(lm.selectChatModels).mockResolvedValue([{ sendRequest }]);
-
-      const token = { isCancellationRequested: false, onCancellationRequested: vi.fn() };
-      await action.analyzeWithTools(
-        'diff', 'https://github.com/owner/repo/pull/42', worktreeInfo as never, token as never,
-      );
-
-      const userMsg = sendRequest.mock.calls[0][0][0];
-      expect(userMsg.content).not.toContain('Prior Walkthrough Analysis');
-    });
-
-    it('truncates walkthrough findings exceeding max length', async () => {
-      const longFindings = 'x'.repeat(35_000);
-      walkthroughCache.setFindings('https://github.com/owner/repo/pull/42', longFindings);
-
-      const sendRequest = createMockSendRequest('Review');
-      vi.mocked(lm.selectChatModels).mockResolvedValue([{ sendRequest }]);
-
-      const token = { isCancellationRequested: false, onCancellationRequested: vi.fn() };
-      await action.analyzeWithTools(
-        'diff', 'https://github.com/owner/repo/pull/42', worktreeInfo as never, token as never,
-      );
-
-      const userMsg = sendRequest.mock.calls[0][0][0];
-      expect(userMsg.content).toContain('earlier walkthrough findings truncated');
-    });
-
     it('appends truncation note when diff exceeds limit and worktree is available', async () => {
       const token = { isCancellationRequested: false, onCancellationRequested: vi.fn() };
       const largeDiff = 'x'.repeat(50_001);
@@ -727,7 +674,7 @@ describe('AiReviewAction', () => {
       });
     });
 
-    it('reuses worktree if previously prepared by walkthrough', async () => {
+    it('reuses worktree if previously prepared', async () => {
       vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
         ok: true,
         text: vi.fn().mockResolvedValue('diff content'),

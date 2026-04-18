@@ -2,7 +2,6 @@ import * as vscode from 'vscode';
 import { AiReviewAction } from './aiReviewAction';
 import { AiWalkthroughAction } from './aiWalkthroughAction';
 import { WalkthroughParticipant } from './walkthroughParticipant';
-import { WalkthroughCache } from './walkthroughCache';
 import { RepoManager } from './repoManager';
 import { registerAllTools } from './tools';
 import type { DevDocketApi } from './types';
@@ -45,10 +44,9 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 
   // Shared infrastructure for both actions
   const repoManager = new RepoManager(context.globalStorageUri, log);
-  const walkthroughCache = new WalkthroughCache();
 
-  // Register code review action (now uses shared RepoManager + walkthrough cache)
-  const reviewAction = new AiReviewAction(repoManager, walkthroughCache, log);
+  // Register code review action (uses shared RepoManager)
+  const reviewAction = new AiReviewAction(repoManager, log);
   context.subscriptions.push(api.registerAction(reviewAction));
   log.info('Registered AI Code Review action');
 
@@ -62,8 +60,8 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   toolDisposables.forEach(d => context.subscriptions.push(d));
   log.info(`Registered ${toolDisposables.length} LM tools`);
 
-  // Register chat participant (uses shared RepoManager + walkthrough cache)
-  const participant = new WalkthroughParticipant(repoManager, log, walkthroughCache);
+  // Register chat participant (uses shared RepoManager)
+  const participant = new WalkthroughParticipant(repoManager, log);
   context.subscriptions.push(participant.register());
   log.info('Registered @walkthrough chat participant');
 

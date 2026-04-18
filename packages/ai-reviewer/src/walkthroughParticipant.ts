@@ -2,7 +2,6 @@ import * as vscode from 'vscode';
 import { RepoManager, type WorktreeInfo } from './repoManager';
 import { buildWalkthroughPrompt } from './walkthroughPrompt';
 import { truncateToolContent } from './toolUtils';
-import type { WalkthroughCache } from './walkthroughCache';
 
 export class WalkthroughParticipant {
   private sessions = new Map<string, WorktreeInfo>();
@@ -10,7 +9,6 @@ export class WalkthroughParticipant {
   constructor(
     private readonly repoManager: RepoManager,
     private readonly log: vscode.LogOutputChannel,
-    private readonly walkthroughCache?: WalkthroughCache,
   ) {}
 
   /** Register the chat participant. Returns disposable. */
@@ -207,7 +205,6 @@ export class WalkthroughParticipant {
       }
 
       let hasToolCalls = false;
-      let turnText = '';
       const assistantParts: (vscode.LanguageModelTextPart | vscode.LanguageModelToolCallPart)[] = [];
       const toolResults: Array<{ callId: string; content: (vscode.LanguageModelTextPart | vscode.LanguageModelToolResultPart)[] }> = [];
 
@@ -215,7 +212,6 @@ export class WalkthroughParticipant {
         if (part instanceof vscode.LanguageModelTextPart) {
           response.markdown(part.value);
           assistantParts.push(part);
-          turnText += part.value;
         } else if (part instanceof vscode.LanguageModelToolCallPart) {
           assistantParts.push(part);
 
@@ -274,11 +270,6 @@ export class WalkthroughParticipant {
             ]),
           );
         }
-      }
-
-      // Store walkthrough content in cache for use by code review
-      if (prUrl && turnText && this.walkthroughCache) {
-        this.walkthroughCache.appendFindings(prUrl, turnText);
       }
 
       if (!hasToolCalls) {
