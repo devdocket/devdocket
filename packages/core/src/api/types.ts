@@ -163,6 +163,9 @@ export interface DevDocketApi {
    *
    * Extensions can subscribe to this event to react when items move between
    * states (e.g. perform cleanup when an item is marked as Done).
+   *
+   * Optional so that consumers creating mock/wrapper `DevDocketApi` objects
+   * are not forced to implement this property.
    */
-  readonly onDidTransitionState: Event<StateTransitionEvent>;
+  readonly onDidTransitionState?: Event<StateTransitionEvent>;
 }
