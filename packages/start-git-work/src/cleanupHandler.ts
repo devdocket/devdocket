@@ -66,13 +66,19 @@ export class CleanupHandler {
     if (worktreeExists) { resources.push(`worktree "${metadata.worktreePath}"`); }
     if (branchExists) { resources.push(`branch "${metadata.branchName}"`); }
 
+    const isPlural = resources.length > 1;
+    const verb = isPlural ? 'exist' : 'exists';
+    const pronoun = isPlural ? 'them' : 'it';
+
     const answer = await vscode.window.showInformationMessage(
-      `The ${resources.join(' and ')} for "${event.item.title}" still exist. Delete them?`,
+      `The ${resources.join(' and ')} for "${event.item.title}" still ${verb}. Delete ${pronoun}?`,
       'Yes',
       'No',
     );
 
     if (answer !== 'Yes') {
+      // User declined or dismissed — clear metadata so we don't ask again
+      await this.globalState.update(key, undefined);
       return;
     }
 
