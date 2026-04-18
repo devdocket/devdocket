@@ -68,7 +68,7 @@ export abstract class BasePrAction implements DevDocketAction {
   }
 
   async run(item: WorkItem): Promise<void> {
-    if (!item.url) return;
+    if (!this.canRun(item)) return;
 
     if (!await confirmAiUsage(this.confirmationMessage)) return;
 
