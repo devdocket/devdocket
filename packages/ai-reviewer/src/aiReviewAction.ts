@@ -44,66 +44,43 @@ export class AiReviewAction extends BasePrAction {
 **File paths and line numbers:** When commenting on specific issues, always include the file path and line number(s) from the diff so the reader can locate the code immediately. Use the format \`path/to/file.ts:42\` for single lines or \`path/to/file.ts:42-50\` for ranges. If a finding spans multiple files, list each location separately.`;
   }
 
-  /**
-   * Override base run() to add worktree preparation and tool-enabled analysis.
-   * Worktree preparation happens after user consent. Tool routing decides
-   * between analyzeWithTools vs analyzeWithAi. If BasePrAction.run() changes,
-   * update this override too.
-   */
-  async run(item: WorkItem): Promise<void> {
-    if (!item.url) return;
-    if (!this.isPrUrl(item.url)) return;
+  protected async doWork(
+    item: WorkItem,
+    progress: vscode.Progress<{ message?: string }>,
+    token: vscode.CancellationToken,
+  ): Promise<void> {
+    progress.report({ message: 'Fetching PR diff...' });
+    const diff = await this.fetchDiff(item.url!);
+    if (!diff || token.isCancellationRequested) return;
 
-    await vscode.window.withProgress(
-      {
-        location: vscode.ProgressLocation.Notification,
-        title: this.progressTitle,
-        cancellable: true,
-      },
-      async (progress, token) => {
-        progress.report({ message: 'Fetching PR diff...' });
-        const diff = await this.fetchDiff(item.url!);
-        if (!diff) return;
+    // Prepare worktree (best-effort — review falls back to diff-only)
+    progress.report({ message: 'Preparing repository...' });
+    let worktreeInfo: WorktreeInfo | undefined;
+    try {
+      worktreeInfo = await this.repoManager.ensureWorktree(item.url!);
+      this.log.info('Worktree ready for code review');
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      this.log.warn(`Worktree preparation failed (continuing with diff only): ${msg}`);
+    }
 
-        if (token.isCancellationRequested) return;
+    if (token.isCancellationRequested) return;
 
-        const proceed = await vscode.window.showWarningMessage(
-          this.confirmationMessage,
-          { modal: true },
-          'Continue',
-        );
-        if (proceed !== 'Continue' || token.isCancellationRequested) return;
+    progress.report({ message: 'Analyzing changes...' });
 
-        // Prepare worktree after user confirms (best-effort — review falls back to diff-only)
-        progress.report({ message: 'Preparing repository...' });
-        let worktreeInfo: WorktreeInfo | undefined;
-        try {
-          worktreeInfo = await this.repoManager.ensureWorktree(item.url!);
-          this.log.info('Worktree ready for code review');
-        } catch (err) {
-          const msg = err instanceof Error ? err.message : String(err);
-          this.log.warn(`Worktree preparation failed (continuing with diff only): ${msg}`);
-        }
+    let result: string | undefined;
+    if (worktreeInfo) {
+      result = await this.analyzeWithTools(diff, item.url!, worktreeInfo, token);
+    } else {
+      result = await this.analyzeWithAi(diff, item.url!, token);
+    }
+    if (!result || token.isCancellationRequested) return;
 
-        if (token.isCancellationRequested) return;
-
-        progress.report({ message: 'Analyzing changes...' });
-
-        let result: string | undefined;
-        if (worktreeInfo) {
-          result = await this.analyzeWithTools(diff, item.url!, worktreeInfo, token);
-        } else {
-          result = await this.analyzeWithAi(diff, item.url!, token);
-        }
-        if (!result || token.isCancellationRequested) return;
-
-        const doc = await vscode.workspace.openTextDocument({
-          content: result,
-          language: 'markdown',
-        });
-        await vscode.window.showTextDocument(doc, { preview: false });
-      },
-    );
+    const doc = await vscode.workspace.openTextDocument({
+      content: result,
+      language: 'markdown',
+    });
+    await vscode.window.showTextDocument(doc, { preview: false });
   }
 
   /**
