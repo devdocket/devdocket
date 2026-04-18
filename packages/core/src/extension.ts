@@ -6,8 +6,8 @@ import { DiscoveredStateStore } from './storage/discoveredStateStore';
 import { ReadStateStore } from './storage/readStateStore';
 import { ProviderLabelCache } from './storage/providerLabelCache';
 import { WorkGraph } from './services/workGraph';
-import { WorkItemState } from './models/workItem';
 import { ProviderRegistry } from './services/providerRegistry';
+import { checkAutoComplete, showAutoCompleteNotification } from './services/autoComplete';
 import { ActionRegistry } from './services/actionRegistry';
 import { InboxTreeProvider } from './views/inboxTreeProvider';
 import { QueueTreeProvider } from './views/queueTreeProvider';
@@ -34,9 +34,6 @@ function safeHandler<T extends unknown[]>(label: string, fn: (...args: T) => voi
       });
   };
 }
-
-/** Work item states eligible for auto-completion when the external item is closed/merged. */
-const AUTO_COMPLETABLE_STATES = new Set([WorkItemState.New, WorkItemState.InProgress, WorkItemState.Paused]);
 
 let providerRegistry: ProviderRegistry | undefined;
 let actionRegistry: ActionRegistry | undefined;
@@ -277,87 +274,13 @@ function wireEvents(
 
   // Auto-complete: after each provider refresh, scan all WorkGraph items with
   // that providerId and check whether their external items are closed/merged.
-  // Uses the provider's getClosedItems() if available; otherwise falls back to
-  // disappearance detection (item was previously discovered but is now absent).
   const autoCompleteSub = providerRegistry.onDidRefreshProvider(safeHandler('Error handling auto-complete', async (providerId) => {
     const config = vscode.workspace.getConfiguration('devdocket');
     if (!config.get<boolean>('autoCompleteOnClose', true)) {
       return;
     }
-
-    // Collect all work items linked to this provider in auto-completable states
-    const candidates = workGraph.getAll().filter(
-      item => item.providerId === providerId && item.externalId && AUTO_COMPLETABLE_STATES.has(item.state),
-    );
-    if (candidates.length === 0) {
-      return;
-    }
-
-    let closedIds: Set<string>;
-    const provider = providerRegistry.getProvider(providerId);
-
-    if (provider && typeof provider.getClosedItems === 'function') {
-      // Provider supports batch status checks — covers imported items too
-      try {
-        const externalIds = candidates.map(item => item.externalId!);
-        const result = await provider.getClosedItems(externalIds);
-        closedIds = new Set(result);
-      } catch (err) {
-        logger.error(`Provider "${providerId}" getClosedItems failed, skipping auto-complete`, err);
-        return;
-      }
-    } else {
-      // Fallback: compare current vs previous discovered items.
-      // Only items that were previously discovered and are now absent are considered closed.
-      // This avoids false positives for imported items that the provider never tracked.
-      if (providerRegistry.wasLastRefreshTruncated(providerId)) {
-        return;
-      }
-      const currentItems = providerRegistry.getDiscoveredItems(providerId);
-      if (currentItems.length === 0) {
-        return;
-      }
-      const currentIds = new Set(currentItems.map(i => i.externalId));
-      closedIds = new Set<string>();
-      for (const item of candidates) {
-        if (
-          !currentIds.has(item.externalId!) &&
-          providerRegistry.wasItemPreviouslyDiscovered(providerId, item.externalId!)
-        ) {
-          closedIds.add(item.externalId!);
-        }
-      }
-    }
-
-    const completedTitles: string[] = [];
-    for (const item of candidates) {
-      if (closedIds.has(item.externalId!)) {
-        try {
-          await workGraph.transitionState(item.id, WorkItemState.Done);
-          completedTitles.push(item.title);
-          logger.info(`Auto-completed work item "${item.title}" (${item.id}) — external item closed/merged`);
-        } catch (err) {
-          logger.error(`Failed to auto-complete work item ${item.id}`, err);
-        }
-      }
-    }
-
-    if (completedTitles.length > 0) {
-      const message = completedTitles.length === 1
-        ? `Item completed: ${completedTitles[0]} was closed/merged externally`
-        : `${completedTitles.length} items completed — closed/merged externally`;
-      void vscode.window.showInformationMessage(`DevDocket: ${message}`, 'Show History').then(
-        action => {
-          if (action === 'Show History') {
-            vscode.commands.executeCommand('devdocket.history.focus').then(
-              undefined,
-              () => { /* view focus is best-effort */ },
-            );
-          }
-        },
-        () => { /* notification is best-effort */ },
-      );
-    }
+    const completedTitles = await checkAutoComplete(providerId, workGraph, providerRegistry);
+    showAutoCompleteNotification(completedTitles);
   }));
 
   return [discoveredSub, newItemsSub, providerRegSub, stateStoreSub, markSeenSub, workGraphSub, autoCompleteSub];
