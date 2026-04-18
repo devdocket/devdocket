@@ -31,6 +31,11 @@ interface TimelineRecord {
   result: string | null;
 }
 
+/** Create a composite key for a build that is unique across orgs/projects. */
+function buildKey(build: AdoBuild): string {
+  return `${build._org ?? ''}/${build.project.name}/${build.id}`;
+}
+
 /**
  * Compose a trackable status string from a build.
  * For completed builds, includes the result (e.g. `completed:failed`).
@@ -63,8 +68,8 @@ export class AdoPipelineProvider extends BaseProvider {
   readonly label = 'Azure DevOps Pipelines';
 
   private readonly buildWatcher = new StatusWatcher<string>();
-  /** Tracks which job failures have already been notified per build. */
-  private readonly notifiedJobFailures = new Map<number, Set<string>>();
+  /** Tracks which job failures have already been notified per build (keyed by composite build key). */
+  private readonly notifiedJobFailures = new Map<string, Set<string>>();
 
   constructor(private readonly orgConfigs: OrgConfig[]) {
     super(new vscode.EventEmitter<DiscoveredItem[]>());
@@ -167,7 +172,7 @@ export class AdoPipelineProvider extends BaseProvider {
     // Detect build-level status changes
     const statusMap = new Map<string, string>();
     for (const build of allBuilds) {
-      statusMap.set(String(build.id), compositeStatus(build));
+      statusMap.set(buildKey(build), compositeStatus(build));
     }
     const changes = this.buildWatcher.update(statusMap);
     await this.notifyBuildChanges(changes, allBuilds);
@@ -179,10 +184,10 @@ export class AdoPipelineProvider extends BaseProvider {
     }
 
     // Clean up notified job failures for builds no longer tracked
-    const activeBuildIds = new Set(allBuilds.map(b => b.id));
-    for (const buildId of this.notifiedJobFailures.keys()) {
-      if (!activeBuildIds.has(buildId)) {
-        this.notifiedJobFailures.delete(buildId);
+    const activeKeys = new Set(allBuilds.map(b => buildKey(b)));
+    for (const key of this.notifiedJobFailures.keys()) {
+      if (!activeKeys.has(key)) {
+        this.notifiedJobFailures.delete(key);
       }
     }
 
@@ -232,10 +237,10 @@ export class AdoPipelineProvider extends BaseProvider {
 
   /** Fire VS Code notifications for detected build status changes. */
   private async notifyBuildChanges(changes: StatusChange<string>[], builds: AdoBuild[]): Promise<void> {
-    const buildById = new Map(builds.map(b => [String(b.id), b]));
+    const buildByKey = new Map(builds.map(b => [buildKey(b), b]));
 
     for (const change of changes) {
-      const build = buildById.get(change.id);
+      const build = buildByKey.get(change.id);
       if (!build) { continue; }
 
       const branch = formatBranch(build.sourceBranch);
@@ -279,7 +284,8 @@ export class AdoPipelineProvider extends BaseProvider {
           const jobs = await this.fetchBuildJobs(token, build);
           const failedJobs = jobs.filter(j => j.state === 'completed' && j.result === 'failed');
 
-          const notified = this.notifiedJobFailures.get(build.id) ?? new Set<string>();
+          const bKey = buildKey(build);
+          const notified = this.notifiedJobFailures.get(bKey) ?? new Set<string>();
           for (const job of failedJobs) {
             const jobKey = `${job.id}:${job.name}`;
             if (!notified.has(jobKey)) {
@@ -294,7 +300,7 @@ export class AdoPipelineProvider extends BaseProvider {
               }
             }
           }
-          this.notifiedJobFailures.set(build.id, notified);
+          this.notifiedJobFailures.set(bKey, notified);
         } catch (err) {
           logger.debug(`Failed to fetch timeline for build ${build.id}: ${String(err)}`);
         }
