@@ -214,7 +214,7 @@ Some providers track **versions** of discovered items. When a version changes on
 4. **Item already dismissed** — Dismissed items never reappear. Check the Sources view to see all items the provider knows about, regardless of inbox state.
 5. **Terminal state** — ADO work items in Closed, Done, Removed, or other terminal states are excluded.
 6. **Provider unhealthy** — Check the Sources view for providers showing "refresh failed". This indicates an authentication or network issue.
-7. **Item limit** — Each provider is limited to 10,000 discovered items. Items beyond this limit are discarded.
+7. **Item limit** — Each provider is limited to 10,000 discovered items per refresh. If a provider emits more than 10,000 items, only the first 10,000 are kept and a warning is logged.
 
 **Items appearing unexpectedly?**
 
