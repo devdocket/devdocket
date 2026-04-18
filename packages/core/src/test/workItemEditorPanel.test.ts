@@ -77,11 +77,14 @@ function createMockContext() {
 
 function createMockProviderRegistry() {
   const discoveredEmitter = new EventEmitter<void>();
+  const registerEmitter = new EventEmitter<void>();
   return {
     getDiscoveredItems: vi.fn(() => []),
     getProvider: vi.fn((id: string) => id ? { id } : undefined),
     onDidChangeDiscoveredItems: discoveredEmitter.event,
+    onDidRegisterProvider: registerEmitter.event,
     _fireDiscoveredItemsChange: () => discoveredEmitter.fire(),
+    _fireRegisterProvider: () => registerEmitter.fire(),
   };
 }
 
@@ -279,7 +282,7 @@ describe('WorkItemEditorPanel', () => {
       expect(mock.panel.webview.postMessage).not.toHaveBeenCalled();
     });
 
-    it('should do a full re-render when managed state changes', () => {
+    it('should do a full re-render when managed state changes via provider registration', () => {
       const item = makeItem({ title: 'My Item', providerId: 'gh', externalId: '10' });
       const mock = createMockWebviewPanel();
       const registry = createMockProviderRegistry();
@@ -291,9 +294,9 @@ describe('WorkItemEditorPanel', () => {
       // Title input should not be readonly initially
       expect(mock.panel.webview.html).not.toContain('Title is managed by the provider');
 
-      // Provider registers — now getProvider returns a provider
+      // Provider registers — fire the registration event
       vi.mocked(registry.getProvider).mockReturnValue({ id: 'gh' } as any);
-      workGraph._fireChange();
+      registry._fireRegisterProvider();
 
       // Should have done a full re-render with readonly title
       expect(mock.panel.webview.html).toContain('Title is managed by the provider');
