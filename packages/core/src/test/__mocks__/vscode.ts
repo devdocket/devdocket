@@ -83,6 +83,7 @@ const window = {
       message: undefined,
       badge: undefined,
       onDidChangeSelection: selectionEmitter.event,
+      reveal: vi.fn().mockResolvedValue(undefined),
       _selectionEmitter: selectionEmitter,
     };
   }),

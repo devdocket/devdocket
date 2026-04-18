@@ -27,6 +27,8 @@ export interface DiscoveredItem {
   group?: string;
   /** Optional notification reason explaining why this item was surfaced (e.g. `"assigned"`, `"review_requested"`). */
   reason?: string;
+  /** Optional upstream state from the provider (e.g. `"open"`, `"closed"`, `"Active"`). */
+  state?: string;
   /**
    * Optional version identifier that changes when the item needs re-attention.
    * When a previously accepted item reappears with a different version,

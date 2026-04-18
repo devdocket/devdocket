@@ -32,6 +32,7 @@ export class GitHubIssueProvider extends BaseGitHubProvider {
         url: issue.html_url,
         group: repoName,
         reason: 'assigned',
+        ...(issue.state ? { state: issue.state } : {}),
       };
     });
 

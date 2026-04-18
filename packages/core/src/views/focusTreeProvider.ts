@@ -62,6 +62,25 @@ export class FocusTreeProvider extends WorkItemViewProvider implements vscode.Tr
     return treeItem;
   }
 
+  getParent(element: FocusElement): FocusElement | undefined {
+    if (this.layout === 'flat') {
+      return undefined;
+    }
+    if (isSubGroupNode(element)) {
+      return undefined;
+    }
+    if (isProviderGroupNode(element)) {
+      return undefined;
+    }
+    // WorkItem — parent is SubGroupNode if item has a group, otherwise root
+    const item = element as import('../models/workItem').WorkItem;
+    const grp = item.group?.trim() || undefined;
+    if (grp) {
+      return { kind: 'subGroup', label: grp, providerId: undefined, groupName: grp };
+    }
+    return undefined;
+  }
+
   getChildren(element?: FocusElement): FocusElement[] {
     if (!element) {
       const items = this.getItems();
