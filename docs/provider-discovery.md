@@ -196,6 +196,8 @@ Some providers track **versions** of discovered items. When a version changes on
 | New commits pushed to the PR | HEAD commit SHA | `devdocketGithub.resurfaceOnNewVersion` |
 | Review explicitly re-requested | Timeline event timestamp | `devdocketGithub.resurfaceOnReRequestedReview` |
 
+> **Note:** Re-request detection is best-effort. Only the first page of PR timeline events (up to 100) is checked, so on PRs with extensive activity the latest re-request event may be missed.
+
 **Azure DevOps PR Reviews** support one resurfacing signal:
 
 | Signal | Tracked via | Setting |
