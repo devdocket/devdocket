@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import * as vscode from 'vscode';
-import { ViewColumn, window } from 'vscode';
+import { EventEmitter, ViewColumn, window } from 'vscode';
 import { WorkItemEditorPanel } from '../views/workItemEditorPanel';
 import { WorkGraph } from '../services/workGraph';
 import { WorkItem, WorkItemState } from '../models/workItem';
@@ -34,6 +34,7 @@ function createMockWebviewPanel() {
         messageHandler = handler;
         return { dispose: vi.fn(() => { messageHandler = undefined; }) };
       }),
+      postMessage: vi.fn(async () => true),
     },
     onDidDispose: vi.fn((handler: DisposeHandler) => {
       disposeHandler = handler;
@@ -50,9 +51,19 @@ function createMockWebviewPanel() {
 }
 
 function createMockWorkGraph(item?: WorkItem) {
+  const changeEmitter = new EventEmitter<void>();
+  const mutableItem = item ? { ...item } : undefined;
   return {
-    getItem: vi.fn((id: string) => (item && item.id === id ? item : undefined)),
-    updateItem: vi.fn(async () => {}),
+    getItem: vi.fn((id: string) => (mutableItem && mutableItem.id === id ? mutableItem : undefined)),
+    updateItem: vi.fn(async (_id: string, patch: Record<string, unknown>) => {
+      if (mutableItem) {
+        Object.assign(mutableItem, patch, { updatedAt: Date.now() });
+      }
+      changeEmitter.fire();
+    }),
+    onDidChange: changeEmitter.event,
+    _fireChange: () => changeEmitter.fire(),
+    _setItem: (newItem: WorkItem) => { Object.assign(mutableItem!, newItem); },
   };
 }
 
@@ -65,9 +76,15 @@ function createMockContext() {
 }
 
 function createMockProviderRegistry() {
+  const discoveredEmitter = new EventEmitter<void>();
+  const registerEmitter = new EventEmitter<void>();
   return {
     getDiscoveredItems: vi.fn(() => []),
     getProvider: vi.fn((id: string) => id ? { id } : undefined),
+    onDidChangeDiscoveredItems: discoveredEmitter.event,
+    onDidRegisterProvider: registerEmitter.event,
+    _fireDiscoveredItemsChange: () => discoveredEmitter.fire(),
+    _fireRegisterProvider: () => registerEmitter.fire(),
   };
 }
 
@@ -106,6 +123,7 @@ function createIntegrationWebviewPanel() {
         messageListeners.push(listener);
         return { dispose: vi.fn() };
       }),
+      postMessage: vi.fn(async () => true),
       _fireMessage: (msg: any) => { messageListeners.forEach(l => l(msg)); },
     },
     onDidDispose: vi.fn((listener: Function) => {
@@ -206,6 +224,82 @@ describe('WorkItemEditorPanel', () => {
       openPanel(item, createMockWorkGraph(item), mock, undefined, registry);
 
       expect(mock.panel.webview.html).not.toContain('Provider State');
+    });
+
+    it('should display persisted title in editor panel', () => {
+      const item = makeItem({ title: 'Current Title', providerId: 'gh', externalId: '42' });
+      const mock = createMockWebviewPanel();
+      openPanel(item, createMockWorkGraph(item), mock);
+
+      expect(mock.panel.title).toBe('Edit: Current Title');
+      expect(mock.panel.webview.html).toContain('Current Title');
+    });
+  });
+
+  describe('dynamic title updates', () => {
+    it('should update title when WorkGraph title changes', () => {
+      const item = makeItem({ title: 'Original', providerId: 'gh', externalId: '10' });
+      const mock = createMockWebviewPanel();
+      const workGraph = createMockWorkGraph(item);
+      openPanel(item, workGraph, mock);
+
+      // Simulate title sync updating the persisted title
+      workGraph._setItem({ ...item, title: 'Renamed Issue' });
+      workGraph._fireChange();
+
+      expect(mock.panel.title).toBe('Edit: Renamed Issue');
+      expect(mock.panel.webview.postMessage).toHaveBeenCalledWith({
+        type: 'updateTitle',
+        title: 'Renamed Issue',
+      });
+    });
+
+    it('should not post message when title has not changed', () => {
+      const item = makeItem({ title: 'Stable Title' });
+      const mock = createMockWebviewPanel();
+      const workGraph = createMockWorkGraph(item);
+      openPanel(item, workGraph, mock);
+
+      // Fire change but title is the same
+      workGraph._fireChange();
+
+      expect(mock.panel.webview.postMessage).not.toHaveBeenCalled();
+    });
+
+    it('should skip title update after panel is disposed', () => {
+      const item = makeItem({ title: 'Disposed', providerId: 'gh', externalId: '10' });
+      const mock = createMockWebviewPanel();
+      const workGraph = createMockWorkGraph(item);
+      openPanel(item, workGraph, mock);
+
+      // Dispose the panel
+      mock.simulateDispose();
+
+      // Simulate title change after disposal
+      workGraph._setItem({ ...item, title: 'New Title' });
+      workGraph._fireChange();
+
+      expect(mock.panel.webview.postMessage).not.toHaveBeenCalled();
+    });
+
+    it('should do a full re-render when managed state changes via provider registration', () => {
+      const item = makeItem({ title: 'My Item', providerId: 'gh', externalId: '10' });
+      const mock = createMockWebviewPanel();
+      const registry = createMockProviderRegistry();
+      const workGraph = createMockWorkGraph(item);
+      // Initially no provider registered
+      vi.mocked(registry.getProvider).mockReturnValue(undefined);
+      openPanel(item, workGraph, mock, undefined, registry);
+
+      // Title input should not be readonly initially
+      expect(mock.panel.webview.html).not.toContain('Title is managed by the provider');
+
+      // Provider registers — fire the registration event
+      vi.mocked(registry.getProvider).mockReturnValue({ id: 'gh' } as any);
+      registry._fireRegisterProvider();
+
+      // Should have done a full re-render with readonly title
+      expect(mock.panel.webview.html).toContain('Title is managed by the provider');
     });
   });
 

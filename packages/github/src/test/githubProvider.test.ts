@@ -619,4 +619,73 @@ describe('GitHubIssueProvider', () => {
     const items = listener.mock.calls[0][0];
     expect(items).toHaveLength(1);
   });
+
+  describe('getClosedItems', () => {
+    it('returns closed issue IDs', async () => {
+      mockFetch
+        .mockResolvedValueOnce({
+          ok: true,
+          json: async () => ({ state: 'closed' }),
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          json: async () => ({ state: 'open' }),
+        });
+
+      const result = await provider.getClosedItems!(['owner/repo#1', 'owner/repo#2']);
+
+      expect(result).toEqual(['owner/repo#1']);
+      expect(mockFetch).toHaveBeenCalledTimes(2);
+      expect(mockFetch).toHaveBeenCalledWith(
+        'https://api.github.com/repos/owner/repo/issues/1',
+        expect.objectContaining({
+          headers: expect.objectContaining({
+            Authorization: 'Bearer test-token',
+          }),
+        }),
+      );
+      expect(mockFetch).toHaveBeenCalledWith(
+        'https://api.github.com/repos/owner/repo/issues/2',
+        expect.objectContaining({
+          headers: expect.objectContaining({
+            Authorization: 'Bearer test-token',
+          }),
+        }),
+      );
+    });
+
+    it('returns empty array when no auth session', async () => {
+      vi.mocked(authentication.getSession).mockResolvedValue(null as any);
+
+      const result = await provider.getClosedItems!(['owner/repo#1']);
+
+      expect(result).toEqual([]);
+      expect(mockFetch).not.toHaveBeenCalled();
+    });
+
+    it('ignores malformed external IDs', async () => {
+      const result = await provider.getClosedItems!(['bad', 'no-hash', 'not/valid#abc']);
+
+      expect(result).toEqual([]);
+      expect(mockFetch).not.toHaveBeenCalled();
+    });
+
+    it('returns empty array for empty input', async () => {
+      const result = await provider.getClosedItems!([]);
+
+      expect(result).toEqual([]);
+      expect(mockFetch).not.toHaveBeenCalled();
+    });
+
+    it('handles API errors gracefully', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: false,
+        status: 404,
+      });
+
+      const result = await provider.getClosedItems!(['owner/repo#1']);
+
+      expect(result).toEqual([]);
+    });
+  });
 });

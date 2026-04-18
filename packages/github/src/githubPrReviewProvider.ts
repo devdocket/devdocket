@@ -120,6 +120,13 @@ export class GitHubPrReviewProvider extends BaseGitHubProvider {
     };
   }
 
+  /**
+   * Check which of the given external IDs correspond to closed/merged GitHub PRs.
+   */
+  async getClosedItems(externalIds: string[], signal?: AbortSignal): Promise<string[]> {
+    return this.fetchClosedGitHubItems(externalIds, 'pulls', signal);
+  }
+
   private getConfiguredRepos(): string[] {
     const config = vscode.workspace.getConfiguration('devdocketGithub');
     return config.get<string[]>('repos', []);

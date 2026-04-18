@@ -2,6 +2,8 @@ import { DevDocketApiImpl } from '../api/devDocketApi';
 import { DevDocketProvider, DevDocketAction, DiscoveredItem } from '../api/types';
 import { ProviderRegistry } from '../services/providerRegistry';
 import { ActionRegistry } from '../services/actionRegistry';
+import { WorkGraph } from '../services/workGraph';
+import { ITaskStore } from '../storage/taskStore';
 import * as vscode from 'vscode';
 import { InboxState } from '../storage/discoveredStateStore';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
@@ -46,6 +48,16 @@ function createMockAction(id: string): DevDocketAction {
   };
 }
 
+function createMockStore(): ITaskStore {
+  const items: Map<string, any> = new Map();
+  return {
+    loadAll: vi.fn(async () => Array.from(items.values())),
+    save: vi.fn(async (item) => { items.set(item.id, item); }),
+    saveAll: vi.fn(async (batch) => { for (const item of batch) { items.set(item.id, item); } }),
+    delete: vi.fn(async (id) => { items.delete(id); }),
+  };
+}
+
 // Contract tests for the public API surface that provider extensions consume.
 // These intentionally overlap with registry-level tests to guard against
 // accidental wiring changes in DevDocketApiImpl.
@@ -53,12 +65,15 @@ describe('DevDocketApiImpl', () => {
   let api: DevDocketApiImpl;
   let providerRegistry: ProviderRegistry;
   let actionRegistry: ActionRegistry;
+  let workGraph: WorkGraph;
 
-  beforeEach(() => {
+  beforeEach(async () => {
     const stateStore = createMockStateStore();
     providerRegistry = new ProviderRegistry(stateStore);
     actionRegistry = new ActionRegistry();
-    api = new DevDocketApiImpl(providerRegistry, actionRegistry);
+    workGraph = new WorkGraph(createMockStore());
+    await workGraph.load();
+    api = new DevDocketApiImpl(providerRegistry, actionRegistry, workGraph);
   });
 
   describe('registerProvider', () => {
@@ -143,6 +158,29 @@ describe('DevDocketApiImpl', () => {
       api.registerAction(a1);
 
       expect(() => api.registerAction(a2)).toThrow('Action already registered: dup');
+    });
+  });
+
+  describe('addActivity', () => {
+    it('delegates to workGraph.addActivity', async () => {
+      const item = await workGraph.createItem({ title: 'Test' });
+      const spy = vi.spyOn(workGraph, 'addActivity');
+
+      await api.addActivity(item.id, 'action-executed', 'branch created');
+
+      expect(spy).toHaveBeenCalledWith(item.id, 'action-executed', 'branch created');
+    });
+
+    it('appends an activity entry to the work item', async () => {
+      const item = await workGraph.createItem({ title: 'Test' });
+
+      await api.addActivity(item.id, 'action-executed', 'cleanup done');
+
+      const updated = workGraph.getItem(item.id);
+      expect(updated?.activityLog).toBeDefined();
+      const actionEntries = updated!.activityLog!.filter(e => e.type === 'action-executed');
+      expect(actionEntries).toHaveLength(1);
+      expect(actionEntries[0].detail).toBe('cleanup done');
     });
   });
 });

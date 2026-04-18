@@ -17,6 +17,11 @@ export class WorkItemEditorPanel {
   private pendingData: Record<string, string> | undefined;
   private saveQueue: Promise<void> = Promise.resolve();
   private readonly messageSubscription: vscode.Disposable;
+  private readonly workGraphSub: vscode.Disposable;
+  private readonly providerRegSub: vscode.Disposable;
+  private readonly providerChangeSub: vscode.Disposable;
+  private lastDisplayedTitle: string | undefined;
+  private lastManagedState: boolean | undefined;
 
   static open(
     context: vscode.ExtensionContext,
@@ -27,7 +32,6 @@ export class WorkItemEditorPanel {
   ): void {
     const existing = WorkItemEditorPanel.openPanels.get(item.id);
     if (existing) {
-      existing.panel.title = `Edit: ${item.title}`;
       existing.providerLabel = providerLabel;
       existing.update();
       existing.panel.reveal();
@@ -69,6 +73,18 @@ export class WorkItemEditorPanel {
 
     this.update();
 
+    this.workGraphSub = this.workGraph.onDidChange(() => {
+      this.checkForUpdates();
+    });
+
+    this.providerRegSub = this.providerRegistry.onDidRegisterProvider(() => {
+      this.checkForUpdates();
+    });
+
+    this.providerChangeSub = this.providerRegistry.onDidChangeDiscoveredItems(() => {
+      this.checkForUpdates();
+    });
+
     this.messageSubscription = this.panel.webview.onDidReceiveMessage((msg) => {
       if (msg?.type === 'openUrl' && typeof msg.url === 'string') {
         const safeUrl = isSafeUrl(msg.url);
@@ -104,12 +120,40 @@ export class WorkItemEditorPanel {
         }
         this.flushPendingData();
         this.messageSubscription.dispose();
+        this.workGraphSub.dispose();
+        this.providerRegSub.dispose();
+        this.providerChangeSub.dispose();
       }
     });
   }
 
   private isProviderManaged(item: WorkItem): boolean {
     return !!(item.providerId && this.providerRegistry.getProvider(item.providerId));
+  }
+
+  /**
+   * Respond to WorkGraph changes. When the persisted title changes (e.g. from
+   * a provider title sync), push the new title to the webview without a full
+   * re-render to preserve unsaved notes edits. When the managed state changes
+   * (provider registered/unregistered), do a full re-render to toggle the
+   * title input's readonly state.
+   */
+  private checkForUpdates(): void {
+    if (this.disposed) { return; }
+    const item = this.workGraph.getItem(this.itemId);
+    if (!item) { return; }
+
+    const currentManaged = this.isProviderManaged(item);
+    if (currentManaged !== this.lastManagedState) {
+      this.update();
+      return;
+    }
+
+    if (item.title !== this.lastDisplayedTitle) {
+      this.lastDisplayedTitle = item.title;
+      this.panel.title = `Edit: ${item.title}`;
+      void this.panel.webview.postMessage({ type: 'updateTitle', title: item.title });
+    }
   }
 
   private async saveData(data: Record<string, string>): Promise<void> {
@@ -136,9 +180,6 @@ export class WorkItemEditorPanel {
     }
 
     await this.workGraph.updateItem(this.itemId, patch);
-    if (!this.disposed && data.title && !managed) {
-      this.panel.title = `Edit: ${data.title}`;
-    }
   }
 
   private update(): void {
@@ -147,6 +188,9 @@ export class WorkItemEditorPanel {
       this.panel.webview.html = '<html><body><p>Item not found.</p></body></html>';
       return;
     }
+    this.lastDisplayedTitle = item.title;
+    this.lastManagedState = this.isProviderManaged(item);
+    this.panel.title = `Edit: ${item.title}`;
     this.panel.webview.html = this.getHtml(item);
   }
 
@@ -180,6 +224,9 @@ export class WorkItemEditorPanel {
       }
       this.flushPendingData();
       this.messageSubscription.dispose();
+      this.workGraphSub.dispose();
+      this.providerRegSub.dispose();
+      this.providerChangeSub.dispose();
       this.panel.dispose();
     }
   }

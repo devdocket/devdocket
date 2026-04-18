@@ -88,6 +88,13 @@ export class GitHubIssueProvider extends BaseGitHubProvider {
     };
   }
 
+  /**
+   * Check which of the given external IDs correspond to closed GitHub issues.
+   */
+  async getClosedItems(externalIds: string[], signal?: AbortSignal): Promise<string[]> {
+    return this.fetchClosedGitHubItems(externalIds, 'issues', signal);
+  }
+
   private getConfiguredRepos(): string[] {
     const config = vscode.workspace.getConfiguration('devdocketGithub');
     return config.get<string[]>('repos', []);
