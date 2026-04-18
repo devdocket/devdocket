@@ -297,8 +297,9 @@ export async function activate(context: vscode.ExtensionContext): Promise<DevDoc
   let pruning = false;
   async function autoTrimHistory(): Promise<void> {
     if (pruning) { return; }
-    const maxItems = vscode.workspace.getConfiguration('devdocket').get<number>('maxHistoryItems', 0);
-    if (!maxItems || maxItems <= 0) { return; }
+    const rawMaxItems = vscode.workspace.getConfiguration('devdocket').get('maxHistoryItems', 0);
+    const maxItems = Number(rawMaxItems);
+    if (!Number.isFinite(maxItems) || maxItems <= 0) { return; }
     pruning = true;
     try {
       const result = await wg.pruneHistory(maxItems);
