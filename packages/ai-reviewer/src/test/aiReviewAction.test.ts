@@ -1,6 +1,8 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { window, workspace, authentication, lm, Uri } from 'vscode';
+import { window, workspace, authentication, lm, Uri, LanguageModelTextPart, mockLogOutputChannel } from 'vscode';
 import { AiReviewAction, sanitizePrUrl } from '../aiReviewAction';
+import { WalkthroughCache } from '../walkthroughCache';
+import type { RepoManager } from '../repoManager';
 
 function createWorkItem(overrides: Partial<Record<string, unknown>> = {}) {
   return {
@@ -17,8 +19,34 @@ function createWorkItem(overrides: Partial<Record<string, unknown>> = {}) {
   };
 }
 
+function createMockRepoManager(): RepoManager {
+  return {
+    ensureWorktree: vi.fn().mockResolvedValue({
+      worktreePath: '/mock/worktrees/pr-42',
+      clonePath: '/mock/repos/owner-repo',
+      org: 'owner',
+      repo: 'repo',
+      prNumber: '42',
+      headRef: 'pr-42',
+      baseRef: 'origin/main',
+    }),
+    getWorktreeInfo: vi.fn(),
+    removeWorktree: vi.fn(),
+    removeRepo: vi.fn(),
+  } as unknown as RepoManager;
+}
+
+function createMockSendRequest(text = 'Review feedback here') {
+  return vi.fn().mockResolvedValue({
+    text: (async function* () { yield text; })(),
+    stream: (async function* () { yield new LanguageModelTextPart(text); })(),
+  });
+}
+
 describe('AiReviewAction', () => {
   let action: AiReviewAction;
+  let mockRepoManager: RepoManager;
+  let walkthroughCache: WalkthroughCache;
 
   afterEach(() => {
     vi.unstubAllGlobals();
@@ -27,7 +55,9 @@ describe('AiReviewAction', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.stubGlobal('fetch', vi.fn());
-    action = new AiReviewAction();
+    mockRepoManager = createMockRepoManager();
+    walkthroughCache = new WalkthroughCache();
+    action = new AiReviewAction(mockRepoManager, walkthroughCache, mockLogOutputChannel as never);
 
     // Reset default mocks
     vi.mocked(authentication.getSession).mockResolvedValue({ accessToken: 'mock-token' } as never);
@@ -38,9 +68,7 @@ describe('AiReviewAction', () => {
       return task(progress, token);
     });
     vi.mocked(lm.selectChatModels).mockResolvedValue([{
-      sendRequest: vi.fn().mockResolvedValue({
-        text: (async function* () { yield 'Review feedback here'; })(),
-      }),
+      sendRequest: createMockSendRequest(),
     }]);
     vi.mocked(window.showWarningMessage).mockResolvedValue('Continue' as never);
     vi.mocked(workspace.getConfiguration).mockReturnValue({
@@ -155,6 +183,9 @@ describe('AiReviewAction', () => {
       const item = createWorkItem();
       await action.run(item);
 
+      // Verify worktree was prepared
+      expect(mockRepoManager.ensureWorktree).toHaveBeenCalledWith('https://github.com/owner/repo/pull/42');
+
       // Verify fetch was called with the GitHub API
       expect(mockFetch).toHaveBeenCalledWith(
         'https://api.github.com/repos/owner/repo/pulls/42',
@@ -204,6 +235,7 @@ describe('AiReviewAction', () => {
       await action.run(item);
 
       expect(window.withProgress).not.toHaveBeenCalled();
+      expect(mockRepoManager.ensureWorktree).not.toHaveBeenCalled();
     });
 
     it('shows warning when GitHub auth is unavailable', async () => {
@@ -229,9 +261,9 @@ describe('AiReviewAction', () => {
       vi.mocked(window.withProgress).mockImplementation(async (_options: unknown, task: Function) => {
         const progress = { report: vi.fn() };
         const token = { isCancellationRequested: false, onCancellationRequested: vi.fn() };
-        // Simulate cancellation after analyzeWithAi resolves
-        const originalAnalyze = action.analyzeWithAi.bind(action);
-        vi.spyOn(action, 'analyzeWithAi').mockImplementation(async (...args) => {
+        // Simulate cancellation after analyzeWithTools resolves
+        const originalAnalyze = action.analyzeWithTools.bind(action);
+        vi.spyOn(action, 'analyzeWithTools').mockImplementation(async (...args) => {
           const result = await originalAnalyze(...args);
           token.isCancellationRequested = true;
           return result;
@@ -547,6 +579,149 @@ describe('AiReviewAction', () => {
       expect(() => action.resolvePromptUri('/outside/prompt.md')).toThrow(
         '"/outside/prompt.md"',
       );
+    });
+  });
+
+  describe('analyzeWithTools', () => {
+    const worktreeInfo = {
+      worktreePath: '/mock/worktrees/pr-42',
+      clonePath: '/mock/repos/owner-repo',
+      org: 'owner',
+      repo: 'repo',
+      prNumber: '42',
+      headRef: 'pr-42',
+      baseRef: 'origin/main',
+    };
+
+    it('returns review text with repo context instructions', async () => {
+      const sendRequest = createMockSendRequest('Tool-enabled review');
+      vi.mocked(lm.selectChatModels).mockResolvedValue([{ sendRequest }]);
+
+      const token = { isCancellationRequested: false, onCancellationRequested: vi.fn() };
+      const result = await action.analyzeWithTools(
+        'diff content', 'https://github.com/owner/repo/pull/42', worktreeInfo as never, token as never,
+      );
+
+      expect(result).toContain('AI Code Review');
+      expect(result).toContain('Tool-enabled review');
+
+      // Verify the prompt includes repo context
+      const userMsg = sendRequest.mock.calls[0][0][0];
+      expect(userMsg.content).toContain('Repository Context');
+      expect(userMsg.content).toContain('/mock/worktrees/pr-42');
+      expect(userMsg.content).toContain('devdocket-readFile');
+      expect(userMsg.content).toContain('devdocket-searchCode');
+    });
+
+    it('includes walkthrough findings when available', async () => {
+      walkthroughCache.setFindings(
+        'https://github.com/owner/repo/pull/42',
+        'The PR refactors the auth module...',
+      );
+
+      const sendRequest = createMockSendRequest('Review with context');
+      vi.mocked(lm.selectChatModels).mockResolvedValue([{ sendRequest }]);
+
+      const token = { isCancellationRequested: false, onCancellationRequested: vi.fn() };
+      await action.analyzeWithTools(
+        'diff', 'https://github.com/owner/repo/pull/42', worktreeInfo as never, token as never,
+      );
+
+      const userMsg = sendRequest.mock.calls[0][0][0];
+      expect(userMsg.content).toContain('Prior Walkthrough Analysis');
+      expect(userMsg.content).toContain('The PR refactors the auth module...');
+    });
+
+    it('does not include walkthrough section when no findings exist', async () => {
+      const sendRequest = createMockSendRequest('Review');
+      vi.mocked(lm.selectChatModels).mockResolvedValue([{ sendRequest }]);
+
+      const token = { isCancellationRequested: false, onCancellationRequested: vi.fn() };
+      await action.analyzeWithTools(
+        'diff', 'https://github.com/owner/repo/pull/42', worktreeInfo as never, token as never,
+      );
+
+      const userMsg = sendRequest.mock.calls[0][0][0];
+      expect(userMsg.content).not.toContain('Prior Walkthrough Analysis');
+    });
+
+    it('truncates walkthrough findings exceeding max length', async () => {
+      const longFindings = 'x'.repeat(35_000);
+      walkthroughCache.setFindings('https://github.com/owner/repo/pull/42', longFindings);
+
+      const sendRequest = createMockSendRequest('Review');
+      vi.mocked(lm.selectChatModels).mockResolvedValue([{ sendRequest }]);
+
+      const token = { isCancellationRequested: false, onCancellationRequested: vi.fn() };
+      await action.analyzeWithTools(
+        'diff', 'https://github.com/owner/repo/pull/42', worktreeInfo as never, token as never,
+      );
+
+      const userMsg = sendRequest.mock.calls[0][0][0];
+      expect(userMsg.content).toContain('walkthrough findings truncated');
+    });
+
+    it('appends truncation note when diff exceeds limit and worktree is available', async () => {
+      const token = { isCancellationRequested: false, onCancellationRequested: vi.fn() };
+      const largeDiff = 'x'.repeat(50_001);
+      const result = await action.analyzeWithTools(
+        largeDiff, 'https://github.com/owner/repo/pull/42', worktreeInfo as never, token as never,
+      );
+
+      expect(result).toContain('Use devdocket-getFileDiff');
+    });
+
+    it('returns undefined when no language model available', async () => {
+      vi.mocked(lm.selectChatModels).mockResolvedValue([]);
+
+      const token = { isCancellationRequested: false, onCancellationRequested: vi.fn() };
+      const result = await action.analyzeWithTools(
+        'diff', 'https://github.com/owner/repo/pull/42', worktreeInfo as never, token as never,
+      );
+
+      expect(result).toBeUndefined();
+      expect(window.showWarningMessage).toHaveBeenCalledWith(
+        expect.stringContaining('No language model available'),
+      );
+    });
+  });
+
+  describe('shared RepoManager', () => {
+    it('falls back to analyzeWithAi when worktree preparation fails', async () => {
+      vi.mocked(mockRepoManager.ensureWorktree).mockRejectedValue(new Error('Clone failed'));
+      vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+        ok: true,
+        text: vi.fn().mockResolvedValue('diff content'),
+      }));
+
+      const item = createWorkItem();
+      await action.run(item);
+
+      // Should still show review via fallback analyzeWithAi
+      expect(workspace.openTextDocument).toHaveBeenCalledWith({
+        content: expect.stringContaining('AI Code Review'),
+        language: 'markdown',
+      });
+    });
+
+    it('reuses worktree if previously prepared by walkthrough', async () => {
+      vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+        ok: true,
+        text: vi.fn().mockResolvedValue('diff content'),
+      }));
+
+      const item = createWorkItem();
+      await action.run(item);
+
+      // ensureWorktree reuses existing clone/worktree
+      expect(mockRepoManager.ensureWorktree).toHaveBeenCalledWith('https://github.com/owner/repo/pull/42');
+    });
+
+    it('does not call ensureWorktree for non-PR URLs', async () => {
+      const item = createWorkItem({ url: 'https://github.com/owner/repo/issues/42' });
+      await action.run(item);
+
+      expect(mockRepoManager.ensureWorktree).not.toHaveBeenCalled();
     });
   });
 });
