@@ -39,8 +39,10 @@ export async function checkAutoComplete(
     try {
       const externalIds = [...new Set(candidates.map(item => item.externalId!))];
       const result = await provider.getClosedItems(externalIds, signal);
+      if (signal?.aborted) { return []; }
       closedIds = new Set(result);
     } catch (err) {
+      if (signal?.aborted) { return []; }
       logger.error(`Provider "${providerId}" getClosedItems failed, skipping auto-complete`, err);
       return [];
     }
@@ -73,6 +75,7 @@ export async function checkAutoComplete(
 
   const completedTitles: string[] = [];
   for (const item of candidates) {
+    if (signal?.aborted) { break; }
     if (closedIds.has(item.externalId!)) {
       const currentItem = workGraph.getItem(item.id);
       if (!currentItem || !currentItem.externalId || !AUTO_COMPLETABLE_STATES.has(currentItem.state)) {
