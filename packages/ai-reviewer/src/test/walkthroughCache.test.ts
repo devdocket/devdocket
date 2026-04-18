@@ -33,6 +33,24 @@ describe('WalkthroughCache', () => {
     expect(cache.getFindings('https://github.com/owner/repo/pull/99')).toBe('New');
   });
 
+  it('caps content at MAX_ENTRY_LENGTH when using setFindings', () => {
+    const cache = new WalkthroughCache();
+    const oversized = 'x'.repeat(600_000);
+    cache.setFindings('https://github.com/owner/repo/pull/42', oversized);
+    const result = cache.getFindings('https://github.com/owner/repo/pull/42')!;
+    expect(result.length).toBeLessThanOrEqual(500_000);
+  });
+
+  it('caps content at MAX_ENTRY_LENGTH when using appendFindings', () => {
+    const cache = new WalkthroughCache();
+    cache.appendFindings('https://github.com/owner/repo/pull/42', 'x'.repeat(400_000));
+    cache.appendFindings('https://github.com/owner/repo/pull/42', 'y'.repeat(200_000));
+    const result = cache.getFindings('https://github.com/owner/repo/pull/42')!;
+    expect(result.length).toBeLessThanOrEqual(500_000);
+    // Should keep the most recent content (ends with 'y's)
+    expect(result.endsWith('y'.repeat(100))).toBe(true);
+  });
+
   it('reports hasFindings correctly', () => {
     const cache = new WalkthroughCache();
     expect(cache.hasFindings('https://github.com/owner/repo/pull/42')).toBe(false);
