@@ -66,7 +66,7 @@ export class GitHubMyPrsProvider extends BaseGitHubProvider {
         ? `Failed to fetch authored PRs from ${failures[0]}`
         : `Failed to fetch authored PRs from ${failures.length} repositories`;
       if (isUserTriggered) {
-        vscode.window.showWarningMessage(`DevDocket GitHub: ${message}`);
+        void vscode.window.showWarningMessage(`DevDocket GitHub: ${message}`);
       } else {
         logger.warn(message);
       }
