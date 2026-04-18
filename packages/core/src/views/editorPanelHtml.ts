@@ -1,5 +1,6 @@
 import * as crypto from 'crypto';
 import { WorkItem, WorkItemState } from '../models/workItem';
+import { isSafeUrl } from '../utils/url';
 
 export interface EditorHtmlOptions {
   cspSource: string;
@@ -8,11 +9,13 @@ export interface EditorHtmlOptions {
   providerLabel?: string;
   /** Read-only description from the provider. Will be HTML-escaped before rendering. */
   providerDescription?: string;
+  /** Upstream state from the provider (e.g. "open", "closed", "Active"). Will be HTML-escaped. */
+  providerState?: string;
   /** When true, the title field is read-only (managed by a live provider). */
   titleReadonly?: boolean;
 }
 
-export function getEditorPanelHtml({ cspSource, item, providerLabel, providerDescription, titleReadonly }: EditorHtmlOptions): string {
+export function getEditorPanelHtml({ cspSource, item, providerLabel, providerDescription, providerState, titleReadonly }: EditorHtmlOptions): string {
   const nonce = getNonce();
   const descriptionSection = providerDescription
     ? `    <div class="field">
@@ -158,28 +161,26 @@ export function getEditorPanelHtml({ cspSource, item, providerLabel, providerDes
       white-space: pre-wrap;
       margin-top: 2px;
     }
-    .source-link {
-      display: inline-flex;
-      align-items: center;
-      gap: 4px;
-      font-size: 0.85em;
-      margin-bottom: 14px;
+    .title-link {
       color: var(--vscode-textLink-foreground);
       cursor: pointer;
-      background: none;
-      border: none;
-      padding: 0;
-      font-family: inherit;
+      text-decoration: none;
     }
-    .source-link:hover {
+    .title-link:hover {
       color: var(--vscode-textLink-activeForeground);
       text-decoration: underline;
+    }
+    .title-link:focus,
+    .title-link:focus-visible {
+      color: var(--vscode-textLink-activeForeground);
+      text-decoration: underline;
+      outline: 1px solid var(--vscode-focusBorder);
+      outline-offset: 2px;
     }
   </style>
 </head>
 <body>
-  <h2 id="editor-heading">${escapeHtml(item.title)}</h2>
-${item.url ? `  <button type="button" class="source-link" id="source-link" data-url="${escapeAttr(item.url)}">Open in browser</button>` : ''}
+  <h2 id="editor-heading">${item.url && isSafeUrl(item.url) ? `<a href="${escapeAttr(item.url)}" class="title-link" id="title-link" data-url="${escapeAttr(item.url)}" title="Open in browser">${escapeHtml(item.title)}</a>` : escapeHtml(item.title)}</h2>
   <div id="form" role="form" aria-labelledby="editor-heading">
     <div class="field">
       <label for="title">Title</label>
@@ -199,6 +200,8 @@ ${descriptionSection}
       <dd><span class="badge ${stateBadgeClass(item.state)}">${escapeHtml(stateLabel(item.state))}</span></dd>
 ${item.providerId && providerLabel ? `      <dt>Provider</dt>
       <dd>${escapeHtml(providerLabel)}</dd>` : ''}
+${providerState && item.providerId ? `      <dt>Provider State</dt>
+      <dd>${escapeHtml(providerState)}</dd>` : ''}
       <dt>Created</dt>
       <dd>${escapeHtml(formatTimestamp(item.createdAt))}</dd>
       <dt>Updated</dt>
@@ -236,10 +239,11 @@ ${item.providerId && providerLabel ? `      <dt>Provider</dt>
       }
     });
 
-    const sourceLink = document.getElementById('source-link');
-    if (sourceLink) {
-      sourceLink.addEventListener('click', () => {
-        vscode.postMessage({ type: 'openUrl', url: sourceLink.dataset.url });
+    const titleLink = document.getElementById('title-link');
+    if (titleLink) {
+      titleLink.addEventListener('click', (e) => {
+        e.preventDefault();
+        vscode.postMessage({ type: 'openUrl', url: titleLink.dataset.url });
       });
     }
   </script>

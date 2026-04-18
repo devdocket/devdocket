@@ -282,6 +282,7 @@ export class AdoWorkItemProvider extends BaseProvider {
         url: wi._links.html.href,
         group: `${org}/${projectName}`,
         reason: 'assigned',
+        state: wi.fields['System.State'],
       };
     });
 

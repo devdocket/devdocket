@@ -149,6 +149,42 @@ describe('GitHubIssueProvider', () => {
     });
   });
 
+  it('should include state when issue has a state field', async () => {
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: async () => [{
+        ...createMockIssue(5, 'Stateful issue'),
+        state: 'open',
+      }],
+      headers: { get: () => null },
+    });
+
+    const listener = vi.fn();
+    provider.onDidDiscoverItems(listener);
+    await provider.refresh();
+
+    const items = listener.mock.calls[0][0];
+    expect(items[0]).toEqual(expect.objectContaining({
+      externalId: 'owner/repo#5',
+      state: 'open',
+    }));
+  });
+
+  it('should omit state when issue has no state field', async () => {
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: async () => [createMockIssue(6, 'Stateless issue')],
+      headers: { get: () => null },
+    });
+
+    const listener = vi.fn();
+    provider.onDidDiscoverItems(listener);
+    await provider.refresh();
+
+    const items = listener.mock.calls[0][0];
+    expect(items[0]).not.toHaveProperty('state');
+  });
+
   it('truncates description to 200 chars', async () => {
     const longBody = 'A'.repeat(300);
     mockFetch.mockResolvedValueOnce({

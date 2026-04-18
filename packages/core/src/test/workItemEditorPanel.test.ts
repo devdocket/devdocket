@@ -182,6 +182,31 @@ describe('WorkItemEditorPanel', () => {
       expect(registry.getDiscoveredItems).toHaveBeenCalledWith('gh');
       expect(mock.panel.webview.html).toContain('Fix the login page');
     });
+
+    it('should pass provider state to HTML when discovered item has state', () => {
+      const item = makeItem({ providerId: 'gh', externalId: '42' });
+      const mock = createMockWebviewPanel();
+      const registry = createMockProviderRegistry();
+      vi.mocked(registry.getDiscoveredItems).mockReturnValue([
+        { externalId: '42', title: 'Bug', state: 'open' } as any,
+      ]);
+      openPanel(item, createMockWorkGraph(item), mock, undefined, registry);
+
+      expect(mock.panel.webview.html).toContain('Provider State');
+      expect(mock.panel.webview.html).toContain('open');
+    });
+
+    it('should omit provider state from HTML when discovered item has no state', () => {
+      const item = makeItem({ providerId: 'gh', externalId: '42' });
+      const mock = createMockWebviewPanel();
+      const registry = createMockProviderRegistry();
+      vi.mocked(registry.getDiscoveredItems).mockReturnValue([
+        { externalId: '42', title: 'Bug' } as any,
+      ]);
+      openPanel(item, createMockWorkGraph(item), mock, undefined, registry);
+
+      expect(mock.panel.webview.html).not.toContain('Provider State');
+    });
   });
 
   describe('panel reuse', () => {
