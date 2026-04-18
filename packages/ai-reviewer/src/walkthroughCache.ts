@@ -1,6 +1,9 @@
 /** Maximum number of PR entries kept in the cache before evicting the oldest. */
 const MAX_CACHE_ENTRIES = 20;
 
+/** Maximum characters stored per PR entry to bound memory usage. */
+const MAX_ENTRY_LENGTH = 500_000;
+
 /**
  * In-memory cache of walkthrough findings keyed by PR URL.
  * Shared between WalkthroughParticipant (writer) and AiReviewAction (reader)
@@ -52,10 +55,15 @@ export class WalkthroughCache {
   /** Append content to existing findings for a PR (accumulates across turns). */
   appendFindings(prUrl: string, content: string): void {
     const key = this.normalizeKey(prUrl);
-    const existing = this.findings.get(key) ?? '';
+    let existing = this.findings.get(key) ?? '';
+    existing += content;
+    // Cap per-entry length to prevent unbounded growth from long walkthroughs
+    if (existing.length > MAX_ENTRY_LENGTH) {
+      existing = existing.slice(existing.length - MAX_ENTRY_LENGTH);
+    }
     // Delete + set to refresh insertion order
     this.findings.delete(key);
-    this.findings.set(key, existing + content);
+    this.findings.set(key, existing);
     this.evictIfNeeded();
   }
 
