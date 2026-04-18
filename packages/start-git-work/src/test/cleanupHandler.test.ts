@@ -175,6 +175,22 @@ describe('CleanupHandler', () => {
       );
     });
 
+    it('does nothing when user dismisses the dialog', async () => {
+      mockMemento._store.set(metadataKey('item-1'), DEFAULT_METADATA);
+      vi.mocked(fs.existsSync).mockImplementation((p: any) => {
+        return p.toString() === DEFAULT_METADATA.worktreePath;
+      });
+      // Dismissing (Escape / close) resolves to undefined
+      vi.mocked(window.showInformationMessage).mockResolvedValue(undefined as any);
+
+      const event = createEvent();
+      await handler.handleStateTransition(event);
+
+      expect(execFile).not.toHaveBeenCalledWith(
+        'git', expect.arrayContaining(['worktree', 'remove']), expect.anything(), expect.anything(),
+      );
+    });
+
     it('removes worktree and deletes branch when user selects Yes', async () => {
       mockMemento._store.set(metadataKey('item-1'), DEFAULT_METADATA);
       // Worktree exists initially but not after removal

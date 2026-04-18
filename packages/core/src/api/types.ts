@@ -104,6 +104,11 @@ export interface DevDocketAction {
  *
  * Fired after a work item transitions between lifecycle states (e.g.
  * InProgress → Done). Extensions can subscribe to react to state changes.
+ *
+ * `oldState` and `newState` are typed as `string` (not `WorkItemState`)
+ * so that satellite extensions (e.g. start-git-work) can consume the event
+ * without importing core-internal enum types. The actual values are always
+ * `WorkItemState` members (e.g. `'Done'`, `'InProgress'`).
  */
 export interface StateTransitionEvent {
   /** The work item after the transition completed. */
