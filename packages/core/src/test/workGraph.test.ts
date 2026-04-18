@@ -942,12 +942,19 @@ describe('WorkGraph', () => {
 
     it('does not record update entry when no fields actually changed', async () => {
       const item = await graph.createItem({ title: 'Same' });
+      const listener = vi.fn();
+      graph.onDidChange(listener);
+      (store.save as ReturnType<typeof vi.fn>).mockClear();
+
       await graph.updateItem(item.id, { title: 'Same' });
 
       const updated = graph.getItem(item.id);
       // Only the initial 'created' entry should exist — no 'updated' entry
       expect(updated?.activityLog).toHaveLength(1);
       expect(updated!.activityLog![0].type).toBe('created');
+      // No save or event should fire for a no-op update
+      expect(store.save).not.toHaveBeenCalled();
+      expect(listener).not.toHaveBeenCalled();
     });
 
     it('appends entries via addActivity', async () => {

@@ -212,21 +212,22 @@ export class WorkGraph {
     if (!item) {
       throw new Error(`Work item not found: ${id}`);
     }
-    const now = Date.now();
     const changes: string[] = [];
     if (patch.title !== undefined && patch.title !== item.title) { changes.push('title'); }
     if (patch.notes !== undefined && patch.notes !== item.notes) { changes.push('notes'); }
+    // Skip save/event when no fields actually changed (e.g. autosave with identical values)
+    if (changes.length === 0) {
+      return;
+    }
+    const now = Date.now();
     const updated = {
       ...item,
       ...patch,
-      // Only log an activity entry when fields actually changed
-      ...(changes.length > 0 ? {
-        activityLog: WorkGraph.appendLogEntry(item.activityLog, {
-          timestamp: now,
-          type: 'updated' as const,
-          detail: changes.join(', '),
-        }),
-      } : {}),
+      activityLog: WorkGraph.appendLogEntry(item.activityLog, {
+        timestamp: now,
+        type: 'updated' as const,
+        detail: changes.join(', '),
+      }),
       updatedAt: now,
     };
     await this.store.save(updated);
