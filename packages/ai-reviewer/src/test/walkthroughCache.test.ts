@@ -56,4 +56,35 @@ describe('WalkthroughCache', () => {
     expect(cache.getFindings('https://github.com/owner/repo/pull/1')).toBe('PR 1');
     expect(cache.getFindings('https://github.com/owner/repo/pull/2')).toBe('PR 2');
   });
+
+  it('evicts oldest entries when exceeding max cache size', () => {
+    const cache = new WalkthroughCache();
+    // Fill to capacity (20 entries)
+    for (let i = 1; i <= 20; i++) {
+      cache.setFindings(`https://github.com/owner/repo/pull/${i}`, `PR ${i}`);
+    }
+    expect(cache.size).toBe(20);
+
+    // Adding one more evicts the oldest (PR 1)
+    cache.setFindings('https://github.com/owner/repo/pull/21', 'PR 21');
+    expect(cache.size).toBe(20);
+    expect(cache.getFindings('https://github.com/owner/repo/pull/1')).toBeUndefined();
+    expect(cache.getFindings('https://github.com/owner/repo/pull/2')).toBe('PR 2');
+    expect(cache.getFindings('https://github.com/owner/repo/pull/21')).toBe('PR 21');
+  });
+
+  it('refreshes insertion order when updating existing entries', () => {
+    const cache = new WalkthroughCache();
+    for (let i = 1; i <= 20; i++) {
+      cache.setFindings(`https://github.com/owner/repo/pull/${i}`, `PR ${i}`);
+    }
+
+    // Touch PR 1 to move it to the end
+    cache.setFindings('https://github.com/owner/repo/pull/1', 'PR 1 updated');
+
+    // Add new entry — should evict PR 2 (now the oldest), not PR 1
+    cache.setFindings('https://github.com/owner/repo/pull/21', 'PR 21');
+    expect(cache.getFindings('https://github.com/owner/repo/pull/1')).toBe('PR 1 updated');
+    expect(cache.getFindings('https://github.com/owner/repo/pull/2')).toBeUndefined();
+  });
 });

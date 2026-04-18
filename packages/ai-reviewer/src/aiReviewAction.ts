@@ -1,6 +1,7 @@
 import * as vscode from 'vscode';
 import { BasePrAction, sanitizePrUrl } from './basePrAction';
 import { DEFAULT_REVIEW_PROMPT } from './defaultPrompt';
+import { truncateToolContent } from './toolUtils';
 import type { RepoManager, WorktreeInfo } from './repoManager';
 import type { WalkthroughCache } from './walkthroughCache';
 import type { WorkItem } from './types';
@@ -13,9 +14,6 @@ const MAX_WALKTHROUGH_CONTEXT = 30_000;
 
 /** Maximum tool-use loop iterations for the tool-enabled review flow. */
 const MAX_TOOL_ITERATIONS = 15;
-
-/** Maximum characters per tool result to avoid context overflow. */
-const MAX_TOOL_RESULT_LENGTH = 80_000;
 
 export class AiReviewAction extends BasePrAction {
   readonly id = 'ai-reviewer.review';
@@ -212,7 +210,7 @@ ${diff.slice(0, maxDiffLength)}
               );
 
               // Truncate large tool results to prevent context overflow
-              const content = this.truncateToolResult(toolResult.content);
+              const content = truncateToolContent(toolResult.content);
               toolResults.push({ callId: part.callId, content });
             } catch (err) {
               const errMsg = err instanceof Error ? err.message : String(err);
@@ -252,7 +250,8 @@ ${diff.slice(0, maxDiffLength)}
 
       return result + truncationNote;
     } catch (err) {
-      console.error(`${this.progressTitle}: analysis failed:`, err);
+      const msg = err instanceof Error ? err.message : String(err);
+      this.log.error(`${this.progressTitle}: analysis failed: ${msg}`);
       vscode.window.showErrorMessage(`${this.progressTitle}: Analysis failed`);
       return undefined;
     }
@@ -334,20 +333,5 @@ ${truncated}
         description: t.description,
         inputSchema: t.inputSchema as Record<string, unknown>,
       }));
-  }
-
-  /** Truncate tool result content to prevent context window overflow. */
-  private truncateToolResult(
-    content: (vscode.LanguageModelTextPart | vscode.LanguageModelToolResultPart)[],
-  ): (vscode.LanguageModelTextPart | vscode.LanguageModelToolResultPart)[] {
-    return content.map((part) => {
-      if (part instanceof vscode.LanguageModelTextPart && part.value.length > MAX_TOOL_RESULT_LENGTH) {
-        return new vscode.LanguageModelTextPart(
-          part.value.slice(0, MAX_TOOL_RESULT_LENGTH) +
-            '\n\n[... content truncated — use devdocket-getFileDiff for individual files ...]',
-        );
-      }
-      return part;
-    });
   }
 }
