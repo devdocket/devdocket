@@ -5,19 +5,21 @@
  *
  * ```
  * New ⇄ InProgress ⇄ Paused
- *  ↑        ↓
- *  ↑      Done
+ *  ↑↓       ↓           ↓
+ *  ↑      Done  ←───────┘
  *  ↑        ↓
  *  └──── Archived
  * ```
  *
  * Valid transitions:
- * - New → InProgress | Archived
+ * - New → InProgress | Done | Archived
  * - InProgress → Paused | Done | New | Archived
- * - Paused → InProgress | New | Archived
+ * - Paused → InProgress | Done | New | Archived
  * - Done → Archived | New
  * - Archived → New
  *
+ * New and Paused may transition directly to Done (e.g. when an external
+ * issue is closed or merged while the work item is still queued or paused).
  * InProgress and Paused may transition back to New (returning to Queue).
  * Done and Archived may also transition back to New (for re-work after
  * discovering the item was not actually complete).

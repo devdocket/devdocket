@@ -52,6 +52,17 @@ export interface DevDocketProvider {
    * @param signal - Optional abort signal for cancellation.
    */
   resolveUrl?(url: string, signal?: AbortSignal): Promise<ResolvedItem | undefined>;
+  /**
+   * Check which of the given external items have been closed or completed.
+   *
+   * The core extension calls this after each provider refresh to auto-complete
+   * linked work items — including manually-imported items that may not appear
+   * in the provider's discovered-items list.
+   *
+   * @param externalIds - The provider-scoped external IDs to check.
+   * @returns The subset of `externalIds` that are closed, merged, or completed.
+   */
+  getClosedItems?(externalIds: string[]): Promise<string[]>;
 }
 
 /**

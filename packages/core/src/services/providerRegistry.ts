@@ -43,6 +43,18 @@ export class ProviderRegistry {
   private readonly _onDidChangeProviderHealth = new vscode.EventEmitter<string>();
   /** Fired when a provider's health info changes (status, lastError, or lastRefreshTime), with the provider ID. */
   readonly onDidChangeProviderHealth = this._onDidChangeProviderHealth.event;
+  private readonly _onDidRefreshProvider = new vscode.EventEmitter<string>();
+  /**
+   * Fired after a provider's discovered items have been processed, carrying the
+   * provider ID. Listeners can use this to run cross-cutting checks (e.g.
+   * auto-complete) against the full WorkGraph rather than just the provider's
+   * own discovered-items list.
+   */
+  readonly onDidRefreshProvider = this._onDidRefreshProvider.event;
+  /** Previous discovered-item external IDs per provider, for fallback disappearance detection. */
+  private readonly previousDiscoveredIds = new Map<string, Set<string>>();
+  /** Tracks whether each provider's most recent refresh was truncated. */
+  private readonly lastRefreshTruncated = new Map<string, boolean>();
   private readonly healthStatus = new Map<string, ProviderHealthStatus>();
   private readonly _loadingProviders = new Set<string>();
   private readonly _pendingRefreshes = new Map<string, { cts: vscode.CancellationTokenSource; timeoutId: ReturnType<typeof setTimeout> }>();
@@ -111,6 +123,8 @@ export class ProviderRegistry {
       this.subscriptions.get(provider.id)?.dispose();
       this.subscriptions.delete(provider.id);
       this.discoveredItems.delete(provider.id);
+      this.previousDiscoveredIds.delete(provider.id);
+      this.lastRefreshTruncated.delete(provider.id);
       this.healthStatus.delete(provider.id);
       this._loadingProviders.delete(provider.id);
       if (!this._disposed) {
@@ -166,6 +180,24 @@ export class ProviderRegistry {
    */
   getAllDiscoveredItems(): Map<string, DiscoveredItem[]> {
     return this.discoveredItems;
+  }
+
+  /**
+   * Check whether an item was in the provider's discovered-items list before
+   * the most recent refresh. Used as a fallback for auto-complete when the
+   * provider does not implement `getClosedItems`.
+   */
+  wasItemPreviouslyDiscovered(providerId: string, externalId: string): boolean {
+    return this.previousDiscoveredIds.get(providerId)?.has(externalId) ?? false;
+  }
+
+  /**
+   * Whether the most recent refresh for the given provider was truncated due to
+   * exceeding {@link MAX_ITEMS_PER_PROVIDER}. When truncated, disappearance-based
+   * completion detection is unreliable.
+   */
+  wasLastRefreshTruncated(providerId: string): boolean {
+    return this.lastRefreshTruncated.get(providerId) ?? false;
   }
 
   /**
@@ -292,15 +324,24 @@ export class ProviderRegistry {
     if (this._disposed) {
       return;
     }
+    let wasTruncated = false;
     if (items.length > ProviderRegistry.MAX_ITEMS_PER_PROVIDER) {
       logger.warn(
         `Provider "${providerId}" emitted ${items.length} items, exceeding the limit of ${ProviderRegistry.MAX_ITEMS_PER_PROVIDER}. Truncating.`,
       );
       items = items.slice(0, ProviderRegistry.MAX_ITEMS_PER_PROVIDER);
+      wasTruncated = true;
     } else {
       items = items.slice();
     }
     logger.info(`Provider ${providerId} discovered ${items.length} items`);
+
+    // Snapshot previous IDs before replacing, for fallback disappearance detection.
+    const prevItems = this.discoveredItems.get(providerId) ?? [];
+    if (prevItems.length > 0) {
+      this.previousDiscoveredIds.set(providerId, new Set(prevItems.map(i => i.externalId)));
+    }
+    this.lastRefreshTruncated.set(providerId, wasTruncated);
     this.discoveredItems.set(providerId, items);
 
     const newUnseenUpdates: Array<{ providerId: string; externalId: string; state: 'unseen'; version?: string; resurfaceVersion?: string }> = [];
@@ -375,6 +416,7 @@ export class ProviderRegistry {
     }
     if (!this._disposed) {
       this._onDidChangeDiscoveredItems.fire();
+      this._onDidRefreshProvider.fire(providerId);
     }
   }
 
@@ -397,5 +439,6 @@ export class ProviderRegistry {
     this._onDidRegisterProvider.dispose();
     this._onDidAddNewUnseenItems.dispose();
     this._onDidChangeProviderHealth.dispose();
+    this._onDidRefreshProvider.dispose();
   }
 }

@@ -7,9 +7,9 @@ import { logger } from './logger';
 const DAY_MS = 24 * 60 * 60 * 1000;
 
 const VALID_TRANSITIONS: ReadonlyMap<WorkItemState, ReadonlySet<WorkItemState>> = new Map([
-  [WorkItemState.New, new Set([WorkItemState.InProgress, WorkItemState.Archived])],
+  [WorkItemState.New, new Set([WorkItemState.InProgress, WorkItemState.Done, WorkItemState.Archived])],
   [WorkItemState.InProgress, new Set([WorkItemState.Paused, WorkItemState.Done, WorkItemState.New, WorkItemState.Archived])],
-  [WorkItemState.Paused, new Set([WorkItemState.InProgress, WorkItemState.New, WorkItemState.Archived])],
+  [WorkItemState.Paused, new Set([WorkItemState.InProgress, WorkItemState.Done, WorkItemState.New, WorkItemState.Archived])],
   [WorkItemState.Done, new Set([WorkItemState.Archived, WorkItemState.New])],
   [WorkItemState.Archived, new Set([WorkItemState.New])],
 ]);
