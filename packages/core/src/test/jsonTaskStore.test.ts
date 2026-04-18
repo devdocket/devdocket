@@ -362,6 +362,7 @@ describe('JsonTaskStore', () => {
         { ...makeItem({ id: 'bad-entry' }), activityLog: [{ timestamp: 'not-a-number', type: 'created' }] },
         { ...makeItem({ id: 'missing-type' }), activityLog: [{ timestamp: 1000 }] },
         { ...makeItem({ id: 'null-entry' }), activityLog: [null] },
+        { ...makeItem({ id: 'bad-detail' }), activityLog: [{ timestamp: 1000, type: 'created', detail: 42 }] },
         { ...makeItem({ id: 'good' }), activityLog: [{ timestamp: 1000, type: 'created' }] },
       ];
       await fs.mkdir(tmpDir, { recursive: true });

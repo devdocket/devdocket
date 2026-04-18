@@ -216,15 +216,17 @@ export class WorkGraph {
     const changes: string[] = [];
     if (patch.title !== undefined && patch.title !== item.title) { changes.push('title'); }
     if (patch.notes !== undefined && patch.notes !== item.notes) { changes.push('notes'); }
-    const entry: ActivityLogEntry = {
-      timestamp: now,
-      type: 'updated',
-      ...(changes.length > 0 ? { detail: changes.join(', ') } : {}),
-    };
     const updated = {
       ...item,
       ...patch,
-      activityLog: WorkGraph.appendLogEntry(item.activityLog, entry),
+      // Only log an activity entry when fields actually changed
+      ...(changes.length > 0 ? {
+        activityLog: WorkGraph.appendLogEntry(item.activityLog, {
+          timestamp: now,
+          type: 'updated' as const,
+          detail: changes.join(', '),
+        }),
+      } : {}),
       updatedAt: now,
     };
     await this.store.save(updated);

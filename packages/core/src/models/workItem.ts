@@ -74,11 +74,6 @@ export interface WorkItem {
 }
 
 /**
- * Re-export activity log types for convenience.
- */
-export type { ActivityLogEntry, ActivityType } from './activityLog';
-
-/**
  * Editable fields of a work item, used as input for creation and
  * (via `Partial<WorkItemInput>`) for updates.
  *

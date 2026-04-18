@@ -940,14 +940,14 @@ describe('WorkGraph', () => {
       expect(updated!.activityLog![1].detail).toBe('title, notes');
     });
 
-    it('records update entry even when no fields actually changed', async () => {
+    it('does not record update entry when no fields actually changed', async () => {
       const item = await graph.createItem({ title: 'Same' });
       await graph.updateItem(item.id, { title: 'Same' });
 
       const updated = graph.getItem(item.id);
-      expect(updated?.activityLog).toHaveLength(2);
-      expect(updated!.activityLog![1].type).toBe('updated');
-      expect(updated!.activityLog![1].detail).toBeUndefined();
+      // Only the initial 'created' entry should exist — no 'updated' entry
+      expect(updated?.activityLog).toHaveLength(1);
+      expect(updated!.activityLog![0].type).toBe('created');
     });
 
     it('appends entries via addActivity', async () => {

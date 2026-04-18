@@ -65,6 +65,9 @@ function validateWorkItem(value: unknown, index: number): string | undefined {
       if (typeof e.type !== 'string' || e.type.length === 0) {
         return `Item "${obj.id}" at index ${index} has invalid activityLog[${j}].type`;
       }
+      if (e.detail !== undefined && typeof e.detail !== 'string') {
+        return `Item "${obj.id}" at index ${index} has invalid activityLog[${j}].detail (string expected)`;
+      }
     }
   }
   return undefined;
