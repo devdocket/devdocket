@@ -212,11 +212,12 @@ export class WorkGraph {
     if (!item) {
       throw new Error(`Work item not found: ${id}`);
     }
+    const now = Date.now();
     const changes: string[] = [];
     if (patch.title !== undefined && patch.title !== item.title) { changes.push('title'); }
     if (patch.notes !== undefined && patch.notes !== item.notes) { changes.push('notes'); }
     const entry: ActivityLogEntry = {
-      timestamp: Date.now(),
+      timestamp: now,
       type: 'updated',
       ...(changes.length > 0 ? { detail: changes.join(', ') } : {}),
     };
@@ -224,7 +225,7 @@ export class WorkGraph {
       ...item,
       ...patch,
       activityLog: WorkGraph.appendLogEntry(item.activityLog, entry),
-      updatedAt: Date.now(),
+      updatedAt: now,
     };
     await this.store.save(updated);
     this.items.set(id, updated);
@@ -248,8 +249,9 @@ export class WorkGraph {
         `Invalid state transition: cannot move from ${item.state} to ${newState}`,
       );
     }
+    const now = Date.now();
     const entry: ActivityLogEntry = {
-      timestamp: Date.now(),
+      timestamp: now,
       type: 'state-changed',
       detail: `${item.state} → ${newState}`,
     };
@@ -257,7 +259,7 @@ export class WorkGraph {
       ...item,
       state: newState,
       activityLog: WorkGraph.appendLogEntry(item.activityLog, entry),
-      updatedAt: Date.now(),
+      updatedAt: now,
     };
     // When returning to Queue, assign a fresh sortOrder based on the current pre-transition
     // Queue contents. Reuse nextSortOrder but also account for the item's own sortOrder
@@ -511,8 +513,9 @@ export class WorkGraph {
     if (!item) {
       throw new Error(`Work item not found: ${id}`);
     }
-    const entry: ActivityLogEntry = { timestamp: Date.now(), type, ...(detail !== undefined ? { detail } : {}) };
-    const updated = { ...item, activityLog: WorkGraph.appendLogEntry(item.activityLog, entry), updatedAt: Date.now() };
+    const now = Date.now();
+    const entry: ActivityLogEntry = { timestamp: now, type, ...(detail !== undefined ? { detail } : {}) };
+    const updated = { ...item, activityLog: WorkGraph.appendLogEntry(item.activityLog, entry), updatedAt: now };
     await this.store.save(updated);
     this.items.set(id, updated);
     this.invalidateStateCache();

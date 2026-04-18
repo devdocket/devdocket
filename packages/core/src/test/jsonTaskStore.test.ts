@@ -341,6 +341,55 @@ describe('JsonTaskStore', () => {
       expect(items).toHaveLength(1);
       expect(items[0].id).toBe('valid');
     });
+
+    it('skips items with non-array activityLog', async () => {
+      const filePath = path.join(tmpDir, 'workitems.json');
+      const data = [
+        { ...makeItem({ id: 'bad-log' }), activityLog: 'not an array' },
+        makeItem({ id: 'valid' }),
+      ];
+      await fs.mkdir(tmpDir, { recursive: true });
+      await fs.writeFile(filePath, JSON.stringify(data), 'utf-8');
+
+      const items = await store.loadAll();
+      expect(items).toHaveLength(1);
+      expect(items[0].id).toBe('valid');
+    });
+
+    it('skips items with malformed activityLog entries', async () => {
+      const filePath = path.join(tmpDir, 'workitems.json');
+      const data = [
+        { ...makeItem({ id: 'bad-entry' }), activityLog: [{ timestamp: 'not-a-number', type: 'created' }] },
+        { ...makeItem({ id: 'missing-type' }), activityLog: [{ timestamp: 1000 }] },
+        { ...makeItem({ id: 'null-entry' }), activityLog: [null] },
+        { ...makeItem({ id: 'good' }), activityLog: [{ timestamp: 1000, type: 'created' }] },
+      ];
+      await fs.mkdir(tmpDir, { recursive: true });
+      await fs.writeFile(filePath, JSON.stringify(data), 'utf-8');
+
+      const items = await store.loadAll();
+      expect(items).toHaveLength(1);
+      expect(items[0].id).toBe('good');
+    });
+
+    it('accepts items with valid activityLog', async () => {
+      const filePath = path.join(tmpDir, 'workitems.json');
+      const data = [
+        {
+          ...makeItem({ id: 'with-log' }),
+          activityLog: [
+            { timestamp: 1700000000000, type: 'created' },
+            { timestamp: 1700001000000, type: 'state-changed', detail: 'New → InProgress' },
+          ],
+        },
+      ];
+      await fs.mkdir(tmpDir, { recursive: true });
+      await fs.writeFile(filePath, JSON.stringify(data), 'utf-8');
+
+      const items = await store.loadAll();
+      expect(items).toHaveLength(1);
+      expect(items[0].activityLog).toHaveLength(2);
+    });
   });
 
 

@@ -297,7 +297,7 @@ ${rows}
   </div>`;
 }
 
-function activityTypeLabel(type: string): string {
+function activityTypeLabel(type: ActivityLogEntry['type']): string {
   switch (type) {
     case 'created': return 'Created';
     case 'state-changed': return 'State changed';
