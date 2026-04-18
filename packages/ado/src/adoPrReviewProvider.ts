@@ -322,7 +322,7 @@ export class AdoPrReviewProvider extends BaseProvider {
 
     if (parsed.length === 0) { return []; }
 
-    const closedIds: string[] = [];
+    const closedSet = new Set<string>();
     let nextIndex = 0;
 
     const runWorker = async (): Promise<void> => {
@@ -342,7 +342,7 @@ export class AdoPrReviewProvider extends BaseProvider {
           if (response.ok) {
             const data = await response.json() as { status?: string };
             if (data.status === 'completed' || data.status === 'abandoned') {
-              closedIds.push(item.id);
+              closedSet.add(item.id);
             }
           } else {
             logger.debug(`Failed to check PR ${item.id}: ${response.status}`);
@@ -357,7 +357,8 @@ export class AdoPrReviewProvider extends BaseProvider {
     const workerCount = Math.min(5, parsed.length);
     await Promise.all(Array.from({ length: workerCount }, () => runWorker()));
 
-    return closedIds;
+    // Return in input order for deterministic results
+    return parsed.filter(p => closedSet.has(p.id)).map(p => p.id);
   }
 
   private static readonly ADO_PR_PATTERN = /^https?:\/\/dev\.azure\.com\/([^/]+)\/([^/]+)\/_git\/([^/]+)\/pullrequest\/(\d+)\b/i;
