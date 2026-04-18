@@ -3,20 +3,11 @@ import { execFile } from 'child_process';
 import { promisify } from 'util';
 import * as fs from 'fs';
 import { logger } from './logger';
+import { metadataKey, type GitWorkMetadata } from './gitWorkMetadata';
 
 const execFileAsync = promisify(execFile);
 
-/** Persisted metadata about a branch/worktree created by StartWorkAction. */
-export interface GitWorkMetadata {
-  branchName: string;
-  worktreePath: string;
-  repoPath: string;
-}
-
-/** Returns the globalState key used to store git work metadata for a work item. */
-export function metadataKey(itemId: string): string {
-  return `gitWork:${itemId}`;
-}
+export { metadataKey, type GitWorkMetadata } from './gitWorkMetadata';
 
 // Re-declared to match core API contract
 interface StateTransitionEvent {

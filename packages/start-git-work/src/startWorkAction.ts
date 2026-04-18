@@ -4,7 +4,7 @@ import { promisify } from 'util';
 import * as path from 'path';
 import * as fs from 'fs';
 import { logger } from './logger';
-import { metadataKey, type GitWorkMetadata } from './cleanupHandler';
+import { metadataKey, type GitWorkMetadata } from './gitWorkMetadata';
 
 const execFileAsync = promisify(execFile);
 
