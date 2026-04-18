@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { window, commands, lm, mockLogOutputChannel } from 'vscode';
+import { window, commands, mockLogOutputChannel } from 'vscode';
 import { AiWalkthroughAction } from '../aiWalkthroughAction';
 import type { RepoManager } from '../repoManager';
 
@@ -14,17 +14,6 @@ function createWorkItem(overrides: Partial<Record<string, unknown>> = {}) {
     url: 'https://github.com/owner/repo/pull/42',
     createdAt: Date.now(),
     updatedAt: Date.now(),
-    ...overrides,
-  };
-}
-
-function createMockModel(overrides: Partial<Record<string, unknown>> = {}) {
-  return {
-    id: 'mock-model-1',
-    name: 'Mock Model',
-    vendor: 'copilot',
-    family: 'gpt-4o',
-    sendRequest: vi.fn(),
     ...overrides,
   };
 }
@@ -49,7 +38,6 @@ function createMockRepoManager(): RepoManager {
 describe('AiWalkthroughAction', () => {
   let action: AiWalkthroughAction;
   let mockRepoManager: RepoManager;
-  let mockOnModelSelected: ReturnType<typeof vi.fn>;
 
   afterEach(() => {
     vi.unstubAllGlobals();
@@ -58,11 +46,10 @@ describe('AiWalkthroughAction', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockRepoManager = createMockRepoManager();
-    mockOnModelSelected = vi.fn();
-    action = new AiWalkthroughAction(mockRepoManager, mockLogOutputChannel as never, mockOnModelSelected);
+    action = new AiWalkthroughAction(mockRepoManager, mockLogOutputChannel as never);
 
-    // Default: single model available (auto-select)
-    vi.mocked(lm.selectChatModels).mockResolvedValue([createMockModel()]);
+    // Default: user confirms the prompt
+    vi.mocked(window.showWarningMessage).mockResolvedValue('Continue' as never);
 
     vi.mocked(window.withProgress).mockImplementation(async (_options: unknown, task: Function) => {
       const progress = { report: vi.fn() };
@@ -109,21 +96,35 @@ describe('AiWalkthroughAction', () => {
   });
 
   describe('run', () => {
-    it('prompts for model selection before preparing worktree', async () => {
+    it('shows confirmation prompt before proceeding', async () => {
       const item = createWorkItem();
       await action.run(item);
 
-      expect(lm.selectChatModels).toHaveBeenCalled();
+      expect(window.showWarningMessage).toHaveBeenCalledWith(
+        'AI Walkthrough will use AI to analyze and walk through this PR. Continue?',
+        { modal: true },
+        'Continue',
+      );
     });
 
-    it('calls onModelSelected with the chosen model', async () => {
-      const model = createMockModel({ id: 'test-model' });
-      vi.mocked(lm.selectChatModels).mockResolvedValue([model]);
+    it('proceeds when user confirms', async () => {
+      vi.mocked(window.showWarningMessage).mockResolvedValue('Continue' as never);
 
       const item = createWorkItem();
       await action.run(item);
 
-      expect(mockOnModelSelected).toHaveBeenCalledWith(model);
+      expect(mockRepoManager.ensureWorktree).toHaveBeenCalledWith('https://github.com/owner/repo/pull/42');
+      expect(commands.executeCommand).toHaveBeenCalledWith('workbench.action.chat.newChat');
+    });
+
+    it('aborts when user dismisses confirmation', async () => {
+      vi.mocked(window.showWarningMessage).mockResolvedValue(undefined as never);
+
+      const item = createWorkItem();
+      await action.run(item);
+
+      expect(mockRepoManager.ensureWorktree).not.toHaveBeenCalled();
+      expect(commands.executeCommand).not.toHaveBeenCalled();
     });
 
     it('calls repoManager.ensureWorktree with the PR URL', async () => {
@@ -159,33 +160,7 @@ describe('AiWalkthroughAction', () => {
       const item = createWorkItem({ url: undefined });
       await action.run(item);
 
-      expect(lm.selectChatModels).not.toHaveBeenCalled();
-      expect(mockRepoManager.ensureWorktree).not.toHaveBeenCalled();
-      expect(commands.executeCommand).not.toHaveBeenCalled();
-    });
-
-    it('aborts when no models are available', async () => {
-      vi.mocked(lm.selectChatModels).mockResolvedValue([]);
-
-      const item = createWorkItem();
-      await action.run(item);
-
-      expect(window.showWarningMessage).toHaveBeenCalledWith(
-        'AI Walkthrough: No language model available. Install GitHub Copilot.',
-      );
-      expect(mockRepoManager.ensureWorktree).not.toHaveBeenCalled();
-      expect(commands.executeCommand).not.toHaveBeenCalled();
-    });
-
-    it('aborts when user cancels model selection', async () => {
-      const model1 = createMockModel({ id: 'm1', name: 'A' });
-      const model2 = createMockModel({ id: 'm2', name: 'B' });
-      vi.mocked(lm.selectChatModels).mockResolvedValue([model1, model2]);
-      vi.mocked(window.showQuickPick).mockResolvedValue(undefined as never);
-
-      const item = createWorkItem();
-      await action.run(item);
-
+      expect(window.showWarningMessage).not.toHaveBeenCalled();
       expect(mockRepoManager.ensureWorktree).not.toHaveBeenCalled();
       expect(commands.executeCommand).not.toHaveBeenCalled();
     });
@@ -215,14 +190,6 @@ describe('AiWalkthroughAction', () => {
       await action.run(item);
 
       expect(commands.executeCommand).not.toHaveBeenCalled();
-    });
-
-    it('works without onModelSelected callback', async () => {
-      const actionNoCallback = new AiWalkthroughAction(mockRepoManager, mockLogOutputChannel as never);
-      const item = createWorkItem();
-      await actionNoCallback.run(item);
-
-      expect(commands.executeCommand).toHaveBeenCalledWith('workbench.action.chat.newChat');
     });
   });
 

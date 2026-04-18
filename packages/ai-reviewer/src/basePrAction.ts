@@ -1,7 +1,6 @@
 import * as vscode from 'vscode';
 import type { WorkItem, DevDocketAction } from './types';
 import { parsePrUrl } from './prUrl';
-import { selectModel } from './selectModel';
 
 /**
  * Sanitize a URL before interpolating it into an LLM prompt.
@@ -55,10 +54,7 @@ export abstract class BasePrAction implements DevDocketAction {
   }
 
   async run(item: WorkItem): Promise<void> {
-    if (!item.url || !this.isPrUrl(item.url)) return;
-
-    const model = await selectModel(this.progressTitle);
-    if (!model) return;
+    if (!item.url) return;
 
     await vscode.window.withProgress(
       {
@@ -85,7 +81,7 @@ export abstract class BasePrAction implements DevDocketAction {
 
         progress.report({ message: 'Analyzing changes...' });
 
-        const result = await this.analyzeWithAi(diff, item.url!, model, token);
+        const result = await this.analyzeWithAi(diff, item.url!, token);
         if (!result || token.isCancellationRequested) return;
 
         const doc = await vscode.workspace.openTextDocument({
@@ -205,8 +201,17 @@ export abstract class BasePrAction implements DevDocketAction {
     return p.startsWith('/') || /^[a-zA-Z]:[\\/]/.test(p);
   }
 
-  async analyzeWithAi(diff: string, prUrl: string, model: vscode.LanguageModelChat, token: vscode.CancellationToken): Promise<string | undefined> {
+  async analyzeWithAi(diff: string, prUrl: string, token: vscode.CancellationToken): Promise<string | undefined> {
     try {
+      let models = await vscode.lm.selectChatModels({ family: 'gpt-4o' });
+      if (models.length === 0) {
+        models = await vscode.lm.selectChatModels();
+      }
+      if (models.length === 0) {
+        vscode.window.showWarningMessage(`${this.progressTitle}: No language model available. Install GitHub Copilot.`);
+        return undefined;
+      }
+
       const maxDiffLength = 50000;
       let truncationNote = '';
       if (diff.length > maxDiffLength) {
@@ -219,6 +224,7 @@ export abstract class BasePrAction implements DevDocketAction {
 
       const runtimeInstructions = this.getRuntimeInstructions(safePrUrl);
 
+      const model = models[0];
       const messages = [
         vscode.LanguageModelChatMessage.User(
           `${runtimeInstructions}${reviewPrompt}

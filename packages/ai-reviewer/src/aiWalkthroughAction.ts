@@ -2,7 +2,6 @@ import * as vscode from 'vscode';
 import type { WorkItem, DevDocketAction } from './types';
 import { RepoManager } from './repoManager';
 import { parsePrUrl } from './prUrl';
-import { selectModel } from './selectModel';
 
 export class AiWalkthroughAction implements DevDocketAction {
   readonly id = 'ai-reviewer.walkthrough';
@@ -11,7 +10,6 @@ export class AiWalkthroughAction implements DevDocketAction {
   constructor(
     private readonly repoManager: RepoManager,
     private readonly log: vscode.LogOutputChannel,
-    private readonly onModelSelected?: (model: vscode.LanguageModelChat) => void,
   ) {}
 
   canRun(item: WorkItem): boolean {
@@ -24,18 +22,15 @@ export class AiWalkthroughAction implements DevDocketAction {
     this.log.debug(`AiWalkthroughAction.run — url: ${item.url ?? '(none)'}`);
     if (!item.url) return;
 
-    if (!parsePrUrl(item.url)) {
-      this.log.warn(`AiWalkthroughAction.run — not a valid PR URL: ${item.url}`);
+    const proceed = await vscode.window.showWarningMessage(
+      'AI Walkthrough will use AI to analyze and walk through this PR. Continue?',
+      { modal: true },
+      'Continue',
+    );
+    if (proceed !== 'Continue') {
+      this.log.info('User declined AI Walkthrough confirmation');
       return;
     }
-
-    const model = await selectModel('AI Walkthrough');
-    if (!model) {
-      this.log.info('Model selection aborted');
-      return;
-    }
-    this.log.info(`Model selected: ${model.id}`);
-    this.onModelSelected?.(model);
 
     await vscode.window.withProgress(
       {

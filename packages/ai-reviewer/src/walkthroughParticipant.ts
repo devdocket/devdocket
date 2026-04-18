@@ -2,19 +2,17 @@ import * as vscode from 'vscode';
 import { RepoManager, type WorktreeInfo } from './repoManager';
 import { buildWalkthroughPrompt } from './walkthroughPrompt';
 
+/** Maximum characters per tool-result text part in the conversation.
+ *  Prevents any single tool result from overflowing the model's context window. */
+export const MAX_TOOL_RESULT_LENGTH = 80_000;
+
 export class WalkthroughParticipant {
   private sessions = new Map<string, WorktreeInfo>();
-  private preferredModel: vscode.LanguageModelChat | undefined;
 
   constructor(
     private readonly repoManager: RepoManager,
     private readonly log: vscode.LogOutputChannel,
   ) {}
-
-  /** Set the preferred model for when the chat UI doesn't provide one. */
-  setPreferredModel(model: vscode.LanguageModelChat): void {
-    this.preferredModel = model;
-  }
 
   /** Register the chat participant. Returns disposable. */
   register(): vscode.Disposable {
@@ -145,9 +143,6 @@ export class WalkthroughParticipant {
     if (request.model) {
       this.log.info(`Using request-provided model: ${request.model.id}`);
       model = request.model;
-    } else if (this.preferredModel) {
-      this.log.info(`Using preferred model: ${this.preferredModel.id}`);
-      model = this.preferredModel;
     } else {
       this.log.info('No request model — selecting gpt-4o family');
       const models = await vscode.lm.selectChatModels({ family: 'gpt-4o' });
@@ -254,7 +249,7 @@ export class WalkthroughParticipant {
               token,
             );
             this.log.debug(`Tool ${part.name} completed successfully`);
-            toolResults.push({ callId: part.callId, content: result.content });
+            toolResults.push({ callId: part.callId, content: truncateToolContent(result.content) });
           } catch (err) {
             const errMsg = err instanceof Error ? err.message : String(err);
             this.log.error(`Tool ${part.name} failed: ${errMsg}`);
@@ -318,4 +313,22 @@ export class WalkthroughParticipant {
 
     return undefined;
   }
+}
+
+/** Truncate oversized text parts in tool result content to stay within
+ *  the model's context budget. Non-text parts are passed through. */
+export function truncateToolContent(
+  content: (vscode.LanguageModelTextPart | vscode.LanguageModelToolResultPart)[],
+): (vscode.LanguageModelTextPart | vscode.LanguageModelToolResultPart)[] {
+  return content.map((part) => {
+    if (part instanceof vscode.LanguageModelTextPart && part.value.length > MAX_TOOL_RESULT_LENGTH) {
+      const truncationNotice =
+        `\n\n(truncated from ${part.value.length.toLocaleString()} chars — content exceeded context budget)`;
+      const sliceLength = Math.max(0, MAX_TOOL_RESULT_LENGTH - truncationNotice.length);
+      return new vscode.LanguageModelTextPart(
+        part.value.slice(0, sliceLength) + truncationNotice,
+      );
+    }
+    return part;
+  });
 }
