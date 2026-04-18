@@ -55,7 +55,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   // Subscribe to state transitions to prompt branch/worktree cleanup on Done
   if (typeof api.onDidTransitionState === 'function') {
     const cleanupHandler = new CleanupHandler(context.globalState);
-    const transitionDisposable = api.onDidTransitionState((event: { item: { id: string; title: string }; newState: string }) => {
+    const transitionDisposable = api.onDidTransitionState((event: { item: { id: string; title: string }; oldState: string; newState: string }) => {
       void cleanupHandler.handleStateTransition(event).catch((err: unknown) => {
         logger.error('Cleanup handler failed', err);
       });
