@@ -87,4 +87,43 @@ describe('WalkthroughCache', () => {
     expect(cache.getFindings('https://github.com/owner/repo/pull/1')).toBe('PR 1 updated');
     expect(cache.getFindings('https://github.com/owner/repo/pull/2')).toBeUndefined();
   });
+
+  describe('URL normalization', () => {
+    it('matches URLs with query strings to clean URLs', () => {
+      const cache = new WalkthroughCache();
+      cache.setFindings('https://github.com/owner/repo/pull/42', 'findings');
+      expect(cache.getFindings('https://github.com/owner/repo/pull/42?diff=unified')).toBe('findings');
+    });
+
+    it('matches URLs with fragments to clean URLs', () => {
+      const cache = new WalkthroughCache();
+      cache.setFindings('https://github.com/owner/repo/pull/42', 'findings');
+      expect(cache.getFindings('https://github.com/owner/repo/pull/42#discussion_r123')).toBe('findings');
+    });
+
+    it('matches URLs with extra path segments to clean URLs', () => {
+      const cache = new WalkthroughCache();
+      cache.setFindings('https://github.com/owner/repo/pull/42', 'findings');
+      expect(cache.getFindings('https://github.com/owner/repo/pull/42/files')).toBe('findings');
+    });
+
+    it('appends to normalized key even when URL variants differ', () => {
+      const cache = new WalkthroughCache();
+      cache.appendFindings('https://github.com/owner/repo/pull/42', 'Part 1');
+      cache.appendFindings('https://github.com/owner/repo/pull/42?w=1', ' Part 2');
+      expect(cache.getFindings('https://github.com/owner/repo/pull/42')).toBe('Part 1 Part 2');
+    });
+
+    it('handles non-GitHub URLs gracefully', () => {
+      const cache = new WalkthroughCache();
+      cache.setFindings('https://example.com/some/path', 'data');
+      expect(cache.getFindings('https://example.com/some/path')).toBe('data');
+    });
+
+    it('handles invalid URLs gracefully', () => {
+      const cache = new WalkthroughCache();
+      cache.setFindings('not-a-url', 'data');
+      expect(cache.getFindings('not-a-url')).toBe('data');
+    });
+  });
 });

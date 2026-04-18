@@ -9,40 +9,69 @@ const MAX_CACHE_ENTRIES = 20;
  * Uses insertion-order eviction: when the cache exceeds MAX_CACHE_ENTRIES,
  * the oldest (least-recently-written) entry is removed. Writes refresh
  * insertion order; reads do not.
+ *
+ * PR URLs are normalized so that query strings, fragments, and trailing
+ * path segments don't cause cache misses between walkthrough and review.
  */
 export class WalkthroughCache {
   private findings = new Map<string, string>();
 
+  /**
+   * Normalize PR URLs so equivalent GitHub pull request URLs map to the same
+   * cache key regardless of query string, fragment, or extra path segments.
+   */
+  private normalizeKey(prUrl: string): string {
+    try {
+      const parsed = new URL(prUrl);
+      const segments = parsed.pathname.split('/').filter(Boolean);
+      if (
+        parsed.hostname.toLowerCase() === 'github.com' &&
+        segments.length >= 4 &&
+        segments[2] === 'pull'
+      ) {
+        const [owner, repo, , pullNumber] = segments;
+        return `${parsed.protocol}//${parsed.host}/${owner}/${repo}/pull/${pullNumber}`;
+      }
+      // Non-GitHub URLs: strip query/fragment only
+      const pathname = parsed.pathname.replace(/\/+$/, '') || '/';
+      return `${parsed.protocol}//${parsed.host}${pathname}`;
+    } catch {
+      return prUrl;
+    }
+  }
+
   /** Store/replace all findings for a PR. */
   setFindings(prUrl: string, content: string): void {
+    const key = this.normalizeKey(prUrl);
     // Delete first so re-insertion moves the key to the end (Map insertion order)
-    this.findings.delete(prUrl);
-    this.findings.set(prUrl, content);
+    this.findings.delete(key);
+    this.findings.set(key, content);
     this.evictIfNeeded();
   }
 
   /** Append content to existing findings for a PR (accumulates across turns). */
   appendFindings(prUrl: string, content: string): void {
-    const existing = this.findings.get(prUrl) ?? '';
+    const key = this.normalizeKey(prUrl);
+    const existing = this.findings.get(key) ?? '';
     // Delete + set to refresh insertion order
-    this.findings.delete(prUrl);
-    this.findings.set(prUrl, existing + content);
+    this.findings.delete(key);
+    this.findings.set(key, existing + content);
     this.evictIfNeeded();
   }
 
   /** Retrieve findings for a PR, or undefined if none exist. */
   getFindings(prUrl: string): string | undefined {
-    return this.findings.get(prUrl);
+    return this.findings.get(this.normalizeKey(prUrl));
   }
 
   /** Check if findings exist for a PR. */
   hasFindings(prUrl: string): boolean {
-    return this.findings.has(prUrl);
+    return this.findings.has(this.normalizeKey(prUrl));
   }
 
   /** Clear findings for a PR. */
   clearFindings(prUrl: string): void {
-    this.findings.delete(prUrl);
+    this.findings.delete(this.normalizeKey(prUrl));
   }
 
   /** Number of cached entries (exposed for testing). */
