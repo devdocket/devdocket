@@ -83,7 +83,7 @@ export class CleanupHandler {
     // Remove worktree first (it must be removed before the branch can be deleted)
     if (fs.existsSync(metadata.worktreePath)) {
       try {
-        await execFileAsync('git', ['worktree', 'remove', metadata.worktreePath], {
+        await execFileAsync('git', ['worktree', 'remove', '--', metadata.worktreePath], {
           cwd: metadata.repoPath,
         });
         worktreeRemoved = true;
@@ -139,7 +139,8 @@ export class CleanupHandler {
         cwd: repoPath,
       });
       return stdout.trim().length > 0;
-    } catch {
+    } catch (err: unknown) {
+      logger.warn(`Failed to check branch existence for "${branchName}"`, err);
       return false;
     }
   }
