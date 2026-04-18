@@ -27,7 +27,8 @@ export interface PrReview {
  * each with review decisions and mergeable state via the PR detail and
  * reviews REST endpoints.
  *
- * Status values: Draft, Waiting on reviews, Review received,
+ * Status values: Open (fallback when detailed PR/review status cannot be
+ * determined), Draft, Waiting on reviews, Review received,
  * Changes requested, Approved, Ready to merge.
  */
 export class GitHubMyPrsProvider extends BaseGitHubProvider {
