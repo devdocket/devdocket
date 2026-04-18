@@ -292,7 +292,7 @@ function renderActivityLog(log: ActivityLogEntry[] | undefined): string {
     `    <div class="activity-entry">
       <span class="activity-time">${escapeHtml(formatTimestamp(e.timestamp))}</span>
       <span class="activity-type">${escapeHtml(activityTypeLabel(e.type))}</span>
-${e.detail ? `      <span class="activity-detail">${escapeHtml(e.detail)}</span>` : ''}
+${e.detail !== undefined ? `      <span class="activity-detail">${escapeHtml(e.detail)}</span>` : ''}
     </div>`
   ).join('\n');
   return `  <div class="activity-log" aria-label="Activity log">
