@@ -1,5 +1,6 @@
 import * as crypto from 'crypto';
 import { WorkItem, WorkItemState } from '../models/workItem';
+import type { ActivityLogEntry } from '../models/activityLog';
 
 export interface EditorHtmlOptions {
   cspSource: string;
@@ -175,6 +176,33 @@ export function getEditorPanelHtml({ cspSource, item, providerLabel, providerDes
       color: var(--vscode-textLink-activeForeground);
       text-decoration: underline;
     }
+    .activity-log {
+      margin-top: 24px;
+      padding-top: 16px;
+      border-top: 1px solid var(--input-border);
+    }
+    .activity-entry {
+      display: flex;
+      gap: 10px;
+      align-items: baseline;
+      font-size: 0.85em;
+      padding: 4px 0;
+    }
+    .activity-entry + .activity-entry {
+      border-top: 1px solid var(--vscode-widget-border, rgba(128,128,128,0.2));
+    }
+    .activity-time {
+      flex-shrink: 0;
+      opacity: 0.6;
+      white-space: nowrap;
+    }
+    .activity-type {
+      flex-shrink: 0;
+      font-weight: 500;
+    }
+    .activity-detail {
+      opacity: 0.8;
+    }
   </style>
 </head>
 <body>
@@ -205,6 +233,7 @@ ${item.providerId && providerLabel ? `      <dt>Provider</dt>
       <dd>${escapeHtml(formatTimestamp(item.updatedAt))}</dd>
     </dl>
   </div>
+${renderActivityLog(item.activityLog)}
   <script nonce="${nonce}">
     const vscode = acquireVsCodeApi();
     const fields = ['title', 'notes'];
@@ -249,6 +278,33 @@ ${item.providerId && providerLabel ? `      <dt>Provider</dt>
 
 function getNonce(): string {
   return crypto.randomBytes(16).toString('hex');
+}
+
+function renderActivityLog(log: ActivityLogEntry[] | undefined): string {
+  if (!log || log.length === 0) { return ''; }
+  // Show newest entries first
+  const entries = [...log].reverse();
+  const rows = entries.map(e =>
+    `    <div class="activity-entry">
+      <span class="activity-time">${escapeHtml(formatTimestamp(e.timestamp))}</span>
+      <span class="activity-type">${escapeHtml(activityTypeLabel(e.type))}</span>
+${e.detail ? `      <span class="activity-detail">${escapeHtml(e.detail)}</span>` : ''}
+    </div>`
+  ).join('\n');
+  return `  <div class="activity-log" aria-label="Activity log">
+    <div class="metadata-heading">Activity</div>
+${rows}
+  </div>`;
+}
+
+function activityTypeLabel(type: string): string {
+  switch (type) {
+    case 'created': return 'Created';
+    case 'state-changed': return 'State changed';
+    case 'updated': return 'Updated';
+    case 'action-executed': return 'Action executed';
+    default: return type;
+  }
 }
 
 function formatTimestamp(epoch: number): string {

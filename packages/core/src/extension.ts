@@ -19,7 +19,7 @@ import { getInboxUnseenCount } from './services/inboxBadge';
 import { getViewLayout, ViewId } from './views/viewLayout';
 import { performance } from 'perf_hooks';
 
-export type { DevDocketApi, DevDocketProvider, DevDocketAction, DiscoveredItem, Disposable } from './api/types';
+export type { DevDocketApi, DevDocketProvider, DevDocketAction, DiscoveredItem, Disposable, ActivityLogEntry, ActivityType } from './api/types';
 export { logger } from './services/logger';
 
 /** Wrap an event callback so unhandled errors (sync or async) are logged instead of crashing. */
@@ -297,7 +297,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<DevDoc
   providerRegistry = pr;
   const ar = new ActionRegistry();
   actionRegistry = ar;
-  const api = new DevDocketApiImpl(pr, ar);
+  const api = new DevDocketApiImpl(pr, ar, wg);
   logger.info(`Store + service init took ${Math.round(performance.now() - initStart)}ms`);
 
   const treeViewStart = performance.now();

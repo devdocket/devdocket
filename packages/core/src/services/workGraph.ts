@@ -1,6 +1,7 @@
 import * as crypto from 'crypto';
 import * as vscode from 'vscode';
 import { WorkItem, WorkItemInput, WorkItemState } from '../models/workItem';
+import { type ActivityLogEntry, type ActivityType, MAX_ACTIVITY_LOG_ENTRIES } from '../models/activityLog';
 import { ITaskStore } from '../storage/taskStore';
 import { logger } from './logger';
 
@@ -168,6 +169,8 @@ export class WorkGraph {
     provenance?: { providerId: string; externalId: string; url?: string; group?: string },
   ): Promise<WorkItem> {
     const sortOrder = this.nextSortOrder(WorkItemState.New);
+    const now = Date.now();
+    const createdEntry: ActivityLogEntry = { timestamp: now, type: 'created' };
     const item: WorkItem = {
       id: generateId(),
       title: input.title,
@@ -178,8 +181,9 @@ export class WorkGraph {
       url: provenance?.url,
       group: provenance?.group,
       sortOrder,
-      createdAt: Date.now(),
-      updatedAt: Date.now(),
+      createdAt: now,
+      updatedAt: now,
+      activityLog: [createdEntry],
     };
     await this.store.save(item);
     this.items.set(item.id, item);
@@ -208,7 +212,20 @@ export class WorkGraph {
     if (!item) {
       throw new Error(`Work item not found: ${id}`);
     }
-    const updated = { ...item, ...patch, updatedAt: Date.now() };
+    const changes: string[] = [];
+    if (patch.title !== undefined && patch.title !== item.title) { changes.push('title'); }
+    if (patch.notes !== undefined && patch.notes !== item.notes) { changes.push('notes'); }
+    const entry: ActivityLogEntry = {
+      timestamp: Date.now(),
+      type: 'updated',
+      ...(changes.length > 0 ? { detail: changes.join(', ') } : {}),
+    };
+    const updated = {
+      ...item,
+      ...patch,
+      activityLog: WorkGraph.appendLogEntry(item.activityLog, entry),
+      updatedAt: Date.now(),
+    };
     await this.store.save(updated);
     this.items.set(id, updated);
     this.invalidateStateCache();
@@ -231,7 +248,17 @@ export class WorkGraph {
         `Invalid state transition: cannot move from ${item.state} to ${newState}`,
       );
     }
-    const updated: WorkItem = { ...item, state: newState, updatedAt: Date.now() };
+    const entry: ActivityLogEntry = {
+      timestamp: Date.now(),
+      type: 'state-changed',
+      detail: `${item.state} → ${newState}`,
+    };
+    const updated: WorkItem = {
+      ...item,
+      state: newState,
+      activityLog: WorkGraph.appendLogEntry(item.activityLog, entry),
+      updatedAt: Date.now(),
+    };
     // When returning to Queue, assign a fresh sortOrder based on the current pre-transition
     // Queue contents. Reuse nextSortOrder but also account for the item's own sortOrder
     // to avoid reusing the same value when moving back to Queue multiple times.
@@ -471,6 +498,33 @@ export class WorkGraph {
     } else {
       this.duplicateProvenanceCounts.set(key, count - 1);
     }
+  }
+
+  /**
+   * Append an activity log entry to a work item and persist the change.
+   *
+   * External callers (e.g. action extensions) use this to record custom
+   * activities like branch creation or cleanup.
+   */
+  async addActivity(id: string, type: ActivityType, detail?: string): Promise<void> {
+    const item = this.items.get(id);
+    if (!item) {
+      throw new Error(`Work item not found: ${id}`);
+    }
+    const entry: ActivityLogEntry = { timestamp: Date.now(), type, ...(detail !== undefined ? { detail } : {}) };
+    const updated = { ...item, activityLog: WorkGraph.appendLogEntry(item.activityLog, entry), updatedAt: Date.now() };
+    await this.store.save(updated);
+    this.items.set(id, updated);
+    this.invalidateStateCache();
+    this._onDidChange.fire();
+  }
+
+  /** Append an entry to the log, trimming the oldest entries if the cap is exceeded. */
+  private static appendLogEntry(log: ActivityLogEntry[] | undefined, entry: ActivityLogEntry): ActivityLogEntry[] {
+    const entries = log ? [...log, entry] : [entry];
+    return entries.length > MAX_ACTIVITY_LOG_ENTRIES
+      ? entries.slice(entries.length - MAX_ACTIVITY_LOG_ENTRIES)
+      : entries;
   }
 
   dispose(): void {

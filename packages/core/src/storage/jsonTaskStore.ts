@@ -49,6 +49,9 @@ function validateWorkItem(value: unknown, index: number): string | undefined {
   if (obj.sortOrder !== undefined && (typeof obj.sortOrder !== 'number' || !Number.isFinite(obj.sortOrder))) {
     return `Item "${obj.id}" at index ${index} has invalid "sortOrder" (finite number expected)`;
   }
+  if (obj.activityLog !== undefined && !Array.isArray(obj.activityLog)) {
+    return `Item "${obj.id}" at index ${index} has invalid "activityLog" (array expected)`;
+  }
   return undefined;
 }
 

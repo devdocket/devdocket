@@ -1,3 +1,5 @@
+import type { ActivityLogEntry } from './activityLog';
+
 /**
  * Lifecycle states for a {@link WorkItem}.
  *
@@ -67,7 +69,14 @@ export interface WorkItem {
   createdAt: number;
   /** Epoch timestamp (ms) of the last modification. */
   updatedAt: number;
+  /** Append-only log of significant events on this work item. */
+  activityLog?: ActivityLogEntry[];
 }
+
+/**
+ * Re-export activity log types for convenience.
+ */
+export type { ActivityLogEntry, ActivityType } from './activityLog';
 
 /**
  * Editable fields of a work item, used as input for creation and
