@@ -354,7 +354,9 @@ export async function activate(context: vscode.ExtensionContext): Promise<DevDoc
   let trimTimer: ReturnType<typeof setTimeout> | undefined;
   function scheduleAutoTrim(): void {
     if (trimTimer !== undefined) { clearTimeout(trimTimer); }
-    trimTimer = setTimeout(() => { void autoTrimHistory(); }, 2000);
+    trimTimer = setTimeout(() => {
+      void autoTrimHistory().catch((err: unknown) => logger.error('Error during auto-trim', err));
+    }, 2000);
   }
   context.subscriptions.push(
     wg.onDidChange(safeHandler('Error scheduling auto-trim', scheduleAutoTrim)),
