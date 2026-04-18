@@ -629,7 +629,9 @@ describe('AiReviewAction', () => {
 
       const userMsg = sendRequest.mock.calls[0][0][0];
       expect(userMsg.content).toContain('Prior Walkthrough Analysis');
+      // Findings are serialized as JSON to prevent prompt injection
       expect(userMsg.content).toContain('The PR refactors the auth module...');
+      expect(userMsg.content).toContain('untrusted');
     });
 
     it('does not include walkthrough section when no findings exist', async () => {
