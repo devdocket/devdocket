@@ -109,10 +109,11 @@ export class GitHubIssueProvider extends BaseGitHubProvider {
     const parsed = externalIds.map(id => {
       const hashIdx = id.lastIndexOf('#');
       if (hashIdx === -1) { return null; }
-      const repo = id.substring(0, hashIdx);
+      const rawRepo = id.substring(0, hashIdx);
       const num = parseInt(id.substring(hashIdx + 1), 10);
-      if (isNaN(num)) { return null; }
-      return { id, repo, number: num };
+      if (isNaN(num) || !isValidGitHubRepo(rawRepo)) { return null; }
+      const [owner, repoName] = rawRepo.split('/');
+      return { id, owner, repoName, number: num };
     }).filter((p): p is NonNullable<typeof p> => p !== null);
 
     if (parsed.length === 0) { return []; }
@@ -127,7 +128,7 @@ export class GitHubIssueProvider extends BaseGitHubProvider {
         const item = parsed[currentIndex];
         try {
           const response = await fetch(
-            `https://api.github.com/repos/${item.repo}/issues/${item.number}`,
+            `https://api.github.com/repos/${encodeURIComponent(item.owner)}/${encodeURIComponent(item.repoName)}/issues/${item.number}`,
             {
               headers: {
                 Authorization: `Bearer ${token}`,
