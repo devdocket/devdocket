@@ -4,8 +4,6 @@ import { buildWalkthroughPrompt } from './walkthroughPrompt';
 import { truncateToolContent } from './toolUtils';
 import type { WalkthroughCache } from './walkthroughCache';
 
-export { truncateToolContent };
-
 export class WalkthroughParticipant {
   private sessions = new Map<string, WorktreeInfo>();
 

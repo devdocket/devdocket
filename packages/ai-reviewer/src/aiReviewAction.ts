@@ -44,6 +44,12 @@ export class AiReviewAction extends BasePrAction {
 **File paths and line numbers:** When commenting on specific issues, always include the file path and line number(s) from the diff so the reader can locate the code immediately. Use the format \`path/to/file.ts:42\` for single lines or \`path/to/file.ts:42-50\` for ranges. If a finding spans multiple files, list each location separately.`;
   }
 
+  /**
+   * Override base run() to add worktree preparation and tool-enabled analysis.
+   * The worktree step must happen before fetchDiff, and tool routing decides
+   * between analyzeWithTools vs analyzeWithAi. If BasePrAction.run() changes,
+   * update this override too.
+   */
   async run(item: WorkItem): Promise<void> {
     if (!item.url) return;
     if (!this.isPrUrl(item.url)) return;

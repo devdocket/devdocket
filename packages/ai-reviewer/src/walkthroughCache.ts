@@ -6,8 +6,9 @@ const MAX_CACHE_ENTRIES = 20;
  * Shared between WalkthroughParticipant (writer) and AiReviewAction (reader)
  * so that code review can incorporate walkthrough context when available.
  *
- * Uses LRU eviction: when the cache exceeds MAX_CACHE_ENTRIES, the oldest
- * (least-recently-inserted) entry is removed.
+ * Uses insertion-order eviction: when the cache exceeds MAX_CACHE_ENTRIES,
+ * the oldest (least-recently-written) entry is removed. Writes refresh
+ * insertion order; reads do not.
  */
 export class WalkthroughCache {
   private findings = new Map<string, string>();
