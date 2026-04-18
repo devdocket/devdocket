@@ -304,6 +304,8 @@ describe('AiReviewAction', () => {
       const item = createWorkItem();
       await action.run(item);
 
+      // Worktree should not be prepared when user declines
+      expect(mockRepoManager.ensureWorktree).not.toHaveBeenCalled();
       expect(workspace.openTextDocument).not.toHaveBeenCalled();
     });
   });

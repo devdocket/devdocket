@@ -61,19 +61,6 @@ export class AiReviewAction extends BasePrAction {
         cancellable: true,
       },
       async (progress, token) => {
-        // Prepare worktree (best-effort — review still works with just the diff)
-        progress.report({ message: 'Preparing repository...' });
-        let worktreeInfo: WorktreeInfo | undefined;
-        try {
-          worktreeInfo = await this.repoManager.ensureWorktree(item.url!);
-          this.log.info('Worktree ready for code review');
-        } catch (err) {
-          const msg = err instanceof Error ? err.message : String(err);
-          this.log.warn(`Worktree preparation failed (continuing with diff only): ${msg}`);
-        }
-
-        if (token.isCancellationRequested) return;
-
         progress.report({ message: 'Fetching PR diff...' });
         const diff = await this.fetchDiff(item.url!);
         if (!diff) return;
@@ -86,6 +73,19 @@ export class AiReviewAction extends BasePrAction {
           'Continue',
         );
         if (proceed !== 'Continue' || token.isCancellationRequested) return;
+
+        // Prepare worktree after user confirms (best-effort — review falls back to diff-only)
+        progress.report({ message: 'Preparing repository...' });
+        let worktreeInfo: WorktreeInfo | undefined;
+        try {
+          worktreeInfo = await this.repoManager.ensureWorktree(item.url!);
+          this.log.info('Worktree ready for code review');
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : String(err);
+          this.log.warn(`Worktree preparation failed (continuing with diff only): ${msg}`);
+        }
+
+        if (token.isCancellationRequested) return;
 
         progress.report({ message: 'Analyzing changes...' });
 
