@@ -87,6 +87,40 @@ describe('getEditorPanelHtml', () => {
     expect(html).not.toContain('Edit Work Item');
   });
 
+  it('uses displayTitle for heading and input when provided', () => {
+    const item = makeItem({ title: 'Persisted Title' });
+    const html = getEditorPanelHtml({ cspSource, item, displayTitle: 'Live Title' });
+    expect(html).toContain('<h2 id="editor-heading">Live Title</h2>');
+    expect(html).toContain('value="Live Title"');
+    expect(html).not.toContain('>Persisted Title<');
+  });
+
+  it('falls back to item.title when displayTitle is omitted', () => {
+    const item = makeItem({ title: 'Fallback Title' });
+    const html = getEditorPanelHtml({ cspSource, item });
+    expect(html).toContain('<h2 id="editor-heading">Fallback Title</h2>');
+    expect(html).toContain('value="Fallback Title"');
+  });
+
+  it('escapes displayTitle in heading and input', () => {
+    const item = makeItem({ title: 'safe' });
+    const html = getEditorPanelHtml({ cspSource, item, displayTitle: '<script>alert("xss")</script>' });
+    expect(html).not.toContain('<script>alert');
+    expect(html).toContain('&lt;script&gt;');
+  });
+
+  it('includes updateTitle message handler in webview script', () => {
+    const html = getEditorPanelHtml({ cspSource, item: makeItem() });
+    expect(html).toContain('updateTitle');
+    expect(html).toContain("window.addEventListener('message'");
+  });
+
+  it('updateTitle handler preserves title-link element when present', () => {
+    const html = getEditorPanelHtml({ cspSource, item: makeItem() });
+    expect(html).toContain("heading.querySelector('#title-link')");
+    expect(html).toContain('link.textContent = msg.title');
+  });
+
   it('escapes special characters in heading title', () => {
     const item = makeItem({ title: 'Use <div> & "quotes"' });
     const html = getEditorPanelHtml({ cspSource, item });

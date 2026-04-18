@@ -17,6 +17,8 @@ export class WorkItemEditorPanel {
   private pendingData: Record<string, string> | undefined;
   private saveQueue: Promise<void> = Promise.resolve();
   private readonly messageSubscription: vscode.Disposable;
+  private readonly discoveredItemsSub: vscode.Disposable;
+  private lastResolvedTitle: string | undefined;
 
   static open(
     context: vscode.ExtensionContext,
@@ -27,7 +29,6 @@ export class WorkItemEditorPanel {
   ): void {
     const existing = WorkItemEditorPanel.openPanels.get(item.id);
     if (existing) {
-      existing.panel.title = `Edit: ${item.title}`;
       existing.providerLabel = providerLabel;
       existing.update();
       existing.panel.reveal();
@@ -69,6 +70,10 @@ export class WorkItemEditorPanel {
 
     this.update();
 
+    this.discoveredItemsSub = this.providerRegistry.onDidChangeDiscoveredItems(() => {
+      this.checkTitleUpdate();
+    });
+
     this.messageSubscription = this.panel.webview.onDidReceiveMessage((msg) => {
       if (msg?.type === 'openUrl' && typeof msg.url === 'string') {
         const safeUrl = isSafeUrl(msg.url);
@@ -104,12 +109,48 @@ export class WorkItemEditorPanel {
         }
         this.flushPendingData();
         this.messageSubscription.dispose();
+        this.discoveredItemsSub.dispose();
       }
     });
   }
 
   private isProviderManaged(item: WorkItem): boolean {
     return !!(item.providerId && this.providerRegistry.getProvider(item.providerId));
+  }
+
+  /**
+   * Resolve the display title for the work item. For provider-backed items,
+   * returns the live title from the provider when available; otherwise falls
+   * back to the persisted title.
+   */
+  private resolveTitle(item: WorkItem): string {
+    if (item.providerId && item.externalId) {
+      const discovered = this.providerRegistry
+        .getDiscoveredItems(item.providerId)
+        .find((d) => d.externalId === item.externalId);
+      if (discovered) {
+        return discovered.title;
+      }
+    }
+    return item.title;
+  }
+
+  /**
+   * Check whether the live provider title has changed and, if so, push the
+   * new title to the webview without a full re-render (which would lose any
+   * unsaved edits in the notes field).
+   */
+  private checkTitleUpdate(): void {
+    if (this.disposed) { return; }
+    const item = this.workGraph.getItem(this.itemId);
+    if (!item || !item.providerId || !item.externalId) { return; }
+
+    const newTitle = this.resolveTitle(item);
+    if (newTitle !== this.lastResolvedTitle) {
+      this.lastResolvedTitle = newTitle;
+      this.panel.title = `Edit: ${newTitle}`;
+      void this.panel.webview.postMessage({ type: 'updateTitle', title: newTitle });
+    }
   }
 
   private async saveData(data: Record<string, string>): Promise<void> {
@@ -147,10 +188,13 @@ export class WorkItemEditorPanel {
       this.panel.webview.html = '<html><body><p>Item not found.</p></body></html>';
       return;
     }
-    this.panel.webview.html = this.getHtml(item);
+    const resolvedTitle = this.resolveTitle(item);
+    this.lastResolvedTitle = resolvedTitle;
+    this.panel.title = `Edit: ${resolvedTitle}`;
+    this.panel.webview.html = this.getHtml(item, resolvedTitle);
   }
 
-  private getHtml(item: WorkItem): string {
+  private getHtml(item: WorkItem, displayTitle: string): string {
     let providerDescription: string | undefined;
     let providerState: string | undefined;
     if (item.providerId && item.externalId) {
@@ -167,6 +211,7 @@ export class WorkItemEditorPanel {
       providerDescription,
       providerState,
       titleReadonly: this.isProviderManaged(item),
+      displayTitle,
     });
   }
 
@@ -180,6 +225,7 @@ export class WorkItemEditorPanel {
       }
       this.flushPendingData();
       this.messageSubscription.dispose();
+      this.discoveredItemsSub.dispose();
       this.panel.dispose();
     }
   }

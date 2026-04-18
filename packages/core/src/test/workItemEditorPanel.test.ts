@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import * as vscode from 'vscode';
-import { ViewColumn, window } from 'vscode';
+import { EventEmitter, ViewColumn, window } from 'vscode';
 import { WorkItemEditorPanel } from '../views/workItemEditorPanel';
 import { WorkGraph } from '../services/workGraph';
 import { WorkItem, WorkItemState } from '../models/workItem';
@@ -34,6 +34,7 @@ function createMockWebviewPanel() {
         messageHandler = handler;
         return { dispose: vi.fn(() => { messageHandler = undefined; }) };
       }),
+      postMessage: vi.fn(async () => true),
     },
     onDidDispose: vi.fn((handler: DisposeHandler) => {
       disposeHandler = handler;
@@ -65,9 +66,12 @@ function createMockContext() {
 }
 
 function createMockProviderRegistry() {
+  const discoveredEmitter = new EventEmitter<void>();
   return {
     getDiscoveredItems: vi.fn(() => []),
     getProvider: vi.fn((id: string) => id ? { id } : undefined),
+    onDidChangeDiscoveredItems: discoveredEmitter.event,
+    _fireDiscoveredItemsChange: () => discoveredEmitter.fire(),
   };
 }
 
@@ -106,6 +110,7 @@ function createIntegrationWebviewPanel() {
         messageListeners.push(listener);
         return { dispose: vi.fn() };
       }),
+      postMessage: vi.fn(async () => true),
       _fireMessage: (msg: any) => { messageListeners.forEach(l => l(msg)); },
     },
     onDidDispose: vi.fn((listener: Function) => {
@@ -207,9 +212,110 @@ describe('WorkItemEditorPanel', () => {
 
       expect(mock.panel.webview.html).not.toContain('Provider State');
     });
+
+    it('should display live provider title instead of persisted title', () => {
+      const item = makeItem({ title: 'Old Title', providerId: 'gh', externalId: '42' });
+      const mock = createMockWebviewPanel();
+      const registry = createMockProviderRegistry();
+      vi.mocked(registry.getDiscoveredItems).mockReturnValue([
+        { externalId: '42', title: 'Updated Live Title', url: '' } as any,
+      ]);
+      openPanel(item, createMockWorkGraph(item), mock, undefined, registry);
+
+      expect(mock.panel.title).toBe('Edit: Updated Live Title');
+      expect(mock.panel.webview.html).toContain('Updated Live Title');
+    });
+
+    it('should fall back to persisted title when provider item is not found', () => {
+      const item = makeItem({ title: 'Persisted Title', providerId: 'gh', externalId: '42' });
+      const mock = createMockWebviewPanel();
+      const registry = createMockProviderRegistry();
+      vi.mocked(registry.getDiscoveredItems).mockReturnValue([]);
+      openPanel(item, createMockWorkGraph(item), mock, undefined, registry);
+
+      expect(mock.panel.title).toBe('Edit: Persisted Title');
+      expect(mock.panel.webview.html).toContain('Persisted Title');
+    });
+
+    it('should use persisted title for manual items (no providerId)', () => {
+      const item = makeItem({ title: 'Manual Item' });
+      const mock = createMockWebviewPanel();
+      openPanel(item, createMockWorkGraph(item), mock);
+
+      expect(mock.panel.title).toBe('Edit: Manual Item');
+      expect(mock.panel.webview.html).toContain('Manual Item');
+    });
   });
 
-  describe('panel reuse', () => {
+  describe('dynamic title updates', () => {
+    it('should update title when provider discovers new title', () => {
+      const item = makeItem({ title: 'Original', providerId: 'gh', externalId: '10' });
+      const mock = createMockWebviewPanel();
+      const registry = createMockProviderRegistry();
+      vi.mocked(registry.getDiscoveredItems).mockReturnValue([
+        { externalId: '10', title: 'Original', url: '' } as any,
+      ]);
+      openPanel(item, createMockWorkGraph(item), mock, undefined, registry);
+
+      // Simulate provider refresh with new title
+      vi.mocked(registry.getDiscoveredItems).mockReturnValue([
+        { externalId: '10', title: 'Renamed Issue', url: '' } as any,
+      ]);
+      registry._fireDiscoveredItemsChange();
+
+      expect(mock.panel.title).toBe('Edit: Renamed Issue');
+      expect(mock.panel.webview.postMessage).toHaveBeenCalledWith({
+        type: 'updateTitle',
+        title: 'Renamed Issue',
+      });
+    });
+
+    it('should not post message when title has not changed', () => {
+      const item = makeItem({ title: 'Stable Title', providerId: 'gh', externalId: '10' });
+      const mock = createMockWebviewPanel();
+      const registry = createMockProviderRegistry();
+      vi.mocked(registry.getDiscoveredItems).mockReturnValue([
+        { externalId: '10', title: 'Stable Title', url: '' } as any,
+      ]);
+      openPanel(item, createMockWorkGraph(item), mock, undefined, registry);
+
+      // Fire change but title is the same
+      registry._fireDiscoveredItemsChange();
+
+      expect(mock.panel.webview.postMessage).not.toHaveBeenCalled();
+    });
+
+    it('should skip title update for non-provider items', () => {
+      const item = makeItem({ title: 'Manual', providerId: undefined });
+      const mock = createMockWebviewPanel();
+      const registry = createMockProviderRegistry();
+      openPanel(item, createMockWorkGraph(item), mock, undefined, registry);
+
+      registry._fireDiscoveredItemsChange();
+
+      expect(mock.panel.webview.postMessage).not.toHaveBeenCalled();
+    });
+
+    it('should skip title update after panel is disposed', () => {
+      const item = makeItem({ title: 'Disposed', providerId: 'gh', externalId: '10' });
+      const mock = createMockWebviewPanel();
+      const registry = createMockProviderRegistry();
+      vi.mocked(registry.getDiscoveredItems).mockReturnValue([
+        { externalId: '10', title: 'Disposed', url: '' } as any,
+      ]);
+      openPanel(item, createMockWorkGraph(item), mock, undefined, registry);
+
+      // Dispose the panel
+      mock.simulateDispose();
+
+      // Now fire a title change
+      vi.mocked(registry.getDiscoveredItems).mockReturnValue([
+        { externalId: '10', title: 'New Title', url: '' } as any,
+      ]);
+      registry._fireDiscoveredItemsChange();
+
+      expect(mock.panel.webview.postMessage).not.toHaveBeenCalled();
+    });
     it('should reuse existing panel when opening same item twice', () => {
       const item = makeItem({ id: 'reuse-1', title: 'Reuse Item' });
       const mock = createMockWebviewPanel();
