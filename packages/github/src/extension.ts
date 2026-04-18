@@ -76,15 +76,39 @@ export async function activate(_context: vscode.ExtensionContext): Promise<void>
   prReviewRegistration = api.registerProvider(prReviewProvider);
 
   // Register the GitHub Actions watcher if enabled
-  const watchWorkflows = config.get<boolean>('watchWorkflowRuns', true);
-  let providerCount = 2;
-  if (watchWorkflows) {
-    actionsProvider = new GitHubActionsProvider();
-    actionsProvider.startPeriodicRefresh(intervalSeconds);
-    actionsRegistration = api.registerProvider(actionsProvider);
-    providerCount = 3;
-  }
+  const configureActionsProvider = (refreshInterval: number) => {
+    actionsRegistration?.dispose();
+    actionsRegistration = undefined;
+    actionsProvider?.dispose();
+    actionsProvider = undefined;
 
+    const ghConfig = vscode.workspace.getConfiguration('devdocketGithub');
+    const watchWorkflows = ghConfig.get<boolean>('watchWorkflowRuns', true);
+    if (watchWorkflows) {
+      actionsProvider = new GitHubActionsProvider();
+      actionsProvider.startPeriodicRefresh(refreshInterval);
+      actionsRegistration = api.registerProvider(actionsProvider);
+      logger.info('GitHub Actions watcher enabled');
+    } else {
+      logger.info('GitHub Actions watcher disabled');
+    }
+  };
+
+  configureActionsProvider(intervalSeconds);
+
+  _context.subscriptions.push(
+    vscode.workspace.onDidChangeConfiguration(e => {
+      if (e.affectsConfiguration('devdocketGithub.watchWorkflowRuns')) {
+        const ghConfig = vscode.workspace.getConfiguration('devdocketGithub');
+        const interval = validateRefreshInterval(
+          ghConfig.get<number>('refreshIntervalSeconds', 300), logger,
+        );
+        configureActionsProvider(interval);
+      }
+    }),
+  );
+
+  const providerCount = actionsProvider ? 3 : 2;
   logger.info(`DevDocket GitHub activated, registered ${providerCount} providers`);
 }
 

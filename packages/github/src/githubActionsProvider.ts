@@ -1,5 +1,5 @@
 import * as vscode from 'vscode';
-import { StatusWatcher, type StatusChange } from '@devdocket/shared';
+import { StatusWatcher, type StatusChange, isValidGitHubRepo } from '@devdocket/shared';
 import { logger } from './logger';
 import { BaseGitHubProvider, DiscoveredItem } from './baseGithubProvider';
 
@@ -83,23 +83,31 @@ export class GitHubActionsProvider extends BaseGitHubProvider {
       return;
     }
 
+    const validRepos = repos.filter(repo => {
+      if (!isValidGitHubRepo(repo)) {
+        logger.warn('Skipping invalid repo identifier for Actions', repo);
+        return false;
+      }
+      return true;
+    });
+
     const allRuns: WorkflowRun[] = [];
     const failures: string[] = [];
 
     const results = await Promise.allSettled(
-      repos.map(repo => this.fetchRepoRuns(accessToken, repo)),
+      validRepos.map(repo => this.fetchRepoRuns(accessToken, repo)),
     );
 
     results.forEach((result, index) => {
       if (result.status === 'fulfilled') {
         allRuns.push(...result.value);
       } else {
-        failures.push(repos[index]);
-        logger.error(`Failed to fetch workflow runs for ${repos[index]}`, result.reason);
+        failures.push(validRepos[index]);
+        logger.error(`Failed to fetch workflow runs for ${validRepos[index]}`, result.reason);
       }
     });
 
-    logger.info(`Fetched ${allRuns.length} workflow runs across ${repos.length} repos`);
+    logger.info(`Fetched ${allRuns.length} workflow runs across ${validRepos.length} repos`);
 
     // Detect run-level status changes
     const statusMap = new Map<string, string>();

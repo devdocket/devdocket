@@ -139,7 +139,8 @@ export async function activate(_context: vscode.ExtensionContext): Promise<void>
     vscode.workspace.onDidChangeConfiguration(e => {
       if (
         e.affectsConfiguration('devdocketAdo.projects') ||
-        e.affectsConfiguration('devdocketAdo.refreshIntervalSeconds')
+        e.affectsConfiguration('devdocketAdo.refreshIntervalSeconds') ||
+        e.affectsConfiguration('devdocketAdo.watchPipelineRuns')
       ) {
         configureProviders();
       }

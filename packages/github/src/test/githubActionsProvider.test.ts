@@ -363,4 +363,31 @@ describe('GitHubActionsProvider', () => {
     const items = listener.mock.calls[0][0];
     expect(items[0].description).toBe('my-feature · push · in_progress');
   });
+
+  it('skips invalid repo identifiers and does not make API calls for them', async () => {
+    vi.mocked(workspace.getConfiguration).mockReturnValue({
+      get: vi.fn((key: string, defaultValue?: any) => {
+        if (key === 'repos') { return ['not-a-repo', '../traversal/attack', 'valid/repo']; }
+        return defaultValue;
+      }),
+    } as any);
+
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({
+        workflow_runs: [createMockRun(1, 'CI', 'completed', 'success', 'valid/repo')],
+      }),
+    });
+
+    const listener = vi.fn();
+    provider.onDidDiscoverItems(listener);
+    await provider.refresh();
+
+    // Only one fetch call — for the valid repo (no job fetch since run is completed)
+    expect(mockFetch).toHaveBeenCalledTimes(1);
+    expect(listener).toHaveBeenCalledTimes(1);
+    // Completed runs are not emitted as items
+    const items = listener.mock.calls[0][0];
+    expect(items).toHaveLength(0);
+  });
 });

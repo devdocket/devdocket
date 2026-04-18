@@ -6,7 +6,7 @@ import { OrgConfig } from './configParser';
 /** Azure DevOps REST API scope for authentication. */
 const ADO_AUTH_SCOPE = '499b84ac-1321-427f-aa17-267ca6975798/.default';
 
-/** A build from the ADO Builds REST API. */
+/** A build from the ADO Builds REST API, augmented with the org it came from. */
 interface AdoBuild {
   id: number;
   buildNumber: string;
@@ -18,6 +18,8 @@ interface AdoBuild {
   project: { name: string };
   startTime?: string;
   finishTime?: string;
+  /** Organization this build belongs to (set locally, not from API). */
+  _org?: string;
 }
 
 /** A timeline record (job/stage) from the ADO Build Timeline API. */
@@ -149,6 +151,9 @@ export class AdoPipelineProvider extends BaseProvider {
         const target = project ? `${orgConfig.org}/${project}` : orgConfig.org;
 
         if (result.status === 'fulfilled') {
+          for (const build of result.value) {
+            build._org = orgConfig.org;
+          }
           allBuilds.push(...result.value);
         } else {
           fetchFailures.push(target);
@@ -301,7 +306,12 @@ export class AdoPipelineProvider extends BaseProvider {
 
   /** Fetch job-level timeline records for a build. */
   private async fetchBuildJobs(token: string, build: AdoBuild): Promise<TimelineRecord[]> {
-    const url = `https://dev.azure.com/${encodeURIComponent(build.project.name)}/_apis/build/builds/${build.id}/timeline?api-version=7.1`;
+    const org = build._org;
+    if (!org) {
+      logger.warn(`Build ${build.id} missing organization — cannot fetch timeline`);
+      return [];
+    }
+    const url = `https://dev.azure.com/${encodeURIComponent(org)}/${encodeURIComponent(build.project.name)}/_apis/build/builds/${build.id}/timeline?api-version=7.1`;
 
     const response = await fetch(url, {
       headers: { Authorization: `Bearer ${token}` },
