@@ -2,6 +2,7 @@ import * as vscode from 'vscode';
 import type { WorkItem, DevDocketAction } from './types';
 import { RepoManager } from './repoManager';
 import { parsePrUrl } from './prUrl';
+import { confirmAiUsage } from './confirmAiUsage';
 
 export class AiWalkthroughAction implements DevDocketAction {
   readonly id = 'ai-reviewer.walkthrough';
@@ -27,12 +28,7 @@ export class AiWalkthroughAction implements DevDocketAction {
       return;
     }
 
-    const proceed = await vscode.window.showWarningMessage(
-      'AI Walkthrough will use AI to analyze and walk through this PR. Continue?',
-      { modal: true },
-      'Continue',
-    );
-    if (proceed !== 'Continue') {
+    if (!await confirmAiUsage('AI Walkthrough will use AI to analyze and walk through this PR. Continue?')) {
       this.log.info('User declined AI Walkthrough confirmation');
       return;
     }

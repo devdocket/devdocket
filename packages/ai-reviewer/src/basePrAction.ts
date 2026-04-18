@@ -1,6 +1,7 @@
 import * as vscode from 'vscode';
 import type { WorkItem, DevDocketAction } from './types';
 import { parsePrUrl } from './prUrl';
+import { confirmAiUsage } from './confirmAiUsage';
 
 /**
  * Sanitize a URL before interpolating it into an LLM prompt.
@@ -72,12 +73,7 @@ export abstract class BasePrAction implements DevDocketAction {
 
         if (token.isCancellationRequested) return;
 
-        const proceed = await vscode.window.showWarningMessage(
-          this.confirmationMessage,
-          { modal: true },
-          'Continue',
-        );
-        if (proceed !== 'Continue' || token.isCancellationRequested) return;
+        if (!await confirmAiUsage(this.confirmationMessage) || token.isCancellationRequested) return;
 
         progress.report({ message: 'Analyzing changes...' });
 
