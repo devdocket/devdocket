@@ -968,6 +968,7 @@ describe('WorkGraph', () => {
       await g.transitionState(item.id, WorkItemState.InProgress);
       await g.transitionState(item.id, WorkItemState.Done);
       const updated = g.getItem(item.id)!;
+      // Mutate updatedAt directly on the Map-stored reference — pruneHistory sorts by this field.
       (updated as any).updatedAt = Date.now() + updatedAtOffset;
       return updated;
     }

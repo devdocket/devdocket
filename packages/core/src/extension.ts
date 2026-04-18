@@ -273,23 +273,6 @@ function wireEvents(
   return [discoveredSub, newItemsSub, providerRegSub, stateStoreSub, markSeenSub, workGraphSub];
 }
 
-/** Read maxHistoryItems from config and prune history if a limit is set. */
-let pruning = false;
-async function autoTrimHistory(wg: WorkGraph): Promise<void> {
-  if (pruning) { return; }
-  const maxItems = vscode.workspace.getConfiguration('devdocket').get<number>('maxHistoryItems', 0);
-  if (!maxItems || maxItems <= 0) { return; }
-  pruning = true;
-  try {
-    const result = await wg.pruneHistory(maxItems);
-    if (result.deleted > 0) {
-      logger.info(`Auto-pruned ${result.deleted} old history item(s) (limit: ${maxItems})`);
-    }
-  } finally {
-    pruning = false;
-  }
-}
-
 /**
  * Activate the DevDocket extension.
  *
@@ -310,8 +293,25 @@ export async function activate(context: vscode.ExtensionContext): Promise<DevDoc
   const { workGraph: wg, stateStore: ss, readStateStore, labelCache } = await loadStores(storagePath);
   await migrateDiscoveredState(wg, ss);
 
+  // Auto-prune: scoped to this activation to avoid stale refs across restarts
+  let pruning = false;
+  async function autoTrimHistory(): Promise<void> {
+    if (pruning) { return; }
+    const maxItems = vscode.workspace.getConfiguration('devdocket').get<number>('maxHistoryItems', 0);
+    if (!maxItems || maxItems <= 0) { return; }
+    pruning = true;
+    try {
+      const result = await wg.pruneHistory(maxItems);
+      if (result.deleted > 0) {
+        logger.info(`Auto-pruned ${result.deleted} old history item(s) (limit: ${maxItems})`);
+      }
+    } finally {
+      pruning = false;
+    }
+  }
+
   // Auto-prune history on startup if a max limit is configured
-  await autoTrimHistory(wg);
+  await autoTrimHistory();
 
   const pr = new ProviderRegistry(ss, labelCache);
   providerRegistry = pr;
@@ -353,7 +353,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<DevDoc
   let trimTimer: ReturnType<typeof setTimeout> | undefined;
   function scheduleAutoTrim(): void {
     if (trimTimer !== undefined) { clearTimeout(trimTimer); }
-    trimTimer = setTimeout(() => { void autoTrimHistory(wg); }, 2000);
+    trimTimer = setTimeout(() => { void autoTrimHistory(); }, 2000);
   }
   context.subscriptions.push(
     wg.onDidChange(safeHandler('Error scheduling auto-trim', scheduleAutoTrim)),
@@ -382,7 +382,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<DevDoc
         }
       }
       if (e.affectsConfiguration('devdocket.maxHistoryItems')) {
-        void autoTrimHistory(wg);
+        scheduleAutoTrim();
       }
     })),
   );
