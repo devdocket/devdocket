@@ -661,7 +661,37 @@ describe('AiReviewAction', () => {
         largeDiff, 'https://github.com/owner/repo/pull/42', worktreeInfo as never, token as never,
       );
 
-      expect(result).toContain('Use devdocket-getFileDiff');
+      expect(result).toContain('instructed to examine each file individually');
+    });
+
+    it('includes autonomous review instructions when diff is truncated', async () => {
+      const sendRequest = createMockSendRequest('File-by-file review');
+      vi.mocked(lm.selectChatModels).mockResolvedValue([{ sendRequest }]);
+
+      const token = { isCancellationRequested: false, onCancellationRequested: vi.fn() };
+      const largeDiff = 'x'.repeat(50_001);
+      await action.analyzeWithTools(
+        largeDiff, 'https://github.com/owner/repo/pull/42', worktreeInfo as never, token as never,
+      );
+
+      const userMsg = sendRequest.mock.calls[0][0][0];
+      expect(userMsg.content).toContain('Autonomous File-by-File Review Required');
+      expect(userMsg.content).toContain('devdocket-getFileDiff');
+      expect(userMsg.content).toContain('Do NOT');
+      expect(userMsg.content).toContain('do not ask the user');
+    });
+
+    it('does not include truncation instructions when diff fits within limit', async () => {
+      const sendRequest = createMockSendRequest('Normal review');
+      vi.mocked(lm.selectChatModels).mockResolvedValue([{ sendRequest }]);
+
+      const token = { isCancellationRequested: false, onCancellationRequested: vi.fn() };
+      await action.analyzeWithTools(
+        'small diff', 'https://github.com/owner/repo/pull/42', worktreeInfo as never, token as never,
+      );
+
+      const userMsg = sendRequest.mock.calls[0][0][0];
+      expect(userMsg.content).not.toContain('Autonomous File-by-File Review Required');
     });
 
     it('returns undefined when no language model available', async () => {

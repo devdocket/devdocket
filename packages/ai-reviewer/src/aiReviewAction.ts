@@ -2,6 +2,7 @@ import * as vscode from 'vscode';
 import { BasePrAction, sanitizePrUrl } from './basePrAction';
 import { DEFAULT_REVIEW_PROMPT } from './defaultPrompt';
 import { truncateToolContent } from './toolUtils';
+import { gitExec } from './tools/gitUtils';
 import type { RepoManager, WorktreeInfo } from './repoManager';
 import type { WalkthroughCache } from './walkthroughCache';
 import type { WorkItem } from './types';
@@ -120,15 +121,54 @@ export class AiReviewAction extends BasePrAction {
       const walkthroughBlock = this.buildWalkthroughBlock(prUrl);
 
       const maxDiffLength = 50_000;
+      const isDiffTruncated = diff.length > maxDiffLength;
       let truncationNote = '';
-      if (diff.length > maxDiffLength) {
+      let truncationInstructions = '';
+
+      if (isDiffTruncated) {
         truncationNote =
-          '\n\n> ⚠️ **Note:** The PR diff was truncated. Use devdocket-getFileDiff to examine individual files in detail.\n';
+          '\n\n> ⚠️ **Note:** The PR diff was truncated. The model was instructed to examine each file individually.\n';
+
+        // Get the full list of changed files so the model knows what to review
+        let fileList = '';
+        try {
+          fileList = await gitExec(
+            ['diff', '--name-status', `${worktreeInfo.baseRef}...${worktreeInfo.headRef}`],
+            worktreeInfo.worktreePath,
+          );
+        } catch (err) {
+          this.log.warn(`Failed to get file list: ${err instanceof Error ? err.message : String(err)}`);
+        }
+
+        truncationInstructions = `
+
+## ⚠️ Diff Truncation — Autonomous File-by-File Review Required
+
+The PR diff below has been truncated (${diff.length.toLocaleString()} chars total, only first ${maxDiffLength.toLocaleString()} shown).
+**You MUST review ALL changed files, not just what's visible in the truncated diff.**
+
+**Procedure:**
+1. Use the file list below to identify every changed file.
+2. For EACH file, call **devdocket-getFileDiff** with \`worktreePath: "${worktreeInfo.worktreePath}"\`, \`baseRef: "${worktreeInfo.baseRef}"\`, \`headRef: "${worktreeInfo.headRef}"\`, and the file's path.
+3. Review each file's diff thoroughly using the review framework below.
+4. Produce a single, complete review covering ALL files — do not ask the user which files to focus on.
+
+**Do NOT:**
+- Ask the user what to focus on or which files to review
+- Produce only a summary and wait for direction
+- Skip files because the inline diff was truncated
+
+**Changed files in this PR:**
+\`\`\`
+${fileList || '(file list unavailable — use devdocket-getDiff to get the stat summary)'}
+\`\`\`
+
+`;
       }
 
       const messages: vscode.LanguageModelChatMessage[] = [
         vscode.LanguageModelChatMessage.User(
-          `${runtimeInstructions}${repoContext}${walkthroughBlock}${reviewPrompt}
+          `${runtimeInstructions}${repoContext}${truncationInstructions}${walkthroughBlock}${reviewPrompt}
 
 \`\`\`\`diff
 ${diff.slice(0, maxDiffLength)}
