@@ -305,6 +305,7 @@ export class AdoWorkItemProvider extends BaseProvider {
     org: string,
     project: string,
     workItemType: string,
+    signal?: AbortSignal,
   ): Promise<Set<string>> {
     const cacheKey = `${org}/${project}/${workItemType}`;
     
@@ -324,6 +325,7 @@ export class AdoWorkItemProvider extends BaseProvider {
         headers: {
           Authorization: `Bearer ${token}`,
         },
+        signal,
       });
     } catch (err) {
       logger.warn(`Failed to fetch states for ${cacheKey}: network error`, err);
@@ -445,6 +447,7 @@ export class AdoWorkItemProvider extends BaseProvider {
     try {
       session = await vscode.authentication.getSession('microsoft', [ADO_AUTH_SCOPE], {
         createIfNone: false,
+        silent: true,
       });
     } catch {
       logger.debug('No ADO auth session for getClosedItems');
@@ -505,15 +508,43 @@ export class AdoWorkItemProvider extends BaseProvider {
             workItemMap.set(wi.id, wi);
           }
 
+          // Group by (project, workItemType) and fetch terminal states per group
+          const groupedItems = new Map<string, {
+            project: string;
+            workItemType: string;
+            items: Array<{ id: string; state: string }>;
+          }>();
+
           for (const item of batchItems) {
             const wi = workItemMap.get(item.workItemId);
             if (!wi) { continue; }
             const state = wi.fields['System.State'];
             const project = wi.fields['System.TeamProject'];
             const workItemType = wi.fields['System.WorkItemType'];
-            const terminalStates = await this.fetchTerminalStates(token, org, project, workItemType);
-            if (terminalStates.has(state)) {
-              closedIds.push(item.id);
+            const groupKey = `${project}\0${workItemType}`;
+            const group = groupedItems.get(groupKey);
+            if (group) {
+              group.items.push({ id: item.id, state });
+            } else {
+              groupedItems.set(groupKey, { project, workItemType, items: [{ id: item.id, state }] });
+            }
+          }
+
+          const terminalStatesByGroup = new Map<string, Set<string>>();
+          await Promise.all(
+            Array.from(groupedItems.entries()).map(async ([groupKey, group]) => {
+              const terminalStates = await this.fetchTerminalStates(token, org, group.project, group.workItemType, signal);
+              terminalStatesByGroup.set(groupKey, terminalStates);
+            }),
+          );
+
+          for (const [groupKey, group] of groupedItems) {
+            const terminalStates = terminalStatesByGroup.get(groupKey);
+            if (!terminalStates) { continue; }
+            for (const item of group.items) {
+              if (terminalStates.has(item.state)) {
+                closedIds.push(item.id);
+              }
             }
           }
         } catch (err) {
