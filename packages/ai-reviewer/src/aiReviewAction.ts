@@ -49,6 +49,15 @@ export class AiReviewAction extends BasePrAction {
     const diff = await this.fetchDiff(item.url!);
     if (!diff || token.isCancellationRequested) return;
 
+    // Check model availability before expensive worktree preparation
+    const models = await vscode.lm.selectChatModels();
+    if (models.length === 0) {
+      vscode.window.showWarningMessage(
+        `${this.progressTitle}: No language model available. Install GitHub Copilot.`,
+      );
+      return;
+    }
+
     // Prepare worktree (best-effort — review falls back to diff-only)
     progress.report({ message: 'Preparing repository...' });
     let worktreeInfo: WorktreeInfo | undefined;
@@ -66,7 +75,7 @@ export class AiReviewAction extends BasePrAction {
 
     let result: string | undefined;
     if (worktreeInfo) {
-      result = await this.analyzeWithTools(diff, item.url!, worktreeInfo, token);
+      result = await this.analyzeWithTools(diff, item.url!, worktreeInfo, models[0], token);
     } else {
       result = await this.analyzeWithAi(diff, item.url!, token);
     }
@@ -81,25 +90,16 @@ export class AiReviewAction extends BasePrAction {
 
   /**
    * Tool-enabled analysis: gives the model access to the full repository
-   * via LM tools (readFile, searchCode, getDiff, etc.) and includes
-   * walkthrough findings when available.
+   * via LM tools (readFile, searchCode, getDiff, etc.).
    */
   async analyzeWithTools(
     diff: string,
     prUrl: string,
     worktreeInfo: WorktreeInfo,
+    model: vscode.LanguageModelChat,
     token: vscode.CancellationToken,
   ): Promise<string | undefined> {
     try {
-      const models = await vscode.lm.selectChatModels();
-      if (models.length === 0) {
-        vscode.window.showWarningMessage(
-          `${this.progressTitle}: No language model available. Install GitHub Copilot.`,
-        );
-        return undefined;
-      }
-
-      const model = models[0];
       this.log.info(`Selected model: ${model.id}`);
 
       const reviewPrompt = await this.getReviewPrompt();

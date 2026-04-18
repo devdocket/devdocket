@@ -581,20 +581,26 @@ describe('AiReviewAction', () => {
       baseRef: 'origin/main',
     };
 
+    function createMockModel(text = 'Review feedback here') {
+      return {
+        id: 'mock-model',
+        sendRequest: createMockSendRequest(text),
+      } as never;
+    }
+
     it('returns review text with repo context instructions', async () => {
-      const sendRequest = createMockSendRequest('Tool-enabled review');
-      vi.mocked(lm.selectChatModels).mockResolvedValue([{ sendRequest }]);
+      const model = createMockModel('Tool-enabled review');
 
       const token = { isCancellationRequested: false, onCancellationRequested: vi.fn() };
       const result = await action.analyzeWithTools(
-        'diff content', 'https://github.com/owner/repo/pull/42', worktreeInfo as never, token as never,
+        'diff content', 'https://github.com/owner/repo/pull/42', worktreeInfo as never, model, token as never,
       );
 
       expect(result).toContain('AI Code Review');
       expect(result).toContain('Tool-enabled review');
 
       // Verify the prompt includes repo context
-      const userMsg = sendRequest.mock.calls[0][0][0];
+      const userMsg = model.sendRequest.mock.calls[0][0][0];
       expect(userMsg.content).toContain('Repository Context');
       expect(userMsg.content).toContain('/mock/worktrees/pr-42');
       expect(userMsg.content).toContain('devdocket-readFile');
@@ -602,26 +608,26 @@ describe('AiReviewAction', () => {
     });
 
     it('appends truncation note when diff exceeds limit and worktree is available', async () => {
+      const model = createMockModel();
       const token = { isCancellationRequested: false, onCancellationRequested: vi.fn() };
       const largeDiff = 'x'.repeat(50_001);
       const result = await action.analyzeWithTools(
-        largeDiff, 'https://github.com/owner/repo/pull/42', worktreeInfo as never, token as never,
+        largeDiff, 'https://github.com/owner/repo/pull/42', worktreeInfo as never, model, token as never,
       );
 
       expect(result).toContain('instructed to examine each file individually');
     });
 
     it('includes autonomous review instructions when diff is truncated', async () => {
-      const sendRequest = createMockSendRequest('File-by-file review');
-      vi.mocked(lm.selectChatModels).mockResolvedValue([{ sendRequest }]);
+      const model = createMockModel('File-by-file review');
 
       const token = { isCancellationRequested: false, onCancellationRequested: vi.fn() };
       const largeDiff = 'x'.repeat(50_001);
       await action.analyzeWithTools(
-        largeDiff, 'https://github.com/owner/repo/pull/42', worktreeInfo as never, token as never,
+        largeDiff, 'https://github.com/owner/repo/pull/42', worktreeInfo as never, model, token as never,
       );
 
-      const userMsg = sendRequest.mock.calls[0][0][0];
+      const userMsg = model.sendRequest.mock.calls[0][0][0];
       expect(userMsg.content).toContain('Autonomous File-by-File Review Required');
       expect(userMsg.content).toContain('devdocket-getFileDiff');
       expect(userMsg.content).toContain('Do NOT');
@@ -629,30 +635,15 @@ describe('AiReviewAction', () => {
     });
 
     it('does not include truncation instructions when diff fits within limit', async () => {
-      const sendRequest = createMockSendRequest('Normal review');
-      vi.mocked(lm.selectChatModels).mockResolvedValue([{ sendRequest }]);
+      const model = createMockModel('Normal review');
 
       const token = { isCancellationRequested: false, onCancellationRequested: vi.fn() };
       await action.analyzeWithTools(
-        'small diff', 'https://github.com/owner/repo/pull/42', worktreeInfo as never, token as never,
+        'small diff', 'https://github.com/owner/repo/pull/42', worktreeInfo as never, model, token as never,
       );
 
-      const userMsg = sendRequest.mock.calls[0][0][0];
+      const userMsg = model.sendRequest.mock.calls[0][0][0];
       expect(userMsg.content).not.toContain('Autonomous File-by-File Review Required');
-    });
-
-    it('returns undefined when no language model available', async () => {
-      vi.mocked(lm.selectChatModels).mockResolvedValue([]);
-
-      const token = { isCancellationRequested: false, onCancellationRequested: vi.fn() };
-      const result = await action.analyzeWithTools(
-        'diff', 'https://github.com/owner/repo/pull/42', worktreeInfo as never, token as never,
-      );
-
-      expect(result).toBeUndefined();
-      expect(window.showWarningMessage).toHaveBeenCalledWith(
-        expect.stringContaining('No language model available'),
-      );
     });
   });
 
