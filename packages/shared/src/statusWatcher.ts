@@ -39,9 +39,10 @@ export class StatusWatcher<TStatus> {
     const changes: StatusChange<TStatus>[] = [];
 
     for (const [id, status] of current) {
+      const hadPrevious = this.tracked.has(id);
       const previous = this.tracked.get(id);
-      if (previous !== undefined && previous !== status) {
-        changes.push({ id, previousStatus: previous, currentStatus: status });
+      if (hadPrevious && previous !== status) {
+        changes.push({ id, previousStatus: previous as TStatus, currentStatus: status });
       }
     }
 
