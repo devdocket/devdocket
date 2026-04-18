@@ -101,7 +101,7 @@ interface DevDocketProvider {
    * discovery) and whenever the user requests a manual refresh. Must be safe
    * to call multiple times and during extension activation.
    */
-  refresh(): Promise<void>;
+  refresh(token?: vscode.CancellationToken): Promise<void>;
 
   /**
    * Check which of the given external items have been closed or completed.
@@ -342,7 +342,7 @@ interface DevDocketProvider {
   readonly id: string;
   readonly label: string;
   readonly onDidDiscoverItems: Event<DiscoveredItem[]>;
-  refresh(): Promise<void>;
+  refresh(token?: unknown): Promise<void>;
   getClosedItems?(externalIds: string[], signal?: AbortSignal): Promise<string[]>;
 }
 
