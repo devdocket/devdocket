@@ -24,9 +24,14 @@ export class AiWalkthroughAction implements DevDocketAction {
     this.log.debug(`AiWalkthroughAction.run — url: ${item.url ?? '(none)'}`);
     if (!item.url) return;
 
+    if (!parsePrUrl(item.url)) {
+      this.log.warn(`AiWalkthroughAction.run — not a valid PR URL: ${item.url}`);
+      return;
+    }
+
     const model = await selectModel('AI Walkthrough');
     if (!model) {
-      this.log.info('Model selection cancelled');
+      this.log.info('Model selection aborted');
       return;
     }
     this.log.info(`Model selected: ${model.id}`);

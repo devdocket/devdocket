@@ -55,7 +55,7 @@ export abstract class BasePrAction implements DevDocketAction {
   }
 
   async run(item: WorkItem): Promise<void> {
-    if (!item.url) return;
+    if (!item.url || !this.isPrUrl(item.url)) return;
 
     const model = await selectModel(this.progressTitle);
     if (!model) return;
