@@ -223,7 +223,7 @@ describe('CleanupHandler', () => {
       // Should have removed worktree
       expect(execFile).toHaveBeenCalledWith(
         'git',
-        ['worktree', 'remove', DEFAULT_METADATA.worktreePath],
+        ['worktree', 'remove', '--', DEFAULT_METADATA.worktreePath],
         { cwd: DEFAULT_METADATA.repoPath },
         expect.any(Function),
       );
