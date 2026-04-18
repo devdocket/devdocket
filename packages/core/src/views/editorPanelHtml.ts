@@ -275,6 +275,25 @@ ${renderActivityLog(item.activityLog)}
         vscode.postMessage({ type: 'openUrl', url: titleLink.dataset.url });
       });
     }
+
+    window.addEventListener('message', event => {
+      const msg = event.data;
+      if (msg && msg.type === 'updateTitle' && typeof msg.title === 'string') {
+        const heading = document.getElementById('editor-heading');
+        if (heading) {
+          const link = heading.querySelector('#title-link');
+          if (link) {
+            link.textContent = msg.title;
+          } else {
+            heading.textContent = msg.title;
+          }
+        }
+        const titleInput = document.getElementById('title');
+        if (titleInput instanceof HTMLInputElement && titleInput.readOnly) {
+          titleInput.value = msg.title;
+        }
+      }
+    });
   </script>
 </body>
 </html>`;

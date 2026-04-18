@@ -83,8 +83,20 @@ describe('getEditorPanelHtml', () => {
   it('shows item title in heading instead of generic text', () => {
     const item = makeItem({ title: 'Fix login bug' });
     const html = getEditorPanelHtml({ cspSource, item });
-    expect(html).toContain('<h2 id="editor-heading">Fix login bug</h2>');
+    expect(html).toContain('>Fix login bug</');
     expect(html).not.toContain('Edit Work Item');
+  });
+
+  it('includes updateTitle message handler in webview script', () => {
+    const html = getEditorPanelHtml({ cspSource, item: makeItem() });
+    expect(html).toContain('updateTitle');
+    expect(html).toContain("window.addEventListener('message'");
+  });
+
+  it('updateTitle handler preserves title-link element when present', () => {
+    const html = getEditorPanelHtml({ cspSource, item: makeItem() });
+    expect(html).toContain("heading.querySelector('#title-link')");
+    expect(html).toContain('link.textContent = msg.title');
   });
 
   it('escapes special characters in heading title', () => {
