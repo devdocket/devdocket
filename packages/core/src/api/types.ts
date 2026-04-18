@@ -60,9 +60,10 @@ export interface DevDocketProvider {
    * in the provider's discovered-items list.
    *
    * @param externalIds - The provider-scoped external IDs to check.
+   * @param signal - Optional abort signal for cancellation.
    * @returns The subset of `externalIds` that are closed, merged, or completed.
    */
-  getClosedItems?(externalIds: string[]): Promise<string[]>;
+  getClosedItems?(externalIds: string[], signal?: AbortSignal): Promise<string[]>;
 }
 
 /**
