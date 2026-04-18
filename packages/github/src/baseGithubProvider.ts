@@ -244,8 +244,9 @@ export abstract class BaseGitHubProvider implements DevDocketProvider {
       const hashIdx = id.lastIndexOf('#');
       if (hashIdx === -1) { return null; }
       const rawRepo = id.substring(0, hashIdx);
-      const num = parseInt(id.substring(hashIdx + 1), 10);
-      if (isNaN(num) || !isValidGitHubRepo(rawRepo)) { return null; }
+      const rawNumber = id.substring(hashIdx + 1);
+      if (!/^\d+$/.test(rawNumber) || !isValidGitHubRepo(rawRepo)) { return null; }
+      const num = Number(rawNumber);
       const [owner, repoName] = rawRepo.split('/');
       return { id, owner, repoName, number: num };
     }).filter((p): p is NonNullable<typeof p> => p !== null);
