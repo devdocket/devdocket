@@ -299,6 +299,7 @@ export class AdoPrReviewProvider extends BaseProvider {
     try {
       session = await vscode.authentication.getSession('microsoft', [ADO_AUTH_SCOPE], {
         createIfNone: false,
+        silent: true,
       });
     } catch {
       logger.debug('No ADO auth session for getClosedItems');
