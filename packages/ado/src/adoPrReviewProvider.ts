@@ -310,12 +310,13 @@ export class AdoPrReviewProvider extends BaseProvider {
     // Parse external IDs: "org/project/repo/prId"
     const parsed = externalIds.map(id => {
       const parts = id.split('/');
-      if (parts.length < 4) { return null; }
-      const prId = parseInt(parts[parts.length - 1], 10);
-      if (isNaN(prId)) { return null; }
+      if (parts.length !== 4) { return null; }
       const org = parts[0];
       const project = parts[1];
-      const repo = parts.slice(2, parts.length - 1).join('/');
+      const repo = parts[2];
+      const prIdSegment = parts[3];
+      if (!/^\d+$/.test(prIdSegment)) { return null; }
+      const prId = Number(prIdSegment);
       return { id, org, project, repo, prId };
     }).filter((p): p is NonNullable<typeof p> => p !== null);
 
