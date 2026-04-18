@@ -274,12 +274,19 @@ function wireEvents(
 }
 
 /** Read maxHistoryItems from config and prune history if a limit is set. */
+let pruning = false;
 async function autoTrimHistory(wg: WorkGraph): Promise<void> {
+  if (pruning) { return; }
   const maxItems = vscode.workspace.getConfiguration('devdocket').get<number>('maxHistoryItems', 0);
   if (!maxItems || maxItems <= 0) { return; }
-  const result = await wg.pruneHistory(maxItems);
-  if (result.deleted > 0) {
-    logger.info(`Auto-pruned ${result.deleted} old history item(s) (limit: ${maxItems})`);
+  pruning = true;
+  try {
+    const result = await wg.pruneHistory(maxItems);
+    if (result.deleted > 0) {
+      logger.info(`Auto-pruned ${result.deleted} old history item(s) (limit: ${maxItems})`);
+    }
+  } finally {
+    pruning = false;
   }
 }
 
@@ -342,9 +349,15 @@ export async function activate(context: vscode.ExtensionContext): Promise<DevDoc
   registerCommands(context, wg, ar, ss, pr, labelCache);
   logger.info(`Command registration took ${Math.round(performance.now() - commandRegStart)}ms`);
 
-  // Auto-prune history when items change (e.g. after completing/archiving)
+  // Debounced auto-prune: collapses rapid mutations into a single prune check
+  let trimTimer: ReturnType<typeof setTimeout> | undefined;
+  function scheduleAutoTrim(): void {
+    if (trimTimer !== undefined) { clearTimeout(trimTimer); }
+    trimTimer = setTimeout(() => { void autoTrimHistory(wg); }, 2000);
+  }
   context.subscriptions.push(
-    wg.onDidChange(safeHandler('Error auto-trimming history', () => autoTrimHistory(wg))),
+    wg.onDidChange(safeHandler('Error scheduling auto-trim', scheduleAutoTrim)),
+    { dispose: () => { if (trimTimer !== undefined) { clearTimeout(trimTimer); } } },
   );
 
   // Set context keys and listen for layout changes
@@ -367,6 +380,9 @@ export async function activate(context: vscode.ExtensionContext): Promise<DevDoc
           providerMap[id].layout = layout;
           void vscode.commands.executeCommand('setContext', `devdocket.${id}Layout`, layout);
         }
+      }
+      if (e.affectsConfiguration('devdocket.maxHistoryItems')) {
+        void autoTrimHistory(wg);
       }
     })),
   );
