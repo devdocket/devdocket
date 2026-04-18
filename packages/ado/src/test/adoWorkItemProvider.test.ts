@@ -468,4 +468,83 @@ describe('AdoWorkItemProvider', () => {
     expect(listener).toHaveBeenCalledTimes(1);
     expect(listener).toHaveBeenCalledWith([]);
   });
+
+  describe('getClosedItems', () => {
+    it('returns closed work item IDs based on terminal states', async () => {
+      mockFetch.mockImplementation(async (url: string) => {
+        // Batch work item details API
+        if (url.includes('/_apis/wit/workitems?ids=')) {
+          return {
+            ok: true,
+            json: async () => ({
+              value: [
+                {
+                  id: 10,
+                  fields: {
+                    'System.State': 'Closed',
+                    'System.WorkItemType': 'User Story',
+                    'System.TeamProject': 'MyProject',
+                  },
+                },
+                {
+                  id: 20,
+                  fields: {
+                    'System.State': 'Active',
+                    'System.WorkItemType': 'User Story',
+                    'System.TeamProject': 'MyProject',
+                  },
+                },
+              ],
+            }),
+          };
+        }
+        // Terminal states API
+        if (url.includes('/workitemtypes/') && url.includes('/states')) {
+          return {
+            ok: true,
+            json: async () => ({
+              count: 1,
+              value: [{ name: 'Closed', category: 'Completed' }],
+            }),
+          };
+        }
+        throw new Error(`Unexpected fetch call: ${url}`);
+      });
+
+      const result = await provider.getClosedItems([
+        'myorg/MyProject/10',
+        'myorg/MyProject/20',
+      ]);
+
+      expect(result).toEqual(['myorg/MyProject/10']);
+    });
+
+    it('returns empty array when no auth session', async () => {
+      vi.mocked(authentication.getSession).mockResolvedValue(undefined as any);
+
+      const result = await provider.getClosedItems(['myorg/MyProject/10']);
+
+      expect(result).toEqual([]);
+      expect(mockFetch).not.toHaveBeenCalled();
+    });
+
+    it('ignores malformed external IDs', async () => {
+      // None of these should trigger a fetch
+      const result = await provider.getClosedItems([
+        'bad',
+        'only/two',
+        'org/project/abc',
+      ]);
+
+      expect(result).toEqual([]);
+      expect(mockFetch).not.toHaveBeenCalled();
+    });
+
+    it('returns empty array for empty input', async () => {
+      const result = await provider.getClosedItems([]);
+
+      expect(result).toEqual([]);
+      expect(mockFetch).not.toHaveBeenCalled();
+    });
+  });
 });

@@ -541,4 +541,66 @@ describe('AdoPrReviewProvider', () => {
     expect(listener).toHaveBeenCalledTimes(1);
     expect(listener).toHaveBeenCalledWith([]);
   });
+
+  describe('getClosedItems', () => {
+    it('returns completed and abandoned PR IDs', async () => {
+      mockFetch.mockImplementation(async (url: string) => {
+        if (url.includes('/pullrequests/101?')) {
+          return { ok: true, json: async () => ({ status: 'completed' }) };
+        }
+        if (url.includes('/pullrequests/102?')) {
+          return { ok: true, json: async () => ({ status: 'active' }) };
+        }
+        throw new Error(`Unexpected fetch call: ${url}`);
+      });
+
+      const result = await provider.getClosedItems([
+        'myorg/MyProject/myrepo/101',
+        'myorg/MyProject/myrepo/102',
+      ]);
+
+      expect(result).toEqual(['myorg/MyProject/myrepo/101']);
+    });
+
+    it('returns abandoned PRs', async () => {
+      mockFetch.mockImplementation(async (url: string) => {
+        if (url.includes('/pullrequests/200?')) {
+          return { ok: true, json: async () => ({ status: 'abandoned' }) };
+        }
+        throw new Error(`Unexpected fetch call: ${url}`);
+      });
+
+      const result = await provider.getClosedItems(['myorg/MyProject/myrepo/200']);
+
+      expect(result).toEqual(['myorg/MyProject/myrepo/200']);
+    });
+
+    it('returns empty array when no auth session', async () => {
+      vi.mocked(authentication.getSession).mockResolvedValue(undefined as any);
+
+      const result = await provider.getClosedItems(['myorg/MyProject/myrepo/101']);
+
+      expect(result).toEqual([]);
+      expect(mockFetch).not.toHaveBeenCalled();
+    });
+
+    it('ignores malformed external IDs', async () => {
+      const result = await provider.getClosedItems([
+        'bad',
+        'only/two/segments',
+        'org/project/repo/abc',
+        'a/b/c/d/e',
+      ]);
+
+      expect(result).toEqual([]);
+      expect(mockFetch).not.toHaveBeenCalled();
+    });
+
+    it('returns empty array for empty input', async () => {
+      const result = await provider.getClosedItems([]);
+
+      expect(result).toEqual([]);
+      expect(mockFetch).not.toHaveBeenCalled();
+    });
+  });
 });
