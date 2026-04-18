@@ -156,6 +156,30 @@ DevDocket is a VS Code extension monorepo for managing work items from multiple 
 
 **No PR needed.** Issue #226 was already fully addressed by PR #259 (commit `8d0df52`), which added all requested keybindings with a `Ctrl+Alt+D` chord prefix. The issue remained open because GitHub doesn't auto-close issues when PRs merge to non-default branches (`dev` instead of `main`). Closed the issue manually with a comment referencing the existing PR.
 
+### 2026-04-18 — Issue #215 (Dynamic Provider Titles — Reworked)
+
+**PR #313:** Provider-backed work item titles now sync at the store level during provider refresh.
+- **Store-level sync vs view-level resolution:** Initial approach resolved live titles at display time in the editor panel. Matt's feedback: update the persisted `WorkItem.title` in the store instead, so all views (tree, editor, tooltips) update naturally via the existing `onDidChange` event system. Covers imported/linked items too — any item with matching `providerId + externalId`.
+- **`titleSync.ts` service:** `syncProviderTitles()` iterates `providerRegistry.getAllDiscoveredItems()`, uses `workGraph.findItemByProvenance()` (O(1) via provenanceIndex) for each, and calls `workGraph.updateItem()` when titles differ. Per-item try/catch for resilience. Guards against empty/whitespace-only provider titles via `discovered.title?.trim()`.
+- **Editor panel event subscriptions:** Three subscriptions: `workGraph.onDidChange` (title changes), `providerRegistry.onDidRegisterProvider` (managed state on register), `providerRegistry.onDidChangeDiscoveredItems` (managed state on deregister). Title-only changes use `postMessage` (preserves unsaved notes); managed-state changes trigger full re-render.
+- **`updateTitle` webview handler:** Targets `#title-link` child if present (preserving clickable heading from #281), only updates readonly input (prevents overwriting user edits in non-managed items).
+- **Key Copilot review fixes:** (1) Whitespace-only title guard. (2) Subscribe to `onDidChangeDiscoveredItems` for deregistration detection. (3) Remove redundant `panel.title` set in `saveData()` — let `checkForUpdates()` handle it consistently.
+- **Files changed:** `packages/core/src/services/titleSync.ts` (new), `packages/core/src/extension.ts`, `packages/core/src/views/workItemEditorPanel.ts`, `packages/core/src/views/editorPanelHtml.ts`, plus test files.
+
+### 2026-04-18 — Issue #253 (Share Cloned Repo Between AI Actions)
+
+**PR #314:** Shared RepoManager and walkthrough findings between AI Code Review and AI Walkthrough.
+- **Shared RepoManager pattern:** Single `RepoManager` instance in `extension.ts` passed to both `AiReviewAction` and `AiWalkthroughAction`. When code review runs for a PR that walkthrough already prepared, it reuses the existing clone/worktree.
+- **Tool-enabled code review:** `AiReviewAction` now overrides `run()` and implements `analyzeWithTools()` with a tool-use loop (matching `WalkthroughParticipant` pattern). Model gets access to `devdocket-readFile`, `devdocket-searchCode`, etc. for full repo exploration during review. Falls back to diff-only `analyzeWithAi()` if worktree preparation fails.
+- **WalkthroughCache for cross-action context:** New `WalkthroughCache` (Map-based, keyed by normalized PR URL) stores walkthrough findings. `WalkthroughParticipant` writes via `appendFindings()` each iteration. `AiReviewAction` reads and includes in the review prompt as JSON-serialized, untrusted reference material.
+- **Prompt injection prevention:** Walkthrough findings are serialized with `JSON.stringify()` and wrapped in a fenced code block with explicit "untrusted, model-generated" disclaimer. Prevents delimiter attacks from cached model output.
+- **URL normalization:** `WalkthroughCache.normalizeKey()` strips query strings, fragments, and extra path segments from GitHub PR URLs so different URL variants map to the same cache key.
+- **Bounded memory:** LRU-style eviction (max 20 entries) + per-entry cap (500K chars) prevents unbounded growth. Uses Map insertion order with delete-then-set for ordering.
+- **Extracted shared utility:** `toolUtils.ts` consolidates `MAX_TOOL_RESULT_LENGTH` and `truncateToolContent()` — previously duplicated between `walkthroughParticipant.ts` and `aiReviewAction.ts`.
+- **Consent ordering:** Worktree preparation happens AFTER user confirms the consent dialog, not before. Avoids expensive clone work if user cancels.
+- **toolInvocationToken: undefined:** The standalone review action passes `undefined` for `toolInvocationToken` since it runs outside a chat participant context. This may prompt user consent at runtime.
+- **Files changed:** `aiReviewAction.ts` (major rewrite), `extension.ts`, `walkthroughParticipant.ts`, `walkthroughCache.ts` (new), `toolUtils.ts` (new), plus test files.
+
 ### 2026-04-18 — Issue #215 (Dynamic Editor Titles)
 
 **PR #313:** Editor panel titles now update dynamically from provider source data.
