@@ -348,4 +348,81 @@ describe('getEditorPanelHtml', () => {
       expect(html).not.toContain('href=');
     });
   });
+
+  describe('activity log', () => {
+    it('renders activity log section when entries exist', () => {
+      const item = makeItem({
+        activityLog: [
+          { timestamp: 1700000000000, type: 'created' },
+        ],
+      });
+      const html = getEditorPanelHtml({ cspSource, item });
+      expect(html).toContain('class="activity-log"');
+      expect(html).toContain('Activity');
+      expect(html).toContain('Created');
+    });
+
+    it('omits activity log section when activityLog is undefined', () => {
+      const item = makeItem({ activityLog: undefined });
+      const html = getEditorPanelHtml({ cspSource, item });
+      expect(html).not.toContain('class="activity-log"');
+    });
+
+    it('omits activity log section when activityLog is empty', () => {
+      const item = makeItem({ activityLog: [] });
+      const html = getEditorPanelHtml({ cspSource, item });
+      expect(html).not.toContain('class="activity-log"');
+    });
+
+    it('escapes HTML entities in detail strings', () => {
+      const item = makeItem({
+        activityLog: [
+          { timestamp: 1700000000000, type: 'action-executed', detail: '<script>alert("xss")</script>' },
+        ],
+      });
+      const html = getEditorPanelHtml({ cspSource, item });
+      expect(html).not.toContain('<script>alert');
+      expect(html).toContain('&lt;script&gt;alert');
+    });
+
+    it('renders entries in reverse chronological order', () => {
+      const item = makeItem({
+        activityLog: [
+          { timestamp: 1700000000000, type: 'created' },
+          { timestamp: 1700001000000, type: 'state-changed', detail: 'New → InProgress' },
+        ],
+      });
+      const html = getEditorPanelHtml({ cspSource, item });
+      // Find indices within the activity-log section only
+      const logStart = html.indexOf('class="activity-log"');
+      expect(logStart).toBeGreaterThan(-1);
+      const logSection = html.slice(logStart);
+      const createdIndex = logSection.indexOf('Created');
+      const stateChangedIndex = logSection.indexOf('State changed');
+      expect(stateChangedIndex).toBeLessThan(createdIndex);
+    });
+
+    it('renders detail when present and omits when absent', () => {
+      const item = makeItem({
+        activityLog: [
+          { timestamp: 1700000000000, type: 'created' },
+          { timestamp: 1700001000000, type: 'state-changed', detail: 'New → Done' },
+        ],
+      });
+      const html = getEditorPanelHtml({ cspSource, item });
+      // state-changed entry has detail
+      expect(html).toContain('activity-detail');
+      expect(html).toContain('New');
+    });
+
+    it('renders unknown activity types safely', () => {
+      const item = makeItem({
+        activityLog: [
+          { timestamp: 1700000000000, type: 'custom-type' as any },
+        ],
+      });
+      const html = getEditorPanelHtml({ cspSource, item });
+      expect(html).toContain('custom-type');
+    });
+  });
 });

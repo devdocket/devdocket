@@ -1,9 +1,13 @@
 import type * as vscode from 'vscode';
 import { WorkItem } from '../models/workItem';
+import type { ActivityLogEntry, ActivityType } from '../models/activityLog';
 import type { Disposable, Event, DiscoveredItem, ResolvedItem } from '@devdocket/shared';
 
 // Re-export shared provider-facing types so existing imports from './api/types' keep working.
 export type { Disposable, Event, DiscoveredItem, ResolvedItem };
+
+// Re-export activity log types for downstream consumers.
+export type { ActivityLogEntry, ActivityType };
 
 /**
  * A provider that discovers work items from an external source.
@@ -150,4 +154,15 @@ export interface DevDocketApi {
    * @returns A {@link Disposable} that unregisters the action when disposed.
    */
   registerAction(action: DevDocketAction): Disposable;
+  /**
+   * Append an activity log entry to a work item.
+   *
+   * Extension-defined actions or satellite extensions can use this to record
+   * significant events (e.g. branch creation, worktree cleanup) on a work item.
+   *
+   * @param itemId - The work item ID to log against.
+   * @param type - The activity type discriminator.
+   * @param detail - Optional human-readable detail string.
+   */
+  addActivity?(itemId: string, type: ActivityType, detail?: string): Promise<void>;
 }

@@ -142,6 +142,18 @@ DevDocket is a VS Code extension monorepo for managing work items from multiple 
 - **Issue #273 (Tree node counts):** Child count badges on all tree view parent nodes. Applied existing Inbox pattern to Queue, Focus, History, Sources.
 - **Code review fix:** Preserved write-after-persist pattern by computing sortOrder with temporary state mutation, then restoring original state before store.save().
 
+### 2026-04-18 — Issue #260 (Item Activity Log)
+
+**PR #312:** Added append-only activity log to work items for audit trail.
+- **Model design:** New `ActivityLogEntry` type with `timestamp`, `type` (discriminated union), and optional `detail`. Stored as `activityLog?: ActivityLogEntry[]` on `WorkItem` — non-breaking optional field.
+- **Automatic logging:** `WorkGraph.createItem()` logs `created`, `transitionState()` logs `state-changed` with `"OldState → NewState"` detail, `updateItem()` logs `updated` with changed field names — but only when fields actually changed (no-op autosaves are silent).
+- **Public API:** Optional `addActivity?()` on `DevDocketApi` for satellite extensions. `DevDocketApiImpl` now takes `WorkGraph` in constructor (wiring change in `extension.ts`).
+- **Timestamp consistency pattern:** All mutation methods capture `const now = Date.now()` once, reusing it for both the activity entry timestamp and `updatedAt`. Review caught the double-`Date.now()` anti-pattern in `updateItem`, `transitionState`, and `addActivity`.
+- **Deep store validation:** `jsonTaskStore` validates each activity log entry (timestamp: finite number, type: non-empty string, detail: string if present). Not just array-ness.
+- **Log trimming:** Capped at `MAX_ACTIVITY_LOG_ENTRIES` (100), oldest entries trimmed via `slice()`. Static `appendLogEntry` helper keeps logic pure and testable.
+- **Editor panel rendering:** Activity timeline in reverse-chronological order below metadata. Uses `escapeHtml()` for all dynamic content. Conditionally hidden when log is empty/undefined.
+- **Merge conflict:** `editorPanelHtml.ts` conflicted with #281 (title hyperlink) — needed both `isSafeUrl` import and `ActivityLogEntry` import, plus both CSS blocks (title-link focus styles and activity log styles).
+- **Files changed:** `activityLog.ts` (new), `workItem.ts`, `workGraph.ts`, `jsonTaskStore.ts`, `types.ts`, `devDocketApi.ts`, `extension.ts`, `editorPanelHtml.ts`, plus 4 test files.
 ### 2026-04-18 — Issue #254 (AI Walkthrough Model Selection)
 
 **PR #310:** Added AI model selection prompt to both AI Walkthrough and AI Code Review actions.
