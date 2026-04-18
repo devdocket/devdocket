@@ -36,7 +36,7 @@ export async function checkAutoComplete(
   if (provider && typeof provider.getClosedItems === 'function') {
     // Provider supports batch status checks — covers imported items too
     try {
-      const externalIds = candidates.map(item => item.externalId!);
+      const externalIds = [...new Set(candidates.map(item => item.externalId!))];
       const result = await provider.getClosedItems(externalIds);
       closedIds = new Set(result);
     } catch (err) {
