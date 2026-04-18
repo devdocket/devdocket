@@ -204,16 +204,18 @@ export class GitHubActionsProvider extends BaseGitHubProvider {
         if (result === 'View Run') {
           void vscode.env.openExternal(vscode.Uri.parse(run.html_url));
         }
-      } else if (change.currentStatus === 'completed:failure') {
+      } else if (change.currentStatus === 'completed:cancelled') {
+        logger.info(`Workflow run ${label} was cancelled (${run.repository.full_name}, ${branch})`);
+      } else if (change.currentStatus.startsWith('completed:')) {
+        const conclusion = change.currentStatus.slice('completed:'.length);
+        const outcome = conclusion === 'failure' ? 'failed' : `completed with conclusion "${conclusion}"`;
         const result = await vscode.window.showWarningMessage(
-          `❌ ${label} failed (${run.repository.full_name}, ${branch})`,
+          `❌ ${label} ${outcome} (${run.repository.full_name}, ${branch})`,
           'View Run',
         );
         if (result === 'View Run') {
           void vscode.env.openExternal(vscode.Uri.parse(run.html_url));
         }
-      } else if (change.currentStatus === 'completed:cancelled') {
-        logger.info(`Workflow run ${label} was cancelled (${run.repository.full_name}, ${branch})`);
       }
     }
   }
