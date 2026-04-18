@@ -475,7 +475,7 @@ export class AdoWorkItemProvider extends BaseProvider {
       if (group) { group.push(item); } else { byOrg.set(item.org, [item]); }
     }
 
-    const closedIds: string[] = [];
+    const closedSet = new Set<string>();
 
     for (const [org, items] of byOrg) {
       if (signal?.aborted) { break; }
@@ -542,7 +542,7 @@ export class AdoWorkItemProvider extends BaseProvider {
             if (!terminalStates) { continue; }
             for (const item of group.items) {
               if (terminalStates.has(item.state)) {
-                closedIds.push(item.id);
+                closedSet.add(item.id);
               }
             }
           }
@@ -553,7 +553,8 @@ export class AdoWorkItemProvider extends BaseProvider {
       }
     }
 
-    return closedIds;
+    // Return in input order for deterministic results
+    return parsed.filter(p => closedSet.has(p.id)).map(p => p.id);
   }
 
   private static readonly ADO_WORKITEM_PATTERN = /^https?:\/\/dev\.azure\.com\/([^/]+)\/([^/]+)\/_workitems\/edit\/(\d+)\b/i;
