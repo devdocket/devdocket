@@ -1,3 +1,5 @@
+import * as vscode from 'vscode';
+import type { WorkItem } from './types';
 import { BasePrAction, sanitizePrUrl } from './basePrAction';
 import { DEFAULT_REVIEW_PROMPT } from './defaultPrompt';
 
@@ -23,5 +25,27 @@ export class AiReviewAction extends BasePrAction {
 **PR URL:** ${safePrUrl} — include a link to this PR in the review header.
 
 **File paths and line numbers:** When commenting on specific issues, always include the file path and line number(s) from the diff so the reader can locate the code immediately. Use the format \`path/to/file.ts:42\` for single lines or \`path/to/file.ts:42-50\` for ranges. If a finding spans multiple files, list each location separately.`;
+  }
+
+  protected async doWork(
+    item: WorkItem,
+    progress: vscode.Progress<{ message?: string }>,
+    token: vscode.CancellationToken,
+  ): Promise<void> {
+    progress.report({ message: 'Fetching PR diff...' });
+
+    const diff = await this.fetchDiff(item.url!);
+    if (!diff || token.isCancellationRequested) return;
+
+    progress.report({ message: 'Analyzing changes...' });
+
+    const result = await this.analyzeWithAi(diff, item.url!, token);
+    if (!result || token.isCancellationRequested) return;
+
+    const doc = await vscode.workspace.openTextDocument({
+      content: result,
+      language: 'markdown',
+    });
+    await vscode.window.showTextDocument(doc, { preview: false });
   }
 }

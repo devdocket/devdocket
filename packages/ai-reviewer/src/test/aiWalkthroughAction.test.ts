@@ -48,6 +48,9 @@ describe('AiWalkthroughAction', () => {
     mockRepoManager = createMockRepoManager();
     action = new AiWalkthroughAction(mockRepoManager, mockLogOutputChannel as never);
 
+    // Default: user confirms the prompt
+    vi.mocked(window.showWarningMessage).mockResolvedValue('Continue' as never);
+
     vi.mocked(window.withProgress).mockImplementation(async (_options: unknown, task: Function) => {
       const progress = { report: vi.fn() };
       const token = { isCancellationRequested: false, onCancellationRequested: vi.fn() };
@@ -55,7 +58,7 @@ describe('AiWalkthroughAction', () => {
     });
   });
 
-  describe('identity properties', () => {
+  describe('identity and inheritance', () => {
     it('has id "ai-reviewer.walkthrough"', () => {
       expect(action.id).toBe('ai-reviewer.walkthrough');
     });
@@ -63,36 +66,50 @@ describe('AiWalkthroughAction', () => {
     it('has label "AI Walkthrough"', () => {
       expect(action.label).toBe('AI Walkthrough');
     });
-  });
 
-  describe('canRun', () => {
-    it('returns true for GitHub PR URLs', () => {
-      const item = createWorkItem({ url: 'https://github.com/owner/repo/pull/42' });
-      expect(action.canRun(item)).toBe(true);
+    it('inherits canRun from BasePrAction', () => {
+      expect(action.canRun(createWorkItem({ url: 'https://github.com/o/r/pull/1' }))).toBe(true);
+      expect(action.canRun(createWorkItem({ url: 'https://github.com/o/r/issues/1' }))).toBe(false);
+      expect(action.canRun(createWorkItem({ url: undefined }))).toBe(false);
     });
 
-    it('returns false for non-PR URLs', () => {
-      const item = createWorkItem({ url: 'https://github.com/owner/repo/issues/42' });
-      expect(action.canRun(item)).toBe(false);
-    });
-
-    it('returns false when item has no URL', () => {
-      const item = createWorkItem({ url: undefined });
-      expect(action.canRun(item)).toBe(false);
-    });
-
-    it('returns true for PR URLs with query strings', () => {
-      const item = createWorkItem({ url: 'https://github.com/owner/repo/pull/42?diff=unified' });
-      expect(action.canRun(item)).toBe(true);
-    });
-
-    it('returns true for PR URLs with fragments', () => {
-      const item = createWorkItem({ url: 'https://github.com/owner/repo/pull/42#discussion_r123' });
-      expect(action.canRun(item)).toBe(true);
+    it('inherits isPrUrl from BasePrAction', () => {
+      expect(action.isPrUrl('https://github.com/owner/repo/pull/42')).toBe(true);
+      expect(action.isPrUrl('https://github.com/owner/repo/issues/42')).toBe(false);
     });
   });
 
   describe('run', () => {
+    it('shows confirmation prompt before proceeding', async () => {
+      const item = createWorkItem();
+      await action.run(item);
+
+      expect(window.showWarningMessage).toHaveBeenCalledWith(
+        'AI Walkthrough will use AI to analyze and walk through this PR. Continue?',
+        { modal: true },
+        'Continue',
+      );
+    });
+
+    it('proceeds when user confirms', async () => {
+      const item = createWorkItem();
+      await action.run(item);
+
+      expect(mockRepoManager.ensureWorktree).toHaveBeenCalledWith('https://github.com/owner/repo/pull/42');
+      expect(commands.executeCommand).toHaveBeenCalledWith('workbench.action.chat.newChat');
+    });
+
+    it('aborts when user dismisses confirmation', async () => {
+      vi.mocked(window.showWarningMessage).mockResolvedValue(undefined as never);
+
+      const item = createWorkItem();
+      await action.run(item);
+
+      expect(window.withProgress).not.toHaveBeenCalled();
+      expect(mockRepoManager.ensureWorktree).not.toHaveBeenCalled();
+      expect(commands.executeCommand).not.toHaveBeenCalled();
+    });
+
     it('calls repoManager.ensureWorktree with the PR URL', async () => {
       const item = createWorkItem();
       await action.run(item);
@@ -126,8 +143,19 @@ describe('AiWalkthroughAction', () => {
       const item = createWorkItem({ url: undefined });
       await action.run(item);
 
+      expect(window.showWarningMessage).not.toHaveBeenCalled();
+      expect(window.withProgress).not.toHaveBeenCalled();
       expect(mockRepoManager.ensureWorktree).not.toHaveBeenCalled();
       expect(commands.executeCommand).not.toHaveBeenCalled();
+    });
+
+    it('skips confirmation for non-PR URLs', async () => {
+      const item = createWorkItem({ url: 'https://github.com/owner/repo/issues/42' });
+      await action.run(item);
+
+      expect(window.showWarningMessage).not.toHaveBeenCalled();
+      expect(window.withProgress).not.toHaveBeenCalled();
+      expect(mockRepoManager.ensureWorktree).not.toHaveBeenCalled();
     });
 
     it('reports progress while preparing repository', async () => {
@@ -154,17 +182,7 @@ describe('AiWalkthroughAction', () => {
       const item = createWorkItem();
       await action.run(item);
 
-      // ensureWorktree is called before cancellation check, but chat should not open
       expect(commands.executeCommand).not.toHaveBeenCalled();
-    });
-  });
-
-  describe('constructor', () => {
-    it('requires repoManager', () => {
-      const rm = createMockRepoManager();
-      const a = new AiWalkthroughAction(rm, mockLogOutputChannel as never);
-      expect(a).toBeDefined();
-      expect(a.id).toBe('ai-reviewer.walkthrough');
     });
   });
 });

@@ -1,6 +1,7 @@
 import * as vscode from 'vscode';
 import type { WorkItem, DevDocketAction } from './types';
 import { parsePrUrl } from './prUrl';
+import { confirmAiUsage } from './confirmAiUsage';
 
 /**
  * Sanitize a URL before interpolating it into an LLM prompt.
@@ -23,19 +24,32 @@ export function sanitizePrUrl(url: string): string {
 
 /**
  * Base class for PR-based AI actions (code review, walkthrough, etc.).
- * Subclasses provide prompt content, labels, and runtime instructions.
+ * Subclasses provide identity, confirmation message, and implement doWork()
+ * with their specific logic. Shared behavior (URL validation, confirmation
+ * prompt, progress notification) lives here.
  */
 export abstract class BasePrAction implements DevDocketAction {
   abstract readonly id: string;
   abstract readonly label: string;
 
-  protected abstract readonly configSection: string;
-  protected abstract readonly defaultPromptContent: string;
   protected abstract readonly progressTitle: string;
-  protected abstract readonly outputHeader: string;
   protected abstract readonly confirmationMessage: string;
 
-  protected abstract getRuntimeInstructions(safePrUrl: string): string;
+  // Override in subclasses that use inline AI analysis (getReviewPrompt / analyzeWithAi)
+  protected readonly configSection: string = '';
+  protected readonly defaultPromptContent: string = '';
+  protected readonly outputHeader: string = '';
+  protected getRuntimeInstructions(_safePrUrl: string): string { return ''; }
+
+  /**
+   * Subclass-specific work executed inside the progress notification
+   * after the user has confirmed AI usage.
+   */
+  protected abstract doWork(
+    item: WorkItem,
+    progress: vscode.Progress<{ message?: string }>,
+    token: vscode.CancellationToken,
+  ): Promise<void>;
 
   canRun(item: WorkItem): boolean {
     if (!item.url) return false;
@@ -54,7 +68,9 @@ export abstract class BasePrAction implements DevDocketAction {
   }
 
   async run(item: WorkItem): Promise<void> {
-    if (!item.url) return;
+    if (!this.canRun(item)) return;
+
+    if (!await confirmAiUsage(this.confirmationMessage)) return;
 
     await vscode.window.withProgress(
       {
@@ -63,32 +79,7 @@ export abstract class BasePrAction implements DevDocketAction {
         cancellable: true,
       },
       async (progress, token) => {
-        progress.report({ message: 'Fetching PR diff...' });
-
-        const diff = await this.fetchDiff(item.url!);
-        if (!diff) {
-          return;
-        }
-
-        if (token.isCancellationRequested) return;
-
-        const proceed = await vscode.window.showWarningMessage(
-          this.confirmationMessage,
-          { modal: true },
-          'Continue',
-        );
-        if (proceed !== 'Continue' || token.isCancellationRequested) return;
-
-        progress.report({ message: 'Analyzing changes...' });
-
-        const result = await this.analyzeWithAi(diff, item.url!, token);
-        if (!result || token.isCancellationRequested) return;
-
-        const doc = await vscode.workspace.openTextDocument({
-          content: result,
-          language: 'markdown',
-        });
-        await vscode.window.showTextDocument(doc, { preview: false });
+        await this.doWork(item, progress, token);
       },
     );
   }

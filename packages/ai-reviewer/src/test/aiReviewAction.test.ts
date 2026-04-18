@@ -203,6 +203,16 @@ describe('AiReviewAction', () => {
       const item = createWorkItem({ url: undefined });
       await action.run(item);
 
+      expect(window.showWarningMessage).not.toHaveBeenCalled();
+      expect(window.withProgress).not.toHaveBeenCalled();
+    });
+
+    it('aborts when user declines confirmation', async () => {
+      vi.mocked(window.showWarningMessage).mockResolvedValue(undefined as never);
+
+      const item = createWorkItem();
+      await action.run(item);
+
       expect(window.withProgress).not.toHaveBeenCalled();
     });
 
@@ -245,13 +255,7 @@ describe('AiReviewAction', () => {
       expect(workspace.openTextDocument).not.toHaveBeenCalled();
     });
 
-    it('prompts for confirmation before sending diff to AI', async () => {
-      vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
-        ok: true,
-        text: vi.fn().mockResolvedValue('diff content'),
-      }));
-      vi.mocked(window.showWarningMessage).mockResolvedValue('Continue' as never);
-
+    it('prompts for confirmation before starting work', async () => {
       const item = createWorkItem();
       await action.run(item);
 
@@ -260,19 +264,6 @@ describe('AiReviewAction', () => {
         expect.objectContaining({ modal: true }),
         'Continue',
       );
-    });
-
-    it('aborts when user declines confirmation', async () => {
-      vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
-        ok: true,
-        text: vi.fn().mockResolvedValue('diff content'),
-      }));
-      vi.mocked(window.showWarningMessage).mockResolvedValue(undefined as never);
-
-      const item = createWorkItem();
-      await action.run(item);
-
-      expect(workspace.openTextDocument).not.toHaveBeenCalled();
     });
   });
 
