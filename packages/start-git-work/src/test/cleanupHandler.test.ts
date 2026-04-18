@@ -264,7 +264,7 @@ describe('CleanupHandler', () => {
       expect(mockMemento.update).not.toHaveBeenCalledWith(metadataKey('item-1'), undefined);
     });
 
-    it('warns when worktree removal fails', async () => {
+    it('warns when worktree removal fails and skips branch deletion', async () => {
       mockMemento._store.set(metadataKey('item-1'), DEFAULT_METADATA);
       vi.mocked(fs.existsSync).mockImplementation((p: any) => {
         return p.toString() === DEFAULT_METADATA.worktreePath;
@@ -285,6 +285,10 @@ describe('CleanupHandler', () => {
 
       expect(window.showWarningMessage).toHaveBeenCalledWith(
         expect.stringContaining('Failed to remove worktree'),
+      );
+      // Should NOT attempt branch deletion when worktree removal failed
+      expect(execFile).not.toHaveBeenCalledWith(
+        'git', expect.arrayContaining(['branch', '-d']), expect.anything(), expect.anything(),
       );
     });
 

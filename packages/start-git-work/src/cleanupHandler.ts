@@ -99,8 +99,9 @@ export class CleanupHandler {
       worktreeRemoved = true;
     }
 
-    // Delete the branch (use -d to warn about unmerged changes)
-    if (await this.branchExists(metadata.branchName, metadata.repoPath)) {
+    // Delete the branch only if the worktree was successfully removed (or didn't exist).
+    // A branch checked out in an active worktree cannot be deleted.
+    if (worktreeRemoved && await this.branchExists(metadata.branchName, metadata.repoPath)) {
       try {
         await execFileAsync('git', ['branch', '-d', metadata.branchName], {
           cwd: metadata.repoPath,
