@@ -46,7 +46,7 @@ export class AiReviewAction extends BasePrAction {
 
   /**
    * Override base run() to add worktree preparation and tool-enabled analysis.
-   * The worktree step must happen before fetchDiff, and tool routing decides
+   * Worktree preparation happens after user consent. Tool routing decides
    * between analyzeWithTools vs analyzeWithAi. If BasePrAction.run() changes,
    * update this override too.
    */
