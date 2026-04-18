@@ -342,7 +342,7 @@ interface DevDocketProvider {
   readonly id: string;
   readonly label: string;
   readonly onDidDiscoverItems: Event<DiscoveredItem[]>;
-  refresh(token?: unknown): Promise<void>;
+  refresh(token?: vscode.CancellationToken): Promise<void>;
   getClosedItems?(externalIds: string[], signal?: AbortSignal): Promise<string[]>;
 }
 
