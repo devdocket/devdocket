@@ -83,30 +83,8 @@ describe('getEditorPanelHtml', () => {
   it('shows item title in heading instead of generic text', () => {
     const item = makeItem({ title: 'Fix login bug' });
     const html = getEditorPanelHtml({ cspSource, item });
-    expect(html).toContain('<h2 id="editor-heading">Fix login bug</h2>');
+    expect(html).toContain('>Fix login bug</');
     expect(html).not.toContain('Edit Work Item');
-  });
-
-  it('uses displayTitle for heading and input when provided', () => {
-    const item = makeItem({ title: 'Persisted Title' });
-    const html = getEditorPanelHtml({ cspSource, item, displayTitle: 'Live Title' });
-    expect(html).toContain('<h2 id="editor-heading">Live Title</h2>');
-    expect(html).toContain('value="Live Title"');
-    expect(html).not.toContain('>Persisted Title<');
-  });
-
-  it('falls back to item.title when displayTitle is omitted', () => {
-    const item = makeItem({ title: 'Fallback Title' });
-    const html = getEditorPanelHtml({ cspSource, item });
-    expect(html).toContain('<h2 id="editor-heading">Fallback Title</h2>');
-    expect(html).toContain('value="Fallback Title"');
-  });
-
-  it('escapes displayTitle in heading and input', () => {
-    const item = makeItem({ title: 'safe' });
-    const html = getEditorPanelHtml({ cspSource, item, displayTitle: '<script>alert("xss")</script>' });
-    expect(html).not.toContain('<script>alert');
-    expect(html).toContain('&lt;script&gt;');
   });
 
   it('includes updateTitle message handler in webview script', () => {

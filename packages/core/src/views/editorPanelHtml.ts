@@ -13,16 +13,10 @@ export interface EditorHtmlOptions {
   providerState?: string;
   /** When true, the title field is read-only (managed by a live provider). */
   titleReadonly?: boolean;
-  /**
-   * Live title resolved from the provider, used for display instead of the
-   * persisted item.title. Falls back to item.title when omitted.
-   */
-  displayTitle?: string;
 }
 
-export function getEditorPanelHtml({ cspSource, item, providerLabel, providerDescription, providerState, titleReadonly, displayTitle }: EditorHtmlOptions): string {
+export function getEditorPanelHtml({ cspSource, item, providerLabel, providerDescription, providerState, titleReadonly }: EditorHtmlOptions): string {
   const nonce = getNonce();
-  const title = displayTitle ?? item.title;
   const descriptionSection = providerDescription
     ? `    <div class="field">
       <label id="provider-desc-label">Provider Description</label>
@@ -186,11 +180,11 @@ export function getEditorPanelHtml({ cspSource, item, providerLabel, providerDes
   </style>
 </head>
 <body>
-  <h2 id="editor-heading">${item.url && isSafeUrl(item.url) ? `<a href="${escapeAttr(item.url)}" class="title-link" id="title-link" data-url="${escapeAttr(item.url)}" title="Open in browser">${escapeHtml(title)}</a>` : escapeHtml(title)}</h2>
+  <h2 id="editor-heading">${item.url && isSafeUrl(item.url) ? `<a href="${escapeAttr(item.url)}" class="title-link" id="title-link" data-url="${escapeAttr(item.url)}" title="Open in browser">${escapeHtml(item.title)}</a>` : escapeHtml(item.title)}</h2>
   <div id="form" role="form" aria-labelledby="editor-heading">
     <div class="field">
       <label for="title">Title</label>
-      <input type="text" id="title" value="${escapeAttr(title)}" ${titleReadonly ? 'readonly aria-readonly="true" aria-describedby="readonly-title-hint"' : ''} />
+      <input type="text" id="title" value="${escapeAttr(item.title)}" ${titleReadonly ? 'readonly aria-readonly="true" aria-describedby="readonly-title-hint"' : ''} />
 ${titleReadonly ? '      <span id="readonly-title-hint" class="hint">Title is managed by the provider</span>' : ''}
     </div>
 ${descriptionSection}

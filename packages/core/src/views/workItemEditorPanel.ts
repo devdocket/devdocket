@@ -17,8 +17,8 @@ export class WorkItemEditorPanel {
   private pendingData: Record<string, string> | undefined;
   private saveQueue: Promise<void> = Promise.resolve();
   private readonly messageSubscription: vscode.Disposable;
-  private readonly discoveredItemsSub: vscode.Disposable;
-  private lastResolvedTitle: string | undefined;
+  private readonly workGraphSub: vscode.Disposable;
+  private lastDisplayedTitle: string | undefined;
   private lastManagedState: boolean | undefined;
 
   static open(
@@ -71,8 +71,8 @@ export class WorkItemEditorPanel {
 
     this.update();
 
-    this.discoveredItemsSub = this.providerRegistry.onDidChangeDiscoveredItems(() => {
-      this.checkTitleUpdate();
+    this.workGraphSub = this.workGraph.onDidChange(() => {
+      this.checkForUpdates();
     });
 
     this.messageSubscription = this.panel.webview.onDidReceiveMessage((msg) => {
@@ -110,7 +110,7 @@ export class WorkItemEditorPanel {
         }
         this.flushPendingData();
         this.messageSubscription.dispose();
-        this.discoveredItemsSub.dispose();
+        this.workGraphSub.dispose();
       }
     });
   }
@@ -120,30 +120,13 @@ export class WorkItemEditorPanel {
   }
 
   /**
-   * Resolve the display title for the work item. For provider-backed items,
-   * returns the live title from the provider when available; otherwise falls
-   * back to the persisted title.
+   * Respond to WorkGraph changes. When the persisted title changes (e.g. from
+   * a provider title sync), push the new title to the webview without a full
+   * re-render to preserve unsaved notes edits. When the managed state changes
+   * (provider registered/unregistered), do a full re-render to toggle the
+   * title input's readonly state.
    */
-  private resolveTitle(item: WorkItem): string {
-    if (item.providerId && item.externalId) {
-      const discovered = this.providerRegistry
-        .getDiscoveredItems(item.providerId)
-        .find((d) => d.externalId === item.externalId);
-      if (discovered) {
-        return discovered.title;
-      }
-    }
-    return item.title;
-  }
-
-  /**
-   * Check whether the live provider title or managed state has changed.
-   * A managed-state change (provider registered/unregistered while panel is
-   * open) requires a full re-render to toggle the title input's readonly
-   * state. A title-only change uses a targeted postMessage to avoid losing
-   * unsaved notes edits.
-   */
-  private checkTitleUpdate(): void {
+  private checkForUpdates(): void {
     if (this.disposed) { return; }
     const item = this.workGraph.getItem(this.itemId);
     if (!item) { return; }
@@ -154,13 +137,10 @@ export class WorkItemEditorPanel {
       return;
     }
 
-    if (!item.providerId || !item.externalId) { return; }
-
-    const newTitle = this.resolveTitle(item);
-    if (newTitle !== this.lastResolvedTitle) {
-      this.lastResolvedTitle = newTitle;
-      this.panel.title = `Edit: ${newTitle}`;
-      void this.panel.webview.postMessage({ type: 'updateTitle', title: newTitle });
+    if (item.title !== this.lastDisplayedTitle) {
+      this.lastDisplayedTitle = item.title;
+      this.panel.title = `Edit: ${item.title}`;
+      void this.panel.webview.postMessage({ type: 'updateTitle', title: item.title });
     }
   }
 
@@ -188,9 +168,6 @@ export class WorkItemEditorPanel {
     }
 
     await this.workGraph.updateItem(this.itemId, patch);
-    if (!this.disposed && data.title && !managed) {
-      this.panel.title = `Edit: ${data.title}`;
-    }
   }
 
   private update(): void {
@@ -199,14 +176,13 @@ export class WorkItemEditorPanel {
       this.panel.webview.html = '<html><body><p>Item not found.</p></body></html>';
       return;
     }
-    const resolvedTitle = this.resolveTitle(item);
-    this.lastResolvedTitle = resolvedTitle;
+    this.lastDisplayedTitle = item.title;
     this.lastManagedState = this.isProviderManaged(item);
-    this.panel.title = `Edit: ${resolvedTitle}`;
-    this.panel.webview.html = this.getHtml(item, resolvedTitle);
+    this.panel.title = `Edit: ${item.title}`;
+    this.panel.webview.html = this.getHtml(item);
   }
 
-  private getHtml(item: WorkItem, displayTitle: string): string {
+  private getHtml(item: WorkItem): string {
     let providerDescription: string | undefined;
     let providerState: string | undefined;
     if (item.providerId && item.externalId) {
@@ -223,7 +199,6 @@ export class WorkItemEditorPanel {
       providerDescription,
       providerState,
       titleReadonly: this.isProviderManaged(item),
-      displayTitle,
     });
   }
 
@@ -237,7 +212,7 @@ export class WorkItemEditorPanel {
       }
       this.flushPendingData();
       this.messageSubscription.dispose();
-      this.discoveredItemsSub.dispose();
+      this.workGraphSub.dispose();
       this.panel.dispose();
     }
   }

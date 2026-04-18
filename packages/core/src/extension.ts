@@ -17,6 +17,7 @@ import { registerCommands } from './commands/commands';
 import { ViewRevealer } from './services/viewRevealer';
 import { initLogger, setLogLevel, logger, resolveLogLevel } from './services/logger';
 import { getInboxUnseenCount } from './services/inboxBadge';
+import { syncProviderTitles } from './services/titleSync';
 import { getViewLayout, ViewId } from './views/viewLayout';
 import { performance } from 'perf_hooks';
 
@@ -238,6 +239,10 @@ function wireEvents(
   const providerRegSub = providerRegistry.onDidRegisterProvider(safeHandler('Error handling provider registration', scheduleUiUpdate));
   const discoveredSub = providerRegistry.onDidChangeDiscoveredItems(safeHandler('Error handling discovered items change', () => {
     scheduleUiUpdate();
+
+    void syncProviderTitles(providerRegistry, workGraph).catch(err => {
+      logger.error('Error syncing provider titles', err);
+    });
 
     // Mark initial load complete when loading transitions from true to false
     if (!initialLoadComplete) {
