@@ -218,15 +218,15 @@ export class GitHubMyPrsProvider extends BaseGitHubProvider {
     }
     const detail = (await detailResponse.json()) as PrDetail;
 
-    // Fetch reviews
+    // Fetch reviews — treat failure as unknown status since we can't determine
+    // the actual review state without this data
     const reviewsUrl = `${pr.pull_request!.url}/reviews`;
     const reviewsResponse = await fetch(reviewsUrl, { headers });
-    let reviews: PrReview[] = [];
-    if (reviewsResponse.ok) {
-      reviews = (await reviewsResponse.json()) as PrReview[];
-    } else {
+    if (!reviewsResponse.ok) {
       logger.debug(`Failed to fetch reviews for ${pr.html_url}: ${reviewsResponse.status}`);
+      return undefined;
     }
+    const reviews = (await reviewsResponse.json()) as PrReview[];
 
     return GitHubMyPrsProvider.determinePrStatus(detail, reviews);
   }
