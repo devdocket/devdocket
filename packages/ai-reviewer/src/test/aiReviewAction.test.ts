@@ -662,7 +662,7 @@ describe('AiReviewAction', () => {
       );
 
       const userMsg = sendRequest.mock.calls[0][0][0];
-      expect(userMsg.content).toContain('walkthrough findings truncated');
+      expect(userMsg.content).toContain('earlier walkthrough findings truncated');
     });
 
     it('appends truncation note when diff exceeds limit and worktree is available', async () => {

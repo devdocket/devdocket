@@ -305,7 +305,7 @@ Cross-reference with related files to understand the impact of changes.
 
     const truncated =
       findings.length > MAX_WALKTHROUGH_CONTEXT
-        ? findings.slice(0, MAX_WALKTHROUGH_CONTEXT) + '\n\n[... walkthrough findings truncated ...]'
+        ? '[... earlier walkthrough findings truncated ...]\n\n' + findings.slice(findings.length - MAX_WALKTHROUGH_CONTEXT)
         : findings;
 
     // Serialize as JSON to prevent delimiter/injection attacks from cached model output
