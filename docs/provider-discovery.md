@@ -106,7 +106,7 @@ This means items are correctly filtered regardless of your process template. For
 | Setting | Default | Description |
 |---------|---------|-------------|
 | `devdocketAdo.projects` | `[]` | Organizations and projects to monitor. Each entry is `<org>` (entire organization) or `<org>/<project>` (specific project). At least one entry is required for the ADO providers to discover items. |
-| `devdocketAdo.refreshIntervalSeconds` | `300` (5 min) | How often to poll for changes. Minimum 60 seconds. Set to 0 to disable. |
+| `devdocketAdo.refreshIntervalSeconds` | `300` (5 min) | How often to poll for changes. Minimum 60 seconds. Set to 0 or a negative value to disable. |
 
 ### What does NOT cause work items to appear
 
