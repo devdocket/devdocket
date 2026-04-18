@@ -316,6 +316,33 @@ describe('WorkItemEditorPanel', () => {
 
       expect(mock.panel.webview.postMessage).not.toHaveBeenCalled();
     });
+
+    it('should do a full re-render when managed state changes', () => {
+      const item = makeItem({ title: 'My Item', providerId: 'gh', externalId: '10' });
+      const mock = createMockWebviewPanel();
+      const registry = createMockProviderRegistry();
+      // Initially no provider registered — getProvider returns undefined for 'gh'
+      vi.mocked(registry.getProvider).mockReturnValue(undefined);
+      vi.mocked(registry.getDiscoveredItems).mockReturnValue([]);
+      openPanel(item, createMockWorkGraph(item), mock, undefined, registry);
+
+      // Title input should not be readonly initially
+      expect(mock.panel.webview.html).not.toContain('Title is managed by the provider');
+
+      // Provider registers — now getProvider returns a provider
+      vi.mocked(registry.getProvider).mockReturnValue({ id: 'gh' } as any);
+      vi.mocked(registry.getDiscoveredItems).mockReturnValue([
+        { externalId: '10', title: 'Live Title', url: '' } as any,
+      ]);
+      registry._fireDiscoveredItemsChange();
+
+      // Should have done a full re-render with readonly title
+      expect(mock.panel.webview.html).toContain('Title is managed by the provider');
+      expect(mock.panel.webview.html).toContain('Live Title');
+    });
+  });
+
+  describe('panel reuse', () => {
     it('should reuse existing panel when opening same item twice', () => {
       const item = makeItem({ id: 'reuse-1', title: 'Reuse Item' });
       const mock = createMockWebviewPanel();

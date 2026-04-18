@@ -19,6 +19,7 @@ export class WorkItemEditorPanel {
   private readonly messageSubscription: vscode.Disposable;
   private readonly discoveredItemsSub: vscode.Disposable;
   private lastResolvedTitle: string | undefined;
+  private lastManagedState: boolean | undefined;
 
   static open(
     context: vscode.ExtensionContext,
@@ -136,14 +137,24 @@ export class WorkItemEditorPanel {
   }
 
   /**
-   * Check whether the live provider title has changed and, if so, push the
-   * new title to the webview without a full re-render (which would lose any
-   * unsaved edits in the notes field).
+   * Check whether the live provider title or managed state has changed.
+   * A managed-state change (provider registered/unregistered while panel is
+   * open) requires a full re-render to toggle the title input's readonly
+   * state. A title-only change uses a targeted postMessage to avoid losing
+   * unsaved notes edits.
    */
   private checkTitleUpdate(): void {
     if (this.disposed) { return; }
     const item = this.workGraph.getItem(this.itemId);
-    if (!item || !item.providerId || !item.externalId) { return; }
+    if (!item) { return; }
+
+    const currentManaged = this.isProviderManaged(item);
+    if (currentManaged !== this.lastManagedState) {
+      this.update();
+      return;
+    }
+
+    if (!item.providerId || !item.externalId) { return; }
 
     const newTitle = this.resolveTitle(item);
     if (newTitle !== this.lastResolvedTitle) {
@@ -190,6 +201,7 @@ export class WorkItemEditorPanel {
     }
     const resolvedTitle = this.resolveTitle(item);
     this.lastResolvedTitle = resolvedTitle;
+    this.lastManagedState = this.isProviderManaged(item);
     this.panel.title = `Edit: ${resolvedTitle}`;
     this.panel.webview.html = this.getHtml(item, resolvedTitle);
   }
