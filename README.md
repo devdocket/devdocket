@@ -100,7 +100,7 @@ flowchart LR
     Focus -- Mark complete --> History
 ```
 
-> **Note:** Items in History are a read-only record of completed or archived work. You can open their links (when available), but they can't currently be moved back to Queue or Focus.
+> **Note:** Items in History can be moved back to Queue if needed — right-click and select **Move to Queue**. This is useful for recovering from false positives when an item is auto-completed but you still have work to do.
 
 ### Auto-Completion
 
