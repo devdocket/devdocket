@@ -49,7 +49,10 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 
   // Set up walkthrough infrastructure
   const repoManager = new RepoManager(context.globalStorageUri, log);
-  const walkthroughAction = new AiWalkthroughAction(repoManager, log);
+  const participant = new WalkthroughParticipant(repoManager, log);
+  const walkthroughAction = new AiWalkthroughAction(repoManager, log, (model) => {
+    participant.setPreferredModel(model);
+  });
   context.subscriptions.push(api.registerAction(walkthroughAction));
   log.info('Registered AI Walkthrough action');
 
@@ -59,7 +62,6 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   log.info(`Registered ${toolDisposables.length} LM tools`);
 
   // Register chat participant
-  const participant = new WalkthroughParticipant(repoManager, log);
   context.subscriptions.push(participant.register());
   log.info('Registered @walkthrough chat participant');
 

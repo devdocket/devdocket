@@ -4,11 +4,17 @@ import { buildWalkthroughPrompt } from './walkthroughPrompt';
 
 export class WalkthroughParticipant {
   private sessions = new Map<string, WorktreeInfo>();
+  private preferredModel: vscode.LanguageModelChat | undefined;
 
   constructor(
     private readonly repoManager: RepoManager,
     private readonly log: vscode.LogOutputChannel,
   ) {}
+
+  /** Set the preferred model for when the chat UI doesn't provide one. */
+  setPreferredModel(model: vscode.LanguageModelChat): void {
+    this.preferredModel = model;
+  }
 
   /** Register the chat participant. Returns disposable. */
   register(): vscode.Disposable {
@@ -139,6 +145,9 @@ export class WalkthroughParticipant {
     if (request.model) {
       this.log.info(`Using request-provided model: ${request.model.id}`);
       model = request.model;
+    } else if (this.preferredModel) {
+      this.log.info(`Using preferred model: ${this.preferredModel.id}`);
+      model = this.preferredModel;
     } else {
       this.log.info('No request model — selecting gpt-4o family');
       const models = await vscode.lm.selectChatModels({ family: 'gpt-4o' });

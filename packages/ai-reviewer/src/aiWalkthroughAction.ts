@@ -2,6 +2,7 @@ import * as vscode from 'vscode';
 import type { WorkItem, DevDocketAction } from './types';
 import { RepoManager } from './repoManager';
 import { parsePrUrl } from './prUrl';
+import { selectModel } from './selectModel';
 
 export class AiWalkthroughAction implements DevDocketAction {
   readonly id = 'ai-reviewer.walkthrough';
@@ -10,6 +11,7 @@ export class AiWalkthroughAction implements DevDocketAction {
   constructor(
     private readonly repoManager: RepoManager,
     private readonly log: vscode.LogOutputChannel,
+    private readonly onModelSelected?: (model: vscode.LanguageModelChat) => void,
   ) {}
 
   canRun(item: WorkItem): boolean {
@@ -21,6 +23,14 @@ export class AiWalkthroughAction implements DevDocketAction {
   async run(item: WorkItem): Promise<void> {
     this.log.debug(`AiWalkthroughAction.run — url: ${item.url ?? '(none)'}`);
     if (!item.url) return;
+
+    const model = await selectModel('AI Walkthrough');
+    if (!model) {
+      this.log.info('Model selection cancelled');
+      return;
+    }
+    this.log.info(`Model selected: ${model.id}`);
+    this.onModelSelected?.(model);
 
     await vscode.window.withProgress(
       {

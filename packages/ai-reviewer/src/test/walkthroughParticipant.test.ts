@@ -143,6 +143,7 @@ describe('WalkthroughParticipant', () => {
 
     it('falls back to lm.selectChatModels when request.model is undefined', async () => {
       const mockModel = {
+        id: 'fallback-model',
         sendRequest: vi.fn().mockResolvedValue({
           stream: (async function* () {
             yield new LanguageModelTextPart('Fallback model response');
@@ -167,6 +168,71 @@ describe('WalkthroughParticipant', () => {
 
       expect(lm.selectChatModels).toHaveBeenCalledWith({ family: 'gpt-4o' });
       expect(response.markdown).toHaveBeenCalledWith('Fallback model response');
+    });
+
+    it('uses preferred model when request.model is undefined and preferred model is set', async () => {
+      const preferredModel = {
+        id: 'preferred-model',
+        sendRequest: vi.fn().mockResolvedValue({
+          stream: (async function* () {
+            yield new LanguageModelTextPart('Preferred model response');
+          })(),
+        }),
+      };
+      participant.setPreferredModel(preferredModel as never);
+
+      participant.register();
+      const handler = vi.mocked(chat.createChatParticipant).mock.calls[0][1];
+
+      const request = {
+        prompt: 'Walk me through https://github.com/owner/repo/pull/42',
+        model: undefined,
+        toolInvocationToken: undefined,
+      };
+      const context = createMockContext();
+      const response = createMockResponse();
+      const token = { isCancellationRequested: false };
+
+      await handler(request, context, response, token);
+
+      expect(lm.selectChatModels).not.toHaveBeenCalled();
+      expect(preferredModel.sendRequest).toHaveBeenCalled();
+      expect(response.markdown).toHaveBeenCalledWith('Preferred model response');
+    });
+
+    it('prefers request.model over preferred model', async () => {
+      const preferredModel = {
+        id: 'preferred-model',
+        sendRequest: vi.fn().mockResolvedValue({
+          stream: (async function* () {
+            yield new LanguageModelTextPart('Should not appear');
+          })(),
+        }),
+      };
+      participant.setPreferredModel(preferredModel as never);
+
+      const requestModel = {
+        id: 'request-model',
+        sendRequest: vi.fn().mockResolvedValue({
+          stream: (async function* () {
+            yield new LanguageModelTextPart('Request model response');
+          })(),
+        }),
+      };
+
+      participant.register();
+      const handler = vi.mocked(chat.createChatParticipant).mock.calls[0][1];
+
+      const request = createMockRequest('Walk me through https://github.com/owner/repo/pull/42', requestModel);
+      const context = createMockContext();
+      const response = createMockResponse();
+      const token = { isCancellationRequested: false };
+
+      await handler(request, context, response, token);
+
+      expect(requestModel.sendRequest).toHaveBeenCalled();
+      expect(preferredModel.sendRequest).not.toHaveBeenCalled();
+      expect(response.markdown).toHaveBeenCalledWith('Request model response');
     });
 
     it('shows error when no model is available', async () => {

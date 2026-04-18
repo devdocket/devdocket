@@ -292,8 +292,13 @@ describe('AiReviewAction', () => {
 
   describe('analyzeWithAi', () => {
     it('returns review text on success', async () => {
+      const mockModel = {
+        sendRequest: vi.fn().mockResolvedValue({
+          text: (async function* () { yield 'Review feedback here'; })(),
+        }),
+      };
       const token = { isCancellationRequested: false, onCancellationRequested: vi.fn() };
-      const result = await action.analyzeWithAi('some diff content', 'https://github.com/owner/repo/pull/42', token as never);
+      const result = await action.analyzeWithAi('some diff content', 'https://github.com/owner/repo/pull/42', mockModel as never, token as never);
 
       expect(result).toContain('AI Code Review');
       expect(result).toContain('Review feedback here');
@@ -304,9 +309,9 @@ describe('AiReviewAction', () => {
       const sendRequest = vi.fn().mockResolvedValue({
         text: (async function* () { yield 'review'; })(),
       });
-      vi.mocked(lm.selectChatModels).mockResolvedValue([{ sendRequest }]);
+      const mockModel = { sendRequest };
 
-      await action.analyzeWithAi('diff', 'https://github.com/org/repo/pull/7', token as never);
+      await action.analyzeWithAi('diff', 'https://github.com/org/repo/pull/7', mockModel as never, token as never);
 
       const userMsg = sendRequest.mock.calls[0][0][0];
       expect(userMsg.content).toContain('https://github.com/org/repo/pull/7');
@@ -314,30 +319,40 @@ describe('AiReviewAction', () => {
     });
 
     it('appends truncation note when diff exceeds 50000 chars', async () => {
+      const mockModel = {
+        sendRequest: vi.fn().mockResolvedValue({
+          text: (async function* () { yield 'Review feedback here'; })(),
+        }),
+      };
       const token = { isCancellationRequested: false, onCancellationRequested: vi.fn() };
       const largeDiff = 'x'.repeat(50001);
-      const result = await action.analyzeWithAi(largeDiff, 'https://github.com/owner/repo/pull/42', token as never);
+      const result = await action.analyzeWithAi(largeDiff, 'https://github.com/owner/repo/pull/42', mockModel as never, token as never);
 
       expect(result).toContain('AI Code Review');
       expect(result).toContain('⚠️ **Note:** The PR diff was truncated');
     });
 
     it('does not append truncation note when diff is within limit', async () => {
+      const mockModel = {
+        sendRequest: vi.fn().mockResolvedValue({
+          text: (async function* () { yield 'Review feedback here'; })(),
+        }),
+      };
       const token = { isCancellationRequested: false, onCancellationRequested: vi.fn() };
       const smallDiff = 'x'.repeat(50000);
-      const result = await action.analyzeWithAi(smallDiff, 'https://github.com/owner/repo/pull/42', token as never);
+      const result = await action.analyzeWithAi(smallDiff, 'https://github.com/owner/repo/pull/42', mockModel as never, token as never);
 
       expect(result).toContain('AI Code Review');
       expect(result).not.toContain('truncated');
     });
 
     it('returns undefined and shows error when sendRequest throws', async () => {
-      vi.mocked(lm.selectChatModels).mockResolvedValue([{
+      const mockModel = {
         sendRequest: vi.fn().mockRejectedValue(new Error('model error')),
-      }]);
+      };
 
       const token = { isCancellationRequested: false, onCancellationRequested: vi.fn() };
-      const result = await action.analyzeWithAi('some diff', 'https://github.com/owner/repo/pull/42', token as never);
+      const result = await action.analyzeWithAi('some diff', 'https://github.com/owner/repo/pull/42', mockModel as never, token as never);
 
       expect(result).toBeUndefined();
       expect(window.showErrorMessage).toHaveBeenCalledWith('AI Code Review: Analysis failed');
@@ -359,9 +374,9 @@ describe('AiReviewAction', () => {
       const sendRequest = vi.fn().mockResolvedValue({
         text: (async function* () { yield 'Security review done'; })(),
       });
-      vi.mocked(lm.selectChatModels).mockResolvedValue([{ sendRequest }]);
+      const mockModel = { sendRequest };
 
-      const result = await action.analyzeWithAi('diff content', 'https://github.com/owner/repo/pull/99', token as never);
+      const result = await action.analyzeWithAi('diff content', 'https://github.com/owner/repo/pull/99', mockModel as never, token as never);
 
       expect(result).toContain('Security review done');
       // Verify the custom prompt was used in the message
