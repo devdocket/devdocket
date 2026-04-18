@@ -298,7 +298,15 @@ function wireEvents(
     }
   }));
 
-  return [discoveredSub, newItemsSub, providerRegSub, stateStoreSub, markSeenSub, workGraphSub, autoCompleteSub];
+  // Abort all in-flight auto-complete checks on disposal
+  const autoCompleteCleanup = { dispose: () => {
+    for (const controller of autoCompleteControllers.values()) {
+      controller.abort();
+    }
+    autoCompleteControllers.clear();
+  }};
+
+  return [discoveredSub, newItemsSub, providerRegSub, stateStoreSub, markSeenSub, workGraphSub, autoCompleteSub, autoCompleteCleanup];
 }
 
 /**
