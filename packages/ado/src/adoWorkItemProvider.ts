@@ -305,6 +305,7 @@ export class AdoWorkItemProvider extends BaseProvider {
     org: string,
     project: string,
     workItemType: string,
+    signal?: AbortSignal,
   ): Promise<Set<string>> {
     const cacheKey = `${org}/${project}/${workItemType}`;
     
@@ -324,6 +325,7 @@ export class AdoWorkItemProvider extends BaseProvider {
         headers: {
           Authorization: `Bearer ${token}`,
         },
+        signal,
       });
     } catch (err) {
       logger.warn(`Failed to fetch states for ${cacheKey}: network error`, err);
@@ -431,6 +433,128 @@ export class AdoWorkItemProvider extends BaseProvider {
 
     logger.debug(`Filtered ${workItems.length} items to ${activeItems.length} active items`);
     return activeItems;
+  }
+
+  /**
+   * Check which of the given external IDs correspond to closed/completed ADO work items.
+   * Uses the batch work items API (up to 200 per request) and checks against
+   * terminal state categories (Completed, Removed, Resolved).
+   */
+  async getClosedItems(externalIds: string[], signal?: AbortSignal): Promise<string[]> {
+    if (externalIds.length === 0) { return []; }
+
+    let session: vscode.AuthenticationSession | undefined;
+    try {
+      session = await vscode.authentication.getSession('microsoft', [ADO_AUTH_SCOPE], {
+        createIfNone: false,
+        silent: true,
+      });
+    } catch {
+      logger.debug('No ADO auth session for getClosedItems');
+    }
+    if (!session) { return []; }
+    const token = session.accessToken;
+
+    // Parse external IDs: "org/project/id"
+    const parsed = externalIds.map(id => {
+      const parts = id.split('/');
+      if (parts.length !== 3) { return null; }
+      const [org, project, numStr] = parts;
+      if (!isValidUrlSegment(org) || !isValidUrlSegment(project)) { return null; }
+      if (!/^\d+$/.test(numStr)) { return null; }
+      const num = parseInt(numStr, 10);
+      return { id, org, workItemId: num };
+    }).filter((p): p is NonNullable<typeof p> => p !== null);
+
+    if (parsed.length === 0) { return []; }
+
+    // Group by org for batch API calls
+    const byOrg = new Map<string, typeof parsed>();
+    for (const item of parsed) {
+      const group = byOrg.get(item.org);
+      if (group) { group.push(item); } else { byOrg.set(item.org, [item]); }
+    }
+
+    const closedSet = new Set<string>();
+
+    for (const [org, items] of byOrg) {
+      if (signal?.aborted) { break; }
+      if (!isValidUrlSegment(org)) { continue; }
+
+      const ids = items.map(i => i.workItemId);
+      const batchSize = 200;
+
+      for (let i = 0; i < ids.length; i += batchSize) {
+        if (signal?.aborted) { break; }
+        const batchIds = ids.slice(i, i + batchSize);
+        const batchItems = items.slice(i, i + batchSize);
+        const detailUrl = `https://dev.azure.com/${encodeURIComponent(org)}/_apis/wit/workitems?ids=${batchIds.join(',')}&fields=System.State,System.WorkItemType,System.TeamProject&api-version=7.1`;
+
+        try {
+          const response = await fetch(detailUrl, {
+            headers: { Authorization: `Bearer ${token}` },
+            signal,
+          });
+
+          if (!response.ok) {
+            logger.debug(`Failed to fetch work item details for org ${org}: ${response.status}`);
+            continue;
+          }
+
+          const data = (await response.json()) as { value: AdoWorkItem[] };
+          const workItemMap = new Map<number, AdoWorkItem>();
+          for (const wi of data.value) {
+            workItemMap.set(wi.id, wi);
+          }
+
+          // Group by (project, workItemType) and fetch terminal states per group
+          const groupedItems = new Map<string, {
+            project: string;
+            workItemType: string;
+            items: Array<{ id: string; state: string }>;
+          }>();
+
+          for (const item of batchItems) {
+            const wi = workItemMap.get(item.workItemId);
+            if (!wi) { continue; }
+            const state = wi.fields['System.State'];
+            const project = wi.fields['System.TeamProject'];
+            const workItemType = wi.fields['System.WorkItemType'];
+            const groupKey = `${project}\0${workItemType}`;
+            const group = groupedItems.get(groupKey);
+            if (group) {
+              group.items.push({ id: item.id, state });
+            } else {
+              groupedItems.set(groupKey, { project, workItemType, items: [{ id: item.id, state }] });
+            }
+          }
+
+          const terminalStatesByGroup = new Map<string, Set<string>>();
+          await Promise.all(
+            Array.from(groupedItems.entries()).map(async ([groupKey, group]) => {
+              const terminalStates = await this.fetchTerminalStates(token, org, group.project, group.workItemType, signal);
+              terminalStatesByGroup.set(groupKey, terminalStates);
+            }),
+          );
+
+          for (const [groupKey, group] of groupedItems) {
+            const terminalStates = terminalStatesByGroup.get(groupKey);
+            if (!terminalStates) { continue; }
+            for (const item of group.items) {
+              if (terminalStates.has(item.state)) {
+                closedSet.add(item.id);
+              }
+            }
+          }
+        } catch (err) {
+          if (signal?.aborted) { break; }
+          logger.debug(`Failed to check work items for org ${org}: ${String(err)}`);
+        }
+      }
+    }
+
+    // Return in input order for deterministic results
+    return parsed.filter(p => closedSet.has(p.id)).map(p => p.id);
   }
 
   private static readonly ADO_WORKITEM_PATTERN = /^https?:\/\/dev\.azure\.com\/([^/]+)\/([^/]+)\/_workitems\/edit\/(\d+)\b/i;

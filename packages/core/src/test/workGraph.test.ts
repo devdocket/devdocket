@@ -480,13 +480,12 @@ describe('WorkGraph', () => {
   });
 
   describe('state transition validation', () => {
-    it('rejects New → Done (skipping InProgress)', async () => {
+    it('allows New → Done (e.g. auto-complete when external item is closed)', async () => {
       const item = await graph.createItem({ title: 'Test' });
       vi.mocked(store.save).mockClear();
-      await expect(graph.transitionState(item.id, WorkItemState.Done))
-        .rejects.toThrow('Invalid state transition');
-      expect(store.save).not.toHaveBeenCalled();
-      expect(graph.getItem(item.id)?.state).toBe(WorkItemState.New);
+      await graph.transitionState(item.id, WorkItemState.Done);
+      expect(store.save).toHaveBeenCalled();
+      expect(graph.getItem(item.id)?.state).toBe(WorkItemState.Done);
     });
 
     it('allows New → Archived', async () => {
@@ -584,6 +583,15 @@ describe('WorkGraph', () => {
 
       await graph.transitionState(item.id, WorkItemState.Archived);
       expect(graph.getItem(item.id)?.state).toBe(WorkItemState.Archived);
+    });
+
+    it('allows Paused → Done (e.g. auto-complete when external item is closed)', async () => {
+      const item = await graph.createItem({ title: 'Test' });
+      await graph.transitionState(item.id, WorkItemState.InProgress);
+      await graph.transitionState(item.id, WorkItemState.Paused);
+
+      await graph.transitionState(item.id, WorkItemState.Done);
+      expect(graph.getItem(item.id)?.state).toBe(WorkItemState.Done);
     });
 
     it('rejects undefined state value', async () => {

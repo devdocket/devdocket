@@ -840,4 +840,67 @@ describe('GitHubPrReviewProvider', () => {
       expect(items[0].resurfaceVersion).toBe('2024-01-15T10:30:00Z');
     });
   });
+
+  describe('getClosedItems', () => {
+    it('returns closed/merged PR IDs', async () => {
+      mockFetch
+        .mockResolvedValueOnce({
+          ok: true,
+          json: async () => ({ state: 'closed' }),
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          json: async () => ({ state: 'closed' }),
+        });
+
+      const result = await provider.getClosedItems!(['owner/repo#10', 'owner/repo#20']);
+
+      expect(result).toEqual(['owner/repo#10', 'owner/repo#20']);
+      expect(mockFetch).toHaveBeenCalledTimes(2);
+      expect(mockFetch).toHaveBeenCalledWith(
+        'https://api.github.com/repos/owner/repo/pulls/10',
+        expect.objectContaining({
+          headers: expect.objectContaining({
+            Authorization: 'Bearer test-token',
+          }),
+        }),
+      );
+      expect(mockFetch).toHaveBeenCalledWith(
+        'https://api.github.com/repos/owner/repo/pulls/20',
+        expect.objectContaining({
+          headers: expect.objectContaining({
+            Authorization: 'Bearer test-token',
+          }),
+        }),
+      );
+    });
+
+    it('excludes open PRs', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ state: 'open' }),
+      });
+
+      const result = await provider.getClosedItems!(['owner/repo#5']);
+
+      expect(result).toEqual([]);
+      expect(mockFetch).toHaveBeenCalledTimes(1);
+    });
+
+    it('returns empty when no auth', async () => {
+      vi.mocked(authentication.getSession).mockResolvedValue(null as any);
+
+      const result = await provider.getClosedItems!(['owner/repo#1']);
+
+      expect(result).toEqual([]);
+      expect(mockFetch).not.toHaveBeenCalled();
+    });
+
+    it('ignores malformed external IDs', async () => {
+      const result = await provider.getClosedItems!(['bad', 'no-hash', 'not/valid#abc']);
+
+      expect(result).toEqual([]);
+      expect(mockFetch).not.toHaveBeenCalled();
+    });
+  });
 });
