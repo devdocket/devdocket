@@ -47,7 +47,7 @@ describe('GitHubMyPrsProvider', () => {
   let mockChannel: { appendLine: ReturnType<typeof vi.fn> };
 
   beforeEach(() => {
-    vi.clearAllMocks();
+    vi.resetAllMocks();
     vi.stubGlobal('fetch', mockFetch);
     provider = new GitHubMyPrsProvider();
 
