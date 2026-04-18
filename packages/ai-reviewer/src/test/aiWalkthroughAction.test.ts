@@ -58,7 +58,7 @@ describe('AiWalkthroughAction', () => {
     });
   });
 
-  describe('identity properties', () => {
+  describe('identity and inheritance', () => {
     it('has id "ai-reviewer.walkthrough"', () => {
       expect(action.id).toBe('ai-reviewer.walkthrough');
     });
@@ -66,32 +66,16 @@ describe('AiWalkthroughAction', () => {
     it('has label "AI Walkthrough"', () => {
       expect(action.label).toBe('AI Walkthrough');
     });
-  });
 
-  describe('canRun', () => {
-    it('returns true for GitHub PR URLs', () => {
-      const item = createWorkItem({ url: 'https://github.com/owner/repo/pull/42' });
-      expect(action.canRun(item)).toBe(true);
+    it('inherits canRun from BasePrAction', () => {
+      expect(action.canRun(createWorkItem({ url: 'https://github.com/o/r/pull/1' }))).toBe(true);
+      expect(action.canRun(createWorkItem({ url: 'https://github.com/o/r/issues/1' }))).toBe(false);
+      expect(action.canRun(createWorkItem({ url: undefined }))).toBe(false);
     });
 
-    it('returns false for non-PR URLs', () => {
-      const item = createWorkItem({ url: 'https://github.com/owner/repo/issues/42' });
-      expect(action.canRun(item)).toBe(false);
-    });
-
-    it('returns false when item has no URL', () => {
-      const item = createWorkItem({ url: undefined });
-      expect(action.canRun(item)).toBe(false);
-    });
-
-    it('returns true for PR URLs with query strings', () => {
-      const item = createWorkItem({ url: 'https://github.com/owner/repo/pull/42?diff=unified' });
-      expect(action.canRun(item)).toBe(true);
-    });
-
-    it('returns true for PR URLs with fragments', () => {
-      const item = createWorkItem({ url: 'https://github.com/owner/repo/pull/42#discussion_r123' });
-      expect(action.canRun(item)).toBe(true);
+    it('inherits isPrUrl from BasePrAction', () => {
+      expect(action.isPrUrl('https://github.com/owner/repo/pull/42')).toBe(true);
+      expect(action.isPrUrl('https://github.com/owner/repo/issues/42')).toBe(false);
     });
   });
 
@@ -108,8 +92,6 @@ describe('AiWalkthroughAction', () => {
     });
 
     it('proceeds when user confirms', async () => {
-      vi.mocked(window.showWarningMessage).mockResolvedValue('Continue' as never);
-
       const item = createWorkItem();
       await action.run(item);
 
@@ -123,6 +105,7 @@ describe('AiWalkthroughAction', () => {
       const item = createWorkItem();
       await action.run(item);
 
+      expect(window.withProgress).not.toHaveBeenCalled();
       expect(mockRepoManager.ensureWorktree).not.toHaveBeenCalled();
       expect(commands.executeCommand).not.toHaveBeenCalled();
     });
@@ -161,15 +144,7 @@ describe('AiWalkthroughAction', () => {
       await action.run(item);
 
       expect(window.showWarningMessage).not.toHaveBeenCalled();
-      expect(mockRepoManager.ensureWorktree).not.toHaveBeenCalled();
-      expect(commands.executeCommand).not.toHaveBeenCalled();
-    });
-
-    it('skips confirmation for non-PR URLs', async () => {
-      const item = createWorkItem({ url: 'https://github.com/owner/repo/issues/42' });
-      await action.run(item);
-
-      expect(window.showWarningMessage).not.toHaveBeenCalled();
+      expect(window.withProgress).not.toHaveBeenCalled();
       expect(mockRepoManager.ensureWorktree).not.toHaveBeenCalled();
       expect(commands.executeCommand).not.toHaveBeenCalled();
     });
@@ -199,15 +174,6 @@ describe('AiWalkthroughAction', () => {
       await action.run(item);
 
       expect(commands.executeCommand).not.toHaveBeenCalled();
-    });
-  });
-
-  describe('constructor', () => {
-    it('requires repoManager', () => {
-      const rm = createMockRepoManager();
-      const a = new AiWalkthroughAction(rm, mockLogOutputChannel as never);
-      expect(a).toBeDefined();
-      expect(a.id).toBe('ai-reviewer.walkthrough');
     });
   });
 });

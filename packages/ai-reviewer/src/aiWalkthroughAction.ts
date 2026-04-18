@@ -1,71 +1,51 @@
 import * as vscode from 'vscode';
-import type { WorkItem, DevDocketAction } from './types';
+import type { WorkItem } from './types';
+import { BasePrAction } from './basePrAction';
 import { RepoManager } from './repoManager';
-import { parsePrUrl } from './prUrl';
-import { confirmAiUsage } from './confirmAiUsage';
 
-export class AiWalkthroughAction implements DevDocketAction {
+export class AiWalkthroughAction extends BasePrAction {
   readonly id = 'ai-reviewer.walkthrough';
   readonly label = 'AI Walkthrough';
+
+  protected readonly progressTitle = 'AI Walkthrough';
+  protected readonly confirmationMessage =
+    'AI Walkthrough will use AI to analyze and walk through this PR. Continue?';
 
   constructor(
     private readonly repoManager: RepoManager,
     private readonly log: vscode.LogOutputChannel,
-  ) {}
-
-  canRun(item: WorkItem): boolean {
-    const result = !!item.url && parsePrUrl(item.url) !== undefined;
-    this.log.debug(`AiWalkthroughAction.canRun — url: ${item.url ?? '(none)'}, result: ${result}`);
-    return result;
+  ) {
+    super();
   }
 
-  async run(item: WorkItem): Promise<void> {
-    this.log.debug(`AiWalkthroughAction.run — url: ${item.url ?? '(none)'}`);
-    if (!item.url) return;
+  protected async doWork(
+    item: WorkItem,
+    progress: vscode.Progress<{ message?: string }>,
+    token: vscode.CancellationToken,
+  ): Promise<void> {
+    progress.report({ message: 'Preparing repository...' });
+    this.log.info('Preparing worktree for walkthrough');
 
-    if (!parsePrUrl(item.url)) {
-      this.log.info(`AI Walkthrough cannot run for non-PR URL: ${item.url}`);
+    try {
+      await this.repoManager.ensureWorktree(item.url!);
+      this.log.info('Worktree ready');
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      this.log.error(`Worktree preparation failed: ${msg}`);
+      vscode.window.showErrorMessage(`AI Walkthrough: Failed to prepare repository — ${msg}`);
       return;
     }
 
-    if (!await confirmAiUsage('AI Walkthrough will use AI to analyze and walk through this PR. Continue?')) {
-      this.log.info('User declined AI Walkthrough confirmation');
+    if (token.isCancellationRequested) {
+      this.log.info('Walkthrough cancelled before opening chat');
       return;
     }
 
-    await vscode.window.withProgress(
-      {
-        location: vscode.ProgressLocation.Notification,
-        title: 'AI Walkthrough',
-        cancellable: true,
-      },
-      async (progress, token) => {
-        progress.report({ message: 'Preparing repository...' });
-        this.log.info('Preparing worktree for walkthrough');
-
-        try {
-          await this.repoManager.ensureWorktree(item.url!);
-          this.log.info('Worktree ready');
-        } catch (err) {
-          const msg = err instanceof Error ? err.message : String(err);
-          this.log.error(`Worktree preparation failed: ${msg}`);
-          vscode.window.showErrorMessage(`AI Walkthrough: Failed to prepare repository — ${msg}`);
-          return;
-        }
-
-        if (token.isCancellationRequested) {
-          this.log.info('Walkthrough cancelled before opening chat');
-          return;
-        }
-
-        this.log.info('Opening chat with @walkthrough participant');
-        // Start a fresh chat conversation, then send the walkthrough query
-        await vscode.commands.executeCommand('workbench.action.chat.newChat');
-        await vscode.commands.executeCommand('workbench.action.chat.open', {
-          query: `@walkthrough Walk me through this PR: ${item.url}`,
-        });
-        this.log.info('Chat opened');
-      },
-    );
+    this.log.info('Opening chat with @walkthrough participant');
+    await vscode.commands.executeCommand('workbench.action.chat.newChat');
+    await vscode.commands.executeCommand('workbench.action.chat.open', {
+      query: `@walkthrough Walk me through this PR: ${item.url}`,
+    });
+    this.log.info('Chat opened');
   }
 }
