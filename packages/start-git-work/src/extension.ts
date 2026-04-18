@@ -1,5 +1,6 @@
 import * as vscode from 'vscode';
 import { StartWorkAction } from './startWorkAction';
+import { CleanupHandler } from './cleanupHandler';
 import { initLogger, setLogLevel, logger, resolveLogLevel } from './logger';
 
 export async function activate(context: vscode.ExtensionContext): Promise<void> {
@@ -50,6 +51,17 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   const startWorkAction = new StartWorkAction(context.globalState);
   const actionDisposable = api.registerAction(startWorkAction);
   context.subscriptions.push(actionDisposable);
+
+  // Subscribe to state transitions to prompt branch/worktree cleanup on Done
+  if (typeof api.onDidTransitionState === 'function') {
+    const cleanupHandler = new CleanupHandler(context.globalState);
+    const transitionDisposable = api.onDidTransitionState((event: any) => {
+      void cleanupHandler.handleStateTransition(event).catch((err: unknown) => {
+        logger.error('Cleanup handler failed', err);
+      });
+    });
+    context.subscriptions.push(transitionDisposable);
+  }
 
   logger.info('DevDocket Start Git Work activated');
 }

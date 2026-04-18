@@ -1,12 +1,19 @@
-import { DevDocketApi, DevDocketProvider, DevDocketAction, Disposable } from './types';
+import { DevDocketApi, DevDocketProvider, DevDocketAction, Disposable, StateTransitionEvent } from './types';
+import type { Event } from '@devdocket/shared';
 import { ProviderRegistry } from '../services/providerRegistry';
 import { ActionRegistry } from '../services/actionRegistry';
+import { WorkGraph } from '../services/workGraph';
 
 export class DevDocketApiImpl implements DevDocketApi {
+  readonly onDidTransitionState: Event<StateTransitionEvent>;
+
   constructor(
     private readonly providerRegistry: ProviderRegistry,
     private readonly actionRegistry: ActionRegistry,
-  ) {}
+    workGraph: WorkGraph,
+  ) {
+    this.onDidTransitionState = workGraph.onDidTransitionState;
+  }
 
   registerProvider(provider: DevDocketProvider): Disposable {
     return this.providerRegistry.register(provider);

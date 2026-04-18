@@ -352,6 +352,39 @@ describe('StartWorkAction', () => {
       );
     });
 
+    it('stores git work metadata in globalState after creating worktree', async () => {
+      const item = createWorkItem();
+      await action.run(item);
+
+      expect(mockMemento.update).toHaveBeenCalledWith(
+        'gitWork:wc-test-1',
+        {
+          branchName: 'issue123',
+          worktreePath: path.join('/mock', 'workspace-issue123'),
+          repoPath: '/mock/workspace',
+        },
+      );
+    });
+
+    it('does not store metadata when worktree creation fails', async () => {
+      vi.mocked(execFile).mockImplementation(((cmd: string, args: string[], opts: any, cb: Function) => {
+        if (args[0] === 'worktree') {
+          cb(new Error('worktree failed'), { stdout: '', stderr: '' }, '');
+          return;
+        }
+        cb(null, { stdout: '', stderr: '' }, '');
+      }) as any);
+
+      const item = createWorkItem();
+      await action.run(item);
+
+      // Should not have stored gitWork metadata (repoPath and baseBranch caching still happens)
+      expect(mockMemento.update).not.toHaveBeenCalledWith(
+        'gitWork:wc-test-1',
+        expect.anything(),
+      );
+    });
+
     it('runs post-worktree commands with {path} placeholder', async () => {
       vi.mocked(workspace.getConfiguration).mockReturnValue({
         get: vi.fn((key: string, defaultValue?: any) => {

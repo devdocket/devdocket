@@ -100,6 +100,21 @@ export interface DevDocketAction {
 }
 
 /**
+ * Payload for the {@link DevDocketApi.onDidTransitionState} event.
+ *
+ * Fired after a work item transitions between lifecycle states (e.g.
+ * InProgress → Done). Extensions can subscribe to react to state changes.
+ */
+export interface StateTransitionEvent {
+  /** The work item after the transition completed. */
+  readonly item: Readonly<WorkItem>;
+  /** The lifecycle state before the transition. */
+  readonly oldState: string;
+  /** The lifecycle state after the transition. */
+  readonly newState: string;
+}
+
+/**
  * Public API surface of the DevDocket extension.
  *
  * Obtain this API from the core extension by getting its extension wrapper via
@@ -138,4 +153,11 @@ export interface DevDocketApi {
    * @returns A {@link Disposable} that unregisters the action when disposed.
    */
   registerAction(action: DevDocketAction): Disposable;
+  /**
+   * Fires after a work item transitions to a new lifecycle state.
+   *
+   * Extensions can subscribe to this event to react when items move between
+   * states (e.g. perform cleanup when an item is marked as Done).
+   */
+  readonly onDidTransitionState: Event<StateTransitionEvent>;
 }

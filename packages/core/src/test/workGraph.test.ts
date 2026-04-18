@@ -134,6 +134,36 @@ describe('WorkGraph', () => {
     expect(listener).toHaveBeenCalledTimes(1);
   });
 
+  it('fires onDidTransitionState with old and new state', async () => {
+    const item = await graph.createItem({ title: 'Test' });
+    const listener = vi.fn();
+    graph.onDidTransitionState(listener);
+
+    await graph.transitionState(item.id, WorkItemState.InProgress);
+
+    expect(listener).toHaveBeenCalledTimes(1);
+    const event = listener.mock.calls[0][0];
+    expect(event.oldState).toBe(WorkItemState.New);
+    expect(event.newState).toBe(WorkItemState.InProgress);
+    expect(event.item.id).toBe(item.id);
+    expect(event.item.state).toBe(WorkItemState.InProgress);
+  });
+
+  it('fires onDidTransitionState for each transition in a lifecycle', async () => {
+    const item = await graph.createItem({ title: 'Test' });
+    const listener = vi.fn();
+    graph.onDidTransitionState(listener);
+
+    await graph.transitionState(item.id, WorkItemState.InProgress);
+    await graph.transitionState(item.id, WorkItemState.Done);
+
+    expect(listener).toHaveBeenCalledTimes(2);
+    expect(listener.mock.calls[0][0].oldState).toBe(WorkItemState.New);
+    expect(listener.mock.calls[0][0].newState).toBe(WorkItemState.InProgress);
+    expect(listener.mock.calls[1][0].oldState).toBe(WorkItemState.InProgress);
+    expect(listener.mock.calls[1][0].newState).toBe(WorkItemState.Done);
+  });
+
   it('sets notes on create', async () => {
     const item = await graph.createItem({
       title: 'Detailed',

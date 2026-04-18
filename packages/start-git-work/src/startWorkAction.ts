@@ -4,6 +4,7 @@ import { promisify } from 'util';
 import * as path from 'path';
 import * as fs from 'fs';
 import { logger } from './logger';
+import { metadataKey, type GitWorkMetadata } from './cleanupHandler';
 
 const execFileAsync = promisify(execFile);
 
@@ -138,6 +139,10 @@ export class StartWorkAction implements DevDocketAction {
           }
 
           logger.info(`Created worktree at ${worktreePath}`);
+
+          // Persist mapping so cleanup can find the branch/worktree later
+          const metadata: GitWorkMetadata = { branchName, worktreePath, repoPath };
+          await this.globalState.update(metadataKey(item.id), metadata);
 
           // Run user-configured post-worktree commands
           const commands = vscode.workspace.getConfiguration('devdocketStartGitWork')

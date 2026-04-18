@@ -1,7 +1,8 @@
 import { DevDocketApiImpl } from '../api/devDocketApi';
-import { DevDocketProvider, DevDocketAction, DiscoveredItem } from '../api/types';
+import { DevDocketProvider, DevDocketAction, DiscoveredItem, StateTransitionEvent } from '../api/types';
 import { ProviderRegistry } from '../services/providerRegistry';
 import { ActionRegistry } from '../services/actionRegistry';
+import { WorkGraph } from '../services/workGraph';
 import * as vscode from 'vscode';
 import { InboxState } from '../storage/discoveredStateStore';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
@@ -46,6 +47,14 @@ function createMockAction(id: string): DevDocketAction {
   };
 }
 
+function createMockWorkGraph() {
+  const emitter = new vscode.EventEmitter<StateTransitionEvent>();
+  return {
+    onDidTransitionState: emitter.event,
+    _emitter: emitter,
+  } as unknown as WorkGraph;
+}
+
 // Contract tests for the public API surface that provider extensions consume.
 // These intentionally overlap with registry-level tests to guard against
 // accidental wiring changes in DevDocketApiImpl.
@@ -53,12 +62,14 @@ describe('DevDocketApiImpl', () => {
   let api: DevDocketApiImpl;
   let providerRegistry: ProviderRegistry;
   let actionRegistry: ActionRegistry;
+  let mockWorkGraph: WorkGraph;
 
   beforeEach(() => {
     const stateStore = createMockStateStore();
     providerRegistry = new ProviderRegistry(stateStore);
     actionRegistry = new ActionRegistry();
-    api = new DevDocketApiImpl(providerRegistry, actionRegistry);
+    mockWorkGraph = createMockWorkGraph();
+    api = new DevDocketApiImpl(providerRegistry, actionRegistry, mockWorkGraph);
   });
 
   describe('registerProvider', () => {
@@ -143,6 +154,27 @@ describe('DevDocketApiImpl', () => {
       api.registerAction(a1);
 
       expect(() => api.registerAction(a2)).toThrow('Action already registered: dup');
+    });
+  });
+
+  describe('onDidTransitionState', () => {
+    it('exposes the event from WorkGraph', () => {
+      expect(api.onDidTransitionState).toBeDefined();
+      expect(typeof api.onDidTransitionState).toBe('function');
+    });
+
+    it('fires when the underlying WorkGraph event fires', () => {
+      const listener = vi.fn();
+      api.onDidTransitionState(listener);
+
+      const event: StateTransitionEvent = {
+        item: { id: 'test', title: 'Test', state: 'Done', createdAt: 0, updatedAt: 0 } as any,
+        oldState: 'InProgress',
+        newState: 'Done',
+      };
+      (mockWorkGraph as any)._emitter.fire(event);
+
+      expect(listener).toHaveBeenCalledWith(event);
     });
   });
 });

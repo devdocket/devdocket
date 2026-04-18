@@ -2,6 +2,7 @@ import * as crypto from 'crypto';
 import * as vscode from 'vscode';
 import { WorkItem, WorkItemInput, WorkItemState } from '../models/workItem';
 import { ITaskStore } from '../storage/taskStore';
+import { StateTransitionEvent } from '../api/types';
 import { logger } from './logger';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -34,6 +35,9 @@ export class WorkGraph {
    * and normalization triggered as part of a public operation when no user-visible mutation occurs.
    */
   readonly onDidChange = this._onDidChange.event;
+  private readonly _onDidTransitionState = new vscode.EventEmitter<StateTransitionEvent>();
+  /** Fires after a work item transitions to a new lifecycle state via {@link transitionState}. */
+  readonly onDidTransitionState = this._onDidTransitionState.event;
 
   constructor(private readonly store: ITaskStore) {}
 
@@ -245,6 +249,7 @@ export class WorkGraph {
     this.items.set(id, updated);
     this.invalidateStateCache();
     this._onDidChange.fire();
+    this._onDidTransitionState.fire({ item: updated, oldState: item.state, newState });
     logger.info(`Transitioned work item ${id} to ${newState}`);
   }
 
@@ -475,6 +480,7 @@ export class WorkGraph {
 
   dispose(): void {
     this._onDidChange.dispose();
+    this._onDidTransitionState.dispose();
   }
 }
 
