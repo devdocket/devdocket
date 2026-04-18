@@ -5,7 +5,7 @@ import { ProviderRegistry } from './providerRegistry';
 import { logger } from './logger';
 
 /** Work item states eligible for auto-completion when the external item is closed/merged. */
-export const AUTO_COMPLETABLE_STATES = new Set([WorkItemState.New, WorkItemState.InProgress, WorkItemState.Paused]);
+export const AUTO_COMPLETABLE_STATES: ReadonlySet<WorkItemState> = new Set([WorkItemState.New, WorkItemState.InProgress, WorkItemState.Paused]);
 
 /**
  * Check for work items that should be auto-completed after a provider refresh.
@@ -73,12 +73,16 @@ export async function checkAutoComplete(
   const completedTitles: string[] = [];
   for (const item of candidates) {
     if (closedIds.has(item.externalId!)) {
+      const currentItem = workGraph.getItem(item.id);
+      if (!currentItem || !currentItem.externalId || !AUTO_COMPLETABLE_STATES.has(currentItem.state)) {
+        continue;
+      }
       try {
-        await workGraph.transitionState(item.id, WorkItemState.Done);
-        completedTitles.push(item.title);
-        logger.info(`Auto-completed work item "${item.title}" (${item.id}) — external item closed/merged`);
+        await workGraph.transitionState(currentItem.id, WorkItemState.Done);
+        completedTitles.push(currentItem.title);
+        logger.info(`Auto-completed work item "${currentItem.title}" (${currentItem.id}) — external item closed/merged`);
       } catch (err) {
-        logger.error(`Failed to auto-complete work item ${item.id}`, err);
+        logger.error(`Failed to auto-complete work item ${currentItem.id}`, err);
       }
     }
   }
