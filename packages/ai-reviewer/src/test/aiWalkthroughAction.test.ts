@@ -165,6 +165,15 @@ describe('AiWalkthroughAction', () => {
       expect(commands.executeCommand).not.toHaveBeenCalled();
     });
 
+    it('skips confirmation for non-PR URLs', async () => {
+      const item = createWorkItem({ url: 'https://github.com/owner/repo/issues/42' });
+      await action.run(item);
+
+      expect(window.showWarningMessage).not.toHaveBeenCalled();
+      expect(mockRepoManager.ensureWorktree).not.toHaveBeenCalled();
+      expect(commands.executeCommand).not.toHaveBeenCalled();
+    });
+
     it('reports progress while preparing repository', async () => {
       const reportSpy = vi.fn();
       vi.mocked(window.withProgress).mockImplementation(async (_options: unknown, task: Function) => {

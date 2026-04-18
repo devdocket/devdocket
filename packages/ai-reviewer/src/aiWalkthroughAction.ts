@@ -22,6 +22,11 @@ export class AiWalkthroughAction implements DevDocketAction {
     this.log.debug(`AiWalkthroughAction.run — url: ${item.url ?? '(none)'}`);
     if (!item.url) return;
 
+    if (!parsePrUrl(item.url)) {
+      this.log.info(`AI Walkthrough cannot run for non-PR URL: ${item.url}`);
+      return;
+    }
+
     const proceed = await vscode.window.showWarningMessage(
       'AI Walkthrough will use AI to analyze and walk through this PR. Continue?',
       { modal: true },
