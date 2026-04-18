@@ -49,11 +49,21 @@ DevDocket is a VS Code extension monorepo for managing work items from multiple 
 - **Build:** esbuild, CJS, `--external:vscode`, sourcemaps. Root `npm install` + `npm run build`.
 
 ### Completed Issues
-#282 (provider state in editor), #281 (clickable title), #275 (History→Queue transitions),#273 (tree counts), #265 (auto-complete on close), #250 (group context), #249 (accept-to-focus, pre-shipped), #243 (version resurfacing), #240 (create from URL), #233 (provider health), #232 (clear history), #231 (sources icons), #230 (layout toggle), #229 (emoji removal), #227 (provider labels), #223 (dead code cleanup), #222 (responsive layout), #221 (contextual heading), #219 (source URL link), #217 (editor metadata), #216 (provider description), #215 (dynamic titles), #189 (dismissed fix), #178 (ADO filtering), #158 (markdown injection), #157 (API trust boundary), #156 (URL sanitization), #155 (URL scheme validation), #154 (crypto.randomUUID), #153 (JSON validation), #152 (path traversal fix), #12 (AI PR actions), bulk rename (WorkCenter→DevDocket)
+#266 (CI/CD pipeline watching), #282 (provider state in editor), #281 (clickable title), #275 (History→Queue transitions),#273 (tree counts), #265 (auto-complete on close), #250 (group context), #249 (accept-to-focus, pre-shipped), #243 (version resurfacing), #240 (create from URL), #233 (provider health), #232 (clear history), #231 (sources icons), #230 (layout toggle), #229 (emoji removal), #227 (provider labels), #223 (dead code cleanup), #222 (responsive layout), #221 (contextual heading), #219 (source URL link), #217 (editor metadata), #216 (provider description), #215 (dynamic titles), #189 (dismissed fix), #178 (ADO filtering), #158 (markdown injection), #157 (API trust boundary), #156 (URL sanitization), #155 (URL scheme validation), #154 (crypto.randomUUID), #153 (JSON validation), #152 (path traversal fix), #12 (AI PR actions), bulk rename (WorkCenter→DevDocket)
 
 > Full issue-level learnings archived to `history-archive.md`
 
 ## Learnings
+
+### 2026-04-18 — Issue #266 (Watch CI/CD Pipelines for Notifications)
+
+- **Shared StatusWatcher utility:** Created `packages/shared/src/statusWatcher.ts` — a generic class that tracks items by string ID across polling cycles and detects status transitions. Newly observed items are silently added (no change emitted); only transitions from a known previous status to a different status generate `StatusChange` events. Designed to be reusable across CI watchers and future PR tracking (#276).
+- **GitHub Actions provider:** `packages/github/src/githubActionsProvider.ts` extends `BaseGitHubProvider`. Polls `/repos/{owner}/{repo}/actions/runs` for recent workflow runs. Uses composite status strings (`in_progress`, `completed:success`, `completed:failure`) for the StatusWatcher. Only emits non-completed runs as DiscoveredItems (active runs show in Sources/Inbox; completed runs disappear after notification).
+- **ADO Pipeline provider:** `packages/ado/src/adoPipelineProvider.ts` extends `BaseProvider`. Follows the same auth pattern as `AdoPrReviewProvider` (interactive vs silent `getSession`). Polls ADO Build API; uses Build Timeline API for job-level failure detection.
+- **Early job failure detection:** Both providers check individual jobs/stages within in-progress runs for failures and notify immediately (before the overall run completes). Job failure notifications are tracked in a `Map<runId, Set<jobKey>>` to avoid duplicate notifications. The map is cleaned up when runs leave the active set.
+- **Notification pattern:** VS Code `showInformationMessage` for success, `showWarningMessage` for failure, with "View Run"/"View Build"/"View Job" action buttons that open the URL via `vscode.env.openExternal`. Cancellations are logged at info level, not notified.
+- **Configuration:** `devdocketGithub.watchWorkflowRuns` and `devdocketAdo.watchPipelineRuns` (boolean, default true) control registration. Reuses existing repos/projects config for which repos to monitor.
+- **Existing test updates:** ADO extension tests expected exactly 2 provider registrations; updated to 3 (including pipeline provider). Added test for `watchPipelineRuns=false` disabling the pipeline provider.
 
 ### 2026-04-18 — Issue #264 (Cleanup Branch/Worktree on Complete)
 

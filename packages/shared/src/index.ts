@@ -8,3 +8,5 @@ export { BaseProvider } from './baseProvider';
 export type { DiscoveredItem, Disposable, Event, EventEmitterLike, ResolvedItem } from './baseProvider';
 export { isValidUrlSegment, isValidGitHubRepo, isValidRepoSlug, sanitizeUrlSegment } from './urlValidation';
 export { validateRefreshInterval } from './refreshInterval';
+export { StatusWatcher } from './statusWatcher';
+export type { StatusChange } from './statusWatcher';

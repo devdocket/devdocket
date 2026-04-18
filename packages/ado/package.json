@@ -39,6 +39,11 @@
           "type": "boolean",
           "default": true,
           "description": "Resurface PR reviews when new iterations are pushed."
+        },
+        "devdocketAdo.watchPipelineRuns": {
+          "type": "boolean",
+          "default": true,
+          "description": "Watch Azure DevOps pipeline builds and notify on completion or failure."
         }
       }
     }

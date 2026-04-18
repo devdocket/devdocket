@@ -44,6 +44,11 @@
           "type": "boolean",
           "default": true,
           "description": "Resurface PR reviews when review is explicitly re-requested."
+        },
+        "devdocketGithub.watchWorkflowRuns": {
+          "type": "boolean",
+          "default": true,
+          "description": "Watch GitHub Actions workflow runs and notify on completion or failure."
         }
       }
     }

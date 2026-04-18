@@ -125,19 +125,21 @@ describe('extension activation', () => {
     await activate(mockContext);
 
     expect(mockActivate).toHaveBeenCalled();
-    expect(mockApi.registerProvider).toHaveBeenCalledTimes(2);
+    expect(mockApi.registerProvider).toHaveBeenCalledTimes(3);
   });
 
-  it('registers two providers when organization is configured', async () => {
+  it('registers three providers when organization is configured', async () => {
     await activate(mockContext);
 
-    expect(mockApi.registerProvider).toHaveBeenCalledTimes(2);
+    expect(mockApi.registerProvider).toHaveBeenCalledTimes(3);
 
     // Verify provider objects passed
     const firstProvider = mockApi.registerProvider.mock.calls[0][0];
     const secondProvider = mockApi.registerProvider.mock.calls[1][0];
+    const thirdProvider = mockApi.registerProvider.mock.calls[2][0];
     expect(firstProvider.id).toBe('ado-work-items');
     expect(secondProvider.id).toBe('ado-pr-reviews');
+    expect(thirdProvider.id).toBe('ado-pipelines');
   });
 
   it('does not register providers when no organization is configured', async () => {
@@ -173,6 +175,32 @@ describe('extension activation', () => {
     await activate(mockContext);
 
     expect(workspace.onDidChangeConfiguration).toHaveBeenCalled();
+  });
+
+  it('registers only two providers when watchPipelineRuns is disabled', async () => {
+    vi.mocked(workspace.getConfiguration).mockImplementation((section?: string) => {
+      if (section === 'devdocketAdo') {
+        return {
+          get: vi.fn((key: string, defaultValue?: any) => {
+            if (key === 'projects') return ['ProjectA'];
+            if (key === 'refreshIntervalSeconds') return 0;
+            if (key === 'watchPipelineRuns') return false;
+            return defaultValue;
+          }),
+        } as any;
+      }
+      return {
+        get: vi.fn((_key: string, defaultValue?: any) => defaultValue),
+      } as any;
+    });
+
+    await activate(mockContext);
+
+    expect(mockApi.registerProvider).toHaveBeenCalledTimes(2);
+    const firstProvider = mockApi.registerProvider.mock.calls[0][0];
+    const secondProvider = mockApi.registerProvider.mock.calls[1][0];
+    expect(firstProvider.id).toBe('ado-work-items');
+    expect(secondProvider.id).toBe('ado-pr-reviews');
   });
 
   it('deactivate is a no-op', () => {

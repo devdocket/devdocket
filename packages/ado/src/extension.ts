@@ -1,14 +1,17 @@
 import * as vscode from 'vscode';
 import { AdoWorkItemProvider } from './adoWorkItemProvider';
 import { AdoPrReviewProvider } from './adoPrReviewProvider';
+import { AdoPipelineProvider } from './adoPipelineProvider';
 import { parseAdoProjectsConfig } from './configParser';
 import { validateRefreshInterval } from '@devdocket/shared';
 import { initLogger, setLogLevel, logger, resolveLogLevel } from './logger';
 
 let workItemProvider: AdoWorkItemProvider | undefined;
 let prProvider: AdoPrReviewProvider | undefined;
+let pipelineProvider: AdoPipelineProvider | undefined;
 let workItemRegistration: vscode.Disposable | undefined;
 let prRegistration: vscode.Disposable | undefined;
+let pipelineRegistration: vscode.Disposable | undefined;
 let orgWarningShown = false;
 
 export async function activate(_context: vscode.ExtensionContext): Promise<void> {
@@ -64,10 +67,14 @@ export async function activate(_context: vscode.ExtensionContext): Promise<void>
     workItemRegistration = undefined;
     prRegistration?.dispose();
     prRegistration = undefined;
+    pipelineRegistration?.dispose();
+    pipelineRegistration = undefined;
     workItemProvider?.dispose();
     workItemProvider = undefined;
     prProvider?.dispose();
     prProvider = undefined;
+    pipelineProvider?.dispose();
+    pipelineProvider = undefined;
 
     const config = vscode.workspace.getConfiguration('devdocketAdo');
     const projects = config.get<string[]>('projects', []);
@@ -113,7 +120,17 @@ export async function activate(_context: vscode.ExtensionContext): Promise<void>
     workItemRegistration = api.registerProvider(workItemProvider);
     prRegistration = api.registerProvider(prProvider);
 
-    logger.info('Registered 2 ADO providers');
+    // Register the pipeline watcher if enabled
+    const watchPipelines = config.get<boolean>('watchPipelineRuns', true);
+    let providerCount = 2;
+    if (watchPipelines) {
+      pipelineProvider = new AdoPipelineProvider(orgConfigs);
+      pipelineProvider.startPeriodicRefresh(intervalSeconds);
+      pipelineRegistration = api.registerProvider(pipelineProvider);
+      providerCount = 3;
+    }
+
+    logger.info(`Registered ${providerCount} ADO providers`);
   };
 
   configureProviders();
@@ -136,7 +153,9 @@ export function deactivate(): void {
   logger.info('DevDocket ADO deactivating...');
   workItemRegistration?.dispose();
   prRegistration?.dispose();
+  pipelineRegistration?.dispose();
   workItemProvider?.dispose();
   prProvider?.dispose();
+  pipelineProvider?.dispose();
   logger.info('DevDocket ADO deactivated');
 }
