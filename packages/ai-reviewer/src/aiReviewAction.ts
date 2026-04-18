@@ -163,6 +163,7 @@ ${diff.slice(0, maxDiffLength)}
             vscode.window.showErrorMessage(`${this.progressTitle}: Analysis failed`);
             return undefined;
           }
+          result += '\n\n> ⚠️ **Warning:** AI analysis ended early because a follow-up model request failed. The review above may be incomplete.\n';
           break;
         }
 
@@ -229,6 +230,7 @@ ${diff.slice(0, maxDiffLength)}
 
       if (iterations >= MAX_TOOL_ITERATIONS) {
         this.log.warn(`Reached max tool iterations (${MAX_TOOL_ITERATIONS})`);
+        result += `\n\n> ⚠️ **Note:** This review stopped after reaching the maximum number of tool iterations (${MAX_TOOL_ITERATIONS}). The investigation may be incomplete.\n`;
       }
 
       return result + truncationNote;
