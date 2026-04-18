@@ -214,7 +214,8 @@ export class WorkGraph {
     }
     const changes: string[] = [];
     if (patch.title !== undefined && patch.title !== item.title) { changes.push('title'); }
-    if (patch.notes !== undefined && patch.notes !== item.notes) { changes.push('notes'); }
+    // Detect notes changes including clearing (patch.notes === undefined with key present)
+    if ('notes' in patch && patch.notes !== item.notes) { changes.push('notes'); }
     // Skip save/event when no fields actually changed (e.g. autosave with identical values)
     if (changes.length === 0) {
       return;
