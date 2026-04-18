@@ -58,7 +58,7 @@ A PR review appears when **all** of the following are true:
 |-----------|---------|
 | **Review requested from you** | You are explicitly listed as a requested reviewer |
 | **Open state** | The PR is not closed or merged |
-| **Repository match** | If `devdocketGithub.repos` is configured, only PRs from those repos appear. Otherwise, all your review requests across all repositories are included. |
+| **Repository match** | If `devdocketGithub.repos` is configured, only PRs from those repos appear. Otherwise, review requests across all repositories are included (up to 100 results due to GitHub Search API limits). |
 
 ### Configuration
 
