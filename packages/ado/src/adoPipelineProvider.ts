@@ -262,8 +262,25 @@ export class AdoPipelineProvider extends BaseProvider {
         if (result === 'View Build') {
           void vscode.env.openExternal(vscode.Uri.parse(build._links.web.href));
         }
+      } else if (change.currentStatus === 'completed:partiallySucceeded') {
+        const result = await vscode.window.showWarningMessage(
+          `⚠️ ${label} partially succeeded (${build.project.name}, ${branch})`,
+          'View Build',
+        );
+        if (result === 'View Build') {
+          void vscode.env.openExternal(vscode.Uri.parse(build._links.web.href));
+        }
       } else if (change.currentStatus === 'completed:canceled') {
-        logger.info(`ADO build ${label} was cancelled (${build.project.name}, ${branch})`);
+        logger.info(`ADO build ${label} was canceled (${build.project.name}, ${branch})`);
+      } else if (change.currentStatus.startsWith('completed:')) {
+        const buildResult = change.currentStatus.slice('completed:'.length);
+        const result = await vscode.window.showWarningMessage(
+          `ℹ️ ${label} completed with result "${buildResult}" (${build.project.name}, ${branch})`,
+          'View Build',
+        );
+        if (result === 'View Build') {
+          void vscode.env.openExternal(vscode.Uri.parse(build._links.web.href));
+        }
       }
     }
   }
