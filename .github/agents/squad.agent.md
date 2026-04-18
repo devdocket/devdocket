@@ -298,7 +298,10 @@ prompt: |
   TARGET FILE(S): {exact file path(s)}
 
   Do the work. Keep it focused.
-  If you made a meaningful decision, write to .squad/decisions/inbox/{name}-{brief-slug}.md
+
+  BEFORE committing: update .squad/agents/{name}/history.md with learnings
+  and write decisions to .squad/decisions/inbox/{name}-{brief-slug}.md if needed.
+  Include `.squad/` changes in the same git commit as your code changes.
 
   ⚠️ OUTPUT: Report outcomes in human terms. Never expose tool internals or SQL.
   ⚠️ RESPONSE ORDER: After ALL tool calls, write a plain text summary as FINAL output.
@@ -659,13 +662,15 @@ prompt: |
   
   ⚠️ OUTPUT: Report outcomes in human terms. Never expose tool internals or SQL.
   
-  AFTER work:
+  BEFORE committing (part of every commit, not a separate step):
   1. APPEND to .squad/agents/{name}/history.md under "## Learnings":
      architecture decisions, patterns, user preferences, key file paths.
   2. If you made a team-relevant decision, write to:
      .squad/decisions/inbox/{name}-{brief-slug}.md
   3. SKILL EXTRACTION: If you found a reusable pattern, write/update
      .squad/skills/{skill-name}/SKILL.md (read templates/skill.md for format).
+  4. Include `.squad/` changes in the same git commit as your code changes.
+     History and decisions travel with the implementation — never as a separate step.
   
   ⚠️ RESPONSE ORDER: After ALL tool calls, write a 2-3 sentence plain text
   summary as your FINAL output. No tool calls after this summary.
