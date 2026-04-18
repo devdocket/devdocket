@@ -152,17 +152,20 @@ export class WorkItemEditorPanel {
 
   private getHtml(item: WorkItem): string {
     let providerDescription: string | undefined;
+    let providerState: string | undefined;
     if (item.providerId && item.externalId) {
       const discovered = this.providerRegistry
         .getDiscoveredItems(item.providerId)
         .find((d) => d.externalId === item.externalId);
       providerDescription = discovered?.description ?? undefined;
+      providerState = discovered?.state ?? undefined;
     }
     return getEditorPanelHtml({
       cspSource: this.panel.webview.cspSource,
       item,
       providerLabel: this.providerLabel,
       providerDescription,
+      providerState,
       titleReadonly: this.isProviderManaged(item),
     });
   }

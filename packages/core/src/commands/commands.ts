@@ -11,6 +11,7 @@ import { type SourceItemNode, type SourcesElement } from '../views/sourcesTreePr
 import { logger } from '../services/logger';
 import type { ResolvedItem } from '../api/types';
 import { toggleViewLayout, setViewLayout } from '../views/viewLayout';
+import type { ViewRevealer } from '../services/viewRevealer';
 
 /**
  * Resolves the effective list of inbox items from VS Code's multi-select command args.
@@ -121,9 +122,11 @@ async function batchTransition(
   ids: string[],
   targetState: WorkItemState,
   successMessage: (count: number) => string,
+  revealer?: ViewRevealer,
 ): Promise<void> {
   if (ids.length === 1) {
     await workGraph.transitionState(ids[0], targetState);
+    void revealer?.revealByState(ids[0]);
     return;
   }
   const failedIds: string[] = [];
@@ -212,7 +215,7 @@ async function batchAcceptItems(
   }
 }
 
-async function handleCreateItem(workGraph: WorkGraph): Promise<void> {
+async function handleCreateItem(workGraph: WorkGraph, revealer?: ViewRevealer): Promise<void> {
   const title = await vscode.window.showInputBox({
     prompt: 'Work item title',
     placeHolder: 'e.g. Fix login redirect bug',
@@ -223,8 +226,9 @@ async function handleCreateItem(workGraph: WorkGraph): Promise<void> {
   }
 
   logger.info(`Creating new work item: ${title.trim()}`);
-  await workGraph.createItem({ title: title.trim() });
+  const createdItem = await workGraph.createItem({ title: title.trim() });
   void vscode.window.showInformationMessage(`DevDocket: Created "${title.trim()}"`);
+  void revealer?.revealInQueue(createdItem.id);
 }
 
 async function handleCreateItemFromUrl(
@@ -232,6 +236,7 @@ async function handleCreateItemFromUrl(
   workGraph: WorkGraph,
   providerRegistry: ProviderRegistry,
   labelCache: ProviderLabelCache,
+  revealer?: ViewRevealer,
 ): Promise<void> {
   const url = await vscode.window.showInputBox({
     prompt: 'Enter a URL to create a work item from',
@@ -283,48 +288,49 @@ async function handleCreateItemFromUrl(
   const providerLabel = createdItem.providerId ? labelCache.get(createdItem.providerId) : undefined;
   WorkItemEditorPanel.open(context, workGraph, providerRegistry, createdItem, providerLabel);
   void vscode.window.showInformationMessage(`DevDocket: Created "${details.title}"`);
+  void revealer?.revealInQueue(createdItem.id);
 }
 
-async function handleAcceptToFocus(workGraph: WorkGraph, item?: { id?: string }, selectedItems?: { id?: string }[]): Promise<void> {
+async function handleAcceptToFocus(workGraph: WorkGraph, item?: { id?: string }, selectedItems?: { id?: string }[], revealer?: ViewRevealer): Promise<void> {
   const ids = resolveItemIds(item, selectedItems);
   if (ids.length === 0) { return; }
   await batchTransition(workGraph, ids, WorkItemState.InProgress,
-    (n) => `Moved ${n} item${n === 1 ? '' : 's'} to Focus`);
+    (n) => `Moved ${n} item${n === 1 ? '' : 's'} to Focus`, revealer);
 }
 
-async function handleArchiveItem(workGraph: WorkGraph, item?: { id?: string }, selectedItems?: { id?: string }[]): Promise<void> {
+async function handleArchiveItem(workGraph: WorkGraph, item?: { id?: string }, selectedItems?: { id?: string }[], revealer?: ViewRevealer): Promise<void> {
   const ids = resolveItemIds(item, selectedItems);
   if (ids.length === 0) { return; }
   await batchTransition(workGraph, ids, WorkItemState.Archived,
-    (n) => `Archived ${n} item${n === 1 ? '' : 's'}`);
+    (n) => `Archived ${n} item${n === 1 ? '' : 's'}`, revealer);
 }
 
-async function handleCompleteItem(workGraph: WorkGraph, item?: { id?: string }, selectedItems?: { id?: string }[]): Promise<void> {
+async function handleCompleteItem(workGraph: WorkGraph, item?: { id?: string }, selectedItems?: { id?: string }[], revealer?: ViewRevealer): Promise<void> {
   const ids = resolveItemIds(item, selectedItems);
   if (ids.length === 0) { return; }
   await batchTransition(workGraph, ids, WorkItemState.Done,
-    (n) => `Completed ${n} item${n === 1 ? '' : 's'}`);
+    (n) => `Completed ${n} item${n === 1 ? '' : 's'}`, revealer);
 }
 
-async function handlePauseItem(workGraph: WorkGraph, item?: { id?: string }, selectedItems?: { id?: string }[]): Promise<void> {
+async function handlePauseItem(workGraph: WorkGraph, item?: { id?: string }, selectedItems?: { id?: string }[], revealer?: ViewRevealer): Promise<void> {
   const ids = resolveItemIds(item, selectedItems);
   if (ids.length === 0) { return; }
   await batchTransition(workGraph, ids, WorkItemState.Paused,
-    (n) => `Paused ${n} item${n === 1 ? '' : 's'}`);
+    (n) => `Paused ${n} item${n === 1 ? '' : 's'}`, revealer);
 }
 
-async function handleResumeItem(workGraph: WorkGraph, item?: { id?: string }, selectedItems?: { id?: string }[]): Promise<void> {
+async function handleResumeItem(workGraph: WorkGraph, item?: { id?: string }, selectedItems?: { id?: string }[], revealer?: ViewRevealer): Promise<void> {
   const ids = resolveItemIds(item, selectedItems);
   if (ids.length === 0) { return; }
   await batchTransition(workGraph, ids, WorkItemState.InProgress,
-    (n) => `Resumed ${n} item${n === 1 ? '' : 's'}`);
+    (n) => `Resumed ${n} item${n === 1 ? '' : 's'}`, revealer);
 }
 
-async function handleMoveToQueue(workGraph: WorkGraph, item?: { id?: string }, selectedItems?: { id?: string }[]): Promise<void> {
+async function handleMoveToQueue(workGraph: WorkGraph, item?: { id?: string }, selectedItems?: { id?: string }[], revealer?: ViewRevealer): Promise<void> {
   const ids = resolveItemIds(item, selectedItems);
   if (ids.length === 0) { return; }
   await batchTransition(workGraph, ids, WorkItemState.New,
-    (n) => `Moved ${n} item${n === 1 ? '' : 's'} to Queue`);
+    (n) => `Moved ${n} item${n === 1 ? '' : 's'} to Queue`, revealer);
 }
 
 function handleEditItem(
@@ -500,12 +506,13 @@ async function handleAcceptFromInbox(
   stateStore: DiscoveredStateStore,
   item?: InboxElement,
   selectedItems?: InboxElement[],
+  revealer?: ViewRevealer,
 ): Promise<void> {
   const items = resolveInboxItems(item, selectedItems);
   if (items.length === 0) { return; }
 
   if (items.length === 1) {
-    await acceptSingleInboxItem(workGraph, stateStore, items[0]);
+    await acceptSingleInboxItem(workGraph, stateStore, items[0], revealer);
     return;
   }
 
@@ -516,6 +523,7 @@ async function acceptSingleInboxItem(
   workGraph: WorkGraph,
   stateStore: DiscoveredStateStore,
   item: InboxItem,
+  revealer?: ViewRevealer,
 ): Promise<void> {
   logger.info(`Accepting inbox item: ${item.externalId} from ${item.providerId}`);
   const existing = workGraph.findItemByProvenance(item.providerId, item.externalId);
@@ -556,13 +564,16 @@ async function acceptSingleInboxItem(
       logger.error('Failed to roll back created item after setState failure', rollbackErr);
     }
     handleCommandError('Failed to update state after accepting item', err);
+    return;
   }
+  void revealer?.revealInQueue(createdItem.id);
 }
 
 async function acceptToFocusSingleInboxItem(
   workGraph: WorkGraph,
   stateStore: DiscoveredStateStore,
   item: InboxItem,
+  revealer?: ViewRevealer,
 ): Promise<void> {
   logger.info(`Accepting inbox item to Focus: ${item.externalId} from ${item.providerId}`);
   let workItemId: string;
@@ -631,7 +642,9 @@ async function acceptToFocusSingleInboxItem(
     await workGraph.transitionState(workItemId, WorkItemState.InProgress);
   } catch (err: unknown) {
     handleCommandError('Failed to move item to Focus', err);
+    return;
   }
+  void revealer?.revealInFocus(workItemId);
 }
 
 async function batchAcceptToFocusItems(
@@ -735,12 +748,13 @@ async function handleAcceptToFocusFromInbox(
   stateStore: DiscoveredStateStore,
   item?: InboxElement,
   selectedItems?: InboxElement[],
+  revealer?: ViewRevealer,
 ): Promise<void> {
   const items = resolveInboxItems(item, selectedItems);
   if (items.length === 0) { return; }
 
   if (items.length === 1) {
-    await acceptToFocusSingleInboxItem(workGraph, stateStore, items[0]);
+    await acceptToFocusSingleInboxItem(workGraph, stateStore, items[0], revealer);
     return;
   }
 
@@ -792,12 +806,13 @@ async function handleAcceptFromSources(
   stateStore: DiscoveredStateStore,
   item?: SourcesElement,
   selectedItems?: SourcesElement[],
+  revealer?: ViewRevealer,
 ): Promise<void> {
   const items = resolveSourceItems(item, selectedItems);
   if (items.length === 0) { return; }
 
   if (items.length === 1) {
-    await acceptSingleSourceItem(workGraph, stateStore, items[0]);
+    await acceptSingleSourceItem(workGraph, stateStore, items[0], revealer);
     return;
   }
 
@@ -808,6 +823,7 @@ async function acceptSingleSourceItem(
   workGraph: WorkGraph,
   stateStore: DiscoveredStateStore,
   item: SourceItemNode,
+  revealer?: ViewRevealer,
 ): Promise<void> {
   logger.info(`Accepting sources item: ${item.externalId}`);
   const existing = workGraph.findItemByProvenance(item.providerId, item.externalId);
@@ -847,7 +863,9 @@ async function acceptSingleSourceItem(
       logger.error('Failed to roll back created item after setState failure', rollbackErr);
     }
     handleCommandError('Failed to update state after accepting item', err);
+    return;
   }
+  void revealer?.revealInQueue(createdItem.id);
 }
 
 async function handleDismissFromSources(
@@ -890,24 +908,25 @@ export function registerCommands(
   stateStore: DiscoveredStateStore,
   providerRegistry: ProviderRegistry,
   labelCache: ProviderLabelCache,
+  revealer?: ViewRevealer,
 ): void {
   context.subscriptions.push(
     vscode.commands.registerCommand('devdocket.refresh',
       wrapCommand('Failed to refresh', () => handleRefresh(providerRegistry))),
     vscode.commands.registerCommand('devdocket.createItem',
-      wrapCommand('Failed to create item', () => handleCreateItem(workGraph))),
+      wrapCommand('Failed to create item', () => handleCreateItem(workGraph, revealer))),
     vscode.commands.registerCommand('devdocket.createItemFromUrl',
-      wrapCommand('Failed to create item from URL', () => handleCreateItemFromUrl(context, workGraph, providerRegistry, labelCache))),
+      wrapCommand('Failed to create item from URL', () => handleCreateItemFromUrl(context, workGraph, providerRegistry, labelCache, revealer))),
     vscode.commands.registerCommand('devdocket.acceptToFocus',
-      wrapCommand('Failed to focus item', (item, selectedItems) => handleAcceptToFocus(workGraph, item, selectedItems))),
+      wrapCommand('Failed to focus item', (item, selectedItems) => handleAcceptToFocus(workGraph, item, selectedItems, revealer))),
     vscode.commands.registerCommand('devdocket.archiveItem',
-      wrapCommand('Failed to archive item', (item, selectedItems) => handleArchiveItem(workGraph, item, selectedItems))),
+      wrapCommand('Failed to archive item', (item, selectedItems) => handleArchiveItem(workGraph, item, selectedItems, revealer))),
     vscode.commands.registerCommand('devdocket.completeItem',
-      wrapCommand('Failed to complete item', (item, selectedItems) => handleCompleteItem(workGraph, item, selectedItems))),
+      wrapCommand('Failed to complete item', (item, selectedItems) => handleCompleteItem(workGraph, item, selectedItems, revealer))),
     vscode.commands.registerCommand('devdocket.pauseItem',
-      wrapCommand('Failed to pause item', (item, selectedItems) => handlePauseItem(workGraph, item, selectedItems))),
+      wrapCommand('Failed to pause item', (item, selectedItems) => handlePauseItem(workGraph, item, selectedItems, revealer))),
     vscode.commands.registerCommand('devdocket.resumeItem',
-      wrapCommand('Failed to resume item', (item, selectedItems) => handleResumeItem(workGraph, item, selectedItems))),
+      wrapCommand('Failed to resume item', (item, selectedItems) => handleResumeItem(workGraph, item, selectedItems, revealer))),
     vscode.commands.registerCommand('devdocket.deleteItem',
       wrapCommand('Failed to delete item', (item, selectedItems) => handleDeleteItem(workGraph, item, selectedItems))),
     vscode.commands.registerCommand('devdocket.clearHistory',
@@ -927,15 +946,15 @@ export function registerCommands(
     vscode.commands.registerCommand('devdocket.focusMoveDown',
       wrapCommand('Failed to move focus item down', (item) => handleFocusMoveDown(workGraph, item))),
     vscode.commands.registerCommand('devdocket.moveToQueue',
-      wrapCommand('Failed to move item to queue', (item, selectedItems) => handleMoveToQueue(workGraph, item, selectedItems))),
+      wrapCommand('Failed to move item to queue', (item, selectedItems) => handleMoveToQueue(workGraph, item, selectedItems, revealer))),
     vscode.commands.registerCommand('devdocket.acceptFromInbox',
-      wrapCommand('Failed to accept from inbox', (item: InboxElement, selectedItems?: InboxElement[]) => handleAcceptFromInbox(workGraph, stateStore, item, selectedItems))),
+      wrapCommand('Failed to accept from inbox', (item: InboxElement, selectedItems?: InboxElement[]) => handleAcceptFromInbox(workGraph, stateStore, item, selectedItems, revealer))),
     vscode.commands.registerCommand('devdocket.acceptToFocusFromInbox',
-      wrapCommand('Failed to accept to focus from inbox', (item: InboxElement, selectedItems?: InboxElement[]) => handleAcceptToFocusFromInbox(workGraph, stateStore, item, selectedItems))),
+      wrapCommand('Failed to accept to focus from inbox', (item: InboxElement, selectedItems?: InboxElement[]) => handleAcceptToFocusFromInbox(workGraph, stateStore, item, selectedItems, revealer))),
     vscode.commands.registerCommand('devdocket.dismissFromInbox',
       wrapCommand('Failed to dismiss from inbox', (item: InboxElement, selectedItems?: InboxElement[]) => handleDismissFromInbox(stateStore, item, selectedItems))),
     vscode.commands.registerCommand('devdocket.acceptFromSources',
-      wrapCommand('Failed to accept from sources', (item: SourcesElement, selectedItems?: SourcesElement[]) => handleAcceptFromSources(workGraph, stateStore, item, selectedItems))),
+      wrapCommand('Failed to accept from sources', (item: SourcesElement, selectedItems?: SourcesElement[]) => handleAcceptFromSources(workGraph, stateStore, item, selectedItems, revealer))),
     vscode.commands.registerCommand('devdocket.dismissFromSources',
       wrapCommand('Failed to dismiss from sources', (item: SourcesElement, selectedItems?: SourcesElement[]) => handleDismissFromSources(stateStore, item, selectedItems))),
     vscode.commands.registerCommand('devdocket.switchInboxToTree',

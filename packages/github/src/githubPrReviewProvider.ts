@@ -61,6 +61,7 @@ export class GitHubPrReviewProvider extends BaseGitHubProvider {
         group: repoName,
         reason: 'review_requested',
       };
+      if (pr.state) { item.state = pr.state; }
       const headSha = headShas.get(pr.html_url);
       if (headSha !== undefined) { item.version = headSha; }
       const reRequestTime = reRequestTimes.get(pr.html_url);

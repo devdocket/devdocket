@@ -460,6 +460,30 @@ export abstract class WorkItemViewProvider implements vscode.TreeDataProvider<Wo
     return this.createWorkItemTreeItem(element);
   }
 
+  getParent(element: WorkItemElement): WorkItemElement | undefined {
+    if (this._layoutState.value === 'flat') {
+      return undefined;
+    }
+    if (isProviderGroupNode(element)) {
+      return undefined;
+    }
+    if (isSubGroupNode(element)) {
+      const label = element.providerId
+        ? (this.labelResolver?.(element.providerId) ?? element.providerId)
+        : 'Other';
+      return { kind: 'providerGroup', label, providerId: element.providerId };
+    }
+    // WorkItem — find its parent node
+    const item = element as WorkItem;
+    const pid = item.providerId?.trim() || undefined;
+    const grp = item.group?.trim() || undefined;
+    if (grp) {
+      return { kind: 'subGroup', label: grp, providerId: pid, groupName: grp };
+    }
+    const label = pid ? (this.labelResolver?.(pid) ?? pid) : 'Other';
+    return { kind: 'providerGroup', label, providerId: pid };
+  }
+
   getChildren(element?: WorkItemElement): WorkItemElement[] {
     return getTreeModeChildren(
       element,

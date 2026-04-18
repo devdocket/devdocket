@@ -14,6 +14,7 @@ import { FocusTreeProvider } from './views/focusTreeProvider';
 import { SourcesTreeProvider } from './views/sourcesTreeProvider';
 import { HistoryTreeProvider } from './views/historyTreeProvider';
 import { registerCommands } from './commands/commands';
+import { ViewRevealer } from './services/viewRevealer';
 import { initLogger, setLogLevel, logger, resolveLogLevel } from './services/logger';
 import { getInboxUnseenCount } from './services/inboxBadge';
 import { getViewLayout, ViewId } from './views/viewLayout';
@@ -326,7 +327,8 @@ export async function activate(context: vscode.ExtensionContext): Promise<DevDoc
   );
 
   const commandRegStart = performance.now();
-  registerCommands(context, wg, ar, ss, pr, labelCache);
+  const revealer = new ViewRevealer(wg, views.queueTreeView, views.focusTreeView, views.historyTreeView);
+  registerCommands(context, wg, ar, ss, pr, labelCache, revealer);
   logger.info(`Command registration took ${Math.round(performance.now() - commandRegStart)}ms`);
 
   // Set context keys and listen for layout changes

@@ -266,20 +266,65 @@ describe('getEditorPanelHtml', () => {
     });
   });
 
-  describe('browser URL link', () => {
-    it('renders a clickable link when item has a url', () => {
-      const item = makeItem({ url: 'https://github.com/org/repo/issues/42' });
-      const html = getEditorPanelHtml({ cspSource, item });
-      expect(html).toContain('id="source-link"');
-      expect(html).toMatch(/<button\s[^>]*data-url="https:\/\/github\.com\/org\/repo\/issues\/42"/);
-      expect(html).toContain('Open in browser');
+  describe('provider state', () => {
+    it('should render Provider State row when providerState is provided for a provider-backed item', () => {
+      const item = makeItem({ providerId: 'github' });
+      const html = getEditorPanelHtml({ cspSource, item, providerState: 'open' });
+      const metadata = getMetadataSection(html);
+      expect(metadata).toContain('Provider State');
+      expect(metadata).toContain('open');
     });
 
-    it('does not render a link when item has no url', () => {
+    it('should omit Provider State row when providerState is not supplied', () => {
+      const item = makeItem({ providerId: 'github' });
+      const html = getEditorPanelHtml({ cspSource, item });
+      const metadata = getMetadataSection(html);
+      expect(metadata).not.toContain('Provider State');
+    });
+
+    it('should omit Provider State row when providerState is undefined', () => {
+      const item = makeItem({ providerId: 'github' });
+      const html = getEditorPanelHtml({ cspSource, item, providerState: undefined });
+      const metadata = getMetadataSection(html);
+      expect(metadata).not.toContain('Provider State');
+    });
+
+    it('should omit Provider State row when providerState is empty string', () => {
+      const item = makeItem({ providerId: 'github' });
+      const html = getEditorPanelHtml({ cspSource, item, providerState: '' });
+      const metadata = getMetadataSection(html);
+      expect(metadata).not.toContain('Provider State');
+    });
+
+    it('should omit Provider State row for manual items even when providerState is given', () => {
+      const item = makeItem({ providerId: undefined });
+      const html = getEditorPanelHtml({ cspSource, item, providerState: 'open' });
+      const metadata = getMetadataSection(html);
+      expect(metadata).not.toContain('Provider State');
+    });
+
+    it('should HTML-escape providerState to prevent XSS', () => {
+      const item = makeItem({ providerId: 'github' });
+      const html = getEditorPanelHtml({ cspSource, item, providerState: '<script>alert("xss")</script>' });
+      expect(html).not.toContain('<script>alert("xss")');
+      expect(html).toContain('&lt;script&gt;');
+    });
+  });
+
+  describe('browser URL link', () => {
+    it('renders the title as a clickable hyperlink when item has a url', () => {
+      const item = makeItem({ url: 'https://github.com/org/repo/issues/42' });
+      const html = getEditorPanelHtml({ cspSource, item });
+      expect(html).toContain('id="title-link"');
+      expect(html).toMatch(/<a\s[^>]*href="https:\/\/github\.com\/org\/repo\/issues\/42"[^>]*data-url="https:\/\/github\.com\/org\/repo\/issues\/42"/);
+      expect(html).toContain('title="Open in browser"');
+      expect(html).not.toContain('Open in browser</');
+    });
+
+    it('renders plain title text when item has no url', () => {
       const item = makeItem({ url: undefined });
       const html = getEditorPanelHtml({ cspSource, item });
-      expect(html).not.toContain('id="source-link"');
-      expect(html).not.toContain('Open in browser');
+      expect(html).not.toContain('id="title-link"');
     });
 
     it('escapes HTML entities in the url to prevent XSS', () => {
@@ -287,6 +332,20 @@ describe('getEditorPanelHtml', () => {
       const html = getEditorPanelHtml({ cspSource, item });
       expect(html).not.toContain('<script>alert(1)</script>');
       expect(html).toContain('&quot;&gt;&lt;script&gt;alert(1)&lt;/script&gt;');
+    });
+
+    it('does not render a hyperlink for javascript: URLs', () => {
+      const item = makeItem({ url: 'javascript:alert(1)' });
+      const html = getEditorPanelHtml({ cspSource, item });
+      expect(html).not.toContain('id="title-link"');
+      expect(html).not.toContain('href=');
+    });
+
+    it('does not render a hyperlink for data: URLs', () => {
+      const item = makeItem({ url: 'data:text/html,<h1>hi</h1>' });
+      const html = getEditorPanelHtml({ cspSource, item });
+      expect(html).not.toContain('id="title-link"');
+      expect(html).not.toContain('href=');
     });
   });
 
