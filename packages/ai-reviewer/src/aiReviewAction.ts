@@ -24,7 +24,7 @@ export class AiReviewAction extends BasePrAction {
   protected readonly progressTitle = 'AI Code Review';
   protected readonly outputHeader = '# AI Code Review\n\n';
   protected readonly confirmationMessage =
-    'AI Code Review will send the PR diff to the language model for analysis. Continue?';
+    'AI Code Review will send the PR diff to the language model for analysis and may allow the model to access additional repository context through tools, such as file contents, directory listings, and git history/diffs. Continue?';
 
   constructor(
     private readonly repoManager: RepoManager,
