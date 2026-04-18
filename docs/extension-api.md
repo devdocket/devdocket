@@ -102,6 +102,15 @@ interface DevDocketProvider {
    * to call multiple times and during extension activation.
    */
   refresh(): Promise<void>;
+
+  /**
+   * Check which of the given external items have been closed or completed.
+   * Called after each provider refresh to auto-complete linked work items,
+   * including manually-imported items. Return the subset of externalIds
+   * that are closed, merged, or completed.
+   * Optional — providers without this fall back to disappearance detection.
+   */
+  getClosedItems?(externalIds: string[], signal?: AbortSignal): Promise<string[]>;
 }
 ```
 
@@ -271,6 +280,37 @@ Each provider is capped at **10,000 discovered items** per refresh. If a provide
 
 URLs opened via `vscode.env.openExternal` are validated to use `http:` or `https:` schemes only. Other URL schemes (e.g., `file:`, `javascript:`, custom protocols) are rejected. Ensure any URLs your provider or action constructs use standard web URLs.
 
+## Auto-Completion
+
+DevDocket can automatically mark work items as **Done** when their linked external item is closed or merged. This is controlled by the `devdocket.autoCompleteOnClose` setting (default: `true`).
+
+After each provider refresh, DevDocket scans the WorkGraph for items linked to that provider in auto-completable states (`New`, `InProgress`, `Paused`). It then checks whether those external items are closed:
+
+1. **If the provider implements `getClosedItems()`** — DevDocket calls it with the full set of linked external IDs (deduplicated). This covers both provider-discovered items and manually-imported items (e.g., items created via "Create Item from URL"). Return the subset of IDs that are closed, merged, or completed.
+
+2. **Fallback: disappearance detection** — For providers without `getClosedItems()`, DevDocket compares the current discovered items against the previous refresh. Items that were previously present but are now absent are assumed closed. This fallback *cannot* cover manually-imported items since the provider never discovered them.
+
+Matched items are transitioned to `Done` and a notification is shown with a "Show History" action.
+
+### Implementing `getClosedItems()`
+
+```ts
+async getClosedItems(externalIds: string[], signal?: AbortSignal): Promise<string[]> {
+  // Batch-check external IDs against your source system's API
+  // Return only the ones that are closed, merged, or completed
+  const statuses = await this.fetchStatuses(externalIds, signal);
+  return statuses
+    .filter(s => s.isClosed)
+    .map(s => s.externalId);
+}
+```
+
+**Guidelines:**
+- Batch API calls where possible — avoid one network call per item.
+- Handle auth failures gracefully — log and return an empty array rather than throwing.
+- Respect the `AbortSignal` — check `signal?.aborted` between API calls and pass `signal` to `fetch()`.
+- Use silent/non-interactive auth — `getClosedItems()` runs after background refreshes and should never prompt the user.
+
 ## Examples
 
 ### Minimal Provider
@@ -303,6 +343,7 @@ interface DevDocketProvider {
   readonly label: string;
   readonly onDidDiscoverItems: Event<DiscoveredItem[]>;
   refresh(): Promise<void>;
+  getClosedItems?(externalIds: string[], signal?: AbortSignal): Promise<string[]>;
 }
 
 class MyTaskProvider implements DevDocketProvider {

@@ -102,6 +102,21 @@ flowchart LR
 
 > **Note:** Items in History are a read-only record of completed or archived work. You can open their links (when available), but they can't currently be moved back to Queue or Focus.
 
+### Auto-Completion
+
+DevDocket can automatically mark work items as **Done** when their linked issue or PR is closed or merged externally. This happens after each provider refresh — no manual intervention needed.
+
+This behavior is controlled by:
+
+```jsonc
+// settings.json
+{
+  "devdocket.autoCompleteOnClose": true  // default: true
+}
+```
+
+Set to `false` to disable auto-completion entirely.
+
 ## Plugin Ecosystem
 
 DevDocket is built around an extensible plugin model with two extension points:
