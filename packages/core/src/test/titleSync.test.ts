@@ -119,4 +119,15 @@ describe('syncProviderTitles', () => {
 
     expect(workGraph.updateItem).not.toHaveBeenCalled();
   });
+
+  it('does not overwrite persisted title with whitespace-only provider title', async () => {
+    providerRegistry.getAllDiscoveredItems.mockReturnValue(new Map([
+      ['github', [{ externalId: '42', title: '   ' }]],
+    ]));
+    workGraph.findItemByProvenance.mockReturnValue({ id: 'item-1', title: 'Good Title' });
+
+    await syncProviderTitles(providerRegistry as any, workGraph as any);
+
+    expect(workGraph.updateItem).not.toHaveBeenCalled();
+  });
 });

@@ -19,6 +19,7 @@ export class WorkItemEditorPanel {
   private readonly messageSubscription: vscode.Disposable;
   private readonly workGraphSub: vscode.Disposable;
   private readonly providerRegSub: vscode.Disposable;
+  private readonly providerChangeSub: vscode.Disposable;
   private lastDisplayedTitle: string | undefined;
   private lastManagedState: boolean | undefined;
 
@@ -80,6 +81,10 @@ export class WorkItemEditorPanel {
       this.checkForUpdates();
     });
 
+    this.providerChangeSub = this.providerRegistry.onDidChangeDiscoveredItems(() => {
+      this.checkForUpdates();
+    });
+
     this.messageSubscription = this.panel.webview.onDidReceiveMessage((msg) => {
       if (msg?.type === 'openUrl' && typeof msg.url === 'string') {
         const safeUrl = isSafeUrl(msg.url);
@@ -117,6 +122,7 @@ export class WorkItemEditorPanel {
         this.messageSubscription.dispose();
         this.workGraphSub.dispose();
         this.providerRegSub.dispose();
+        this.providerChangeSub.dispose();
       }
     });
   }
@@ -220,6 +226,7 @@ export class WorkItemEditorPanel {
       this.messageSubscription.dispose();
       this.workGraphSub.dispose();
       this.providerRegSub.dispose();
+      this.providerChangeSub.dispose();
       this.panel.dispose();
     }
   }

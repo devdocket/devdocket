@@ -20,7 +20,7 @@ export async function syncProviderTitles(
   for (const [providerId, discoveredItems] of providerRegistry.getAllDiscoveredItems()) {
     for (const discovered of discoveredItems) {
       const workItem = workGraph.findItemByProvenance(providerId, discovered.externalId);
-      if (workItem && discovered.title && workItem.title !== discovered.title) {
+      if (workItem && discovered.title?.trim() && workItem.title !== discovered.title) {
         try {
           await workGraph.updateItem(workItem.id, { title: discovered.title });
           logger.debug(`Synced title for ${providerId}/${discovered.externalId}: "${workItem.title}" → "${discovered.title}"`);
