@@ -205,13 +205,18 @@ export class WatcherService implements vscode.Disposable {
           watch.hasWarning = false;
           watch.errorMessage = undefined;
 
+          // Snapshot old status for comparison, then update immediately
+          // so event subscribers always see current data.
+          const oldStatus = watch.status;
+          watch.status = newStatus;
+          anyChanged = true;
+
           // Detect job failures (while run is still in progress)
           if (newStatus.overallState !== 'completed') {
             for (const newJob of newStatus.jobs) {
               if (newJob.state === 'completed' && newJob.conclusion === 'failure') {
-                const oldJob = watch.status.jobs.find(j => j.name === newJob.name);
+                const oldJob = oldStatus.jobs.find(j => j.name === newJob.name);
                 if (!oldJob || oldJob.state !== 'completed' || oldJob.conclusion !== 'failure') {
-                  // New failure detected
                   this._onDidDetectJobFailure.fire({ run: watch, job: newJob });
                 }
               }
@@ -219,13 +224,7 @@ export class WatcherService implements vscode.Disposable {
           }
 
           // Check if run just completed
-          const wasRunning = watch.status.overallState !== 'completed';
-          const isCompleted = newStatus.overallState === 'completed';
-          
-          watch.status = newStatus;
-          anyChanged = true;
-
-          if (wasRunning && isCompleted) {
+          if (oldStatus.overallState !== 'completed' && newStatus.overallState === 'completed') {
             this._onDidCompleteRun.fire(watch);
           }
 
