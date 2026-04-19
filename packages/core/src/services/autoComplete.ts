@@ -83,6 +83,7 @@ export async function checkAutoComplete(
       }
       try {
         await workGraph.transitionState(currentItem.id, WorkItemState.Done);
+        await workGraph.addActivity(currentItem.id, 'auto-completed', `Provider detected external closure (${currentItem.state} → Done)`);
         completedTitles.push(currentItem.title);
         logger.info(`Auto-completed work item "${currentItem.title}" (${currentItem.id}) — external item closed/merged`);
       } catch (err) {

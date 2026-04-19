@@ -326,6 +326,7 @@ function activityTypeLabel(type: ActivityLogEntry['type']): string {
     case 'state-changed': return 'State changed';
     case 'updated': return 'Updated';
     case 'action-executed': return 'Action executed';
+    case 'auto-completed': return 'Auto-completed';
     default: return type;
   }
 }
