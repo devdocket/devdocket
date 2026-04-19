@@ -6,7 +6,7 @@ export type RunState = 'queued' | 'running' | 'completed';
 /**
  * Conclusion of a pipeline run or job (only meaningful when state is 'completed').
  */
-export type RunConclusion = 'success' | 'failure' | 'cancelled' | 'skipped' | 'timed_out' | 'action_required' | 'neutral' | undefined;
+export type RunConclusion = 'success' | 'failure' | 'cancelled' | 'skipped' | 'timed_out' | 'action_required' | 'neutral';
 
 /**
  * Status of an individual job within a pipeline run.
@@ -15,7 +15,7 @@ export interface JobStatus {
   /** Unique name/id within the run */
   name: string;
   state: RunState;
-  conclusion: RunConclusion;
+  conclusion?: RunConclusion;
   startedAt?: string; // ISO 8601 timestamp
   completedAt?: string; // ISO 8601 timestamp
 }
@@ -41,7 +41,7 @@ export interface RunIdentifier {
  */
 export interface RunStatus {
   overallState: RunState;
-  conclusion: RunConclusion;
+  conclusion?: RunConclusion;
   jobs: JobStatus[];
   startedAt?: string; // ISO 8601 timestamp
   completedAt?: string; // ISO 8601 timestamp
