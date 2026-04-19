@@ -138,9 +138,11 @@ export class WatchesTreeProvider implements vscode.TreeDataProvider<WatchedRunNo
   private readonly _onDidChangeTreeData = new vscode.EventEmitter<WatchedRunNode | JobStatusNode | undefined>();
   readonly onDidChangeTreeData = this._onDidChangeTreeData.event;
 
+  private watchChangeSub: vscode.Disposable;
+
   constructor(private watcherService: WatcherService) {
     // Listen for watch changes
-    watcherService.onDidChangeWatchedRuns(() => {
+    this.watchChangeSub = watcherService.onDidChangeWatchedRuns(() => {
       this._onDidChangeTreeData.fire(undefined);
     });
   }
@@ -175,6 +177,7 @@ export class WatchesTreeProvider implements vscode.TreeDataProvider<WatchedRunNo
   }
 
   dispose(): void {
+    this.watchChangeSub.dispose();
     this._onDidChangeTreeData.dispose();
   }
 }
