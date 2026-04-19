@@ -1385,7 +1385,7 @@ describe('ProviderRegistry', () => {
       registry.onDidChangeProviderHealth(listener);
 
       // Guarantee a different timestamp on next refresh.
-      // vi.useFakeTimers + setSystemTime properly mocks new Date(),
+      // vi.useFakeTimers({ now }) properly mocks new Date(),
       // unlike vi.spyOn(Date, 'now') which doesn't affect the Date constructor.
       const futureTime = Date.now() + 1000;
       vi.useFakeTimers({ now: futureTime });
