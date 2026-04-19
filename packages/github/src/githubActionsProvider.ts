@@ -73,7 +73,7 @@ export class GitHubActionsProvider extends BaseGitHubProvider {
   /** Tracks which job failures have already been notified per run to avoid duplicates. */
   private readonly notifiedJobFailures = new Map<number, Set<string>>();
 
-  protected async fetchAndPublish(accessToken: string, _isUserTriggered: boolean): Promise<void> {
+  protected async fetchAndPublish(accessToken: string, isUserTriggered: boolean): Promise<void> {
     logger.info('Fetching GitHub Actions workflow runs...');
     const repos = this.getConfiguredRepos();
 
@@ -150,6 +150,9 @@ export class GitHubActionsProvider extends BaseGitHubProvider {
       const msg = failures.length === 1
         ? `Failed to fetch workflow runs from ${failures[0]}`
         : `Failed to fetch workflow runs from ${failures.length} repositories`;
+      if (isUserTriggered) {
+        void vscode.window.showWarningMessage(`DevDocket GitHub: ${msg}`);
+      }
       logger.warn(msg);
     }
   }
