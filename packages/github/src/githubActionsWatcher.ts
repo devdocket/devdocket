@@ -71,16 +71,19 @@ export class GitHubActionsWatcher implements DevDocketRunWatcher {
       ? token as vscode.CancellationToken
       : undefined;
     const [owner, repo] = identifier.repo.split('/');
+    const encodedOwner = encodeURIComponent(owner);
+    const encodedRepo = encodeURIComponent(repo);
+    const encodedRunId = encodeURIComponent(identifier.runId);
     
     // Fetch run details
     const runData = await this.fetchApi<GitHubWorkflowRun>(
-      `https://api.github.com/repos/${owner}/${repo}/actions/runs/${identifier.runId}`,
+      `https://api.github.com/repos/${encodedOwner}/${encodedRepo}/actions/runs/${encodedRunId}`,
       cancellationToken
     );
 
     // Fetch jobs for this run
     const jobsData = await this.fetchApi<{ jobs: GitHubWorkflowJob[] }>(
-      `https://api.github.com/repos/${owner}/${repo}/actions/runs/${identifier.runId}/jobs`,
+      `https://api.github.com/repos/${encodedOwner}/${encodedRepo}/actions/runs/${encodedRunId}/jobs`,
       cancellationToken
     );
 
