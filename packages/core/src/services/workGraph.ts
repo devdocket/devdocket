@@ -270,6 +270,11 @@ export class WorkGraph {
       throw new Error(`Work item not found: ${id}`);
     }
     const sanitized = this.sanitizeMetadataPatch(patch);
+    // Skip no-op updates when the sanitized patch has no keys
+    const sanitizedKeys = Object.keys(sanitized);
+    if (sanitizedKeys.length === 0) {
+      return;
+    }
     // Reset cleanupDismissed when git metadata is being set to new values
     const hasNewMetadata = WorkGraph.METADATA_KEYS.some(
       k => Object.prototype.hasOwnProperty.call(sanitized, k) && sanitized[k] !== undefined,
