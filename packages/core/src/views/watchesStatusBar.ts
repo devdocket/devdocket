@@ -1,5 +1,6 @@
 import * as vscode from 'vscode';
 import { WatcherService, WatchedRun } from '../services/watcherService';
+import { isSafeUrl } from '../commands/commands';
 
 /**
  * Status bar item that shows the count of active/failed watches.
@@ -114,7 +115,12 @@ export async function showWatchesQuickPick(watcherService: WatcherService): Prom
   });
 
   if (selected) {
-    vscode.env.openExternal(vscode.Uri.parse(selected.watch.identifier.url));
+    const safeUrl = isSafeUrl(selected.watch.identifier.url);
+    if (safeUrl) {
+      void vscode.env.openExternal(vscode.Uri.parse(safeUrl.href));
+    } else {
+      void vscode.window.showWarningMessage('Can only open http(s) URLs in the browser.');
+    }
   }
 }
 
