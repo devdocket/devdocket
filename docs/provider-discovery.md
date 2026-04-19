@@ -7,6 +7,7 @@ This document explains what conditions cause work items and reviews to appear in
 - [Discovery Overview](#discovery-overview)
 - [GitHub Issues](#github-issues)
 - [GitHub PR Reviews](#github-pr-reviews)
+- [GitHub My PRs](#github-my-prs)
 - [Azure DevOps Work Items](#azure-devops-work-items)
 - [Azure DevOps PR Reviews](#azure-devops-pr-reviews)
 - [Common Behavior](#common-behavior)
@@ -31,6 +32,7 @@ flowchart LR
     subgraph Providers["Provider Extensions"]
         GHI["GitHub Issues\nProvider"]
         GHPR["GitHub PR Reviews\nProvider"]
+        GHMY["GitHub My PRs\nProvider"]
         ADOWI["ADO Work Items\nProvider"]
         ADOPR["ADO PR Reviews\nProvider"]
     end
@@ -47,11 +49,13 @@ flowchart LR
 
     GH --> GHI
     GH --> GHPR
+    GH --> GHMY
     ADO --> ADOWI
     ADO --> ADOPR
 
     GHI -- "DiscoveredItem[]" --> PR
     GHPR -- "DiscoveredItem[]" --> PR
+    GHMY -- "DiscoveredItem[]" --> PR
     ADOWI -- "DiscoveredItem[]" --> PR
     ADOPR -- "DiscoveredItem[]" --> PR
 
@@ -122,6 +126,37 @@ A PR review appears when **all** of the following are true:
 - Being the **author** of a PR
 - PRs you have **already reviewed** (unless review is re-requested)
 - **Closed** or **merged** PRs
+
+---
+
+## GitHub My PRs
+
+**Provider:** DevDocket GitHub  
+**Condition:** You are the **author** of an **open** pull request.
+
+A PR appears when **all** of the following are true:
+
+| Condition | Details |
+|-----------|---------|
+| **Authored by you** | You created the pull request |
+| **Open state** | The PR is not closed or merged |
+| **Repository match** | If `devdocketGithub.repos` is configured, only PRs from those repos appear. Otherwise, your authored PRs across all repositories are included (up to 100 results due to GitHub Search API limits). |
+
+Each discovered PR is enriched with its current status: Draft, Waiting on reviews, Review received, Changes requested, Approved, or Ready to merge.
+
+### Configuration
+
+| Setting | Default | Description |
+|---------|---------|-------------|
+| `devdocketGithub.repos` | `[]` (all repos) | Same repo filter as GitHub Issues. |
+| `devdocketGithub.refreshIntervalSeconds` | `300` (5 min) | Shared with GitHub Issues. |
+
+### What does NOT cause your PRs to appear
+
+- PRs where you are a **reviewer** but not the author
+- PRs you are **assigned** to but did not author
+- **Closed** or **merged** PRs
+- **Draft** PRs still appear (with "Draft" status)
 
 ---
 
