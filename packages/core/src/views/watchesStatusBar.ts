@@ -7,13 +7,14 @@ import { WatcherService, WatchedRun } from '../services/watcherService';
  */
 export class WatchesStatusBar implements vscode.Disposable {
   private statusBarItem: vscode.StatusBarItem;
+  private watchChangeSub: vscode.Disposable;
 
   constructor(private watcherService: WatcherService) {
     this.statusBarItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 100);
     this.statusBarItem.command = 'devdocket.showWatchesQuickPick';
     
     // Update on watch changes
-    watcherService.onDidChangeWatchedRuns(() => {
+    this.watchChangeSub = watcherService.onDidChangeWatchedRuns(() => {
       this.update();
     });
     
@@ -64,6 +65,7 @@ export class WatchesStatusBar implements vscode.Disposable {
   }
 
   dispose(): void {
+    this.watchChangeSub.dispose();
     this.statusBarItem.dispose();
   }
 }
