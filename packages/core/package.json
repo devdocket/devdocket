@@ -21,7 +21,9 @@
     "onCommand:devdocket.dismissFromSources",
     "onCommand:devdocket.deleteItem",
     "onCommand:devdocket.createItemFromUrl",
-    "onCommand:devdocket.clearHistory"
+    "onCommand:devdocket.clearHistory",
+    "onView:devdocket.watches",
+    "onCommand:devdocket.watchRun"
   ],
   "main": "./dist/extension.js",
   "contributes": {
