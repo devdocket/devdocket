@@ -57,7 +57,7 @@ function makeSourceItem(overrides: Partial<SourceItemNode> = {}): SourceItemNode
 
 type UsedWorkGraphMethods = Pick<
   WorkGraph,
-  'transitionState' | 'getItem' | 'createItem' | 'findItemByProvenance' | 'moveItem' | 'deleteItem' | 'clearOldHistory'
+  'transitionState' | 'getItem' | 'createItem' | 'findItemByProvenance' | 'moveItem' | 'deleteItem' | 'clearOldHistory' | 'updateMetadata'
 >;
 
 function createMockWorkGraph(): { [K in keyof UsedWorkGraphMethods]: Mock } {
@@ -69,6 +69,7 @@ function createMockWorkGraph(): { [K in keyof UsedWorkGraphMethods]: Mock } {
     moveItem: vi.fn(),
     deleteItem: vi.fn(),
     clearOldHistory: vi.fn(async () => ({ deleted: 0, failed: 0 })),
+    updateMetadata: vi.fn(),
   };
 }
 
@@ -187,6 +188,7 @@ describe('registerCommands', () => {
       'devdocket.dismissFromSources',
       'devdocket.createItemFromUrl',
       'devdocket.clearHistory',
+      'devdocket.updateMetadata',
     ];
     for (const cmd of expected) {
       expect(commandHandlers.has(cmd), `missing command: ${cmd}`).toBe(true);
@@ -2072,6 +2074,39 @@ describe('registerCommands', () => {
       await invoke('devdocket.clearHistory');
 
       expect(workGraph.clearOldHistory).toHaveBeenCalledWith(30);
+    });
+  });
+
+  // ── updateMetadata ────────────────────────────────────────────────
+
+  describe('devdocket.updateMetadata', () => {
+    it('calls workGraph.updateMetadata with the provided args', async () => {
+      await invoke('devdocket.updateMetadata', 'wc-1', { branchName: 'feature/x', repoPath: '/repos/main' });
+
+      expect(workGraph.updateMetadata).toHaveBeenCalledWith('wc-1', {
+        branchName: 'feature/x',
+        repoPath: '/repos/main',
+      });
+    });
+
+    it('logs field names without path values', async () => {
+      await invoke('devdocket.updateMetadata', 'wc-1', { branchName: 'feat', worktreePath: '/tmp/wt' });
+
+      expect(logger.info).toHaveBeenCalledWith(
+        expect.stringContaining('branchName, worktreePath'),
+      );
+      expect(logger.info).not.toHaveBeenCalledWith(
+        expect.stringContaining('/tmp/wt'),
+      );
+    });
+
+    it('shows error when updateMetadata throws', async () => {
+      workGraph.updateMetadata.mockRejectedValue(new Error('not found'));
+      await invoke('devdocket.updateMetadata', 'wc-bad', { branchName: 'x' });
+
+      expect(vscode.window.showErrorMessage).toHaveBeenCalledWith(
+        expect.stringContaining('not found'),
+      );
     });
   });
 });
