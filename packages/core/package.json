@@ -97,6 +97,17 @@
           "default": 30,
           "minimum": 1,
           "description": "Age threshold in days for the Clear Old History command. Items older than this are removed."
+        },
+        "devdocket.watches.pollingIntervalSeconds": {
+          "type": "number",
+          "default": 30,
+          "minimum": 15,
+          "description": "Polling interval in seconds for pipeline watches (minimum 15 seconds)"
+        },
+        "devdocket.watches.notifyOnJobFailure": {
+          "type": "boolean",
+          "default": true,
+          "description": "Show a notification when an individual job fails while the pipeline run is still in progress"
         }
       }
     },
@@ -130,6 +141,10 @@
         {
           "id": "devdocket.sources",
           "name": "Sources"
+        },
+        {
+          "id": "devdocket.watches",
+          "name": "Watches"
         }
       ]
     },
@@ -378,6 +393,30 @@
         "title": "Refresh",
         "category": "DevDocket",
         "icon": "$(refresh)"
+      },
+      {
+        "command": "devdocket.watchRun",
+        "title": "DevDocket: Watch Pipeline Run",
+        "category": "DevDocket",
+        "icon": "$(eye)"
+      },
+      {
+        "command": "devdocket.dismissWatch",
+        "title": "Dismiss Watch",
+        "category": "DevDocket",
+        "icon": "$(close)"
+      },
+      {
+        "command": "devdocket.dismissAllWatches",
+        "title": "Dismiss All Completed",
+        "category": "DevDocket",
+        "icon": "$(clear-all)"
+      },
+      {
+        "command": "devdocket.openWatchUrl",
+        "title": "Open in Browser",
+        "category": "DevDocket",
+        "icon": "$(link-external)"
       }
     ],
     "menus": {
@@ -450,6 +489,16 @@
         {
           "command": "devdocket.refresh",
           "when": "view == devdocket.inbox || view == devdocket.sources",
+          "group": "navigation"
+        },
+        {
+          "command": "devdocket.watchRun",
+          "when": "view == devdocket.watches",
+          "group": "navigation"
+        },
+        {
+          "command": "devdocket.dismissAllWatches",
+          "when": "view == devdocket.watches",
           "group": "navigation"
         }
       ],
@@ -639,6 +688,21 @@
         {
           "command": "devdocket.deleteItem",
           "when": "view == devdocket.history && viewItem =~ /^historyItem/",
+          "group": "1_actions"
+        },
+        {
+          "command": "devdocket.openWatchUrl",
+          "when": "view == devdocket.watches && viewItem == watchedRun.completed",
+          "group": "inline"
+        },
+        {
+          "command": "devdocket.dismissWatch",
+          "when": "view == devdocket.watches && viewItem == watchedRun.completed",
+          "group": "inline"
+        },
+        {
+          "command": "devdocket.openWatchUrl",
+          "when": "view == devdocket.watches && viewItem =~ /^watchedRun/",
           "group": "1_actions"
         }
       ]

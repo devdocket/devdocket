@@ -188,3 +188,26 @@ DevDocket is a VS Code extension monorepo for managing work items from multiple 
 - **Managed state tracking:** Copilot review caught that `onDidChangeDiscoveredItems` also fires when providers register/unregister, which changes the managed (readonly) state. Added `lastManagedState` tracking — when it flips, a full `update()` re-render runs instead of a targeted title-only update.
 - **`displayTitle` on `EditorHtmlOptions`:** Added optional `displayTitle` property; heading and title input use it (falling back to `item.title`). This is an internal interface, not public API — no breaking change.
 - **Files changed:** `packages/core/src/views/editorPanelHtml.ts`, `packages/core/src/views/workItemEditorPanel.ts`, plus test files.
+
+### 2026-04-20 — Issue #266 (Watch CI Pipelines)
+
+**Implementation:** Fire-and-forget pipeline watching for GitHub Actions and ADO Pipelines.
+- **Hybrid architecture:** Core owns `WatcherService` lifecycle (poll, notify), providers supply `DevDocketRunWatcher` interface (canWatch, parseRunUrl, getRunStatus).
+- **New API surface:** `DevDocketRunWatcher` in `@devdocket/shared`, `registerRunWatcher()` on `DevDocketApi` (additive, non-breaking). Optional interface mirrors existing provider/action pattern.
+- **Session-scoped persistence:** Watches are in-memory only. If VS Code restarts, re-watch by pasting URL again. Design spec decision.
+- **Polling with concurrency guard:** `WatcherService` polls active watches every 30s (configurable, min 15s). Skips tick if previous poll still in-flight. After 3 consecutive failures, sets warning flag and stops polling that run.
+- **Early failure notifications:** `onDidDetectJobFailure` fires when job completes with `failure` conclusion while overall run is still in progress. Notification shows running job count. Gated by `devdocket.watches.notifyOnJobFailure` (default: true).
+- **UI components:** (1) `WatchesTreeProvider` (6th view): run nodes with job children. (2) `WatchesStatusBar`: right side, shows counts, click for quick-pick. (3) Notification toasts on completion and job failure.
+- **Commands:** `watchRun` (input box with URL validation), `dismissWatch`, `dismissAllWatches`, `openWatchUrl`. All wired in context menus and view title.
+- **GitHub Actions implementation:** `GitHubActionsWatcher` in `packages/github` parses `github.com/.../actions/runs/...` URLs, uses REST API with GitHub auth session. Maps API status/conclusion to shared enums. Registered conditionally if `registerRunWatcher` exists on API (graceful degradation for older core).
+- **vscode mock expansion:** Added `StatusBarAlignment` enum and `createStatusBarItem()` to vscode mock. All 1090 tests pass.
+- **Configuration:** `devdocket.watches.pollingIntervalSeconds` (default: 30, min: 15), `devdocket.watches.notifyOnJobFailure` (default: true).
+- **Files changed:** 
+  - `packages/shared/src/runWatcher.ts` (new), `index.ts`
+  - `packages/core/src/api/types.ts`, `devDocketApi.ts`, `extension.ts`, `commands/commands.ts`, `package.json`
+  - `packages/core/src/services/watcherRegistry.ts` (new), `watcherService.ts` (new)
+  - `packages/core/src/views/watchesTreeProvider.ts` (new), `watchesStatusBar.ts` (new)
+  - `packages/core/src/test/__mocks__/vscode.ts` (StatusBarAlignment)
+  - `packages/github/src/githubActionsWatcher.ts` (new), `extension.ts`
+- **ADO Pipelines:** Out of scope for this implementation — GitHub Actions only. ADO watcher would follow the same pattern: implement `DevDocketRunWatcher`, parse ADO pipeline URLs, call ADO REST API.
+

@@ -98,6 +98,7 @@ const window = {
     name: 'DevDocket',
     replace: vi.fn(),
   })),
+  createStatusBarItem: vi.fn((alignment?: number, priority?: number) => new MockStatusBarItem()),
 };
 
 const commands = {
@@ -180,6 +181,20 @@ const ConfigurationTarget = {
   WorkspaceFolder: 3,
 };
 
+const StatusBarAlignment = {
+  Left: 1,
+  Right: 2,
+};
+
+class MockStatusBarItem {
+  text = '';
+  tooltip: string | undefined;
+  command: string | undefined;
+  show = vi.fn();
+  hide = vi.fn();
+  dispose = vi.fn();
+}
+
 const authentication = {
   getSession: vi.fn().mockResolvedValue(undefined),
 };
@@ -194,9 +209,11 @@ export {
   MockDataTransfer as DataTransfer,
   MockCancellationTokenSource as CancellationTokenSource,
   MockDisposable as Disposable,
+  MockStatusBarItem as StatusBarItem,
   TreeItemCollapsibleState,
   ViewColumn,
   ConfigurationTarget,
+  StatusBarAlignment,
   ProgressLocation,
   window,
   commands,

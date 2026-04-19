@@ -1,9 +1,9 @@
 import type * as vscode from 'vscode';
 import { WorkItem } from '../models/workItem';
-import type { Disposable, Event, DiscoveredItem, ResolvedItem } from '@devdocket/shared';
+import type { Disposable, Event, DiscoveredItem, ResolvedItem, DevDocketRunWatcher } from '@devdocket/shared';
 
 // Re-export shared provider-facing types so existing imports from './api/types' keep working.
-export type { Disposable, Event, DiscoveredItem, ResolvedItem };
+export type { Disposable, Event, DiscoveredItem, ResolvedItem, DevDocketRunWatcher };
 
 /**
  * A provider that discovers work items from an external source.
@@ -113,6 +113,7 @@ export interface DevDocketAction {
  * if (api) {
  *   api.registerProvider(myProvider);
  *   api.registerAction(myAction);
+ *   api.registerRunWatcher(myWatcher);
  * }
  * ```
  */
@@ -138,4 +139,14 @@ export interface DevDocketApi {
    * @returns A {@link Disposable} that unregisters the action when disposed.
    */
   registerAction(action: DevDocketAction): Disposable;
+  /**
+   * Register a pipeline run watcher.
+   *
+   * Run watchers provide status polling for CI/CD pipelines (GitHub Actions, ADO Pipelines, etc.).
+   * Once registered, users can watch runs by pasting URLs into the "Watch Pipeline Run" command.
+   *
+   * @param watcher - The run watcher to register.
+   * @returns A {@link Disposable} that unregisters the watcher when disposed.
+   */
+  registerRunWatcher(watcher: DevDocketRunWatcher): Disposable;
 }

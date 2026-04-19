@@ -12,6 +12,9 @@ import { logger } from '../services/logger';
 import type { ResolvedItem } from '../api/types';
 import { toggleViewLayout, setViewLayout } from '../views/viewLayout';
 import type { ViewRevealer } from '../services/viewRevealer';
+import { WatcherService, type WatchedRun } from '../services/watcherService';
+import { WatcherRegistry } from '../services/watcherRegistry';
+import { showWatchesQuickPick } from '../views/watchesStatusBar';
 
 /**
  * Resolves the effective list of inbox items from VS Code's multi-select command args.
@@ -898,6 +901,70 @@ async function handleDismissFromSources(
 }
 
 // ---------------------------------------------------------------------------
+// Watch Pipeline Commands
+// ---------------------------------------------------------------------------
+
+async function handleWatchRun(watcherRegistry: WatcherRegistry, watcherService: WatcherService): Promise<void> {
+  const url = await vscode.window.showInputBox({
+    prompt: 'Enter a GitHub Actions or ADO pipeline run URL',
+    placeHolder: 'https://github.com/owner/repo/actions/runs/123456789',
+    validateInput: (value) => {
+      if (!value.trim()) {
+        return 'URL cannot be empty';
+      }
+      const watcher = watcherRegistry.findWatcherForUrl(value);
+      if (!watcher) {
+        return 'Unsupported URL format. DevDocket supports GitHub Actions and ADO pipeline URLs.';
+      }
+      return undefined;
+    },
+  });
+
+  if (!url) {
+    return; // User cancelled
+  }
+
+  try {
+    const watcher = watcherRegistry.findWatcherForUrl(url);
+    if (!watcher) {
+      void vscode.window.showErrorMessage('Unsupported URL format. DevDocket supports GitHub Actions and ADO pipeline URLs.');
+      return;
+    }
+
+    const identifier = watcher.parseRunUrl(url);
+    await watcherService.startWatch(identifier);
+    
+    void vscode.window.showInformationMessage(`Now watching: ${identifier.displayName}`);
+  } catch (err: unknown) {
+    handleCommandError('Failed to watch pipeline run', err);
+  }
+}
+
+async function handleDismissWatch(watchedRun: WatchedRun, watcherService: WatcherService): Promise<void> {
+  try {
+    watcherService.dismissWatch(watchedRun.identifier);
+  } catch (err: unknown) {
+    handleCommandError('Failed to dismiss watch', err);
+  }
+}
+
+async function handleDismissAllWatches(watcherService: WatcherService): Promise<void> {
+  try {
+    watcherService.dismissAllCompleted();
+  } catch (err: unknown) {
+    handleCommandError('Failed to dismiss all watches', err);
+  }
+}
+
+async function handleOpenWatchUrl(watchedRun: WatchedRun): Promise<void> {
+  try {
+    await vscode.env.openExternal(vscode.Uri.parse(watchedRun.identifier.url));
+  } catch (err: unknown) {
+    handleCommandError('Failed to open URL', err);
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Registration
 // ---------------------------------------------------------------------------
 
@@ -908,6 +975,8 @@ export function registerCommands(
   stateStore: DiscoveredStateStore,
   providerRegistry: ProviderRegistry,
   labelCache: ProviderLabelCache,
+  watcherRegistry: WatcherRegistry,
+  watcherService: WatcherService,
   revealer?: ViewRevealer,
 ): void {
   context.subscriptions.push(
@@ -988,5 +1057,16 @@ export function registerCommands(
       wrapCommand('Failed to switch history layout', () => toggleViewLayout('history'))),
     vscode.commands.registerCommand('devdocket.toggleSourcesLayout',
       wrapCommand('Failed to switch sources layout', () => toggleViewLayout('sources'))),
+    // Watch pipeline commands
+    vscode.commands.registerCommand('devdocket.watchRun',
+      wrapCommand('Failed to watch pipeline run', () => handleWatchRun(watcherRegistry, watcherService))),
+    vscode.commands.registerCommand('devdocket.dismissWatch',
+      wrapCommand('Failed to dismiss watch', (watchedRun: WatchedRun) => handleDismissWatch(watchedRun, watcherService))),
+    vscode.commands.registerCommand('devdocket.dismissAllWatches',
+      wrapCommand('Failed to dismiss all watches', () => handleDismissAllWatches(watcherService))),
+    vscode.commands.registerCommand('devdocket.openWatchUrl',
+      wrapCommand('Failed to open watch URL', (watchedRun: WatchedRun) => handleOpenWatchUrl(watchedRun))),
+    vscode.commands.registerCommand('devdocket.showWatchesQuickPick',
+      wrapCommand('Failed to show watches quick pick', () => showWatchesQuickPick(watcherService))),
   );
 }

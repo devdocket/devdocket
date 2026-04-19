@@ -1,13 +1,16 @@
 import * as vscode from 'vscode';
 import { GitHubIssueProvider } from './githubProvider';
 import { GitHubPrReviewProvider } from './githubPrReviewProvider';
+import { GitHubActionsWatcher } from './githubActionsWatcher';
 import { validateRefreshInterval } from '@devdocket/shared';
 import { initLogger, setLogLevel, logger, resolveLogLevel } from './logger';
 
 let issueProvider: GitHubIssueProvider | undefined;
 let prReviewProvider: GitHubPrReviewProvider | undefined;
+let actionsWatcher: GitHubActionsWatcher | undefined;
 let providerRegistration: vscode.Disposable | undefined;
 let prReviewRegistration: vscode.Disposable | undefined;
+let watcherRegistration: vscode.Disposable | undefined;
 
 export async function activate(_context: vscode.ExtensionContext): Promise<void> {
   const outputChannel = vscode.window.createOutputChannel('DevDocket GitHub');
@@ -72,13 +75,21 @@ export async function activate(_context: vscode.ExtensionContext): Promise<void>
   prReviewProvider.startPeriodicRefresh(intervalSeconds);
   prReviewRegistration = api.registerProvider(prReviewProvider);
 
-  logger.info('DevDocket GitHub activated, registered 2 providers');
+  // Register the GitHub Actions watcher
+  if (typeof api.registerRunWatcher === 'function') {
+    actionsWatcher = new GitHubActionsWatcher();
+    watcherRegistration = api.registerRunWatcher(actionsWatcher);
+    logger.info('DevDocket GitHub activated, registered 2 providers + 1 watcher');
+  } else {
+    logger.info('DevDocket GitHub activated, registered 2 providers (run watcher API not available)');
+  }
 }
 
 export function deactivate(): void {
   logger.info('DevDocket GitHub deactivating...');
   providerRegistration?.dispose();
   prReviewRegistration?.dispose();
+  watcherRegistration?.dispose();
   issueProvider?.dispose();
   prReviewProvider?.dispose();
   logger.info('DevDocket GitHub deactivated');

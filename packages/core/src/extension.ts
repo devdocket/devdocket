@@ -8,17 +8,22 @@ import { ProviderLabelCache } from './storage/providerLabelCache';
 import { WorkGraph } from './services/workGraph';
 import { ProviderRegistry } from './services/providerRegistry';
 import { ActionRegistry } from './services/actionRegistry';
+import { WatcherRegistry } from './services/watcherRegistry';
+import { WatcherService } from './services/watcherService';
 import { InboxTreeProvider } from './views/inboxTreeProvider';
 import { QueueTreeProvider } from './views/queueTreeProvider';
 import { FocusTreeProvider } from './views/focusTreeProvider';
 import { SourcesTreeProvider } from './views/sourcesTreeProvider';
 import { HistoryTreeProvider } from './views/historyTreeProvider';
+import { WatchesTreeProvider } from './views/watchesTreeProvider';
+import { WatchesStatusBar } from './views/watchesStatusBar';
 import { registerCommands } from './commands/commands';
 import { ViewRevealer } from './services/viewRevealer';
 import { initLogger, setLogLevel, logger, resolveLogLevel } from './services/logger';
 import { getInboxUnseenCount } from './services/inboxBadge';
 import { getViewLayout, ViewId } from './views/viewLayout';
 import { performance } from 'perf_hooks';
+import type { JobStatus } from '@devdocket/shared';
 
 export type { DevDocketApi, DevDocketProvider, DevDocketAction, DiscoveredItem, Disposable } from './api/types';
 export { logger } from './services/logger';
@@ -120,12 +125,14 @@ function createTreeViews(
   stateStore: DiscoveredStateStore,
   readStateStore: ReadStateStore,
   workGraph: WorkGraph,
+  watcherService: WatcherService,
 ) {
   const inboxProvider = new InboxTreeProvider(providerRegistry, stateStore, readStateStore);
   const queueProvider = new QueueTreeProvider(workGraph, providerRegistry);
   const focusProvider = new FocusTreeProvider(workGraph, providerRegistry);
   const sourcesProvider = new SourcesTreeProvider(providerRegistry, stateStore);
   const historyProvider = new HistoryTreeProvider(workGraph, providerRegistry);
+  const watchesProvider = new WatchesTreeProvider(watcherService);
 
   // Apply persisted layout settings
   inboxProvider.layout = getViewLayout('inbox');
@@ -139,6 +146,7 @@ function createTreeViews(
   const queueTreeView = vscode.window.createTreeView('devdocket.queue', { treeDataProvider: queueProvider, dragAndDropController: queueProvider, canSelectMany: true });
   const focusTreeView = vscode.window.createTreeView('devdocket.focus', { treeDataProvider: focusProvider, dragAndDropController: focusProvider, canSelectMany: true });
   const historyTreeView = vscode.window.createTreeView('devdocket.history', { treeDataProvider: historyProvider, canSelectMany: true });
+  const watchesTreeView = vscode.window.createTreeView('devdocket.watches', { treeDataProvider: watchesProvider });
 
   const inboxSelectionSub = inboxTreeView.onDidChangeSelection((e) => {
     void (async () => {
@@ -155,18 +163,19 @@ function createTreeViews(
   });
 
   return {
-    providers: { inboxProvider, queueProvider, focusProvider, sourcesProvider, historyProvider },
-    views: { inboxTreeView, queueTreeView, focusTreeView, sourcesTreeView, historyTreeView },
+    providers: { inboxProvider, queueProvider, focusProvider, sourcesProvider, historyProvider, watchesProvider },
+    views: { inboxTreeView, queueTreeView, focusTreeView, sourcesTreeView, historyTreeView, watchesTreeView },
     disposables: [inboxSelectionSub] as vscode.Disposable[],
   };
 }
 
 // Wires up all event-driven UI updates: view messages, inbox badge,
-// coalesced provider events, and new-item notifications.
+// coalesced provider events, new-item notifications, and watch notifications.
 function wireEvents(
   providerRegistry: ProviderRegistry,
   stateStore: DiscoveredStateStore,
   workGraph: WorkGraph,
+  watcherService: WatcherService,
   { providers, views }: ReturnType<typeof createTreeViews>,
 ): vscode.Disposable[] {
   const { inboxProvider, queueProvider, focusProvider, historyProvider } = providers;
@@ -271,7 +280,47 @@ function wireEvents(
   const stateStoreSub = stateStore.onDidChange(safeHandler('Error handling state store change', scheduleUiUpdate));
   const markSeenSub = inboxProvider.onDidMarkSeen(safeHandler('Error handling mark seen', scheduleUiUpdate));
 
-  return [discoveredSub, newItemsSub, providerRegSub, stateStoreSub, markSeenSub, workGraphSub];
+  // Watch notifications
+  const jobFailureSub = watcherService.onDidDetectJobFailure(safeHandler('Error handling job failure', ({ run, job }) => {
+    const config = vscode.workspace.getConfiguration('devdocket.watches');
+    const notifyOnJobFailure = config.get<boolean>('notifyOnJobFailure', true);
+    if (!notifyOnJobFailure) {
+      return;
+    }
+    
+    // Count still-running jobs
+    const runningCount = run.status.jobs.filter(j => j.state === 'running').length;
+    const message = runningCount > 0
+      ? `Job '${job.name}' failed in ${run.identifier.displayName} (${runningCount} job${runningCount === 1 ? '' : 's'} still running)`
+      : `Job '${job.name}' failed in ${run.identifier.displayName}`;
+    
+    void vscode.window.showWarningMessage(message, 'View Run').then(action => {
+      if (action === 'View Run') {
+        void vscode.env.openExternal(vscode.Uri.parse(run.identifier.url));
+      }
+    });
+  }));
+
+  const runCompleteSub = watcherService.onDidCompleteRun(safeHandler('Error handling run completion', (run) => {
+    const isSuccess = run.status.conclusion === 'success';
+    const message = `${run.identifier.displayName} ${isSuccess ? 'succeeded' : run.status.conclusion || 'completed'}`;
+    
+    if (isSuccess) {
+      void vscode.window.showInformationMessage(message, 'View Run').then(action => {
+        if (action === 'View Run') {
+          void vscode.env.openExternal(vscode.Uri.parse(run.identifier.url));
+        }
+      });
+    } else {
+      void vscode.window.showWarningMessage(message, 'View Run').then(action => {
+        if (action === 'View Run') {
+          void vscode.env.openExternal(vscode.Uri.parse(run.identifier.url));
+        }
+      });
+    }
+  }));
+
+  return [discoveredSub, newItemsSub, providerRegSub, stateStoreSub, markSeenSub, workGraphSub, jobFailureSub, runCompleteSub];
 }
 
 /**
@@ -298,37 +347,46 @@ export async function activate(context: vscode.ExtensionContext): Promise<DevDoc
   providerRegistry = pr;
   const ar = new ActionRegistry();
   actionRegistry = ar;
-  const api = new DevDocketApiImpl(pr, ar);
+  const wr = new WatcherRegistry(logger);
+  const ws = new WatcherService(wr, logger);
+  const api = new DevDocketApiImpl(pr, ar, wr);
   logger.info(`Store + service init took ${Math.round(performance.now() - initStart)}ms`);
 
   const treeViewStart = performance.now();
-  const treeSetup = createTreeViews(pr, ss, readStateStore, wg);
+  const treeSetup = createTreeViews(pr, ss, readStateStore, wg, ws);
   logger.info(`Tree view creation took ${Math.round(performance.now() - treeViewStart)}ms`);
 
   const eventWiringStart = performance.now();
-  const eventDisposables = wireEvents(pr, ss, wg, treeSetup);
+  const eventDisposables = wireEvents(pr, ss, wg, ws, treeSetup);
   logger.info(`Event wiring took ${Math.round(performance.now() - eventWiringStart)}ms`);
 
   const { providers, views, disposables: viewDisposables } = treeSetup;
+
+  // Create status bar item
+  const watchesStatusBar = new WatchesStatusBar(ws);
 
   context.subscriptions.push(
     ...Object.values(views),
     ...viewDisposables,
     ...eventDisposables,
+    watchesStatusBar,
     { dispose: () => wg.dispose() },
     { dispose: () => ss.dispose() },
+    { dispose: () => ws.dispose() },
+    { dispose: () => wr.dispose() },
     { dispose: () => providers.inboxProvider.dispose() },
     { dispose: () => providers.queueProvider.dispose() },
     { dispose: () => providers.focusProvider.dispose() },
     { dispose: () => providers.sourcesProvider.dispose() },
     { dispose: () => providers.historyProvider.dispose() },
+    { dispose: () => providers.watchesProvider.dispose() },
     { dispose: () => pr.dispose() },
     { dispose: () => ar.dispose() },
   );
 
   const commandRegStart = performance.now();
   const revealer = new ViewRevealer(wg, views.queueTreeView, views.focusTreeView, views.historyTreeView);
-  registerCommands(context, wg, ar, ss, pr, labelCache, revealer);
+  registerCommands(context, wg, ar, ss, pr, labelCache, wr, ws, revealer);
   logger.info(`Command registration took ${Math.round(performance.now() - commandRegStart)}ms`);
 
   // Set context keys and listen for layout changes
