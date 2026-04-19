@@ -7,7 +7,7 @@ import type {
   RunState, 
   RunConclusion 
 } from '@devdocket/shared';
-import { logger } from './logger';
+
 
 interface GitHubWorkflowRun {
   id: number;
