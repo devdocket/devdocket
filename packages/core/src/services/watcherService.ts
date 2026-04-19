@@ -80,8 +80,10 @@ export class WatcherService implements vscode.Disposable {
     
     this._onDidChangeWatchedRuns.fire(this.getAllWatches());
     
-    // Start polling if not already active
-    this.ensurePollingActive();
+    // Start polling if the watch is pollable (not already completed)
+    if (watchedRun.status.overallState !== 'completed') {
+      this.ensurePollingActive();
+    }
     
     return watchedRun;
   }
