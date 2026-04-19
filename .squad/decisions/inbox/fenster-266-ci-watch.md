@@ -31,8 +31,8 @@
 **Why:** Follows `BaseProvider` pattern. Prevents overlapping polls from queuing up if API calls are slow.
 
 ### 7. 3-Strike Failure Handling
-**Decision:** After 3 consecutive poll failures, set `hasWarning: true`, show warning notification, stop polling that run.  
-**Why:** Prevents infinite retry loops on permanent failures (auth expired, run deleted). User can dismiss or re-watch. Run stays in tree with warning icon.
+**Decision:** After 3 consecutive poll failures, set `hasWarning: true` and skip that run in subsequent poll ticks.  
+**Why:** Surfaces likely permanent failures (auth expired, run deleted) without removing the watch. Run stays in tree with warning icon. User can dismiss and re-watch.
 
 ## Future Considerations
 
