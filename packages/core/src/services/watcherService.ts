@@ -212,7 +212,10 @@ export class WatcherService implements vscode.Disposable {
           const statusChanged = oldStatus.overallState !== newStatus.overallState
             || oldStatus.conclusion !== newStatus.conclusion
             || oldStatus.jobs.length !== newStatus.jobs.length
-            || oldStatus.jobs.some((j, i) => j.state !== newStatus.jobs[i]?.state || j.conclusion !== newStatus.jobs[i]?.conclusion);
+            || newStatus.jobs.some(newJob => {
+              const oldJob = oldStatus.jobs.find(j => j.name === newJob.name);
+              return !oldJob || oldJob.state !== newJob.state || oldJob.conclusion !== newJob.conclusion;
+            });
           watch.status = newStatus;
           if (statusChanged) {
             anyChanged = true;
