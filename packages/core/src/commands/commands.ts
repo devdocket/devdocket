@@ -900,7 +900,7 @@ async function handleDismissFromSources(
 async function handleUpdateMetadata(
   workGraph: WorkGraph,
   itemId: string,
-  metadata: { branchName?: string; worktreePath?: string },
+  metadata: { branchName?: string; worktreePath?: string; repoPath?: string },
 ): Promise<void> {
   logger.info(`Updating metadata for item ${itemId}: ${JSON.stringify(metadata)}`);
   await workGraph.updateMetadata(itemId, metadata);
@@ -998,6 +998,6 @@ export function registerCommands(
     vscode.commands.registerCommand('devdocket.toggleSourcesLayout',
       wrapCommand('Failed to switch sources layout', () => toggleViewLayout('sources'))),
     vscode.commands.registerCommand('devdocket.updateMetadata',
-      wrapCommand('Failed to update metadata', (itemId: string, metadata: { branchName?: string; worktreePath?: string }) => handleUpdateMetadata(workGraph, itemId, metadata))),
+      wrapCommand('Failed to update metadata', (itemId: string, metadata: { branchName?: string; worktreePath?: string; repoPath?: string }) => handleUpdateMetadata(workGraph, itemId, metadata))),
   );
 }

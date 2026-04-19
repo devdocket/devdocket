@@ -22,6 +22,7 @@ interface WorkItem {
   updatedAt: number;
   branchName?: string;
   worktreePath?: string;
+  repoPath?: string;
 }
 
 // Re-declared to match core API contract — separate extension cannot import core types directly
@@ -146,6 +147,7 @@ export class StartWorkAction implements DevDocketAction {
             await vscode.commands.executeCommand('devdocket.updateMetadata', item.id, {
               branchName,
               worktreePath,
+              repoPath,
             });
           } catch (metadataErr) {
             logger.error('Failed to persist branch/worktree metadata', metadataErr);

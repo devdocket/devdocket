@@ -217,8 +217,8 @@ export class WorkGraph {
     logger.info(`Updated work item: ${id}`);
   }
 
-  /** Apply a partial metadata update (e.g., branchName, worktreePath) to an existing work item. */
-  async updateMetadata(id: string, patch: Partial<Pick<WorkItem, 'branchName' | 'worktreePath'>>): Promise<void> {
+  /** Apply a partial metadata update (e.g., branchName, worktreePath, repoPath) to an existing work item. */
+  async updateMetadata(id: string, patch: Partial<Pick<WorkItem, 'branchName' | 'worktreePath' | 'repoPath'>>): Promise<void> {
     const item = this.items.get(id);
     if (!item) {
       throw new Error(`Work item not found: ${id}`);

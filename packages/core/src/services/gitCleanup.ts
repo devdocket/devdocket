@@ -18,32 +18,22 @@ interface CleanupState {
  * Checks if a git worktree and branch still exist for a completed work item.
  */
 async function checkCleanupState(item: WorkItem): Promise<CleanupState | undefined> {
-  if (!item.worktreePath && !item.branchName) {
+  if (!item.branchName && !item.worktreePath) {
     return undefined;
   }
 
   const worktreeExists = item.worktreePath ? fs.existsSync(item.worktreePath) : false;
-
   let branchExists = false;
-  let repoPath: string | undefined;
+  let repoPath = item.repoPath;
 
-  if (item.branchName && item.worktreePath) {
-    // Determine repo path from worktree path (worktree is typically named repo-issueN)
-    const worktreeDir = path.dirname(item.worktreePath);
-    const worktreeBasename = path.basename(item.worktreePath);
-    // Try to extract repo name: "repo-issue123" -> "repo"
-    const match = worktreeBasename.match(/^(.+)-issue\d+$/);
-    if (match) {
-      repoPath = path.join(worktreeDir, match[1]);
-      if (fs.existsSync(path.join(repoPath, '.git'))) {
-        try {
-          const { stdout } = await execFileAsync('git', ['branch', '--list', item.branchName], { cwd: repoPath });
-          branchExists = stdout.trim().length > 0;
-        } catch (err) {
-          logger.warn(`Failed to check branch existence for ${item.branchName}`, err);
-        }
-      } else {
-        repoPath = undefined;
+  // Check branch existence if we have both branchName and repoPath
+  if (item.branchName && repoPath) {
+    if (fs.existsSync(path.join(repoPath, '.git'))) {
+      try {
+        const { stdout } = await execFileAsync('git', ['branch', '--list', item.branchName], { cwd: repoPath });
+        branchExists = stdout.trim().length > 0;
+      } catch (err) {
+        logger.warn(`Failed to check branch existence for ${item.branchName}`, err);
       }
     }
   }
