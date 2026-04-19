@@ -132,7 +132,7 @@ export class GitHubActionsWatcher implements DevDocketRunWatcher {
 
   private async fetchApi<T>(url: string, token?: vscode.CancellationToken): Promise<T> {
     // Get GitHub authentication session
-    const session = await vscode.authentication.getSession('github', ['repo'], { createIfNone: false });
+    const session = await vscode.authentication.getSession('github', ['repo'], { createIfNone: true });
     if (!session) {
       throw new Error('GitHub authentication required. Please sign in to GitHub.');
     }
