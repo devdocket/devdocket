@@ -91,7 +91,7 @@ class JobStatusNode extends vscode.TreeItem {
   constructor(
     public readonly jobName: string,
     public readonly state: RunState,
-    public readonly conclusion: RunConclusion
+    public readonly conclusion?: RunConclusion
   ) {
     super(jobName, vscode.TreeItemCollapsibleState.None);
     
@@ -107,7 +107,7 @@ class JobStatusNode extends vscode.TreeItem {
     return this.state;
   }
 
-  private getIconForJobState(state: RunState, conclusion: RunConclusion): vscode.ThemeIcon {
+  private getIconForJobState(state: RunState, conclusion: RunConclusion | undefined): vscode.ThemeIcon {
     if (state === 'queued') {
       return new vscode.ThemeIcon('circle-outline');
     }
