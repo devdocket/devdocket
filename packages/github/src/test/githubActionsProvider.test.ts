@@ -120,6 +120,10 @@ describe('GitHubActionsProvider', () => {
       ok: true,
       json: async () => ({ workflow_runs: runs }),
     });
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({ jobs: [] }),
+    });
 
     const listener = vi.fn();
     provider.onDidDiscoverItems(listener);

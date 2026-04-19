@@ -88,10 +88,15 @@ describe('AdoPipelineProvider', () => {
       createMockBuild(3, 'Tests', 'completed', 'succeeded', 'MyProject'),
     ];
 
-    mockFetch.mockResolvedValueOnce({
-      ok: true,
-      json: async () => ({ count: builds.length, value: builds }),
-    });
+    mockFetch
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ count: builds.length, value: builds }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ records: [] }),
+      });
 
     const listener = vi.fn();
     provider.onDidDiscoverItems(listener);
