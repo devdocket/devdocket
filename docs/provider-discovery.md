@@ -4,6 +4,7 @@ This document explains what conditions cause work items and reviews to appear in
 
 ## Table of Contents
 
+- [Discovery Overview](#discovery-overview)
 - [GitHub Issues](#github-issues)
 - [GitHub PR Reviews](#github-pr-reviews)
 - [Azure DevOps Work Items](#azure-devops-work-items)
@@ -13,6 +14,51 @@ This document explains what conditions cause work items and reviews to appear in
   - [Item Lifecycle (Inbox States)](#item-lifecycle-inbox-states)
   - [Resurfacing](#resurfacing)
   - [Troubleshooting](#troubleshooting)
+
+---
+
+## Discovery Overview
+
+The following diagram shows how items flow from external systems into DevDocket's views:
+
+```mermaid
+flowchart LR
+    subgraph External["External Systems"]
+        GH["GitHub API"]
+        ADO["Azure DevOps API"]
+    end
+
+    subgraph Providers["Provider Extensions"]
+        GHI["GitHub Issues\nProvider"]
+        GHPR["GitHub PR Reviews\nProvider"]
+        ADOWI["ADO Work Items\nProvider"]
+        ADOPR["ADO PR Reviews\nProvider"]
+    end
+
+    subgraph Core["DevDocket Core"]
+        PR["ProviderRegistry"]
+        SS["DiscoveredStateStore"]
+        subgraph Views
+            Inbox["Inbox\n(unseen)"]
+            Sources["Sources\n(all items)"]
+            Queue["Queue\n(accepted)"]
+        end
+    end
+
+    GH --> GHI
+    GH --> GHPR
+    ADO --> ADOWI
+    ADO --> ADOPR
+
+    GHI -- "DiscoveredItem[]" --> PR
+    GHPR -- "DiscoveredItem[]" --> PR
+    ADOWI -- "DiscoveredItem[]" --> PR
+    ADOPR -- "DiscoveredItem[]" --> PR
+
+    PR -- "new items" --> Inbox
+    PR -- "all items" --> Sources
+    Inbox -- "user accepts" --> Queue
+```
 
 ---
 
@@ -96,6 +142,16 @@ A work item appears when **all** of the following are true:
 
 ADO uses a two-layer filter to handle the variety of process templates (Agile, Scrum, CMMI, custom):
 
+```mermaid
+flowchart TD
+    A["WIQL Query\nAssigned to @Me"] --> B["First pass:\nExclude State = 'Closed'\nExclude State = 'Removed'"]
+    B --> C["Fetch work item details\n(batches of 200)"]
+    C --> D["Second pass:\nFetch state categories\nper work item type"]
+    D --> E{State category\nterminal?}
+    E -- "Completed /\nRemoved /\nResolved" --> F["Excluded"]
+    E -- "Active /\nProposed /\nother" --> G["Included in\ndiscovered items"]
+```
+
 1. **First pass:** Excludes items with state names `Closed` or `Removed` (covers the most common cases)
 2. **Second pass:** Checks each work item type's state definitions and excludes items whose state falls into a **terminal state category** (Completed, Removed, or Resolved)
 
@@ -156,29 +212,39 @@ All providers poll their data source periodically. The default interval is **5 m
 - **Disable:** Set the interval to `0` or a negative value to stop automatic polling
 - **Manual refresh:** You can always trigger a refresh manually via the DevDocket refresh command, regardless of the interval setting
 
+```mermaid
+flowchart TD
+    A["Timer fires\n(every N seconds)"] --> B{Already\nrefreshing?}
+    B -- Yes --> C[Skip]
+    B -- No --> D{Authenticated?}
+    D -- No --> E["Background: skip silently\nManual: prompt sign-in"]
+    D -- Yes --> F["Query external API"]
+    F --> G{Success?}
+    G -- Yes --> H["Emit DiscoveredItem[]\nMark provider healthy"]
+    G -- No --> I["Log error\nMark provider unhealthy"]
+    H --> J["ProviderRegistry\nprocesses items"]
+    I --> K["Timer continues\n(next interval)"]
+    J --> K
+
+    M["User triggers\nmanual refresh"] --> D
+```
+
 ### Item Lifecycle (Inbox States)
 
 When a provider discovers an item, it enters the **Inbox** as an unseen item. From there:
 
-```
-Provider discovers item
-        │
-        ▼
-   ┌─────────┐
-   │ Unseen  │  ← Appears in Inbox
-   └────┬────┘
-        │
-   ┌────┴────┐
-   │         │
-   ▼         ▼
-┌──────┐  ┌───────────┐
-│Accept│  │  Dismiss   │
-└──┬───┘  └─────┬─────┘
-   │            │
-   ▼            ▼
-┌──────────┐  ┌───────────┐
-│ Accepted │  │ Dismissed │  ← Hidden from Inbox
-└──────────┘  └───────────┘
+```mermaid
+stateDiagram-v2
+    [*] --> Unseen : Provider discovers item
+
+    Unseen --> Accepted : User accepts
+    Unseen --> Dismissed : User dismisses
+
+    Accepted --> Unseen : Version changes\n(resurfacing)
+
+    note right of Unseen : Appears in Inbox
+    note right of Accepted : Creates a work item\nin the Queue
+    note right of Dismissed : Permanently hidden\n(never resurfaced)
 ```
 
 - **Unseen** — New item in your Inbox, waiting for you to triage it.
@@ -188,6 +254,20 @@ Provider discovers item
 ### Resurfacing
 
 Some providers track **versions** of discovered items. When a version changes on an item you previously accepted, the item is moved back to **Unseen** so it reappears in your Inbox. This lets you know something has changed.
+
+```mermaid
+flowchart TD
+    A["Provider emits item\nwith version"] --> B{Item exists\nin state store?}
+    B -- No --> C["Add as Unseen\n(new discovery)"]
+    B -- Yes --> D{Current\ninbox state?}
+    D -- Unseen --> E["Update stored\nversion"]
+    D -- Dismissed --> F["No action\n(never resurface)"]
+    D -- Accepted --> G{Version\nchanged?}
+    G -- No --> H{Version\nmissing in store?}
+    H -- Yes --> I["Backfill version\n(keep Accepted)"]
+    H -- No --> J["No action"]
+    G -- Yes --> K["Resurface → Unseen\n(reappears in Inbox)"]
+```
 
 **GitHub PR Reviews** support two independent resurfacing signals:
 
