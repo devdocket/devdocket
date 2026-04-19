@@ -192,6 +192,8 @@ flowchart TD
 
 This means items are correctly filtered regardless of your process template. For example, a Scrum "Done" item (category: Completed) is excluded even though its state name isn't "Closed".
 
+> **Note:** State-category filtering is fail-open. If the Work Item Type States API call fails, only the first-pass name filter (`Closed`/`Removed`) applies, and items in other terminal states (e.g., `Done`) may still appear.
+
 ### Configuration
 
 | Setting | Default | Description |
