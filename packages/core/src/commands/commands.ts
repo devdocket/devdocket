@@ -902,8 +902,8 @@ async function handleUpdateMetadata(
   itemId: string,
   metadata: unknown,
 ): Promise<void> {
-  if (typeof metadata !== 'object' || metadata === null) {
-    throw new Error('Metadata update must be an object');
+  if (typeof metadata !== 'object' || metadata === null || Array.isArray(metadata)) {
+    throw new Error('Metadata update must be a plain object');
   }
   const validatedMetadata = metadata as { branchName?: string; worktreePath?: string; repoPath?: string };
   const updatedFields = Object.keys(validatedMetadata).filter(
