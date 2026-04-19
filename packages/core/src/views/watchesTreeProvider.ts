@@ -119,7 +119,7 @@ class JobStatusNode extends vscode.TreeItem {
       return new vscode.ThemeIcon('check', new vscode.ThemeColor('testing.iconPassed'));
     }
     if (conclusion === 'failure') {
-      return new vscode.ThemeIcon('x', new vscode.ThemeColor('testing.iconFailed'));
+      return new vscode.ThemeIcon('error', new vscode.ThemeColor('testing.iconFailed'));
     }
     if (conclusion === 'cancelled') {
       return new vscode.ThemeIcon('circle-slash');
