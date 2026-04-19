@@ -18,7 +18,7 @@ import { SourcesTreeProvider } from './views/sourcesTreeProvider';
 import { HistoryTreeProvider } from './views/historyTreeProvider';
 import { WatchesTreeProvider } from './views/watchesTreeProvider';
 import { WatchesStatusBar } from './views/watchesStatusBar';
-import { registerCommands } from './commands/commands';
+import { registerCommands, isSafeUrl } from './commands/commands';
 import { ViewRevealer } from './services/viewRevealer';
 import { initLogger, setLogLevel, logger, resolveLogLevel } from './services/logger';
 import { getInboxUnseenCount } from './services/inboxBadge';
@@ -301,7 +301,10 @@ function wireEvents(
     
     void vscode.window.showWarningMessage(message, 'View Run').then(action => {
       if (action === 'View Run') {
-        void vscode.env.openExternal(vscode.Uri.parse(run.identifier.url));
+        const safe = isSafeUrl(run.identifier.url);
+        if (safe) {
+          void vscode.env.openExternal(vscode.Uri.parse(safe.href));
+        }
       }
     });
   }));
@@ -313,13 +316,19 @@ function wireEvents(
     if (isSuccess) {
       void vscode.window.showInformationMessage(message, 'View Run').then(action => {
         if (action === 'View Run') {
-          void vscode.env.openExternal(vscode.Uri.parse(run.identifier.url));
+          const safe = isSafeUrl(run.identifier.url);
+          if (safe) {
+            void vscode.env.openExternal(vscode.Uri.parse(safe.href));
+          }
         }
       });
     } else {
       void vscode.window.showWarningMessage(message, 'View Run').then(action => {
         if (action === 'View Run') {
-          void vscode.env.openExternal(vscode.Uri.parse(run.identifier.url));
+          const safe = isSafeUrl(run.identifier.url);
+          if (safe) {
+            void vscode.env.openExternal(vscode.Uri.parse(safe.href));
+          }
         }
       });
     }
