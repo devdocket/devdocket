@@ -906,7 +906,7 @@ async function handleDismissFromSources(
 
 async function handleWatchRun(watcherRegistry: WatcherRegistry, watcherService: WatcherService): Promise<void> {
   const url = await vscode.window.showInputBox({
-    prompt: 'Enter a GitHub Actions or ADO pipeline run URL',
+    prompt: 'Enter a pipeline run URL',
     placeHolder: 'https://github.com/owner/repo/actions/runs/123456789',
     validateInput: (value) => {
       if (!value.trim()) {
@@ -914,7 +914,7 @@ async function handleWatchRun(watcherRegistry: WatcherRegistry, watcherService: 
       }
       const watcher = watcherRegistry.findWatcherForUrl(value);
       if (!watcher) {
-        return 'Unsupported URL format. DevDocket supports GitHub Actions and ADO pipeline URLs.';
+        return 'Unsupported URL format. Paste a GitHub Actions run URL.';
       }
       return undefined;
     },
@@ -927,7 +927,7 @@ async function handleWatchRun(watcherRegistry: WatcherRegistry, watcherService: 
   try {
     const watcher = watcherRegistry.findWatcherForUrl(url);
     if (!watcher) {
-      void vscode.window.showErrorMessage('Unsupported URL format. DevDocket supports GitHub Actions and ADO pipeline URLs.');
+      void vscode.window.showErrorMessage('Unsupported URL format. Paste a GitHub Actions run URL.');
       return;
     }
 
