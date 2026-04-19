@@ -239,13 +239,38 @@ export class WorkGraph {
     logger.info(`Updated work item: ${id}`);
   }
 
+  private static readonly METADATA_KEYS = ['branchName', 'worktreePath', 'repoPath'] as const;
+
+  /** Sanitize a metadata patch to only allow known string keys. */
+  private sanitizeMetadataPatch(
+    patch: Partial<Pick<WorkItem, 'branchName' | 'worktreePath' | 'repoPath'>>,
+  ): Partial<Pick<WorkItem, 'branchName' | 'worktreePath' | 'repoPath'>> {
+    if (patch == null || typeof patch !== 'object') {
+      throw new Error('Invalid metadata patch: expected an object.');
+    }
+    const candidate = patch as Record<string, unknown>;
+    const sanitized: Partial<Pick<WorkItem, 'branchName' | 'worktreePath' | 'repoPath'>> = {};
+    for (const key of WorkGraph.METADATA_KEYS) {
+      const value = candidate[key];
+      if (value === undefined) {
+        continue;
+      }
+      if (typeof value !== 'string') {
+        throw new Error(`Invalid metadata patch: ${key} must be a string or undefined.`);
+      }
+      sanitized[key] = value;
+    }
+    return sanitized;
+  }
+
   /** Apply a partial metadata update (e.g., branchName, worktreePath, repoPath) to an existing work item. */
   async updateMetadata(id: string, patch: Partial<Pick<WorkItem, 'branchName' | 'worktreePath' | 'repoPath'>>): Promise<void> {
     const item = this.items.get(id);
     if (!item) {
       throw new Error(`Work item not found: ${id}`);
     }
-    const updated = { ...item, ...patch, updatedAt: Date.now() };
+    const sanitized = this.sanitizeMetadataPatch(patch);
+    const updated = { ...item, ...sanitized, updatedAt: Date.now() };
     await this.store.save(updated);
     this.items.set(id, updated);
     this.invalidateStateCache();
