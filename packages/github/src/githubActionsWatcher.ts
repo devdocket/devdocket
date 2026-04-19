@@ -137,6 +137,7 @@ export class GitHubActionsWatcher implements DevDocketRunWatcher {
       'Accept': 'application/vnd.github+json',
       'Authorization': `Bearer ${session.accessToken}`,
       'X-GitHub-Api-Version': '2022-11-28',
+      'User-Agent': 'DevDocket-VSCode',
     };
 
     if (token?.isCancellationRequested) {
