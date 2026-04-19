@@ -82,7 +82,7 @@ export class GitHubActionsWatcher implements DevDocketRunWatcher {
     );
 
     // Update display name with actual workflow name
-    (identifier as { displayName: string }).displayName = runData.name;
+    identifier.displayName = runData.name;
 
     const overallState = this.mapState(runData.status);
     const conclusion = runData.conclusion ? this.mapConclusion(runData.conclusion) : undefined;
