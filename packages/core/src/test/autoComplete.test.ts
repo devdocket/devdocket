@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { checkAutoComplete } from '../services/autoComplete';
 import { WorkGraph } from '../services/workGraph';
-import { WorkItemState, WorkItem } from '../models/workItem';
+import { WorkItemState } from '../models/workItem';
 import { ITaskStore } from '../storage/taskStore';
 import { ProviderRegistry } from '../services/providerRegistry';
 
