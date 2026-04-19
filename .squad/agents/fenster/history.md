@@ -231,7 +231,7 @@ DevDocket is a VS Code extension monorepo for managing work items from multiple 
 - **Polling with concurrency guard:** `WatcherService` polls active watches every 30s (configurable, min 15s). Skips tick if previous poll still in-flight. After 3 consecutive failures, sets warning flag and skips that run in subsequent polls.
 - **Early failure notifications:** `onDidDetectJobFailure` fires when job completes with `failure` conclusion while overall run is still in progress. Notification shows running job count. Gated by `devdocket.watches.notifyOnJobFailure` (default: true).
 - **UI components:** (1) `WatchesTreeProvider` (6th view): run nodes with job children. (2) `WatchesStatusBar`: right side, shows counts, click for quick-pick. (3) Notification toasts on completion and job failure.
-- **Commands:** `watchRun` (input box with URL validation), `dismissWatch`, `dismissAllWatches`, `openWatchUrl`. All wired in context menus and view title.
+- **Commands:** `watchRun` (input box with URL validation), `dismissWatch`, `dismissAllCompletedWatches`, `openWatchUrl`. All wired in context menus and view title.
 - **GitHub Actions implementation:** `GitHubActionsWatcher` in `packages/github` parses `github.com/.../actions/runs/...` URLs, uses REST API with GitHub auth session. Maps API status/conclusion to shared enums. Registered conditionally if `registerRunWatcher` exists on API (graceful degradation for older core).
 - **vscode mock expansion:** Added `StatusBarAlignment` enum and `createStatusBarItem()` to vscode mock. All 1090 tests pass.
 - **Configuration:** `devdocket.watches.pollingIntervalSeconds` (default: 30, min: 15), `devdocket.watches.notifyOnJobFailure` (default: true).
