@@ -2100,13 +2100,11 @@ describe('registerCommands', () => {
       );
     });
 
-    it('shows error when updateMetadata throws', async () => {
+    it('propagates errors to the caller', async () => {
       workGraph.updateMetadata.mockRejectedValue(new Error('not found'));
-      await invoke('devdocket.updateMetadata', 'wc-bad', { branchName: 'x' });
 
-      expect(vscode.window.showErrorMessage).toHaveBeenCalledWith(
-        expect.stringContaining('not found'),
-      );
+      await expect(invoke('devdocket.updateMetadata', 'wc-bad', { branchName: 'x' }))
+        .rejects.toThrow('not found');
     });
   });
 });

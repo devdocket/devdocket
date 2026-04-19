@@ -1005,6 +1005,6 @@ export function registerCommands(
     vscode.commands.registerCommand('devdocket.toggleSourcesLayout',
       wrapCommand('Failed to switch sources layout', () => toggleViewLayout('sources'))),
     vscode.commands.registerCommand('devdocket.updateMetadata',
-      wrapCommand('Failed to update metadata', (itemId: string, metadata: { branchName?: string; worktreePath?: string; repoPath?: string }) => handleUpdateMetadata(workGraph, itemId, metadata))),
+      (itemId: string, metadata: unknown) => handleUpdateMetadata(workGraph, itemId, metadata)),
   );
 }
