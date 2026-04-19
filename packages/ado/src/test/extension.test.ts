@@ -39,7 +39,7 @@ describe('extension activation', () => {
       activate: vi.fn(),
     } as any);
 
-    // Default: organization configured
+    // Default: ADO organization and projects configured
     vi.mocked(workspace.getConfiguration).mockImplementation((section?: string) => {
       if (section === 'devdocketAdo') {
         return {
@@ -128,7 +128,7 @@ describe('extension activation', () => {
     expect(mockApi.registerProvider).toHaveBeenCalledTimes(3);
   });
 
-  it('registers three providers when organization is configured', async () => {
+  it('registers three providers when ADO projects are configured', async () => {
     await activate(mockContext);
 
     expect(mockApi.registerProvider).toHaveBeenCalledTimes(3);
@@ -142,7 +142,7 @@ describe('extension activation', () => {
     expect(thirdProvider.id).toBe('ado-pipelines');
   });
 
-  it('does not register providers when no organization is configured', async () => {
+  it('does not register providers when no ADO projects are configured', async () => {
     vi.mocked(workspace.getConfiguration).mockImplementation((section?: string) => {
       if (section === 'devdocketAdo') {
         return {
