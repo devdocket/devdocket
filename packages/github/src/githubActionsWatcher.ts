@@ -133,10 +133,11 @@ export class GitHubActionsWatcher implements DevDocketRunWatcher {
   }
 
   private async fetchApi<T>(url: string, token?: vscode.CancellationToken): Promise<T> {
-    // Get GitHub authentication session
-    const session = await vscode.authentication.getSession('github', ['repo'], { createIfNone: true });
+    // Background polling must not trigger interactive sign-in prompts.
+    // Reuse an existing session if available; fail gracefully if not.
+    const session = await vscode.authentication.getSession('github', ['repo'], { createIfNone: false });
     if (!session) {
-      throw new Error('GitHub authentication required. Please sign in to GitHub.');
+      throw new Error('No GitHub authentication session available. Sign in to GitHub to watch pipeline runs.');
     }
 
     const headers: Record<string, string> = {
