@@ -276,7 +276,9 @@ export class WatcherService implements vscode.Disposable {
    * Generate a unique key for a watch.
    */
   private getWatchKey(identifier: RunIdentifier): string {
-    return `${identifier.providerId}:${identifier.runId}`;
+    return identifier.repo
+      ? `${identifier.providerId}:${identifier.repo}:${identifier.runId}`
+      : `${identifier.providerId}:${identifier.runId}`;
   }
 
   dispose(): void {
