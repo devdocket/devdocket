@@ -3,6 +3,7 @@ import * as vscode from 'vscode';
 import { WorkItem, WorkItemInput, WorkItemState } from '../models/workItem';
 import { ITaskStore } from '../storage/taskStore';
 import { logger } from './logger';
+import { promptGitCleanup } from './gitCleanup';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -216,6 +217,20 @@ export class WorkGraph {
     logger.info(`Updated work item: ${id}`);
   }
 
+  /** Apply a partial metadata update (e.g., branchName, worktreePath) to an existing work item. */
+  async updateMetadata(id: string, patch: Partial<Pick<WorkItem, 'branchName' | 'worktreePath'>>): Promise<void> {
+    const item = this.items.get(id);
+    if (!item) {
+      throw new Error(`Work item not found: ${id}`);
+    }
+    const updated = { ...item, ...patch, updatedAt: Date.now() };
+    await this.store.save(updated);
+    this.items.set(id, updated);
+    this.invalidateStateCache();
+    this._onDidChange.fire();
+    logger.info(`Updated metadata for work item: ${id}`);
+  }
+
   /** Transition a work item to a new lifecycle state. */
   async transitionState(id: string, newState: WorkItemState): Promise<void> {
     const item = this.items.get(id);
@@ -246,6 +261,11 @@ export class WorkGraph {
     this.invalidateStateCache();
     this._onDidChange.fire();
     logger.info(`Transitioned work item ${id} to ${newState}`);
+
+    // Prompt for cleanup if transitioning to Done and branch/worktree metadata exists
+    if (newState === WorkItemState.Done) {
+      void promptGitCleanup(updated);
+    }
   }
 
   /** Swap a work item one position up or down among siblings in the same state. */

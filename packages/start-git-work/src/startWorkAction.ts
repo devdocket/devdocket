@@ -20,6 +20,8 @@ interface WorkItem {
   sortOrder?: number;
   createdAt: number;
   updatedAt: number;
+  branchName?: string;
+  worktreePath?: string;
 }
 
 // Re-declared to match core API contract — separate extension cannot import core types directly
@@ -138,6 +140,19 @@ export class StartWorkAction implements DevDocketAction {
           }
 
           logger.info(`Created worktree at ${worktreePath}`);
+
+          // Persist branch and worktree metadata to the work item
+          try {
+            await vscode.commands.executeCommand('devdocket.updateMetadata', item.id, {
+              branchName,
+              worktreePath,
+            });
+          } catch (metadataErr) {
+            logger.error('Failed to persist branch/worktree metadata', metadataErr);
+            void vscode.window.showWarningMessage(
+              `DevDocket: Worktree created but failed to save metadata — cleanup prompt may not work`,
+            );
+          }
 
           // Run user-configured post-worktree commands
           const commands = vscode.workspace.getConfiguration('devdocketStartGitWork')

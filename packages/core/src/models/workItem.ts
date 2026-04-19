@@ -67,6 +67,10 @@ export interface WorkItem {
   createdAt: number;
   /** Epoch timestamp (ms) of the last modification. */
   updatedAt: number;
+  /** Git branch name created by Start Git Work action, if any. */
+  branchName?: string;
+  /** Worktree path created by Start Git Work action, if any. */
+  worktreePath?: string;
 }
 
 /**
