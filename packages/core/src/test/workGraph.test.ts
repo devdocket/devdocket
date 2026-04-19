@@ -4,7 +4,7 @@ import { WorkItemState } from '../models/workItem';
 import { ITaskStore } from '../storage/taskStore';
 
 vi.mock('../services/gitCleanup', () => ({
-  promptGitCleanup: vi.fn(),
+  promptGitCleanup: vi.fn().mockResolvedValue(undefined),
 }));
 
 function createMockStore(): ITaskStore {
