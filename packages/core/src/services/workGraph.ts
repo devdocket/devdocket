@@ -245,8 +245,8 @@ export class WorkGraph {
   private sanitizeMetadataPatch(
     patch: Partial<Pick<WorkItem, 'branchName' | 'worktreePath' | 'repoPath'>>,
   ): Partial<Pick<WorkItem, 'branchName' | 'worktreePath' | 'repoPath'>> {
-    if (patch == null || typeof patch !== 'object') {
-      throw new Error('Invalid metadata patch: expected an object.');
+    if (patch == null || typeof patch !== 'object' || Array.isArray(patch)) {
+      throw new Error('Invalid metadata patch: expected a plain object.');
     }
     const candidate = patch as Record<string, unknown>;
     const sanitized: Partial<Pick<WorkItem, 'branchName' | 'worktreePath' | 'repoPath'>> = {};
