@@ -129,6 +129,22 @@ export class AiReviewAction extends BasePrAction {
           this.log.warn(`Failed to get file list: ${err instanceof Error ? err.message : String(err)}`);
         }
 
+        // Cap the file list to avoid blowing the context budget on very large PRs
+        const maxFileListLength = 5_000;
+        let displayList = fileList;
+        if (fileList.length > maxFileListLength) {
+          const lines = fileList.split('\n');
+          let truncated = '';
+          for (const line of lines) {
+            if (truncated.length + line.length + 1 > maxFileListLength) {
+              truncated += `\n... and more files (${lines.length} total — use devdocket-getDiff for the full list)`;
+              break;
+            }
+            truncated += (truncated ? '\n' : '') + line;
+          }
+          displayList = truncated;
+        }
+
         truncationInstructions = `
 
 ## ⚠️ Diff Truncation — Autonomous File-by-File Review Required
@@ -149,7 +165,7 @@ The PR diff below has been truncated (${diff.length.toLocaleString()} chars tota
 
 **Changed files in this PR:**
 \`\`\`
-${fileList || '(file list unavailable — use devdocket-getDiff to get the stat summary)'}
+${displayList || '(file list unavailable — use devdocket-getDiff to get the stat summary)'}
 \`\`\`
 
 `;
@@ -287,7 +303,7 @@ patterns, and cross-reference related files.
 - **Head ref:** ${info.headRef}
 - **Base ref:** ${info.baseRef}
 
-### Available Tools
+### Available Tools (commonly used — additional devdocket-* tools may also be available)
 
 - **devdocket-readFile** — Read the full contents of a file. Pass \`worktreePath: "${info.worktreePath}"\` and a relative \`filePath\`.
 - **devdocket-listDirectory** — List files and directories. Pass \`worktreePath: "${info.worktreePath}"\` and optionally \`dirPath\`.
