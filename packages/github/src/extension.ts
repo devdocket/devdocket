@@ -8,8 +8,6 @@ import { initLogger, setLogLevel, logger, resolveLogLevel } from './logger';
 
 let issueProvider: GitHubIssueProvider | undefined;
 let prReviewProvider: GitHubPrReviewProvider | undefined;
-let actionsWatcher: GitHubActionsWatcher | undefined;
-let myPrsProvider: GitHubMyPrsProvider | undefined;
 let providerRegistration: vscode.Disposable | undefined;
 let prReviewRegistration: vscode.Disposable | undefined;
 let watcherRegistration: vscode.Disposable | undefined;
@@ -85,8 +83,7 @@ export async function activate(_context: vscode.ExtensionContext): Promise<void>
 
   // Register the GitHub Actions watcher
   if (typeof api.registerRunWatcher === 'function') {
-    actionsWatcher = new GitHubActionsWatcher();
-    watcherRegistration = api.registerRunWatcher(actionsWatcher);
+    watcherRegistration = api.registerRunWatcher(new GitHubActionsWatcher());
     logger.info('DevDocket GitHub activated, registered 3 providers + 1 watcher');
   } else {
     logger.info('DevDocket GitHub activated, registered 3 providers (run watcher API not available)');
