@@ -141,9 +141,9 @@ export class WalkthroughParticipant {
       this.log.info(`Using request-provided model: ${request.model.id}`);
       model = request.model;
     } else {
-      this.log.info('No request model — selecting gpt-4o family');
-      const models = await vscode.lm.selectChatModels({ family: 'gpt-4o' });
-      this.log.info(`selectChatModels({ family: 'gpt-4o' }) returned ${models.length} model(s): ${models.map(m => m.id).join(', ')}`);
+      this.log.info('No request model — selecting default');
+      const models = await vscode.lm.selectChatModels();
+      this.log.info(`selectChatModels() returned ${models.length} model(s): ${models.map(m => m.id).join(', ')}`);
       if (models.length === 0) {
         this.log.error('No language model available');
         response.markdown('❌ No language model available. Please install GitHub Copilot.');

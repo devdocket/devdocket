@@ -3,6 +3,12 @@ import { window, workspace, authentication, lm, Uri, LanguageModelTextPart, mock
 import { AiReviewAction, sanitizePrUrl } from '../aiReviewAction';
 import type { RepoManager } from '../repoManager';
 
+vi.mock('child_process', () => ({
+  execFile: vi.fn((_cmd: string, _args: string[], _opts: unknown, cb: Function) => {
+    cb(null, 'M\tpackages/ai-reviewer/src/aiReviewAction.ts', '');
+  }),
+}));
+
 function createWorkItem(overrides: Partial<Record<string, unknown>> = {}) {
   return {
     id: 'wc-test-1',
