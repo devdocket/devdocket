@@ -958,7 +958,12 @@ async function handleDismissAllWatches(watcherService: WatcherService): Promise<
 
 async function handleOpenWatchUrl(watchedRun: WatchedRun): Promise<void> {
   try {
-    await vscode.env.openExternal(vscode.Uri.parse(watchedRun.identifier.url));
+    const safeUrl = isSafeUrl(watchedRun.identifier.url);
+    if (!safeUrl) {
+      void vscode.window.showWarningMessage('Can only open http(s) URLs in the browser.');
+      return;
+    }
+    await vscode.env.openExternal(vscode.Uri.parse(safeUrl.href));
   } catch (err: unknown) {
     handleCommandError('Failed to open URL', err);
   }
