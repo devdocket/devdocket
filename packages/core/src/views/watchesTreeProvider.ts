@@ -56,7 +56,7 @@ class WatchedRunNode extends vscode.TreeItem {
     return run.status.overallState;
   }
 
-  private getIconForState(state: RunState, conclusion: RunConclusion, hasWarning?: boolean): vscode.ThemeIcon {
+  private getIconForState(state: RunState, conclusion: RunConclusion | undefined, hasWarning?: boolean): vscode.ThemeIcon {
     if (hasWarning) {
       return new vscode.ThemeIcon('warning', new vscode.ThemeColor('problemsWarningIcon.foreground'));
     }
