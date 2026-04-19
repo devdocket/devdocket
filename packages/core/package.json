@@ -702,7 +702,7 @@
         },
         {
           "command": "devdocket.dismissWatch",
-          "when": "view == devdocket.watches && viewItem == watchedRun.completed",
+          "when": "view == devdocket.watches && viewItem =~ /^watchedRun/",
           "group": "inline"
         },
         {
