@@ -902,7 +902,10 @@ async function handleUpdateMetadata(
   itemId: string,
   metadata: { branchName?: string; worktreePath?: string; repoPath?: string },
 ): Promise<void> {
-  logger.info(`Updating metadata for item ${itemId}: ${JSON.stringify(metadata)}`);
+  const updatedFields = Object.keys(metadata).filter(
+    (key) => metadata[key as keyof typeof metadata] !== undefined,
+  );
+  logger.info(`Updating metadata for item ${itemId}; fields: ${updatedFields.join(', ') || 'none'}`);
   await workGraph.updateMetadata(itemId, metadata);
 }
 
