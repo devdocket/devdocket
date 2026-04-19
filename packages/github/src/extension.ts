@@ -98,7 +98,10 @@ export async function activate(_context: vscode.ExtensionContext): Promise<void>
 
   _context.subscriptions.push(
     vscode.workspace.onDidChangeConfiguration(e => {
-      if (e.affectsConfiguration('devdocketGithub.watchWorkflowRuns')) {
+      if (
+        e.affectsConfiguration('devdocketGithub.watchWorkflowRuns') ||
+        e.affectsConfiguration('devdocketGithub.refreshIntervalSeconds')
+      ) {
         const ghConfig = vscode.workspace.getConfiguration('devdocketGithub');
         const interval = validateRefreshInterval(
           ghConfig.get<number>('refreshIntervalSeconds', 300), logger,
