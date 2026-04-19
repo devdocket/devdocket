@@ -1,12 +1,21 @@
 import * as vscode from 'vscode';
 import * as path from 'path';
-import * as fs from 'fs';
+import * as fs from 'fs/promises';
 import { execFile } from 'child_process';
 import { promisify } from 'util';
 import { WorkItem } from '../models/workItem';
 import { logger } from './logger';
 
 const execFileAsync = promisify(execFile);
+
+async function pathExists(p: string): Promise<boolean> {
+  try {
+    await fs.access(p);
+    return true;
+  } catch {
+    return false;
+  }
+}
 
 interface CleanupState {
   worktreeExists: boolean;
@@ -22,13 +31,13 @@ async function checkCleanupState(item: WorkItem): Promise<CleanupState | undefin
     return undefined;
   }
 
-  const worktreeExists = item.worktreePath ? fs.existsSync(item.worktreePath) : false;
+  const worktreeExists = item.worktreePath ? await pathExists(item.worktreePath) : false;
   let branchExists = false;
   let repoPath = item.repoPath;
 
   // Check branch existence if we have both branchName and repoPath
   if (item.branchName && repoPath) {
-    if (fs.existsSync(path.join(repoPath, '.git'))) {
+    if (await pathExists(path.join(repoPath, '.git'))) {
       try {
         await execFileAsync('git', ['show-ref', '--verify', '--quiet', `refs/heads/${item.branchName}`], { cwd: repoPath });
         branchExists = true;
