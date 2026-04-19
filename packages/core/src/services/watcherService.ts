@@ -209,8 +209,14 @@ export class WatcherService implements vscode.Disposable {
           // Snapshot old status for comparison, then update immediately
           // so event subscribers always see current data.
           const oldStatus = watch.status;
+          const statusChanged = oldStatus.overallState !== newStatus.overallState
+            || oldStatus.conclusion !== newStatus.conclusion
+            || oldStatus.jobs.length !== newStatus.jobs.length
+            || oldStatus.jobs.some((j, i) => j.state !== newStatus.jobs[i]?.state || j.conclusion !== newStatus.jobs[i]?.conclusion);
           watch.status = newStatus;
-          anyChanged = true;
+          if (statusChanged) {
+            anyChanged = true;
+          }
 
           // Detect job failures (while run is still in progress)
           if (newStatus.overallState !== 'completed') {
