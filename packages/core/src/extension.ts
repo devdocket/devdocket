@@ -19,7 +19,7 @@ import { HistoryTreeProvider } from './views/historyTreeProvider';
 import { WatchesTreeProvider } from './views/watchesTreeProvider';
 import { WatchesStatusBar } from './views/watchesStatusBar';
 import { registerCommands } from './commands/commands';
-import { isSafeUrl } from './utils/urlSafety';
+import { isSafeUrl } from './utils/url';
 import { ViewRevealer } from './services/viewRevealer';
 import { initLogger, setLogLevel, logger, resolveLogLevel } from './services/logger';
 import { getInboxUnseenCount } from './services/inboxBadge';

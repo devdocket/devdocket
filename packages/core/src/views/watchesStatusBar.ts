@@ -1,6 +1,6 @@
 import * as vscode from 'vscode';
 import { WatcherService, WatchedRun } from '../services/watcherService';
-import { isSafeUrl } from '../utils/urlSafety';
+import { isSafeUrl } from '../utils/url';
 
 /**
  * Status bar item that shows the count of active/failed watches.

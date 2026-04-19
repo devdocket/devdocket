@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, vi, type Mock } from 'vitest';
 import * as vscode from 'vscode';
 import { WorkItemState, type WorkItem } from '../models/workItem';
 import { registerCommands } from '../commands/commands';
-import { isSafeUrl } from '../utils/urlSafety';
+import { isSafeUrl } from '../utils/url';
 import type { WorkGraph } from '../services/workGraph';
 import type { ActionRegistry } from '../services/actionRegistry';
 import type { ProviderRegistry } from '../services/providerRegistry';

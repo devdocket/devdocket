@@ -15,7 +15,7 @@ import type { ViewRevealer } from '../services/viewRevealer';
 import { WatcherService, type WatchedRun } from '../services/watcherService';
 import { WatcherRegistry } from '../services/watcherRegistry';
 import { showWatchesQuickPick } from '../views/watchesStatusBar';
-import { isSafeUrl } from '../utils/urlSafety';
+import { isSafeUrl } from '../utils/url';
 
 /**
  * Resolves the effective list of inbox items from VS Code's multi-select command args.
