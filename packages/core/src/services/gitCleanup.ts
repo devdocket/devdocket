@@ -20,7 +20,7 @@ async function pathExists(p: string): Promise<boolean> {
 interface CleanupState {
   worktreeExists: boolean;
   branchExists: boolean;
-  repoPath?: string;
+  repoPath: string;
 }
 
 /**
