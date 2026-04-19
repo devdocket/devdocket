@@ -192,15 +192,16 @@ export abstract class BasePrAction implements DevDocketAction {
     return p.startsWith('/') || /^[a-zA-Z]:[\\/]/.test(p);
   }
 
-  async analyzeWithAi(diff: string, prUrl: string, token: vscode.CancellationToken): Promise<string | undefined> {
+  async analyzeWithAi(diff: string, prUrl: string, token: vscode.CancellationToken, preselectedModel?: vscode.LanguageModelChat): Promise<string | undefined> {
     try {
-      let models = await vscode.lm.selectChatModels({ family: 'gpt-4o' });
-      if (models.length === 0) {
-        models = await vscode.lm.selectChatModels();
-      }
-      if (models.length === 0) {
-        vscode.window.showWarningMessage(`${this.progressTitle}: No language model available. Install GitHub Copilot.`);
-        return undefined;
+      let model = preselectedModel;
+      if (!model) {
+        const models = await vscode.lm.selectChatModels();
+        if (models.length === 0) {
+          vscode.window.showWarningMessage(`${this.progressTitle}: No language model available. Install GitHub Copilot.`);
+          return undefined;
+        }
+        model = models[0];
       }
 
       const maxDiffLength = 50000;
@@ -215,7 +216,6 @@ export abstract class BasePrAction implements DevDocketAction {
 
       const runtimeInstructions = this.getRuntimeInstructions(safePrUrl);
 
-      const model = models[0];
       const messages = [
         vscode.LanguageModelChatMessage.User(
           `${runtimeInstructions}${reviewPrompt}

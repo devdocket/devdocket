@@ -1,6 +1,13 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { window, workspace, authentication, lm, Uri } from 'vscode';
+import { window, workspace, authentication, lm, Uri, LanguageModelTextPart, mockLogOutputChannel } from 'vscode';
 import { AiReviewAction, sanitizePrUrl } from '../aiReviewAction';
+import type { RepoManager } from '../repoManager';
+
+vi.mock('child_process', () => ({
+  execFile: vi.fn((_cmd: string, _args: string[], _opts: unknown, cb: Function) => {
+    cb(null, 'M\tpackages/ai-reviewer/src/aiReviewAction.ts', '');
+  }),
+}));
 
 function createWorkItem(overrides: Partial<Record<string, unknown>> = {}) {
   return {
@@ -17,8 +24,33 @@ function createWorkItem(overrides: Partial<Record<string, unknown>> = {}) {
   };
 }
 
+function createMockRepoManager(): RepoManager {
+  return {
+    ensureWorktree: vi.fn().mockResolvedValue({
+      worktreePath: '/mock/worktrees/pr-42',
+      clonePath: '/mock/repos/owner-repo',
+      org: 'owner',
+      repo: 'repo',
+      prNumber: '42',
+      headRef: 'pr-42',
+      baseRef: 'origin/main',
+    }),
+    getWorktreeInfo: vi.fn(),
+    removeWorktree: vi.fn(),
+    removeRepo: vi.fn(),
+  } as unknown as RepoManager;
+}
+
+function createMockSendRequest(text = 'Review feedback here') {
+  return vi.fn().mockResolvedValue({
+    text: (async function* () { yield text; })(),
+    stream: (async function* () { yield new LanguageModelTextPart(text); })(),
+  });
+}
+
 describe('AiReviewAction', () => {
   let action: AiReviewAction;
+  let mockRepoManager: RepoManager;
 
   afterEach(() => {
     vi.unstubAllGlobals();
@@ -27,7 +59,8 @@ describe('AiReviewAction', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.stubGlobal('fetch', vi.fn());
-    action = new AiReviewAction();
+    mockRepoManager = createMockRepoManager();
+    action = new AiReviewAction(mockRepoManager, mockLogOutputChannel as never);
 
     // Reset default mocks
     vi.mocked(authentication.getSession).mockResolvedValue({ accessToken: 'mock-token' } as never);
@@ -38,9 +71,7 @@ describe('AiReviewAction', () => {
       return task(progress, token);
     });
     vi.mocked(lm.selectChatModels).mockResolvedValue([{
-      sendRequest: vi.fn().mockResolvedValue({
-        text: (async function* () { yield 'Review feedback here'; })(),
-      }),
+      sendRequest: createMockSendRequest(),
     }]);
     vi.mocked(window.showWarningMessage).mockResolvedValue('Continue' as never);
     vi.mocked(workspace.getConfiguration).mockReturnValue({
@@ -155,6 +186,9 @@ describe('AiReviewAction', () => {
       const item = createWorkItem();
       await action.run(item);
 
+      // Verify worktree was prepared
+      expect(mockRepoManager.ensureWorktree).toHaveBeenCalledWith('https://github.com/owner/repo/pull/42');
+
       // Verify fetch was called with the GitHub API
       expect(mockFetch).toHaveBeenCalledWith(
         'https://api.github.com/repos/owner/repo/pulls/42',
@@ -214,6 +248,7 @@ describe('AiReviewAction', () => {
       await action.run(item);
 
       expect(window.withProgress).not.toHaveBeenCalled();
+      expect(mockRepoManager.ensureWorktree).not.toHaveBeenCalled();
     });
 
     it('shows warning when GitHub auth is unavailable', async () => {
@@ -239,9 +274,9 @@ describe('AiReviewAction', () => {
       vi.mocked(window.withProgress).mockImplementation(async (_options: unknown, task: Function) => {
         const progress = { report: vi.fn() };
         const token = { isCancellationRequested: false, onCancellationRequested: vi.fn() };
-        // Simulate cancellation after analyzeWithAi resolves
-        const originalAnalyze = action.analyzeWithAi.bind(action);
-        vi.spyOn(action, 'analyzeWithAi').mockImplementation(async (...args) => {
+        // Simulate cancellation after analyzeWithTools resolves
+        const originalAnalyze = action.analyzeWithTools.bind(action);
+        vi.spyOn(action, 'analyzeWithTools').mockImplementation(async (...args) => {
           const result = await originalAnalyze(...args);
           token.isCancellationRequested = true;
           return result;
@@ -538,6 +573,122 @@ describe('AiReviewAction', () => {
       expect(() => action.resolvePromptUri('/outside/prompt.md')).toThrow(
         '"/outside/prompt.md"',
       );
+    });
+  });
+
+  describe('analyzeWithTools', () => {
+    const worktreeInfo = {
+      worktreePath: '/mock/worktrees/pr-42',
+      clonePath: '/mock/repos/owner-repo',
+      org: 'owner',
+      repo: 'repo',
+      prNumber: '42',
+      headRef: 'pr-42',
+      baseRef: 'origin/main',
+    };
+
+    function createMockModel(text = 'Review feedback here') {
+      return {
+        id: 'mock-model',
+        sendRequest: createMockSendRequest(text),
+      } as never;
+    }
+
+    it('returns review text with repo context instructions', async () => {
+      const model = createMockModel('Tool-enabled review');
+
+      const token = { isCancellationRequested: false, onCancellationRequested: vi.fn() };
+      const result = await action.analyzeWithTools(
+        'diff content', 'https://github.com/owner/repo/pull/42', worktreeInfo as never, model, token as never,
+      );
+
+      expect(result).toContain('AI Code Review');
+      expect(result).toContain('Tool-enabled review');
+
+      // Verify the prompt includes repo context
+      const userMsg = model.sendRequest.mock.calls[0][0][0];
+      expect(userMsg.content).toContain('Repository Context');
+      expect(userMsg.content).toContain('/mock/worktrees/pr-42');
+      expect(userMsg.content).toContain('devdocket-readFile');
+      expect(userMsg.content).toContain('devdocket-searchCode');
+    });
+
+    it('appends truncation note when diff exceeds limit and worktree is available', async () => {
+      const model = createMockModel();
+      const token = { isCancellationRequested: false, onCancellationRequested: vi.fn() };
+      const largeDiff = 'x'.repeat(50_001);
+      const result = await action.analyzeWithTools(
+        largeDiff, 'https://github.com/owner/repo/pull/42', worktreeInfo as never, model, token as never,
+      );
+
+      expect(result).toContain('instructed to examine each file individually');
+    });
+
+    it('includes autonomous review instructions when diff is truncated', async () => {
+      const model = createMockModel('File-by-file review');
+
+      const token = { isCancellationRequested: false, onCancellationRequested: vi.fn() };
+      const largeDiff = 'x'.repeat(50_001);
+      await action.analyzeWithTools(
+        largeDiff, 'https://github.com/owner/repo/pull/42', worktreeInfo as never, model, token as never,
+      );
+
+      const userMsg = model.sendRequest.mock.calls[0][0][0];
+      expect(userMsg.content).toContain('Autonomous File-by-File Review Required');
+      expect(userMsg.content).toContain('devdocket-getFileDiff');
+      expect(userMsg.content).toContain('Do NOT');
+      expect(userMsg.content).toContain('do not ask the user');
+    });
+
+    it('does not include truncation instructions when diff fits within limit', async () => {
+      const model = createMockModel('Normal review');
+
+      const token = { isCancellationRequested: false, onCancellationRequested: vi.fn() };
+      await action.analyzeWithTools(
+        'small diff', 'https://github.com/owner/repo/pull/42', worktreeInfo as never, model, token as never,
+      );
+
+      const userMsg = model.sendRequest.mock.calls[0][0][0];
+      expect(userMsg.content).not.toContain('Autonomous File-by-File Review Required');
+    });
+  });
+
+  describe('shared RepoManager', () => {
+    it('falls back to analyzeWithAi when worktree preparation fails', async () => {
+      vi.mocked(mockRepoManager.ensureWorktree).mockRejectedValue(new Error('Clone failed'));
+      vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+        ok: true,
+        text: vi.fn().mockResolvedValue('diff content'),
+      }));
+
+      const item = createWorkItem();
+      await action.run(item);
+
+      // Should still show review via fallback analyzeWithAi
+      expect(workspace.openTextDocument).toHaveBeenCalledWith({
+        content: expect.stringContaining('AI Code Review'),
+        language: 'markdown',
+      });
+    });
+
+    it('reuses worktree if previously prepared', async () => {
+      vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+        ok: true,
+        text: vi.fn().mockResolvedValue('diff content'),
+      }));
+
+      const item = createWorkItem();
+      await action.run(item);
+
+      // ensureWorktree reuses existing clone/worktree
+      expect(mockRepoManager.ensureWorktree).toHaveBeenCalledWith('https://github.com/owner/repo/pull/42');
+    });
+
+    it('does not call ensureWorktree for non-PR URLs', async () => {
+      const item = createWorkItem({ url: 'https://github.com/owner/repo/issues/42' });
+      await action.run(item);
+
+      expect(mockRepoManager.ensureWorktree).not.toHaveBeenCalled();
     });
   });
 });
