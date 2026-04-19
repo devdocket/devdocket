@@ -144,10 +144,18 @@ describe('promptGitCleanup', () => {
   });
 
   it('does not prompt when neither branch nor worktree exist', async () => {
-    // fs.access fails (worktree path doesn't exist)
-    (fs.access as Mock).mockRejectedValue(new Error('ENOENT'));
+    // .git check succeeds, but worktree path doesn't exist
+    (fs.access as Mock).mockImplementation(async (p: string) => {
+      if (p.endsWith('.git')) {
+        return undefined;
+      }
+      throw new Error('ENOENT');
+    });
+    // git show-ref exits with 1 (branch not found)
+    (execFile as unknown as Mock).mockRejectedValueOnce(Object.assign(new Error('not found'), { code: 1 }));
 
     await promptGitCleanup(createItem({
+      branchName: 'feature/gone',
       worktreePath: '/nonexistent/path',
       repoPath: '/repos/main',
     }));
