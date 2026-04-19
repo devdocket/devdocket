@@ -30,10 +30,15 @@ async function checkCleanupState(item: WorkItem): Promise<CleanupState | undefin
   if (item.branchName && repoPath) {
     if (fs.existsSync(path.join(repoPath, '.git'))) {
       try {
-        const { stdout } = await execFileAsync('git', ['branch', '--list', item.branchName], { cwd: repoPath });
-        branchExists = stdout.trim().length > 0;
+        await execFileAsync('git', ['show-ref', '--verify', '--quiet', `refs/heads/${item.branchName}`], { cwd: repoPath });
+        branchExists = true;
       } catch (err) {
-        logger.warn(`Failed to check branch existence for ${item.branchName}`, err);
+        // Exit code 1 means ref not found; anything else is an unexpected error
+        if ((err as { code?: number | string }).code === 1) {
+          branchExists = false;
+        } else {
+          logger.warn(`Failed to check branch existence for ${item.branchName}`, err);
+        }
       }
     }
   }
