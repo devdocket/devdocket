@@ -936,8 +936,14 @@ async function handleWatchRun(watcherRegistry: WatcherRegistry, watcherService: 
   }
 }
 
-async function handleDismissWatch(watchedRun: WatchedRun, watcherService: WatcherService): Promise<void> {
+// Normalize argument: context menu passes WatchedRunNode, inline click passes WatchedRun
+function resolveWatchedRun(arg: WatchedRun | { watchedRun: WatchedRun }): WatchedRun {
+  return 'watchedRun' in arg ? arg.watchedRun : arg;
+}
+
+async function handleDismissWatch(arg: WatchedRun | { watchedRun: WatchedRun }, watcherService: WatcherService): Promise<void> {
   try {
+    const watchedRun = resolveWatchedRun(arg);
     watcherService.dismissWatch(watchedRun.identifier);
   } catch (err: unknown) {
     handleCommandError('Failed to dismiss watch', err);
@@ -952,8 +958,9 @@ async function handleDismissAllCompletedWatches(watcherService: WatcherService):
   }
 }
 
-async function handleOpenWatchUrl(watchedRun: WatchedRun): Promise<void> {
+async function handleOpenWatchUrl(arg: WatchedRun | { watchedRun: WatchedRun }): Promise<void> {
   try {
+    const watchedRun = resolveWatchedRun(arg);
     const safeUrl = isSafeUrl(watchedRun.identifier.url);
     if (!safeUrl) {
       void vscode.window.showWarningMessage('Can only open http(s) URLs in the browser.');
