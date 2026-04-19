@@ -175,7 +175,10 @@ export class WatcherService implements vscode.Disposable {
     }
 
     const activeWatches = this.getActiveWatches();
-    if (activeWatches.length === 0) {
+    const pollableWatches = activeWatches.filter(
+      w => w.status.overallState !== 'completed' && !w.hasWarning
+    );
+    if (pollableWatches.length === 0) {
       this.stopPolling();
       return;
     }
@@ -184,16 +187,7 @@ export class WatcherService implements vscode.Disposable {
     try {
       let anyChanged = false;
       
-      for (const watch of activeWatches) {
-        // Skip completed runs unless they have warnings (might recover)
-        if (watch.status.overallState === 'completed' && !watch.hasWarning) {
-          continue;
-        }
-
-        // Skip watches that have hit the 3-strike failure threshold
-        if (watch.hasWarning) {
-          continue;
-        }
+      for (const watch of pollableWatches) {
 
         try {
           const watcher = this.watcherRegistry.get(watch.identifier.providerId);
