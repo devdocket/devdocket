@@ -164,7 +164,7 @@ export interface DevDocketApi {
    * @param watcher - The run watcher to register.
    * @returns A {@link Disposable} that unregisters the watcher when disposed.
    */
-  registerRunWatcher(watcher: DevDocketRunWatcher): Disposable;
+  registerRunWatcher?(watcher: DevDocketRunWatcher): Disposable;
   /**
    * Append an activity log entry to a work item.
    *
