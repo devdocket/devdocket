@@ -937,13 +937,26 @@ async function handleWatchRun(watcherRegistry: WatcherRegistry, watcherService: 
 }
 
 // Normalize argument: context menu passes WatchedRunNode, inline click passes WatchedRun
-function resolveWatchedRun(arg: WatchedRun | { watchedRun: WatchedRun }): WatchedRun {
-  return 'watchedRun' in arg ? arg.watchedRun : arg;
+function resolveWatchedRun(arg: unknown): WatchedRun | undefined {
+  if (!arg || typeof arg !== 'object') {
+    return undefined;
+  }
+  if ('watchedRun' in arg) {
+    return (arg as { watchedRun: WatchedRun }).watchedRun;
+  }
+  if ('identifier' in arg && 'status' in arg) {
+    return arg as WatchedRun;
+  }
+  return undefined;
 }
 
-async function handleDismissWatch(arg: WatchedRun | { watchedRun: WatchedRun }, watcherService: WatcherService): Promise<void> {
+async function handleDismissWatch(arg: unknown, watcherService: WatcherService): Promise<void> {
   try {
     const watchedRun = resolveWatchedRun(arg);
+    if (!watchedRun) {
+      void vscode.window.showInformationMessage('Select a watch from the Watches view to dismiss.');
+      return;
+    }
     watcherService.dismissWatch(watchedRun.identifier);
   } catch (err: unknown) {
     handleCommandError('Failed to dismiss watch', err);
@@ -958,9 +971,13 @@ async function handleDismissAllCompletedWatches(watcherService: WatcherService):
   }
 }
 
-async function handleOpenWatchUrl(arg: WatchedRun | { watchedRun: WatchedRun }): Promise<void> {
+async function handleOpenWatchUrl(arg: unknown): Promise<void> {
   try {
     const watchedRun = resolveWatchedRun(arg);
+    if (!watchedRun) {
+      void vscode.window.showInformationMessage('Select a watch from the Watches view to open.');
+      return;
+    }
     const safeUrl = isSafeUrl(watchedRun.identifier.url);
     if (!safeUrl) {
       void vscode.window.showWarningMessage('Can only open http(s) URLs in the browser.');
