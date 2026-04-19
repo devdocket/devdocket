@@ -1,7 +1,7 @@
 {
   "name": "devdocket-github",
   "displayName": "DevDocket GitHub",
-  "description": "GitHub provider for DevDocket — discovers assigned issues and PR reviews.",
+  "description": "GitHub provider for DevDocket — discovers assigned issues, PR reviews, and authored PRs with status tracking.",
   "version": "0.1.0",
   "publisher": "mthalman",
   "license": "MIT",
