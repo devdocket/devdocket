@@ -917,14 +917,16 @@ async function handleWatchRun(watcherRegistry: WatcherRegistry, watcherService: 
     return; // User cancelled
   }
 
+  const trimmedUrl = url.trim();
+
   try {
-    const watcher = watcherRegistry.findWatcherForUrl(url);
+    const watcher = watcherRegistry.findWatcherForUrl(trimmedUrl);
     if (!watcher) {
       void vscode.window.showErrorMessage('Unsupported URL format. Paste a GitHub Actions run URL.');
       return;
     }
 
-    const identifier = watcher.parseRunUrl(url);
+    const identifier = watcher.parseRunUrl(trimmedUrl);
     await watcherService.startWatch(identifier);
     
     void vscode.window.showInformationMessage(`Now watching: ${identifier.displayName}`);
