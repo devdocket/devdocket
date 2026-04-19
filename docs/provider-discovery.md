@@ -177,7 +177,7 @@ A work item appears when **all** of the following are true:
 
 ADO uses a two-layer filter to handle the variety of process templates (Agile, Scrum, CMMI, custom):
 
-1. **First pass:**Excludes items with state names `Closed` or `Removed` (covers the most common cases)
+1. **First pass:** Excludes items with state names `Closed` or `Removed` (covers the most common cases)
 2. **Second pass:** Checks each work item type's state definitions and excludes items whose state falls into a **terminal state category** (Completed, Removed, or Resolved)
 
 This means items are correctly filtered regardless of your process template. For example, a Scrum "Done" item (category: Completed) is excluded even though its state name isn't "Closed".
