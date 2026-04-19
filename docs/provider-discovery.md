@@ -108,7 +108,7 @@ A PR review appears when **all** of the following are true:
 |-----------|---------|
 | **Review requested from you** | You are explicitly listed as a requested reviewer |
 | **Open state** | The PR is not closed or merged |
-| **Repository match** | If `devdocketGithub.repos` is configured, only PRs from those repos appear. Otherwise, review requests across all repositories are included (up to 100 results due to GitHub Search API limits). |
+| **Repository match** | If `devdocketGithub.repos` is configured, only PRs from those repos appear. Otherwise, review requests across all repositories are included. Each query (global or per-repo) is limited to 100 results due to GitHub Search API limits. |
 
 ### Configuration
 
@@ -140,7 +140,7 @@ A PR appears when **all** of the following are true:
 |-----------|---------|
 | **Authored by you** | You created the pull request |
 | **Open state** | The PR is not closed or merged |
-| **Repository match** | If `devdocketGithub.repos` is configured, only PRs from those repos appear. Otherwise, your authored PRs across all repositories are included (up to 100 results due to GitHub Search API limits). |
+| **Repository match** | If `devdocketGithub.repos` is configured, only PRs from those repos appear. Otherwise, your authored PRs across all repositories are included. Each query (global or per-repo) is limited to 100 results due to GitHub Search API limits. |
 
 Each discovered PR is enriched with its current status: Draft, Waiting on reviews, Review received, Changes requested, Approved, Ready to merge, or Open (fallback when detailed status cannot be determined).
 
