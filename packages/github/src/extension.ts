@@ -8,6 +8,7 @@ import { initLogger, setLogLevel, logger, resolveLogLevel } from './logger';
 
 let issueProvider: GitHubIssueProvider | undefined;
 let prReviewProvider: GitHubPrReviewProvider | undefined;
+let myPrsProvider: GitHubMyPrsProvider | undefined;
 let providerRegistration: vscode.Disposable | undefined;
 let prReviewRegistration: vscode.Disposable | undefined;
 let watcherRegistration: vscode.Disposable | undefined;
