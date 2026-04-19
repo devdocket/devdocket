@@ -900,13 +900,17 @@ async function handleDismissFromSources(
 async function handleUpdateMetadata(
   workGraph: WorkGraph,
   itemId: string,
-  metadata: { branchName?: string; worktreePath?: string; repoPath?: string },
+  metadata: unknown,
 ): Promise<void> {
-  const updatedFields = Object.keys(metadata).filter(
-    (key) => metadata[key as keyof typeof metadata] !== undefined,
+  if (typeof metadata !== 'object' || metadata === null) {
+    throw new Error('Metadata update must be an object');
+  }
+  const validatedMetadata = metadata as { branchName?: string; worktreePath?: string; repoPath?: string };
+  const updatedFields = Object.keys(validatedMetadata).filter(
+    (key) => validatedMetadata[key as keyof typeof validatedMetadata] !== undefined,
   );
   logger.info(`Updating metadata for item ${itemId}; fields: ${updatedFields.join(', ') || 'none'}`);
-  await workGraph.updateMetadata(itemId, metadata);
+  await workGraph.updateMetadata(itemId, validatedMetadata);
 }
 
 // ---------------------------------------------------------------------------
