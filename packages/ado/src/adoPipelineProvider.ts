@@ -274,7 +274,7 @@ export class AdoPipelineProvider extends BaseProvider {
         logger.info(`ADO build ${label} was canceled (${build.project.name}, ${branch})`);
       } else if (change.currentStatus.startsWith('completed:')) {
         const buildResult = change.currentStatus.slice('completed:'.length);
-        const result = await vscode.window.showWarningMessage(
+        const result = await vscode.window.showInformationMessage(
           `ℹ️ ${label} completed with result "${buildResult}" (${build.project.name}, ${branch})`,
           'View Build',
         );
