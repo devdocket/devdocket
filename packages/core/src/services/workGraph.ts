@@ -251,14 +251,14 @@ export class WorkGraph {
     const candidate = patch as Record<string, unknown>;
     const sanitized: Partial<Pick<WorkItem, 'branchName' | 'worktreePath' | 'repoPath'>> = {};
     for (const key of WorkGraph.METADATA_KEYS) {
-      const value = candidate[key];
-      if (value === undefined) {
+      if (!Object.prototype.hasOwnProperty.call(candidate, key)) {
         continue;
       }
-      if (typeof value !== 'string') {
+      const value = candidate[key];
+      if (value !== undefined && typeof value !== 'string') {
         throw new Error(`Invalid metadata patch: ${key} must be a string or undefined.`);
       }
-      sanitized[key] = value;
+      sanitized[key] = value as string | undefined;
     }
     return sanitized;
   }
@@ -270,7 +270,16 @@ export class WorkGraph {
       throw new Error(`Work item not found: ${id}`);
     }
     const sanitized = this.sanitizeMetadataPatch(patch);
-    const updated = { ...item, ...sanitized, updatedAt: Date.now() };
+    // Reset cleanupDismissed when git metadata is being set to new values
+    const hasNewMetadata = WorkGraph.METADATA_KEYS.some(
+      k => Object.prototype.hasOwnProperty.call(sanitized, k) && sanitized[k] !== undefined,
+    );
+    const updated = {
+      ...item,
+      ...sanitized,
+      updatedAt: Date.now(),
+      ...(hasNewMetadata ? { cleanupDismissed: undefined } : {}),
+    };
     await this.store.save(updated);
     this.items.set(id, updated);
     this.invalidateStateCache();
