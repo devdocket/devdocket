@@ -275,6 +275,13 @@ export class WorkGraph {
     if (sanitizedKeys.length === 0) {
       return;
     }
+    // Skip when all values are identical to what's already stored
+    const hasChanges = sanitizedKeys.some(
+      k => (sanitized as Record<string, unknown>)[k] !== (item as Record<string, unknown>)[k],
+    );
+    if (!hasChanges) {
+      return;
+    }
     // Reset cleanupDismissed when git metadata is being set to new values
     const hasNewMetadata = WorkGraph.METADATA_KEYS.some(
       k => Object.prototype.hasOwnProperty.call(sanitized, k) && sanitized[k] !== undefined,
