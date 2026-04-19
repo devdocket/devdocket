@@ -30,20 +30,20 @@ flowchart LR
     end
 
     subgraph Providers["Provider Extensions"]
-        GHI["GitHub Issues\nProvider"]
-        GHPR["GitHub PR Reviews\nProvider"]
-        GHMY["GitHub My PRs\nProvider"]
-        ADOWI["ADO Work Items\nProvider"]
-        ADOPR["ADO PR Reviews\nProvider"]
+        GHI["GitHub Issues<br/>Provider"]
+        GHPR["GitHub PR Reviews<br/>Provider"]
+        GHMY["GitHub My PRs<br/>Provider"]
+        ADOWI["ADO Work Items<br/>Provider"]
+        ADOPR["ADO PR Reviews<br/>Provider"]
     end
 
     subgraph Core["DevDocket Core"]
         PR["ProviderRegistry"]
         SS["DiscoveredStateStore"]
         subgraph Views
-            Inbox["Inbox\n(unseen)"]
-            Sources["Sources\n(all items)"]
-            Queue["Queue\n(accepted)"]
+            Inbox["Inbox<br/>(unseen)"]
+            Sources["Sources<br/>(all items)"]
+            Queue["Queue<br/>(accepted)"]
         end
     end
 
@@ -177,17 +177,7 @@ A work item appears when **all** of the following are true:
 
 ADO uses a two-layer filter to handle the variety of process templates (Agile, Scrum, CMMI, custom):
 
-```mermaid
-flowchart TD
-    A["WIQL Query\nAssigned to @Me"] --> B["First pass:\nExclude State = 'Closed'\nExclude State = 'Removed'"]
-    B --> C["Fetch work item details\n(batches of 200)"]
-    C --> D["Second pass:\nFetch state categories\nper work item type"]
-    D --> E{State category\nterminal?}
-    E -- "Completed /\nRemoved /\nResolved" --> F["Excluded"]
-    E -- "Active /\nProposed /\nother" --> G["Included in\ndiscovered items"]
-```
-
-1. **First pass:** Excludes items with state names `Closed` or `Removed` (covers the most common cases)
+1. **First pass:**Excludes items with state names `Closed` or `Removed` (covers the most common cases)
 2. **Second pass:** Checks each work item type's state definitions and excludes items whose state falls into a **terminal state category** (Completed, Removed, or Resolved)
 
 This means items are correctly filtered regardless of your process template. For example, a Scrum "Done" item (category: Completed) is excluded even though its state name isn't "Closed".
@@ -249,23 +239,6 @@ All providers poll their data source periodically. The default interval is **5 m
 - **Disable:** Set the interval to `0` or a negative value to stop automatic polling
 - **Manual refresh:** You can always trigger a refresh manually via the DevDocket refresh command, regardless of the interval setting
 
-```mermaid
-flowchart TD
-    A["Timer fires\n(every N seconds)"] --> B{Already\nrefreshing?}
-    B -- Yes --> C[Skip]
-    B -- No --> D{Authenticated?}
-    D -- No --> E["Background: skip silently\nManual: prompt sign-in"]
-    D -- Yes --> F["Query external API"]
-    F --> G{Success?}
-    G -- Yes --> H["Emit DiscoveredItem[]\nMark provider healthy"]
-    G -- No --> I["Log error\nMark provider unhealthy"]
-    H --> J["ProviderRegistry\nprocesses items"]
-    I --> K["Timer continues\n(next interval)"]
-    J --> K
-
-    M["User triggers\nmanual refresh"] --> D
-```
-
 ### Item Lifecycle (Inbox States)
 
 When a provider discovers an item, it enters the **Inbox** as an unseen item. From there:
@@ -277,11 +250,11 @@ stateDiagram-v2
     Unseen --> Accepted : User accepts
     Unseen --> Dismissed : User dismisses
 
-    Accepted --> Unseen : Version changes\n(resurfacing)
+    Accepted --> Unseen : Version changes (resurfacing)
 
     note right of Unseen : Appears in Inbox
-    note right of Accepted : Creates a work item\nin the Queue
-    note right of Dismissed : Hidden from Inbox\n(never resurfaced)
+    note right of Accepted : Creates a work item in the Queue
+    note right of Dismissed : Hidden from Inbox (never resurfaced)
 ```
 
 - **Unseen** — New item in your Inbox, waiting for you to triage it.
@@ -294,16 +267,16 @@ Some providers track **versions** of discovered items. When a version changes on
 
 ```mermaid
 flowchart TD
-    A["Provider emits item\nwith version"] --> B{Item exists\nin state store?}
-    B -- No --> C["Add as Unseen\n(new discovery)"]
-    B -- Yes --> D{Current\ninbox state?}
-    D -- Unseen --> E["Update stored\nversion"]
-    D -- Dismissed --> F["No action\n(never resurface)"]
-    D -- Accepted --> G{Version\nchanged?}
-    G -- No --> H{Version\nmissing in store?}
-    H -- Yes --> I["Backfill version\n(keep Accepted)"]
+    A["Provider emits item<br/>with version"] --> B{Item exists<br/>in state store?}
+    B -- No --> C["Add as Unseen<br/>(new discovery)"]
+    B -- Yes --> D{Current<br/>inbox state?}
+    D -- Unseen --> E["Update stored<br/>version"]
+    D -- Dismissed --> F["No action<br/>(never resurface)"]
+    D -- Accepted --> G{Version<br/>changed?}
+    G -- No --> H{Version<br/>missing in store?}
+    H -- Yes --> I["Backfill version<br/>(keep Accepted)"]
     H -- No --> J["No action"]
-    G -- Yes --> K["Resurface → Unseen\n(reappears in Inbox)"]
+    G -- Yes --> K["Resurface → Unseen<br/>(reappears in Inbox)"]
 ```
 
 **GitHub PR Reviews** support two independent resurfacing signals:
