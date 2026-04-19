@@ -23,6 +23,7 @@ interface WorkItem {
   branchName?: string;
   worktreePath?: string;
   repoPath?: string;
+  cleanupDismissed?: boolean;
 }
 
 // Re-declared to match core API contract — separate extension cannot import core types directly
