@@ -7,6 +7,7 @@ import type {
   RunState, 
   RunConclusion 
 } from '@devdocket/shared';
+import { logger } from './logger';
 
 
 interface GitHubWorkflowRun {
@@ -126,6 +127,7 @@ export class GitHubActionsWatcher implements DevDocketRunWatcher {
       case 'neutral':
         return conclusion;
       default:
+        logger.warn(`Unknown run conclusion '${conclusion}', treating as undefined`);
         return undefined;
     }
   }
