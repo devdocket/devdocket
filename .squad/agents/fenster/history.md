@@ -221,3 +221,12 @@ DevDocket is a VS Code extension monorepo for managing work items from multiple 
 - **Managed state tracking:** Copilot review caught that `onDidChangeDiscoveredItems` also fires when providers register/unregister, which changes the managed (readonly) state. Added `lastManagedState` tracking — when it flips, a full `update()` re-render runs instead of a targeted title-only update.
 - **`displayTitle` on `EditorHtmlOptions`:** Added optional `displayTitle` property; heading and title input use it (falling back to `item.title`). This is an internal interface, not public API — no breaking change.
 - **Files changed:** `packages/core/src/views/editorPanelHtml.ts`, `packages/core/src/views/workItemEditorPanel.ts`, plus test files.
+
+### 2026-04-18 — Issue #319 (Focus View Provider Grouping)
+
+**PR #XXX:** Focus view now groups items by provider in tree mode, matching Sources view pattern.
+- **Removed custom grouping logic:** Focus view had custom `getChildren()` and `getParent()` implementations that grouped by `item.group` (repo name). Removed these overrides to use the base class `WorkItemViewProvider` pattern which groups by provider.
+- **WorkItemViewProvider base class:** The base class already implements provider grouping via `getTreeModeChildren()` helper in `viewLayout.ts`. It creates a two-level hierarchy: provider → sub-group (item.group) → items. This is consistent with Queue, History, and Sources views.
+- **Tree hierarchy:** In tree mode, items are now grouped: Provider (GitHub, ADO, etc.) → Sub-group (repo name) → Work Items. Manual items appear under "Other" provider group. In flat mode, unchanged.
+- **No breaking changes:** The public API surface is unchanged — only internal tree provider implementation.
+- **Files changed:** `packages/core/src/views/focusTreeProvider.ts` (removed ~60 lines of custom grouping logic).

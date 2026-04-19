@@ -3,7 +3,7 @@ import { WorkItem, WorkItemState } from '../models/workItem';
 import { WorkGraph } from '../services/workGraph';
 import { ProviderRegistry } from '../services/providerRegistry';
 import {
-  WorkItemElement, WorkItemViewProvider, SubGroupNode, isProviderGroupNode, isSubGroupNode,
+  WorkItemElement, WorkItemViewProvider, isProviderGroupNode, isSubGroupNode,
 } from './viewLayout';
 
 const DRAG_MIME_TYPE = 'application/vnd.code.tree.devdocket.focus';
@@ -62,67 +62,7 @@ export class FocusTreeProvider extends WorkItemViewProvider implements vscode.Tr
     return treeItem;
   }
 
-  getParent(element: FocusElement): FocusElement | undefined {
-    if (this.layout === 'flat') {
-      return undefined;
-    }
-    if (isSubGroupNode(element)) {
-      return undefined;
-    }
-    if (isProviderGroupNode(element)) {
-      return undefined;
-    }
-    // WorkItem — parent is SubGroupNode if item has a group, otherwise root
-    const item = element as import('../models/workItem').WorkItem;
-    const grp = item.group?.trim() || undefined;
-    if (grp) {
-      return { kind: 'subGroup', label: grp, providerId: undefined, groupName: grp };
-    }
-    return undefined;
-  }
 
-  getChildren(element?: FocusElement): FocusElement[] {
-    if (!element) {
-      const items = this.getItems();
-      if (this.layout === 'flat') {
-        return this.sortItems(items);
-      }
-      return this.getGroupRootChildren(items);
-    }
-
-    if (isSubGroupNode(element)) {
-      return this.sortItems(
-        this.getItems().filter(i => (i.group?.trim() || undefined) === element.groupName),
-      );
-    }
-
-    return [];
-  }
-
-  /** Group items by `item.group` (repo name) at the top level in tree mode. */
-  private getGroupRootChildren(items: WorkItem[]): (SubGroupNode | WorkItem)[] {
-    const groups = new Set<string>();
-    const ungrouped: WorkItem[] = [];
-
-    for (const item of items) {
-      const g = item.group?.trim();
-      if (g) {
-        groups.add(g);
-      } else {
-        ungrouped.push(item);
-      }
-    }
-
-    const subGroups: SubGroupNode[] = [];
-    for (const groupName of groups) {
-      subGroups.push({ kind: 'subGroup', label: groupName, providerId: undefined, groupName });
-    }
-
-    const sortedSubGroups = subGroups.sort((a, b) => a.label.localeCompare(b.label));
-    const sortedUngrouped = this.sortItems(ungrouped);
-
-    return [...sortedSubGroups, ...sortedUngrouped];
-  }
 
   private getFocusStatePriority(state: WorkItemState): number {
     switch (state) {
