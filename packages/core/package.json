@@ -26,8 +26,7 @@
     "onCommand:devdocket.watchRun",
     "onCommand:devdocket.dismissWatch",
     "onCommand:devdocket.dismissAllCompletedWatches",
-    "onCommand:devdocket.openWatchUrl",
-    "onCommand:devdocket.showWatchesQuickPick"
+    "onCommand:devdocket.openWatchUrl"
   ],
   "main": "./dist/extension.js",
   "contributes": {
