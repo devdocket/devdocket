@@ -95,10 +95,14 @@ export async function promptGitCleanup(
   const message = `The ${parts.join(' and ')} for this item still ${hasSingleTarget ? 'exists' : 'exist'}. Delete ${hasSingleTarget ? 'it' : 'them'}?`;
   const choice = await vscode.window.showInformationMessage(message, 'Yes', 'No');
 
-  if (choice !== 'Yes') {
+  if (choice === 'No') {
     if (onDismiss) {
       await onDismiss();
     }
+    return;
+  }
+
+  if (choice !== 'Yes') {
     return;
   }
 
