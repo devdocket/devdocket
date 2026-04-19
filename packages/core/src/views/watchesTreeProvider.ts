@@ -11,7 +11,7 @@ class WatchedRunNode extends vscode.TreeItem {
     public readonly children: JobStatusNode[]
   ) {
     const label = watchedRun.identifier.displayName;
-    super(label, vscode.TreeItemCollapsibleState.Collapsed);
+    super(label, children.length > 0 ? vscode.TreeItemCollapsibleState.Collapsed : vscode.TreeItemCollapsibleState.None);
     
     this.tooltip = this.buildTooltip();
     this.description = this.buildDescription();
