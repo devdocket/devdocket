@@ -50,6 +50,7 @@ DevDocket is a VS Code extension monorepo for managing work items from multiple 
 
 ### Completed Issues
 #282 (provider state in editor), #281 (clickable title), #275 (History→Queue transitions), #273 (tree counts), #265 (auto-complete on close), #255 (provider metadata docs), #250 (group context), #249 (accept-to-focus, pre-shipped), #243 (version resurfacing), #240 (create from URL), #233 (provider health), #232 (clear history), #231 (sources icons), #230 (layout toggle), #229 (emoji removal), #227 (provider labels), #223 (dead code cleanup), #222 (responsive layout), #221 (contextual heading), #219 (source URL link), #217 (editor metadata), #216 (provider description), #215 (dynamic titles), #189 (dismissed fix), #178 (ADO filtering), #158 (markdown injection), #157 (API trust boundary), #156 (URL sanitization), #155 (URL scheme validation), #154 (crypto.randomUUID), #153 (JSON validation), #152 (path traversal fix), #12 (AI PR actions), bulk rename (WorkCenter→DevDocket)
+#276 (auto-track authored PRs), #282 (provider state in editor), #281 (clickable title), #275 (History→Queue transitions),#273 (tree counts), #265 (auto-complete on close), #250 (group context), #249 (accept-to-focus, pre-shipped), #243 (version resurfacing), #240 (create from URL), #233 (provider health), #232 (clear history), #231 (sources icons), #230 (layout toggle), #229 (emoji removal), #227 (provider labels), #223 (dead code cleanup), #222 (responsive layout), #221 (contextual heading), #219 (source URL link), #217 (editor metadata), #216 (provider description), #215 (dynamic titles), #189 (dismissed fix), #178 (ADO filtering), #158 (markdown injection), #157 (API trust boundary), #156 (URL sanitization), #155 (URL scheme validation), #154 (crypto.randomUUID), #153 (JSON validation), #152 (path traversal fix), #12 (AI PR actions), bulk rename (WorkCenter→DevDocket)
 
 > Full issue-level learnings archived to `history-archive.md`
 
@@ -64,6 +65,17 @@ DevDocket is a VS Code extension monorepo for managing work items from multiple 
 - **ADO PR Reviews:** You are a reviewer + active status. Resurfacing via `lastMergeSourceCommit.commitId`.
 - **Common behavior:** 5-min default refresh, 60s minimum, version-based resurfacing, dismissed items never resurface.
 - **Documentation-only change** — no code modified, all tests pass.
+### 2026-04-19 — Issue #276 (Auto-Track Authored PRs)
+
+**PR:** Added a new `GitHubMyPrsProvider` that discovers open PRs authored by the current user and shows their review/CI status.
+- **New provider pattern:** Follows `BaseGitHubProvider` extension pattern like the existing issue and PR review providers. Registered as third provider in `extension.ts`. Uses the same `devdocketGithub.repos` config for repo filtering.
+- **Status determination:** Static `determinePrStatus()` method computes status from PR detail + reviews. Priority: Draft > Changes requested > Ready to merge (approved + clean) > Approved (approved but not clean) > Review received (comments only) > Waiting on reviews.
+- **Review decision logic:** Tracks latest review per reviewer by `user.id`. Only `APPROVED` and `CHANGES_REQUESTED` count as decisions; `COMMENTED`, `PENDING`, `DISMISSED` are informational. Uses `submitted_at` timestamp comparison for ordering.
+- **Mergeable state as CI proxy:** Uses `mergeable_state === 'clean'` from the PR detail API to determine "Ready to merge" status. This combines CI status and branch protection checks without requiring separate `/commits/{sha}/status` and `/check-runs` API calls — reduces per-PR API calls from 4 to 2.
+- **Concurrent enrichment:** Fetches PR details and reviews in parallel per-PR with 3 concurrent workers (same pattern as PR review provider's head SHA fetching). Best-effort: failures fall back to generic "Open" status.
+- **Test mock pattern:** Concurrent worker tests need URL-based mock routing (`mockImplementation` with URL matching) instead of sequential `mockResolvedValueOnce`, since worker execution order is non-deterministic.
+- **No version-based resurfacing:** Status changes don't trigger resurfacing — status is informational via `DiscoveredItem.state`. Users track open PRs at a glance; merged PRs disappear and auto-complete (#265) handles the work item transition.
+- **Files changed:** `packages/github/src/githubMyPrsProvider.ts` (new), `packages/github/src/extension.ts`, `packages/github/package.json`, `packages/github/src/test/githubMyPrsProvider.test.ts` (new, 24 tests).
 
 ### 2026-04-18 — Issue #264 (Cleanup Branch/Worktree on Complete)
 
