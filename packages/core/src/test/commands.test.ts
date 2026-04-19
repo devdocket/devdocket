@@ -2077,6 +2077,24 @@ describe('registerCommands', () => {
       expect(workGraph.clearOldHistory).toHaveBeenCalledWith(30);
     });
   });
+
+  describe('devdocket.dismissWatch', () => {
+    it('shows info message when no argument provided', async () => {
+      await invoke('devdocket.dismissWatch');
+      expect(vscode.window.showInformationMessage).toHaveBeenCalledWith(
+        'Select a watch from the Watches view to dismiss.',
+      );
+    });
+  });
+
+  describe('devdocket.openWatchUrl', () => {
+    it('shows info message when no argument provided', async () => {
+      await invoke('devdocket.openWatchUrl');
+      expect(vscode.window.showInformationMessage).toHaveBeenCalledWith(
+        'Select a watch from the Watches view to open.',
+      );
+    });
+  });
 });
 
 describe('isSafeUrl', () => {
