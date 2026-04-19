@@ -190,6 +190,11 @@ export class WatcherService implements vscode.Disposable {
           continue;
         }
 
+        // Skip watches that have hit the 3-strike failure threshold
+        if (watch.hasWarning) {
+          continue;
+        }
+
         try {
           const watcher = this.watcherRegistry.get(watch.identifier.providerId);
           if (!watcher) {
@@ -237,7 +242,7 @@ export class WatcherService implements vscode.Disposable {
             watch.hasWarning = true;
             watch.errorMessage = err instanceof Error ? err.message : String(err);
             anyChanged = true;
-            this.logger.warn(`3 consecutive failures for ${watch.identifier.displayName}, stopping poll for this run`);
+            this.logger.warn(`3 consecutive failures for ${watch.identifier.displayName}, marking with warning`);
           } else {
             this.logger.warn(`Poll failed for ${watch.identifier.displayName} (attempt ${failures}/3): ${err}`);
           }
