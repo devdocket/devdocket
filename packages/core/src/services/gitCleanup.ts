@@ -66,8 +66,16 @@ async function checkCleanupState(item: WorkItem): Promise<CleanupState | undefin
 
 /**
  * Prompts the user to clean up a git worktree and branch, and performs the cleanup if confirmed.
+ * If dismissed, calls onDismiss so the caller can persist the dismissal flag.
  */
-export async function promptGitCleanup(item: WorkItem): Promise<void> {
+export async function promptGitCleanup(
+  item: WorkItem,
+  onDismiss?: () => Promise<void>,
+): Promise<void> {
+  if (item.cleanupDismissed) {
+    return;
+  }
+
   const state = await checkCleanupState(item);
   if (!state) {
     return;
@@ -87,6 +95,9 @@ export async function promptGitCleanup(item: WorkItem): Promise<void> {
   const choice = await vscode.window.showInformationMessage(message, 'Yes', 'No');
 
   if (choice !== 'Yes') {
+    if (onDismiss) {
+      await onDismiss();
+    }
     return;
   }
 

@@ -322,7 +322,14 @@ export class WorkGraph {
 
     // Prompt for cleanup if transitioning to Done and branch/worktree metadata exists
     if (newState === WorkItemState.Done) {
-      void promptGitCleanup(updated);
+      void promptGitCleanup(updated, async () => {
+        const current = this.items.get(id);
+        if (current) {
+          const dismissed = { ...current, cleanupDismissed: true, updatedAt: Date.now() };
+          await this.store.save(dismissed);
+          this.items.set(id, dismissed);
+        }
+      });
     }
   }
 
