@@ -142,7 +142,7 @@ A PR appears when **all** of the following are true:
 | **Open state** | The PR is not closed or merged |
 | **Repository match** | If `devdocketGithub.repos` is configured, only PRs from those repos appear. Otherwise, your authored PRs across all repositories are included (up to 100 results due to GitHub Search API limits). |
 
-Each discovered PR is enriched with its current status: Draft, Waiting on reviews, Review received, Changes requested, Approved, or Ready to merge.
+Each discovered PR is enriched with its current status: Draft, Waiting on reviews, Review received, Changes requested, Approved, Ready to merge, or Open (fallback when detailed status cannot be determined).
 
 ### Configuration
 
@@ -279,12 +279,12 @@ stateDiagram-v2
 
     note right of Unseen : Appears in Inbox
     note right of Accepted : Creates a work item\nin the Queue
-    note right of Dismissed : Permanently hidden\n(never resurfaced)
+    note right of Dismissed : Hidden from Inbox\n(never resurfaced)
 ```
 
 - **Unseen** — New item in your Inbox, waiting for you to triage it.
 - **Accepted** — You've accepted the item; it becomes a work item in your Queue.
-- **Dismissed** — You've dismissed the item. It will **not** reappear, even if the provider keeps discovering it.
+- **Dismissed** — You've dismissed the item. It will **not** reappear in the Inbox, even if the provider keeps discovering it. Dismissed items remain visible in the Sources view.
 
 ### Resurfacing
 
