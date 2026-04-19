@@ -15,6 +15,7 @@ import type { ViewRevealer } from '../services/viewRevealer';
 import { WatcherService, type WatchedRun } from '../services/watcherService';
 import { WatcherRegistry } from '../services/watcherRegistry';
 import { showWatchesQuickPick } from '../views/watchesStatusBar';
+import { isSafeUrl } from '../utils/urlSafety';
 
 /**
  * Resolves the effective list of inbox items from VS Code's multi-select command args.
@@ -83,15 +84,7 @@ function formatItemTitle(item: { group?: string; title: string }): string {
   return trimmedGroup ? `${trimmedGroup} ${item.title}` : item.title;
 }
 
-/** Returns the parsed URL if it uses an allowed web scheme (http or https), or null otherwise. */
-export function isSafeUrl(url: string): URL | null {
-  try {
-    const parsed = new URL(url);
-    return (parsed.protocol === 'http:' || parsed.protocol === 'https:') ? parsed : null;
-  } catch {
-    return null;
-  }
-}
+// isSafeUrl lives in ../utils/urlSafety to avoid a circular dependency with watchesStatusBar.
 
 /** Log the error and show a user-facing message. */
 function handleCommandError(context: string, err: unknown): void {
