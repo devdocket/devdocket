@@ -902,10 +902,11 @@ async function handleWatchRun(watcherRegistry: WatcherRegistry, watcherService: 
     prompt: 'Enter a pipeline run URL',
     placeHolder: 'https://github.com/owner/repo/actions/runs/123456789',
     validateInput: (value) => {
-      if (!value.trim()) {
+      const trimmed = value.trim();
+      if (!trimmed) {
         return 'URL cannot be empty';
       }
-      const watcher = watcherRegistry.findWatcherForUrl(value);
+      const watcher = watcherRegistry.findWatcherForUrl(trimmed);
       if (!watcher) {
         return 'Unsupported URL format. No registered watcher recognizes this URL.';
       }
