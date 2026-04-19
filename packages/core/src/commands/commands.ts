@@ -944,11 +944,11 @@ async function handleDismissWatch(watchedRun: WatchedRun, watcherService: Watche
   }
 }
 
-async function handleDismissAllWatches(watcherService: WatcherService): Promise<void> {
+async function handleDismissAllCompletedWatches(watcherService: WatcherService): Promise<void> {
   try {
     watcherService.dismissAllCompleted();
   } catch (err: unknown) {
-    handleCommandError('Failed to dismiss all watches', err);
+    handleCommandError('Failed to dismiss all completed watches', err);
   }
 }
 
@@ -1064,7 +1064,7 @@ export function registerCommands(
     vscode.commands.registerCommand('devdocket.dismissWatch',
       wrapCommand('Failed to dismiss watch', (watchedRun: WatchedRun) => handleDismissWatch(watchedRun, watcherService))),
     vscode.commands.registerCommand('devdocket.dismissAllWatches',
-      wrapCommand('Failed to dismiss all watches', () => handleDismissAllWatches(watcherService))),
+      wrapCommand('Failed to dismiss all completed watches', () => handleDismissAllCompletedWatches(watcherService))),
     vscode.commands.registerCommand('devdocket.openWatchUrl',
       wrapCommand('Failed to open watch URL', (watchedRun: WatchedRun) => handleOpenWatchUrl(watchedRun))),
     vscode.commands.registerCommand('devdocket.showWatchesQuickPick',
