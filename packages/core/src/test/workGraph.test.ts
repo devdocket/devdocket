@@ -3,6 +3,10 @@ import { WorkGraph } from '../services/workGraph';
 import { WorkItemState } from '../models/workItem';
 import { ITaskStore } from '../storage/taskStore';
 
+vi.mock('../services/gitCleanup', () => ({
+  promptGitCleanup: vi.fn(),
+}));
+
 function createMockStore(): ITaskStore {
   const items: Map<string, any> = new Map();
   return {
@@ -1032,6 +1036,93 @@ describe('WorkGraph', () => {
       expect(store.save).toHaveBeenCalled();
       const savedItem = (store.save as ReturnType<typeof vi.fn>).mock.calls.at(-1)?.[0];
       expect(savedItem.activityLog).toHaveLength(2);
+    });
+  });
+
+  describe('updateMetadata', () => {
+    it('updates allowed metadata fields on a work item', async () => {
+      const item = await graph.createItem({ title: 'Test' });
+      await graph.updateMetadata(item.id, {
+        branchName: 'feature/test',
+        worktreePath: '/tmp/wt',
+        repoPath: '/repos/main',
+      });
+
+      const updated = graph.getItem(item.id);
+      expect(updated?.branchName).toBe('feature/test');
+      expect(updated?.worktreePath).toBe('/tmp/wt');
+      expect(updated?.repoPath).toBe('/repos/main');
+    });
+
+    it('throws for unknown item', async () => {
+      await expect(graph.updateMetadata('nonexistent', { branchName: 'x' }))
+        .rejects.toThrow('Work item not found');
+    });
+
+    it('rejects non-string values in patch', async () => {
+      const item = await graph.createItem({ title: 'Test' });
+      await expect(graph.updateMetadata(item.id, { branchName: 42 } as any))
+        .rejects.toThrow('must be a string or undefined');
+    });
+
+    it('strips unknown keys from patch', async () => {
+      const item = await graph.createItem({ title: 'Test' });
+      await graph.updateMetadata(item.id, { branchName: 'ok', state: 'Archived' } as any);
+
+      const updated = graph.getItem(item.id);
+      expect(updated?.branchName).toBe('ok');
+      expect(updated?.state).toBe(WorkItemState.New);
+    });
+
+    it('fires onDidChange after metadata update', async () => {
+      const item = await graph.createItem({ title: 'Test' });
+      const listener = vi.fn();
+      graph.onDidChange(listener);
+
+      await graph.updateMetadata(item.id, { branchName: 'test-branch' });
+      expect(listener).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  describe('git cleanup on transition to Done', () => {
+    it('calls promptGitCleanup when transitioning to Done with metadata', async () => {
+      const { promptGitCleanup } = await import('../services/gitCleanup');
+      vi.mocked(promptGitCleanup).mockClear();
+
+      const item = await graph.createItem({ title: 'Test' });
+      await graph.updateMetadata(item.id, {
+        branchName: 'feature/test',
+        repoPath: '/repos/main',
+      });
+      await graph.transitionState(item.id, WorkItemState.InProgress);
+      await graph.transitionState(item.id, WorkItemState.Done);
+
+      expect(promptGitCleanup).toHaveBeenCalledTimes(1);
+      const calledItem = vi.mocked(promptGitCleanup).mock.calls[0][0];
+      expect(calledItem.branchName).toBe('feature/test');
+      expect(calledItem.state).toBe(WorkItemState.Done);
+    });
+
+    it('calls promptGitCleanup even without metadata', async () => {
+      const { promptGitCleanup } = await import('../services/gitCleanup');
+      vi.mocked(promptGitCleanup).mockClear();
+
+      const item = await graph.createItem({ title: 'Test' });
+      await graph.transitionState(item.id, WorkItemState.InProgress);
+      await graph.transitionState(item.id, WorkItemState.Done);
+
+      expect(promptGitCleanup).toHaveBeenCalledTimes(1);
+    });
+
+    it('does not call promptGitCleanup for non-Done transitions', async () => {
+      const { promptGitCleanup } = await import('../services/gitCleanup');
+      vi.mocked(promptGitCleanup).mockClear();
+
+      const item = await graph.createItem({ title: 'Test' });
+      await graph.transitionState(item.id, WorkItemState.InProgress);
+      await graph.transitionState(item.id, WorkItemState.Paused);
+
+      expect(promptGitCleanup).not.toHaveBeenCalled();
     });
   });
 });
