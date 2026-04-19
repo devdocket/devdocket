@@ -175,6 +175,8 @@ export class WatcherService implements vscode.Disposable {
     }
 
     const activeWatches = this.getActiveWatches();
+    // Only poll watches that are still in progress and haven't hit the failure threshold.
+    // Completed watches stay visible until dismissed; warned watches need manual re-watch.
     const pollableWatches = activeWatches.filter(
       w => w.status.overallState !== 'completed' && !w.hasWarning
     );
