@@ -62,8 +62,6 @@ export class FocusTreeProvider extends WorkItemViewProvider implements vscode.Tr
     return treeItem;
   }
 
-
-
   private getFocusStatePriority(state: WorkItemState): number {
     switch (state) {
       case WorkItemState.InProgress:
