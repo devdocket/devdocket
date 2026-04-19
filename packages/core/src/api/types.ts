@@ -129,7 +129,7 @@ export interface DevDocketAction {
  * if (api) {
  *   api.registerProvider(myProvider);
  *   api.registerAction(myAction);
- *   api.registerRunWatcher(myWatcher);
+ *   api.registerRunWatcher?.(myWatcher);
  * }
  * ```
  */
