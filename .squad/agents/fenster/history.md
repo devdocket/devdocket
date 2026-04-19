@@ -224,11 +224,11 @@ DevDocket is a VS Code extension monorepo for managing work items from multiple 
 
 ### 2026-04-20 — Issue #266 (Watch CI Pipelines)
 
-**Implementation:** Fire-and-forget pipeline watching for GitHub Actions and ADO Pipelines.
+**Implementation:** Fire-and-forget pipeline watching for GitHub Actions.
 - **Hybrid architecture:** Core owns `WatcherService` lifecycle (poll, notify), providers supply `DevDocketRunWatcher` interface (canWatch, parseRunUrl, getRunStatus).
 - **New API surface:** `DevDocketRunWatcher` in `@devdocket/shared`, `registerRunWatcher()` on `DevDocketApi` (additive, non-breaking). Optional interface mirrors existing provider/action pattern.
 - **Session-scoped persistence:** Watches are in-memory only. If VS Code restarts, re-watch by pasting URL again. Design spec decision.
-- **Polling with concurrency guard:** `WatcherService` polls active watches every 30s (configurable, min 15s). Skips tick if previous poll still in-flight. After 3 consecutive failures, sets warning flag and stops polling that run.
+- **Polling with concurrency guard:** `WatcherService` polls active watches every 30s (configurable, min 15s). Skips tick if previous poll still in-flight. After 3 consecutive failures, sets warning flag and skips that run in subsequent polls.
 - **Early failure notifications:** `onDidDetectJobFailure` fires when job completes with `failure` conclusion while overall run is still in progress. Notification shows running job count. Gated by `devdocket.watches.notifyOnJobFailure` (default: true).
 - **UI components:** (1) `WatchesTreeProvider` (6th view): run nodes with job children. (2) `WatchesStatusBar`: right side, shows counts, click for quick-pick. (3) Notification toasts on completion and job failure.
 - **Commands:** `watchRun` (input box with URL validation), `dismissWatch`, `dismissAllWatches`, `openWatchUrl`. All wired in context menus and view title.
