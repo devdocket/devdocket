@@ -1063,7 +1063,7 @@ export function registerCommands(
       wrapCommand('Failed to watch pipeline run', () => handleWatchRun(watcherRegistry, watcherService))),
     vscode.commands.registerCommand('devdocket.dismissWatch',
       wrapCommand('Failed to dismiss watch', (watchedRun: WatchedRun) => handleDismissWatch(watchedRun, watcherService))),
-    vscode.commands.registerCommand('devdocket.dismissAllWatches',
+    vscode.commands.registerCommand('devdocket.dismissAllCompletedWatches',
       wrapCommand('Failed to dismiss all completed watches', () => handleDismissAllCompletedWatches(watcherService))),
     vscode.commands.registerCommand('devdocket.openWatchUrl',
       wrapCommand('Failed to open watch URL', (watchedRun: WatchedRun) => handleOpenWatchUrl(watchedRun))),

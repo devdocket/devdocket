@@ -414,7 +414,7 @@
         "icon": "$(close)"
       },
       {
-        "command": "devdocket.dismissAllWatches",
+        "command": "devdocket.dismissAllCompletedWatches",
         "title": "Dismiss All Completed",
         "category": "DevDocket",
         "icon": "$(clear-all)"
@@ -504,7 +504,7 @@
           "group": "navigation"
         },
         {
-          "command": "devdocket.dismissAllWatches",
+          "command": "devdocket.dismissAllCompletedWatches",
           "when": "view == devdocket.watches",
           "group": "navigation"
         }
