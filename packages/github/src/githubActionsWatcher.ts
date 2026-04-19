@@ -84,9 +84,6 @@ export class GitHubActionsWatcher implements DevDocketRunWatcher {
       cancellationToken
     );
 
-    // Update display name with actual workflow name
-    identifier.displayName = runData.name;
-
     const overallState = this.mapState(runData.status);
     const conclusion = runData.conclusion ? this.mapConclusion(runData.conclusion) : undefined;
 
@@ -101,6 +98,7 @@ export class GitHubActionsWatcher implements DevDocketRunWatcher {
     return {
       overallState,
       conclusion,
+      displayName: runData.name,
       jobs,
       startedAt: runData.run_started_at || runData.created_at,
       completedAt: overallState === 'completed' ? runData.updated_at : undefined,

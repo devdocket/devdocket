@@ -42,6 +42,8 @@ export interface RunIdentifier {
 export interface RunStatus {
   overallState: RunState;
   conclusion?: RunConclusion;
+  /** Optional human-readable name returned by the watcher (e.g. workflow name). */
+  displayName?: string;
   jobs: JobStatus[];
   startedAt?: string; // ISO 8601 timestamp
   completedAt?: string; // ISO 8601 timestamp

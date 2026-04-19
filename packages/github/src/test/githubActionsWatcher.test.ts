@@ -107,7 +107,7 @@ describe('GitHubActionsWatcher', () => {
       expect(result.jobs).toHaveLength(2);
       expect(result.jobs[0].name).toBe('build');
       expect(result.jobs[1].name).toBe('test');
-      expect(identifier.displayName).toBe('CI');
+      expect(result.displayName).toBe('CI');
 
       fetchSpy.mockRestore();
     });

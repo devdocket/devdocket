@@ -60,6 +60,10 @@ export class WatcherService implements vscode.Disposable {
 
     // Fetch initial status
     const status = await watcher.getRunStatus(identifier);
+    // Update display name if the watcher returned one
+    if (status.displayName) {
+      identifier.displayName = status.displayName;
+    }
     const now = new Date().toISOString();
     
     const watchedRun: WatchedRun = {
@@ -217,6 +221,11 @@ export class WatcherService implements vscode.Disposable {
               return !oldJob || oldJob.state !== newJob.state || oldJob.conclusion !== newJob.conclusion;
             });
           watch.status = newStatus;
+          // Update display name if the watcher returned one
+          if (newStatus.displayName && newStatus.displayName !== watch.identifier.displayName) {
+            watch.identifier.displayName = newStatus.displayName;
+            anyChanged = true;
+          }
           if (statusChanged) {
             anyChanged = true;
           }
