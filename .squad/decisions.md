@@ -2,6 +2,26 @@
 
 ## Active Decisions
 
+### 2026-04-19T19:45:31Z: User directive
+
+**By:** Matt Thalman (via Copilot)
+
+**What:** When requesting Copilot PR review, always follow the instructions in the copilot-pr-review skill rather than ad-hoc review requests. Invoke the skill for the full feedback loop.
+
+**Why:** User request — captured for team memory
+
+---
+
+### 2026-04-19T19:41:35Z: User directive
+
+**By:** Matt Thalman (via Copilot)
+
+**What:** When reading a GitHub issue to implement a fix, always read the issue description AND all posted comments — not just the issue body. Comments often contain design decisions, clarifications, and updated requirements.
+
+**Why:** User request — captured for team memory
+
+---
+
 ### 2026-04-17T20:48:27Z: User directive
 
 **By:** Matt Thalman (via Copilot)

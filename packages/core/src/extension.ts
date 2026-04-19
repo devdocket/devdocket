@@ -7,6 +7,7 @@ import { ReadStateStore } from './storage/readStateStore';
 import { ProviderLabelCache } from './storage/providerLabelCache';
 import { WorkGraph } from './services/workGraph';
 import { ProviderRegistry } from './services/providerRegistry';
+import { checkAutoComplete, showAutoCompleteNotification } from './services/autoComplete';
 import { ActionRegistry } from './services/actionRegistry';
 import { InboxTreeProvider } from './views/inboxTreeProvider';
 import { QueueTreeProvider } from './views/queueTreeProvider';
@@ -17,10 +18,11 @@ import { registerCommands } from './commands/commands';
 import { ViewRevealer } from './services/viewRevealer';
 import { initLogger, setLogLevel, logger, resolveLogLevel } from './services/logger';
 import { getInboxUnseenCount } from './services/inboxBadge';
+import { syncProviderTitles } from './services/titleSync';
 import { getViewLayout, ViewId } from './views/viewLayout';
 import { performance } from 'perf_hooks';
 
-export type { DevDocketApi, DevDocketProvider, DevDocketAction, DiscoveredItem, Disposable } from './api/types';
+export type { DevDocketApi, DevDocketProvider, DevDocketAction, DiscoveredItem, Disposable, ActivityLogEntry, ActivityType } from './api/types';
 export { logger } from './services/logger';
 
 /** Wrap an event callback so unhandled errors (sync or async) are logged instead of crashing. */
@@ -239,6 +241,10 @@ function wireEvents(
   const discoveredSub = providerRegistry.onDidChangeDiscoveredItems(safeHandler('Error handling discovered items change', () => {
     scheduleUiUpdate();
 
+    void syncProviderTitles(providerRegistry, workGraph).catch(err => {
+      logger.error('Error syncing provider titles', err);
+    });
+
     // Mark initial load complete when loading transitions from true to false
     if (!initialLoadComplete) {
       if (wasLoading && !providerRegistry.loading) {
@@ -271,7 +277,41 @@ function wireEvents(
   const stateStoreSub = stateStore.onDidChange(safeHandler('Error handling state store change', scheduleUiUpdate));
   const markSeenSub = inboxProvider.onDidMarkSeen(safeHandler('Error handling mark seen', scheduleUiUpdate));
 
-  return [discoveredSub, newItemsSub, providerRegSub, stateStoreSub, markSeenSub, workGraphSub];
+  // Auto-complete: after each provider refresh, scan all WorkGraph items with
+  // that providerId and check whether their external items are closed/merged.
+  // Per-provider guard prevents overlapping runs; AbortController cancels in-flight checks.
+  const autoCompleteControllers = new Map<string, AbortController>();
+  const autoCompleteSub = providerRegistry.onDidRefreshProvider(safeHandler('Error handling auto-complete', async (providerId) => {
+    const config = vscode.workspace.getConfiguration('devdocket');
+    if (!config.get<boolean>('autoCompleteOnClose', true)) {
+      return;
+    }
+    // Abort any in-flight check for this provider
+    const prev = autoCompleteControllers.get(providerId);
+    if (prev) {
+      prev.abort();
+    }
+    const controller = new AbortController();
+    autoCompleteControllers.set(providerId, controller);
+    try {
+      const completedTitles = await checkAutoComplete(providerId, workGraph, providerRegistry, controller.signal);
+      showAutoCompleteNotification(completedTitles);
+    } finally {
+      if (autoCompleteControllers.get(providerId) === controller) {
+        autoCompleteControllers.delete(providerId);
+      }
+    }
+  }));
+
+  // Abort all in-flight auto-complete checks on disposal
+  const autoCompleteCleanup = { dispose: () => {
+    for (const controller of autoCompleteControllers.values()) {
+      controller.abort();
+    }
+    autoCompleteControllers.clear();
+  }};
+
+  return [discoveredSub, newItemsSub, providerRegSub, stateStoreSub, markSeenSub, workGraphSub, autoCompleteSub, autoCompleteCleanup];
 }
 
 /**
@@ -298,7 +338,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<DevDoc
   providerRegistry = pr;
   const ar = new ActionRegistry();
   actionRegistry = ar;
-  const api = new DevDocketApiImpl(pr, ar);
+  const api = new DevDocketApiImpl(pr, ar, wg);
   logger.info(`Store + service init took ${Math.round(performance.now() - initStart)}ms`);
 
   const treeViewStart = performance.now();

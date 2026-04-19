@@ -1,13 +1,16 @@
 import * as vscode from 'vscode';
 import { GitHubIssueProvider } from './githubProvider';
 import { GitHubPrReviewProvider } from './githubPrReviewProvider';
+import { GitHubMyPrsProvider } from './githubMyPrsProvider';
 import { validateRefreshInterval } from '@devdocket/shared';
 import { initLogger, setLogLevel, logger, resolveLogLevel } from './logger';
 
 let issueProvider: GitHubIssueProvider | undefined;
 let prReviewProvider: GitHubPrReviewProvider | undefined;
+let myPrsProvider: GitHubMyPrsProvider | undefined;
 let providerRegistration: vscode.Disposable | undefined;
 let prReviewRegistration: vscode.Disposable | undefined;
+let myPrsRegistration: vscode.Disposable | undefined;
 
 export async function activate(_context: vscode.ExtensionContext): Promise<void> {
   const outputChannel = vscode.window.createOutputChannel('DevDocket GitHub');
@@ -72,14 +75,21 @@ export async function activate(_context: vscode.ExtensionContext): Promise<void>
   prReviewProvider.startPeriodicRefresh(intervalSeconds);
   prReviewRegistration = api.registerProvider(prReviewProvider);
 
-  logger.info('DevDocket GitHub activated, registered 2 providers');
+  // Register the My PRs provider (authored PRs with status tracking)
+  myPrsProvider = new GitHubMyPrsProvider();
+  myPrsProvider.startPeriodicRefresh(intervalSeconds);
+  myPrsRegistration = api.registerProvider(myPrsProvider);
+
+  logger.info('DevDocket GitHub activated, registered 3 providers');
 }
 
 export function deactivate(): void {
   logger.info('DevDocket GitHub deactivating...');
   providerRegistration?.dispose();
   prReviewRegistration?.dispose();
+  myPrsRegistration?.dispose();
   issueProvider?.dispose();
   prReviewProvider?.dispose();
+  myPrsProvider?.dispose();
   logger.info('DevDocket GitHub deactivated');
 }
