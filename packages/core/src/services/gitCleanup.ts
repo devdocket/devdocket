@@ -31,12 +31,17 @@ async function checkCleanupState(item: WorkItem): Promise<CleanupState | undefin
     return undefined;
   }
 
+  if (!item.repoPath) {
+    logger.warn('Cannot check cleanup state: repoPath is missing');
+    return undefined;
+  }
+
+  const repoPath = item.repoPath;
   const worktreeExists = item.worktreePath ? await pathExists(item.worktreePath) : false;
   let branchExists = false;
-  let repoPath = item.repoPath;
 
-  // Check branch existence if we have both branchName and repoPath
-  if (item.branchName && repoPath) {
+  // Check branch existence if we have a branchName
+  if (item.branchName) {
     if (await pathExists(path.join(repoPath, '.git'))) {
       try {
         await execFileAsync('git', ['show-ref', '--verify', '--quiet', `refs/heads/${item.branchName}`], { cwd: repoPath });
