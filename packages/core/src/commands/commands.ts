@@ -84,7 +84,7 @@ function formatItemTitle(item: { group?: string; title: string }): string {
   return trimmedGroup ? `${trimmedGroup} ${item.title}` : item.title;
 }
 
-// isSafeUrl lives in ../utils/urlSafety to avoid a circular dependency with watchesStatusBar.
+// isSafeUrl is imported from ../utils/url.
 
 /** Log the error and show a user-facing message. */
 function handleCommandError(context: string, err: unknown): void {
