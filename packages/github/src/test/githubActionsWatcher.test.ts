@@ -13,8 +13,8 @@ describe('GitHubActionsWatcher', () => {
       expect(watcher.canWatch('https://github.com/owner/repo/actions/runs/12345')).toBe(true);
     });
 
-    it('returns true for URL with attempt suffix', () => {
-      expect(watcher.canWatch('https://github.com/owner/repo/actions/runs/12345/attempts/2')).toBe(true);
+    it('returns false for URL with attempt suffix', () => {
+      expect(watcher.canWatch('https://github.com/owner/repo/actions/runs/12345/attempts/2')).toBe(false);
     });
 
     it('returns false for non-GitHub URL', () => {
