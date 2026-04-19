@@ -62,23 +62,26 @@ export class GitHubActionsWatcher implements DevDocketRunWatcher {
     };
   }
 
-  async getRunStatus(identifier: RunIdentifier, token?: vscode.CancellationToken): Promise<RunStatus> {
+  async getRunStatus(identifier: RunIdentifier, token?: unknown): Promise<RunStatus> {
     if (!identifier.repo) {
       throw new Error('Repository required for GitHub Actions run');
     }
 
+    const cancellationToken = token && typeof token === 'object' && 'isCancellationRequested' in token
+      ? token as vscode.CancellationToken
+      : undefined;
     const [owner, repo] = identifier.repo.split('/');
     
     // Fetch run details
     const runData = await this.fetchApi<GitHubWorkflowRun>(
       `https://api.github.com/repos/${owner}/${repo}/actions/runs/${identifier.runId}`,
-      token
+      cancellationToken
     );
 
     // Fetch jobs for this run
     const jobsData = await this.fetchApi<{ jobs: GitHubWorkflowJob[] }>(
       `https://api.github.com/repos/${owner}/${repo}/actions/runs/${identifier.runId}/jobs`,
-      token
+      cancellationToken
     );
 
     // Update display name with actual workflow name
