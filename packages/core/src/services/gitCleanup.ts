@@ -91,7 +91,8 @@ export async function promptGitCleanup(
     parts.push(`branch "${item.branchName}"`);
   }
 
-  const message = `The ${parts.join(' and ')} for this item still exists. Delete them?`;
+  const hasSingleTarget = parts.length === 1;
+  const message = `The ${parts.join(' and ')} for this item still ${hasSingleTarget ? 'exists' : 'exist'}. Delete ${hasSingleTarget ? 'it' : 'them'}?`;
   const choice = await vscode.window.showInformationMessage(message, 'Yes', 'No');
 
   if (choice !== 'Yes') {
