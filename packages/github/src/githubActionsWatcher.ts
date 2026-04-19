@@ -112,7 +112,7 @@ export class GitHubActionsWatcher implements DevDocketRunWatcher {
     return state;
   }
 
-  private mapConclusion(conclusion: string): RunConclusion {
+  private mapConclusion(conclusion: string): RunConclusion | undefined {
     switch (conclusion) {
       case 'success':
       case 'failure':
