@@ -236,7 +236,9 @@ export class GitHubActionsProvider extends BaseGitHubProvider {
         const run = runs[idx];
         try {
           const jobs = await this.fetchRunJobs(token, run);
-          const failedJobs = jobs.filter(j => j.status === 'completed' && j.conclusion === 'failure');
+          // Detect any non-success terminal job conclusions (failure, timed_out, action_required, etc.)
+          const silentConclusions = new Set(['success', 'cancelled', 'skipped', null]);
+          const failedJobs = jobs.filter(j => j.status === 'completed' && !silentConclusions.has(j.conclusion));
 
           const notified = this.notifiedJobFailures.get(run.id) ?? new Set<string>();
           for (const job of failedJobs) {
