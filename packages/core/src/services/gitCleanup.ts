@@ -111,7 +111,7 @@ export async function promptGitCleanup(
 
   if (worktreeExists && item.worktreePath && repoPath) {
     try {
-      await execFileAsync('git', ['worktree', 'remove', item.worktreePath], { cwd: repoPath });
+      await execFileAsync('git', ['worktree', 'remove', '--', item.worktreePath], { cwd: repoPath });
       logger.info(`Removed worktree: ${item.worktreePath}`);
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
@@ -122,7 +122,7 @@ export async function promptGitCleanup(
 
   if (branchExists && item.branchName && repoPath) {
     try {
-      await execFileAsync('git', ['branch', '-d', item.branchName], { cwd: repoPath });
+      await execFileAsync('git', ['branch', '-d', '--', item.branchName], { cwd: repoPath });
       logger.info(`Deleted branch: ${item.branchName}`);
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
