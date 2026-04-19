@@ -77,7 +77,7 @@ export class AiReviewAction extends BasePrAction {
     if (worktreeInfo) {
       result = await this.analyzeWithTools(diff, item.url!, worktreeInfo, models[0], token);
     } else {
-      result = await this.analyzeWithAi(diff, item.url!, token);
+      result = await this.analyzeWithAi(diff, item.url!, token, models[0]);
     }
     if (!result || token.isCancellationRequested) return;
 
