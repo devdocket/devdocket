@@ -72,10 +72,10 @@ export class WatchesStatusBar implements vscode.Disposable {
 }
 
 /**
- * Quick-pick command to show all watches.
+ * Quick-pick command to show active watches.
  */
 export async function showWatchesQuickPick(watcherService: WatcherService): Promise<void> {
-  const watches = watcherService.getAllWatches();
+  const watches = watcherService.getActiveWatches();
   
   if (watches.length === 0) {
     vscode.window.showInformationMessage('No pipeline runs are being watched.');
