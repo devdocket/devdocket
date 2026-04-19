@@ -79,6 +79,8 @@ export class GitHubActionsProvider extends BaseGitHubProvider {
 
     if (repos.length === 0) {
       logger.debug('No repos configured — skipping GitHub Actions fetch');
+      this.runWatcher.update(new Map());
+      this.notifiedJobFailures.clear();
       this._onDidDiscoverItems.fire([]);
       return;
     }
