@@ -49,6 +49,27 @@ function validateWorkItem(value: unknown, index: number): string | undefined {
   if (obj.sortOrder !== undefined && (typeof obj.sortOrder !== 'number' || !Number.isFinite(obj.sortOrder))) {
     return `Item "${obj.id}" at index ${index} has invalid "sortOrder" (finite number expected)`;
   }
+  if (obj.activityLog !== undefined) {
+    if (!Array.isArray(obj.activityLog)) {
+      return `Item "${obj.id}" at index ${index} has invalid "activityLog" (array expected)`;
+    }
+    for (let j = 0; j < (obj.activityLog as unknown[]).length; j++) {
+      const entry = (obj.activityLog as unknown[])[j];
+      if (typeof entry !== 'object' || entry === null) {
+        return `Item "${obj.id}" at index ${index} has invalid activityLog entry at position ${j}`;
+      }
+      const e = entry as Record<string, unknown>;
+      if (typeof e.timestamp !== 'number' || !Number.isFinite(e.timestamp)) {
+        return `Item "${obj.id}" at index ${index} has invalid activityLog[${j}].timestamp`;
+      }
+      if (typeof e.type !== 'string' || e.type.length === 0) {
+        return `Item "${obj.id}" at index ${index} has invalid activityLog[${j}].type`;
+      }
+      if (e.detail !== undefined && typeof e.detail !== 'string') {
+        return `Item "${obj.id}" at index ${index} has invalid activityLog[${j}].detail (string expected)`;
+      }
+    }
+  }
   return undefined;
 }
 

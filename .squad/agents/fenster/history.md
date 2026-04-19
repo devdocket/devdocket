@@ -49,11 +49,32 @@ DevDocket is a VS Code extension monorepo for managing work items from multiple 
 - **Build:** esbuild, CJS, `--external:vscode`, sourcemaps. Root `npm install` + `npm run build`.
 
 ### Completed Issues
-#282 (provider state in editor), #281 (clickable title), #275 (History→Queue transitions),#273 (tree counts), #265 (auto-complete on close), #250 (group context), #249 (accept-to-focus, pre-shipped), #243 (version resurfacing), #240 (create from URL), #233 (provider health), #232 (clear history), #231 (sources icons), #230 (layout toggle), #229 (emoji removal), #227 (provider labels), #223 (dead code cleanup), #222 (responsive layout), #221 (contextual heading), #219 (source URL link), #217 (editor metadata), #216 (provider description), #215 (dynamic titles), #189 (dismissed fix), #178 (ADO filtering), #158 (markdown injection), #157 (API trust boundary), #156 (URL sanitization), #155 (URL scheme validation), #154 (crypto.randomUUID), #153 (JSON validation), #152 (path traversal fix), #12 (AI PR actions), bulk rename (WorkCenter→DevDocket)
+#282 (provider state in editor), #281 (clickable title), #276 (auto-track authored PRs), #275 (History→Queue transitions), #273 (tree counts), #265 (auto-complete on close), #255 (provider metadata docs), #250 (group context), #249 (accept-to-focus, pre-shipped), #243 (version resurfacing), #240 (create from URL), #233 (provider health), #232 (clear history), #231 (sources icons), #230 (layout toggle), #229 (emoji removal), #227 (provider labels), #223 (dead code cleanup), #222 (responsive layout), #221 (contextual heading), #219 (source URL link), #217 (editor metadata), #216 (provider description), #215 (dynamic titles), #189 (dismissed fix), #178 (ADO filtering), #158 (markdown injection), #157 (API trust boundary), #156 (URL sanitization), #155 (URL scheme validation), #154 (crypto.randomUUID), #153 (JSON validation), #152 (path traversal fix), #12 (AI PR actions), bulk rename (WorkCenter→DevDocket)
 
 > Full issue-level learnings archived to `history-archive.md`
 
 ## Learnings
+
+### 2026-04-21 — Issue #255 (Provider Metadata Docs)
+
+**PR:** Created `docs/provider-discovery.md` documenting what causes items to appear in each provider.
+- **GitHub Issues:** Assigned to you + open + not a PR. Optionally scoped by `devdocketGithub.repos`.
+- **GitHub PR Reviews:** Review requested from you + open. Supports two resurfacing signals (new commits, re-requested review).
+- **ADO Work Items:** Assigned to you + not in terminal state category. Two-layer filtering: WIQL excludes `Closed`/`Removed`, then State Category API excludes Completed/Removed/Resolved categories.
+- **ADO PR Reviews:** You are a reviewer + active status. Resurfacing via `lastMergeSourceCommit.commitId`.
+- **Common behavior:** 5-min default refresh, 60s minimum, version-based resurfacing, dismissed items never resurface.
+- **Documentation-only change** — no code modified, all tests pass.
+### 2026-04-19 — Issue #276 (Auto-Track Authored PRs)
+
+**PR:** Added a new `GitHubMyPrsProvider` that discovers open PRs authored by the current user and shows their review/CI status.
+- **New provider pattern:** Follows `BaseGitHubProvider` extension pattern like the existing issue and PR review providers. Registered as third provider in `extension.ts`. Uses the same `devdocketGithub.repos` config for repo filtering.
+- **Status determination:** Static `determinePrStatus()` method computes status from PR detail + reviews. Priority: Draft > Changes requested > Ready to merge (approved + clean) > Approved (approved but not clean) > Review received (comments only) > Waiting on reviews.
+- **Review decision logic:** Tracks latest review per reviewer by `user.id`. Only `APPROVED` and `CHANGES_REQUESTED` count as decisions; `COMMENTED`, `PENDING`, `DISMISSED` are informational. Uses `submitted_at` timestamp comparison for ordering.
+- **Mergeable state as CI proxy:** Uses `mergeable_state === 'clean'` from the PR detail API to determine "Ready to merge" status. This combines CI status and branch protection checks without requiring separate `/commits/{sha}/status` and `/check-runs` API calls — reduces per-PR API calls from 4 to 2.
+- **Concurrent enrichment:** Fetches PR details and reviews in parallel per-PR with 3 concurrent workers (same pattern as PR review provider's head SHA fetching). Best-effort: failures fall back to generic "Open" status.
+- **Test mock pattern:** Concurrent worker tests need URL-based mock routing (`mockImplementation` with URL matching) instead of sequential `mockResolvedValueOnce`, since worker execution order is non-deterministic.
+- **No version-based resurfacing:** Status changes don't trigger resurfacing — status is informational via `DiscoveredItem.state`. Users track open PRs at a glance; merged PRs disappear and auto-complete (#265) handles the work item transition.
+- **Files changed:** `packages/github/src/githubMyPrsProvider.ts` (new), `packages/github/src/extension.ts`, `packages/github/package.json`, `packages/github/src/test/githubMyPrsProvider.test.ts` (new, 24 tests).
 
 ### 2026-04-18 — Issue #264 (Cleanup Branch/Worktree on Complete)
 
@@ -142,6 +163,18 @@ DevDocket is a VS Code extension monorepo for managing work items from multiple 
 - **Issue #273 (Tree node counts):** Child count badges on all tree view parent nodes. Applied existing Inbox pattern to Queue, Focus, History, Sources.
 - **Code review fix:** Preserved write-after-persist pattern by computing sortOrder with temporary state mutation, then restoring original state before store.save().
 
+### 2026-04-18 — Issue #260 (Item Activity Log)
+
+**PR #312:** Added append-only activity log to work items for audit trail.
+- **Model design:** New `ActivityLogEntry` type with `timestamp`, `type` (discriminated union), and optional `detail`. Stored as `activityLog?: ActivityLogEntry[]` on `WorkItem` — non-breaking optional field.
+- **Automatic logging:** `WorkGraph.createItem()` logs `created`, `transitionState()` logs `state-changed` with `"OldState → NewState"` detail, `updateItem()` logs `updated` with changed field names — but only when fields actually changed (no-op autosaves are silent).
+- **Public API:** Optional `addActivity?()` on `DevDocketApi` for satellite extensions. `DevDocketApiImpl` now takes `WorkGraph` in constructor (wiring change in `extension.ts`).
+- **Timestamp consistency pattern:** All mutation methods capture `const now = Date.now()` once, reusing it for both the activity entry timestamp and `updatedAt`. Review caught the double-`Date.now()` anti-pattern in `updateItem`, `transitionState`, and `addActivity`.
+- **Deep store validation:** `jsonTaskStore` validates each activity log entry (timestamp: finite number, type: non-empty string, detail: string if present). Not just array-ness.
+- **Log trimming:** Capped at `MAX_ACTIVITY_LOG_ENTRIES` (100), oldest entries trimmed via `slice()`. Static `appendLogEntry` helper keeps logic pure and testable.
+- **Editor panel rendering:** Activity timeline in reverse-chronological order below metadata. Uses `escapeHtml()` for all dynamic content. Conditionally hidden when log is empty/undefined.
+- **Merge conflict:** `editorPanelHtml.ts` conflicted with #281 (title hyperlink) — needed both `isSafeUrl` import and `ActivityLogEntry` import, plus both CSS blocks (title-link focus styles and activity log styles).
+- **Files changed:** `activityLog.ts` (new), `workItem.ts`, `workGraph.ts`, `jsonTaskStore.ts`, `types.ts`, `devDocketApi.ts`, `extension.ts`, `editorPanelHtml.ts`, plus 4 test files.
 ### 2026-04-18 — Issue #254 (AI Walkthrough Model Selection)
 
 **PR #310:** Added AI model selection prompt to both AI Walkthrough and AI Code Review actions.
@@ -211,3 +244,11 @@ DevDocket is a VS Code extension monorepo for managing work items from multiple 
   - `packages/github/src/githubActionsWatcher.ts` (new), `extension.ts`
 - **ADO Pipelines:** Out of scope for this implementation — GitHub Actions only. ADO watcher would follow the same pattern: implement `DevDocketRunWatcher`, parse ADO pipeline URLs, call ADO REST API.
 
+### 2026-04-18 — Issue #319 (Focus View Provider Grouping)
+
+**PR #XXX:** Focus view now groups items by provider in tree mode, matching Sources view pattern.
+- **Removed custom grouping logic:** Focus view had custom `getChildren()` and `getParent()` implementations that grouped by `item.group` (repo name). Removed these overrides to use the base class `WorkItemViewProvider` pattern which groups by provider.
+- **WorkItemViewProvider base class:** The base class already implements provider grouping via `getTreeModeChildren()` helper in `viewLayout.ts`. It creates a two-level hierarchy: provider → sub-group (item.group) → items. This is consistent with Queue, History, and Sources views.
+- **Tree hierarchy:** In tree mode, items are now grouped: Provider (GitHub, ADO, etc.) → Sub-group (repo name) → Work Items. Manual items appear under "Other" provider group. In flat mode, unchanged.
+- **No breaking changes:** The public API surface is unchanged — only internal tree provider implementation.
+- **Files changed:** `packages/core/src/views/focusTreeProvider.ts` (removed ~60 lines of custom grouping logic).

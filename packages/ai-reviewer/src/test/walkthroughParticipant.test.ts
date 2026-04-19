@@ -165,7 +165,7 @@ describe('WalkthroughParticipant', () => {
 
       await handler(request, context, response, token);
 
-      expect(lm.selectChatModels).toHaveBeenCalledWith({ family: 'gpt-4o' });
+      expect(lm.selectChatModels).toHaveBeenCalledWith();
       expect(response.markdown).toHaveBeenCalledWith('Fallback model response');
     });
 

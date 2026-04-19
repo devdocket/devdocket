@@ -287,6 +287,80 @@ export class AdoPrReviewProvider extends BaseProvider {
     return { items, failed: false };
   }
 
+  /**
+   * Check which of the given external IDs correspond to completed/abandoned ADO PRs.
+   * Uses concurrent individual API calls with a worker pool since there is
+   * no batch PR-get endpoint.
+   */
+  async getClosedItems(externalIds: string[], signal?: AbortSignal): Promise<string[]> {
+    if (externalIds.length === 0) { return []; }
+
+    let session: vscode.AuthenticationSession | undefined;
+    try {
+      session = await vscode.authentication.getSession('microsoft', [ADO_AUTH_SCOPE], {
+        createIfNone: false,
+        silent: true,
+      });
+    } catch {
+      logger.debug('No ADO auth session for getClosedItems');
+    }
+    if (!session) { return []; }
+    const token = session.accessToken;
+
+    // Parse external IDs: "org/project/repo/prId"
+    const parsed = externalIds.map(id => {
+      const parts = id.split('/');
+      if (parts.length !== 4) { return null; }
+      const org = parts[0];
+      const project = parts[1];
+      const repo = parts[2];
+      const prIdSegment = parts[3];
+      if (!/^\d+$/.test(prIdSegment)) { return null; }
+      const prId = Number(prIdSegment);
+      return { id, org, project, repo, prId };
+    }).filter((p): p is NonNullable<typeof p> => p !== null);
+
+    if (parsed.length === 0) { return []; }
+
+    const closedSet = new Set<string>();
+    let nextIndex = 0;
+
+    const runWorker = async (): Promise<void> => {
+      while (nextIndex < parsed.length) {
+        if (signal?.aborted) { break; }
+        const currentIndex = nextIndex++;
+        const item = parsed[currentIndex];
+        try {
+          if (!isValidUrlSegment(item.org) || !isValidUrlSegment(item.project) || !isValidUrlSegment(item.repo)) {
+            continue;
+          }
+          const url = `https://dev.azure.com/${encodeURIComponent(item.org)}/${encodeURIComponent(item.project)}/_apis/git/repositories/${encodeURIComponent(item.repo)}/pullrequests/${item.prId}?api-version=7.1`;
+          const response = await fetch(url, {
+            headers: { Authorization: `Bearer ${token}` },
+            signal,
+          });
+          if (response.ok) {
+            const data = await response.json() as { status?: string };
+            if (data.status === 'completed' || data.status === 'abandoned') {
+              closedSet.add(item.id);
+            }
+          } else {
+            logger.debug(`Failed to check PR ${item.id}: ${response.status}`);
+          }
+        } catch (err) {
+          if (signal?.aborted) { break; }
+          logger.debug(`Failed to check PR ${item.id}: ${String(err)}`);
+        }
+      }
+    };
+
+    const workerCount = Math.min(5, parsed.length);
+    await Promise.all(Array.from({ length: workerCount }, () => runWorker()));
+
+    // Return in input order for deterministic results
+    return parsed.filter(p => closedSet.has(p.id)).map(p => p.id);
+  }
+
   private static readonly ADO_PR_PATTERN = /^https?:\/\/dev\.azure\.com\/([^/]+)\/([^/]+)\/_git\/([^/]+)\/pullrequest\/(\d+)\b/i;
 
   async resolveUrl(url: string, signal?: AbortSignal): Promise<ResolvedItem | undefined> {

@@ -121,6 +121,7 @@ interface DevDocketProvider {
   readonly onDidDiscoverItems: Event<DiscoveredItem[]>;
   refresh(token?: vscode.CancellationToken): Promise<void>;
   resolveUrl?(url: string, signal?: AbortSignal): Promise<ResolvedItem | undefined>;
+  getClosedItems?(externalIds: string[], signal?: AbortSignal): Promise<string[]>;
 }
 
 interface ResolvedItem {
@@ -166,6 +167,7 @@ interface DevDocketProvider {
   readonly onDidDiscoverItems: Event<DiscoveredItem[]>;
   refresh(token?: vscode.CancellationToken): Promise<void>;
   resolveUrl?(url: string, signal?: AbortSignal): Promise<ResolvedItem | undefined>;
+  getClosedItems?(externalIds: string[], signal?: AbortSignal): Promise<string[]>;
 }
 
 interface ResolvedItem {
@@ -253,6 +255,26 @@ class JiraProvider implements DevDocketProvider {
     };
   }
 
+  // Optional: support auto-completion when external items are closed
+  async getClosedItems(
+    externalIds: string[],
+    signal?: AbortSignal,
+  ): Promise<string[]> {
+    // Batch-check which items are closed/resolved in Jira
+    const statuses = await this.fetchStatuses(externalIds, signal);
+    return statuses
+      .filter((s) => s.isClosed)
+      .map((s) => s.externalId);
+  }
+
+  private async fetchStatuses(
+    _externalIds: string[],
+    _signal?: AbortSignal,
+  ): Promise<Array<{ externalId: string; isClosed: boolean }>> {
+    // Replace with your actual API call — batch where possible
+    return [];
+  }
+
   private async fetchTicket(_key: string): Promise<
     { summary: string; description?: string } | undefined
   > {
@@ -281,6 +303,7 @@ class JiraProvider implements DevDocketProvider {
 - **`externalId` must be unique per provider** — DevDocket uses the combination of `providerId + externalId` to track inbox state. Use a stable identifier like `owner/repo#123` or `PROJECT/TICKET-42`.
 - **`group` is optional** — When set, items with the same group value are nested under a folder node in the Inbox and Sources views.
 - **`resolveUrl()` is optional** — Implement it to let users create work items by pasting a URL (e.g. from a browser). When the user runs the "Create Item from URL" command, DevDocket asks each registered provider to resolve the URL. The first provider that returns a `ResolvedItem` wins. If your provider doesn't recognise the URL, return `undefined`.
+- **`getClosedItems()` is optional** — Implement it to enable auto-completion of work items when their linked external item is closed or merged. After each provider refresh, DevDocket collects all work items in the WorkGraph linked to your provider (including manually-imported items) and calls `getClosedItems()` with their external IDs. Return the subset that are closed, merged, or completed. Providers without this method fall back to **disappearance detection** — if a previously-discovered item is absent from the next refresh, it is assumed closed. The disappearance fallback cannot cover manually-imported items since the provider never discovered them. Auto-completion is controlled by the `devdocket.autoCompleteOnClose` setting (default: `true`).
 - **Emit the full set every time** — Each `onDidDiscoverItems` emission replaces all previously known items for that provider. Emit everything currently relevant, not just deltas.
 
 ### Periodic Refresh Pattern
@@ -548,6 +571,20 @@ interface DevDocketProvider {
    * @param signal - Optional AbortSignal for cancellation.
    */
   resolveUrl?(url: string, signal?: AbortSignal): Promise<ResolvedItem | undefined>;
+
+  /**
+   * Check which of the given external items have been closed or completed.
+   * Called after each provider refresh to auto-complete linked work items,
+   * including manually-imported items that may not appear in the provider's
+   * discovered-items list.
+   * Optional — providers without this method fall back to disappearance
+   * detection (item was previously discovered but is now absent).
+   *
+   * @param externalIds - The provider-scoped external IDs to check.
+   * @param signal - Optional AbortSignal for cancellation.
+   * @returns The subset of externalIds that are closed, merged, or completed.
+   */
+  getClosedItems?(externalIds: string[], signal?: AbortSignal): Promise<string[]>;
 }
 ```
 

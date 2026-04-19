@@ -1,15 +1,16 @@
 import * as crypto from 'crypto';
 import * as vscode from 'vscode';
 import { WorkItem, WorkItemInput, WorkItemState } from '../models/workItem';
+import { type ActivityLogEntry, type ActivityType, MAX_ACTIVITY_LOG_ENTRIES } from '../models/activityLog';
 import { ITaskStore } from '../storage/taskStore';
 import { logger } from './logger';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
 const VALID_TRANSITIONS: ReadonlyMap<WorkItemState, ReadonlySet<WorkItemState>> = new Map([
-  [WorkItemState.New, new Set([WorkItemState.InProgress, WorkItemState.Archived])],
+  [WorkItemState.New, new Set([WorkItemState.InProgress, WorkItemState.Done, WorkItemState.Archived])],
   [WorkItemState.InProgress, new Set([WorkItemState.Paused, WorkItemState.Done, WorkItemState.New, WorkItemState.Archived])],
-  [WorkItemState.Paused, new Set([WorkItemState.InProgress, WorkItemState.New, WorkItemState.Archived])],
+  [WorkItemState.Paused, new Set([WorkItemState.InProgress, WorkItemState.Done, WorkItemState.New, WorkItemState.Archived])],
   [WorkItemState.Done, new Set([WorkItemState.Archived, WorkItemState.New])],
   [WorkItemState.Archived, new Set([WorkItemState.New])],
 ]);
@@ -168,6 +169,8 @@ export class WorkGraph {
     provenance?: { providerId: string; externalId: string; url?: string; group?: string },
   ): Promise<WorkItem> {
     const sortOrder = this.nextSortOrder(WorkItemState.New);
+    const now = Date.now();
+    const createdEntry: ActivityLogEntry = { timestamp: now, type: 'created' };
     const item: WorkItem = {
       id: generateId(),
       title: input.title,
@@ -178,8 +181,9 @@ export class WorkGraph {
       url: provenance?.url,
       group: provenance?.group,
       sortOrder,
-      createdAt: Date.now(),
-      updatedAt: Date.now(),
+      createdAt: now,
+      updatedAt: now,
+      activityLog: [createdEntry],
     };
     await this.store.save(item);
     this.items.set(item.id, item);
@@ -208,7 +212,25 @@ export class WorkGraph {
     if (!item) {
       throw new Error(`Work item not found: ${id}`);
     }
-    const updated = { ...item, ...patch, updatedAt: Date.now() };
+    const changes: string[] = [];
+    if (patch.title !== undefined && patch.title !== item.title) { changes.push('title'); }
+    // Detect notes changes including clearing (patch.notes === undefined with key present)
+    if ('notes' in patch && patch.notes !== item.notes) { changes.push('notes'); }
+    // Skip save/event when no fields actually changed (e.g. autosave with identical values)
+    if (changes.length === 0) {
+      return;
+    }
+    const now = Date.now();
+    const updated = {
+      ...item,
+      ...patch,
+      activityLog: WorkGraph.appendLogEntry(item.activityLog, {
+        timestamp: now,
+        type: 'updated' as const,
+        detail: changes.join(', '),
+      }),
+      updatedAt: now,
+    };
     await this.store.save(updated);
     this.items.set(id, updated);
     this.invalidateStateCache();
@@ -231,7 +253,18 @@ export class WorkGraph {
         `Invalid state transition: cannot move from ${item.state} to ${newState}`,
       );
     }
-    const updated: WorkItem = { ...item, state: newState, updatedAt: Date.now() };
+    const now = Date.now();
+    const entry: ActivityLogEntry = {
+      timestamp: now,
+      type: 'state-changed',
+      detail: `${item.state} → ${newState}`,
+    };
+    const updated: WorkItem = {
+      ...item,
+      state: newState,
+      activityLog: WorkGraph.appendLogEntry(item.activityLog, entry),
+      updatedAt: now,
+    };
     // When returning to Queue, assign a fresh sortOrder based on the current pre-transition
     // Queue contents. Reuse nextSortOrder but also account for the item's own sortOrder
     // to avoid reusing the same value when moving back to Queue multiple times.
@@ -471,6 +504,34 @@ export class WorkGraph {
     } else {
       this.duplicateProvenanceCounts.set(key, count - 1);
     }
+  }
+
+  /**
+   * Append an activity log entry to a work item and persist the change.
+   *
+   * External callers (e.g. action extensions) use this to record custom
+   * activities like branch creation or cleanup.
+   */
+  async addActivity(id: string, type: ActivityType, detail?: string): Promise<void> {
+    const item = this.items.get(id);
+    if (!item) {
+      throw new Error(`Work item not found: ${id}`);
+    }
+    const now = Date.now();
+    const entry: ActivityLogEntry = { timestamp: now, type, ...(detail !== undefined ? { detail } : {}) };
+    const updated = { ...item, activityLog: WorkGraph.appendLogEntry(item.activityLog, entry), updatedAt: now };
+    await this.store.save(updated);
+    this.items.set(id, updated);
+    this.invalidateStateCache();
+    this._onDidChange.fire();
+  }
+
+  /** Append an entry to the log, trimming the oldest entries if the cap is exceeded. */
+  private static appendLogEntry(log: ActivityLogEntry[] | undefined, entry: ActivityLogEntry): ActivityLogEntry[] {
+    const entries = log ? [...log, entry] : [entry];
+    return entries.length > MAX_ACTIVITY_LOG_ENTRIES
+      ? entries.slice(entries.length - MAX_ACTIVITY_LOG_ENTRIES)
+      : entries;
   }
 
   dispose(): void {

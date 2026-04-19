@@ -1,5 +1,5 @@
 import * as vscode from 'vscode';
-import type { ResolvedItem } from '@devdocket/shared';
+import { isValidGitHubRepo, type ResolvedItem } from '@devdocket/shared';
 import { logger } from './logger';
 
 export type { ResolvedItem };
@@ -32,6 +32,7 @@ export interface DevDocketProvider {
   readonly onDidDiscoverItems: Event<DiscoveredItem[]>;
   refresh(token?: vscode.CancellationToken): Promise<void>;
   resolveUrl?(url: string, signal?: AbortSignal): Promise<ResolvedItem | undefined>;
+  getClosedItems?(externalIds: string[], signal?: AbortSignal): Promise<string[]>;
 }
 
 export interface GitHubIssue {
@@ -211,6 +212,89 @@ export abstract class BaseGitHubProvider implements DevDocketProvider {
   /** Decode a percent-encoded URL path segment, returning the original on malformed input. */
   protected static safeDecodeComponent(value: string): string {
     try { return decodeURIComponent(value); } catch { return value; }
+  }
+
+  /**
+   * Shared implementation for getClosedItems across GitHub providers.
+   * Parses external IDs ("owner/repo#number"), validates repo slugs, and
+   * checks item state via the specified API endpoint using a worker pool.
+   *
+   * @param externalIds - External IDs in "owner/repo#number" format.
+   * @param apiType - GitHub API path segment: `'issues'` or `'pulls'`.
+   * @param signal - Optional abort signal for cancellation.
+   * @returns External IDs whose GitHub state is `'closed'`.
+   */
+  protected async fetchClosedGitHubItems(
+    externalIds: string[],
+    apiType: 'issues' | 'pulls',
+    signal?: AbortSignal,
+  ): Promise<string[]> {
+    if (externalIds.length === 0) { return []; }
+
+    let session: vscode.AuthenticationSession | undefined;
+    try {
+      session = await vscode.authentication.getSession('github', ['repo'], { silent: true });
+    } catch {
+      logger.debug(`No GitHub auth session for getClosedItems (${apiType})`);
+    }
+    if (!session) { return []; }
+    const token = session.accessToken;
+
+    const parsed = externalIds.map(id => {
+      const hashIdx = id.lastIndexOf('#');
+      if (hashIdx === -1) { return null; }
+      const rawRepo = id.substring(0, hashIdx);
+      const rawNumber = id.substring(hashIdx + 1);
+      if (!/^\d+$/.test(rawNumber) || !isValidGitHubRepo(rawRepo)) { return null; }
+      const num = Number(rawNumber);
+      const [owner, repoName] = rawRepo.split('/');
+      return { id, owner, repoName, number: num };
+    }).filter((p): p is NonNullable<typeof p> => p !== null);
+
+    if (parsed.length === 0) { return []; }
+
+    // Track which IDs are closed; use a Set so worker order doesn't affect results
+    const closedSet = new Set<string>();
+    let nextIndex = 0;
+
+    const runWorker = async (): Promise<void> => {
+      while (nextIndex < parsed.length) {
+        if (signal?.aborted) { break; }
+        const currentIndex = nextIndex++;
+        const item = parsed[currentIndex];
+        try {
+          const response = await fetch(
+            `https://api.github.com/repos/${encodeURIComponent(item.owner)}/${encodeURIComponent(item.repoName)}/${apiType}/${item.number}`,
+            {
+              headers: {
+                Authorization: `Bearer ${token}`,
+                Accept: 'application/vnd.github+json',
+                'User-Agent': 'DevDocket-VSCode',
+                'X-GitHub-Api-Version': '2022-11-28',
+              },
+              signal,
+            },
+          );
+          if (response.ok) {
+            const data = await response.json() as { state?: string };
+            if (data.state === 'closed') {
+              closedSet.add(item.id);
+            }
+          } else {
+            logger.debug(`Failed to check ${apiType} ${item.id}: ${response.status}`);
+          }
+        } catch (err) {
+          if (signal?.aborted) { break; }
+          logger.debug(`Failed to check ${apiType} ${item.id}: ${String(err)}`);
+        }
+      }
+    };
+
+    const workerCount = Math.min(5, parsed.length);
+    await Promise.all(Array.from({ length: workerCount }, () => runWorker()));
+
+    // Return in input order for deterministic results
+    return parsed.filter(p => closedSet.has(p.id)).map(p => p.id);
   }
 
   dispose(): void {

@@ -480,13 +480,12 @@ describe('WorkGraph', () => {
   });
 
   describe('state transition validation', () => {
-    it('rejects New → Done (skipping InProgress)', async () => {
+    it('allows New → Done (e.g. auto-complete when external item is closed)', async () => {
       const item = await graph.createItem({ title: 'Test' });
       vi.mocked(store.save).mockClear();
-      await expect(graph.transitionState(item.id, WorkItemState.Done))
-        .rejects.toThrow('Invalid state transition');
-      expect(store.save).not.toHaveBeenCalled();
-      expect(graph.getItem(item.id)?.state).toBe(WorkItemState.New);
+      await graph.transitionState(item.id, WorkItemState.Done);
+      expect(store.save).toHaveBeenCalled();
+      expect(graph.getItem(item.id)?.state).toBe(WorkItemState.Done);
     });
 
     it('allows New → Archived', async () => {
@@ -584,6 +583,15 @@ describe('WorkGraph', () => {
 
       await graph.transitionState(item.id, WorkItemState.Archived);
       expect(graph.getItem(item.id)?.state).toBe(WorkItemState.Archived);
+    });
+
+    it('allows Paused → Done (e.g. auto-complete when external item is closed)', async () => {
+      const item = await graph.createItem({ title: 'Test' });
+      await graph.transitionState(item.id, WorkItemState.InProgress);
+      await graph.transitionState(item.id, WorkItemState.Paused);
+
+      await graph.transitionState(item.id, WorkItemState.Done);
+      expect(graph.getItem(item.id)?.state).toBe(WorkItemState.Done);
     });
 
     it('rejects undefined state value', async () => {
@@ -900,6 +908,130 @@ describe('WorkGraph', () => {
       await graph.clearOldHistory(30);
 
       expect(changeSpy).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  describe('activity log', () => {
+    it('records a created entry on createItem', async () => {
+      const item = await graph.createItem({ title: 'Test' });
+
+      expect(item.activityLog).toHaveLength(1);
+      expect(item.activityLog![0].type).toBe('created');
+      expect(item.activityLog![0].timestamp).toBeGreaterThan(0);
+    });
+
+    it('records a state-changed entry on transitionState', async () => {
+      const item = await graph.createItem({ title: 'Test' });
+      await graph.transitionState(item.id, WorkItemState.InProgress);
+
+      const updated = graph.getItem(item.id);
+      expect(updated?.activityLog).toHaveLength(2);
+      expect(updated!.activityLog![1].type).toBe('state-changed');
+      expect(updated!.activityLog![1].detail).toBe('New → InProgress');
+    });
+
+    it('records an updated entry on updateItem', async () => {
+      const item = await graph.createItem({ title: 'Original' });
+      await graph.updateItem(item.id, { title: 'Updated' });
+
+      const updated = graph.getItem(item.id);
+      expect(updated?.activityLog).toHaveLength(2);
+      expect(updated!.activityLog![1].type).toBe('updated');
+      expect(updated!.activityLog![1].detail).toBe('title');
+    });
+
+    it('records changed fields in update detail', async () => {
+      const item = await graph.createItem({ title: 'Original', notes: 'some notes' });
+      await graph.updateItem(item.id, { title: 'New title', notes: 'new notes' });
+
+      const updated = graph.getItem(item.id);
+      expect(updated!.activityLog![1].detail).toBe('title, notes');
+    });
+
+    it('does not record update entry when no fields actually changed', async () => {
+      const item = await graph.createItem({ title: 'Same' });
+      const listener = vi.fn();
+      graph.onDidChange(listener);
+      (store.save as ReturnType<typeof vi.fn>).mockClear();
+
+      await graph.updateItem(item.id, { title: 'Same' });
+
+      const updated = graph.getItem(item.id);
+      // Only the initial 'created' entry should exist — no 'updated' entry
+      expect(updated?.activityLog).toHaveLength(1);
+      expect(updated!.activityLog![0].type).toBe('created');
+      // No save or event should fire for a no-op update
+      expect(store.save).not.toHaveBeenCalled();
+      expect(listener).not.toHaveBeenCalled();
+    });
+
+    it('appends entries via addActivity', async () => {
+      const item = await graph.createItem({ title: 'Test' });
+      await graph.addActivity(item.id, 'action-executed', 'branch created');
+
+      const updated = graph.getItem(item.id);
+      expect(updated?.activityLog).toHaveLength(2);
+      expect(updated!.activityLog![1].type).toBe('action-executed');
+      expect(updated!.activityLog![1].detail).toBe('branch created');
+    });
+
+    it('addActivity without detail omits the detail field', async () => {
+      const item = await graph.createItem({ title: 'Test' });
+      await graph.addActivity(item.id, 'action-executed');
+
+      const updated = graph.getItem(item.id);
+      expect(updated!.activityLog![1].detail).toBeUndefined();
+    });
+
+    it('addActivity throws for unknown item', async () => {
+      await expect(graph.addActivity('nonexistent', 'action-executed'))
+        .rejects.toThrow('Work item not found');
+    });
+
+    it('addActivity fires onDidChange', async () => {
+      const item = await graph.createItem({ title: 'Test' });
+      const listener = vi.fn();
+      graph.onDidChange(listener);
+
+      await graph.addActivity(item.id, 'action-executed');
+      expect(listener).toHaveBeenCalledTimes(1);
+    });
+
+    it('trims log to MAX_ACTIVITY_LOG_ENTRIES', async () => {
+      const { MAX_ACTIVITY_LOG_ENTRIES } = await import('../models/activityLog');
+      const item = await graph.createItem({ title: 'Test' });
+
+      // Already has 1 entry from creation
+      for (let i = 1; i < MAX_ACTIVITY_LOG_ENTRIES + 10; i++) {
+        await graph.addActivity(item.id, 'action-executed', `entry ${i}`);
+      }
+
+      const updated = graph.getItem(item.id);
+      expect(updated!.activityLog).toHaveLength(MAX_ACTIVITY_LOG_ENTRIES);
+      // Oldest entries should have been trimmed; newest should be present
+      const lastEntry = updated!.activityLog![MAX_ACTIVITY_LOG_ENTRIES - 1];
+      expect(lastEntry.detail).toBe(`entry ${MAX_ACTIVITY_LOG_ENTRIES + 9}`);
+    });
+
+    it('accumulates entries across lifecycle transitions', async () => {
+      const item = await graph.createItem({ title: 'Test' });
+      await graph.transitionState(item.id, WorkItemState.InProgress);
+      await graph.transitionState(item.id, WorkItemState.Done);
+
+      const updated = graph.getItem(item.id);
+      expect(updated?.activityLog).toHaveLength(3);
+      expect(updated!.activityLog!.map(e => e.type)).toEqual([
+        'created', 'state-changed', 'state-changed',
+      ]);
+    });
+
+    it('persists activity log through store save', async () => {
+      const item = await graph.createItem({ title: 'Test' });
+      await graph.addActivity(item.id, 'action-executed', 'saved data');
+
+      expect(store.save).toHaveBeenCalled();
+      const savedItem = (store.save as ReturnType<typeof vi.fn>).mock.calls.at(-1)?.[0];
+      expect(savedItem.activityLog).toHaveLength(2);
     });
   });
 });

@@ -44,6 +44,11 @@
           "default": true,
           "description": "Show a notification when new items arrive in the Inbox"
         },
+        "devdocket.autoCompleteOnClose": {
+          "type": "boolean",
+          "default": true,
+          "description": "Automatically mark work items as Done when their linked issue or PR is closed or merged externally"
+        },
         "devdocket.viewLayout": {
           "type": "object",
           "default": {},

@@ -1,10 +1,7 @@
 import * as vscode from 'vscode';
 import { RepoManager, type WorktreeInfo } from './repoManager';
 import { buildWalkthroughPrompt } from './walkthroughPrompt';
-
-/** Maximum characters per tool-result text part in the conversation.
- *  Prevents any single tool result from overflowing the model's context window. */
-export const MAX_TOOL_RESULT_LENGTH = 80_000;
+import { truncateToolContent } from './toolUtils';
 
 export class WalkthroughParticipant {
   private sessions = new Map<string, WorktreeInfo>();
@@ -144,9 +141,9 @@ export class WalkthroughParticipant {
       this.log.info(`Using request-provided model: ${request.model.id}`);
       model = request.model;
     } else {
-      this.log.info('No request model — selecting gpt-4o family');
-      const models = await vscode.lm.selectChatModels({ family: 'gpt-4o' });
-      this.log.info(`selectChatModels({ family: 'gpt-4o' }) returned ${models.length} model(s): ${models.map(m => m.id).join(', ')}`);
+      this.log.info('No request model — selecting default');
+      const models = await vscode.lm.selectChatModels();
+      this.log.info(`selectChatModels() returned ${models.length} model(s): ${models.map(m => m.id).join(', ')}`);
       if (models.length === 0) {
         this.log.error('No language model available');
         response.markdown('❌ No language model available. Please install GitHub Copilot.');
@@ -313,22 +310,4 @@ export class WalkthroughParticipant {
 
     return undefined;
   }
-}
-
-/** Truncate oversized text parts in tool result content to stay within
- *  the model's context budget. Non-text parts are passed through. */
-export function truncateToolContent(
-  content: (vscode.LanguageModelTextPart | vscode.LanguageModelToolResultPart)[],
-): (vscode.LanguageModelTextPart | vscode.LanguageModelToolResultPart)[] {
-  return content.map((part) => {
-    if (part instanceof vscode.LanguageModelTextPart && part.value.length > MAX_TOOL_RESULT_LENGTH) {
-      const truncationNotice =
-        `\n\n(truncated from ${part.value.length.toLocaleString()} chars — content exceeded context budget)`;
-      const sliceLength = Math.max(0, MAX_TOOL_RESULT_LENGTH - truncationNotice.length);
-      return new vscode.LanguageModelTextPart(
-        part.value.slice(0, sliceLength) + truncationNotice,
-      );
-    }
-    return part;
-  });
 }
