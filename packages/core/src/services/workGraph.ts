@@ -320,15 +320,20 @@ export class WorkGraph {
     this._onDidChange.fire();
     logger.info(`Transitioned work item ${id} to ${newState}`);
 
-    // Prompt for cleanup if transitioning to Done and branch/worktree metadata exists
+    // Consider prompting for git cleanup when transitioning to Done; promptGitCleanup
+    // will no-op if the work item has no branch/worktree metadata to clean up.
     if (newState === WorkItemState.Done) {
-      void promptGitCleanup(updated, async () => {
+      promptGitCleanup(updated, async () => {
         const current = this.items.get(id);
         if (current) {
           const dismissed = { ...current, cleanupDismissed: true, updatedAt: Date.now() };
           await this.store.save(dismissed);
           this.items.set(id, dismissed);
+          this.invalidateStateCache();
+          this._onDidChange.fire();
         }
+      }).catch(err => {
+        logger.error(`Failed to run git cleanup prompt for work item ${id}`, err);
       });
     }
   }
