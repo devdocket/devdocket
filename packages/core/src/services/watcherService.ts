@@ -205,7 +205,7 @@ export class WatcherService implements vscode.Disposable {
         try {
           const watcher = this.watcherRegistry.get(watch.identifier.providerId);
           if (!watcher) {
-            continue;
+            throw new Error(`Watcher '${watch.identifier.providerId}' is no longer registered`);
           }
 
           const newStatus = await watcher.getRunStatus(watch.identifier);
