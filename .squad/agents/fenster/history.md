@@ -49,12 +49,21 @@ DevDocket is a VS Code extension monorepo for managing work items from multiple 
 - **Build:** esbuild, CJS, `--external:vscode`, sourcemaps. Root `npm install` + `npm run build`.
 
 ### Completed Issues
-#276 (auto-track authored PRs), #282 (provider state in editor), #281 (clickable title), #275 (History→Queue transitions),#273 (tree counts), #265 (auto-complete on close), #250 (group context), #249 (accept-to-focus, pre-shipped), #243 (version resurfacing), #240 (create from URL), #233 (provider health), #232 (clear history), #231 (sources icons), #230 (layout toggle), #229 (emoji removal), #227 (provider labels), #223 (dead code cleanup), #222 (responsive layout), #221 (contextual heading), #219 (source URL link), #217 (editor metadata), #216 (provider description), #215 (dynamic titles), #189 (dismissed fix), #178 (ADO filtering), #158 (markdown injection), #157 (API trust boundary), #156 (URL sanitization), #155 (URL scheme validation), #154 (crypto.randomUUID), #153 (JSON validation), #152 (path traversal fix), #12 (AI PR actions), bulk rename (WorkCenter→DevDocket)
+#282 (provider state in editor), #281 (clickable title), #276 (auto-track authored PRs), #275 (History→Queue transitions), #273 (tree counts), #265 (auto-complete on close), #255 (provider metadata docs), #250 (group context), #249 (accept-to-focus, pre-shipped), #243 (version resurfacing), #240 (create from URL), #233 (provider health), #232 (clear history), #231 (sources icons), #230 (layout toggle), #229 (emoji removal), #227 (provider labels), #223 (dead code cleanup), #222 (responsive layout), #221 (contextual heading), #219 (source URL link), #217 (editor metadata), #216 (provider description), #215 (dynamic titles), #189 (dismissed fix), #178 (ADO filtering), #158 (markdown injection), #157 (API trust boundary), #156 (URL sanitization), #155 (URL scheme validation), #154 (crypto.randomUUID), #153 (JSON validation), #152 (path traversal fix), #12 (AI PR actions), bulk rename (WorkCenter→DevDocket)
 
 > Full issue-level learnings archived to `history-archive.md`
 
 ## Learnings
 
+### 2026-04-21 — Issue #255 (Provider Metadata Docs)
+
+**PR:** Created `docs/provider-discovery.md` documenting what causes items to appear in each provider.
+- **GitHub Issues:** Assigned to you + open + not a PR. Optionally scoped by `devdocketGithub.repos`.
+- **GitHub PR Reviews:** Review requested from you + open. Supports two resurfacing signals (new commits, re-requested review).
+- **ADO Work Items:** Assigned to you + not in terminal state category. Two-layer filtering: WIQL excludes `Closed`/`Removed`, then State Category API excludes Completed/Removed/Resolved categories.
+- **ADO PR Reviews:** You are a reviewer + active status. Resurfacing via `lastMergeSourceCommit.commitId`.
+- **Common behavior:** 5-min default refresh, 60s minimum, version-based resurfacing, dismissed items never resurface.
+- **Documentation-only change** — no code modified, all tests pass.
 ### 2026-04-19 — Issue #276 (Auto-Track Authored PRs)
 
 **PR:** Added a new `GitHubMyPrsProvider` that discovers open PRs authored by the current user and shows their review/CI status.
