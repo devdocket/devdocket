@@ -37,22 +37,25 @@ async function checkCleanupState(item: WorkItem): Promise<CleanupState | undefin
   }
 
   const repoPath = item.repoPath;
+  if (!await pathExists(path.join(repoPath, '.git'))) {
+    logger.warn(`Skipping cleanup: repoPath is not a git repo: ${repoPath}`);
+    return undefined;
+  }
+
   const worktreeExists = item.worktreePath ? await pathExists(item.worktreePath) : false;
   let branchExists = false;
 
   // Check branch existence if we have a branchName
   if (item.branchName) {
-    if (await pathExists(path.join(repoPath, '.git'))) {
-      try {
-        await execFileAsync('git', ['show-ref', '--verify', '--quiet', `refs/heads/${item.branchName}`], { cwd: repoPath });
-        branchExists = true;
-      } catch (err) {
-        // Exit code 1 means ref not found; anything else is an unexpected error
-        if ((err as { code?: number | string }).code === 1) {
-          branchExists = false;
-        } else {
-          logger.warn(`Failed to check branch existence for ${item.branchName}`, err);
-        }
+    try {
+      await execFileAsync('git', ['show-ref', '--verify', '--quiet', `refs/heads/${item.branchName}`], { cwd: repoPath });
+      branchExists = true;
+    } catch (err) {
+      // Exit code 1 means ref not found; anything else is an unexpected error
+      if ((err as { code?: number | string }).code === 1) {
+        branchExists = false;
+      } else {
+        logger.warn(`Failed to check branch existence for ${item.branchName}`, err);
       }
     }
   }
