@@ -907,7 +907,7 @@ async function handleWatchRun(watcherRegistry: WatcherRegistry, watcherService: 
       }
       const watcher = watcherRegistry.findWatcherForUrl(value);
       if (!watcher) {
-        return 'Unsupported URL format. Paste a GitHub Actions run URL.';
+        return 'Unsupported URL format. No registered watcher recognizes this URL.';
       }
       return undefined;
     },
@@ -922,7 +922,7 @@ async function handleWatchRun(watcherRegistry: WatcherRegistry, watcherService: 
   try {
     const watcher = watcherRegistry.findWatcherForUrl(trimmedUrl);
     if (!watcher) {
-      void vscode.window.showErrorMessage('Unsupported URL format. Paste a GitHub Actions run URL.');
+      void vscode.window.showErrorMessage('Unsupported URL format. No registered watcher recognizes this URL.');
       return;
     }
 
