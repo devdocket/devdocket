@@ -47,7 +47,7 @@ export class GitHubActionsWatcher implements DevDocketRunWatcher {
 
   parseRunUrl(url: string): RunIdentifier {
     const u = new URL(url);
-    const match = u.pathname.match(/^\/([^/]+)\/([^/]+)\/actions\/runs\/(\d+)/);
+    const match = u.pathname.match(/^\/([^/]+)\/([^/]+)\/actions\/runs\/(\d+)\/?$/);
     if (!match) {
       throw new Error('Invalid GitHub Actions run URL');
     }
