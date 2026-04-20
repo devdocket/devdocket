@@ -101,6 +101,7 @@ Clicking a History item opens the editor panel to view its details.
 
 | Action | Description |
 |--------|-------------|
+| **Move to Queue** | Moves the item back to the Queue in the **New** state (useful for recovering from false auto-completions) |
 | **Clear Old History** | Removes history items older than a configurable threshold (title bar button) |
 | **Open in Browser** | Opens the item's URL in your default browser (if the item has a URL) |
 
@@ -109,8 +110,6 @@ Clicking a History item opens the editor panel to view its details.
 The **Clear Old History** command (available from the History view title bar) bulk-removes history items that have not been updated within a configurable number of days. A confirmation dialog shows the threshold before proceeding.
 
 The age threshold is controlled by the `devdocket.historyClearDays` setting (default: **30** days). Only items whose last modification is older than the threshold are removed.
-
-> **Note:** History items are in terminal states, so no state-changing commands are available beyond clearing old items.
 
 ## Data Flow
 
@@ -155,7 +154,7 @@ The editor **auto-saves** as you type — there is no save button. The panel tit
 
 ## Providers
 
-DevDocket supports multiple provider extensions that discover work items from external systems. Each provider is a separate VS Code extension that depends on the core DevDocket extension.
+DevDocket supports multiple provider extensions that discover work items from external systems. Each provider is a separate VS Code extension that depends on the core DevDocket extension. For details on what causes items to appear in the Inbox, see [Provider Discovery](provider-discovery.md).
 
 ### GitHub Provider (`devdocket-github`)
 
@@ -171,7 +170,7 @@ Discovers items from GitHub via two sub-providers:
 
 | Setting | Type | Default | Description |
 |---------|------|---------|-------------|
-| `devdocketGithub.repos` | `string[]` | `[]` | GitHub repositories to watch (e.g., `owner/repo`). Leave empty to fetch all assigned issues across all repositories. |
+| `devdocketGithub.repos` | `string[]` | `[]` | GitHub repositories to watch (e.g., `owner/repo`). Scopes both issue discovery and PR review discovery. Leave empty to fetch all assigned issues and all requested PR reviews across all repositories. |
 | `devdocketGithub.refreshIntervalSeconds` | `number` | `300` | How often to refresh GitHub data (in seconds). Minimum 60 seconds; values below 60 are clamped. |
 | `devdocketGithub.resurfaceOnNewVersion` | `boolean` | `true` | Resurface PR reviews when new commits are pushed. |
 | `devdocketGithub.resurfaceOnReRequestedReview` | `boolean` | `true` | Resurface PR reviews when review is explicitly re-requested. |
