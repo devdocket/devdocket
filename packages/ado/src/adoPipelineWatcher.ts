@@ -109,20 +109,19 @@ export class AdoPipelineWatcher implements DevDocketRunWatcher {
 
     // Fetch timeline for job details
     const timelineUrl = `https://dev.azure.com/${encodedOrg}/${encodedProject}/_apis/build/builds/${encodedBuildId}/timeline?api-version=7.1`;
-    let timelineResponse: Response;
+    let timelineResponse: Response | undefined;
     try {
       timelineResponse = await fetch(timelineUrl, { headers, signal: AbortSignal.timeout(30_000) });
     } catch (err) {
       if (err instanceof Error && err.name === 'AbortError') {
         logger.warn(`ADO timeline request timed out after 30s for build ${identifier.runId}`);
-        timelineResponse = { ok: false } as Response;
       } else {
         throw err;
       }
     }
 
     let jobs: JobStatus[] = [];
-    if (timelineResponse.ok) {
+    if (timelineResponse?.ok) {
       const timelineData = await timelineResponse.json() as { records: AdoTimelineRecord[] };
       jobs = timelineData.records
         .filter(r => r.type === 'Job')
@@ -134,7 +133,7 @@ export class AdoPipelineWatcher implements DevDocketRunWatcher {
           startedAt: r.startTime,
           completedAt: r.finishTime,
         }));
-    } else {
+    } else if (timelineResponse) {
       logger.warn(`Failed to fetch timeline for build ${identifier.runId}: ${timelineResponse.status} ${timelineResponse.statusText}`);
     }
 
