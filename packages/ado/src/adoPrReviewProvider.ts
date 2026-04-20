@@ -1,5 +1,5 @@
 import * as vscode from 'vscode';
-import { BaseProvider, DiscoveredItem, isValidUrlSegment, type ResolvedItem } from '@devdocket/shared';
+import { BaseProvider, DiscoveredItem, isValidUrlSegment, combineSignals, type ResolvedItem } from '@devdocket/shared';
 import { logger } from './logger';
 import { OrgConfig } from './configParser';
 import { getAdoHeaders, retryAdoWithAuth, throwAdoApiError, safeDecodeComponent } from './adoAuth';
@@ -224,11 +224,11 @@ export class AdoPrReviewProvider extends BaseProvider {
         `https://dev.azure.com/${encodeURIComponent(org)}/_apis/connectiondata`,
         {
           headers: { Authorization: `Bearer ${token}` },
-          signal: signal ? AbortSignal.any([signal, AbortSignal.timeout(30_000)]) : AbortSignal.timeout(30_000),
+          signal: combineSignals(signal, 30_000),
         },
       );
     } catch (err) {
-      if (err instanceof Error && err.name === 'AbortError') { throw err; }
+      if (err instanceof Error && err.name === 'AbortError' && signal?.aborted) { throw err; }
       logger.error(`Network error fetching connection data for org ${org}:`, err);
       this._cachedUserIds.delete(org);
       return undefined;
@@ -275,7 +275,7 @@ export class AdoPrReviewProvider extends BaseProvider {
       headers: {
         Authorization: `Bearer ${token}`,
       },
-      signal: signal ? AbortSignal.any([signal, AbortSignal.timeout(30_000)]) : AbortSignal.timeout(30_000),
+      signal: combineSignals(signal, 30_000),
     });
 
     if (!response.ok) {

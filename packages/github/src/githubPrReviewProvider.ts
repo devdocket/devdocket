@@ -1,4 +1,5 @@
 import * as vscode from 'vscode';
+import { combineSignals } from '@devdocket/shared';
 import { logger } from './logger';
 import { parseRepoFromUrls } from './parseRepo';
 import { BaseGitHubProvider, DiscoveredItem, GitHubIssue, type ResolvedItem } from './baseGithubProvider';
@@ -185,7 +186,7 @@ export class GitHubPrReviewProvider extends BaseGitHubProvider {
           const value = await this.fetchRepoPrReviews(token, repos[currentIndex], signal);
           results[currentIndex] = { status: 'fulfilled', value };
         } catch (reason) {
-          if (reason instanceof Error && reason.name === 'AbortError') { throw reason; }
+          if (reason instanceof Error && reason.name === 'AbortError' && signal?.aborted) { throw reason; }
           results[currentIndex] = { status: 'rejected', reason: reason as Error };
         }
       }
@@ -207,7 +208,7 @@ export class GitHubPrReviewProvider extends BaseGitHubProvider {
           Accept: 'application/vnd.github+json',
           'X-GitHub-Api-Version': '2022-11-28',
         },
-        signal: signal ? AbortSignal.any([signal, AbortSignal.timeout(30_000)]) : AbortSignal.timeout(30_000),
+        signal: combineSignals(signal, 30_000),
       },
     );
 
@@ -229,7 +230,7 @@ export class GitHubPrReviewProvider extends BaseGitHubProvider {
           Accept: 'application/vnd.github+json',
           'X-GitHub-Api-Version': '2022-11-28',
         },
-        signal: signal ? AbortSignal.any([signal, AbortSignal.timeout(30_000)]) : AbortSignal.timeout(30_000),
+        signal: combineSignals(signal, 30_000),
       },
     );
 
@@ -271,7 +272,7 @@ export class GitHubPrReviewProvider extends BaseGitHubProvider {
               Accept: 'application/vnd.github+json',
               'X-GitHub-Api-Version': '2022-11-28',
             },
-            signal: signal ? AbortSignal.any([signal, AbortSignal.timeout(30_000)]) : AbortSignal.timeout(30_000),
+            signal: combineSignals(signal, 30_000),
           });
           if (response.ok) {
             const data = (await response.json()) as { head?: { sha?: string } };
@@ -284,7 +285,7 @@ export class GitHubPrReviewProvider extends BaseGitHubProvider {
             );
           }
         } catch (error) {
-          if (error instanceof Error && error.name === 'AbortError') { throw error; }
+          if (error instanceof Error && error.name === 'AbortError' && signal?.aborted) { throw error; }
           logger.debug(`Failed to fetch head SHA for PR ${pr.html_url}: ${String(error)}`);
         }
       }
@@ -312,7 +313,7 @@ export class GitHubPrReviewProvider extends BaseGitHubProvider {
           Accept: 'application/vnd.github+json',
           'X-GitHub-Api-Version': '2022-11-28',
         },
-        signal: signal ? AbortSignal.any([signal, AbortSignal.timeout(30_000)]) : AbortSignal.timeout(30_000),
+        signal: combineSignals(signal, 30_000),
       });
       if (response.ok) {
         const data = (await response.json()) as { login?: string };
@@ -324,6 +325,7 @@ export class GitHubPrReviewProvider extends BaseGitHubProvider {
       }
       logger.debug(`Failed to fetch current user: ${response.status}`);
     } catch (error) {
+      if (error instanceof Error && error.name === 'AbortError' && signal?.aborted) { throw error; }
       logger.debug(`Failed to fetch current user: ${String(error)}`);
     }
     return undefined;
@@ -363,7 +365,7 @@ export class GitHubPrReviewProvider extends BaseGitHubProvider {
               Accept: 'application/vnd.github+json',
               'X-GitHub-Api-Version': '2022-11-28',
             },
-            signal: signal ? AbortSignal.any([signal, AbortSignal.timeout(30_000)]) : AbortSignal.timeout(30_000),
+            signal: combineSignals(signal, 30_000),
           });
           if (response.ok) {
             const events = (await response.json()) as TimelineEvent[];
@@ -389,7 +391,7 @@ export class GitHubPrReviewProvider extends BaseGitHubProvider {
             );
           }
         } catch (error) {
-          if (error instanceof Error && error.name === 'AbortError') { throw error; }
+          if (error instanceof Error && error.name === 'AbortError' && signal?.aborted) { throw error; }
           logger.debug(`Failed to fetch timeline for PR ${pr.html_url}: ${String(error)}`);
         }
       }

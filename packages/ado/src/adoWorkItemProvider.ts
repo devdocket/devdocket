@@ -1,5 +1,5 @@
 import * as vscode from 'vscode';
-import { BaseProvider, DiscoveredItem, isValidUrlSegment, type ResolvedItem } from '@devdocket/shared';
+import { BaseProvider, DiscoveredItem, isValidUrlSegment, combineSignals, type ResolvedItem } from '@devdocket/shared';
 import { logger } from './logger';
 import { OrgConfig } from './configParser';
 import { getAdoHeaders, retryAdoWithAuth, throwAdoApiError, safeDecodeComponent } from './adoAuth';
@@ -223,10 +223,10 @@ export class AdoWorkItemProvider extends BaseProvider {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({ query: wiqlQuery }),
-        signal: signal ? AbortSignal.any([signal, AbortSignal.timeout(30_000)]) : AbortSignal.timeout(30_000),
+        signal: combineSignals(signal, 30_000),
       });
     } catch (err) {
-      if (err instanceof Error && err.name === 'AbortError') { throw err; }
+      if (err instanceof Error && err.name === 'AbortError' && signal?.aborted) { throw err; }
       logger.error(`Network error querying work items for project "${project || org}":`, err);
       return { items: [], failed: true };
     }
@@ -265,10 +265,10 @@ export class AdoWorkItemProvider extends BaseProvider {
           headers: {
             Authorization: `Bearer ${token}`,
           },
-          signal: signal ? AbortSignal.any([signal, AbortSignal.timeout(30_000)]) : AbortSignal.timeout(30_000),
+          signal: combineSignals(signal, 30_000),
         });
       } catch (err) {
-        if (err instanceof Error && err.name === 'AbortError') { throw err; }
+        if (err instanceof Error && err.name === 'AbortError' && signal?.aborted) { throw err; }
         logger.error(
           `Network error fetching work item details for ${project || org} (batch at index ${i}, ids ${batchIds[0]}-${batchIds[batchIds.length - 1]}):`,
           err,
@@ -354,7 +354,7 @@ export class AdoWorkItemProvider extends BaseProvider {
         signal,
       });
     } catch (err) {
-      if (err instanceof Error && err.name === 'AbortError') { throw err; }
+      if (err instanceof Error && err.name === 'AbortError' && signal?.aborted) { throw err; }
       logger.warn(`Failed to fetch states for ${cacheKey}: network error`, err);
       return new Set<string>(); // Fail open
     }

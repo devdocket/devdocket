@@ -1,4 +1,5 @@
 import * as vscode from 'vscode';
+import { combineSignals } from '@devdocket/shared';
 import { logger } from './logger';
 import { parseRepoFromUrls } from './parseRepo';
 import { BaseGitHubProvider, DiscoveredItem, GitHubIssue } from './baseGithubProvider';
@@ -110,7 +111,7 @@ export class GitHubMyPrsProvider extends BaseGitHubProvider {
           const value = await this.fetchRepoPrs(token, repos[currentIndex], signal);
           results[currentIndex] = { status: 'fulfilled', value };
         } catch (reason) {
-          if (reason instanceof Error && reason.name === 'AbortError') { throw reason; }
+          if (reason instanceof Error && reason.name === 'AbortError' && signal?.aborted) { throw reason; }
           results[currentIndex] = { status: 'rejected', reason: reason as Error };
         }
       }
@@ -146,7 +147,7 @@ export class GitHubMyPrsProvider extends BaseGitHubProvider {
           Accept: 'application/vnd.github+json',
           'X-GitHub-Api-Version': '2022-11-28',
         },
-        signal: signal ? AbortSignal.any([signal, AbortSignal.timeout(30_000)]) : AbortSignal.timeout(30_000),
+        signal: combineSignals(signal, 30_000),
       },
     );
 
@@ -168,7 +169,7 @@ export class GitHubMyPrsProvider extends BaseGitHubProvider {
           Accept: 'application/vnd.github+json',
           'X-GitHub-Api-Version': '2022-11-28',
         },
-        signal: signal ? AbortSignal.any([signal, AbortSignal.timeout(30_000)]) : AbortSignal.timeout(30_000),
+        signal: combineSignals(signal, 30_000),
       },
     );
 
@@ -208,7 +209,7 @@ export class GitHubMyPrsProvider extends BaseGitHubProvider {
             result.set(pr.html_url, status);
           }
         } catch (error) {
-          if (error instanceof Error && error.name === 'AbortError') { throw error; }
+          if (error instanceof Error && error.name === 'AbortError' && signal?.aborted) { throw error; }
           logger.debug(`Failed to fetch status for PR ${pr.html_url}: ${String(error)}`);
         }
       }
@@ -228,7 +229,7 @@ export class GitHubMyPrsProvider extends BaseGitHubProvider {
     };
 
     // Fetch PR details (draft, mergeable state)
-    const detailResponse = await fetch(pr.pull_request!.url, { headers, signal: signal ? AbortSignal.any([signal, AbortSignal.timeout(30_000)]) : AbortSignal.timeout(30_000) });
+    const detailResponse = await fetch(pr.pull_request!.url, { headers, signal: combineSignals(signal, 30_000) });
     if (!detailResponse.ok) {
       logger.debug(`Failed to fetch PR detail for ${pr.html_url}: ${detailResponse.status}`);
       return undefined;
@@ -238,7 +239,7 @@ export class GitHubMyPrsProvider extends BaseGitHubProvider {
     // Fetch reviews — treat failure as unknown status since we can't determine
     // the actual review state without this data
     const reviewsUrl = `${pr.pull_request!.url}/reviews`;
-    const reviewsResponse = await fetch(reviewsUrl, { headers, signal: signal ? AbortSignal.any([signal, AbortSignal.timeout(30_000)]) : AbortSignal.timeout(30_000) });
+    const reviewsResponse = await fetch(reviewsUrl, { headers, signal: combineSignals(signal, 30_000) });
     if (!reviewsResponse.ok) {
       logger.debug(`Failed to fetch reviews for ${pr.html_url}: ${reviewsResponse.status}`);
       return undefined;
