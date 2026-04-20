@@ -32,6 +32,7 @@ class WatchedRunNode extends vscode.TreeItem {
     if (run.identifier.repo) {
       lines.push(`Repository: ${run.identifier.repo}`);
     }
+    lines.push(`Run: #${run.identifier.runId}`);
     
     lines.push(`State: ${run.status.overallState}`);
     if (run.status.overallState === 'completed' && run.status.conclusion) {
@@ -47,13 +48,19 @@ class WatchedRunNode extends vscode.TreeItem {
 
   private buildDescription(): string {
     const run = this.watchedRun;
+    const parts: string[] = [];
+    if (run.identifier.repo) {
+      parts.push(run.identifier.repo);
+    }
+    parts.push(`#${run.identifier.runId}`);
     if (run.hasWarning) {
-      return 'polling failed';
+      parts.push('polling failed');
+    } else if (run.status.overallState === 'completed' && run.status.conclusion) {
+      parts.push(run.status.conclusion);
+    } else {
+      parts.push(run.status.overallState);
     }
-    if (run.status.overallState === 'completed' && run.status.conclusion) {
-      return run.status.conclusion;
-    }
-    return run.status.overallState;
+    return parts.join(' · ');
   }
 
   private getIconForState(state: RunState, conclusion: RunConclusion | undefined, hasWarning?: boolean): vscode.ThemeIcon {

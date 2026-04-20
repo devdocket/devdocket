@@ -109,7 +109,7 @@ export async function showWatchesQuickPick(watcherService: WatcherService): Prom
     
     return {
       label: `${icon} ${watch.identifier.displayName}`,
-      description: state,
+      description: `#${watch.identifier.runId} · ${state}`,
       detail: watch.identifier.repo,
       watch,
     };
