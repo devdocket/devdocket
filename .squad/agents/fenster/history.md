@@ -49,7 +49,7 @@ DevDocket is a VS Code extension monorepo for managing work items from multiple 
 - **Build:** esbuild, CJS, `--external:vscode`, sourcemaps. Root `npm install` + `npm run build`.
 
 ### Completed Issues
-#323 (watch CI pipelines), #322 (auto-complete activity log), #320 (focus view grouping), #282 (provider state in editor), #281 (clickable title), #276 (auto-track authored PRs), #275 (History→Queue transitions), #273 (tree counts), #265 (auto-complete on close), #255 (provider metadata docs), #250 (group context), #249 (accept-to-focus, pre-shipped), #243 (version resurfacing), #240 (create from URL), #233 (provider health), #232 (clear history), #231 (sources icons), #230 (layout toggle), #229 (emoji removal), #227 (provider labels), #223 (dead code cleanup), #222 (responsive layout), #221 (contextual heading), #219 (source URL link), #217 (editor metadata), #216 (provider description), #215 (dynamic titles), #189 (dismissed fix), #178 (ADO filtering), #158 (markdown injection), #157 (API trust boundary), #156 (URL sanitization), #155 (URL scheme validation), #154 (crypto.randomUUID), #153 (JSON validation), #152 (path traversal fix), #12 (AI PR actions), bulk rename (WorkCenter→DevDocket)
+#299 (fix double disposal), #323 (watch CI pipelines), #322 (auto-complete activity log), #320 (focus view grouping), #282 (provider state in editor), #281 (clickable title), #276 (auto-track authored PRs), #275 (History→Queue transitions), #273 (tree counts), #265 (auto-complete on close), #255 (provider metadata docs), #250 (group context), #249 (accept-to-focus, pre-shipped), #243 (version resurfacing), #240 (create from URL), #233 (provider health), #232 (clear history), #231 (sources icons), #230 (layout toggle), #229 (emoji removal), #227 (provider labels), #223 (dead code cleanup), #222 (responsive layout), #221 (contextual heading), #219 (source URL link), #217 (editor metadata), #216 (provider description), #215 (dynamic titles), #189 (dismissed fix), #178 (ADO filtering), #158 (markdown injection), #157 (API trust boundary), #156 (URL sanitization), #155 (URL scheme validation), #154 (crypto.randomUUID), #153 (JSON validation), #152 (path traversal fix), #12 (AI PR actions), bulk rename (WorkCenter→DevDocket)
 
 > Full issue-level learnings archived to `history-archive.md`
 
@@ -289,3 +289,10 @@ DevDocket is a VS Code extension monorepo for managing work items from multiple 
 - **Tree hierarchy:** In tree mode, items are now grouped: Provider (GitHub, ADO, etc.) → Sub-group (repo name) → Work Items. Manual items appear under "Other" provider group. In flat mode, unchanged.
 - **No breaking changes:** The public API surface is unchanged — only internal tree provider implementation.
 - **Files changed:** `packages/core/src/views/focusTreeProvider.ts` (removed ~60 lines of custom grouping logic).
+
+### 2026-04-20 — Issue #299 (Remove double disposal of resources)
+
+**Bug:** `deactivate()` manually disposed 4 resources (`providerRegistry`, `actionRegistry`, `workGraph`, `stateStore`) that were already registered in `context.subscriptions` for VS Code auto-disposal. This caused every resource to be disposed twice.
+- **Fix:** Removed all manual disposal from `deactivate()`, making it a true no-op. Removed the module-level variables and their assignments since they only existed to support the manual disposal.
+- **VS Code idiom:** Rely exclusively on `context.subscriptions` for resource lifecycle management. VS Code calls `dispose()` on all subscriptions during deactivation automatically.
+- **Files changed:** `packages/core/src/extension.ts` only.

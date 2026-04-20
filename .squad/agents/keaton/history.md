@@ -164,4 +164,68 @@ Detailed findings and patterns documented in:
 - Comments include: assignment, complexity (small/medium/large), category, dependencies, implementation notes
 - All comments posted safely with `--body-file` to avoid PowerShell backtick escaping issues
 
+## Triage Round 2 — 12 Squad Issues (2026-07-24)
+
+**Status:** COMPLETE — All 12 issues routed and triage comments posted.
+
+### Routing Summary
+
+| Route | Count | Issues |
+|-------|-------|--------|
+| squad:fenster | 7 | 298, 299, 300, 301, 302, 303, 305, 306 |
+| squad:keaton | 5 | 304, 307, 308, 292 |
+
+### Key Decisions
+
+1. **Bugs (High Priority - Fenster):**
+   - #298 (fetch/git timeouts): Medium complexity. Blocks extension activation on slow networks.
+   - #299 (double disposal): Small complexity. Remove manual deactivate() calls, rely on context.subscriptions idiom.
+   - #300 (CancellationToken wiring): Medium complexity. Wire token to AbortSignal in providers. Coordinate with #298.
+
+2. **Enhancement (Fenster):**
+   - #301 (provider health visibility): Medium complexity. Recommend status bar item for unhealthy provider discovery.
+
+3. **Chores (Fenster):**
+   - #302 (consolidated types): Large complexity. Create @devdocket/types or expand @devdocket/shared. ai-reviewer's copy is already stale.
+   - #303 (BaseGitHubProvider extends BaseProvider): Large complexity. Eliminates duplication, matches ADO pattern. Benefits from completing #298/#300 first.
+   - #305 (split monolith commands.ts): Medium complexity. Pure refactoring — no behavior change.
+   - #306 (WorkItemEditorPanel cache lifecycle): Small complexity. Move static Map to instance-level manager.
+
+4. **Architecture Decisions (Keaton):**
+   - #304 (JSON stores → globalState): Large complexity, LOW priority. Architectural decision required before Fenster implements. Trade-offs: raw JSON (debugging) vs. globalState (platform ownership). Defer decision until storage pain is felt.
+   - #307 (weekly codebase review): Medium complexity, LOW priority. Meta-task (workflow setup). Scope decision: implement now or defer? Recommend defer until MVP stabilizes.
+   - #308 (weekly UX review): Medium complexity, LOW priority. Companion to #307. Scope decision: defer until post-MVP usability focus.
+   - #292 (automated code refactoring): Medium complexity, LOW priority. Should automated refactoring PRs be submitted without review? Keaton decision on scope and timing.
+
+### Complexity Summary
+
+- Small: #299, #306 (2 issues)
+- Medium: #298, #300, #301, #305, #304, #307, #308, #292 (8 issues)
+- Large: #302, #303 (2 issues)
+
+### Priority & Sequencing Recommendations
+
+**Immediate (Bugs):**
+1. #299 (small, quick win, lifecycle correctness)
+2. #298 + #300 (coordinate fetch timeout + CancellationToken wiring)
+
+**Next Sprint (Enhancements & Smaller Chores):**
+3. #301 (medium, improves UX for provider failures)
+4. #305 (medium, improves code organization)
+5. #306 (small, improves lifecycle safety)
+
+**Post-MVP or Parallel Track (Large Refactorings):**
+6. #302 (large, consolidates types, enables #303)
+7. #303 (large, eliminates duplication, requires #302 first)
+
+**Deferred (Architecture Decisions & Process Setup):**
+8. #304 (decide architecture, then implement)
+9. #307, #308, #292 (Keaton scopes timing and priorities)
+
+### Triage Process Notes
+
+- All 12 issues read via `gh issue view --json body,comments`
+- Comments include: assignment, complexity, category, dependencies, and implementation guidance
+- All comments posted safely with `--body-file` to avoid shell escaping issues
+- Fenster has 8 routable issues; Keaton has 5 scoping/decision issues
 
