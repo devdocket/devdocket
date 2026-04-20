@@ -906,8 +906,9 @@ async function handleUpdateMetadata(
     throw new Error('Metadata update must be a plain object');
   }
   const validatedMetadata = metadata as { branchName?: string; worktreePath?: string; repoPath?: string };
-  const updatedFields = Object.keys(validatedMetadata).filter(
-    (key) => validatedMetadata[key as keyof typeof validatedMetadata] !== undefined,
+  const ALLOWED_KEYS = ['branchName', 'worktreePath', 'repoPath'] as const;
+  const updatedFields = ALLOWED_KEYS.filter(
+    (key) => Object.prototype.hasOwnProperty.call(validatedMetadata, key) && validatedMetadata[key] !== undefined,
   );
   logger.info(`Updating metadata for item ${itemId}; fields: ${updatedFields.join(', ') || 'none'}`);
   await workGraph.updateMetadata(itemId, validatedMetadata);
