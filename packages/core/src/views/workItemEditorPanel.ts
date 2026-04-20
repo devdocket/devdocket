@@ -5,13 +5,37 @@ import { ProviderRegistry } from '../services/providerRegistry';
 import { getEditorPanelHtml } from './editorPanelHtml';
 import { isSafeUrl } from '../utils/url';
 
+/**
+ * Manages the lifecycle of open WorkItemEditorPanels.
+ * Created during extension activation and disposed with the extension context,
+ * preventing stale panel references across extension reloads.
+ */
+export class PanelManager {
+  /** @internal Used by WorkItemEditorPanel — not part of public API. */
+  readonly openPanels = new Map<string, WorkItemEditorPanel>();
+
+  /** Dispose all tracked panels and clear the cache. */
+  clearPanelCache(): void {
+    const panels = Array.from(this.openPanels.values());
+    for (const editor of panels) {
+      editor.dispose();
+    }
+    this.openPanels.clear();
+  }
+
+  dispose(): void {
+    this.clearPanelCache();
+  }
+}
+
 export class WorkItemEditorPanel {
   private static readonly viewType = 'devdocket.editItem';
-  private static readonly openPanels = new Map<string, WorkItemEditorPanel>();
+  private static panelManager = new PanelManager();
   private readonly panel: vscode.WebviewPanel;
   private readonly workGraph: WorkGraph;
   private readonly providerRegistry: ProviderRegistry;
   private readonly itemId: string;
+  private readonly panelCache: PanelManager;
   private disposed = false;
   private debounceTimer: ReturnType<typeof setTimeout> | undefined;
   private pendingData: Record<string, string> | undefined;
@@ -23,6 +47,14 @@ export class WorkItemEditorPanel {
   private lastDisplayedTitle: string | undefined;
   private lastManagedState: boolean | undefined;
 
+  /**
+   * Replace the active panel manager. Called during `activate()` to scope
+   * the panel cache to the extension lifecycle.
+   */
+  static setPanelManager(manager: PanelManager): void {
+    WorkItemEditorPanel.panelManager = manager;
+  }
+
   static open(
     context: vscode.ExtensionContext,
     workGraph: WorkGraph,
@@ -30,7 +62,8 @@ export class WorkItemEditorPanel {
     item: WorkItem,
     providerLabel?: string,
   ): void {
-    const existing = WorkItemEditorPanel.openPanels.get(item.id);
+    const manager = WorkItemEditorPanel.panelManager;
+    const existing = manager.openPanels.get(item.id);
     if (existing) {
       existing.providerLabel = providerLabel;
       existing.update();
@@ -45,18 +78,14 @@ export class WorkItemEditorPanel {
       { enableScripts: true, retainContextWhenHidden: true },
     );
 
-    const editor = new WorkItemEditorPanel(panel, workGraph, providerRegistry, item.id, providerLabel);
-    WorkItemEditorPanel.openPanels.set(item.id, editor);
+    const editor = new WorkItemEditorPanel(panel, workGraph, providerRegistry, item.id, manager, providerLabel);
+    manager.openPanels.set(item.id, editor);
     context.subscriptions.push({ dispose: () => editor.dispose() });
   }
 
   /** @internal Exposed for testing only. */
   static clearPanelCache(): void {
-    const panels = Array.from(WorkItemEditorPanel.openPanels.values());
-    for (const editor of panels) {
-      editor.dispose();
-    }
-    WorkItemEditorPanel.openPanels.clear();
+    WorkItemEditorPanel.panelManager.clearPanelCache();
   }
 
   private constructor(
@@ -64,12 +93,14 @@ export class WorkItemEditorPanel {
     workGraph: WorkGraph,
     providerRegistry: ProviderRegistry,
     itemId: string,
+    panelCache: PanelManager,
     private providerLabel?: string,
   ) {
     this.panel = panel;
     this.workGraph = workGraph;
     this.providerRegistry = providerRegistry;
     this.itemId = itemId;
+    this.panelCache = panelCache;
 
     this.update();
 
@@ -113,7 +144,7 @@ export class WorkItemEditorPanel {
     this.panel.onDidDispose(() => {
       if (!this.disposed) {
         this.disposed = true;
-        WorkItemEditorPanel.openPanels.delete(this.itemId);
+        this.panelCache.openPanels.delete(this.itemId);
         if (this.debounceTimer) {
           clearTimeout(this.debounceTimer);
           this.debounceTimer = undefined;
@@ -217,7 +248,7 @@ export class WorkItemEditorPanel {
   dispose(): void {
     if (!this.disposed) {
       this.disposed = true;
-      WorkItemEditorPanel.openPanels.delete(this.itemId);
+      this.panelCache.openPanels.delete(this.itemId);
       if (this.debounceTimer) {
         clearTimeout(this.debounceTimer);
         this.debounceTimer = undefined;

@@ -19,6 +19,7 @@ import { SourcesTreeProvider } from './views/sourcesTreeProvider';
 import { HistoryTreeProvider } from './views/historyTreeProvider';
 import { WatchesTreeProvider } from './views/watchesTreeProvider';
 import { WatchesStatusBar } from './views/watchesStatusBar';
+import { WorkItemEditorPanel, PanelManager } from './views/workItemEditorPanel';
 import { registerCommands } from './commands/commands';
 import { isSafeUrl } from './utils/url';
 import { ViewRevealer } from './services/viewRevealer';
@@ -414,7 +415,12 @@ export async function activate(context: vscode.ExtensionContext): Promise<DevDoc
     logger.error('Failed to load persisted watches', err);
   });
 
+  // Scope panel cache to extension lifecycle
+  const panelManager = new PanelManager();
+  WorkItemEditorPanel.setPanelManager(panelManager);
+
   context.subscriptions.push(
+    panelManager,
     ...Object.values(views),
     ...viewDisposables,
     ...eventDisposables,

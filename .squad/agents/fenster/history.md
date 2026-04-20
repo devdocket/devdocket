@@ -55,7 +55,16 @@ DevDocket is a VS Code extension monorepo for managing work items from multiple 
 
 ## Learnings
 
-### 2026-04-22 — Issue #300 (CancellationToken → AbortSignal wiring)
+### 2026-04-22 — Issue #306 (Scope WorkItemEditorPanel cache to extension lifecycle)
+
+**Refactor:** Moved the static panel cache from `WorkItemEditorPanel` to a `PanelManager` class instantiated during `activate()` and disposed with the extension context.
+- **Problem:** Static `Map<string, WorkItemEditorPanel>` survived extension reloads during development, leaking stale panel references. `clearPanelCache()` existed but was only called in tests.
+- **Solution:** Created `PanelManager` class owning the `openPanels` map. Each `activate()` creates a fresh `PanelManager`, sets it via `WorkItemEditorPanel.setPanelManager()`, and pushes it to `context.subscriptions`. On deactivation, `PanelManager.dispose()` clears all panels.
+- **Backward compatibility:** Kept static `open()` and `clearPanelCache()` on `WorkItemEditorPanel` as thin delegates to the current manager. Tests work unchanged — they use the default static manager reset by `clearPanelCache()` in `beforeEach`.
+- **Pattern:** When static class state needs lifecycle scoping, use a manager class with `setPanelManager()` injection — preserves static API facade for consumers while scoping ownership to `activate()`/`deactivate()`.
+- **Files changed:** `packages/core/src/views/workItemEditorPanel.ts` (new `PanelManager` class, refactored panel cache ownership), `packages/core/src/extension.ts` (create + register `PanelManager`).
+
+### 2026-04-22 — Issue #300(CancellationToken → AbortSignal wiring)
 
 **Bug fix:** Providers accepted `CancellationToken` in `refresh()` but only checked `isCancellationRequested` at discrete points. In-flight `fetch()` calls ran to completion even after cancellation.
 - **Pattern:** Create `AbortController` at refresh entry point, wire `token?.onCancellationRequested?.(() => abortController.abort())` with double optional chaining (test mocks may lack the event method), pass `abortController.signal` to all `fetch()` calls down the chain.
