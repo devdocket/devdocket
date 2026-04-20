@@ -41,5 +41,11 @@ export function combineSignals(cancelSignal: AbortSignal | undefined, timeoutMs:
   }, timeoutMs);
   timer.unref?.();
 
+  // If cancelSignal fired during setup (before timer was assigned), onAbort
+  // couldn't clear the timer. Clean it up now to avoid a dangling timeout.
+  if (controller.signal.aborted) {
+    clearTimeout(timer);
+  }
+
   return controller.signal;
 }
