@@ -306,3 +306,33 @@ See `.squad/orchestration-log/2026-04-20T16-18-00Z-keaton.md` for full triage de
 - **Tree hierarchy:** In tree mode, items are now grouped: Provider (GitHub, ADO, etc.) → Sub-group (repo name) → Work Items. Manual items appear under "Other" provider group. In flat mode, unchanged.
 - **No breaking changes:** The public API surface is unchanged — only internal tree provider implementation.
 - **Files changed:** `packages/core/src/views/focusTreeProvider.ts` (removed ~60 lines of custom grouping logic).
+
+### 2026-04-20 — Issue #299 (Double Disposal in Deactivate)
+
+**PR #325:** Fixed double disposal in `extension.ts` deactivate() and cleaned up 4 unused module variables.
+- **Bug:** `deactivate()` called `.dispose()` on resources twice due to missing guard. Cleaned up unused variables in extension module.
+- **Impact:** Improves shutdown reliability and prevents resource leaks. 1704 tests pass.
+- **No API changes.** Isolated to extension lifecycle management.
+
+### 2026-04-20 — Issue #298 (Add Timeouts to Fetch/Git Calls)
+
+**PR #326:** Added timeout configuration to all fetch() and git subprocess calls to prevent hanging on network delays.
+- **Scope:** Applied consistently across GitHub, ADO, and generic providers.
+- **Pattern:** Timeout handling with graceful error messaging for user feedback.
+- **Impact:** Improves reliability on flaky networks. 1898 tests pass.
+- **No API surface changes.**
+
+### 2026-04-20 — Issue #300 (Wire CancellationToken to AbortSignal)
+
+**PR #327:** Integrated VS Code CancellationToken with AbortSignal across 7 provider files for consistent cancellation semantics.
+- **Pattern:** Providers now receive `vscode.CancellationToken` in constructor. Wired to `AbortSignal` for fetch/git operations.
+- **Scope:** GitHub, ADO, and generic provider implementations.
+- **Note:** Breaking change — provider constructors require CancellationToken. Migration documented in PR.
+- **Impact:** Ensures responsive cancellation on user action and extension shutdown.
+
+### 2026-04-20 — Documentation Refresh
+
+**PR #328:** Rewrote README and created UX guide for configuration details.
+- **README changes:** Removed marketplace-specific language, added build-from-source workflow, condensed feature descriptions.
+- **New guide:** Dedicated UX guide for configuration and developer setup.
+- **Impact:** Improves developer experience for local builds. 5 rounds Copilot review passed.
