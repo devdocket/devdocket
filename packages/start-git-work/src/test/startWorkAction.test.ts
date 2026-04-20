@@ -229,13 +229,13 @@ describe('StartWorkAction', () => {
       const firstCall = vi.mocked(execFile).mock.calls[0];
       expect(firstCall[0]).toBe('git');
       expect(firstCall[1]).toEqual(['branch', '--list', 'issue123']);
-      expect(firstCall[2]).toEqual({ cwd: '/mock/workspace' });
+      expect(firstCall[2]).toEqual({ cwd: '/mock/workspace', timeout: 30_000 });
 
       // Second call: create branch from user-specified base
       const secondCall = vi.mocked(execFile).mock.calls[1];
       expect(secondCall[0]).toBe('git');
       expect(secondCall[1]).toEqual(['branch', 'issue123', 'origin/dev']);
-      expect(secondCall[2]).toEqual({ cwd: '/mock/workspace' });
+      expect(secondCall[2]).toEqual({ cwd: '/mock/workspace', timeout: 30_000 });
 
       // Third call: create worktree
       const thirdCall = vi.mocked(execFile).mock.calls[2];
@@ -245,6 +245,7 @@ describe('StartWorkAction', () => {
         path.join('/mock', 'workspace-issue123'),
         'issue123',
       ]);
+      expect(thirdCall[2]).toEqual({ cwd: '/mock/workspace', timeout: 30_000 });
     });
 
     it('creates branch and worktree with correct names for ADO items', async () => {
@@ -261,7 +262,7 @@ describe('StartWorkAction', () => {
       const firstCall = vi.mocked(execFile).mock.calls[0];
       expect(firstCall[0]).toBe('git');
       expect(firstCall[1]).toEqual(['branch', '--list', 'issue456']);
-      expect(firstCall[2]).toEqual({ cwd: '/mock/workspace' });
+      expect(firstCall[2]).toEqual({ cwd: '/mock/workspace', timeout: 30_000 });
 
       // Second call: create branch
       const secondCall = vi.mocked(execFile).mock.calls[1];
@@ -276,6 +277,7 @@ describe('StartWorkAction', () => {
         path.join('/mock', 'workspace-issue456'),
         'issue456',
       ]);
+      expect(thirdCall[2]).toEqual({ cwd: '/mock/workspace', timeout: 30_000 });
     });
 
     it('uses user-specified base branch for branch creation', async () => {

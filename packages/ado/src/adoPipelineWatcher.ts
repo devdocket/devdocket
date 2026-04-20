@@ -88,7 +88,7 @@ export class AdoPipelineWatcher implements DevDocketRunWatcher {
 
     // Fetch build details
     const buildUrl = `https://dev.azure.com/${encodedOrg}/${encodedProject}/_apis/build/builds/${encodedBuildId}?api-version=7.1`;
-    const buildResponse = await fetch(buildUrl, { headers });
+    const buildResponse = await fetch(buildUrl, { headers, signal: AbortSignal.timeout(30_000) });
     if (!buildResponse.ok) {
       throwAdoApiError(buildResponse, `Build ${identifier.runId}`);
     }
@@ -101,7 +101,7 @@ export class AdoPipelineWatcher implements DevDocketRunWatcher {
 
     // Fetch timeline for job details
     const timelineUrl = `https://dev.azure.com/${encodedOrg}/${encodedProject}/_apis/build/builds/${encodedBuildId}/timeline?api-version=7.1`;
-    const timelineResponse = await fetch(timelineUrl, { headers });
+    const timelineResponse = await fetch(timelineUrl, { headers, signal: AbortSignal.timeout(30_000) });
 
     let jobs: JobStatus[] = [];
     if (timelineResponse.ok) {

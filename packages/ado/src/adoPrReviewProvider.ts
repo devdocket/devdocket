@@ -203,6 +203,7 @@ export class AdoPrReviewProvider extends BaseProvider {
         `https://dev.azure.com/${encodeURIComponent(org)}/_apis/connectiondata`,
         {
           headers: { Authorization: `Bearer ${token}` },
+          signal: AbortSignal.timeout(30_000),
         },
       );
     } catch (err) {
@@ -251,6 +252,7 @@ export class AdoPrReviewProvider extends BaseProvider {
       headers: {
         Authorization: `Bearer ${token}`,
       },
+      signal: AbortSignal.timeout(30_000),
     });
 
     if (!response.ok) {

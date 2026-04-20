@@ -104,13 +104,13 @@ export class StartWorkAction implements DevDocketAction {
           progress.report({ message: 'Creating branch...' });
 
           // Check if branch already exists
-          const { stdout: branchList } = await execFileAsync('git', ['branch', '--list', branchName], { cwd: repoPath });
+          const { stdout: branchList } = await execFileAsync('git', ['branch', '--list', branchName], { cwd: repoPath, timeout: 30_000 });
           if (branchList.trim()) {
             void vscode.window.showErrorMessage(`DevDocket: Branch "${branchName}" already exists.`);
             return;
           }
 
-          await execFileAsync('git', ['branch', branchName, baseBranch], { cwd: repoPath });
+          await execFileAsync('git', ['branch', branchName, baseBranch], { cwd: repoPath, timeout: 30_000 });
           logger.info(`Starting work: creating branch ${branchName}`);
 
           progress.report({ message: 'Creating worktree...' });
@@ -118,11 +118,12 @@ export class StartWorkAction implements DevDocketAction {
           try {
             await execFileAsync('git', ['worktree', 'add', worktreePath, branchName], {
               cwd: repoPath,
+              timeout: 30_000,
             });
           } catch (worktreeErr) {
             // Rollback: delete the branch we just created
             try {
-              await execFileAsync('git', ['branch', '-D', branchName], { cwd: repoPath });
+              await execFileAsync('git', ['branch', '-D', branchName], { cwd: repoPath, timeout: 30_000 });
             } catch (rollbackErr) {
               const rollbackMessage = rollbackErr instanceof Error ? rollbackErr.message : String(rollbackErr);
               void vscode.window.showWarningMessage(`DevDocket: Failed to delete branch during rollback — ${rollbackMessage}`);
@@ -160,7 +161,7 @@ export class StartWorkAction implements DevDocketAction {
               arg => arg.replace(/\{path\}/g, worktreePath),
             );
             try {
-              await execFileAsync(cmd.command, resolvedArgs, { cwd: worktreePath });
+              await execFileAsync(cmd.command, resolvedArgs, { cwd: worktreePath, timeout: 60_000 });
             } catch (cmdErr) {
               const cmdMessage = cmdErr instanceof Error ? cmdErr.message : String(cmdErr);
               logger.error(`Post-worktree command failed: ${cmd.command}`, cmdErr);

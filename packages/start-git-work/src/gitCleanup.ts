@@ -120,7 +120,7 @@ async function checkCleanupState(item: WorkItem): Promise<CleanupState | undefin
 
   if (info.branchName) {
     try {
-      await execFileAsync('git', ['show-ref', '--verify', '--quiet', '--', `refs/heads/${info.branchName}`], { cwd: repoPath });
+      await execFileAsync('git', ['show-ref', '--verify', '--quiet', '--', `refs/heads/${info.branchName}`], { cwd: repoPath, timeout: 30_000 });
       branchExists = true;
     } catch (err) {
       if ((err as { code?: number | string }).code === 1) {
@@ -188,7 +188,7 @@ export async function promptGitCleanup(
 
   if (worktreeExists && worktreePath && repoPath) {
     try {
-      await execFileAsync('git', ['worktree', 'remove', '--', worktreePath], { cwd: repoPath });
+      await execFileAsync('git', ['worktree', 'remove', '--', worktreePath], { cwd: repoPath, timeout: 30_000 });
       logger.info('Removed worktree for work item');
       cleaned.push(`worktree`);
     } catch (err) {
@@ -202,7 +202,7 @@ export async function promptGitCleanup(
   // Skip branch deletion if worktree removal failed — branch is likely still checked out
   if (branchExists && branchName && repoPath && worktreeRemoved) {
     try {
-      await execFileAsync('git', ['branch', '-d', '--', branchName], { cwd: repoPath });
+      await execFileAsync('git', ['branch', '-d', '--', branchName], { cwd: repoPath, timeout: 30_000 });
       logger.info(`Deleted branch: ${branchName}`);
       cleaned.push(`branch ${branchName}`);
     } catch (err) {
