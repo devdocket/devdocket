@@ -157,7 +157,7 @@ describe('WatcherService', () => {
       service.onDidDetectJobFailure(failureSpy);
 
       // Advance timer to trigger poll
-      await vi.advanceTimersByTimeAsync(30000);
+      await vi.advanceTimersByTimeAsync(60000);
 
       expect(failureSpy).toHaveBeenCalledTimes(1);
       expect(failureSpy).toHaveBeenCalledWith(
@@ -183,7 +183,7 @@ describe('WatcherService', () => {
       const completeSpy = vi.fn();
       service.onDidCompleteRun(completeSpy);
 
-      await vi.advanceTimersByTimeAsync(30000);
+      await vi.advanceTimersByTimeAsync(60000);
 
       expect(completeSpy).toHaveBeenCalledTimes(1);
     });
@@ -203,16 +203,16 @@ describe('WatcherService', () => {
       await service.startWatch(createIdentifier());
 
       // 3 poll ticks to hit 3 failures
-      await vi.advanceTimersByTimeAsync(30000);
-      await vi.advanceTimersByTimeAsync(30000);
-      await vi.advanceTimersByTimeAsync(30000);
+      await vi.advanceTimersByTimeAsync(60000);
+      await vi.advanceTimersByTimeAsync(60000);
+      await vi.advanceTimersByTimeAsync(60000);
 
       const watches = service.getActiveWatches();
       expect(watches[0].hasWarning).toBe(true);
 
       // After 3 failures, the run should be skipped on next poll
       const callCountBefore = (watcher.getRunStatus as ReturnType<typeof vi.fn>).mock.calls.length;
-      await vi.advanceTimersByTimeAsync(30000);
+      await vi.advanceTimersByTimeAsync(60000);
       const callCountAfter = (watcher.getRunStatus as ReturnType<typeof vi.fn>).mock.calls.length;
       expect(callCountAfter).toBe(callCountBefore); // No new calls
     });
@@ -229,7 +229,7 @@ describe('WatcherService', () => {
       service.dismissWatch(createIdentifier());
 
       // Advance past several poll intervals — no new getRunStatus calls expected
-      await vi.advanceTimersByTimeAsync(90000);
+      await vi.advanceTimersByTimeAsync(180000);
       const callCountAfterDismiss = (watcher.getRunStatus as ReturnType<typeof vi.fn>).mock.calls.length;
       expect(callCountAfterDismiss).toBe(callCountAfterStart);
     });

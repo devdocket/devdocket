@@ -171,7 +171,7 @@ export class WatcherService implements vscode.Disposable {
    */
   private getPollingInterval(): number {
     const config = vscode.workspace.getConfiguration('devdocket.watches');
-    const interval = config.get<number>('pollingIntervalSeconds', 30);
+    const interval = config.get<number>('pollingIntervalSeconds', 60);
     return Math.max(interval, 15);
   }
 
