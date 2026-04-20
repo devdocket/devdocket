@@ -51,7 +51,7 @@ DevDocket is a VS Code extension monorepo for managing work items from multiple 
 ### Completed Issues
 #330 (git auth env vars — credential exposure fix), #299 (fix double disposal), #323 (watch CI pipelines), #322 (auto-complete activity log), #320 (focus view grouping), #282 (provider state in editor), #281 (clickable title), #276 (auto-track authored PRs), #275 (History→Queue transitions), #273 (tree counts), #265 (auto-complete on close), #255 (provider metadata docs), #250 (group context), #249 (accept-to-focus, pre-shipped), #243 (version resurfacing), #240 (create from URL), #233 (provider health), #232 (clear history), #231 (sources icons), #230 (layout toggle), #229 (emoji removal), #227 (provider labels), #223 (dead code cleanup), #222 (responsive layout), #221 (contextual heading), #219 (source URL link), #217 (editor metadata), #216 (provider description), #215 (dynamic titles), #189 (dismissed fix), #178 (ADO filtering), #158 (markdown injection), #157 (API trust boundary), #156 (URL sanitization), #155 (URL scheme validation), #154 (crypto.randomUUID), #153 (JSON validation), #152 (path traversal fix), #12 (AI PR actions), bulk rename (WorkCenter→DevDocket)
 
-> Full issue-level learnings archived to `history-archive.md`
+> **Archived Summary (04-17 and earlier):** Early issues including auto-complete v1 with disappearance detection (#265), large PR fix for walkthrough (#261), clickable title (#281), item activity log (#260), AI model selection (#254), keyboard shortcuts (#226), and dynamic title sync via `titleSync.ts` service (#215). Full learnings in `history-archive.md`
 
 ## Learnings
 
@@ -170,98 +170,23 @@ DevDocket is a VS Code extension monorepo for managing work items from multiple 
 - **Copilot review fixes:** (1) Stale snapshot on empty refresh. (2) Deduplicate externalIds before getClosedItems. (3) AbortSignal on getClosedItems.
 - **Files changed:** `types.ts`, `providerRegistry.ts`, `autoComplete.ts` (new), `extension.ts`, `workGraph.ts`, `workItem.ts`, `package.json`, `workGraph.test.ts`
 
-### 2026-04-17 Round 3 — Issue #265 v1 (Auto-Complete — superseded by redesign above)
+## Learnings
 
-**PR #297:** Auto-complete work items when their linked external item disappears from a provider refresh.
-- **Disappearance detection approach:** Compare previous vs current discovered items inline in `handleDiscoveredItems`. Items that disappear and had `accepted` inbox state are considered externally closed/merged. No changes to `DiscoveredItem` interface or providers needed.
-- **Key design decision:** Detection runs in `handleDiscoveredItems` (not in `refreshWithTimeout`) so it works for ALL refresh paths — both registry-managed and provider-managed periodic background refreshes. Initial approach deferred to `refreshWithTimeout` which missed background refreshes.
-- **State machine expansion:** Added `New → Done` and `Paused → Done` transitions to `VALID_TRANSITIONS`. Required for auto-complete of items in Queue (New) and Focus (Paused). Updated state diagram docs in `workItem.ts`.
-- **Guards:** (1) Empty-current guard prevents mass false positives from silent provider failures. (2) Truncation guard skips detection when `MAX_ITEMS_PER_PROVIDER` was exceeded. (3) First-refresh no-op (previous items empty).
-- **Event-driven separation:** `ProviderRegistry.onDidDetectCompletedItems` handles detection; `extension.ts` handles transition + notification. Clean separation.
-- **Setting:** `devdocket.autoCompleteOnClose` (default: true) in `packages/core/package.json`.
-- **Known tradeoff:** Partial provider failures (e.g. one repo fails) can cause false positives. Acceptable for v1 — items can be moved back from History to Queue.
-- **Files changed:** `providerRegistry.ts`, `extension.ts`, `workGraph.ts`, `workItem.ts`, `package.json`, `workGraph.test.ts`
+### 2026-04-20 — Security & Concurrency Sprint
 
-### 2026-04-17 Round 2 — Issue #261 (Walkthrough Large PR Fix)
+**Team outcome:** 5 PRs completed in parallel coordination with Hockney.
 
-**PR #294:** Fixed AI Walkthrough failing on large external PRs due to context overflow.
-- **Root cause:** `getDiffTool` returned raw `git diff` output with no size limit. For large PRs (hundreds of files), multi-MB diffs overflowed the model's context window. The model provider truncated earlier messages, removing the assistant message with `tool_use` blocks while keeping `tool_result` messages — API error: "unexpected tool_use_id found in tool_result blocks".
-- **Two-layer fix:** (1) `getDiffTool.ts` truncates at 75K chars with `--stat` summary + footer guiding model to use `getFileDiff`. (2) `walkthroughParticipant.ts` truncates any tool result text part exceeding 80K chars as defense-in-depth.
-- **Budget arithmetic:** MAX_DIFF_LENGTH (75K) must be below MAX_TOOL_RESULT_LENGTH (80K) so the tool's own truncation output (stat + footer) survives the participant's safety net. Stat summaries are themselves truncated if too large, never dropped.
-- **Files changed:** `packages/ai-reviewer/src/tools/getDiffTool.ts`, `packages/ai-reviewer/src/walkthroughParticipant.ts`
-- **Key exports:** `MAX_DIFF_LENGTH`, `MAX_TOOL_RESULT_LENGTH`, `truncateToolContent` — all exported for testability.
+- **PR #327 — CancellationToken Race Condition Fix:** Fixed race condition in `combineSignals()` where concurrent updates corrupted state. Resolved all code review feedback in single cycle.
+- **PR #328 — README Refresh:** Rewritten documentation with UX guide creation. Mermaid diagram removed. Merge conflicts resolved cleanly.
+- **PR #330 — Credential Exposure Security Fix:** Moved git authentication from CLI arguments to `GIT_CONFIG` environment variables. Unified gitExec signature. 7-round review cycle completed.
+- **PR #331 — BaseRef Sanitization Hardening:** Replaced weak denylist with strict `isValidRef()` allowlist validation. Only valid git refs accepted. 3-round review cycle completed.
 
-### 2026-04-17 Round 2 — Issue #281 (Clickable Title Hyperlink)
+**Hockney's contribution:** 44 new tests across 5 files covering AbortSignal wiring and cancellation paths (PR #329, 1942 tests passing).
 
-**PR #293:** Made the editor panel title a clickable hyperlink instead of a separate "Open in browser" button.
-- **Key pattern:** Webview hyperlinks use `<a>` with real `href` + `data-url`, but click handler calls `e.preventDefault()` + `postMessage({ type: 'openUrl' })` for VS Code's `openExternal`. The `href` attribute enables copy-link-address and screen reader access.
-- **Security:** Title link rendering is gated by `isSafeUrl()` — unsafe schemes (javascript:, data:) render plain text. This prevents unsafe URLs from appearing in `href` even though the `postMessage` handler also validates.
-- **Accessibility:** `<a href="...">` is keyboard-focusable. Added `:focus`/`:focus-visible` CSS styles with `outline` for visible focus indicator. Added `title="Open in browser"` tooltip for discoverability.
-- **Files changed:** `packages/core/src/views/editorPanelHtml.ts` (source), `packages/core/src/test/editorPanelHtml.test.ts` (tests). Now imports `isSafeUrl` from `../utils/url`.
-
-### 2026-04-17 Round 3 — Issue #280 (Auto-Reveal Items)
-
-**PR #296:** Auto-reveal items in destination tree view when moved between views.
-- **Key pattern:** `ViewRevealer` service wraps `TreeView.reveal()` for Queue, Focus, and History views. State-to-view mapping: New→Queue, InProgress/Paused→Focus, Done/Archived→History. All reveals are best-effort (try-catch, debug-level logging).
-- **`getParent()` required for reveal:** VS Code's `TreeView.reveal()` needs `getParent()` to walk up the tree hierarchy. Added to `WorkItemViewProvider` base (ProviderGroup→SubGroup→WorkItem) and overridden in `FocusTreeProvider` (SubGroup→WorkItem, no ProviderGroup).
-- **HistoryTreeProvider bug fix:** Was missing `treeItem.id = item.id` — needed for `reveal()` to match elements. Queue and Focus already set this.
-- **Error path fix:** Added `return` after `handleCommandError` in accept functions — without it, execution fell through to the reveal call after a failed operation.
-- **Batch operations skip reveal:** Multi-select transitions don't reveal since there's no single target item. Single-item ops reveal in the destination view.
-- **Files:** `packages/core/src/services/viewRevealer.ts` (new), `packages/core/src/views/viewLayout.ts`, `packages/core/src/views/focusTreeProvider.ts`, `packages/core/src/views/historyTreeProvider.ts`, `packages/core/src/commands/commands.ts`, `packages/core/src/extension.ts`.
-
-### 2026-04-17 Round 3 — Issue #282 (Provider State in Editor)
-
-**PR #295:** Added upstream provider state display to the item editor panel metadata section.
-- **Pattern:** Added optional `state?: string` to `DiscoveredItem` (non-breaking API change). Each provider populates it from their API response — GitHub issues use `issue.state`, ADO work items use `System.State`, ADO PRs use `pr.status`.
-- **Conditional inclusion:** Use spread `...(value ? { state: value } : {})` or conditional assignment `if (value) { item.state = value; }` to avoid emitting `state: undefined` on discovered items. This prevents `toEqual` test mismatches and keeps the data clean.
-- **Guard pattern:** Provider State row in the editor metadata is gated on both `providerState` and `item.providerId` for defensive consistency with the Provider row guard.
-- **Merged-state detection:** Initially added `pull_request.merged_at` check for GitHub PRs but removed it — the Search API only returns `state:open` PRs so `merged_at` would never fire. Use `pr.state` directly.
-- **Files changed:** `packages/shared/src/baseProvider.ts`, `packages/github/src/baseGithubProvider.ts`, all 4 provider files, `packages/core/src/views/editorPanelHtml.ts`, `packages/core/src/views/workItemEditorPanel.ts`.
-
-### 2026-04-17 Round 1 — Parallel Multi-Issue Sprint
-
-**Issues #275 & #273 completed in tandem** with test coverage from Hockney:
-- **Issue #275 (History→Queue):** State transitions Done→New and Archived→New. Fixed sortOrder race condition with temporary state mutation pattern. All 1071 tests pass.
-- **Issue #273 (Tree node counts):** Child count badges on all tree view parent nodes. Applied existing Inbox pattern to Queue, Focus, History, Sources.
-- **Code review fix:** Preserved write-after-persist pattern by computing sortOrder with temporary state mutation, then restoring original state before store.save().
-
-### 2026-04-18 — Issue #260 (Item Activity Log)
-
-**PR #312:** Added append-only activity log to work items for audit trail.
-- **Model design:** New `ActivityLogEntry` type with `timestamp`, `type` (discriminated union), and optional `detail`. Stored as `activityLog?: ActivityLogEntry[]` on `WorkItem` — non-breaking optional field.
-- **Automatic logging:** `WorkGraph.createItem()` logs `created`, `transitionState()` logs `state-changed` with `"OldState → NewState"` detail, `updateItem()` logs `updated` with changed field names — but only when fields actually changed (no-op autosaves are silent).
-- **Public API:** Optional `addActivity?()` on `DevDocketApi` for satellite extensions. `DevDocketApiImpl` now takes `WorkGraph` in constructor (wiring change in `extension.ts`).
-- **Timestamp consistency pattern:** All mutation methods capture `const now = Date.now()` once, reusing it for both the activity entry timestamp and `updatedAt`. Review caught the double-`Date.now()` anti-pattern in `updateItem`, `transitionState`, and `addActivity`.
-- **Deep store validation:** `jsonTaskStore` validates each activity log entry (timestamp: finite number, type: non-empty string, detail: string if present). Not just array-ness.
-- **Log trimming:** Capped at `MAX_ACTIVITY_LOG_ENTRIES` (100), oldest entries trimmed via `slice()`. Static `appendLogEntry` helper keeps logic pure and testable.
-- **Editor panel rendering:** Activity timeline in reverse-chronological order below metadata. Uses `escapeHtml()` for all dynamic content. Conditionally hidden when log is empty/undefined.
-- **Merge conflict:** `editorPanelHtml.ts` conflicted with #281 (title hyperlink) — needed both `isSafeUrl` import and `ActivityLogEntry` import, plus both CSS blocks (title-link focus styles and activity log styles).
-- **Files changed:** `activityLog.ts` (new), `workItem.ts`, `workGraph.ts`, `jsonTaskStore.ts`, `types.ts`, `devDocketApi.ts`, `extension.ts`, `editorPanelHtml.ts`, plus 4 test files.
-### 2026-04-18 — Issue #254 (AI Walkthrough Model Selection)
-
-**PR #310:** Added AI model selection prompt to both AI Walkthrough and AI Code Review actions.
-- **Shared utility pattern:** Extracted `selectModel()` in `packages/ai-reviewer/src/selectModel.ts`. Auto-selects when one model available, shows QuickPick for multiple. Reused by both actions.
-- **Model placement UX:** Model selection happens BEFORE `withProgress` in both actions. Placing it inside `withProgress` causes QuickPick to appear behind the progress notification — a real UX bug caught in code review.
-- **Preferred model propagation:** `AiWalkthroughAction` passes selected model to `WalkthroughParticipant` via `onModelSelected` callback wired in `extension.ts`. Participant uses it when `request.model` is undefined (priority: request.model > preferredModel > fallback selectChatModels).
-- **URL validation guards:** Copilot review flagged that `run()` should validate PR URLs before prompting for model selection. Added `!this.isPrUrl()` and `parsePrUrl()` guards in both actions.
-- **Breaking change from gpt-4o preference:** Old `BasePrAction.analyzeWithAi()` preferred `gpt-4o` family, now `selectModel()` shows all models. Intentional — lets users choose freely. `WalkthroughParticipant` fallback still uses `gpt-4o` filter.
-- **Files changed:** `selectModel.ts` (new), `basePrAction.ts`, `aiWalkthroughAction.ts`, `walkthroughParticipant.ts`, `extension.ts`, plus test files.
-
-### 2026-04-18 — Issue #226 (Keyboard Shortcuts) — Already Done
-
-**No PR needed.** Issue #226 was already fully addressed by PR #259 (commit `8d0df52`), which added all requested keybindings with a `Ctrl+Alt+D` chord prefix. The issue remained open because GitHub doesn't auto-close issues when PRs merge to non-default branches (`dev` instead of `main`). Closed the issue manually with a comment referencing the existing PR.
-
-### 2026-04-18 — Issue #215 (Dynamic Provider Titles — Reworked)
-
-**PR #313:** Provider-backed work item titles now sync at the store level during provider refresh.
-- **Store-level sync vs view-level resolution:** Initial approach resolved live titles at display time in the editor panel. Matt's feedback: update the persisted `WorkItem.title` in the store instead, so all views (tree, editor, tooltips) update naturally via the existing `onDidChange` event system. Covers imported/linked items too — any item with matching `providerId + externalId`.
-- **`titleSync.ts` service:** `syncProviderTitles()` iterates `providerRegistry.getAllDiscoveredItems()`, uses `workGraph.findItemByProvenance()` (O(1) via provenanceIndex) for each, and calls `workGraph.updateItem()` when titles differ. Per-item try/catch for resilience. Guards against empty/whitespace-only provider titles via `discovered.title?.trim()`.
-- **Editor panel event subscriptions:** Three subscriptions: `workGraph.onDidChange` (title changes), `providerRegistry.onDidRegisterProvider` (managed state on register), `providerRegistry.onDidChangeDiscoveredItems` (managed state on deregister). Title-only changes use `postMessage` (preserves unsaved notes); managed-state changes trigger full re-render.
-- **`updateTitle` webview handler:** Targets `#title-link` child if present (preserving clickable heading from #281), only updates readonly input (prevents overwriting user edits in non-managed items).
-- **Key Copilot review fixes:** (1) Whitespace-only title guard. (2) Subscribe to `onDidChangeDiscoveredItems` for deregistration detection. (3) Remove redundant `panel.title` set in `saveData()` — let `checkForUpdates()` handle it consistently.
-- **Files changed:** `packages/core/src/services/titleSync.ts` (new), `packages/core/src/extension.ts`, `packages/core/src/views/workItemEditorPanel.ts`, `packages/core/src/views/editorPanelHtml.ts`, plus test files.
-
-### 2026-04-18 — Issue #253 (Share Cloned Repo Between AI Actions)
+**Key patterns emerged:**
+- Environment variable patterns for sensitive data (applicable to future credential management).
+- Allowlist validation more secure than denylist (applicable to all input validation).
+- Concurrent signal handling requires careful synchronization (document in concurrency guidelines).
 
 ## Squad Triage & Routing (2026-04-20)
 
