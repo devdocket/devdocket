@@ -3,7 +3,7 @@ import { WorkItem } from '../models/workItem';
 
 export type ViewLayout = 'flat' | 'tree';
 
-export type ViewId = 'inbox' | 'queue' | 'focus' | 'history' | 'sources';
+export type ViewId = 'inbox' | 'queue' | 'focus' | 'history' | 'sources' | 'watches';
 
 const VIEW_DEFAULTS: Record<ViewId, ViewLayout> = {
   inbox: 'tree',
@@ -11,6 +11,7 @@ const VIEW_DEFAULTS: Record<ViewId, ViewLayout> = {
   focus: 'flat',
   history: 'flat',
   sources: 'tree',
+  watches: 'flat',
 };
 
 /** Read the persisted layout for a given view, falling back to its default. */
@@ -27,7 +28,7 @@ export function getViewLayout(viewId: ViewId): ViewLayout {
   return VIEW_DEFAULTS[viewId];
 }
 
-const VALID_VIEW_IDS: ReadonlySet<string> = new Set<ViewId>(['inbox', 'queue', 'focus', 'history', 'sources']);
+const VALID_VIEW_IDS: ReadonlySet<string> = new Set<ViewId>(['inbox', 'queue', 'focus', 'history', 'sources', 'watches']);
 
 /** Extract only valid ViewId keys with valid ViewLayout values from an unknown object. */
 function sanitizeLayouts(raw: unknown): Record<string, string> {

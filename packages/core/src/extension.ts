@@ -9,12 +9,18 @@ import { WorkGraph } from './services/workGraph';
 import { ProviderRegistry } from './services/providerRegistry';
 import { checkAutoComplete, showAutoCompleteNotification } from './services/autoComplete';
 import { ActionRegistry } from './services/actionRegistry';
+import { WatcherRegistry } from './services/watcherRegistry';
+import { WatcherService } from './services/watcherService';
+import { WatchStore } from './storage/watchStore';
 import { InboxTreeProvider } from './views/inboxTreeProvider';
 import { QueueTreeProvider } from './views/queueTreeProvider';
 import { FocusTreeProvider } from './views/focusTreeProvider';
 import { SourcesTreeProvider } from './views/sourcesTreeProvider';
 import { HistoryTreeProvider } from './views/historyTreeProvider';
+import { WatchesTreeProvider } from './views/watchesTreeProvider';
+import { WatchesStatusBar } from './views/watchesStatusBar';
 import { registerCommands } from './commands/commands';
+import { isSafeUrl } from './utils/url';
 import { ViewRevealer } from './services/viewRevealer';
 import { initLogger, setLogLevel, logger, resolveLogLevel } from './services/logger';
 import { getInboxUnseenCount } from './services/inboxBadge';
@@ -122,12 +128,14 @@ function createTreeViews(
   stateStore: DiscoveredStateStore,
   readStateStore: ReadStateStore,
   workGraph: WorkGraph,
+  watcherService: WatcherService,
 ) {
   const inboxProvider = new InboxTreeProvider(providerRegistry, stateStore, readStateStore);
   const queueProvider = new QueueTreeProvider(workGraph, providerRegistry);
   const focusProvider = new FocusTreeProvider(workGraph, providerRegistry);
   const sourcesProvider = new SourcesTreeProvider(providerRegistry, stateStore);
   const historyProvider = new HistoryTreeProvider(workGraph, providerRegistry);
+  const watchesProvider = new WatchesTreeProvider(watcherService);
 
   // Apply persisted layout settings
   inboxProvider.layout = getViewLayout('inbox');
@@ -135,12 +143,14 @@ function createTreeViews(
   focusProvider.layout = getViewLayout('focus');
   sourcesProvider.layout = getViewLayout('sources');
   historyProvider.layout = getViewLayout('history');
+  watchesProvider.layout = getViewLayout('watches');
 
   const inboxTreeView = vscode.window.createTreeView('devdocket.inbox', { treeDataProvider: inboxProvider, canSelectMany: true });
   const sourcesTreeView = vscode.window.createTreeView('devdocket.sources', { treeDataProvider: sourcesProvider, canSelectMany: true });
   const queueTreeView = vscode.window.createTreeView('devdocket.queue', { treeDataProvider: queueProvider, dragAndDropController: queueProvider, canSelectMany: true });
   const focusTreeView = vscode.window.createTreeView('devdocket.focus', { treeDataProvider: focusProvider, dragAndDropController: focusProvider, canSelectMany: true });
   const historyTreeView = vscode.window.createTreeView('devdocket.history', { treeDataProvider: historyProvider, canSelectMany: true });
+  const watchesTreeView = vscode.window.createTreeView('devdocket.watches', { treeDataProvider: watchesProvider });
 
   const inboxSelectionSub = inboxTreeView.onDidChangeSelection((e) => {
     void (async () => {
@@ -157,18 +167,19 @@ function createTreeViews(
   });
 
   return {
-    providers: { inboxProvider, queueProvider, focusProvider, sourcesProvider, historyProvider },
-    views: { inboxTreeView, queueTreeView, focusTreeView, sourcesTreeView, historyTreeView },
+    providers: { inboxProvider, queueProvider, focusProvider, sourcesProvider, historyProvider, watchesProvider },
+    views: { inboxTreeView, queueTreeView, focusTreeView, sourcesTreeView, historyTreeView, watchesTreeView },
     disposables: [inboxSelectionSub] as vscode.Disposable[],
   };
 }
 
 // Wires up all event-driven UI updates: view messages, inbox badge,
-// coalesced provider events, and new-item notifications.
+// coalesced provider events, new-item notifications, and watch notifications.
 function wireEvents(
   providerRegistry: ProviderRegistry,
   stateStore: DiscoveredStateStore,
   workGraph: WorkGraph,
+  watcherService: WatcherService,
   { providers, views }: ReturnType<typeof createTreeViews>,
 ): vscode.Disposable[] {
   const { inboxProvider, queueProvider, focusProvider, historyProvider } = providers;
@@ -277,6 +288,55 @@ function wireEvents(
   const stateStoreSub = stateStore.onDidChange(safeHandler('Error handling state store change', scheduleUiUpdate));
   const markSeenSub = inboxProvider.onDidMarkSeen(safeHandler('Error handling mark seen', scheduleUiUpdate));
 
+  // Watch notifications
+  const jobFailureSub = watcherService.onDidDetectJobFailure(safeHandler('Error handling job failure', ({ run, job }) => {
+    const config = vscode.workspace.getConfiguration('devdocket.watches');
+    const notifyOnJobFailure = config.get<boolean>('notifyOnJobFailure', true);
+    if (!notifyOnJobFailure) {
+      return;
+    }
+    
+    // Count still-running jobs
+    const runningCount = run.status.jobs.filter(j => j.state === 'running').length;
+    const message = runningCount > 0
+      ? `Job '${job.name}' failed in ${run.identifier.displayName} (${runningCount} job${runningCount === 1 ? '' : 's'} still running)`
+      : `Job '${job.name}' failed in ${run.identifier.displayName}`;
+    
+    void vscode.window.showWarningMessage(message, 'View Run').then(action => {
+      if (action === 'View Run') {
+        const safe = isSafeUrl(run.identifier.url);
+        if (safe) {
+          void vscode.env.openExternal(vscode.Uri.parse(safe.href));
+        }
+      }
+    });
+  }));
+
+  const runCompleteSub = watcherService.onDidCompleteRun(safeHandler('Error handling run completion', (run) => {
+    const isSuccess = run.status.conclusion === 'success';
+    const message = `${run.identifier.displayName} ${isSuccess ? 'succeeded' : run.status.conclusion || 'completed'}`;
+    
+    if (isSuccess) {
+      void vscode.window.showInformationMessage(message, 'View Run').then(action => {
+        if (action === 'View Run') {
+          const safe = isSafeUrl(run.identifier.url);
+          if (safe) {
+            void vscode.env.openExternal(vscode.Uri.parse(safe.href));
+          }
+        }
+      });
+    } else {
+      void vscode.window.showWarningMessage(message, 'View Run').then(action => {
+        if (action === 'View Run') {
+          const safe = isSafeUrl(run.identifier.url);
+          if (safe) {
+            void vscode.env.openExternal(vscode.Uri.parse(safe.href));
+          }
+        }
+      });
+    }
+  }));
+
   // Auto-complete: after each provider refresh, scan all WorkGraph items with
   // that providerId and check whether their external items are closed/merged.
   // Per-provider guard prevents overlapping runs; AbortController cancels in-flight checks.
@@ -311,7 +371,7 @@ function wireEvents(
     autoCompleteControllers.clear();
   }};
 
-  return [discoveredSub, newItemsSub, providerRegSub, stateStoreSub, markSeenSub, workGraphSub, autoCompleteSub, autoCompleteCleanup];
+  return [discoveredSub, newItemsSub, providerRegSub, stateStoreSub, markSeenSub, workGraphSub, jobFailureSub, runCompleteSub, autoCompleteSub, autoCompleteCleanup];
 }
 
 /**
@@ -338,47 +398,63 @@ export async function activate(context: vscode.ExtensionContext): Promise<DevDoc
   providerRegistry = pr;
   const ar = new ActionRegistry();
   actionRegistry = ar;
-  const api = new DevDocketApiImpl(pr, ar, wg);
+  const wr = new WatcherRegistry(logger);
+  const watchStore = new WatchStore(storagePath);
+  const ws = new WatcherService(wr, watchStore, logger);
+  const api = new DevDocketApiImpl(pr, ar, wr, wg);
   logger.info(`Store + service init took ${Math.round(performance.now() - initStart)}ms`);
 
   const treeViewStart = performance.now();
-  const treeSetup = createTreeViews(pr, ss, readStateStore, wg);
+  const treeSetup = createTreeViews(pr, ss, readStateStore, wg, ws);
   logger.info(`Tree view creation took ${Math.round(performance.now() - treeViewStart)}ms`);
 
   const eventWiringStart = performance.now();
-  const eventDisposables = wireEvents(pr, ss, wg, treeSetup);
+  const eventDisposables = wireEvents(pr, ss, wg, ws, treeSetup);
   logger.info(`Event wiring took ${Math.round(performance.now() - eventWiringStart)}ms`);
 
   const { providers, views, disposables: viewDisposables } = treeSetup;
+
+  // Create status bar item
+  const watchesStatusBar = new WatchesStatusBar(ws);
+
+  // Load persisted watches (must happen after tree views are registered to show restored watches)
+  ws.loadPersistedWatches().catch(err => {
+    logger.error('Failed to load persisted watches', err);
+  });
 
   context.subscriptions.push(
     ...Object.values(views),
     ...viewDisposables,
     ...eventDisposables,
+    watchesStatusBar,
     { dispose: () => wg.dispose() },
     { dispose: () => ss.dispose() },
+    { dispose: () => ws.dispose() },
+    { dispose: () => wr.dispose() },
     { dispose: () => providers.inboxProvider.dispose() },
     { dispose: () => providers.queueProvider.dispose() },
     { dispose: () => providers.focusProvider.dispose() },
     { dispose: () => providers.sourcesProvider.dispose() },
     { dispose: () => providers.historyProvider.dispose() },
+    { dispose: () => providers.watchesProvider.dispose() },
     { dispose: () => pr.dispose() },
     { dispose: () => ar.dispose() },
   );
 
   const commandRegStart = performance.now();
   const revealer = new ViewRevealer(wg, views.queueTreeView, views.focusTreeView, views.historyTreeView);
-  registerCommands(context, wg, ar, ss, pr, labelCache, revealer);
+  registerCommands(context, wg, ar, ss, pr, labelCache, wr, ws, revealer);
   logger.info(`Command registration took ${Math.round(performance.now() - commandRegStart)}ms`);
 
   // Set context keys and listen for layout changes
-  const viewIds: ViewId[] = ['inbox', 'queue', 'focus', 'history', 'sources'];
+  const viewIds: ViewId[] = ['inbox', 'queue', 'focus', 'history', 'sources', 'watches'];
   const providerMap: Record<ViewId, { layout: import('./views/viewLayout').ViewLayout }> = {
     inbox: providers.inboxProvider,
     queue: providers.queueProvider,
     focus: providers.focusProvider,
     history: providers.historyProvider,
     sources: providers.sourcesProvider,
+    watches: providers.watchesProvider,
   };
   for (const id of viewIds) {
     void vscode.commands.executeCommand('setContext', `devdocket.${id}Layout`, getViewLayout(id));

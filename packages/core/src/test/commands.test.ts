@@ -1,12 +1,15 @@
 import { describe, it, expect, beforeEach, vi, type Mock } from 'vitest';
 import * as vscode from 'vscode';
 import { WorkItemState, type WorkItem } from '../models/workItem';
-import { registerCommands, isSafeUrl } from '../commands/commands';
+import { registerCommands } from '../commands/commands';
+import { isSafeUrl } from '../utils/url';
 import type { WorkGraph } from '../services/workGraph';
 import type { ActionRegistry } from '../services/actionRegistry';
 import type { ProviderRegistry } from '../services/providerRegistry';
 import type { DiscoveredStateStore } from '../storage/discoveredStateStore';
 import type { ProviderLabelCache } from '../storage/providerLabelCache';
+import type { WatcherRegistry } from '../services/watcherRegistry';
+import type { WatcherService } from '../services/watcherService';
 import type { InboxItem, InboxProviderNode, InboxGroupNode } from '../views/inboxTreeProvider';
 import type { SourceItemNode, SourceProviderNode, SourceGroupNode } from '../views/sourcesTreeProvider';
 import { WorkItemEditorPanel } from '../views/workItemEditorPanel';
@@ -149,7 +152,7 @@ describe('registerCommands', () => {
     labelCache = createMockLabelCache();
     ctx = createMockContext();
 
-    registerCommands(ctx, workGraph as any, actionRegistry as any, stateStore as any, providerRegistry as any, labelCache as any);
+    registerCommands(ctx, workGraph as any, actionRegistry as any, stateStore as any, providerRegistry as any, labelCache as any, {} as WatcherRegistry, {} as WatcherService);
   });
 
   // helper to invoke a registered command
@@ -2074,6 +2077,24 @@ describe('registerCommands', () => {
       await invoke('devdocket.clearHistory');
 
       expect(workGraph.clearOldHistory).toHaveBeenCalledWith(30);
+    });
+  });
+
+  describe('devdocket.dismissWatch', () => {
+    it('shows info message when no argument provided', async () => {
+      await invoke('devdocket.dismissWatch');
+      expect(vscode.window.showInformationMessage).toHaveBeenCalledWith(
+        'Select a watch from the Watches view to dismiss.',
+      );
+    });
+  });
+
+  describe('devdocket.openWatchUrl', () => {
+    it('shows info message when no argument provided', async () => {
+      await invoke('devdocket.openWatchUrl');
+      expect(vscode.window.showInformationMessage).toHaveBeenCalledWith(
+        'Select a watch from the Watches view to open.',
+      );
     });
   });
 

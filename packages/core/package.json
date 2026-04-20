@@ -22,6 +22,12 @@
     "onCommand:devdocket.deleteItem",
     "onCommand:devdocket.createItemFromUrl",
     "onCommand:devdocket.clearHistory",
+    "onView:devdocket.watches",
+    "onCommand:devdocket.watchRun",
+    "onCommand:devdocket.dismissWatch",
+    "onCommand:devdocket.dismissAllCompletedWatches",
+    "onCommand:devdocket.openWatchUrl",
+    "onCommand:devdocket.showWatchesQuickPick",
     "onCommand:devdocket.addActivity"
   ],
   "main": "./dist/extension.js",
@@ -103,6 +109,17 @@
           "default": 30,
           "minimum": 1,
           "description": "Age threshold in days for the Clear Old History command. Items older than this are removed."
+        },
+        "devdocket.watches.pollingIntervalSeconds": {
+          "type": "number",
+          "default": 60,
+          "minimum": 15,
+          "description": "Polling interval in seconds for pipeline watches (minimum 15 seconds)"
+        },
+        "devdocket.watches.notifyOnJobFailure": {
+          "type": "boolean",
+          "default": true,
+          "description": "Show a notification when an individual job fails while the pipeline run is still in progress"
         }
       }
     },
@@ -136,6 +153,10 @@
         {
           "id": "devdocket.sources",
           "name": "Sources"
+        },
+        {
+          "id": "devdocket.watches",
+          "name": "Watches"
         }
       ]
     },
@@ -159,6 +180,10 @@
       {
         "view": "devdocket.sources",
         "contents": "Discovered items from all providers will appear here."
+      },
+      {
+        "view": "devdocket.watches",
+        "contents": "No pipeline runs being watched.\n[Watch Pipeline Run](command:devdocket.watchRun)"
       }
     ],
     "commands": [
@@ -356,6 +381,23 @@
         "category": "DevDocket"
       },
       {
+        "command": "devdocket.switchWatchesToTree",
+        "title": "Switch Watches to Tree Layout",
+        "category": "DevDocket",
+        "icon": "$(list-tree)"
+      },
+      {
+        "command": "devdocket.switchWatchesToFlat",
+        "title": "Switch Watches to Flat Layout",
+        "category": "DevDocket",
+        "icon": "$(list-flat)"
+      },
+      {
+        "command": "devdocket.toggleWatchesLayout",
+        "title": "Toggle Watches Layout",
+        "category": "DevDocket"
+      },
+      {
         "command": "devdocket.dismissFromSources",
         "title": "Dismiss",
         "category": "DevDocket",
@@ -389,6 +431,35 @@
         "title": "Refresh",
         "category": "DevDocket",
         "icon": "$(refresh)"
+      },
+      {
+        "command": "devdocket.watchRun",
+        "title": "DevDocket: Watch Pipeline Run",
+        "category": "DevDocket",
+        "icon": "$(add)"
+      },
+      {
+        "command": "devdocket.dismissWatch",
+        "title": "Dismiss Watch",
+        "category": "DevDocket",
+        "icon": "$(close)"
+      },
+      {
+        "command": "devdocket.dismissAllCompletedWatches",
+        "title": "Dismiss All Completed",
+        "category": "DevDocket",
+        "icon": "$(clear-all)"
+      },
+      {
+        "command": "devdocket.openWatchUrl",
+        "title": "Open in Browser",
+        "category": "DevDocket",
+        "icon": "$(link-external)"
+      },
+      {
+        "command": "devdocket.showWatchesQuickPick",
+        "title": "Show Watches",
+        "category": "DevDocket"
       }
     ],
     "menus": {
@@ -459,8 +530,28 @@
           "group": "navigation"
         },
         {
+          "command": "devdocket.switchWatchesToTree",
+          "when": "view == devdocket.watches && devdocket.watchesLayout == flat",
+          "group": "navigation"
+        },
+        {
+          "command": "devdocket.switchWatchesToFlat",
+          "when": "view == devdocket.watches && devdocket.watchesLayout == tree",
+          "group": "navigation"
+        },
+        {
           "command": "devdocket.refresh",
           "when": "view == devdocket.inbox || view == devdocket.sources",
+          "group": "navigation"
+        },
+        {
+          "command": "devdocket.watchRun",
+          "when": "view == devdocket.watches",
+          "group": "navigation"
+        },
+        {
+          "command": "devdocket.dismissAllCompletedWatches",
+          "when": "view == devdocket.watches",
           "group": "navigation"
         }
       ],
@@ -506,6 +597,14 @@
           "when": "devdocket.sourcesLayout == tree"
         },
         {
+          "command": "devdocket.switchWatchesToTree",
+          "when": "devdocket.watchesLayout == flat"
+        },
+        {
+          "command": "devdocket.switchWatchesToFlat",
+          "when": "devdocket.watchesLayout == tree"
+        },
+        {
           "command": "devdocket.toggleInboxLayout",
           "when": "false"
         },
@@ -523,6 +622,10 @@
         },
         {
           "command": "devdocket.toggleSourcesLayout",
+          "when": "false"
+        },
+        {
+          "command": "devdocket.toggleWatchesLayout",
           "when": "false"
         },
         {
@@ -654,6 +757,16 @@
         {
           "command": "devdocket.deleteItem",
           "when": "view == devdocket.history && viewItem =~ /^historyItem/",
+          "group": "1_actions"
+        },
+        {
+          "command": "devdocket.dismissWatch",
+          "when": "view == devdocket.watches && viewItem =~ /^watchedRun/",
+          "group": "inline"
+        },
+        {
+          "command": "devdocket.openWatchUrl",
+          "when": "view == devdocket.watches && viewItem =~ /^watchedRun/",
           "group": "1_actions"
         }
       ]
