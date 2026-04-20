@@ -413,7 +413,7 @@
         "command": "devdocket.watchRun",
         "title": "DevDocket: Watch Pipeline Run",
         "category": "DevDocket",
-        "icon": "$(eye)"
+        "icon": "$(add)"
       },
       {
         "command": "devdocket.dismissWatch",
