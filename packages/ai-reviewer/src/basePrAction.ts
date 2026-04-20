@@ -117,6 +117,7 @@ export abstract class BasePrAction implements DevDocketAction {
           Accept: 'application/vnd.github.diff',
           'X-GitHub-Api-Version': '2022-11-28',
         },
+        signal: AbortSignal.timeout(30_000),
       },
     );
 

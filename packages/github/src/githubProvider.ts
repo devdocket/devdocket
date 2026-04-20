@@ -220,7 +220,7 @@ export class GitHubIssueProvider extends BaseGitHubProvider {
             Accept: 'application/vnd.github+json',
             'X-GitHub-Api-Version': '2022-11-28',
           },
-          signal,
+          signal: signal ? AbortSignal.any([signal, AbortSignal.timeout(30_000)]) : AbortSignal.timeout(30_000),
         });
       } catch (err) {
         if (signal?.aborted) {

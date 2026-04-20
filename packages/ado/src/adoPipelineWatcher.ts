@@ -30,6 +30,8 @@ interface AdoTimelineRecord {
   finishTime?: string;
 }
 
+const FETCH_TIMEOUT_MS = 30_000;
+
 export class AdoPipelineWatcher implements DevDocketRunWatcher {
   readonly id = 'ado-pipelines';
   readonly label = 'Azure DevOps Pipelines';
@@ -90,7 +92,15 @@ export class AdoPipelineWatcher implements DevDocketRunWatcher {
 
     // Fetch build details
     const buildUrl = `https://dev.azure.com/${encodedOrg}/${encodedProject}/_apis/build/builds/${encodedBuildId}?api-version=7.1`;
-    const buildResponse = await fetch(buildUrl, { headers });
+    let buildResponse: Response;
+    try {
+      buildResponse = await fetch(buildUrl, { headers, signal: AbortSignal.timeout(FETCH_TIMEOUT_MS) });
+    } catch (err) {
+      if (err instanceof Error && err.name === 'AbortError') {
+        throw new Error(`ADO API request timed out after ${FETCH_TIMEOUT_MS / 1000}s for build ${identifier.runId}`);
+      }
+      throw err;
+    }
     if (!buildResponse.ok) {
       throwAdoApiError(buildResponse, `Build ${identifier.runId}`);
     }
@@ -109,10 +119,19 @@ export class AdoPipelineWatcher implements DevDocketRunWatcher {
 
     // Fetch timeline for job details
     const timelineUrl = `https://dev.azure.com/${encodedOrg}/${encodedProject}/_apis/build/builds/${encodedBuildId}/timeline?api-version=7.1`;
-    const timelineResponse = await fetch(timelineUrl, { headers });
+    let timelineResponse: Response | undefined;
+    try {
+      timelineResponse = await fetch(timelineUrl, { headers, signal: AbortSignal.timeout(FETCH_TIMEOUT_MS) });
+    } catch (err) {
+      if (err instanceof Error && err.name === 'AbortError') {
+        logger.warn(`ADO timeline request timed out after ${FETCH_TIMEOUT_MS / 1000}s for build ${identifier.runId}`);
+      } else {
+        throw err;
+      }
+    }
 
     let jobs: JobStatus[] = [];
-    if (timelineResponse.ok) {
+    if (timelineResponse?.ok) {
       const timelineData = await timelineResponse.json() as { records: AdoTimelineRecord[] };
       jobs = timelineData.records
         .filter(r => r.type === 'Job')
@@ -124,7 +143,7 @@ export class AdoPipelineWatcher implements DevDocketRunWatcher {
           startedAt: r.startTime,
           completedAt: r.finishTime,
         }));
-    } else {
+    } else if (timelineResponse) {
       logger.warn(`Failed to fetch timeline for build ${identifier.runId}: ${timelineResponse.status} ${timelineResponse.statusText}`);
     }
 

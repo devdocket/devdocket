@@ -146,7 +146,7 @@ export class GitHubMyPrsProvider extends BaseGitHubProvider {
           Accept: 'application/vnd.github+json',
           'X-GitHub-Api-Version': '2022-11-28',
         },
-        signal,
+        signal: signal ? AbortSignal.any([signal, AbortSignal.timeout(30_000)]) : AbortSignal.timeout(30_000),
       },
     );
 
@@ -168,7 +168,7 @@ export class GitHubMyPrsProvider extends BaseGitHubProvider {
           Accept: 'application/vnd.github+json',
           'X-GitHub-Api-Version': '2022-11-28',
         },
-        signal,
+        signal: signal ? AbortSignal.any([signal, AbortSignal.timeout(30_000)]) : AbortSignal.timeout(30_000),
       },
     );
 
@@ -228,7 +228,7 @@ export class GitHubMyPrsProvider extends BaseGitHubProvider {
     };
 
     // Fetch PR details (draft, mergeable state)
-    const detailResponse = await fetch(pr.pull_request!.url, { headers, signal });
+    const detailResponse = await fetch(pr.pull_request!.url, { headers, signal: signal ? AbortSignal.any([signal, AbortSignal.timeout(30_000)]) : AbortSignal.timeout(30_000) });
     if (!detailResponse.ok) {
       logger.debug(`Failed to fetch PR detail for ${pr.html_url}: ${detailResponse.status}`);
       return undefined;
@@ -238,7 +238,7 @@ export class GitHubMyPrsProvider extends BaseGitHubProvider {
     // Fetch reviews — treat failure as unknown status since we can't determine
     // the actual review state without this data
     const reviewsUrl = `${pr.pull_request!.url}/reviews`;
-    const reviewsResponse = await fetch(reviewsUrl, { headers, signal });
+    const reviewsResponse = await fetch(reviewsUrl, { headers, signal: signal ? AbortSignal.any([signal, AbortSignal.timeout(30_000)]) : AbortSignal.timeout(30_000) });
     if (!reviewsResponse.ok) {
       logger.debug(`Failed to fetch reviews for ${pr.html_url}: ${reviewsResponse.status}`);
       return undefined;

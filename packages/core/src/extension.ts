@@ -42,10 +42,6 @@ function safeHandler<T extends unknown[]>(label: string, fn: (...args: T) => voi
   };
 }
 
-let providerRegistry: ProviderRegistry | undefined;
-let actionRegistry: ActionRegistry | undefined;
-let workGraph: WorkGraph | undefined;
-let stateStore: DiscoveredStateStore | undefined;
 
 function initializeLogging(context: vscode.ExtensionContext): void {
   const outputChannel = vscode.window.createOutputChannel('DevDocket');
@@ -73,12 +69,10 @@ function initializeLogging(context: vscode.ExtensionContext): void {
 async function loadStores(storagePath: string): Promise<{ workGraph: WorkGraph; stateStore: DiscoveredStateStore; readStateStore: ReadStateStore; labelCache: ProviderLabelCache }> {
   const store = new JsonTaskStore(storagePath);
   const wg = new WorkGraph(store);
-  workGraph = wg;
   await wg.load();
   logger.debug(`Loaded ${wg.getAll().length} work items`);
 
   const ss = new DiscoveredStateStore(storagePath);
-  stateStore = ss;
   await ss.load();
   logger.debug('Loaded discovered state');
 
@@ -395,9 +389,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<DevDoc
   await migrateDiscoveredState(wg, ss);
 
   const pr = new ProviderRegistry(ss, labelCache);
-  providerRegistry = pr;
   const ar = new ActionRegistry();
-  actionRegistry = ar;
   const wr = new WatcherRegistry(logger);
   const watchStore = new WatchStore(storagePath);
   const ws = new WatcherService(wr, watchStore, logger);
@@ -482,10 +474,5 @@ export async function activate(context: vscode.ExtensionContext): Promise<DevDoc
  * so this function is intentionally a no-op.
  */
 export function deactivate(): void {
-  logger.info('DevDocket deactivating...');
-  providerRegistry?.dispose();
-  actionRegistry?.dispose();
-  workGraph?.dispose();
-  stateStore?.dispose();
-  logger.info('DevDocket deactivated');
+  // All resources are disposed automatically via context.subscriptions.
 }

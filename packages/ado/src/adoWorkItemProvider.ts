@@ -223,7 +223,7 @@ export class AdoWorkItemProvider extends BaseProvider {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({ query: wiqlQuery }),
-        signal,
+        signal: signal ? AbortSignal.any([signal, AbortSignal.timeout(30_000)]) : AbortSignal.timeout(30_000),
       });
     } catch (err) {
       if (err instanceof Error && err.name === 'AbortError') { throw err; }
@@ -265,7 +265,7 @@ export class AdoWorkItemProvider extends BaseProvider {
           headers: {
             Authorization: `Bearer ${token}`,
           },
-          signal,
+          signal: signal ? AbortSignal.any([signal, AbortSignal.timeout(30_000)]) : AbortSignal.timeout(30_000),
         });
       } catch (err) {
         if (err instanceof Error && err.name === 'AbortError') { throw err; }
