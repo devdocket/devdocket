@@ -3,6 +3,7 @@ import * as path from 'path';
 import { parsePrUrl } from './prUrl';
 import { gitExec } from './tools/gitUtils';
 import { validWorktreePaths } from './tools/worktreeRegistry';
+import { isValidRef } from './tools/refValidation';
 
 export { parsePrUrl };
 
@@ -118,7 +119,7 @@ export class RepoManager {
 
     // Strict allowlist validation for baseRef before it's interpolated into
     // git commands and LLM prompts — matches the org/repo validation pattern.
-    if (!/^[a-zA-Z0-9._\/-]+$/.test(baseRef)) {
+    if (!isValidRef(baseRef)) {
       this.log.error(`Invalid base ref from GitHub API: ${baseRef}`);
       throw new Error(`Invalid base ref from GitHub API: ${baseRef}`);
     }

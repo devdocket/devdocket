@@ -156,6 +156,7 @@ describe('RepoManager', () => {
         'ref;drop',
         'branch**glob',
         'ref<script>',
+        '',
       ];
       for (const ref of unsafeRefs) {
         vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
