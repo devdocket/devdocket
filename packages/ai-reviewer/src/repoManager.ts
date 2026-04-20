@@ -23,7 +23,7 @@ function authHeader(token: string): string {
 }
 
 /** Run a git command with transient auth injected via http.extraheader. */
-function gitAuth(args: string[], cwd: string, token: string, timeout?: number): Promise<string> {
+function gitAuth(args: string[], cwd: string, token: string, timeout = 30_000): Promise<string> {
   return gitExec(
     ['-c', `http.extraheader=${authHeader(token)}`, ...args],
     cwd,
