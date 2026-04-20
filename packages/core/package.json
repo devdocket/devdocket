@@ -21,7 +21,8 @@
     "onCommand:devdocket.dismissFromSources",
     "onCommand:devdocket.deleteItem",
     "onCommand:devdocket.createItemFromUrl",
-    "onCommand:devdocket.clearHistory"
+    "onCommand:devdocket.clearHistory",
+    "onCommand:devdocket.addActivity"
   ],
   "main": "./dist/extension.js",
   "contributes": {
@@ -373,6 +374,11 @@
         "icon": "$(clear-all)"
       },
       {
+        "command": "devdocket.addActivity",
+        "title": "Add Activity Log Entry",
+        "category": "DevDocket"
+      },
+      {
         "command": "devdocket.moveToQueue",
         "title": "Move to Queue",
         "category": "DevDocket",
@@ -517,6 +523,10 @@
         },
         {
           "command": "devdocket.toggleSourcesLayout",
+          "when": "false"
+        },
+        {
+          "command": "devdocket.addActivity",
           "when": "false"
         }
       ],

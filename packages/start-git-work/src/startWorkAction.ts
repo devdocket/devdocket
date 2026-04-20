@@ -139,6 +139,17 @@ export class StartWorkAction implements DevDocketAction {
 
           logger.info(`Created worktree at ${worktreePath}`);
 
+          // Log branch and worktree info to the work item's activity log
+          try {
+            const detail = JSON.stringify({ branchName, worktreePath, repoPath });
+            await vscode.commands.executeCommand('devdocket.addActivity', item.id, 'work-started', detail);
+          } catch (activityErr) {
+            logger.error('Failed to log work-started activity', activityErr);
+            void vscode.window.showWarningMessage(
+              `DevDocket: Worktree created but failed to log activity — cleanup prompt may not work`,
+            );
+          }
+
           // Run user-configured post-worktree commands
           const commands = vscode.workspace.getConfiguration('devdocketStartGitWork')
             .get<{ command: string; args?: string[] }[]>('commands', []);

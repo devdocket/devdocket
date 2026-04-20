@@ -10,6 +10,23 @@ export type { Disposable, Event, DiscoveredItem, ResolvedItem };
 export type { ActivityLogEntry, ActivityType };
 
 /**
+ * Event payload emitted when a work item changes lifecycle state.
+ *
+ * State values are plain strings (not the internal `WorkItemState` enum)
+ * to keep satellite extensions decoupled from core-internal enums.
+ */
+export interface StateTransitionEvent {
+  /** ID of the work item that transitioned. */
+  readonly itemId: string;
+  /** Snapshot of the work item after the transition. */
+  readonly item: Readonly<WorkItem>;
+  /** Previous lifecycle state (e.g. `'InProgress'`). */
+  readonly oldState: string;
+  /** New lifecycle state (e.g. `'Done'`). */
+  readonly newState: string;
+}
+
+/**
  * A provider that discovers work items from an external source.
  *
  * Providers are registered via {@link DevDocketApi.registerProvider} and emit
@@ -165,4 +182,11 @@ export interface DevDocketApi {
    * @param detail - Optional human-readable detail string.
    */
   addActivity?(itemId: string, type: ActivityType, detail?: string): Promise<void>;
+  /**
+   * Event fired after a work item changes lifecycle state.
+   *
+   * Satellite extensions can subscribe to react to state transitions
+   * (e.g., prompting for cleanup when an item moves to Done).
+   */
+  onDidTransitionState?: Event<StateTransitionEvent>;
 }

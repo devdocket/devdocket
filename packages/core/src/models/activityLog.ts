@@ -12,8 +12,18 @@ export const MAX_ACTIVITY_LOG_ENTRIES = 100;
  * - `updated` — user edited title or notes.
  * - `action-executed` — an extension-defined action was run.
  * - `auto-completed` — item was automatically completed because the linked external item was closed/merged.
+ * - `work-started` — a branch and/or worktree was created for this item.
+ * - `cleanup` — git branch and/or worktree was cleaned up.
+ * - `cleanup-dismissed` — user declined cleanup prompt for this item.
  */
-export type ActivityType = 'created' | 'state-changed' | 'updated' | 'action-executed' | 'auto-completed';
+/** All valid activity type values, for runtime validation. */
+export const ACTIVITY_TYPES = ['created', 'state-changed', 'updated', 'action-executed', 'auto-completed', 'work-started', 'cleanup', 'cleanup-dismissed'] as const;
+
+/**
+ * Discriminated activity types tracked in the work item activity log.
+ * Derived from {@link ACTIVITY_TYPES} to guarantee the type and array stay in sync.
+ */
+export type ActivityType = (typeof ACTIVITY_TYPES)[number];
 
 /**
  * A single, immutable entry in a work item's activity log.

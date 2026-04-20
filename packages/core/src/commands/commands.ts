@@ -1,5 +1,6 @@
 import * as vscode from 'vscode';
 import { WorkItemState } from '../models/workItem';
+import { ACTIVITY_TYPES, type ActivityType } from '../models/activityLog';
 import { WorkGraph } from '../services/workGraph';
 import { ActionRegistry } from '../services/actionRegistry';
 import { ProviderRegistry } from '../services/providerRegistry';
@@ -988,5 +989,15 @@ export function registerCommands(
       wrapCommand('Failed to switch history layout', () => toggleViewLayout('history'))),
     vscode.commands.registerCommand('devdocket.toggleSourcesLayout',
       wrapCommand('Failed to switch sources layout', () => toggleViewLayout('sources'))),
+    vscode.commands.registerCommand('devdocket.addActivity',
+      (itemId: string, type: string, detail?: unknown) => {
+        if (!ACTIVITY_TYPES.includes(type as ActivityType)) {
+          throw new Error(`Invalid activity type: ${type}. Expected one of: ${ACTIVITY_TYPES.join(', ')}`);
+        }
+        if (detail !== undefined && typeof detail !== 'string') {
+          throw new Error('Activity detail must be a string or undefined');
+        }
+        return workGraph.addActivity(itemId, type as ActivityType, detail);
+      }),
   );
 }
