@@ -22,7 +22,7 @@ import { syncProviderTitles } from './services/titleSync';
 import { getViewLayout, ViewId } from './views/viewLayout';
 import { performance } from 'perf_hooks';
 
-export type { DevDocketApi, DevDocketProvider, DevDocketAction, DiscoveredItem, Disposable, ActivityLogEntry, ActivityType } from './api/types';
+export type { DevDocketApi, DevDocketProvider, DevDocketAction, DiscoveredItem, Disposable, ActivityLogEntry, ActivityType, StateTransitionEvent } from './api/types';
 export { logger } from './services/logger';
 
 /** Wrap an event callback so unhandled errors (sync or async) are logged instead of crashing. */

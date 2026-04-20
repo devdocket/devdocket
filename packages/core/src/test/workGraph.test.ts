@@ -3,10 +3,6 @@ import { WorkGraph } from '../services/workGraph';
 import { WorkItemState } from '../models/workItem';
 import { ITaskStore } from '../storage/taskStore';
 
-vi.mock('../services/gitCleanup', () => ({
-  promptGitCleanup: vi.fn().mockResolvedValue(undefined),
-}));
-
 function createMockStore(): ITaskStore {
   const items: Map<string, any> = new Map();
   return {
@@ -1039,66 +1035,41 @@ describe('WorkGraph', () => {
     });
   });
 
-  describe('git cleanup on transition to Done', () => {
-    it('calls promptGitCleanup when transitioning to Done', async () => {
-      const { promptGitCleanup } = await import('../services/gitCleanup');
-      vi.mocked(promptGitCleanup).mockClear();
+  describe('onDidTransitionState event', () => {
+    it('fires with correct payload on state transition', async () => {
+      const listener = vi.fn();
+      graph.onDidTransitionState(listener);
+
+      const item = await graph.createItem({ title: 'Test' });
+      await graph.transitionState(item.id, WorkItemState.InProgress);
+
+      expect(listener).toHaveBeenCalledTimes(1);
+      const event = listener.mock.calls[0][0];
+      expect(event.itemId).toBe(item.id);
+      expect(event.oldState).toBe('New');
+      expect(event.newState).toBe('InProgress');
+      expect(event.item.state).toBe(WorkItemState.InProgress);
+    });
+
+    it('fires for each transition in a lifecycle', async () => {
+      const listener = vi.fn();
+      graph.onDidTransitionState(listener);
 
       const item = await graph.createItem({ title: 'Test' });
       await graph.transitionState(item.id, WorkItemState.InProgress);
       await graph.transitionState(item.id, WorkItemState.Done);
 
-      expect(promptGitCleanup).toHaveBeenCalledTimes(1);
-      const calledItem = vi.mocked(promptGitCleanup).mock.calls[0][0];
-      expect(calledItem.state).toBe(WorkItemState.Done);
+      expect(listener).toHaveBeenCalledTimes(2);
+      expect(listener.mock.calls[0][0].newState).toBe('InProgress');
+      expect(listener.mock.calls[1][0].newState).toBe('Done');
     });
 
-    it('does not call promptGitCleanup for non-Done transitions', async () => {
-      const { promptGitCleanup } = await import('../services/gitCleanup');
-      vi.mocked(promptGitCleanup).mockClear();
+    it('does not fire for non-transition operations', async () => {
+      const listener = vi.fn();
+      graph.onDidTransitionState(listener);
 
-      const item = await graph.createItem({ title: 'Test' });
-      await graph.transitionState(item.id, WorkItemState.InProgress);
-      await graph.transitionState(item.id, WorkItemState.Paused);
-
-      expect(promptGitCleanup).not.toHaveBeenCalled();
-    });
-
-    it('passes onDismiss callback that logs cleanup-dismissed activity', async () => {
-      const { promptGitCleanup } = await import('../services/gitCleanup');
-      vi.mocked(promptGitCleanup).mockClear();
-
-      const item = await graph.createItem({ title: 'Test' });
-      await graph.transitionState(item.id, WorkItemState.InProgress);
-      await graph.transitionState(item.id, WorkItemState.Done);
-
-      // Extract the onDismiss callback (2nd arg) and invoke it
-      const onDismiss = vi.mocked(promptGitCleanup).mock.calls[0][1];
-      expect(onDismiss).toBeDefined();
-      await onDismiss!();
-
-      const updated = graph.getItem(item.id);
-      const dismissEntry = updated?.activityLog?.find(e => e.type === 'cleanup-dismissed');
-      expect(dismissEntry).toBeDefined();
-    });
-
-    it('passes onCleanup callback that logs cleanup activity', async () => {
-      const { promptGitCleanup } = await import('../services/gitCleanup');
-      vi.mocked(promptGitCleanup).mockClear();
-
-      const item = await graph.createItem({ title: 'Test' });
-      await graph.transitionState(item.id, WorkItemState.InProgress);
-      await graph.transitionState(item.id, WorkItemState.Done);
-
-      // Extract the onCleanup callback (3rd arg) and invoke it
-      const onCleanup = vi.mocked(promptGitCleanup).mock.calls[0][2];
-      expect(onCleanup).toBeDefined();
-      await onCleanup!('Removed branch feature/x');
-
-      const updated = graph.getItem(item.id);
-      const cleanupEntry = updated?.activityLog?.find(e => e.type === 'cleanup');
-      expect(cleanupEntry).toBeDefined();
-      expect(cleanupEntry!.detail).toBe('Removed branch feature/x');
+      await graph.createItem({ title: 'Test' });
+      expect(listener).not.toHaveBeenCalled();
     });
   });
 });

@@ -3,7 +3,6 @@ import * as path from 'path';
 import * as fs from 'fs/promises';
 import { execFile } from 'child_process';
 import { promisify } from 'util';
-import { WorkItem } from '../models/workItem';
 import { logger } from './logger';
 
 const execFileAsync = promisify(execFile);
@@ -15,6 +14,18 @@ async function pathExists(p: string): Promise<boolean> {
   } catch {
     return false;
   }
+}
+
+// Re-declared locally — start-git-work cannot import core types directly.
+interface ActivityLogEntry {
+  timestamp: number;
+  type: string;
+  detail?: string;
+}
+
+interface WorkItem {
+  id: string;
+  activityLog?: ActivityLogEntry[];
 }
 
 /** Structured data stored in the detail field of a 'work-started' activity entry. */
@@ -35,7 +46,6 @@ function getWorkStartedInfo(item: WorkItem): WorkStartedData | undefined {
     return undefined;
   }
 
-  // Find the most recent work-started entry
   let lastStartedIdx = -1;
   for (let i = log.length - 1; i >= 0; i--) {
     if (log[i].type === 'work-started') {
@@ -84,10 +94,6 @@ interface CleanupState {
   worktreePath?: string;
 }
 
-/**
- * Checks if a git worktree and branch still exist for a completed work item
- * by reading the activity log for the most recent work-started entry.
- */
 async function checkCleanupState(item: WorkItem): Promise<CleanupState | undefined> {
   const info = getWorkStartedInfo(item);
   if (!info) {
@@ -133,15 +139,15 @@ async function checkCleanupState(item: WorkItem): Promise<CleanupState | undefin
 }
 
 /**
- * Prompts the user to clean up a git worktree and branch, and performs the cleanup if confirmed.
+ * Prompts the user to clean up a git worktree and branch for a completed work item.
  * Reads branch/worktree info from the item's activity log (most recent 'work-started' entry).
- * If the user explicitly clicks "No", calls onDismiss so the caller can log a 'cleanup-dismissed' entry.
- * Dismissing the notification (Esc/close) does not persist dismissal, allowing re-prompting later.
+ *
+ * @param item - The work item (must include activityLog).
+ * @param addActivity - Callback to log activity entries on the item.
  */
 export async function promptGitCleanup(
   item: WorkItem,
-  onDismiss?: () => Promise<void>,
-  onCleanup?: (detail: string) => Promise<void>,
+  addActivity: (itemId: string, type: string, detail?: string) => Promise<void>,
 ): Promise<void> {
   const state = await checkCleanupState(item);
   if (!state) {
@@ -163,9 +169,7 @@ export async function promptGitCleanup(
   const choice = await vscode.window.showInformationMessage(message, 'Yes', 'No');
 
   if (choice === 'No') {
-    if (onDismiss) {
-      await onDismiss();
-    }
+    await addActivity(item.id, 'cleanup-dismissed');
     return;
   }
 
@@ -215,7 +219,7 @@ export async function promptGitCleanup(
     void vscode.window.showInformationMessage('DevDocket: Cleanup completed successfully');
   }
 
-  if (cleaned.length > 0 && onCleanup) {
-    await onCleanup(`Removed ${cleaned.join(' and ')}`);
+  if (cleaned.length > 0) {
+    await addActivity(item.id, 'cleanup', `Removed ${cleaned.join(' and ')}`);
   }
 }

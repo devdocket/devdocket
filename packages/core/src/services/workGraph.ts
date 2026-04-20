@@ -4,7 +4,6 @@ import { WorkItem, WorkItemInput, WorkItemState } from '../models/workItem';
 import { type ActivityLogEntry, type ActivityType, MAX_ACTIVITY_LOG_ENTRIES } from '../models/activityLog';
 import { ITaskStore } from '../storage/taskStore';
 import { logger } from './logger';
-import { promptGitCleanup } from './gitCleanup';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -29,6 +28,7 @@ export class WorkGraph {
   /** Lazily-built index of items grouped by state; nulled on any mutation to {@link items}. */
   private stateCache: Map<WorkItemState, WorkItem[]> | null = null;
   private readonly _onDidChange = new vscode.EventEmitter<void>();
+  private readonly _onDidTransitionState = new vscode.EventEmitter<{ itemId: string; item: WorkItem; oldState: string; newState: string }>();
   /**
    * Fires when this graph changes through public mutation operations exposed by {@link WorkGraph},
    * except for internal maintenance or normalization work that may update items without emitting
@@ -36,6 +36,8 @@ export class WorkGraph {
    * and normalization triggered as part of a public operation when no user-visible mutation occurs.
    */
   readonly onDidChange = this._onDidChange.event;
+  /** Fires after a work item transitions to a new lifecycle state. */
+  readonly onDidTransitionState = this._onDidTransitionState.event;
 
   constructor(private readonly store: ITaskStore) {}
 
@@ -279,19 +281,8 @@ export class WorkGraph {
     this.items.set(id, updated);
     this.invalidateStateCache();
     this._onDidChange.fire();
+    this._onDidTransitionState.fire({ itemId: id, item: updated, oldState: item.state, newState });
     logger.info(`Transitioned work item ${id} to ${newState}`);
-
-    // Prompt for git cleanup when transitioning to Done; promptGitCleanup
-    // reads the activity log for work-started entries — no-ops if none found.
-    if (newState === WorkItemState.Done) {
-      void promptGitCleanup(updated, async () => {
-        await this.addActivity(id, 'cleanup-dismissed');
-      }, async (detail: string) => {
-        await this.addActivity(id, 'cleanup', detail);
-      }).catch(err => {
-        logger.error(`Failed to run git cleanup prompt for work item ${id}`, err);
-      });
-    }
   }
 
   /** Swap a work item one position up or down among siblings in the same state. */
@@ -549,6 +540,7 @@ export class WorkGraph {
 
   dispose(): void {
     this._onDidChange.dispose();
+    this._onDidTransitionState.dispose();
   }
 }
 
