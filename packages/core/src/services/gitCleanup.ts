@@ -69,7 +69,8 @@ async function checkCleanupState(item: WorkItem): Promise<CleanupState | undefin
 
 /**
  * Prompts the user to clean up a git worktree and branch, and performs the cleanup if confirmed.
- * If dismissed, calls onDismiss so the caller can persist the dismissal flag.
+ * If the user explicitly clicks "No", calls onDismiss so the caller can persist the dismissal flag.
+ * Dismissing the notification (Esc/close) does not persist dismissal, allowing re-prompting later.
  */
 export async function promptGitCleanup(
   item: WorkItem,
