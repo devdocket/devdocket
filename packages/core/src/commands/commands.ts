@@ -906,6 +906,9 @@ async function handleWatchRun(watcherRegistry: WatcherRegistry, watcherService: 
       if (!trimmed) {
         return 'URL cannot be empty';
       }
+      if (!isSafeUrl(trimmed)) {
+        return 'Only http(s) URLs are supported.';
+      }
       const watcher = watcherRegistry.findWatcherForUrl(trimmed);
       if (!watcher) {
         return 'Unsupported URL format. No registered watcher recognizes this URL.';
