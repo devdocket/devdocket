@@ -16,10 +16,14 @@ export const MAX_ACTIVITY_LOG_ENTRIES = 100;
  * - `cleanup` — git branch and/or worktree was cleaned up.
  * - `cleanup-dismissed` — user declined cleanup prompt for this item.
  */
-export type ActivityType = 'created' | 'state-changed' | 'updated' | 'action-executed' | 'auto-completed' | 'work-started' | 'cleanup' | 'cleanup-dismissed';
-
 /** All valid activity type values, for runtime validation. */
-export const ACTIVITY_TYPES = ['created', 'state-changed', 'updated', 'action-executed', 'auto-completed', 'work-started', 'cleanup', 'cleanup-dismissed'] as const satisfies readonly ActivityType[];
+export const ACTIVITY_TYPES = ['created', 'state-changed', 'updated', 'action-executed', 'auto-completed', 'work-started', 'cleanup', 'cleanup-dismissed'] as const;
+
+/**
+ * Discriminated activity types tracked in the work item activity log.
+ * Derived from {@link ACTIVITY_TYPES} to guarantee the type and array stay in sync.
+ */
+export type ActivityType = (typeof ACTIVITY_TYPES)[number];
 
 /**
  * A single, immutable entry in a work item's activity log.
