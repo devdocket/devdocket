@@ -199,18 +199,6 @@ DevDocket is a VS Code extension monorepo for managing work items from multiple 
 
 **PR #313:** Provider-backed work item titles now sync at the store level during provider refresh.
 - **Store-level sync vs view-level resolution:** Initial approach resolved live titles at display time in the editor panel. Matt's feedback: update the persisted `WorkItem.title` in the store instead, so all views (tree, editor, tooltips) update naturally via the existing `onDidChange` event system. Covers imported/linked items too — any item with matching `providerId + externalId`.
-
-### 2026-04-18 — Issue #264 (Cleanup Branch/Worktree on Complete)
-
-**Implementation:** Added automatic prompt to clean up git branches and worktrees when work items are marked Done.
-- **WorkItem metadata fields:** Added optional `branchName?: string`, `worktreePath?: string`, and `repoPath?: string` to `WorkItem` interface. These fields persist the git state created by the Start Git Work action.
-- **Command for metadata updates:** Added `devdocket.updateMetadata` command handler and `WorkGraph.updateMetadata()` method. Actions can call this command to persist metadata without triggering full WorkItem updates.
-- **StartWorkAction integration:** Modified `StartWorkAction.run()` to call `devdocket.updateMetadata` after successfully creating the worktree and branch. Stores `branchName`, `worktreePath`, and `repoPath` on the WorkItem.
-- **Cleanup service:** Created `packages/core/src/services/gitCleanup.ts` with `promptGitCleanup()` function. Checks if worktree directory exists and if branch exists using stored `repoPath`. Supports branch-only cleanup when worktree is already deleted.
-- **Hook into transitionState:** Modified `WorkGraph.transitionState()` to call `promptGitCleanup()` (non-blocking) when transitioning to `Done` state. Prompt fires asynchronously to avoid blocking state transition.
-- **Safety:** Uses `git branch -d` (not `-D`) to warn about unmerged changes. Removes worktree first (required before branch deletion). Shows specific error messages for unmerged branches.
-- **Files changed:** `packages/core/src/models/workItem.ts`, `workGraph.ts`, `gitCleanup.ts` (new), `commands/commands.ts`; `packages/start-git-work/src/startWorkAction.ts`.
-- **Key pattern:** Metadata fields on WorkItem are optional and action-specific. Core doesn't interpret them — actions own their lifecycle. Storing `repoPath` directly avoids fragile regex-based inference.
 - **`titleSync.ts` service:** `syncProviderTitles()` iterates `providerRegistry.getAllDiscoveredItems()`, uses `workGraph.findItemByProvenance()` (O(1) via provenanceIndex) for each, and calls `workGraph.updateItem()` when titles differ. Per-item try/catch for resilience. Guards against empty/whitespace-only provider titles via `discovered.title?.trim()`.
 - **Editor panel event subscriptions:** Three subscriptions: `workGraph.onDidChange` (title changes), `providerRegistry.onDidRegisterProvider` (managed state on register), `providerRegistry.onDidChangeDiscoveredItems` (managed state on deregister). Title-only changes use `postMessage` (preserves unsaved notes); managed-state changes trigger full re-render.
 - **`updateTitle` webview handler:** Targets `#title-link` child if present (preserving clickable heading from #281), only updates readonly input (prevents overwriting user edits in non-managed items).
