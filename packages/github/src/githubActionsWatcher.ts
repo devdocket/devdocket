@@ -151,7 +151,15 @@ export class GitHubActionsWatcher implements DevDocketRunWatcher {
       throw new Error('Request cancelled');
     }
 
-    const response = await fetch(url, { headers, signal: AbortSignal.timeout(30_000) });
+    let response: Response;
+    try {
+      response = await fetch(url, { headers, signal: AbortSignal.timeout(30_000) });
+    } catch (err) {
+      if (err instanceof Error && err.name === 'AbortError') {
+        throw new Error('GitHub API request timed out after 30s');
+      }
+      throw err;
+    }
 
     if (!response.ok) {
       if (response.status === 404) {

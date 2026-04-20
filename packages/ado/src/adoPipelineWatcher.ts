@@ -88,7 +88,15 @@ export class AdoPipelineWatcher implements DevDocketRunWatcher {
 
     // Fetch build details
     const buildUrl = `https://dev.azure.com/${encodedOrg}/${encodedProject}/_apis/build/builds/${encodedBuildId}?api-version=7.1`;
-    const buildResponse = await fetch(buildUrl, { headers, signal: AbortSignal.timeout(30_000) });
+    let buildResponse: Response;
+    try {
+      buildResponse = await fetch(buildUrl, { headers, signal: AbortSignal.timeout(30_000) });
+    } catch (err) {
+      if (err instanceof Error && err.name === 'AbortError') {
+        throw new Error(`ADO API request timed out after 30s for build ${identifier.runId}`);
+      }
+      throw err;
+    }
     if (!buildResponse.ok) {
       throwAdoApiError(buildResponse, `Build ${identifier.runId}`);
     }
@@ -101,7 +109,17 @@ export class AdoPipelineWatcher implements DevDocketRunWatcher {
 
     // Fetch timeline for job details
     const timelineUrl = `https://dev.azure.com/${encodedOrg}/${encodedProject}/_apis/build/builds/${encodedBuildId}/timeline?api-version=7.1`;
-    const timelineResponse = await fetch(timelineUrl, { headers, signal: AbortSignal.timeout(30_000) });
+    let timelineResponse: Response;
+    try {
+      timelineResponse = await fetch(timelineUrl, { headers, signal: AbortSignal.timeout(30_000) });
+    } catch (err) {
+      if (err instanceof Error && err.name === 'AbortError') {
+        logger.warn(`ADO timeline request timed out after 30s for build ${identifier.runId}`);
+        timelineResponse = { ok: false } as Response;
+      } else {
+        throw err;
+      }
+    }
 
     let jobs: JobStatus[] = [];
     if (timelineResponse.ok) {
