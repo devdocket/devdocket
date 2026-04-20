@@ -174,7 +174,12 @@ export class AdoPrReviewProvider extends BaseProvider {
           r.status === 'rejected' && r.reason instanceof Error && r.reason.name === 'AbortError',
       );
       if (signal?.aborted || abortedResult) {
-        throw abortedResult?.reason ?? new Error('The operation was aborted.');
+        if (abortedResult) {
+          throw abortedResult.reason;
+        }
+        const abortError = new Error('The operation was aborted.');
+        abortError.name = 'AbortError';
+        throw abortError;
       }
     }
 
