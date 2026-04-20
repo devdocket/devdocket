@@ -226,6 +226,22 @@ describe('RepoManager', () => {
       ).rejects.toThrow(/git 2\.30 is too old/);
     });
 
+    it('throws when git version is unparseable', async () => {
+      vi.mocked(execFile).mockImplementation(
+        (_cmd: string, args: string[], _opts: unknown, cb: Function) => {
+          if ((args as string[])?.includes('version')) {
+            cb(null, 'unknown output', '');
+          } else {
+            cb(null, '', '');
+          }
+        },
+      );
+
+      await expect(
+        manager.ensureWorktree('https://github.com/owner/repo/pull/42'),
+      ).rejects.toThrow(/Could not determine git version/);
+    });
+
     it('stores worktree info for quick lookup', async () => {
       const url = 'https://github.com/owner/repo/pull/42';
       const info = await manager.ensureWorktree(url);
