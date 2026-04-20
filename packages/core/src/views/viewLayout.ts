@@ -432,8 +432,11 @@ export abstract class WorkItemViewProvider implements vscode.TreeDataProvider<Wo
         const groupKeyWithProvider = `group:${normalizeProviderId(item.providerId) ?? ''}:${normalizedGroup}`;
         counts.set(groupKeyWithProvider, (counts.get(groupKeyWithProvider) ?? 0) + 1);
 
-        const groupKeyOnly = `group-only:${normalizedGroup}`;
-        counts.set(groupKeyOnly, (counts.get(groupKeyOnly) ?? 0) + 1);
+        // group-only key: only for items without a providerId (the "Other" group)
+        if (!normalizeProviderId(item.providerId)) {
+          const groupKeyOnly = `group-only:${normalizedGroup}`;
+          counts.set(groupKeyOnly, (counts.get(groupKeyOnly) ?? 0) + 1);
+        }
       }
       this._countsCache = counts;
     }
