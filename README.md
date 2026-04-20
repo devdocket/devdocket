@@ -28,7 +28,7 @@ DevDocket organizes work across five views in the sidebar:
 | **History** | Completed and archived items — your work record. |
 | **Sources** | Everything providers know about, browsable anytime. |
 
-Provider-linked items are automatically marked **Done** when their issue is closed or their PR is closed or merged externally.
+By default, provider-linked items are automatically marked **Done** when their issue is closed or their PR is merged externally.
 
 For detailed view behavior, keyboard shortcuts, and configuration options, see the [UX Guide](docs/ux-guide.md).
 
