@@ -154,6 +154,7 @@ describe('RepoManager', () => {
         'ref with spaces',
         'ref\tnewline',
         'ref;drop',
+        '-flag',
         'branch**glob',
         'ref<script>',
         '',
