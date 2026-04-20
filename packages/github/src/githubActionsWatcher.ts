@@ -92,6 +92,7 @@ export class GitHubActionsWatcher implements DevDocketRunWatcher {
     const conclusion = runData.conclusion ? this.mapConclusion(runData.conclusion) : undefined;
 
     const jobs: JobStatus[] = jobsData.jobs.map(job => ({
+      id: String(job.id),
       name: job.name,
       state: this.mapState(job.status),
       conclusion: job.conclusion ? this.mapConclusion(job.conclusion) : undefined,

@@ -12,7 +12,9 @@ export type RunConclusion = 'success' | 'failure' | 'cancelled' | 'skipped' | 't
  * Status of an individual job within a pipeline run.
  */
 export interface JobStatus {
-  /** Unique name/id within the run */
+  /** Stable provider-specific unique identifier for this job within the run. */
+  id?: string;
+  /** Human-readable job name (may not be unique for matrix builds). */
   name: string;
   state: RunState;
   conclusion?: RunConclusion;
