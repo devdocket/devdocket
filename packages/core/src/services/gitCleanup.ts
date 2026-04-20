@@ -48,7 +48,7 @@ async function checkCleanupState(item: WorkItem): Promise<CleanupState | undefin
   // Check branch existence if we have a branchName
   if (item.branchName) {
     try {
-      await execFileAsync('git', ['show-ref', '--verify', '--quiet', `refs/heads/${item.branchName}`], { cwd: repoPath });
+      await execFileAsync('git', ['show-ref', '--verify', '--quiet', '--', `refs/heads/${item.branchName}`], { cwd: repoPath });
       branchExists = true;
     } catch (err) {
       // Exit code 1 means ref not found; anything else is an unexpected error
