@@ -5,7 +5,8 @@ import type {
   RunStatus, 
   JobStatus, 
   RunState, 
-  RunConclusion 
+  RunConclusion,
+  CancellationTokenLike 
 } from '@devdocket/shared';
 import { logger } from './logger';
 
@@ -63,14 +64,11 @@ export class GitHubActionsWatcher implements DevDocketRunWatcher {
     };
   }
 
-  async getRunStatus(identifier: RunIdentifier, token?: unknown): Promise<RunStatus> {
+  async getRunStatus(identifier: RunIdentifier, token?: CancellationTokenLike): Promise<RunStatus> {
     if (!identifier.repo) {
       throw new Error('Repository required for GitHub Actions run');
     }
 
-    const cancellationToken = token && typeof token === 'object' && 'isCancellationRequested' in token
-      ? token as vscode.CancellationToken
-      : undefined;
     const [owner, repo] = identifier.repo.split('/');
     const encodedOwner = encodeURIComponent(owner);
     const encodedRepo = encodeURIComponent(repo);
@@ -79,13 +77,13 @@ export class GitHubActionsWatcher implements DevDocketRunWatcher {
     // Fetch run details
     const runData = await this.fetchApi<GitHubWorkflowRun>(
       `https://api.github.com/repos/${encodedOwner}/${encodedRepo}/actions/runs/${encodedRunId}`,
-      cancellationToken
+      token
     );
 
     // Fetch jobs for this run
     const jobsData = await this.fetchApi<{ jobs: GitHubWorkflowJob[] }>(
       `https://api.github.com/repos/${encodedOwner}/${encodedRepo}/actions/runs/${encodedRunId}/jobs`,
-      cancellationToken
+      token
     );
 
     const overallState = this.mapState(runData.status);
@@ -133,7 +131,7 @@ export class GitHubActionsWatcher implements DevDocketRunWatcher {
     }
   }
 
-  private async fetchApi<T>(url: string, token?: vscode.CancellationToken): Promise<T> {
+  private async fetchApi<T>(url: string, token?: CancellationTokenLike): Promise<T> {
     // Background polling must not trigger interactive sign-in prompts.
     // Reuse an existing session if available; fail gracefully if not.
     const session = await vscode.authentication.getSession('github', ['repo'], { createIfNone: false });

@@ -9,6 +9,14 @@ export type RunState = 'queued' | 'running' | 'completed';
 export type RunConclusion = 'success' | 'failure' | 'cancelled' | 'skipped' | 'timed_out' | 'action_required' | 'neutral';
 
 /**
+ * Minimal cancellation token interface compatible with vscode.CancellationToken.
+ * Allows watcher implementations to check for cancellation without depending on vscode types.
+ */
+export interface CancellationTokenLike {
+  readonly isCancellationRequested: boolean;
+}
+
+/**
  * Status of an individual job within a pipeline run.
  */
 export interface JobStatus {
@@ -83,5 +91,5 @@ export interface DevDocketRunWatcher {
    * @returns Current status including per-job detail
    * @throws If API call fails or run not found
    */
-  getRunStatus(identifier: RunIdentifier, token?: unknown): Promise<RunStatus>;
+  getRunStatus(identifier: RunIdentifier, token?: CancellationTokenLike): Promise<RunStatus>;
 }
