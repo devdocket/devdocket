@@ -989,6 +989,12 @@ export function registerCommands(
     vscode.commands.registerCommand('devdocket.toggleSourcesLayout',
       wrapCommand('Failed to switch sources layout', () => toggleViewLayout('sources'))),
     vscode.commands.registerCommand('devdocket.addActivity',
-      (itemId: string, type: string, detail?: string) => workGraph.addActivity(itemId, type as any, detail)),
+      (itemId: string, type: string, detail?: string) => {
+        const validTypes = ['created', 'state-changed', 'updated', 'action-executed', 'work-started', 'cleanup', 'cleanup-dismissed'];
+        if (!validTypes.includes(type)) {
+          throw new Error(`Invalid activity type: ${type}. Expected one of: ${validTypes.join(', ')}`);
+        }
+        return workGraph.addActivity(itemId, type as any, detail);
+      }),
   );
 }

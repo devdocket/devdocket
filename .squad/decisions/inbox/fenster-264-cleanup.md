@@ -1,6 +1,6 @@
-# Decision: WorkItem Metadata Extension Pattern
+# Decision: Activity-Log-Based Cleanup Tracking
 
-**Date:** 2026-04-18  
+**Date:** 2026-04-18 (revised 2026-04-21)  
 **Author:** Fenster (Issue #264)  
 **Status:** Implemented
 
@@ -10,40 +10,35 @@ Issue #264 required tracking git branch and worktree metadata created by the Sta
 
 ## Decision
 
-Extended WorkItem model with optional metadata fields (`branchName`, `worktreePath`, `repoPath`) that actions can use to store action-specific state.
+Use the work item's activity log as the source of truth for branch/worktree associations instead of adding metadata fields to the WorkItem model.
 
 ### Implementation
 
-1. **WorkItem interface:** Added optional `branchName?: string`, `worktreePath?: string`, and `repoPath?: string` fields.
-2. **Update mechanism:** Created `WorkGraph.updateMetadata()` method and `devdocket.updateMetadata` command for actions to persist metadata.
-3. **Action integration:** StartWorkAction calls `devdocket.updateMetadata` after creating worktree/branch, passing all three metadata fields.
-4. **Cleanup hook:** `WorkGraph.transitionState()` calls `promptGitCleanup()` asynchronously when state becomes `Done`.
-5. **Cleanup service:** `packages/core/src/services/gitCleanup.ts` handles worktree/branch existence checks and git operations using the stored `repoPath`.
+1. **Activity types:** Added `'work-started'`, `'cleanup'`, and `'cleanup-dismissed'` to `ActivityType`.
+2. **Logging work info:** StartWorkAction calls `devdocket.addActivity` with type `'work-started'` and a JSON detail string containing `{ branchName, worktreePath, repoPath }`.
+3. **Reading work info:** `gitCleanup.ts` finds the most recent `'work-started'` entry in the activity log and parses its JSON detail to extract branch/worktree/repo info.
+4. **Dismissal tracking:** When the user clicks "No" on the cleanup prompt, a `'cleanup-dismissed'` entry is logged. The cleanup check skips prompting if a `'cleanup-dismissed'` entry exists after the last `'work-started'` entry.
+5. **Cleanup logging:** Successful cleanup logs a `'cleanup'` entry with a human-readable detail (e.g., "Removed worktree and branch feature/x").
+6. **Command:** `devdocket.addActivity` registered for extensions to log activities. Validates type against known values.
 
 ## Rationale
 
-- **Optional fields on WorkItem:** Keeps the interface extensible without breaking changes. Core doesn't interpret action-specific metadata.
-- **Command-based updates:** Actions are separate extensions that can't import core services directly. They call public commands exposed via `vscode.commands.executeCommand`.
-- **Store repoPath explicitly:** Avoids fragile regex-based inference from worktree naming conventions. The action already has the repo path when creating the worktree, so persisting it is zero additional cost.
-- **Non-blocking cleanup prompt:** Transition succeeds immediately. Prompt fires asynchronously via `void promptGitCleanup()`.
-- **Safety-first git operations:** Use `git branch -d` (not `-D`) to warn about unmerged changes. Remove worktree before branch (required order).
-- **Branch-only cleanup:** Supports scenarios where user manually deleted the worktree but branch still exists.
+- **Activity log as source of truth:** Avoids adding action-specific metadata fields to the WorkItem model. The activity log already exists and is designed for tracking significant events.
+- **JSON detail string:** Structured data lives in the `detail` field of the `'work-started'` entry. Machine-readable while staying within the existing `ActivityLogEntry` shape.
+- **Dismissal via activity entry:** Avoids a `cleanupDismissed` boolean on WorkItem. The temporal ordering of log entries naturally handles "re-arm after new work-started" — a new `'work-started'` entry after a `'cleanup-dismissed'` entry will trigger a fresh prompt.
+- **Non-blocking cleanup prompt:** Transition succeeds immediately. Prompt fires asynchronously.
+- **Safety-first git operations:** `git branch -d` (not `-D`) warns about unmerged changes. `--` terminators on all commands. `git show-ref --verify` for exact branch checks.
 
 ## Consequences
 
-- **Pro:** Actions can persist arbitrary metadata on WorkItems without core knowing their semantics.
-- **Pro:** Cleanup is automatic but user-controlled via prompt.
-- **Pro:** Non-breaking change to WorkItem interface (optional fields).
-- **Pro:** No fragile naming convention coupling — repoPath is stored directly.
-- **Pro:** Works even when worktree is manually deleted (branch-only cleanup).
+- **Pro:** No additional fields on WorkItem — cleaner model.
+- **Pro:** Activity log provides a full audit trail of work-started/cleanup/dismissed events.
+- **Pro:** Re-arming after new work-started is automatic — no need to manually reset flags.
+- **Con:** Detail field is JSON, which is less human-readable than plain text for `'work-started'` entries.
+- **Breaking:** Three new `ActivityType` values. Extensions with exhaustive switch must add cases.
 
 ## Alternatives Considered
 
-1. **Store metadata in action's globalState:** Doesn't survive if action extension is uninstalled. Metadata is logically part of the work item lifecycle.
-2. **Event-based approach (like PR #311):** Requires extending DevDocketApi with new events. Command-based approach is simpler and already available.
-3. **Infer repo path from worktree path:** Initial implementation used regex `{repo}-issue{N}` → `{repo}`. Fragile, couples cleanup to naming convention, fails if repo name contains `-issue\d+`. Replaced with explicit storage.
-
-## Team Impact
-
-- This pattern can be reused by other actions that need to persist metadata (e.g., AI review feedback, test run results).
-- `updateMetadata()` currently allows updating `branchName`, `worktreePath`, and `repoPath`. If more fields are needed, expand the `Pick<WorkItem, ...>` type.
+1. **WorkItem metadata fields:** Original approach (PR #321 v1). Worked but added action-specific fields to the core model.
+2. **Store metadata in action's globalState:** Doesn't survive if action extension is uninstalled. Metadata is logically part of the work item lifecycle.
+3. **Infer repo path from worktree path:** Fragile, couples cleanup to naming convention.
