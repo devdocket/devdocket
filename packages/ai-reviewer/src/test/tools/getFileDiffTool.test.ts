@@ -55,6 +55,52 @@ describe('getFileDiffTool', () => {
       );
     });
 
+    it('rejects invalid baseRef', async () => {
+      const { lm } = await import('vscode');
+      registerGetFileDiffTool();
+      const handler = vi.mocked(lm.registerTool).mock.calls[0][1];
+
+      const result = await handler.invoke(
+        {
+          input: {
+            worktreePath: '/mock/worktree',
+            baseRef: 'origin/main;rm -rf',
+            headRef: 'pr-42',
+            filePath: 'src/index.ts',
+          },
+          toolInvocationToken: undefined,
+        } as never,
+        { isCancellationRequested: false } as never,
+      );
+
+      expect(execFile).not.toHaveBeenCalled();
+      const text = (result as any).content[0].value;
+      expect(text).toContain('Invalid ref');
+    });
+
+    it('rejects invalid headRef', async () => {
+      const { lm } = await import('vscode');
+      registerGetFileDiffTool();
+      const handler = vi.mocked(lm.registerTool).mock.calls[0][1];
+
+      const result = await handler.invoke(
+        {
+          input: {
+            worktreePath: '/mock/worktree',
+            baseRef: 'origin/main',
+            headRef: 'pr`whoami`',
+            filePath: 'src/index.ts',
+          },
+          toolInvocationToken: undefined,
+        } as never,
+        { isCancellationRequested: false } as never,
+      );
+
+      expect(execFile).not.toHaveBeenCalled();
+      const text = (result as any).content[0].value;
+      expect(text).toContain('Invalid ref');
+    });
+
     it('rejects path traversal in filePath', async () => {
       const { lm } = await import('vscode');
       registerGetFileDiffTool();
