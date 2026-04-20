@@ -17,6 +17,9 @@ export const MAX_ACTIVITY_LOG_ENTRIES = 100;
  */
 export type ActivityType = 'created' | 'state-changed' | 'updated' | 'action-executed' | 'work-started' | 'cleanup' | 'cleanup-dismissed';
 
+/** All valid activity type values, for runtime validation. */
+export const ACTIVITY_TYPES: readonly ActivityType[] = ['created', 'state-changed', 'updated', 'action-executed', 'work-started', 'cleanup', 'cleanup-dismissed'];
+
 /**
  * A single, immutable entry in a work item's activity log.
  *

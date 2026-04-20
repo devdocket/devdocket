@@ -176,6 +176,7 @@ export async function promptGitCleanup(
   // Perform cleanup
   const errors: string[] = [];
   const cleaned: string[] = [];
+  let worktreeRemoved = true;
 
   if (worktreeExists && worktreePath && repoPath) {
     try {
@@ -183,13 +184,15 @@ export async function promptGitCleanup(
       logger.info('Removed worktree for work item');
       cleaned.push(`worktree`);
     } catch (err) {
+      worktreeRemoved = false;
       const message = err instanceof Error ? err.message : String(err);
       errors.push(`Failed to remove worktree: ${message}`);
       logger.error('Failed to remove worktree', err);
     }
   }
 
-  if (branchExists && branchName && repoPath) {
+  // Skip branch deletion if worktree removal failed — branch is likely still checked out
+  if (branchExists && branchName && repoPath && worktreeRemoved) {
     try {
       await execFileAsync('git', ['branch', '-d', '--', branchName], { cwd: repoPath });
       logger.info(`Deleted branch: ${branchName}`);
