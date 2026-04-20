@@ -39,7 +39,7 @@ export class AdoPipelineWatcher implements DevDocketRunWatcher {
       const u = new URL(url);
       return (u.protocol === 'https:' || u.protocol === 'http:')
         && u.hostname === 'dev.azure.com'
-        && /^\/[^/]+\/[^/]+\/_build\/results/.test(u.pathname)
+        && /^\/[^/]+\/[^/]+\/_build\/results\/?$/.test(u.pathname)
         && !!u.searchParams.get('buildId');
     } catch {
       return false;
