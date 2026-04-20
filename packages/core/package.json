@@ -524,6 +524,10 @@
         {
           "command": "devdocket.toggleSourcesLayout",
           "when": "false"
+        },
+        {
+          "command": "devdocket.updateMetadata",
+          "when": "false"
         }
       ],
       "view/item/context": [
