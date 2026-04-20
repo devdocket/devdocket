@@ -80,9 +80,9 @@ export class GitHubActionsWatcher implements DevDocketRunWatcher {
       token
     );
 
-    // Fetch jobs for this run
+    // Fetch jobs for this run (request max page size to avoid omitting jobs on larger workflows)
     const jobsData = await this.fetchApi<{ jobs: GitHubWorkflowJob[] }>(
-      `https://api.github.com/repos/${encodedOwner}/${encodedRepo}/actions/runs/${encodedRunId}/jobs`,
+      `https://api.github.com/repos/${encodedOwner}/${encodedRepo}/actions/runs/${encodedRunId}/jobs?per_page=100`,
       token
     );
 
