@@ -120,8 +120,9 @@ export class RepoManager {
     // Strict allowlist validation for baseRef before it's interpolated into
     // git commands and LLM prompts — matches the org/repo validation pattern.
     if (!isValidRef(baseRef)) {
-      this.log.error(`Invalid base ref from GitHub API: ${baseRef}`);
-      throw new Error(`Invalid base ref from GitHub API: ${baseRef}`);
+      const safeBaseRef = JSON.stringify(baseRef);
+      this.log.error(`Invalid base ref from GitHub API: ${safeBaseRef}`);
+      throw new Error(`Invalid base ref from GitHub API: ${safeBaseRef}`);
     }
     this.log.info(`Fetching base branch: ${baseRef}`);
     await gitAuth(
