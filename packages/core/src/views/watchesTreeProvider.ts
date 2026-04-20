@@ -18,12 +18,6 @@ class WatchedRunNode extends vscode.TreeItem {
     this.description = this.buildDescription();
     this.iconPath = this.getIconForState(watchedRun.status.overallState, watchedRun.status.conclusion, watchedRun.hasWarning);
     this.contextValue = watchedRun.status.overallState === 'completed' ? 'watchedRun.completed' : 'watchedRun.active';
-    
-    this.command = {
-      command: 'devdocket.openWatchUrl',
-      title: 'Open in Browser',
-      arguments: [watchedRun],
-    };
   }
 
   private buildTooltip(): string {

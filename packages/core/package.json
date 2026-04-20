@@ -711,11 +711,6 @@
           "group": "1_actions"
         },
         {
-          "command": "devdocket.openWatchUrl",
-          "when": "view == devdocket.watches && viewItem == watchedRun.completed",
-          "group": "inline"
-        },
-        {
           "command": "devdocket.dismissWatch",
           "when": "view == devdocket.watches && viewItem =~ /^watchedRun/",
           "group": "inline"
