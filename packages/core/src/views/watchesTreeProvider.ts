@@ -172,8 +172,10 @@ export class WatchesTreeProvider implements vscode.TreeDataProvider<WatchedRunNo
     }
     
     if (element instanceof WatchedRunNode) {
-      // Children: job status nodes
-      return element.children;
+      // Generate children from latest status to avoid stale data
+      return element.watchedRun.status.jobs.map(
+        job => new JobStatusNode(job.name, job.state, job.conclusion)
+      );
     }
     
     // Jobs have no children
