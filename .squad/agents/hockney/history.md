@@ -94,3 +94,28 @@ DevDocket is a VS Code extension monorepo for managing work items. Packages: `co
 **Pattern:** Concurrent test writing enabled Fenster to implement two features in parallel while Hockney validated the more complex state transitions (#275) with full test coverage.
 
 **Multi-worktree workflow confirmed:** Worked in dedicated worktree on branch `squad/275-history-to-queue` while main worktree was on different branch.
+
+### 2026-04-22 — PR #327 Cancellation Test Coverage (Issue #300)
+
+**44 new cancellation tests** across 5 test files covering the CancellationToken → AbortSignal wiring from PR #327. Test files:
+- `packages/github/src/test/githubProvider.cancellation.test.ts` — 13 tests
+- `packages/github/src/test/githubMyPrsProvider.cancellation.test.ts` — 9 tests
+- `packages/github/src/test/githubPrReviewProvider.cancellation.test.ts` — 8 tests
+- `packages/ado/src/test/adoWorkItemProvider.cancellation.test.ts` — 7 tests
+- `packages/ado/src/test/adoPrReviewProvider.cancellation.test.ts` — 7 tests
+
+**Key scenarios tested:**
+1. AbortSignal is passed to every `fetch()` call when CancellationToken is provided
+2. Mid-flight cancellation: token fires during fetch → AbortError propagates correctly
+3. No items published on abort (preserves previous provider state)
+4. AbortError logged at debug level, not error level
+5. Worker pool abort: worker loops stop early when signal is aborted
+6. cancelListener disposed in finally block (both success and abort paths)
+7. `_isRefreshing` guard resets after abort so subsequent refresh can proceed
+8. Already-cancelled token: early return without fetch
+9. Pagination abort: stops fetching further pages when aborted mid-pagination
+10. No partial results published when abort happens during multi-repo fetch
+
+**Mock pattern: `createMockCancellationToken()`** — Creates a token with working `onCancellationRequested` callback and trackable `disposeStubs`. Mirrors real vscode.CancellationToken behavior. Returns `{ token, cancel, disposeStubs }`.
+
+**Key behavioral difference discovered:** GitHub providers (via BaseGitHubProvider) do NOT fire empty items on early cancellation — they just return. ADO providers DO fire `[]` on pre-fetch cancellation. Both are correct for their respective patterns. AbortError during fetch does NOT publish items in either package.

@@ -55,6 +55,15 @@ DevDocket is a VS Code extension monorepo for managing work items from multiple 
 
 ## Learnings
 
+### 2026-04-22 — Issue #300 (CancellationToken → AbortSignal wiring)
+
+**Bug fix:** Providers accepted `CancellationToken` in `refresh()` but only checked `isCancellationRequested` at discrete points. In-flight `fetch()` calls ran to completion even after cancellation.
+- **Pattern:** Create `AbortController` at refresh entry point, wire `token?.onCancellationRequested?.(() => abortController.abort())` with double optional chaining (test mocks may lack the event method), pass `abortController.signal` to all `fetch()` calls down the chain.
+- **Signal combining:** Use `combineSignals(signal, 30_000)` from `@devdocket/shared` to merge cancellation + per-request timeout into one signal. Node 18 compatible — `AbortSignal.any()` requires Node 20.3+ which isn't available in VS Code 1.85.0's runtime.
+- **AbortError handling:** Catch `AbortError` (check `err.name === 'AbortError'`) at the top-level and log at debug level, not error. Guard rethrows with `&& signal?.aborted` to distinguish cancellation from timeouts (`TimeoutError`).
+- **Worker pool abort:** Throw `AbortError` (not break) at top of worker loops when `signal?.aborted` — ensures cancellation propagates through `Promise.all` and prevents partial result publishing. For `Promise.allSettled`, check for AbortError in results after settling and rethrow before publishing.
+- **Files changed:** `shared/src/signalUtils.ts` (new — `combineSignals`), `baseGithubProvider.ts` (core wiring), `githubProvider.ts`, `githubPrReviewProvider.ts`, `githubMyPrsProvider.ts`, `adoWorkItemProvider.ts`, `adoPrReviewProvider.ts`, `adoPipelineWatcher.ts`.
+- **Key lesson:** `?.` on `token?.onCancellationRequested(...)` only guards against `token` being nullish. If `token` exists but lacks `onCancellationRequested` (like test mocks), it throws. Must use `token?.onCancellationRequested?.(...)` with double optional chaining.
 ### 2026-04-21 — README Refresh
 
 **Task:** Rewrote README per Matt's requests — removed marketplace install language, trimmed config details, added build-from-source instructions.

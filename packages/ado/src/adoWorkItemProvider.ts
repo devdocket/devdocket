@@ -1,5 +1,5 @@
 import * as vscode from 'vscode';
-import { BaseProvider, DiscoveredItem, isValidUrlSegment, type ResolvedItem } from '@devdocket/shared';
+import { BaseProvider, DiscoveredItem, isValidUrlSegment, combineSignals, type ResolvedItem } from '@devdocket/shared';
 import { logger } from './logger';
 import { OrgConfig } from './configParser';
 import { getAdoHeaders, retryAdoWithAuth, throwAdoApiError, safeDecodeComponent } from './adoAuth';
@@ -73,6 +73,8 @@ export class AdoWorkItemProvider extends BaseProvider {
     }
 
     this._isRefreshing = true;
+    const abortController = new AbortController();
+    const cancelListener = token?.onCancellationRequested?.(() => abortController.abort());
     try {
       logger.info('Fetching assigned ADO work items...');
       if (token?.isCancellationRequested) {
@@ -89,11 +91,16 @@ export class AdoWorkItemProvider extends BaseProvider {
         return;
       }
 
-      await this.fetchAndPublishWorkItems(session.accessToken, true);
+      await this.fetchAndPublishWorkItems(session.accessToken, true, abortController.signal);
     } catch (err) {
-      this._onDidDiscoverItems.fire([]);
-      logger.error('Failed to fetch work items:', err);
+      if (err instanceof Error && err.name === 'AbortError') {
+        logger.debug('ADO work items fetch aborted due to cancellation');
+      } else {
+        this._onDidDiscoverItems.fire([]);
+        logger.error('Failed to fetch work items:', err);
+      }
     } finally {
+      cancelListener?.dispose();
       this._isRefreshing = false;
     }
   }
@@ -117,7 +124,7 @@ export class AdoWorkItemProvider extends BaseProvider {
     }
   }
 
-  private async fetchAndPublishWorkItems(accessToken: string, isUserTriggered: boolean): Promise<void> {
+  private async fetchAndPublishWorkItems(accessToken: string, isUserTriggered: boolean, signal?: AbortSignal): Promise<void> {
     const allItems: DiscoveredItem[] = [];
     const failures: string[] = [];
 
@@ -143,7 +150,7 @@ export class AdoWorkItemProvider extends BaseProvider {
 
       const projectList = validProjects.length > 0 ? validProjects : [''];
       const results = await Promise.allSettled(
-        projectList.map(project => this.fetchWorkItemsForProject(accessToken, orgConfig.org, project)),
+        projectList.map(project => this.fetchWorkItemsForProject(accessToken, orgConfig.org, project, signal)),
       );
 
       results.forEach((result, index) => {
@@ -165,6 +172,20 @@ export class AdoWorkItemProvider extends BaseProvider {
           );
         }
       });
+
+      // Propagate cancellation so the refresh stops without publishing partial results
+      const abortedResult = results.find(
+        (r): r is PromiseRejectedResult =>
+          r.status === 'rejected' && r.reason instanceof Error && r.reason.name === 'AbortError',
+      );
+      if (signal?.aborted || abortedResult) {
+        if (abortedResult) {
+          throw abortedResult.reason;
+        }
+        const abortError = new Error('The operation was aborted.');
+        abortError.name = 'AbortError';
+        throw abortError;
+      }
     }
 
     this._onDidDiscoverItems.fire(allItems);
@@ -185,6 +206,7 @@ export class AdoWorkItemProvider extends BaseProvider {
     token: string,
     org: string,
     project: string,
+    signal?: AbortSignal,
   ): Promise<{ items: DiscoveredItem[]; failed: boolean }> {
     logger.debug(`Fetching work items for project: ${project || org}`);
     const projectPath = project ? `/${encodeURIComponent(project)}` : '';
@@ -201,9 +223,10 @@ export class AdoWorkItemProvider extends BaseProvider {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({ query: wiqlQuery }),
-        signal: AbortSignal.timeout(30_000),
+        signal: combineSignals(signal, 30_000),
       });
     } catch (err) {
+      if (err instanceof Error && err.name === 'AbortError' && signal?.aborted) { throw err; }
       logger.error(`Network error querying work items for project "${project || org}":`, err);
       return { items: [], failed: true };
     }
@@ -242,9 +265,10 @@ export class AdoWorkItemProvider extends BaseProvider {
           headers: {
             Authorization: `Bearer ${token}`,
           },
-          signal: AbortSignal.timeout(30_000),
+          signal: combineSignals(signal, 30_000),
         });
       } catch (err) {
+        if (err instanceof Error && err.name === 'AbortError' && signal?.aborted) { throw err; }
         logger.error(
           `Network error fetching work item details for ${project || org} (batch at index ${i}, ids ${batchIds[0]}-${batchIds[batchIds.length - 1]}):`,
           err,
@@ -272,7 +296,7 @@ export class AdoWorkItemProvider extends BaseProvider {
     }
 
     // Filter out items in terminal state categories
-    const activeWorkItems = await this.filterActiveItems(token, org, allWorkItems);
+    const activeWorkItems = await this.filterActiveItems(token, org, allWorkItems, signal);
 
     const items: DiscoveredItem[] = activeWorkItems.map((wi) => {
       const projectName = wi.fields['System.TeamProject'];
@@ -327,9 +351,10 @@ export class AdoWorkItemProvider extends BaseProvider {
         headers: {
           Authorization: `Bearer ${token}`,
         },
-        signal,
+        signal: combineSignals(signal, 30_000),
       });
     } catch (err) {
+      if (err instanceof Error && err.name === 'AbortError' && signal?.aborted) { throw err; }
       logger.warn(`Failed to fetch states for ${cacheKey}: network error`, err);
       return new Set<string>(); // Fail open
     }
@@ -382,6 +407,7 @@ export class AdoWorkItemProvider extends BaseProvider {
     token: string,
     org: string,
     workItems: AdoWorkItem[],
+    signal?: AbortSignal,
   ): Promise<AdoWorkItem[]> {
     if (workItems.length === 0) {
       return [];
@@ -410,7 +436,7 @@ export class AdoWorkItemProvider extends BaseProvider {
 
     const results = await Promise.all(
       entries.map(async ({ key, project, workItemType }) => {
-        const terminalStates = await this.fetchTerminalStates(token, org, project, workItemType);
+        const terminalStates = await this.fetchTerminalStates(token, org, project, workItemType, signal);
         return { key, terminalStates };
       }),
     );

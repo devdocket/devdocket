@@ -1,5 +1,5 @@
 import * as vscode from 'vscode';
-import { isValidGitHubRepo } from '@devdocket/shared';
+import { isValidGitHubRepo, combineSignals } from '@devdocket/shared';
 import { logger } from './logger';
 import { parseRepoFromUrls } from './parseRepo';
 import { BaseGitHubProvider, DiscoveredItem, GitHubIssue, type ResolvedItem } from './baseGithubProvider';
@@ -18,10 +18,10 @@ export class GitHubIssueProvider extends BaseGitHubProvider {
   readonly id = 'github';
   readonly label = 'GitHub Issues';
 
-  protected async fetchAndPublish(accessToken: string, isUserTriggered: boolean): Promise<void> {
+  protected async fetchAndPublish(accessToken: string, isUserTriggered: boolean, signal?: AbortSignal): Promise<void> {
     logger.info('Fetching assigned issues...');
     const repos = this.getConfiguredRepos();
-    const { issues, failures } = await this.fetchAssignedIssues(accessToken, repos);
+    const { issues, failures } = await this.fetchAssignedIssues(accessToken, repos, signal);
 
     const items: DiscoveredItem[] = issues.map((issue) => {
       const repoName = this.parseRepo(issue);
@@ -107,6 +107,7 @@ export class GitHubIssueProvider extends BaseGitHubProvider {
   private async fetchAssignedIssues(
     token: string,
     repos: string[],
+    signal?: AbortSignal,
   ): Promise<{ issues: GitHubIssue[]; failures: string[] }> {
     if (repos.length > 0) {
       const validRepos: string[] = [];
@@ -121,7 +122,7 @@ export class GitHubIssueProvider extends BaseGitHubProvider {
       const failures: string[] = [];
 
       const results = await Promise.allSettled(
-        validRepos.map(repo => this.fetchRepoIssues(token, repo))
+        validRepos.map(repo => this.fetchRepoIssues(token, repo, signal))
       );
 
       const allIssues: GitHubIssue[] = [];
@@ -138,17 +139,28 @@ export class GitHubIssueProvider extends BaseGitHubProvider {
         }
       });
 
+      // Propagate cancellation so the refresh stops without publishing partial results
+      const abortedResult = results.find(
+        (r): r is PromiseRejectedResult =>
+          r.status === 'rejected' && r.reason instanceof Error && r.reason.name === 'AbortError',
+      );
+      if (signal?.aborted || abortedResult) {
+        const error = abortedResult?.reason ?? new Error('The operation was aborted.');
+        if (error.name !== 'AbortError') { error.name = 'AbortError'; }
+        throw error;
+      }
+
       return { issues: allIssues, failures };
     }
 
     // Fallback: fetch all assigned issues across all repos
-    const { issues, failed } = await this.fetchAllAssignedIssues(token);
+    const { issues, failed } = await this.fetchAllAssignedIssues(token, signal);
     return { issues, failures: failed ? ['all repositories'] : [] };
   }
 
   private static readonly REPO_PATTERN = /^[A-Za-z0-9._-]+\/[A-Za-z0-9._-]+$/;
 
-  private async fetchRepoIssues(token: string, repo: string): Promise<{ issues: GitHubIssue[]; failed: boolean }> {
+  private async fetchRepoIssues(token: string, repo: string, signal?: AbortSignal): Promise<{ issues: GitHubIssue[]; failed: boolean }> {
     logger.debug(`Fetching issues for repo: ${repo}`);
     if (!GitHubIssueProvider.REPO_PATTERN.test(repo)) {
       logger.error(`Invalid repo format, expected owner/name: ${repo}`);
@@ -158,37 +170,48 @@ export class GitHubIssueProvider extends BaseGitHubProvider {
       const items = await this.fetchPaginated<GitHubIssue>(
         `https://api.github.com/repos/${repo}/issues?assignee=@me&state=open&per_page=100`,
         token,
+        10,
+        signal,
       );
       // Filter out pull requests (GitHub /issues endpoint returns both issues and PRs)
       const issues = items.filter(item => !item.pull_request);
       return { issues, failed: false };
     } catch (err) {
+      if (err instanceof Error && err.name === 'AbortError' && signal?.aborted) { throw err; }
       logger.error(`Failed to fetch issues for ${repo}`, err);
       return { issues: [], failed: true };
     }
   }
 
-  private async fetchAllAssignedIssues(token: string): Promise<{ issues: GitHubIssue[]; failed: boolean }> {
+  private async fetchAllAssignedIssues(token: string, signal?: AbortSignal): Promise<{ issues: GitHubIssue[]; failed: boolean }> {
     try {
       const items = await this.fetchPaginated<GitHubIssue>(
         'https://api.github.com/issues?filter=assigned&state=open&per_page=100',
         token,
+        10,
+        signal,
       );
       // Filter out pull requests (GitHub /issues endpoint returns both issues and PRs)
       const issues = items.filter(item => !item.pull_request);
       return { issues, failed: false };
     } catch (err) {
+      if (err instanceof Error && err.name === 'AbortError' && signal?.aborted) { throw err; }
       logger.error('Failed to fetch assigned issues', err);
       return { issues: [], failed: true };
     }
   }
 
-  private async fetchPaginated<T>(url: string, token: string, maxPages: number = 10): Promise<T[]> {
+  private async fetchPaginated<T>(url: string, token: string, maxPages: number = 10, signal?: AbortSignal): Promise<T[]> {
     const allItems: T[] = [];
     let nextUrl: string | null = url;
     let page = 0;
 
     while (nextUrl && page < maxPages) {
+      if (signal?.aborted) {
+        const error = new Error('The operation was aborted.');
+        error.name = 'AbortError';
+        throw error;
+      }
       let response: Response;
       try {
         response = await fetch(nextUrl, {
@@ -197,9 +220,12 @@ export class GitHubIssueProvider extends BaseGitHubProvider {
             Accept: 'application/vnd.github+json',
             'X-GitHub-Api-Version': '2022-11-28',
           },
-          signal: AbortSignal.timeout(30_000),
+          signal: combineSignals(signal, 30_000),
         });
       } catch (err) {
+        if (signal?.aborted) {
+          throw err;
+        }
         if (allItems.length > 0) {
           logger.warn(
             `Network error on page ${page + 1}. ` +

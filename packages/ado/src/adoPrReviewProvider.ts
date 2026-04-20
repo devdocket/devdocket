@@ -1,5 +1,5 @@
 import * as vscode from 'vscode';
-import { BaseProvider, DiscoveredItem, isValidUrlSegment, type ResolvedItem } from '@devdocket/shared';
+import { BaseProvider, DiscoveredItem, isValidUrlSegment, combineSignals, type ResolvedItem } from '@devdocket/shared';
 import { logger } from './logger';
 import { OrgConfig } from './configParser';
 import { getAdoHeaders, retryAdoWithAuth, throwAdoApiError, safeDecodeComponent } from './adoAuth';
@@ -61,6 +61,8 @@ export class AdoPrReviewProvider extends BaseProvider {
     }
 
     this._isRefreshing = true;
+    const abortController = new AbortController();
+    const cancelListener = token?.onCancellationRequested?.(() => abortController.abort());
     try {
       logger.info('Fetching ADO PR reviews...');
       if (token?.isCancellationRequested) {
@@ -77,11 +79,16 @@ export class AdoPrReviewProvider extends BaseProvider {
         return;
       }
 
-      await this.fetchAndPublishPrs(session.accessToken, true, session.account.id);
+      await this.fetchAndPublishPrs(session.accessToken, true, session.account.id, abortController.signal);
     } catch (err) {
-      this._onDidDiscoverItems.fire([]);
-      logger.error('Failed to fetch PR reviews:', err);
+      if (err instanceof Error && err.name === 'AbortError' && abortController.signal.aborted && token?.isCancellationRequested) {
+        logger.debug('ADO PR reviews fetch aborted due to cancellation');
+      } else {
+        this._onDidDiscoverItems.fire([]);
+        logger.error('Failed to fetch PR reviews:', err);
+      }
     } finally {
+      cancelListener?.dispose();
       this._isRefreshing = false;
     }
   }
@@ -105,7 +112,7 @@ export class AdoPrReviewProvider extends BaseProvider {
     }
   }
 
-  private async fetchAndPublishPrs(accessToken: string, isUserTriggered: boolean, sessionAccountId: string): Promise<void> {
+  private async fetchAndPublishPrs(accessToken: string, isUserTriggered: boolean, sessionAccountId: string, signal?: AbortSignal): Promise<void> {
     const allItems: DiscoveredItem[] = [];
     const identityFailures: string[] = [];
     const fetchFailures: string[] = [];
@@ -116,7 +123,7 @@ export class AdoPrReviewProvider extends BaseProvider {
         continue;
       }
 
-      const userId = await this.getUserId(accessToken, orgConfig.org, sessionAccountId);
+      const userId = await this.getUserId(accessToken, orgConfig.org, sessionAccountId, signal);
       if (!userId) {
         identityFailures.push(orgConfig.org);
         logger.warn(`Failed to determine Azure DevOps user identity for org ${orgConfig.org}`);
@@ -139,7 +146,7 @@ export class AdoPrReviewProvider extends BaseProvider {
 
       const projectList = validProjects.length > 0 ? validProjects : [''];
       const results = await Promise.allSettled(
-        projectList.map(project => this.fetchPrsForProject(accessToken, orgConfig.org, project, userId)),
+        projectList.map(project => this.fetchPrsForProject(accessToken, orgConfig.org, project, userId, signal)),
       );
 
       results.forEach((result, index) => {
@@ -160,6 +167,20 @@ export class AdoPrReviewProvider extends BaseProvider {
           );
         }
       });
+
+      // Propagate cancellation so the refresh stops without publishing partial results
+      const abortedResult = results.find(
+        (r): r is PromiseRejectedResult =>
+          r.status === 'rejected' && r.reason instanceof Error && r.reason.name === 'AbortError',
+      );
+      if (signal?.aborted || abortedResult) {
+        if (abortedResult) {
+          throw abortedResult.reason;
+        }
+        const abortError = new Error('The operation was aborted.');
+        abortError.name = 'AbortError';
+        throw abortError;
+      }
     }
 
     this._onDidDiscoverItems.fire(allItems);
@@ -185,7 +206,7 @@ export class AdoPrReviewProvider extends BaseProvider {
     }
   }
 
-  private async getUserId(token: string, org: string, sessionAccountId: string): Promise<string | undefined> {
+  private async getUserId(token: string, org: string, sessionAccountId: string, signal?: AbortSignal): Promise<string | undefined> {
     // If the auth account changed, clear all cached user IDs
     if (this._cachedSessionAccountId !== sessionAccountId) {
       this._cachedUserIds.clear();
@@ -203,10 +224,11 @@ export class AdoPrReviewProvider extends BaseProvider {
         `https://dev.azure.com/${encodeURIComponent(org)}/_apis/connectiondata`,
         {
           headers: { Authorization: `Bearer ${token}` },
-          signal: AbortSignal.timeout(30_000),
+          signal: combineSignals(signal, 30_000),
         },
       );
     } catch (err) {
+      if (err instanceof Error && err.name === 'AbortError' && signal?.aborted) { throw err; }
       logger.error(`Network error fetching connection data for org ${org}:`, err);
       this._cachedUserIds.delete(org);
       return undefined;
@@ -243,6 +265,7 @@ export class AdoPrReviewProvider extends BaseProvider {
     org: string,
     project: string,
     reviewerId: string,
+    signal?: AbortSignal,
   ): Promise<{ items: DiscoveredItem[]; failed: boolean }> {
     logger.debug(`Fetching PRs for project: ${project || org}`);
     const projectPath = project ? `/${encodeURIComponent(project)}` : '';
@@ -252,7 +275,7 @@ export class AdoPrReviewProvider extends BaseProvider {
       headers: {
         Authorization: `Bearer ${token}`,
       },
-      signal: AbortSignal.timeout(30_000),
+      signal: combineSignals(signal, 30_000),
     });
 
     if (!response.ok) {

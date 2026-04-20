@@ -1,4 +1,5 @@
 import * as vscode from 'vscode';
+import { combineSignals } from '@devdocket/shared';
 import { logger } from './logger';
 import { parseRepoFromUrls } from './parseRepo';
 import { BaseGitHubProvider, DiscoveredItem, GitHubIssue, type ResolvedItem } from './baseGithubProvider';
@@ -26,10 +27,10 @@ export class GitHubPrReviewProvider extends BaseGitHubProvider {
   private _cachedCurrentUser: string | undefined;
   private _cachedCurrentUserToken: string | undefined;
 
-  protected async fetchAndPublish(accessToken: string, isUserTriggered: boolean): Promise<void> {
+  protected async fetchAndPublish(accessToken: string, isUserTriggered: boolean, signal?: AbortSignal): Promise<void> {
     logger.info('Fetching PR review requests...');
     const repos = this.getConfiguredRepos();
-    const { prs, failures } = await this.fetchReviewRequestedPrs(accessToken, repos);
+    const { prs, failures } = await this.fetchReviewRequestedPrs(accessToken, repos, signal);
 
     logger.info(`Discovered ${prs.length} PR review requests`);
 
@@ -39,15 +40,15 @@ export class GitHubPrReviewProvider extends BaseGitHubProvider {
 
     // Fetch head commit SHAs for precise version tracking
     const headShas = resurfaceOnNewVersion
-      ? await this.fetchHeadShas(accessToken, prs)
+      ? await this.fetchHeadShas(accessToken, prs, signal)
       : new Map<string, string>();
 
     // Fetch re-request timestamps for review re-request detection
     let reRequestTimes = new Map<string, string>();
     if (resurfaceOnReRequestedReview && prs.length > 0) {
-      const currentUser = await this.fetchCurrentUser(accessToken);
+      const currentUser = await this.fetchCurrentUser(accessToken, signal);
       if (currentUser) {
-        reRequestTimes = await this.fetchReRequestTimes(accessToken, prs, currentUser);
+        reRequestTimes = await this.fetchReRequestTimes(accessToken, prs, currentUser, signal);
       }
     }
 
@@ -135,9 +136,10 @@ export class GitHubPrReviewProvider extends BaseGitHubProvider {
   private async fetchReviewRequestedPrs(
     token: string,
     repos: string[],
+    signal?: AbortSignal,
   ): Promise<{ prs: GitHubIssue[]; failures: string[] }> {
     if (repos.length > 0) {
-      const results = await this.fetchRepoPrReviewsWithLimit(token, repos, 3);
+      const results = await this.fetchRepoPrReviewsWithLimit(token, repos, 3, signal);
 
       const allPrs: GitHubIssue[] = [];
       const failures: string[] = [];
@@ -158,7 +160,7 @@ export class GitHubPrReviewProvider extends BaseGitHubProvider {
     }
 
     // Fallback: fetch all review-requested PRs across all repos
-    const { prs, failed } = await this.fetchAllPrReviews(token);
+    const { prs, failed } = await this.fetchAllPrReviews(token, signal);
     return { prs, failures: failed ? ['all repositories'] : [] };
   }
 
@@ -167,17 +169,24 @@ export class GitHubPrReviewProvider extends BaseGitHubProvider {
     token: string,
     repos: string[],
     maxConcurrent: number,
+    signal?: AbortSignal,
   ): Promise<PromiseSettledResult<{ prs: GitHubIssue[]; failed: boolean }>[]> {
     const results: PromiseSettledResult<{ prs: GitHubIssue[]; failed: boolean }>[] = new Array(repos.length);
     let nextIndex = 0;
 
     const runWorker = async (): Promise<void> => {
       while (nextIndex < repos.length) {
+        if (signal?.aborted) {
+          const error = new Error('The operation was aborted.');
+          error.name = 'AbortError';
+          throw error;
+        }
         const currentIndex = nextIndex++;
         try {
-          const value = await this.fetchRepoPrReviews(token, repos[currentIndex]);
+          const value = await this.fetchRepoPrReviews(token, repos[currentIndex], signal);
           results[currentIndex] = { status: 'fulfilled', value };
         } catch (reason) {
+          if (reason instanceof Error && reason.name === 'AbortError' && signal?.aborted) { throw reason; }
           results[currentIndex] = { status: 'rejected', reason: reason as Error };
         }
       }
@@ -189,7 +198,7 @@ export class GitHubPrReviewProvider extends BaseGitHubProvider {
     return results;
   }
 
-  private async fetchRepoPrReviews(token: string, repo: string): Promise<{ prs: GitHubIssue[]; failed: boolean }> {
+  private async fetchRepoPrReviews(token: string, repo: string, signal?: AbortSignal): Promise<{ prs: GitHubIssue[]; failed: boolean }> {
     logger.debug(`Fetching PR reviews for repo: ${repo}`);
     const response = await fetch(
       `https://api.github.com/search/issues?q=type:pr+state:open+review-requested:@me+repo:${repo}&per_page=100`,
@@ -199,7 +208,7 @@ export class GitHubPrReviewProvider extends BaseGitHubProvider {
           Accept: 'application/vnd.github+json',
           'X-GitHub-Api-Version': '2022-11-28',
         },
-        signal: AbortSignal.timeout(30_000),
+        signal: combineSignals(signal, 30_000),
       },
     );
 
@@ -212,7 +221,7 @@ export class GitHubPrReviewProvider extends BaseGitHubProvider {
     return { prs: data.items, failed: false };
   }
 
-  private async fetchAllPrReviews(token: string): Promise<{ prs: GitHubIssue[]; failed: boolean }> {
+  private async fetchAllPrReviews(token: string, signal?: AbortSignal): Promise<{ prs: GitHubIssue[]; failed: boolean }> {
     const response = await fetch(
       'https://api.github.com/search/issues?q=type:pr+state:open+review-requested:@me&per_page=100',
       {
@@ -221,7 +230,7 @@ export class GitHubPrReviewProvider extends BaseGitHubProvider {
           Accept: 'application/vnd.github+json',
           'X-GitHub-Api-Version': '2022-11-28',
         },
-        signal: AbortSignal.timeout(30_000),
+        signal: combineSignals(signal, 30_000),
       },
     );
 
@@ -239,7 +248,7 @@ export class GitHubPrReviewProvider extends BaseGitHubProvider {
    * Uses the `pull_request.url` from search results to avoid constructing URLs.
    * Best-effort: failures are logged at debug level and skipped (version will be undefined).
    */
-  private async fetchHeadShas(token: string, prs: GitHubIssue[]): Promise<Map<string, string>> {
+  private async fetchHeadShas(token: string, prs: GitHubIssue[], signal?: AbortSignal): Promise<Map<string, string>> {
     const result = new Map<string, string>();
     const prsWithApiUrl = prs.filter(pr => pr.pull_request?.url);
     if (prsWithApiUrl.length === 0) {
@@ -249,6 +258,11 @@ export class GitHubPrReviewProvider extends BaseGitHubProvider {
     let nextIndex = 0;
     const runWorker = async (): Promise<void> => {
       while (nextIndex < prsWithApiUrl.length) {
+        if (signal?.aborted) {
+          const error = new Error('The operation was aborted.');
+          error.name = 'AbortError';
+          throw error;
+        }
         const currentIndex = nextIndex++;
         const pr = prsWithApiUrl[currentIndex];
         try {
@@ -258,7 +272,7 @@ export class GitHubPrReviewProvider extends BaseGitHubProvider {
               Accept: 'application/vnd.github+json',
               'X-GitHub-Api-Version': '2022-11-28',
             },
-            signal: AbortSignal.timeout(30_000),
+            signal: combineSignals(signal, 30_000),
           });
           if (response.ok) {
             const data = (await response.json()) as { head?: { sha?: string } };
@@ -271,6 +285,7 @@ export class GitHubPrReviewProvider extends BaseGitHubProvider {
             );
           }
         } catch (error) {
+          if (error instanceof Error && error.name === 'AbortError' && signal?.aborted) { throw error; }
           logger.debug(`Failed to fetch head SHA for PR ${pr.html_url}: ${String(error)}`);
         }
       }
@@ -286,7 +301,7 @@ export class GitHubPrReviewProvider extends BaseGitHubProvider {
    * Fetches the authenticated user's login name. Cached for the lifetime of the provider.
    * Returns undefined on failure.
    */
-  private async fetchCurrentUser(token: string): Promise<string | undefined> {
+  private async fetchCurrentUser(token: string, signal?: AbortSignal): Promise<string | undefined> {
     if (this._cachedCurrentUser && this._cachedCurrentUserToken === token) {
       return this._cachedCurrentUser;
     }
@@ -298,7 +313,7 @@ export class GitHubPrReviewProvider extends BaseGitHubProvider {
           Accept: 'application/vnd.github+json',
           'X-GitHub-Api-Version': '2022-11-28',
         },
-        signal: AbortSignal.timeout(30_000),
+        signal: combineSignals(signal, 30_000),
       });
       if (response.ok) {
         const data = (await response.json()) as { login?: string };
@@ -310,6 +325,7 @@ export class GitHubPrReviewProvider extends BaseGitHubProvider {
       }
       logger.debug(`Failed to fetch current user: ${response.status}`);
     } catch (error) {
+      if (error instanceof Error && error.name === 'AbortError' && signal?.aborted) { throw error; }
       logger.debug(`Failed to fetch current user: ${String(error)}`);
     }
     return undefined;
@@ -324,12 +340,18 @@ export class GitHubPrReviewProvider extends BaseGitHubProvider {
     token: string,
     prs: GitHubIssue[],
     currentUserLogin: string,
+    signal?: AbortSignal,
   ): Promise<Map<string, string>> {
     const result = new Map<string, string>();
 
     let nextIndex = 0;
     const runWorker = async (): Promise<void> => {
       while (nextIndex < prs.length) {
+        if (signal?.aborted) {
+          const error = new Error('The operation was aborted.');
+          error.name = 'AbortError';
+          throw error;
+        }
         const currentIdx = nextIndex++;
         const pr = prs[currentIdx];
         try {
@@ -343,7 +365,7 @@ export class GitHubPrReviewProvider extends BaseGitHubProvider {
               Accept: 'application/vnd.github+json',
               'X-GitHub-Api-Version': '2022-11-28',
             },
-            signal: AbortSignal.timeout(30_000),
+            signal: combineSignals(signal, 30_000),
           });
           if (response.ok) {
             const events = (await response.json()) as TimelineEvent[];
@@ -369,6 +391,7 @@ export class GitHubPrReviewProvider extends BaseGitHubProvider {
             );
           }
         } catch (error) {
+          if (error instanceof Error && error.name === 'AbortError' && signal?.aborted) { throw error; }
           logger.debug(`Failed to fetch timeline for PR ${pr.html_url}: ${String(error)}`);
         }
       }

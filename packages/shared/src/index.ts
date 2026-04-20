@@ -9,3 +9,4 @@ export type { DiscoveredItem, Disposable, Event, EventEmitterLike, ResolvedItem 
 export { isValidUrlSegment, isValidGitHubRepo, isValidRepoSlug, sanitizeUrlSegment } from './urlValidation';
 export { validateRefreshInterval } from './refreshInterval';
 export type { DevDocketRunWatcher, RunIdentifier, RunStatus, JobStatus, RunState, RunConclusion, CancellationTokenLike } from './runWatcher';
+export { combineSignals } from './signalUtils';
