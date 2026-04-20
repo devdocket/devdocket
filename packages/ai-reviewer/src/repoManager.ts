@@ -6,6 +6,33 @@ import { validWorktreePaths } from './tools/worktreeRegistry';
 
 export { parsePrUrl };
 
+/** Minimum git version required for GIT_CONFIG_COUNT env-based config injection. */
+const MIN_GIT_VERSION = [2, 31] as const;
+
+let gitVersionChecked = false;
+
+/** Verify git >= 2.31 (needed for GIT_CONFIG_COUNT env vars). Runs once. */
+async function ensureGitVersion(): Promise<void> {
+  if (gitVersionChecked) return;
+  const raw = await gitExec(['version'], '.');
+  const match = raw.match(/(\d+)\.(\d+)/);
+  if (match) {
+    const major = parseInt(match[1], 10);
+    const minor = parseInt(match[2], 10);
+    if (major < MIN_GIT_VERSION[0] || (major === MIN_GIT_VERSION[0] && minor < MIN_GIT_VERSION[1])) {
+      throw new Error(
+        `git ${major}.${minor} is too old. DevDocket AI Reviewer requires git >= ${MIN_GIT_VERSION[0]}.${MIN_GIT_VERSION[1]} for secure credential handling. Please upgrade git.`,
+      );
+    }
+  }
+  gitVersionChecked = true;
+}
+
+/** Reset cached git version check (for testing). */
+export function resetGitVersionCheck(): void {
+  gitVersionChecked = false;
+}
+
 export interface WorktreeInfo {
   worktreePath: string;
   clonePath: string;
@@ -21,7 +48,8 @@ export interface WorktreeInfo {
  * Uses GIT_CONFIG_COUNT/KEY/VALUE (git ≥ 2.31) so the token never appears
  * in process argument lists visible to other users.
  */
-function gitAuth(args: string[], cwd: string, token: string): Promise<string> {
+async function gitAuth(args: string[], cwd: string, token: string): Promise<string> {
+  await ensureGitVersion();
   const encoded = Buffer.from(`x-access-token:${token}`).toString('base64');
   return gitExec(args, cwd, {
     GIT_CONFIG_COUNT: '1',

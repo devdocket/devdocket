@@ -1,11 +1,16 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { authentication, workspace, mockLogOutputChannel } from 'vscode';
-import { RepoManager, parsePrUrl } from '../repoManager';
+import { RepoManager, parsePrUrl, resetGitVersionCheck } from '../repoManager';
 
 // Mock child_process
 vi.mock('child_process', () => ({
-  execFile: vi.fn((_cmd: string, _args: string[], _opts: unknown, cb: Function) => {
-    cb(null, '', '');
+  execFile: vi.fn((_cmd: string, args: string[], _opts: unknown, cb: Function) => {
+    // Return valid version for `git --no-pager version` calls
+    if (args?.includes('version')) {
+      cb(null, 'git version 2.45.0.windows.1', '');
+    } else {
+      cb(null, '', '');
+    }
   }),
 }));
 
@@ -53,6 +58,19 @@ describe('RepoManager', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    resetGitVersionCheck();
+
+    // Restore default execFile mock (returns version for `git version`, empty otherwise)
+    vi.mocked(execFile).mockImplementation(
+      (_cmd: string, args: string[], _opts: unknown, cb: Function) => {
+        if ((args as string[])?.includes('version')) {
+          cb(null, 'git version 2.45.0.windows.1', '');
+        } else {
+          cb(null, '', '');
+        }
+      },
+    );
+
     manager = createRepoManager();
 
     // Default auth mock
@@ -190,6 +208,22 @@ describe('RepoManager', () => {
       await expect(
         manager.ensureWorktree('https://github.com/owner/repo/pull/42'),
       ).rejects.toThrow();
+    });
+
+    it('throws when git version is too old', async () => {
+      vi.mocked(execFile).mockImplementation(
+        (_cmd: string, args: string[], _opts: unknown, cb: Function) => {
+          if ((args as string[])?.includes('version')) {
+            cb(null, 'git version 2.30.0', '');
+          } else {
+            cb(null, '', '');
+          }
+        },
+      );
+
+      await expect(
+        manager.ensureWorktree('https://github.com/owner/repo/pull/42'),
+      ).rejects.toThrow(/git 2\.30 is too old/);
     });
 
     it('stores worktree info for quick lookup', async () => {
