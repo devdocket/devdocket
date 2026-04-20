@@ -427,6 +427,11 @@
         "title": "Open in Browser",
         "category": "DevDocket",
         "icon": "$(link-external)"
+      },
+      {
+        "command": "devdocket.showWatchesQuickPick",
+        "title": "Show Watches",
+        "category": "DevDocket"
       }
     ],
     "menus": {
