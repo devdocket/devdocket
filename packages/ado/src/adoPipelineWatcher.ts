@@ -83,7 +83,9 @@ export class AdoPipelineWatcher implements DevDocketRunWatcher {
     const headers = await getAdoHeaders();
 
     if (token?.isCancellationRequested) {
-      throw new Error('Request cancelled');
+      const error = new Error('The operation was aborted.');
+      error.name = 'AbortError';
+      throw error;
     }
 
     // Fetch build details
@@ -100,7 +102,9 @@ export class AdoPipelineWatcher implements DevDocketRunWatcher {
       : `Build ${buildData.buildNumber}`;
 
     if (token?.isCancellationRequested) {
-      throw new Error('Request cancelled');
+      const error = new Error('The operation was aborted.');
+      error.name = 'AbortError';
+      throw error;
     }
 
     // Fetch timeline for job details
