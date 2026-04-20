@@ -1,11 +1,17 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { authentication, workspace, mockLogOutputChannel } from 'vscode';
-import { RepoManager, parsePrUrl } from '../repoManager';
+import { RepoManager, parsePrUrl, __testing } from '../repoManager';
+const { resetGitVersionCheck } = __testing;
 
 // Mock child_process
 vi.mock('child_process', () => ({
-  execFile: vi.fn((_cmd: string, _args: string[], _opts: unknown, cb: Function) => {
-    cb(null, '', '');
+  execFile: vi.fn((_cmd: string, args: string[], _opts: unknown, cb: Function) => {
+    // Return valid version for `git --no-pager version` calls
+    if (args?.includes('version')) {
+      cb(null, 'git version 2.45.0.windows.1', '');
+    } else {
+      cb(null, '', '');
+    }
   }),
 }));
 
@@ -53,6 +59,19 @@ describe('RepoManager', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    resetGitVersionCheck();
+
+    // Restore default execFile mock (returns version for `git version`, empty otherwise)
+    vi.mocked(execFile).mockImplementation(
+      (_cmd: string, args: string[], _opts: unknown, cb: Function) => {
+        if ((args as string[])?.includes('version')) {
+          cb(null, 'git version 2.45.0.windows.1', '');
+        } else {
+          cb(null, '', '');
+        }
+      },
+    );
+
     manager = createRepoManager();
 
     // Default auth mock
@@ -86,6 +105,29 @@ describe('RepoManager', () => {
       const cloneCall = calls.find(c => c[1]?.includes('clone'));
       expect(cloneCall).toBeDefined();
       expect(cloneCall![1]).toContain('--no-checkout');
+    });
+
+    it('passes auth via env vars, not CLI args', async () => {
+      await manager.ensureWorktree('https://github.com/owner/repo/pull/42');
+
+      const calls = vi.mocked(execFile).mock.calls;
+      // Authenticated operations: clone, fetch PR head, fetch base
+      const authCalls = calls.filter(c => {
+        const opts = c[2] as { env?: Record<string, string> } | undefined;
+        return opts?.env?.GIT_CONFIG_COUNT === '1';
+      });
+      expect(authCalls.length).toBeGreaterThanOrEqual(3);
+
+      for (const call of authCalls) {
+        const opts = call[2] as { env?: Record<string, string> };
+        expect(opts.env!.GIT_CONFIG_KEY_0).toBe('http.extraheader');
+        expect(opts.env!.GIT_CONFIG_VALUE_0).toMatch(/^Authorization: Basic /);
+
+        // Token must NOT appear in CLI args
+        const args = call[1] as string[];
+        expect(args.some(a => a.includes('http.extraheader'))).toBe(false);
+        expect(args.some(a => a.includes('Authorization'))).toBe(false);
+      }
     });
 
     it('fetches PR ref and base ref', async () => {
@@ -210,6 +252,38 @@ describe('RepoManager', () => {
       await expect(
         manager.ensureWorktree('https://github.com/owner/repo/pull/42'),
       ).rejects.toThrow();
+    });
+
+    it('throws when git version is too old', async () => {
+      vi.mocked(execFile).mockImplementation(
+        (_cmd: string, args: string[], _opts: unknown, cb: Function) => {
+          if ((args as string[])?.includes('version')) {
+            cb(null, 'git version 2.30.0', '');
+          } else {
+            cb(null, '', '');
+          }
+        },
+      );
+
+      await expect(
+        manager.ensureWorktree('https://github.com/owner/repo/pull/42'),
+      ).rejects.toThrow(/git 2\.30 is too old/);
+    });
+
+    it('throws when git version is unparseable', async () => {
+      vi.mocked(execFile).mockImplementation(
+        (_cmd: string, args: string[], _opts: unknown, cb: Function) => {
+          if ((args as string[])?.includes('version')) {
+            cb(null, 'unknown output', '');
+          } else {
+            cb(null, '', '');
+          }
+        },
+      );
+
+      await expect(
+        manager.ensureWorktree('https://github.com/owner/repo/pull/42'),
+      ).rejects.toThrow(/Could not determine git version/);
     });
 
     it('stores worktree info for quick lookup', async () => {

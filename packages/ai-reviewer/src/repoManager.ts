@@ -7,6 +7,40 @@ import { isValidRef } from './tools/refValidation';
 
 export { parsePrUrl };
 
+/** Minimum git version required for GIT_CONFIG_COUNT env-based config injection. */
+const MIN_GIT_VERSION = [2, 31] as const;
+
+let gitVersionChecked = false;
+
+/** Verify git >= 2.31 (needed for GIT_CONFIG_COUNT env vars). Runs once. */
+async function ensureGitVersion(): Promise<void> {
+  if (gitVersionChecked) return;
+  const raw = await gitExec(['version'], '.');
+  const match = raw.match(/(\d+)\.(\d+)/);
+  if (!match) {
+    throw new Error(
+      `Could not determine git version from: ${raw.trim()}. DevDocket AI Reviewer requires git >= ${MIN_GIT_VERSION[0]}.${MIN_GIT_VERSION[1]}.`,
+    );
+  }
+  const major = parseInt(match[1], 10);
+  const minor = parseInt(match[2], 10);
+  if (major < MIN_GIT_VERSION[0] || (major === MIN_GIT_VERSION[0] && minor < MIN_GIT_VERSION[1])) {
+    throw new Error(
+      `git ${major}.${minor} is too old. DevDocket AI Reviewer requires git >= ${MIN_GIT_VERSION[0]}.${MIN_GIT_VERSION[1]} for secure credential handling. Please upgrade git.`,
+    );
+  }
+  gitVersionChecked = true;
+}
+
+function resetGitVersionCheck(): void {
+  gitVersionChecked = false;
+}
+
+/** @internal Test-only hooks for repoManager.ts. */
+export const __testing = {
+  resetGitVersionCheck,
+};
+
 export interface WorktreeInfo {
   worktreePath: string;
   clonePath: string;
@@ -17,19 +51,22 @@ export interface WorktreeInfo {
   baseRef: string;
 }
 
-/** Build a Basic auth header value for transient git authentication. */
-function authHeader(token: string): string {
+/**
+ * Run a git command with transient auth injected via environment variables.
+ * Uses GIT_CONFIG_COUNT/KEY/VALUE (git ≥ 2.31) so the token never appears
+ * in process argument lists visible to other users.
+ */
+async function gitAuth(args: string[], cwd: string, token: string, timeout = 30_000): Promise<string> {
+  await ensureGitVersion();
   const encoded = Buffer.from(`x-access-token:${token}`).toString('base64');
-  return `Authorization: Basic ${encoded}`;
-}
-
-/** Run a git command with transient auth injected via http.extraheader. */
-function gitAuth(args: string[], cwd: string, token: string, timeout = 30_000): Promise<string> {
-  return gitExec(
-    ['-c', `http.extraheader=${authHeader(token)}`, ...args],
-    cwd,
+  return gitExec(args, cwd, {
     timeout,
-  );
+    env: {
+      GIT_CONFIG_COUNT: '1',
+      GIT_CONFIG_KEY_0: 'http.extraheader',
+      GIT_CONFIG_VALUE_0: `Authorization: Basic ${encoded}`,
+    },
+  });
 }
 
 export class RepoManager {
