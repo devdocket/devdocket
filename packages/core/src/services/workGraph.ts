@@ -287,7 +287,7 @@ export class WorkGraph {
     if (!hasChanges && !needsDismissalReset) {
       return;
     }
-    // Reset cleanupDismissed when git metadata is being set to new values
+    // Reset cleanupDismissed when any non-undefined metadata key is present in the patch
     const updated = {
       ...item,
       ...sanitized,
