@@ -167,6 +167,15 @@ export class AdoPrReviewProvider extends BaseProvider {
           );
         }
       });
+
+      // Propagate cancellation so the refresh stops without publishing partial results
+      const abortedResult = results.find(
+        (r): r is PromiseRejectedResult =>
+          r.status === 'rejected' && r.reason instanceof Error && r.reason.name === 'AbortError',
+      );
+      if (signal?.aborted || abortedResult) {
+        throw abortedResult?.reason ?? new Error('The operation was aborted.');
+      }
     }
 
     this._onDidDiscoverItems.fire(allItems);
@@ -214,6 +223,7 @@ export class AdoPrReviewProvider extends BaseProvider {
         },
       );
     } catch (err) {
+      if (err instanceof Error && err.name === 'AbortError') { throw err; }
       logger.error(`Network error fetching connection data for org ${org}:`, err);
       this._cachedUserIds.delete(org);
       return undefined;
