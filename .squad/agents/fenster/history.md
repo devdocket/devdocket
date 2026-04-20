@@ -55,6 +55,13 @@ DevDocket is a VS Code extension monorepo for managing work items from multiple 
 
 ## Learnings
 
+### 2026-04-21 — README Refresh
+
+**Task:** Rewrote README per Matt's requests — removed marketplace install language, trimmed config details, added build-from-source instructions.
+- **Key changes:** Replaced "Quick Start" (marketplace-based) with "Installation" (clone/build/F5/vsce). Condensed five-view descriptions from multi-paragraph sections to a summary table. Removed inline GitHub provider and Start Git Work config blocks. Removed auto-completion config block. Removed Data Storage section (implementation detail).
+- **Moved to UX guide:** Auto-completion behavior + `autoCompleteOnClose` setting, Start Git Work `commands` configuration with `{path}` placeholder docs, added `autoCompleteOnClose` to Core Configuration table.
+- **Pattern:** README = welcoming overview + install + pointers to docs. UX guide = detailed behavior, config tables, keyboard shortcuts. Keep README under ~120 lines.
+
 ### 2026-04-21 — Issue #323 (Watch CI Pipelines — PR #323)
 
 **Feature:** Full CI pipeline watcher with ADO support, polling control, tree/flat layout toggle, and persistence.

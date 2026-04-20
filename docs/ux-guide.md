@@ -201,12 +201,48 @@ Registers an **AI Code Review** action that can be run on any work item whose UR
 |---------|------|---------|-------------|
 | `devdocketAiReview.customPromptPath` | `string` | `""` | Path to a custom code review prompt file. Replaces the built-in review instructions. The PR diff is always appended automatically. Supports absolute paths and workspace-relative paths. |
 
+## Auto-Completion
+
+DevDocket can automatically mark work items as **Done** when their linked issue or PR is closed or merged externally. This happens after each provider refresh — no manual intervention needed.
+
+This behavior is controlled by:
+
+```jsonc
+// settings.json
+{
+  "devdocket.autoCompleteOnClose": true  // default: true
+}
+```
+
+Set to `false` to disable auto-completion entirely.
+
+Items in History can be moved back to Queue if needed — right-click and select **Move to Queue**. This is useful for recovering from false positives when an item is auto-completed but you still have work to do.
+
+## Start Git Work Configuration
+
+The **Start Git Work** action creates a branch and worktree when you start working on a GitHub or ADO item. You can configure commands to run after the worktree is created (e.g., opening an editor or terminal):
+
+```jsonc
+// settings.json (user-level only — workspace settings are not supported)
+{
+  "devdocketStartGitWork.commands": [
+    { "command": "code.cmd", "args": ["{path}"] },
+    { "command": "wt", "args": ["-d", "{path}"] }
+  ]
+}
+```
+
+Use `{path}` in args as a placeholder for the worktree path. Commands run in sequence; failures show a warning but don't block the action.
+
+> **Note:** On Windows, use the explicit `.cmd` extension for executables that are batch files (e.g., `code.cmd` instead of `code`).
+
 ## Core Configuration
 
 | Setting | Type | Default | Description |
 |---------|------|---------|-------------|
 | `devdocket.logLevel` | `string` | `"info"` | Log level for the DevDocket output channel. Valid values: `debug`, `info`, `warn`, `error`. |
 | `devdocket.showInboxNotifications` | `boolean` | `true` | Show a notification when new items arrive in the Inbox. |
+| `devdocket.autoCompleteOnClose` | `boolean` | `true` | Automatically mark work items as Done when their linked issue or PR is closed or merged. |
 | `devdocket.historyClearDays` | `integer` | `30` | Age threshold in days for the **Clear Old History** command. Items in History whose last modification is older than this many days are removed. Minimum: 1. |
 
 ## Keyboard Shortcuts
