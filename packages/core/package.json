@@ -179,6 +179,10 @@
       {
         "view": "devdocket.sources",
         "contents": "Discovered items from all providers will appear here."
+      },
+      {
+        "view": "devdocket.watches",
+        "contents": "No pipeline runs being watched.\n[Watch Pipeline Run](command:devdocket.watchRun)"
       }
     ],
     "commands": [
