@@ -161,6 +161,13 @@ export class GitHubActionsWatcher implements DevDocketRunWatcher {
       if (response.status === 401) {
         throw new Error('GitHub authentication failed. Please re-authenticate.');
       }
+      if (response.status === 403) {
+        const rateLimitRemaining = response.headers.get('x-ratelimit-remaining');
+        if (rateLimitRemaining === '0') {
+          throw new Error('GitHub API rate limit exceeded. Please wait and try again.');
+        }
+        throw new Error('GitHub access denied. Check repository permissions.');
+      }
       throw new Error(`GitHub API error: ${response.status} ${response.statusText}`);
     }
 
