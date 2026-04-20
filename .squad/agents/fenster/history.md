@@ -55,6 +55,16 @@ DevDocket is a VS Code extension monorepo for managing work items from multiple 
 
 ## Learnings
 
+### 2026-04-22 — Issue #298 (Add fetch/git timeouts)
+
+**Bug fix:** Added timeout safety nets to all unprotected `fetch()` and `execFile`/`execFileAsync` calls across the extension.
+- **Fetch timeouts:** `AbortSignal.timeout(30_000)` added to 19 fetch() calls across github, ado, ai-reviewer packages that previously had no signal. Calls already receiving an `AbortSignal` from callers (e.g., `getClosedItems`, `resolveUrl`) left unchanged.
+- **Git subprocess timeouts:** `timeout: 30_000` added to all local git operations (`branch`, `show-ref`, `worktree add/remove`, `reset`). Network git ops (`clone`, `fetch`) use `timeout: 300_000` (5 min) since they involve data transfer.
+- **gitExec signature change:** Added optional `timeout` parameter (default 30_000) to `packages/ai-reviewer/src/tools/gitUtils.ts`. `gitAuth` wrapper in `repoManager.ts` passes through. Non-breaking: existing callers get the default.
+- **User-configured commands:** `startWorkAction.ts` post-worktree commands get `timeout: 60_000` (longer than git ops since arbitrary user commands may need more time).
+- **Files changed:** 12 source files + 1 test file across github, ado, ai-reviewer, start-git-work packages.
+- **Related:** #300 (CancellationToken→AbortController wiring) is a separate issue for deeper cancellation integration.
+
 ### 2026-04-21 — Issue #323 (Watch CI Pipelines — PR #323)
 
 **Feature:** Full CI pipeline watcher with ADO support, polling control, tree/flat layout toggle, and persistence.
