@@ -1,6 +1,7 @@
 import * as vscode from 'vscode';
 import { AdoWorkItemProvider } from './adoWorkItemProvider';
 import { AdoPrReviewProvider } from './adoPrReviewProvider';
+import { AdoPipelineWatcher } from './adoPipelineWatcher';
 import { parseAdoProjectsConfig } from './configParser';
 import { validateRefreshInterval } from '@devdocket/shared';
 import { initLogger, setLogLevel, logger, resolveLogLevel } from './logger';
@@ -9,6 +10,7 @@ let workItemProvider: AdoWorkItemProvider | undefined;
 let prProvider: AdoPrReviewProvider | undefined;
 let workItemRegistration: vscode.Disposable | undefined;
 let prRegistration: vscode.Disposable | undefined;
+let watcherRegistration: vscode.Disposable | undefined;
 let orgWarningShown = false;
 
 export async function activate(_context: vscode.ExtensionContext): Promise<void> {
@@ -113,7 +115,14 @@ export async function activate(_context: vscode.ExtensionContext): Promise<void>
     workItemRegistration = api.registerProvider(workItemProvider);
     prRegistration = api.registerProvider(prProvider);
 
-    logger.info('Registered 2 ADO providers');
+    // Register ADO pipeline watcher (if core supports it)
+    if (typeof api.registerRunWatcher === 'function') {
+      watcherRegistration?.dispose();
+      watcherRegistration = api.registerRunWatcher(new AdoPipelineWatcher());
+      logger.info('Registered 2 ADO providers + 1 watcher');
+    } else {
+      logger.info('Registered 2 ADO providers (run watcher API not available)');
+    }
   };
 
   configureProviders();
@@ -136,6 +145,7 @@ export function deactivate(): void {
   logger.info('DevDocket ADO deactivating...');
   workItemRegistration?.dispose();
   prRegistration?.dispose();
+  watcherRegistration?.dispose();
   workItemProvider?.dispose();
   prProvider?.dispose();
   logger.info('DevDocket ADO deactivated');
