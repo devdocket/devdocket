@@ -219,7 +219,7 @@ Items in History can be moved back to Queue if needed — right-click and select
 
 ## Start Git Work Configuration
 
-The **Start Git Work** action creates a branch and worktree when you start working on a GitHub or ADO item. You can configure commands to run after the worktree is created (e.g., opening an editor or terminal):
+The **Start Git Work** action creates a branch and worktree for supported GitHub or ADO work items. It is only available after the item has been moved to **In Progress** (Focus view) — it does not appear on Queue items. You can configure commands to run after the worktree is created (e.g., opening an editor or terminal):
 
 ```jsonc
 // settings.json (user-level only — workspace settings are not supported)

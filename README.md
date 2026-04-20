@@ -81,9 +81,9 @@ DevDocket is extensible with two types of plugins:
 | Extension | Type | What It Does |
 |-----------|------|--------------|
 | DevDocket GitHub | Provider | Discovers GitHub issues and PR review requests |
-| DevDocket ADO | Provider | Discovers Azure DevOps work items and PR review requests |
-| Start Git Work | Action | Creates a branch and worktree for a work item |
-| AI Code Review | Action | Analyzes diffs using an AI model and posts review comments |
+| DevDocket — Azure DevOps | Provider | Discovers Azure DevOps work items and PR review requests |
+| DevDocket Start Git Work | Action | Creates a branch and worktree for a work item |
+| DevDocket — AI Actions | Action | AI-powered actions such as analyzing diffs and posting review comments |
 
 To build your own provider or action, see the [Extension API documentation](docs/extension-api.md).
 
