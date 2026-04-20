@@ -114,6 +114,8 @@ export class AdoPipelineWatcher implements DevDocketRunWatcher {
           startedAt: r.startTime,
           completedAt: r.finishTime,
         }));
+    } else {
+      logger.warn(`Failed to fetch timeline for build ${identifier.runId}: ${timelineResponse.status} ${timelineResponse.statusText}`);
     }
 
     const overallState = this.mapState(buildData.status);
