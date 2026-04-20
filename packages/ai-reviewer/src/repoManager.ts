@@ -93,6 +93,14 @@ export class RepoManager {
     const prMeta = await this.fetchPrMetadata(org, repo, prNumber, session.accessToken);
     const baseRef = prMeta.baseRef;
     const headRef = `pr-${prNumber}`;
+
+    // Strict allowlist validation for baseRef before it's interpolated into
+    // git commands, log messages, and LLM prompts.
+    if (!isValidRef(baseRef)) {
+      const safeBaseRef = JSON.stringify(baseRef);
+      this.log.error(`Invalid base ref from GitHub API: ${safeBaseRef}`);
+      throw new Error(`Invalid base ref from GitHub API: ${safeBaseRef}`);
+    }
     this.log.info(`PR metadata — baseRef: ${baseRef}, headSha: ${prMeta.headSha}, local headRef: ${headRef}`);
 
     // Fetch PR head ref and base branch
@@ -117,13 +125,6 @@ export class RepoManager {
       this.log.info('PR head fetched');
     }
 
-    // Strict allowlist validation for baseRef before it's interpolated into
-    // git commands and LLM prompts — matches the org/repo validation pattern.
-    if (!isValidRef(baseRef)) {
-      const safeBaseRef = JSON.stringify(baseRef);
-      this.log.error(`Invalid base ref from GitHub API: ${safeBaseRef}`);
-      throw new Error(`Invalid base ref from GitHub API: ${safeBaseRef}`);
-    }
     this.log.info(`Fetching base branch: ${baseRef}`);
     await gitAuth(
       ['fetch', 'origin', `refs/heads/${baseRef}:refs/remotes/origin/${baseRef}`],
