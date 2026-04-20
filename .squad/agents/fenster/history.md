@@ -36,7 +36,7 @@ DevDocket is a VS Code extension monorepo for managing work items from multiple 
 - **Stable external IDs:** `owner/repo#number` format. URL-imported items use `providerId: 'url-import'`.
 - **Webview security:** CSP `default-src 'none'`. `escapeHtml()` for text, `escapeAttr()` for attributes. External links via `postMessage` + `isSafeUrl()`.
 - **Markdown injection prevention:** `appendText()` for user-controlled strings, not `appendMarkdown()`.
-- **Prompt injection prevention:** Sanitize URLs via `new URL(url)` + strip control chars before LLM prompt interpolation.
+- **Prompt injection prevention:** Sanitize URLs via `new URL(url)` + strip control chars before LLM prompt interpolation. `baseRef` validated with strict allowlist `/^[a-zA-Z0-9._\/-]+$/` before interpolation into LLM prompts (#331).
 - **Plugin API trust boundary:** Log registrations, reject duplicate IDs, enforce `MAX_ITEMS_PER_PROVIDER` at ingestion.
 - **Custom prompt path validation:** All paths contained within workspace folder via `path.normalize()` + prefix comparison.
 - **JSON validation:** Validate parsed JSON at runtime. `MAX_STORE_FILE_SIZE` in `limits.ts`. Backup-and-reset on corruption.
