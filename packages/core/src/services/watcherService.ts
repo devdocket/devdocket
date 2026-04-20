@@ -1,6 +1,7 @@
 import * as vscode from 'vscode';
 import type { RunIdentifier, RunStatus, JobStatus } from '@devdocket/shared';
 import { WatcherRegistry } from './watcherRegistry';
+import { WatchStore } from '../storage/watchStore';
 
 /**
  * A watched pipeline run with its current status.
@@ -38,8 +39,33 @@ export class WatcherService implements vscode.Disposable {
 
   constructor(
     private watcherRegistry: WatcherRegistry,
+    private watchStore: WatchStore,
     private logger: { info: (msg: string) => void; warn: (msg: string) => void; error: (msg: string) => void }
   ) {}
+
+  /**
+   * Load persisted watches from disk and resume polling for active ones.
+   */
+  async loadPersistedWatches(): Promise<void> {
+    const watches = await this.watchStore.loadAll();
+    // Only restore non-dismissed watches
+    const restored = watches.filter(w => !w.dismissed);
+    for (const watch of restored) {
+      const key = this.getWatchKey(watch.identifier);
+      this.watches.set(key, watch);
+    }
+    if (restored.length > 0) {
+      this.logger.info(`Restored ${restored.length} persisted watch(es)`);
+      this._onDidChangeWatchedRuns.fire(this.getAllWatches());
+      // Resume polling for any that are still in progress
+      const hasPollable = restored.some(
+        w => w.status.overallState !== 'completed' && !w.hasWarning
+      );
+      if (hasPollable) {
+        this.ensurePollingActive();
+      }
+    }
+  }
 
   /**
    * Start watching a pipeline run.
@@ -90,6 +116,7 @@ export class WatcherService implements vscode.Disposable {
       this.ensurePollingActive();
     }
     
+    this.persistWatches();
     return watchedRun;
   }
 
@@ -103,6 +130,7 @@ export class WatcherService implements vscode.Disposable {
       watch.dismissed = true;
       this.logger.info(`Dismissed watch: ${identifier.displayName}`);
       this._onDidChangeWatchedRuns.fire(this.getAllWatches());
+      this.persistWatches();
     }
   }
 
@@ -120,6 +148,7 @@ export class WatcherService implements vscode.Disposable {
     if (dismissedCount > 0) {
       this.logger.info(`Dismissed ${dismissedCount} completed watch(es)`);
       this._onDidChangeWatchedRuns.fire(this.getAllWatches());
+      this.persistWatches();
     }
   }
 
@@ -276,6 +305,7 @@ export class WatcherService implements vscode.Disposable {
 
       if (anyChanged) {
         this._onDidChangeWatchedRuns.fire(this.getAllWatches());
+        this.persistWatches();
       }
 
     } finally {
@@ -290,6 +320,12 @@ export class WatcherService implements vscode.Disposable {
     return identifier.repo
       ? `${identifier.providerId}:${identifier.repo}:${identifier.runId}`
       : `${identifier.providerId}:${identifier.runId}`;
+  }
+
+  private persistWatches(): void {
+    this.watchStore.saveAll(this.getAllWatches()).catch(err => {
+      this.logger.error(`Failed to persist watches: ${err}`);
+    });
   }
 
   dispose(): void {

@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { WatcherService } from '../services/watcherService';
+import { WatcherService, WatchedRun } from '../services/watcherService';
 import { WatcherRegistry } from '../services/watcherRegistry';
+import { WatchStore } from '../storage/watchStore';
 import type { DevDocketRunWatcher, RunIdentifier, RunStatus } from '@devdocket/shared';
 
 function createMockLogger() {
@@ -39,16 +40,25 @@ function createIdentifier(providerId: string = 'test'): RunIdentifier {
   };
 }
 
+function createMockWatchStore(): WatchStore {
+  return {
+    loadAll: vi.fn().mockResolvedValue([]),
+    saveAll: vi.fn().mockResolvedValue(undefined),
+  } as unknown as WatchStore;
+}
+
 describe('WatcherService', () => {
   let service: WatcherService;
   let registry: WatcherRegistry;
   let logger: ReturnType<typeof createMockLogger>;
+  let watchStore: WatchStore;
 
   beforeEach(() => {
     vi.useFakeTimers();
     logger = createMockLogger();
     registry = new WatcherRegistry(logger);
-    service = new WatcherService(registry, logger);
+    watchStore = createMockWatchStore();
+    service = new WatcherService(registry, watchStore, logger);
   });
 
   afterEach(() => {
@@ -222,6 +232,36 @@ describe('WatcherService', () => {
       await vi.advanceTimersByTimeAsync(90000);
       const callCountAfterDismiss = (watcher.getRunStatus as ReturnType<typeof vi.fn>).mock.calls.length;
       expect(callCountAfterDismiss).toBe(callCountAfterStart);
+    });
+  });
+
+  describe('persistence', () => {
+    it('saves watches after startWatch', async () => {
+      const watcher = createMockWatcher('test');
+      registry.register(watcher);
+      await service.startWatch(createIdentifier());
+      // saveAll is called async — flush
+      await vi.advanceTimersByTimeAsync(0);
+      expect(watchStore.saveAll).toHaveBeenCalled();
+    });
+
+    it('loads persisted watches on loadPersistedWatches', async () => {
+      const watcher = createMockWatcher('test');
+      registry.register(watcher);
+      
+      const persistedWatch: WatchedRun = {
+        identifier: createIdentifier(),
+        status: { overallState: 'running', jobs: [] },
+        watchedAt: new Date().toISOString(),
+        lastPolledAt: new Date().toISOString(),
+        dismissed: false,
+      };
+      (watchStore.loadAll as ReturnType<typeof vi.fn>).mockResolvedValue([persistedWatch]);
+      
+      await service.loadPersistedWatches();
+      
+      expect(service.getActiveWatches()).toHaveLength(1);
+      expect(service.getActiveWatches()[0].identifier.runId).toBe('run-1');
     });
   });
 });

@@ -11,6 +11,7 @@ import { checkAutoComplete, showAutoCompleteNotification } from './services/auto
 import { ActionRegistry } from './services/actionRegistry';
 import { WatcherRegistry } from './services/watcherRegistry';
 import { WatcherService } from './services/watcherService';
+import { WatchStore } from './storage/watchStore';
 import { InboxTreeProvider } from './views/inboxTreeProvider';
 import { QueueTreeProvider } from './views/queueTreeProvider';
 import { FocusTreeProvider } from './views/focusTreeProvider';
@@ -397,7 +398,8 @@ export async function activate(context: vscode.ExtensionContext): Promise<DevDoc
   const ar = new ActionRegistry();
   actionRegistry = ar;
   const wr = new WatcherRegistry(logger);
-  const ws = new WatcherService(wr, logger);
+  const watchStore = new WatchStore(storagePath);
+  const ws = new WatcherService(wr, watchStore, logger);
   const api = new DevDocketApiImpl(pr, ar, wr, wg);
   logger.info(`Store + service init took ${Math.round(performance.now() - initStart)}ms`);
 
@@ -413,6 +415,11 @@ export async function activate(context: vscode.ExtensionContext): Promise<DevDoc
 
   // Create status bar item
   const watchesStatusBar = new WatchesStatusBar(ws);
+
+  // Load persisted watches (must happen after tree views are registered to show restored watches)
+  ws.loadPersistedWatches().catch(err => {
+    logger.error('Failed to load persisted watches', err);
+  });
 
   context.subscriptions.push(
     ...Object.values(views),
