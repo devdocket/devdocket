@@ -170,5 +170,18 @@ describe('FocusTreeProvider layout toggle', () => {
       expect(directItems).toHaveLength(1);
       expect(directItems[0].title).toBe('Whitespace');
     });
+
+    it('sub-group count under "Other" only includes manual items, not provider items with same group', () => {
+      const items = [
+        makeItem({ id: '1', title: 'Manual', state: WorkItemState.InProgress, group: 'shared-group' }),
+        makeItem({ id: '2', title: 'Provider', providerId: 'github', state: WorkItemState.InProgress, group: 'shared-group' }),
+      ];
+      workGraph.getItemsByState.mockReturnValue(items);
+
+      const otherSubGroup: SubGroupNode = { kind: 'subGroup', label: 'shared-group', providerId: undefined, groupName: 'shared-group' };
+      const treeItem = provider.getTreeItem(otherSubGroup);
+      // Only the manual item should be counted, not the GitHub item
+      expect(treeItem.description).toBe('1');
+    });
   });
 });
