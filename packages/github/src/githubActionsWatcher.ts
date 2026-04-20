@@ -132,6 +132,8 @@ export class GitHubActionsWatcher implements DevDocketRunWatcher {
     }
   }
 
+  private static readonly FETCH_TIMEOUT_MS = 30_000;
+
   private async fetchApi<T>(url: string, token?: CancellationTokenLike): Promise<T> {
     // Background polling must not trigger interactive sign-in prompts.
     // Reuse an existing session if available; fail gracefully if not.
@@ -153,10 +155,10 @@ export class GitHubActionsWatcher implements DevDocketRunWatcher {
 
     let response: Response;
     try {
-      response = await fetch(url, { headers, signal: AbortSignal.timeout(30_000) });
+      response = await fetch(url, { headers, signal: AbortSignal.timeout(GitHubActionsWatcher.FETCH_TIMEOUT_MS) });
     } catch (err) {
       if (err instanceof Error && err.name === 'AbortError') {
-        throw new Error('GitHub API request timed out after 30s');
+        throw new Error(`GitHub API request timed out after ${GitHubActionsWatcher.FETCH_TIMEOUT_MS / 1000}s`);
       }
       throw err;
     }
