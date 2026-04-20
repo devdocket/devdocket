@@ -181,7 +181,7 @@ export class WatcherService implements vscode.Disposable {
   private async pollAllWatches(): Promise<void> {
     // Concurrency guard: skip if previous poll still in flight
     if (this.isPollInFlight) {
-      this.logger.info('Poll already in flight, skipping tick');
+      this.logger.warn('Poll already in flight, skipping tick');
       return;
     }
 
