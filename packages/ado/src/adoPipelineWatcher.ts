@@ -7,7 +7,7 @@ import type {
   RunConclusion,
   CancellationTokenLike,
 } from '@devdocket/shared';
-import { getAdoHeaders, throwAdoApiError } from './adoAuth';
+import { getAdoHeaders, throwAdoApiError, safeDecodeComponent } from './adoAuth';
 import { logger } from './logger';
 
 interface AdoBuild {
@@ -57,7 +57,9 @@ export class AdoPipelineWatcher implements DevDocketRunWatcher {
       throw new Error('Missing buildId parameter in Azure DevOps pipeline URL');
     }
 
-    const [, org, project] = pathMatch;
+    const [, rawOrg, rawProject] = pathMatch;
+    const org = safeDecodeComponent(rawOrg);
+    const project = safeDecodeComponent(rawProject);
 
     return {
       providerId: this.id,
