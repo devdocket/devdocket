@@ -202,7 +202,7 @@ Registers an **AI Code Review** action that can be run on any work item whose UR
 
 ## Auto-Completion
 
-DevDocket can automatically mark work items as **Done** when their linked issue or PR is closed or merged externally. This happens after each provider refresh — no manual intervention needed.
+DevDocket can automatically mark work items as **Done** when their linked external item is closed, merged, or otherwise completed by the provider. This happens after each provider refresh — no manual intervention needed.
 
 This behavior is controlled by:
 
@@ -241,7 +241,7 @@ Use `{path}` in args as a placeholder for the worktree path. Commands run in seq
 |---------|------|---------|-------------|
 | `devdocket.logLevel` | `string` | `"info"` | Log level for the DevDocket output channel. Valid values: `debug`, `info`, `warn`, `error`. |
 | `devdocket.showInboxNotifications` | `boolean` | `true` | Show a notification when new items arrive in the Inbox. |
-| `devdocket.autoCompleteOnClose` | `boolean` | `true` | Automatically mark work items as Done when their linked issue or PR is closed or merged. |
+| `devdocket.autoCompleteOnClose` | `boolean` | `true` | Automatically mark work items as Done when their linked external item is closed, merged, or otherwise completed by the provider. |
 | `devdocket.historyClearDays` | `integer` | `30` | Age threshold in days for the **Clear Old History** command. Items in History whose last modification is older than this many days are removed. Minimum: 1. |
 
 ## Keyboard Shortcuts
