@@ -349,6 +349,7 @@ export class AdoWorkItemProvider extends BaseProvider {
         signal,
       });
     } catch (err) {
+      if (err instanceof Error && err.name === 'AbortError') { throw err; }
       logger.warn(`Failed to fetch states for ${cacheKey}: network error`, err);
       return new Set<string>(); // Fail open
     }
