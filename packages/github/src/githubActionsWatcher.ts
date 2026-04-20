@@ -40,7 +40,8 @@ export class GitHubActionsWatcher implements DevDocketRunWatcher {
   canWatch(url: string): boolean {
     try {
       const u = new URL(url);
-      return u.hostname === 'github.com' && /^\/[^/]+\/[^/]+\/actions\/runs\/\d+\/?$/.test(u.pathname);
+      return (u.protocol === 'https:' || u.protocol === 'http:')
+        && u.hostname === 'github.com' && /^\/[^/]+\/[^/]+\/actions\/runs\/\d+\/?$/.test(u.pathname);
     } catch {
       return false;
     }
