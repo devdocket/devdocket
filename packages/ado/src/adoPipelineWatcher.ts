@@ -48,7 +48,7 @@ export class AdoPipelineWatcher implements DevDocketRunWatcher {
 
   parseRunUrl(url: string): RunIdentifier {
     const u = new URL(url);
-    const pathMatch = u.pathname.match(/^\/([^/]+)\/([^/]+)\/_build\/results/);
+    const pathMatch = u.pathname.match(/^\/([^/]+)\/([^/]+)\/_build\/results\/?$/);
     if (!pathMatch) {
       throw new Error('Invalid Azure DevOps pipeline URL');
     }
