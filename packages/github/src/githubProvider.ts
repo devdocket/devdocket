@@ -194,7 +194,11 @@ export class GitHubIssueProvider extends BaseGitHubProvider {
     let page = 0;
 
     while (nextUrl && page < maxPages) {
-      if (signal?.aborted) { break; }
+      if (signal?.aborted) {
+        const error = new Error('The operation was aborted.');
+        error.name = 'AbortError';
+        throw error;
+      }
       let response: Response;
       try {
         response = await fetch(nextUrl, {
