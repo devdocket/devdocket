@@ -27,7 +27,8 @@
     "onCommand:devdocket.dismissWatch",
     "onCommand:devdocket.dismissAllCompletedWatches",
     "onCommand:devdocket.openWatchUrl",
-    "onCommand:devdocket.showWatchesQuickPick"
+    "onCommand:devdocket.showWatchesQuickPick",
+    "onCommand:devdocket.addActivity"
   ],
   "main": "./dist/extension.js",
   "contributes": {
@@ -415,6 +416,11 @@
         "icon": "$(clear-all)"
       },
       {
+        "command": "devdocket.addActivity",
+        "title": "Add Activity Log Entry",
+        "category": "DevDocket"
+      },
+      {
         "command": "devdocket.moveToQueue",
         "title": "Move to Queue",
         "category": "DevDocket",
@@ -620,6 +626,10 @@
         },
         {
           "command": "devdocket.toggleWatchesLayout",
+          "when": "false"
+        },
+        {
+          "command": "devdocket.addActivity",
           "when": "false"
         }
       ],

@@ -1034,4 +1034,42 @@ describe('WorkGraph', () => {
       expect(savedItem.activityLog).toHaveLength(2);
     });
   });
+
+  describe('onDidTransitionState event', () => {
+    it('fires with correct payload on state transition', async () => {
+      const listener = vi.fn();
+      graph.onDidTransitionState(listener);
+
+      const item = await graph.createItem({ title: 'Test' });
+      await graph.transitionState(item.id, WorkItemState.InProgress);
+
+      expect(listener).toHaveBeenCalledTimes(1);
+      const event = listener.mock.calls[0][0];
+      expect(event.itemId).toBe(item.id);
+      expect(event.oldState).toBe('New');
+      expect(event.newState).toBe('InProgress');
+      expect(event.item.state).toBe(WorkItemState.InProgress);
+    });
+
+    it('fires for each transition in a lifecycle', async () => {
+      const listener = vi.fn();
+      graph.onDidTransitionState(listener);
+
+      const item = await graph.createItem({ title: 'Test' });
+      await graph.transitionState(item.id, WorkItemState.InProgress);
+      await graph.transitionState(item.id, WorkItemState.Done);
+
+      expect(listener).toHaveBeenCalledTimes(2);
+      expect(listener.mock.calls[0][0].newState).toBe('InProgress');
+      expect(listener.mock.calls[1][0].newState).toBe('Done');
+    });
+
+    it('does not fire for non-transition operations', async () => {
+      const listener = vi.fn();
+      graph.onDidTransitionState(listener);
+
+      await graph.createItem({ title: 'Test' });
+      expect(listener).not.toHaveBeenCalled();
+    });
+  });
 });

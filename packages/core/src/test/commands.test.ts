@@ -60,7 +60,7 @@ function makeSourceItem(overrides: Partial<SourceItemNode> = {}): SourceItemNode
 
 type UsedWorkGraphMethods = Pick<
   WorkGraph,
-  'transitionState' | 'getItem' | 'createItem' | 'findItemByProvenance' | 'moveItem' | 'deleteItem' | 'clearOldHistory'
+  'transitionState' | 'getItem' | 'createItem' | 'findItemByProvenance' | 'moveItem' | 'deleteItem' | 'clearOldHistory' | 'addActivity'
 >;
 
 function createMockWorkGraph(): { [K in keyof UsedWorkGraphMethods]: Mock } {
@@ -72,6 +72,7 @@ function createMockWorkGraph(): { [K in keyof UsedWorkGraphMethods]: Mock } {
     moveItem: vi.fn(),
     deleteItem: vi.fn(),
     clearOldHistory: vi.fn(async () => ({ deleted: 0, failed: 0 })),
+    addActivity: vi.fn(),
   };
 }
 
@@ -190,6 +191,7 @@ describe('registerCommands', () => {
       'devdocket.dismissFromSources',
       'devdocket.createItemFromUrl',
       'devdocket.clearHistory',
+      'devdocket.addActivity',
     ];
     for (const cmd of expected) {
       expect(commandHandlers.has(cmd), `missing command: ${cmd}`).toBe(true);
@@ -2093,6 +2095,22 @@ describe('registerCommands', () => {
       expect(vscode.window.showInformationMessage).toHaveBeenCalledWith(
         'Select a watch from the Watches view to open.',
       );
+    });
+  });
+
+  // ── addActivity ────────────────────────────────────────────────
+
+  describe('devdocket.addActivity', () => {
+    it('calls workGraph.addActivity with the provided args', async () => {
+      await invoke('devdocket.addActivity', 'wc-1', 'work-started', '{"branchName":"feat"}');
+
+      expect(workGraph.addActivity).toHaveBeenCalledWith('wc-1', 'work-started', '{"branchName":"feat"}');
+    });
+
+    it('works without optional detail parameter', async () => {
+      await invoke('devdocket.addActivity', 'wc-1', 'cleanup-dismissed');
+
+      expect(workGraph.addActivity).toHaveBeenCalledWith('wc-1', 'cleanup-dismissed', undefined);
     });
   });
 });

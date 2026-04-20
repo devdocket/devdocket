@@ -55,6 +55,13 @@ DevDocket is a VS Code extension monorepo for managing work items from multiple 
 
 ## Learnings
 
+### 2026-04-21 — Auto-complete activity log integration
+
+**Fix:** Auto-complete transitions to Done now log an `'auto-completed'` activity entry with detail like "Provider detected external closure (InProgress → Done)".
+- **Pattern:** `transitionState()` already logs `'state-changed'`; the new `addActivity()` call adds a second entry distinguishing automatic from manual transitions.
+- **ActivityType extension:** Added `'auto-completed'` to the string union. Store validator accepts any non-empty string, so no migration needed.
+- **Three files changed:** `activityLog.ts` (type union), `autoComplete.ts` (addActivity call), `editorPanelHtml.ts` (display label).
+
 ### 2026-04-21 — Issue #255 (Provider Metadata Docs)
 
 **PR:** Created `docs/provider-discovery.md` documenting what causes items to appear in each provider.
@@ -78,14 +85,13 @@ DevDocket is a VS Code extension monorepo for managing work items from multiple 
 
 ### 2026-04-18 — Issue #264 (Cleanup Branch/Worktree on Complete)
 
-**PR #311:** Prompt to clean up branch/worktree when completing a work item.
-- **Cross-extension event pattern:** Added `onDidTransitionState` event to `DevDocketApi` (optional property, non-breaking). `WorkGraph.transitionState()` fires `StateTransitionEvent` with `{ item, oldState, newState }`. Satellite extensions subscribe via the API.
-- **String-typed state fields:** `StateTransitionEvent` uses `string` (not `WorkItemState` enum) for `oldState`/`newState` to keep satellite extensions decoupled from core-internal enums. Documented rationale in JSDoc.
-- **Metadata persistence pattern:** `StartWorkAction` stores `GitWorkMetadata` (branchName, worktreePath, repoPath) in `globalState` keyed by `gitWork:${item.id}`. Separate `gitWorkMetadata.ts` module avoids circular dependency between action and cleanup handler.
-- **Cleanup safety:** `git branch -d` (not `-D`) warns about unmerged changes. Worktree must be removed before branch can be deleted — skip branch deletion if worktree removal fails. `--` delimiter prevents path-as-option parsing. `branchExists()` logs errors instead of silently swallowing.
-- **"Don't ask again" behavior:** Metadata is cleared both on successful cleanup AND when user declines/dismisses, so the prompt won't recur.
-- **API optionality:** Making `onDidTransitionState?` optional on the interface prevents breaking mocks/wrappers that implement `DevDocketApi`. The runtime guard `typeof api.onDidTransitionState === 'function'` in start-git-work handles graceful degradation.
-- **Files changed:** `packages/core/src/api/types.ts`, `devDocketApi.ts`, `workGraph.ts`, `extension.ts`; `packages/start-git-work/src/gitWorkMetadata.ts` (new), `cleanupHandler.ts` (new), `startWorkAction.ts`, `extension.ts`; tests in both packages.
+**PR #321:** Prompt to clean up branch/worktree when completing a work item.
+- **Activity-log-based tracking:** Instead of persisting branch/worktree metadata as WorkItem fields, the activity log is the source of truth. `StartWorkAction` logs a `'work-started'` entry with JSON detail containing `{ branchName, worktreePath, repoPath }`. `gitCleanup.ts` reads the most recent `work-started` entry to find cleanup targets.
+- **Dismissal tracking:** When the user clicks "No" on the cleanup prompt, a `'cleanup-dismissed'` activity entry is logged. Subsequent Done transitions check for this entry after the last `work-started` to skip re-prompting. Esc/close does not persist dismissal — allows re-prompting later.
+- **Activity types added:** `'work-started'`, `'cleanup'`, `'cleanup-dismissed'` added to `ActivityType` union. Breaking change documented in PR migration notes.
+- **Command:** `devdocket.addActivity` command registered for extensions to log activities via `vscode.commands.executeCommand`. Validates type against known `ActivityType` values. Errors propagate to callers (no wrapCommand).
+- **Cleanup safety:** `git branch -d` (not `-D`) warns about unmerged changes. `--` terminators on all git commands. `git show-ref --verify` for exact branch existence check. Async `fs.promises.access` instead of synchronous `existsSync`. `.git` directory validated before any checks.
+- **Files changed:** `packages/core/src/models/activityLog.ts`, `workItem.ts`, `gitCleanup.ts` (new), `workGraph.ts`, `commands.ts`, `package.json`, `jsonTaskStore.ts`; `packages/start-git-work/src/startWorkAction.ts`; tests in core.
 
 ### 2026-04-18 — Issue #232 (History View Cleanup)
 
@@ -246,7 +252,7 @@ DevDocket is a VS Code extension monorepo for managing work items from multiple 
 
 ### 2026-04-18 — Issue #319 (Focus View Provider Grouping)
 
-**PR #XXX:** Focus view now groups items by provider in tree mode, matching Sources view pattern.
+**PR #320:** Focus view now groups items by provider in tree mode, matching Sources view pattern.
 - **Removed custom grouping logic:** Focus view had custom `getChildren()` and `getParent()` implementations that grouped by `item.group` (repo name). Removed these overrides to use the base class `WorkItemViewProvider` pattern which groups by provider.
 - **WorkItemViewProvider base class:** The base class already implements provider grouping via `getTreeModeChildren()` helper in `viewLayout.ts`. It creates a two-level hierarchy: provider → sub-group (item.group) → items. This is consistent with Queue, History, and Sources views.
 - **Tree hierarchy:** In tree mode, items are now grouped: Provider (GitHub, ADO, etc.) → Sub-group (repo name) → Work Items. Manual items appear under "Other" provider group. In flat mode, unchanged.
