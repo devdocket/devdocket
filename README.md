@@ -25,7 +25,7 @@ flowchart LR
     P["Providers\n(GitHub, ADO)"] --> Inbox
     M["Manual\ncreation"] --> Queue
     Inbox -- Accept --> Queue
-    Queue -- Start --> Focus
+    Queue -- Move to Focus --> Focus
     Queue -- Archive --> History
     Focus -- Complete --> History
 ```
@@ -62,9 +62,10 @@ DevDocket is not yet available on the VS Code Marketplace. To run it, build from
 
 4. **Package for local install** (optional):
    ```bash
+   cd packages/core
    npx @vscode/vsce package
    ```
-   This produces a `.vsix` file you can install via **Extensions → ⋯ → Install from VSIX…** in VS Code.
+   Run this from each extension folder you want to package (e.g., `packages/core`, `packages/github`). This produces a `.vsix` file you can install via **Extensions → ⋯ → Install from VSIX…** in VS Code.
 
 ## Plugin Ecosystem
 
