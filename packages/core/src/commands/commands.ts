@@ -897,23 +897,6 @@ async function handleDismissFromSources(
   }
 }
 
-async function handleUpdateMetadata(
-  workGraph: WorkGraph,
-  itemId: string,
-  metadata: unknown,
-): Promise<void> {
-  if (typeof metadata !== 'object' || metadata === null || Array.isArray(metadata)) {
-    throw new Error('Metadata update must be a plain object');
-  }
-  const validatedMetadata = metadata as { branchName?: string; worktreePath?: string; repoPath?: string };
-  const ALLOWED_KEYS = ['branchName', 'worktreePath', 'repoPath'] as const;
-  const updatedFields = ALLOWED_KEYS.filter(
-    (key) => Object.prototype.hasOwnProperty.call(validatedMetadata, key) && validatedMetadata[key] !== undefined,
-  );
-  logger.info(`Updating metadata for item ${itemId}; fields: ${updatedFields.join(', ') || 'none'}`);
-  await workGraph.updateMetadata(itemId, validatedMetadata);
-}
-
 // ---------------------------------------------------------------------------
 // Registration
 // ---------------------------------------------------------------------------
@@ -1005,7 +988,7 @@ export function registerCommands(
       wrapCommand('Failed to switch history layout', () => toggleViewLayout('history'))),
     vscode.commands.registerCommand('devdocket.toggleSourcesLayout',
       wrapCommand('Failed to switch sources layout', () => toggleViewLayout('sources'))),
-    vscode.commands.registerCommand('devdocket.updateMetadata',
-      (itemId: string, metadata: unknown) => handleUpdateMetadata(workGraph, itemId, metadata)),
+    vscode.commands.registerCommand('devdocket.addActivity',
+      (itemId: string, type: string, detail?: string) => workGraph.addActivity(itemId, type as any, detail)),
   );
 }

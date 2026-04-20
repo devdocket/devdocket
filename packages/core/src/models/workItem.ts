@@ -71,14 +71,6 @@ export interface WorkItem {
   createdAt: number;
   /** Epoch timestamp (ms) of the last modification. */
   updatedAt: number;
-  /** Git branch name created by Start Git Work action, if any. */
-  branchName?: string;
-  /** Worktree path created by Start Git Work action, if any. */
-  worktreePath?: string;
-  /** Repository path where the branch was created, if any. */
-  repoPath?: string;
-  /** Whether the user dismissed the git cleanup prompt for this item. */
-  cleanupDismissed?: boolean;
   /** Append-only log of significant events on this work item. */
   activityLog?: ActivityLogEntry[];
 }

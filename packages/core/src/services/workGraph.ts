@@ -239,72 +239,6 @@ export class WorkGraph {
     logger.info(`Updated work item: ${id}`);
   }
 
-  private static readonly METADATA_KEYS = ['branchName', 'worktreePath', 'repoPath'] as const;
-
-  /** Sanitize a metadata patch to only allow known string keys. */
-  private sanitizeMetadataPatch(
-    patch: Partial<Pick<WorkItem, 'branchName' | 'worktreePath' | 'repoPath'>>,
-  ): Partial<Pick<WorkItem, 'branchName' | 'worktreePath' | 'repoPath'>> {
-    if (patch == null || typeof patch !== 'object' || Array.isArray(patch)) {
-      throw new Error('Invalid metadata patch: expected a plain object.');
-    }
-    const proto = Object.getPrototypeOf(patch);
-    if (proto !== Object.prototype && proto !== null) {
-      throw new Error('Invalid metadata patch: expected a plain object.');
-    }
-    const candidate = patch as Record<string, unknown>;
-    const sanitized: Partial<Pick<WorkItem, 'branchName' | 'worktreePath' | 'repoPath'>> = {};
-    for (const key of WorkGraph.METADATA_KEYS) {
-      if (!Object.prototype.hasOwnProperty.call(candidate, key)) {
-        continue;
-      }
-      const value = candidate[key];
-      if (value !== undefined && typeof value !== 'string') {
-        throw new Error(`Invalid metadata patch: ${key} must be a string or undefined.`);
-      }
-      sanitized[key] = value as string | undefined;
-    }
-    return sanitized;
-  }
-
-  /** Apply a partial metadata update (e.g., branchName, worktreePath, repoPath) to an existing work item. */
-  async updateMetadata(id: string, patch: Partial<Pick<WorkItem, 'branchName' | 'worktreePath' | 'repoPath'>>): Promise<void> {
-    const item = this.items.get(id);
-    if (!item) {
-      throw new Error(`Work item not found: ${id}`);
-    }
-    const sanitized = this.sanitizeMetadataPatch(patch);
-    // Skip no-op updates when the sanitized patch has no keys
-    const sanitizedKeys = Object.keys(sanitized);
-    if (sanitizedKeys.length === 0) {
-      return;
-    }
-    // Skip when all values are identical to what's already stored
-    // and there's no cleanupDismissed flag to reset
-    const hasChanges = sanitizedKeys.some(
-      k => (sanitized as Record<string, unknown>)[k] !== (item as Record<string, unknown>)[k],
-    );
-    const hasNewMetadata = WorkGraph.METADATA_KEYS.some(
-      k => Object.prototype.hasOwnProperty.call(sanitized, k) && sanitized[k] !== undefined,
-    );
-    const needsDismissalReset = hasNewMetadata && item.cleanupDismissed;
-    if (!hasChanges && !needsDismissalReset) {
-      return;
-    }
-    // Reset cleanupDismissed when any non-undefined metadata key is present in the patch
-    const updated = {
-      ...item,
-      ...sanitized,
-      updatedAt: Date.now(),
-      ...(hasNewMetadata ? { cleanupDismissed: undefined } : {}),
-    };
-    await this.store.save(updated);
-    this.items.set(id, updated);
-    this.invalidateStateCache();
-    this._onDidChange.fire();
-    logger.info(`Updated metadata for work item: ${id}`);
-  }
-
   /** Transition a work item to a new lifecycle state. */
   async transitionState(id: string, newState: WorkItemState): Promise<void> {
     const item = this.items.get(id);
@@ -347,18 +281,11 @@ export class WorkGraph {
     this._onDidChange.fire();
     logger.info(`Transitioned work item ${id} to ${newState}`);
 
-    // Consider prompting for git cleanup when transitioning to Done; promptGitCleanup
-    // will no-op if the work item has no branch/worktree metadata to clean up.
+    // Prompt for git cleanup when transitioning to Done; promptGitCleanup
+    // reads the activity log for work-started entries — no-ops if none found.
     if (newState === WorkItemState.Done) {
       void promptGitCleanup(updated, async () => {
-        const current = this.items.get(id);
-        if (current) {
-          const dismissed = { ...current, cleanupDismissed: true, updatedAt: Date.now() };
-          await this.store.save(dismissed);
-          this.items.set(id, dismissed);
-          this.invalidateStateCache();
-          this._onDidChange.fire();
-        }
+        await this.addActivity(id, 'cleanup-dismissed');
       }, async (detail: string) => {
         await this.addActivity(id, 'cleanup', detail);
       }).catch(err => {

@@ -1039,79 +1039,18 @@ describe('WorkGraph', () => {
     });
   });
 
-  describe('updateMetadata', () => {
-    it('updates allowed metadata fields on a work item', async () => {
-      const item = await graph.createItem({ title: 'Test' });
-      await graph.updateMetadata(item.id, {
-        branchName: 'feature/test',
-        worktreePath: '/tmp/wt',
-        repoPath: '/repos/main',
-      });
-
-      const updated = graph.getItem(item.id);
-      expect(updated?.branchName).toBe('feature/test');
-      expect(updated?.worktreePath).toBe('/tmp/wt');
-      expect(updated?.repoPath).toBe('/repos/main');
-    });
-
-    it('throws for unknown item', async () => {
-      await expect(graph.updateMetadata('nonexistent', { branchName: 'x' }))
-        .rejects.toThrow('Work item not found');
-    });
-
-    it('rejects non-string values in patch', async () => {
-      const item = await graph.createItem({ title: 'Test' });
-      await expect(graph.updateMetadata(item.id, { branchName: 42 } as any))
-        .rejects.toThrow('must be a string or undefined');
-    });
-
-    it('strips unknown keys from patch', async () => {
-      const item = await graph.createItem({ title: 'Test' });
-      await graph.updateMetadata(item.id, { branchName: 'ok', state: 'Archived' } as any);
-
-      const updated = graph.getItem(item.id);
-      expect(updated?.branchName).toBe('ok');
-      expect(updated?.state).toBe(WorkItemState.New);
-    });
-
-    it('fires onDidChange after metadata update', async () => {
-      const item = await graph.createItem({ title: 'Test' });
-      const listener = vi.fn();
-      graph.onDidChange(listener);
-
-      await graph.updateMetadata(item.id, { branchName: 'test-branch' });
-      expect(listener).toHaveBeenCalledTimes(1);
-    });
-  });
-
   describe('git cleanup on transition to Done', () => {
-    it('calls promptGitCleanup when transitioning to Done with metadata', async () => {
+    it('calls promptGitCleanup when transitioning to Done', async () => {
       const { promptGitCleanup } = await import('../services/gitCleanup');
       vi.mocked(promptGitCleanup).mockClear();
 
       const item = await graph.createItem({ title: 'Test' });
-      await graph.updateMetadata(item.id, {
-        branchName: 'feature/test',
-        repoPath: '/repos/main',
-      });
       await graph.transitionState(item.id, WorkItemState.InProgress);
       await graph.transitionState(item.id, WorkItemState.Done);
 
       expect(promptGitCleanup).toHaveBeenCalledTimes(1);
       const calledItem = vi.mocked(promptGitCleanup).mock.calls[0][0];
-      expect(calledItem.branchName).toBe('feature/test');
       expect(calledItem.state).toBe(WorkItemState.Done);
-    });
-
-    it('calls promptGitCleanup even without metadata', async () => {
-      const { promptGitCleanup } = await import('../services/gitCleanup');
-      vi.mocked(promptGitCleanup).mockClear();
-
-      const item = await graph.createItem({ title: 'Test' });
-      await graph.transitionState(item.id, WorkItemState.InProgress);
-      await graph.transitionState(item.id, WorkItemState.Done);
-
-      expect(promptGitCleanup).toHaveBeenCalledTimes(1);
     });
 
     it('does not call promptGitCleanup for non-Done transitions', async () => {
@@ -1123,6 +1062,43 @@ describe('WorkGraph', () => {
       await graph.transitionState(item.id, WorkItemState.Paused);
 
       expect(promptGitCleanup).not.toHaveBeenCalled();
+    });
+
+    it('passes onDismiss callback that logs cleanup-dismissed activity', async () => {
+      const { promptGitCleanup } = await import('../services/gitCleanup');
+      vi.mocked(promptGitCleanup).mockClear();
+
+      const item = await graph.createItem({ title: 'Test' });
+      await graph.transitionState(item.id, WorkItemState.InProgress);
+      await graph.transitionState(item.id, WorkItemState.Done);
+
+      // Extract the onDismiss callback (2nd arg) and invoke it
+      const onDismiss = vi.mocked(promptGitCleanup).mock.calls[0][1];
+      expect(onDismiss).toBeDefined();
+      await onDismiss!();
+
+      const updated = graph.getItem(item.id);
+      const dismissEntry = updated?.activityLog?.find(e => e.type === 'cleanup-dismissed');
+      expect(dismissEntry).toBeDefined();
+    });
+
+    it('passes onCleanup callback that logs cleanup activity', async () => {
+      const { promptGitCleanup } = await import('../services/gitCleanup');
+      vi.mocked(promptGitCleanup).mockClear();
+
+      const item = await graph.createItem({ title: 'Test' });
+      await graph.transitionState(item.id, WorkItemState.InProgress);
+      await graph.transitionState(item.id, WorkItemState.Done);
+
+      // Extract the onCleanup callback (3rd arg) and invoke it
+      const onCleanup = vi.mocked(promptGitCleanup).mock.calls[0][2];
+      expect(onCleanup).toBeDefined();
+      await onCleanup!('Removed branch feature/x');
+
+      const updated = graph.getItem(item.id);
+      const cleanupEntry = updated?.activityLog?.find(e => e.type === 'cleanup');
+      expect(cleanupEntry).toBeDefined();
+      expect(cleanupEntry!.detail).toBe('Removed branch feature/x');
     });
   });
 });

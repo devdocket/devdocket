@@ -22,7 +22,7 @@
     "onCommand:devdocket.deleteItem",
     "onCommand:devdocket.createItemFromUrl",
     "onCommand:devdocket.clearHistory",
-    "onCommand:devdocket.updateMetadata"
+    "onCommand:devdocket.addActivity"
   ],
   "main": "./dist/extension.js",
   "contributes": {
@@ -374,8 +374,8 @@
         "icon": "$(clear-all)"
       },
       {
-        "command": "devdocket.updateMetadata",
-        "title": "Update Work Item Metadata",
+        "command": "devdocket.addActivity",
+        "title": "Add Activity Log Entry",
         "category": "DevDocket"
       },
       {
@@ -526,7 +526,7 @@
           "when": "false"
         },
         {
-          "command": "devdocket.updateMetadata",
+          "command": "devdocket.addActivity",
           "when": "false"
         }
       ],

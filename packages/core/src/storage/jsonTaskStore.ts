@@ -70,18 +70,6 @@ function validateWorkItem(value: unknown, index: number): string | undefined {
       }
     }
   }
-  if (obj.branchName !== undefined && typeof obj.branchName !== 'string') {
-    return `Item "${obj.id}" at index ${index} has invalid "branchName" (string expected)`;
-  }
-  if (obj.worktreePath !== undefined && typeof obj.worktreePath !== 'string') {
-    return `Item "${obj.id}" at index ${index} has invalid "worktreePath" (string expected)`;
-  }
-  if (obj.repoPath !== undefined && typeof obj.repoPath !== 'string') {
-    return `Item "${obj.id}" at index ${index} has invalid "repoPath" (string expected)`;
-  }
-  if (obj.cleanupDismissed !== undefined && typeof obj.cleanupDismissed !== 'boolean') {
-    return `Item "${obj.id}" at index ${index} has invalid "cleanupDismissed" (boolean expected)`;
-  }
   return undefined;
 }
 

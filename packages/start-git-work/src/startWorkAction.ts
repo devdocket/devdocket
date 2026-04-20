@@ -20,10 +20,6 @@ interface WorkItem {
   sortOrder?: number;
   createdAt: number;
   updatedAt: number;
-  branchName?: string;
-  worktreePath?: string;
-  repoPath?: string;
-  cleanupDismissed?: boolean;
 }
 
 // Re-declared to match core API contract — separate extension cannot import core types directly
@@ -143,17 +139,14 @@ export class StartWorkAction implements DevDocketAction {
 
           logger.info(`Created worktree at ${worktreePath}`);
 
-          // Persist branch and worktree metadata to the work item
+          // Log branch and worktree info to the work item's activity log
           try {
-            await vscode.commands.executeCommand('devdocket.updateMetadata', item.id, {
-              branchName,
-              worktreePath,
-              repoPath,
-            });
-          } catch (metadataErr) {
-            logger.error('Failed to persist branch/worktree metadata', metadataErr);
+            const detail = JSON.stringify({ branchName, worktreePath, repoPath });
+            await vscode.commands.executeCommand('devdocket.addActivity', item.id, 'work-started', detail);
+          } catch (activityErr) {
+            logger.error('Failed to log work-started activity', activityErr);
             void vscode.window.showWarningMessage(
-              `DevDocket: Worktree created but failed to save metadata — cleanup prompt may not work`,
+              `DevDocket: Worktree created but failed to log activity — cleanup prompt may not work`,
             );
           }
 

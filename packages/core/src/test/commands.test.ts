@@ -57,7 +57,7 @@ function makeSourceItem(overrides: Partial<SourceItemNode> = {}): SourceItemNode
 
 type UsedWorkGraphMethods = Pick<
   WorkGraph,
-  'transitionState' | 'getItem' | 'createItem' | 'findItemByProvenance' | 'moveItem' | 'deleteItem' | 'clearOldHistory' | 'updateMetadata'
+  'transitionState' | 'getItem' | 'createItem' | 'findItemByProvenance' | 'moveItem' | 'deleteItem' | 'clearOldHistory' | 'addActivity'
 >;
 
 function createMockWorkGraph(): { [K in keyof UsedWorkGraphMethods]: Mock } {
@@ -69,7 +69,7 @@ function createMockWorkGraph(): { [K in keyof UsedWorkGraphMethods]: Mock } {
     moveItem: vi.fn(),
     deleteItem: vi.fn(),
     clearOldHistory: vi.fn(async () => ({ deleted: 0, failed: 0 })),
-    updateMetadata: vi.fn(),
+    addActivity: vi.fn(),
   };
 }
 
@@ -188,7 +188,7 @@ describe('registerCommands', () => {
       'devdocket.dismissFromSources',
       'devdocket.createItemFromUrl',
       'devdocket.clearHistory',
-      'devdocket.updateMetadata',
+      'devdocket.addActivity',
     ];
     for (const cmd of expected) {
       expect(commandHandlers.has(cmd), `missing command: ${cmd}`).toBe(true);
@@ -2077,34 +2077,19 @@ describe('registerCommands', () => {
     });
   });
 
-  // ── updateMetadata ────────────────────────────────────────────────
+  // ── addActivity ────────────────────────────────────────────────
 
-  describe('devdocket.updateMetadata', () => {
-    it('calls workGraph.updateMetadata with the provided args', async () => {
-      await invoke('devdocket.updateMetadata', 'wc-1', { branchName: 'feature/x', repoPath: '/repos/main' });
+  describe('devdocket.addActivity', () => {
+    it('calls workGraph.addActivity with the provided args', async () => {
+      await invoke('devdocket.addActivity', 'wc-1', 'work-started', '{"branchName":"feat"}');
 
-      expect(workGraph.updateMetadata).toHaveBeenCalledWith('wc-1', {
-        branchName: 'feature/x',
-        repoPath: '/repos/main',
-      });
+      expect(workGraph.addActivity).toHaveBeenCalledWith('wc-1', 'work-started', '{"branchName":"feat"}');
     });
 
-    it('logs field names without path values', async () => {
-      await invoke('devdocket.updateMetadata', 'wc-1', { branchName: 'feat', worktreePath: '/tmp/wt' });
+    it('works without optional detail parameter', async () => {
+      await invoke('devdocket.addActivity', 'wc-1', 'cleanup-dismissed');
 
-      expect(logger.info).toHaveBeenCalledWith(
-        expect.stringContaining('branchName, worktreePath'),
-      );
-      expect(logger.info).not.toHaveBeenCalledWith(
-        expect.stringContaining('/tmp/wt'),
-      );
-    });
-
-    it('propagates errors to the caller', async () => {
-      workGraph.updateMetadata.mockRejectedValue(new Error('not found'));
-
-      await expect(invoke('devdocket.updateMetadata', 'wc-bad', { branchName: 'x' }))
-        .rejects.toThrow('not found');
+      expect(workGraph.addActivity).toHaveBeenCalledWith('wc-1', 'cleanup-dismissed', undefined);
     });
   });
 });

@@ -11,9 +11,11 @@ export const MAX_ACTIVITY_LOG_ENTRIES = 100;
  * - `state-changed` — lifecycle state transition.
  * - `updated` — user edited title or notes.
  * - `action-executed` — an extension-defined action was run.
+ * - `work-started` — a branch and/or worktree was created for this item.
  * - `cleanup` — git branch and/or worktree was cleaned up.
+ * - `cleanup-dismissed` — user declined cleanup prompt for this item.
  */
-export type ActivityType = 'created' | 'state-changed' | 'updated' | 'action-executed' | 'cleanup';
+export type ActivityType = 'created' | 'state-changed' | 'updated' | 'action-executed' | 'work-started' | 'cleanup' | 'cleanup-dismissed';
 
 /**
  * A single, immutable entry in a work item's activity log.
