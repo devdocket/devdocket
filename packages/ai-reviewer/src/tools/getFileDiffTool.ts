@@ -27,7 +27,7 @@ export function registerGetFileDiffTool(): vscode.Disposable {
 
       if (!isValidRef(baseRef) || !isValidRef(headRef)) {
         return new vscode.LanguageModelToolResult([
-          new vscode.LanguageModelTextPart('Invalid ref: refs must contain only alphanumeric, dot, underscore, hyphen, or slash characters'),
+          new vscode.LanguageModelTextPart('Invalid ref: refs must be non-empty, must not start with "-", and may contain only alphanumeric, dot, underscore, hyphen, or slash characters'),
         ]);
       }
 
