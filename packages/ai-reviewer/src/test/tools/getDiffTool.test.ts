@@ -51,6 +51,42 @@ describe('getDiffTool', () => {
       );
     });
 
+    it('rejects invalid baseRef', async () => {
+      const { lm } = await import('vscode');
+      registerGetDiffTool();
+      const handler = vi.mocked(lm.registerTool).mock.calls[0][1];
+
+      const result = await handler.invoke(
+        {
+          input: { worktreePath: '/mock/worktree', baseRef: 'origin/main;rm -rf', headRef: 'pr-42' },
+          toolInvocationToken: undefined,
+        } as never,
+        { isCancellationRequested: false } as never,
+      );
+
+      expect(execFile).not.toHaveBeenCalled();
+      const text = (result as any).content[0].value;
+      expect(text).toContain('Invalid ref');
+    });
+
+    it('rejects invalid headRef', async () => {
+      const { lm } = await import('vscode');
+      registerGetDiffTool();
+      const handler = vi.mocked(lm.registerTool).mock.calls[0][1];
+
+      const result = await handler.invoke(
+        {
+          input: { worktreePath: '/mock/worktree', baseRef: 'origin/main', headRef: 'pr`whoami`' },
+          toolInvocationToken: undefined,
+        } as never,
+        { isCancellationRequested: false } as never,
+      );
+
+      expect(execFile).not.toHaveBeenCalled();
+      const text = (result as any).content[0].value;
+      expect(text).toContain('Invalid ref');
+    });
+
     it('handles git errors gracefully', async () => {
       vi.mocked(execFile).mockImplementation(
         (_cmd: unknown, _args: unknown, _opts: unknown, cb: unknown) => {
