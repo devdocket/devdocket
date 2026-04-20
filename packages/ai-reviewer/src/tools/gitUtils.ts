@@ -9,12 +9,20 @@ export class GitExecError extends Error {
 }
 
 /** Run a git command in the given directory. Returns stdout. */
-export function gitExec(args: string[], cwd: string): Promise<string> {
+export function gitExec(
+  args: string[],
+  cwd: string,
+  env?: Record<string, string>,
+): Promise<string> {
   return new Promise((resolve, reject) => {
     execFile(
       'git',
       ['--no-pager', ...args],
-      { cwd, maxBuffer: 10 * 1024 * 1024 },
+      {
+        cwd,
+        maxBuffer: 10 * 1024 * 1024,
+        env: env ? { ...process.env, ...env } : undefined,
+      },
       (err, stdout, stderr) => {
         if (err) {
           const errorOutput = stderr?.trim() || 'git command failed';

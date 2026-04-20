@@ -88,6 +88,29 @@ describe('RepoManager', () => {
       expect(cloneCall![1]).toContain('--no-checkout');
     });
 
+    it('passes auth via env vars, not CLI args', async () => {
+      await manager.ensureWorktree('https://github.com/owner/repo/pull/42');
+
+      const calls = vi.mocked(execFile).mock.calls;
+      // Authenticated operations: clone, fetch PR head, fetch base
+      const authCalls = calls.filter(c => {
+        const opts = c[2] as { env?: Record<string, string> } | undefined;
+        return opts?.env?.GIT_CONFIG_COUNT === '1';
+      });
+      expect(authCalls.length).toBeGreaterThanOrEqual(3);
+
+      for (const call of authCalls) {
+        const opts = call[2] as { env?: Record<string, string> };
+        expect(opts.env!.GIT_CONFIG_KEY_0).toBe('http.extraheader');
+        expect(opts.env!.GIT_CONFIG_VALUE_0).toMatch(/^Authorization: Basic /);
+
+        // Token must NOT appear in CLI args
+        const args = call[1] as string[];
+        expect(args.some(a => a.includes('http.extraheader'))).toBe(false);
+        expect(args.some(a => a.includes('Authorization'))).toBe(false);
+      }
+    });
+
     it('fetches PR ref and base ref', async () => {
       await manager.ensureWorktree('https://github.com/owner/repo/pull/42');
 

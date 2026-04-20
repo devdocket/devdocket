@@ -16,18 +16,18 @@ export interface WorktreeInfo {
   baseRef: string;
 }
 
-/** Build a Basic auth header value for transient git authentication. */
-function authHeader(token: string): string {
-  const encoded = Buffer.from(`x-access-token:${token}`).toString('base64');
-  return `Authorization: Basic ${encoded}`;
-}
-
-/** Run a git command with transient auth injected via http.extraheader. */
+/**
+ * Run a git command with transient auth injected via environment variables.
+ * Uses GIT_CONFIG_COUNT/KEY/VALUE (git ≥ 2.31) so the token never appears
+ * in process argument lists visible to other users.
+ */
 function gitAuth(args: string[], cwd: string, token: string): Promise<string> {
-  return gitExec(
-    ['-c', `http.extraheader=${authHeader(token)}`, ...args],
-    cwd,
-  );
+  const encoded = Buffer.from(`x-access-token:${token}`).toString('base64');
+  return gitExec(args, cwd, {
+    GIT_CONFIG_COUNT: '1',
+    GIT_CONFIG_KEY_0: 'http.extraheader',
+    GIT_CONFIG_VALUE_0: `Authorization: Basic ${encoded}`,
+  });
 }
 
 export class RepoManager {
