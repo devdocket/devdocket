@@ -20,16 +20,6 @@ Developers constantly context-switch between tools. Issues live in GitHub, tasks
 
 DevDocket organizes work across five views in the sidebar:
 
-```mermaid
-flowchart LR
-    P["Providers\n(GitHub, ADO)"] --> Inbox
-    M["Manual\ncreation"] --> Queue
-    Inbox -- Accept --> Queue
-    Queue -- Move to Focus --> Focus
-    Queue -- Archive --> History
-    Focus -- Complete --> History
-```
-
 | View | Purpose |
 |------|---------|
 | **Inbox** | Newly discovered items from providers. Accept to keep, or dismiss. |
