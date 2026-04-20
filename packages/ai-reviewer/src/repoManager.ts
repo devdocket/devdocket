@@ -31,10 +31,14 @@ async function ensureGitVersion(): Promise<void> {
   gitVersionChecked = true;
 }
 
-/** Reset cached git version check (for testing). */
-export function resetGitVersionCheck(): void {
+function resetGitVersionCheck(): void {
   gitVersionChecked = false;
 }
+
+/** @internal Test-only hooks for repoManager.ts. */
+export const __testing = {
+  resetGitVersionCheck,
+};
 
 export interface WorktreeInfo {
   worktreePath: string;

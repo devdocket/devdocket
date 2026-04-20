@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { authentication, workspace, mockLogOutputChannel } from 'vscode';
-import { RepoManager, parsePrUrl, resetGitVersionCheck } from '../repoManager';
+import { RepoManager, parsePrUrl, __testing } from '../repoManager';
+const { resetGitVersionCheck } = __testing;
 
 // Mock child_process
 vi.mock('child_process', () => ({
