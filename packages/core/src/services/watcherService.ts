@@ -51,7 +51,7 @@ export class WatcherService implements vscode.Disposable {
     const key = this.getWatchKey(identifier);
     const existing = this.watches.get(key);
     if (existing && !existing.dismissed) {
-      throw new Error(`Already watching run: ${identifier.displayName}`);
+      throw new Error(`Already watching run: ${existing.identifier.displayName}`);
     }
     // Remove dismissed watch to allow re-watching
     if (existing) {
