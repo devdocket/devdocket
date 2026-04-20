@@ -166,6 +166,7 @@ export class GitHubIssueProvider extends BaseGitHubProvider {
       const issues = items.filter(item => !item.pull_request);
       return { issues, failed: false };
     } catch (err) {
+      if (err instanceof Error && err.name === 'AbortError') { throw err; }
       logger.error(`Failed to fetch issues for ${repo}`, err);
       return { issues: [], failed: true };
     }
