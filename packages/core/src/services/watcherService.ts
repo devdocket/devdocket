@@ -224,7 +224,9 @@ export class WatcherService implements vscode.Disposable {
             || oldStatus.conclusion !== newStatus.conclusion
             || oldStatus.jobs.length !== newStatus.jobs.length
             || newStatus.jobs.some(newJob => {
-              const oldJob = oldStatus.jobs.find(j => j.name === newJob.name);
+              const oldJob = newJob.id
+                ? oldStatus.jobs.find(j => j.id === newJob.id)
+                : oldStatus.jobs.find(j => j.name === newJob.name);
               return !oldJob || oldJob.state !== newJob.state || oldJob.conclusion !== newJob.conclusion;
             });
           watch.status = newStatus;
@@ -241,7 +243,9 @@ export class WatcherService implements vscode.Disposable {
           if (newStatus.overallState !== 'completed') {
             for (const newJob of newStatus.jobs) {
               if (newJob.state === 'completed' && newJob.conclusion === 'failure') {
-                const oldJob = oldStatus.jobs.find(j => j.name === newJob.name);
+                const oldJob = newJob.id
+                  ? oldStatus.jobs.find(j => j.id === newJob.id)
+                  : oldStatus.jobs.find(j => j.name === newJob.name);
                 if (!oldJob || oldJob.state !== 'completed' || oldJob.conclusion !== 'failure') {
                   this._onDidDetectJobFailure.fire({ run: watch, job: newJob });
                 }
