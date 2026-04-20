@@ -1,6 +1,7 @@
 import * as vscode from 'vscode';
 import type { RunState, RunConclusion } from '@devdocket/shared';
 import { WatcherService, WatchedRun } from '../services/watcherService';
+import type { ViewLayout } from './viewLayout';
 
 /**
  * Tree item for a watched run.
@@ -133,14 +134,29 @@ class JobStatusNode extends vscode.TreeItem {
   }
 }
 
+interface WatchProviderGroupNode {
+  kind: 'watchProviderGroup';
+  providerId: string;
+  label: string;
+}
+
 /**
  * Tree data provider for the Watches view.
  */
-export class WatchesTreeProvider implements vscode.TreeDataProvider<WatchedRunNode | JobStatusNode> {
-  private readonly _onDidChangeTreeData = new vscode.EventEmitter<WatchedRunNode | JobStatusNode | undefined>();
+export class WatchesTreeProvider implements vscode.TreeDataProvider<WatchedRunNode | JobStatusNode | WatchProviderGroupNode> {
+  private readonly _onDidChangeTreeData = new vscode.EventEmitter<WatchedRunNode | JobStatusNode | WatchProviderGroupNode | undefined>();
   readonly onDidChangeTreeData = this._onDidChangeTreeData.event;
 
+  private _layout: ViewLayout = 'flat';
   private watchChangeSub: vscode.Disposable;
+
+  get layout(): ViewLayout { return this._layout; }
+  set layout(value: ViewLayout) {
+    if (this._layout !== value) {
+      this._layout = value;
+      this._onDidChangeTreeData.fire(undefined);
+    }
+  }
 
   constructor(private watcherService: WatcherService) {
     // Listen for watch changes
@@ -149,14 +165,49 @@ export class WatchesTreeProvider implements vscode.TreeDataProvider<WatchedRunNo
     });
   }
 
-  getTreeItem(element: WatchedRunNode | JobStatusNode): vscode.TreeItem {
+  getTreeItem(element: WatchedRunNode | JobStatusNode | WatchProviderGroupNode): vscode.TreeItem {
+    if ('kind' in element && element.kind === 'watchProviderGroup') {
+      const watches = this.watcherService.getActiveWatches()
+        .filter(w => w.identifier.providerId === element.providerId);
+      const treeItem = new vscode.TreeItem(element.label, vscode.TreeItemCollapsibleState.Collapsed);
+      treeItem.id = `watch-group:${element.providerId}`;
+      treeItem.contextValue = 'watchProviderGroup';
+      treeItem.iconPath = new vscode.ThemeIcon('plug');
+      treeItem.description = `${watches.length}`;
+      return treeItem;
+    }
     return element;
   }
 
-  getChildren(element?: WatchedRunNode | JobStatusNode): vscode.ProviderResult<(WatchedRunNode | JobStatusNode)[]> {
+  getChildren(element?: WatchedRunNode | JobStatusNode | WatchProviderGroupNode): vscode.ProviderResult<(WatchedRunNode | JobStatusNode | WatchProviderGroupNode)[]> {
     if (!element) {
-      // Root: return all active (non-dismissed) watches
       const watches = this.watcherService.getActiveWatches();
+      if (this._layout === 'flat') {
+        return watches.map(watch => {
+          const jobNodes = watch.status.jobs.map(
+            job => new JobStatusNode(job.name, job.state, job.conclusion)
+          );
+          return new WatchedRunNode(watch, jobNodes);
+        });
+      }
+      // Tree mode: group by provider
+      const providers = new Map<string, WatchedRun[]>();
+      for (const watch of watches) {
+        const pid = watch.identifier.providerId;
+        if (!providers.has(pid)) {
+          providers.set(pid, []);
+        }
+        providers.get(pid)!.push(watch);
+      }
+      return Array.from(providers.entries()).map(([pid, _runs]) => {
+        const label = this.watcherService.getProviderLabel(pid) ?? pid;
+        return { kind: 'watchProviderGroup' as const, providerId: pid, label };
+      });
+    }
+
+    if ('kind' in element && element.kind === 'watchProviderGroup') {
+      const watches = this.watcherService.getActiveWatches()
+        .filter(w => w.identifier.providerId === element.providerId);
       return watches.map(watch => {
         const jobNodes = watch.status.jobs.map(
           job => new JobStatusNode(job.name, job.state, job.conclusion)
@@ -164,15 +215,13 @@ export class WatchesTreeProvider implements vscode.TreeDataProvider<WatchedRunNo
         return new WatchedRunNode(watch, jobNodes);
       });
     }
-    
+
     if (element instanceof WatchedRunNode) {
-      // Generate children from latest status to avoid stale data
       return element.watchedRun.status.jobs.map(
         job => new JobStatusNode(job.name, job.state, job.conclusion)
       );
     }
-    
-    // Jobs have no children
+
     return [];
   }
 

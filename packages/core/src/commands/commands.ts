@@ -1085,6 +1085,12 @@ export function registerCommands(
       wrapCommand('Failed to switch history layout', () => toggleViewLayout('history'))),
     vscode.commands.registerCommand('devdocket.toggleSourcesLayout',
       wrapCommand('Failed to switch sources layout', () => toggleViewLayout('sources'))),
+    vscode.commands.registerCommand('devdocket.switchWatchesToTree',
+      wrapCommand('Failed to switch watches layout', () => setViewLayout('watches', 'tree'))),
+    vscode.commands.registerCommand('devdocket.switchWatchesToFlat',
+      wrapCommand('Failed to switch watches layout', () => setViewLayout('watches', 'flat'))),
+    vscode.commands.registerCommand('devdocket.toggleWatchesLayout',
+      wrapCommand('Failed to switch watches layout', () => toggleViewLayout('watches'))),
     // Watch pipeline commands
     vscode.commands.registerCommand('devdocket.watchRun',
       wrapCommand('Failed to watch pipeline run', () => handleWatchRun(watcherRegistry, watcherService))),

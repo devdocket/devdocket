@@ -380,6 +380,23 @@
         "category": "DevDocket"
       },
       {
+        "command": "devdocket.switchWatchesToTree",
+        "title": "Switch Watches to Tree Layout",
+        "category": "DevDocket",
+        "icon": "$(list-tree)"
+      },
+      {
+        "command": "devdocket.switchWatchesToFlat",
+        "title": "Switch Watches to Flat Layout",
+        "category": "DevDocket",
+        "icon": "$(list-flat)"
+      },
+      {
+        "command": "devdocket.toggleWatchesLayout",
+        "title": "Toggle Watches Layout",
+        "category": "DevDocket"
+      },
+      {
         "command": "devdocket.dismissFromSources",
         "title": "Dismiss",
         "category": "DevDocket",
@@ -507,6 +524,16 @@
           "group": "navigation"
         },
         {
+          "command": "devdocket.switchWatchesToTree",
+          "when": "view == devdocket.watches && devdocket.watchesLayout == flat",
+          "group": "navigation"
+        },
+        {
+          "command": "devdocket.switchWatchesToFlat",
+          "when": "view == devdocket.watches && devdocket.watchesLayout == tree",
+          "group": "navigation"
+        },
+        {
           "command": "devdocket.refresh",
           "when": "view == devdocket.inbox || view == devdocket.sources",
           "group": "navigation"
@@ -564,6 +591,14 @@
           "when": "devdocket.sourcesLayout == tree"
         },
         {
+          "command": "devdocket.switchWatchesToTree",
+          "when": "devdocket.watchesLayout == flat"
+        },
+        {
+          "command": "devdocket.switchWatchesToFlat",
+          "when": "devdocket.watchesLayout == tree"
+        },
+        {
           "command": "devdocket.toggleInboxLayout",
           "when": "false"
         },
@@ -581,6 +616,10 @@
         },
         {
           "command": "devdocket.toggleSourcesLayout",
+          "when": "false"
+        },
+        {
+          "command": "devdocket.toggleWatchesLayout",
           "when": "false"
         }
       ],

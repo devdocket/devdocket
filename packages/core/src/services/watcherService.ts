@@ -160,6 +160,14 @@ export class WatcherService implements vscode.Disposable {
   }
 
   /**
+   * Get a human-friendly label for a provider by looking up its registered watcher.
+   */
+  getProviderLabel(providerId: string): string | undefined {
+    const watcher = this.watcherRegistry.get(providerId);
+    return watcher?.label;
+  }
+
+  /**
    * Get all watches including dismissed.
    */
   getAllWatches(): WatchedRun[] {

@@ -143,6 +143,7 @@ function createTreeViews(
   focusProvider.layout = getViewLayout('focus');
   sourcesProvider.layout = getViewLayout('sources');
   historyProvider.layout = getViewLayout('history');
+  watchesProvider.layout = getViewLayout('watches');
 
   const inboxTreeView = vscode.window.createTreeView('devdocket.inbox', { treeDataProvider: inboxProvider, canSelectMany: true });
   const sourcesTreeView = vscode.window.createTreeView('devdocket.sources', { treeDataProvider: sourcesProvider, canSelectMany: true });
@@ -446,13 +447,14 @@ export async function activate(context: vscode.ExtensionContext): Promise<DevDoc
   logger.info(`Command registration took ${Math.round(performance.now() - commandRegStart)}ms`);
 
   // Set context keys and listen for layout changes
-  const viewIds: ViewId[] = ['inbox', 'queue', 'focus', 'history', 'sources'];
+  const viewIds: ViewId[] = ['inbox', 'queue', 'focus', 'history', 'sources', 'watches'];
   const providerMap: Record<ViewId, { layout: import('./views/viewLayout').ViewLayout }> = {
     inbox: providers.inboxProvider,
     queue: providers.queueProvider,
     focus: providers.focusProvider,
     history: providers.historyProvider,
     sources: providers.sourcesProvider,
+    watches: providers.watchesProvider,
   };
   for (const id of viewIds) {
     void vscode.commands.executeCommand('setContext', `devdocket.${id}Layout`, getViewLayout(id));
