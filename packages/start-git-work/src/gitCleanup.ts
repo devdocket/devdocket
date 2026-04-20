@@ -169,7 +169,11 @@ export async function promptGitCleanup(
   const choice = await vscode.window.showInformationMessage(message, 'Yes', 'No');
 
   if (choice === 'No') {
-    await addActivity(item.id, 'cleanup-dismissed');
+    try {
+      await addActivity(item.id, 'cleanup-dismissed');
+    } catch (err) {
+      logger.warn('Failed to log cleanup-dismissed activity', err);
+    }
     return;
   }
 
@@ -220,6 +224,10 @@ export async function promptGitCleanup(
   }
 
   if (cleaned.length > 0) {
-    await addActivity(item.id, 'cleanup', `Removed ${cleaned.join(' and ')}`);
+    try {
+      await addActivity(item.id, 'cleanup', `Removed ${cleaned.join(' and ')}`);
+    } catch (err) {
+      logger.warn('Failed to log cleanup activity', err);
+    }
   }
 }
