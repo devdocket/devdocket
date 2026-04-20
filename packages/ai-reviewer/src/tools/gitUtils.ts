@@ -22,7 +22,12 @@ export function gitExec(
         cwd,
         maxBuffer: 10 * 1024 * 1024,
         timeout: options?.timeout ?? 30_000,
-        env: options?.env ? { ...process.env, ...options.env } : undefined,
+        env: options?.env
+          ? Object.fromEntries(
+              Object.entries({ ...process.env, ...options.env })
+                .filter(([, v]) => v !== undefined),
+            )
+          : undefined,
       },
       (err, stdout, stderr) => {
         if (err) {
