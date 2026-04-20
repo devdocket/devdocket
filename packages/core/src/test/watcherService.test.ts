@@ -208,19 +208,20 @@ describe('WatcherService', () => {
     });
 
     it('stops polling when no active watches remain', async () => {
-      const watcher = createMockWatcher('test', async () => ({
-        overallState: 'completed' as const,
-        conclusion: 'success' as const,
-        jobs: [],
-      }));
+      const watcher = createMockWatcher('test');
       registry.register(watcher);
 
       await service.startWatch(createIdentifier());
+
+      // Polling is now active — record call count after initial startWatch
+      const callCountAfterStart = (watcher.getRunStatus as ReturnType<typeof vi.fn>).mock.calls.length;
+
       service.dismissWatch(createIdentifier());
 
-      // Timer should have been cleared
-      await vi.advanceTimersByTimeAsync(60000);
-      // If polling stopped, no error (we dismissed the only watch)
+      // Advance past several poll intervals — no new getRunStatus calls expected
+      await vi.advanceTimersByTimeAsync(90000);
+      const callCountAfterDismiss = (watcher.getRunStatus as ReturnType<typeof vi.fn>).mock.calls.length;
+      expect(callCountAfterDismiss).toBe(callCountAfterStart);
     });
   });
 });
