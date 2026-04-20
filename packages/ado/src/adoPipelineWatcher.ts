@@ -30,6 +30,8 @@ interface AdoTimelineRecord {
   finishTime?: string;
 }
 
+const FETCH_TIMEOUT_MS = 30_000;
+
 export class AdoPipelineWatcher implements DevDocketRunWatcher {
   readonly id = 'ado-pipelines';
   readonly label = 'Azure DevOps Pipelines';
@@ -90,10 +92,10 @@ export class AdoPipelineWatcher implements DevDocketRunWatcher {
     const buildUrl = `https://dev.azure.com/${encodedOrg}/${encodedProject}/_apis/build/builds/${encodedBuildId}?api-version=7.1`;
     let buildResponse: Response;
     try {
-      buildResponse = await fetch(buildUrl, { headers, signal: AbortSignal.timeout(30_000) });
+      buildResponse = await fetch(buildUrl, { headers, signal: AbortSignal.timeout(FETCH_TIMEOUT_MS) });
     } catch (err) {
       if (err instanceof Error && err.name === 'AbortError') {
-        throw new Error(`ADO API request timed out after 30s for build ${identifier.runId}`);
+        throw new Error(`ADO API request timed out after ${FETCH_TIMEOUT_MS / 1000}s for build ${identifier.runId}`);
       }
       throw err;
     }
@@ -111,10 +113,10 @@ export class AdoPipelineWatcher implements DevDocketRunWatcher {
     const timelineUrl = `https://dev.azure.com/${encodedOrg}/${encodedProject}/_apis/build/builds/${encodedBuildId}/timeline?api-version=7.1`;
     let timelineResponse: Response | undefined;
     try {
-      timelineResponse = await fetch(timelineUrl, { headers, signal: AbortSignal.timeout(30_000) });
+      timelineResponse = await fetch(timelineUrl, { headers, signal: AbortSignal.timeout(FETCH_TIMEOUT_MS) });
     } catch (err) {
       if (err instanceof Error && err.name === 'AbortError') {
-        logger.warn(`ADO timeline request timed out after 30s for build ${identifier.runId}`);
+        logger.warn(`ADO timeline request timed out after ${FETCH_TIMEOUT_MS / 1000}s for build ${identifier.runId}`);
       } else {
         throw err;
       }
