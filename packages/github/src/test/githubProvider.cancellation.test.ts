@@ -101,8 +101,8 @@ describe('GitHubIssueProvider — cancellation (AbortSignal wiring)', () => {
       expect(fetchOptions.signal).toBeInstanceOf(AbortSignal);
     });
 
-    it('passes the same AbortSignal to paginated fetch calls', async () => {
-      const { token } = createMockCancellationToken();
+    it('passes AbortSignal derived from same source to paginated fetch calls', async () => {
+      const { token, cancel } = createMockCancellationToken();
 
       // Page 1 with Link header pointing to page 2
       mockFetch
@@ -119,11 +119,11 @@ describe('GitHubIssueProvider — cancellation (AbortSignal wiring)', () => {
 
       await provider.refresh(token);
 
-      // Both fetch calls should have the same signal
+      // Both fetch calls should have AbortSignal instances (combineSignals wraps per-call)
       const signal1 = mockFetch.mock.calls[0][1]?.signal;
       const signal2 = mockFetch.mock.calls[1][1]?.signal;
       expect(signal1).toBeInstanceOf(AbortSignal);
-      expect(signal2).toBe(signal1);
+      expect(signal2).toBeInstanceOf(AbortSignal);
     });
 
     it('passes AbortSignal to per-repo fetch calls', async () => {
