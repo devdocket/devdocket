@@ -12,7 +12,7 @@ export class GitExecError extends Error {
 export function gitExec(
   args: string[],
   cwd: string,
-  env?: Record<string, string | undefined>,
+  options?: { timeout?: number; env?: Record<string, string | undefined> },
 ): Promise<string> {
   return new Promise((resolve, reject) => {
     execFile(
@@ -21,7 +21,8 @@ export function gitExec(
       {
         cwd,
         maxBuffer: 10 * 1024 * 1024,
-        env: env ? { ...process.env, ...env } : undefined,
+        timeout: options?.timeout ?? 30_000,
+        env: options?.env ? { ...process.env, ...options.env } : undefined,
       },
       (err, stdout, stderr) => {
         if (err) {

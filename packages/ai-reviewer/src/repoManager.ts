@@ -55,13 +55,16 @@ export interface WorktreeInfo {
  * Uses GIT_CONFIG_COUNT/KEY/VALUE (git ≥ 2.31) so the token never appears
  * in process argument lists visible to other users.
  */
-async function gitAuth(args: string[], cwd: string, token: string): Promise<string> {
+async function gitAuth(args: string[], cwd: string, token: string, timeout = 30_000): Promise<string> {
   await ensureGitVersion();
   const encoded = Buffer.from(`x-access-token:${token}`).toString('base64');
   return gitExec(args, cwd, {
-    GIT_CONFIG_COUNT: '1',
-    GIT_CONFIG_KEY_0: 'http.extraheader',
-    GIT_CONFIG_VALUE_0: `Authorization: Basic ${encoded}`,
+    timeout,
+    env: {
+      GIT_CONFIG_COUNT: '1',
+      GIT_CONFIG_KEY_0: 'http.extraheader',
+      GIT_CONFIG_VALUE_0: `Authorization: Basic ${encoded}`,
+    },
   });
 }
 
@@ -118,6 +121,7 @@ export class RepoManager {
         ['clone', '--no-checkout', cloneUrl, clonePath],
         path.dirname(clonePath),
         session.accessToken,
+        300_000,
       );
       this.log.info('Clone complete');
     }
@@ -138,6 +142,7 @@ export class RepoManager {
         ['fetch', 'origin', `pull/${prNumber}/head`],
         worktreePath,
         session.accessToken,
+        300_000,
       );
       await gitExec(['reset', '--hard', 'FETCH_HEAD'], worktreePath);
       this.log.info('Worktree updated');
@@ -147,6 +152,7 @@ export class RepoManager {
         ['fetch', 'origin', `pull/${prNumber}/head:${headRef}`],
         clonePath,
         session.accessToken,
+        300_000,
       );
       this.log.info('PR head fetched');
     }
@@ -161,6 +167,7 @@ export class RepoManager {
       ['fetch', 'origin', `refs/heads/${baseRef}:refs/remotes/origin/${baseRef}`],
       clonePath,
       session.accessToken,
+      300_000,
     );
     this.log.info('Base branch fetched');
 
@@ -265,6 +272,7 @@ export class RepoManager {
           Accept: 'application/vnd.github+json',
           'X-GitHub-Api-Version': '2022-11-28',
         },
+        signal: AbortSignal.timeout(30_000),
       },
     );
 

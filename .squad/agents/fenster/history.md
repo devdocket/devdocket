@@ -50,10 +50,27 @@ DevDocket is a VS Code extension monorepo for managing work items from multiple 
 
 ### Completed Issues
 #330 (git auth env vars — credential exposure fix), #323 (watch CI pipelines), #322 (auto-complete activity log), #320 (focus view grouping), #282 (provider state in editor), #281 (clickable title), #276 (auto-track authored PRs), #275 (History→Queue transitions), #273 (tree counts), #265 (auto-complete on close), #255 (provider metadata docs), #250 (group context), #249 (accept-to-focus, pre-shipped), #243 (version resurfacing), #240 (create from URL), #233 (provider health), #232 (clear history), #231 (sources icons), #230 (layout toggle), #229 (emoji removal), #227 (provider labels), #223 (dead code cleanup), #222 (responsive layout), #221 (contextual heading), #219 (source URL link), #217 (editor metadata), #216 (provider description), #215 (dynamic titles), #189 (dismissed fix), #178 (ADO filtering), #158 (markdown injection), #157 (API trust boundary), #156 (URL sanitization), #155 (URL scheme validation), #154 (crypto.randomUUID), #153 (JSON validation), #152 (path traversal fix), #12 (AI PR actions), bulk rename (WorkCenter→DevDocket)
+#299 (fix double disposal), #323 (watch CI pipelines), #322 (auto-complete activity log), #320 (focus view grouping), #282 (provider state in editor), #281 (clickable title), #276 (auto-track authored PRs), #275 (History→Queue transitions), #273 (tree counts), #265 (auto-complete on close), #255 (provider metadata docs), #250 (group context), #249 (accept-to-focus, pre-shipped), #243 (version resurfacing), #240 (create from URL), #233 (provider health), #232 (clear history), #231 (sources icons), #230 (layout toggle), #229 (emoji removal), #227 (provider labels), #223 (dead code cleanup), #222 (responsive layout), #221 (contextual heading), #219 (source URL link), #217 (editor metadata), #216 (provider description), #215 (dynamic titles), #189 (dismissed fix), #178 (ADO filtering), #158 (markdown injection), #157 (API trust boundary), #156 (URL sanitization), #155 (URL scheme validation), #154 (crypto.randomUUID), #153 (JSON validation), #152 (path traversal fix), #12 (AI PR actions), bulk rename (WorkCenter→DevDocket)
 
 > Full issue-level learnings archived to `history-archive.md`
 
 ## Learnings
+
+### 2026-04-21 — README Refresh
+
+**Task:** Rewrote README per Matt's requests — removed marketplace install language, trimmed config details, added build-from-source instructions.
+- **Key changes:** Replaced "Quick Start" (marketplace-based) with "Installation" (clone/build/F5/vsce). Condensed five-view descriptions from multi-paragraph sections to a summary table. Removed inline GitHub provider and Start Git Work config blocks. Removed auto-completion config block. Removed Data Storage section (implementation detail).
+- **Moved to UX guide:** Auto-completion behavior + `autoCompleteOnClose` setting, Start Git Work `commands` configuration with `{path}` placeholder docs, added `autoCompleteOnClose` to Core Configuration table.
+- **Pattern:** README = welcoming overview + install + pointers to docs. UX guide = detailed behavior, config tables, keyboard shortcuts. Keep README under ~120 lines.
+### 2026-04-22 — Issue #298 (Add fetch/git timeouts)
+
+**Bug fix:** Added timeout safety nets to all unprotected `fetch()` and `execFile`/`execFileAsync` calls across the extension.
+- **Fetch timeouts:** `AbortSignal.timeout(30_000)` added to 19 fetch() calls across github, ado, ai-reviewer packages that previously had no signal. Calls already receiving an `AbortSignal` from callers (e.g., `getClosedItems`, `resolveUrl`) left unchanged.
+- **Git subprocess timeouts:** `timeout: 30_000` added to all local git operations (`branch`, `show-ref`, `worktree add/remove`, `reset`). Network git ops (`clone`, `fetch`) use `timeout: 300_000` (5 min) since they involve data transfer.
+- **gitExec signature change:** Added optional `timeout` parameter (default 30_000) to `packages/ai-reviewer/src/tools/gitUtils.ts`. `gitAuth` wrapper in `repoManager.ts` passes through. Non-breaking: existing callers get the default.
+- **User-configured commands:** `startWorkAction.ts` post-worktree commands get `timeout: 60_000` (longer than git ops since arbitrary user commands may need more time).
+- **Files changed:** 12 source files + 1 test file across github, ado, ai-reviewer, start-git-work packages.
+- **Related:** #300 (CancellationToken→AbortController wiring) is a separate issue for deeper cancellation integration.
 
 ### 2026-04-21 — Issue #323 (Watch CI Pipelines — PR #323)
 
@@ -336,3 +353,9 @@ See `.squad/orchestration-log/2026-04-20T16-18-00Z-keaton.md` for full triage de
 - **README changes:** Removed marketplace-specific language, added build-from-source workflow, condensed feature descriptions.
 - **New guide:** Dedicated UX guide for configuration and developer setup.
 - **Impact:** Improves developer experience for local builds. 5 rounds Copilot review passed.
+### 2026-04-20 — Issue #299 (Remove double disposal of resources)
+
+**Bug:** `deactivate()` manually disposed 4 resources (`providerRegistry`, `actionRegistry`, `workGraph`, `stateStore`) that were already registered in `context.subscriptions` for VS Code auto-disposal. This caused every resource to be disposed twice.
+- **Fix:** Removed all manual disposal from `deactivate()`, making it a true no-op. Removed the module-level variables and their assignments since they only existed to support the manual disposal.
+- **VS Code idiom:** Rely exclusively on `context.subscriptions` for resource lifecycle management. VS Code calls `dispose()` on all subscriptions during deactivation automatically.
+- **Files changed:** `packages/core/src/extension.ts` only.
