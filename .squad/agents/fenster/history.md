@@ -49,13 +49,44 @@ DevDocket is a VS Code extension monorepo for managing work items from multiple 
 - **Build:** esbuild, CJS, `--external:vscode`, sourcemaps. Root `npm install` + `npm run build`.
 
 ### Completed Issues
-#282 (provider state in editor), #281 (clickable title), #276 (auto-track authored PRs), #275 (History→Queue transitions), #273 (tree counts), #265 (auto-complete on close), #255 (provider metadata docs), #250 (group context), #249 (accept-to-focus, pre-shipped), #243 (version resurfacing), #240 (create from URL), #233 (provider health), #232 (clear history), #231 (sources icons), #230 (layout toggle), #229 (emoji removal), #227 (provider labels), #223 (dead code cleanup), #222 (responsive layout), #221 (contextual heading), #219 (source URL link), #217 (editor metadata), #216 (provider description), #215 (dynamic titles), #189 (dismissed fix), #178 (ADO filtering), #158 (markdown injection), #157 (API trust boundary), #156 (URL sanitization), #155 (URL scheme validation), #154 (crypto.randomUUID), #153 (JSON validation), #152 (path traversal fix), #12 (AI PR actions), bulk rename (WorkCenter→DevDocket)
+#323 (watch CI pipelines), #322 (auto-complete activity log), #320 (focus view grouping), #282 (provider state in editor), #281 (clickable title), #276 (auto-track authored PRs), #275 (History→Queue transitions), #273 (tree counts), #265 (auto-complete on close), #255 (provider metadata docs), #250 (group context), #249 (accept-to-focus, pre-shipped), #243 (version resurfacing), #240 (create from URL), #233 (provider health), #232 (clear history), #231 (sources icons), #230 (layout toggle), #229 (emoji removal), #227 (provider labels), #223 (dead code cleanup), #222 (responsive layout), #221 (contextual heading), #219 (source URL link), #217 (editor metadata), #216 (provider description), #215 (dynamic titles), #189 (dismissed fix), #178 (ADO filtering), #158 (markdown injection), #157 (API trust boundary), #156 (URL sanitization), #155 (URL scheme validation), #154 (crypto.randomUUID), #153 (JSON validation), #152 (path traversal fix), #12 (AI PR actions), bulk rename (WorkCenter→DevDocket)
 
 > Full issue-level learnings archived to `history-archive.md`
 
 ## Learnings
 
-### 2026-04-21 — Auto-complete activity log integration
+### 2026-04-21 — Issue #323 (Watch CI Pipelines — PR #323)
+
+**Feature:** Full CI pipeline watcher with ADO support, polling control, tree/flat layout toggle, and persistence.
+- **Core components:** `WatcherService` (lifecycle/polling), `WatchStore` (persistence via write-queue), `WatchesTreeProvider` (tree/flat views), ADO pipeline watcher (status polling).
+- **Watch model:** `{ id, providerId, externalId, repoId?, runId?, state, lastChecked, dismissedAt? }`. Persisted to `globalStorageUri` alongside other stores.
+- **Layout toggle:** Two command IDs (tree/flat) with context keys, mirrors pattern from history layout toggle.
+- **Polling interval:** 60s default, configurable via `devdocket.watchPollingInterval` setting.
+- **Dismissal:** Per-watch via activity-log-style dismissal. Multiple Copilot review rounds refined error handling, edge cases, layout logic.
+- **Context-menu-only browser open:** "Open in browser" only appears in context menu (not tree click), prevents accidental external navigation.
+- **Files changed:** `packages/core/src/services/watcherService.ts` (new), `packages/core/src/storage/watchStore.ts` (new), `packages/core/src/views/watchesTreeProvider.ts` (new), `packages/ado/src/adoPipelineWatcher.ts` (new), plus tests, views, and commands.
+- **Extensibility:** Architecture ready for GitHub Actions watcher via future provider.
+
+### 2026-04-21 — Issue #321 (Worktree Cleanup on Complete — PR #321)
+
+**Major refactor:** Activity-log-driven metadata, moved gitCleanup from core to start-git-work, ActivityType derived from ACTIVITY_TYPES array.
+- **Design principle:** Branch/worktree metadata lives in `'work-started'` activity log entry (JSON detail), not on WorkItem fields. Implements team directive: "derive data from activity log when possible".
+- **Three new activity types:** `'work-started'`, `'cleanup'`, `'cleanup-dismissed'`. Breaking change but documented in PR migration notes.
+- **Dismissal semantic:** `'cleanup-dismissed'` entry prevents re-prompting until a new `'work-started'` entry. Temporal ordering in log naturally handles re-arming.
+- **Non-blocking transition:** State transition succeeds immediately; cleanup prompt fires async. Prevents workflow interruption.
+- **Git safety:** `git branch -d` (not `-D`) warns on unmerged changes. `--` terminators on all commands. `git show-ref --verify` for exact checks. Async `fs.promises.access` for directory validation.
+- **Files changed:** `packages/core/src/models/activityLog.ts`, `workItem.ts`, `gitCleanup.ts` (moved to start-git-work), `workGraph.ts`, `commands.ts`, `package.json`, `jsonTaskStore.ts`; `packages/start-git-work/src/startWorkAction.ts`.
+- **Consequence:** Cleaner WorkItem model. Activity log as audit trail. Couples with issue #264 decision in decisions.md.
+
+### 2026-04-21 — Issue #320 (Focus View Provider Grouping — PR #320)
+
+**Bug fix:** Sub-group count accuracy and provider ID normalization caching.
+- **Sub-group count bug:** Parent node showed filtered child count instead of unfiltered count. Fixed by separating count calculation from filter logic.
+- **Caching pattern:** `normalizeProviderId()` results cached at tree provider instantiation to avoid repeated normalization during refresh cycles. Small but significant performance win.
+- **No API surface changes.** Isolated to `FocusTreeProvider` structure.
+- **Files changed:** `packages/core/src/views/focusTreeProvider.ts`.
+
+### 2026-04-21 — Auto-complete activity log integration (PR #322)
 
 **Fix:** Auto-complete transitions to Done now log an `'auto-completed'` activity entry with detail like "Provider detected external closure (InProgress → Done)".
 - **Pattern:** `transitionState()` already logs `'state-changed'`; the new `addActivity()` call adds a second entry distinguishing automatic from manual transitions.
