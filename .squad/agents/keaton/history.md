@@ -170,6 +170,23 @@ Detailed findings and patterns documented in:
 
 ### Routing Summary
 
+## Squad Triage & Routing (2026-04-20)
+
+### Triage Round — 12 Untriaged Squad Issues
+
+**Status:** COMPLETE — Keaton triaged all 12 untriaged issues via background agent.
+
+**Routed to Fenster:** 8 issues
+- **Bugs:** #298, #299, #300
+- **Chores:** #301, #302, #303, #305, #306
+- **Rationale:** Fenster owns provider implementations and provider API surface; bugs/chores align with existing focus areas
+
+**Deferred to Keaton:** 4 issues
+- **Architecture/Scope Decisions:** #292, #304, #307, #308
+- **Rationale:** Require lead judgment on scope, priority trade-offs, or architectural direction. Pending design review.
+
+See `.squad/orchestration-log/2026-04-20T16-18-00Z-keaton.md` for full triage details.
+
 | Route | Count | Issues |
 |-------|-------|--------|
 | squad:fenster | 7 | 298, 299, 300, 301, 302, 303, 305, 306 |

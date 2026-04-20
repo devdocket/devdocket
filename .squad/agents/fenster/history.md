@@ -64,6 +64,12 @@ DevDocket is a VS Code extension monorepo for managing work items from multiple 
 - **Worker pool abort:** Throw `AbortError` (not break) at top of worker loops when `signal?.aborted` — ensures cancellation propagates through `Promise.all` and prevents partial result publishing. For `Promise.allSettled`, check for AbortError in results after settling and rethrow before publishing.
 - **Files changed:** `shared/src/signalUtils.ts` (new — `combineSignals`), `baseGithubProvider.ts` (core wiring), `githubProvider.ts`, `githubPrReviewProvider.ts`, `githubMyPrsProvider.ts`, `adoWorkItemProvider.ts`, `adoPrReviewProvider.ts`, `adoPipelineWatcher.ts`.
 - **Key lesson:** `?.` on `token?.onCancellationRequested(...)` only guards against `token` being nullish. If `token` exists but lacks `onCancellationRequested` (like test mocks), it throws. Must use `token?.onCancellationRequested?.(...)` with double optional chaining.
+### 2026-04-21 — README Refresh
+
+**Task:** Rewrote README per Matt's requests — removed marketplace install language, trimmed config details, added build-from-source instructions.
+- **Key changes:** Replaced "Quick Start" (marketplace-based) with "Installation" (clone/build/F5/vsce). Condensed five-view descriptions from multi-paragraph sections to a summary table. Removed inline GitHub provider and Start Git Work config blocks. Removed auto-completion config block. Removed Data Storage section (implementation detail).
+- **Moved to UX guide:** Auto-completion behavior + `autoCompleteOnClose` setting, Start Git Work `commands` configuration with `{path}` placeholder docs, added `autoCompleteOnClose` to Core Configuration table.
+- **Pattern:** README = welcoming overview + install + pointers to docs. UX guide = detailed behavior, config tables, keyboard shortcuts. Keep README under ~120 lines.
 ### 2026-04-22 — Issue #298 (Add fetch/git timeouts)
 
 **Bug fix:** Added timeout safety nets to all unprotected `fetch()` and `execFile`/`execFileAsync` calls across the extension.
@@ -256,6 +262,23 @@ DevDocket is a VS Code extension monorepo for managing work items from multiple 
 - **Files changed:** `packages/core/src/services/titleSync.ts` (new), `packages/core/src/extension.ts`, `packages/core/src/views/workItemEditorPanel.ts`, `packages/core/src/views/editorPanelHtml.ts`, plus test files.
 
 ### 2026-04-18 — Issue #253 (Share Cloned Repo Between AI Actions)
+
+## Squad Triage & Routing (2026-04-20)
+
+### Triage Round — 12 Untriaged Squad Issues
+
+**Status:** COMPLETE — Keaton triaged all 12 untriaged issues via background agent.
+
+**Routed to Fenster:** 8 issues
+- **Bugs:** #298, #299, #300
+- **Chores:** #301, #302, #303, #305, #306
+- **Rationale:** Fenster owns provider implementations and provider API surface; bugs/chores align with existing focus areas
+
+**Deferred to Keaton:** 4 issues
+- **Architecture/Scope Decisions:** #292, #304, #307, #308
+- **Rationale:** Require lead judgment on scope, priority trade-offs, or architectural direction. Pending design review.
+
+See `.squad/orchestration-log/2026-04-20T16-18-00Z-keaton.md` for full triage details.
 
 **PR #314:** Shared RepoManager and walkthrough findings between AI Code Review and AI Walkthrough.
 - **Shared RepoManager pattern:** Single `RepoManager` instance in `extension.ts` passed to both `AiReviewAction` and `AiWalkthroughAction`. When code review runs for a PR that walkthrough already prepared, it reuses the existing clone/worktree.
