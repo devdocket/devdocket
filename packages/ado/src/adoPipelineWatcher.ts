@@ -132,11 +132,16 @@ export class AdoPipelineWatcher implements DevDocketRunWatcher {
     switch (state) {
       case 'notStarted':
       case 'pending':
+      case 'postponed':
         return 'queued';
       case 'inProgress':
+      case 'cancelling':
         return 'running';
-      default:
+      case 'completed':
         return 'completed';
+      default:
+        logger.warn(`Unknown ADO build/timeline state '${state}', treating as running`);
+        return 'running';
     }
   }
 
