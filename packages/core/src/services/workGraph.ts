@@ -346,7 +346,7 @@ export class WorkGraph {
     // Consider prompting for git cleanup when transitioning to Done; promptGitCleanup
     // will no-op if the work item has no branch/worktree metadata to clean up.
     if (newState === WorkItemState.Done) {
-      promptGitCleanup(updated, async () => {
+      void promptGitCleanup(updated, async () => {
         const current = this.items.get(id);
         if (current) {
           const dismissed = { ...current, cleanupDismissed: true, updatedAt: Date.now() };
