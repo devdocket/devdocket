@@ -26,8 +26,11 @@ export class WatcherRegistry {
     this.logger.info(`Registered run watcher: ${watcher.id} (${watcher.label})`);
     
     return new vscode.Disposable(() => {
-      this.watchers.delete(watcher.id);
-      this.logger.info(`Unregistered run watcher: ${watcher.id}`);
+      // Only remove if this is still the registered instance (prevents removing a re-registered watcher)
+      if (this.watchers.get(watcher.id) === watcher) {
+        this.watchers.delete(watcher.id);
+        this.logger.info(`Unregistered run watcher: ${watcher.id}`);
+      }
     });
   }
 
