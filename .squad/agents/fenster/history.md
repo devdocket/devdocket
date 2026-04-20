@@ -55,7 +55,25 @@ DevDocket is a VS Code extension monorepo for managing work items from multiple 
 
 ## Learnings
 
-### 2026-04-22 — Issue #300 (CancellationToken → AbortSignal wiring)
+### 2026-04-23 — Issue #305 (Split commands.ts into domain modules)
+
+**Refactoring:** Split the 1118-line monolith `commands.ts` into 8 domain-specific modules plus a shared utilities file.
+- **Modules created:** `commandUtils.ts` (shared helpers), `inboxCommands.ts`, `queueCommands.ts`, `focusCommands.ts`, `historyCommands.ts`, `layoutCommands.ts`, `generalCommands.ts`, `sourcesCommands.ts`, `watchCommands.ts`.
+- **Pattern:** Each module exports a single `register*Commands()` function that receives only the dependencies it needs. The original `commands.ts` becomes a thin orchestrator calling each domain registrar.
+- **Shared utilities in `commandUtils.ts`:** `wrapCommand`, `handleCommandError`, `resolveItemIds`, `formatItemTitle`, `batchTransition`, `batchAcceptItems` + `AcceptableItem` interface — used across multiple domain modules.
+- **Key lesson:** When splitting a monolith, identify cross-cutting helpers first and extract them into a shared utils module. Domain-specific type guards (e.g., `isInboxItem`, `isSourceItem`) stay in their respective domain modules since they're only used there.
+- **Files changed:** 9 new files in `packages/core/src/commands/`, `commands.ts` reduced to ~40 lines.
+
+### 2026-04-22 — Issue #306 (Scope WorkItemEditorPanel cache to extension lifecycle)
+
+**Refactor:** Moved the static panel cache from `WorkItemEditorPanel` to a `PanelManager` class instantiated during `activate()` and disposed with the extension context.
+- **Problem:** Static `Map<string, WorkItemEditorPanel>` survived extension reloads during development, leaking stale panel references. `clearPanelCache()` existed but was only called in tests.
+- **Solution:** Created `PanelManager` class owning the `openPanels` map. Each `activate()` creates a fresh `PanelManager`, sets it via `WorkItemEditorPanel.setPanelManager()`, and pushes it to `context.subscriptions`. On deactivation, `PanelManager.dispose()` clears all panels.
+- **Backward compatibility:** Kept static `open()` and `clearPanelCache()` on `WorkItemEditorPanel` as thin delegates to the current manager. Tests work unchanged — they use the default static manager reset by `clearPanelCache()` in `beforeEach`.
+- **Pattern:** When static class state needs lifecycle scoping, use a manager class with `setPanelManager()` injection — preserves static API facade for consumers while scoping ownership to `activate()`/`deactivate()`.
+- **Files changed:** `packages/core/src/views/workItemEditorPanel.ts` (new `PanelManager` class, refactored panel cache ownership), `packages/core/src/extension.ts` (create + register `PanelManager`).
+
+### 2026-04-22 — Issue #300(CancellationToken → AbortSignal wiring)
 
 **Bug fix:** Providers accepted `CancellationToken` in `refresh()` but only checked `isCancellationRequested` at discrete points. In-flight `fetch()` calls ran to completion even after cancellation.
 - **Pattern:** Create `AbortController` at refresh entry point, wire `token?.onCancellationRequested?.(() => abortController.abort())` with double optional chaining (test mocks may lack the event method), pass `abortController.signal` to all `fetch()` calls down the chain.
@@ -308,3 +326,15 @@ See `.squad/orchestration-log/2026-04-20T16-18-00Z-keaton.md` for full triage de
 - Environment variable patterns for sensitive data (applicable to future credential management).
 - Allowlist validation more secure than denylist (applicable to all input validation).
 - Concurrent signal handling requires careful synchronization (document in concurrency guidelines).
+
+### 2026-04-20 — Issue #303 (BaseGitHubProvider extends BaseProvider)
+
+**Refactored** BaseGitHubProvider to extend BaseProvider from @devdocket/shared instead of duplicating infrastructure.
+- **Removed duplication:** Event emitter lifecycle, refresh timer, concurrency guard, and disposal were all duplicated from BaseProvider. Now inherited.
+- **Inherited _disposed guard:** BaseProvider.dispose() sets _disposed = true and checks it in startPeriodicRefresh and 
+efreshInBackground. GitHub providers now get this protection automatically.
+- **Split refresh paths:** Replaced single doRefresh(isUserTriggered) with separate 
+efresh(token?) (user-triggered) and doBackgroundRefresh() (silent auth). Matches ADO provider pattern.
+- **Re-exports from shared:** DiscoveredItem, Disposable, Event, ResolvedItem now imported from @devdocket/shared instead of being re-declared locally.
+- **No subclass changes needed:** githubProvider.ts, githubPrReviewProvider.ts, and githubMyPrsProvider.ts required zero changes.
+- **Files changed:** packages/github/src/baseGithubProvider.ts only (37 insertions, 77 deletions).
