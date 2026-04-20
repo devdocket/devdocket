@@ -10,9 +10,9 @@
 **Decision:** Core owns the `WatcherService` lifecycle, providers supply `DevDocketRunWatcher` interface.  
 **Why:** Mirrors existing provider/action plugin patterns. Keeps polling logic centralized while provider-specific API calls are delegated. Both GitHub Actions and ADO Pipelines implemented using this pattern.
 
-### 2. Session-Scoped Persistence
-**Decision:** Watches are in-memory only, cleared on VS Code restart.  
-**Why:** Design spec decision. Fire-and-forget use case doesn't need persistence. Users can re-watch by pasting URL again. Simpler implementation, no migration concerns.
+### 2. Persisted Watch Lifecycle
+**Decision:** Watches are persisted to `watches.json` via `WatchStore` and restored on activation, surviving VS Code restarts. Dismissed watches are excluded on restore.  
+**Why:** Users shouldn't lose active watches if VS Code restarts while a pipeline is still running. Write-queue serialization prevents file corruption. Completed/dismissed watches are cleaned up on restore.
 
 ### 3. API Surface Extension
 **Decision:** Added optional `registerRunWatcher(watcher: DevDocketRunWatcher)` to `DevDocketApi`.  

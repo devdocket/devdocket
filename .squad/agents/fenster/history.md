@@ -227,7 +227,7 @@ DevDocket is a VS Code extension monorepo for managing work items from multiple 
 **Implementation:** Fire-and-forget pipeline watching for GitHub Actions and Azure DevOps Pipelines.
 - **Hybrid architecture:** Core owns `WatcherService` lifecycle (poll, notify), providers supply `DevDocketRunWatcher` interface (canWatch, parseRunUrl, getRunStatus).
 - **New API surface:** `DevDocketRunWatcher` in `@devdocket/shared`, `registerRunWatcher()` on `DevDocketApi` (additive, non-breaking). Optional interface mirrors existing provider/action pattern.
-- **Session-scoped persistence:** Watches are in-memory only. If VS Code restarts, re-watch by pasting URL again. Design spec decision.
+- **Persistence:** Watches persisted to `watches.json` via `WatchStore` (write-queue serialization). Restored on activation — dismissed watches excluded. Active watches resume polling automatically.
 - **Polling with concurrency guard:** `WatcherService` polls active watches every 30s (configurable, min 15s). Skips tick if previous poll still in-flight. After 3 consecutive failures, sets warning flag and skips that run in subsequent polls.
 - **Early failure notifications:** `onDidDetectJobFailure` fires when job completes with `failure` conclusion while overall run is still in progress. Notification shows running job count. Gated by `devdocket.watches.notifyOnJobFailure` (default: true).
 - **UI components:** (1) `WatchesTreeProvider` (6th view): run nodes with job children, description shows repo/runId/state. (2) `WatchesStatusBar`: right side, shows counts, click for quick-pick. (3) Notification toasts on completion and job failure.
