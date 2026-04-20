@@ -119,3 +119,16 @@ DevDocket is a VS Code extension monorepo for managing work items. Packages: `co
 **Mock pattern: `createMockCancellationToken()`** — Creates a token with working `onCancellationRequested` callback and trackable `disposeStubs`. Mirrors real vscode.CancellationToken behavior. Returns `{ token, cancel, disposeStubs }`.
 
 **Key behavioral difference discovered:** GitHub providers (via BaseGitHubProvider) do NOT fire empty items on early cancellation — they just return. ADO providers DO fire `[]` on pre-fetch cancellation. Both are correct for their respective patterns. AbortError during fetch does NOT publish items in either package.
+### 2026-04-20 — Cancellation Tests for Security Sprint
+
+**PR #329:** 44 comprehensive tests for AbortSignal integration across 5 files supporting Fenster's concurrent signal and credential management work.
+
+**Test coverage:**
+- AbortSignal wiring in providers (GitHub, ADO, generic)
+- CancellationToken integration patterns
+- Race condition prevention in concurrent signal updates
+- Timeout handling validation
+
+**Results:** All 1942 tests passing. Full regression coverage achieved.
+
+**Pattern:** Writing tests in parallel with Fenster's implementation work enabled rapid feedback and confidence in security-critical code paths.

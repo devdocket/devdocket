@@ -367,3 +367,19 @@ See `.squad/orchestration-log/2026-04-20T16-18-00Z-keaton.md` for full triage de
 - **Fix:** Removed all manual disposal from `deactivate()`, making it a true no-op. Removed the module-level variables and their assignments since they only existed to support the manual disposal.
 - **VS Code idiom:** Rely exclusively on `context.subscriptions` for resource lifecycle management. VS Code calls `dispose()` on all subscriptions during deactivation automatically.
 - **Files changed:** `packages/core/src/extension.ts` only.
+
+### 2026-04-20 — Security & Concurrency Sprint
+
+**Team outcome:** 5 PRs completed in parallel coordination with Hockney.
+
+- **PR #327 — CancellationToken Race Condition Fix:** Fixed race condition in `combineSignals()` where concurrent updates corrupted state. Resolved all code review feedback in single cycle.
+- **PR #328 — README Refresh:** Rewritten documentation with UX guide creation. Mermaid diagram removed. Merge conflicts resolved cleanly.
+- **PR #330 — Credential Exposure Security Fix:** Moved git authentication from CLI arguments to `GIT_CONFIG` environment variables. Unified gitExec signature. 7-round review cycle completed.
+- **PR #331 — BaseRef Sanitization Hardening:** Replaced weak denylist with strict `isValidRef()` allowlist validation. Only valid git refs accepted. 3-round review cycle completed.
+
+**Hockney's contribution:** 44 new tests across 5 files covering AbortSignal wiring and cancellation paths (PR #329, 1942 tests passing).
+
+**Key patterns emerged:**
+- Environment variable patterns for sensitive data (applicable to future credential management).
+- Allowlist validation more secure than denylist (applicable to all input validation).
+- Concurrent signal handling requires careful synchronization (document in concurrency guidelines).
