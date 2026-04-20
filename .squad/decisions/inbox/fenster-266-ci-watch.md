@@ -36,6 +36,5 @@
 
 ## Future Considerations
 
-- **ADO Pipelines:** Out of scope for this PR. Would implement `DevDocketRunWatcher` in `packages/ado`, parse ADO URLs, call ADO REST API.
 - **Auto-watch on push:** Design spec "Out of Scope (Future)" item. Could auto-detect workflow triggers from branch push events.
 - **Webhook-based updates:** Design spec future item. Would replace polling with push notifications when supported.
