@@ -2,13 +2,13 @@
 
 **Date:** 2026-04-20  
 **By:** Fenster  
-**Context:** Implemented fire-and-forget pipeline watching for GitHub Actions
+**Context:** Implemented fire-and-forget pipeline watching for GitHub Actions and Azure DevOps Pipelines
 
 ## Key Decisions
 
 ### 1. Hybrid Architecture Pattern
 **Decision:** Core owns the `WatcherService` lifecycle, providers supply `DevDocketRunWatcher` interface.  
-**Why:** Mirrors existing provider/action plugin patterns. Keeps polling logic centralized while provider-specific API calls are delegated. ADO Pipelines can be added later following the same pattern.
+**Why:** Mirrors existing provider/action plugin patterns. Keeps polling logic centralized while provider-specific API calls are delegated. Both GitHub Actions and ADO Pipelines implemented using this pattern.
 
 ### 2. Session-Scoped Persistence
 **Decision:** Watches are in-memory only, cleared on VS Code restart.  
