@@ -127,7 +127,7 @@ export abstract class BaseGitHubProvider implements DevDocketProvider {
 
       await this.fetchAndPublish(session.accessToken, isUserTriggered, abortController.signal);
     } catch (err) {
-      if (err instanceof Error && err.name === 'AbortError') {
+      if (err instanceof Error && err.name === 'AbortError' && abortController.signal.aborted && token?.isCancellationRequested) {
         logger.debug(`${this.label} fetch aborted due to cancellation`);
       } else {
         logger.error(`Failed to fetch ${this.label}`, err);

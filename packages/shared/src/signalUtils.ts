@@ -21,18 +21,25 @@ export function combineSignals(cancelSignal: AbortSignal | undefined, timeoutMs:
     return controller.signal;
   }
 
+  let timer: ReturnType<typeof setTimeout> | undefined;
   const onCancel = () => controller.abort(cancelSignal.reason);
+
+  // Register cleanup before wiring cancel listener to avoid timer leak race
+  const onAbort = () => {
+    if (timer !== undefined) {
+      clearTimeout(timer);
+    }
+    cancelSignal.removeEventListener('abort', onCancel);
+  };
+  controller.signal.addEventListener('abort', onAbort, { once: true });
+
   cancelSignal.addEventListener('abort', onCancel, { once: true });
 
-  const timer = setTimeout(() => {
+  timer = setTimeout(() => {
     cancelSignal.removeEventListener('abort', onCancel);
     controller.abort(new DOMException('The operation timed out.', 'TimeoutError'));
   }, timeoutMs);
-
-  controller.signal.addEventListener('abort', () => {
-    clearTimeout(timer);
-    cancelSignal.removeEventListener('abort', onCancel);
-  }, { once: true });
+  timer.unref?.();
 
   return controller.signal;
 }

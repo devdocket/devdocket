@@ -351,7 +351,7 @@ export class AdoWorkItemProvider extends BaseProvider {
         headers: {
           Authorization: `Bearer ${token}`,
         },
-        signal,
+        signal: combineSignals(signal, 30_000),
       });
     } catch (err) {
       if (err instanceof Error && err.name === 'AbortError' && signal?.aborted) { throw err; }

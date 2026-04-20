@@ -81,7 +81,7 @@ export class AdoPrReviewProvider extends BaseProvider {
 
       await this.fetchAndPublishPrs(session.accessToken, true, session.account.id, abortController.signal);
     } catch (err) {
-      if (err instanceof Error && err.name === 'AbortError') {
+      if (err instanceof Error && err.name === 'AbortError' && abortController.signal.aborted && token?.isCancellationRequested) {
         logger.debug('ADO PR reviews fetch aborted due to cancellation');
       } else {
         this._onDidDiscoverItems.fire([]);
