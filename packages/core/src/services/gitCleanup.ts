@@ -38,7 +38,7 @@ async function checkCleanupState(item: WorkItem): Promise<CleanupState | undefin
 
   const repoPath = item.repoPath;
   if (!await pathExists(path.join(repoPath, '.git'))) {
-    logger.warn(`Skipping cleanup: repoPath is not a git repo: ${repoPath}`);
+    logger.warn('Skipping cleanup: repoPath is not a valid git repo');
     return undefined;
   }
 
@@ -116,7 +116,7 @@ export async function promptGitCleanup(
   if (worktreeExists && item.worktreePath && repoPath) {
     try {
       await execFileAsync('git', ['worktree', 'remove', '--', item.worktreePath], { cwd: repoPath });
-      logger.info(`Removed worktree: ${item.worktreePath}`);
+      logger.info('Removed worktree for work item');
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       errors.push(`Failed to remove worktree: ${message}`);
