@@ -257,7 +257,11 @@ export class GitHubPrReviewProvider extends BaseGitHubProvider {
     let nextIndex = 0;
     const runWorker = async (): Promise<void> => {
       while (nextIndex < prsWithApiUrl.length) {
-        if (signal?.aborted) { break; }
+        if (signal?.aborted) {
+          const error = new Error('The operation was aborted.');
+          error.name = 'AbortError';
+          throw error;
+        }
         const currentIndex = nextIndex++;
         const pr = prsWithApiUrl[currentIndex];
         try {
@@ -280,7 +284,7 @@ export class GitHubPrReviewProvider extends BaseGitHubProvider {
             );
           }
         } catch (error) {
-          if (signal?.aborted) { break; }
+          if (error instanceof Error && error.name === 'AbortError') { throw error; }
           logger.debug(`Failed to fetch head SHA for PR ${pr.html_url}: ${String(error)}`);
         }
       }
