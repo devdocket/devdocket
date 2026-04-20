@@ -374,6 +374,11 @@
         "icon": "$(clear-all)"
       },
       {
+        "command": "devdocket.updateMetadata",
+        "title": "Update Work Item Metadata",
+        "category": "DevDocket"
+      },
+      {
         "command": "devdocket.moveToQueue",
         "title": "Move to Queue",
         "category": "DevDocket",
