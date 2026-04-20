@@ -24,7 +24,7 @@ export function combineSignals(cancelSignal: AbortSignal | undefined, timeoutMs:
   let timer: ReturnType<typeof setTimeout> | undefined;
   const onCancel = () => controller.abort(cancelSignal.reason);
 
-  // Register cleanup before wiring cancel listener to avoid timer leak race
+  // Cleanup handler clears timer and removes cancel listener
   const onAbort = () => {
     if (timer !== undefined) {
       clearTimeout(timer);
@@ -33,16 +33,18 @@ export function combineSignals(cancelSignal: AbortSignal | undefined, timeoutMs:
   };
   controller.signal.addEventListener('abort', onAbort, { once: true });
 
-  cancelSignal.addEventListener('abort', onCancel, { once: true });
-
+  // Create timer BEFORE wiring cancel listener so timer is always defined
+  // when onAbort runs, eliminating the race where cancel fires mid-setup.
   timer = setTimeout(() => {
     cancelSignal.removeEventListener('abort', onCancel);
     controller.abort(new DOMException('The operation timed out.', 'TimeoutError'));
   }, timeoutMs);
   timer.unref?.();
 
-  // If cancelSignal fired during setup (before timer was assigned), onAbort
-  // couldn't clear the timer. Clean it up now to avoid a dangling timeout.
+  cancelSignal.addEventListener('abort', onCancel, { once: true });
+
+  // If cancelSignal fired between the aborted check above and addEventListener,
+  // the combined signal may already be aborted. Clean up the timer.
   if (controller.signal.aborted) {
     clearTimeout(timer);
   }
