@@ -13,6 +13,7 @@ class WatchedRunNode extends vscode.TreeItem {
     const label = watchedRun.identifier.displayName;
     super(label, children.length > 0 ? vscode.TreeItemCollapsibleState.Collapsed : vscode.TreeItemCollapsibleState.None);
     
+    this.id = `watch:${watchedRun.identifier.providerId}:${watchedRun.identifier.repo ?? ''}:${watchedRun.identifier.runId}`;
     this.tooltip = this.buildTooltip();
     this.description = this.buildDescription();
     this.iconPath = this.getIconForState(watchedRun.status.overallState, watchedRun.status.conclusion, watchedRun.hasWarning);
