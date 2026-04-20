@@ -164,6 +164,40 @@ describe('DevDocketApiImpl', () => {
     });
   });
 
+  describe('registerRunWatcher', () => {
+    it('delegates to watcherRegistry.register', () => {
+      const watcher = {
+        id: 'test-watcher',
+        label: 'Test Watcher',
+        canWatch: vi.fn(),
+        parseRunUrl: vi.fn(),
+        getRunStatus: vi.fn(),
+      };
+      const spy = vi.spyOn(watcherRegistry, 'register');
+
+      api.registerRunWatcher(watcher);
+
+      expect(spy).toHaveBeenCalledWith(watcher);
+    });
+
+    it('returns a Disposable that unregisters the watcher', () => {
+      const watcher = {
+        id: 'test-watcher',
+        label: 'Test Watcher',
+        canWatch: vi.fn(),
+        parseRunUrl: vi.fn(),
+        getRunStatus: vi.fn(),
+      };
+      const disposable = api.registerRunWatcher(watcher);
+
+      expect(watcherRegistry.get('test-watcher')).toBeDefined();
+
+      disposable.dispose();
+
+      expect(watcherRegistry.get('test-watcher')).toBeUndefined();
+    });
+  });
+
   describe('addActivity', () => {
     it('delegates to workGraph.addActivity', async () => {
       const item = await workGraph.createItem({ title: 'Test' });
