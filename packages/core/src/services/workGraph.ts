@@ -248,6 +248,10 @@ export class WorkGraph {
     if (patch == null || typeof patch !== 'object' || Array.isArray(patch)) {
       throw new Error('Invalid metadata patch: expected a plain object.');
     }
+    const proto = Object.getPrototypeOf(patch);
+    if (proto !== Object.prototype && proto !== null) {
+      throw new Error('Invalid metadata patch: expected a plain object.');
+    }
     const candidate = patch as Record<string, unknown>;
     const sanitized: Partial<Pick<WorkItem, 'branchName' | 'worktreePath' | 'repoPath'>> = {};
     for (const key of WorkGraph.METADATA_KEYS) {
