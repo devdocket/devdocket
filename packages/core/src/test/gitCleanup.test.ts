@@ -95,6 +95,41 @@ describe('promptGitCleanup', () => {
     );
   });
 
+  it('calls onCleanup with detail when branch is deleted', async () => {
+    (fs.access as Mock).mockResolvedValue(undefined);
+    (execFile as unknown as Mock).mockResolvedValueOnce({ stdout: '', stderr: '' });
+    (vscode.window.showInformationMessage as Mock).mockResolvedValue('Yes');
+    (execFile as unknown as Mock).mockResolvedValueOnce({ stdout: '', stderr: '' });
+    const onCleanup = vi.fn().mockResolvedValue(undefined);
+
+    await promptGitCleanup(createItem({
+      branchName: 'feature/x',
+      repoPath: '/repos/main',
+    }), undefined, onCleanup);
+
+    expect(onCleanup).toHaveBeenCalledWith('Removed branch feature/x');
+  });
+
+  it('calls onCleanup with detail for both worktree and branch', async () => {
+    (fs.access as Mock).mockResolvedValue(undefined);
+    // show-ref succeeds (branch exists)
+    (execFile as unknown as Mock).mockResolvedValueOnce({ stdout: '', stderr: '' });
+    (vscode.window.showInformationMessage as Mock).mockResolvedValue('Yes');
+    // worktree remove succeeds
+    (execFile as unknown as Mock).mockResolvedValueOnce({ stdout: '', stderr: '' });
+    // branch -d succeeds
+    (execFile as unknown as Mock).mockResolvedValueOnce({ stdout: '', stderr: '' });
+    const onCleanup = vi.fn().mockResolvedValue(undefined);
+
+    await promptGitCleanup(createItem({
+      branchName: 'feature/x',
+      worktreePath: '/wt/path',
+      repoPath: '/repos/main',
+    }), undefined, onCleanup);
+
+    expect(onCleanup).toHaveBeenCalledWith('Removed worktree and branch feature/x');
+  });
+
   it('does not run cleanup when user clicks No', async () => {
     (fs.access as Mock).mockResolvedValue(undefined);
     (execFile as unknown as Mock).mockResolvedValueOnce({ stdout: '', stderr: '' });

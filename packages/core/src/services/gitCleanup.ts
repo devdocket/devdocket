@@ -75,6 +75,7 @@ async function checkCleanupState(item: WorkItem): Promise<CleanupState | undefin
 export async function promptGitCleanup(
   item: WorkItem,
   onDismiss?: () => Promise<void>,
+  onCleanup?: (detail: string) => Promise<void>,
 ): Promise<void> {
   if (item.cleanupDismissed) {
     return;
@@ -112,11 +113,13 @@ export async function promptGitCleanup(
 
   // Perform cleanup
   const errors: string[] = [];
+  const cleaned: string[] = [];
 
   if (worktreeExists && item.worktreePath && repoPath) {
     try {
       await execFileAsync('git', ['worktree', 'remove', '--', item.worktreePath], { cwd: repoPath });
       logger.info('Removed worktree for work item');
+      cleaned.push(`worktree`);
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       errors.push(`Failed to remove worktree: ${message}`);
@@ -128,6 +131,7 @@ export async function promptGitCleanup(
     try {
       await execFileAsync('git', ['branch', '-d', '--', item.branchName], { cwd: repoPath });
       logger.info(`Deleted branch: ${item.branchName}`);
+      cleaned.push(`branch ${item.branchName}`);
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       const stderr = (err as any)?.stderr ?? '';
@@ -144,5 +148,9 @@ export async function promptGitCleanup(
     void vscode.window.showErrorMessage(`DevDocket: ${errors.join('; ')}`);
   } else {
     void vscode.window.showInformationMessage('DevDocket: Cleanup completed successfully');
+  }
+
+  if (cleaned.length > 0 && onCleanup) {
+    await onCleanup(`Removed ${cleaned.join(' and ')}`);
   }
 }

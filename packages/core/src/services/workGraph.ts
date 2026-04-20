@@ -359,6 +359,8 @@ export class WorkGraph {
           this.invalidateStateCache();
           this._onDidChange.fire();
         }
+      }, async (detail: string) => {
+        await this.addActivity(id, 'cleanup', detail);
       }).catch(err => {
         logger.error(`Failed to run git cleanup prompt for work item ${id}`, err);
       });
