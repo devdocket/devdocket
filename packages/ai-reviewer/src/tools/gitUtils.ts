@@ -12,7 +12,7 @@ export class GitExecError extends Error {
 export function gitExec(
   args: string[],
   cwd: string,
-  env?: Record<string, string>,
+  env?: Record<string, string | undefined>,
 ): Promise<string> {
   return new Promise((resolve, reject) => {
     execFile(
