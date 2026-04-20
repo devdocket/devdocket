@@ -175,12 +175,17 @@ export class GitHubPrReviewProvider extends BaseGitHubProvider {
 
     const runWorker = async (): Promise<void> => {
       while (nextIndex < repos.length) {
-        if (signal?.aborted) { break; }
+        if (signal?.aborted) {
+          const error = new Error('The operation was aborted.');
+          error.name = 'AbortError';
+          throw error;
+        }
         const currentIndex = nextIndex++;
         try {
           const value = await this.fetchRepoPrReviews(token, repos[currentIndex], signal);
           results[currentIndex] = { status: 'fulfilled', value };
         } catch (reason) {
+          if (reason instanceof Error && reason.name === 'AbortError') { throw reason; }
           results[currentIndex] = { status: 'rejected', reason: reason as Error };
         }
       }
