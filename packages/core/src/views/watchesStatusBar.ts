@@ -55,9 +55,14 @@ export class WatchesStatusBar implements vscode.Disposable {
       parts.push(`$(clock) ${queuedCount} queued`);
     }
     
-    // If all completed successfully or in other states, show total count
+    // Fallback: all completed — distinguish success vs other conclusions
     if (parts.length === 0) {
-      parts.push(`$(check) ${watches.length} completed`);
+      const successCount = watches.filter(w => w.status.conclusion === 'success').length;
+      if (successCount === watches.length) {
+        parts.push(`$(check) ${watches.length} completed`);
+      } else {
+        parts.push(`$(circle-outline) ${watches.length} completed`);
+      }
     }
 
     this.statusBarItem.text = parts.join(' · ');
