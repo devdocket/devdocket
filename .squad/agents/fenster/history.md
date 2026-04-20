@@ -238,6 +238,23 @@ DevDocket is a VS Code extension monorepo for managing work items from multiple 
 
 ### 2026-04-18 — Issue #253 (Share Cloned Repo Between AI Actions)
 
+## Squad Triage & Routing (2026-04-20)
+
+### Triage Round — 12 Untriaged Squad Issues
+
+**Status:** COMPLETE — Keaton triaged all 12 untriaged issues via background agent.
+
+**Routed to Fenster:** 8 issues
+- **Bugs:** #298, #299, #300
+- **Chores:** #301, #302, #303, #305, #306
+- **Rationale:** Fenster owns provider implementations and provider API surface; bugs/chores align with existing focus areas
+
+**Deferred to Keaton:** 4 issues
+- **Architecture/Scope Decisions:** #292, #304, #307, #308
+- **Rationale:** Require lead judgment on scope, priority trade-offs, or architectural direction. Pending design review.
+
+See `.squad/orchestration-log/2026-04-20T16-18-00Z-keaton.md` for full triage details.
+
 **PR #314:** Shared RepoManager and walkthrough findings between AI Code Review and AI Walkthrough.
 - **Shared RepoManager pattern:** Single `RepoManager` instance in `extension.ts` passed to both `AiReviewAction` and `AiWalkthroughAction`. When code review runs for a PR that walkthrough already prepared, it reuses the existing clone/worktree.
 - **Tool-enabled code review:** `AiReviewAction` now overrides `run()` and implements `analyzeWithTools()` with a tool-use loop (matching `WalkthroughParticipant` pattern). Model gets access to `devdocket-readFile`, `devdocket-searchCode`, etc. for full repo exploration during review. Falls back to diff-only `analyzeWithAi()` if worktree preparation fails.
