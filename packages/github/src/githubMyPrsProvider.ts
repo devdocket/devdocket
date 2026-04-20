@@ -100,12 +100,17 @@ export class GitHubMyPrsProvider extends BaseGitHubProvider {
 
     const runWorker = async (): Promise<void> => {
       while (nextIndex < repos.length) {
-        if (signal?.aborted) { break; }
+        if (signal?.aborted) {
+          const error = new Error('The operation was aborted.');
+          error.name = 'AbortError';
+          throw error;
+        }
         const currentIndex = nextIndex++;
         try {
           const value = await this.fetchRepoPrs(token, repos[currentIndex], signal);
           results[currentIndex] = { status: 'fulfilled', value };
         } catch (reason) {
+          if (reason instanceof Error && reason.name === 'AbortError') { throw reason; }
           results[currentIndex] = { status: 'rejected', reason: reason as Error };
         }
       }
@@ -190,7 +195,11 @@ export class GitHubMyPrsProvider extends BaseGitHubProvider {
     let nextIndex = 0;
     const runWorker = async (): Promise<void> => {
       while (nextIndex < prsWithApiUrl.length) {
-        if (signal?.aborted) { break; }
+        if (signal?.aborted) {
+          const error = new Error('The operation was aborted.');
+          error.name = 'AbortError';
+          throw error;
+        }
         const currentIndex = nextIndex++;
         const pr = prsWithApiUrl[currentIndex];
         try {
@@ -199,7 +208,7 @@ export class GitHubMyPrsProvider extends BaseGitHubProvider {
             result.set(pr.html_url, status);
           }
         } catch (error) {
-          if (signal?.aborted) { break; }
+          if (error instanceof Error && error.name === 'AbortError') { throw error; }
           logger.debug(`Failed to fetch status for PR ${pr.html_url}: ${String(error)}`);
         }
       }
