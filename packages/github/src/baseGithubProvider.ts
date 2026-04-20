@@ -90,6 +90,8 @@ export abstract class BaseGitHubProvider implements DevDocketProvider {
       return;
     }
     this._isRefreshing = true;
+    const abortController = new AbortController();
+    const cancelListener = token?.onCancellationRequested?.(() => abortController.abort());
     try {
       if (token?.isCancellationRequested) {
         return;
@@ -123,15 +125,20 @@ export abstract class BaseGitHubProvider implements DevDocketProvider {
         return;
       }
 
-      await this.fetchAndPublish(session.accessToken, isUserTriggered);
+      await this.fetchAndPublish(session.accessToken, isUserTriggered, abortController.signal);
     } catch (err) {
-      logger.error(`Failed to fetch ${this.label}`, err);
+      if (err instanceof Error && err.name === 'AbortError') {
+        logger.debug(`${this.label} fetch aborted due to cancellation`);
+      } else {
+        logger.error(`Failed to fetch ${this.label}`, err);
+      }
     } finally {
+      cancelListener?.dispose();
       this._isRefreshing = false;
     }
   }
 
-  protected abstract fetchAndPublish(accessToken: string, isUserTriggered: boolean): Promise<void>;
+  protected abstract fetchAndPublish(accessToken: string, isUserTriggered: boolean, signal?: AbortSignal): Promise<void>;
 
   protected parseRepo(issue: GitHubIssue): string {
     const match = issue.html_url.match(/github\.com\/([^/]+\/[^/]+)/);

@@ -35,15 +35,15 @@ export class GitHubMyPrsProvider extends BaseGitHubProvider {
   readonly id = 'github-my-prs';
   readonly label = 'My GitHub PRs';
 
-  protected async fetchAndPublish(accessToken: string, isUserTriggered: boolean): Promise<void> {
+  protected async fetchAndPublish(accessToken: string, isUserTriggered: boolean, signal?: AbortSignal): Promise<void> {
     logger.info('Fetching authored PRs...');
     const repos = this.getConfiguredRepos();
-    const { prs, failures } = await this.fetchAuthoredPrs(accessToken, repos);
+    const { prs, failures } = await this.fetchAuthoredPrs(accessToken, repos, signal);
 
     logger.info(`Discovered ${prs.length} authored PRs`);
 
     const statusMap = prs.length > 0
-      ? await this.fetchPrStatuses(accessToken, prs)
+      ? await this.fetchPrStatuses(accessToken, prs, signal)
       : new Map<string, string>();
 
     const items: DiscoveredItem[] = prs.map((pr) => {
@@ -82,25 +82,28 @@ export class GitHubMyPrsProvider extends BaseGitHubProvider {
   private async fetchAuthoredPrs(
     token: string,
     repos: string[],
+    signal?: AbortSignal,
   ): Promise<{ prs: GitHubIssue[]; failures: string[] }> {
     if (repos.length > 0) {
-      return this.fetchPerRepoPrs(token, repos);
+      return this.fetchPerRepoPrs(token, repos, signal);
     }
-    return this.fetchAllAuthoredPrs(token);
+    return this.fetchAllAuthoredPrs(token, signal);
   }
 
   private async fetchPerRepoPrs(
     token: string,
     repos: string[],
+    signal?: AbortSignal,
   ): Promise<{ prs: GitHubIssue[]; failures: string[] }> {
     const results: PromiseSettledResult<{ prs: GitHubIssue[]; failed: boolean }>[] = new Array(repos.length);
     let nextIndex = 0;
 
     const runWorker = async (): Promise<void> => {
       while (nextIndex < repos.length) {
+        if (signal?.aborted) { break; }
         const currentIndex = nextIndex++;
         try {
-          const value = await this.fetchRepoPrs(token, repos[currentIndex]);
+          const value = await this.fetchRepoPrs(token, repos[currentIndex], signal);
           results[currentIndex] = { status: 'fulfilled', value };
         } catch (reason) {
           results[currentIndex] = { status: 'rejected', reason: reason as Error };
@@ -128,7 +131,7 @@ export class GitHubMyPrsProvider extends BaseGitHubProvider {
     return { prs: allPrs, failures };
   }
 
-  private async fetchRepoPrs(token: string, repo: string): Promise<{ prs: GitHubIssue[]; failed: boolean }> {
+  private async fetchRepoPrs(token: string, repo: string, signal?: AbortSignal): Promise<{ prs: GitHubIssue[]; failed: boolean }> {
     logger.debug(`Fetching authored PRs for repo: ${repo}`);
     const response = await fetch(
       `https://api.github.com/search/issues?q=type:pr+state:open+author:@me+repo:${repo}&per_page=100`,
@@ -138,6 +141,7 @@ export class GitHubMyPrsProvider extends BaseGitHubProvider {
           Accept: 'application/vnd.github+json',
           'X-GitHub-Api-Version': '2022-11-28',
         },
+        signal,
       },
     );
 
@@ -150,7 +154,7 @@ export class GitHubMyPrsProvider extends BaseGitHubProvider {
     return { prs: data.items, failed: false };
   }
 
-  private async fetchAllAuthoredPrs(token: string): Promise<{ prs: GitHubIssue[]; failures: string[] }> {
+  private async fetchAllAuthoredPrs(token: string, signal?: AbortSignal): Promise<{ prs: GitHubIssue[]; failures: string[] }> {
     const response = await fetch(
       'https://api.github.com/search/issues?q=type:pr+state:open+author:@me&per_page=100',
       {
@@ -159,6 +163,7 @@ export class GitHubMyPrsProvider extends BaseGitHubProvider {
           Accept: 'application/vnd.github+json',
           'X-GitHub-Api-Version': '2022-11-28',
         },
+        signal,
       },
     );
 
@@ -175,7 +180,7 @@ export class GitHubMyPrsProvider extends BaseGitHubProvider {
    * Fetches PR details and reviews for each PR to determine its status.
    * Uses concurrent workers to limit API call rate.
    */
-  private async fetchPrStatuses(token: string, prs: GitHubIssue[]): Promise<Map<string, string>> {
+  private async fetchPrStatuses(token: string, prs: GitHubIssue[], signal?: AbortSignal): Promise<Map<string, string>> {
     const result = new Map<string, string>();
     const prsWithApiUrl = prs.filter(pr => pr.pull_request?.url);
     if (prsWithApiUrl.length === 0) {
@@ -185,14 +190,16 @@ export class GitHubMyPrsProvider extends BaseGitHubProvider {
     let nextIndex = 0;
     const runWorker = async (): Promise<void> => {
       while (nextIndex < prsWithApiUrl.length) {
+        if (signal?.aborted) { break; }
         const currentIndex = nextIndex++;
         const pr = prsWithApiUrl[currentIndex];
         try {
-          const status = await this.fetchSinglePrStatus(token, pr);
+          const status = await this.fetchSinglePrStatus(token, pr, signal);
           if (status) {
             result.set(pr.html_url, status);
           }
         } catch (error) {
+          if (signal?.aborted) { break; }
           logger.debug(`Failed to fetch status for PR ${pr.html_url}: ${String(error)}`);
         }
       }
@@ -204,7 +211,7 @@ export class GitHubMyPrsProvider extends BaseGitHubProvider {
     return result;
   }
 
-  private async fetchSinglePrStatus(token: string, pr: GitHubIssue): Promise<string | undefined> {
+  private async fetchSinglePrStatus(token: string, pr: GitHubIssue, signal?: AbortSignal): Promise<string | undefined> {
     const headers = {
       Authorization: `Bearer ${token}`,
       Accept: 'application/vnd.github+json',
@@ -212,7 +219,7 @@ export class GitHubMyPrsProvider extends BaseGitHubProvider {
     };
 
     // Fetch PR details (draft, mergeable state)
-    const detailResponse = await fetch(pr.pull_request!.url, { headers });
+    const detailResponse = await fetch(pr.pull_request!.url, { headers, signal });
     if (!detailResponse.ok) {
       logger.debug(`Failed to fetch PR detail for ${pr.html_url}: ${detailResponse.status}`);
       return undefined;
@@ -222,7 +229,7 @@ export class GitHubMyPrsProvider extends BaseGitHubProvider {
     // Fetch reviews — treat failure as unknown status since we can't determine
     // the actual review state without this data
     const reviewsUrl = `${pr.pull_request!.url}/reviews`;
-    const reviewsResponse = await fetch(reviewsUrl, { headers });
+    const reviewsResponse = await fetch(reviewsUrl, { headers, signal });
     if (!reviewsResponse.ok) {
       logger.debug(`Failed to fetch reviews for ${pr.html_url}: ${reviewsResponse.status}`);
       return undefined;

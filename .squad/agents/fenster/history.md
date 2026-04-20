@@ -55,6 +55,15 @@ DevDocket is a VS Code extension monorepo for managing work items from multiple 
 
 ## Learnings
 
+### 2026-04-22 — Issue #300 (CancellationToken → AbortSignal wiring)
+
+**Bug fix:** Providers accepted `CancellationToken` in `refresh()` but only checked `isCancellationRequested` at discrete points. In-flight `fetch()` calls ran to completion even after cancellation.
+- **Pattern:** Create `AbortController` at refresh entry point, wire `token?.onCancellationRequested?.(() => abortController.abort())` with double optional chaining (test mocks may lack the event method), pass `abortController.signal` to all `fetch()` calls down the chain.
+- **AbortError handling:** Catch `AbortError` (check `err.name === 'AbortError'`) at the top-level and log at debug level, not error. Don't fire empty items on abort — preserves previous provider state.
+- **Worker pool abort:** Add `if (signal?.aborted) { break; }` at top of worker loops. Add abort check in catch blocks to avoid logging expected errors.
+- **Files changed:** `baseGithubProvider.ts` (core wiring), `githubProvider.ts`, `githubPrReviewProvider.ts`, `githubMyPrsProvider.ts`, `adoWorkItemProvider.ts`, `adoPrReviewProvider.ts`, `adoPipelineWatcher.ts` (inter-fetch check).
+- **Key lesson:** `?.` on `token?.onCancellationRequested(...)` only guards against `token` being nullish. If `token` exists but lacks `onCancellationRequested` (like test mocks), it throws. Must use `token?.onCancellationRequested?.(...)` with double optional chaining.
+
 ### 2026-04-21 — Issue #323 (Watch CI Pipelines — PR #323)
 
 **Feature:** Full CI pipeline watcher with ADO support, polling control, tree/flat layout toggle, and persistence.

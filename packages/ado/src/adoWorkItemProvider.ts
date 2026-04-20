@@ -73,6 +73,8 @@ export class AdoWorkItemProvider extends BaseProvider {
     }
 
     this._isRefreshing = true;
+    const abortController = new AbortController();
+    const cancelListener = token?.onCancellationRequested?.(() => abortController.abort());
     try {
       logger.info('Fetching assigned ADO work items...');
       if (token?.isCancellationRequested) {
@@ -89,11 +91,16 @@ export class AdoWorkItemProvider extends BaseProvider {
         return;
       }
 
-      await this.fetchAndPublishWorkItems(session.accessToken, true);
+      await this.fetchAndPublishWorkItems(session.accessToken, true, abortController.signal);
     } catch (err) {
-      this._onDidDiscoverItems.fire([]);
-      logger.error('Failed to fetch work items:', err);
+      if (err instanceof Error && err.name === 'AbortError') {
+        logger.debug('ADO work items fetch aborted due to cancellation');
+      } else {
+        this._onDidDiscoverItems.fire([]);
+        logger.error('Failed to fetch work items:', err);
+      }
     } finally {
+      cancelListener?.dispose();
       this._isRefreshing = false;
     }
   }
@@ -117,7 +124,7 @@ export class AdoWorkItemProvider extends BaseProvider {
     }
   }
 
-  private async fetchAndPublishWorkItems(accessToken: string, isUserTriggered: boolean): Promise<void> {
+  private async fetchAndPublishWorkItems(accessToken: string, isUserTriggered: boolean, signal?: AbortSignal): Promise<void> {
     const allItems: DiscoveredItem[] = [];
     const failures: string[] = [];
 
@@ -143,7 +150,7 @@ export class AdoWorkItemProvider extends BaseProvider {
 
       const projectList = validProjects.length > 0 ? validProjects : [''];
       const results = await Promise.allSettled(
-        projectList.map(project => this.fetchWorkItemsForProject(accessToken, orgConfig.org, project)),
+        projectList.map(project => this.fetchWorkItemsForProject(accessToken, orgConfig.org, project, signal)),
       );
 
       results.forEach((result, index) => {
@@ -185,6 +192,7 @@ export class AdoWorkItemProvider extends BaseProvider {
     token: string,
     org: string,
     project: string,
+    signal?: AbortSignal,
   ): Promise<{ items: DiscoveredItem[]; failed: boolean }> {
     logger.debug(`Fetching work items for project: ${project || org}`);
     const projectPath = project ? `/${encodeURIComponent(project)}` : '';
@@ -201,6 +209,7 @@ export class AdoWorkItemProvider extends BaseProvider {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({ query: wiqlQuery }),
+        signal,
       });
     } catch (err) {
       logger.error(`Network error querying work items for project "${project || org}":`, err);
@@ -241,6 +250,7 @@ export class AdoWorkItemProvider extends BaseProvider {
           headers: {
             Authorization: `Bearer ${token}`,
           },
+          signal,
         });
       } catch (err) {
         logger.error(
@@ -270,7 +280,7 @@ export class AdoWorkItemProvider extends BaseProvider {
     }
 
     // Filter out items in terminal state categories
-    const activeWorkItems = await this.filterActiveItems(token, org, allWorkItems);
+    const activeWorkItems = await this.filterActiveItems(token, org, allWorkItems, signal);
 
     const items: DiscoveredItem[] = activeWorkItems.map((wi) => {
       const projectName = wi.fields['System.TeamProject'];
@@ -380,6 +390,7 @@ export class AdoWorkItemProvider extends BaseProvider {
     token: string,
     org: string,
     workItems: AdoWorkItem[],
+    signal?: AbortSignal,
   ): Promise<AdoWorkItem[]> {
     if (workItems.length === 0) {
       return [];
@@ -408,7 +419,7 @@ export class AdoWorkItemProvider extends BaseProvider {
 
     const results = await Promise.all(
       entries.map(async ({ key, project, workItemType }) => {
-        const terminalStates = await this.fetchTerminalStates(token, org, project, workItemType);
+        const terminalStates = await this.fetchTerminalStates(token, org, project, workItemType, signal);
         return { key, terminalStates };
       }),
     );

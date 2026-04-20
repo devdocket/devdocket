@@ -99,6 +99,10 @@ export class AdoPipelineWatcher implements DevDocketRunWatcher {
       ? `${buildData.definition.name} #${buildData.buildNumber}`
       : `Build ${buildData.buildNumber}`;
 
+    if (token?.isCancellationRequested) {
+      throw new Error('Request cancelled');
+    }
+
     // Fetch timeline for job details
     const timelineUrl = `https://dev.azure.com/${encodedOrg}/${encodedProject}/_apis/build/builds/${encodedBuildId}/timeline?api-version=7.1`;
     const timelineResponse = await fetch(timelineUrl, { headers });
