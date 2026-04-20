@@ -2,6 +2,7 @@ import * as vscode from 'vscode';
 import * as path from 'path';
 import { gitExec } from './gitUtils';
 import { validWorktreePaths } from './worktreeRegistry';
+import { isValidRef } from './refValidation';
 
 /** Maximum characters of diff output before truncation.
  *  Keep below the walkthrough tool-result limit (MAX_TOOL_RESULT_LENGTH)
@@ -32,9 +33,9 @@ export function registerGetDiffTool(): vscode.Disposable {
         ]);
       }
 
-      if (/^-|\s/.test(baseRef) || /^-|\s/.test(headRef)) {
+      if (!isValidRef(baseRef) || !isValidRef(headRef)) {
         return new vscode.LanguageModelToolResult([
-          new vscode.LanguageModelTextPart('Invalid ref: refs must not start with - or contain whitespace'),
+          new vscode.LanguageModelTextPart('Invalid ref: refs must be non-empty, must not start with "-", and may contain only alphanumeric, dot, underscore, hyphen, or slash characters'),
         ]);
       }
 

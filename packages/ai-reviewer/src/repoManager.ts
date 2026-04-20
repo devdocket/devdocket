@@ -3,6 +3,7 @@ import * as path from 'path';
 import { parsePrUrl } from './prUrl';
 import { gitExec } from './tools/gitUtils';
 import { validWorktreePaths } from './tools/worktreeRegistry';
+import { isValidRef } from './tools/refValidation';
 
 export { parsePrUrl };
 
@@ -94,6 +95,14 @@ export class RepoManager {
     const prMeta = await this.fetchPrMetadata(org, repo, prNumber, session.accessToken);
     const baseRef = prMeta.baseRef;
     const headRef = `pr-${prNumber}`;
+
+    // Strict allowlist validation for baseRef before it's interpolated into
+    // git commands, log messages, and LLM prompts.
+    if (!isValidRef(baseRef)) {
+      const safeBaseRef = JSON.stringify(baseRef);
+      this.log.error(`Invalid base ref from GitHub API: ${safeBaseRef}`);
+      throw new Error(`Invalid base ref from GitHub API: ${safeBaseRef}`);
+    }
     this.log.info(`PR metadata — baseRef: ${baseRef}, headSha: ${prMeta.headSha}, local headRef: ${headRef}`);
 
     // Fetch PR head ref and base branch
@@ -120,11 +129,6 @@ export class RepoManager {
       this.log.info('PR head fetched');
     }
 
-    // Fetch base branch for diffs (validate ref from API)
-    if (/^-|\s/.test(baseRef)) {
-      this.log.error(`Invalid base ref from GitHub API: ${baseRef}`);
-      throw new Error(`Invalid base ref from GitHub API: ${baseRef}`);
-    }
     this.log.info(`Fetching base branch: ${baseRef}`);
     await gitAuth(
       ['fetch', 'origin', `refs/heads/${baseRef}:refs/remotes/origin/${baseRef}`],

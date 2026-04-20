@@ -147,6 +147,49 @@ describe('RepoManager', () => {
       );
     });
 
+    it('throws when baseRef contains unsafe characters', async () => {
+      const unsafeRefs = [
+        'main`whoami`',
+        'branch$(cmd)',
+        'ref with spaces',
+        'ref\tnewline',
+        'ref;drop',
+        '-flag',
+        'branch**glob',
+        'ref<script>',
+        '',
+      ];
+      for (const ref of unsafeRefs) {
+        vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+          ok: true,
+          json: vi.fn().mockResolvedValue({
+            base: { ref },
+            head: { sha: 'abc123' },
+          }),
+        }));
+
+        await expect(
+          manager.ensureWorktree('https://github.com/owner/repo/pull/42'),
+        ).rejects.toThrow('Invalid base ref from GitHub API');
+      }
+    });
+
+    it('allows valid baseRef values', async () => {
+      const validRefs = ['main', 'release/v1.0', 'feature/my_branch', 'my.branch-name'];
+      for (const ref of validRefs) {
+        vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+          ok: true,
+          json: vi.fn().mockResolvedValue({
+            base: { ref },
+            head: { sha: 'abc123' },
+          }),
+        }));
+
+        const info = await manager.ensureWorktree(`https://github.com/owner/repo/pull/42`);
+        expect(info.baseRef).toBe(`origin/${ref}`);
+      }
+    });
+
     it('throws when GitHub auth fails', async () => {
       vi.mocked(authentication.getSession).mockResolvedValue(null as never);
 
