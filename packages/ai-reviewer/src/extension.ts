@@ -45,13 +45,16 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   // Shared infrastructure for both actions
   const repoManager = new RepoManager(context.globalStorageUri, log);
 
+  // Create participant first so the walkthrough action can pass model preferences to it
+  const participant = new WalkthroughParticipant(repoManager, log);
+
   // Register code review action (uses shared RepoManager)
   const reviewAction = new AiReviewAction(repoManager, log);
   context.subscriptions.push(api.registerAction(reviewAction));
   log.info('Registered AI Code Review action');
 
-  // Register walkthrough action (uses shared RepoManager)
-  const walkthroughAction = new AiWalkthroughAction(repoManager, log);
+  // Register walkthrough action (uses shared RepoManager + participant for model handoff)
+  const walkthroughAction = new AiWalkthroughAction(repoManager, log, participant);
   context.subscriptions.push(api.registerAction(walkthroughAction));
   log.info('Registered AI Walkthrough action');
 
@@ -60,8 +63,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   toolDisposables.forEach(d => context.subscriptions.push(d));
   log.info(`Registered ${toolDisposables.length} LM tools`);
 
-  // Register chat participant (uses shared RepoManager)
-  const participant = new WalkthroughParticipant(repoManager, log);
+  // Register chat participant
   context.subscriptions.push(participant.register());
   log.info('Registered @walkthrough chat participant');
 

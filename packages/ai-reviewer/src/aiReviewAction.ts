@@ -1,6 +1,7 @@
 import * as vscode from 'vscode';
 import { BasePrAction, sanitizePrUrl } from './basePrAction';
 import { DEFAULT_REVIEW_PROMPT } from './defaultPrompt';
+import { promptForModel } from './modelSelection';
 import { truncateToolContent } from './toolUtils';
 import { gitExec } from './tools/gitUtils';
 import type { RepoManager, WorktreeInfo } from './repoManager';
@@ -49,14 +50,9 @@ export class AiReviewAction extends BasePrAction {
     const diff = await this.fetchDiff(item.url!);
     if (!diff || token.isCancellationRequested) return;
 
-    // Check model availability before expensive worktree preparation
-    const models = await vscode.lm.selectChatModels();
-    if (models.length === 0) {
-      vscode.window.showWarningMessage(
-        `${this.progressTitle}: No language model available. Install GitHub Copilot.`,
-      );
-      return;
-    }
+    // Prompt user to select a model before expensive worktree preparation
+    const model = await promptForModel(this.progressTitle);
+    if (!model || token.isCancellationRequested) return;
 
     // Prepare worktree (best-effort — review falls back to diff-only)
     progress.report({ message: 'Preparing repository...' });
@@ -75,9 +71,9 @@ export class AiReviewAction extends BasePrAction {
 
     let result: string | undefined;
     if (worktreeInfo) {
-      result = await this.analyzeWithTools(diff, item.url!, worktreeInfo, models[0], token);
+      result = await this.analyzeWithTools(diff, item.url!, worktreeInfo, model, token);
     } else {
-      result = await this.analyzeWithAi(diff, item.url!, token, models[0]);
+      result = await this.analyzeWithAi(diff, item.url!, token, model);
     }
     if (!result || token.isCancellationRequested) return;
 

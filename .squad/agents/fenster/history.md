@@ -55,6 +55,16 @@ DevDocket is a VS Code extension monorepo for managing work items from multiple 
 
 ## Learnings
 
+### 2026-04-22 — Issue #254 (AI Model Selection for Walkthrough)
+
+**Feature:** Added AI model selection prompt to both AI Code Review and AI Walkthrough, giving users control over cost/quality tradeoff.
+- **Shared utility:** Created `packages/ai-reviewer/src/modelSelection.ts` with `promptForModel()` — returns the model directly if only one is available, shows QuickPick if multiple.
+- **Review action:** Replaced `models[0]` auto-selection in `AiReviewAction.doWork()` with `promptForModel()` call.
+- **Walkthrough action:** Added `promptForModel()` to `AiWalkthroughAction.doWork()`. Passes selected model to `WalkthroughParticipant` via `setPreferredModel()`. Made participant param optional to avoid breaking existing tests.
+- **Participant integration:** `WalkthroughParticipant.setPreferredModel()` sets a one-shot preferred model consumed on the next `handleRequest()`. After use, clears so subsequent chat messages defer to the VS Code chat UI model picker.
+- **Wiring:** In `extension.ts`, `WalkthroughParticipant` is now created before the walkthrough action and injected into its constructor.
+- **Key files:** `modelSelection.ts` (new), `aiReviewAction.ts`, `aiWalkthroughAction.ts`, `walkthroughParticipant.ts`, `extension.ts`.
+
 ### 2026-04-21 — Issue #323 (Watch CI Pipelines — PR #323)
 
 **Feature:** Full CI pipeline watcher with ADO support, polling control, tree/flat layout toggle, and persistence.

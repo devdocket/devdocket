@@ -1,7 +1,9 @@
 import * as vscode from 'vscode';
 import type { WorkItem } from './types';
 import { BasePrAction, sanitizePrUrl } from './basePrAction';
-import { RepoManager } from './repoManager';
+import { promptForModel } from './modelSelection';
+import type { RepoManager } from './repoManager';
+import type { WalkthroughParticipant } from './walkthroughParticipant';
 
 export class AiWalkthroughAction extends BasePrAction {
   readonly id = 'ai-reviewer.walkthrough';
@@ -14,6 +16,7 @@ export class AiWalkthroughAction extends BasePrAction {
   constructor(
     private readonly repoManager: RepoManager,
     private readonly log: vscode.LogOutputChannel,
+    private readonly walkthroughParticipant?: WalkthroughParticipant,
   ) {
     super();
   }
@@ -23,6 +26,13 @@ export class AiWalkthroughAction extends BasePrAction {
     progress: vscode.Progress<{ message?: string }>,
     token: vscode.CancellationToken,
   ): Promise<void> {
+    // Prompt for model selection so the user controls the cost/quality tradeoff
+    const model = await promptForModel(this.progressTitle);
+    if (!model || token.isCancellationRequested) return;
+
+    // Pass model preference to the walkthrough participant for its first request
+    this.walkthroughParticipant?.setPreferredModel(model);
+
     progress.report({ message: 'Preparing repository...' });
     this.log.info('Preparing worktree for walkthrough');
 

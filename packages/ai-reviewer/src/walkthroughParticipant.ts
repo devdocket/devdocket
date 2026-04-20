@@ -5,11 +5,21 @@ import { truncateToolContent } from './toolUtils';
 
 export class WalkthroughParticipant {
   private sessions = new Map<string, WorktreeInfo>();
+  private preferredModel: vscode.LanguageModelChat | undefined;
 
   constructor(
     private readonly repoManager: RepoManager,
     private readonly log: vscode.LogOutputChannel,
   ) {}
+
+  /**
+   * Set a preferred model for the next chat request.
+   * Consumed once — after the first request uses it, it clears automatically
+   * so subsequent messages defer to the chat UI's model picker.
+   */
+  setPreferredModel(model: vscode.LanguageModelChat): void {
+    this.preferredModel = model;
+  }
 
   /** Register the chat participant. Returns disposable. */
   register(): vscode.Disposable {
@@ -135,9 +145,13 @@ export class WalkthroughParticipant {
     messages.push(vscode.LanguageModelChatMessage.User(request.prompt));
     this.log.info(`Built message array: ${messages.length} messages (1 system + ${messages.length - 2} history + 1 user)`);
 
-    // Select model
+    // Select model — prefer action-provided model, then chat UI model, then fallback
     let model: vscode.LanguageModelChat;
-    if (request.model) {
+    if (this.preferredModel) {
+      this.log.info(`Using action-provided model: ${this.preferredModel.id}`);
+      model = this.preferredModel;
+      this.preferredModel = undefined;
+    } else if (request.model) {
       this.log.info(`Using request-provided model: ${request.model.id}`);
       model = request.model;
     } else {
