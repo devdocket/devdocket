@@ -55,6 +55,13 @@ DevDocket is a VS Code extension monorepo for managing work items from multiple 
 
 ## Learnings
 
+### 2026-04-21 — Auto-complete activity log integration
+
+**Fix:** Auto-complete transitions to Done now log an `'auto-completed'` activity entry with detail like "Provider detected external closure (InProgress → Done)".
+- **Pattern:** `transitionState()` already logs `'state-changed'`; the new `addActivity()` call adds a second entry distinguishing automatic from manual transitions.
+- **ActivityType extension:** Added `'auto-completed'` to the string union. Store validator accepts any non-empty string, so no migration needed.
+- **Three files changed:** `activityLog.ts` (type union), `autoComplete.ts` (addActivity call), `editorPanelHtml.ts` (display label).
+
 ### 2026-04-21 — Issue #255 (Provider Metadata Docs)
 
 **PR:** Created `docs/provider-discovery.md` documenting what causes items to appear in each provider.

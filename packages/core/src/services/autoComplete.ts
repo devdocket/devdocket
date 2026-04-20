@@ -82,9 +82,15 @@ export async function checkAutoComplete(
         continue;
       }
       try {
+        const oldState = currentItem.state;
         await workGraph.transitionState(currentItem.id, WorkItemState.Done);
         completedTitles.push(currentItem.title);
         logger.info(`Auto-completed work item "${currentItem.title}" (${currentItem.id}) — external item closed/merged`);
+        try {
+          await workGraph.addActivity(currentItem.id, 'auto-completed', `Provider detected external closure (${oldState} → Done)`);
+        } catch (activityErr) {
+          logger.error(`Failed to record auto-complete activity for work item ${currentItem.id}`, activityErr);
+        }
       } catch (err) {
         logger.error(`Failed to auto-complete work item ${currentItem.id}`, err);
       }

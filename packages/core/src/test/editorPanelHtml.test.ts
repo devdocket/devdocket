@@ -427,6 +427,17 @@ describe('getEditorPanelHtml', () => {
       expect(html).toContain('New');
     });
 
+    it('renders auto-completed activity type with correct label', () => {
+      const item = makeItem({
+        activityLog: [
+          { timestamp: 1700000000000, type: 'auto-completed', detail: 'Provider detected external closure (New → Done)' },
+        ],
+      });
+      const html = getEditorPanelHtml({ cspSource, item });
+      expect(html).toContain('Auto-completed');
+      expect(html).toContain('Provider detected external closure');
+    });
+
     it('renders unknown activity types safely', () => {
       const item = makeItem({
         activityLog: [
