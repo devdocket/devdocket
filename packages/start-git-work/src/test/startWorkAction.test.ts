@@ -375,6 +375,7 @@ describe('StartWorkAction', () => {
       expect(postCmd[0]).toBe('npm');
       const expectedWorktreePath = path.join('/mock', 'workspace-issue123');
       expect(postCmd[1]).toEqual(['install', '--prefix', expectedWorktreePath]);
+      expect(postCmd[2]).toEqual({ cwd: expectedWorktreePath, timeout: 60_000 });
     });
 
     it('shows warning when post-worktree command fails', async () => {
