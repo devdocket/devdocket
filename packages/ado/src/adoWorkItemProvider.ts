@@ -172,6 +172,15 @@ export class AdoWorkItemProvider extends BaseProvider {
           );
         }
       });
+
+      // Propagate cancellation so the refresh stops without publishing partial results
+      const abortedResult = results.find(
+        (r): r is PromiseRejectedResult =>
+          r.status === 'rejected' && r.reason instanceof Error && r.reason.name === 'AbortError',
+      );
+      if (signal?.aborted || abortedResult) {
+        throw abortedResult?.reason ?? new Error('The operation was aborted.');
+      }
     }
 
     this._onDidDiscoverItems.fire(allItems);
@@ -212,6 +221,7 @@ export class AdoWorkItemProvider extends BaseProvider {
         signal,
       });
     } catch (err) {
+      if (err instanceof Error && err.name === 'AbortError') { throw err; }
       logger.error(`Network error querying work items for project "${project || org}":`, err);
       return { items: [], failed: true };
     }
@@ -253,6 +263,7 @@ export class AdoWorkItemProvider extends BaseProvider {
           signal,
         });
       } catch (err) {
+        if (err instanceof Error && err.name === 'AbortError') { throw err; }
         logger.error(
           `Network error fetching work item details for ${project || org} (batch at index ${i}, ids ${batchIds[0]}-${batchIds[batchIds.length - 1]}):`,
           err,
