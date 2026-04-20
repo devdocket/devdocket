@@ -6,148 +6,76 @@
 
 **A unified work hub inside VS Code.**
 
-DevDocket is a VS Code extension that brings all of your work items — GitHub issues, Azure DevOps work items, PR review requests, investigations, follow-ups, and ad-hoc tasks — into a single, organized sidebar. Instead of juggling browser tabs, notification emails, and sticky notes, you manage everything from where you already write code.
+DevDocket is a VS Code extension that brings all of your work items — GitHub issues, Azure DevOps work items, PR review requests, and ad-hoc tasks — into a single, organized sidebar. Instead of juggling browser tabs, notification emails, and sticky notes, you manage everything from where you already write code.
 
-## The Problem
+## Why DevDocket?
 
-Developers constantly context-switch between tools. Issues live in GitHub, tasks live in Azure DevOps, review requests arrive by email, and ad-hoc follow-ups exist only in your head. Each tool has its own UI, its own notification model, and its own idea of "what's next." The result: work falls through the cracks, and you waste time just figuring out what to do.
+Developers constantly context-switch between tools. Issues live in GitHub, tasks live in Azure DevOps, review requests arrive by email, and ad-hoc follow-ups exist only in your head. DevDocket is **not** a replacement for any of these — it's an **aggregation layer** that gives you a personal, unified view of your work inside VS Code.
 
-## How DevDocket Helps
-
-DevDocket is **not** a replacement for GitHub Issues, Azure DevOps, or any other system of record. It is an **aggregation layer** that sits inside VS Code and gives you a personal, unified view of your work:
-
-- **Providers** discover items from external sources (GitHub issues, Azure DevOps work items, PR reviews, and more in the future) and surface them automatically.
+- **Providers** discover items from external sources (GitHub, Azure DevOps, and more) and surface them automatically.
 - **You** decide what to accept, what to dismiss, and what to work on next.
-- **Actions** let provider extensions automate workflows — like creating a branch and worktree for a work item with one click.
+- **Actions** automate workflows — like creating a branch and worktree for a work item with one click.
 
-## Quick Start
-
-1. **Install DevDocket** from the VS Code marketplace (`mthalman.devdocket`).
-2. **Install a provider** — for example, DevDocket GitHub (`mthalman.devdocket-github`) to discover GitHub issues and PR review requests.
-3. **Open the DevDocket sidebar** by clicking the DevDocket icon in the activity bar.
-4. **Check your Inbox** — newly discovered items from providers appear here. Accept items to add them to your Queue, or dismiss them. Some providers may re-surface dismissed items if they remain relevant.
-5. **Work your Queue** — move items to Focus when you're ready to start, or create manual items with the ➕ button.
-6. **Stay focused** — the Focus view shows only what you're actively working on. Pause items or mark them complete as you go.
-
-### Configuring the GitHub Provider
-
-After installing DevDocket GitHub, configure which repositories to watch for issues:
-
-```jsonc
-// settings.json
-{
-  "devdocketGithub.repos": ["owner/repo1", "owner/repo2"],
-  "devdocketGithub.refreshIntervalSeconds": 300
-}
-```
-
-Leave `repos` empty to fetch all issues assigned to you across all repositories.
-
-> **Note:** The `repos` setting scopes both **issue discovery and PR review discovery**. When `repos` is empty, both fall back to global discovery (all issues assigned to you and all PRs where your review is requested, across all repositories).
-
-### Configuring Start Git Work
-
-The Start Git Work action creates a branch and worktree when you start working on a GitHub or ADO item. Configure commands to run after the worktree is created (e.g., opening an editor or terminal):
-
-```jsonc
-// settings.json (user-level only — workspace settings are not supported)
-{
-  "devdocketStartGitWork.commands": [
-    { "command": "code.cmd", "args": ["{path}"] },
-    { "command": "wt", "args": ["-d", "{path}"] }
-  ]
-}
-```
-
-Use `{path}` in args as a placeholder for the worktree path. Commands run in sequence; failures show a warning but don't block the action.
-
-> **Note:** On Windows, use the explicit `.cmd` extension for executables that are batch files (e.g., `code.cmd` instead of `code`).
-
-## The Five-View Model
+## Workflow
 
 DevDocket organizes work across five views in the sidebar:
 
-### Inbox
+| View | Purpose |
+|------|---------|
+| **Inbox** | Newly discovered items from providers. Accept to keep, or dismiss. |
+| **Queue** | Your curated backlog — accepted items and manual tasks. |
+| **Focus** | What you're actively working on. Pause or complete items here. |
+| **History** | Completed and archived items — your work record. |
+| **Sources** | Everything providers know about, browsable anytime. |
 
-Newly discovered items from providers that you haven't acted on yet. Each provider's items are grouped under the provider name. Accept items to move them to your Queue, or dismiss them to hide them from the Inbox; depending on the provider, dismissed items may later reappear if they are resurfaced.
+By default, provider-linked items are automatically marked **Done** when their issue is closed or their PR is merged externally.
 
-### Queue
+For detailed view behavior, keyboard shortcuts, and configuration options, see the [UX Guide](docs/ux-guide.md).
 
-Your curated backlog. Items arrive here when accepted from the Inbox or Sources, or when you create them manually. From here, move items to Focus when you're ready to start working on them, or archive them to skip.
+## Installation
 
-### Focus
+DevDocket is not yet available on the VS Code Marketplace. To run it, build from source:
 
-Your active work. Items here are things you're actively working on or paused. The Focus view is designed to show only what matters right now. Mark items complete when you're done, or pause them to signal status at a glance.
+1. **Clone the repository:**
+   ```bash
+   git clone https://github.com/devdocket/devdocket.git
+   cd devdocket
+   ```
 
-### History
+2. **Install dependencies and build:**
+   ```bash
+   npm install
+   npm run build
+   ```
 
-Completed and archived items. The History view gives you a record of finished work — useful for standups, status updates, and recalling what you've done.
+3. **Run in VS Code** — open the repo in VS Code and press **F5** to launch the Extension Development Host with DevDocket loaded.
 
-### Sources
-
-A browsable library of everything providers know about, organized by provider and sub-group (e.g., repository name). Items show whether you've already acted on them — accepted items display a ✓ icon, dismissed items show a label. You can accept items into your Queue directly from Sources at any time.
-
-### Data Flow
-
-```mermaid
-flowchart LR
-    P["Providers\n(GitHub, etc.)"] --> Inbox
-    M["Manual\ncreation"] --> Queue
-    Inbox -- Accept --> Queue
-    Queue -- Move to Focus --> Focus
-    Queue -- Archive --> History
-    Focus -- Pause --> Focus
-    Focus -- Mark complete --> History
-```
-
-> **Note:** Items in History can be moved back to Queue if needed — right-click and select **Move to Queue**. This is useful for recovering from false positives when an item is auto-completed but you still have work to do.
-
-### Auto-Completion
-
-DevDocket can automatically mark work items as **Done** when their linked issue or PR is closed or merged externally. This happens after each provider refresh — no manual intervention needed.
-
-This behavior is controlled by:
-
-```jsonc
-// settings.json
-{
-  "devdocket.autoCompleteOnClose": true  // default: true
-}
-```
-
-Set to `false` to disable auto-completion entirely.
+4. **Package for local install** (optional):
+   ```bash
+   cd packages/core
+   npx @vscode/vsce package
+   ```
+   Run this from each extension folder you want to package (e.g., `packages/core`, `packages/github`). This produces a `.vsix` file you can install via **Extensions → ⋯ → Install from VSIX…** in VS Code.
 
 ## Plugin Ecosystem
 
-DevDocket is built around an extensible plugin model with two extension points:
+DevDocket is extensible with two types of plugins:
 
-### Providers
+| Type | Description |
+|------|-------------|
+| **Providers** | Discover work items from external sources and surface them in DevDocket. |
+| **Actions** | Operations that run on a work item (e.g., create a branch, run AI code review). |
 
-A provider discovers work items from an external source and reports them to DevDocket. The core extension handles all UI — providers just emit data.
+**Included extensions:**
 
-**Built-in providers:**
+| Extension | Type | What It Does |
+|-----------|------|--------------|
+| DevDocket GitHub | Provider | Discovers GitHub issues and PR review requests |
+| DevDocket — Azure DevOps | Provider | Discovers Azure DevOps work items and PR review requests |
+| DevDocket Start Git Work | Action | Creates a branch and worktree for a work item |
+| DevDocket — AI Actions | Action | AI-powered actions such as analyzing diffs and posting review comments |
 
-| Provider | What It Discovers |
-|----------|-------------------|
-| **GitHub Issues** | Issues assigned to you in configured repositories |
-| **GitHub PR Reviews** | Pull requests where your review is requested |
-| **ADO Work Items** | Azure DevOps work items assigned to you |
-| **ADO PR Reviews** | Azure DevOps pull requests where your review is requested |
-
-### Actions
-
-An action is an operation that runs on a work item. Actions appear in the **Run Action…** menu on Queue and Focus items.
-
-**Built-in actions:**
-
-| Action | Description |
-|--------|-------------|
-| **Start Git Work (Branch + Worktree)** | Creates a git branch and worktree for a GitHub or ADO work item, then runs configured post-worktree commands |
-| **AI Code Review** | Analyzes the current diff using an AI model and posts review comments |
-
-### Building Your Own
-
-Provider and action extensions use a simple, well-defined API surface. See the [Extension API documentation](docs/extension-api.md) for the full contract, interfaces, and example implementations.
+To build your own provider or action, see the [Extension API documentation](docs/extension-api.md).
 
 ## Architecture
 
@@ -155,34 +83,21 @@ DevDocket is a monorepo with five VS Code extensions and a shared library:
 
 ```
 packages/
-├── core/              # DevDocket — the hub extension (UI, lifecycle, plugin API)
-├── github/            # DevDocket GitHub — provider for GitHub issues and PR reviews
-├── ado/               # DevDocket ADO — provider for Azure DevOps work items and PR reviews
-├── start-git-work/    # Start Git Work — action for creating branches and worktrees
-├── ai-reviewer/       # AI code review action extension
-└── shared/            # Shared library (BaseProvider, URL validation, logger, refresh interval)
+├── core/              # The hub extension (UI, lifecycle, plugin API)
+├── github/            # GitHub issues and PR review provider
+├── ado/               # Azure DevOps work items and PR review provider
+├── start-git-work/    # Branch + worktree action
+├── ai-reviewer/       # AI code review action
+└── shared/            # Shared library (BaseProvider, utilities)
 ```
-
-- **`packages/core`** owns the five views, work item persistence, the editor panel, and the extension API (`DevDocketApi`).
-- **`packages/github`** is a provider extension that discovers GitHub issues and PR reviews.
-- **`packages/ado`** is a provider extension that discovers Azure DevOps work items and PR reviews.
-- **`packages/start-git-work`** is an action extension that creates git branches and worktrees for work items from GitHub and ADO providers, with configurable post-worktree commands.
-- **`packages/ai-reviewer`** is an action extension that analyzes diffs using an AI model and posts review comments.
-- **`packages/shared`** contains the `BaseProvider` base class for consistent provider lifecycle management (periodic refresh, concurrency guards, disposal), URL validation helpers, a logger service, and refresh interval validation.
-
-Provider extensions extend `BaseProvider` from `@devdocket/shared` and depend on the core extension via `extensionDependencies`, acquiring the API at activation time. They do not import code from the core package directly — interfaces are re-declared to keep the extensions decoupled.
-
-### Data Storage
-
-DevDocket persists two JSON files in VS Code's `globalStorageUri`:
-
-- **`workitems.json`** — All accepted and manual work items with their lifecycle state, including the persisted fields DevDocket stores at creation/accept time, such as the work item `title`, optional `url`, provider provenance (`providerId` and `externalId`), and any `notes`. Provider-derived values captured at accept time may become stale compared to live data from the provider.
-- **`discovered-state.json`** — A thin index tracking whether each discovered item has been accepted, dismissed, or not yet seen. This file does not store provider item fields; for inbox items, provider data is read live from the provider.
 
 ## Documentation
 
-- [UX Guide](docs/ux-guide.md) — The five views, data flow, work item states, available actions, and the editor panel.
-- [Extension API](docs/extension-api.md) — Provider and action contracts, interfaces, and example implementations.
+| Document | Description |
+|----------|-------------|
+| [UX Guide](docs/ux-guide.md) | Views, data flow, configuration, keyboard shortcuts |
+| [Extension API](docs/extension-api.md) | Provider and action contracts, interfaces, examples |
+| [Provider Discovery](docs/provider-discovery.md) | What causes items to appear in each provider |
 
 ## Contributing
 

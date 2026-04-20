@@ -199,6 +199,7 @@ export class GitHubPrReviewProvider extends BaseGitHubProvider {
           Accept: 'application/vnd.github+json',
           'X-GitHub-Api-Version': '2022-11-28',
         },
+        signal: AbortSignal.timeout(30_000),
       },
     );
 
@@ -220,6 +221,7 @@ export class GitHubPrReviewProvider extends BaseGitHubProvider {
           Accept: 'application/vnd.github+json',
           'X-GitHub-Api-Version': '2022-11-28',
         },
+        signal: AbortSignal.timeout(30_000),
       },
     );
 
@@ -256,6 +258,7 @@ export class GitHubPrReviewProvider extends BaseGitHubProvider {
               Accept: 'application/vnd.github+json',
               'X-GitHub-Api-Version': '2022-11-28',
             },
+            signal: AbortSignal.timeout(30_000),
           });
           if (response.ok) {
             const data = (await response.json()) as { head?: { sha?: string } };
@@ -295,6 +298,7 @@ export class GitHubPrReviewProvider extends BaseGitHubProvider {
           Accept: 'application/vnd.github+json',
           'X-GitHub-Api-Version': '2022-11-28',
         },
+        signal: AbortSignal.timeout(30_000),
       });
       if (response.ok) {
         const data = (await response.json()) as { login?: string };
@@ -339,6 +343,7 @@ export class GitHubPrReviewProvider extends BaseGitHubProvider {
               Accept: 'application/vnd.github+json',
               'X-GitHub-Api-Version': '2022-11-28',
             },
+            signal: AbortSignal.timeout(30_000),
           });
           if (response.ok) {
             const events = (await response.json()) as TimelineEvent[];

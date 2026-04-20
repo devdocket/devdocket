@@ -101,6 +101,7 @@ Clicking a History item opens the editor panel to view its details.
 
 | Action | Description |
 |--------|-------------|
+| **Move to Queue** | Moves the item back to the Queue in the **New** state (useful for recovering from false auto-completions) |
 | **Clear Old History** | Removes history items older than a configurable threshold (title bar button) |
 | **Open in Browser** | Opens the item's URL in your default browser (if the item has a URL) |
 
@@ -109,8 +110,6 @@ Clicking a History item opens the editor panel to view its details.
 The **Clear Old History** command (available from the History view title bar) bulk-removes history items that have not been updated within a configurable number of days. A confirmation dialog shows the threshold before proceeding.
 
 The age threshold is controlled by the `devdocket.historyClearDays` setting (default: **30** days). Only items whose last modification is older than the threshold are removed.
-
-> **Note:** History items are in terminal states, so no state-changing commands are available beyond clearing old items.
 
 ## Data Flow
 
@@ -155,7 +154,7 @@ The editor **auto-saves** as you type — there is no save button. The panel tit
 
 ## Providers
 
-DevDocket supports multiple provider extensions that discover work items from external systems. Each provider is a separate VS Code extension that depends on the core DevDocket extension.
+DevDocket supports multiple provider extensions that discover work items from external systems. Each provider is a separate VS Code extension that depends on the core DevDocket extension. For details on what causes items to appear in the Inbox, see [Provider Discovery](provider-discovery.md).
 
 ### GitHub Provider (`devdocket-github`)
 
@@ -171,7 +170,7 @@ Discovers items from GitHub via two sub-providers:
 
 | Setting | Type | Default | Description |
 |---------|------|---------|-------------|
-| `devdocketGithub.repos` | `string[]` | `[]` | GitHub repositories to watch (e.g., `owner/repo`). Leave empty to fetch all assigned issues across all repositories. |
+| `devdocketGithub.repos` | `string[]` | `[]` | GitHub repositories to watch (e.g., `owner/repo`). Scopes both issue discovery and PR review discovery. Leave empty to fetch all assigned issues and all requested PR reviews across all repositories. |
 | `devdocketGithub.refreshIntervalSeconds` | `number` | `300` | How often to refresh GitHub data (in seconds). Minimum 60 seconds; values below 60 are clamped. |
 | `devdocketGithub.resurfaceOnNewVersion` | `boolean` | `true` | Resurface PR reviews when new commits are pushed. |
 | `devdocketGithub.resurfaceOnReRequestedReview` | `boolean` | `true` | Resurface PR reviews when review is explicitly re-requested. |
@@ -201,12 +200,48 @@ Registers an **AI Code Review** action that can be run on any work item whose UR
 |---------|------|---------|-------------|
 | `devdocketAiReview.customPromptPath` | `string` | `""` | Path to a custom code review prompt file. Replaces the built-in review instructions. The PR diff is always appended automatically. Supports absolute paths and workspace-relative paths. |
 
+## Auto-Completion
+
+DevDocket can automatically mark work items as **Done** when their linked external item is closed, merged, or otherwise completed by the provider. This happens after each provider refresh — no manual intervention needed.
+
+This behavior is controlled by:
+
+```jsonc
+// settings.json
+{
+  "devdocket.autoCompleteOnClose": true  // default: true
+}
+```
+
+Set to `false` to disable auto-completion entirely.
+
+Items in History can be moved back to Queue if needed — right-click and select **Move to Queue**. This is useful for recovering from false positives when an item is auto-completed but you still have work to do.
+
+## Start Git Work Configuration
+
+The **Start Git Work** action creates a branch and worktree for supported GitHub or ADO work items. It is only available after the item has been moved to **In Progress** (Focus view) — it does not appear on Queue items. You can configure commands to run after the worktree is created (e.g., opening an editor or terminal):
+
+```jsonc
+// settings.json (user-level only — workspace settings are not supported)
+{
+  "devdocketStartGitWork.commands": [
+    { "command": "code.cmd", "args": ["{path}"] },
+    { "command": "wt", "args": ["-d", "{path}"] }
+  ]
+}
+```
+
+Use `{path}` in args as a placeholder for the worktree path. Commands run in sequence; failures show a warning but don't block the action.
+
+> **Note:** On Windows, use the explicit `.cmd` extension for executables that are batch files (e.g., `code.cmd` instead of `code`).
+
 ## Core Configuration
 
 | Setting | Type | Default | Description |
 |---------|------|---------|-------------|
 | `devdocket.logLevel` | `string` | `"info"` | Log level for the DevDocket output channel. Valid values: `debug`, `info`, `warn`, `error`. |
 | `devdocket.showInboxNotifications` | `boolean` | `true` | Show a notification when new items arrive in the Inbox. |
+| `devdocket.autoCompleteOnClose` | `boolean` | `true` | Automatically mark work items as Done when their linked external item is closed, merged, or otherwise completed by the provider. |
 | `devdocket.historyClearDays` | `integer` | `30` | Age threshold in days for the **Clear Old History** command. Items in History whose last modification is older than this many days are removed. Minimum: 1. |
 
 ## Keyboard Shortcuts

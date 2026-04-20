@@ -201,6 +201,7 @@ export class AdoWorkItemProvider extends BaseProvider {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({ query: wiqlQuery }),
+        signal: AbortSignal.timeout(30_000),
       });
     } catch (err) {
       logger.error(`Network error querying work items for project "${project || org}":`, err);
@@ -241,6 +242,7 @@ export class AdoWorkItemProvider extends BaseProvider {
           headers: {
             Authorization: `Bearer ${token}`,
           },
+          signal: AbortSignal.timeout(30_000),
         });
       } catch (err) {
         logger.error(
