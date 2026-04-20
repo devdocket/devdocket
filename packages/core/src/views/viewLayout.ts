@@ -424,16 +424,20 @@ export abstract class WorkItemViewProvider implements vscode.TreeDataProvider<Wo
     if (!this._countsCache) {
       const counts = new Map<string, number>();
       for (const item of this.getItems()) {
-        const providerKey = `provider:${normalizeProviderId(item.providerId) ?? ''}`;
+        const normalizedProvider = normalizeProviderId(item.providerId) ?? '';
+        const providerKey = `provider:${normalizedProvider}`;
         counts.set(providerKey, (counts.get(providerKey) ?? 0) + 1);
 
-        // Build both keys: one with providerId (for Queue/History) and one without (for Focus)
+        // Per-provider sub-group key (used when providerId is known)
         const normalizedGroup = normalizeGroup(item.group) ?? '';
-        const groupKeyWithProvider = `group:${normalizeProviderId(item.providerId) ?? ''}:${normalizedGroup}`;
+        const groupKeyWithProvider = `group:${normalizedProvider}:${normalizedGroup}`;
         counts.set(groupKeyWithProvider, (counts.get(groupKeyWithProvider) ?? 0) + 1);
 
-        const groupKeyOnly = `group-only:${normalizedGroup}`;
-        counts.set(groupKeyOnly, (counts.get(groupKeyOnly) ?? 0) + 1);
+        // Provider-less sub-group key (used only for the "Other" provider group)
+        if (!normalizedProvider) {
+          const groupKeyOnly = `group-only:${normalizedGroup}`;
+          counts.set(groupKeyOnly, (counts.get(groupKeyOnly) ?? 0) + 1);
+        }
       }
       this._countsCache = counts;
     }
@@ -449,8 +453,8 @@ export abstract class WorkItemViewProvider implements vscode.TreeDataProvider<Wo
     }
     if (isSubGroupNode(element)) {
       const counts = this.ensureCountsCache();
-      // When providerId is undefined (Focus view), count by group name only
-      // When providerId is defined (Queue/History), count by provider + group
+      // "Other" provider sub-groups (no providerId) use the provider-less key;
+      // named-provider sub-groups use the per-provider key
       const groupKey = element.providerId !== undefined
         ? `group:${element.providerId}:${element.groupName}`
         : `group-only:${element.groupName}`;

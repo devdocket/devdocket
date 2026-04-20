@@ -55,6 +55,13 @@ DevDocket is a VS Code extension monorepo for managing work items from multiple 
 
 ## Learnings
 
+### 2026-04-21 — Auto-complete activity log integration
+
+**Fix:** Auto-complete transitions to Done now log an `'auto-completed'` activity entry with detail like "Provider detected external closure (InProgress → Done)".
+- **Pattern:** `transitionState()` already logs `'state-changed'`; the new `addActivity()` call adds a second entry distinguishing automatic from manual transitions.
+- **ActivityType extension:** Added `'auto-completed'` to the string union. Store validator accepts any non-empty string, so no migration needed.
+- **Three files changed:** `activityLog.ts` (type union), `autoComplete.ts` (addActivity call), `editorPanelHtml.ts` (display label).
+
 ### 2026-04-21 — Issue #255 (Provider Metadata Docs)
 
 **PR:** Created `docs/provider-discovery.md` documenting what causes items to appear in each provider.
@@ -235,7 +242,7 @@ DevDocket is a VS Code extension monorepo for managing work items from multiple 
 
 ### 2026-04-18 — Issue #319 (Focus View Provider Grouping)
 
-**PR #XXX:** Focus view now groups items by provider in tree mode, matching Sources view pattern.
+**PR #320:** Focus view now groups items by provider in tree mode, matching Sources view pattern.
 - **Removed custom grouping logic:** Focus view had custom `getChildren()` and `getParent()` implementations that grouped by `item.group` (repo name). Removed these overrides to use the base class `WorkItemViewProvider` pattern which groups by provider.
 - **WorkItemViewProvider base class:** The base class already implements provider grouping via `getTreeModeChildren()` helper in `viewLayout.ts`. It creates a two-level hierarchy: provider → sub-group (item.group) → items. This is consistent with Queue, History, and Sources views.
 - **Tree hierarchy:** In tree mode, items are now grouped: Provider (GitHub, ADO, etc.) → Sub-group (repo name) → Work Items. Manual items appear under "Other" provider group. In flat mode, unchanged.
