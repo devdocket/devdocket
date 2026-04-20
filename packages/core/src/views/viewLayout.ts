@@ -424,16 +424,17 @@ export abstract class WorkItemViewProvider implements vscode.TreeDataProvider<Wo
     if (!this._countsCache) {
       const counts = new Map<string, number>();
       for (const item of this.getItems()) {
-        const providerKey = `provider:${normalizeProviderId(item.providerId) ?? ''}`;
+        const normalizedProvider = normalizeProviderId(item.providerId) ?? '';
+        const providerKey = `provider:${normalizedProvider}`;
         counts.set(providerKey, (counts.get(providerKey) ?? 0) + 1);
 
         // Per-provider sub-group key (used when providerId is known)
         const normalizedGroup = normalizeGroup(item.group) ?? '';
-        const groupKeyWithProvider = `group:${normalizeProviderId(item.providerId) ?? ''}:${normalizedGroup}`;
+        const groupKeyWithProvider = `group:${normalizedProvider}:${normalizedGroup}`;
         counts.set(groupKeyWithProvider, (counts.get(groupKeyWithProvider) ?? 0) + 1);
 
         // Provider-less sub-group key (used only for the "Other" provider group)
-        if (!normalizeProviderId(item.providerId)) {
+        if (!normalizedProvider) {
           const groupKeyOnly = `group-only:${normalizedGroup}`;
           counts.set(groupKeyOnly, (counts.get(groupKeyOnly) ?? 0) + 1);
         }
