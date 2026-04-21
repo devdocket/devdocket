@@ -117,5 +117,5 @@ jobs:
 
       - name: Summary
         run: |
-          echo "✅ Weekly code review tracking issue created and assigned to @copilot"
+          echo "✅ Weekly code review tracking issue #${{ steps.create-issue.outputs.issue_number }} created and assigned to copilot-swe-agent[bot]"
           echo "The agent will analyze the codebase and create issues for novel findings"
