@@ -29,8 +29,8 @@ describe('runWorkerPool', () => {
     const results: number[] = [];
     
     await runWorkerPool(items, async (item, index) => {
-      // Simulate variable processing time
-      await new Promise(resolve => setTimeout(resolve, Math.random() * 10));
+      // Simulate variable processing time using deterministic delays
+      await new Promise(resolve => setTimeout(resolve, (items.length - item) * 2));
       results[index] = item * 2;
     }, 3);
     
