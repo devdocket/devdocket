@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import * as vscode from 'vscode';
 import { EventEmitter, ViewColumn, window } from 'vscode';
-import { WorkItemEditorPanel } from '../views/workItemEditorPanel';
+import { WorkItemEditorPanel, PanelManager } from '../views/workItemEditorPanel';
 import { WorkGraph } from '../services/workGraph';
 import { WorkItem, WorkItemState } from '../models/workItem';
 import { ITaskStore } from '../storage/taskStore';
@@ -1360,6 +1360,132 @@ describe('WorkItemEditorPanel (integration with WorkGraph)', () => {
       const sub = context.subscriptions[0] as vscode.Disposable;
       sub.dispose();
       expect(() => sub.dispose()).not.toThrow();
+    });
+  });
+
+  describe('PanelManager lifecycle', () => {
+    it('setPanelManager scopes panels to the new manager', () => {
+      const managerA = new PanelManager();
+      const managerB = new PanelManager();
+
+      // Open a panel under manager A
+      WorkItemEditorPanel.setPanelManager(managerA);
+      const item = makeItem({ id: 'scoped-1', title: 'Scoped' });
+      const mock1 = createMockWebviewPanel();
+      vi.mocked(window.createWebviewPanel).mockReturnValue(mock1.panel as any);
+      const ctx = createMockContext();
+      WorkItemEditorPanel.open(ctx, createMockWorkGraph(item) as any, createMockProviderRegistry() as any, item);
+
+      expect(managerA.openPanels.has('scoped-1')).toBe(true);
+
+      // Switch to manager B — manager A's panel should not be found
+      WorkItemEditorPanel.setPanelManager(managerB);
+      expect(managerB.openPanels.has('scoped-1')).toBe(false);
+
+      // Opening the same item under manager B creates a new panel
+      const mock2 = createMockWebviewPanel();
+      vi.mocked(window.createWebviewPanel).mockReturnValue(mock2.panel as any);
+      WorkItemEditorPanel.open(ctx, createMockWorkGraph(item) as any, createMockProviderRegistry() as any, item);
+
+      expect(window.createWebviewPanel).toHaveBeenCalledTimes(2);
+      expect(managerB.openPanels.has('scoped-1')).toBe(true);
+
+      // Manager A still has its own panel reference
+      expect(managerA.openPanels.has('scoped-1')).toBe(true);
+    });
+
+    it('PanelManager.dispose() clears all tracked panels', () => {
+      const manager = new PanelManager();
+      WorkItemEditorPanel.setPanelManager(manager);
+
+      const itemA = makeItem({ id: 'disp-a', title: 'A' });
+      const itemB = makeItem({ id: 'disp-b', title: 'B' });
+      const mockA = createMockWebviewPanel();
+      const mockB = createMockWebviewPanel();
+
+      vi.mocked(window.createWebviewPanel)
+        .mockReturnValueOnce(mockA.panel as any)
+        .mockReturnValueOnce(mockB.panel as any);
+
+      const ctx = createMockContext();
+      WorkItemEditorPanel.open(ctx, createMockWorkGraph(itemA) as any, createMockProviderRegistry() as any, itemA);
+      WorkItemEditorPanel.open(ctx, createMockWorkGraph(itemB) as any, createMockProviderRegistry() as any, itemB);
+
+      expect(manager.openPanels.size).toBe(2);
+
+      manager.dispose();
+
+      expect(manager.openPanels.size).toBe(0);
+      // Both webview panels should have been disposed
+      expect(mockA.panel.dispose).toHaveBeenCalled();
+      expect(mockB.panel.dispose).toHaveBeenCalled();
+    });
+
+    it('stale panels from previous manager do not leak into new manager', () => {
+      const oldManager = new PanelManager();
+      WorkItemEditorPanel.setPanelManager(oldManager);
+
+      const item = makeItem({ id: 'leak-1', title: 'Leaky' });
+      const mock = createMockWebviewPanel();
+      vi.mocked(window.createWebviewPanel).mockReturnValue(mock.panel as any);
+
+      const ctx = createMockContext();
+      WorkItemEditorPanel.open(ctx, createMockWorkGraph(item) as any, createMockProviderRegistry() as any, item);
+      expect(oldManager.openPanels.size).toBe(1);
+
+      // Simulate extension reload: set a new manager
+      const newManager = new PanelManager();
+      WorkItemEditorPanel.setPanelManager(newManager);
+
+      // New manager starts empty — stale panels are not inherited
+      expect(newManager.openPanels.size).toBe(0);
+
+      // Opening the same item creates a fresh panel
+      const freshMock = createMockWebviewPanel();
+      vi.mocked(window.createWebviewPanel).mockReturnValue(freshMock.panel as any);
+      WorkItemEditorPanel.open(ctx, createMockWorkGraph(item) as any, createMockProviderRegistry() as any, item);
+
+      expect(window.createWebviewPanel).toHaveBeenCalledTimes(2);
+      expect(newManager.openPanels.size).toBe(1);
+    });
+
+    it('PanelManager.dispose() is idempotent', () => {
+      const manager = new PanelManager();
+      WorkItemEditorPanel.setPanelManager(manager);
+
+      const item = makeItem({ id: 'idem-1', title: 'Idempotent' });
+      const mock = createMockWebviewPanel();
+      vi.mocked(window.createWebviewPanel).mockReturnValue(mock.panel as any);
+
+      const ctx = createMockContext();
+      WorkItemEditorPanel.open(ctx, createMockWorkGraph(item) as any, createMockProviderRegistry() as any, item);
+
+      manager.dispose();
+      expect(() => manager.dispose()).not.toThrow();
+      expect(mock.panel.dispose).toHaveBeenCalledTimes(1);
+    });
+
+    it('clearPanelCache disposes panels without disposing the manager', () => {
+      const manager = new PanelManager();
+      WorkItemEditorPanel.setPanelManager(manager);
+
+      const item = makeItem({ id: 'clear-1', title: 'Clearable' });
+      const mock1 = createMockWebviewPanel();
+      vi.mocked(window.createWebviewPanel).mockReturnValue(mock1.panel as any);
+
+      const ctx = createMockContext();
+      WorkItemEditorPanel.open(ctx, createMockWorkGraph(item) as any, createMockProviderRegistry() as any, item);
+      expect(manager.openPanels.size).toBe(1);
+
+      manager.clearPanelCache();
+      expect(manager.openPanels.size).toBe(0);
+      expect(mock1.panel.dispose).toHaveBeenCalled();
+
+      // Manager is still usable — can open new panels
+      const mock2 = createMockWebviewPanel();
+      vi.mocked(window.createWebviewPanel).mockReturnValue(mock2.panel as any);
+      WorkItemEditorPanel.open(ctx, createMockWorkGraph(item) as any, createMockProviderRegistry() as any, item);
+      expect(manager.openPanels.size).toBe(1);
     });
   });
 });
