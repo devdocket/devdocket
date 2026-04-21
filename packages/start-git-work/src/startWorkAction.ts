@@ -4,7 +4,7 @@ import { promisify } from 'util';
 import * as path from 'path';
 import * as fs from 'fs';
 import { logger } from './logger';
-import type { WorkItem, DevDocketAction } from '@devdocket/shared';
+import { WorkItemState, type WorkItem, type DevDocketAction } from '@devdocket/shared';
 
 const execFileAsync = promisify(execFile);
 
@@ -39,7 +39,7 @@ export class StartWorkAction implements DevDocketAction {
   }
 
   canRun(item: Readonly<WorkItem>): boolean {
-    return item.state === 'InProgress' && SUPPORTED_PROVIDERS.includes(item.providerId ?? '');
+    return item.state === WorkItemState.InProgress && SUPPORTED_PROVIDERS.includes(item.providerId ?? '');
   }
 
   async run(item: Readonly<WorkItem>): Promise<void> {
