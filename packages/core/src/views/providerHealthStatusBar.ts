@@ -1,6 +1,5 @@
 import * as vscode from 'vscode';
 import { ProviderRegistry } from '../services/providerRegistry';
-import { buildProviderTooltip } from './providerTooltip';
 
 /**
  * Status bar item that shows a warning when any provider is unhealthy.
@@ -116,7 +115,6 @@ export async function showProviderHealthQuickPick(providerRegistry: ProviderRegi
     const provider = providers.find(p => p.id === selected.providerId);
     if (provider) {
       const health = providerRegistry.getProviderHealth(provider.id);
-      const tooltip = buildProviderTooltip(provider.label, health);
       
       // Show detailed message based on health status
       if (health.status === 'unhealthy' && health.lastError) {
