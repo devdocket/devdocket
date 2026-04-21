@@ -39,6 +39,22 @@ describe('readFileTool', () => {
       // e.g. src/../lib/index.ts normalizes to lib/index.ts
       expect(validatePath('/worktree', 'src/../lib/index.ts')).toBeUndefined();
     });
+
+    it('handles filesystem root worktree correctly', () => {
+      // Test that path validation works when worktreePath is a filesystem root
+      const isWindows = process.platform === 'win32';
+      const rootPath = isWindows ? 'C:\\' : '/';
+      validWorktreePaths.add(path.resolve(rootPath));
+      
+      // Should accept normal relative paths
+      const error1 = validatePath(rootPath, 'foo/bar.txt');
+      expect(error1).toBeUndefined();
+      
+      // Should reject traversal attempts
+      const error2 = validatePath(rootPath, '..');
+      expect(error2).toBeDefined();
+      expect(error2).toContain('Path traversal not allowed');
+    });
   });
 
   describe('registerReadFileTool', () => {

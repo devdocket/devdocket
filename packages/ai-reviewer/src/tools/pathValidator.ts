@@ -2,22 +2,6 @@ import * as path from 'path';
 import { validWorktreePaths } from './worktreeRegistry';
 
 /**
- * Checks if a candidate path is within a root directory.
- * Uses path.relative to handle edge cases like filesystem roots.
- *
- * @param root The root directory path
- * @param candidate The candidate path to check
- * @returns true if candidate is within root (but not equal to root), false otherwise
- */
-export function isWithinRoot(root: string, candidate: string): boolean {
-  const rel = path.relative(root, candidate);
-  return rel !== '' 
-    && !rel.startsWith('..' + path.sep) 
-    && rel !== '..' 
-    && !path.isAbsolute(rel);
-}
-
-/**
  * Checks if a candidate path is at or within a root directory.
  * Uses path.relative to handle edge cases like filesystem roots.
  *
@@ -64,7 +48,7 @@ export function validateRelativePath(
   }
   const resolved = path.resolve(worktreePath, normalized);
   const root = path.resolve(worktreePath);
-  // Use isWithinRoot helper to check containment
+  // Use isAtOrWithinRoot helper to check containment - handles filesystem root edge case
   if (!isAtOrWithinRoot(root, resolved)) {
     return 'Path traversal not allowed: resolved path escapes the worktree';
   }
