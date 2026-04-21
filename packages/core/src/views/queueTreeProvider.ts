@@ -5,6 +5,7 @@ import { ProviderRegistry } from '../services/providerRegistry';
 import {
   WorkItemElement, WorkItemViewProvider, isProviderGroupNode, isSubGroupNode,
 } from './viewLayout';
+import { buildWorkItemTooltip } from './viewUtils';
 
 export type QueueElement = WorkItemElement;
 
@@ -42,21 +43,11 @@ export class QueueTreeProvider extends WorkItemViewProvider implements vscode.Tr
     treeItem.description = this.layout === 'flat'
       ? this.buildDescription(item.group, this.getProviderLabel(item.providerId))
       : undefined;
-    treeItem.tooltip = this.buildTooltip(item, title);
+    treeItem.tooltip = buildWorkItemTooltip(item, title, { showState: false, notesStyle: 'plain' });
     treeItem.contextValue = item.url ? 'queueItem.hasUrl' : 'queueItem';
     treeItem.iconPath = new vscode.ThemeIcon(item.providerId ? 'remote' : 'circle-filled');
     treeItem.command = { command: 'devdocket.editItem', title: 'Open Details', arguments: [item] };
     return treeItem;
-  }
-
-  private buildTooltip(item: WorkItem, title: string): vscode.MarkdownString {
-    const md = new vscode.MarkdownString();
-    md.appendMarkdown(`**Title:** `);
-    md.appendText(title);
-    md.appendMarkdown(`\n\n`);
-    if (item.notes) { md.appendText(`${item.notes}\n\n`); }
-    md.appendMarkdown(`Created: ${new Date(item.createdAt).toLocaleString()}`);
-    return md;
   }
 
   handleDrag(source: readonly QueueElement[], dataTransfer: vscode.DataTransfer): void {

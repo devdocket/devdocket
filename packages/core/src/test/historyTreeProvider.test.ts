@@ -236,10 +236,10 @@ describe('HistoryTreeProvider', () => {
       expect(treeItem.description).toBe('done');
     });
 
-    it('should use circle-outline icon for unexpected state', () => {
+    it('should use state-appropriate icon for unexpected state', () => {
       const item = makeItem({ id: '1', title: 'X', state: WorkItemState.InProgress });
       const treeItem = provider.getTreeItem(item);
-      expect((treeItem.iconPath as any).id).toBe('circle-outline');
+      expect((treeItem.iconPath as any).id).toBe('play-circle');
     });
 
     it('should use raw state string as description for unexpected state', () => {

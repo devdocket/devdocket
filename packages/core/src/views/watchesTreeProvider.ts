@@ -1,7 +1,7 @@
 import * as vscode from 'vscode';
 import type { RunState, RunConclusion } from '@devdocket/shared';
 import { WatcherService, WatchedRun } from '../services/watcherService';
-import type { ViewLayout } from './viewLayout';
+import { ViewLayout, LayoutState } from './viewLayout';
 
 /**
  * Tree item for a watched run.
@@ -147,18 +147,14 @@ export class WatchesTreeProvider implements vscode.TreeDataProvider<WatchedRunNo
   private readonly _onDidChangeTreeData = new vscode.EventEmitter<WatchedRunNode | JobStatusNode | WatchProviderGroupNode | undefined>();
   readonly onDidChangeTreeData = this._onDidChangeTreeData.event;
 
-  private _layout: ViewLayout = 'flat';
+  private readonly _layoutState: LayoutState;
   private watchChangeSub: vscode.Disposable;
 
-  get layout(): ViewLayout { return this._layout; }
-  set layout(value: ViewLayout) {
-    if (this._layout !== value) {
-      this._layout = value;
-      this._onDidChangeTreeData.fire(undefined);
-    }
-  }
+  get layout(): ViewLayout { return this._layoutState.value; }
+  set layout(value: ViewLayout) { this._layoutState.value = value; }
 
   constructor(private watcherService: WatcherService) {
+    this._layoutState = new LayoutState('flat', () => this._onDidChangeTreeData.fire(undefined));
     // Listen for watch changes
     this.watchChangeSub = watcherService.onDidChangeWatchedRuns(() => {
       this._onDidChangeTreeData.fire(undefined);
@@ -182,7 +178,7 @@ export class WatchesTreeProvider implements vscode.TreeDataProvider<WatchedRunNo
   getChildren(element?: WatchedRunNode | JobStatusNode | WatchProviderGroupNode): vscode.ProviderResult<(WatchedRunNode | JobStatusNode | WatchProviderGroupNode)[]> {
     if (!element) {
       const watches = this.watcherService.getActiveWatches();
-      if (this._layout === 'flat') {
+      if (this._layoutState.value === 'flat') {
         return watches.map(watch => {
           const jobNodes = watch.status.jobs.map(
             job => new JobStatusNode(job.name, job.state, job.conclusion)

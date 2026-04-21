@@ -5,6 +5,7 @@ import { ProviderRegistry } from '../services/providerRegistry';
 import {
   WorkItemElement, WorkItemViewProvider,
 } from './viewLayout';
+import { buildWorkItemTooltip, getWorkItemIcon } from './viewUtils';
 
 export type HistoryElement = WorkItemElement;
 
@@ -38,8 +39,13 @@ export class HistoryTreeProvider extends WorkItemViewProvider {
     treeItem.description = this.layout === 'tree'
       ? this.getStateLabel(item.state)
       : this.buildDescription(item.group, this.getProviderLabel(item.providerId), this.getStateLabel(item.state));
-    treeItem.tooltip = this.buildTooltip(item, title);
-    treeItem.iconPath = this.getIcon(item.state);
+    treeItem.tooltip = buildWorkItemTooltip(item, title, {
+      timestamp: 'updatedAt',
+      timestampLabel: item.state === WorkItemState.Done ? 'Completed at'
+        : item.state === WorkItemState.Archived ? 'Archived at'
+        : 'Last updated',
+    });
+    treeItem.iconPath = getWorkItemIcon(item.state);
     let contextBase = 'historyItem';
     if (item.state === WorkItemState.Done) {
       contextBase = 'historyItem.done';
@@ -62,30 +68,4 @@ export class HistoryTreeProvider extends WorkItemViewProvider {
     }
   }
 
-  private getIcon(state: WorkItemState): vscode.ThemeIcon {
-    switch (state) {
-      case WorkItemState.Done:
-        return new vscode.ThemeIcon('check');
-      case WorkItemState.Archived:
-        return new vscode.ThemeIcon('archive');
-      default:
-        return new vscode.ThemeIcon('circle-outline');
-    }
-  }
-
-  private buildTooltip(item: WorkItem, title: string): vscode.MarkdownString {
-    const md = new vscode.MarkdownString();
-    md.appendMarkdown(`**Title:** `);
-    md.appendText(title);
-    md.appendMarkdown(`\n\n`);
-    if (item.notes) {
-      md.appendMarkdown(`**Notes:** `);
-      md.appendText(item.notes);
-      md.appendMarkdown(`\n\n`);
-    }
-    md.appendMarkdown(`**State:** ${item.state}\n\n`);
-    const timestampLabel = item.state === WorkItemState.Done ? 'Completed at' : item.state === WorkItemState.Archived ? 'Archived at' : 'Last updated';
-    md.appendMarkdown(`**${timestampLabel}:** ${new Date(item.updatedAt).toLocaleString()}`);
-    return md;
-  }
 }

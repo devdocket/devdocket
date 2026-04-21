@@ -5,6 +5,7 @@ import { ProviderRegistry } from '../services/providerRegistry';
 import {
   WorkItemElement, WorkItemViewProvider, isProviderGroupNode, isSubGroupNode,
 } from './viewLayout';
+import { buildWorkItemTooltip, getWorkItemIcon } from './viewUtils';
 
 const DRAG_MIME_TYPE = 'application/vnd.code.tree.devdocket.focus';
 
@@ -48,8 +49,8 @@ export class FocusTreeProvider extends WorkItemViewProvider implements vscode.Tr
     treeItem.description = this.layout === 'tree'
       ? undefined
       : this.buildDescription(item.group, this.getProviderLabel(item.providerId));
-    treeItem.tooltip = this.buildTooltip(item, title);
-    treeItem.iconPath = this.getIcon(item.state);
+    treeItem.tooltip = buildWorkItemTooltip(item, title);
+    treeItem.iconPath = getWorkItemIcon(item.state);
 
     // contextValue controls which context menu items appear
     if (item.state === WorkItemState.Paused) {
@@ -70,17 +71,6 @@ export class FocusTreeProvider extends WorkItemViewProvider implements vscode.Tr
         return 1;
       default:
         return Number.MAX_SAFE_INTEGER;
-    }
-  }
-
-  private getIcon(state: WorkItemState): vscode.ThemeIcon {
-    switch (state) {
-      case WorkItemState.InProgress:
-        return new vscode.ThemeIcon('play-circle');
-      case WorkItemState.Paused:
-        return new vscode.ThemeIcon('debug-pause');
-      default:
-        return new vscode.ThemeIcon('circle-outline');
     }
   }
 
@@ -121,18 +111,4 @@ export class FocusTreeProvider extends WorkItemViewProvider implements vscode.Tr
     await this.workGraph.reorderItem(draggedId, target.id);
   }
 
-  private buildTooltip(item: WorkItem, title: string): vscode.MarkdownString {
-    const md = new vscode.MarkdownString();
-    md.appendMarkdown(`**Title:** `);
-    md.appendText(title);
-    md.appendMarkdown(`\n\n`);
-    if (item.notes) {
-      md.appendMarkdown(`**Notes:** `);
-      md.appendText(item.notes);
-      md.appendMarkdown(`\n\n`);
-    }
-    md.appendMarkdown(`**State:** ${item.state}\n\n`);
-    md.appendMarkdown(`**Created:** ${new Date(item.createdAt).toLocaleString()}`);
-    return md;
-  }
 }

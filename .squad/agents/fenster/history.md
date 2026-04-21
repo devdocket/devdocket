@@ -64,6 +64,18 @@ DevDocket is a VS Code extension monorepo for managing work items from multiple 
 - **CancellationToken handling:** `DevDocketProvider.refresh(token?: CancellationTokenLike)` uses the shared `CancellationTokenLike` interface instead of `vscode.CancellationToken`. This avoids a vscode dependency in shared while remaining structurally compatible — `vscode.CancellationToken` satisfies `CancellationTokenLike`. Implementations can still declare `vscode.CancellationToken` thanks to TypeScript's method bivariance.
 - **Key lesson:** When moving types to a shared package that must remain vscode-free, use minimal interfaces (`CancellationTokenLike`) for vscode types. Callers pass the full vscode type which satisfies the minimal interface structurally. This is the same pattern used by `DevDocketRunWatcher.getRunStatus`.
 - **Files changed:** `packages/shared/src/workItem.ts` (new), `packages/shared/src/apiTypes.ts` (new), `packages/shared/src/index.ts`, `packages/core/src/models/workItem.ts`, `packages/core/src/models/activityLog.ts`, `packages/core/src/api/types.ts`, `packages/ai-reviewer/src/types.ts`, `packages/ai-reviewer/package.json`, `packages/start-git-work/src/startWorkAction.ts`, `packages/start-git-work/src/gitCleanup.ts`, `packages/start-git-work/src/extension.ts`, `packages/github/src/baseGithubProvider.ts`.
+## Learnings
+
+### 2026-04-23 — Issue #335 (Extract shared tree view utilities)
+
+**Refactor:** Extracted duplicated tooltip-building and icon-resolution logic from Focus, History, and Queue tree providers into shared `viewUtils.ts`.
+- **`buildWorkItemTooltip(item, title, options?)`:** Unified tooltip builder with configurable `showState`, `timestamp` field, `timestampLabel`, and `notesStyle` options. Replaces three near-identical private `buildTooltip` methods.
+- **`getWorkItemIcon(state)`:** Single icon-resolution function covering all `WorkItemState` values. Replaces separate `getIcon` methods in Focus and History providers.
+- **`LayoutState` adoption:** Refactored `WatchesTreeProvider` to use the existing `LayoutState` class from `viewLayout.ts` instead of inline layout management.
+- **Test update:** History's "unexpected state" test now expects `play-circle` (the correct mapped icon for InProgress) instead of `circle-outline` (former default fallthrough).
+- **Files changed:** `viewUtils.ts` (new), `focusTreeProvider.ts`, `historyTreeProvider.ts`, `queueTreeProvider.ts`, `watchesTreeProvider.ts`, `viewUtils.test.ts` (new, 12 tests).
+- **Pattern:** When extracting shared view utilities, use options objects (not method overloading) to handle per-view differences in tooltip/icon behavior.
+
 ### 2026-04-23 — Issue #333 (Consolidate storage write-queue and validation patterns)
 
 **Refactor:** Extracted `SerializedJsonStore` base class and composable field validators to eliminate duplicated plumbing across 5 store classes.
@@ -72,6 +84,7 @@ DevDocket is a VS Code extension monorepo for managing work items from multiple 
 - **Stores refactored:** `JsonTaskStore`, `DiscoveredStateStore`, `ReadStateStore`, `ProviderLabelCache`, `WatchStore`. Each removed its own write-queue, backup, and writeFile/readFile boilerplate. Validation functions now use `??` chains of composable validators instead of sequential `typeof` checks.
 - **Test impact:** 7 tests in `discoveredStateStore.test.ts` that spied on `store.writeFile` updated to spy on `store.writeJson` (the base class method). All 154 storage tests pass.
 - **Pattern:** When multiple stores share write serialization, extract a `SerializedJsonStore` base class. Stores override their load/save logic but delegate enqueue, JSON I/O, and backup to the base. Validation uses composable functions composed with `??`.
+
 ### 2026-04-23 — Issue #305 (Split commands.ts into domain modules)
 
 **Refactoring:** Split the 1118-line monolith `commands.ts` into 8 domain-specific modules plus a shared utilities file.
