@@ -1,5 +1,6 @@
 import * as vscode from 'vscode';
-import { BaseProvider, DiscoveredItem, combineSignals, runWorkerPool, runWorkerPoolSettled, safeDecodeComponent, type ResolvedItem } from '@devdocket/shared';
+import { DiscoveredItem, combineSignals, runWorkerPool, runWorkerPoolSettled, safeDecodeComponent, type ResolvedItem } from '@devdocket/shared';
+import { BaseGitHubProvider } from './baseGithubProvider';
 import { logger } from './logger';
 import { parseRepoFromUrls } from './parseRepo';
 import { getHeaders, retryWithAuth, throwApiError, parseCanonicalRepo, fetchClosedGitHubItems, type GitHubIssue } from './githubApiHelpers';
@@ -20,85 +21,14 @@ interface TimelineEvent {
  *
  * Uses the GitHub Search API (`review-requested:@me`) to find open PRs.
  */
-export class GitHubPrReviewProvider extends BaseProvider {
+export class GitHubPrReviewProvider extends BaseGitHubProvider {
   readonly id = 'github-pr-reviews';
   readonly label = 'GitHub PR Reviews';
 
   private _cachedCurrentUser: string | undefined;
   private _cachedCurrentUserToken: string | undefined;
 
-  constructor() {
-    super(new vscode.EventEmitter<DiscoveredItem[]>());
-    this.onBackgroundRefreshError = (error) => {
-      logger.error(`${this.label} refresh failed`, error);
-    };
-  }
-
-  async refresh(token?: vscode.CancellationToken): Promise<void> {
-    if (this._isRefreshing) {
-      return;
-    }
-
-    this._isRefreshing = true;
-    const abortController = new AbortController();
-    const cancelListener = token?.onCancellationRequested?.(() => abortController.abort());
-    try {
-      if (token?.isCancellationRequested) {
-        return;
-      }
-
-      let session: vscode.AuthenticationSession | undefined;
-      try {
-        session = await vscode.authentication.getSession('github', ['repo'], {
-          createIfNone: true,
-        });
-      } catch (err) {
-        const message = err instanceof Error ? err.message : String(err);
-        logger.error('GitHub authentication failed', err);
-        vscode.window.showWarningMessage(`DevDocket GitHub: Authentication failed — ${message}`);
-        return;
-      }
-
-      if (!session || token?.isCancellationRequested) {
-        if (!session) {
-          logger.info('User cancelled GitHub authentication');
-        }
-        return;
-      }
-
-      await this.fetchAndPublish(session.accessToken, true, abortController.signal);
-    } catch (err) {
-      if (err instanceof Error && err.name === 'AbortError' && abortController.signal.aborted && token?.isCancellationRequested) {
-        logger.debug(`${this.label} fetch aborted due to cancellation`);
-      } else {
-        logger.error(`Failed to fetch ${this.label}`, err);
-      }
-    } finally {
-      cancelListener?.dispose();
-      this._isRefreshing = false;
-    }
-  }
-
-  protected async doBackgroundRefresh(): Promise<void> {
-    let session: vscode.AuthenticationSession | undefined;
-    try {
-      session = await vscode.authentication.getSession('github', ['repo'], {
-        createIfNone: false,
-      });
-    } catch (err) {
-      logger.warn('GitHub authentication failed during background refresh', err);
-      return;
-    }
-
-    if (!session) {
-      logger.debug('No GitHub session available for background refresh');
-      return;
-    }
-
-    await this.fetchAndPublish(session.accessToken, false);
-  }
-
-  private async fetchAndPublish(accessToken: string, isUserTriggered: boolean, signal?: AbortSignal): Promise<void> {
+  protected async fetchAndPublish(accessToken: string, isUserTriggered: boolean, signal?: AbortSignal): Promise<void> {
     logger.info('Fetching PR review requests...');
     const repos = this.getConfiguredRepos();
     const { prs, failures } = await this.fetchReviewRequestedPrs(accessToken, repos, signal);

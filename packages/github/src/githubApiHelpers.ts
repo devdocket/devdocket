@@ -68,27 +68,6 @@ export function parseCanonicalRepo(htmlUrl: string, fallbackOwner: string, fallb
   return match ? `${match[1]}/${match[2]}` : `${fallbackOwner}/${fallbackRepo}`;
 }
 
-/** Extract repo name from a GitHub issue/PR object. */
-export function parseRepoFromIssue(issue: GitHubIssue): string {
-  const match = issue.html_url.match(/github\.com\/([^/]+\/[^/]+)/);
-  if (match) {
-    return match[1];
-  }
-
-  // Fallback to parsing from repository_url (API URL)
-  const apiMatch = issue.repository_url.match(/repos\/([^/]+\/[^/]+)/);
-  if (apiMatch) {
-    return apiMatch[1];
-  }
-
-  // Deterministic fallback: hash the repository_url
-  logger.warn(`Could not parse repo from URL: ${issue.html_url}`);
-  const hash = issue.repository_url.split('').reduce((acc, char) => {
-    return ((acc << 5) - acc) + char.charCodeAt(0) | 0;
-  }, 0);
-  return `unknown-repo-${Math.abs(hash).toString(36)}`;
-}
-
 /**
  * Shared implementation for getClosedItems across GitHub providers.
  * Parses external IDs ("owner/repo#number"), validates repo slugs, and
