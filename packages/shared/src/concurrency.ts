@@ -59,8 +59,10 @@ export async function runWorkerPool<T>(
  * Unlike runWorkerPool, this function captures errors per-item and returns them
  * in the results array, allowing for partial success when some items fail.
  * 
- * AbortErrors thrown by the worker will propagate immediately, stopping all workers.
- * Other errors are captured in the results array as rejected promises.
+ * AbortErrors thrown by the worker are re-thrown immediately, causing the overall
+ * operation to reject. Already-running workers may continue until they reach their
+ * own abort checks or await boundaries. Other errors are captured in the results
+ * array as rejected promises.
  * 
  * @param items - Array of items to process
  * @param worker - Async function that processes a single item and returns a result
