@@ -4,35 +4,32 @@ on:
   # Run every Wednesday at 10:00 AM UTC (offset from implementation review)
   schedule:
     - cron: '0 10 * * 3'
-
   # Manual trigger for testing
   workflow_dispatch:
-
-permissions:
-  issues: write
-  contents: read
 
 concurrency:
   group: weekly-ux-review
   cancel-in-progress: true
 
+permissions:
+  issues: write
+  contents: read
+
 jobs:
-  ux-review:
+  create-ux-review-issue:
     runs-on: ubuntu-latest
+    outputs:
+      issue_number: ${{ steps.create-issue.outputs.issue_number }}
+      should_assign: ${{ steps.create-issue.outputs.should_assign }}
     steps:
+      - uses: actions/checkout@v4
+
       - name: Create UX review tracking issue
+        id: create-issue
         uses: actions/github-script@v7
         with:
-          github-token: ${{ secrets.COPILOT_ASSIGN_TOKEN || secrets.GITHUB_TOKEN }}
           script: |
-
-            // Get repo default branch for agent assignment
-            const { data: repoData } = await github.rest.repos.get({
-              owner: context.repo.owner,
-              repo: context.repo.repo
-            });
-
-            // UX review prompt from issue #308
+            // UX review prompt (from issue #308)
             const uxPrompt = `First, review the latest VS Code UX guidelines (https://code.visualstudio.com/api/ux-guidelines/overview) and the VS Code extension API documentation (https://code.visualstudio.com/api). Then, act as a senior UX designer who specializes in developer tools and VS Code extensions, reviewing this extension for the first time. Identify concrete areas where the user experience is confusing, inefficient, or inconsistent — not minor polish items, but workflow-level problems that cause real user friction. Before reporting a finding, check the GitHub issue tracker to see if it's already filed. For each finding: name the UX problem, describe current user experience, explain concrete impact, describe what it should be instead. Focus areas: workflow completeness, cognitive load, discoverability, feedback & state visibility, efficiency for repeat use, information architecture, error & edge cases, platform fit, accessibility & inclusivity. Skip icon choices, color preferences, wording tweaks.`;
 
             // Ensure weekly-ux-review label exists
@@ -58,35 +55,25 @@ jobs:
               }
             }
 
-            // Check for existing UX review tracking issue from this week
-            const weekStart = new Date();
-            weekStart.setUTCDate(weekStart.getUTCDate() - weekStart.getUTCDay());
-            weekStart.setUTCHours(0, 0, 0, 0);
-
-            const { data: existingIssues } = await github.rest.issues.listForRepo({
+            // Check for existing open UX review issues
+            const { data: existing } = await github.rest.issues.listForRepo({
               owner: context.repo.owner,
               repo: context.repo.repo,
               labels: 'weekly-ux-review',
-              state: 'all',
-              per_page: 100,
-              sort: 'created',
-              direction: 'desc'
+              state: 'open',
+              per_page: 1
             });
 
-            // Check if we already have a recent UX review issue (within current week)
-            const recentIssue = existingIssues.find(issue => {
-              const createdAt = new Date(issue.created_at);
-              return createdAt >= weekStart;
-            });
+            const existingIssue = existing.find(item => !item.pull_request);
 
-            if (recentIssue) {
-              core.info(`UX review already triggered this week: #${recentIssue.number}`);
+            if (existingIssue) {
+              core.info(`Skipping: open UX review issue #${existingIssue.number} already exists`);
+              core.setOutput('should_assign', 'false');
               return;
             }
 
             // Create tracking issue
-            const now = new Date();
-            const dateStr = now.toISOString().split('T')[0];
+            const dateStr = new Date().toISOString().split('T')[0];
 
             const { data: issue } = await github.rest.issues.create({
               owner: context.repo.owner,
@@ -122,50 +109,81 @@ jobs:
             });
 
             core.info(`Created UX review tracking issue: #${issue.number}`);
+            core.setOutput('issue_number', issue.number);
+            core.setOutput('should_assign', 'true');
+            return issue.number;
 
-            // Auto-assign @copilot using the Copilot coding agent API
-            let assigned = false;
+  assign-copilot-agent:
+    needs: create-ux-review-issue
+    if: needs.create-ux-review-issue.outputs.should_assign == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Assign @copilot coding agent
+        uses: actions/github-script@v7
+        env:
+          ISSUE_NUMBER: ${{ needs.create-ux-review-issue.outputs.issue_number }}
+        with:
+          github-token: ${{ secrets.COPILOT_ASSIGN_TOKEN }}
+          script: |
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            const issue_number = parseInt(process.env.ISSUE_NUMBER, 10);
+
+            // Get the default branch name
+            const { data: repoData } = await github.rest.repos.get({ owner, repo });
+            const baseBranch = repoData.default_branch;
+
+            const customInstructions = [
+              'Read .squad/team.md for team context.',
+              'This is a weekly UX review — focus on workflow-level UX problems, not cosmetic issues.',
+              'Search existing issues (open and closed) thoroughly before creating new ones.'
+            ].join('\n');
+
             try {
               await github.request('POST /repos/{owner}/{repo}/issues/{issue_number}/assignees', {
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                issue_number: issue.number,
+                owner,
+                repo,
+                issue_number,
                 assignees: ['copilot-swe-agent[bot]'],
                 agent_assignment: {
-                  target_repo: `${context.repo.owner}/${context.repo.repo}`,
-                  base_branch: repoData.default_branch,
-                  custom_instructions: `Read .squad/team.md for team context. This is a weekly UX review — focus on workflow-level UX problems, not cosmetic issues. Search existing issues thoroughly before creating new ones.`
+                  target_repo: `${owner}/${repo}`,
+                  base_branch: baseBranch,
+                  custom_instructions: customInstructions,
+                  custom_agent: '',
+                  model: ''
                 },
                 headers: {
                   'X-GitHub-Api-Version': '2022-11-28'
                 }
               });
-              core.info(`✅ Assigned copilot-swe-agent[bot] to #${issue.number}`);
-              assigned = true;
-            } catch (e) {
-              core.warning(`Failed to assign with agent_assignment: ${e.message}`);
-              // Fallback: try plain assignment without agent payload
+              core.info(`✅ Assigned copilot-swe-agent[bot] to issue #${issue_number}`);
+            } catch (err) {
+              core.warning(`Assignment with agent_assignment failed: ${err.message}`);
+              // Fallback: try without agent_assignment
               try {
                 await github.rest.issues.addAssignees({
-                  owner: context.repo.owner,
-                  repo: context.repo.repo,
-                  issue_number: issue.number,
+                  owner,
+                  repo,
+                  issue_number,
                   assignees: ['copilot-swe-agent[bot]']
                 });
-                core.info(`✅ Assigned copilot-swe-agent[bot] to #${issue.number} (fallback)`);
-                assigned = true;
-              } catch (fallbackError) {
-                core.error(`Failed to assign @copilot: ${fallbackError.message}`);
+                core.info(`Fallback: assigned copilot-swe-agent[bot] to issue #${issue_number}`);
+
+                // Post custom instructions as a comment
+                await github.rest.issues.createComment({
+                  owner,
+                  repo,
+                  issue_number,
+                  body: [
+                    '### 🤖 @copilot Instructions',
+                    '',
+                    customInstructions
+                  ].join('\n')
+                });
+              } catch (err2) {
+                core.error(`Both assignment attempts failed: ${err2.message}`);
+                throw err2;
               }
             }
-
-            if (!assigned) {
-              core.setFailed('Could not assign @copilot to the tracking issue. Manual assignment required.');
-            }
-
-            core.summary
-              .addHeading('Weekly UX Review')
-              .addRaw(`Created tracking issue: <a href="${issue.html_url}">#${issue.number}</a>`)
-              .addRaw('<br/>')
-              .addRaw('🤖 @copilot will analyze the codebase and create issues for UX findings.')
-              .write();
