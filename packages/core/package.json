@@ -41,10 +41,13 @@
           {
             "id": "createFirstItem",
             "title": "Create Your First Work Item",
-            "description": "Start by creating a manual work item to track your work.\n[Create Work Item](command:devdocket.createItem)",
+            "description": "Start by creating a manual work item to track your work.",
             "media": {
               "markdown": "media/walkthroughs/create-item.md"
-            }
+            },
+            "completionEvents": [
+              "onCommand:devdocket.createItem"
+            ]
           },
           {
             "id": "understandWorkflow",
@@ -57,18 +60,27 @@
           {
             "id": "connectProvider",
             "title": "Connect a Provider",
-            "description": "Automatically discover work from GitHub, Azure DevOps, and more.\n[Open Extensions](command:workbench.view.extensions)",
+            "description": "Automatically discover work from GitHub, Azure DevOps, and more.",
             "media": {
               "markdown": "media/walkthroughs/providers.md"
-            }
+            },
+            "completionEvents": [
+              "extensionInstalled:mthalman.devdocket-github",
+              "extensionInstalled:mthalman.devdocket-ado"
+            ]
           },
           {
             "id": "focusOnWork",
             "title": "Focus on Active Work",
-            "description": "Move items to Focus and complete them when done.\n[Open Queue](command:devdocket.queue.focus)",
+            "description": "Move items to Focus and complete them when done.",
             "media": {
               "markdown": "media/walkthroughs/focus.md"
-            }
+            },
+            "completionEvents": [
+              "onCommand:devdocket.acceptToFocus",
+              "onCommand:devdocket.acceptToFocusFromInbox",
+              "onCommand:devdocket.completeItem"
+            ]
           }
         ]
       }
