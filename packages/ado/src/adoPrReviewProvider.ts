@@ -1,5 +1,5 @@
 import * as vscode from 'vscode';
-import { BaseProvider, DiscoveredItem, isValidUrlSegment, combineSignals, type ResolvedItem } from '@devdocket/shared';
+import { BaseProvider, DiscoveredItem, isValidUrlSegment, combineSignals, runWorkerPool, type ResolvedItem } from '@devdocket/shared';
 import { logger } from './logger';
 import { OrgConfig } from './configParser';
 import { getAdoHeaders, retryAdoWithAuth, throwAdoApiError, safeDecodeComponent } from './adoAuth';
@@ -348,39 +348,35 @@ export class AdoPrReviewProvider extends BaseProvider {
     if (parsed.length === 0) { return []; }
 
     const closedSet = new Set<string>();
-    let nextIndex = 0;
 
-    const runWorker = async (): Promise<void> => {
-      while (nextIndex < parsed.length) {
-        if (signal?.aborted) { break; }
-        const currentIndex = nextIndex++;
-        const item = parsed[currentIndex];
-        try {
-          if (!isValidUrlSegment(item.org) || !isValidUrlSegment(item.project) || !isValidUrlSegment(item.repo)) {
-            continue;
-          }
-          const url = `https://dev.azure.com/${encodeURIComponent(item.org)}/${encodeURIComponent(item.project)}/_apis/git/repositories/${encodeURIComponent(item.repo)}/pullrequests/${item.prId}?api-version=7.1`;
-          const response = await fetch(url, {
-            headers: { Authorization: `Bearer ${token}` },
-            signal,
-          });
-          if (response.ok) {
-            const data = await response.json() as { status?: string };
-            if (data.status === 'completed' || data.status === 'abandoned') {
-              closedSet.add(item.id);
-            }
-          } else {
-            logger.debug(`Failed to check PR ${item.id}: ${response.status}`);
-          }
-        } catch (err) {
-          if (signal?.aborted) { break; }
-          logger.debug(`Failed to check PR ${item.id}: ${String(err)}`);
+    // Note: When signal is aborted, the worker returns early, but runWorkerPool's internal
+    // loop may continue claiming indices and invoking the worker (which immediately returns)
+    // until the array is drained. This is a minor performance difference from the previous
+    // `break` pattern but doesn't affect correctness since no network calls are made after abort.
+    await runWorkerPool(parsed, async (item) => {
+      if (signal?.aborted) { return; }
+      try {
+        if (!isValidUrlSegment(item.org) || !isValidUrlSegment(item.project) || !isValidUrlSegment(item.repo)) {
+          return;
         }
+        const url = `https://dev.azure.com/${encodeURIComponent(item.org)}/${encodeURIComponent(item.project)}/_apis/git/repositories/${encodeURIComponent(item.repo)}/pullrequests/${item.prId}?api-version=7.1`;
+        const response = await fetch(url, {
+          headers: { Authorization: `Bearer ${token}` },
+          signal,
+        });
+        if (response.ok) {
+          const data = await response.json() as { status?: string };
+          if (data.status === 'completed' || data.status === 'abandoned') {
+            closedSet.add(item.id);
+          }
+        } else {
+          logger.debug(`Failed to check PR ${item.id}: ${response.status}`);
+        }
+      } catch (err) {
+        if (signal?.aborted) { return; }
+        logger.debug(`Failed to check PR ${item.id}: ${String(err)}`);
       }
-    };
-
-    const workerCount = Math.min(5, parsed.length);
-    await Promise.all(Array.from({ length: workerCount }, () => runWorker()));
+    }, 5);
 
     // Return in input order for deterministic results
     return parsed.filter(p => closedSet.has(p.id)).map(p => p.id);
