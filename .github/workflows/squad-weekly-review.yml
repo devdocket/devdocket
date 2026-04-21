@@ -100,7 +100,7 @@ jobs:
                 });
                 core.info(`Posted instructions comment (assignment API unavailable)`);
               } catch (commentErr) {
-                core.error(`Failed to post instructions comment: ${commentErr.message}`);
+                core.error(`Failed to post instructions comment: ${String(commentErr)}`);
               }
               
               // Try fallback assignment without agent_assignment
