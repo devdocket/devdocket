@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { isValidUrlSegment, isValidGitHubRepo } from '../urlValidation';
+import { isValidUrlSegment, isValidGitHubRepo, safeDecodeComponent } from '../urlValidation';
 import { isValidRepoSlug, sanitizeUrlSegment } from '../urlValidation';
 
 describe('isValidUrlSegment', () => {
@@ -363,5 +363,42 @@ describe('sanitizeUrlSegment', () => {
 
   it('strips percent-encoding sequences', () => {
     expect(sanitizeUrlSegment('a%20b')).toBe('a20b');
+  });
+});
+
+describe('safeDecodeComponent', () => {
+  it('decodes valid percent-encoded strings', () => {
+    expect(safeDecodeComponent('hello%20world')).toBe('hello world');
+    expect(safeDecodeComponent('foo%2Fbar')).toBe('foo/bar');
+    expect(safeDecodeComponent('test%40example.com')).toBe('test@example.com');
+  });
+
+  it('decodes complex percent-encoded strings', () => {
+    expect(safeDecodeComponent('%C3%A9')).toBe('é');  // UTF-8 encoded é
+    expect(safeDecodeComponent('100%25')).toBe('100%');
+    expect(safeDecodeComponent('a%2Bb%3Dc')).toBe('a+b=c');
+  });
+
+  it('returns original string for malformed percent-encoding', () => {
+    expect(safeDecodeComponent('bad%')).toBe('bad%');
+    expect(safeDecodeComponent('bad%2')).toBe('bad%2');
+    expect(safeDecodeComponent('bad%ZZ')).toBe('bad%ZZ');
+    expect(safeDecodeComponent('%E0%A4%A')).toBe('%E0%A4%A');  // Incomplete UTF-8 sequence
+  });
+
+  it('returns original string for already decoded input', () => {
+    expect(safeDecodeComponent('hello world')).toBe('hello world');
+    expect(safeDecodeComponent('foo/bar')).toBe('foo/bar');
+    expect(safeDecodeComponent('no-encoding-here')).toBe('no-encoding-here');
+  });
+
+  it('handles empty and edge case strings', () => {
+    expect(safeDecodeComponent('')).toBe('');
+    expect(safeDecodeComponent('%')).toBe('%');
+    expect(safeDecodeComponent('%%')).toBe('%%');
+  });
+
+  it('handles mixed valid and invalid encoding', () => {
+    expect(safeDecodeComponent('valid%20and%ZZ')).toBe('valid%20and%ZZ');  // Stops at first error
   });
 });
