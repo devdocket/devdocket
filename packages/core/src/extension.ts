@@ -421,8 +421,8 @@ export async function activate(context: vscode.ExtensionContext): Promise<DevDoc
 
   // panelManager must be first: its dispose() flushes pending saves via
   // WorkGraph, which must still be alive at that point. VS Code disposes
-  // subscriptions in reverse order, so placing it first ensures it is
-  // disposed last.
+  // subscriptions in array order, so placing it first ensures it runs
+  // before WorkGraph is disposed.
   context.subscriptions.push(
     panelManager,
     ...Object.values(views),
