@@ -4,31 +4,9 @@ import { promisify } from 'util';
 import * as path from 'path';
 import * as fs from 'fs';
 import { logger } from './logger';
+import { WorkItemState, type WorkItem, type DevDocketAction } from '@devdocket/shared';
 
 const execFileAsync = promisify(execFile);
-
-// Re-declared to match core API contract — separate extension cannot import core types directly
-interface WorkItem {
-  id: string;
-  title: string;
-  notes?: string;
-  state: string;
-  providerId?: string;
-  externalId?: string;
-  url?: string;
-  group?: string;
-  sortOrder?: number;
-  createdAt: number;
-  updatedAt: number;
-}
-
-// Re-declared to match core API contract — separate extension cannot import core types directly
-interface DevDocketAction {
-  readonly id: string;
-  readonly label: string;
-  canRun(item: Readonly<WorkItem>): boolean;
-  run(item: Readonly<WorkItem>): Promise<void>;
-}
 
 interface ParsedExternalId {
   repoKey: string;
@@ -61,7 +39,7 @@ export class StartWorkAction implements DevDocketAction {
   }
 
   canRun(item: Readonly<WorkItem>): boolean {
-    return item.state === 'InProgress' && SUPPORTED_PROVIDERS.includes(item.providerId ?? '');
+    return item.state === WorkItemState.InProgress && SUPPORTED_PROVIDERS.includes(item.providerId ?? '');
   }
 
   async run(item: Readonly<WorkItem>): Promise<void> {

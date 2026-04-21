@@ -2,6 +2,7 @@ import * as vscode from 'vscode';
 import { StartWorkAction } from './startWorkAction';
 import { promptGitCleanup } from './gitCleanup';
 import { initLogger, setLogLevel, logger, resolveLogLevel } from './logger';
+import type { StateTransitionEvent, ActivityType } from '@devdocket/shared';
 
 export async function activate(context: vscode.ExtensionContext): Promise<void> {
   const outputChannel = vscode.window.createOutputChannel('DevDocket Start Git Work');
@@ -54,9 +55,9 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 
   // Listen for Done transitions to prompt for branch/worktree cleanup
   if (typeof api.onDidTransitionState === 'function') {
-    const cleanupDisposable = api.onDidTransitionState((event: { itemId: string; item: { id: string; activityLog?: { timestamp: number; type: string; detail?: string }[] }; newState: string }) => {
+    const cleanupDisposable = api.onDidTransitionState((event: StateTransitionEvent) => {
       if (event.newState === 'Done') {
-        const addActivity = async (itemId: string, type: string, detail?: string) => {
+        const addActivity = async (itemId: string, type: ActivityType, detail?: string) => {
           if (typeof api.addActivity === 'function') {
             await api.addActivity(itemId, type, detail);
           }

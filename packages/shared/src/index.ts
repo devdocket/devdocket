@@ -1,5 +1,5 @@
 /**
- * Shared logging utilities used across all DevDocket packages.
+ * Shared types and utilities used across all DevDocket packages.
  * @module @devdocket/shared
  */
 export { createLoggerService, LogLevel, resolveLogLevel, serializeArg } from './logger';
@@ -10,3 +10,6 @@ export { isValidUrlSegment, isValidGitHubRepo, isValidRepoSlug, sanitizeUrlSegme
 export { validateRefreshInterval } from './refreshInterval';
 export type { DevDocketRunWatcher, RunIdentifier, RunStatus, JobStatus, RunState, RunConclusion, CancellationTokenLike } from './runWatcher';
 export { combineSignals } from './signalUtils';
+export { WorkItemState } from './workItem';
+export type { WorkItem, WorkItemInput, ActivityLogEntry, ActivityType } from './workItem';
+export type { DevDocketProvider, DevDocketAction, DevDocketApi, StateTransitionEvent } from './apiTypes';

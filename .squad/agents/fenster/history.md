@@ -48,6 +48,22 @@ DevDocket is a VS Code extension monorepo for managing work items from multiple 
 - **Layout toggle:** Two command IDs per toggle with own icons. Context keys set on activation + config listener.
 - **Build:** esbuild, CJS, `--external:vscode`, sourcemaps. Root `npm install` + `npm run build`.
 
+### Completed Issues
+#333 (storage write-queue consolidation), #302 (consolidate shared types), #330 (git auth env vars — credential exposure fix), #299 (fix double disposal), #323 (watch CI pipelines), #322 (auto-complete activity log), #320 (focus view grouping), #282 (provider state in editor), #281 (clickable title), #276 (auto-track authored PRs), #275 (History→Queue transitions), #273 (tree counts), #265 (auto-complete on close), #255 (provider metadata docs), #250 (group context), #249 (accept-to-focus, pre-shipped), #243 (version resurfacing), #240 (create from URL), #233 (provider health), #232 (clear history), #231 (sources icons), #230 (layout toggle), #229 (emoji removal), #227 (provider labels), #223 (dead code cleanup), #222 (responsive layout), #221 (contextual heading), #219 (source URL link), #217 (editor metadata), #216 (provider description), #215 (dynamic titles), #189 (dismissed fix), #178 (ADO filtering), #158 (markdown injection), #157 (API trust boundary), #156 (URL sanitization), #155 (URL scheme validation), #154 (crypto.randomUUID), #153 (JSON validation), #152 (path traversal fix), #12 (AI PR actions), bulk rename (WorkCenter→DevDocket)
+
+> **Archived Summary (04-17 and earlier):** Early issues including auto-complete v1 with disappearance detection (#265), large PR fix for walkthrough (#261), clickable title (#281), item activity log (#260), AI model selection (#254), keyboard shortcuts (#226), and dynamic title sync via `titleSync.ts` service (#215). Full learnings in `history-archive.md`
+
+## Learnings
+
+### 2026-04-23 — Issue #302 (Consolidate duplicated type declarations into shared)
+
+**Refactor:** Moved all duplicated type declarations (`WorkItem`, `WorkItemState`, `DevDocketAction`, `DevDocketProvider`, `DevDocketApi`, `ActivityLogEntry`, `ActivityType`, `StateTransitionEvent`) to `@devdocket/shared`. Satellite extensions now import from a single source of truth.
+- **Problem:** Every consumer package (ai-reviewer, start-git-work, github) re-declared core API types locally. The ai-reviewer copy was already stale (`description` vs `notes`, missing fields).
+- **New shared files:** `packages/shared/src/workItem.ts` (WorkItem, WorkItemState, WorkItemInput, ActivityLogEntry, ActivityType), `packages/shared/src/apiTypes.ts` (DevDocketProvider, DevDocketAction, DevDocketApi, StateTransitionEvent).
+- **Re-export pattern:** Core's `models/workItem.ts`, `models/activityLog.ts`, and `api/types.ts` now re-export from `@devdocket/shared` — all existing intra-core imports remain unchanged.
+- **CancellationToken handling:** `DevDocketProvider.refresh(token?: CancellationTokenLike)` uses the shared `CancellationTokenLike` interface instead of `vscode.CancellationToken`. This avoids a vscode dependency in shared while remaining structurally compatible — `vscode.CancellationToken` satisfies `CancellationTokenLike`. Implementations can still declare `vscode.CancellationToken` thanks to TypeScript's method bivariance.
+- **Key lesson:** When moving types to a shared package that must remain vscode-free, use minimal interfaces (`CancellationTokenLike`) for vscode types. Callers pass the full vscode type which satisfies the minimal interface structurally. This is the same pattern used by `DevDocketRunWatcher.getRunStatus`.
+- **Files changed:** `packages/shared/src/workItem.ts` (new), `packages/shared/src/apiTypes.ts` (new), `packages/shared/src/index.ts`, `packages/core/src/models/workItem.ts`, `packages/core/src/models/activityLog.ts`, `packages/core/src/api/types.ts`, `packages/ai-reviewer/src/types.ts`, `packages/ai-reviewer/package.json`, `packages/start-git-work/src/startWorkAction.ts`, `packages/start-git-work/src/gitCleanup.ts`, `packages/start-git-work/src/extension.ts`, `packages/github/src/baseGithubProvider.ts`.
 ## Learnings
 
 ### 2026-04-23 — Issue #335 (Extract shared tree view utilities)
