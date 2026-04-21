@@ -1,5 +1,5 @@
 import * as vscode from 'vscode';
-import { combineSignals } from '@devdocket/shared';
+import { combineSignals, runWorkerPool, runWorkerPoolSettled } from '@devdocket/shared';
 import { logger } from './logger';
 import { parseRepoFromUrls } from './parseRepo';
 import { BaseGitHubProvider, DiscoveredItem, GitHubIssue } from './baseGithubProvider';
@@ -96,29 +96,14 @@ export class GitHubMyPrsProvider extends BaseGitHubProvider {
     repos: string[],
     signal?: AbortSignal,
   ): Promise<{ prs: GitHubIssue[]; failures: string[] }> {
-    const results: PromiseSettledResult<{ prs: GitHubIssue[]; failed: boolean }>[] = new Array(repos.length);
-    let nextIndex = 0;
-
-    const runWorker = async (): Promise<void> => {
-      while (nextIndex < repos.length) {
-        if (signal?.aborted) {
-          const error = new Error('The operation was aborted.');
-          error.name = 'AbortError';
-          throw error;
-        }
-        const currentIndex = nextIndex++;
-        try {
-          const value = await this.fetchRepoPrs(token, repos[currentIndex], signal);
-          results[currentIndex] = { status: 'fulfilled', value };
-        } catch (reason) {
-          if (reason instanceof Error && reason.name === 'AbortError' && signal?.aborted) { throw reason; }
-          results[currentIndex] = { status: 'rejected', reason: reason as Error };
-        }
+    const results = await runWorkerPoolSettled(repos, async (repo) => {
+      if (signal?.aborted) {
+        const error = new Error('The operation was aborted.');
+        error.name = 'AbortError';
+        throw error;
       }
-    };
-
-    const workerCount = Math.min(3, repos.length);
-    await Promise.all(Array.from({ length: workerCount }, () => runWorker()));
+      return await this.fetchRepoPrs(token, repo, signal);
+    }, 3);
 
     const allPrs: GitHubIssue[] = [];
     const failures: string[] = [];
@@ -193,30 +178,22 @@ export class GitHubMyPrsProvider extends BaseGitHubProvider {
       return result;
     }
 
-    let nextIndex = 0;
-    const runWorker = async (): Promise<void> => {
-      while (nextIndex < prsWithApiUrl.length) {
-        if (signal?.aborted) {
-          const error = new Error('The operation was aborted.');
-          error.name = 'AbortError';
-          throw error;
-        }
-        const currentIndex = nextIndex++;
-        const pr = prsWithApiUrl[currentIndex];
-        try {
-          const status = await this.fetchSinglePrStatus(token, pr, signal);
-          if (status) {
-            result.set(pr.html_url, status);
-          }
-        } catch (error) {
-          if (error instanceof Error && error.name === 'AbortError' && signal?.aborted) { throw error; }
-          logger.debug(`Failed to fetch status for PR ${pr.html_url}: ${String(error)}`);
-        }
+    await runWorkerPool(prsWithApiUrl, async (pr) => {
+      if (signal?.aborted) {
+        const error = new Error('The operation was aborted.');
+        error.name = 'AbortError';
+        throw error;
       }
-    };
-
-    const workerCount = Math.min(3, prsWithApiUrl.length);
-    await Promise.all(Array.from({ length: workerCount }, () => runWorker()));
+      try {
+        const status = await this.fetchSinglePrStatus(token, pr, signal);
+        if (status) {
+          result.set(pr.html_url, status);
+        }
+      } catch (error) {
+        if (error instanceof Error && error.name === 'AbortError' && signal?.aborted) { throw error; }
+        logger.debug(`Failed to fetch status for PR ${pr.html_url}: ${String(error)}`);
+      }
+    }, 3);
 
     return result;
   }
