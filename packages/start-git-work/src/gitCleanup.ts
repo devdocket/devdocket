@@ -4,7 +4,7 @@ import * as fs from 'fs/promises';
 import { execFile } from 'child_process';
 import { promisify } from 'util';
 import { logger } from './logger';
-import type { WorkItem, ActivityLogEntry, ActivityType } from '@devdocket/shared';
+import type { WorkItem, ActivityType } from '@devdocket/shared';
 
 const execFileAsync = promisify(execFile);
 
