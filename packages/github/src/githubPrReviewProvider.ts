@@ -1,5 +1,5 @@
 import * as vscode from 'vscode';
-import { combineSignals } from '@devdocket/shared';
+import { combineSignals, runWorkerPool, runWorkerPoolSettled } from '@devdocket/shared';
 import { logger } from './logger';
 import { parseRepoFromUrls } from './parseRepo';
 import { BaseGitHubProvider, DiscoveredItem, GitHubIssue, type ResolvedItem } from './baseGithubProvider';
@@ -171,31 +171,14 @@ export class GitHubPrReviewProvider extends BaseGitHubProvider {
     maxConcurrent: number,
     signal?: AbortSignal,
   ): Promise<PromiseSettledResult<{ prs: GitHubIssue[]; failed: boolean }>[]> {
-    const results: PromiseSettledResult<{ prs: GitHubIssue[]; failed: boolean }>[] = new Array(repos.length);
-    let nextIndex = 0;
-
-    const runWorker = async (): Promise<void> => {
-      while (nextIndex < repos.length) {
-        if (signal?.aborted) {
-          const error = new Error('The operation was aborted.');
-          error.name = 'AbortError';
-          throw error;
-        }
-        const currentIndex = nextIndex++;
-        try {
-          const value = await this.fetchRepoPrReviews(token, repos[currentIndex], signal);
-          results[currentIndex] = { status: 'fulfilled', value };
-        } catch (reason) {
-          if (reason instanceof Error && reason.name === 'AbortError' && signal?.aborted) { throw reason; }
-          results[currentIndex] = { status: 'rejected', reason: reason as Error };
-        }
+    return await runWorkerPoolSettled(repos, async (repo) => {
+      if (signal?.aborted) {
+        const error = new Error('The operation was aborted.');
+        error.name = 'AbortError';
+        throw error;
       }
-    };
-
-    const workerCount = Math.min(maxConcurrent, repos.length);
-    await Promise.all(Array.from({ length: workerCount }, () => runWorker()));
-
-    return results;
+      return await this.fetchRepoPrReviews(token, repo, signal);
+    }, maxConcurrent);
   }
 
   private async fetchRepoPrReviews(token: string, repo: string, signal?: AbortSignal): Promise<{ prs: GitHubIssue[]; failed: boolean }> {
@@ -255,44 +238,36 @@ export class GitHubPrReviewProvider extends BaseGitHubProvider {
       return result;
     }
 
-    let nextIndex = 0;
-    const runWorker = async (): Promise<void> => {
-      while (nextIndex < prsWithApiUrl.length) {
-        if (signal?.aborted) {
-          const error = new Error('The operation was aborted.');
-          error.name = 'AbortError';
-          throw error;
-        }
-        const currentIndex = nextIndex++;
-        const pr = prsWithApiUrl[currentIndex];
-        try {
-          const response = await fetch(pr.pull_request!.url, {
-            headers: {
-              Authorization: `Bearer ${token}`,
-              Accept: 'application/vnd.github+json',
-              'X-GitHub-Api-Version': '2022-11-28',
-            },
-            signal: combineSignals(signal, 30_000),
-          });
-          if (response.ok) {
-            const data = (await response.json()) as { head?: { sha?: string } };
-            if (data.head?.sha) {
-              result.set(pr.html_url, data.head.sha);
-            }
-          } else {
-            logger.debug(
-              `Failed to fetch head SHA for PR ${pr.html_url}: ${response.status} ${response.statusText}`,
-            );
-          }
-        } catch (error) {
-          if (error instanceof Error && error.name === 'AbortError' && signal?.aborted) { throw error; }
-          logger.debug(`Failed to fetch head SHA for PR ${pr.html_url}: ${String(error)}`);
-        }
+    await runWorkerPool(prsWithApiUrl, async (pr) => {
+      if (signal?.aborted) {
+        const error = new Error('The operation was aborted.');
+        error.name = 'AbortError';
+        throw error;
       }
-    };
-
-    const workerCount = Math.min(3, prsWithApiUrl.length);
-    await Promise.all(Array.from({ length: workerCount }, () => runWorker()));
+      try {
+        const response = await fetch(pr.pull_request!.url, {
+          headers: {
+            Authorization: `Bearer ${token}`,
+            Accept: 'application/vnd.github+json',
+            'X-GitHub-Api-Version': '2022-11-28',
+          },
+          signal: combineSignals(signal, 30_000),
+        });
+        if (response.ok) {
+          const data = (await response.json()) as { head?: { sha?: string } };
+          if (data.head?.sha) {
+            result.set(pr.html_url, data.head.sha);
+          }
+        } else {
+          logger.debug(
+            `Failed to fetch head SHA for PR ${pr.html_url}: ${response.status} ${response.statusText}`,
+          );
+        }
+      } catch (error) {
+        if (error instanceof Error && error.name === 'AbortError' && signal?.aborted) { throw error; }
+        logger.debug(`Failed to fetch head SHA for PR ${pr.html_url}: ${String(error)}`);
+      }
+    }, 3);
 
     return result;
   }
@@ -344,61 +319,53 @@ export class GitHubPrReviewProvider extends BaseGitHubProvider {
   ): Promise<Map<string, string>> {
     const result = new Map<string, string>();
 
-    let nextIndex = 0;
-    const runWorker = async (): Promise<void> => {
-      while (nextIndex < prs.length) {
-        if (signal?.aborted) {
-          const error = new Error('The operation was aborted.');
-          error.name = 'AbortError';
-          throw error;
-        }
-        const currentIdx = nextIndex++;
-        const pr = prs[currentIdx];
-        try {
-          // Only fetches the first page (100 events). For PRs with very extensive
-          // activity the latest review_requested event could be missed — an acceptable
-          // trade-off to limit API calls.
-          const timelineUrl = `${pr.repository_url}/issues/${pr.number}/timeline?per_page=100`;
-          const response = await fetch(timelineUrl, {
-            headers: {
-              Authorization: `Bearer ${token}`,
-              Accept: 'application/vnd.github+json',
-              'X-GitHub-Api-Version': '2022-11-28',
-            },
-            signal: combineSignals(signal, 30_000),
-          });
-          if (response.ok) {
-            const events = (await response.json()) as TimelineEvent[];
-            let latestReRequest: string | undefined;
-            for (const event of events) {
-              if (
-                event.event === 'review_requested' &&
-                event.requested_reviewer?.login?.toLowerCase() === currentUserLogin.toLowerCase() &&
-                event.created_at
-              ) {
-                // Track the maximum timestamp rather than relying on array order
-                if (!latestReRequest || event.created_at > latestReRequest) {
-                  latestReRequest = event.created_at;
-                }
+    await runWorkerPool(prs, async (pr) => {
+      if (signal?.aborted) {
+        const error = new Error('The operation was aborted.');
+        error.name = 'AbortError';
+        throw error;
+      }
+      try {
+        // Only fetches the first page (100 events). For PRs with very extensive
+        // activity the latest review_requested event could be missed — an acceptable
+        // trade-off to limit API calls.
+        const timelineUrl = `${pr.repository_url}/issues/${pr.number}/timeline?per_page=100`;
+        const response = await fetch(timelineUrl, {
+          headers: {
+            Authorization: `Bearer ${token}`,
+            Accept: 'application/vnd.github+json',
+            'X-GitHub-Api-Version': '2022-11-28',
+          },
+          signal: combineSignals(signal, 30_000),
+        });
+        if (response.ok) {
+          const events = (await response.json()) as TimelineEvent[];
+          let latestReRequest: string | undefined;
+          for (const event of events) {
+            if (
+              event.event === 'review_requested' &&
+              event.requested_reviewer?.login?.toLowerCase() === currentUserLogin.toLowerCase() &&
+              event.created_at
+            ) {
+              // Track the maximum timestamp rather than relying on array order
+              if (!latestReRequest || event.created_at > latestReRequest) {
+                latestReRequest = event.created_at;
               }
             }
-            if (latestReRequest) {
-              result.set(pr.html_url, latestReRequest);
-            }
-          } else {
-            logger.debug(
-              `Failed to fetch timeline for PR ${pr.html_url}: ${response.status}`,
-            );
           }
-        } catch (error) {
-          if (error instanceof Error && error.name === 'AbortError' && signal?.aborted) { throw error; }
-          logger.debug(`Failed to fetch timeline for PR ${pr.html_url}: ${String(error)}`);
+          if (latestReRequest) {
+            result.set(pr.html_url, latestReRequest);
+          }
+        } else {
+          logger.debug(
+            `Failed to fetch timeline for PR ${pr.html_url}: ${response.status}`,
+          );
         }
+      } catch (error) {
+        if (error instanceof Error && error.name === 'AbortError' && signal?.aborted) { throw error; }
+        logger.debug(`Failed to fetch timeline for PR ${pr.html_url}: ${String(error)}`);
       }
-    };
-
-    const workerCount = Math.min(3, prs.length);
-    await Promise.all(Array.from({ length: workerCount }, () => runWorker()));
+    }, 3);
 
     return result;
   }
