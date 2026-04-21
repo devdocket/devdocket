@@ -1,6 +1,11 @@
 import { describe, it, expect } from 'vitest';
-import { isValidUrlSegment, isValidGitHubRepo, safeDecodeComponent } from '../urlValidation';
-import { isValidRepoSlug, sanitizeUrlSegment } from '../urlValidation';
+import {
+  isValidUrlSegment,
+  isValidGitHubRepo,
+  safeDecodeComponent,
+  isValidRepoSlug,
+  sanitizeUrlSegment,
+} from '../urlValidation';
 
 describe('isValidUrlSegment', () => {
   describe('accepts valid segments', () => {
