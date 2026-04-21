@@ -129,7 +129,7 @@ jobs:
                   owner, repo, issue_number,
                   body: `### 🤖 copilot-swe-agent[bot] Instructions\n\n${customInstructions}${manualNote}`
                 });
-                core.info(`Posted instructions comment (assignment API unavailable)`);
+                core.info(`Posted instructions comment after assignment failure`);
               } catch (commentErr) {
                 core.error(`Failed to post instructions comment: ${String(commentErr)}`);
               }
