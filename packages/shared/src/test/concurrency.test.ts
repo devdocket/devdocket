@@ -77,7 +77,7 @@ describe('runWorkerPool', () => {
     expect(results).toEqual([]);
   });
 
-  it('propagates AbortError and stops workers', async () => {
+  it('propagates AbortError from workers', async () => {
     const items = Array.from({ length: 100 }, (_, i) => i);
     const processed: number[] = [];
     
