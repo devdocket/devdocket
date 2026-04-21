@@ -30,9 +30,6 @@ export abstract class BaseGitHubProvider extends BaseProvider implements DevDock
 
   constructor() {
     super(new vscode.EventEmitter<DiscoveredItem[]>());
-    this.onBackgroundRefreshError = (error: unknown) => {
-      logger.error(`${this.label} refresh failed`, error);
-    };
   }
 
   async refresh(token?: vscode.CancellationToken): Promise<void> {
