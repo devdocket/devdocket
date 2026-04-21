@@ -1,7 +1,7 @@
 import * as vscode from 'vscode';
 import * as path from 'path';
 import * as fs from 'fs/promises';
-import { validateWorktreePath, validateRelativePath } from './pathValidator';
+import { validateWorktreePath, validateRelativePath, isAtOrWithinRoot } from './pathValidator';
 import { errorToString } from './errorUtils';
 
 interface ListDirectoryInput {
@@ -38,7 +38,7 @@ export function registerListDirectoryTool(): vscode.Disposable {
         // Resolve symlinks in all path segments and verify containment
         const realPath = await fs.realpath(resolved);
         const realRoot = await fs.realpath(worktreePath);
-        if (!realPath.startsWith(realRoot + path.sep) && realPath !== realRoot) {
+        if (!isAtOrWithinRoot(realRoot, realPath)) {
           return new vscode.LanguageModelToolResult([
             new vscode.LanguageModelTextPart('Path escapes the worktree after resolving symlinks'),
           ]);

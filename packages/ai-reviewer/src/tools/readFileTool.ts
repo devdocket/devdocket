@@ -1,7 +1,7 @@
 import * as vscode from 'vscode';
 import * as path from 'path';
 import * as fs from 'fs/promises';
-import { validatePath } from './pathValidator';
+import { validatePath, isAtOrWithinRoot } from './pathValidator';
 import { errorToString } from './errorUtils';
 
 interface ReadFileInput {
@@ -31,7 +31,7 @@ export function registerReadFileTool(): vscode.Disposable {
         // stays within the worktree root
         const realPath = await fs.realpath(fullPath);
         const realRoot = await fs.realpath(worktreePath);
-        if (!realPath.startsWith(realRoot + path.sep) && realPath !== realRoot) {
+        if (!isAtOrWithinRoot(realRoot, realPath)) {
           return new vscode.LanguageModelToolResult([
             new vscode.LanguageModelTextPart('Path escapes the worktree after resolving symlinks'),
           ]);
@@ -57,7 +57,7 @@ export function registerReadFileTool(): vscode.Disposable {
             // Resolve symlinks and ensure parent stays within the worktree
             const realParent = await fs.realpath(parentFull);
             const realRoot = await fs.realpath(worktreePath);
-            if (realParent.startsWith(realRoot + path.sep) || realParent === realRoot) {
+            if (isAtOrWithinRoot(realRoot, realParent)) {
               const parentUri = vscode.Uri.file(realParent);
               const entries = await vscode.workspace.fs.readDirectory(parentUri);
               if (entries.length > 0) {
