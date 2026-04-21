@@ -202,3 +202,33 @@ describe('runWorkerPoolSettled', () => {
     expect(maxConcurrent).toBe(3);
   });
 });
+
+describe('maxConcurrency parameter validation', () => {
+  it('should throw for maxConcurrency = 0', async () => {
+    await expect(runWorkerPool([1], async () => {}, 0)).rejects.toThrow('maxConcurrency must be a finite integer >= 1');
+  });
+
+  it('should throw for negative maxConcurrency', async () => {
+    await expect(runWorkerPool([1], async () => {}, -1)).rejects.toThrow('maxConcurrency must be a finite integer >= 1');
+  });
+
+  it('should throw for NaN maxConcurrency', async () => {
+    await expect(runWorkerPool([1], async () => {}, NaN)).rejects.toThrow('maxConcurrency must be a finite integer >= 1');
+  });
+
+  it('should throw for Infinity maxConcurrency', async () => {
+    await expect(runWorkerPool([1], async () => {}, Infinity)).rejects.toThrow('maxConcurrency must be a finite integer >= 1');
+  });
+
+  it('should throw for fractional maxConcurrency', async () => {
+    await expect(runWorkerPool([1], async () => {}, 2.5)).rejects.toThrow('maxConcurrency must be a finite integer >= 1');
+  });
+
+  it('should accept valid integer maxConcurrency', async () => {
+    const results: number[] = [];
+    await runWorkerPool([1, 2, 3], async (item, index) => {
+      results[index] = item * 2;
+    }, 2);
+    expect(results).toEqual([2, 4, 6]);
+  });
+});
