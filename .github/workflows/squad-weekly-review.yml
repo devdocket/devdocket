@@ -64,7 +64,7 @@ jobs:
                 '',
                 '**Note:** Issue de-duplication and per-finding issue creation are handled entirely by the agent — the workflow only creates this tracking issue and assigns it.'
               ].join('\n'),
-              labels: ['squad:copilot', 'go:needs-research']
+              labels: ['weekly-review', 'go:needs-research']
             });
             
             core.setOutput('issue_number', issue.number);
