@@ -7,9 +7,10 @@
  * external array or map using the provided `index`.
  * 
  * The worker function is responsible for handling AbortSignal checks and throwing
- * AbortError when appropriate. If any worker throws, the error propagates immediately
- * and other workers continue until they check their own abort conditions.
- * 
+ * AbortError when appropriate. If any worker throws, the error propagates and
+ * terminates the Promise.all, though individual workers that have already claimed
+ * items may continue processing until they naturally exit their loop.
+ *
  * @param items - Array of items to process
  * @param worker - Async function that processes a single item and its index
  * @param maxConcurrency - Maximum number of workers to run in parallel (default: 3)
@@ -64,9 +65,10 @@ export async function runWorkerPool<T>(
  * Unlike runWorkerPool, this function captures errors per-item and returns them
  * in the results array, allowing for partial success when some items fail.
  * 
- * AbortErrors thrown by the worker will propagate immediately, stopping all workers.
+ * AbortErrors thrown by the worker will propagate and terminate the Promise.all,
+ * though workers that have already claimed items may continue until they exit.
  * Other errors are captured in the results array as rejected promises.
- * 
+ *
  * @param items - Array of items to process
  * @param worker - Async function that processes a single item and returns a result
  * @param maxConcurrency - Maximum number of workers to run in parallel (default: 3)
