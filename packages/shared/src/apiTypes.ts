@@ -5,8 +5,10 @@ import type { WorkItem, ActivityType } from './workItem';
 /**
  * Event payload emitted when a work item changes lifecycle state.
  *
- * State values are plain strings (not the internal `WorkItemState` enum)
- * to keep satellite extensions decoupled from core-internal enums.
+ * The {@link oldState} and {@link newState} fields are plain strings (e.g.
+ * `'InProgress'`, `'Done'`), keeping satellite extensions decoupled from
+ * the {@link WorkItemState} enum. The {@link item} snapshot retains the
+ * enum-typed `state` property for consumers that need it.
  */
 export interface StateTransitionEvent {
   /** ID of the work item that transitioned. */
