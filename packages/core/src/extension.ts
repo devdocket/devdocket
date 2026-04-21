@@ -19,6 +19,7 @@ import { SourcesTreeProvider } from './views/sourcesTreeProvider';
 import { HistoryTreeProvider } from './views/historyTreeProvider';
 import { WatchesTreeProvider } from './views/watchesTreeProvider';
 import { WatchesStatusBar } from './views/watchesStatusBar';
+import { ProviderHealthStatusBar } from './views/providerHealthStatusBar';
 import { WorkItemEditorPanel, PanelManager } from './views/workItemEditorPanel';
 import { registerCommands } from './commands/commands';
 import { isSafeUrl } from './utils/url';
@@ -407,8 +408,9 @@ export async function activate(context: vscode.ExtensionContext): Promise<DevDoc
 
   const { providers, views, disposables: viewDisposables } = treeSetup;
 
-  // Create status bar item
+  // Create status bar items
   const watchesStatusBar = new WatchesStatusBar(ws);
+  const providerHealthStatusBar = new ProviderHealthStatusBar(pr);
 
   // Load persisted watches (must happen after tree views are registered to show restored watches)
   ws.loadPersistedWatches().catch(err => {
@@ -429,6 +431,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<DevDoc
     ...viewDisposables,
     ...eventDisposables,
     watchesStatusBar,
+    providerHealthStatusBar,
     { dispose: () => wg.dispose() },
     { dispose: () => ss.dispose() },
     { dispose: () => ws.dispose() },
