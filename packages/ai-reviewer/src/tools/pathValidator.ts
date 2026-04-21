@@ -13,7 +13,7 @@ export function validateWorktreePath(worktreePath: string): string | undefined {
 }
 
 /**
- * Validates a relative file path against path traversal attacks.
+ * Validates a relative path against path traversal attacks.
  * Ensures the path:
  * - Is not absolute
  * - Does not escape the worktree via ".." segments
@@ -37,7 +37,7 @@ export function validateRelativePath(worktreePath: string, relativePath: string)
 }
 
 /**
- * Validates both worktree path and relative file path.
+ * Validates both worktree path and relative path.
  * Combines validateWorktreePath and validateRelativePath for convenience.
  *
  * @param worktreePath The worktree root path
