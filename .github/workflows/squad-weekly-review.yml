@@ -29,15 +29,13 @@ jobs:
             const dateStr = new Date().toISOString().slice(0, 10);
             const title = `Weekly Expert Codebase Review — ${dateStr}`;
 
-            // Check for existing open issue with the same title to avoid duplicates on retries
-            const { data: existing } = await github.rest.issues.listForRepo({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              state: 'open',
-              labels: 'squad:copilot',
+            // Check for an existing open issue with the same title to avoid duplicates on retries.
+            // Use search scoped to issues so pull requests are excluded from duplicate detection.
+            const { data: searchResults } = await github.rest.search.issuesAndPullRequests({
+              q: `repo:${context.repo.owner}/${context.repo.repo} is:issue is:open label:"squad:copilot" "${title}" in:title`,
               per_page: 100
             });
-            const duplicate = existing.find(i => i.title === title);
+            const duplicate = searchResults.items.find(item => !item.pull_request && item.title === title);
             if (duplicate) {
               core.info(`Tracking issue already exists: #${duplicate.number} — skipping creation`);
               core.setOutput('issue_number', duplicate.number);
