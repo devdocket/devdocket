@@ -26,11 +26,23 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Download code-refactorer skill
+        run: |
+          curl -sSfL \
+            "https://raw.githubusercontent.com/mthalman/superpowers/main/skills/code-refactorer/SKILL.md" \
+            -o skill-content.md
+          echo "Downloaded skill content ($(wc -c < skill-content.md) bytes)"
+
       - name: Create refactoring issue
         id: create-issue
         uses: actions/github-script@v7
         with:
           script: |
+            const fs = require('fs');
+            const rawSkill = fs.readFileSync('skill-content.md', 'utf8');
+            // Strip YAML frontmatter if present
+            const skillContent = rawSkill.replace(/^---[\s\S]*?---\n*/, '');
+
             // Check for existing open refactoring issues
             const { data: existing } = await github.rest.issues.listForRepo({
               owner: context.repo.owner,
@@ -59,10 +71,10 @@ jobs:
                 '',
                 '### Task',
                 '',
-                'Analyze the codebase for refactoring opportunities using the `code-refactorer` skill.',
+                'Analyze the codebase for refactoring opportunities using the code-refactorer methodology embedded below.',
                 '',
                 '**Instructions:**',
-                '- Use the `code-refactorer` skill to identify code that could be improved',
+                '- Follow the complete refactoring methodology included in this issue',
                 '- Focus on patterns like:',
                 '  - Reducing code duplication',
                 '  - Extracting reusable functions/classes',
@@ -86,6 +98,12 @@ jobs:
                 '',
                 '- If no refactoring opportunities are found, close this issue with a comment explaining the analysis',
                 '- If refactorings are identified and applied, open a PR with detailed description',
+                '',
+                '### Refactoring Methodology',
+                '',
+                'Follow this complete methodology when analyzing and applying refactoring changes:',
+                '',
+                skillContent,
                 '',
                 '---',
                 '',
@@ -122,14 +140,13 @@ jobs:
             const baseBranch = repoData.default_branch;
 
             const customInstructions = [
-              'You MUST use the `code-refactorer` skill for this task.',
+              'Follow the complete code-refactorer methodology embedded in the issue body.',
               '',
-              'Invoke the skill by calling: skill("code-refactorer")',
-              '',
-              'The code-refactorer skill will:',
-              '1. Help identify refactoring opportunities across the codebase',
-              '2. Ensure refactorings preserve existing behavior',
-              '3. Guide you through safe, high-quality refactoring',
+              'The issue contains the full refactoring workflow including:',
+              '1. Appropriateness Gate — assess whether refactoring is the right response',
+              '2. Context-Adapted Analysis — adapt based on code signals (blast radius, test coverage, coupling)',
+              '3. Standard Refactoring Workflow — analyze, diagnose, plan, execute, verify, summarize',
+              '4. Cross-File Pattern Discovery — find and consolidate patterns across the codebase',
               '',
               'Key principles:',
               '- Focus on reducing duplication and improving structure',
@@ -158,7 +175,7 @@ jobs:
                   'X-GitHub-Api-Version': '2022-11-28'
                 }
               });
-              core.info(`✅ Assigned copilot-swe-agent[bot] to issue #${issue_number} with code-refactorer skill instructions`);
+              core.info(`✅ Assigned copilot-swe-agent[bot] to issue #${issue_number} with embedded refactoring methodology`);
             } catch (err) {
               core.warning(`Assignment with agent_assignment failed: ${err.message}`);
               // Fallback: try without agent_assignment
