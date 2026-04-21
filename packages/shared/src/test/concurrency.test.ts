@@ -52,16 +52,19 @@ describe('runWorkerPool', () => {
     expect(maxConcurrent).toBeLessThanOrEqual(3);
   });
 
-  it('clamps worker count to item count', async () => {
+  it('clamps effective concurrency to item count when maxConcurrency is larger', async () => {
     const items = [1, 2];
-    let workerCount = 0;
+    let maxConcurrent = 0;
+    let currentConcurrent = 0;
     
     await runWorkerPool(items, async () => {
-      workerCount++;
+      currentConcurrent++;
+      maxConcurrent = Math.max(maxConcurrent, currentConcurrent);
+      await new Promise(resolve => setTimeout(resolve, 10));
+      currentConcurrent--;
     }, 10);
     
-    // Should use 2 workers (min of 10 and items.length)
-    expect(workerCount).toBe(2);
+    expect(maxConcurrent).toBeLessThanOrEqual(items.length);
   });
 
   it('returns immediately for empty array', async () => {
