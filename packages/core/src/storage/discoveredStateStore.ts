@@ -1,8 +1,13 @@
 import * as vscode from 'vscode';
-import * as fs from 'fs/promises';
 import * as path from 'path';
 import { logger } from '../services/logger';
-import { MAX_STORE_FILE_SIZE } from './limits';
+import { SerializedJsonStore } from './serializedJsonStore';
+import {
+  validateObject,
+  requiredString,
+  optionalString,
+  requiredEnum,
+} from './validation';
 
 /** Possible states for a provider-discovered item in the inbox workflow. */
 const inboxStates = ['unseen', 'accepted', 'dismissed'] as const;
@@ -27,26 +32,15 @@ export interface DiscoveredStateRecord {
  * Returns a descriptive error string if invalid, or undefined if valid.
  */
 function validateDiscoveredStateRecord(value: unknown, index: number): string | undefined {
-  if (typeof value !== 'object' || value === null) {
-    return `Record at index ${index} is not an object`;
-  }
-  const obj = value as Record<string, unknown>;
-  if (typeof obj.providerId !== 'string' || obj.providerId.length === 0) {
-    return `Record at index ${index} is missing a valid "providerId" (string)`;
-  }
-  if (typeof obj.externalId !== 'string' || obj.externalId.length === 0) {
-    return `Record at index ${index} is missing a valid "externalId" (string)`;
-  }
-  if (typeof obj.inboxState !== 'string' || !validInboxStates.has(obj.inboxState)) {
-    return `Record at index ${index} has invalid "inboxState": ${JSON.stringify(obj.inboxState)}`;
-  }
-  if ('version' in obj && typeof obj.version !== 'string') {
-    return `Record at index ${index} has invalid "version": expected string`;
-  }
-  if ('resurfaceVersion' in obj && typeof obj.resurfaceVersion !== 'string') {
-    return `Record at index ${index} has invalid "resurfaceVersion": expected string`;
-  }
-  return undefined;
+  const result = validateObject(value, `Record at index ${index}`);
+  if (typeof result === 'string') return result;
+
+  const ctx = `Record at index ${index}`;
+  return requiredString(result, 'providerId', ctx)
+    ?? requiredString(result, 'externalId', ctx)
+    ?? requiredEnum(result, 'inboxState', validInboxStates, ctx)
+    ?? optionalString(result, 'version', ctx)
+    ?? optionalString(result, 'resurfaceVersion', ctx);
 }
 
 /**
@@ -57,12 +51,11 @@ function validateDiscoveredStateRecord(value: unknown, index: number): string | 
  * always read live from the provider. All writes are serialized through an
  * internal queue to prevent concurrent file corruption.
  */
-export class DiscoveredStateStore {
+export class DiscoveredStateStore extends SerializedJsonStore {
   private readonly filePath: string;
   private readonly cache = new Map<string, DiscoveredStateRecord>();
   private readonly _onDidChange = new vscode.EventEmitter<void>();
   readonly onDidChange = this._onDidChange.event;
-  private writeQueue: Promise<void> = Promise.resolve();
   private loadPromise: Promise<void> | null = null;
   private loaded = false;
 
@@ -70,6 +63,7 @@ export class DiscoveredStateStore {
    * @param storagePath - Directory where `discovered-state.json` will be stored.
    */
   constructor(storagePath: string) {
+    super();
     this.filePath = path.join(storagePath, 'discovered-state.json');
   }
 
@@ -138,7 +132,7 @@ export class DiscoveredStateStore {
       }
       this.cache.set(k, newRecord);
       try {
-        await this.writeFile();
+        await this.writeJson(this.filePath, Array.from(this.cache.values()));
       } catch (err) {
         if (previousValue) {
           this.cache.set(k, previousValue);
@@ -181,7 +175,7 @@ export class DiscoveredStateStore {
         this.cache.set(k, newRecord);
       }
       try {
-        await this.writeFile();
+        await this.writeJson(this.filePath, Array.from(this.cache.values()));
       } catch (err) {
         for (const [k, previousValue] of rollback) {
           if (previousValue) {
@@ -225,35 +219,15 @@ export class DiscoveredStateStore {
 
   private async doLoad(): Promise<void> {
     try {
-      const stats = await fs.stat(this.filePath);
-      if (!stats.isFile()) {
-        logger.warn('Discovered state path is not a regular file — backing up and resetting to empty');
-        await this.backupInvalidFile();
-        this.cache.clear();
-        this.loaded = true;
-        return;
-      }
-      if (stats.size > MAX_STORE_FILE_SIZE) {
-        logger.warn(`Discovered state file exceeds ${MAX_STORE_FILE_SIZE} bytes — backing up and resetting to empty`);
-        await this.backupInvalidFile();
-        this.cache.clear();
-        this.loaded = true;
-        return;
-      }
-      const data = await fs.readFile(this.filePath, 'utf-8');
-      let parsed: unknown;
-      try {
-        parsed = JSON.parse(data);
-      } catch {
-        logger.warn('Failed to parse discovered state file — backing up and resetting to empty');
-        await this.backupInvalidFile();
+      const parsed = await this.readJson(this.filePath);
+      if (parsed === undefined) {
         this.cache.clear();
         this.loaded = true;
         return;
       }
       if (!Array.isArray(parsed)) {
         logger.warn('Discovered state file does not contain an array — backing up and resetting to empty');
-        await this.backupInvalidFile();
+        await this.backupFile(this.filePath);
         this.cache.clear();
         this.loaded = true;
         return;
@@ -270,13 +244,6 @@ export class DiscoveredStateStore {
       }
       logger.debug(`Loaded discovered state: ${this.cache.size} entries`);
       this.loaded = true;
-    } catch (err: unknown) {
-      if (isNodeError(err) && err.code === 'ENOENT') {
-        this.cache.clear();
-        this.loaded = true;
-        return;
-      }
-      throw err;
     } finally {
       // Clear the in-flight promise so it doesn't retain a reference
       // and so reload can be supported in the future
@@ -284,38 +251,8 @@ export class DiscoveredStateStore {
     }
   }
 
-  private async writeFile(): Promise<void> {
-    const dir = path.dirname(this.filePath);
-    await fs.mkdir(dir, { recursive: true });
-    const records = Array.from(this.cache.values());
-    const data = JSON.stringify(records, null, 2);
-    await fs.writeFile(this.filePath, data, 'utf-8');
-  }
-
-  private enqueue(op: () => Promise<void>): Promise<void> {
-    this.writeQueue = this.writeQueue.then(op, (err: unknown) => {
-      logger.warn('Previous write operation failed, continuing queue', err);
-      return op();
-    });
-    return this.writeQueue;
-  }
-
-  private async backupInvalidFile(): Promise<void> {
-    try {
-      const backupPath = `${this.filePath}.corrupt.${Date.now()}`;
-      await fs.rename(this.filePath, backupPath);
-      logger.warn(`Backed up invalid discovered state file to ${backupPath}`);
-    } catch {
-      logger.warn('Failed to back up invalid discovered state file');
-    }
-  }
-
   /** Disposes the change event emitter. */
   dispose(): void {
     this._onDidChange.dispose();
   }
-}
-
-function isNodeError(err: unknown): err is NodeJS.ErrnoException {
-  return err instanceof Error && 'code' in err;
 }

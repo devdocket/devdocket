@@ -1,9 +1,16 @@
-import * as fs from 'fs/promises';
 import * as path from 'path';
 import { WorkItem, WorkItemState } from '../models/workItem';
 import { ITaskStore } from './taskStore';
 import { logger } from '../services/logger';
-import { MAX_STORE_FILE_SIZE } from './limits';
+import { SerializedJsonStore } from './serializedJsonStore';
+import {
+  validateObject,
+  requiredString,
+  optionalString,
+  requiredEnum,
+  requiredFiniteNumber,
+  optionalFiniteNumber,
+} from './validation';
 
 const validWorkItemStates = new Set<string>(Object.values(WorkItemState));
 
@@ -12,62 +19,40 @@ const validWorkItemStates = new Set<string>(Object.values(WorkItemState));
  * Returns a descriptive error string if invalid, or undefined if valid.
  */
 function validateWorkItem(value: unknown, index: number): string | undefined {
-  if (typeof value !== 'object' || value === null) {
-    return `Item at index ${index} is not an object`;
-  }
-  const obj = value as Record<string, unknown>;
-  if (typeof obj.id !== 'string' || obj.id.length === 0) {
-    return `Item at index ${index} is missing a valid "id" (string)`;
-  }
-  if (typeof obj.title !== 'string' || obj.title.length === 0) {
-    return `Item "${obj.id}" at index ${index} is missing a valid "title" (string)`;
-  }
-  if (typeof obj.state !== 'string' || !validWorkItemStates.has(obj.state)) {
-    return `Item "${obj.id}" at index ${index} has invalid "state": ${JSON.stringify(obj.state)}`;
-  }
-  if (typeof obj.createdAt !== 'number' || !Number.isFinite(obj.createdAt)) {
-    return `Item "${obj.id}" at index ${index} is missing a valid "createdAt" (finite number)`;
-  }
-  if (typeof obj.updatedAt !== 'number' || !Number.isFinite(obj.updatedAt)) {
-    return `Item "${obj.id}" at index ${index} is missing a valid "updatedAt" (finite number)`;
-  }
-  if (obj.url !== undefined && typeof obj.url !== 'string') {
-    return `Item "${obj.id}" at index ${index} has invalid "url" (string expected)`;
-  }
-  if (obj.providerId !== undefined && typeof obj.providerId !== 'string') {
-    return `Item "${obj.id}" at index ${index} has invalid "providerId" (string expected)`;
-  }
-  if (obj.externalId !== undefined && typeof obj.externalId !== 'string') {
-    return `Item "${obj.id}" at index ${index} has invalid "externalId" (string expected)`;
-  }
-  if (obj.description !== undefined && typeof obj.description !== 'string') {
-    return `Item "${obj.id}" at index ${index} has invalid legacy "description" (string expected)`;
-  }
-  if (obj.notes !== undefined && typeof obj.notes !== 'string') {
-    return `Item "${obj.id}" at index ${index} has invalid "notes" (string expected)`;
-  }
-  if (obj.sortOrder !== undefined && (typeof obj.sortOrder !== 'number' || !Number.isFinite(obj.sortOrder))) {
-    return `Item "${obj.id}" at index ${index} has invalid "sortOrder" (finite number expected)`;
-  }
-  if (obj.activityLog !== undefined) {
-    if (!Array.isArray(obj.activityLog)) {
-      return `Item "${obj.id}" at index ${index} has invalid "activityLog" (array expected)`;
+  const result = validateObject(value, `Item at index ${index}`);
+  if (typeof result === 'string') return result;
+
+  let err = requiredString(result, 'id', `Item at index ${index}`);
+  if (err) return err;
+
+  const ctx = `Item "${result.id}" at index ${index}`;
+  err = requiredString(result, 'title', ctx)
+    ?? requiredEnum(result, 'state', validWorkItemStates, ctx)
+    ?? requiredFiniteNumber(result, 'createdAt', ctx)
+    ?? requiredFiniteNumber(result, 'updatedAt', ctx)
+    ?? optionalString(result, 'url', ctx)
+    ?? optionalString(result, 'providerId', ctx)
+    ?? optionalString(result, 'externalId', ctx)
+    ?? optionalString(result, 'description', ctx)
+    ?? optionalString(result, 'notes', ctx)
+    ?? optionalFiniteNumber(result, 'sortOrder', ctx);
+  if (err) return err;
+
+  // Validate activityLog entries individually
+  if (result.activityLog !== undefined) {
+    if (!Array.isArray(result.activityLog)) {
+      return `${ctx} has invalid "activityLog" (array expected)`;
     }
-    for (let j = 0; j < (obj.activityLog as unknown[]).length; j++) {
-      const entry = (obj.activityLog as unknown[])[j];
-      if (typeof entry !== 'object' || entry === null) {
-        return `Item "${obj.id}" at index ${index} has invalid activityLog entry at position ${j}`;
-      }
-      const e = entry as Record<string, unknown>;
-      if (typeof e.timestamp !== 'number' || !Number.isFinite(e.timestamp)) {
-        return `Item "${obj.id}" at index ${index} has invalid activityLog[${j}].timestamp`;
-      }
-      if (typeof e.type !== 'string' || e.type.length === 0) {
-        return `Item "${obj.id}" at index ${index} has invalid activityLog[${j}].type`;
-      }
-      if (e.detail !== undefined && typeof e.detail !== 'string') {
-        return `Item "${obj.id}" at index ${index} has invalid activityLog[${j}].detail (string expected)`;
-      }
+    for (let j = 0; j < (result.activityLog as unknown[]).length; j++) {
+      const entry = (result.activityLog as unknown[])[j];
+      const entryResult = validateObject(entry, `${ctx} activityLog entry at position ${j}`);
+      if (typeof entryResult === 'string') return entryResult;
+
+      const entryCtx = `${ctx} activityLog[${j}]`;
+      const entryErr = requiredFiniteNumber(entryResult, 'timestamp', entryCtx)
+        ?? requiredString(entryResult, 'type', entryCtx)
+        ?? optionalString(entryResult, 'detail', entryCtx);
+      if (entryErr) return entryErr;
     }
   }
   return undefined;
@@ -80,9 +65,8 @@ function validateWorkItem(value: unknown, index: number): string | undefined {
  * concurrent file corruption. An in-memory cache is populated on first load
  * and kept in sync with every mutation.
  */
-export class JsonTaskStore implements ITaskStore {
+export class JsonTaskStore extends SerializedJsonStore implements ITaskStore {
   private readonly filePath: string;
-  private writeQueue: Promise<void> = Promise.resolve();
   private cache: Map<string, WorkItem> | null = null;
   private loadPromise: Promise<WorkItem[]> | null = null;
 
@@ -90,6 +74,7 @@ export class JsonTaskStore implements ITaskStore {
    * @param storagePath - Directory where `workitems.json` will be stored.
    */
   constructor(storagePath: string) {
+    super();
     this.filePath = path.join(storagePath, 'workitems.json');
   }
 
@@ -113,32 +98,14 @@ export class JsonTaskStore implements ITaskStore {
   private async doLoad(): Promise<WorkItem[]> {
     logger.debug(`Loading work items from ${this.filePath}`);
     try {
-      const stats = await fs.stat(this.filePath);
-      if (!stats.isFile()) {
-        logger.warn('Work items path is not a regular file — backing up and resetting to empty');
-        await this.backupInvalidFile();
-        this.cache = new Map();
-        return [];
-      }
-      if (stats.size > MAX_STORE_FILE_SIZE) {
-        logger.warn(`Work items file exceeds ${MAX_STORE_FILE_SIZE} bytes — backing up and resetting to empty`);
-        await this.backupInvalidFile();
-        this.cache = new Map();
-        return [];
-      }
-      const data = await fs.readFile(this.filePath, 'utf-8');
-      let parsed: unknown;
-      try {
-        parsed = JSON.parse(data);
-      } catch {
-        logger.warn('Failed to parse work items file — backing up and resetting to empty');
-        await this.backupInvalidFile();
+      const parsed = await this.readJson(this.filePath);
+      if (parsed === undefined) {
         this.cache = new Map();
         return [];
       }
       if (!Array.isArray(parsed)) {
         logger.warn('Work items file does not contain an array — backing up and resetting to empty');
-        await this.backupInvalidFile();
+        await this.backupFile(this.filePath);
         this.cache = new Map();
         return [];
       }
@@ -155,7 +122,6 @@ export class JsonTaskStore implements ITaskStore {
       // Migrate legacy fields
       let needsMigration = false;
       for (const item of items) {
-        // Migrate legacy 'description' field to 'notes'
         const legacy = item as WorkItem & { description?: string };
         if (legacy.description !== undefined) {
           if (item.notes === undefined) {
@@ -168,15 +134,11 @@ export class JsonTaskStore implements ITaskStore {
       this.cache = new Map(items.map((item) => [item.id, item]));
       if (needsMigration) {
         await this.enqueue(async () => {
-          await this.writeFile(items);
+          await this.writeJson(this.filePath, items);
         });
       }
       return items;
     } catch (err: unknown) {
-      if (isNodeError(err) && err.code === 'ENOENT') {
-        this.cache = new Map();
-        return [];
-      }
       // Allow retry on failure
       this.loadPromise = null;
       this.cache = null;
@@ -207,7 +169,7 @@ export class JsonTaskStore implements ITaskStore {
       try {
         const items = Array.from(cache.values()).filter(i => i.id !== item.id);
         items.push(item);
-        await this.writeFile(items);
+        await this.writeJson(this.filePath, items);
         cache.set(item.id, item);
       } catch (err) {
         if (previousValue) {
@@ -236,7 +198,7 @@ export class JsonTaskStore implements ITaskStore {
         const ids = new Set(items.map(i => i.id));
         const remaining = Array.from(cache.values()).filter(i => !ids.has(i.id));
         remaining.push(...items);
-        await this.writeFile(remaining);
+        await this.writeJson(this.filePath, remaining);
         for (const item of items) {
           cache.set(item.id, item);
         }
@@ -267,7 +229,7 @@ export class JsonTaskStore implements ITaskStore {
       const previousValue = cache.get(id);
       try {
         cache.delete(id);
-        await this.writeFile(Array.from(cache.values()));
+        await this.writeJson(this.filePath, Array.from(cache.values()));
       } catch (err) {
         if (previousValue) {
           cache.set(id, previousValue);
@@ -276,34 +238,4 @@ export class JsonTaskStore implements ITaskStore {
       }
     });
   }
-
-  private async writeFile(items: WorkItem[]): Promise<void> {
-    const dir = path.dirname(this.filePath);
-    await fs.mkdir(dir, { recursive: true });
-    const data = JSON.stringify(items, null, 2);
-    await fs.writeFile(this.filePath, data, 'utf-8');
-  }
-
-  // Serialize all write operations to prevent concurrent file corruption
-  private enqueue(op: () => Promise<void>): Promise<void> {
-    this.writeQueue = this.writeQueue.then(op, (err: unknown) => {
-      logger.warn('Previous write operation failed, continuing queue', err);
-      return op();
-    });
-    return this.writeQueue;
-  }
-
-  private async backupInvalidFile(): Promise<void> {
-    try {
-      const backupPath = `${this.filePath}.corrupt.${Date.now()}`;
-      await fs.rename(this.filePath, backupPath);
-      logger.warn(`Backed up invalid work items file to ${backupPath}`);
-    } catch {
-      logger.warn('Failed to back up invalid work items file');
-    }
-  }
-}
-
-function isNodeError(err: unknown): err is NodeJS.ErrnoException {
-  return err instanceof Error && 'code' in err;
 }

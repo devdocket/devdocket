@@ -6,20 +6,34 @@ applyTo: "**/storage/**"
 
 ## Write Queue Serialization
 
-Both `JsonTaskStore` and `DiscoveredStateStore` use a **writeQueue** (promise chain) to prevent concurrent writes from corrupting JSON files. Always follow this pattern for any new store.
+All JSON-backed stores extend `SerializedJsonStore` (in `serializedJsonStore.ts`), which provides a **writeQueue** (promise chain) via `enqueue()` to prevent concurrent writes from corrupting JSON files. New stores should extend this base class rather than implementing their own queue.
 
-### Pattern
+### Base Class Helpers
+
+- `enqueue(op)` — Serializes write operations through a promise chain.
+- `readJson(filePath, maxSize?)` — Reads, stat-checks, and parses a JSON file with corruption guards and backup.
+- `writeJson(filePath, data)` — Writes pretty-printed JSON, creating the directory if needed.
+- `backupFile(filePath)` — Renames corrupt files with a `.corrupt.<timestamp>` suffix.
+- `flush()` — Returns a promise that resolves when all queued writes complete.
+
+### Field Validators
+
+Composable validators in `validation.ts` replace hand-rolled `typeof` checks:
+
+- `validateObject(value, context)` — Ensures value is a non-null object.
+- `requiredString(obj, field, context)` — Required non-empty string.
+- `optionalString(obj, field, context)` — Optional string.
+- `requiredEnum(obj, field, validValues, context)` — Required enum member.
+- `requiredFiniteNumber(obj, field, context)` — Required finite number.
+- `optionalFiniteNumber(obj, field, context)` — Optional finite number.
+
+Compose with nullish coalescing for short-circuit validation:
 
 ```ts
-private writeQueue: Promise<void> = Promise.resolve();
-
-private enqueueWrite(fn: () => Promise<void>): Promise<void> {
-  this.writeQueue = this.writeQueue.then(fn, fn);
-  return this.writeQueue;
-}
+return requiredString(obj, 'id', ctx)
+  ?? requiredEnum(obj, 'state', validStates, ctx)
+  ?? optionalString(obj, 'url', ctx);
 ```
-
-All write operations must go through `enqueueWrite()` so they execute sequentially, even when called concurrently from multiple async paths.
 
 ## Data Stores
 
