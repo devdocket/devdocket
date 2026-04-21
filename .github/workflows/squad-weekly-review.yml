@@ -65,6 +65,8 @@ jobs:
             const repo = context.repo.repo;
             const issue_number = ${{ steps.create-issue.outputs.issue_number }};
 
+            const customInstructions = 'Read AGENTS.md for project architecture and conventions, and .squad/team.md for team context. Focus on creating separate issues for each novel finding. Before creating an issue, search both open and closed issues to avoid duplicates.';
+
             // Get the default branch name
             const { data: repoData } = await github.rest.repos.get({ owner, repo });
             const baseBranch = repoData.default_branch;
@@ -78,7 +80,7 @@ jobs:
                 agent_assignment: {
                   target_repo: `${owner}/${repo}`,
                   base_branch: baseBranch,
-                  custom_instructions: 'Read AGENTS.md for project architecture and conventions, and .squad/team.md for team context. Focus on creating separate issues for each novel finding. Before creating an issue, search both open and closed issues to avoid duplicates.',
+                  custom_instructions: customInstructions,
                   custom_agent: '',
                   model: ''
                 },
@@ -89,8 +91,6 @@ jobs:
               core.info(`Assigned copilot-swe-agent[bot] to issue #${issue_number} (base: ${baseBranch})`);
             } catch (err) {
               core.warning(`Assignment with agent_assignment failed: ${String(err)}`);
-              
-              const customInstructions = 'Read AGENTS.md for project architecture and conventions, and .squad/team.md for team context. Focus on creating separate issues for each novel finding. Before creating an issue, search both open and closed issues to avoid duplicates.';
               
               // Try fallback assignment without agent_assignment
               let fallbackSucceeded = false;
