@@ -214,6 +214,10 @@ export abstract class BaseGitHubProvider extends BaseProvider implements DevDock
     // Track which IDs are closed; use a Set so worker order doesn't affect results
     const closedSet = new Set<string>();
 
+    // Note: When signal is aborted, the worker returns early, but runWorkerPool's internal
+    // loop may continue claiming indices and invoking the worker (which immediately returns)
+    // until the array is drained. This is a minor performance difference from the previous
+    // `break` pattern but doesn't affect correctness since no network calls are made after abort.
     await runWorkerPool(parsed, async (item) => {
       if (signal?.aborted) { return; }
       try {
