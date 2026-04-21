@@ -90,28 +90,33 @@ jobs:
             } catch (err) {
               core.warning(`Assignment with agent_assignment failed: ${String(err)}`);
               
-              // Post instructions as comment before fallback assignment
               const customInstructions = 'Read AGENTS.md for project architecture and conventions, and .squad/team.md for team context. Focus on creating separate issues for each novel finding. Before creating an issue, search both open and closed issues to avoid duplicates.';
               
-              try {
-                await github.rest.issues.createComment({
-                  owner, repo, issue_number,
-                  body: `### 🤖 copilot-swe-agent[bot] Instructions\n\n${customInstructions}\n\n> ⚠️ Automated assignment via \`agent_assignment\` API failed. A maintainer should manually assign \`copilot-swe-agent[bot]\` to this issue.`
-                });
-                core.info(`Posted instructions comment (assignment API unavailable)`);
-              } catch (commentErr) {
-                core.error(`Failed to post instructions comment: ${String(commentErr)}`);
-              }
-              
               // Try fallback assignment without agent_assignment
+              let fallbackSucceeded = false;
               try {
                 await github.rest.issues.addAssignees({
                   owner, repo, issue_number,
                   assignees: ['copilot-swe-agent[bot]']
                 });
-                core.info(`Fallback assigned copilot-swe-agent to issue #${issue_number}`);
+                core.info(`Fallback assigned copilot-swe-agent[bot] to issue #${issue_number}`);
+                fallbackSucceeded = true;
               } catch (err2) {
                 core.error(`Fallback assignment also failed: ${String(err2)} — manual assignment required`);
+              }
+              
+              // Post instructions comment; include manual assignment note only if fallback also failed
+              try {
+                const manualNote = fallbackSucceeded
+                  ? ''
+                  : '\n\n> ⚠️ Automated assignment failed. A maintainer should manually assign `copilot-swe-agent[bot]` to this issue.';
+                await github.rest.issues.createComment({
+                  owner, repo, issue_number,
+                  body: `### 🤖 copilot-swe-agent[bot] Instructions\n\n${customInstructions}${manualNote}`
+                });
+                core.info(`Posted instructions comment (assignment API unavailable)`);
+              } catch (commentErr) {
+                core.error(`Failed to post instructions comment: ${String(commentErr)}`);
               }
             }
 
