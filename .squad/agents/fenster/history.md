@@ -49,11 +49,21 @@ DevDocket is a VS Code extension monorepo for managing work items from multiple 
 - **Build:** esbuild, CJS, `--external:vscode`, sourcemaps. Root `npm install` + `npm run build`.
 
 ### Completed Issues
-#330 (git auth env vars — credential exposure fix), #299 (fix double disposal), #323 (watch CI pipelines), #322 (auto-complete activity log), #320 (focus view grouping), #282 (provider state in editor), #281 (clickable title), #276 (auto-track authored PRs), #275 (History→Queue transitions), #273 (tree counts), #265 (auto-complete on close), #255 (provider metadata docs), #250 (group context), #249 (accept-to-focus, pre-shipped), #243 (version resurfacing), #240 (create from URL), #233 (provider health), #232 (clear history), #231 (sources icons), #230 (layout toggle), #229 (emoji removal), #227 (provider labels), #223 (dead code cleanup), #222 (responsive layout), #221 (contextual heading), #219 (source URL link), #217 (editor metadata), #216 (provider description), #215 (dynamic titles), #189 (dismissed fix), #178 (ADO filtering), #158 (markdown injection), #157 (API trust boundary), #156 (URL sanitization), #155 (URL scheme validation), #154 (crypto.randomUUID), #153 (JSON validation), #152 (path traversal fix), #12 (AI PR actions), bulk rename (WorkCenter→DevDocket)
+#330 (git auth env vars — credential exposure fix), #335 (shared tree view utilities), #299 (fix double disposal), #323 (watch CI pipelines), #322 (auto-complete activity log), #320 (focus view grouping), #282 (provider state in editor), #281 (clickable title), #276 (auto-track authored PRs), #275 (History→Queue transitions), #273 (tree counts), #265 (auto-complete on close), #255 (provider metadata docs), #250 (group context), #249 (accept-to-focus, pre-shipped), #243 (version resurfacing), #240 (create from URL), #233 (provider health), #232 (clear history), #231 (sources icons), #230 (layout toggle), #229 (emoji removal), #227 (provider labels), #223 (dead code cleanup), #222 (responsive layout), #221 (contextual heading), #219 (source URL link), #217 (editor metadata), #216 (provider description), #215 (dynamic titles), #189 (dismissed fix), #178 (ADO filtering), #158 (markdown injection), #157 (API trust boundary), #156 (URL sanitization), #155 (URL scheme validation), #154 (crypto.randomUUID), #153 (JSON validation), #152 (path traversal fix), #12 (AI PR actions), bulk rename (WorkCenter→DevDocket)
 
 > **Archived Summary (04-17 and earlier):** Early issues including auto-complete v1 with disappearance detection (#265), large PR fix for walkthrough (#261), clickable title (#281), item activity log (#260), AI model selection (#254), keyboard shortcuts (#226), and dynamic title sync via `titleSync.ts` service (#215). Full learnings in `history-archive.md`
 
 ## Learnings
+
+### 2026-04-23 — Issue #335 (Extract shared tree view utilities)
+
+**Refactor:** Extracted duplicated tooltip-building and icon-resolution logic from Focus, History, and Queue tree providers into shared `viewUtils.ts`.
+- **`buildWorkItemTooltip(item, title, options?)`:** Unified tooltip builder with configurable `showState`, `timestamp` field, `timestampLabel`, and `notesStyle` options. Replaces three near-identical private `buildTooltip` methods.
+- **`getWorkItemIcon(state)`:** Single icon-resolution function covering all `WorkItemState` values. Replaces separate `getIcon` methods in Focus and History providers.
+- **`LayoutState` adoption:** Refactored `WatchesTreeProvider` to use the existing `LayoutState` class from `viewLayout.ts` instead of inline layout management.
+- **Test update:** History's "unexpected state" test now expects `play-circle` (the correct mapped icon for InProgress) instead of `circle-outline` (former default fallthrough).
+- **Files changed:** `viewUtils.ts` (new), `focusTreeProvider.ts`, `historyTreeProvider.ts`, `queueTreeProvider.ts`, `watchesTreeProvider.ts`, `viewUtils.test.ts` (new, 12 tests).
+- **Pattern:** When extracting shared view utilities, use options objects (not method overloading) to handle per-view differences in tooltip/icon behavior.
 
 ### 2026-04-22 — Issue #306 (Scope WorkItemEditorPanel cache to extension lifecycle)
 
