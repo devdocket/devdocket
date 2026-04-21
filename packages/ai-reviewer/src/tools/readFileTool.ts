@@ -1,34 +1,12 @@
 import * as vscode from 'vscode';
 import * as path from 'path';
 import * as fs from 'fs/promises';
-import { validWorktreePaths } from './worktreeRegistry';
-
-function validateWorktreePath(worktreePath: string): string | undefined {
-  if (!validWorktreePaths.has(path.resolve(worktreePath))) {
-    return 'Invalid worktree path: not a known managed worktree';
-  }
-  return undefined;
-}
+import { validatePath, isAtOrWithinRoot } from './pathValidator';
+import { errorToString } from './errorUtils';
 
 interface ReadFileInput {
   worktreePath: string;
   filePath: string;
-}
-
-function validatePath(worktreePath: string, filePath: string): string | undefined {
-  const wtError = validateWorktreePath(worktreePath);
-  if (wtError) return wtError;
-
-  const normalized = path.normalize(filePath);
-  if (normalized === '..' || normalized.startsWith('..' + path.sep) || path.isAbsolute(normalized)) {
-    return 'Path traversal not allowed: filePath must be relative and within the worktree';
-  }
-  const resolved = path.resolve(worktreePath, normalized);
-  const root = path.resolve(worktreePath);
-  if (!resolved.startsWith(root + path.sep) && resolved !== root) {
-    return 'Path traversal not allowed: resolved path escapes the worktree';
-  }
-  return undefined;
 }
 
 export function registerReadFileTool(): vscode.Disposable {
@@ -53,7 +31,7 @@ export function registerReadFileTool(): vscode.Disposable {
         // stays within the worktree root
         const realPath = await fs.realpath(fullPath);
         const realRoot = await fs.realpath(worktreePath);
-        if (!realPath.startsWith(realRoot + path.sep) && realPath !== realRoot) {
+        if (!isAtOrWithinRoot(realRoot, realPath)) {
           return new vscode.LanguageModelToolResult([
             new vscode.LanguageModelTextPart('Path escapes the worktree after resolving symlinks'),
           ]);
@@ -66,7 +44,7 @@ export function registerReadFileTool(): vscode.Disposable {
           new vscode.LanguageModelTextPart(content),
         ]);
       } catch (err) {
-        const msg = err instanceof Error ? err.message : String(err);
+        const msg = errorToString(err);
         const isNotFound =
           msg.includes('ENOENT') ||
           msg.includes('FileNotFound') ||
@@ -79,7 +57,7 @@ export function registerReadFileTool(): vscode.Disposable {
             // Resolve symlinks and ensure parent stays within the worktree
             const realParent = await fs.realpath(parentFull);
             const realRoot = await fs.realpath(worktreePath);
-            if (realParent.startsWith(realRoot + path.sep) || realParent === realRoot) {
+            if (isAtOrWithinRoot(realRoot, realParent)) {
               const parentUri = vscode.Uri.file(realParent);
               const entries = await vscode.workspace.fs.readDirectory(parentUri);
               if (entries.length > 0) {
@@ -104,5 +82,3 @@ export function registerReadFileTool(): vscode.Disposable {
     },
   });
 }
-
-export { validatePath };

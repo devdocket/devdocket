@@ -349,39 +349,34 @@ export class AdoPrReviewProvider extends BaseProvider {
 
     const closedSet = new Set<string>();
 
-    try {
-      await runWorkerPool(parsed, async (item) => {
-        if (signal?.aborted) {
-          const abortError = new Error('The operation was aborted.');
-          abortError.name = 'AbortError';
-          throw abortError;
+    // Note: When signal is aborted, the worker returns early, but runWorkerPool's internal
+    // loop may continue claiming indices and invoking the worker (which immediately returns)
+    // until the array is drained. This is a minor performance difference from the previous
+    // `break` pattern but doesn't affect correctness since no network calls are made after abort.
+    await runWorkerPool(parsed, async (item) => {
+      if (signal?.aborted) { return; }
+      try {
+        if (!isValidUrlSegment(item.org) || !isValidUrlSegment(item.project) || !isValidUrlSegment(item.repo)) {
+          return;
         }
-        try {
-          if (!isValidUrlSegment(item.org) || !isValidUrlSegment(item.project) || !isValidUrlSegment(item.repo)) {
-            return;
+        const url = `https://dev.azure.com/${encodeURIComponent(item.org)}/${encodeURIComponent(item.project)}/_apis/git/repositories/${encodeURIComponent(item.repo)}/pullrequests/${item.prId}?api-version=7.1`;
+        const response = await fetch(url, {
+          headers: { Authorization: `Bearer ${token}` },
+          signal,
+        });
+        if (response.ok) {
+          const data = await response.json() as { status?: string };
+          if (data.status === 'completed' || data.status === 'abandoned') {
+            closedSet.add(item.id);
           }
-          const url = `https://dev.azure.com/${encodeURIComponent(item.org)}/${encodeURIComponent(item.project)}/_apis/git/repositories/${encodeURIComponent(item.repo)}/pullrequests/${item.prId}?api-version=7.1`;
-          const response = await fetch(url, {
-            headers: { Authorization: `Bearer ${token}` },
-            signal,
-          });
-          if (response.ok) {
-            const data = await response.json() as { status?: string };
-            if (data.status === 'completed' || data.status === 'abandoned') {
-              closedSet.add(item.id);
-            }
-          } else {
-            logger.debug(`Failed to check PR ${item.id}: ${response.status}`);
-          }
-        } catch (err) {
-          if (err instanceof Error && err.name === 'AbortError') { throw err; }
-          logger.debug(`Failed to check PR ${item.id}: ${String(err)}`);
+        } else {
+          logger.debug(`Failed to check PR ${item.id}: ${response.status}`);
         }
-      }, 5);
-    } catch (err) {
-      // On abort, return partial results collected so far
-      if (!(err instanceof Error && err.name === 'AbortError')) { throw err; }
-    }
+      } catch (err) {
+        if (signal?.aborted) { return; }
+        logger.debug(`Failed to check PR ${item.id}: ${String(err)}`);
+      }
+    }, 5);
 
     // Return in input order for deterministic results
     return parsed.filter(p => closedSet.has(p.id)).map(p => p.id);

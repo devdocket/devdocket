@@ -172,13 +172,13 @@ export class GitHubPrReviewProvider extends BaseGitHubProvider {
     maxConcurrent: number,
     signal?: AbortSignal,
   ): Promise<PromiseSettledResult<{ prs: GitHubIssue[]; failed: boolean }>[]> {
-    return runWorkerPoolSettled(repos, async (repo) => {
+    return await runWorkerPoolSettled(repos, async (repo) => {
       if (signal?.aborted) {
         const error = new Error('The operation was aborted.');
         error.name = 'AbortError';
         throw error;
       }
-      return this.fetchRepoPrReviews(token, repo, signal);
+      return await this.fetchRepoPrReviews(token, repo, signal);
     }, maxConcurrent);
   }
 

@@ -1,7 +1,8 @@
 import * as vscode from 'vscode';
 import * as path from 'path';
 import * as fs from 'fs/promises';
-import { validWorktreePaths } from './worktreeRegistry';
+import { validateWorktreePath, validateRelativePath, isAtOrWithinRoot } from './pathValidator';
+import { errorToString } from './errorUtils';
 
 interface ListDirectoryInput {
   worktreePath: string;
@@ -16,37 +17,28 @@ export function registerListDirectoryTool(): vscode.Disposable {
     ) {
       const { worktreePath, dirPath } = options.input;
 
-      if (!validWorktreePaths.has(path.resolve(worktreePath))) {
+      const wtError = validateWorktreePath(worktreePath);
+      if (wtError) {
         return new vscode.LanguageModelToolResult([
-          new vscode.LanguageModelTextPart('Invalid worktree path: not a known managed worktree'),
+          new vscode.LanguageModelTextPart(wtError),
         ]);
       }
 
       const relDir = dirPath ?? '.';
-      const normalized = path.normalize(relDir);
-      if (normalized.startsWith('..' + path.sep) || normalized === '..' || path.isAbsolute(normalized)) {
+      const pathError = validateRelativePath(worktreePath, relDir, 'dirPath');
+      if (pathError) {
         return new vscode.LanguageModelToolResult([
-          new vscode.LanguageModelTextPart(
-            'Path traversal not allowed: dirPath must be relative and within the worktree',
-          ),
+          new vscode.LanguageModelTextPart(pathError),
         ]);
       }
 
-      const resolved = path.resolve(worktreePath, normalized);
-      const root = path.resolve(worktreePath);
-      if (!resolved.startsWith(root + path.sep) && resolved !== root) {
-        return new vscode.LanguageModelToolResult([
-          new vscode.LanguageModelTextPart(
-            'Path traversal not allowed: resolved path escapes the worktree',
-          ),
-        ]);
-      }
+      const resolved = path.resolve(worktreePath, path.normalize(relDir));
 
       try {
         // Resolve symlinks in all path segments and verify containment
         const realPath = await fs.realpath(resolved);
         const realRoot = await fs.realpath(worktreePath);
-        if (!realPath.startsWith(realRoot + path.sep) && realPath !== realRoot) {
+        if (!isAtOrWithinRoot(realRoot, realPath)) {
           return new vscode.LanguageModelToolResult([
             new vscode.LanguageModelTextPart('Path escapes the worktree after resolving symlinks'),
           ]);
@@ -64,9 +56,8 @@ export function registerListDirectoryTool(): vscode.Disposable {
           new vscode.LanguageModelTextPart(lines.join('\n') || '(empty directory)'),
         ]);
       } catch (err) {
-        const msg = err instanceof Error ? err.message : String(err);
         return new vscode.LanguageModelToolResult([
-          new vscode.LanguageModelTextPart(`Error listing directory: ${msg}`),
+          new vscode.LanguageModelTextPart(`Error listing directory: ${errorToString(err)}`),
         ]);
       }
     },
