@@ -20,7 +20,6 @@ jobs:
   expert-review:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
 
       - name: Create tracking issue for weekly review
         id: create-issue
