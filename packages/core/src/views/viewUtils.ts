@@ -46,7 +46,10 @@ export function buildWorkItemTooltip(
   }
 
   const label = timestampLabel ?? (timestamp === 'createdAt' ? 'Created' : 'Last updated');
-  md.appendMarkdown(`**${label}:** ${new Date(item[timestamp]).toLocaleString()}`);
+  md.appendMarkdown(`**`);
+  md.appendText(label);
+  md.appendMarkdown(`:** `);
+  md.appendText(new Date(item[timestamp]).toLocaleString());
 
   return md;
 }
