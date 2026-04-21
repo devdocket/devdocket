@@ -10,7 +10,7 @@ on:
 
 concurrency:
   group: automated-refactoring
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 permissions:
   issues: write
