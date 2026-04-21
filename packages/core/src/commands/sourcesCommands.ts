@@ -133,8 +133,8 @@ export function registerSourcesCommands(
 ): void {
   context.subscriptions.push(
     vscode.commands.registerCommand('devdocket.acceptFromSources',
-      wrapCommand('Failed to accept from sources', (item: SourcesElement, selectedItems?: SourcesElement[]) => handleAcceptFromSources(workGraph, stateStore, item, selectedItems, revealer))),
+      wrapCommand('Failed to accept from sources', (item?: SourcesElement, selectedItems?: SourcesElement[]) => handleAcceptFromSources(workGraph, stateStore, item, selectedItems, revealer))),
     vscode.commands.registerCommand('devdocket.dismissFromSources',
-      wrapCommand('Failed to dismiss from sources', (item: SourcesElement, selectedItems?: SourcesElement[]) => handleDismissFromSources(stateStore, item, selectedItems))),
+      wrapCommand('Failed to dismiss from sources', (item?: SourcesElement, selectedItems?: SourcesElement[]) => handleDismissFromSources(stateStore, item, selectedItems))),
   );
 }
