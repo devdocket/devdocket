@@ -83,7 +83,7 @@ export async function showProviderHealthQuickPick(providerRegistry: ProviderRegi
   const providers = providerRegistry.getProviders();
   
   if (providers.length === 0) {
-    vscode.window.showInformationMessage('No providers are registered.');
+    void vscode.window.showInformationMessage('No providers are registered.');
     return;
   }
 
