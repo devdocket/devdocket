@@ -111,7 +111,7 @@ jobs:
                 });
                 core.info(`Fallback assigned copilot-swe-agent to issue #${issue_number}`);
               } catch (err2) {
-                core.error(`Fallback assignment also failed: ${err2.message} — manual assignment required`);
+                core.error(`Fallback assignment also failed: ${String(err2)} — manual assignment required`);
               }
             }
 
