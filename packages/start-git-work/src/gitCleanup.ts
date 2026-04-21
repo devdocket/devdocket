@@ -29,7 +29,7 @@ interface WorkStartedData {
  * Finds the most recent 'work-started' entry, then checks whether a
  * 'cleanup-dismissed' entry exists after it (which suppresses prompting).
  */
-function getWorkStartedInfo(item: WorkItem): WorkStartedData | undefined {
+function getWorkStartedInfo(item: Readonly<WorkItem>): WorkStartedData | undefined {
   const log = item.activityLog;
   if (!log || log.length === 0) {
     return undefined;
@@ -83,7 +83,7 @@ interface CleanupState {
   worktreePath?: string;
 }
 
-async function checkCleanupState(item: WorkItem): Promise<CleanupState | undefined> {
+async function checkCleanupState(item: Readonly<WorkItem>): Promise<CleanupState | undefined> {
   const info = getWorkStartedInfo(item);
   if (!info) {
     return undefined;
@@ -135,7 +135,7 @@ async function checkCleanupState(item: WorkItem): Promise<CleanupState | undefin
  * @param addActivity - Callback to log activity entries on the item.
  */
 export async function promptGitCleanup(
-  item: WorkItem,
+  item: Readonly<WorkItem>,
   addActivity: (itemId: string, type: ActivityType, detail?: string) => Promise<void>,
 ): Promise<void> {
   const state = await checkCleanupState(item);
