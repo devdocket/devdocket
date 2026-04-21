@@ -17,15 +17,16 @@ describe('runWorkerPool', () => {
   });
 
   it('caps worker count to item count', async () => {
+    let workerId = 0;
     const activeWorkers = new Set<number>();
     let maxConcurrent = 0;
 
     await runWorkerPool([1, 2], async (item) => {
-      const workerId = Math.random();
-      activeWorkers.add(workerId);
+      const id = workerId++;
+      activeWorkers.add(id);
       maxConcurrent = Math.max(maxConcurrent, activeWorkers.size);
       await new Promise(resolve => setTimeout(resolve, 10));
-      activeWorkers.delete(workerId);
+      activeWorkers.delete(id);
     }, 10);
 
     expect(maxConcurrent).toBeLessThanOrEqual(2);
@@ -36,10 +37,11 @@ describe('runWorkerPool', () => {
     let maxConcurrent = 0;
     const items = Array.from({ length: 10 }, (_, i) => i);
 
-    await runWorkerPool(items, async () => {
+    await runWorkerPool(items, async (item, index) => {
       activeCount.current++;
       maxConcurrent = Math.max(maxConcurrent, activeCount.current);
-      await new Promise(resolve => setTimeout(resolve, 10));
+      // Use item-based delay for determinism
+      await new Promise(resolve => setTimeout(resolve, 10 + index % 3));
       activeCount.current--;
     }, 3);
 
@@ -51,8 +53,8 @@ describe('runWorkerPool', () => {
     const items = ['a', 'b', 'c', 'd', 'e'];
 
     await runWorkerPool(items, async (item, index) => {
-      // Simulate variable processing time
-      await new Promise(resolve => setTimeout(resolve, Math.random() * 20));
+      // Use index-based delay for determinism
+      await new Promise(resolve => setTimeout(resolve, 10 + (index % 3) * 5));
       results[index] = item.toUpperCase();
     }, 3);
 
@@ -93,9 +95,9 @@ describe('runWorkerPoolSettled', () => {
 
   it('preserves input order in results', async () => {
     const items = [1, 2, 3, 4, 5];
-    const results = await runWorkerPoolSettled(items, async (item) => {
-      // Simulate variable processing time
-      await new Promise(resolve => setTimeout(resolve, Math.random() * 20));
+    const results = await runWorkerPoolSettled(items, async (item, index) => {
+      // Use index-based delay for determinism
+      await new Promise(resolve => setTimeout(resolve, 10 + (index % 3) * 5));
       return item * 2;
     }, 3);
 
