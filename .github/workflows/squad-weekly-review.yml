@@ -28,10 +28,28 @@ jobs:
         with:
           script: |
             const dateStr = new Date().toISOString().slice(0, 10);
+            const title = `Weekly Expert Codebase Review — ${dateStr}`;
+
+            // Check for existing open issue with the same title to avoid duplicates on retries
+            const { data: existing } = await github.rest.issues.listForRepo({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              state: 'open',
+              labels: 'squad:copilot',
+              per_page: 100
+            });
+            const duplicate = existing.find(i => i.title === title);
+            if (duplicate) {
+              core.info(`Tracking issue already exists: #${duplicate.number} — skipping creation`);
+              core.setOutput('issue_number', duplicate.number);
+              core.setOutput('skipped', 'true');
+              return duplicate.number;
+            }
+
             const { data: issue } = await github.rest.issues.create({
               owner: context.repo.owner,
               repo: context.repo.repo,
-              title: `Weekly Expert Codebase Review — ${dateStr}`,
+              title,
               body: [
                 '### 🔍 Automated Weekly Code Review',
                 '',
