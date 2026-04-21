@@ -96,7 +96,7 @@ jobs:
               try {
                 await github.rest.issues.createComment({
                   owner, repo, issue_number,
-                  body: `### 🤖 @copilot Instructions\n\n${customInstructions}\n\n> ⚠️ Automated assignment via \`agent_assignment\` API failed. A maintainer should manually assign \`copilot-swe-agent[bot]\` to this issue.`
+                  body: `### 🤖 copilot-swe-agent[bot] Instructions\n\n${customInstructions}\n\n> ⚠️ Automated assignment via \`agent_assignment\` API failed. A maintainer should manually assign \`copilot-swe-agent[bot]\` to this issue.`
                 });
                 core.info(`Posted instructions comment (assignment API unavailable)`);
               } catch (commentErr) {
