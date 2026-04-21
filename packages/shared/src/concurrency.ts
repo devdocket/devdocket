@@ -41,7 +41,7 @@ export async function runWorkerPool<T>(
   }
 
   // Validate concurrency parameter
-  if (!Number.isFinite(maxConcurrency) || maxConcurrency < 1) {
+  if (!Number.isFinite(maxConcurrency) || !Number.isInteger(maxConcurrency) || maxConcurrency < 1) {
     throw new Error(`maxConcurrency must be a finite integer >= 1, got ${maxConcurrency}`);
   }
 
