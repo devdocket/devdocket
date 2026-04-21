@@ -87,23 +87,29 @@ jobs:
               core.info(`Assigned copilot-swe-agent to issue #${issue_number} (base: ${baseBranch})`);
             } catch (err) {
               core.warning(`Assignment with agent_assignment failed: ${err.message}`);
-              // Fallback: try without agent_assignment and post instructions as comment
+              
+              // Post instructions as comment regardless of assignee success
+              const customInstructions = 'Read AGENTS.md for project architecture and conventions, and .squad/team.md for team context. Focus on creating separate issues for each novel finding. Before creating an issue, search both open and closed issues to avoid duplicates.';
+              
+              try {
+                await github.rest.issues.createComment({
+                  owner, repo, issue_number,
+                  body: `### 🤖 @copilot Instructions\n\n${customInstructions}\n\n> ⚠️ Automated assignment via \`agent_assignment\` API failed. A maintainer should manually assign \`@copilot\` to this issue.`
+                });
+                core.info(`Posted instructions comment (assignment API unavailable)`);
+              } catch (commentErr) {
+                core.error(`Failed to post instructions comment: ${commentErr.message}`);
+              }
+              
+              // Try fallback assignment without agent_assignment
               try {
                 await github.rest.issues.addAssignees({
                   owner, repo, issue_number,
                   assignees: ['copilot-swe-agent[bot]']
                 });
-                
-                // Post custom instructions as a comment since agent_assignment failed
-                const customInstructions = 'Read AGENTS.md for project architecture and conventions, and .squad/team.md for team context. Focus on creating separate issues for each novel finding. Before creating an issue, search both open and closed issues to avoid duplicates.';
-                await github.rest.issues.createComment({
-                  owner, repo, issue_number,
-                  body: `### 🤖 @copilot Instructions\n\n${customInstructions}`
-                });
-                
-                core.info(`Fallback assigned copilot-swe-agent to issue #${issue_number} with instructions comment`);
+                core.info(`Fallback assigned copilot-swe-agent to issue #${issue_number}`);
               } catch (err2) {
-                core.error(`Fallback also failed: ${err2.message}`);
+                core.error(`Fallback assignment also failed: ${err2.message} — manual assignment required`);
               }
             }
 
