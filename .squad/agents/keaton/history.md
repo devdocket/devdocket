@@ -24,6 +24,53 @@ Key files:
 
 ## Learnings
 
+### 2025-01-09 — Issue #342: Command Registration Architecture Analysis
+
+**Status:** COMPLETE — Analysis posted to GitHub, decision documented
+
+Triaged vague issue #342 ("Factor out command registration across extensions") to understand if commands were misconfigured across packages.
+
+#### Findings
+
+✅ **Architecture is correct.** All 43 VS Code commands are properly in core (`packages/core/src/commands/`):
+- Core owns all commands because they operate on core's work item state, views, and lifecycle
+- Providers (GitHub, ADO) correctly register only via `api.registerProvider()` — discovery is API-driven, not command-driven
+- Actions (Start Git Work, AI Reviewer) correctly register only via `api.registerAction()` — invoked programmatically
+- AI Reviewer uses chat participants and LM tools, not commands
+
+#### Command Inventory
+
+| View/Concern | Count | Modules |
+|--------------|-------|---------|
+| Inbox operations | 3 | inboxCommands.ts |
+| Queue operations | 2 | queueCommands.ts |
+| Focus operations | 5 | focusCommands.ts |
+| History operations | 1 | historyCommands.ts |
+| Layout toggles | 17 | layoutCommands.ts (per-view layout switches) |
+| Watch management | 6 | watchCommands.ts |
+| Item creation | 5 | generalCommands.ts |
+| General | 4 | generalCommands.ts |
+
+All commands wired in `packages/core/src/commands/commands.ts` → registered in `extension.ts`.
+
+#### API Surface Impact
+
+✅ **No changes needed.** DevDocketApi doesn't expose command registration (correct—commands are internal). If providers ever need commands, could extend API at that time (not needed today).
+
+#### Recommendations (Non-Breaking)
+
+- **Phase 1 (Clarity):** Add `README.md` to `packages/core/src/commands/` documenting command ownership
+- **Phase 2 (Optional):** Create command registry interface for machine-readable ownership + automated tests
+- **Phase 3 (If Needed):** Extend DevDocketApi if providers ever need commands (unlikely)
+
+#### Decision
+
+Issue disposition: Close as **working-as-intended** or **type:enhancement** (if pursuing Phase 1 docs).
+
+Records:
+- Decision: `.squad/decisions/inbox/keaton-command-registration.md`
+- Analysis: `command-registration-analysis.md` (in root, can be deleted after merging notes to issue)
+
 ### 2025-07-18 — Four-View Architecture Review
 - Reviewed Matt's four-view proposal (Inbox → Queue → Focus → Sources) replacing the current two-view model
 - **Key decision:** Approved the overall direction but flagged three items needing refinement before Fenster implements:
