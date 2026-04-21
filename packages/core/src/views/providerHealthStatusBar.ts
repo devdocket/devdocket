@@ -9,6 +9,7 @@ export class ProviderHealthStatusBar implements vscode.Disposable {
   private statusBarItem: vscode.StatusBarItem;
   private healthChangeSub: vscode.Disposable;
   private registerSub: vscode.Disposable;
+  private discoveredChangesSub: vscode.Disposable;
 
   constructor(private providerRegistry: ProviderRegistry) {
     this.statusBarItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 99);
@@ -21,6 +22,11 @@ export class ProviderHealthStatusBar implements vscode.Disposable {
     
     // Update when new providers register
     this.registerSub = providerRegistry.onDidRegisterProvider(() => {
+      this.update();
+    });
+    
+    // Update when discovered items change (fires on provider disposal)
+    this.discoveredChangesSub = providerRegistry.onDidChangeDiscoveredItems(() => {
       this.update();
     });
     
@@ -54,6 +60,7 @@ export class ProviderHealthStatusBar implements vscode.Disposable {
   dispose(): void {
     this.healthChangeSub.dispose();
     this.registerSub.dispose();
+    this.discoveredChangesSub.dispose();
     this.statusBarItem.dispose();
   }
 }
