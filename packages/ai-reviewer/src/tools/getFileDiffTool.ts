@@ -1,7 +1,7 @@
 import * as vscode from 'vscode';
-import * as path from 'path';
 import { gitExec } from './gitUtils';
-import { validWorktreePaths } from './worktreeRegistry';
+import { validateWorktreePath, validateRelativePath } from './pathValidator';
+import { errorToString } from './errorUtils';
 import { isValidRef } from './refValidation';
 
 interface GetFileDiffInput {
@@ -19,9 +19,10 @@ export function registerGetFileDiffTool(): vscode.Disposable {
     ) {
       const { worktreePath, baseRef, headRef, filePath } = options.input;
 
-      if (!validWorktreePaths.has(path.resolve(worktreePath))) {
+      const wtError = validateWorktreePath(worktreePath);
+      if (wtError) {
         return new vscode.LanguageModelToolResult([
-          new vscode.LanguageModelTextPart('Invalid worktree path: not a known managed worktree'),
+          new vscode.LanguageModelTextPart(wtError),
         ]);
       }
 
@@ -32,12 +33,10 @@ export function registerGetFileDiffTool(): vscode.Disposable {
       }
 
       // Path traversal protection
-      const normalized = path.normalize(filePath);
-      if (normalized.startsWith('..' + path.sep) || normalized === '..' || path.isAbsolute(normalized)) {
+      const pathError = validateRelativePath(worktreePath, filePath);
+      if (pathError) {
         return new vscode.LanguageModelToolResult([
-          new vscode.LanguageModelTextPart(
-            'Path traversal not allowed: filePath must be relative and within the worktree',
-          ),
+          new vscode.LanguageModelTextPart(pathError),
         ]);
       }
 
@@ -91,9 +90,8 @@ export function registerGetFileDiffTool(): vscode.Disposable {
           new vscode.LanguageModelTextPart(output),
         ]);
       } catch (err) {
-        const msg = err instanceof Error ? err.message : String(err);
         return new vscode.LanguageModelToolResult([
-          new vscode.LanguageModelTextPart(`Error getting file diff: ${msg}`),
+          new vscode.LanguageModelTextPart(`Error getting file diff: ${errorToString(err)}`),
         ]);
       }
     },

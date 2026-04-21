@@ -103,7 +103,7 @@ export class GitHubMyPrsProvider extends BaseGitHubProvider {
         error.name = 'AbortError';
         throw error;
       }
-      return this.fetchRepoPrs(token, repo, signal);
+      return await this.fetchRepoPrs(token, repo, signal);
     }, 3);
 
     const allPrs: GitHubIssue[] = [];

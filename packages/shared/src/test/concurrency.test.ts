@@ -1,214 +1,234 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { runWorkerPool, runWorkerPoolSettled } from '../concurrency';
 
 describe('runWorkerPool', () => {
-  it('processes all items with a single worker', async () => {
-    const items = [1, 2, 3];
-    const results: number[] = [];
-    
-    await runWorkerPool(items, async (item, index) => {
-      results[index] = item * 2;
-    }, 1);
-    
-    expect(results).toEqual([2, 4, 6]);
-  });
-
-  it('processes all items with multiple workers', async () => {
-    const items = [1, 2, 3, 4, 5];
-    const results: number[] = [];
-    
-    await runWorkerPool(items, async (item, index) => {
-      results[index] = item * 2;
-    }, 3);
-    
-    expect(results).toEqual([2, 4, 6, 8, 10]);
-  });
-
-  it('preserves input order in results despite processing order', async () => {
-    const items = Array.from({ length: 10 }, (_, i) => i);
-    const results: number[] = [];
-    
-    await runWorkerPool(items, async (item, index) => {
-      // Simulate variable processing time using deterministic delays
-      await new Promise(resolve => setTimeout(resolve, (items.length - item) * 2));
-      results[index] = item * 2;
-    }, 3);
-    
-    expect(results).toEqual([0, 2, 4, 6, 8, 10, 12, 14, 16, 18]);
-  });
-
-  it('respects maxConcurrency parameter', async () => {
-    const items = Array.from({ length: 10 }, (_, i) => i);
-    let maxConcurrent = 0;
-    let currentConcurrent = 0;
-    
-    await runWorkerPool(items, async () => {
-      currentConcurrent++;
-      maxConcurrent = Math.max(maxConcurrent, currentConcurrent);
-      await new Promise(resolve => setTimeout(resolve, 10));
-      currentConcurrent--;
-    }, 3);
-    
-    expect(maxConcurrent).toBeLessThanOrEqual(3);
-  });
-
-  it('clamps effective concurrency to item count when maxConcurrency is larger', async () => {
-    const items = [1, 2];
-    let maxConcurrent = 0;
-    let currentConcurrent = 0;
-    
-    await runWorkerPool(items, async () => {
-      currentConcurrent++;
-      maxConcurrent = Math.max(maxConcurrent, currentConcurrent);
-      await new Promise(resolve => setTimeout(resolve, 10));
-      currentConcurrent--;
-    }, 10);
-    
-    expect(maxConcurrent).toBeLessThanOrEqual(items.length);
-  });
-
   it('returns immediately for empty array', async () => {
+    const worker = vi.fn();
+    await runWorkerPool([], worker, 3);
+    expect(worker).not.toHaveBeenCalled();
+  });
+
+  it('processes single item correctly', async () => {
     const results: number[] = [];
-    
-    await runWorkerPool([], async (item, index) => {
-      results[index] = item;
+    await runWorkerPool([42], async (item, index) => {
+      results[index] = item * 2;
     }, 3);
-    
-    expect(results).toEqual([]);
+    expect(results).toEqual([84]);
   });
 
-  it('propagates AbortError from workers', async () => {
-    const items = Array.from({ length: 100 }, (_, i) => i);
-    const processed: number[] = [];
-    
-    await expect(
-      runWorkerPool(items, async (item) => {
-        if (item === 5) {
-          const error = new Error('Aborted');
-          error.name = 'AbortError';
-          throw error;
-        }
-        processed.push(item);
-      }, 3)
-    ).rejects.toThrow('Aborted');
-    
-    // Should have processed some items before abort
-    expect(processed.length).toBeGreaterThan(0);
-    expect(processed.length).toBeLessThan(100);
+  it('caps worker count to item count', async () => {
+    let workerId = 0;
+    const activeWorkers = new Set<number>();
+    let maxConcurrent = 0;
+
+    await runWorkerPool([1, 2], async (item) => {
+      const id = workerId++;
+      activeWorkers.add(id);
+      maxConcurrent = Math.max(maxConcurrent, activeWorkers.size);
+      await new Promise(resolve => setTimeout(resolve, 10));
+      activeWorkers.delete(id);
+    }, 10);
+
+    expect(maxConcurrent).toBeLessThanOrEqual(2);
   });
 
-  it('propagates non-AbortError immediately', async () => {
-    const items = [1, 2, 3, 4, 5];
-    
+  it('processes items concurrently with specified limit', async () => {
+    const activeCount = { current: 0 };
+    let maxConcurrent = 0;
+    const items = Array.from({ length: 10 }, (_, i) => i);
+
+    await runWorkerPool(items, async (item, index) => {
+      activeCount.current++;
+      maxConcurrent = Math.max(maxConcurrent, activeCount.current);
+      // Use item-based delay for determinism
+      await new Promise(resolve => setTimeout(resolve, 10 + index % 3));
+      activeCount.current--;
+    }, 3);
+
+    expect(maxConcurrent).toBe(3);
+  });
+
+  it('preserves input order in results when using index', async () => {
+    const results: string[] = [];
+    const items = ['a', 'b', 'c', 'd', 'e'];
+
+    await runWorkerPool(items, async (item, index) => {
+      // Use index-based delay for determinism
+      await new Promise(resolve => setTimeout(resolve, 10 + (index % 3) * 5));
+      results[index] = item.toUpperCase();
+    }, 3);
+
+    expect(results).toEqual(['A', 'B', 'C', 'D', 'E']);
+  });
+
+  it('propagates worker errors to caller', async () => {
     await expect(
-      runWorkerPool(items, async (item) => {
-        if (item === 3) {
-          throw new Error('Regular error');
+      runWorkerPool([1, 2, 3], async (item) => {
+        if (item === 2) {
+          throw new Error('Worker failed');
         }
       }, 2)
-    ).rejects.toThrow('Regular error');
+    ).rejects.toThrow('Worker failed');
+  });
+
+  it('uses default concurrency of 3 when not specified', async () => {
+    const activeCount = { current: 0 };
+    let maxConcurrent = 0;
+    const items = Array.from({ length: 10 }, (_, i) => i);
+
+    await runWorkerPool(items, async () => {
+      activeCount.current++;
+      maxConcurrent = Math.max(maxConcurrent, activeCount.current);
+      await new Promise(resolve => setTimeout(resolve, 10));
+      activeCount.current--;
+    });
+
+    expect(maxConcurrent).toBe(3);
   });
 });
 
 describe('runWorkerPoolSettled', () => {
-  it('returns fulfilled results for successful items', async () => {
-    const items = [1, 2, 3];
-    
-    const results = await runWorkerPoolSettled(items, async (item) => {
-      return item * 2;
-    }, 2);
-    
-    expect(results).toEqual([
-      { status: 'fulfilled', value: 2 },
-      { status: 'fulfilled', value: 4 },
-      { status: 'fulfilled', value: 6 },
-    ]);
-  });
-
-  it('captures rejected results for failed items', async () => {
-    const items = [1, 2, 3, 4];
-    
-    const results = await runWorkerPoolSettled(items, async (item) => {
-      if (item === 2 || item === 4) {
-        throw new Error(`Failed: ${item}`);
-      }
-      return item * 2;
-    }, 2);
-    
-    expect(results[0]).toEqual({ status: 'fulfilled', value: 2 });
-    expect(results[1].status).toBe('rejected');
-    expect((results[1] as PromiseRejectedResult).reason.message).toBe('Failed: 2');
-    expect(results[2]).toEqual({ status: 'fulfilled', value: 6 });
-    expect(results[3].status).toBe('rejected');
-    expect((results[3] as PromiseRejectedResult).reason.message).toBe('Failed: 4');
-  });
-
-  it('preserves result order matching input order', async () => {
-    const items = [1, 2, 3, 4, 5];
-    
-    const results = await runWorkerPoolSettled(items, async (item) => {
-      // Simulate variable processing time
-      await new Promise(resolve => setTimeout(resolve, (5 - item) * 10));
-      return item * 2;
-    }, 3);
-    
-    expect(results.map(r => r.status === 'fulfilled' ? r.value : null))
-      .toEqual([2, 4, 6, 8, 10]);
-  });
-
-  it('propagates AbortError without capturing it', async () => {
-    const items = [1, 2, 3, 4, 5];
-    
-    await expect(
-      runWorkerPoolSettled(items, async (item) => {
-        if (item === 3) {
-          const error = new Error('Aborted');
-          error.name = 'AbortError';
-          throw error;
-        }
-        return item * 2;
-      }, 2)
-    ).rejects.toThrow('Aborted');
-  });
-
-  it('handles empty array gracefully', async () => {
-    const results = await runWorkerPoolSettled([], async (item) => {
-      return item;
-    }, 3);
-    
+  it('returns empty array for empty input', async () => {
+    const results = await runWorkerPoolSettled([], async () => 42, 3);
     expect(results).toEqual([]);
   });
 
-  it('respects maxConcurrency parameter', async () => {
-    const items = Array.from({ length: 10 }, (_, i) => i);
-    let maxConcurrent = 0;
-    let currentConcurrent = 0;
-    
-    await runWorkerPoolSettled(items, async () => {
-      currentConcurrent++;
-      maxConcurrent = Math.max(maxConcurrent, currentConcurrent);
-      await new Promise(resolve => setTimeout(resolve, 10));
-      currentConcurrent--;
-      return 0;
+  it('preserves input order in results', async () => {
+    const items = [1, 2, 3, 4, 5];
+    const results = await runWorkerPoolSettled(items, async (item, index) => {
+      // Use index-based delay for determinism
+      await new Promise(resolve => setTimeout(resolve, 10 + (index % 3) * 5));
+      return item * 2;
     }, 3);
-    
-    expect(maxConcurrent).toBeLessThanOrEqual(3);
+
+    expect(results).toHaveLength(5);
+    expect(results[0]).toEqual({ status: 'fulfilled', value: 2 });
+    expect(results[1]).toEqual({ status: 'fulfilled', value: 4 });
+    expect(results[2]).toEqual({ status: 'fulfilled', value: 6 });
+    expect(results[3]).toEqual({ status: 'fulfilled', value: 8 });
+    expect(results[4]).toEqual({ status: 'fulfilled', value: 10 });
   });
 
-  it('allows partial success when some workers fail', async () => {
-    const items = [1, 2, 3, 4, 5];
-    
+  it('captures worker errors as rejected results', async () => {
+    const items = [1, 2, 3];
     const results = await runWorkerPoolSettled(items, async (item) => {
-      if (item % 2 === 0) {
-        throw new Error('Even number');
+      if (item === 2) {
+        throw new Error('Item 2 failed');
       }
       return item * 10;
     }, 2);
-    
+
+    expect(results).toHaveLength(3);
     expect(results[0]).toEqual({ status: 'fulfilled', value: 10 });
-    expect(results[1].status).toBe('rejected');
+    expect(results[1]).toEqual({ status: 'rejected', reason: expect.objectContaining({ message: 'Item 2 failed' }) });
     expect(results[2]).toEqual({ status: 'fulfilled', value: 30 });
+  });
+
+  it('handles non-Error throws gracefully', async () => {
+    const items = [1, 2];
+    const results = await runWorkerPoolSettled(items, async (item) => {
+      if (item === 2) {
+        throw 'plain string error';
+      }
+      return item;
+    }, 2);
+
+    expect(results[1]).toEqual({ status: 'rejected', reason: 'plain string error' });
+  });
+
+  it('re-throws AbortError to stop all workers', async () => {
+    const processedItems: number[] = [];
+    const items = [1, 2, 3, 4, 5];
+
+    await expect(
+      runWorkerPoolSettled(items, async (item) => {
+        processedItems.push(item);
+        if (item === 2) {
+          const error = new Error('The operation was aborted.');
+          error.name = 'AbortError';
+          throw error;
+        }
+        return item;
+      }, 3)
+    ).rejects.toThrow('The operation was aborted.');
+  });
+
+  it('returns mix of fulfilled and rejected results', async () => {
+    const items = [1, 2, 3, 4, 5];
+    const results = await runWorkerPoolSettled(items, async (item) => {
+      if (item % 2 === 0) {
+        throw new Error(`Even number ${item}`);
+      }
+      return item * 100;
+    }, 3);
+
+    expect(results).toHaveLength(5);
+    expect(results[0]).toEqual({ status: 'fulfilled', value: 100 });
+    expect(results[1].status).toBe('rejected');
+    expect(results[2]).toEqual({ status: 'fulfilled', value: 300 });
     expect(results[3].status).toBe('rejected');
-    expect(results[4]).toEqual({ status: 'fulfilled', value: 50 });
+    expect(results[4]).toEqual({ status: 'fulfilled', value: 500 });
+  });
+
+  it('processes items concurrently up to limit', async () => {
+    const activeCount = { current: 0 };
+    let maxConcurrent = 0;
+    const items = Array.from({ length: 10 }, (_, i) => i);
+
+    await runWorkerPoolSettled(items, async (item) => {
+      activeCount.current++;
+      maxConcurrent = Math.max(maxConcurrent, activeCount.current);
+      await new Promise(resolve => setTimeout(resolve, 10));
+      activeCount.current--;
+      return item;
+    }, 4);
+
+    expect(maxConcurrent).toBe(4);
+  });
+
+  it('uses default concurrency of 3 when not specified', async () => {
+    const activeCount = { current: 0 };
+    let maxConcurrent = 0;
+    const items = Array.from({ length: 10 }, (_, i) => i);
+
+    await runWorkerPoolSettled(items, async (item) => {
+      activeCount.current++;
+      maxConcurrent = Math.max(maxConcurrent, activeCount.current);
+      await new Promise(resolve => setTimeout(resolve, 10));
+      activeCount.current--;
+      return item;
+    });
+
+    expect(maxConcurrent).toBe(3);
+  });
+});
+
+describe('maxConcurrency parameter validation', () => {
+  it('should throw for maxConcurrency = 0', async () => {
+    await expect(runWorkerPool([1], async () => {}, 0)).rejects.toThrow('maxConcurrency must be a finite integer >= 1');
+  });
+
+  it('should throw for negative maxConcurrency', async () => {
+    await expect(runWorkerPool([1], async () => {}, -1)).rejects.toThrow('maxConcurrency must be a finite integer >= 1');
+  });
+
+  it('should throw for NaN maxConcurrency', async () => {
+    await expect(runWorkerPool([1], async () => {}, NaN)).rejects.toThrow('maxConcurrency must be a finite integer >= 1');
+  });
+
+  it('should throw for Infinity maxConcurrency', async () => {
+    await expect(runWorkerPool([1], async () => {}, Infinity)).rejects.toThrow('maxConcurrency must be a finite integer >= 1');
+  });
+
+  it('should throw for fractional maxConcurrency', async () => {
+    await expect(runWorkerPool([1], async () => {}, 2.5)).rejects.toThrow('maxConcurrency must be a finite integer >= 1');
+  });
+
+  it('should accept valid integer maxConcurrency', async () => {
+    const results: number[] = [];
+    await runWorkerPool([1, 2, 3], async (item, index) => {
+      results[index] = item * 2;
+    }, 2);
+    expect(results).toEqual([2, 4, 6]);
   });
 });

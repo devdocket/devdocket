@@ -1,7 +1,7 @@
 import * as vscode from 'vscode';
-import * as path from 'path';
 import { gitExec } from './gitUtils';
-import { validWorktreePaths } from './worktreeRegistry';
+import { validateWorktreePath } from './pathValidator';
+import { errorToString } from './errorUtils';
 import { isValidRef } from './refValidation';
 
 /** Maximum characters of diff output before truncation.
@@ -27,9 +27,10 @@ export function registerGetDiffTool(): vscode.Disposable {
     ) {
       const { worktreePath, baseRef, headRef } = options.input;
 
-      if (!validWorktreePaths.has(path.resolve(worktreePath))) {
+      const wtError = validateWorktreePath(worktreePath);
+      if (wtError) {
         return new vscode.LanguageModelToolResult([
-          new vscode.LanguageModelTextPart('Invalid worktree path: not a known managed worktree'),
+          new vscode.LanguageModelTextPart(wtError),
         ]);
       }
 
@@ -97,9 +98,8 @@ export function registerGetDiffTool(): vscode.Disposable {
           new vscode.LanguageModelTextPart(parts.join('')),
         ]);
       } catch (err) {
-        const msg = err instanceof Error ? err.message : String(err);
         return new vscode.LanguageModelToolResult([
-          new vscode.LanguageModelTextPart(`Error getting diff: ${msg}`),
+          new vscode.LanguageModelTextPart(`Error getting diff: ${errorToString(err)}`),
         ]);
       }
     },
