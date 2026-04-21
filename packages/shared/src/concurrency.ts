@@ -49,7 +49,7 @@ export async function runWorkerPool<T>(
     }
   };
 
-  const safeConcurrency = Math.max(1, Math.floor(maxConcurrency));
+  const safeConcurrency = Number.isFinite(maxConcurrency) ? Math.max(1, Math.floor(maxConcurrency)) : 3;
   const workerCount = Math.min(safeConcurrency, items.length);
   await Promise.all(Array.from({ length: workerCount }, () => runWorker()));
 }
