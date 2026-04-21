@@ -2,7 +2,8 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import * as path from 'path';
 import * as fs from 'fs/promises';
 import { workspace } from 'vscode';
-import { registerReadFileTool, validatePath } from '../../tools/readFileTool';
+import { registerReadFileTool } from '../../tools/readFileTool';
+import { validatePath } from '../../tools/pathValidator';
 import { validWorktreePaths } from '../../tools/worktreeRegistry';
 
 vi.mock('fs/promises', () => ({

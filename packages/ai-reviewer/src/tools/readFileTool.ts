@@ -82,5 +82,3 @@ export function registerReadFileTool(): vscode.Disposable {
     },
   });
 }
-
-export { validatePath };
