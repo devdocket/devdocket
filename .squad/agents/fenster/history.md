@@ -64,7 +64,6 @@ DevDocket is a VS Code extension monorepo for managing work items from multiple 
 - **Key lesson:** When splitting a monolith, identify cross-cutting helpers first and extract them into a shared utils module. Domain-specific type guards (e.g., `isInboxItem`, `isSourceItem`) stay in their respective domain modules since they're only used there.
 - **Files changed:** 9 new files in `packages/core/src/commands/`, `commands.ts` reduced to ~40 lines.
 
-### 2026-04-22 — Issue #300 (CancellationToken → AbortSignal wiring)
 ### 2026-04-22 — Issue #306 (Scope WorkItemEditorPanel cache to extension lifecycle)
 
 **Refactor:** Moved the static panel cache from `WorkItemEditorPanel` to a `PanelManager` class instantiated during `activate()` and disposed with the extension context.
