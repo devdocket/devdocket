@@ -94,7 +94,10 @@ async function handleOpenWatchUrl(arg: unknown): Promise<void> {
       void vscode.window.showWarningMessage('Can only open http(s) URLs in the browser.');
       return;
     }
-    await vscode.env.openExternal(vscode.Uri.parse(safeUrl.href));
+    const opened = await vscode.env.openExternal(vscode.Uri.parse(safeUrl.href));
+    if (!opened) {
+      void vscode.window.showWarningMessage('Failed to open URL in the browser.');
+    }
   } catch (err: unknown) {
     handleCommandError('Failed to open URL', err);
   }
