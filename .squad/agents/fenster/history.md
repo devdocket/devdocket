@@ -64,6 +64,14 @@ DevDocket is a VS Code extension monorepo for managing work items from multiple 
 - **CancellationToken handling:** `DevDocketProvider.refresh(token?: CancellationTokenLike)` uses the shared `CancellationTokenLike` interface instead of `vscode.CancellationToken`. This avoids a vscode dependency in shared while remaining structurally compatible — `vscode.CancellationToken` satisfies `CancellationTokenLike`. Implementations can still declare `vscode.CancellationToken` thanks to TypeScript's method bivariance.
 - **Key lesson:** When moving types to a shared package that must remain vscode-free, use minimal interfaces (`CancellationTokenLike`) for vscode types. Callers pass the full vscode type which satisfies the minimal interface structurally. This is the same pattern used by `DevDocketRunWatcher.getRunStatus`.
 - **Files changed:** `packages/shared/src/workItem.ts` (new), `packages/shared/src/apiTypes.ts` (new), `packages/shared/src/index.ts`, `packages/core/src/models/workItem.ts`, `packages/core/src/models/activityLog.ts`, `packages/core/src/api/types.ts`, `packages/ai-reviewer/src/types.ts`, `packages/ai-reviewer/package.json`, `packages/start-git-work/src/startWorkAction.ts`, `packages/start-git-work/src/gitCleanup.ts`, `packages/start-git-work/src/extension.ts`, `packages/github/src/baseGithubProvider.ts`.
+### 2026-04-23 — Issue #305 (Split commands.ts into domain modules)
+
+**Refactoring:** Split the 1118-line monolith `commands.ts` into 8 domain-specific modules plus a shared utilities file.
+- **Modules created:** `commandUtils.ts` (shared helpers), `inboxCommands.ts`, `queueCommands.ts`, `focusCommands.ts`, `historyCommands.ts`, `layoutCommands.ts`, `generalCommands.ts`, `sourcesCommands.ts`, `watchCommands.ts`.
+- **Pattern:** Each module exports a single `register*Commands()` function that receives only the dependencies it needs. The original `commands.ts` becomes a thin orchestrator calling each domain registrar.
+- **Shared utilities in `commandUtils.ts`:** `wrapCommand`, `handleCommandError`, `resolveItemIds`, `formatItemTitle`, `batchTransition`, `batchAcceptItems` + `AcceptableItem` interface — used across multiple domain modules.
+- **Key lesson:** When splitting a monolith, identify cross-cutting helpers first and extract them into a shared utils module. Domain-specific type guards (e.g., `isInboxItem`, `isSourceItem`) stay in their respective domain modules since they're only used there.
+- **Files changed:** 9 new files in `packages/core/src/commands/`, `commands.ts` reduced to ~40 lines.
 
 ### 2026-04-22 — Issue #306 (Scope WorkItemEditorPanel cache to extension lifecycle)
 

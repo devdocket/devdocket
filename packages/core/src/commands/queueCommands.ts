@@ -1,0 +1,100 @@
+import * as vscode from 'vscode';
+import { WorkItemState } from '../models/workItem';
+import { WorkGraph } from '../services/workGraph';
+import { logger } from '../services/logger';
+import type { ViewRevealer } from '../services/viewRevealer';
+import { wrapCommand, resolveItemIds, batchTransition } from './commandUtils';
+
+async function handleCreateItem(workGraph: WorkGraph, revealer?: ViewRevealer): Promise<void> {
+  const title = await vscode.window.showInputBox({
+    prompt: 'Work item title',
+    placeHolder: 'e.g. Fix login redirect bug',
+    validateInput: (value) => (value.trim() ? undefined : 'Title is required'),
+  });
+  if (!title) {
+    return;
+  }
+
+  logger.info(`Creating new work item: ${title.trim()}`);
+  const createdItem = await workGraph.createItem({ title: title.trim() });
+  void vscode.window.showInformationMessage(`DevDocket: Created "${title.trim()}"`);
+  void revealer?.revealInQueue(createdItem.id);
+}
+
+async function handleAcceptToFocus(workGraph: WorkGraph, item?: { id?: string }, selectedItems?: { id?: string }[], revealer?: ViewRevealer): Promise<void> {
+  const ids = resolveItemIds(item, selectedItems);
+  if (ids.length === 0) { return; }
+  await batchTransition(workGraph, ids, WorkItemState.InProgress,
+    (n) => `Moved ${n} item${n === 1 ? '' : 's'} to Focus`, revealer);
+}
+
+async function handleMoveUp(workGraph: WorkGraph, item?: { id?: string }): Promise<void> {
+  if (!item?.id) {
+    void vscode.window.showInformationMessage('DevDocket: Select an item in the Queue to move.');
+    return;
+  }
+  await workGraph.moveItem(item.id, 'up');
+}
+
+async function handleMoveDown(workGraph: WorkGraph, item?: { id?: string }): Promise<void> {
+  if (!item?.id) {
+    void vscode.window.showInformationMessage('DevDocket: Select an item in the Queue to move.');
+    return;
+  }
+  await workGraph.moveItem(item.id, 'down');
+}
+
+async function handleDeleteItem(workGraph: WorkGraph, item?: { id?: string }, selectedItems?: { id?: string }[]): Promise<void> {
+  const ids = resolveItemIds(item, selectedItems);
+  if (ids.length === 0) { return; }
+
+  const itemWord = ids.length === 1 ? 'item' : `${ids.length} items`;
+  const confirm = await vscode.window.showWarningMessage(
+    `Delete ${itemWord}? This cannot be undone.`,
+    { modal: true },
+    'Delete',
+  );
+  if (confirm !== 'Delete') { return; }
+
+  if (ids.length === 1) {
+    await workGraph.deleteItem(ids[0]);
+    return;
+  }
+  const failedIds: string[] = [];
+  for (const id of ids) {
+    try {
+      await workGraph.deleteItem(id);
+    } catch (err: unknown) {
+      failedIds.push(id);
+      logger.error(`Failed to delete item ${id}`, err);
+    }
+  }
+  const succeeded = ids.length - failedIds.length;
+  if (succeeded > 0) {
+    void vscode.window.showInformationMessage(`Deleted ${succeeded} item${succeeded === 1 ? '' : 's'}`);
+  }
+  if (failedIds.length > 0) {
+    void vscode.window.showErrorMessage(
+      `DevDocket: Failed to delete ${failedIds.length} item(s); see Output for details`,
+    );
+  }
+}
+
+export function registerQueueCommands(
+  context: vscode.ExtensionContext,
+  workGraph: WorkGraph,
+  revealer?: ViewRevealer,
+): void {
+  context.subscriptions.push(
+    vscode.commands.registerCommand('devdocket.createItem',
+      wrapCommand('Failed to create item', () => handleCreateItem(workGraph, revealer))),
+    vscode.commands.registerCommand('devdocket.acceptToFocus',
+      wrapCommand('Failed to focus item', (item, selectedItems) => handleAcceptToFocus(workGraph, item, selectedItems, revealer))),
+    vscode.commands.registerCommand('devdocket.moveUp',
+      wrapCommand('Failed to move item up', (item) => handleMoveUp(workGraph, item))),
+    vscode.commands.registerCommand('devdocket.moveDown',
+      wrapCommand('Failed to move item down', (item) => handleMoveDown(workGraph, item))),
+    vscode.commands.registerCommand('devdocket.deleteItem',
+      wrapCommand('Failed to delete item', (item, selectedItems) => handleDeleteItem(workGraph, item, selectedItems))),
+  );
+}

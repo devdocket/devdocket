@@ -1,8 +1,8 @@
 import * as vscode from 'vscode';
-import { isValidGitHubRepo, type ResolvedItem, type DevDocketProvider, type DiscoveredItem } from '@devdocket/shared';
+import { BaseProvider, type DiscoveredItem, type ResolvedItem, type DevDocketProvider, isValidGitHubRepo } from '@devdocket/shared';
 import { logger } from './logger';
 
-export type { ResolvedItem, DiscoveredItem };
+export type { DiscoveredItem, ResolvedItem };
 
 export interface GitHubIssue {
   number: number;
@@ -14,47 +14,15 @@ export interface GitHubIssue {
   pull_request?: { url: string };
 }
 
-export abstract class BaseGitHubProvider implements DevDocketProvider {
+export abstract class BaseGitHubProvider extends BaseProvider implements DevDocketProvider {
   abstract readonly id: string;
   abstract readonly label: string;
 
-  protected readonly _onDidDiscoverItems = new vscode.EventEmitter<DiscoveredItem[]>();
-  readonly onDidDiscoverItems = this._onDidDiscoverItems.event;
-
-  private refreshTimer: ReturnType<typeof setInterval> | undefined;
-  private _isRefreshing = false;
-
-  startPeriodicRefresh(intervalSeconds: number): void {
-    this.stopPeriodicRefresh();
-    const interval = Number(intervalSeconds);
-    if (!Number.isFinite(interval) || interval <= 0) {
-      return;
-    }
-    // Clamp to minimum of 60 seconds
-    const clampedInterval = Math.max(interval, 60);
-    this.refreshTimer = setInterval(() => {
-      this.refreshInBackground().catch((err) => {
-        logger.error(`${this.label} refresh failed`, err);
-      });
-    }, clampedInterval * 1000);
-  }
-
-  stopPeriodicRefresh(): void {
-    if (this.refreshTimer) {
-      clearInterval(this.refreshTimer);
-      this.refreshTimer = undefined;
-    }
+  constructor() {
+    super(new vscode.EventEmitter<DiscoveredItem[]>());
   }
 
   async refresh(token?: vscode.CancellationToken): Promise<void> {
-    await this.doRefresh(true, token);
-  }
-
-  private async refreshInBackground(): Promise<void> {
-    await this.doRefresh(false);
-  }
-
-  private async doRefresh(isUserTriggered: boolean, token?: vscode.CancellationToken): Promise<void> {
     if (this._isRefreshing) {
       return;
     }
@@ -66,35 +34,26 @@ export abstract class BaseGitHubProvider implements DevDocketProvider {
         return;
       }
 
-      const createIfNone = isUserTriggered;
       let session: vscode.AuthenticationSession | undefined;
       try {
         session = await vscode.authentication.getSession('github', ['repo'], {
-          createIfNone,
+          createIfNone: true,
         });
       } catch (err) {
-        if (isUserTriggered) {
-          const message = err instanceof Error ? err.message : String(err);
-          logger.error('GitHub authentication failed', err);
-          vscode.window.showWarningMessage(`DevDocket GitHub: Authentication failed — ${message}`);
-        } else {
-          logger.warn('GitHub authentication failed during background refresh', err);
-        }
+        const message = err instanceof Error ? err.message : String(err);
+        logger.error('GitHub authentication failed', err);
+        vscode.window.showWarningMessage(`DevDocket GitHub: Authentication failed — ${message}`);
         return;
       }
 
       if (!session || token?.isCancellationRequested) {
         if (!session) {
-          if (isUserTriggered) {
-            logger.info('User cancelled GitHub authentication');
-          } else {
-            logger.debug('No GitHub session available for background refresh');
-          }
+          logger.info('User cancelled GitHub authentication');
         }
         return;
       }
 
-      await this.fetchAndPublish(session.accessToken, isUserTriggered, abortController.signal);
+      await this.fetchAndPublish(session.accessToken, true, abortController.signal);
     } catch (err) {
       if (err instanceof Error && err.name === 'AbortError' && abortController.signal.aborted && token?.isCancellationRequested) {
         logger.debug(`${this.label} fetch aborted due to cancellation`);
@@ -104,6 +63,29 @@ export abstract class BaseGitHubProvider implements DevDocketProvider {
     } finally {
       cancelListener?.dispose();
       this._isRefreshing = false;
+    }
+  }
+
+  protected async doBackgroundRefresh(): Promise<void> {
+    let session: vscode.AuthenticationSession | undefined;
+    try {
+      session = await vscode.authentication.getSession('github', ['repo'], {
+        createIfNone: false,
+      });
+    } catch (err) {
+      logger.warn('GitHub authentication failed during background refresh', err);
+      return;
+    }
+
+    if (!session) {
+      logger.debug('No GitHub session available for background refresh');
+      return;
+    }
+
+    try {
+      await this.fetchAndPublish(session.accessToken, false);
+    } catch (err) {
+      logger.error(`Failed to fetch ${this.label}`, err);
     }
   }
 
@@ -273,8 +255,4 @@ export abstract class BaseGitHubProvider implements DevDocketProvider {
     return parsed.filter(p => closedSet.has(p.id)).map(p => p.id);
   }
 
-  dispose(): void {
-    this.stopPeriodicRefresh();
-    this._onDidDiscoverItems.dispose();
-  }
 }
