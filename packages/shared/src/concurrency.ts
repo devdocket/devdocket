@@ -38,6 +38,11 @@ export async function runWorkerPool<T>(
     return;
   }
 
+  // Validate concurrency parameter
+  if (!Number.isFinite(maxConcurrency) || maxConcurrency < 1) {
+    throw new Error(`maxConcurrency must be a finite integer >= 1, got ${maxConcurrency}`);
+  }
+
   let nextIndex = 0;
 
   const runWorker = async (): Promise<void> => {
