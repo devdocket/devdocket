@@ -88,7 +88,7 @@ jobs:
               });
               core.info(`Assigned copilot-swe-agent to issue #${issue_number} (base: ${baseBranch})`);
             } catch (err) {
-              core.warning(`Assignment with agent_assignment failed: ${err.message}`);
+              core.warning(`Assignment with agent_assignment failed: ${String(err)}`);
               
               // Post instructions as comment before fallback assignment
               const customInstructions = 'Read AGENTS.md for project architecture and conventions, and .squad/team.md for team context. Focus on creating separate issues for each novel finding. Before creating an issue, search both open and closed issues to avoid duplicates.';
