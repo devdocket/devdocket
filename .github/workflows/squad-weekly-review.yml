@@ -29,10 +29,10 @@ jobs:
             const dateStr = new Date().toISOString().slice(0, 10);
             const title = `Weekly Expert Codebase Review — ${dateStr}`;
 
-            // Check for an existing open issue with the same title to avoid duplicates on retries.
+            // Use the stable title/date as the idempotency key so label edits/removals do not create duplicates.
             // Use search scoped to issues so pull requests are excluded from duplicate detection.
             const { data: searchResults } = await github.rest.search.issuesAndPullRequests({
-              q: `repo:${context.repo.owner}/${context.repo.repo} is:issue is:open label:"squad:copilot" "${title}" in:title`,
+              q: `repo:${context.repo.owner}/${context.repo.repo} is:issue is:open "${title}" in:title`,
               per_page: 100
             });
             const duplicate = searchResults.items.find(item => !item.pull_request && item.title === title);
