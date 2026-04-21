@@ -13,7 +13,7 @@ type Obj = Record<string, unknown>;
  * Returns the value cast to `Obj` on success, or an error string.
  */
 export function validateObject(value: unknown, context: string): Obj | string {
-  if (typeof value !== 'object' || value === null) {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) {
     return `${context} is not an object`;
   }
   return value as Obj;
