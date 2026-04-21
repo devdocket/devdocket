@@ -84,3 +84,12 @@ export function sanitizeUrlSegment(segment: string): string {
   const sanitized = segment.replace(/[^a-zA-Z0-9._~-]/g, '');
   return sanitized.replace(/^\.+/, '');
 }
+
+/**
+ * Safely decode a percent-encoded URI component, returning the original
+ * value on malformed input. Used by both GitHub and ADO providers when
+ * parsing URLs from external sources.
+ */
+export function safeDecodeComponent(value: string): string {
+  try { return decodeURIComponent(value); } catch { return value; }
+}

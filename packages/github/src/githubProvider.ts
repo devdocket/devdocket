@@ -1,8 +1,8 @@
 import * as vscode from 'vscode';
-import { isValidGitHubRepo, combineSignals } from '@devdocket/shared';
+import { BaseProvider, DiscoveredItem, isValidGitHubRepo, combineSignals, safeDecodeComponent, type ResolvedItem } from '@devdocket/shared';
 import { logger } from './logger';
 import { parseRepoFromUrls } from './parseRepo';
-import { BaseGitHubProvider, DiscoveredItem, GitHubIssue, type ResolvedItem } from './baseGithubProvider';
+import { getHeaders, retryWithAuth, throwApiError, parseCanonicalRepo, parseRepoFromIssue, fetchClosedGitHubItems, type GitHubIssue } from './githubApiHelpers';
 
 /**
  * DevDocket provider that discovers GitHub issues assigned to the current user.
@@ -14,17 +14,88 @@ import { BaseGitHubProvider, DiscoveredItem, GitHubIssue, type ResolvedItem } fr
  * Supports periodic background refresh and emits discovered items through
  * the {@link DevDocketProvider.onDidDiscoverItems} event.
  */
-export class GitHubIssueProvider extends BaseGitHubProvider {
+export class GitHubIssueProvider extends BaseProvider {
   readonly id = 'github';
   readonly label = 'GitHub Issues';
 
-  protected async fetchAndPublish(accessToken: string, isUserTriggered: boolean, signal?: AbortSignal): Promise<void> {
+  constructor() {
+    super(new vscode.EventEmitter<DiscoveredItem[]>());
+    this.onBackgroundRefreshError = (error) => {
+      logger.error(`${this.label} refresh failed`, error);
+    };
+  }
+
+  async refresh(token?: vscode.CancellationToken): Promise<void> {
+    if (this._isRefreshing) {
+      return;
+    }
+
+    this._isRefreshing = true;
+    const abortController = new AbortController();
+    const cancelListener = token?.onCancellationRequested?.(() => abortController.abort());
+    try {
+      if (token?.isCancellationRequested) {
+        return;
+      }
+
+      let session: vscode.AuthenticationSession | undefined;
+      try {
+        session = await vscode.authentication.getSession('github', ['repo'], {
+          createIfNone: true,
+        });
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        logger.error('GitHub authentication failed', err);
+        vscode.window.showWarningMessage(`DevDocket GitHub: Authentication failed — ${message}`);
+        return;
+      }
+
+      if (!session || token?.isCancellationRequested) {
+        if (!session) {
+          logger.info('User cancelled GitHub authentication');
+        }
+        return;
+      }
+
+      await this.fetchAndPublish(session.accessToken, true, abortController.signal);
+    } catch (err) {
+      if (err instanceof Error && err.name === 'AbortError' && abortController.signal.aborted && token?.isCancellationRequested) {
+        logger.debug(`${this.label} fetch aborted due to cancellation`);
+      } else {
+        logger.error(`Failed to fetch ${this.label}`, err);
+      }
+    } finally {
+      cancelListener?.dispose();
+      this._isRefreshing = false;
+    }
+  }
+
+  protected async doBackgroundRefresh(): Promise<void> {
+    let session: vscode.AuthenticationSession | undefined;
+    try {
+      session = await vscode.authentication.getSession('github', ['repo'], {
+        createIfNone: false,
+      });
+    } catch (err) {
+      logger.warn('GitHub authentication failed during background refresh', err);
+      return;
+    }
+
+    if (!session) {
+      logger.debug('No GitHub session available for background refresh');
+      return;
+    }
+
+    await this.fetchAndPublish(session.accessToken, false);
+  }
+
+  private async fetchAndPublish(accessToken: string, isUserTriggered: boolean, signal?: AbortSignal): Promise<void> {
     logger.info('Fetching assigned issues...');
     const repos = this.getConfiguredRepos();
     const { issues, failures } = await this.fetchAssignedIssues(accessToken, repos, signal);
 
     const items: DiscoveredItem[] = issues.map((issue) => {
-      const repoName = this.parseRepo(issue);
+      const repoName = parseRepoFromUrls(issue.html_url, issue.repository_url);
       return {
         externalId: `${repoName}#${issue.number}`,
         title: `#${issue.number}: ${issue.title}`,
@@ -57,27 +128,27 @@ export class GitHubIssueProvider extends BaseGitHubProvider {
     const match = url.trim().match(GitHubIssueProvider.GITHUB_ISSUE_PATTERN);
     if (!match) { return undefined; }
     const [, rawOwner, rawRepo, numStr] = match;
-    const owner = BaseGitHubProvider.safeDecodeComponent(rawOwner);
-    const repo = BaseGitHubProvider.safeDecodeComponent(rawRepo);
+    const owner = safeDecodeComponent(rawOwner);
+    const repo = safeDecodeComponent(rawRepo);
     const number = parseInt(numStr, 10);
 
     const apiUrl = `https://api.github.com/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/issues/${number}`;
-    const headers = await this.getHeaders();
+    const headers = await getHeaders();
     const wasAuthenticated = 'Authorization' in headers;
 
     let response = await fetch(apiUrl, { headers, signal });
 
     if (response.status === 404 && !wasAuthenticated && !signal?.aborted) {
-      const retryResponse = await this.retryWithAuth(apiUrl, signal);
+      const retryResponse = await retryWithAuth(apiUrl, signal);
       if (retryResponse) { response = retryResponse; }
     }
 
     if (!response.ok) {
-      this.throwApiError(response, `GitHub issue ${owner}/${repo}#${number}`);
+      throwApiError(response, `GitHub issue ${owner}/${repo}#${number}`);
     }
 
     const data = await response.json() as { title: string; body: string | null; html_url: string };
-    const canonicalRepo = this.parseCanonicalRepo(data.html_url, owner, repo);
+    const canonicalRepo = parseCanonicalRepo(data.html_url, owner, repo);
     return {
       title: `#${number}: ${data.title}`,
       notes: data.body ?? '',
@@ -92,16 +163,12 @@ export class GitHubIssueProvider extends BaseGitHubProvider {
    * Check which of the given external IDs correspond to closed GitHub issues.
    */
   async getClosedItems(externalIds: string[], signal?: AbortSignal): Promise<string[]> {
-    return this.fetchClosedGitHubItems(externalIds, 'issues', signal);
+    return fetchClosedGitHubItems(externalIds, 'issues', signal);
   }
 
   private getConfiguredRepos(): string[] {
     const config = vscode.workspace.getConfiguration('devdocketGithub');
     return config.get<string[]>('repos', []);
-  }
-
-  protected override parseRepo(issue: GitHubIssue): string {
-    return parseRepoFromUrls(issue.html_url, issue.repository_url);
   }
 
   private async fetchAssignedIssues(

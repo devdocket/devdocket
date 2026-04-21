@@ -1,0 +1,49 @@
+
+> devdocket-github@0.1.0 test
+> vitest run
+
+The CJS build of Vite's Node API is deprecated. See https://vite.dev/guide/troubleshooting.html#vite-cjs-node-api-deprecated for more details.
+
+[7m[1m[36m RUN [39m[22m[27m [36mv1.6.1[39m [90mC:/repos/devdocket/packages/github[39m
+
+ [32mΓ£ô[39m src/test/githubActionsWatcher.test.ts [2m ([22m[2m12 tests[22m[2m)[22m[90m 81[2mms[22m[39m
+ [32mΓ£ô[39m src/test/githubMyPrsProvider.cancellation.test.ts [2m ([22m[2m9 tests[22m[2m)[22m[90m 108[2mms[22m[39m
+ [32mΓ£ô[39m src/test/githubMyPrsProvider.test.ts [2m ([22m[2m25 tests[22m[2m)[22m[90m 137[2mms[22m[39m
+ [32mΓ£ô[39m src/test/githubPrReviewProvider.cancellation.test.ts [2m ([22m[2m8 tests[22m[2m)[22m[90m 67[2mms[22m[39m
+ [32mΓ£ô[39m src/test/githubProvider.cancellation.test.ts [2m ([22m[2m13 tests[22m[2m)[22m[90m 143[2mms[22m[39m
+ [32mΓ£ô[39m src/test/configEdgeCases.test.ts [2m ([22m[2m15 tests[22m[2m)[22m[90m 159[2mms[22m[39m
+ [32mΓ£ô[39m src/test/githubProvider.test.ts [2m ([22m[2m32 tests[22m[2m)[22m[90m 275[2mms[22m[39m
+ [32mΓ£ô[39m src/test/githubPrReviewProvider.test.ts [2m ([22m[2m41 tests[22m[2m)[22m[33m 370[2mms[22m[39m
+ [32mΓ£ô[39m src/test/githubProvider.error.test.ts [2m ([22m[2m30 tests[22m[2m)[22m[33m 394[2mms[22m[39m
+ [32mΓ£ô[39m src/test/resolveUrl.test.ts [2m ([22m[2m21 tests[22m[2m)[22m[90m 200[2mms[22m[39m
+ [33mΓ¥»[39m src/test/githubPrReviewProvider.error.test.ts [2m ([22m[2m27 tests[22m [2m|[22m [31m1 failed[39m[2m)[22m[33m 769[2mms[22m[39m
+[31m   [33mΓ¥»[31m src/test/githubPrReviewProvider.error.test.ts[2m > [22mGitHubPrReviewProvider ΓÇö error handling[2m > [22m_isRefreshing guard[2m > [22mresets _isRefreshing after background refresh throws[39m
+[31m     ΓåÆ kaboom[39m
+ [32mΓ£ô[39m src/test/parseRepo.test.ts [2m ([22m[2m12 tests[22m[2m)[22m[90m 30[2mms[22m[39m
+
+ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ» Failed Tests 1 ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»
+
+ FAIL  src/test/githubPrReviewProvider.error.test.ts > GitHubPrReviewProvider ΓÇö error handling > _isRefreshing guard > resets _isRefreshing after background refresh throws
+Error: kaboom
+ Γ¥» src/test/githubPrReviewProvider.error.test.ts:392:39
+    390| 
+    391|     it('resets _isRefreshing after background refresh throws', async (ΓÇª
+    392|       mockFetch.mockRejectedValueOnce(new Error('kaboom'));
+       |                                       ^
+    393| 
+    394|       const refreshBg = (provider as any).refreshInBackground.bind(proΓÇª
+
+ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»ΓÄ»[1/1]ΓÄ»
+
+[2m Test Files [22m [1m[31m1 failed[39m[22m[2m | [22m[1m[32m11 passed[39m[22m[90m (12)[39m
+[2m      Tests [22m [1m[31m1 failed[39m[22m[2m | [22m[1m[32m244 passed[39m[22m[90m (245)[39m
+[2m   Start at [22m 23:17:26
+[2m   Duration [22m 7.15s[2m (transform 4.38s, setup 2ms, collect 14.12s, tests 2.73s, environment 8ms, prepare 18.56s)[22m
+
+npm error Lifecycle script `test` failed with error:
+npm error code 1
+npm error path C:\repos\devdocket\packages\github
+npm error workspace devdocket-github@0.1.0
+npm error location C:\repos\devdocket\packages\github
+npm error command failed
+npm error command C:\WINDOWS\system32\cmd.exe /d /s /c vitest run

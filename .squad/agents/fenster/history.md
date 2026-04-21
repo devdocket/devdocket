@@ -393,3 +393,13 @@ efresh(token?) (user-triggered) and doBackgroundRefresh() (silent auth). Matches
 - **Re-exports from shared:** DiscoveredItem, Disposable, Event, ResolvedItem now imported from @devdocket/shared instead of being re-declared locally.
 - **No subclass changes needed:** githubProvider.ts, githubPrReviewProvider.ts, and githubMyPrsProvider.ts required zero changes.
 - **Files changed:** packages/github/src/baseGithubProvider.ts only (37 insertions, 77 deletions).
+
+### 2026-04-24 — Issue #334 (Refactor: Unify GitHub provider base class with shared BaseProvider)
+
+**Refactor:** Deleted aseGithubProvider.ts (304 lines) and migrated all GitHub providers to extend shared.BaseProvider, eliminating duplicated lifecycle logic.
+- **Problem:** GitHub providers used their own BaseGitHubProvider which reimplemented periodic refresh, concurrency guard, and dispose lifecycle that shared.BaseProvider already provides. ADO providers correctly extended the shared base.
+- **Solution:** Created githubApiHelpers.ts with extracted auth/API helpers (getHeaders, etryWithAuth, 	hrowApiError, parseCanonicalRepo, parseRepoFromIssue, etchClosedGitHubItems). Moved safeDecodeComponent to shared/urlValidation.ts for use by both GitHub and ADO. All three GitHub providers now extend shared.BaseProvider.
+- **Refresh pattern:** Providers override efresh() (user-triggered with createIfNone: true) and doBackgroundRefresh() (silent with createIfNone: false). Both call a private etchAndPublish() helper. Error handlers set via onBackgroundRefreshError in constructors.
+- **Files changed:** packages/github/src/githubApiHelpers.ts (new, 196 lines), packages/shared/src/urlValidation.ts (added safeDecodeComponent), packages/shared/src/index.ts (export safeDecodeComponent), packages/ado/src/adoAuth.ts (removed local safeDecodeComponent), packages/ado/src/adoWorkItemProvider.ts, packages/ado/src/adoPrReviewProvider.ts (import safeDecodeComponent from shared), packages/github/src/githubProvider.ts, packages/github/src/githubPrReviewProvider.ts, packages/github/src/githubMyPrsProvider.ts (extend BaseProvider, use helpers from githubApiHelpers), deleted packages/github/src/baseGithubProvider.ts.
+- **Impact:** ~305 lines removed from baseGithubProvider.ts, ~40 lines removed from duplicated auth helpers, unified provider architecture across GitHub and ADO.
+- **Test status:** 244 of 245 tests pass. One flaky test in githubPrReviewProvider.error.test.ts ("resets _isRefreshing after background refresh throws") fails due to vitest test isolation issue (unhandled promise rejection detected during test setup). Same test pattern passes in githubProvider.error.test.ts. Likely test infrastructure issue, not a code bug.

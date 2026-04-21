@@ -1,8 +1,8 @@
 import * as vscode from 'vscode';
-import { combineSignals } from '@devdocket/shared';
+import { BaseProvider, DiscoveredItem, combineSignals, runWorkerPool, runWorkerPoolSettled } from '@devdocket/shared';
 import { logger } from './logger';
 import { parseRepoFromUrls } from './parseRepo';
-import { BaseGitHubProvider, DiscoveredItem, GitHubIssue } from './baseGithubProvider';
+import { parseRepoFromIssue, type GitHubIssue } from './githubApiHelpers';
 
 interface GitHubSearchResponse {
   items: GitHubIssue[];
@@ -32,11 +32,82 @@ export interface PrReview {
  * determined), Draft, Waiting on reviews, Review received,
  * Changes requested, Approved, Ready to merge.
  */
-export class GitHubMyPrsProvider extends BaseGitHubProvider {
+export class GitHubMyPrsProvider extends BaseProvider {
   readonly id = 'github-my-prs';
   readonly label = 'My GitHub PRs';
 
-  protected async fetchAndPublish(accessToken: string, isUserTriggered: boolean, signal?: AbortSignal): Promise<void> {
+  constructor() {
+    super(new vscode.EventEmitter<DiscoveredItem[]>());
+    this.onBackgroundRefreshError = (error) => {
+      logger.error(`${this.label} refresh failed`, error);
+    };
+  }
+
+  async refresh(token?: vscode.CancellationToken): Promise<void> {
+    if (this._isRefreshing) {
+      return;
+    }
+
+    this._isRefreshing = true;
+    const abortController = new AbortController();
+    const cancelListener = token?.onCancellationRequested?.(() => abortController.abort());
+    try {
+      if (token?.isCancellationRequested) {
+        return;
+      }
+
+      let session: vscode.AuthenticationSession | undefined;
+      try {
+        session = await vscode.authentication.getSession('github', ['repo'], {
+          createIfNone: true,
+        });
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        logger.error('GitHub authentication failed', err);
+        vscode.window.showWarningMessage(`DevDocket GitHub: Authentication failed — ${message}`);
+        return;
+      }
+
+      if (!session || token?.isCancellationRequested) {
+        if (!session) {
+          logger.info('User cancelled GitHub authentication');
+        }
+        return;
+      }
+
+      await this.fetchAndPublish(session.accessToken, true, abortController.signal);
+    } catch (err) {
+      if (err instanceof Error && err.name === 'AbortError' && abortController.signal.aborted && token?.isCancellationRequested) {
+        logger.debug(`${this.label} fetch aborted due to cancellation`);
+      } else {
+        logger.error(`Failed to fetch ${this.label}`, err);
+      }
+    } finally {
+      cancelListener?.dispose();
+      this._isRefreshing = false;
+    }
+  }
+
+  protected async doBackgroundRefresh(): Promise<void> {
+    let session: vscode.AuthenticationSession | undefined;
+    try {
+      session = await vscode.authentication.getSession('github', ['repo'], {
+        createIfNone: false,
+      });
+    } catch (err) {
+      logger.warn('GitHub authentication failed during background refresh', err);
+      return;
+    }
+
+    if (!session) {
+      logger.debug('No GitHub session available for background refresh');
+      return;
+    }
+
+    await this.fetchAndPublish(session.accessToken, false);
+  }
+
+  private async fetchAndPublish(accessToken: string, isUserTriggered: boolean, signal?: AbortSignal): Promise<void> {
     logger.info('Fetching authored PRs...');
     const repos = this.getConfiguredRepos();
     const { prs, failures } = await this.fetchAuthoredPrs(accessToken, repos, signal);
@@ -48,7 +119,7 @@ export class GitHubMyPrsProvider extends BaseGitHubProvider {
       : new Map<string, string>();
 
     const items: DiscoveredItem[] = prs.map((pr) => {
-      const repoName = this.parseRepo(pr);
+      const repoName = parseRepoFromUrls(pr.html_url, pr.repository_url);
       const status = statusMap.get(pr.html_url) ?? 'Open';
       return {
         externalId: `${repoName}#${pr.number}`,
@@ -96,29 +167,14 @@ export class GitHubMyPrsProvider extends BaseGitHubProvider {
     repos: string[],
     signal?: AbortSignal,
   ): Promise<{ prs: GitHubIssue[]; failures: string[] }> {
-    const results: PromiseSettledResult<{ prs: GitHubIssue[]; failed: boolean }>[] = new Array(repos.length);
-    let nextIndex = 0;
-
-    const runWorker = async (): Promise<void> => {
-      while (nextIndex < repos.length) {
-        if (signal?.aborted) {
-          const error = new Error('The operation was aborted.');
-          error.name = 'AbortError';
-          throw error;
-        }
-        const currentIndex = nextIndex++;
-        try {
-          const value = await this.fetchRepoPrs(token, repos[currentIndex], signal);
-          results[currentIndex] = { status: 'fulfilled', value };
-        } catch (reason) {
-          if (reason instanceof Error && reason.name === 'AbortError' && signal?.aborted) { throw reason; }
-          results[currentIndex] = { status: 'rejected', reason: reason as Error };
-        }
+    const results = await runWorkerPoolSettled(repos, async (repo) => {
+      if (signal?.aborted) {
+        const error = new Error('The operation was aborted.');
+        error.name = 'AbortError';
+        throw error;
       }
-    };
-
-    const workerCount = Math.min(3, repos.length);
-    await Promise.all(Array.from({ length: workerCount }, () => runWorker()));
+      return this.fetchRepoPrs(token, repo, signal);
+    }, 3);
 
     const allPrs: GitHubIssue[] = [];
     const failures: string[] = [];
@@ -193,30 +249,22 @@ export class GitHubMyPrsProvider extends BaseGitHubProvider {
       return result;
     }
 
-    let nextIndex = 0;
-    const runWorker = async (): Promise<void> => {
-      while (nextIndex < prsWithApiUrl.length) {
-        if (signal?.aborted) {
-          const error = new Error('The operation was aborted.');
-          error.name = 'AbortError';
-          throw error;
-        }
-        const currentIndex = nextIndex++;
-        const pr = prsWithApiUrl[currentIndex];
-        try {
-          const status = await this.fetchSinglePrStatus(token, pr, signal);
-          if (status) {
-            result.set(pr.html_url, status);
-          }
-        } catch (error) {
-          if (error instanceof Error && error.name === 'AbortError' && signal?.aborted) { throw error; }
-          logger.debug(`Failed to fetch status for PR ${pr.html_url}: ${String(error)}`);
-        }
+    await runWorkerPool(prsWithApiUrl, async (pr) => {
+      if (signal?.aborted) {
+        const error = new Error('The operation was aborted.');
+        error.name = 'AbortError';
+        throw error;
       }
-    };
-
-    const workerCount = Math.min(3, prsWithApiUrl.length);
-    await Promise.all(Array.from({ length: workerCount }, () => runWorker()));
+      try {
+        const status = await this.fetchSinglePrStatus(token, pr, signal);
+        if (status) {
+          result.set(pr.html_url, status);
+        }
+      } catch (error) {
+        if (error instanceof Error && error.name === 'AbortError' && signal?.aborted) { throw error; }
+        logger.debug(`Failed to fetch status for PR ${pr.html_url}: ${String(error)}`);
+      }
+    }, 3);
 
     return result;
   }
@@ -310,9 +358,5 @@ export class GitHubMyPrsProvider extends BaseGitHubProvider {
     }
 
     return 'Waiting on reviews';
-  }
-
-  protected override parseRepo(issue: GitHubIssue): string {
-    return parseRepoFromUrls(issue.html_url, issue.repository_url);
   }
 }

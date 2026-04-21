@@ -1,8 +1,8 @@
 import * as vscode from 'vscode';
-import { combineSignals } from '@devdocket/shared';
+import { BaseProvider, DiscoveredItem, combineSignals, runWorkerPool, runWorkerPoolSettled, safeDecodeComponent, type ResolvedItem } from '@devdocket/shared';
 import { logger } from './logger';
 import { parseRepoFromUrls } from './parseRepo';
-import { BaseGitHubProvider, DiscoveredItem, GitHubIssue, type ResolvedItem } from './baseGithubProvider';
+import { getHeaders, retryWithAuth, throwApiError, parseCanonicalRepo, fetchClosedGitHubItems, type GitHubIssue } from './githubApiHelpers';
 
 interface GitHubSearchResponse {
   items: GitHubIssue[];
@@ -20,14 +20,85 @@ interface TimelineEvent {
  *
  * Uses the GitHub Search API (`review-requested:@me`) to find open PRs.
  */
-export class GitHubPrReviewProvider extends BaseGitHubProvider {
+export class GitHubPrReviewProvider extends BaseProvider {
   readonly id = 'github-pr-reviews';
   readonly label = 'GitHub PR Reviews';
 
   private _cachedCurrentUser: string | undefined;
   private _cachedCurrentUserToken: string | undefined;
 
-  protected async fetchAndPublish(accessToken: string, isUserTriggered: boolean, signal?: AbortSignal): Promise<void> {
+  constructor() {
+    super(new vscode.EventEmitter<DiscoveredItem[]>());
+    this.onBackgroundRefreshError = (error) => {
+      logger.error(`${this.label} refresh failed`, error);
+    };
+  }
+
+  async refresh(token?: vscode.CancellationToken): Promise<void> {
+    if (this._isRefreshing) {
+      return;
+    }
+
+    this._isRefreshing = true;
+    const abortController = new AbortController();
+    const cancelListener = token?.onCancellationRequested?.(() => abortController.abort());
+    try {
+      if (token?.isCancellationRequested) {
+        return;
+      }
+
+      let session: vscode.AuthenticationSession | undefined;
+      try {
+        session = await vscode.authentication.getSession('github', ['repo'], {
+          createIfNone: true,
+        });
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        logger.error('GitHub authentication failed', err);
+        vscode.window.showWarningMessage(`DevDocket GitHub: Authentication failed — ${message}`);
+        return;
+      }
+
+      if (!session || token?.isCancellationRequested) {
+        if (!session) {
+          logger.info('User cancelled GitHub authentication');
+        }
+        return;
+      }
+
+      await this.fetchAndPublish(session.accessToken, true, abortController.signal);
+    } catch (err) {
+      if (err instanceof Error && err.name === 'AbortError' && abortController.signal.aborted && token?.isCancellationRequested) {
+        logger.debug(`${this.label} fetch aborted due to cancellation`);
+      } else {
+        logger.error(`Failed to fetch ${this.label}`, err);
+      }
+    } finally {
+      cancelListener?.dispose();
+      this._isRefreshing = false;
+    }
+  }
+
+  protected async doBackgroundRefresh(): Promise<void> {
+    let session: vscode.AuthenticationSession | undefined;
+    try {
+      session = await vscode.authentication.getSession('github', ['repo'], {
+        createIfNone: false,
+      });
+    } catch (err) {
+      logger.warn('GitHub authentication failed during background refresh', err);
+      return;
+    }
+
+    if (!session) {
+      logger.debug('No GitHub session available for background refresh');
+      return;
+    }
+
+    await this.fetchAndPublish(session.accessToken, false);
+  }
+
+  private async fetchAndPublish(accessToken: string, isUserTriggered: boolean, signal?: AbortSignal): Promise<void> {
     logger.info('Fetching PR review requests...');
     const repos = this.getConfiguredRepos();
     const { prs, failures } = await this.fetchReviewRequestedPrs(accessToken, repos, signal);
@@ -53,7 +124,7 @@ export class GitHubPrReviewProvider extends BaseGitHubProvider {
     }
 
     const items: DiscoveredItem[] = prs.map((pr) => {
-      const repoName = this.parseRepo(pr);
+      const repoName = parseRepoFromUrls(pr.html_url, pr.repository_url);
       const item: DiscoveredItem = {
         externalId: `${repoName}#${pr.number}`,
         title: `#${pr.number}: ${pr.title}`,
@@ -90,27 +161,27 @@ export class GitHubPrReviewProvider extends BaseGitHubProvider {
     const match = url.trim().match(GitHubPrReviewProvider.GITHUB_PR_PATTERN);
     if (!match) { return undefined; }
     const [, rawOwner, rawRepo, numStr] = match;
-    const owner = BaseGitHubProvider.safeDecodeComponent(rawOwner);
-    const repo = BaseGitHubProvider.safeDecodeComponent(rawRepo);
+    const owner = safeDecodeComponent(rawOwner);
+    const repo = safeDecodeComponent(rawRepo);
     const number = parseInt(numStr, 10);
 
     const apiUrl = `https://api.github.com/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/pulls/${number}`;
-    const headers = await this.getHeaders();
+    const headers = await getHeaders();
     const wasAuthenticated = 'Authorization' in headers;
 
     let response = await fetch(apiUrl, { headers, signal });
 
     if (response.status === 404 && !wasAuthenticated && !signal?.aborted) {
-      const retryResponse = await this.retryWithAuth(apiUrl, signal);
+      const retryResponse = await retryWithAuth(apiUrl, signal);
       if (retryResponse) { response = retryResponse; }
     }
 
     if (!response.ok) {
-      this.throwApiError(response, `GitHub PR ${owner}/${repo}#${number}`);
+      throwApiError(response, `GitHub PR ${owner}/${repo}#${number}`);
     }
 
     const data = await response.json() as { title: string; body: string | null; html_url: string };
-    const canonicalRepo = this.parseCanonicalRepo(data.html_url, owner, repo);
+    const canonicalRepo = parseCanonicalRepo(data.html_url, owner, repo);
     return {
       title: `#${number}: ${data.title}`,
       notes: data.body ?? '',
@@ -125,7 +196,7 @@ export class GitHubPrReviewProvider extends BaseGitHubProvider {
    * Check which of the given external IDs correspond to closed/merged GitHub PRs.
    */
   async getClosedItems(externalIds: string[], signal?: AbortSignal): Promise<string[]> {
-    return this.fetchClosedGitHubItems(externalIds, 'pulls', signal);
+    return fetchClosedGitHubItems(externalIds, 'pulls', signal);
   }
 
   private getConfiguredRepos(): string[] {
@@ -171,31 +242,14 @@ export class GitHubPrReviewProvider extends BaseGitHubProvider {
     maxConcurrent: number,
     signal?: AbortSignal,
   ): Promise<PromiseSettledResult<{ prs: GitHubIssue[]; failed: boolean }>[]> {
-    const results: PromiseSettledResult<{ prs: GitHubIssue[]; failed: boolean }>[] = new Array(repos.length);
-    let nextIndex = 0;
-
-    const runWorker = async (): Promise<void> => {
-      while (nextIndex < repos.length) {
-        if (signal?.aborted) {
-          const error = new Error('The operation was aborted.');
-          error.name = 'AbortError';
-          throw error;
-        }
-        const currentIndex = nextIndex++;
-        try {
-          const value = await this.fetchRepoPrReviews(token, repos[currentIndex], signal);
-          results[currentIndex] = { status: 'fulfilled', value };
-        } catch (reason) {
-          if (reason instanceof Error && reason.name === 'AbortError' && signal?.aborted) { throw reason; }
-          results[currentIndex] = { status: 'rejected', reason: reason as Error };
-        }
+    return runWorkerPoolSettled(repos, async (repo) => {
+      if (signal?.aborted) {
+        const error = new Error('The operation was aborted.');
+        error.name = 'AbortError';
+        throw error;
       }
-    };
-
-    const workerCount = Math.min(maxConcurrent, repos.length);
-    await Promise.all(Array.from({ length: workerCount }, () => runWorker()));
-
-    return results;
+      return this.fetchRepoPrReviews(token, repo, signal);
+    }, maxConcurrent);
   }
 
   private async fetchRepoPrReviews(token: string, repo: string, signal?: AbortSignal): Promise<{ prs: GitHubIssue[]; failed: boolean }> {
@@ -255,44 +309,36 @@ export class GitHubPrReviewProvider extends BaseGitHubProvider {
       return result;
     }
 
-    let nextIndex = 0;
-    const runWorker = async (): Promise<void> => {
-      while (nextIndex < prsWithApiUrl.length) {
-        if (signal?.aborted) {
-          const error = new Error('The operation was aborted.');
-          error.name = 'AbortError';
-          throw error;
-        }
-        const currentIndex = nextIndex++;
-        const pr = prsWithApiUrl[currentIndex];
-        try {
-          const response = await fetch(pr.pull_request!.url, {
-            headers: {
-              Authorization: `Bearer ${token}`,
-              Accept: 'application/vnd.github+json',
-              'X-GitHub-Api-Version': '2022-11-28',
-            },
-            signal: combineSignals(signal, 30_000),
-          });
-          if (response.ok) {
-            const data = (await response.json()) as { head?: { sha?: string } };
-            if (data.head?.sha) {
-              result.set(pr.html_url, data.head.sha);
-            }
-          } else {
-            logger.debug(
-              `Failed to fetch head SHA for PR ${pr.html_url}: ${response.status} ${response.statusText}`,
-            );
-          }
-        } catch (error) {
-          if (error instanceof Error && error.name === 'AbortError' && signal?.aborted) { throw error; }
-          logger.debug(`Failed to fetch head SHA for PR ${pr.html_url}: ${String(error)}`);
-        }
+    await runWorkerPool(prsWithApiUrl, async (pr) => {
+      if (signal?.aborted) {
+        const error = new Error('The operation was aborted.');
+        error.name = 'AbortError';
+        throw error;
       }
-    };
-
-    const workerCount = Math.min(3, prsWithApiUrl.length);
-    await Promise.all(Array.from({ length: workerCount }, () => runWorker()));
+      try {
+        const response = await fetch(pr.pull_request!.url, {
+          headers: {
+            Authorization: `Bearer ${token}`,
+            Accept: 'application/vnd.github+json',
+            'X-GitHub-Api-Version': '2022-11-28',
+          },
+          signal: combineSignals(signal, 30_000),
+        });
+        if (response.ok) {
+          const data = (await response.json()) as { head?: { sha?: string } };
+          if (data.head?.sha) {
+            result.set(pr.html_url, data.head.sha);
+          }
+        } else {
+          logger.debug(
+            `Failed to fetch head SHA for PR ${pr.html_url}: ${response.status} ${response.statusText}`,
+          );
+        }
+      } catch (error) {
+        if (error instanceof Error && error.name === 'AbortError' && signal?.aborted) { throw error; }
+        logger.debug(`Failed to fetch head SHA for PR ${pr.html_url}: ${String(error)}`);
+      }
+    }, 3);
 
     return result;
   }
@@ -344,66 +390,54 @@ export class GitHubPrReviewProvider extends BaseGitHubProvider {
   ): Promise<Map<string, string>> {
     const result = new Map<string, string>();
 
-    let nextIndex = 0;
-    const runWorker = async (): Promise<void> => {
-      while (nextIndex < prs.length) {
-        if (signal?.aborted) {
-          const error = new Error('The operation was aborted.');
-          error.name = 'AbortError';
-          throw error;
-        }
-        const currentIdx = nextIndex++;
-        const pr = prs[currentIdx];
-        try {
-          // Only fetches the first page (100 events). For PRs with very extensive
-          // activity the latest review_requested event could be missed — an acceptable
-          // trade-off to limit API calls.
-          const timelineUrl = `${pr.repository_url}/issues/${pr.number}/timeline?per_page=100`;
-          const response = await fetch(timelineUrl, {
-            headers: {
-              Authorization: `Bearer ${token}`,
-              Accept: 'application/vnd.github+json',
-              'X-GitHub-Api-Version': '2022-11-28',
-            },
-            signal: combineSignals(signal, 30_000),
-          });
-          if (response.ok) {
-            const events = (await response.json()) as TimelineEvent[];
-            let latestReRequest: string | undefined;
-            for (const event of events) {
-              if (
-                event.event === 'review_requested' &&
-                event.requested_reviewer?.login?.toLowerCase() === currentUserLogin.toLowerCase() &&
-                event.created_at
-              ) {
-                // Track the maximum timestamp rather than relying on array order
-                if (!latestReRequest || event.created_at > latestReRequest) {
-                  latestReRequest = event.created_at;
-                }
+    await runWorkerPool(prs, async (pr) => {
+      if (signal?.aborted) {
+        const error = new Error('The operation was aborted.');
+        error.name = 'AbortError';
+        throw error;
+      }
+      try {
+        // Only fetches the first page (100 events). For PRs with very extensive
+        // activity the latest review_requested event could be missed — an acceptable
+        // trade-off to limit API calls.
+        const timelineUrl = `${pr.repository_url}/issues/${pr.number}/timeline?per_page=100`;
+        const response = await fetch(timelineUrl, {
+          headers: {
+            Authorization: `Bearer ${token}`,
+            Accept: 'application/vnd.github+json',
+            'X-GitHub-Api-Version': '2022-11-28',
+          },
+          signal: combineSignals(signal, 30_000),
+        });
+        if (response.ok) {
+          const events = (await response.json()) as TimelineEvent[];
+          let latestReRequest: string | undefined;
+          for (const event of events) {
+            if (
+              event.event === 'review_requested' &&
+              event.requested_reviewer?.login?.toLowerCase() === currentUserLogin.toLowerCase() &&
+              event.created_at
+            ) {
+              // Track the maximum timestamp rather than relying on array order
+              if (!latestReRequest || event.created_at > latestReRequest) {
+                latestReRequest = event.created_at;
               }
             }
-            if (latestReRequest) {
-              result.set(pr.html_url, latestReRequest);
-            }
-          } else {
-            logger.debug(
-              `Failed to fetch timeline for PR ${pr.html_url}: ${response.status}`,
-            );
           }
-        } catch (error) {
-          if (error instanceof Error && error.name === 'AbortError' && signal?.aborted) { throw error; }
-          logger.debug(`Failed to fetch timeline for PR ${pr.html_url}: ${String(error)}`);
+          if (latestReRequest) {
+            result.set(pr.html_url, latestReRequest);
+          }
+        } else {
+          logger.debug(
+            `Failed to fetch timeline for PR ${pr.html_url}: ${response.status}`,
+          );
         }
+      } catch (error) {
+        if (error instanceof Error && error.name === 'AbortError' && signal?.aborted) { throw error; }
+        logger.debug(`Failed to fetch timeline for PR ${pr.html_url}: ${String(error)}`);
       }
-    };
-
-    const workerCount = Math.min(3, prs.length);
-    await Promise.all(Array.from({ length: workerCount }, () => runWorker()));
+    }, 3);
 
     return result;
-  }
-
-  protected override parseRepo(issue: GitHubIssue): string {
-    return parseRepoFromUrls(issue.html_url, issue.repository_url);
   }
 }
