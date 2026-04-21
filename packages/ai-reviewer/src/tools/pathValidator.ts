@@ -20,13 +20,13 @@ export function validateWorktreePath(worktreePath: string): string | undefined {
  * - Resolves to a location within the worktree root
  *
  * @param worktreePath The worktree root path (must already be validated via validateWorktreePath)
- * @param filePath The relative file path to validate
+ * @param relativePath The relative path to validate (file or directory)
  * @returns undefined if valid, or an error message string if invalid
  */
-export function validateRelativePath(worktreePath: string, filePath: string): string | undefined {
-  const normalized = path.normalize(filePath);
+export function validateRelativePath(worktreePath: string, relativePath: string): string | undefined {
+  const normalized = path.normalize(relativePath);
   if (normalized === '..' || normalized.startsWith('..' + path.sep) || path.isAbsolute(normalized)) {
-    return 'Path traversal not allowed: filePath must be relative and within the worktree';
+    return 'Path traversal not allowed: path must be relative and within the worktree';
   }
   const resolved = path.resolve(worktreePath, normalized);
   const root = path.resolve(worktreePath);
@@ -41,12 +41,12 @@ export function validateRelativePath(worktreePath: string, filePath: string): st
  * Combines validateWorktreePath and validateRelativePath for convenience.
  *
  * @param worktreePath The worktree root path
- * @param filePath The relative file path to validate
+ * @param relativePath The relative path to validate (file or directory)
  * @returns undefined if valid, or an error message string if invalid
  */
-export function validatePath(worktreePath: string, filePath: string): string | undefined {
+export function validatePath(worktreePath: string, relativePath: string): string | undefined {
   const wtError = validateWorktreePath(worktreePath);
   if (wtError) return wtError;
 
-  return validateRelativePath(worktreePath, filePath);
+  return validateRelativePath(worktreePath, relativePath);
 }
