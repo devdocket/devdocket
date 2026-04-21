@@ -140,5 +140,6 @@ jobs:
 
       - name: Summary
         run: |
-          echo "✅ Weekly code review tracking issue #${{ steps.create-issue.outputs.issue_number }} created and assigned to copilot-swe-agent[bot]"
-          echo "The agent will analyze the codebase and create issues for novel findings"
+          echo "✅ Weekly code review tracking issue #${{ steps.create-issue.outputs.issue_number }} created"
+          echo "ℹ️ Assignment to copilot-swe-agent[bot] was attempted in the previous step"
+          echo "Check the assignment step logs or issue comments to confirm whether the agent was successfully assigned"
