@@ -1,89 +1,41 @@
-import * as fs from 'fs';
 import * as path from 'path';
 import { logger } from '../services/logger';
-import { MAX_STORE_FILE_SIZE } from './limits';
+import { SerializedJsonStore } from './serializedJsonStore';
 
 /**
  * Persists a mapping of providerId → display label so that tree views
  * can show human-friendly group names immediately on startup, before
  * provider extensions have registered.
  */
-export class ProviderLabelCache {
+export class ProviderLabelCache extends SerializedJsonStore {
   private labels = new Map<string, string>();
   private readonly filePath: string;
-  private writeQueue: Promise<void> = Promise.resolve();
 
   constructor(storagePath: string) {
+    super();
     this.filePath = path.join(storagePath, 'provider-labels.json');
   }
 
   /** Load cached labels from disk. Safe to call even if the file does not exist. */
   async load(): Promise<void> {
-    let stats: fs.Stats;
-    try {
-      stats = await fs.promises.stat(this.filePath);
-    } catch (error) {
-      const fsError = error as NodeJS.ErrnoException;
-      if (fsError.code === 'ENOENT') {
-        this.labels.clear();
-        return;
-      }
-      logger.warn(`Failed to stat provider label cache at ${this.filePath}:`, error);
-      throw error;
-    }
-
-    if (!stats.isFile()) {
-      logger.warn(`Provider label cache path is not a regular file: ${this.filePath} — removing`);
-      try {
-        await fs.promises.rm(this.filePath, { recursive: true, force: true });
-      } catch {
-        // Best-effort cleanup
-      }
+    const parsed = await this.readJson(this.filePath);
+    if (parsed === undefined) {
       this.labels.clear();
       return;
     }
 
-    if (stats.size > MAX_STORE_FILE_SIZE) {
-      logger.warn(`Provider label cache exceeds ${MAX_STORE_FILE_SIZE} bytes — resetting to empty`);
-      this.labels.clear();
-      return;
-    }
-
-    let raw: string;
-    try {
-      raw = await fs.promises.readFile(this.filePath, 'utf-8');
-    } catch (error) {
-      const fsError = error as NodeJS.ErrnoException;
-      if (fsError.code === 'ENOENT') {
-        this.labels.clear();
-        return;
-      }
-      logger.warn(`Failed to read provider label cache from ${this.filePath}:`, error);
-      throw error;
-    }
-
-    let data: unknown;
-    try {
-      data = JSON.parse(raw);
-    } catch {
-      logger.warn('Failed to parse provider label cache — backing up and resetting to empty');
-      await this.backupInvalidFile();
-      this.labels.clear();
-      return;
-    }
-
-    if (!data || typeof data !== 'object' || Array.isArray(data)) {
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
       logger.warn('Provider label cache does not contain a valid object — backing up and resetting to empty');
-      await this.backupInvalidFile();
+      await this.backupFile(this.filePath);
       this.labels.clear();
       return;
     }
 
     const nextLabels = new Map<string, string>();
-    for (const [key, value] of Object.entries(data as Record<string, unknown>)) {
+    for (const [key, value] of Object.entries(parsed as Record<string, unknown>)) {
       if (typeof value !== 'string') {
         logger.warn('Provider label cache contains non-string values — backing up and resetting to empty');
-        await this.backupInvalidFile();
+        await this.backupFile(this.filePath);
         this.labels.clear();
         return;
       }
@@ -104,7 +56,7 @@ export class ProviderLabelCache {
   /** Update the cached label for a provider and persist to disk. */
   async set(providerId: string, label: string): Promise<void> {
     if (this.labels.get(providerId) === label) {
-      await this.writeQueue; // Ensure any in-flight writes have settled
+      await this.flush(); // Ensure any in-flight writes have settled
       return;
     }
     const hadPrevious = this.labels.has(providerId);
@@ -112,7 +64,11 @@ export class ProviderLabelCache {
     this.labels.set(providerId, label);
     await this.enqueue(async () => {
       try {
-        await this.save();
+        const obj = Object.create(null) as Record<string, string>;
+        for (const [key, value] of this.labels) {
+          obj[key] = value;
+        }
+        await this.writeJson(this.filePath, obj);
       } catch (error) {
         // Roll back in-memory state so future set() calls retry persistence
         if (this.labels.get(providerId) === label) {
@@ -125,33 +81,5 @@ export class ProviderLabelCache {
         throw error;
       }
     });
-  }
-
-  private enqueue(op: () => Promise<void>): Promise<void> {
-    this.writeQueue = this.writeQueue.then(op, error => {
-      logger.warn('Previous provider label cache write failed; continuing with next queued write.', error);
-      return op();
-    });
-    return this.writeQueue;
-  }
-
-  private async save(): Promise<void> {
-    const obj = Object.create(null) as Record<string, string>;
-    for (const [key, value] of this.labels) {
-      obj[key] = value;
-    }
-    const dir = path.dirname(this.filePath);
-    await fs.promises.mkdir(dir, { recursive: true });
-    await fs.promises.writeFile(this.filePath, JSON.stringify(obj, null, 2), 'utf-8');
-  }
-
-  private async backupInvalidFile(): Promise<void> {
-    try {
-      const backupPath = `${this.filePath}.corrupt.${Date.now()}`;
-      await fs.promises.rename(this.filePath, backupPath);
-      logger.warn(`Backed up invalid provider label cache to ${backupPath}`);
-    } catch {
-      // Best-effort backup
-    }
   }
 }
