@@ -9,7 +9,7 @@ import { logger } from '../services/logger';
 import type { ResolvedItem } from '../api/types';
 import type { ViewRevealer } from '../services/viewRevealer';
 import { isSafeUrl } from '../utils/url';
-import { wrapCommand, handleCommandError } from './commandUtils';
+import { wrapCommand } from './commandUtils';
 
 async function handleCreateItemFromUrl(
   context: vscode.ExtensionContext,
