@@ -293,3 +293,80 @@ See `.squad/orchestration-log/2026-04-20T16-18-00Z-keaton.md` for full triage de
 - All comments posted safely with `--body-file` to avoid shell escaping issues
 - Fenster has 8 routable issues; Keaton has 5 scoping/decision issues
 
+## Issue #304: JSON Stores → globalState Migration Analysis (2026-04-20)
+
+**Status:** COMPLETE — Analysis posted to GitHub, recommendation finalized
+
+### Findings Summary
+
+Conducted full architectural analysis on migrating four JSON file stores (JsonTaskStore, DiscoveredStateStore, ReadStateStore, ProviderLabelCache) to VS Code's globalState API.
+
+#### Infrastructure Audit
+
+- **SerializedJsonStore base class:** 99 lines (write queue serialization, file I/O, corruption recovery)
+- **Per-store overhead:** ~70 lines duplicated (validation, caching, load deduplication)
+- **Total duplication:** ~170 lines of persistence infrastructure across four stores
+
+| Store | Lines | Complexity | Business Logic |
+|-------|-------|-----------|-----------------|
+| JsonTaskStore | 242 | High | WorkItem validation, activity log, rollback |
+| DiscoveredStateStore | 259 | Low | Thin records, multi-version tracking |
+| ReadStateStore | 145 | Low | Set operations, lazy loading |
+| ProviderLabelCache | 86 | Very Low | Key-value cache, fallback-safe |
+
+#### globalState Capability Assessment
+
+✅ **Handles DevDocket's scale:**
+- Typical data volume: ~136 KB (WorkItems + DiscoveredState + ReadState)
+- Platform provides: atomicity, concurrent access handling, corruption recovery
+- Type support: JSON-serializable only (no binary data)
+
+⚠️ **Trade-offs:**
+- Loses file access (debugging/export harder)
+- No built-in validation (application-level required)
+- No TTL/expiry mechanism (cache invalidation at app level)
+- Scope unclear in docs (global vs. workspace)
+
+#### Migration Feasibility by Store
+
+| Store | Migrate? | Rationale |
+|-------|----------|-----------|
+| DiscoveredStateStore | ✅ Yes | Thin cache, high read volume, perfect fit for globalState |
+| ReadStateStore | ✅ Yes | Stateless, infrequent writes, no complex logic |
+| JsonTaskStore | ⚠️ No | Export/debugging critical, complex validation, activity log |
+| ProviderLabelCache | ⚠️ No | Informational cache, value in transparent file access |
+
+#### Testing Impact
+
+- Thin stores (DiscoveredStateStore, ReadStateStore): straightforward globalState mock in vscode.ts
+- No regression expected; test patterns same (just different I/O backend)
+- Effort: 1–2 days for mock + test updates
+- Simplifies tests: globalState mocks simpler than file I/O; no tmpdir cleanup
+
+### Recommendation: Option C — Hybrid Approach
+
+**Phase 1 (1–2 weeks): Migrate thin caches**
+1. Add globalState mock to vscode.ts
+2. Refactor DiscoveredStateStore, ReadStateStore
+3. Update tests
+4. Migrate existing data on startup (with rollback)
+
+**Phase 2 (Post-MVP): Defer JsonTaskStore**
+- Keep JsonTaskStore and ProviderLabelCache as JSON files
+- Revisit only if file I/O pain reported
+- Maintains debuggability and export capability
+
+### Benefits
+
+1. **Reduced code:** Remove 99-line SerializedJsonStore + 60+ lines per-store duplication
+2. **Simplified testing:** globalState mocks eliminate tmpdir dependency
+3. **Maintained transparency:** WorkItems and labels remain as plain JSON
+4. **Platform leverage:** Use VS Code's native SQLite for cache data
+5. **Low risk:** Thin stores first, critical data unchanged
+
+### Records
+
+- **Decision:** `.squad/decisions/inbox/keaton-globalstate-migration.md` (full 14 KB analysis)
+- **GitHub comment:** Posted to issue #304 with summary and implementation roadmap
+- **Risk assessment:** Included migration path for existing data with rollback strategy
+
