@@ -1,6 +1,6 @@
 # Understanding the DevDocket Workflow
 
-DevDocket organizes your work across five views:
+DevDocket organizes your work across five core work-item views:
 
 ## 📥 Inbox
 New items discovered by providers (like GitHub issues or pull requests). Review and either **Accept** to move them to your Queue, or **Dismiss** if they're not relevant.
