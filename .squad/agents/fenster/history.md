@@ -118,6 +118,31 @@ DevDocket is a VS Code extension monorepo for managing work items from multiple 
 - **Sub-group count bug:** Parent node showed filtered child count instead of unfiltered count. Fixed by separating count calculation from filter logic.
 - **Caching pattern:** `normalizeProviderId()` results cached at tree provider instantiation to avoid repeated normalization during refresh cycles. Small but significant performance win.
 - **No API surface changes.** Isolated to `FocusTreeProvider` structure.
+
+### 2026-04-20 — Issue #303 (Refactor BaseGitHubProvider to extend BaseProvider — PR #339)
+
+**Refactor:** Unified provider base class by having `BaseGitHubProvider` extend `BaseProvider` from `@devdocket/shared`.
+- **Problem:** Duplicate health tracking, event emission logic lived in both `BaseProvider` and `BaseGitHubProvider`.
+- **Solution:** Removed 77 lines of duplication. GitHub provider now extends shared base class while maintaining backward compatibility.
+- **Result:** All 1750 tests pass. Event-driven architecture unified across all providers. Non-breaking change — no API surface modifications.
+- **Pattern:** Share provider lifecycle patterns via `@devdocket/shared`. Extension-specific providers inherit core behavior.
+
+### 2026-04-20 — Issue #305 (Split commands.ts monolith into domain modules — PR #341)
+
+**Refactor:** Decomposed `packages/core/src/commands/commands.ts` into 8 focused domain modules.
+- **Modules created:** `workItemLifecycle.ts`, `focusCommands.ts`, `queueCommands.ts`, `sourceCommands.ts`, `editorCommands.ts`, `layoutCommands.ts`, `providerCommands.ts`, `utilityCommands.ts`.
+- **Pattern:** Each module groups 1-2 cohesive command families. Entry point (`commands.ts`) exports barrel or re-exports individual modules. Command registration order preserved.
+- **Result:** 1166 lines organized by domain. All tests pass. No command ID changes — fully backward compatible.
+- **Lesson:** Large monoliths benefit from domain-driven decomposition even before architectural changes. Breaks up cognitive load for reviewers.
+
+### 2026-04-20 — Issue #306 (Scope WorkItemEditorPanel cache to extension lifecycle — PR #340)
+
+**Refactor:** Introduced `PanelManager` class to scope panel cache lifecycle and prevent stale references.
+- **Problem:** Static `Map<string, WorkItemEditorPanel>` survived extension reloads during development, leaking panel references. `clearPanelCache()` existed but only called in tests.
+- **Solution:** Created `PanelManager` owned by `activate()` context. Each extension reload creates fresh manager. All panel creation flows through manager. On deactivation, `PanelManager.dispose()` clears panels.
+- **Backward compat:** Static `open()` and `clearPanelCache()` delegate to current manager. Existing code unchanged.
+- **Result:** 426 tests pass. Panel reuse works across cycles. Proper cleanup on deactivation. Zero memory leak.
+- **Pattern:** Use manager class with dependency injection to scope static class state to extension lifecycle. Preserves static API facade while fixing ownership.
 - **Files changed:** `packages/core/src/views/focusTreeProvider.ts`.
 
 ### 2026-04-21 — Auto-complete activity log integration (PR #322)
@@ -317,3 +342,15 @@ See `.squad/orchestration-log/2026-04-20T16-18-00Z-keaton.md` for full triage de
 - Environment variable patterns for sensitive data (applicable to future credential management).
 - Allowlist validation more secure than denylist (applicable to all input validation).
 - Concurrent signal handling requires careful synchronization (document in concurrency guidelines).
+
+### 2026-04-20 — Issue #303 (BaseGitHubProvider extends BaseProvider)
+
+**Refactored** BaseGitHubProvider to extend BaseProvider from @devdocket/shared instead of duplicating infrastructure.
+- **Removed duplication:** Event emitter lifecycle, refresh timer, concurrency guard, and disposal were all duplicated from BaseProvider. Now inherited.
+- **Inherited _disposed guard:** BaseProvider.dispose() sets _disposed = true and checks it in startPeriodicRefresh and 
+efreshInBackground. GitHub providers now get this protection automatically.
+- **Split refresh paths:** Replaced single doRefresh(isUserTriggered) with separate 
+efresh(token?) (user-triggered) and doBackgroundRefresh() (silent auth). Matches ADO provider pattern.
+- **Re-exports from shared:** DiscoveredItem, Disposable, Event, ResolvedItem now imported from @devdocket/shared instead of being re-declared locally.
+- **No subclass changes needed:** githubProvider.ts, githubPrReviewProvider.ts, and githubMyPrsProvider.ts required zero changes.
+- **Files changed:** packages/github/src/baseGithubProvider.ts only (37 insertions, 77 deletions).
