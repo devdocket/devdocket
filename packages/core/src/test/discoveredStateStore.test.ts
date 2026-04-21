@@ -390,12 +390,12 @@ describe('DiscoveredStateStore', () => {
   // ── Rollback semantics ────────────────────────────────────────────
 
   describe('rollback on write failure', () => {
-    it('setState rolls back cache when writeFile fails for a new item', async () => {
+    it('setState rolls back cache when writeJson fails for a new item', async () => {
       await store.load();
 
-      // Spy on the store's internal writeFile because fs.writeFile from ESM
+      // Spy on the store's internal writeJson because fs.writeFile from ESM
       // fs/promises has non-configurable property descriptors and cannot be spied on.
-      const writeSpy = vi.spyOn(store as any, 'writeFile').mockRejectedValueOnce(new Error('disk full'));
+      const writeSpy = vi.spyOn(store as any, 'writeJson').mockRejectedValueOnce(new Error('disk full'));
 
       await expect(store.setState('gh', 'issue-1', 'unseen')).rejects.toThrow('disk full');
 
@@ -405,10 +405,10 @@ describe('DiscoveredStateStore', () => {
       writeSpy.mockRestore();
     });
 
-    it('setState rolls back cache to previous value when writeFile fails for an existing item', async () => {
+    it('setState rolls back cache to previous value when writeJson fails for an existing item', async () => {
       await store.setState('gh', 'issue-1', 'unseen');
 
-      const writeSpy = vi.spyOn(store as any, 'writeFile').mockRejectedValueOnce(new Error('disk full'));
+      const writeSpy = vi.spyOn(store as any, 'writeJson').mockRejectedValueOnce(new Error('disk full'));
 
       await expect(store.setState('gh', 'issue-1', 'accepted')).rejects.toThrow('disk full');
 
@@ -418,10 +418,10 @@ describe('DiscoveredStateStore', () => {
       writeSpy.mockRestore();
     });
 
-    it('setStates rolls back all items when writeFile fails', async () => {
+    it('setStates rolls back all items when writeJson fails', async () => {
       await store.setState('gh', 'existing', 'unseen');
 
-      const writeSpy = vi.spyOn(store as any, 'writeFile').mockRejectedValueOnce(new Error('I/O error'));
+      const writeSpy = vi.spyOn(store as any, 'writeJson').mockRejectedValueOnce(new Error('I/O error'));
 
       await expect(store.setStates([
         { providerId: 'gh', externalId: 'existing', state: 'accepted' },
@@ -439,7 +439,7 @@ describe('DiscoveredStateStore', () => {
     it('store remains functional after a failed write', async () => {
       await store.load();
 
-      const writeSpy = vi.spyOn(store as any, 'writeFile').mockRejectedValueOnce(new Error('transient'));
+      const writeSpy = vi.spyOn(store as any, 'writeJson').mockRejectedValueOnce(new Error('transient'));
 
       await expect(store.setState('gh', 'issue-1', 'unseen')).rejects.toThrow('transient');
 
@@ -462,7 +462,7 @@ describe('DiscoveredStateStore', () => {
       const listener = vi.fn();
       store.onDidChange(listener);
 
-      const writeSpy = vi.spyOn(store as any, 'writeFile').mockRejectedValueOnce(new Error('fail'));
+      const writeSpy = vi.spyOn(store as any, 'writeJson').mockRejectedValueOnce(new Error('fail'));
 
       await expect(store.setState('gh', 'issue-1', 'unseen')).rejects.toThrow();
 
@@ -477,7 +477,7 @@ describe('DiscoveredStateStore', () => {
       const listener = vi.fn();
       store.onDidChange(listener);
 
-      const writeSpy = vi.spyOn(store as any, 'writeFile').mockRejectedValueOnce(new Error('fail'));
+      const writeSpy = vi.spyOn(store as any, 'writeJson').mockRejectedValueOnce(new Error('fail'));
 
       await expect(store.setStates([
         { providerId: 'gh', externalId: 'a', state: 'unseen' },
@@ -576,7 +576,7 @@ describe('DiscoveredStateStore', () => {
     it('a failed write in a queue does not block subsequent operations', async () => {
       await store.load();
 
-      const writeSpy = vi.spyOn(store as any, 'writeFile')
+      const writeSpy = vi.spyOn(store as any, 'writeJson')
         .mockRejectedValueOnce(new Error('first fails'));
 
       const p1 = store.setState('gh', 'issue-1', 'unseen');

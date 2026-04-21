@@ -51,6 +51,22 @@ DevDocket is a VS Code extension monorepo for managing work items from multiple 
 ## Learnings
 
 ### 2026-04-23 — Issue #335 (Extract shared tree view utilities)
+### Completed Issues
+#333 (storage write-queue consolidation), #330 (git auth env vars — credential exposure fix), #299 (fix double disposal), #323 (watch CI pipelines), #322 (auto-complete activity log), #320 (focus view grouping), #282 (provider state in editor), #281 (clickable title), #276 (auto-track authored PRs), #275 (History→Queue transitions), #273 (tree counts), #265 (auto-complete on close), #255 (provider metadata docs), #250 (group context), #249 (accept-to-focus, pre-shipped), #243 (version resurfacing), #240 (create from URL), #233 (provider health), #232 (clear history), #231 (sources icons), #230 (layout toggle), #229 (emoji removal), #227 (provider labels), #223 (dead code cleanup), #222 (responsive layout), #221 (contextual heading), #219 (source URL link), #217 (editor metadata), #216 (provider description), #215 (dynamic titles), #189 (dismissed fix), #178 (ADO filtering), #158 (markdown injection), #157 (API trust boundary), #156 (URL sanitization), #155 (URL scheme validation), #154 (crypto.randomUUID), #153 (JSON validation), #152 (path traversal fix), #12 (AI PR actions), bulk rename (WorkCenter→DevDocket)
+
+> **Archived Summary (04-17 and earlier):** Early issues including auto-complete v1 with disappearance detection (#265), large PR fix for walkthrough (#261), clickable title (#281), item activity log (#260), AI model selection (#254), keyboard shortcuts (#226), and dynamic title sync via `titleSync.ts` service (#215). Full learnings in `history-archive.md`
+
+## Learnings
+
+### 2026-04-23 — Issue #333 (Consolidate storage write-queue and validation patterns)
+
+**Refactor:** Extracted `SerializedJsonStore` base class and composable field validators to eliminate duplicated plumbing across 5 store classes.
+- **Problem:** All 5 stores in `packages/core/src/storage/` independently implemented write-queue serialization (`writeQueue` + `enqueue()`), JSON read/write helpers (stat, size check, parse, backup), and hand-rolled `typeof` validation checks (80+ lines across stores).
+- **Solution:** Created `SerializedJsonStore` abstract base class (`serializedJsonStore.ts`) with `enqueue()`, `readJson()`, `writeJson()`, `backupFile()`, and `flush()`. Created `validation.ts` with composable validators: `validateObject`, `requiredString`, `optionalString`, `requiredEnum`, `requiredFiniteNumber`, `optionalFiniteNumber`. All 5 stores now extend the base class.
+- **Stores refactored:** `JsonTaskStore`, `DiscoveredStateStore`, `ReadStateStore`, `ProviderLabelCache`, `WatchStore`. Each removed its own write-queue, backup, and writeFile/readFile boilerplate. Validation functions now use `??` chains of composable validators instead of sequential `typeof` checks.
+- **Test impact:** 7 tests in `discoveredStateStore.test.ts` that spied on `store.writeFile` updated to spy on `store.writeJson` (the base class method). All 154 storage tests pass.
+- **Pattern:** When multiple stores share write serialization, extract a `SerializedJsonStore` base class. Stores override their load/save logic but delegate enqueue, JSON I/O, and backup to the base. Validation uses composable functions composed with `??`.
+### 2026-04-23 — Issue #305 (Split commands.ts into domain modules)
 
 **Refactor:** Extracted duplicated tooltip-building and icon-resolution logic from Focus, History, and Queue tree providers into shared `viewUtils.ts`.
 - **`buildWorkItemTooltip(item, title, options?)`:** Unified tooltip builder with configurable `showState`, `timestamp` field, `timestampLabel`, and `notesStyle` options. Replaces three near-identical private `buildTooltip` methods.
