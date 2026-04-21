@@ -2,8 +2,9 @@
  * Executes a worker function over an array of items with controlled concurrency.
  * 
  * Uses a shared index to distribute work across multiple concurrent workers.
- * Workers process items in an indeterminate order but the original input array
- * order is preserved in the results.
+ * Workers process items in an indeterminate order; callers that need ordered
+ * results should use the provided `index` parameter to store outputs in the
+ * correct position.
  * 
  * The worker function is responsible for handling AbortSignal checks and throwing
  * AbortError when appropriate. If any worker throws, the error propagates immediately
@@ -98,7 +99,7 @@ export async function runWorkerPoolSettled<T, R>(
       if (reason instanceof Error && reason.name === 'AbortError') {
         throw reason;
       }
-      results[index] = { status: 'rejected', reason: reason as Error };
+      results[index] = { status: 'rejected', reason };
     }
   }, maxConcurrency);
 
