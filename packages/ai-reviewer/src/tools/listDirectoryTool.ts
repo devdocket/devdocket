@@ -25,7 +25,7 @@ export function registerListDirectoryTool(): vscode.Disposable {
       }
 
       const relDir = dirPath ?? '.';
-      const pathError = validateRelativePath(worktreePath, relDir);
+      const pathError = validateRelativePath(worktreePath, relDir, 'dirPath');
       if (pathError) {
         return new vscode.LanguageModelToolResult([
           new vscode.LanguageModelTextPart(pathError),
