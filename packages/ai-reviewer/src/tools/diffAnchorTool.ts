@@ -1,5 +1,6 @@
 import * as vscode from 'vscode';
 import * as crypto from 'crypto';
+import { errorToString } from './errorUtils';
 
 interface DiffAnchorInput {
   filePath: string;
@@ -27,9 +28,8 @@ export function registerDiffAnchorTool(): vscode.Disposable {
           new vscode.LanguageModelTextPart(hash),
         ]);
       } catch (err) {
-        const msg = err instanceof Error ? err.message : String(err);
         return new vscode.LanguageModelToolResult([
-          new vscode.LanguageModelTextPart(`Error computing diff anchor: ${msg}`),
+          new vscode.LanguageModelTextPart(`Error computing diff anchor: ${errorToString(err)}`),
         ]);
       }
     },

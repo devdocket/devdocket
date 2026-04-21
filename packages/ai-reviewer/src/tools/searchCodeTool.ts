@@ -1,7 +1,7 @@
 import * as vscode from 'vscode';
-import * as path from 'path';
 import { gitExec, GitExecError } from './gitUtils';
-import { validWorktreePaths } from './worktreeRegistry';
+import { validateWorktreePath } from './pathValidator';
+import { errorToString } from './errorUtils';
 
 interface SearchCodeInput {
   worktreePath: string;
@@ -19,9 +19,10 @@ export function registerSearchCodeTool(): vscode.Disposable {
       const { worktreePath, pattern, fileGlob, maxResults } = options.input;
       const limit = Math.min(Math.max(1, maxResults ?? 50), 500);
 
-      if (!validWorktreePaths.has(path.resolve(worktreePath))) {
+      const wtError = validateWorktreePath(worktreePath);
+      if (wtError) {
         return new vscode.LanguageModelToolResult([
-          new vscode.LanguageModelTextPart('Invalid worktree path: not a known managed worktree'),
+          new vscode.LanguageModelTextPart(wtError),
         ]);
       }
 
@@ -53,9 +54,8 @@ export function registerSearchCodeTool(): vscode.Disposable {
             new vscode.LanguageModelTextPart('(no matches found)'),
           ]);
         }
-        const msg = err instanceof Error ? err.message : String(err);
         return new vscode.LanguageModelToolResult([
-          new vscode.LanguageModelTextPart(`Error searching code: ${msg}`),
+          new vscode.LanguageModelTextPart(`Error searching code: ${errorToString(err)}`),
         ]);
       }
     },
