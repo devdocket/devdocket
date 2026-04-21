@@ -2,8 +2,9 @@
  * Executes a worker function over an array of items with controlled concurrency.
  * 
  * Uses a shared index to distribute work across multiple concurrent workers.
- * Workers process items in an indeterminate order but the original input array
- * order is preserved in the results.
+ * Workers process items in an indeterminate order. This function does not collect
+ * or return results; callers that need to preserve input ordering can write to an
+ * external array or map using the provided `index`.
  * 
  * The worker function is responsible for handling AbortSignal checks and throwing
  * AbortError when appropriate. If any worker throws, the error propagates immediately
