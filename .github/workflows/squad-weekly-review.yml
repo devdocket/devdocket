@@ -1,4 +1,4 @@
-name: Weekly Code Review
+name: Squad Weekly Review
 
 on:
   # Run every Monday at 9:00 AM UTC
@@ -7,6 +7,10 @@ on:
 
   # Manual trigger
   workflow_dispatch:
+
+concurrency:
+  group: weekly-code-review
+  cancel-in-progress: true
 
 permissions:
   issues: write
@@ -23,10 +27,11 @@ jobs:
         uses: actions/github-script@v7
         with:
           script: |
+            const dateStr = new Date().toISOString().slice(0, 10);
             const { data: issue } = await github.rest.issues.create({
               owner: context.repo.owner,
               repo: context.repo.repo,
-              title: 'Weekly Expert Codebase Review',
+              title: `Weekly Expert Codebase Review — ${dateStr}`,
               body: `### 🔍 Automated Weekly Code Review
             
             This issue tracks the weekly automated expert review of the codebase.
@@ -71,7 +76,7 @@ jobs:
                 agent_assignment: {
                   target_repo: `${owner}/${repo}`,
                   base_branch: baseBranch,
-                  custom_instructions: 'Read .squad/team.md for team context. Focus on creating separate issues for each novel finding. Before creating an issue, search both open and closed issues to avoid duplicates.',
+                  custom_instructions: 'Read AGENTS.md for project architecture and conventions, and .squad/team.md for team context. Focus on creating separate issues for each novel finding. Before creating an issue, search both open and closed issues to avoid duplicates.',
                   custom_agent: '',
                   model: ''
                 },
@@ -82,13 +87,21 @@ jobs:
               core.info(`Assigned copilot-swe-agent to issue #${issue_number} (base: ${baseBranch})`);
             } catch (err) {
               core.warning(`Assignment with agent_assignment failed: ${err.message}`);
-              // Fallback: try without agent_assignment
+              // Fallback: try without agent_assignment and post instructions as comment
               try {
                 await github.rest.issues.addAssignees({
                   owner, repo, issue_number,
-                  assignees: ['copilot-swe-agent']
+                  assignees: ['copilot-swe-agent[bot]']
                 });
-                core.info(`Fallback assigned copilot-swe-agent to issue #${issue_number}`);
+                
+                // Post custom instructions as a comment since agent_assignment failed
+                const customInstructions = 'Read AGENTS.md for project architecture and conventions, and .squad/team.md for team context. Focus on creating separate issues for each novel finding. Before creating an issue, search both open and closed issues to avoid duplicates.';
+                await github.rest.issues.createComment({
+                  owner, repo, issue_number,
+                  body: `### 🤖 @copilot Instructions\n\n${customInstructions}`
+                });
+                
+                core.info(`Fallback assigned copilot-swe-agent to issue #${issue_number} with instructions comment`);
               } catch (err2) {
                 core.error(`Fallback also failed: ${err2.message}`);
               }
