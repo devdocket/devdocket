@@ -386,10 +386,8 @@ See `.squad/orchestration-log/2026-04-20T16-18-00Z-keaton.md` for full triage de
 
 **Refactored** BaseGitHubProvider to extend BaseProvider from @devdocket/shared instead of duplicating infrastructure.
 - **Removed duplication:** Event emitter lifecycle, refresh timer, concurrency guard, and disposal were all duplicated from BaseProvider. Now inherited.
-- **Inherited _disposed guard:** BaseProvider.dispose() sets _disposed = true and checks it in startPeriodicRefresh and 
-efreshInBackground. GitHub providers now get this protection automatically.
-- **Split refresh paths:** Replaced single doRefresh(isUserTriggered) with separate 
-efresh(token?) (user-triggered) and doBackgroundRefresh() (silent auth). Matches ADO provider pattern.
+- **Inherited _disposed guard:** BaseProvider.dispose() sets _disposed = true and checks it in startPeriodicRefresh and refreshInBackground. GitHub providers now get this protection automatically.
+- **Split refresh paths:** Replaced single doRefresh(isUserTriggered) with separate refresh(token?) (user-triggered) and doBackgroundRefresh() (silent auth). Matches ADO provider pattern.
 - **Re-exports from shared:** DiscoveredItem, Disposable, Event, ResolvedItem now imported from @devdocket/shared instead of being re-declared locally.
 - **No subclass changes needed:** githubProvider.ts, githubPrReviewProvider.ts, and githubMyPrsProvider.ts required zero changes.
 - **Files changed:** packages/github/src/baseGithubProvider.ts only (37 insertions, 77 deletions).
@@ -407,9 +405,8 @@ efresh(token?) (user-triggered) and doBackgroundRefresh() (silent auth). Matches
 ### 2026-04-24 — Issue #336 (Refactor: Extract shared path validation and error utilities in ai-reviewer)
 
 **Refactor:** Extracted duplicated worktree path validation, path traversal prevention, and error extraction into shared utilities in packages/ai-reviewer/src/tools/.
-- **Problem:** All 7 tool files (eadFileTool.ts, listDirectoryTool.ts, getDiffTool.ts, getFileDiffTool.ts, gitLogTool.ts, searchCodeTool.ts, diffAnchorTool.ts) repeated near-identical validation and error handling code (~150 lines of duplication). Worktree validation (alidWorktreePaths.has()) appeared in all 7. Path traversal prevention (
-ormalize + startsWith guard) appeared in 5. Error extraction (rr instanceof Error ? err.message : String(err)) appeared in 7+.
-- **Solution:** Created pathValidator.ts with alidateWorktreePath(), alidateRelativePath(), and alidatePath() (composite). Created rrorUtils.ts with rrorToString(err). All 7 tools now import these shared utilities.
+- **Problem:** All 7 tool files (readFileTool.ts, listDirectoryTool.ts, getDiffTool.ts, getFileDiffTool.ts, gitLogTool.ts, searchCodeTool.ts, diffAnchorTool.ts) repeated near-identical validation and error handling code (~150 lines of duplication). Worktree validation (validWorktreePaths.has()) appeared in all 7. Path traversal prevention (normalize + startsWith guard) appeared in 5. Error extraction (err instanceof Error ? err.message : String(err)) appeared in 7+.
+- **Solution:** Created pathValidator.ts with validateWorktreePath(), validateRelativePath(), and validatePath() (composite). Created errorUtils.ts with errorToString(err). All 7 tools now import these shared utilities.
 - **Files changed:** packages/ai-reviewer/src/tools/pathValidator.ts (new, 51 lines), packages/ai-reviewer/src/tools/errorUtils.ts (new, 7 lines), updated all 7 tool files to use shared utilities.
 - **Impact:** ~150 lines of duplication eliminated. Security-critical path validation logic now centralized in single source of truth. New tools automatically get consistent validation.
 - **Pattern:** When security-critical validation is duplicated, extract it immediately into shared utilities. Behavior-preserving refactors must maintain identical error messages and validation semantics.
