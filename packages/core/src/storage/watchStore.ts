@@ -28,10 +28,15 @@ export class WatchStore extends SerializedJsonStore {
       parsed = await this.readJson(this.filePath, MAX_FILE_SIZE);
     } catch (err) {
       // Swallow non-ENOENT errors (e.g. permission issues) gracefully
-      logger.warn(`Failed to load watches: ${err}`);
+      logger.warn('Failed to load watches', err);
       return [];
     }
-    if (parsed === undefined || !Array.isArray(parsed)) {
+    if (parsed === undefined) {
+      return [];
+    }
+    if (!Array.isArray(parsed)) {
+      logger.warn(`Invalid watches data in ${this.filePath}: expected a JSON array`);
+      await this.backupFile(this.filePath);
       return [];
     }
     // Basic validation: each entry must have identifier and status
