@@ -127,7 +127,7 @@ export async function showProviderHealthQuickPick(providerRegistry: ProviderRegi
           await vscode.commands.executeCommand('devdocket.refresh');
         }
       } else {
-        vscode.window.showInformationMessage(`${provider.label} is ${health.status}.`);
+        void vscode.window.showInformationMessage(`${provider.label} is ${health.status}.`);
       }
     }
   }
