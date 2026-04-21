@@ -1,5 +1,5 @@
 import * as vscode from 'vscode';
-import { isValidGitHubRepo } from '@devdocket/shared';
+import { isValidGitHubRepo, runWorkerPoolSettled } from '@devdocket/shared';
 import { logger } from './logger';
 
 export interface GitHubIssue {
@@ -107,46 +107,38 @@ export async function fetchClosedGitHubItems(
 
   if (parsed.length === 0) { return []; }
 
-  // Track which IDs are closed; use a Set so worker order doesn't affect results
-  const closedSet = new Set<string>();
-  let nextIndex = 0;
-
-  const runWorker = async (): Promise<void> => {
-    while (nextIndex < parsed.length) {
-      if (signal?.aborted) { break; }
-      const currentIndex = nextIndex++;
-      const item = parsed[currentIndex];
-      try {
-        const response = await fetch(
-          `https://api.github.com/repos/${encodeURIComponent(item.owner)}/${encodeURIComponent(item.repoName)}/${apiType}/${item.number}`,
-          {
-            headers: {
-              Authorization: `Bearer ${token}`,
-              Accept: 'application/vnd.github+json',
-              'User-Agent': 'DevDocket-VSCode',
-              'X-GitHub-Api-Version': '2022-11-28',
-            },
-            signal,
-          },
-        );
-        if (response.ok) {
-          const data = await response.json() as { state?: string };
-          if (data.state === 'closed') {
-            closedSet.add(item.id);
-          }
-        } else {
-          logger.debug(`Failed to check ${apiType} ${item.id}: ${response.status}`);
-        }
-      } catch (err) {
-        if (signal?.aborted) { break; }
-        logger.debug(`Failed to check ${apiType} ${item.id}: ${String(err)}`);
+  const results = await runWorkerPoolSettled(
+    parsed,
+    async (item) => {
+      if (signal?.aborted) {
+        const error = new Error('The operation was aborted.');
+        error.name = 'AbortError';
+        throw error;
       }
-    }
-  };
+      const response = await fetch(
+        `https://api.github.com/repos/${encodeURIComponent(item.owner)}/${encodeURIComponent(item.repoName)}/${apiType}/${item.number}`,
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+            Accept: 'application/vnd.github+json',
+            'User-Agent': 'DevDocket-VSCode',
+            'X-GitHub-Api-Version': '2022-11-28',
+          },
+          signal,
+        },
+      );
+      if (!response.ok) {
+        logger.debug(`Failed to check ${apiType} ${item.id}: ${response.status}`);
+        return null;
+      }
+      const data = await response.json() as { state?: string };
+      return data.state === 'closed' ? item.id : null;
+    },
+    5, // maxConcurrency
+  );
 
-  const workerCount = Math.min(5, parsed.length);
-  await Promise.all(Array.from({ length: workerCount }, () => runWorker()));
-
-  // Return in input order for deterministic results
-  return parsed.filter(p => closedSet.has(p.id)).map(p => p.id);
+  // Filter out nulls and errors, keep only the closed IDs
+  return results
+    .filter(r => r.status === 'fulfilled' && r.value !== null)
+    .map(r => (r as PromiseFulfilledResult<string | null>).value as string);
 }
