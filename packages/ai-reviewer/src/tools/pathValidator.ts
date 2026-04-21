@@ -35,7 +35,9 @@ export function validateRelativePath(
   }
   const resolved = path.resolve(worktreePath, normalized);
   const root = path.resolve(worktreePath);
-  if (!resolved.startsWith(root + path.sep) && resolved !== root) {
+  // Use path.relative to check containment - handles filesystem root edge case
+  const rel = path.relative(root, resolved);
+  if (rel.startsWith('..' + path.sep) || rel === '..' || path.isAbsolute(rel)) {
     return 'Path traversal not allowed: resolved path escapes the worktree';
   }
   return undefined;
