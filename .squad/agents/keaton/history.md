@@ -24,7 +24,7 @@ Key files:
 
 ## Learnings
 
-### 2025-01-09 — Issue #342: Command Registration Architecture Analysis
+### 2026-04-21 — Issue #342: Command Registration Architecture Analysis
 
 **Status:** COMPLETE — Analysis posted to GitHub, decision documented
 
