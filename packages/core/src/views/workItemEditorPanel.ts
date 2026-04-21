@@ -13,6 +13,7 @@ import { isSafeUrl } from '../utils/url';
 export class PanelManager {
   /** @internal Used by WorkItemEditorPanel — not part of public API. */
   readonly openPanels = new Map<string, WorkItemEditorPanel>();
+  private disposed = false;
 
   /** Dispose all tracked panels and clear the cache. */
   clearPanelCache(): void {
@@ -24,6 +25,8 @@ export class PanelManager {
   }
 
   dispose(): void {
+    if (this.disposed) { return; }
+    this.disposed = true;
     this.clearPanelCache();
   }
 }
@@ -35,7 +38,7 @@ export class WorkItemEditorPanel {
   private readonly workGraph: WorkGraph;
   private readonly providerRegistry: ProviderRegistry;
   private readonly itemId: string;
-  private readonly panelCache: PanelManager;
+  private readonly panelManager: PanelManager;
   private disposed = false;
   private debounceTimer: ReturnType<typeof setTimeout> | undefined;
   private pendingData: Record<string, string> | undefined;
@@ -93,14 +96,14 @@ export class WorkItemEditorPanel {
     workGraph: WorkGraph,
     providerRegistry: ProviderRegistry,
     itemId: string,
-    panelCache: PanelManager,
+    panelManager: PanelManager,
     private providerLabel?: string,
   ) {
     this.panel = panel;
     this.workGraph = workGraph;
     this.providerRegistry = providerRegistry;
     this.itemId = itemId;
-    this.panelCache = panelCache;
+    this.panelManager = panelManager;
 
     this.update();
 
@@ -144,7 +147,7 @@ export class WorkItemEditorPanel {
     this.panel.onDidDispose(() => {
       if (!this.disposed) {
         this.disposed = true;
-        this.panelCache.openPanels.delete(this.itemId);
+        this.panelManager.openPanels.delete(this.itemId);
         if (this.debounceTimer) {
           clearTimeout(this.debounceTimer);
           this.debounceTimer = undefined;
@@ -248,7 +251,7 @@ export class WorkItemEditorPanel {
   dispose(): void {
     if (!this.disposed) {
       this.disposed = true;
-      this.panelCache.openPanels.delete(this.itemId);
+      this.panelManager.openPanels.delete(this.itemId);
       if (this.debounceTimer) {
         clearTimeout(this.debounceTimer);
         this.debounceTimer = undefined;

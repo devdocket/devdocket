@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import * as vscode from 'vscode';
 import { EventEmitter, ViewColumn, window } from 'vscode';
-import { WorkItemEditorPanel } from '../views/workItemEditorPanel';
+import { WorkItemEditorPanel, PanelManager } from '../views/workItemEditorPanel';
 import { WorkGraph } from '../services/workGraph';
 import { WorkItem, WorkItemState } from '../models/workItem';
 import { ITaskStore } from '../storage/taskStore';

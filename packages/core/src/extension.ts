@@ -419,6 +419,10 @@ export async function activate(context: vscode.ExtensionContext): Promise<DevDoc
   const panelManager = new PanelManager();
   WorkItemEditorPanel.setPanelManager(panelManager);
 
+  // panelManager must be first: its dispose() flushes pending saves via
+  // WorkGraph, which must still be alive at that point. VS Code disposes
+  // subscriptions in reverse order, so placing it first ensures it is
+  // disposed last.
   context.subscriptions.push(
     panelManager,
     ...Object.values(views),
