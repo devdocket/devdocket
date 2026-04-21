@@ -28,7 +28,11 @@
     "onCommand:devdocket.dismissAllCompletedWatches",
     "onCommand:devdocket.openWatchUrl",
     "onCommand:devdocket.showWatchesQuickPick",
-    "onCommand:devdocket.addActivity"
+    "onCommand:devdocket.addActivity",
+    "onCommand:devdocket.createItem",
+    "onCommand:devdocket.acceptToFocus",
+    "onCommand:devdocket.acceptToFocusFromInbox",
+    "onCommand:devdocket.completeItem"
   ],
   "main": "./dist/extension.js",
   "contributes": {
