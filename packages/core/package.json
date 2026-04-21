@@ -32,6 +32,47 @@
   ],
   "main": "./dist/extension.js",
   "contributes": {
+    "walkthroughs": [
+      {
+        "id": "devdocket.gettingStarted",
+        "title": "Get Started with DevDocket",
+        "description": "Learn how to manage your work items across Inbox, Queue, Focus, and History",
+        "steps": [
+          {
+            "id": "createFirstItem",
+            "title": "Create Your First Work Item",
+            "description": "Start by creating a manual work item to track your work.\n[Create Work Item](command:devdocket.createItem)",
+            "media": {
+              "markdown": "media/walkthroughs/create-item.md"
+            }
+          },
+          {
+            "id": "understandWorkflow",
+            "title": "Understand the Workflow",
+            "description": "Learn how items flow through Inbox → Queue → Focus → History.",
+            "media": {
+              "markdown": "media/walkthroughs/workflow.md"
+            }
+          },
+          {
+            "id": "connectProvider",
+            "title": "Connect a Provider",
+            "description": "Automatically discover work from GitHub, Azure DevOps, and more.\n[Open Extensions](command:workbench.view.extensions)",
+            "media": {
+              "markdown": "media/walkthroughs/providers.md"
+            }
+          },
+          {
+            "id": "focusOnWork",
+            "title": "Focus on Active Work",
+            "description": "Move items to Focus and complete them when done.\n[Open Queue](command:devdocket.queue.focus)",
+            "media": {
+              "markdown": "media/walkthroughs/focus.md"
+            }
+          }
+        ]
+      }
+    ],
     "configuration": {
       "title": "DevDocket",
       "properties": {
