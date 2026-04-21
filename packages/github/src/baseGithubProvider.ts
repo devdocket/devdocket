@@ -1,5 +1,5 @@
 import * as vscode from 'vscode';
-import { BaseProvider, type DiscoveredItem, type ResolvedItem, type DevDocketProvider, isValidGitHubRepo, combineSignals, runWorkerPool } from '@devdocket/shared';
+import { BaseProvider, type DiscoveredItem, type ResolvedItem, type DevDocketProvider, isValidGitHubRepo, runWorkerPool } from '@devdocket/shared';
 import { logger } from './logger';
 
 export type { DiscoveredItem, ResolvedItem };

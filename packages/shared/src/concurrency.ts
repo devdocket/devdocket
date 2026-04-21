@@ -95,7 +95,7 @@ export async function runWorkerPoolSettled<T, R>(
       if (reason instanceof Error && reason.name === 'AbortError') {
         throw reason;
       }
-      results[index] = { status: 'rejected', reason: reason as Error };
+      results[index] = { status: 'rejected', reason };
     }
   }, maxConcurrency);
 
