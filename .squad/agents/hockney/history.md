@@ -132,3 +132,16 @@ DevDocket is a VS Code extension monorepo for managing work items. Packages: `co
 **Results:** All 1942 tests passing. Full regression coverage achieved.
 
 **Pattern:** Writing tests in parallel with Fenster's implementation work enabled rapid feedback and confidence in security-critical code paths.
+
+### 2026-04-22 — PR #340 PanelManager Lifecycle Tests (Issue #306)
+
+**5 new tests** in `packages/core/src/test/workItemEditorPanel.test.ts` covering the PanelManager lifecycle introduced in PR #340:
+1. `setPanelManager` scopes panels to the new manager — panels opened under manager A are invisible to manager B
+2. `PanelManager.dispose()` clears all tracked panels and disposes their webviews
+3. Stale panels from a previous manager don't leak into a new manager
+4. `PanelManager.dispose()` is idempotent (safe to call twice)
+5. `clearPanelCache()` disposes panels without retiring the manager (can reopen after clearing)
+
+**Key pattern:** Tested the static `setPanelManager()` / `PanelManager` contract by creating multiple manager instances and verifying panel isolation across them. The `openPanels` map on `PanelManager` is `readonly` public, which made assertions straightforward.
+
+**Results:** All 1963 tests passing across all packages.
