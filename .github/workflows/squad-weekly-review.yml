@@ -137,6 +137,10 @@ jobs:
 
       - name: Summary
         run: |
-          echo "✅ Weekly code review tracking issue #${{ steps.create-issue.outputs.issue_number }} created"
+          if [ "${{ steps.create-issue.outputs.skipped }}" = "true" ]; then
+            echo "ℹ️ Weekly code review tracking issue #${{ steps.create-issue.outputs.issue_number }} already existed and was reused"
+          else
+            echo "✅ Weekly code review tracking issue #${{ steps.create-issue.outputs.issue_number }} created"
+          fi
           echo "ℹ️ Assignment to copilot-swe-agent[bot] was attempted in the previous step"
           echo "Check the assignment step logs or issue comments to confirm whether the agent was successfully assigned"
