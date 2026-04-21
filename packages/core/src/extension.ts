@@ -19,6 +19,7 @@ import { SourcesTreeProvider } from './views/sourcesTreeProvider';
 import { HistoryTreeProvider } from './views/historyTreeProvider';
 import { WatchesTreeProvider } from './views/watchesTreeProvider';
 import { WatchesStatusBar } from './views/watchesStatusBar';
+import { WorkItemEditorPanel, PanelManager } from './views/workItemEditorPanel';
 import { registerCommands } from './commands/commands';
 import { isSafeUrl } from './utils/url';
 import { ViewRevealer } from './services/viewRevealer';
@@ -414,7 +415,16 @@ export async function activate(context: vscode.ExtensionContext): Promise<DevDoc
     logger.error('Failed to load persisted watches', err);
   });
 
+  // Scope panel cache to extension lifecycle
+  const panelManager = new PanelManager();
+  WorkItemEditorPanel.setPanelManager(panelManager);
+
+  // panelManager must be first: its dispose() flushes pending saves via
+  // WorkGraph, which must still be alive at that point. VS Code disposes
+  // subscriptions in array order, so placing it first ensures it runs
+  // before WorkGraph is disposed.
   context.subscriptions.push(
+    panelManager,
     ...Object.values(views),
     ...viewDisposables,
     ...eventDisposables,
