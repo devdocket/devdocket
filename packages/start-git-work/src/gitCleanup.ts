@@ -4,6 +4,7 @@ import * as fs from 'fs/promises';
 import { execFile } from 'child_process';
 import { promisify } from 'util';
 import { logger } from './logger';
+import type { WorkItem, ActivityLogEntry, ActivityType } from '@devdocket/shared';
 
 const execFileAsync = promisify(execFile);
 
@@ -14,18 +15,6 @@ async function pathExists(p: string): Promise<boolean> {
   } catch {
     return false;
   }
-}
-
-// Re-declared locally — start-git-work cannot import core types directly.
-interface ActivityLogEntry {
-  timestamp: number;
-  type: string;
-  detail?: string;
-}
-
-interface WorkItem {
-  id: string;
-  activityLog?: ActivityLogEntry[];
 }
 
 /** Structured data stored in the detail field of a 'work-started' activity entry. */
@@ -147,7 +136,7 @@ async function checkCleanupState(item: WorkItem): Promise<CleanupState | undefin
  */
 export async function promptGitCleanup(
   item: WorkItem,
-  addActivity: (itemId: string, type: string, detail?: string) => Promise<void>,
+  addActivity: (itemId: string, type: ActivityType, detail?: string) => Promise<void>,
 ): Promise<void> {
   const state = await checkCleanupState(item);
   if (!state) {

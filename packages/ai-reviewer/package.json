@@ -151,6 +151,9 @@
     "lint": "eslint src",
     "test": "vitest run"
   },
+  "dependencies": {
+    "@devdocket/shared": "*"
+  },
   "devDependencies": {
     "@types/node": "^20.11.0",
     "@types/vscode": "^1.96.0",

@@ -1,39 +1,8 @@
 import * as vscode from 'vscode';
-import { isValidGitHubRepo, type ResolvedItem } from '@devdocket/shared';
+import { isValidGitHubRepo, type ResolvedItem, type DevDocketProvider, type DiscoveredItem } from '@devdocket/shared';
 import { logger } from './logger';
 
-export type { ResolvedItem };
-
-// Re-declared to match core API contract — separate extension cannot import core types directly
-export interface Disposable {
-  dispose(): void;
-}
-
-// Re-declared to match core API contract — separate extension cannot import core types directly
-export interface Event<T> {
-  (listener: (e: T) => void): Disposable;
-}
-
-export interface DiscoveredItem {
-  externalId: string;
-  title: string;
-  description?: string;
-  url?: string;
-  group?: string;
-  reason?: string;
-  state?: string;
-  version?: string;
-  resurfaceVersion?: string;
-}
-
-export interface DevDocketProvider {
-  readonly id: string;
-  readonly label: string;
-  readonly onDidDiscoverItems: Event<DiscoveredItem[]>;
-  refresh(token?: vscode.CancellationToken): Promise<void>;
-  resolveUrl?(url: string, signal?: AbortSignal): Promise<ResolvedItem | undefined>;
-  getClosedItems?(externalIds: string[], signal?: AbortSignal): Promise<string[]>;
-}
+export type { ResolvedItem, DiscoveredItem };
 
 export interface GitHubIssue {
   number: number;
