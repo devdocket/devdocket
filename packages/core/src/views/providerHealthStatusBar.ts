@@ -2,6 +2,17 @@ import * as vscode from 'vscode';
 import { ProviderRegistry } from '../services/providerRegistry';
 
 /**
+ * Sanitizes error messages for display by removing newlines and truncating.
+ */
+function sanitizeError(error: string, maxLength = 100): string {
+  // Replace all newlines/carriage returns with spaces
+  const singleLine = error.replace(/[\r\n]+/g, ' ');
+  // Trim and truncate if needed
+  const trimmed = singleLine.trim();
+  return trimmed.length > maxLength ? trimmed.substring(0, maxLength) + '…' : trimmed;
+}
+
+/**
  * Status bar item that shows a warning when any provider is unhealthy.
  * Click to open quick-pick with provider health details.
  */
@@ -103,7 +114,7 @@ export async function showProviderHealthQuickPick(providerRegistry: ProviderRegi
     
     let description = health.status;
     if (health.lastError) {
-      description = `${health.status} — ${health.lastError}`;
+      description = `${health.status} — ${sanitizeError(health.lastError)}`;
     }
     
     return {
@@ -126,7 +137,7 @@ export async function showProviderHealthQuickPick(providerRegistry: ProviderRegi
       // Show detailed message based on health status
       if (health.status === 'unhealthy' && health.lastError) {
         const action = await vscode.window.showWarningMessage(
-          `${provider.label} is unhealthy: ${health.lastError}`,
+          `${provider.label} is unhealthy: ${sanitizeError(health.lastError, 200)}`,
           'Refresh',
         );
         
