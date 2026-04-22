@@ -28,6 +28,7 @@
     "onCommand:devdocket.dismissAllCompletedWatches",
     "onCommand:devdocket.openWatchUrl",
     "onCommand:devdocket.showWatchesQuickPick",
+    "onCommand:devdocket.showProviderHealthQuickPick",
     "onCommand:devdocket.addActivity",
     "onCommand:devdocket.createItem",
     "onCommand:devdocket.acceptToFocus",
@@ -506,6 +507,11 @@
         "title": "Dismiss All Completed",
         "category": "DevDocket",
         "icon": "$(clear-all)"
+      },
+      {
+        "command": "devdocket.showProviderHealthQuickPick",
+        "title": "Show Provider Health",
+        "category": "DevDocket"
       },
       {
         "command": "devdocket.openWatchUrl",
