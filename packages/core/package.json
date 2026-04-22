@@ -28,10 +28,67 @@
     "onCommand:devdocket.dismissAllCompletedWatches",
     "onCommand:devdocket.openWatchUrl",
     "onCommand:devdocket.showWatchesQuickPick",
-    "onCommand:devdocket.addActivity"
+    "onCommand:devdocket.addActivity",
+    "onCommand:devdocket.createItem",
+    "onCommand:devdocket.acceptToFocus",
+    "onCommand:devdocket.acceptToFocusFromInbox",
+    "onCommand:devdocket.completeItem"
   ],
   "main": "./dist/extension.js",
   "contributes": {
+    "walkthroughs": [
+      {
+        "id": "devdocket.gettingStarted",
+        "title": "Get Started with DevDocket",
+        "description": "Learn how to manage your work items across Inbox, Queue, Focus, and History",
+        "steps": [
+          {
+            "id": "createFirstItem",
+            "title": "Create Your First Work Item",
+            "description": "Start by creating a manual work item to track your work.",
+            "media": {
+              "markdown": "media/walkthroughs/create-item.md"
+            },
+            "completionEvents": [
+              "onCommand:devdocket.createItem"
+            ]
+          },
+          {
+            "id": "understandWorkflow",
+            "title": "Understand the Workflow",
+            "description": "Learn how items flow through Inbox → Queue → Focus → History.",
+            "media": {
+              "markdown": "media/walkthroughs/workflow.md"
+            }
+          },
+          {
+            "id": "connectProvider",
+            "title": "Connect a Provider",
+            "description": "Automatically discover work from GitHub, Azure DevOps, and more.",
+            "media": {
+              "markdown": "media/walkthroughs/providers.md"
+            },
+            "completionEvents": [
+              "extensionInstalled:mthalman.devdocket-github",
+              "extensionInstalled:mthalman.devdocket-ado"
+            ]
+          },
+          {
+            "id": "focusOnWork",
+            "title": "Focus on Active Work",
+            "description": "Move items to Focus and complete them when done.",
+            "media": {
+              "markdown": "media/walkthroughs/focus.md"
+            },
+            "completionEvents": [
+              "onCommand:devdocket.acceptToFocus",
+              "onCommand:devdocket.acceptToFocusFromInbox",
+              "onCommand:devdocket.completeItem"
+            ]
+          }
+        ]
+      }
+    ],
     "configuration": {
       "title": "DevDocket",
       "properties": {
