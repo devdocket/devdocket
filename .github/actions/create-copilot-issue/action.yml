@@ -64,14 +64,19 @@ runs:
           const dedupLabels = process.env.INPUT_DEDUP_LABELS;
           const dedupTitle = process.env.INPUT_DEDUP_TITLE;
 
+          // Escape values interpolated into GitHub search quoted qualifiers
+          function escapeSearchValue(value) {
+            return String(value).replace(/[\r\n]+/g, ' ').trim().replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+          }
+
           // Use search API for dedup to avoid pagination limits of listForRepo
           const labels = dedupLabels.split(',').map(l => l.trim()).filter(Boolean);
           if (labels.length === 0) {
             core.setFailed('dedup-labels resolved to an empty list — at least one label is required');
             return;
           }
-          const labelQuery = labels.map(l => `label:"${l}"`).join(' ');
-          const titleQuery = dedupTitle ? `"${dedupTitle}" in:title` : '';
+          const labelQuery = labels.map(l => `label:"${escapeSearchValue(l)}"`).join(' ');
+          const titleQuery = dedupTitle ? `"${escapeSearchValue(dedupTitle)}" in:title` : '';
           const q = `repo:${context.repo.owner}/${context.repo.repo} is:issue is:open ${labelQuery} ${titleQuery}`.trim();
 
           const { data: searchResults } = await github.rest.search.issuesAndPullRequests({
