@@ -20,127 +20,53 @@ jobs:
   expert-review:
     runs-on: ubuntu-latest
     steps:
+      - uses: actions/checkout@v4
 
-      - name: Create tracking issue for weekly review
-        id: create-issue
+      - name: Build issue body
+        id: build-body
         uses: actions/github-script@v7
         with:
           script: |
             const dateStr = new Date().toISOString().slice(0, 10);
-            const title = `Weekly Expert Codebase Review — ${dateStr}`;
 
-            // Use the stable title/date as the idempotency key so label edits/removals do not create duplicates.
-            // Use search scoped to issues so pull requests are excluded from duplicate detection.
-            const { data: searchResults } = await github.rest.search.issuesAndPullRequests({
-              q: `repo:${context.repo.owner}/${context.repo.repo} is:issue is:open "${title}" in:title`,
-              per_page: 100
-            });
-            const duplicate = searchResults.items.find(item => !item.pull_request && item.title === title);
-            if (duplicate) {
-              core.info(`Tracking issue already exists: #${duplicate.number} — skipping creation`);
-              core.setOutput('issue_number', duplicate.number);
-              core.setOutput('skipped', 'true');
-              return duplicate.number;
-            }
+            const body = [
+              '### 🔍 Automated Weekly Code Review',
+              '',
+              'This issue tracks the weekly automated expert review of the codebase.',
+              '',
+              '**Review Scope:**',
+              '- Implementation patterns and architectural decisions',
+              '- Resource lifecycle and API correctness',
+              '- Product decisions and UX model',
+              '- VS Code extension best practices',
+              '',
+              '**Instructions for the Copilot coding agent (`copilot-swe-agent[bot]`):**',
+              '',
+              "First, review the latest VS Code extension API documentation (https://code.visualstudio.com/api) to understand the full set of platform capabilities available. Then, act as a senior VS Code extension developer reviewing this codebase for the first time. Identify concrete areas where you disagree with the implementation approach or product decisions — not style nits, but structural decisions that create real maintenance burden, correctness risks, or violate VS Code extension best practices. Before reporting a finding, check the GitHub issue tracker (open and closed) to see if it's already been filed. Skip anything already tracked. For each finding: name the pattern/decision, point to specific files, explain the concrete downside, describe what you'd do instead. Focus areas: implementation (resource lifecycle, API correctness, storage, code organization, platform API usage) and product (feature set, complexity, workflows, missing capabilities, UX model vs VS Code conventions). Skip linting-level concerns, naming preferences, and anything working fine.",
+              '',
+              '**Note:** Issue de-duplication and per-finding issue creation are handled entirely by the agent — the workflow only creates this tracking issue and assigns it.'
+            ].join('\n');
 
-            const { data: issue } = await github.rest.issues.create({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              title,
-              body: [
-                '### 🔍 Automated Weekly Code Review',
-                '',
-                'This issue tracks the weekly automated expert review of the codebase.',
-                '',
-                '**Review Scope:**',
-                '- Implementation patterns and architectural decisions',
-                '- Resource lifecycle and API correctness',
-                '- Product decisions and UX model',
-                '- VS Code extension best practices',
-                '',
-                '**Instructions for the Copilot coding agent (`copilot-swe-agent[bot]`):**',
-                '',
-                "First, review the latest VS Code extension API documentation (https://code.visualstudio.com/api) to understand the full set of platform capabilities available. Then, act as a senior VS Code extension developer reviewing this codebase for the first time. Identify concrete areas where you disagree with the implementation approach or product decisions — not style nits, but structural decisions that create real maintenance burden, correctness risks, or violate VS Code extension best practices. Before reporting a finding, check the GitHub issue tracker (open and closed) to see if it's already been filed. Skip anything already tracked. For each finding: name the pattern/decision, point to specific files, explain the concrete downside, describe what you'd do instead. Focus areas: implementation (resource lifecycle, API correctness, storage, code organization, platform API usage) and product (feature set, complexity, workflows, missing capabilities, UX model vs VS Code conventions). Skip linting-level concerns, naming preferences, and anything working fine.",
-                '',
-                '**Note:** Issue de-duplication and per-finding issue creation are handled entirely by the agent — the workflow only creates this tracking issue and assigns it.'
-              ].join('\n'),
-              labels: ['weekly-review', 'go:needs-research']
-            });
-            
-            core.setOutput('issue_number', issue.number);
-            core.info(`Created tracking issue #${issue.number}`);
-            return issue.number;
+            core.setOutput('body', body);
+            core.setOutput('title', `Weekly Expert Codebase Review — ${dateStr}`);
 
-      - name: Assign copilot-swe-agent[bot] to tracking issue
-        uses: actions/github-script@v7
+      - name: Create issue and assign Copilot agent
+        id: create-issue
+        uses: ./.github/actions/create-copilot-issue
         with:
-          github-token: ${{ secrets.COPILOT_ASSIGN_TOKEN || secrets.GITHUB_TOKEN }}
-          script: |
-            const owner = context.repo.owner;
-            const repo = context.repo.repo;
-            const issue_number = ${{ steps.create-issue.outputs.issue_number }};
-
-            const customInstructions = 'Read AGENTS.md for project architecture and conventions, and .squad/team.md for team context. Focus on creating separate issues for each novel finding. Before creating an issue, search both open and closed issues to avoid duplicates.';
-
-            // Get the default branch name
-            const { data: repoData } = await github.rest.repos.get({ owner, repo });
-            const baseBranch = repoData.default_branch;
-
-            try {
-              await github.request('POST /repos/{owner}/{repo}/issues/{issue_number}/assignees', {
-                owner,
-                repo,
-                issue_number,
-                assignees: ['copilot-swe-agent[bot]'],
-                agent_assignment: {
-                  target_repo: `${owner}/${repo}`,
-                  base_branch: baseBranch,
-                  custom_instructions: customInstructions,
-                  custom_agent: '',
-                  model: ''
-                },
-                headers: {
-                  'X-GitHub-Api-Version': '2022-11-28'
-                }
-              });
-              core.info(`Assigned copilot-swe-agent[bot] to issue #${issue_number} (base: ${baseBranch})`);
-            } catch (err) {
-              core.warning(`Assignment with agent_assignment failed: ${String(err)}`);
-              
-              // Try fallback assignment without agent_assignment
-              let fallbackSucceeded = false;
-              try {
-                await github.rest.issues.addAssignees({
-                  owner, repo, issue_number,
-                  assignees: ['copilot-swe-agent[bot]']
-                });
-                core.info(`Fallback assigned copilot-swe-agent[bot] to issue #${issue_number}`);
-                fallbackSucceeded = true;
-              } catch (err2) {
-                core.error(`Fallback assignment also failed: ${String(err2)} — manual assignment required`);
-              }
-              
-              // Post instructions comment; include manual assignment note only if fallback also failed
-              try {
-                const manualNote = fallbackSucceeded
-                  ? ''
-                  : '\n\n> ⚠️ Automated assignment failed. A maintainer should manually assign `copilot-swe-agent[bot]` to this issue.';
-                await github.rest.issues.createComment({
-                  owner, repo, issue_number,
-                  body: `### 🤖 copilot-swe-agent[bot] Instructions\n\n${customInstructions}${manualNote}`
-                });
-                core.info(`Posted instructions comment after assignment failure`);
-              } catch (commentErr) {
-                core.error(`Failed to post instructions comment: ${String(commentErr)}`);
-              }
-            }
+          issue-title: ${{ steps.build-body.outputs.title }}
+          issue-body: ${{ steps.build-body.outputs.body }}
+          issue-labels: 'weekly-review,go:needs-research'
+          dedup-labels: 'weekly-review'
+          custom-instructions: |
+            Read AGENTS.md for project architecture and conventions, and .squad/team.md for team context. Focus on creating separate issues for each novel finding. Before creating an issue, search both open and closed issues to avoid duplicates.
+          copilot-assign-token: ${{ secrets.COPILOT_ASSIGN_TOKEN }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Summary
         run: |
-          if [ "${{ steps.create-issue.outputs.skipped }}" = "true" ]; then
-            echo "ℹ️ Weekly code review tracking issue #${{ steps.create-issue.outputs.issue_number }} already existed and was reused"
+          if [ "${{ steps.create-issue.outputs.created }}" = "false" ]; then
+            echo "ℹ️ Weekly code review tracking issue #${{ steps.create-issue.outputs.issue-number }} already existed and was reused"
           else
-            echo "✅ Weekly code review tracking issue #${{ steps.create-issue.outputs.issue_number }} created"
+            echo "✅ Weekly code review tracking issue #${{ steps.create-issue.outputs.issue-number }} created and assigned to copilot-swe-agent[bot]"
           fi
-          echo "ℹ️ Assignment to copilot-swe-agent[bot] was attempted in the previous step"
-          echo "Check the assignment step logs or issue comments to confirm whether the agent was successfully assigned"
