@@ -1,7 +1,7 @@
 import * as vscode from 'vscode';
-import * as path from 'path';
 import { gitExec } from './gitUtils';
-import { validWorktreePaths } from './worktreeRegistry';
+import { validateWorktreePath, validateRelativePath } from './pathValidator';
+import { errorToString } from './errorUtils';
 
 interface GitLogInput {
   worktreePath: string;
@@ -18,20 +18,19 @@ export function registerGitLogTool(): vscode.Disposable {
       const { worktreePath, filePath, maxCount } = options.input;
       const limit = Math.min(Math.max(1, maxCount ?? 20), 200);
 
-      if (!validWorktreePaths.has(path.resolve(worktreePath))) {
+      const wtError = validateWorktreePath(worktreePath);
+      if (wtError) {
         return new vscode.LanguageModelToolResult([
-          new vscode.LanguageModelTextPart('Invalid worktree path: not a known managed worktree'),
+          new vscode.LanguageModelTextPart(wtError),
         ]);
       }
 
       // Path traversal protection for optional filePath
       if (filePath) {
-        const normalized = path.normalize(filePath);
-        if (normalized.startsWith('..' + path.sep) || normalized === '..' || path.isAbsolute(normalized)) {
+        const pathError = validateRelativePath(worktreePath, filePath);
+        if (pathError) {
           return new vscode.LanguageModelToolResult([
-            new vscode.LanguageModelTextPart(
-              'Path traversal not allowed: filePath must be relative and within the worktree',
-            ),
+            new vscode.LanguageModelTextPart(pathError),
           ]);
         }
       }
@@ -46,9 +45,8 @@ export function registerGitLogTool(): vscode.Disposable {
           new vscode.LanguageModelTextPart(output || '(no commits found)'),
         ]);
       } catch (err) {
-        const msg = err instanceof Error ? err.message : String(err);
         return new vscode.LanguageModelToolResult([
-          new vscode.LanguageModelTextPart(`Error running git log: ${msg}`),
+          new vscode.LanguageModelTextPart(`Error running git log: ${errorToString(err)}`),
         ]);
       }
     },
