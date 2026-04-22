@@ -145,7 +145,10 @@ export async function fetchClosedGitHubItems(
   }
 
   // Filter out nulls and errors, keep only the closed IDs
-  return results
-    .filter(r => r.status === 'fulfilled' && r.value !== null)
-    .map(r => (r as PromiseFulfilledResult<string | null>).value as string);
+  const isFulfilledNonNull = (
+    r: PromiseSettledResult<string | null>,
+  ): r is PromiseFulfilledResult<string> =>
+    r.status === 'fulfilled' && r.value !== null;
+
+  return results.filter(isFulfilledNonNull).map(r => r.value);
 }
