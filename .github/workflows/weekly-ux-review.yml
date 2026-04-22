@@ -14,7 +14,6 @@ concurrency:
 permissions:
   issues: write
   contents: read
-  pull-requests: read
 
 jobs:
   create-ux-review-issue:
