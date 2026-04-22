@@ -18,10 +18,12 @@
  * 
  * @example
  * ```ts
+ * const controller = new AbortController();
+ * const signal = controller.signal;
  * const items = [1, 2, 3, 4, 5];
  * const results: number[] = [];
  * await runWorkerPool(items, async (item, index) => {
- *   if (signal?.aborted) {
+ *   if (signal.aborted) {
  *     const error = new Error('The operation was aborted.');
  *     error.name = 'AbortError';
  *     throw error;
@@ -76,9 +78,11 @@ export async function runWorkerPool<T>(
  * 
  * @example
  * ```ts
+ * const controller = new AbortController();
+ * const signal = controller.signal;
  * const repos = ['owner/repo1', 'owner/repo2'];
  * const results = await runWorkerPoolSettled(repos, async (repo) => {
- *   if (signal?.aborted) {
+ *   if (signal.aborted) {
  *     const error = new Error('The operation was aborted.');
  *     error.name = 'AbortError';
  *     throw error;

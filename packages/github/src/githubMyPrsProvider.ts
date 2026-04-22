@@ -1,8 +1,9 @@
 import * as vscode from 'vscode';
-import { combineSignals, runWorkerPool, runWorkerPoolSettled } from '@devdocket/shared';
+import { DiscoveredItem, combineSignals, runWorkerPool, runWorkerPoolSettled } from '@devdocket/shared';
+import { BaseGitHubProvider } from './baseGithubProvider';
 import { logger } from './logger';
 import { parseRepoFromUrls } from './parseRepo';
-import { BaseGitHubProvider, DiscoveredItem, GitHubIssue } from './baseGithubProvider';
+import { type GitHubIssue } from './githubApiHelpers';
 
 interface GitHubSearchResponse {
   items: GitHubIssue[];
@@ -48,7 +49,7 @@ export class GitHubMyPrsProvider extends BaseGitHubProvider {
       : new Map<string, string>();
 
     const items: DiscoveredItem[] = prs.map((pr) => {
-      const repoName = this.parseRepo(pr);
+      const repoName = parseRepoFromUrls(pr.html_url, pr.repository_url);
       const status = statusMap.get(pr.html_url) ?? 'Open';
       return {
         externalId: `${repoName}#${pr.number}`,
@@ -287,9 +288,5 @@ export class GitHubMyPrsProvider extends BaseGitHubProvider {
     }
 
     return 'Waiting on reviews';
-  }
-
-  protected override parseRepo(issue: GitHubIssue): string {
-    return parseRepoFromUrls(issue.html_url, issue.repository_url);
   }
 }

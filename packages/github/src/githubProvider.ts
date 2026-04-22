@@ -1,8 +1,9 @@
 import * as vscode from 'vscode';
-import { isValidGitHubRepo, combineSignals } from '@devdocket/shared';
+import { DiscoveredItem, isValidGitHubRepo, combineSignals, safeDecodeComponent, type ResolvedItem } from '@devdocket/shared';
+import { BaseGitHubProvider } from './baseGithubProvider';
 import { logger } from './logger';
 import { parseRepoFromUrls } from './parseRepo';
-import { BaseGitHubProvider, DiscoveredItem, GitHubIssue, type ResolvedItem } from './baseGithubProvider';
+import { getHeaders, retryWithAuth, throwApiError, parseCanonicalRepo, fetchClosedGitHubItems, type GitHubIssue } from './githubApiHelpers';
 
 /**
  * DevDocket provider that discovers GitHub issues assigned to the current user.
@@ -24,7 +25,7 @@ export class GitHubIssueProvider extends BaseGitHubProvider {
     const { issues, failures } = await this.fetchAssignedIssues(accessToken, repos, signal);
 
     const items: DiscoveredItem[] = issues.map((issue) => {
-      const repoName = this.parseRepo(issue);
+      const repoName = parseRepoFromUrls(issue.html_url, issue.repository_url);
       return {
         externalId: `${repoName}#${issue.number}`,
         title: `#${issue.number}: ${issue.title}`,
@@ -57,27 +58,27 @@ export class GitHubIssueProvider extends BaseGitHubProvider {
     const match = url.trim().match(GitHubIssueProvider.GITHUB_ISSUE_PATTERN);
     if (!match) { return undefined; }
     const [, rawOwner, rawRepo, numStr] = match;
-    const owner = BaseGitHubProvider.safeDecodeComponent(rawOwner);
-    const repo = BaseGitHubProvider.safeDecodeComponent(rawRepo);
+    const owner = safeDecodeComponent(rawOwner);
+    const repo = safeDecodeComponent(rawRepo);
     const number = parseInt(numStr, 10);
 
     const apiUrl = `https://api.github.com/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/issues/${number}`;
-    const headers = await this.getHeaders();
+    const headers = await getHeaders();
     const wasAuthenticated = 'Authorization' in headers;
 
     let response = await fetch(apiUrl, { headers, signal });
 
     if (response.status === 404 && !wasAuthenticated && !signal?.aborted) {
-      const retryResponse = await this.retryWithAuth(apiUrl, signal);
+      const retryResponse = await retryWithAuth(apiUrl, signal);
       if (retryResponse) { response = retryResponse; }
     }
 
     if (!response.ok) {
-      this.throwApiError(response, `GitHub issue ${owner}/${repo}#${number}`);
+      throwApiError(response, `GitHub issue ${owner}/${repo}#${number}`);
     }
 
     const data = await response.json() as { title: string; body: string | null; html_url: string };
-    const canonicalRepo = this.parseCanonicalRepo(data.html_url, owner, repo);
+    const canonicalRepo = parseCanonicalRepo(data.html_url, owner, repo);
     return {
       title: `#${number}: ${data.title}`,
       notes: data.body ?? '',
@@ -92,16 +93,12 @@ export class GitHubIssueProvider extends BaseGitHubProvider {
    * Check which of the given external IDs correspond to closed GitHub issues.
    */
   async getClosedItems(externalIds: string[], signal?: AbortSignal): Promise<string[]> {
-    return this.fetchClosedGitHubItems(externalIds, 'issues', signal);
+    return fetchClosedGitHubItems(externalIds, 'issues', signal);
   }
 
   private getConfiguredRepos(): string[] {
     const config = vscode.workspace.getConfiguration('devdocketGithub');
     return config.get<string[]>('repos', []);
-  }
-
-  protected override parseRepo(issue: GitHubIssue): string {
-    return parseRepoFromUrls(issue.html_url, issue.repository_url);
   }
 
   private async fetchAssignedIssues(

@@ -2,6 +2,146 @@
 
 ## Active Decisions
 
+### 2026-04-21T07:05:30Z: Issue #342 — Command Registration Architecture Review
+
+**Issue:** #342  
+**Author:** Keaton (Architecture)  
+**Status:** COMPLETE — Findings posted to issue  
+**Date:** 2026-04-21
+
+#### Problem Statement
+
+Issue #342 questioned whether command registration was misconfigured and whether providers (GitHub, ADO) should own their own commands.
+
+#### Key Finding
+
+Current architecture is **correct**. All 43 commands belong in core (`packages/core/src/commands/`):
+1. All commands operate on core's work item state model (WorkItem, WorkItemState)
+2. All commands interact with core views (Inbox, Queue, Focus, History, Sources, Watches)
+3. Provider items are ephemeral (read live); only core maintains persistent state
+4. Layout/view management commands are inherently core concerns
+
+Providers are discovery agents (no UI operations). Actions are programmatic (invoked via `devdocket.runAction`). Neither needs command registration.
+
+#### API Review
+
+DevDocketApi correctly does NOT expose command registration — commands are internal implementation details, not API contracts.
+
+#### Recommendation
+
+Close #342 as `status:working-as-intended`. Optional enhancement: add `packages/core/src/commands/README.md` documenting command organization and how to add new commands.
+
+---
+
+### 2026-04-21T07:05:30Z: Issue #304 — JSON File Stores vs. VS Code globalState Migration
+
+**Issue:** #304  
+**Author:** Keaton (Architecture)  
+**Status:** RECOMMENDATION PENDING  
+**Date:** 2026-04-21
+
+#### Problem Statement
+
+DevDocket persists four datasets (work items, discovered state, read state, provider label cache) as separate JSON files, each implementing shared infrastructure: write serialization, corruption recovery, validation. Should we migrate to VS Code's globalState API?
+
+#### Recommendation: Option C — Hybrid Approach (Phased Migration)
+
+**Migrate to globalState:**
+- DiscoveredStateStore (thin, read-heavy inbox state cache)
+- ReadStateStore (simple set of read/unread keys)
+
+**Keep as JSON files:**
+- JsonTaskStore (complex WorkItem structure, critical for debugging/export)
+- ProviderLabelCache (informational, small, simple)
+
+#### Rationale
+
+1. **Simplify infrastructure:** Remove 99-line SerializedJsonStore base + 170 lines of duplicated persistence code
+2. **Maintain debuggability:** Keep JSON export for WorkItems (critical) and ProviderLabelCache (informational)
+3. **Leverage platform:** Use globalState for cache-like data where atomicity is automatic
+4. **Gradual, low-risk:** Migrate two small stores first; keep critical JsonTaskStore untouched
+5. **Reduce test complexity:** globalState mocks simpler than file I/O mocking
+
+#### Phase 1: Migrate Thin Caches (Week 1–2)
+
+Tasks:
+1. Add globalState mock to vscode.ts (1 day)
+2. Refactor DiscoveredStateStore to use globalState (1 day)
+3. Refactor ReadStateStore to use globalState (0.5 days)
+4. Update tests (1.5 days)
+5. Validation & documentation (0.5 days)
+
+#### Non-Recommendations
+
+- **Option A (Keep All JSON):** Duplicates infrastructure, requires manual recovery
+- **Option B (Migrate All):** Loses debuggability, validation becomes app-level, loses export capability
+
+#### Success Metrics
+
+1. Reduced code: Remove 99-line base class and 60+ lines per-store infrastructure
+2. Maintained test coverage: No drop in test count or quality
+3. No user-visible changes: DiscoveredState and ReadState behavior identical
+4. Faster tests: globalState mocks simpler than file I/O
+5. Easier debugging: globalState stores visible in VS Code storage location
+
+#### Next Steps
+
+1. Code review: Present decision to team; collect feedback on globalState scope
+2. Validate globalState scope: Confirm multi-workspace behavior
+3. Phase 1 implementation: Assign to backend engineer + test engineer
+4. Documentation: Update storage.instructions.md with globalState patterns
+
+---
+
+### 2026-04-23T00:00:00Z: Issue #225 — Onboarding Walkthrough Implementation
+
+**Issue:** #225  
+**Author:** Fenster (Extension Dev)  
+**Status:** Implemented  
+**Date:** 2026-04-23
+
+## Context
+
+Implemented VS Code walkthrough for new user onboarding to guide users through creating their first work item, understanding the Inbox → Queue → Focus → History workflow, connecting providers, and managing active work.
+
+## Key Decisions
+
+#### 1. VS Code Native Walkthrough API
+**Decision:** Use `contributes.walkthroughs` in package.json rather than a custom modal or webview.  
+**Why:** VS Code's native walkthrough API provides a consistent UX familiar to users from other extensions. Appears in the Get Started tab automatically. No custom UI code needed.
+
+#### 2. Four-Step Onboarding Flow
+**Decision:** Four steps — Create First Item, Understand Workflow, Connect Provider, Focus on Work.  
+**Why:** Mirrors the natural user journey. Start with immediate action (create item), then explain concepts, then expand with providers, then close the loop with completion workflow.
+
+#### 3. Markdown Media Files
+**Decision:** Each step uses a markdown file in `media/walkthroughs/` directory with command links.  
+**Why:** Markdown allows rich formatting, code blocks, headers, and interactive command links (e.g., `[Create Work Item](command:devdocket.createItem)`). Easier to maintain than inline JSON strings.
+
+#### 4. Command Links for Interactivity
+**Decision:** Embed command links in both step descriptions and markdown media.  
+**Why:** Users can click directly to perform actions (create item, open extensions view, etc.) without searching for commands. Makes onboarding interactive rather than passive reading.
+
+#### 5. Media Organization
+**Decision:** Created dedicated `packages/core/media/walkthroughs/` directory.  
+**Why:** Keeps walkthrough content separate from other media assets. Future walkthroughs can add more files here. Mirrors pattern used by other VS Code extensions.
+
+## Files Changed
+
+- `packages/core/package.json` — Added `walkthroughs` contribution
+- `packages/core/media/walkthroughs/create-item.md` — Step 1 content
+- `packages/core/media/walkthroughs/workflow.md` — Step 2 content
+- `packages/core/media/walkthroughs/providers.md` — Step 3 content
+- `packages/core/media/walkthroughs/focus.md` — Step 4 content
+
+## Future Considerations
+
+- Add screenshots or animated GIFs to media files for visual learners
+- Consider per-provider walkthroughs for GitHub/ADO setup
+- Track walkthrough completion via telemetry (if added in the future)
+
+---
+
 ### 2026-04-20T02:07:15Z: Issue #266 — CI Pipeline Watching Feature
 
 **Issue:** #266  

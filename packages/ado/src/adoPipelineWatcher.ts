@@ -7,7 +7,8 @@ import type {
   RunConclusion,
   CancellationTokenLike,
 } from '@devdocket/shared';
-import { getAdoHeaders, throwAdoApiError, safeDecodeComponent } from './adoAuth';
+import { safeDecodeComponent } from '@devdocket/shared';
+import { getAdoHeaders, throwAdoApiError } from './adoAuth';
 import { logger } from './logger';
 
 interface AdoBuild {

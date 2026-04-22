@@ -1,8 +1,8 @@
 import * as vscode from 'vscode';
-import { BaseProvider, DiscoveredItem, isValidUrlSegment, combineSignals, type ResolvedItem } from '@devdocket/shared';
+import { BaseProvider, DiscoveredItem, isValidUrlSegment, combineSignals, safeDecodeComponent, type ResolvedItem } from '@devdocket/shared';
 import { logger } from './logger';
 import { OrgConfig } from './configParser';
-import { getAdoHeaders, retryAdoWithAuth, throwAdoApiError, safeDecodeComponent } from './adoAuth';
+import { getAdoHeaders, retryAdoWithAuth, throwAdoApiError } from './adoAuth';
 
 // Azure DevOps WIQL query response
 interface WiqlResponse {

@@ -1,8 +1,9 @@
 import * as vscode from 'vscode';
-import { combineSignals, runWorkerPool, runWorkerPoolSettled } from '@devdocket/shared';
+import { DiscoveredItem, combineSignals, runWorkerPool, runWorkerPoolSettled, safeDecodeComponent, type ResolvedItem } from '@devdocket/shared';
+import { BaseGitHubProvider } from './baseGithubProvider';
 import { logger } from './logger';
 import { parseRepoFromUrls } from './parseRepo';
-import { BaseGitHubProvider, DiscoveredItem, GitHubIssue, type ResolvedItem } from './baseGithubProvider';
+import { getHeaders, retryWithAuth, throwApiError, parseCanonicalRepo, fetchClosedGitHubItems, type GitHubIssue } from './githubApiHelpers';
 
 interface GitHubSearchResponse {
   items: GitHubIssue[];
@@ -53,7 +54,7 @@ export class GitHubPrReviewProvider extends BaseGitHubProvider {
     }
 
     const items: DiscoveredItem[] = prs.map((pr) => {
-      const repoName = this.parseRepo(pr);
+      const repoName = parseRepoFromUrls(pr.html_url, pr.repository_url);
       const item: DiscoveredItem = {
         externalId: `${repoName}#${pr.number}`,
         title: `#${pr.number}: ${pr.title}`,
@@ -90,27 +91,27 @@ export class GitHubPrReviewProvider extends BaseGitHubProvider {
     const match = url.trim().match(GitHubPrReviewProvider.GITHUB_PR_PATTERN);
     if (!match) { return undefined; }
     const [, rawOwner, rawRepo, numStr] = match;
-    const owner = BaseGitHubProvider.safeDecodeComponent(rawOwner);
-    const repo = BaseGitHubProvider.safeDecodeComponent(rawRepo);
+    const owner = safeDecodeComponent(rawOwner);
+    const repo = safeDecodeComponent(rawRepo);
     const number = parseInt(numStr, 10);
 
     const apiUrl = `https://api.github.com/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/pulls/${number}`;
-    const headers = await this.getHeaders();
+    const headers = await getHeaders();
     const wasAuthenticated = 'Authorization' in headers;
 
     let response = await fetch(apiUrl, { headers, signal });
 
     if (response.status === 404 && !wasAuthenticated && !signal?.aborted) {
-      const retryResponse = await this.retryWithAuth(apiUrl, signal);
+      const retryResponse = await retryWithAuth(apiUrl, signal);
       if (retryResponse) { response = retryResponse; }
     }
 
     if (!response.ok) {
-      this.throwApiError(response, `GitHub PR ${owner}/${repo}#${number}`);
+      throwApiError(response, `GitHub PR ${owner}/${repo}#${number}`);
     }
 
     const data = await response.json() as { title: string; body: string | null; html_url: string };
-    const canonicalRepo = this.parseCanonicalRepo(data.html_url, owner, repo);
+    const canonicalRepo = parseCanonicalRepo(data.html_url, owner, repo);
     return {
       title: `#${number}: ${data.title}`,
       notes: data.body ?? '',
@@ -125,7 +126,7 @@ export class GitHubPrReviewProvider extends BaseGitHubProvider {
    * Check which of the given external IDs correspond to closed/merged GitHub PRs.
    */
   async getClosedItems(externalIds: string[], signal?: AbortSignal): Promise<string[]> {
-    return this.fetchClosedGitHubItems(externalIds, 'pulls', signal);
+    return fetchClosedGitHubItems(externalIds, 'pulls', signal);
   }
 
   private getConfiguredRepos(): string[] {
@@ -368,9 +369,5 @@ export class GitHubPrReviewProvider extends BaseGitHubProvider {
     }, 3);
 
     return result;
-  }
-
-  protected override parseRepo(issue: GitHubIssue): string {
-    return parseRepoFromUrls(issue.html_url, issue.repository_url);
   }
 }

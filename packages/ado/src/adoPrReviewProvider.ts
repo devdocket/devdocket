@@ -1,8 +1,8 @@
 import * as vscode from 'vscode';
-import { BaseProvider, DiscoveredItem, isValidUrlSegment, combineSignals, runWorkerPool, type ResolvedItem } from '@devdocket/shared';
+import { BaseProvider, DiscoveredItem, isValidUrlSegment, combineSignals, runWorkerPool, safeDecodeComponent, type ResolvedItem } from '@devdocket/shared';
 import { logger } from './logger';
 import { OrgConfig } from './configParser';
-import { getAdoHeaders, retryAdoWithAuth, throwAdoApiError, safeDecodeComponent } from './adoAuth';
+import { getAdoHeaders, retryAdoWithAuth, throwAdoApiError } from './adoAuth';
 
 interface AdoPullRequest {
   pullRequestId: number;
