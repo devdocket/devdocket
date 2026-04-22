@@ -2,9 +2,9 @@
 
 Providers automatically discover work items from external sources.
 
-## Available Providers
+## Sample Providers
 
-### 🐙 GitHub Provider
+### GitHub Provider
 Discovers:
 - Issues assigned to you or mentioning you
 - Pull requests you created or need to review
@@ -15,7 +15,7 @@ Discovers:
 2. Authenticate with GitHub when prompted
 3. Configure which repositories to watch via settings
 
-### 📘 Azure DevOps Provider
+### Azure DevOps Provider
 Discovers:
 - Work items assigned to you
 - Pull requests you need to review

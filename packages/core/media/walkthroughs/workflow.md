@@ -1,6 +1,6 @@
 # Understanding the DevDocket Workflow
 
-DevDocket organizes your work across five core work-item views:
+DevDocket organizes your work across six core work-item views:
 
 ## 📥 Inbox
 New items discovered by providers (like GitHub issues or pull requests). Review and either **Accept** to move them to your Queue, or **Dismiss** if they're not relevant.
@@ -13,6 +13,9 @@ Active work you're currently working on. Items here are **In Progress** or **Pau
 
 ## 📜 History
 Completed and archived items. Items marked **Done** or **Archived** appear here.
+
+## 👁️ Watches
+Fire-and-forget monitoring of CI/CD pipeline runs from GitHub Actions and Azure DevOps Pipelines. Watch a run and get notified when it completes or fails — no need to keep checking manually.
 
 ## 📚 Sources
 A browsable library of everything providers know about, grouped by provider.
