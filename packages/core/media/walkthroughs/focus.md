@@ -30,4 +30,4 @@ When you finish a work item:
 **Try it now:**
 If you created a work item earlier, find it in the Queue and move it to Focus!
 
-[Open Queue View](command:devdocket.queue.focus)
+[Open Queue View](command:vscode.openView?%5B%22devdocket.queue%22%5D)
