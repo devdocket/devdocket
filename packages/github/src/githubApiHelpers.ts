@@ -137,6 +137,13 @@ export async function fetchClosedGitHubItems(
     5, // maxConcurrency
   );
 
+  // Log rejected results so fetch/json failures aren't silently swallowed
+  for (const r of results) {
+    if (r.status === 'rejected') {
+      logger.warn(`Worker failed during ${apiType} closed-item check: ${r.reason}`);
+    }
+  }
+
   // Filter out nulls and errors, keep only the closed IDs
   return results
     .filter(r => r.status === 'fulfilled' && r.value !== null)
