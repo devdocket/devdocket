@@ -19,6 +19,12 @@ inputs:
       Defaults to issue-labels if not specified.
     required: false
     default: ''
+  dedup-title:
+    description: >
+      If provided, dedup also requires the issue title to match exactly.
+      Use when the same labels appear on multiple issues (e.g., weekly dated issues).
+    required: false
+    default: ''
   custom-instructions:
     description: Instructions to provide to the Copilot coding agent
     required: true
@@ -51,21 +57,42 @@ runs:
         INPUT_ISSUE_BODY: ${{ inputs.issue-body }}
         INPUT_ISSUE_LABELS: ${{ inputs.issue-labels }}
         INPUT_DEDUP_LABELS: ${{ inputs.dedup-labels || inputs.issue-labels }}
+        INPUT_DEDUP_TITLE: ${{ inputs.dedup-title }}
       with:
         github-token: ${{ inputs.github-token }}
         script: |
           const dedupLabels = process.env.INPUT_DEDUP_LABELS;
+          const dedupTitle = process.env.INPUT_DEDUP_TITLE;
 
-          // Check for existing open issues matching the dedup labels
-          const { data: existing } = await github.rest.issues.listForRepo({
-            owner: context.repo.owner,
-            repo: context.repo.repo,
-            labels: dedupLabels,
-            state: 'open',
-            per_page: 1
-          });
+          // Escape values interpolated into GitHub search quoted qualifiers
+          function escapeSearchValue(value) {
+            return String(value).replace(/[\r\n]+/g, ' ').trim().replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+          }
 
-          const existingIssue = existing.find(item => !item.pull_request);
+          // Use search API for dedup to avoid pagination limits of listForRepo
+          const labels = dedupLabels.split(',').map(l => l.trim()).filter(Boolean);
+          if (labels.length === 0) {
+            core.setFailed('dedup-labels resolved to an empty list — at least one label is required');
+            return;
+          }
+          const labelQuery = labels.map(l => `label:"${escapeSearchValue(l)}"`).join(' ');
+          const titleQuery = dedupTitle ? `"${escapeSearchValue(dedupTitle)}" in:title` : '';
+          const q = `repo:${context.repo.owner}/${context.repo.repo} is:issue is:open ${labelQuery} ${titleQuery}`.trim();
+
+          // Paginate search results so duplicates beyond the first page aren't missed
+          let existingIssue = null;
+          for await (const response of github.paginate.iterator(
+            github.rest.search.issuesAndPullRequests, { q, per_page: 100 }
+          )) {
+            const match = response.data.find(item =>
+              !item.pull_request &&
+              (!dedupTitle || item.title === dedupTitle)
+            );
+            if (match) {
+              existingIssue = match;
+              break;
+            }
+          }
 
           if (existingIssue) {
             core.info(`Skipping: open issue #${existingIssue.number} already exists (dedup labels: ${dedupLabels})`);

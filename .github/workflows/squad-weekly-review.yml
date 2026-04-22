@@ -1,0 +1,73 @@
+name: Squad Weekly Review
+
+on:
+  # Run every Monday at 9:00 AM UTC
+  schedule:
+    - cron: '0 9 * * 1'
+
+  # Manual trigger
+  workflow_dispatch:
+
+concurrency:
+  group: weekly-code-review
+  cancel-in-progress: true
+
+permissions:
+  issues: write
+  contents: read
+
+jobs:
+  expert-review:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build issue body
+        id: build-body
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const dateStr = new Date().toISOString().slice(0, 10);
+
+            const body = [
+              '### 🔍 Automated Weekly Code Review',
+              '',
+              'This issue tracks the weekly automated expert review of the codebase.',
+              '',
+              '**Review Scope:**',
+              '- Implementation patterns and architectural decisions',
+              '- Resource lifecycle and API correctness',
+              '- Product decisions and UX model',
+              '- VS Code extension best practices',
+              '',
+              '**Instructions for the Copilot coding agent (`copilot-swe-agent[bot]`):**',
+              '',
+              "First, review the latest VS Code extension API documentation (https://code.visualstudio.com/api) to understand the full set of platform capabilities available. Then, act as a senior VS Code extension developer reviewing this codebase for the first time. Identify concrete areas where you disagree with the implementation approach or product decisions — not style nits, but structural decisions that create real maintenance burden, correctness risks, or violate VS Code extension best practices. Before reporting a finding, check the GitHub issue tracker (open and closed) to see if it's already been filed. Skip anything already tracked. For each finding: name the pattern/decision, point to specific files, explain the concrete downside, describe what you'd do instead. Focus areas: implementation (resource lifecycle, API correctness, storage, code organization, platform API usage) and product (feature set, complexity, workflows, missing capabilities, UX model vs VS Code conventions). Skip linting-level concerns, naming preferences, and anything working fine.",
+              '',
+              '**Note:** Issue de-duplication and per-finding issue creation are handled entirely by the agent — the workflow only creates this tracking issue and assigns it.'
+            ].join('\n');
+
+            core.setOutput('body', body);
+            core.setOutput('title', `Weekly Expert Codebase Review — ${dateStr}`);
+
+      - name: Create issue and assign Copilot agent
+        id: create-issue
+        uses: ./.github/actions/create-copilot-issue
+        with:
+          issue-title: ${{ steps.build-body.outputs.title }}
+          issue-body: ${{ steps.build-body.outputs.body }}
+          issue-labels: 'weekly-review,go:needs-research'
+          dedup-labels: 'weekly-review'
+          dedup-title: ${{ steps.build-body.outputs.title }}
+          custom-instructions: |
+            Read AGENTS.md for project architecture and conventions, and .squad/team.md for team context. Focus on creating separate issues for each novel finding. Before creating an issue, search both open and closed issues to avoid duplicates.
+          copilot-assign-token: ${{ secrets.COPILOT_ASSIGN_TOKEN }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Summary
+        run: |
+          if [ "${{ steps.create-issue.outputs.created }}" = "false" ]; then
+            echo "ℹ️ Weekly code review tracking issue #${{ steps.create-issue.outputs.issue-number }} already existed and was reused"
+          else
+            echo "✅ Weekly code review tracking issue #${{ steps.create-issue.outputs.issue-number }} created and assigned to copilot-swe-agent[bot]"
+          fi
