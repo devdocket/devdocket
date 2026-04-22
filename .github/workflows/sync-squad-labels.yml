@@ -125,12 +125,17 @@ jobs:
               });
             }
 
-            // Add go:, release:, type:, priority:, and high-signal labels
+            const WORKFLOW_LABELS = [
+              { name: 'weekly-review', color: '6B8EB5', description: 'Weekly automated expert codebase review' }
+            ];
+
+            // Add go:, release:, type:, priority:, workflow, and high-signal labels
             labels.push(...GO_LABELS);
             labels.push(...RELEASE_LABELS);
             labels.push(...TYPE_LABELS);
             labels.push(...PRIORITY_LABELS);
             labels.push(...SIGNAL_LABELS);
+            labels.push(...WORKFLOW_LABELS);
 
             // Sync labels (create or update)
             for (const label of labels) {
