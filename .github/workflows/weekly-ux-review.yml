@@ -19,175 +19,84 @@ permissions:
 jobs:
   create-ux-review-issue:
     runs-on: ubuntu-latest
-    outputs:
-      issue_number: ${{ steps.create-issue.outputs.issue_number }}
-      should_assign: ${{ steps.create-issue.outputs.should_assign }}
     steps:
       - uses: actions/checkout@v4
 
-      - name: Create UX review tracking issue
-        id: create-issue
+      - name: Build issue body
+        id: build-body
         uses: actions/github-script@v7
         with:
           script: |
-            // UX review prompt (from issue #308)
             const uxPrompt = `First, review the latest VS Code UX guidelines (https://code.visualstudio.com/api/ux-guidelines/overview) and the VS Code extension API documentation (https://code.visualstudio.com/api). Then, act as a senior UX designer who specializes in developer tools and VS Code extensions, reviewing this extension for the first time. Identify concrete areas where the user experience is confusing, inefficient, or inconsistent — not minor polish items, but workflow-level problems that cause real user friction. Before reporting a finding, check the GitHub issue tracker to see if it's already filed. For each finding: name the UX problem, describe current user experience, explain concrete impact, describe what it should be instead. Focus areas: workflow completeness, cognitive load, discoverability, feedback & state visibility, efficiency for repeat use, information architecture, error & edge cases, platform fit, accessibility & inclusivity. Skip icon choices, color preferences, wording tweaks.`;
 
-            // Check for existing open UX review issues
-            const { data: existing } = await github.rest.issues.listForRepo({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              labels: 'weekly-ux-review',
-              state: 'open',
-              per_page: 1
-            });
-
-            const existingIssue = existing.find(item => !item.pull_request);
-
-            if (existingIssue) {
-              core.info(`Skipping: open UX review issue #${existingIssue.number} already exists`);
-              core.setOutput('should_assign', 'false');
-              return;
-            }
-
-            const { data: issue } = await github.rest.issues.create({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              title: 'Automated weekly UX review',
-              body: [
-                '## 🎨 Weekly UX Expert Review',
-                '',
-                'This issue was created automatically by the scheduled UX review workflow.',
-                '',
-                '### Task',
-                '',
-                'Analyze the DevDocket extension UX using the UX review methodology embedded below.',
-                '',
-                '**Instructions:**',
-                '- Follow the complete UX review prompt included in this issue',
-                '- Review the latest VS Code UX guidelines and extension API documentation',
-                '- Act as a senior UX designer specializing in developer tools',
-                '- Identify concrete UX problems that cause real user friction',
-                '- Before filing findings, search existing issues (open and closed) to avoid duplicates',
-                '- Create individual issues for each novel UX problem with clear titles and details',
-                '- Reference this tracking issue in each finding',
-                '- Close this issue once all findings are filed',
-                '',
-                '### Scope',
-                '',
-                'Focus on workflow-level problems, not cosmetic issues:',
-                '- Workflow completeness and efficiency',
-                '- Cognitive load and discoverability',
-                '- Feedback, state visibility, and information architecture',
-                '- Error handling and edge cases',
-                '- Accessibility and inclusivity',
-                '- Platform fit for VS Code',
-                '',
-                '### Exit Criteria',
-                '',
-                '- If no UX problems are found, close this issue with a comment explaining the analysis',
-                '- If findings are identified, create individual issues for each and reference this tracker',
-                '',
-                '### UX Review Prompt',
-                '',
-                uxPrompt,
-                '',
-                '---',
-                '',
-                '_Scheduled UX review run triggered at ' + new Date().toISOString() + '_'
-              ].join('\n'),
-              labels: ['squad:copilot', 'weekly-ux-review']
-            });
-
-            core.info(`Created issue #${issue.number}`);
-            core.setOutput('issue_number', issue.number);
-            core.setOutput('should_assign', 'true');
-            return issue.number;
-
-  assign-copilot-agent:
-    needs: create-ux-review-issue
-    if: needs.create-ux-review-issue.outputs.should_assign == 'true'
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Assign @copilot coding agent
-        uses: actions/github-script@v7
-        env:
-          ISSUE_NUMBER: ${{ needs.create-ux-review-issue.outputs.issue_number }}
-        with:
-          github-token: ${{ secrets.COPILOT_ASSIGN_TOKEN }}
-          script: |
-            const owner = context.repo.owner;
-            const repo = context.repo.repo;
-            const issue_number = parseInt(process.env.ISSUE_NUMBER, 10);
-
-            // Get the default branch name
-            const { data: repoData } = await github.rest.repos.get({ owner, repo });
-            const baseBranch = repoData.default_branch;
-
-            const customInstructions = [
-              'Follow the complete UX review prompt embedded in the issue body.',
+            const body = [
+              '## 🎨 Weekly UX Expert Review',
               '',
-              'The issue contains the full UX review methodology including:',
-              '1. Review Scope — focus on workflow-level UX problems',
-              '2. User Impact Analysis — concrete problems causing real friction',
-              '3. Exit Criteria — close when analysis is complete',
+              'This issue was created automatically by the scheduled UX review workflow.',
               '',
-              'Key principles:',
-              '- Review the latest VS Code UX guidelines and extension API docs',
-              '- Act as a senior UX designer reviewing this extension for the first time',
-              '- Search existing issues (open and closed) to avoid duplicates before filing findings',
-              '- Create individual issues for each novel UX problem with clear titles',
+              '### Task',
+              '',
+              'Analyze the DevDocket extension UX using the UX review methodology embedded below.',
+              '',
+              '**Instructions:**',
+              '- Follow the complete UX review prompt included in this issue',
+              '- Review the latest VS Code UX guidelines and extension API documentation',
+              '- Act as a senior UX designer specializing in developer tools',
+              '- Identify concrete UX problems that cause real user friction',
+              '- Before filing findings, search existing issues (open and closed) to avoid duplicates',
+              '- Create individual issues for each novel UX problem with clear titles and details',
               '- Reference this tracking issue in each finding',
+              '- Close this issue once all findings are filed',
               '',
-              'If no UX problems are found, close this issue with an explanation.',
-              'If findings are identified, create individual issues and reference this tracker.'
+              '### Scope',
+              '',
+              'Focus on workflow-level problems, not cosmetic issues:',
+              '- Workflow completeness and efficiency',
+              '- Cognitive load and discoverability',
+              '- Feedback, state visibility, and information architecture',
+              '- Error handling and edge cases',
+              '- Accessibility and inclusivity',
+              '- Platform fit for VS Code',
+              '',
+              '### Exit Criteria',
+              '',
+              '- If no UX problems are found, close this issue with a comment explaining the analysis',
+              '- If findings are identified, create individual issues for each and reference this tracker',
+              '',
+              '### UX Review Prompt',
+              '',
+              uxPrompt,
+              '',
+              '---',
+              '',
+              '_Scheduled UX review run triggered at ' + new Date().toISOString() + '_'
             ].join('\n');
 
-            try {
-              await github.request('POST /repos/{owner}/{repo}/issues/{issue_number}/assignees', {
-                owner,
-                repo,
-                issue_number,
-                assignees: ['copilot-swe-agent[bot]'],
-                agent_assignment: {
-                  target_repo: `${owner}/${repo}`,
-                  base_branch: baseBranch,
-                  custom_instructions: customInstructions,
-                  custom_agent: '',
-                  model: ''
-                },
-                headers: {
-                  'X-GitHub-Api-Version': '2022-11-28'
-                }
-              });
-              core.info(`✅ Assigned copilot-swe-agent[bot] to issue #${issue_number} with embedded UX review prompt`);
-            } catch (err) {
-              core.warning(`Assignment with agent_assignment failed: ${err.message}`);
-              // Fallback: try without agent_assignment
-              try {
-                await github.rest.issues.addAssignees({
-                  owner,
-                  repo,
-                  issue_number,
-                  assignees: ['copilot-swe-agent[bot]']
-                });
-                core.info(`Fallback: assigned copilot-swe-agent[bot] to issue #${issue_number}`);
-                
-                // Post custom instructions as a comment
-                await github.rest.issues.createComment({
-                  owner,
-                  repo,
-                  issue_number,
-                  body: [
-                    '### 🤖 @copilot Instructions',
-                    '',
-                    customInstructions
-                  ].join('\n')
-                });
-              } catch (err2) {
-                core.error(`Both assignment attempts failed: ${err2.message}`);
-                throw err2;
-              }
-            }
+            core.setOutput('body', body);
+
+      - name: Create issue and assign Copilot agent
+        uses: ./.github/actions/create-copilot-issue
+        with:
+          issue-title: 'Automated weekly UX review'
+          issue-body: ${{ steps.build-body.outputs.body }}
+          issue-labels: 'squad:copilot,weekly-ux-review'
+          dedup-labels: 'weekly-ux-review'
+          custom-instructions: |
+            Follow the complete UX review prompt embedded in the issue body.
+
+            The issue contains the full UX review methodology including:
+            1. Review Scope — focus on workflow-level UX problems
+            2. User Impact Analysis — concrete problems causing real friction
+            3. Exit Criteria — close when analysis is complete
+
+            Key principles:
+            - Review the latest VS Code UX guidelines and extension API docs
+            - Act as a senior UX designer reviewing this extension for the first time
+            - Search existing issues (open and closed) to avoid duplicates before filing findings
+            - Create individual issues for each novel UX problem with clear titles
+            - Reference this tracking issue in each finding
+
+            If no UX problems are found, close this issue with an explanation.
+            If findings are identified, create individual issues and reference this tracker.
+          copilot-assign-token: ${{ secrets.COPILOT_ASSIGN_TOKEN }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
