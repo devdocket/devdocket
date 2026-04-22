@@ -388,12 +388,27 @@ describe('GitHubPrReviewProvider — error handling', () => {
       expect(authentication.getSession).not.toHaveBeenCalled();
     });
 
-    // TODO: Fix vitest test isolation issue causing unhandled promise rejection
-    // from a previous test to be detected during test setup. The same test
-    // pattern works in githubProvider.error.test.ts, suggesting an ordering
-    // or cleanup issue specific to this file.
-    // Tracking: https://github.com/devdocket/devdocket/issues/349
-    it.todo('resets _isRefreshing after background refresh throws');
+    it('resets _isRefreshing after background refresh throws', async () => {
+      mockFetch.mockRejectedValueOnce(new Error('kaboom'));
+
+      const refreshBg = (provider as any).refreshInBackground.bind(provider);
+      try {
+        await refreshBg();
+      } catch {
+        // Expected: doBackgroundRefresh threw, but _isRefreshing should still be reset
+      }
+
+      // _isRefreshing should be false now, so a second call proceeds
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ items: [createMockPr(1, 'PR')] }),
+      });
+
+      const listener = vi.fn();
+      provider.onDidDiscoverItems(listener);
+      await refreshBg();
+      expect(listener).toHaveBeenCalled();
+    });
 
     it('resets _isRefreshing after user-triggered refresh throws', async () => {
       mockFetch.mockRejectedValueOnce(new Error('kaboom'));
