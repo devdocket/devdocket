@@ -392,11 +392,7 @@ describe('GitHubPrReviewProvider — error handling', () => {
       mockFetch.mockRejectedValueOnce(new Error('kaboom'));
 
       const refreshBg = (provider as any).refreshInBackground.bind(provider);
-      try {
-        await refreshBg();
-      } catch {
-        // Expected: doBackgroundRefresh threw, but _isRefreshing should still be reset
-      }
+      await expect(refreshBg()).rejects.toThrow('kaboom');
 
       // _isRefreshing should be false now, so a second call proceeds
       mockFetch.mockResolvedValueOnce({
