@@ -1,0 +1,151 @@
+name: Create Copilot Issue
+description: >
+  Creates a GitHub issue with dedup checking and assigns the Copilot coding agent.
+  Handles agent_assignment API with fallback to plain assignment + instructions comment.
+
+inputs:
+  issue-title:
+    description: Title for the GitHub issue
+    required: true
+  issue-body:
+    description: Body markdown for the GitHub issue
+    required: true
+  issue-labels:
+    description: Comma-separated labels to apply to the issue
+    required: true
+  dedup-labels:
+    description: >
+      Comma-separated labels to check for duplicate open issues.
+      Defaults to issue-labels if not specified.
+    required: false
+    default: ''
+  custom-instructions:
+    description: Instructions to provide to the Copilot coding agent
+    required: true
+  copilot-assign-token:
+    description: >
+      PAT with permissions for the agent_assignment API.
+      Falls back to github-token if not provided.
+    required: false
+    default: ''
+  github-token:
+    description: GitHub token for issue creation and fallback assignment
+    required: true
+
+outputs:
+  issue-number:
+    description: The number of the created or existing issue
+    value: ${{ steps.create-issue.outputs.issue_number }}
+  created:
+    description: Whether a new issue was created ('true' or 'false')
+    value: ${{ steps.create-issue.outputs.created }}
+
+runs:
+  using: composite
+  steps:
+    - name: Create issue with dedup check
+      id: create-issue
+      uses: actions/github-script@v7
+      env:
+        INPUT_ISSUE_TITLE: ${{ inputs.issue-title }}
+        INPUT_ISSUE_BODY: ${{ inputs.issue-body }}
+        INPUT_ISSUE_LABELS: ${{ inputs.issue-labels }}
+        INPUT_DEDUP_LABELS: ${{ inputs.dedup-labels || inputs.issue-labels }}
+      with:
+        github-token: ${{ inputs.github-token }}
+        script: |
+          const dedupLabels = process.env.INPUT_DEDUP_LABELS;
+
+          // Check for existing open issues matching the dedup labels
+          const { data: existing } = await github.rest.issues.listForRepo({
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            labels: dedupLabels,
+            state: 'open',
+            per_page: 1
+          });
+
+          const existingIssue = existing.find(item => !item.pull_request);
+
+          if (existingIssue) {
+            core.info(`Skipping: open issue #${existingIssue.number} already exists (dedup labels: ${dedupLabels})`);
+            core.setOutput('issue_number', existingIssue.number);
+            core.setOutput('created', 'false');
+            return;
+          }
+
+          const issueLabels = process.env.INPUT_ISSUE_LABELS.split(',').map(l => l.trim());
+
+          const { data: issue } = await github.rest.issues.create({
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            title: process.env.INPUT_ISSUE_TITLE,
+            body: process.env.INPUT_ISSUE_BODY,
+            labels: issueLabels
+          });
+
+          core.info(`Created issue #${issue.number}`);
+          core.setOutput('issue_number', issue.number);
+          core.setOutput('created', 'true');
+
+    - name: Assign Copilot coding agent
+      if: steps.create-issue.outputs.created == 'true'
+      uses: actions/github-script@v7
+      env:
+        ISSUE_NUMBER: ${{ steps.create-issue.outputs.issue_number }}
+        CUSTOM_INSTRUCTIONS: ${{ inputs.custom-instructions }}
+      with:
+        github-token: ${{ inputs.copilot-assign-token || inputs.github-token }}
+        script: |
+          const owner = context.repo.owner;
+          const repo = context.repo.repo;
+          const issue_number = parseInt(process.env.ISSUE_NUMBER, 10);
+          const customInstructions = process.env.CUSTOM_INSTRUCTIONS;
+
+          // Get the default branch name
+          const { data: repoData } = await github.rest.repos.get({ owner, repo });
+          const baseBranch = repoData.default_branch;
+
+          try {
+            await github.request('POST /repos/{owner}/{repo}/issues/{issue_number}/assignees', {
+              owner,
+              repo,
+              issue_number,
+              assignees: ['copilot-swe-agent[bot]'],
+              agent_assignment: {
+                target_repo: `${owner}/${repo}`,
+                base_branch: baseBranch,
+                custom_instructions: customInstructions,
+                custom_agent: '',
+                model: ''
+              },
+              headers: {
+                'X-GitHub-Api-Version': '2022-11-28'
+              }
+            });
+            core.info(`Assigned copilot-swe-agent[bot] to issue #${issue_number}`);
+          } catch (err) {
+            core.warning(`Assignment with agent_assignment failed: ${err.message}`);
+
+            // Fallback: try plain assignment without agent_assignment
+            let fallbackSucceeded = false;
+            try {
+              await github.rest.issues.addAssignees({
+                owner, repo, issue_number,
+                assignees: ['copilot-swe-agent[bot]']
+              });
+              core.info(`Fallback: assigned copilot-swe-agent[bot] to issue #${issue_number}`);
+              fallbackSucceeded = true;
+            } catch (err2) {
+              core.error(`Fallback assignment also failed: ${err2.message}`);
+            }
+
+            // Post instructions as comment; include manual-assignment note if both methods failed
+            const manualNote = fallbackSucceeded
+              ? ''
+              : '\n\n> ⚠️ Automated assignment failed. A maintainer should manually assign `copilot-swe-agent[bot]` to this issue.';
+            await github.rest.issues.createComment({
+              owner, repo, issue_number,
+              body: `### 🤖 @copilot Instructions\n\n${customInstructions}${manualNote}`
+            });
+          }

@@ -1,0 +1,116 @@
+name: Automated Code Refactoring
+
+on:
+  # Run twice a week: Monday and Thursday at 2 AM UTC
+  schedule:
+    - cron: '0 2 * * 1,4'
+
+  # Manual trigger
+  workflow_dispatch:
+
+concurrency:
+  group: automated-refactoring
+  cancel-in-progress: false
+
+permissions:
+  issues: write
+  contents: read
+  pull-requests: read
+
+jobs:
+  create-refactoring-issue:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download code-refactorer skill
+        run: |
+          curl -sSfL \
+            "https://raw.githubusercontent.com/mthalman/superpowers/main/skills/code-refactorer/SKILL.md" \
+            -o skill-content.md
+          echo "Downloaded skill content ($(wc -c < skill-content.md) bytes)"
+
+      - name: Build issue body
+        id: build-body
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const rawSkill = fs.readFileSync('skill-content.md', 'utf8');
+            // Strip YAML frontmatter if present
+            const skillContent = rawSkill.replace(/^---[\s\S]*?---\n*/, '');
+
+            const body = [
+              '## Automated Refactoring Request',
+              '',
+              'This issue was created automatically by the scheduled refactoring workflow.',
+              '',
+              '### Task',
+              '',
+              'Analyze the codebase for refactoring opportunities using the code-refactorer methodology embedded below.',
+              '',
+              '**Instructions:**',
+              '- Follow the complete refactoring methodology included in this issue',
+              '- Focus on patterns like:',
+              '  - Reducing code duplication',
+              '  - Extracting reusable functions/classes',
+              '  - Simplifying complex logic',
+              '  - Improving naming and structure',
+              '  - Consolidating common patterns across files',
+              '- Apply ONLY refactorings that strictly preserve existing behavior',
+              '- Run all tests before and after to verify no behavior changes',
+              '- Create a PR with clear explanation of what was refactored and why',
+              '',
+              '### Scope',
+              '',
+              'Focus on the TypeScript source files in:',
+              '- `packages/core/src/`',
+              '- `packages/github/src/`',
+              '- `packages/ado/src/`',
+              '- `packages/start-git-work/src/`',
+              '- `packages/ai-reviewer/src/`',
+              '',
+              '### Exit Criteria',
+              '',
+              '- If no refactoring opportunities are found, close this issue with a comment explaining the analysis',
+              '- If refactorings are identified and applied, open a PR with detailed description',
+              '',
+              '### Refactoring Methodology',
+              '',
+              'Follow this complete methodology when analyzing and applying refactoring changes:',
+              '',
+              skillContent,
+              '',
+              '---',
+              '',
+              '_Scheduled refactoring run triggered at ' + new Date().toISOString() + '_'
+            ].join('\n');
+
+            core.setOutput('body', body);
+
+      - name: Create issue and assign Copilot agent
+        uses: ./.github/actions/create-copilot-issue
+        with:
+          issue-title: 'Automated code refactoring analysis'
+          issue-body: ${{ steps.build-body.outputs.body }}
+          issue-labels: 'squad:copilot,automated,refactoring'
+          dedup-labels: 'automated,refactoring'
+          custom-instructions: |
+            Follow the complete code-refactorer methodology embedded in the issue body.
+
+            The issue contains the full refactoring workflow including:
+            1. Appropriateness Gate — assess whether refactoring is the right response
+            2. Context-Adapted Analysis — adapt based on code signals (blast radius, test coverage, coupling)
+            3. Standard Refactoring Workflow — analyze, diagnose, plan, execute, verify, summarize
+            4. Cross-File Pattern Discovery — find and consolidate patterns across the codebase
+
+            Key principles:
+            - Focus on reducing duplication and improving structure
+            - Preserve all existing behavior (no functional changes)
+            - Run tests before and after to verify correctness
+            - Document what was refactored and why in the PR description
+
+            If you find no refactoring opportunities, close the issue with an explanation.
+            If you apply refactorings, create a PR with a clear description.
+          copilot-assign-token: ${{ secrets.COPILOT_ASSIGN_TOKEN }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}

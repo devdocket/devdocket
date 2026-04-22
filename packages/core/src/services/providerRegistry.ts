@@ -144,6 +144,15 @@ export class ProviderRegistry {
   }
 
   /**
+   * Get all registered providers.
+   *
+   * @returns An array of all registered providers.
+   */
+  getProviders(): DevDocketProvider[] {
+    return Array.from(this.providers.values());
+  }
+
+  /**
    * Get the human-readable label for a provider.
    *
    * @param providerId - The provider identifier.

@@ -5,6 +5,7 @@ import { ActionRegistry } from '../services/actionRegistry';
 import { ProviderRegistry } from '../services/providerRegistry';
 import type { ProviderLabelCache } from '../storage/providerLabelCache';
 import { WorkItemEditorPanel } from '../views/workItemEditorPanel';
+import { showProviderHealthQuickPick } from '../views/providerHealthStatusBar';
 import { logger } from '../services/logger';
 import type { ResolvedItem } from '../api/types';
 import type { ViewRevealer } from '../services/viewRevealer';
@@ -174,6 +175,8 @@ export function registerGeneralCommands(
       wrapCommand('Failed to open in browser', (item) => handleOpenInBrowser(workGraph, item))),
     vscode.commands.registerCommand('devdocket.runAction',
       wrapCommand('Failed to run action', (item) => handleRunAction(workGraph, actionRegistry, item))),
+    vscode.commands.registerCommand('devdocket.showProviderHealthQuickPick',
+      wrapCommand('Failed to show provider health quick pick', () => showProviderHealthQuickPick(providerRegistry))),
     vscode.commands.registerCommand('devdocket.addActivity',
       (itemId: string, type: string, detail?: unknown) => {
         if (!ACTIVITY_TYPES.includes(type as ActivityType)) {
