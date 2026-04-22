@@ -65,7 +65,12 @@ runs:
           const dedupTitle = process.env.INPUT_DEDUP_TITLE;
 
           // Use search API for dedup to avoid pagination limits of listForRepo
-          const labelQuery = dedupLabels.split(',').map(l => `label:"${l.trim()}"`).join(' ');
+          const labels = dedupLabels.split(',').map(l => l.trim()).filter(Boolean);
+          if (labels.length === 0) {
+            core.setFailed('dedup-labels resolved to an empty list — at least one label is required');
+            return;
+          }
+          const labelQuery = labels.map(l => `label:"${l}"`).join(' ');
           const titleQuery = dedupTitle ? `"${dedupTitle}" in:title` : '';
           const q = `repo:${context.repo.owner}/${context.repo.repo} is:issue is:open ${labelQuery} ${titleQuery}`.trim();
 
