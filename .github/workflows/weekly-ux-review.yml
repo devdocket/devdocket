@@ -1,0 +1,106 @@
+name: Weekly UX Review
+
+on:
+  # Run every Wednesday at 10:00 AM UTC (offset from implementation review)
+  schedule:
+    - cron: '0 10 * * 3'
+  # Manual trigger for testing
+  workflow_dispatch:
+
+concurrency:
+  group: weekly-ux-review
+  cancel-in-progress: false
+
+permissions:
+  issues: write
+  contents: read
+
+jobs:
+  create-ux-review-issue:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build issue body
+        id: build-body
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const uxPrompt = `First, review the latest VS Code UX guidelines (https://code.visualstudio.com/api/ux-guidelines/overview) and the VS Code extension API documentation (https://code.visualstudio.com/api). Then, act as a senior UX designer who specializes in developer tools and VS Code extensions, reviewing this extension for the first time. Identify concrete areas where the user experience is confusing, inefficient, or inconsistent — not minor polish items, but workflow-level problems that cause real user friction. Before reporting a finding, check the GitHub issue tracker to see if it's already filed. For each finding: name the UX problem, describe current user experience, explain concrete impact, describe what it should be instead. Focus areas: workflow completeness, cognitive load, discoverability, feedback & state visibility, efficiency for repeat use, information architecture, error & edge cases, platform fit, accessibility & inclusivity. Skip icon choices, color preferences, wording tweaks.`;
+
+            const body = [
+              '## 🎨 Weekly UX Expert Review',
+              '',
+              'This issue was created automatically by the scheduled UX review workflow.',
+              '',
+              '### Task',
+              '',
+              'Analyze the DevDocket extension UX using the UX review methodology embedded below.',
+              '',
+              '**Instructions:**',
+              '- Follow the complete UX review prompt included in this issue',
+              '- Review the latest VS Code UX guidelines and extension API documentation',
+              '- Act as a senior UX designer specializing in developer tools',
+              '- Identify concrete UX problems that cause real user friction',
+              '- Before filing findings, search existing issues (open and closed) to avoid duplicates',
+              '- Create individual issues for each novel UX problem with clear titles and details',
+              '- Reference this tracking issue in each finding',
+              '- Close this issue once all findings are filed',
+              '',
+              '### Scope',
+              '',
+              'Focus on workflow-level problems, not cosmetic issues:',
+              '- Workflow completeness and efficiency',
+              '- Cognitive load and discoverability',
+              '- Feedback, state visibility, and information architecture',
+              '- Error handling and edge cases',
+              '- Accessibility and inclusivity',
+              '- Platform fit for VS Code',
+              '',
+              '### Exit Criteria',
+              '',
+              '- If no UX problems are found, close this issue with a comment explaining the analysis',
+              '- If findings are identified, create individual issues for each and reference this tracker',
+              '',
+              '### UX Review Prompt',
+              '',
+              uxPrompt,
+              '',
+              '---',
+              '',
+              '_Scheduled UX review run triggered at ' + new Date().toISOString() + '_'
+            ].join('\n');
+
+            core.setOutput('body', body);
+
+      - name: Create issue and assign Copilot agent
+        # Dedup: skips creation if an open issue with the dedup label already exists.
+        # Once the previous tracking issue is closed, the next run creates a fresh one.
+        # This is intentional — week-aware dedup is unnecessary since the cron
+        # schedule already gates frequency, and open-issue dedup prevents duplicates
+        # from manual re-runs or overlapping schedules.
+        uses: ./.github/actions/create-copilot-issue
+        with:
+          issue-title: 'Automated weekly UX review'
+          issue-body: ${{ steps.build-body.outputs.body }}
+          issue-labels: 'squad:copilot,weekly-ux-review'
+          dedup-labels: 'weekly-ux-review'
+          custom-instructions: |
+            Follow the complete UX review prompt embedded in the issue body.
+
+            The issue contains the full UX review methodology including:
+            1. Review Scope — focus on workflow-level UX problems
+            2. User Impact Analysis — concrete problems causing real friction
+            3. Exit Criteria — close when analysis is complete
+
+            Key principles:
+            - Review the latest VS Code UX guidelines and extension API docs
+            - Act as a senior UX designer reviewing this extension for the first time
+            - Search existing issues (open and closed) to avoid duplicates before filing findings
+            - Create individual issues for each novel UX problem with clear titles
+            - Reference this tracking issue in each finding
+
+            If no UX problems are found, close this issue with an explanation.
+            If findings are identified, create individual issues and reference this tracker.
+          copilot-assign-token: ${{ secrets.COPILOT_ASSIGN_TOKEN }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
