@@ -75,6 +75,11 @@ jobs:
             core.setOutput('body', body);
 
       - name: Create issue and assign Copilot agent
+        # Dedup: skips creation if an open issue with the dedup label already exists.
+        # Once the previous tracking issue is closed, the next run creates a fresh one.
+        # This is intentional — week-aware dedup is unnecessary since the cron
+        # schedule already gates frequency, and open-issue dedup prevents duplicates
+        # from manual re-runs or overlapping schedules.
         uses: ./.github/actions/create-copilot-issue
         with:
           issue-title: 'Automated weekly UX review'
