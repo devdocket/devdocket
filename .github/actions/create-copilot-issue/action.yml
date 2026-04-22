@@ -79,15 +79,20 @@ runs:
           const titleQuery = dedupTitle ? `"${escapeSearchValue(dedupTitle)}" in:title` : '';
           const q = `repo:${context.repo.owner}/${context.repo.repo} is:issue is:open ${labelQuery} ${titleQuery}`.trim();
 
-          const { data: searchResults } = await github.rest.search.issuesAndPullRequests({
-            q,
-            per_page: 100
-          });
-
-          const existingIssue = searchResults.items.find(item =>
-            !item.pull_request &&
-            (!dedupTitle || item.title === dedupTitle)
-          );
+          // Paginate search results so duplicates beyond the first page aren't missed
+          let existingIssue = null;
+          for await (const response of github.paginate.iterator(
+            github.rest.search.issuesAndPullRequests, { q, per_page: 100 }
+          )) {
+            const match = response.data.find(item =>
+              !item.pull_request &&
+              (!dedupTitle || item.title === dedupTitle)
+            );
+            if (match) {
+              existingIssue = match;
+              break;
+            }
+          }
 
           if (existingIssue) {
             core.info(`Skipping: open issue #${existingIssue.number} already exists (dedup labels: ${dedupLabels})`);
