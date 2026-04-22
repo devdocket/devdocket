@@ -58,6 +58,7 @@ jobs:
           issue-body: ${{ steps.build-body.outputs.body }}
           issue-labels: 'weekly-review,go:needs-research'
           dedup-labels: 'weekly-review'
+          dedup-title: ${{ steps.build-body.outputs.title }}
           custom-instructions: |
             Read AGENTS.md for project architecture and conventions, and .squad/team.md for team context. Focus on creating separate issues for each novel finding. Before creating an issue, search both open and closed issues to avoid duplicates.
           copilot-assign-token: ${{ secrets.COPILOT_ASSIGN_TOKEN }}

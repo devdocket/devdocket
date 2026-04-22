@@ -19,6 +19,12 @@ inputs:
       Defaults to issue-labels if not specified.
     required: false
     default: ''
+  dedup-title:
+    description: >
+      If provided, dedup also requires the issue title to match exactly.
+      Use when the same labels appear on multiple issues (e.g., weekly dated issues).
+    required: false
+    default: ''
   custom-instructions:
     description: Instructions to provide to the Copilot coding agent
     required: true
@@ -51,10 +57,12 @@ runs:
         INPUT_ISSUE_BODY: ${{ inputs.issue-body }}
         INPUT_ISSUE_LABELS: ${{ inputs.issue-labels }}
         INPUT_DEDUP_LABELS: ${{ inputs.dedup-labels || inputs.issue-labels }}
+        INPUT_DEDUP_TITLE: ${{ inputs.dedup-title }}
       with:
         github-token: ${{ inputs.github-token }}
         script: |
           const dedupLabels = process.env.INPUT_DEDUP_LABELS;
+          const dedupTitle = process.env.INPUT_DEDUP_TITLE;
 
           // Check for existing open issues matching the dedup labels
           const { data: existing } = await github.rest.issues.listForRepo({
@@ -62,10 +70,13 @@ runs:
             repo: context.repo.repo,
             labels: dedupLabels,
             state: 'open',
-            per_page: 1
+            per_page: 100
           });
 
-          const existingIssue = existing.find(item => !item.pull_request);
+          const existingIssue = existing.find(item =>
+            !item.pull_request &&
+            (!dedupTitle || item.title === dedupTitle)
+          );
 
           if (existingIssue) {
             core.info(`Skipping: open issue #${existingIssue.number} already exists (dedup labels: ${dedupLabels})`);
