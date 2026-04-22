@@ -93,6 +93,15 @@ DevDocket is a VS Code extension monorepo for managing work items from multiple 
 - **Shared utilities in `commandUtils.ts`:** `wrapCommand`, `handleCommandError`, `resolveItemIds`, `formatItemTitle`, `batchTransition`, `batchAcceptItems` + `AcceptableItem` interface — used across multiple domain modules.
 - **Key lesson:** When splitting a monolith, identify cross-cutting helpers first and extract them into a shared utils module. Domain-specific type guards (e.g., `isInboxItem`, `isSourceItem`) stay in their respective domain modules since they're only used there.
 - **Files changed:** 9 new files in `packages/core/src/commands/`, `commands.ts` reduced to ~40 lines.
+### 2026-04-23 — Issue #225 (Add onboarding walkthrough)
+
+**Feature:** Added VS Code walkthrough for new user onboarding using `contributes.walkthroughs` in package.json.
+- **Walkthrough structure:** Four steps — Create First Item, Understand Workflow, Connect Provider, Focus on Work. Each step uses markdown media files in `media/walkthroughs/`.
+- **Key learnings:** VS Code walkthroughs use markdown files with command links (e.g., `[Create Work Item](command:devdocket.createItem)`). The walkthrough appears in the Get Started tab and can be triggered via Command Palette.
+- **Media organization:** Created `packages/core/media/walkthroughs/` directory for step content. Each step has a dedicated markdown file explaining concepts and linking to relevant commands.
+- **Integration:** Added to `contributes.walkthroughs` array in package.json between `main` and `configuration` sections. Walkthrough ID: `devdocket.gettingStarted`.
+- **Files changed:** `packages/core/package.json` (walkthroughs contribution), `media/walkthroughs/create-item.md`, `workflow.md`, `providers.md`, `focus.md`.
+- **Pattern:** When adding user onboarding, use VS Code's native walkthrough API with markdown media for rich content. Keep step descriptions concise with command links for interactive actions.
 
 ### 2026-04-22 — Issue #306 (Scope WorkItemEditorPanel cache to extension lifecycle)
 
