@@ -1020,5 +1020,37 @@ describe('InboxTreeProvider', () => {
       expect(provider.sessionSeenItems.has('prs::repo#1')).toBe(true);
       expect(provider.sessionSeenItems.has('reviews::repo#1')).toBe(true);
     });
+
+    it('markSeen does not propagate to already-accepted canonical peers', async () => {
+      registry._setItems('prs', [
+        { externalId: 'repo#1', title: 'PR #1', canonicalId: 'github:pull:repo#1' },
+      ]);
+      registry._setItems('reviews', [
+        { externalId: 'repo#1', title: 'PR #1', canonicalId: 'github:pull:repo#1' },
+      ]);
+      stateStore._set('reviews', 'repo#1', 'accepted');
+
+      await provider.markSeen('prs', 'repo#1');
+
+      expect(provider.sessionSeenItems.has('prs::repo#1')).toBe(true);
+      // Peer is already accepted — should not be marked seen
+      expect(provider.sessionSeenItems.has('reviews::repo#1')).toBe(false);
+    });
+
+    it('markSeenBatch does not propagate to already-dismissed canonical peers', async () => {
+      registry._setItems('prs', [
+        { externalId: 'repo#1', title: 'PR #1', canonicalId: 'github:pull:repo#1' },
+      ]);
+      registry._setItems('reviews', [
+        { externalId: 'repo#1', title: 'PR #1', canonicalId: 'github:pull:repo#1' },
+      ]);
+      stateStore._set('reviews', 'repo#1', 'dismissed');
+
+      await provider.markSeenBatch([{ providerId: 'prs', externalId: 'repo#1' }]);
+
+      expect(provider.sessionSeenItems.has('prs::repo#1')).toBe(true);
+      // Peer is already dismissed — should not be marked seen
+      expect(provider.sessionSeenItems.has('reviews::repo#1')).toBe(false);
+    });
   });
 });

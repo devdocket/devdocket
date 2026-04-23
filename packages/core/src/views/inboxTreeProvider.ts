@@ -175,7 +175,7 @@ export class InboxTreeProvider implements vscode.TreeDataProvider<InboxElement> 
     return newKeys.length > 0 || newlyAdded.length > 0;
   }
 
-  /** Finds `providerId::externalId` keys of canonical peers for the given item. */
+  /** Finds `providerId::externalId` keys of canonical peers for the given item, excluding already accepted/dismissed peers. */
   private findCanonicalPeerKeys(providerId: string, externalId: string): string[] {
     const items = this.providerRegistry.getDiscoveredItems(providerId);
     const item = items.find(i => i.externalId === externalId);
@@ -185,6 +185,8 @@ export class InboxTreeProvider implements vscode.TreeDataProvider<InboxElement> 
       for (const pi of pItems) {
         if (pi.canonicalId !== item.canonicalId) { continue; }
         if (pid === providerId && pi.externalId === externalId) { continue; }
+        const state = this.stateStore.getState(pid, pi.externalId);
+        if (state !== undefined && state !== 'unseen') { continue; }
         peers.push(`${pid}::${pi.externalId}`);
       }
     }
