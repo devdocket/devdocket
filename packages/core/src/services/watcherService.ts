@@ -114,7 +114,11 @@ export class WatcherService implements vscode.Disposable {
    * @returns The newly watched run
    * @throws If run is already being watched or watcher not found
    */
-  async startWatch(identifier: RunIdentifier, parentPRKey?: string): Promise<WatchedRun> {
+  async startWatch(
+    identifier: RunIdentifier,
+    parentPRKey?: string,
+    options?: { suppressEvents?: boolean; suppressPersist?: boolean },
+  ): Promise<WatchedRun> {
     const key = this.getWatchKey(identifier);
     const existing = this.watches.get(key);
     if (existing && !existing.dismissed) {
@@ -156,14 +160,18 @@ export class WatcherService implements vscode.Disposable {
     this.consecutiveFailures.delete(key);
     this.logger.info(`Started watching: ${identifier.displayName} (${identifier.providerId})`);
     
-    this._onDidChangeWatchedRuns.fire(this.getAllWatches());
+    if (!options?.suppressEvents) {
+      this._onDidChangeWatchedRuns.fire(this.getAllWatches());
+    }
     
     // Start polling if the watch is pollable (not already completed)
     if (watchedRun.status.overallState !== 'completed') {
       this.ensurePollingActive();
     }
     
-    this.persistWatches();
+    if (!options?.suppressPersist) {
+      this.persistWatches();
+    }
     return watchedRun;
   }
 
@@ -208,9 +216,12 @@ export class WatcherService implements vscode.Disposable {
     this.consecutiveFailures.delete(key);
     this.logger.info(`Started watching PR: ${identifier.displayName} (${identifier.providerId})`);
 
-    // Add initial runs as child watches
+    // Add initial runs as child watches (batched — single event/persist after)
     for (const runId of snapshot.runs) {
-      await this.addChildRun(key, watchedPR, runId);
+      await this.addChildRun(key, watchedPR, runId, {
+        suppressEvents: true,
+        suppressPersist: true,
+      });
     }
 
     this._onDidChangePRWatches.fire();
@@ -407,18 +418,18 @@ export class WatcherService implements vscode.Disposable {
       let anyChanged = false;
 
       // Phase 1: Poll PR watches first — may add/remove child runs
-      const prChanged = await this.pollPRWatches();
-      anyChanged = anyChanged || prChanged;
+      const prResult = await this.pollPRWatches();
+      anyChanged = anyChanged || prResult.prChanged || prResult.childRunChanged;
 
       // Phase 2: Poll run watches (including newly added child runs)
       const runChanged = await this.pollRunWatches();
       anyChanged = anyChanged || runChanged;
 
-      if (prChanged) {
+      if (prResult.prChanged) {
         this._onDidChangePRWatches.fire();
       }
 
-      if (runChanged) {
+      if (runChanged || prResult.childRunChanged) {
         this._onDidChangeWatchedRuns.fire(this.getAllWatches());
       }
 
@@ -443,14 +454,16 @@ export class WatcherService implements vscode.Disposable {
 
   /**
    * Poll PR watches for state changes and run updates.
+   * @returns Object indicating whether PR metadata or child runs changed
    */
-  private async pollPRWatches(): Promise<boolean> {
+  private async pollPRWatches(): Promise<{ prChanged: boolean; childRunChanged: boolean }> {
     const activePRs = this.getActivePRWatches().filter(
       pr => pr.prState === 'open' && !pr.hasWarning
     );
-    if (activePRs.length === 0) return false;
+    if (activePRs.length === 0) return { prChanged: false, childRunChanged: false };
 
-    let anyChanged = false;
+    let prChanged = false;
+    let childRunChanged = false;
 
     for (const prWatch of activePRs) {
       const key = this.getPRWatchKey(prWatch.identifier);
@@ -466,7 +479,7 @@ export class WatcherService implements vscode.Disposable {
         // Apply updated display name from snapshot
         if (snapshot.displayName && snapshot.displayName !== prWatch.identifier.displayName) {
           prWatch.identifier.displayName = snapshot.displayName;
-          anyChanged = true;
+          prChanged = true;
         }
 
         // Reset failure count
@@ -481,9 +494,10 @@ export class WatcherService implements vscode.Disposable {
           const runKey = this.getWatchKey(runId);
           newRunKeys.add(runKey);
           if (!currentRunKeys.has(runKey)) {
-            // New run discovered
-            await this.addChildRun(key, prWatch, runId);
-            anyChanged = true;
+            const added = await this.addChildRun(key, prWatch, runId);
+            if (added) {
+              childRunChanged = true;
+            }
           }
         }
 
@@ -493,7 +507,7 @@ export class WatcherService implements vscode.Disposable {
             const childWatch = this.watches.get(childKey);
             if (childWatch && !childWatch.dismissed) {
               childWatch.dismissed = true;
-              anyChanged = true;
+              childRunChanged = true;
             }
             prWatch.childRunKeys = prWatch.childRunKeys.filter(k => k !== childKey);
           }
@@ -502,7 +516,7 @@ export class WatcherService implements vscode.Disposable {
         // Check PR state transitions
         if (snapshot.prState !== prWatch.prState) {
           prWatch.prState = snapshot.prState;
-          anyChanged = true;
+          prChanged = true;
           if (snapshot.prState === 'merged' || snapshot.prState === 'closed') {
             this._onDidCompletePR.fire(prWatch);
           }
@@ -515,7 +529,7 @@ export class WatcherService implements vscode.Disposable {
         if (failures >= 3) {
           prWatch.hasWarning = true;
           prWatch.errorMessage = err instanceof Error ? err.message : String(err);
-          anyChanged = true;
+          prChanged = true;
           this.logger.warn(`3 consecutive failures for PR ${prWatch.identifier.displayName}, marking with warning`);
         } else {
           this.logger.warn(`PR poll failed for ${prWatch.identifier.displayName} (attempt ${failures}/3): ${err}`);
@@ -523,7 +537,7 @@ export class WatcherService implements vscode.Disposable {
       }
     }
 
-    return anyChanged;
+    return { prChanged, childRunChanged };
   }
 
   /**
@@ -617,27 +631,35 @@ export class WatcherService implements vscode.Disposable {
 
   /**
    * Add a child run to a PR watch, starting a new watch for it.
+   * @returns true if the PR's child run list actually changed
    */
-  private async addChildRun(prKey: string, prWatch: WatchedPR, runIdentifier: RunIdentifier): Promise<void> {
+  private async addChildRun(
+    prKey: string,
+    prWatch: WatchedPR,
+    runIdentifier: RunIdentifier,
+    options?: { suppressEvents?: boolean; suppressPersist?: boolean },
+  ): Promise<boolean> {
     const runKey = this.getWatchKey(runIdentifier);
     try {
       const existing = this.watches.get(runKey);
       if (existing && !existing.dismissed) {
-        // Already watched as standalone or by another PR — don't re-parent
-        if (existing.parentPRKey === prKey) {
-          if (!prWatch.childRunKeys.includes(runKey)) {
-            prWatch.childRunKeys.push(runKey);
-          }
+        // Already watched — record association without re-parenting
+        if (!prWatch.childRunKeys.includes(runKey)) {
+          prWatch.childRunKeys.push(runKey);
+          return true;
         }
-        return;
+        return false;
       }
 
-      await this.startWatch(runIdentifier, prKey);
+      await this.startWatch(runIdentifier, prKey, options);
       if (!prWatch.childRunKeys.includes(runKey)) {
         prWatch.childRunKeys.push(runKey);
+        return true;
       }
+      return false;
     } catch (err) {
       this.logger.warn(`Failed to add child run ${runIdentifier.displayName} for PR ${prWatch.identifier.displayName}: ${err}`);
+      return false;
     }
   }
 
