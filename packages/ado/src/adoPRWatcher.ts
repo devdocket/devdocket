@@ -74,6 +74,9 @@ export class AdoPRWatcher implements DevDocketPRWatcher {
     token?: CancellationTokenLike,
   ): Promise<PRRunsSnapshot> {
     const repoParts = identifier.repo.split('/');
+    if (repoParts.length !== 3 || repoParts.some(p => !p)) {
+      throw new Error(`Invalid ADO repo format: expected "org/project/repo" but got "${identifier.repo}"`);
+    }
     const [org, project, repo] = repoParts;
     const encodedOrg = encodeURIComponent(org);
     const encodedProject = encodeURIComponent(project);
