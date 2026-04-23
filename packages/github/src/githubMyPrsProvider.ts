@@ -55,10 +55,18 @@ export class GitHubMyPrsProvider extends BaseGitHubProvider {
       : { prs: [] as GitHubIssue[], failures: [] as string[] };
 
     if (authoredSettled.status === 'rejected') {
-      logger.error('Failed to fetch authored PRs', authoredSettled.reason);
+      const err = authoredSettled.reason;
+      if (err instanceof Error && err.name === 'AbortError') {
+        throw err;
+      }
+      logger.error('Failed to fetch authored PRs', err);
     }
     if (assignedSettled.status === 'rejected') {
-      logger.error('Failed to fetch assigned PRs', assignedSettled.reason);
+      const err = assignedSettled.reason;
+      if (err instanceof Error && err.name === 'AbortError') {
+        throw err;
+      }
+      logger.error('Failed to fetch assigned PRs', err);
     }
 
     logger.info(`Discovered ${authoredResult.prs.length} authored PRs and ${assignedResult.prs.length} assigned PRs`);

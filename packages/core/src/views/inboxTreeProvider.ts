@@ -1,6 +1,7 @@
 import * as vscode from 'vscode';
 import { DiscoveredItem } from '../api/types';
 import { ProviderRegistry } from '../services/providerRegistry';
+import { buildCanonicalHiddenSet } from '../services/canonicalDedup';
 import { DiscoveredStateStore } from '../storage/discoveredStateStore';
 import { ReadStateStore } from '../storage/readStateStore';
 import { logger } from '../services/logger';
@@ -359,45 +360,12 @@ export class InboxTreeProvider implements vscode.TreeDataProvider<InboxElement> 
     };
   }
 
-  /**
-   * Builds a set of `providerId::externalId` keys that should be hidden due to
-   * cross-provider canonicalId dedup. For each group of unseen items sharing the
-   * same canonicalId, the first key alphabetically is the representative;
-   * the rest are hidden.
-   */
-  private buildCanonicalHiddenSet(): Set<string> {
-    const hidden = new Set<string>();
-    // Map canonicalId → list of providerId::externalId keys
-    const groups = new Map<string, string[]>();
-    const allItems = this.providerRegistry.getAllDiscoveredItems();
-    for (const [providerId, items] of allItems) {
-      for (const item of items) {
-        if (!item.canonicalId) { continue; }
-        const state = this.stateStore.getState(providerId, item.externalId);
-        if (state !== undefined && state !== 'unseen') { continue; }
-        const key = `${providerId}::${item.externalId}`;
-        let group = groups.get(item.canonicalId);
-        if (!group) {
-          group = [];
-          groups.set(item.canonicalId, group);
-        }
-        group.push(key);
-      }
-    }
-    for (const members of groups.values()) {
-      if (members.length <= 1) { continue; }
-      members.sort();
-      // First sorted key is the representative; hide the rest
-      for (let i = 1; i < members.length; i++) {
-        hidden.add(members[i]);
-      }
-    }
-    return hidden;
-  }
-
   private getCanonicalHiddenSet(): Set<string> {
     if (!this.cachedHiddenSet) {
-      this.cachedHiddenSet = this.buildCanonicalHiddenSet();
+      this.cachedHiddenSet = buildCanonicalHiddenSet(
+        this.providerRegistry.getAllDiscoveredItems(),
+        (pid, eid) => this.stateStore.getState(pid, eid),
+      );
     }
     return this.cachedHiddenSet;
   }
