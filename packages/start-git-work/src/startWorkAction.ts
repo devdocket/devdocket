@@ -49,7 +49,7 @@ interface AdoPrResponse {
 
 interface PrBranchInfo {
   branchName: string;
-  /** Local ref for fork PRs fetched via GitHub's PR refs (e.g. "refs/devdocket/pr/42"). */
+  /** Remote tracking ref when branch is on a non-origin remote (e.g. "devdocket-fork-contributor/fix-bug"). */
   trackingRef?: string;
 }
 
@@ -285,7 +285,8 @@ export class StartWorkAction implements DevDocketAction {
 
   /**
    * Fetches the branch name for a GitHub PR and ensures it is available locally.
-   * For fork PRs, fetches via GitHub's PR refs on origin (no fork remote needed).
+   * Finds (or adds) the remote whose URL matches the PR head repo, then does a
+   * full fetch so all refs are available for checkout/worktree creation.
    */
   private async fetchGitHubPrBranch(parsed: ParsedExternalId, repoPath: string): Promise<PrBranchInfo | undefined> {
     const session = await vscode.authentication.getSession('github', ['repo'], { createIfNone: true });
@@ -331,20 +332,50 @@ export class StartWorkAction implements DevDocketAction {
       return undefined;
     }
 
-    const isFork = pr.head.repo.full_name !== pr.base.repo.full_name;
+    const headCloneUrl = pr.head.repo.clone_url;
+    const remoteName = await this.findOrAddRemote(headCloneUrl, pr.head.repo.full_name, repoPath);
 
-    if (isFork) {
-      // Fetch fork PR via GitHub's special PR refs on the base repo.
-      // This avoids adding a remote for the fork (which may lack auth for private forks).
-      const prRef = `refs/devdocket/pr/${parsed.itemNumber}`;
-      await execFileAsync('git', ['fetch', 'origin', `pull/${parsed.itemNumber}/head:${prRef}`], { cwd: repoPath, timeout: 30_000 });
+    // Full fetch to ensure all refs (including the PR branch) are available
+    await execFileAsync('git', ['fetch', remoteName], { cwd: repoPath, timeout: 30_000 });
 
-      return { branchName, trackingRef: prRef };
-    } else {
-      await execFileAsync('git', ['fetch', 'origin', branchName], { cwd: repoPath, timeout: 30_000 });
+    if (remoteName === 'origin') {
+      return { branchName };
+    }
+    return { branchName, trackingRef: `${remoteName}/${branchName}` };
+  }
+
+  /**
+   * Finds a local remote whose fetch URL matches {@link cloneUrl}, or adds a
+   * new `devdocket-fork-{owner}` remote pointing to it.
+   */
+  private async findOrAddRemote(cloneUrl: string, fullName: string, repoPath: string): Promise<string> {
+    const { stdout } = await execFileAsync('git', ['remote', '-v'], { cwd: repoPath, timeout: 30_000 });
+    for (const line of stdout.split('\n')) {
+      const match = line.match(/^(\S+)\t(\S+)\s+\(fetch\)$/);
+      if (match && match[2] === cloneUrl) {
+        return match[1];
+      }
     }
 
-    return { branchName };
+    // No existing remote matches — add a DevDocket-managed one
+    const forkOwner = fullName.split('/')[0];
+    const forkRemoteName = `devdocket-fork-${forkOwner}`;
+
+    try {
+      await execFileAsync('git', ['remote', 'add', forkRemoteName, cloneUrl], { cwd: repoPath, timeout: 30_000 });
+    } catch (err) {
+      try {
+        const { stdout: existingUrl } = await execFileAsync('git', ['remote', 'get-url', forkRemoteName], { cwd: repoPath, timeout: 30_000 });
+        if (existingUrl.trim() !== cloneUrl) {
+          logger.info(`Remote "${forkRemoteName}" exists with different URL, updating to "${cloneUrl}".`);
+          await execFileAsync('git', ['remote', 'set-url', forkRemoteName, cloneUrl], { cwd: repoPath, timeout: 30_000 });
+        }
+      } catch {
+        throw err;
+      }
+    }
+
+    return forkRemoteName;
   }
 
   /**
@@ -434,7 +465,7 @@ export class StartWorkAction implements DevDocketAction {
     let createdBranch = false;
 
     if (hasLocalBranch && trackingRef) {
-      // Fork PR with an existing local branch — the local branch may be stale or
+      // PR with an existing local branch — the local branch may be stale or
       // tracking a different remote. Create a detached worktree from the PR ref.
       logger.info(
         `Local branch ${branchName} exists, but PR uses tracking ref ${trackingRef}; creating detached worktree from tracking ref`,
