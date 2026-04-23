@@ -922,6 +922,31 @@ describe('StartWorkAction', () => {
       expect(checkoutCall![1]).toEqual(['checkout', '-b', 'fix/something', 'contributor/fix/something']);
     });
 
+    it('force-updates local branch to fork tracking ref in checkout mode', async () => {
+      mockFetchResponse(createGitHubPrResponse({
+        head: {
+          ref: 'fix/something',
+          repo: {
+            full_name: 'contributor/repo',
+            clone_url: 'https://github.com/contributor/repo.git',
+          },
+        },
+      }));
+      mockQuickPickCheckout();
+      // Local branch exists — should use -B to reset it to tracking ref
+      const item = createWorkItem({
+        providerId: 'github-my-prs',
+        externalId: 'owner/repo#42',
+      });
+      await action.run(item);
+
+      const checkoutCall = vi.mocked(execFile).mock.calls.find(
+        (call: any[]) => call[1]?.[0] === 'checkout',
+      );
+      expect(checkoutCall).toBeDefined();
+      expect(checkoutCall![1]).toEqual(['checkout', '-B', 'fix/something', 'contributor/fix/something']);
+    });
+
     it('shows error when fork repository has been deleted', async () => {
       mockFetchResponse(createGitHubPrResponse({
         head: {

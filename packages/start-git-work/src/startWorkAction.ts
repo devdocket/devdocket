@@ -509,9 +509,13 @@ export class StartWorkAction implements DevDocketAction {
     // Check if the branch already exists locally to pick the right checkout strategy.
     // For fork PRs without a local branch, create from the remote tracking ref.
     // For same-repo PRs without a local branch, create from origin/<branch>.
+    // When a fork trackingRef is set and a local branch exists, force-update it to
+    // point at the tracking ref to avoid silently checking out stale/unrelated code.
     const hasLocalBranch = await this.localBranchExists(branchName, repoPath);
     let checkoutArgs: string[];
-    if (hasLocalBranch) {
+    if (hasLocalBranch && trackingRef) {
+      checkoutArgs = ['checkout', '-B', branchName, trackingRef];
+    } else if (hasLocalBranch) {
       checkoutArgs = ['checkout', branchName];
     } else if (trackingRef) {
       checkoutArgs = ['checkout', '-b', branchName, trackingRef];
