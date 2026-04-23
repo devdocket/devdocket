@@ -30,7 +30,7 @@ interface GitHubPrHead {
   repo: {
     full_name: string;
     clone_url: string;
-  };
+  } | null;
 }
 
 interface GitHubPrResponse {
@@ -44,6 +44,12 @@ interface GitHubPrResponse {
 
 interface AdoPrResponse {
   sourceRefName: string;
+}
+
+interface PrBranchInfo {
+  branchName: string;
+  /** Fully-qualified remote tracking ref for fork PRs (e.g. "contributor/fix-bug"). */
+  trackingRef?: string;
 }
 
 /**
@@ -254,18 +260,18 @@ export class StartWorkAction implements DevDocketAction {
           progress.report({ message: 'Fetching PR branch...' });
 
           const isGitHubPr = item.providerId === 'github-my-prs' || item.providerId === 'github-pr-reviews';
-          const branchName = isGitHubPr
+          const branchInfo = isGitHubPr
             ? await this.fetchGitHubPrBranch(parsed, repoPath)
             : await this.fetchAdoPrBranch(parsed, repoPath);
 
-          if (!branchName) {
+          if (!branchInfo) {
             return;
           }
 
           if (workMode === 'worktree') {
-            await this.prWorktreeFlow(item, parsed, repoPath, branchName, progress);
+            await this.prWorktreeFlow(item, parsed, repoPath, branchInfo, progress);
           } else {
-            await this.prCheckoutFlow(item, repoPath, branchName, progress);
+            await this.prCheckoutFlow(item, repoPath, branchInfo, progress);
           }
         },
       );
@@ -280,7 +286,7 @@ export class StartWorkAction implements DevDocketAction {
    * Fetches the branch name for a GitHub PR and ensures it is available locally.
    * Handles fork detection — adds a remote for the fork owner if needed.
    */
-  private async fetchGitHubPrBranch(parsed: ParsedExternalId, repoPath: string): Promise<string | undefined> {
+  private async fetchGitHubPrBranch(parsed: ParsedExternalId, repoPath: string): Promise<PrBranchInfo | undefined> {
     const session = await vscode.authentication.getSession('github', ['repo'], { createIfNone: true });
     if (!session) {
       void vscode.window.showErrorMessage('DevDocket: GitHub authentication required.');
@@ -309,6 +315,14 @@ export class StartWorkAction implements DevDocketAction {
 
     const pr = await response.json() as GitHubPrResponse;
     const branchName = pr.head.ref;
+
+    if (!pr.head.repo) {
+      void vscode.window.showErrorMessage(
+        `DevDocket: The source repository for PR #${parsed.itemNumber} has been deleted.`,
+      );
+      return undefined;
+    }
+
     const isFork = pr.head.repo.full_name !== pr.base.repo.full_name;
 
     if (isFork) {
@@ -318,23 +332,25 @@ export class StartWorkAction implements DevDocketAction {
       // Add remote if it doesn't already exist
       try {
         await execFileAsync('git', ['remote', 'add', forkOwner, cloneUrl], { cwd: repoPath, timeout: 30_000 });
-      } catch {
-        // Remote already exists — that's fine
+      } catch (err) {
+        logger.info(`Remote "${forkOwner}" may already exist: ${err instanceof Error ? err.message : String(err)}`);
       }
 
       await execFileAsync('git', ['fetch', forkOwner, branchName], { cwd: repoPath, timeout: 30_000 });
+
+      return { branchName, trackingRef: `${forkOwner}/${branchName}` };
     } else {
       await execFileAsync('git', ['fetch', 'origin', branchName], { cwd: repoPath, timeout: 30_000 });
     }
 
-    return branchName;
+    return { branchName };
   }
 
   /**
    * Fetches the branch name for an ADO PR.
    * Strips the `refs/heads/` prefix from `sourceRefName`.
    */
-  private async fetchAdoPrBranch(parsed: ParsedExternalId, repoPath: string): Promise<string | undefined> {
+  private async fetchAdoPrBranch(parsed: ParsedExternalId, repoPath: string): Promise<PrBranchInfo | undefined> {
     const session = await vscode.authentication.getSession(
       'microsoft',
       ['499b84ac-1321-427f-aa17-267ca6975798/.default'],
@@ -374,16 +390,17 @@ export class StartWorkAction implements DevDocketAction {
 
     await execFileAsync('git', ['fetch', 'origin', branchName], { cwd: repoPath, timeout: 30_000 });
 
-    return branchName;
+    return { branchName };
   }
 
   private async prWorktreeFlow(
     item: Readonly<WorkItem>,
     parsed: ParsedExternalId,
     repoPath: string,
-    branchName: string,
+    branchInfo: PrBranchInfo,
     progress: vscode.Progress<{ message?: string }>,
   ): Promise<void> {
+    const { branchName, trackingRef } = branchInfo;
     const repoBaseName = path.basename(repoPath);
     const worktreeDirName = `${repoBaseName}-pr${parsed.itemNumber}`;
     const worktreePath = path.join(path.dirname(repoPath), worktreeDirName);
@@ -395,7 +412,12 @@ export class StartWorkAction implements DevDocketAction {
 
     progress.report({ message: 'Creating worktree...' });
 
-    await execFileAsync('git', ['worktree', 'add', worktreePath, branchName], {
+    // For fork PRs, use -b to create a local branch from the remote tracking ref
+    const worktreeArgs = trackingRef
+      ? ['worktree', 'add', '-b', branchName, worktreePath, trackingRef]
+      : ['worktree', 'add', worktreePath, branchName];
+
+    await execFileAsync('git', worktreeArgs, {
       cwd: repoPath,
       timeout: 30_000,
     });
@@ -422,9 +444,10 @@ export class StartWorkAction implements DevDocketAction {
   private async prCheckoutFlow(
     item: Readonly<WorkItem>,
     repoPath: string,
-    branchName: string,
+    branchInfo: PrBranchInfo,
     progress: vscode.Progress<{ message?: string }>,
   ): Promise<void> {
+    const { branchName, trackingRef } = branchInfo;
     const canProceed = await this.checkDirtyTree(repoPath);
     if (!canProceed) {
       return;
@@ -432,7 +455,12 @@ export class StartWorkAction implements DevDocketAction {
 
     progress.report({ message: 'Checking out branch...' });
 
-    await execFileAsync('git', ['checkout', branchName], { cwd: repoPath, timeout: 30_000 });
+    // For fork PRs, create a local branch from the remote tracking ref to avoid ambiguity
+    const checkoutArgs = trackingRef
+      ? ['checkout', '-b', branchName, trackingRef]
+      : ['checkout', branchName];
+
+    await execFileAsync('git', checkoutArgs, { cwd: repoPath, timeout: 30_000 });
     logger.info(`Checked out PR branch ${branchName}`);
 
     try {
@@ -515,9 +543,10 @@ export class StartWorkAction implements DevDocketAction {
 
   /**
    * Parses the externalId into repoKey and itemNumber.
-   * Supports two formats:
-   *   GitHub:  "owner/repo#123"       → repoKey="owner/repo", itemNumber="123"
-   *   ADO:    "org/project/123"       → repoKey="org/project", itemNumber="123"
+   * Supports three formats:
+   *   GitHub:      "owner/repo#123"           → repoKey="owner/repo", itemNumber="123"
+   *   ADO Issue:   "org/project/123"           → repoKey="org/project", itemNumber="123"
+   *   ADO PR:      "org/project/repo/101"      → repoKey="org/project/repo", itemNumber="101"
    */
   private parseExternalId(externalId: string | undefined): ParsedExternalId | undefined {
     if (!externalId) {

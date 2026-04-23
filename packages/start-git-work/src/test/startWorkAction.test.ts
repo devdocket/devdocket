@@ -850,6 +850,61 @@ describe('StartWorkAction', () => {
       );
       expect(fetchCall).toBeDefined();
       expect(fetchCall![1]).toEqual(['fetch', 'contributor', 'fix/something']);
+
+      const worktreeCall = vi.mocked(execFile).mock.calls.find(
+        (call: any[]) => call[1]?.[0] === 'worktree',
+      );
+      expect(worktreeCall).toBeDefined();
+      expect(worktreeCall![1]).toEqual([
+        'worktree', 'add', '-b', 'fix/something',
+        path.join('/mock', 'workspace-pr42'),
+        'contributor/fix/something',
+      ]);
+    });
+
+    it('uses checkout -b with tracking ref for fork PRs in checkout mode', async () => {
+      mockFetchResponse(createGitHubPrResponse({
+        head: {
+          ref: 'fix/something',
+          repo: {
+            full_name: 'contributor/repo',
+            clone_url: 'https://github.com/contributor/repo.git',
+          },
+        },
+      }));
+      mockQuickPickCheckout();
+
+      const item = createWorkItem({
+        providerId: 'github-my-prs',
+        externalId: 'owner/repo#42',
+      });
+      await action.run(item);
+
+      const checkoutCall = vi.mocked(execFile).mock.calls.find(
+        (call: any[]) => call[1]?.[0] === 'checkout',
+      );
+      expect(checkoutCall).toBeDefined();
+      expect(checkoutCall![1]).toEqual(['checkout', '-b', 'fix/something', 'contributor/fix/something']);
+    });
+
+    it('shows error when fork repository has been deleted', async () => {
+      mockFetchResponse(createGitHubPrResponse({
+        head: {
+          ref: 'fix/something',
+          repo: null,
+        },
+      }));
+      mockQuickPickWorktree();
+
+      const item = createWorkItem({
+        providerId: 'github-my-prs',
+        externalId: 'owner/repo#42',
+      });
+      await action.run(item);
+
+      expect(window.showErrorMessage).toHaveBeenCalledWith(
+        'DevDocket: The source repository for PR #42 has been deleted.',
+      );
     });
 
     it('handles existing fork remote gracefully', async () => {
