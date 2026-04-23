@@ -464,7 +464,7 @@ describe('AdoPrReviewProvider — extended', () => {
       } as any);
     });
 
-    it('omits version when resurfaceOnNewVersion is false', async () => {
+    it('omits resurfaceVersion when resurfaceOnNewVersion is false', async () => {
       const { workspace } = await import('vscode');
       vi.mocked(workspace.getConfiguration).mockReturnValue({
         get: vi.fn((key: string, defaultValue?: any) => {
@@ -493,10 +493,10 @@ describe('AdoPrReviewProvider — extended', () => {
 
       const items = listener.mock.calls[0][0];
       expect(items).toHaveLength(1);
-      expect(items[0].version).toBeUndefined();
+      expect(items[0].resurfaceVersion).toBeUndefined();
     });
 
-    it('includes version when resurfaceOnNewVersion is true (default)', async () => {
+    it('includes resurfaceVersion when resurfaceOnNewVersion is true (default)', async () => {
       const prWithCommit = {
         ...createMockPr(1, 'PR with commit'),
         lastMergeSourceCommit: { commitId: 'abc123' },
@@ -515,7 +515,7 @@ describe('AdoPrReviewProvider — extended', () => {
 
       const items = listener.mock.calls[0][0];
       expect(items).toHaveLength(1);
-      expect(items[0].version).toBe('abc123');
+      expect(items[0].resurfaceVersion).toBe('abc123');
     });
   });
 

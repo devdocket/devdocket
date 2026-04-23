@@ -28,6 +28,7 @@ import { initLogger, setLogLevel, logger, resolveLogLevel } from './services/log
 import { getInboxUnseenCount } from './services/inboxBadge';
 import { syncProviderTitles } from './services/titleSync';
 import { getViewLayout, ViewId } from './views/viewLayout';
+import { ActivityType } from '@devdocket/shared';
 import { performance } from 'perf_hooks';
 
 export type { DevDocketApi, DevDocketProvider, DevDocketAction, DiscoveredItem, Disposable, ActivityLogEntry, ActivityType, StateTransitionEvent } from './api/types';
@@ -390,7 +391,14 @@ export async function activate(context: vscode.ExtensionContext): Promise<DevDoc
   const { workGraph: wg, stateStore: ss, readStateStore, labelCache } = await loadStores(storagePath);
   await migrateDiscoveredState(wg, ss);
 
-  const pr = new ProviderRegistry(ss, labelCache);
+  const pr = new ProviderRegistry(
+    ss, labelCache,
+    (providerId, externalId) => wg.findItemByProvenance(providerId, externalId)?.state,
+    async (providerId, externalId, type, detail) => {
+      const item = wg.findItemByProvenance(providerId, externalId);
+      if (item) { await wg.addActivity(item.id, type as ActivityType, detail); }
+    },
+  );
   const ar = new ActionRegistry();
   const wr = new WatcherRegistry(logger);
   const watchStore = new WatchStore(storagePath);
