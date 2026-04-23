@@ -19,7 +19,9 @@ interface WatchStoreData {
  * Persists watched pipeline runs and PR watches as JSON on disk.
  * Extends SerializedJsonStore for write-queue serialization and JSON helpers.
  *
- * Migrates legacy files (plain JSON array) to the new envelope format.
+ * Supports the legacy plain-array format (runs only); legacy data is
+ * transparently converted on read and written in the new envelope format
+ * on the next save.
  */
 export class WatchStore extends SerializedJsonStore {
   private readonly filePath: string;
