@@ -434,12 +434,25 @@ export class StartWorkAction implements DevDocketAction {
     progress.report({ message: 'Creating worktree...' });
 
     // Determine worktree strategy based on whether a local branch already exists.
-    // For fork PRs, always create from the remote tracking ref.
+    // For fork PRs, always create from the remote tracking ref (detached if local branch
+    // exists, to avoid using a stale/unrelated same-named local branch).
     // For same-repo PRs, the branch may only exist as origin/<branch> after fetch.
     const hasLocalBranch = await this.localBranchExists(branchName, repoPath);
     const worktreeSourceRef = trackingRef ?? `origin/${branchName}`;
 
-    if (hasLocalBranch) {
+    if (hasLocalBranch && trackingRef) {
+      // Fork PR with an existing local branch — the local branch may be stale or
+      // tracking a different remote. Create a detached worktree from the fork ref.
+      logger.info(
+        `Local branch ${branchName} exists, but PR uses tracking ref ${trackingRef}; creating detached worktree from tracking ref`,
+      );
+      progress.report({ message: 'Creating detached worktree from PR tracking ref...' });
+
+      await execFileAsync('git', ['worktree', 'add', '--detach', worktreePath, trackingRef], {
+        cwd: repoPath,
+        timeout: 30_000,
+      });
+    } else if (hasLocalBranch) {
       try {
         await execFileAsync('git', ['worktree', 'add', worktreePath, branchName], {
           cwd: repoPath,

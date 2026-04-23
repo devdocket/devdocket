@@ -896,6 +896,36 @@ describe('StartWorkAction', () => {
       ]);
     });
 
+    it('creates detached worktree from tracking ref when local branch exists (fork PR)', async () => {
+      mockFetchResponse(createGitHubPrResponse({
+        head: {
+          ref: 'fix/something',
+          repo: {
+            full_name: 'contributor/repo',
+            clone_url: 'https://github.com/contributor/repo.git',
+          },
+        },
+      }));
+      mockQuickPickWorktree();
+      // Local branch exists — should create detached worktree from tracking ref
+
+      const item = createWorkItem({
+        providerId: 'github-my-prs',
+        externalId: 'owner/repo#42',
+      });
+      await action.run(item);
+
+      const worktreeCall = vi.mocked(execFile).mock.calls.find(
+        (call: any[]) => call[1]?.[0] === 'worktree',
+      );
+      expect(worktreeCall).toBeDefined();
+      expect(worktreeCall![1]).toEqual([
+        'worktree', 'add', '--detach',
+        path.join('/mock', 'workspace-pr42'),
+        'contributor/fix/something',
+      ]);
+    });
+
     it('uses checkout -b with tracking ref for fork PRs in checkout mode', async () => {
       mockFetchResponse(createGitHubPrResponse({
         head: {
