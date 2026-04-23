@@ -12,6 +12,18 @@ export function getInboxUnseenCount(
     (pid, eid) => stateStore.getState(pid, eid),
   );
 
+  // Precompute which canonical groups have any member seen in this session
+  const seenCanonicalIds = new Set<string>();
+  if (seenItems && seenItems.size > 0) {
+    for (const [providerId, items] of providerRegistry.getAllDiscoveredItems()) {
+      for (const item of items) {
+        if (item.canonicalId && seenItems.has(`${providerId}::${item.externalId}`)) {
+          seenCanonicalIds.add(item.canonicalId);
+        }
+      }
+    }
+  }
+
   let count = 0;
   for (const [providerId, items] of providerRegistry.getAllDiscoveredItems()) {
     for (const item of items) {
@@ -19,6 +31,10 @@ export function getInboxUnseenCount(
       if (state === undefined || state === 'unseen') {
         const key = `${providerId}::${item.externalId}`;
         if (!hidden.has(key) && !seenItems?.has(key)) {
+          // Also treat as seen if any canonical peer was seen this session
+          if (item.canonicalId && seenCanonicalIds.has(item.canonicalId)) {
+            continue;
+          }
           count++;
         }
       }
