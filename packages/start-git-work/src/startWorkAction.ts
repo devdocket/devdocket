@@ -261,6 +261,7 @@ export class StartWorkAction implements DevDocketAction {
           progress.report({ message: 'Fetching PR branch...' });
 
           const isGitHubPr = GITHUB_PR_PROVIDERS.includes(item.providerId ?? '');
+          logger.info(`PR flow: provider=${item.providerId}, type=${isGitHubPr ? 'GitHub' : 'ADO'}, repoKey=${parsed.repoKey}, itemNumber=${parsed.itemNumber}`);
           const branchInfo = isGitHubPr
             ? await this.fetchGitHubPrBranch(parsed, repoPath)
             : await this.fetchAdoPrBranch(parsed, repoPath);
@@ -302,6 +303,7 @@ export class StartWorkAction implements DevDocketAction {
     }
     const [owner, repo] = repoKeyParts;
     const url = `https://api.github.com/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/pulls/${parsed.itemNumber}`;
+    logger.debug(`GitHub PR API: ${url}`);
 
     const response = await fetch(url, {
       headers: {
@@ -314,6 +316,7 @@ export class StartWorkAction implements DevDocketAction {
     });
 
     if (!response.ok) {
+      logger.info(`GitHub PR API returned ${response.status} for PR #${parsed.itemNumber}`);
       if (response.status === 404) {
         void vscode.window.showErrorMessage(`DevDocket: Could not find PR #${parsed.itemNumber}`);
       } else {
@@ -324,8 +327,11 @@ export class StartWorkAction implements DevDocketAction {
 
     const pr = await response.json() as GitHubPrResponse;
     const branchName = pr.head.ref;
+    const isFork = pr.head.repo ? pr.head.repo.full_name !== pr.base.repo.full_name : false;
+    logger.debug(`GitHub PR #${parsed.itemNumber}: head.ref=${branchName}, head.repo=${pr.head.repo?.full_name ?? 'null'}, base.repo=${pr.base.repo.full_name}, isFork=${isFork}`);
 
     if (!pr.head.repo) {
+      logger.info(`PR #${parsed.itemNumber}: source repository has been deleted`);
       void vscode.window.showErrorMessage(
         `DevDocket: The source repository for PR #${parsed.itemNumber} has been deleted.`,
       );
@@ -333,14 +339,19 @@ export class StartWorkAction implements DevDocketAction {
     }
 
     const headCloneUrl = pr.head.repo.clone_url;
+    logger.debug(`Looking up remote for clone URL: ${headCloneUrl}`);
     const remoteName = await this.findOrAddRemote(headCloneUrl, pr.head.repo.full_name, repoPath);
 
     // Full fetch to ensure all refs (including the PR branch) are available
+    logger.info(`Fetching all refs from remote "${remoteName}"`);
     await execFileAsync('git', ['fetch', remoteName], { cwd: repoPath, timeout: 30_000 });
+    logger.debug(`Fetch complete for remote "${remoteName}"`);
 
     if (remoteName === 'origin') {
+      logger.info(`PR branch "${branchName}" available on origin`);
       return { branchName };
     }
+    logger.info(`PR branch available as ${remoteName}/${branchName}`);
     return { branchName, trackingRef: `${remoteName}/${branchName}` };
   }
 
@@ -353,6 +364,7 @@ export class StartWorkAction implements DevDocketAction {
     for (const line of stdout.split('\n')) {
       const match = line.match(/^(\S+)\t(\S+)\s+\(fetch\)$/);
       if (match && match[2] === cloneUrl) {
+        logger.info(`Found existing remote "${match[1]}" matching ${cloneUrl}`);
         return match[1];
       }
     }
@@ -360,15 +372,19 @@ export class StartWorkAction implements DevDocketAction {
     // No existing remote matches — add a DevDocket-managed one
     const forkOwner = fullName.split('/')[0];
     const forkRemoteName = `devdocket-fork-${forkOwner}`;
+    logger.debug(`No remote found for ${cloneUrl}, adding "${forkRemoteName}"`);
 
     try {
       await execFileAsync('git', ['remote', 'add', forkRemoteName, cloneUrl], { cwd: repoPath, timeout: 30_000 });
+      logger.info(`Added remote "${forkRemoteName}" → ${cloneUrl}`);
     } catch (err) {
       try {
         const { stdout: existingUrl } = await execFileAsync('git', ['remote', 'get-url', forkRemoteName], { cwd: repoPath, timeout: 30_000 });
         if (existingUrl.trim() !== cloneUrl) {
           logger.info(`Remote "${forkRemoteName}" exists with different URL, updating to "${cloneUrl}".`);
           await execFileAsync('git', ['remote', 'set-url', forkRemoteName, cloneUrl], { cwd: repoPath, timeout: 30_000 });
+        } else {
+          logger.debug(`Remote "${forkRemoteName}" already exists with correct URL`);
         }
       } catch {
         throw err;
@@ -403,6 +419,7 @@ export class StartWorkAction implements DevDocketAction {
     const project = parts[1];
     const adoRepo = parts[2];
     const url = `https://dev.azure.com/${encodeURIComponent(org)}/${encodeURIComponent(project)}/_apis/git/repositories/${encodeURIComponent(adoRepo)}/pullrequests/${parsed.itemNumber}?api-version=7.1`;
+    logger.debug(`ADO PR API: ${url}`);
 
     const response = await fetch(url, {
       headers: {
@@ -414,6 +431,7 @@ export class StartWorkAction implements DevDocketAction {
     });
 
     if (!response.ok) {
+      logger.info(`ADO PR API returned ${response.status} for PR #${parsed.itemNumber}`);
       if (response.status === 404) {
         void vscode.window.showErrorMessage(`DevDocket: Could not find PR #${parsed.itemNumber}`);
       } else {
@@ -424,10 +442,14 @@ export class StartWorkAction implements DevDocketAction {
 
     const pr = await response.json() as AdoPrResponse;
     const branchName = pr.sourceRefName.replace(/^refs\/heads\//, '');
+    logger.debug(`ADO PR #${parsed.itemNumber}: sourceRefName=${pr.sourceRefName}, branchName=${branchName}`);
 
+    logger.info(`Fetching branch "${branchName}" from origin`);
     try {
       await execFileAsync('git', ['fetch', 'origin', branchName], { cwd: repoPath, timeout: 30_000 });
+      logger.debug(`Fetch complete for origin/${branchName}`);
     } catch {
+      logger.info(`Failed to fetch branch "${branchName}" from origin`);
       void vscode.window.showErrorMessage(
         `DevDocket: Could not fetch branch '${branchName}' from origin. The branch may have been deleted.`,
       );
