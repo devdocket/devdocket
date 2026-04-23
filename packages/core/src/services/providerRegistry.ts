@@ -440,17 +440,22 @@ export class ProviderRegistry {
         if (!this._disposed && newUnseenUpdates.length > 0) {
           this._onDidAddNewUnseenItems.fire(newUnseenUpdates.length);
         }
+
+        // Log activity only after state was successfully persisted
+        if (this.addActivity && activityEntries.length > 0) {
+          const results = await Promise.allSettled(
+            activityEntries.map(entry =>
+              this.addActivity!(entry.providerId, entry.externalId, 'version-updated'),
+            ),
+          );
+          for (const result of results) {
+            if (result.status === 'rejected') {
+              logger.error('Failed to log version-updated activity', result.reason);
+            }
+          }
+        }
       } catch (err) {
         logger.error('Failed to persist discovered states', err);
-      }
-    }
-
-    // Log activity for suppressed version changes
-    if (this.addActivity && activityEntries.length > 0) {
-      for (const entry of activityEntries) {
-        this.addActivity(entry.providerId, entry.externalId, 'version-updated').catch(err => {
-          logger.error('Failed to log version-updated activity', err);
-        });
       }
     }
     if (!this._disposed) {
