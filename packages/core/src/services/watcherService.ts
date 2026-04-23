@@ -415,15 +415,11 @@ export class WatcherService implements vscode.Disposable {
 
     this.isPollInFlight = true;
     try {
-      let anyChanged = false;
-
       // Phase 1: Poll PR watches first — may add/remove child runs
       const prResult = await this.pollPRWatches();
-      anyChanged = anyChanged || prResult.prChanged || prResult.childRunChanged;
 
       // Phase 2: Poll run watches (including newly added child runs)
       const runChanged = await this.pollRunWatches();
-      anyChanged = anyChanged || runChanged;
 
       if (prResult.prChanged) {
         this._onDidChangePRWatches.fire();
@@ -433,6 +429,7 @@ export class WatcherService implements vscode.Disposable {
         this._onDidChangeWatchedRuns.fire(this.getAllWatches());
       }
 
+      const anyChanged = prResult.prChanged || prResult.childRunChanged || runChanged;
       if (anyChanged) {
         this.persistWatches();
       }
