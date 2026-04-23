@@ -656,12 +656,18 @@ export class WatcherService implements vscode.Disposable {
     try {
       const existing = this.watches.get(runKey);
       if (existing && !existing.dismissed) {
-        // Already watched — record association without re-parenting
+        let changed = false;
+        // Re-parent unowned standalone watches so they don't appear
+        // in both the standalone list and the PR's child list.
+        if (!existing.parentPRKey) {
+          existing.parentPRKey = prKey;
+          changed = true;
+        }
         if (!prWatch.childRunKeys.includes(runKey)) {
           prWatch.childRunKeys.push(runKey);
-          return true;
+          changed = true;
         }
-        return false;
+        return changed;
       }
 
       await this.startWatch(runIdentifier, prKey, options);
