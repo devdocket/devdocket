@@ -414,8 +414,15 @@ export class WatcherService implements vscode.Disposable {
       const runChanged = await this.pollRunWatches();
       anyChanged = anyChanged || runChanged;
 
-      if (anyChanged) {
+      if (prChanged) {
+        this._onDidChangePRWatches.fire();
+      }
+
+      if (runChanged) {
         this._onDidChangeWatchedRuns.fire(this.getAllWatches());
+      }
+
+      if (anyChanged) {
         this.persistWatches();
       }
 
