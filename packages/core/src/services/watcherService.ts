@@ -332,9 +332,22 @@ export class WatcherService implements vscode.Disposable {
    * Get active child runs for a PR watch.
    */
   getChildRuns(prKey: string): WatchedRun[] {
-    return Array.from(this.watches.values()).filter(
-      w => !w.dismissed && w.parentPRKey === prKey
-    );
+    const childRuns = new Map<string, WatchedRun>();
+    // Include runs tracked via childRunKeys (covers linked standalone watches)
+    const prWatch = this.prWatches.get(prKey);
+    for (const childRunKey of prWatch?.childRunKeys ?? []) {
+      const watch = this.watches.get(childRunKey);
+      if (watch && !watch.dismissed) {
+        childRuns.set(childRunKey, watch);
+      }
+    }
+    // Also include any runs explicitly parented by this PR
+    for (const [watchKey, watch] of this.watches.entries()) {
+      if (!watch.dismissed && watch.parentPRKey === prKey) {
+        childRuns.set(watchKey, watch);
+      }
+    }
+    return Array.from(childRuns.values());
   }
 
   /**
