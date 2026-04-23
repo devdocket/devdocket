@@ -198,17 +198,24 @@ export class GitHubMyPrsProvider extends BaseGitHubProvider {
   }
 
   private async fetchAllAuthoredPrs(token: string, signal?: AbortSignal): Promise<{ prs: GitHubIssue[]; failures: string[] }> {
-    const response = await fetch(
-      'https://api.github.com/search/issues?q=type:pr+state:open+author:@me&per_page=100',
-      {
-        headers: {
-          Authorization: `Bearer ${token}`,
-          Accept: 'application/vnd.github+json',
-          'X-GitHub-Api-Version': '2022-11-28',
+    let response: Response;
+    try {
+      response = await fetch(
+        'https://api.github.com/search/issues?q=type:pr+state:open+author:@me&per_page=100',
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+            Accept: 'application/vnd.github+json',
+            'X-GitHub-Api-Version': '2022-11-28',
+          },
+          signal: combineSignals(signal, 30_000),
         },
-        signal: combineSignals(signal, 30_000),
-      },
-    );
+      );
+    } catch (err: unknown) {
+      if (err instanceof Error && err.name === 'AbortError') { throw err; }
+      logger.error('Failed to fetch authored PRs', err);
+      return { prs: [], failures: ['all repositories'] };
+    }
 
     if (!response.ok) {
       logger.error(`Failed to fetch authored PRs: ${response.status}`);
@@ -285,17 +292,24 @@ export class GitHubMyPrsProvider extends BaseGitHubProvider {
   }
 
   private async fetchAllAssignedPrs(token: string, signal?: AbortSignal): Promise<{ prs: GitHubIssue[]; failures: string[] }> {
-    const response = await fetch(
-      'https://api.github.com/search/issues?q=type:pr+state:open+assignee:@me&per_page=100',
-      {
-        headers: {
-          Authorization: `Bearer ${token}`,
-          Accept: 'application/vnd.github+json',
-          'X-GitHub-Api-Version': '2022-11-28',
+    let response: Response;
+    try {
+      response = await fetch(
+        'https://api.github.com/search/issues?q=type:pr+state:open+assignee:@me&per_page=100',
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+            Accept: 'application/vnd.github+json',
+            'X-GitHub-Api-Version': '2022-11-28',
+          },
+          signal: combineSignals(signal, 30_000),
         },
-        signal: combineSignals(signal, 30_000),
-      },
-    );
+      );
+    } catch (err: unknown) {
+      if (err instanceof Error && err.name === 'AbortError') { throw err; }
+      logger.error('Failed to fetch assigned PRs', err);
+      return { prs: [], failures: ['all repositories'] };
+    }
 
     if (!response.ok) {
       logger.error(`Failed to fetch assigned PRs: ${response.status}`);

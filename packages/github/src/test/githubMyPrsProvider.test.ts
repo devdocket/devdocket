@@ -290,6 +290,18 @@ describe('GitHubMyPrsProvider', () => {
     expect(listener.mock.calls[0][0]).toHaveLength(0);
   });
 
+  it('handles network error in global search without throwing', async () => {
+    mockFetch.mockRejectedValue(new TypeError('fetch failed'));
+
+    const listener = vi.fn();
+    provider.onDidDiscoverItems(listener);
+    await provider.refresh();
+
+    // Should still fire with empty items (no throw)
+    expect(listener).toHaveBeenCalledTimes(1);
+    expect(listener.mock.calls[0][0]).toHaveLength(0);
+  });
+
   it('discovers assigned PRs alongside authored PRs', async () => {
     const authoredPr = createMockPr(1, 'My PR');
     const assignedPr = createMockPr(2, 'Assigned to me', 'other/repo');
