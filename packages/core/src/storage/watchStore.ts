@@ -32,7 +32,7 @@ export class WatchStore extends SerializedJsonStore {
   /**
    * Load all persisted data from disk.
    * Returns empty arrays if file doesn't exist or is invalid.
-   * Transparently migrates legacy plain-array format.
+   * Transparently supports the legacy plain-array format (runs only).
    */
   async loadAll(): Promise<WatchStoreData> {
     let parsed: unknown;
