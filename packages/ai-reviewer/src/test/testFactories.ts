@@ -1,7 +1,7 @@
 import { vi } from 'vitest';
 import { WorkItemState } from '@devdocket/shared';
 import type { WorkItem } from '@devdocket/shared';
-import type { RepoManager } from '../repoManager';
+import type { RepoManager, WorktreeInfo } from '../repoManager';
 
 export function createWorkItem(overrides: Partial<WorkItem> = {}): WorkItem {
   return {
@@ -19,18 +19,20 @@ export function createWorkItem(overrides: Partial<WorkItem> = {}): WorkItem {
 }
 
 export function createMockRepoManager(): RepoManager {
+  const worktreeInfo = {
+    worktreePath: '/mock/worktrees/pr-42',
+    clonePath: '/mock/repos/owner-repo',
+    org: 'owner',
+    repo: 'repo',
+    prNumber: '42',
+    headRef: 'pr-42',
+    baseRef: 'origin/main',
+  } satisfies WorktreeInfo;
+
   return {
-    ensureWorktree: vi.fn().mockResolvedValue({
-      worktreePath: '/mock/worktrees/pr-42',
-      clonePath: '/mock/repos/owner-repo',
-      org: 'owner',
-      repo: 'repo',
-      prNumber: '42',
-      headRef: 'pr-42',
-      baseRef: 'origin/main',
-    }),
+    ensureWorktree: vi.fn().mockResolvedValue(worktreeInfo),
     getWorktreeInfo: vi.fn(),
     removeWorktree: vi.fn(),
     removeRepo: vi.fn(),
-  } as unknown as RepoManager;
+  } as RepoManager;
 }
