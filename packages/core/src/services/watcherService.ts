@@ -122,9 +122,9 @@ export class WatcherService implements vscode.Disposable {
     const key = this.getWatchKey(identifier);
     const existing = this.watches.get(key);
     if (existing && !existing.dismissed) {
-      // If being re-added by a PR watcher, just update parentPRKey
-      if (parentPRKey && !existing.parentPRKey) {
-        existing.parentPRKey = parentPRKey;
+      // If being re-added by a PR watcher, keep existing ownership unchanged
+      // to avoid converting a standalone watch into a PR-owned watch.
+      if (parentPRKey) {
         return existing;
       }
       throw new Error(`Already watching run: ${existing.identifier.displayName}`);
@@ -325,7 +325,18 @@ export class WatcherService implements vscode.Disposable {
    * Get active standalone watches (not dismissed, no parent PR).
    */
   getActiveStandaloneWatches(): WatchedRun[] {
-    return Array.from(this.watches.values()).filter(w => !w.dismissed && !w.parentPRKey);
+    // Collect run keys linked by any active PR
+    const prLinkedKeys = new Set<string>();
+    for (const prWatch of this.prWatches.values()) {
+      if (!prWatch.dismissed) {
+        for (const childKey of prWatch.childRunKeys) {
+          prLinkedKeys.add(childKey);
+        }
+      }
+    }
+    return Array.from(this.watches.values()).filter(
+      w => !w.dismissed && !w.parentPRKey && !prLinkedKeys.has(this.getWatchKey(w.identifier))
+    );
   }
 
   /**
@@ -378,7 +389,7 @@ export class WatcherService implements vscode.Disposable {
    * Get a unique key for a PR watch.
    */
   getPRWatchKey(identifier: PRIdentifier): string {
-    return `${identifier.providerId}:${identifier.repo}:${identifier.prId}`;
+    return `pr:${identifier.providerId}:${identifier.repo}:${identifier.prId}`;
   }
 
   /**
@@ -656,18 +667,13 @@ export class WatcherService implements vscode.Disposable {
     try {
       const existing = this.watches.get(runKey);
       if (existing && !existing.dismissed) {
-        let changed = false;
-        // Re-parent unowned standalone watches so they don't appear
-        // in both the standalone list and the PR's child list.
-        if (!existing.parentPRKey) {
-          existing.parentPRKey = prKey;
-          changed = true;
-        }
+        // Preserve ownership of existing watches. Standalone watches remain
+        // standalone even when linked from a PR watch.
         if (!prWatch.childRunKeys.includes(runKey)) {
           prWatch.childRunKeys.push(runKey);
-          changed = true;
+          return true;
         }
-        return changed;
+        return false;
       }
 
       await this.startWatch(runIdentifier, prKey, options);
