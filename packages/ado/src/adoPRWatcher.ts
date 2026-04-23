@@ -124,8 +124,8 @@ export class AdoPRWatcher implements DevDocketPRWatcher {
       throw error;
     }
 
-    // Fetch builds for the PR's source branch
-    const buildsUrl = `https://dev.azure.com/${encodedOrg}/${encodedProject}/_apis/build/builds?reasonFilter=pullRequest&repositoryId=${encodedRepo}&repositoryType=TfsGit&api-version=7.1`;
+    // Fetch builds triggered by this PR via its merge ref branch
+    const buildsUrl = `https://dev.azure.com/${encodedOrg}/${encodedProject}/_apis/build/builds?branchName=refs/pull/${encodedPrId}/merge&api-version=7.1`;
     let buildsResponse: Response;
     try {
       buildsResponse = await fetch(buildsUrl, { headers, signal: AbortSignal.timeout(FETCH_TIMEOUT_MS) });
@@ -138,15 +138,9 @@ export class AdoPRWatcher implements DevDocketPRWatcher {
 
     const runs: RunIdentifier[] = [];
     if (buildsResponse.ok) {
-      const buildsData = await buildsResponse.json() as { value: (AdoBuild & { triggerInfo?: { 'pr.number'?: string } })[] };
+      const buildsData = await buildsResponse.json() as { value: AdoBuild[] };
 
       for (const build of buildsData.value) {
-        // Filter to builds triggered by this specific PR
-        const prNumber = build.triggerInfo?.['pr.number'];
-        if (prNumber !== identifier.prId) {
-          continue;
-        }
-
         const displayName = build.definition?.name
           ? `${build.definition.name} #${build.buildNumber}`
           : `Build ${build.buildNumber}`;

@@ -168,18 +168,24 @@ describe('AdoPRWatcher', () => {
           ok: true,
           json: async () => ({
             value: [
-              { id: 100, buildNumber: '20240101.1', definition: { name: 'CI' }, status: 'completed', result: 'succeeded', triggerInfo: { 'pr.number': '42' } },
-              { id: 200, buildNumber: '20240101.2', definition: { name: 'CI' }, status: 'completed', result: 'failed', triggerInfo: { 'pr.number': '99' } },
-              { id: 300, buildNumber: '20240101.3', definition: { name: 'Nightly' }, status: 'completed', result: 'succeeded', triggerInfo: {} },
+              { id: 100, buildNumber: '20240101.1', definition: { name: 'CI' }, status: 'completed', result: 'succeeded' },
+              { id: 200, buildNumber: '20240101.2', definition: { name: 'Deploy' }, status: 'completed', result: 'failed' },
             ],
           }),
         } as Response);
 
       const result = await watcher.getPRRunsSnapshot(identifier);
-      expect(result.runs).toHaveLength(1);
+      expect(result.runs).toHaveLength(2);
       expect(result.runs[0].runId).toBe('100');
       expect(result.runs[0].displayName).toBe('CI #20240101.1');
       expect(result.runs[0].providerId).toBe('ado-pipelines');
+      expect(result.runs[1].runId).toBe('200');
+      expect(result.runs[1].displayName).toBe('Deploy #20240101.2');
+
+      // Verify the builds URL uses branchName filter instead of repositoryId
+      const buildsCallUrl = (fetchSpy.mock.calls[1][0] as string);
+      expect(buildsCallUrl).toContain('branchName=refs/pull/42/merge');
+      expect(buildsCallUrl).not.toContain('repositoryId');
 
       fetchSpy.mockRestore();
     });

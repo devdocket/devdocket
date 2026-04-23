@@ -148,7 +148,7 @@ describe('GitHubPRWatcher', () => {
       expect(snapshot.displayName).toBe('PR #42: Fix the widget');
     });
 
-    it('deduplicates check runs by check_suite.id', async () => {
+    it('deduplicates GitHub Actions check runs by workflow run ID', async () => {
       mockFetchResponses(
         { number: 42, title: 'My PR', state: 'open', merged: false, head: { sha: 'abc123' } },
         {
@@ -172,6 +172,7 @@ describe('GitHubPRWatcher', () => {
       const result = await watcher.getPRRunsSnapshot(makeIdentifier());
       expect(result.runs).toHaveLength(1);
       expect(result.runs[0].runId).toBe('100');
+      expect(result.runs[0].providerId).toBe('github-actions');
     });
 
     it('extracts workflow run IDs from check run html_url', async () => {
@@ -202,6 +203,105 @@ describe('GitHubPRWatcher', () => {
       expect(result.runs[0].url).toBe('https://github.com/owner/repo/actions/runs/777');
       expect(result.runs[1].runId).toBe('888');
       expect(result.runs[1].displayName).toBe('Deploy');
+    });
+
+    it('includes non-GitHub-Actions check runs with details_url', async () => {
+      mockFetchResponses(
+        { number: 42, title: 'My PR', state: 'open', merged: false, head: { sha: 'abc123' } },
+        {
+          check_runs: [
+            {
+              id: 10,
+              name: 'CI Pipeline',
+              html_url: 'https://github.com/owner/repo/runs/10',
+              details_url: 'https://dev.azure.com/myorg/myproject/_build/results?buildId=555',
+              app: { slug: 'azure-pipelines' },
+              check_suite: { id: 600 },
+            },
+          ],
+        },
+      );
+
+      const result = await watcher.getPRRunsSnapshot(makeIdentifier());
+      expect(result.runs).toHaveLength(1);
+      expect(result.runs[0].providerId).toBe('azure-pipelines');
+      expect(result.runs[0].runId).toBe('10');
+      expect(result.runs[0].displayName).toBe('CI Pipeline');
+      expect(result.runs[0].url).toBe('https://dev.azure.com/myorg/myproject/_build/results?buildId=555');
+    });
+
+    it('falls back to html_url when details_url is absent for non-GHA checks', async () => {
+      mockFetchResponses(
+        { number: 42, title: 'My PR', state: 'open', merged: false, head: { sha: 'abc123' } },
+        {
+          check_runs: [
+            {
+              id: 20,
+              name: 'External CI',
+              html_url: 'https://github.com/owner/repo/runs/20',
+              app: { slug: 'some-ci' },
+              check_suite: { id: 601 },
+            },
+          ],
+        },
+      );
+
+      const result = await watcher.getPRRunsSnapshot(makeIdentifier());
+      expect(result.runs).toHaveLength(1);
+      expect(result.runs[0].providerId).toBe('some-ci');
+      expect(result.runs[0].url).toBe('https://github.com/owner/repo/runs/20');
+    });
+
+    it('uses check-run as providerId when app slug is missing', async () => {
+      mockFetchResponses(
+        { number: 42, title: 'My PR', state: 'open', merged: false, head: { sha: 'abc123' } },
+        {
+          check_runs: [
+            {
+              id: 30,
+              name: 'Mystery Check',
+              html_url: 'https://github.com/owner/repo/runs/30',
+              check_suite: { id: 602 },
+            },
+          ],
+        },
+      );
+
+      const result = await watcher.getPRRunsSnapshot(makeIdentifier());
+      expect(result.runs).toHaveLength(1);
+      expect(result.runs[0].providerId).toBe('check-run');
+      expect(result.runs[0].runId).toBe('30');
+    });
+
+    it('handles mix of GitHub Actions and external check runs', async () => {
+      mockFetchResponses(
+        { number: 42, title: 'My PR', state: 'open', merged: false, head: { sha: 'abc123' } },
+        {
+          check_runs: [
+            {
+              id: 1,
+              name: 'CI',
+              html_url: 'https://github.com/owner/repo/actions/runs/777/jobs/1',
+              check_suite: { id: 501 },
+            },
+            {
+              id: 10,
+              name: 'ADO Pipeline',
+              html_url: 'https://github.com/owner/repo/runs/10',
+              details_url: 'https://dev.azure.com/myorg/myproject/_build/results?buildId=555',
+              app: { slug: 'azure-pipelines' },
+              check_suite: { id: 600 },
+            },
+          ],
+        },
+      );
+
+      const result = await watcher.getPRRunsSnapshot(makeIdentifier());
+      expect(result.runs).toHaveLength(2);
+      expect(result.runs[0].providerId).toBe('github-actions');
+      expect(result.runs[0].runId).toBe('777');
+      expect(result.runs[1].providerId).toBe('azure-pipelines');
+      expect(result.runs[1].url).toBe('https://dev.azure.com/myorg/myproject/_build/results?buildId=555');
     });
 
     it('returns empty runs array when no check runs found', async () => {

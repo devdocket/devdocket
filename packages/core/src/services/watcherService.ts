@@ -218,7 +218,8 @@ export class WatcherService implements vscode.Disposable {
 
     // Add initial runs as child watches (batched — single event/persist after)
     for (const runId of snapshot.runs) {
-      await this.addChildRun(key, watchedPR, runId, {
+      const resolved = this.resolveRunIdentifier(runId);
+      await this.addChildRun(key, watchedPR, resolved, {
         suppressEvents: true,
         suppressPersist: true,
       });
@@ -515,10 +516,11 @@ export class WatcherService implements vscode.Disposable {
         const currentRunKeys = new Set(prWatch.childRunKeys);
         const newRunKeys = new Set<string>();
         for (const runId of snapshot.runs) {
-          const runKey = this.getWatchKey(runId);
+          const resolved = this.resolveRunIdentifier(runId);
+          const runKey = this.getWatchKey(resolved);
           newRunKeys.add(runKey);
           if (!currentRunKeys.has(runKey)) {
-            const added = await this.addChildRun(key, prWatch, runId);
+            const added = await this.addChildRun(key, prWatch, resolved);
             if (added) {
               childRunChanged = true;
             }
@@ -695,6 +697,29 @@ export class WatcherService implements vscode.Disposable {
     return identifier.repo
       ? `${identifier.providerId}:${identifier.repo}:${identifier.runId}`
       : `${identifier.providerId}:${identifier.runId}`;
+  }
+
+  /**
+   * Resolve a run identifier to one backed by a registered watcher.
+   * If the identifier's providerId matches a registered watcher directly, returns as-is.
+   * Otherwise, tries URL-based matching against all registered run watchers.
+   * Returns the resolved identifier, or the original if no resolution is possible.
+   */
+  private resolveRunIdentifier(identifier: RunIdentifier): RunIdentifier {
+    if (this.watcherRegistry.get(identifier.providerId)) {
+      return identifier;
+    }
+
+    const watcher = this.watcherRegistry.findWatcherForUrl(identifier.url);
+    if (watcher) {
+      const parsed = watcher.parseRunUrl(identifier.url);
+      return {
+        ...parsed,
+        displayName: identifier.displayName || parsed.displayName,
+      };
+    }
+
+    return identifier;
   }
 
   private persistWatches(): void {

@@ -20,6 +20,7 @@ interface GitHubCheckRun {
   id: number;
   name: string;
   html_url: string;
+  details_url?: string;
   app?: { slug?: string };
   check_suite?: { id: number };
 }
@@ -99,31 +100,38 @@ export class GitHubPRWatcher implements DevDocketPRWatcher {
       token,
     );
 
-    // Deduplicate by check_suite ID to get unique workflow runs
-    const seenSuites = new Set<number>();
     const runs: RunIdentifier[] = [];
+    // Track GitHub Actions workflow runs by run ID to avoid duplicates
+    // (multiple check runs/jobs share the same workflow run)
+    const seenGHARunIds = new Set<string>();
 
     for (const cr of checkRunsData.check_runs) {
-      const suiteId = cr.check_suite?.id;
-      if (suiteId && seenSuites.has(suiteId)) {
-        continue;
-      }
-      if (suiteId) {
-        seenSuites.add(suiteId);
-      }
-
-      // Extract workflow run ID from the check run's html_url
+      // GitHub Actions checks: extract workflow run ID from URL and deduplicate
       const runIdMatch = cr.html_url.match(/\/actions\/runs\/(\d+)/);
-      if (!runIdMatch) {
+      if (runIdMatch) {
+        const runId = runIdMatch[1];
+        if (seenGHARunIds.has(runId)) {
+          continue;
+        }
+        seenGHARunIds.add(runId);
+
+        runs.push({
+          providerId: 'github-actions',
+          runId,
+          displayName: cr.name,
+          url: `https://github.com/${owner}/${repo}/actions/runs/${runId}`,
+          repo: `${owner}/${repo}`,
+        });
         continue;
       }
 
-      const runId = runIdMatch[1];
+      // Non-GitHub-Actions checks: use details_url for run watcher matching
+      const checkUrl = cr.details_url || cr.html_url;
       runs.push({
-        providerId: 'github-actions',
-        runId,
+        providerId: cr.app?.slug || 'check-run',
+        runId: String(cr.id),
         displayName: cr.name,
-        url: `https://github.com/${owner}/${repo}/actions/runs/${runId}`,
+        url: checkUrl,
         repo: `${owner}/${repo}`,
       });
     }

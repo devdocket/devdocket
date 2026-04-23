@@ -462,5 +462,64 @@ describe('WatcherService', () => {
       expect(service.getActivePRWatches()).toHaveLength(1);
       expect(service.getActivePRWatches()[0].identifier.prId).toBe('42');
     });
+
+    it('resolves run identifiers via URL matching when providerId is unknown', async () => {
+      // Register a run watcher that recognizes URLs
+      const runWatcher = createMockWatcher('ado-pipelines');
+      (runWatcher.canWatch as ReturnType<typeof vi.fn>).mockImplementation(
+        (url: string) => url.includes('dev.azure.com') && url.includes('_build/results'),
+      );
+      (runWatcher.parseRunUrl as ReturnType<typeof vi.fn>).mockReturnValue({
+        providerId: 'ado-pipelines',
+        runId: '555',
+        displayName: 'Build 555',
+        url: 'https://dev.azure.com/org/project/_build/results?buildId=555',
+        repo: 'org/project',
+      });
+      registry.register(runWatcher);
+
+      // PR watcher returns a run with an unknown providerId but a recognizable URL
+      const prWatcher = createMockPRWatcher('test-pr', async () => ({
+        prState: 'open',
+        runs: [{
+          providerId: 'azure-pipelines',
+          runId: '10',
+          displayName: 'ADO Pipeline',
+          url: 'https://dev.azure.com/org/project/_build/results?buildId=555',
+          repo: 'owner/repo',
+        }],
+      }));
+      prRegistry.register(prWatcher);
+
+      const result = await service.startPRWatch(createPRIdentifier());
+
+      expect(result.childRunKeys).toHaveLength(1);
+      expect(service.getActiveWatches()).toHaveLength(1);
+      // The resolved identifier should use the watcher's providerId
+      expect(service.getActiveWatches()[0].identifier.providerId).toBe('ado-pipelines');
+      expect(service.getActiveWatches()[0].identifier.runId).toBe('555');
+    });
+
+    it('skips run identifiers when no watcher matches providerId or URL', async () => {
+      // No run watchers registered — unresolvable run
+      const prWatcher = createMockPRWatcher('test-pr', async () => ({
+        prState: 'open',
+        runs: [{
+          providerId: 'unknown-ci',
+          runId: '99',
+          displayName: 'Unknown CI',
+          url: 'https://unknown-ci.example.com/build/99',
+          repo: 'owner/repo',
+        }],
+      }));
+      prRegistry.register(prWatcher);
+
+      const result = await service.startPRWatch(createPRIdentifier());
+
+      // Child run should not be added (no matching watcher)
+      expect(result.childRunKeys).toHaveLength(0);
+      expect(service.getActiveWatches()).toHaveLength(0);
+      expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining('Failed to add child run'));
+    });
   });
 });
