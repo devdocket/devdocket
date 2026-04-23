@@ -242,7 +242,7 @@
       },
       {
         "view": "devdocket.watches",
-        "contents": "No pipeline runs being watched.\n[Watch Pipeline Run](command:devdocket.watchRun)\n[Watch Pull Request](command:devdocket.watchPR)"
+        "contents": "No watches yet.\n[Watch Pipeline Run](command:devdocket.watchRun)\n[Watch Pull Request](command:devdocket.watchPR)"
       }
     ],
     "commands": [
