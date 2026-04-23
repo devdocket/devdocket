@@ -68,7 +68,11 @@ export class GitHubPRWatcher implements DevDocketPRWatcher {
     identifier: PRIdentifier,
     token?: CancellationTokenLike,
   ): Promise<PRRunsSnapshot> {
-    const [owner, repo] = identifier.repo.split('/');
+    const repoParts = identifier.repo.split('/');
+    if (repoParts.length !== 2 || repoParts.some(p => !p)) {
+      throw new Error(`Invalid GitHub repo format: expected "owner/repo" but got "${identifier.repo}"`);
+    }
+    const [owner, repo] = repoParts;
     const encodedOwner = encodeURIComponent(owner);
     const encodedRepo = encodeURIComponent(repo);
     const encodedPrNumber = encodeURIComponent(identifier.prId);
