@@ -126,7 +126,7 @@ export class StartWorkAction implements DevDocketAction {
           if (workMode === 'worktree') {
             await this.issueWorktreeFlow(item, parsed, repoPath, branchName, baseBranch, progress);
           } else {
-            await this.issueCheckoutFlow(item, parsed, repoPath, branchName, baseBranch, progress);
+            await this.issueCheckoutFlow(item, repoPath, branchName, baseBranch, progress);
           }
         },
       );
@@ -210,7 +210,6 @@ export class StartWorkAction implements DevDocketAction {
 
   private async issueCheckoutFlow(
     item: Readonly<WorkItem>,
-    parsed: ParsedExternalId,
     repoPath: string,
     branchName: string,
     baseBranch: string,
