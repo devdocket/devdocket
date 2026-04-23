@@ -441,6 +441,7 @@ export class StartWorkAction implements DevDocketAction {
     // For same-repo PRs, the branch may only exist as origin/<branch> after fetch.
     const hasLocalBranch = await this.localBranchExists(branchName, repoPath);
     const worktreeSourceRef = trackingRef ?? `origin/${branchName}`;
+    let createdBranch = false;
 
     if (hasLocalBranch && trackingRef) {
       // Fork PR with an existing local branch — the local branch may be stale or
@@ -486,12 +487,19 @@ export class StartWorkAction implements DevDocketAction {
         cwd: repoPath,
         timeout: 30_000,
       });
+      createdBranch = true;
     }
 
     logger.info(`Created worktree at ${worktreePath} for PR branch ${branchName}`);
 
     try {
-      const detail = JSON.stringify({ branchName, worktreePath, repoPath });
+      // Only include branchName when this action created the branch, so cleanup
+      // won't accidentally delete a pre-existing user branch.
+      const detail = JSON.stringify({
+        ...(createdBranch ? { branchName } : {}),
+        worktreePath,
+        repoPath,
+      });
       await vscode.commands.executeCommand('devdocket.addActivity', item.id, 'work-started', detail);
     } catch (activityErr) {
       logger.error('Failed to log work-started activity', activityErr);
@@ -528,14 +536,19 @@ export class StartWorkAction implements DevDocketAction {
     // point at the tracking ref to avoid silently checking out stale/unrelated code.
     const hasLocalBranch = await this.localBranchExists(branchName, repoPath);
     let checkoutArgs: string[];
+    // Track whether this action created/reset the branch (for safe cleanup later)
+    let createdBranch = false;
     if (hasLocalBranch && trackingRef) {
       checkoutArgs = ['checkout', '-B', branchName, trackingRef];
+      createdBranch = true; // force-reset counts as owning the branch
     } else if (hasLocalBranch) {
       checkoutArgs = ['checkout', branchName];
     } else if (trackingRef) {
       checkoutArgs = ['checkout', '-b', branchName, trackingRef];
+      createdBranch = true;
     } else {
       checkoutArgs = ['checkout', '-b', branchName, '--track', `origin/${branchName}`];
+      createdBranch = true;
     }
 
     try {
@@ -554,7 +567,12 @@ export class StartWorkAction implements DevDocketAction {
     logger.info(`Checked out PR branch ${branchName}`);
 
     try {
-      const detail = JSON.stringify({ branchName, repoPath });
+      // Only include branchName when this action created/reset the branch, so cleanup
+      // won't accidentally delete a pre-existing user branch.
+      const detail = JSON.stringify({
+        ...(createdBranch ? { branchName } : {}),
+        repoPath,
+      });
       await vscode.commands.executeCommand('devdocket.addActivity', item.id, 'work-started', detail);
     } catch (activityErr) {
       logger.error('Failed to log work-started activity', activityErr);

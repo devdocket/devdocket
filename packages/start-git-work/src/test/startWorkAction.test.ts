@@ -1150,7 +1150,7 @@ describe('StartWorkAction', () => {
         'devdocket.addActivity',
         item.id,
         'work-started',
-        JSON.stringify({ branchName: 'feature/my-branch', worktreePath: expectedWorktreePath, repoPath: '/mock/workspace' }),
+        JSON.stringify({ worktreePath: expectedWorktreePath, repoPath: '/mock/workspace' }),
       );
     });
 
@@ -1167,7 +1167,7 @@ describe('StartWorkAction', () => {
         'devdocket.addActivity',
         item.id,
         'work-started',
-        JSON.stringify({ branchName: 'feature/my-branch', repoPath: '/mock/workspace' }),
+        JSON.stringify({ repoPath: '/mock/workspace' }),
       );
     });
 
