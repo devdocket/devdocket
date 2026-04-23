@@ -1,12 +1,14 @@
 import { vi } from 'vitest';
+import { WorkItemState } from '@devdocket/shared';
+import type { WorkItem } from '@devdocket/shared';
 import type { RepoManager } from '../repoManager';
 
-export function createWorkItem(overrides: Partial<Record<string, unknown>> = {}) {
+export function createWorkItem(overrides: Partial<WorkItem> = {}): WorkItem {
   return {
     id: 'wc-test-1',
     title: 'Fix login redirect bug',
-    description: 'Some description',
-    state: 'New',
+    notes: 'Some description',
+    state: WorkItemState.New,
     providerId: 'github',
     externalId: 'owner/repo#123',
     url: 'https://github.com/owner/repo/pull/42',
