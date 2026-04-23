@@ -952,7 +952,7 @@ describe('StartWorkAction', () => {
       expect(checkoutCall![1]).toEqual(['checkout', '-b', 'fix/something', 'devdocket-fork-contributor/fix/something']);
     });
 
-    it('force-updates local branch to fork tracking ref in checkout mode', async () => {
+    it('uses detached checkout for fork PR when local branch exists', async () => {
       mockFetchResponse(createGitHubPrResponse({
         head: {
           ref: 'fix/something',
@@ -963,7 +963,7 @@ describe('StartWorkAction', () => {
         },
       }));
       mockQuickPickCheckout();
-      // Local branch exists — should use -B to reset it to tracking ref
+      // Local branch exists — should use --detach to avoid resetting user's branch
       const item = createWorkItem({
         providerId: 'github-my-prs',
         externalId: 'owner/repo#42',
@@ -974,7 +974,7 @@ describe('StartWorkAction', () => {
         (call: any[]) => call[1]?.[0] === 'checkout',
       );
       expect(checkoutCall).toBeDefined();
-      expect(checkoutCall![1]).toEqual(['checkout', '-B', 'fix/something', 'devdocket-fork-contributor/fix/something']);
+      expect(checkoutCall![1]).toEqual(['checkout', '--detach', 'devdocket-fork-contributor/fix/something']);
     });
 
     it('shows error when fork repository has been deleted', async () => {

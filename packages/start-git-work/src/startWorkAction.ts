@@ -536,11 +536,12 @@ export class StartWorkAction implements DevDocketAction {
     // point at the tracking ref to avoid silently checking out stale/unrelated code.
     const hasLocalBranch = await this.localBranchExists(branchName, repoPath);
     let checkoutArgs: string[];
-    // Track whether this action created/reset the branch (for safe cleanup later)
+    // Track whether this action created the branch (for safe cleanup later)
     let createdBranch = false;
     if (hasLocalBranch && trackingRef) {
-      checkoutArgs = ['checkout', '-B', branchName, trackingRef];
-      createdBranch = true; // force-reset counts as owning the branch
+      // Fork PR with existing local branch — use detached checkout to avoid
+      // destructively resetting the user's branch.
+      checkoutArgs = ['checkout', '--detach', trackingRef];
     } else if (hasLocalBranch) {
       checkoutArgs = ['checkout', branchName];
     } else if (trackingRef) {
