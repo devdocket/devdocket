@@ -43,6 +43,14 @@ export interface DiscoveredItem {
    * commits via `version` and re-requested reviews via `resurfaceVersion`).
    */
   resurfaceVersion?: string;
+  /**
+   * Optional cross-provider deduplication key.
+   * When set, items from different providers that share the same `canonicalId`
+   * are grouped in the Inbox view and only one representative is shown.
+   * Accept/dismiss/read-state actions propagate to all items in the group.
+   * Items without `canonicalId` always show individually (backward compatible).
+   */
+  canonicalId?: string;
 }
 
 /**

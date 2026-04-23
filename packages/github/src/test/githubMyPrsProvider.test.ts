@@ -93,8 +93,11 @@ describe('GitHubMyPrsProvider', () => {
 
     // Use URL-based routing because concurrent workers consume mocks in unpredictable order
     mockFetch.mockImplementation(async (url: string) => {
-      if (url.includes('search/issues')) {
+      if (url.includes('search/issues') && url.includes('author:@me')) {
         return mockSearchResponse([pr1, pr2]);
+      }
+      if (url.includes('search/issues') && url.includes('assignee:@me')) {
+        return mockSearchResponse([]);
       }
       if (url.endsWith('/pulls/1')) {
         return mockPrDetailResponse({ draft: false, mergeable_state: 'blocked' });
@@ -123,9 +126,13 @@ describe('GitHubMyPrsProvider', () => {
     expect(items[0].title).toBe('#1: Fix bug');
     expect(items[0].state).toBe('Waiting on reviews');
     expect(items[0].group).toBe('owner/repo');
+    expect(items[0].reason).toBe('You authored this PR');
+    expect(items[0].canonicalId).toBe('github:pull:owner/repo#1');
 
     expect(items[1].externalId).toBe('owner/repo#2');
     expect(items[1].state).toBe('Draft');
+    expect(items[1].reason).toBe('You authored this PR');
+    expect(items[1].canonicalId).toBe('github:pull:owner/repo#2');
   });
 
   it('uses search API with repos when configured', async () => {
@@ -136,29 +143,35 @@ describe('GitHubMyPrsProvider', () => {
       }),
     } as any);
 
-    mockFetch.mockResolvedValueOnce(mockSearchResponse([]));
+    mockFetch.mockResolvedValue(mockSearchResponse([]));
 
     const listener = vi.fn();
     provider.onDidDiscoverItems(listener);
     await provider.refresh();
 
-    expect(mockFetch).toHaveBeenCalledTimes(1);
-    const url = mockFetch.mock.calls[0][0];
-    expect(url).toContain('repo:myorg/myrepo');
-    expect(url).toContain('author:@me');
+    // 2 calls: author:@me and assignee:@me
+    expect(mockFetch).toHaveBeenCalledTimes(2);
+    const authorUrl = mockFetch.mock.calls.find((c: any[]) => c[0].includes('author:@me'))?.[0];
+    expect(authorUrl).toContain('repo:myorg/myrepo');
+    const assigneeUrl = mockFetch.mock.calls.find((c: any[]) => c[0].includes('assignee:@me'))?.[0];
+    expect(assigneeUrl).toContain('repo:myorg/myrepo');
   });
 
   it('uses global search when no repos configured', async () => {
-    mockFetch.mockResolvedValueOnce(mockSearchResponse([]));
+    mockFetch.mockResolvedValue(mockSearchResponse([]));
 
     const listener = vi.fn();
     provider.onDidDiscoverItems(listener);
     await provider.refresh();
 
-    expect(mockFetch).toHaveBeenCalledTimes(1);
-    const url = mockFetch.mock.calls[0][0];
-    expect(url).toContain('author:@me');
-    expect(url).not.toContain('repo:');
+    // 2 calls: author:@me and assignee:@me
+    expect(mockFetch).toHaveBeenCalledTimes(2);
+    const authorUrl = mockFetch.mock.calls.find((c: any[]) => c[0].includes('author:@me'))?.[0];
+    expect(authorUrl).toBeDefined();
+    expect(authorUrl).not.toContain('repo:');
+    const assigneeUrl = mockFetch.mock.calls.find((c: any[]) => c[0].includes('assignee:@me'))?.[0];
+    expect(assigneeUrl).toBeDefined();
+    expect(assigneeUrl).not.toContain('repo:');
   });
 
   it('reports failures for individual repos', async () => {
@@ -169,9 +182,12 @@ describe('GitHubMyPrsProvider', () => {
       }),
     } as any);
 
-    mockFetch
-      .mockResolvedValueOnce(mockSearchResponse([]))
-      .mockResolvedValueOnce(mockFailedResponse());
+    mockFetch.mockImplementation(async (url: string) => {
+      if (url.includes('bad/repo')) {
+        return mockFailedResponse();
+      }
+      return mockSearchResponse([]);
+    });
 
     const listener = vi.fn();
     provider.onDidDiscoverItems(listener);
@@ -185,8 +201,11 @@ describe('GitHubMyPrsProvider', () => {
     const pr = createMockPr(1, 'My PR');
 
     mockFetch.mockImplementation(async (url: string) => {
-      if (url.includes('search/issues')) {
+      if (url.includes('search/issues') && url.includes('author:@me')) {
         return mockSearchResponse([pr]);
+      }
+      if (url.includes('search/issues') && url.includes('assignee:@me')) {
+        return mockSearchResponse([]);
       }
       // PR detail fails
       return mockFailedResponse(404);
@@ -212,7 +231,15 @@ describe('GitHubMyPrsProvider', () => {
       // No pull_request field
     };
 
-    mockFetch.mockResolvedValueOnce(mockSearchResponse([pr as any]));
+    mockFetch.mockImplementation(async (url: string) => {
+      if (url.includes('search/issues') && url.includes('author:@me')) {
+        return mockSearchResponse([pr as any]);
+      }
+      if (url.includes('search/issues') && url.includes('assignee:@me')) {
+        return mockSearchResponse([]);
+      }
+      return mockFailedResponse(404);
+    });
 
     const listener = vi.fn();
     provider.onDidDiscoverItems(listener);
@@ -228,8 +255,11 @@ describe('GitHubMyPrsProvider', () => {
     pr.body = 'a'.repeat(500);
 
     mockFetch.mockImplementation(async (url: string) => {
-      if (url.includes('search/issues')) {
+      if (url.includes('search/issues') && url.includes('author:@me')) {
         return mockSearchResponse([pr]);
+      }
+      if (url.includes('search/issues') && url.includes('assignee:@me')) {
+        return mockSearchResponse([]);
       }
       if (url.endsWith('/pulls/1')) {
         return mockPrDetailResponse({ draft: false });
@@ -249,7 +279,7 @@ describe('GitHubMyPrsProvider', () => {
   });
 
   it('reports all-repos failure for global search', async () => {
-    mockFetch.mockResolvedValueOnce(mockFailedResponse());
+    mockFetch.mockResolvedValue(mockFailedResponse());
 
     const listener = vi.fn();
     provider.onDidDiscoverItems(listener);
@@ -258,6 +288,187 @@ describe('GitHubMyPrsProvider', () => {
     // Should still fire with empty items
     expect(listener).toHaveBeenCalledTimes(1);
     expect(listener.mock.calls[0][0]).toHaveLength(0);
+  });
+
+  it('discovers assigned PRs alongside authored PRs', async () => {
+    const authoredPr = createMockPr(1, 'My PR');
+    const assignedPr = createMockPr(2, 'Assigned to me', 'other/repo');
+
+    mockFetch.mockImplementation(async (url: string) => {
+      if (url.includes('search/issues') && url.includes('author:@me')) {
+        return mockSearchResponse([authoredPr]);
+      }
+      if (url.includes('search/issues') && url.includes('assignee:@me')) {
+        return mockSearchResponse([assignedPr]);
+      }
+      if (url.endsWith('/pulls/1')) {
+        return mockPrDetailResponse({ draft: false });
+      }
+      if (url.endsWith('/pulls/1/reviews')) {
+        return mockReviewsResponse([]);
+      }
+      if (url.endsWith('/pulls/2')) {
+        return mockPrDetailResponse({ draft: false });
+      }
+      if (url.endsWith('/pulls/2/reviews')) {
+        return mockReviewsResponse([]);
+      }
+      return mockFailedResponse(404);
+    });
+
+    const listener = vi.fn();
+    provider.onDidDiscoverItems(listener);
+    await provider.refresh();
+
+    expect(listener).toHaveBeenCalledTimes(1);
+    const items = listener.mock.calls[0][0];
+    expect(items).toHaveLength(2);
+
+    expect(items[0].externalId).toBe('owner/repo#1');
+    expect(items[0].reason).toBe('You authored this PR');
+
+    expect(items[1].externalId).toBe('other/repo#2');
+    expect(items[1].reason).toBe('You are assigned to this PR');
+  });
+
+  it('excludes self-authored PRs from assigned results', async () => {
+    const pr = createMockPr(1, 'Both authored and assigned');
+
+    mockFetch.mockImplementation(async (url: string) => {
+      if (url.includes('search/issues') && url.includes('author:@me')) {
+        return mockSearchResponse([pr]);
+      }
+      if (url.includes('search/issues') && url.includes('assignee:@me')) {
+        // Same PR also returned as assigned
+        return mockSearchResponse([pr]);
+      }
+      if (url.endsWith('/pulls/1')) {
+        return mockPrDetailResponse({ draft: false });
+      }
+      if (url.endsWith('/pulls/1/reviews')) {
+        return mockReviewsResponse([]);
+      }
+      return mockFailedResponse(404);
+    });
+
+    const listener = vi.fn();
+    provider.onDidDiscoverItems(listener);
+    await provider.refresh();
+
+    const items = listener.mock.calls[0][0];
+    // Should only appear once (as authored)
+    expect(items).toHaveLength(1);
+    expect(items[0].reason).toBe('You authored this PR');
+  });
+
+  it('sets canonicalId on all discovered items', async () => {
+    const authoredPr = createMockPr(1, 'Authored');
+    const assignedPr = createMockPr(2, 'Assigned', 'org/other');
+
+    mockFetch.mockImplementation(async (url: string) => {
+      if (url.includes('search/issues') && url.includes('author:@me')) {
+        return mockSearchResponse([authoredPr]);
+      }
+      if (url.includes('search/issues') && url.includes('assignee:@me')) {
+        return mockSearchResponse([assignedPr]);
+      }
+      if (url.includes('/pulls/')) {
+        return mockPrDetailResponse({ draft: false });
+      }
+      if (url.includes('/reviews')) {
+        return mockReviewsResponse([]);
+      }
+      return mockFailedResponse(404);
+    });
+
+    const listener = vi.fn();
+    provider.onDidDiscoverItems(listener);
+    await provider.refresh();
+
+    const items = listener.mock.calls[0][0];
+    expect(items[0].canonicalId).toBe('github:pull:owner/repo#1');
+    expect(items[1].canonicalId).toBe('github:pull:org/other#2');
+  });
+
+  it('handles assigned PRs API failure gracefully', async () => {
+    const authoredPr = createMockPr(1, 'Authored');
+
+    mockFetch.mockImplementation(async (url: string) => {
+      if (url.includes('search/issues') && url.includes('author:@me')) {
+        return mockSearchResponse([authoredPr]);
+      }
+      if (url.includes('search/issues') && url.includes('assignee:@me')) {
+        return mockFailedResponse();
+      }
+      if (url.endsWith('/pulls/1')) {
+        return mockPrDetailResponse({ draft: false });
+      }
+      if (url.endsWith('/pulls/1/reviews')) {
+        return mockReviewsResponse([]);
+      }
+      return mockFailedResponse(404);
+    });
+
+    const listener = vi.fn();
+    provider.onDidDiscoverItems(listener);
+    await provider.refresh();
+
+    // Should still emit authored PRs even if assigned API fails
+    expect(listener).toHaveBeenCalledTimes(1);
+    const items = listener.mock.calls[0][0];
+    expect(items).toHaveLength(1);
+    expect(items[0].reason).toBe('You authored this PR');
+  });
+
+  it('fetches status for assigned PRs', async () => {
+    const assignedPr = createMockPr(1, 'Assigned PR');
+
+    mockFetch.mockImplementation(async (url: string) => {
+      if (url.includes('search/issues') && url.includes('author:@me')) {
+        return mockSearchResponse([]);
+      }
+      if (url.includes('search/issues') && url.includes('assignee:@me')) {
+        return mockSearchResponse([assignedPr]);
+      }
+      if (url.endsWith('/pulls/1')) {
+        return mockPrDetailResponse({ draft: false, mergeable_state: 'clean' });
+      }
+      if (url.endsWith('/pulls/1/reviews')) {
+        return mockReviewsResponse([
+          { user: { id: 10 }, state: 'APPROVED', submitted_at: '2025-01-01T00:00:00Z' },
+        ]);
+      }
+      return mockFailedResponse(404);
+    });
+
+    const listener = vi.fn();
+    provider.onDidDiscoverItems(listener);
+    await provider.refresh();
+
+    const items = listener.mock.calls[0][0];
+    expect(items).toHaveLength(1);
+    expect(items[0].reason).toBe('You are assigned to this PR');
+    expect(items[0].state).toBe('Ready to merge');
+  });
+
+  it('fetches assigned PRs per-repo when repos configured', async () => {
+    vi.mocked(workspace.getConfiguration).mockReturnValue({
+      get: vi.fn((key: string, defaultValue?: any) => {
+        if (key === 'repos') { return ['myorg/myrepo']; }
+        return defaultValue;
+      }),
+    } as any);
+
+    mockFetch.mockResolvedValue(mockSearchResponse([]));
+
+    const listener = vi.fn();
+    provider.onDidDiscoverItems(listener);
+    await provider.refresh();
+
+    const assigneeCall = mockFetch.mock.calls.find((c: any[]) =>
+      c[0].includes('assignee:@me') && c[0].includes('repo:myorg/myrepo')
+    );
+    expect(assigneeCall).toBeDefined();
   });
 });
 

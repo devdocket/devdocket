@@ -60,6 +60,16 @@ function createMockReadStateStore() {
       items.add(key);
       return true;
     }),
+    addMany: vi.fn(async (keys: string[]) => {
+      const added: string[] = [];
+      for (const key of keys) {
+        if (!items.has(key)) {
+          items.add(key);
+          added.push(key);
+        }
+      }
+      return added;
+    }),
     deleteMany: vi.fn(async (keys: string[]) => {
       for (const key of keys) { items.delete(key); }
     }),
@@ -851,6 +861,164 @@ describe('InboxTreeProvider', () => {
       const children = provider.getChildren();
       expect(children).toHaveLength(1);
       expect((children[0] as InboxProviderNode).providerId).toBe('gh');
+    });
+  });
+
+  describe('canonicalId dedup', () => {
+    it('shows only one representative when items share canonicalId across providers', () => {
+      registry._setItems('prs', [
+        { externalId: 'repo#1', title: 'PR #1', canonicalId: 'github:pull:repo#1' },
+      ]);
+      registry._setItems('reviews', [
+        { externalId: 'repo#1', title: 'PR #1', canonicalId: 'github:pull:repo#1' },
+      ]);
+
+      // Flat mode shows all unseen items
+      provider.layout = 'flat';
+      const items = provider.getChildren();
+      expect(items).toHaveLength(1);
+      // Representative is the first by sorted key
+      const item = items[0] as InboxItem;
+      expect(item.kind).toBe('item');
+    });
+
+    it('shows items without canonicalId individually', () => {
+      registry._setItems('prs', [
+        { externalId: 'repo#1', title: 'PR #1' },
+      ]);
+      registry._setItems('reviews', [
+        { externalId: 'repo#1', title: 'Review #1' },
+      ]);
+
+      provider.layout = 'flat';
+      const items = provider.getChildren();
+      expect(items).toHaveLength(2);
+    });
+
+    it('hides duplicates in tree mode provider children', () => {
+      registry._setLabel('prs', 'My PRs');
+      registry._setLabel('reviews', 'PR Reviews');
+      registry._setItems('prs', [
+        { externalId: 'repo#1', title: 'PR #1', canonicalId: 'github:pull:repo#1' },
+      ]);
+      registry._setItems('reviews', [
+        { externalId: 'repo#1', title: 'PR #1', canonicalId: 'github:pull:repo#1' },
+      ]);
+
+      // Tree mode: only one provider should have unseen items
+      const topLevel = provider.getChildren();
+      // One provider's items are hidden, so only one provider node appears
+      expect(topLevel).toHaveLength(1);
+    });
+
+    it('deterministic representative selection (sorted by key)', () => {
+      // 'alpha' provider key comes before 'beta'
+      registry._setItems('beta', [
+        { externalId: 'x#1', title: 'From beta', canonicalId: 'shared:x#1' },
+      ]);
+      registry._setItems('alpha', [
+        { externalId: 'x#1', title: 'From alpha', canonicalId: 'shared:x#1' },
+      ]);
+
+      provider.layout = 'flat';
+      const items = provider.getChildren();
+      expect(items).toHaveLength(1);
+      const representative = items[0] as InboxItem;
+      // alpha::x#1 < beta::x#1
+      expect(representative.providerId).toBe('alpha');
+    });
+
+    it('does not dedup items with different canonicalIds', () => {
+      registry._setItems('prs', [
+        { externalId: 'repo#1', title: 'PR #1', canonicalId: 'github:pull:repo#1' },
+        { externalId: 'repo#2', title: 'PR #2', canonicalId: 'github:pull:repo#2' },
+      ]);
+
+      provider.layout = 'flat';
+      const items = provider.getChildren();
+      expect(items).toHaveLength(2);
+    });
+
+    it('dedup respects accepted/dismissed state', () => {
+      registry._setItems('prs', [
+        { externalId: 'repo#1', title: 'PR #1', canonicalId: 'github:pull:repo#1' },
+      ]);
+      registry._setItems('reviews', [
+        { externalId: 'repo#1', title: 'PR #1', canonicalId: 'github:pull:repo#1' },
+      ]);
+      // Accept one of them
+      stateStore._set('prs', 'repo#1', 'accepted');
+
+      provider.layout = 'flat';
+      const items = provider.getChildren();
+      // Only the reviews item remains since the prs one is accepted
+      expect(items).toHaveLength(1);
+      expect((items[0] as InboxItem).providerId).toBe('reviews');
+    });
+
+    it('dedup correctly counts unseen items per provider', () => {
+      registry._setLabel('prs', 'My PRs');
+      registry._setLabel('reviews', 'PR Reviews');
+      registry._setItems('prs', [
+        { externalId: 'repo#1', title: 'PR #1', canonicalId: 'github:pull:repo#1' },
+        { externalId: 'repo#2', title: 'PR #2' },
+      ]);
+      registry._setItems('reviews', [
+        { externalId: 'repo#1', title: 'PR #1', canonicalId: 'github:pull:repo#1' },
+      ]);
+
+      // prs provider: repo#1 is representative (prs::repo#1 < reviews::repo#1), repo#2 no canonicalId
+      const prsTreeItem = provider.getTreeItem(providerNode('prs'));
+      expect(prsTreeItem.description).toBe('2');
+
+      // reviews provider: repo#1 is hidden (reviews::repo#1 > prs::repo#1)
+      const reviewsTreeItem = provider.getTreeItem(providerNode('reviews'));
+      expect(reviewsTreeItem.description).toBe('0');
+    });
+
+    it('dedup with groups hides items correctly', () => {
+      registry._setItems('prs', [
+        { externalId: 'repo#1', title: 'PR #1', group: 'myrepo', canonicalId: 'github:pull:repo#1' },
+      ]);
+      registry._setItems('reviews', [
+        { externalId: 'repo#1', title: 'PR #1', group: 'myrepo', canonicalId: 'github:pull:repo#1' },
+      ]);
+
+      const prsChildren = provider.getChildren(providerNode('prs'));
+      // prs is the representative (prs < reviews alphabetically)
+      expect(prsChildren.length).toBeGreaterThan(0);
+
+      const reviewsChildren = provider.getChildren(providerNode('reviews'));
+      expect(reviewsChildren).toHaveLength(0);
+    });
+
+    it('markSeen propagates to canonical peers', async () => {
+      registry._setItems('prs', [
+        { externalId: 'repo#1', title: 'PR #1', canonicalId: 'github:pull:repo#1' },
+      ]);
+      registry._setItems('reviews', [
+        { externalId: 'repo#1', title: 'PR #1', canonicalId: 'github:pull:repo#1' },
+      ]);
+
+      await provider.markSeen('prs', 'repo#1');
+
+      // Both should now be seen
+      expect(provider.sessionSeenItems.has('prs::repo#1')).toBe(true);
+      expect(provider.sessionSeenItems.has('reviews::repo#1')).toBe(true);
+    });
+
+    it('markSeenBatch propagates to canonical peers', async () => {
+      registry._setItems('prs', [
+        { externalId: 'repo#1', title: 'PR #1', canonicalId: 'github:pull:repo#1' },
+      ]);
+      registry._setItems('reviews', [
+        { externalId: 'repo#1', title: 'PR #1', canonicalId: 'github:pull:repo#1' },
+      ]);
+
+      await provider.markSeenBatch([{ providerId: 'prs', externalId: 'repo#1' }]);
+
+      expect(provider.sessionSeenItems.has('prs::repo#1')).toBe(true);
+      expect(provider.sessionSeenItems.has('reviews::repo#1')).toBe(true);
     });
   });
 });

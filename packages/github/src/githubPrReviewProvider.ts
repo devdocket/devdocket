@@ -62,6 +62,7 @@ export class GitHubPrReviewProvider extends BaseGitHubProvider {
         url: pr.html_url,
         group: repoName,
         reason: 'review_requested',
+        canonicalId: `github:pull:${repoName}#${pr.number}`,
       };
       if (pr.state) { item.state = pr.state; }
       const headSha = headShas.get(pr.html_url);

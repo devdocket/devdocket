@@ -38,36 +38,64 @@ export class GitHubMyPrsProvider extends BaseGitHubProvider {
   readonly label = 'My GitHub PRs';
 
   protected async fetchAndPublish(accessToken: string, isUserTriggered: boolean, signal?: AbortSignal): Promise<void> {
-    logger.info('Fetching authored PRs...');
+    logger.info('Fetching authored and assigned PRs...');
     const repos = this.getConfiguredRepos();
-    const { prs, failures } = await this.fetchAuthoredPrs(accessToken, repos, signal);
 
-    logger.info(`Discovered ${prs.length} authored PRs`);
+    // Fetch authored and assigned PRs in parallel
+    const [authoredResult, assignedResult] = await Promise.all([
+      this.fetchAuthoredPrs(accessToken, repos, signal),
+      this.fetchAssignedPrs(accessToken, repos, signal),
+    ]);
 
-    const statusMap = prs.length > 0
-      ? await this.fetchPrStatuses(accessToken, prs, signal)
+    logger.info(`Discovered ${authoredResult.prs.length} authored PRs and ${assignedResult.prs.length} assigned PRs`);
+
+    // Filter out self-authored PRs from assigned results to avoid duplicates
+    const authoredUrls = new Set(authoredResult.prs.map(pr => pr.html_url));
+    const uniqueAssignedPrs = assignedResult.prs.filter(pr => !authoredUrls.has(pr.html_url));
+
+    const allPrs = [...authoredResult.prs, ...uniqueAssignedPrs];
+
+    const statusMap = allPrs.length > 0
+      ? await this.fetchPrStatuses(accessToken, allPrs, signal)
       : new Map<string, string>();
 
-    const items: DiscoveredItem[] = prs.map((pr) => {
+    const items: DiscoveredItem[] = [];
+    for (const pr of authoredResult.prs) {
       const repoName = parseRepoFromUrls(pr.html_url, pr.repository_url);
       const status = statusMap.get(pr.html_url) ?? 'Open';
-      return {
+      items.push({
         externalId: `${repoName}#${pr.number}`,
         title: `#${pr.number}: ${pr.title}`,
         description: pr.body?.slice(0, 200),
         url: pr.html_url,
         group: repoName,
-        reason: 'authored',
+        reason: 'You authored this PR',
         state: status,
-      };
-    });
+        canonicalId: `github:pull:${repoName}#${pr.number}`,
+      });
+    }
+    for (const pr of uniqueAssignedPrs) {
+      const repoName = parseRepoFromUrls(pr.html_url, pr.repository_url);
+      const status = statusMap.get(pr.html_url) ?? 'Open';
+      items.push({
+        externalId: `${repoName}#${pr.number}`,
+        title: `#${pr.number}: ${pr.title}`,
+        description: pr.body?.slice(0, 200),
+        url: pr.html_url,
+        group: repoName,
+        reason: 'You are assigned to this PR',
+        state: status,
+        canonicalId: `github:pull:${repoName}#${pr.number}`,
+      });
+    }
 
     this._onDidDiscoverItems.fire(items);
 
+    const failures = [...authoredResult.failures, ...assignedResult.failures];
     if (failures.length > 0) {
       const message = failures.length === 1
-        ? `Failed to fetch authored PRs from ${failures[0]}`
-        : `Failed to fetch authored PRs from ${failures.length} repositories`;
+        ? `Failed to fetch PRs from ${failures[0]}`
+        : `Failed to fetch PRs from ${failures.length} repositories`;
       if (isUserTriggered) {
         void vscode.window.showWarningMessage(`DevDocket GitHub: ${message}`);
       } else {
@@ -161,6 +189,93 @@ export class GitHubMyPrsProvider extends BaseGitHubProvider {
 
     if (!response.ok) {
       logger.error(`Failed to fetch authored PRs: ${response.status}`);
+      return { prs: [], failures: ['all repositories'] };
+    }
+
+    const data = (await response.json()) as GitHubSearchResponse;
+    return { prs: data.items, failures: [] };
+  }
+
+  private async fetchAssignedPrs(
+    token: string,
+    repos: string[],
+    signal?: AbortSignal,
+  ): Promise<{ prs: GitHubIssue[]; failures: string[] }> {
+    if (repos.length > 0) {
+      return this.fetchPerRepoAssignedPrs(token, repos, signal);
+    }
+    return this.fetchAllAssignedPrs(token, signal);
+  }
+
+  private async fetchPerRepoAssignedPrs(
+    token: string,
+    repos: string[],
+    signal?: AbortSignal,
+  ): Promise<{ prs: GitHubIssue[]; failures: string[] }> {
+    const results = await runWorkerPoolSettled(repos, async (repo) => {
+      if (signal?.aborted) {
+        const error = new Error('The operation was aborted.');
+        error.name = 'AbortError';
+        throw error;
+      }
+      return await this.fetchRepoAssignedPrs(token, repo, signal);
+    }, 3);
+
+    const allPrs: GitHubIssue[] = [];
+    const failures: string[] = [];
+
+    results.forEach((result, index) => {
+      if (result.status === 'fulfilled') {
+        allPrs.push(...result.value.prs);
+        if (result.value.failed) {
+          failures.push(repos[index]);
+        }
+      } else {
+        failures.push(repos[index]);
+      }
+    });
+
+    return { prs: allPrs, failures };
+  }
+
+  private async fetchRepoAssignedPrs(token: string, repo: string, signal?: AbortSignal): Promise<{ prs: GitHubIssue[]; failed: boolean }> {
+    logger.debug(`Fetching assigned PRs for repo: ${repo}`);
+    const response = await fetch(
+      `https://api.github.com/search/issues?q=type:pr+state:open+assignee:@me+repo:${repo}&per_page=100`,
+      {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          Accept: 'application/vnd.github+json',
+          'X-GitHub-Api-Version': '2022-11-28',
+        },
+        signal: combineSignals(signal, 30_000),
+      },
+    );
+
+    if (!response.ok) {
+      logger.error(`Failed to fetch assigned PRs for ${repo}: ${response.status}`);
+      return { prs: [], failed: true };
+    }
+
+    const data = (await response.json()) as GitHubSearchResponse;
+    return { prs: data.items, failed: false };
+  }
+
+  private async fetchAllAssignedPrs(token: string, signal?: AbortSignal): Promise<{ prs: GitHubIssue[]; failures: string[] }> {
+    const response = await fetch(
+      'https://api.github.com/search/issues?q=type:pr+state:open+assignee:@me&per_page=100',
+      {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          Accept: 'application/vnd.github+json',
+          'X-GitHub-Api-Version': '2022-11-28',
+        },
+        signal: combineSignals(signal, 30_000),
+      },
+    );
+
+    if (!response.ok) {
+      logger.error(`Failed to fetch assigned PRs: ${response.status}`);
       return { prs: [], failures: ['all repositories'] };
     }
 
