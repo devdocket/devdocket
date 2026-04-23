@@ -250,17 +250,19 @@ export class WatcherService implements vscode.Disposable {
   }
 
   /**
-   * Dismiss a watched PR and all its child runs.
+   * Dismiss a watched PR and its owned child runs.
+   * Runs not owned by this PR (standalone or owned by another PR) are
+   * unlinked but not dismissed.
    */
   dismissPRWatch(identifier: PRIdentifier): void {
     const key = this.getPRWatchKey(identifier);
     const prWatch = this.prWatches.get(key);
     if (prWatch) {
       prWatch.dismissed = true;
-      // Dismiss all child runs
+      // Only dismiss child runs actually owned by this PR
       for (const childKey of prWatch.childRunKeys) {
         const childWatch = this.watches.get(childKey);
-        if (childWatch) {
+        if (childWatch && childWatch.parentPRKey === key) {
           childWatch.dismissed = true;
         }
       }
@@ -498,11 +500,11 @@ export class WatcherService implements vscode.Disposable {
           }
         }
 
-        // Remove orphaned child runs
+        // Remove orphaned child runs (only dismiss runs owned by this PR)
         for (const childKey of currentRunKeys) {
           if (!newRunKeys.has(childKey)) {
             const childWatch = this.watches.get(childKey);
-            if (childWatch && !childWatch.dismissed) {
+            if (childWatch && !childWatch.dismissed && childWatch.parentPRKey === key) {
               childWatch.dismissed = true;
               childRunChanged = true;
             }
