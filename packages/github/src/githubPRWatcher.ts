@@ -7,7 +7,6 @@ import type {
   RunIdentifier,
   CancellationTokenLike,
 } from '@devdocket/shared';
-import { logger } from './logger';
 
 interface GitHubPR {
   number: number;
@@ -23,12 +22,6 @@ interface GitHubCheckRun {
   html_url: string;
   app?: { slug?: string };
   check_suite?: { id: number };
-}
-
-interface GitHubWorkflowRun {
-  id: number;
-  name: string;
-  html_url: string;
 }
 
 const FETCH_TIMEOUT_MS = 30_000;
