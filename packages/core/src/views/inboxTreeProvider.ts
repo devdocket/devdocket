@@ -44,6 +44,7 @@ export class InboxTreeProvider implements vscode.TreeDataProvider<InboxElement> 
   private refreshTimer: ReturnType<typeof setTimeout> | undefined;
   static readonly REFRESH_DEBOUNCE_MS = 50;
   private readonly _layoutState: LayoutState;
+  private cachedHiddenSet: Set<string> | undefined;
 
   get layout(): ViewLayout { return this._layoutState.value; }
   set layout(value: ViewLayout) { this._layoutState.value = value; }
@@ -65,6 +66,7 @@ export class InboxTreeProvider implements vscode.TreeDataProvider<InboxElement> 
     if (this.refreshTimer !== undefined) {
       clearTimeout(this.refreshTimer);
     }
+    this.cachedHiddenSet = undefined;
     this.refreshTimer = setTimeout(() => {
       this.refreshTimer = undefined;
       this.pruneSeenItems();
@@ -130,8 +132,8 @@ export class InboxTreeProvider implements vscode.TreeDataProvider<InboxElement> 
       this._onDidMarkSeen.fire();
     }
     if (peerKeys.length > 0) {
-      await this.readStateStore.addMany(allKeys);
-      return true;
+      const addedCount = await this.readStateStore.addMany(allKeys);
+      return changed || addedCount > 0;
     }
     return this.readStateStore.add(key);
   }
@@ -280,7 +282,7 @@ export class InboxTreeProvider implements vscode.TreeDataProvider<InboxElement> 
 
   private getAllUnseenItems(): InboxItem[] {
     const result: InboxItem[] = [];
-    const hidden = this.buildCanonicalHiddenSet();
+    const hidden = this.getCanonicalHiddenSet();
     const allItems = this.providerRegistry.getAllDiscoveredItems();
     for (const [providerId, items] of allItems) {
       for (const item of items) {
@@ -295,7 +297,7 @@ export class InboxTreeProvider implements vscode.TreeDataProvider<InboxElement> 
 
   private getProviderChildren(providerId: string): (InboxGroupNode | InboxItem)[] {
     const items = this.providerRegistry.getDiscoveredItems(providerId);
-    const hidden = this.buildCanonicalHiddenSet();
+    const hidden = this.getCanonicalHiddenSet();
     const groupCounts = new Map<string, number>();
     const ungrouped: typeof items = [];
 
@@ -331,7 +333,7 @@ export class InboxTreeProvider implements vscode.TreeDataProvider<InboxElement> 
 
   private getGroupChildren(providerId: string, groupName: string): InboxItem[] {
     const items = this.providerRegistry.getDiscoveredItems(providerId);
-    const hidden = this.buildCanonicalHiddenSet();
+    const hidden = this.getCanonicalHiddenSet();
     const result: InboxItem[] = [];
     for (const item of items) {
       if (item.group?.trim() !== groupName) { continue; }
@@ -393,9 +395,16 @@ export class InboxTreeProvider implements vscode.TreeDataProvider<InboxElement> 
     return hidden;
   }
 
+  private getCanonicalHiddenSet(): Set<string> {
+    if (!this.cachedHiddenSet) {
+      this.cachedHiddenSet = this.buildCanonicalHiddenSet();
+    }
+    return this.cachedHiddenSet;
+  }
+
   private getGroupUnseenCount(providerId: string, groupName: string): number {
     const items = this.providerRegistry.getDiscoveredItems(providerId);
-    const hidden = this.buildCanonicalHiddenSet();
+    const hidden = this.getCanonicalHiddenSet();
     return items.filter((item) => {
       if (item.group?.trim() !== groupName) { return false; }
       const state = this.stateStore.getState(providerId, item.externalId);
@@ -406,7 +415,7 @@ export class InboxTreeProvider implements vscode.TreeDataProvider<InboxElement> 
 
   private getUnseenCount(providerId: string): number {
     const items = this.providerRegistry.getDiscoveredItems(providerId);
-    const hidden = this.buildCanonicalHiddenSet();
+    const hidden = this.getCanonicalHiddenSet();
     return items.filter((item) => {
       const state = this.stateStore.getState(providerId, item.externalId);
       if (state !== undefined && state !== 'unseen') { return false; }
