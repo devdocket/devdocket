@@ -506,7 +506,6 @@ export class WatcherService implements vscode.Disposable {
           if (snapshot.prState === 'merged' || snapshot.prState === 'closed') {
             this._onDidCompletePR.fire(prWatch);
           }
-          this._onDidChangePRWatches.fire();
         }
 
       } catch (err) {
@@ -517,7 +516,6 @@ export class WatcherService implements vscode.Disposable {
           prWatch.hasWarning = true;
           prWatch.errorMessage = err instanceof Error ? err.message : String(err);
           anyChanged = true;
-          this._onDidChangePRWatches.fire();
           this.logger.warn(`3 consecutive failures for PR ${prWatch.identifier.displayName}, marking with warning`);
         } else {
           this.logger.warn(`PR poll failed for ${prWatch.identifier.displayName} (attempt ${failures}/3): ${err}`);
