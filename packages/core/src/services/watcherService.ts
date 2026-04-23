@@ -520,7 +520,10 @@ export class WatcherService implements vscode.Disposable {
           const runKey = this.getWatchKey(resolved);
           newRunKeys.add(runKey);
           if (!currentRunKeys.has(runKey)) {
-            const added = await this.addChildRun(key, prWatch, resolved);
+            const added = await this.addChildRun(key, prWatch, resolved, {
+              suppressEvents: true,
+              suppressPersist: true,
+            });
             if (added) {
               childRunChanged = true;
             }
