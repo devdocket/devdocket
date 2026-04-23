@@ -618,12 +618,11 @@ export class WatcherService implements vscode.Disposable {
     try {
       const existing = this.watches.get(runKey);
       if (existing && !existing.dismissed) {
-        // Already watched — just link to the PR
-        if (!existing.parentPRKey) {
-          existing.parentPRKey = prKey;
-        }
-        if (!prWatch.childRunKeys.includes(runKey)) {
-          prWatch.childRunKeys.push(runKey);
+        // Already watched as standalone or by another PR — don't re-parent
+        if (existing.parentPRKey === prKey) {
+          if (!prWatch.childRunKeys.includes(runKey)) {
+            prWatch.childRunKeys.push(runKey);
+          }
         }
         return;
       }

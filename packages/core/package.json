@@ -24,6 +24,7 @@
     "onCommand:devdocket.clearHistory",
     "onView:devdocket.watches",
     "onCommand:devdocket.watchRun",
+    "onCommand:devdocket.watchPR",
     "onCommand:devdocket.dismissWatch",
     "onCommand:devdocket.dismissAllCompletedWatches",
     "onCommand:devdocket.openWatchUrl",
@@ -241,7 +242,7 @@
       },
       {
         "view": "devdocket.watches",
-        "contents": "No pipeline runs being watched.\n[Watch Pipeline Run](command:devdocket.watchRun)"
+        "contents": "No pipeline runs being watched.\n[Watch Pipeline Run](command:devdocket.watchRun)\n[Watch Pull Request](command:devdocket.watchPR)"
       }
     ],
     "commands": [
@@ -495,6 +496,12 @@
         "title": "DevDocket: Watch Pipeline Run",
         "category": "DevDocket",
         "icon": "$(add)"
+      },
+      {
+        "command": "devdocket.watchPR",
+        "title": "DevDocket: Watch Pull Request",
+        "category": "DevDocket",
+        "icon": "$(git-pull-request)"
       },
       {
         "command": "devdocket.dismissWatch",
