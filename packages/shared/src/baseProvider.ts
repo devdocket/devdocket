@@ -30,17 +30,18 @@ export interface DiscoveredItem {
   /** Optional upstream state from the provider (e.g. `"open"`, `"closed"`, `"Active"`). */
   state?: string;
   /**
-   * Optional version identifier that changes when the item needs re-attention.
+   * Optional version identifier for "soft" resurfacing.
    * When a previously accepted item reappears with a different version,
-   * it is resurfaced in the Inbox as unseen. Useful for PR reviews where
-   * new commits should create a new inbox cycle.
+   * it is resurfaced in the Inbox as unseen **unless** the linked work item
+   * is currently in Queue or Focus (New, InProgress, Paused), in which case
+   * the version is silently updated and a `version-updated` activity is logged.
    */
   version?: string;
   /**
-   * Optional secondary version that independently triggers resurfacing.
-   * Behaves the same as `version` but is tracked separately, allowing
-   * providers to detect multiple independent change signals (e.g. new
-   * commits via `version` and re-requested reviews via `resurfaceVersion`).
+   * Optional secondary version for "hard" resurfacing.
+   * When a previously accepted item reappears with a different
+   * resurfaceVersion, it is **always** resurfaced in the Inbox as unseen,
+   * regardless of the linked work item's state.
    */
   resurfaceVersion?: string;
 }

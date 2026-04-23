@@ -3,7 +3,7 @@ import { DevDocketProvider, DiscoveredItem, type ResolvedItem } from '../api/typ
 import { DiscoveredStateStore, InboxState } from '../storage/discoveredStateStore';
 import { ProviderLabelCache } from '../storage/providerLabelCache';
 import { logger } from './logger';
-import { WorkItemState } from '@devdocket/shared';
+import { WorkItemState, type ActivityType } from '@devdocket/shared';
 
 /** Health status of a single provider's most recent refresh attempt. */
 export interface ProviderHealthStatus {
@@ -75,7 +75,7 @@ export class ProviderRegistry {
     private readonly stateStore: DiscoveredStateStore,
     private readonly labelCache?: ProviderLabelCache,
     private readonly getWorkItemState?: (providerId: string, externalId: string) => WorkItemState | undefined,
-    private readonly addActivity?: (providerId: string, externalId: string, type: string, detail?: string) => Promise<void>,
+    private readonly addActivity?: (providerId: string, externalId: string, type: ActivityType, detail?: string) => Promise<void>,
   ) {}
 
   /**

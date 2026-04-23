@@ -396,7 +396,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<DevDoc
     (providerId, externalId) => wg.findItemByProvenance(providerId, externalId)?.state,
     async (providerId, externalId, type, detail) => {
       const item = wg.findItemByProvenance(providerId, externalId);
-      if (item) { await wg.addActivity(item.id, type as ActivityType, detail); }
+      if (item) { await wg.addActivity(item.id, type, detail); }
     },
   );
   const ar = new ActionRegistry();
