@@ -57,14 +57,15 @@ interface PrBranchInfo {
  * DevDocket action that bootstraps a development environment for a work item.
  *
  * Supports items from GitHub and Azure DevOps providers (both issues and PRs).
- * When executed on an issue it creates a new branch and checks out or creates a worktree.
+ * When executed on an issue it creates a new branch and either checks out
+ * or creates a worktree for it, based on user preference.
  * When executed on a PR it fetches the existing PR branch instead of creating one.
  *
  * Only available for items in the `InProgress` state from supported providers.
  */
 export class StartWorkAction implements DevDocketAction {
   readonly id = 'startGitWork';
-  readonly label = 'Start Git Work (Branch + Worktree)';
+  readonly label = 'Start Git Work';
 
   private readonly globalState: vscode.Memento;
 
@@ -294,14 +295,19 @@ export class StartWorkAction implements DevDocketAction {
       return undefined;
     }
 
-    const [owner, repo] = parsed.repoKey.split('/');
-    const url = `https://api.github.com/repos/${owner}/${repo}/pulls/${parsed.itemNumber}`;
+    const repoKeyParts = parsed.repoKey.split('/');
+    if (repoKeyParts.length !== 2 || !repoKeyParts[0] || !repoKeyParts[1]) {
+      void vscode.window.showErrorMessage(`DevDocket: Invalid GitHub repository key "${parsed.repoKey}".`);
+      return undefined;
+    }
+    const [owner, repo] = repoKeyParts;
+    const url = `https://api.github.com/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/pulls/${parsed.itemNumber}`;
 
     const response = await fetch(url, {
       headers: {
         Authorization: `Bearer ${session.accessToken}`,
         Accept: 'application/vnd.github+json',
-        'User-Agent': 'devdocket-start-git-work',
+        'User-Agent': 'DevDocket-VSCode',
         'X-GitHub-Api-Version': '2022-11-28',
       },
       signal: AbortSignal.timeout(30_000),
