@@ -831,12 +831,12 @@
         },
         {
           "command": "devdocket.dismissWatch",
-          "when": "view == devdocket.watches && viewItem =~ /^watchedRun/",
+          "when": "view == devdocket.watches && viewItem =~ /^watchedRun|^watchedPR/",
           "group": "inline"
         },
         {
           "command": "devdocket.openWatchUrl",
-          "when": "view == devdocket.watches && viewItem =~ /^watchedRun/",
+          "when": "view == devdocket.watches && viewItem =~ /^watchedRun|^watchedPR/",
           "group": "1_actions"
         }
       ]
