@@ -394,6 +394,7 @@ export class StartWorkAction implements DevDocketAction {
       headers: {
         Authorization: `Bearer ${session.accessToken}`,
         Accept: 'application/json',
+        'User-Agent': 'DevDocket-VSCode',
       },
       signal: AbortSignal.timeout(30_000),
     });
@@ -537,7 +538,19 @@ export class StartWorkAction implements DevDocketAction {
       checkoutArgs = ['checkout', '-b', branchName, '--track', `origin/${branchName}`];
     }
 
-    await execFileAsync('git', checkoutArgs, { cwd: repoPath, timeout: 30_000 });
+    try {
+      await execFileAsync('git', checkoutArgs, { cwd: repoPath, timeout: 30_000 });
+    } catch (error) {
+      const gitError = error as { stderr?: string; stdout?: string; message?: string };
+      const gitErrorText = `${gitError.stderr ?? ''}\n${gitError.stdout ?? ''}\n${gitError.message ?? ''}`;
+      if (gitErrorText.includes('already checked out') || gitErrorText.includes('already used by worktree')) {
+        void vscode.window.showErrorMessage(
+          `DevDocket: Branch "${branchName}" is already checked out in another worktree. Use worktree mode instead, or remove the conflicting worktree first.`,
+        );
+        return;
+      }
+      throw error;
+    }
     logger.info(`Checked out PR branch ${branchName}`);
 
     try {
