@@ -92,12 +92,12 @@ export async function activate(_context: vscode.ExtensionContext): Promise<void>
   // Register the GitHub PR watcher
   if (typeof api.registerPRWatcher === 'function') {
     prWatcherRegistration = api.registerPRWatcher(new GitHubPRWatcher());
-    logger.info('DevDocket GitHub activated, registered 3 providers + 1 watcher + 1 PR watcher');
-  } else if (watcherRegistration) {
-    logger.info('DevDocket GitHub activated, registered 3 providers + 1 watcher');
-  } else {
-    logger.info('DevDocket GitHub activated, registered 3 providers');
   }
+
+  const parts = ['3 providers'];
+  if (watcherRegistration) { parts.push('1 watcher'); }
+  if (prWatcherRegistration) { parts.push('1 PR watcher'); }
+  logger.info(`DevDocket GitHub activated, registered ${parts.join(' + ')}`);
 }
 
 export function deactivate(): void {
