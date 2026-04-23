@@ -91,7 +91,7 @@ export class GitHubMyPrsProvider extends BaseGitHubProvider {
 
     this._onDidDiscoverItems.fire(items);
 
-    const failures = [...authoredResult.failures, ...assignedResult.failures];
+    const failures = [...new Set([...authoredResult.failures, ...assignedResult.failures])];
     if (failures.length > 0) {
       const message = failures.length === 1
         ? `Failed to fetch PRs from ${failures[0]}`

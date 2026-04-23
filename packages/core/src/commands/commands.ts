@@ -589,9 +589,11 @@ async function handleAcceptFromInbox(
     return;
   }
 
-  // Expand items with canonical peers for batch accept
-  const expanded = expandWithCanonicalPeers(items, providerRegistry, stateStore);
-  await batchAcceptItems(workGraph, stateStore, expanded, 'inbox item');
+  await batchAcceptItems(workGraph, stateStore, items, 'inbox item');
+  // Propagate state to canonical peers (state-only, no work items created)
+  for (const batchItem of items) {
+    await propagateStateToCanonicalPeers(batchItem, providerRegistry, stateStore, 'accepted');
+  }
 }
 
 async function acceptSingleInboxItem(
@@ -840,9 +842,11 @@ async function handleAcceptToFocusFromInbox(
     return;
   }
 
-  // Expand items with canonical peers for batch accept
-  const expanded = expandWithCanonicalPeers(items, providerRegistry, stateStore);
-  await batchAcceptToFocusItems(workGraph, stateStore, expanded);
+  await batchAcceptToFocusItems(workGraph, stateStore, items);
+  // Propagate state to canonical peers (state-only, no work items created)
+  for (const batchItem of items) {
+    await propagateStateToCanonicalPeers(batchItem, providerRegistry, stateStore, 'accepted');
+  }
 }
 
 async function handleDismissFromInbox(
@@ -872,7 +876,7 @@ async function handleDismissFromInbox(
     await stateStore.setStates(
       expanded.map(i => ({ providerId: i.providerId, externalId: i.externalId, state: 'dismissed' as const }))
     );
-    void vscode.window.showInformationMessage(`Dismissed ${items.length} items`);
+    void vscode.window.showInformationMessage(`Dismissed ${expanded.length} item${expanded.length === 1 ? '' : 's'}`);
   } catch (err: unknown) {
     handleCommandError('Failed to dismiss items', err);
   }
