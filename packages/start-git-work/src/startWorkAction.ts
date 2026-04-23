@@ -374,10 +374,14 @@ export class StartWorkAction implements DevDocketAction {
 
     // ADO PR externalId format: org/project/repo/id
     const parts = parsed.repoKey.split('/');
+    if (parts.length < 3) {
+      void vscode.window.showErrorMessage(`DevDocket: Invalid ADO repo key "${parsed.repoKey}".`);
+      return undefined;
+    }
     const org = parts[0];
     const project = parts[1];
     const adoRepo = parts[2];
-    const url = `https://dev.azure.com/${org}/${project}/_apis/git/repositories/${adoRepo}/pullrequests/${parsed.itemNumber}?api-version=7.1`;
+    const url = `https://dev.azure.com/${encodeURIComponent(org)}/${encodeURIComponent(project)}/_apis/git/repositories/${encodeURIComponent(adoRepo)}/pullrequests/${parsed.itemNumber}?api-version=7.1`;
 
     const response = await fetch(url, {
       headers: {
