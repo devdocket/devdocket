@@ -467,7 +467,12 @@ describe('WatcherService', () => {
       // Register a run watcher that recognizes URLs
       const runWatcher = createMockWatcher('ado-pipelines');
       (runWatcher.canWatch as ReturnType<typeof vi.fn>).mockImplementation(
-        (url: string) => url.includes('dev.azure.com') && url.includes('_build/results'),
+        (url: string) => {
+          try {
+            const u = new URL(url);
+            return u.hostname === 'dev.azure.com' && u.pathname.includes('_build/results');
+          } catch { return false; }
+        },
       );
       (runWatcher.parseRunUrl as ReturnType<typeof vi.fn>).mockReturnValue({
         providerId: 'ado-pipelines',
