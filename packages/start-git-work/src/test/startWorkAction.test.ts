@@ -427,7 +427,7 @@ describe('StartWorkAction', () => {
       await action.run(item);
 
       expect(window.showErrorMessage).toHaveBeenCalledWith(
-        'Could not determine issue number.',
+        'Could not determine work item number.',
       );
     });
 
@@ -436,7 +436,7 @@ describe('StartWorkAction', () => {
       await action.run(item);
 
       expect(window.showErrorMessage).toHaveBeenCalledWith(
-        'Could not determine issue number.',
+        'Could not determine work item number.',
       );
     });
 

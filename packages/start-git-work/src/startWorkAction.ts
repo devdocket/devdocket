@@ -22,6 +22,7 @@ const SUPPORTED_PROVIDERS = [
 ];
 
 const PR_PROVIDERS = ['github-my-prs', 'github-pr-reviews', 'ado-pr-reviews'];
+const GITHUB_PR_PROVIDERS = ['github-my-prs', 'github-pr-reviews'];
 
 type WorkMode = 'checkout' | 'worktree';
 
@@ -78,7 +79,7 @@ export class StartWorkAction implements DevDocketAction {
   async run(item: Readonly<WorkItem>): Promise<void> {
     const parsed = this.parseExternalId(item.externalId);
     if (!parsed) {
-      void vscode.window.showErrorMessage('Could not determine issue number.');
+      void vscode.window.showErrorMessage('Could not determine work item number.');
       return;
     }
 
@@ -259,7 +260,7 @@ export class StartWorkAction implements DevDocketAction {
         async (progress) => {
           progress.report({ message: 'Fetching PR branch...' });
 
-          const isGitHubPr = item.providerId === 'github-my-prs' || item.providerId === 'github-pr-reviews';
+          const isGitHubPr = GITHUB_PR_PROVIDERS.includes(item.providerId ?? '');
           const branchInfo = isGitHubPr
             ? await this.fetchGitHubPrBranch(parsed, repoPath)
             : await this.fetchAdoPrBranch(parsed, repoPath);
