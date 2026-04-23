@@ -94,7 +94,7 @@ export class AdoPRWatcher implements DevDocketPRWatcher {
     try {
       prResponse = await fetch(prUrl, { headers, signal: AbortSignal.timeout(FETCH_TIMEOUT_MS) });
     } catch (err) {
-      if (err instanceof Error && err.name === 'AbortError') {
+      if (err instanceof Error && (err.name === 'AbortError' || err.name === 'TimeoutError')) {
         throw new Error(`ADO API request timed out after ${FETCH_TIMEOUT_MS / 1000}s`);
       }
       throw err;
