@@ -337,25 +337,26 @@ export class StartWorkAction implements DevDocketAction {
     if (isFork) {
       const forkOwner = pr.head.repo.full_name.split('/')[0];
       const cloneUrl = pr.head.repo.clone_url;
+      const forkRemoteName = `devdocket-fork-${forkOwner}`;
 
-      // Add remote if it doesn't already exist; update URL if it points elsewhere
+      // Add or update only the DevDocket-managed fork remote to avoid mutating user remotes
       try {
-        await execFileAsync('git', ['remote', 'add', forkOwner, cloneUrl], { cwd: repoPath, timeout: 30_000 });
+        await execFileAsync('git', ['remote', 'add', forkRemoteName, cloneUrl], { cwd: repoPath, timeout: 30_000 });
       } catch (err) {
         try {
-          const { stdout } = await execFileAsync('git', ['remote', 'get-url', forkOwner], { cwd: repoPath, timeout: 30_000 });
+          const { stdout } = await execFileAsync('git', ['remote', 'get-url', forkRemoteName], { cwd: repoPath, timeout: 30_000 });
           if (stdout.trim() !== cloneUrl) {
-            logger.info(`Remote "${forkOwner}" exists with different URL, updating to "${cloneUrl}".`);
-            await execFileAsync('git', ['remote', 'set-url', forkOwner, cloneUrl], { cwd: repoPath, timeout: 30_000 });
+            logger.info(`Remote "${forkRemoteName}" exists with different URL, updating to "${cloneUrl}".`);
+            await execFileAsync('git', ['remote', 'set-url', forkRemoteName, cloneUrl], { cwd: repoPath, timeout: 30_000 });
           }
         } catch {
           throw err;
         }
       }
 
-      await execFileAsync('git', ['fetch', forkOwner, branchName], { cwd: repoPath, timeout: 30_000 });
+      await execFileAsync('git', ['fetch', forkRemoteName, branchName], { cwd: repoPath, timeout: 30_000 });
 
-      return { branchName, trackingRef: `${forkOwner}/${branchName}` };
+      return { branchName, trackingRef: `${forkRemoteName}/${branchName}` };
     } else {
       await execFileAsync('git', ['fetch', 'origin', branchName], { cwd: repoPath, timeout: 30_000 });
     }

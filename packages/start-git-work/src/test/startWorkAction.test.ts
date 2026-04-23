@@ -877,13 +877,13 @@ describe('StartWorkAction', () => {
         (call: any[]) => call[1]?.[0] === 'remote' && call[1]?.[1] === 'add',
       );
       expect(remoteAddCall).toBeDefined();
-      expect(remoteAddCall![1]).toEqual(['remote', 'add', 'contributor', 'https://github.com/contributor/repo.git']);
+      expect(remoteAddCall![1]).toEqual(['remote', 'add', 'devdocket-fork-contributor', 'https://github.com/contributor/repo.git']);
 
       const fetchCall = vi.mocked(execFile).mock.calls.find(
         (call: any[]) => call[1]?.[0] === 'fetch',
       );
       expect(fetchCall).toBeDefined();
-      expect(fetchCall![1]).toEqual(['fetch', 'contributor', 'fix/something']);
+      expect(fetchCall![1]).toEqual(['fetch', 'devdocket-fork-contributor', 'fix/something']);
 
       const worktreeCall = vi.mocked(execFile).mock.calls.find(
         (call: any[]) => call[1]?.[0] === 'worktree',
@@ -892,7 +892,7 @@ describe('StartWorkAction', () => {
       expect(worktreeCall![1]).toEqual([
         'worktree', 'add', '-b', 'fix/something',
         path.join('/mock', 'workspace-pr42'),
-        'contributor/fix/something',
+        'devdocket-fork-contributor/fix/something',
       ]);
     });
 
@@ -922,7 +922,7 @@ describe('StartWorkAction', () => {
       expect(worktreeCall![1]).toEqual([
         'worktree', 'add', '--detach',
         path.join('/mock', 'workspace-pr42'),
-        'contributor/fix/something',
+        'devdocket-fork-contributor/fix/something',
       ]);
     });
 
@@ -949,7 +949,7 @@ describe('StartWorkAction', () => {
         (call: any[]) => call[1]?.[0] === 'checkout',
       );
       expect(checkoutCall).toBeDefined();
-      expect(checkoutCall![1]).toEqual(['checkout', '-b', 'fix/something', 'contributor/fix/something']);
+      expect(checkoutCall![1]).toEqual(['checkout', '-b', 'fix/something', 'devdocket-fork-contributor/fix/something']);
     });
 
     it('force-updates local branch to fork tracking ref in checkout mode', async () => {
@@ -974,7 +974,7 @@ describe('StartWorkAction', () => {
         (call: any[]) => call[1]?.[0] === 'checkout',
       );
       expect(checkoutCall).toBeDefined();
-      expect(checkoutCall![1]).toEqual(['checkout', '-B', 'fix/something', 'contributor/fix/something']);
+      expect(checkoutCall![1]).toEqual(['checkout', '-B', 'fix/something', 'devdocket-fork-contributor/fix/something']);
     });
 
     it('shows error when fork repository has been deleted', async () => {
@@ -1012,7 +1012,7 @@ describe('StartWorkAction', () => {
       // Make remote add fail (already exists); get-url returns the same URL
       vi.mocked(execFile).mockImplementation(((cmd: string, args: string[], opts: any, cb: Function) => {
         if (args[0] === 'remote' && args[1] === 'add') {
-          cb(new Error('remote contributor already exists'), '', '');
+          cb(new Error('remote devdocket-fork-contributor already exists'), '', '');
           return;
         }
         if (args[0] === 'remote' && args[1] === 'get-url') {
@@ -1033,7 +1033,7 @@ describe('StartWorkAction', () => {
         (call: any[]) => call[1]?.[0] === 'fetch',
       );
       expect(fetchCall).toBeDefined();
-      expect(fetchCall![1]).toEqual(['fetch', 'contributor', 'fix/something']);
+      expect(fetchCall![1]).toEqual(['fetch', 'devdocket-fork-contributor', 'fix/something']);
     });
 
     it('creates worktree with pr-prefixed directory name', async () => {
