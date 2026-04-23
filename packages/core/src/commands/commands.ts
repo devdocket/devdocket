@@ -614,6 +614,7 @@ async function acceptSingleInboxItem(
     } catch (err: unknown) {
       handleCommandError('Failed to update state for existing accepted item', err);
     }
+    await propagateStateToCanonicalPeers(item, providerRegistry, stateStore, 'accepted');
     return;
   }
   const group = item.group?.trim();
