@@ -669,6 +669,7 @@ async function acceptToFocusSingleInboxItem(
         return;
       }
       void vscode.window.showInformationMessage('DevDocket: Item is already in Focus');
+      await propagateStateToCanonicalPeers(item, providerRegistry, stateStore, 'accepted');
       return;
     }
     if (existing.state === WorkItemState.Done || existing.state === WorkItemState.Archived) {
@@ -681,6 +682,7 @@ async function acceptToFocusSingleInboxItem(
       void vscode.window.showWarningMessage(
         `DevDocket: Item is ${existing.state} and cannot be moved to Focus`,
       );
+      await propagateStateToCanonicalPeers(item, providerRegistry, stateStore, 'accepted');
       return;
     }
     workItemId = existing.id;
