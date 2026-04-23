@@ -122,21 +122,34 @@ export class InboxTreeProvider implements vscode.TreeDataProvider<InboxElement> 
     const key = `${providerId}::${externalId}`;
     const peerKeys = this.findCanonicalPeerKeys(providerId, externalId);
     const allKeys = [key, ...peerKeys];
-    let changed = false;
+    const addedKeys: string[] = [];
     for (const k of allKeys) {
       if (!this.seenItems.has(k)) {
         this.seenItems.add(k);
-        changed = true;
+        addedKeys.push(k);
       }
     }
-    if (changed) {
-      this._onDidMarkSeen.fire();
+    try {
+      if (peerKeys.length > 0) {
+        const newlyAdded = await this.readStateStore.addMany(allKeys);
+        const changed = addedKeys.length > 0;
+        if (changed) {
+          this._onDidMarkSeen.fire();
+        }
+        return changed || newlyAdded.length > 0;
+      }
+      const persisted = await this.readStateStore.add(key);
+      if (addedKeys.length > 0) {
+        this._onDidMarkSeen.fire();
+      }
+      return persisted;
+    } catch (err) {
+      // Roll back in-memory state on persistence failure
+      for (const k of addedKeys) {
+        this.seenItems.delete(k);
+      }
+      throw err;
     }
-    if (peerKeys.length > 0) {
-      const newlyAdded = await this.readStateStore.addMany(allKeys);
-      return changed || newlyAdded.length > 0;
-    }
-    return this.readStateStore.add(key);
   }
 
   /** Marks multiple items as seen in a single write operation. */

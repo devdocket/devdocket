@@ -404,10 +404,10 @@ describe('InboxTreeProvider', () => {
       expect(await provider.markSeen('gh', '1')).toBe(false);
     });
 
-    it('should fire onDidMarkSeen when a new item is marked seen', () => {
+    it('should fire onDidMarkSeen when a new item is marked seen', async () => {
       const listener = vi.fn();
       provider.onDidMarkSeen(listener);
-      provider.markSeen('gh', '1');
+      await provider.markSeen('gh', '1');
       expect(listener).toHaveBeenCalledTimes(1);
     });
 
