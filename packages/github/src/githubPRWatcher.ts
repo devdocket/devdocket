@@ -148,7 +148,7 @@ export class GitHubPRWatcher implements DevDocketPRWatcher {
     try {
       response = await fetch(url, { headers, signal: AbortSignal.timeout(FETCH_TIMEOUT_MS) });
     } catch (err) {
-      if (err instanceof Error && err.name === 'AbortError') {
+      if (err instanceof Error && (err.name === 'AbortError' || err.name === 'TimeoutError')) {
         throw new Error(`GitHub API request timed out after ${FETCH_TIMEOUT_MS / 1000}s`);
       }
       throw err;
