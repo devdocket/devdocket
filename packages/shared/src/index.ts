@@ -9,6 +9,7 @@ export type { DiscoveredItem, Disposable, Event, EventEmitterLike, ResolvedItem 
 export { isValidUrlSegment, isValidGitHubRepo, isValidRepoSlug, sanitizeUrlSegment, safeDecodeComponent } from './urlValidation';
 export { validateRefreshInterval } from './refreshInterval';
 export type { DevDocketRunWatcher, RunIdentifier, RunStatus, JobStatus, RunState, RunConclusion, CancellationTokenLike } from './runWatcher';
+export type { DevDocketPRWatcher, PRIdentifier, PRState, PRRunsSnapshot } from './prWatcher';
 export { combineSignals } from './signalUtils';
 export { runWorkerPool, runWorkerPoolSettled } from './concurrency';
 export { WorkItemState } from './workItem';

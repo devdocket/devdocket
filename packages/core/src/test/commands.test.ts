@@ -9,6 +9,7 @@ import type { ProviderRegistry } from '../services/providerRegistry';
 import type { DiscoveredStateStore } from '../storage/discoveredStateStore';
 import type { ProviderLabelCache } from '../storage/providerLabelCache';
 import type { WatcherRegistry } from '../services/watcherRegistry';
+import type { PRWatcherRegistry } from '../services/prWatcherRegistry';
 import type { WatcherService } from '../services/watcherService';
 import type { InboxItem, InboxProviderNode, InboxGroupNode } from '../views/inboxTreeProvider';
 import type { SourceItemNode, SourceProviderNode, SourceGroupNode } from '../views/sourcesTreeProvider';
@@ -152,7 +153,7 @@ describe('registerCommands', () => {
     labelCache = createMockLabelCache();
     ctx = createMockContext();
 
-    registerCommands(ctx, workGraph as any, actionRegistry as any, stateStore as any, providerRegistry as any, labelCache as any, {} as WatcherRegistry, {} as WatcherService);
+    registerCommands(ctx, workGraph as any, actionRegistry as any, stateStore as any, providerRegistry as any, labelCache as any, {} as WatcherRegistry, {} as PRWatcherRegistry, {} as WatcherService);
   });
 
   // helper to invoke a registered command

@@ -1,4 +1,5 @@
 import type { CancellationTokenLike, DevDocketRunWatcher } from './runWatcher';
+import type { DevDocketPRWatcher } from './prWatcher';
 import type { Disposable, Event, DiscoveredItem, ResolvedItem } from './baseProvider';
 import type { WorkItem, ActivityType } from './workItem';
 
@@ -191,6 +192,16 @@ export interface DevDocketApi {
    * @param detail - Optional human-readable detail string.
    */
   addActivity?(itemId: string, type: ActivityType, detail?: string): Promise<void>;
+  /**
+   * Register a PR watcher for tracking pull request pipelines.
+   *
+   * PR watchers resolve PR URLs to their associated pipeline runs,
+   * enabling automatic tracking of all CI/CD runs for a pull request.
+   *
+   * @param watcher - The PR watcher to register.
+   * @returns A {@link Disposable} that unregisters the watcher when disposed.
+   */
+  registerPRWatcher?(watcher: DevDocketPRWatcher): Disposable;
   /**
    * Event fired after a work item changes lifecycle state.
    *

@@ -1,7 +1,63 @@
 import * as vscode from 'vscode';
-import type { RunState, RunConclusion } from '@devdocket/shared';
-import { WatcherService, WatchedRun } from '../services/watcherService';
+import type { RunState, RunConclusion, PRState } from '@devdocket/shared';
+import { WatcherService, WatchedRun, WatchedPR } from '../services/watcherService';
 import { ViewLayout, LayoutState } from './viewLayout';
+
+/**
+ * Tree item for a watched PR.
+ */
+class WatchedPRNode extends vscode.TreeItem {
+  constructor(
+    public readonly watchedPR: WatchedPR,
+    public readonly children: WatchedRunNode[]
+  ) {
+    const label = watchedPR.identifier.displayName;
+    super(label, children.length > 0 ? vscode.TreeItemCollapsibleState.Expanded : vscode.TreeItemCollapsibleState.None);
+
+    this.id = `watch-pr:${watchedPR.identifier.providerId}:${watchedPR.identifier.repo}:${watchedPR.identifier.prId}`;
+    this.tooltip = this.buildTooltip();
+    this.description = this.buildDescription();
+    this.iconPath = this.getIconForPRState(watchedPR.prState, watchedPR.hasWarning);
+    this.contextValue = watchedPR.prState === 'open' ? 'watchedPR.active' : 'watchedPR.completed';
+  }
+
+  private buildTooltip(): string {
+    const pr = this.watchedPR;
+    const lines = [pr.identifier.displayName];
+    lines.push(`Repository: ${pr.identifier.repo}`);
+    lines.push(`PR State: ${pr.prState}`);
+    lines.push(`Child Runs: ${this.children.length}`);
+    if (pr.hasWarning && pr.errorMessage) {
+      lines.push(`Warning: ${pr.errorMessage}`);
+    }
+    return lines.join('\n');
+  }
+
+  private buildDescription(): string {
+    const pr = this.watchedPR;
+    const parts: string[] = [pr.identifier.repo];
+    if (pr.hasWarning) {
+      parts.push('polling failed');
+    } else {
+      parts.push(pr.prState);
+    }
+    return parts.join(' · ');
+  }
+
+  private getIconForPRState(state: PRState, hasWarning?: boolean): vscode.ThemeIcon {
+    if (hasWarning) {
+      return new vscode.ThemeIcon('warning', new vscode.ThemeColor('problemsWarningIcon.foreground'));
+    }
+    if (state === 'open') {
+      return new vscode.ThemeIcon('git-pull-request');
+    }
+    if (state === 'merged') {
+      return new vscode.ThemeIcon('git-merge', new vscode.ThemeColor('testing.iconPassed'));
+    }
+    // closed
+    return new vscode.ThemeIcon('git-pull-request-closed', new vscode.ThemeColor('testing.iconFailed'));
+  }
+}
 
 /**
  * Tree item for a watched run.
@@ -140,15 +196,18 @@ interface WatchProviderGroupNode {
   label: string;
 }
 
+type WatchTreeElement = WatchedPRNode | WatchedRunNode | JobStatusNode | WatchProviderGroupNode;
+
 /**
  * Tree data provider for the Watches view.
  */
-export class WatchesTreeProvider implements vscode.TreeDataProvider<WatchedRunNode | JobStatusNode | WatchProviderGroupNode> {
-  private readonly _onDidChangeTreeData = new vscode.EventEmitter<WatchedRunNode | JobStatusNode | WatchProviderGroupNode | undefined>();
+export class WatchesTreeProvider implements vscode.TreeDataProvider<WatchTreeElement> {
+  private readonly _onDidChangeTreeData = new vscode.EventEmitter<WatchTreeElement | undefined>();
   readonly onDidChangeTreeData = this._onDidChangeTreeData.event;
 
   private readonly _layoutState: LayoutState;
   private watchChangeSub: vscode.Disposable;
+  private prChangeSub: vscode.Disposable;
 
   get layout(): ViewLayout { return this._layoutState.value; }
   set layout(value: ViewLayout) { this._layoutState.value = value; }
@@ -159,57 +218,42 @@ export class WatchesTreeProvider implements vscode.TreeDataProvider<WatchedRunNo
     this.watchChangeSub = watcherService.onDidChangeWatchedRuns(() => {
       this._onDidChangeTreeData.fire(undefined);
     });
+    this.prChangeSub = watcherService.onDidChangePRWatches(() => {
+      this._onDidChangeTreeData.fire(undefined);
+    });
   }
 
-  getTreeItem(element: WatchedRunNode | JobStatusNode | WatchProviderGroupNode): vscode.TreeItem {
+  getTreeItem(element: WatchTreeElement): vscode.TreeItem {
     if ('kind' in element && element.kind === 'watchProviderGroup') {
-      const watches = this.watcherService.getActiveWatches()
+      const allRuns = this.watcherService.getActiveStandaloneWatches()
         .filter(w => w.identifier.providerId === element.providerId);
+      const allPRs = this.watcherService.getActivePRWatches()
+        .filter(pr => pr.identifier.providerId === element.providerId);
       const treeItem = new vscode.TreeItem(element.label, vscode.TreeItemCollapsibleState.Collapsed);
       treeItem.id = `watch-group:${element.providerId}`;
       treeItem.contextValue = 'watchProviderGroup';
       treeItem.iconPath = new vscode.ThemeIcon('plug');
-      treeItem.description = `${watches.length}`;
+      treeItem.description = `${allRuns.length + allPRs.length}`;
       return treeItem;
     }
     return element;
   }
 
-  getChildren(element?: WatchedRunNode | JobStatusNode | WatchProviderGroupNode): vscode.ProviderResult<(WatchedRunNode | JobStatusNode | WatchProviderGroupNode)[]> {
+  getChildren(element?: WatchTreeElement): vscode.ProviderResult<WatchTreeElement[]> {
     if (!element) {
-      const watches = this.watcherService.getActiveWatches();
       if (this._layoutState.value === 'flat') {
-        return watches.map(watch => {
-          const jobNodes = watch.status.jobs.map(
-            job => new JobStatusNode(job.name, job.state, job.conclusion)
-          );
-          return new WatchedRunNode(watch, jobNodes);
-        });
+        return this.buildFlatChildren();
       }
       // Tree mode: group by provider
-      const providers = new Map<string, WatchedRun[]>();
-      for (const watch of watches) {
-        const pid = watch.identifier.providerId;
-        if (!providers.has(pid)) {
-          providers.set(pid, []);
-        }
-        providers.get(pid)!.push(watch);
-      }
-      return Array.from(providers.entries()).map(([pid, _runs]) => {
-        const label = this.watcherService.getProviderLabel(pid) ?? pid;
-        return { kind: 'watchProviderGroup' as const, providerId: pid, label };
-      });
+      return this.buildGroupedRoots();
     }
 
     if ('kind' in element && element.kind === 'watchProviderGroup') {
-      const watches = this.watcherService.getActiveWatches()
-        .filter(w => w.identifier.providerId === element.providerId);
-      return watches.map(watch => {
-        const jobNodes = watch.status.jobs.map(
-          job => new JobStatusNode(job.name, job.state, job.conclusion)
-        );
-        return new WatchedRunNode(watch, jobNodes);
-      });
+      return this.buildProviderChildren(element.providerId);
+    }
+
+    if (element instanceof WatchedPRNode) {
+      return element.children;
     }
 
     if (element instanceof WatchedRunNode) {
@@ -221,12 +265,83 @@ export class WatchesTreeProvider implements vscode.TreeDataProvider<WatchedRunNo
     return [];
   }
 
+  private buildFlatChildren(): WatchTreeElement[] {
+    const result: WatchTreeElement[] = [];
+
+    // Add PR watch nodes
+    const prWatches = this.watcherService.getActivePRWatches();
+    for (const prWatch of prWatches) {
+      result.push(this.buildPRNode(prWatch));
+    }
+
+    // Add standalone run nodes
+    const standaloneWatches = this.watcherService.getActiveStandaloneWatches();
+    for (const watch of standaloneWatches) {
+      const jobNodes = watch.status.jobs.map(
+        job => new JobStatusNode(job.name, job.state, job.conclusion)
+      );
+      result.push(new WatchedRunNode(watch, jobNodes));
+    }
+
+    return result;
+  }
+
+  private buildGroupedRoots(): WatchTreeElement[] {
+    const providers = new Map<string, boolean>();
+    for (const watch of this.watcherService.getActiveStandaloneWatches()) {
+      providers.set(watch.identifier.providerId, true);
+    }
+    for (const prWatch of this.watcherService.getActivePRWatches()) {
+      providers.set(prWatch.identifier.providerId, true);
+    }
+    return Array.from(providers.keys()).map(pid => {
+      const label = this.watcherService.getProviderLabel(pid) ?? pid;
+      return { kind: 'watchProviderGroup' as const, providerId: pid, label };
+    });
+  }
+
+  private buildProviderChildren(providerId: string): WatchTreeElement[] {
+    const result: WatchTreeElement[] = [];
+
+    // PR watches for this provider
+    const prWatches = this.watcherService.getActivePRWatches()
+      .filter(pr => pr.identifier.providerId === providerId);
+    for (const prWatch of prWatches) {
+      result.push(this.buildPRNode(prWatch));
+    }
+
+    // Standalone run watches for this provider
+    const standaloneWatches = this.watcherService.getActiveStandaloneWatches()
+      .filter(w => w.identifier.providerId === providerId);
+    for (const watch of standaloneWatches) {
+      const jobNodes = watch.status.jobs.map(
+        job => new JobStatusNode(job.name, job.state, job.conclusion)
+      );
+      result.push(new WatchedRunNode(watch, jobNodes));
+    }
+
+    return result;
+  }
+
+  private buildPRNode(prWatch: WatchedPR): WatchedPRNode {
+    const prKey = this.watcherService.getPRWatchKey(prWatch.identifier);
+    const childRuns = this.watcherService.getChildRuns(prKey);
+    const childNodes = childRuns.map(run => {
+      const jobNodes = run.status.jobs.map(
+        job => new JobStatusNode(job.name, job.state, job.conclusion)
+      );
+      return new WatchedRunNode(run, jobNodes);
+    });
+    return new WatchedPRNode(prWatch, childNodes);
+  }
+
   refresh(): void {
     this._onDidChangeTreeData.fire(undefined);
   }
 
   dispose(): void {
     this.watchChangeSub.dispose();
+    this.prChangeSub.dispose();
     this._onDidChangeTreeData.dispose();
   }
 }

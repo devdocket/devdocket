@@ -3,6 +3,7 @@ import { DevDocketProvider, DevDocketAction, DiscoveredItem } from '../api/types
 import { ProviderRegistry } from '../services/providerRegistry';
 import { ActionRegistry } from '../services/actionRegistry';
 import { WatcherRegistry } from '../services/watcherRegistry';
+import { PRWatcherRegistry } from '../services/prWatcherRegistry';
 import { WorkGraph } from '../services/workGraph';
 import { ITaskStore } from '../storage/taskStore';
 import * as vscode from 'vscode';
@@ -67,6 +68,7 @@ describe('DevDocketApiImpl', () => {
   let providerRegistry: ProviderRegistry;
   let actionRegistry: ActionRegistry;
   let watcherRegistry: WatcherRegistry;
+  let prWatcherRegistry: PRWatcherRegistry;
   let workGraph: WorkGraph;
 
   beforeEach(async () => {
@@ -74,9 +76,10 @@ describe('DevDocketApiImpl', () => {
     providerRegistry = new ProviderRegistry(stateStore);
     actionRegistry = new ActionRegistry();
     watcherRegistry = new WatcherRegistry({ info: vi.fn(), warn: vi.fn() });
+    prWatcherRegistry = new PRWatcherRegistry({ info: vi.fn(), warn: vi.fn() });
     workGraph = new WorkGraph(createMockStore());
     await workGraph.load();
-    api = new DevDocketApiImpl(providerRegistry, actionRegistry, watcherRegistry, workGraph);
+    api = new DevDocketApiImpl(providerRegistry, actionRegistry, watcherRegistry, prWatcherRegistry, workGraph);
   });
 
   describe('registerProvider', () => {
