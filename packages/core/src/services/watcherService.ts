@@ -715,11 +715,15 @@ export class WatcherService implements vscode.Disposable {
 
     const watcher = this.watcherRegistry.findWatcherForUrl(identifier.url);
     if (watcher) {
-      const parsed = watcher.parseRunUrl(identifier.url);
-      return {
-        ...parsed,
-        displayName: identifier.displayName || parsed.displayName,
-      };
+      try {
+        const parsed = watcher.parseRunUrl(identifier.url);
+        return {
+          ...parsed,
+          displayName: identifier.displayName || parsed.displayName,
+        };
+      } catch (err) {
+        this.logger.warn(`URL matched watcher '${watcher.id}' but parseRunUrl failed for ${identifier.url}: ${err}`);
+      }
     }
 
     return identifier;
