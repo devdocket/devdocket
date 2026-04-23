@@ -41,11 +41,25 @@ export class GitHubMyPrsProvider extends BaseGitHubProvider {
     logger.info('Fetching authored and assigned PRs...');
     const repos = this.getConfiguredRepos();
 
-    // Fetch authored and assigned PRs in parallel
-    const [authoredResult, assignedResult] = await Promise.all([
+    // Fetch authored and assigned PRs in parallel; proceed with partial results if one fails
+    const [authoredSettled, assignedSettled] = await Promise.allSettled([
       this.fetchAuthoredPrs(accessToken, repos, signal),
       this.fetchAssignedPrs(accessToken, repos, signal),
     ]);
+
+    const authoredResult = authoredSettled.status === 'fulfilled'
+      ? authoredSettled.value
+      : { prs: [] as GitHubIssue[], failures: [] as string[] };
+    const assignedResult = assignedSettled.status === 'fulfilled'
+      ? assignedSettled.value
+      : { prs: [] as GitHubIssue[], failures: [] as string[] };
+
+    if (authoredSettled.status === 'rejected') {
+      logger.error('Failed to fetch authored PRs', authoredSettled.reason);
+    }
+    if (assignedSettled.status === 'rejected') {
+      logger.error('Failed to fetch assigned PRs', assignedSettled.reason);
+    }
 
     logger.info(`Discovered ${authoredResult.prs.length} authored PRs and ${assignedResult.prs.length} assigned PRs`);
 
