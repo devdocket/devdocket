@@ -28,7 +28,6 @@ import { initLogger, setLogLevel, logger, resolveLogLevel } from './services/log
 import { getInboxUnseenCount } from './services/inboxBadge';
 import { syncProviderTitles } from './services/titleSync';
 import { getViewLayout, ViewId } from './views/viewLayout';
-import { ActivityType } from '@devdocket/shared';
 import { performance } from 'perf_hooks';
 
 export type { DevDocketApi, DevDocketProvider, DevDocketAction, DiscoveredItem, Disposable, ActivityLogEntry, ActivityType, StateTransitionEvent } from './api/types';
