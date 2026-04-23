@@ -75,6 +75,7 @@ function createMockReadStateStore() {
     }),
     keys: vi.fn(() => items.values()),
     load: vi.fn(async () => {}),
+    _add: (key: string) => { items.add(key); },
   };
 }
 
@@ -1051,6 +1052,24 @@ describe('InboxTreeProvider', () => {
       expect(provider.sessionSeenItems.has('prs::repo#1')).toBe(true);
       // Peer is already dismissed — should not be marked seen
       expect(provider.sessionSeenItems.has('reviews::repo#1')).toBe(false);
+    });
+
+    it('tree item isSeen reflects canonical peer read state', async () => {
+      registry._setItems('prs', [
+        { externalId: 'repo#1', title: 'PR #1', canonicalId: 'github:pull:repo#1' },
+      ]);
+      registry._setItems('reviews', [
+        { externalId: 'repo#1', title: 'PR #1', canonicalId: 'github:pull:repo#1' },
+      ]);
+
+      // Mark one peer as read
+      readStateStore._add('reviews::repo#1');
+
+      // The representative (prs::repo#1) should show as seen because its canonical peer is read
+      const items = provider.getChildren(providerNode('prs')) as InboxItem[];
+      expect(items).toHaveLength(1);
+      const treeItem = provider.getTreeItem(items[0]);
+      expect(treeItem.iconPath).toEqual(expect.objectContaining({ id: 'circle-outline' }));
     });
   });
 });

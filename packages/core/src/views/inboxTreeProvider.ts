@@ -193,6 +193,25 @@ export class InboxTreeProvider implements vscode.TreeDataProvider<InboxElement> 
     return peers;
   }
 
+  /** Checks if this item or any canonical peer is marked as read in the persistent store. */
+  private isCanonicalGroupSeen(key: string, canonicalId?: string): boolean {
+    if (this.readStateStore.has(key)) {
+      return true;
+    }
+    if (!canonicalId) { return false; }
+    for (const [pid, pItems] of this.providerRegistry.getAllDiscoveredItems()) {
+      for (const pi of pItems) {
+        if (pi.canonicalId !== canonicalId) { continue; }
+        const peerKey = `${pid}::${pi.externalId}`;
+        if (peerKey === key) { continue; }
+        if (this.readStateStore.has(peerKey)) {
+          return true;
+        }
+      }
+    }
+    return false;
+  }
+
   getTreeItem(element: InboxElement): vscode.TreeItem {
     if (element.kind === 'provider') {
       const count = this.getUnseenCount(element.providerId);
@@ -220,7 +239,7 @@ export class InboxTreeProvider implements vscode.TreeDataProvider<InboxElement> 
     }
 
     const key = `${element.providerId}::${element.externalId}`;
-    const isSeen = this.readStateStore.has(key);
+    const isSeen = this.isCanonicalGroupSeen(key, element.canonicalId);
 
     const treeItem = new vscode.TreeItem(element.title, vscode.TreeItemCollapsibleState.None);
     treeItem.id = `inbox::item::${element.providerId}::${element.externalId}`;
