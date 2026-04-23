@@ -354,11 +354,25 @@ export class StartWorkAction implements DevDocketAction {
         }
       }
 
-      await execFileAsync('git', ['fetch', forkRemoteName, branchName], { cwd: repoPath, timeout: 30_000 });
+      try {
+        await execFileAsync('git', ['fetch', forkRemoteName, branchName], { cwd: repoPath, timeout: 30_000 });
+      } catch {
+        void vscode.window.showErrorMessage(
+          `DevDocket: Could not fetch branch '${branchName}' from fork '${forkOwner}'. The branch may have been deleted.`,
+        );
+        return undefined;
+      }
 
       return { branchName, trackingRef: `${forkRemoteName}/${branchName}` };
     } else {
-      await execFileAsync('git', ['fetch', 'origin', branchName], { cwd: repoPath, timeout: 30_000 });
+      try {
+        await execFileAsync('git', ['fetch', 'origin', branchName], { cwd: repoPath, timeout: 30_000 });
+      } catch {
+        void vscode.window.showErrorMessage(
+          `DevDocket: Could not fetch branch '${branchName}' from origin. The branch may have been deleted.`,
+        );
+        return undefined;
+      }
     }
 
     return { branchName };

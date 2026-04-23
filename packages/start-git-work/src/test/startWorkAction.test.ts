@@ -991,6 +991,74 @@ describe('StartWorkAction', () => {
       );
     });
 
+    it('shows error when fork branch fetch fails', async () => {
+      mockFetchResponse(createGitHubPrResponse({
+        head: {
+          ref: 'fix/something',
+          repo: {
+            full_name: 'contributor/repo',
+            clone_url: 'https://github.com/contributor/repo.git',
+          },
+        },
+      }));
+      mockQuickPickWorktree();
+
+      // Make fetch fail (branch deleted on fork)
+      vi.mocked(execFile).mockImplementation(((cmd: string, args: string[], opts: any, cb: Function) => {
+        if (args[0] === 'fetch') {
+          cb(new Error("fatal: couldn't find remote ref fix/something"), '', '');
+          return;
+        }
+        cb(null, '', '');
+      }) as any);
+
+      const item = createWorkItem({
+        providerId: 'github-my-prs',
+        externalId: 'owner/repo#42',
+      });
+      await action.run(item);
+
+      expect(window.showErrorMessage).toHaveBeenCalledWith(
+        "DevDocket: Could not fetch branch 'fix/something' from fork 'contributor'. The branch may have been deleted.",
+      );
+
+      // Should not create worktree
+      const worktreeCall = vi.mocked(execFile).mock.calls.find(
+        (call: any[]) => call[1]?.[0] === 'worktree',
+      );
+      expect(worktreeCall).toBeUndefined();
+    });
+
+    it('shows error when origin branch fetch fails', async () => {
+      mockFetchResponse(createGitHubPrResponse());
+      mockQuickPickWorktree();
+
+      // Make fetch fail (branch deleted on origin)
+      vi.mocked(execFile).mockImplementation(((cmd: string, args: string[], opts: any, cb: Function) => {
+        if (args[0] === 'fetch') {
+          cb(new Error("fatal: couldn't find remote ref feature/my-branch"), '', '');
+          return;
+        }
+        cb(null, '', '');
+      }) as any);
+
+      const item = createWorkItem({
+        providerId: 'github-my-prs',
+        externalId: 'owner/repo#42',
+      });
+      await action.run(item);
+
+      expect(window.showErrorMessage).toHaveBeenCalledWith(
+        "DevDocket: Could not fetch branch 'feature/my-branch' from origin. The branch may have been deleted.",
+      );
+
+      // Should not create worktree
+      const worktreeCall = vi.mocked(execFile).mock.calls.find(
+        (call: any[]) => call[1]?.[0] === 'worktree',
+      );
+      expect(worktreeCall).toBeUndefined();
+    });
+
     it('handles existing fork remote gracefully', async () => {
       mockFetchResponse(createGitHubPrResponse({
         head: {
