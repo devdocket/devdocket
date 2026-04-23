@@ -313,7 +313,7 @@ export class ProviderRegistry {
     const prev = this.healthStatus.get(providerId);
     const next: ProviderHealthStatus = {
       status,
-      lastRefreshTime: status === 'healthy' ? new Date(Date.now()) : prev?.lastRefreshTime,
+      lastRefreshTime: status === 'healthy' ? new Date() : prev?.lastRefreshTime,
       lastError: status === 'unhealthy' ? lastError : undefined,
     };
     this.healthStatus.set(providerId, next);
