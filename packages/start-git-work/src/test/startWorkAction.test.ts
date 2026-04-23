@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { window, workspace } from 'vscode';
+import { window, workspace, authentication } from 'vscode';
 import { StartWorkAction } from '../startWorkAction';
 import * as path from 'path';
 
@@ -57,17 +57,58 @@ function mockInputBox(repoPath: string | undefined, baseBranch: string | undefin
   });
 }
 
+/** Sets up showQuickPick to return the worktree option (default for existing tests). */
+function mockQuickPickWorktree() {
+  vi.mocked(window.showQuickPick).mockResolvedValue({ label: 'Create worktree', value: 'worktree' } as any);
+}
+
+/** Sets up showQuickPick to return the checkout option. */
+function mockQuickPickCheckout() {
+  vi.mocked(window.showQuickPick).mockResolvedValue({ label: 'Checkout branch', value: 'checkout' } as any);
+}
+
+function mockFetchResponse(body: any, status = 200) {
+  const mockResponse = {
+    ok: status >= 200 && status < 300,
+    status,
+    json: vi.fn().mockResolvedValue(body),
+  };
+  vi.stubGlobal('fetch', vi.fn().mockResolvedValue(mockResponse));
+}
+
+function createGitHubPrResponse(overrides: Partial<any> = {}) {
+  return {
+    head: {
+      ref: 'feature/my-branch',
+      repo: {
+        full_name: 'owner/repo',
+        clone_url: 'https://github.com/owner/repo.git',
+      },
+    },
+    base: {
+      repo: {
+        full_name: 'owner/repo',
+      },
+    },
+    ...overrides,
+  };
+}
+
 describe('StartWorkAction', () => {
   let action: StartWorkAction;
   let mockMemento: ReturnType<typeof createMockMemento>;
 
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.unstubAllGlobals();
     mockMemento = createMockMemento();
     action = new StartWorkAction(mockMemento as any);
 
     // Default: showInputBox returns repo path and base branch based on prompt
     mockInputBox('/mock/workspace', 'origin/dev');
+
+    // Default: select worktree mode (preserves existing test behavior)
+    mockQuickPickWorktree();
 
     // Default: no post-worktree commands configured
     vi.mocked(workspace.getConfiguration).mockReturnValue({
@@ -93,6 +134,21 @@ describe('StartWorkAction', () => {
 
     it('returns true for ado-work-items provider items in InProgress state', () => {
       const item = createWorkItem({ providerId: 'ado-work-items', state: 'InProgress', externalId: 'org/project/456' });
+      expect(action.canRun(item)).toBe(true);
+    });
+
+    it('returns true for github-my-prs provider items in InProgress state', () => {
+      const item = createWorkItem({ providerId: 'github-my-prs', state: 'InProgress' });
+      expect(action.canRun(item)).toBe(true);
+    });
+
+    it('returns true for github-pr-reviews provider items in InProgress state', () => {
+      const item = createWorkItem({ providerId: 'github-pr-reviews', state: 'InProgress' });
+      expect(action.canRun(item)).toBe(true);
+    });
+
+    it('returns true for ado-pr-reviews provider items in InProgress state', () => {
+      const item = createWorkItem({ providerId: 'ado-pr-reviews', state: 'InProgress', externalId: 'org/project/repo/101' });
       expect(action.canRun(item)).toBe(true);
     });
 
@@ -204,6 +260,7 @@ describe('StartWorkAction', () => {
 
       vi.clearAllMocks();
       mockInputBox('/cached/path', 'origin/dev');
+      mockQuickPickWorktree();
       vi.mocked(execFile).mockImplementation(((cmd: string, args: string[], opts: any, cb: Function) => {
         cb(null, { stdout: '', stderr: '' }, '');
       }) as any);
@@ -218,7 +275,34 @@ describe('StartWorkAction', () => {
     });
   });
 
-  describe('run', () => {
+  describe('checkout vs worktree prompt', () => {
+    it('shows quick pick with checkout and worktree options for issue items', async () => {
+      const item = createWorkItem();
+      await action.run(item);
+
+      expect(window.showQuickPick).toHaveBeenCalledWith(
+        [
+          { label: 'Checkout branch', value: 'checkout' },
+          { label: 'Create worktree', value: 'worktree' },
+        ],
+        {
+          placeHolder: 'How would you like to work on this?',
+          ignoreFocusOut: true,
+        },
+      );
+    });
+
+    it('aborts when user cancels work mode selection', async () => {
+      vi.mocked(window.showQuickPick).mockResolvedValue(undefined);
+
+      const item = createWorkItem();
+      await action.run(item);
+
+      expect(execFile).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('run (worktree mode)', () => {
     it('creates branch and worktree with correct names for GitHub items', async () => {
       const item = createWorkItem({ title: '#123: Fix login redirect bug' });
       await action.run(item);
@@ -426,6 +510,121 @@ describe('StartWorkAction', () => {
       expect(rollbackCall).toBeDefined();
       expect(rollbackCall![1]).toEqual(['branch', '-D', 'issue123']);
     });
+
+    it('logs activity with worktreePath and repoPath', async () => {
+      const { commands } = await import('vscode');
+      const item = createWorkItem();
+      await action.run(item);
+
+      const expectedWorktreePath = path.join('/mock', 'workspace-issue123');
+      expect(commands.executeCommand).toHaveBeenCalledWith(
+        'devdocket.addActivity',
+        item.id,
+        'work-started',
+        JSON.stringify({ branchName: 'issue123', worktreePath: expectedWorktreePath, repoPath: '/mock/workspace' }),
+      );
+    });
+  });
+
+  describe('run (checkout mode)', () => {
+    beforeEach(() => {
+      mockQuickPickCheckout();
+    });
+
+    it('checks out new branch with git checkout -b for issue items', async () => {
+      const item = createWorkItem();
+      await action.run(item);
+
+      // git status --porcelain + git checkout -b
+      expect(execFile).toHaveBeenCalledTimes(2);
+
+      const statusCall = vi.mocked(execFile).mock.calls[0];
+      expect(statusCall[1]).toEqual(['status', '--porcelain']);
+
+      const checkoutCall = vi.mocked(execFile).mock.calls[1];
+      expect(checkoutCall[0]).toBe('git');
+      expect(checkoutCall[1]).toEqual(['checkout', '-b', 'issue123', 'origin/dev']);
+      expect(checkoutCall[2]).toEqual({ cwd: '/mock/workspace', timeout: 30_000 });
+    });
+
+    it('shows success message after checkout', async () => {
+      const item = createWorkItem();
+      await action.run(item);
+
+      expect(window.showInformationMessage).toHaveBeenCalledWith(
+        'DevDocket: Checked out branch issue123',
+      );
+    });
+
+    it('logs activity with branchName and repoPath (no worktreePath)', async () => {
+      const { commands } = await import('vscode');
+      const item = createWorkItem();
+      await action.run(item);
+
+      expect(commands.executeCommand).toHaveBeenCalledWith(
+        'devdocket.addActivity',
+        item.id,
+        'work-started',
+        JSON.stringify({ branchName: 'issue123', repoPath: '/mock/workspace' }),
+      );
+    });
+
+    it('prompts confirmation when working tree is dirty', async () => {
+      vi.mocked(execFile).mockImplementation(((cmd: string, args: string[], opts: any, cb: Function) => {
+        if (args[0] === 'status' && args[1] === '--porcelain') {
+          cb(null, { stdout: ' M file.ts\n', stderr: '' }, '');
+          return;
+        }
+        cb(null, { stdout: '', stderr: '' }, '');
+      }) as any);
+
+      vi.mocked(window.showWarningMessage).mockResolvedValue('Yes' as any);
+
+      const item = createWorkItem();
+      await action.run(item);
+
+      expect(window.showWarningMessage).toHaveBeenCalledWith(
+        'Working tree has uncommitted changes. Checkout anyway?',
+        { modal: true },
+        'Yes',
+      );
+      // Should still proceed
+      const checkoutCall = vi.mocked(execFile).mock.calls.find(
+        (call: any[]) => call[1]?.[0] === 'checkout',
+      );
+      expect(checkoutCall).toBeDefined();
+    });
+
+    it('aborts checkout when user declines dirty tree prompt', async () => {
+      vi.mocked(execFile).mockImplementation(((cmd: string, args: string[], opts: any, cb: Function) => {
+        if (args[0] === 'status' && args[1] === '--porcelain') {
+          cb(null, { stdout: ' M file.ts\n', stderr: '' }, '');
+          return;
+        }
+        cb(null, { stdout: '', stderr: '' }, '');
+      }) as any);
+
+      vi.mocked(window.showWarningMessage).mockResolvedValue(undefined as any);
+
+      const item = createWorkItem();
+      await action.run(item);
+
+      const checkoutCall = vi.mocked(execFile).mock.calls.find(
+        (call: any[]) => call[1]?.[0] === 'checkout',
+      );
+      expect(checkoutCall).toBeUndefined();
+    });
+
+    it('does not prompt when working tree is clean', async () => {
+      const item = createWorkItem();
+      await action.run(item);
+
+      expect(window.showWarningMessage).not.toHaveBeenCalledWith(
+        expect.stringContaining('uncommitted changes'),
+        expect.anything(),
+        expect.anything(),
+      );
+    });
   });
 
   describe('base branch prompting', () => {
@@ -560,6 +759,375 @@ describe('StartWorkAction', () => {
 
       expect(window.showErrorMessage).toHaveBeenCalledWith(
         expect.stringContaining('Failed to start work'),
+      );
+    });
+  });
+
+  describe('GitHub PR flow', () => {
+    beforeEach(() => {
+      mockFetchResponse(createGitHubPrResponse());
+    });
+
+    it('fetches PR branch via GitHub API for github-my-prs items', async () => {
+      mockQuickPickWorktree();
+      const item = createWorkItem({
+        providerId: 'github-my-prs',
+        externalId: 'owner/repo#42',
+      });
+      await action.run(item);
+
+      expect(authentication.getSession).toHaveBeenCalledWith('github', ['repo'], { createIfNone: true });
+      const fetchCalls = vi.mocked(globalThis.fetch).mock.calls;
+      expect(fetchCalls[0][0]).toBe('https://api.github.com/repos/owner/repo/pulls/42');
+    });
+
+    it('fetches PR branch via GitHub API for github-pr-reviews items', async () => {
+      mockQuickPickWorktree();
+      const item = createWorkItem({
+        providerId: 'github-pr-reviews',
+        externalId: 'owner/repo#99',
+      });
+      await action.run(item);
+
+      const fetchCalls = vi.mocked(globalThis.fetch).mock.calls;
+      expect(fetchCalls[0][0]).toBe('https://api.github.com/repos/owner/repo/pulls/99');
+    });
+
+    it('does not prompt for base branch for PR items', async () => {
+      const item = createWorkItem({
+        providerId: 'github-my-prs',
+        externalId: 'owner/repo#42',
+      });
+      await action.run(item);
+
+      const baseBranchCall = vi.mocked(window.showInputBox).mock.calls.find(
+        (call: any[]) => call[0]?.prompt?.includes('base branch'),
+      );
+      expect(baseBranchCall).toBeUndefined();
+    });
+
+    it('fetches from origin for same-repo PRs', async () => {
+      mockQuickPickWorktree();
+      const item = createWorkItem({
+        providerId: 'github-my-prs',
+        externalId: 'owner/repo#42',
+      });
+      await action.run(item);
+
+      const fetchCall = vi.mocked(execFile).mock.calls.find(
+        (call: any[]) => call[1]?.[0] === 'fetch',
+      );
+      expect(fetchCall).toBeDefined();
+      expect(fetchCall![1]).toEqual(['fetch', 'origin', 'feature/my-branch']);
+    });
+
+    it('adds fork remote and fetches for fork PRs', async () => {
+      mockFetchResponse(createGitHubPrResponse({
+        head: {
+          ref: 'fix/something',
+          repo: {
+            full_name: 'contributor/repo',
+            clone_url: 'https://github.com/contributor/repo.git',
+          },
+        },
+      }));
+      mockQuickPickWorktree();
+
+      const item = createWorkItem({
+        providerId: 'github-my-prs',
+        externalId: 'owner/repo#42',
+      });
+      await action.run(item);
+
+      const remoteAddCall = vi.mocked(execFile).mock.calls.find(
+        (call: any[]) => call[1]?.[0] === 'remote' && call[1]?.[1] === 'add',
+      );
+      expect(remoteAddCall).toBeDefined();
+      expect(remoteAddCall![1]).toEqual(['remote', 'add', 'contributor', 'https://github.com/contributor/repo.git']);
+
+      const fetchCall = vi.mocked(execFile).mock.calls.find(
+        (call: any[]) => call[1]?.[0] === 'fetch',
+      );
+      expect(fetchCall).toBeDefined();
+      expect(fetchCall![1]).toEqual(['fetch', 'contributor', 'fix/something']);
+    });
+
+    it('handles existing fork remote gracefully', async () => {
+      mockFetchResponse(createGitHubPrResponse({
+        head: {
+          ref: 'fix/something',
+          repo: {
+            full_name: 'contributor/repo',
+            clone_url: 'https://github.com/contributor/repo.git',
+          },
+        },
+      }));
+      mockQuickPickWorktree();
+
+      // Make remote add fail (already exists), but fetch succeeds
+      vi.mocked(execFile).mockImplementation(((cmd: string, args: string[], opts: any, cb: Function) => {
+        if (args[0] === 'remote' && args[1] === 'add') {
+          cb(new Error('remote contributor already exists'), { stdout: '', stderr: '' }, '');
+          return;
+        }
+        cb(null, { stdout: '', stderr: '' }, '');
+      }) as any);
+
+      const item = createWorkItem({
+        providerId: 'github-my-prs',
+        externalId: 'owner/repo#42',
+      });
+      await action.run(item);
+
+      // Should still fetch
+      const fetchCall = vi.mocked(execFile).mock.calls.find(
+        (call: any[]) => call[1]?.[0] === 'fetch',
+      );
+      expect(fetchCall).toBeDefined();
+      expect(fetchCall![1]).toEqual(['fetch', 'contributor', 'fix/something']);
+    });
+
+    it('creates worktree with pr-prefixed directory name', async () => {
+      mockQuickPickWorktree();
+      const item = createWorkItem({
+        providerId: 'github-my-prs',
+        externalId: 'owner/repo#42',
+      });
+      await action.run(item);
+
+      const worktreeCall = vi.mocked(execFile).mock.calls.find(
+        (call: any[]) => call[1]?.[0] === 'worktree',
+      );
+      expect(worktreeCall).toBeDefined();
+      expect(worktreeCall![1]).toEqual([
+        'worktree', 'add',
+        path.join('/mock', 'workspace-pr42'),
+        'feature/my-branch',
+      ]);
+    });
+
+    it('checks out PR branch for checkout mode', async () => {
+      mockQuickPickCheckout();
+      const item = createWorkItem({
+        providerId: 'github-my-prs',
+        externalId: 'owner/repo#42',
+      });
+      await action.run(item);
+
+      const checkoutCall = vi.mocked(execFile).mock.calls.find(
+        (call: any[]) => call[1]?.[0] === 'checkout',
+      );
+      expect(checkoutCall).toBeDefined();
+      expect(checkoutCall![1]).toEqual(['checkout', 'feature/my-branch']);
+    });
+
+    it('shows error for 404 PR response', async () => {
+      mockFetchResponse({}, 404);
+      mockQuickPickWorktree();
+
+      const item = createWorkItem({
+        providerId: 'github-my-prs',
+        externalId: 'owner/repo#999',
+      });
+      await action.run(item);
+
+      expect(window.showErrorMessage).toHaveBeenCalledWith(
+        'DevDocket: Could not find PR #999',
+      );
+    });
+
+    it('shows error for non-404 API errors', async () => {
+      mockFetchResponse({}, 500);
+      mockQuickPickWorktree();
+
+      const item = createWorkItem({
+        providerId: 'github-my-prs',
+        externalId: 'owner/repo#42',
+      });
+      await action.run(item);
+
+      expect(window.showErrorMessage).toHaveBeenCalledWith(
+        'DevDocket: GitHub API error (500)',
+      );
+    });
+
+    it('logs activity with worktreePath for worktree mode', async () => {
+      const { commands } = await import('vscode');
+      mockQuickPickWorktree();
+      const item = createWorkItem({
+        providerId: 'github-my-prs',
+        externalId: 'owner/repo#42',
+      });
+      await action.run(item);
+
+      const expectedWorktreePath = path.join('/mock', 'workspace-pr42');
+      expect(commands.executeCommand).toHaveBeenCalledWith(
+        'devdocket.addActivity',
+        item.id,
+        'work-started',
+        JSON.stringify({ branchName: 'feature/my-branch', worktreePath: expectedWorktreePath, repoPath: '/mock/workspace' }),
+      );
+    });
+
+    it('logs activity without worktreePath for checkout mode', async () => {
+      const { commands } = await import('vscode');
+      mockQuickPickCheckout();
+      const item = createWorkItem({
+        providerId: 'github-my-prs',
+        externalId: 'owner/repo#42',
+      });
+      await action.run(item);
+
+      expect(commands.executeCommand).toHaveBeenCalledWith(
+        'devdocket.addActivity',
+        item.id,
+        'work-started',
+        JSON.stringify({ branchName: 'feature/my-branch', repoPath: '/mock/workspace' }),
+      );
+    });
+
+    it('prompts for dirty tree before checkout', async () => {
+      mockQuickPickCheckout();
+      vi.mocked(execFile).mockImplementation(((cmd: string, args: string[], opts: any, cb: Function) => {
+        if (args[0] === 'status' && args[1] === '--porcelain') {
+          cb(null, { stdout: ' M dirty.ts\n', stderr: '' }, '');
+          return;
+        }
+        cb(null, { stdout: '', stderr: '' }, '');
+      }) as any);
+      vi.mocked(window.showWarningMessage).mockResolvedValue('Yes' as any);
+
+      const item = createWorkItem({
+        providerId: 'github-my-prs',
+        externalId: 'owner/repo#42',
+      });
+      await action.run(item);
+
+      expect(window.showWarningMessage).toHaveBeenCalledWith(
+        'Working tree has uncommitted changes. Checkout anyway?',
+        { modal: true },
+        'Yes',
+      );
+    });
+
+    it('aborts when user cancels work mode selection for PR', async () => {
+      vi.mocked(window.showQuickPick).mockResolvedValue(undefined);
+
+      const item = createWorkItem({
+        providerId: 'github-my-prs',
+        externalId: 'owner/repo#42',
+      });
+      await action.run(item);
+
+      // fetch should not have been called (work mode prompt comes before API call)
+      expect(vi.mocked(globalThis.fetch)).not.toHaveBeenCalled();
+      expect(execFile).not.toHaveBeenCalled();
+    });
+
+    it('shows error when worktree dir already exists for PR', async () => {
+      mockQuickPickWorktree();
+      vi.mocked(fs.existsSync).mockImplementation((p: any) => {
+        const pathStr = p.toString();
+        return pathStr.endsWith('.git') || pathStr.includes('workspace-pr42');
+      });
+
+      const item = createWorkItem({
+        providerId: 'github-my-prs',
+        externalId: 'owner/repo#42',
+      });
+      await action.run(item);
+
+      expect(window.showErrorMessage).toHaveBeenCalledWith(
+        expect.stringContaining('already exists'),
+      );
+    });
+  });
+
+  describe('ADO PR flow', () => {
+    beforeEach(() => {
+      mockFetchResponse({ sourceRefName: 'refs/heads/feature/ado-branch' });
+    });
+
+    it('fetches PR branch via ADO API for ado-pr-reviews items', async () => {
+      mockQuickPickWorktree();
+      const item = createWorkItem({
+        providerId: 'ado-pr-reviews',
+        externalId: 'org/project/repo/101',
+      });
+      await action.run(item);
+
+      expect(authentication.getSession).toHaveBeenCalledWith(
+        'microsoft',
+        ['499b84ac-1321-427f-aa17-267ca6975798/.default'],
+        { createIfNone: true },
+      );
+      const fetchCalls = vi.mocked(globalThis.fetch).mock.calls;
+      expect(fetchCalls[0][0]).toBe(
+        'https://dev.azure.com/org/project/_apis/git/repositories/repo/pullrequests/101?api-version=7.1',
+      );
+    });
+
+    it('strips refs/heads/ prefix from sourceRefName', async () => {
+      mockQuickPickWorktree();
+      const item = createWorkItem({
+        providerId: 'ado-pr-reviews',
+        externalId: 'org/project/repo/101',
+      });
+      await action.run(item);
+
+      const fetchCall = vi.mocked(execFile).mock.calls.find(
+        (call: any[]) => call[1]?.[0] === 'fetch',
+      );
+      expect(fetchCall).toBeDefined();
+      expect(fetchCall![1]).toEqual(['fetch', 'origin', 'feature/ado-branch']);
+    });
+
+    it('creates worktree with pr-prefixed directory for ADO PRs', async () => {
+      mockQuickPickWorktree();
+      const item = createWorkItem({
+        providerId: 'ado-pr-reviews',
+        externalId: 'org/project/repo/101',
+      });
+      await action.run(item);
+
+      const worktreeCall = vi.mocked(execFile).mock.calls.find(
+        (call: any[]) => call[1]?.[0] === 'worktree',
+      );
+      expect(worktreeCall).toBeDefined();
+      expect(worktreeCall![1]).toEqual([
+        'worktree', 'add',
+        path.join('/mock', 'workspace-pr101'),
+        'feature/ado-branch',
+      ]);
+    });
+
+    it('checks out ADO PR branch for checkout mode', async () => {
+      mockQuickPickCheckout();
+      const item = createWorkItem({
+        providerId: 'ado-pr-reviews',
+        externalId: 'org/project/repo/101',
+      });
+      await action.run(item);
+
+      const checkoutCall = vi.mocked(execFile).mock.calls.find(
+        (call: any[]) => call[1]?.[0] === 'checkout',
+      );
+      expect(checkoutCall).toBeDefined();
+      expect(checkoutCall![1]).toEqual(['checkout', 'feature/ado-branch']);
+    });
+
+    it('shows error for 404 ADO PR response', async () => {
+      mockFetchResponse({}, 404);
+      mockQuickPickWorktree();
+
+      const item = createWorkItem({
+        providerId: 'ado-pr-reviews',
+        externalId: 'org/project/repo/999',
+      });
+      await action.run(item);
+
+      expect(window.showErrorMessage).toHaveBeenCalledWith(
+        'DevDocket: Could not find PR #999',
       );
     });
   });
