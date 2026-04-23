@@ -3,13 +3,35 @@ import { window, workspace, authentication } from 'vscode';
 import { StartWorkAction } from '../startWorkAction';
 import * as path from 'path';
 
-// Mock child_process
-vi.mock('child_process', () => ({
-  execFile: vi.fn((cmd: string, args: string[], optsOrCb: any, cb?: Function) => {
+// Mock child_process with custom promisify so util.promisify(execFile) returns { stdout, stderr }
+vi.mock('child_process', () => {
+  const fn = vi.fn((cmd: string, args: string[], optsOrCb: any, cb?: Function) => {
     const callback = typeof optsOrCb === 'function' ? optsOrCb : cb;
     callback?.(null, '', '');
-  }),
-}));
+  });
+  const customSymbol = Symbol.for('nodejs.util.promisify.custom');
+  (fn as any)[customSymbol] = (...promiseArgs: any[]) => {
+    return new Promise<{ stdout: string; stderr: string }>((resolve, reject) => {
+      const cb = (err: Error | null, stdout: string, stderr: string) => {
+        if (err) {
+          (err as any).stdout = stdout;
+          (err as any).stderr = stderr;
+          reject(err);
+        } else {
+          resolve({ stdout, stderr });
+        }
+      };
+      // Determine if last user arg is options or if there are only positional args
+      const lastArg = promiseArgs[promiseArgs.length - 1];
+      if (typeof lastArg === 'object' && lastArg !== null) {
+        fn(...promiseArgs, cb);
+      } else {
+        fn(...promiseArgs, cb);
+      }
+    });
+  };
+  return { execFile: fn };
+});
 
 // Mock fs
 vi.mock('fs', () => ({
@@ -71,10 +93,10 @@ function mockQuickPickCheckout() {
 function mockNoLocalBranch() {
   vi.mocked(execFile).mockImplementation(((cmd: string, args: string[], opts: any, cb: Function) => {
     if (args[0] === 'rev-parse' && args[1] === '--verify' && args[2]?.startsWith('refs/heads/')) {
-      cb(new Error('not a valid ref'), { stdout: '', stderr: '' }, '');
+      cb(new Error('not a valid ref'), '', '');
       return;
     }
-    cb(null, { stdout: '', stderr: '' }, '');
+    cb(null, '', '');
   }) as any);
 }
 
@@ -128,7 +150,7 @@ describe('StartWorkAction', () => {
 
     // Reset execFile mock to succeed with empty output
     vi.mocked(execFile).mockImplementation(((cmd: string, args: string[], opts: any, cb: Function) => {
-      cb(null, { stdout: '', stderr: '' }, '');
+      cb(null, '', '');
     }) as any);
 
     // Return true for .git paths (repo validation), false otherwise (worktree check)
@@ -273,7 +295,7 @@ describe('StartWorkAction', () => {
       mockInputBox('/cached/path', 'origin/dev');
       mockQuickPickWorktree();
       vi.mocked(execFile).mockImplementation(((cmd: string, args: string[], opts: any, cb: Function) => {
-        cb(null, { stdout: '', stderr: '' }, '');
+        cb(null, '', '');
       }) as any);
       vi.mocked(fs.existsSync).mockImplementation((p: any) => p.toString().endsWith('.git'));
 
@@ -391,9 +413,9 @@ describe('StartWorkAction', () => {
     it('shows error when branch already exists', async () => {
       vi.mocked(execFile).mockImplementation(((cmd: string, args: string[], opts: any, cb: Function) => {
         if (args[0] === 'branch' && args[1] === '--list') {
-          cb(null, { stdout: '  issue123\n', stderr: '' }, '');
+          cb(null, '  issue123\n', '');
         } else {
-          cb(null, { stdout: '', stderr: '' }, '');
+          cb(null, '', '');
         }
       }) as any);
 
@@ -486,10 +508,10 @@ describe('StartWorkAction', () => {
       vi.mocked(execFile).mockImplementation(((cmd: string, args: string[], optsOrCb: any, cb?: Function) => {
         const callback = typeof optsOrCb === 'function' ? optsOrCb : cb;
         if (cmd === 'bad-cmd') {
-          callback?.(new Error('command not found'), { stdout: '', stderr: '' }, '');
+          callback?.(new Error('command not found'), '', '');
           return;
         }
-        callback?.(null, { stdout: '', stderr: '' }, '');
+        callback?.(null, '', '');
       }) as any);
 
       const item = createWorkItem();
@@ -505,10 +527,10 @@ describe('StartWorkAction', () => {
       vi.mocked(execFile).mockImplementation(((cmd: string, args: string[], opts: any, cb: Function) => {
         callCount++;
         if (args[0] === 'worktree') {
-          cb(new Error('worktree failed'), { stdout: '', stderr: '' }, '');
+          cb(new Error('worktree failed'), '', '');
           return;
         }
-        cb(null, { stdout: '', stderr: '' }, '');
+        cb(null, '', '');
       }) as any);
 
       const item = createWorkItem();
@@ -583,10 +605,10 @@ describe('StartWorkAction', () => {
     it('prompts confirmation when working tree is dirty', async () => {
       vi.mocked(execFile).mockImplementation(((cmd: string, args: string[], opts: any, cb: Function) => {
         if (args[0] === 'status' && args[1] === '--porcelain') {
-          cb(null, { stdout: ' M file.ts\n', stderr: '' }, '');
+          cb(null, ' M file.ts\n', '');
           return;
         }
-        cb(null, { stdout: '', stderr: '' }, '');
+        cb(null, '', '');
       }) as any);
 
       vi.mocked(window.showWarningMessage).mockResolvedValue('Yes' as any);
@@ -609,10 +631,10 @@ describe('StartWorkAction', () => {
     it('aborts checkout when user declines dirty tree prompt', async () => {
       vi.mocked(execFile).mockImplementation(((cmd: string, args: string[], opts: any, cb: Function) => {
         if (args[0] === 'status' && args[1] === '--porcelain') {
-          cb(null, { stdout: ' M file.ts\n', stderr: '' }, '');
+          cb(null, ' M file.ts\n', '');
           return;
         }
-        cb(null, { stdout: '', stderr: '' }, '');
+        cb(null, '', '');
       }) as any);
 
       vi.mocked(window.showWarningMessage).mockResolvedValue(undefined as any);
@@ -759,10 +781,10 @@ describe('StartWorkAction', () => {
     it('handles generic git failure gracefully', async () => {
       vi.mocked(execFile).mockImplementation(((cmd: string, args: string[], opts: any, cb: Function) => {
         if (args[0] === 'branch' && args[1] !== '--list') {
-          cb(new Error('git error: permission denied'), { stdout: '', stderr: '' }, '');
+          cb(new Error('git error: permission denied'), '', '');
           return;
         }
-        cb(null, { stdout: '', stderr: '' }, '');
+        cb(null, '', '');
       }) as any);
 
       const item = createWorkItem();
@@ -935,14 +957,14 @@ describe('StartWorkAction', () => {
       // Make remote add fail (already exists); get-url returns the same URL
       vi.mocked(execFile).mockImplementation(((cmd: string, args: string[], opts: any, cb: Function) => {
         if (args[0] === 'remote' && args[1] === 'add') {
-          cb(new Error('remote contributor already exists'), { stdout: '', stderr: '' }, '');
+          cb(new Error('remote contributor already exists'), '', '');
           return;
         }
         if (args[0] === 'remote' && args[1] === 'get-url') {
-          cb(null, { stdout: 'https://github.com/contributor/repo.git\n', stderr: '' }, '');
+          cb(null, 'https://github.com/contributor/repo.git\n', '');
           return;
         }
-        cb(null, { stdout: '', stderr: '' }, '');
+        cb(null, '', '');
       }) as any);
 
       const item = createWorkItem({
@@ -1098,10 +1120,10 @@ describe('StartWorkAction', () => {
       mockQuickPickCheckout();
       vi.mocked(execFile).mockImplementation(((cmd: string, args: string[], opts: any, cb: Function) => {
         if (args[0] === 'status' && args[1] === '--porcelain') {
-          cb(null, { stdout: ' M dirty.ts\n', stderr: '' }, '');
+          cb(null, ' M dirty.ts\n', '');
           return;
         }
-        cb(null, { stdout: '', stderr: '' }, '');
+        cb(null, '', '');
       }) as any);
       vi.mocked(window.showWarningMessage).mockResolvedValue('Yes' as any);
 
