@@ -127,12 +127,12 @@ export async function activate(_context: vscode.ExtensionContext): Promise<void>
     if (typeof api.registerPRWatcher === 'function') {
       prWatcherRegistration?.dispose();
       prWatcherRegistration = api.registerPRWatcher(new AdoPRWatcher());
-      logger.info('Registered 2 ADO providers + 1 watcher + 1 PR watcher');
-    } else if (watcherRegistration) {
-      logger.info('Registered 2 ADO providers + 1 watcher');
-    } else {
-      logger.info('Registered 2 ADO providers');
     }
+
+    const parts = ['2 ADO providers'];
+    if (watcherRegistration) { parts.push('1 watcher'); }
+    if (prWatcherRegistration) { parts.push('1 PR watcher'); }
+    logger.info(`Registered ${parts.join(' + ')}`);
   };
 
   configureProviders();
