@@ -64,10 +64,14 @@ export class GitHubPrReviewProvider extends BaseGitHubProvider {
         reason: 'review_requested',
       };
       if (pr.state) { item.state = pr.state; }
+      // Both settings produce hard resurfacing (resurfaceVersion) since the user
+      // explicitly opted in. Combine both signals so either change triggers it.
       const headSha = headShas.get(pr.html_url);
-      if (headSha !== undefined) { item.version = headSha; }
       const reRequestTime = reRequestTimes.get(pr.html_url);
-      if (reRequestTime !== undefined) { item.resurfaceVersion = reRequestTime; }
+      const resurfaceParts: string[] = [];
+      if (headSha !== undefined) { resurfaceParts.push(headSha); }
+      if (reRequestTime !== undefined) { resurfaceParts.push(reRequestTime); }
+      if (resurfaceParts.length > 0) { item.resurfaceVersion = resurfaceParts.join('::'); }
       return item;
     });
 
