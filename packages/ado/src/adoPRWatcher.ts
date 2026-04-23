@@ -152,7 +152,7 @@ export class AdoPRWatcher implements DevDocketPRWatcher {
           providerId: 'ado-pipelines',
           runId: String(build.id),
           displayName,
-          url: `https://dev.azure.com/${org}/${project}/_build/results?buildId=${build.id}`,
+          url: `https://dev.azure.com/${encodeURIComponent(org)}/${encodeURIComponent(project)}/_build/results?buildId=${build.id}`,
           repo: `${org}/${project}`,
         });
       }
