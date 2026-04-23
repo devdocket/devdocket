@@ -286,11 +286,12 @@ export class WatcherService implements vscode.Disposable {
     }
     for (const prWatch of this.prWatches.values()) {
       if ((prWatch.prState === 'merged' || prWatch.prState === 'closed') && !prWatch.dismissed) {
+        const key = this.getPRWatchKey(prWatch.identifier);
         prWatch.dismissed = true;
-        // Dismiss child runs too
+        // Only dismiss child runs actually owned by this PR
         for (const childKey of prWatch.childRunKeys) {
           const childWatch = this.watches.get(childKey);
-          if (childWatch && !childWatch.dismissed) {
+          if (childWatch && !childWatch.dismissed && childWatch.parentPRKey === key) {
             childWatch.dismissed = true;
             dismissedCount++;
           }
