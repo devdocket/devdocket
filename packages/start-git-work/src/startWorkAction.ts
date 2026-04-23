@@ -49,7 +49,7 @@ interface AdoPrResponse {
 
 interface PrBranchInfo {
   branchName: string;
-  /** Fully-qualified remote tracking ref for fork PRs (e.g. "devdocket-fork-contributor/fix-bug"). */
+  /** Local ref for fork PRs fetched via GitHub's PR refs (e.g. "refs/devdocket/pr/42"). */
   trackingRef?: string;
 }
 
@@ -286,7 +286,7 @@ export class StartWorkAction implements DevDocketAction {
 
   /**
    * Fetches the branch name for a GitHub PR and ensures it is available locally.
-   * Handles fork detection — adds a remote for the fork owner if needed.
+   * For fork PRs, fetches via GitHub's PR refs on origin (no fork remote needed).
    */
   private async fetchGitHubPrBranch(parsed: ParsedExternalId, repoPath: string): Promise<PrBranchInfo | undefined> {
     const session = await vscode.authentication.getSession('github', ['repo'], { createIfNone: true });
@@ -335,44 +335,14 @@ export class StartWorkAction implements DevDocketAction {
     const isFork = pr.head.repo.full_name !== pr.base.repo.full_name;
 
     if (isFork) {
-      const forkOwner = pr.head.repo.full_name.split('/')[0];
-      const cloneUrl = pr.head.repo.clone_url;
-      const forkRemoteName = `devdocket-fork-${forkOwner}`;
+      // Fetch fork PR via GitHub's special PR refs on the base repo.
+      // This avoids adding a remote for the fork (which may lack auth for private forks).
+      const prRef = `refs/devdocket/pr/${parsed.itemNumber}`;
+      await execFileAsync('git', ['fetch', 'origin', `pull/${parsed.itemNumber}/head:${prRef}`], { cwd: repoPath, timeout: 30_000 });
 
-      // Add or update only the DevDocket-managed fork remote to avoid mutating user remotes
-      try {
-        await execFileAsync('git', ['remote', 'add', forkRemoteName, cloneUrl], { cwd: repoPath, timeout: 30_000 });
-      } catch (err) {
-        try {
-          const { stdout } = await execFileAsync('git', ['remote', 'get-url', forkRemoteName], { cwd: repoPath, timeout: 30_000 });
-          if (stdout.trim() !== cloneUrl) {
-            logger.info(`Remote "${forkRemoteName}" exists with different URL, updating to "${cloneUrl}".`);
-            await execFileAsync('git', ['remote', 'set-url', forkRemoteName, cloneUrl], { cwd: repoPath, timeout: 30_000 });
-          }
-        } catch {
-          throw err;
-        }
-      }
-
-      try {
-        await execFileAsync('git', ['fetch', forkRemoteName, branchName], { cwd: repoPath, timeout: 30_000 });
-      } catch {
-        void vscode.window.showErrorMessage(
-          `DevDocket: Could not fetch branch '${branchName}' from fork '${forkOwner}'. The branch may have been deleted.`,
-        );
-        return undefined;
-      }
-
-      return { branchName, trackingRef: `${forkRemoteName}/${branchName}` };
+      return { branchName, trackingRef: prRef };
     } else {
-      try {
-        await execFileAsync('git', ['fetch', 'origin', branchName], { cwd: repoPath, timeout: 30_000 });
-      } catch {
-        void vscode.window.showErrorMessage(
-          `DevDocket: Could not fetch branch '${branchName}' from origin. The branch may have been deleted.`,
-        );
-        return undefined;
-      }
+      await execFileAsync('git', ['fetch', 'origin', branchName], { cwd: repoPath, timeout: 30_000 });
     }
 
     return { branchName };
@@ -459,7 +429,7 @@ export class StartWorkAction implements DevDocketAction {
 
     if (hasLocalBranch && trackingRef) {
       // Fork PR with an existing local branch — the local branch may be stale or
-      // tracking a different remote. Create a detached worktree from the fork ref.
+      // tracking a different remote. Create a detached worktree from the PR ref.
       logger.info(
         `Local branch ${branchName} exists, but PR uses tracking ref ${trackingRef}; creating detached worktree from tracking ref`,
       );

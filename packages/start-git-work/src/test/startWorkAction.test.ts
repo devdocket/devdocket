@@ -848,7 +848,7 @@ describe('StartWorkAction', () => {
       expect(fetchCall![1]).toEqual(['fetch', 'origin', 'feature/my-branch']);
     });
 
-    it('adds fork remote and fetches for fork PRs', async () => {
+    it('fetches fork PR via PR ref from origin', async () => {
       mockFetchResponse(createGitHubPrResponse({
         head: {
           ref: 'fix/something',
@@ -867,17 +867,18 @@ describe('StartWorkAction', () => {
       });
       await action.run(item);
 
+      // Should NOT add a fork remote
       const remoteAddCall = vi.mocked(execFile).mock.calls.find(
         (call: any[]) => call[1]?.[0] === 'remote' && call[1]?.[1] === 'add',
       );
-      expect(remoteAddCall).toBeDefined();
-      expect(remoteAddCall![1]).toEqual(['remote', 'add', 'devdocket-fork-contributor', 'https://github.com/contributor/repo.git']);
+      expect(remoteAddCall).toBeUndefined();
 
+      // Should fetch via GitHub's PR ref on origin
       const fetchCall = vi.mocked(execFile).mock.calls.find(
         (call: any[]) => call[1]?.[0] === 'fetch',
       );
       expect(fetchCall).toBeDefined();
-      expect(fetchCall![1]).toEqual(['fetch', 'devdocket-fork-contributor', 'fix/something']);
+      expect(fetchCall![1]).toEqual(['fetch', 'origin', 'pull/42/head:refs/devdocket/pr/42']);
 
       const worktreeCall = vi.mocked(execFile).mock.calls.find(
         (call: any[]) => call[1]?.[0] === 'worktree',
@@ -886,7 +887,7 @@ describe('StartWorkAction', () => {
       expect(worktreeCall![1]).toEqual([
         'worktree', 'add', '-b', 'fix/something',
         path.join('/mock', 'workspace-pr42'),
-        'devdocket-fork-contributor/fix/something',
+        'refs/devdocket/pr/42',
       ]);
     });
 
@@ -916,7 +917,7 @@ describe('StartWorkAction', () => {
       expect(worktreeCall![1]).toEqual([
         'worktree', 'add', '--detach',
         path.join('/mock', 'workspace-pr42'),
-        'devdocket-fork-contributor/fix/something',
+        'refs/devdocket/pr/42',
       ]);
     });
 
@@ -943,7 +944,7 @@ describe('StartWorkAction', () => {
         (call: any[]) => call[1]?.[0] === 'checkout',
       );
       expect(checkoutCall).toBeDefined();
-      expect(checkoutCall![1]).toEqual(['checkout', '-b', 'fix/something', 'devdocket-fork-contributor/fix/something']);
+      expect(checkoutCall![1]).toEqual(['checkout', '-b', 'fix/something', 'refs/devdocket/pr/42']);
     });
 
     it('uses detached checkout for fork PR when local branch exists', async () => {
@@ -968,7 +969,7 @@ describe('StartWorkAction', () => {
         (call: any[]) => call[1]?.[0] === 'checkout',
       );
       expect(checkoutCall).toBeDefined();
-      expect(checkoutCall![1]).toEqual(['checkout', '--detach', 'devdocket-fork-contributor/fix/something']);
+      expect(checkoutCall![1]).toEqual(['checkout', '--detach', 'refs/devdocket/pr/42']);
     });
 
     it('shows error when fork repository has been deleted', async () => {
@@ -989,113 +990,6 @@ describe('StartWorkAction', () => {
       expect(window.showErrorMessage).toHaveBeenCalledWith(
         'DevDocket: The source repository for PR #42 has been deleted.',
       );
-    });
-
-    it('shows error when fork branch fetch fails', async () => {
-      mockFetchResponse(createGitHubPrResponse({
-        head: {
-          ref: 'fix/something',
-          repo: {
-            full_name: 'contributor/repo',
-            clone_url: 'https://github.com/contributor/repo.git',
-          },
-        },
-      }));
-      mockQuickPickWorktree();
-
-      // Make fetch fail (branch deleted on fork)
-      vi.mocked(execFile).mockImplementation(((cmd: string, args: string[], opts: any, cb: Function) => {
-        if (args[0] === 'fetch') {
-          cb(new Error("fatal: couldn't find remote ref fix/something"), '', '');
-          return;
-        }
-        cb(null, '', '');
-      }) as any);
-
-      const item = createWorkItem({
-        providerId: 'github-my-prs',
-        externalId: 'owner/repo#42',
-      });
-      await action.run(item);
-
-      expect(window.showErrorMessage).toHaveBeenCalledWith(
-        "DevDocket: Could not fetch branch 'fix/something' from fork 'contributor'. The branch may have been deleted.",
-      );
-
-      // Should not create worktree
-      const worktreeCall = vi.mocked(execFile).mock.calls.find(
-        (call: any[]) => call[1]?.[0] === 'worktree',
-      );
-      expect(worktreeCall).toBeUndefined();
-    });
-
-    it('shows error when origin branch fetch fails', async () => {
-      mockFetchResponse(createGitHubPrResponse());
-      mockQuickPickWorktree();
-
-      // Make fetch fail (branch deleted on origin)
-      vi.mocked(execFile).mockImplementation(((cmd: string, args: string[], opts: any, cb: Function) => {
-        if (args[0] === 'fetch') {
-          cb(new Error("fatal: couldn't find remote ref feature/my-branch"), '', '');
-          return;
-        }
-        cb(null, '', '');
-      }) as any);
-
-      const item = createWorkItem({
-        providerId: 'github-my-prs',
-        externalId: 'owner/repo#42',
-      });
-      await action.run(item);
-
-      expect(window.showErrorMessage).toHaveBeenCalledWith(
-        "DevDocket: Could not fetch branch 'feature/my-branch' from origin. The branch may have been deleted.",
-      );
-
-      // Should not create worktree
-      const worktreeCall = vi.mocked(execFile).mock.calls.find(
-        (call: any[]) => call[1]?.[0] === 'worktree',
-      );
-      expect(worktreeCall).toBeUndefined();
-    });
-
-    it('handles existing fork remote gracefully', async () => {
-      mockFetchResponse(createGitHubPrResponse({
-        head: {
-          ref: 'fix/something',
-          repo: {
-            full_name: 'contributor/repo',
-            clone_url: 'https://github.com/contributor/repo.git',
-          },
-        },
-      }));
-      mockQuickPickWorktree();
-
-      // Make remote add fail (already exists); get-url returns the same URL
-      vi.mocked(execFile).mockImplementation(((cmd: string, args: string[], opts: any, cb: Function) => {
-        if (args[0] === 'remote' && args[1] === 'add') {
-          cb(new Error('remote devdocket-fork-contributor already exists'), '', '');
-          return;
-        }
-        if (args[0] === 'remote' && args[1] === 'get-url') {
-          cb(null, 'https://github.com/contributor/repo.git\n', '');
-          return;
-        }
-        cb(null, '', '');
-      }) as any);
-
-      const item = createWorkItem({
-        providerId: 'github-my-prs',
-        externalId: 'owner/repo#42',
-      });
-      await action.run(item);
-
-      // Should still fetch
-      const fetchCall = vi.mocked(execFile).mock.calls.find(
-        (call: any[]) => call[1]?.[0] === 'fetch',
-      );
-      expect(fetchCall).toBeDefined();
-      expect(fetchCall![1]).toEqual(['fetch', 'devdocket-fork-contributor', 'fix/something']);
     });
 
     it('creates worktree with pr-prefixed directory name', async () => {
