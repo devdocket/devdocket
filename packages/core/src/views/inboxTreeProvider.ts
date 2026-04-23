@@ -132,8 +132,8 @@ export class InboxTreeProvider implements vscode.TreeDataProvider<InboxElement> 
       this._onDidMarkSeen.fire();
     }
     if (peerKeys.length > 0) {
-      const addedCount = await this.readStateStore.addMany(allKeys);
-      return changed || addedCount > 0;
+      const newlyAdded = await this.readStateStore.addMany(allKeys);
+      return changed || newlyAdded.length > 0;
     }
     return this.readStateStore.add(key);
   }
