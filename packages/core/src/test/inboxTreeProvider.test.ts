@@ -412,17 +412,17 @@ describe('InboxTreeProvider', () => {
       expect(listener).toHaveBeenCalledTimes(1);
     });
 
-    it('should not fire onDidMarkSeen when item is already seen', () => {
-      provider.markSeen('gh', '1');
+    it('should not fire onDidMarkSeen when item is already seen', async () => {
+      await provider.markSeen('gh', '1');
       const listener = vi.fn();
       provider.onDidMarkSeen(listener);
-      provider.markSeen('gh', '1');
+      await provider.markSeen('gh', '1');
       expect(listener).not.toHaveBeenCalled();
     });
 
-    it('should expose seen items via sessionSeenItems', () => {
+    it('should expose seen items via sessionSeenItems', async () => {
       expect(provider.sessionSeenItems.size).toBe(0);
-      provider.markSeen('gh', '1');
+      await provider.markSeen('gh', '1');
       expect(provider.sessionSeenItems.has('gh::1')).toBe(true);
       expect(provider.sessionSeenItems.size).toBe(1);
     });
