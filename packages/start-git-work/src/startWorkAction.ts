@@ -49,7 +49,7 @@ interface AdoPrResponse {
 
 interface PrBranchInfo {
   branchName: string;
-  /** Fully-qualified remote tracking ref for fork PRs (e.g. "contributor/fix-bug"). */
+  /** Fully-qualified remote tracking ref for fork PRs (e.g. "devdocket-fork-contributor/fix-bug"). */
   trackingRef?: string;
 }
 
@@ -532,8 +532,8 @@ export class StartWorkAction implements DevDocketAction {
     // Check if the branch already exists locally to pick the right checkout strategy.
     // For fork PRs without a local branch, create from the remote tracking ref.
     // For same-repo PRs without a local branch, create from origin/<branch>.
-    // When a fork trackingRef is set and a local branch exists, force-update it to
-    // point at the tracking ref to avoid silently checking out stale/unrelated code.
+    // When a fork trackingRef is set and a local branch exists, use a detached checkout
+    // to avoid destructively modifying the user's existing branch.
     const hasLocalBranch = await this.localBranchExists(branchName, repoPath);
     let checkoutArgs: string[];
     // Track whether this action created the branch (for safe cleanup later)
@@ -568,7 +568,7 @@ export class StartWorkAction implements DevDocketAction {
     logger.info(`Checked out PR branch ${branchName}`);
 
     try {
-      // Only include branchName when this action created/reset the branch, so cleanup
+      // Only include branchName when this action created the branch, so cleanup
       // won't accidentally delete a pre-existing user branch.
       const detail = JSON.stringify({
         ...(createdBranch ? { branchName } : {}),

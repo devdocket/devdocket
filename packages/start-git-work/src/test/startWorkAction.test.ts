@@ -21,13 +21,7 @@ vi.mock('child_process', () => {
           resolve({ stdout, stderr });
         }
       };
-      // Determine if last user arg is options or if there are only positional args
-      const lastArg = promiseArgs[promiseArgs.length - 1];
-      if (typeof lastArg === 'object' && lastArg !== null) {
-        fn(...promiseArgs, cb);
-      } else {
-        fn(...promiseArgs, cb);
-      }
+      fn(...promiseArgs, cb);
     });
   };
   return { execFile: fn };
