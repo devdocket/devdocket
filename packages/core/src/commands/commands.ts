@@ -110,12 +110,19 @@ function wrapCommand<T extends unknown[]>(label: string, fn: (...args: T) => Pro
 // Canonical ID dedup helpers
 // ---------------------------------------------------------------------------
 
+/** Item with optional canonicalId — accepted by findCanonicalPeers. */
+interface CanonicalItem {
+  providerId: string;
+  externalId: string;
+  canonicalId?: string;
+}
+
 /**
  * Finds all unseen inbox items from other providers that share the same
  * canonicalId as the given item. Used to propagate accept/dismiss actions.
  */
 function findCanonicalPeers(
-  item: InboxItem,
+  item: CanonicalItem,
   providerRegistry: ProviderRegistry,
   stateStore: DiscoveredStateStore,
 ): Array<{ providerId: string; externalId: string }> {
@@ -135,7 +142,7 @@ function findCanonicalPeers(
 
 /** Propagates an inbox state change to all canonical peers of the given item. */
 async function propagateStateToCanonicalPeers(
-  item: InboxItem,
+  item: CanonicalItem,
   providerRegistry: ProviderRegistry,
   stateStore: DiscoveredStateStore,
   state: 'accepted' | 'dismissed',
@@ -899,6 +906,7 @@ async function handleRefresh(providerRegistry: ProviderRegistry): Promise<void> 
 async function handleAcceptFromSources(
   workGraph: WorkGraph,
   stateStore: DiscoveredStateStore,
+  providerRegistry: ProviderRegistry,
   item?: SourcesElement,
   selectedItems?: SourcesElement[],
   revealer?: ViewRevealer,
@@ -907,16 +915,21 @@ async function handleAcceptFromSources(
   if (items.length === 0) { return; }
 
   if (items.length === 1) {
-    await acceptSingleSourceItem(workGraph, stateStore, items[0], revealer);
+    await acceptSingleSourceItem(workGraph, stateStore, providerRegistry, items[0], revealer);
     return;
   }
 
   await batchAcceptItems(workGraph, stateStore, items, 'source item');
+  // Propagate accepted state to canonical peers of all batch items
+  for (const i of items) {
+    await propagateStateToCanonicalPeers(i, providerRegistry, stateStore, 'accepted');
+  }
 }
 
 async function acceptSingleSourceItem(
   workGraph: WorkGraph,
   stateStore: DiscoveredStateStore,
+  providerRegistry: ProviderRegistry,
   item: SourceItemNode,
   revealer?: ViewRevealer,
 ): Promise<void> {
@@ -928,6 +941,7 @@ async function acceptSingleSourceItem(
     } catch (err: unknown) {
       handleCommandError('Failed to update state for existing item', err);
     }
+    await propagateStateToCanonicalPeers(item, providerRegistry, stateStore, 'accepted');
     void vscode.window.showInformationMessage(
       `DevDocket: Item already accepted as "${existing.title}"`
     );
@@ -961,10 +975,12 @@ async function acceptSingleSourceItem(
     return;
   }
   void revealer?.revealInQueue(createdItem.id);
+  await propagateStateToCanonicalPeers(item, providerRegistry, stateStore, 'accepted');
 }
 
 async function handleDismissFromSources(
   stateStore: DiscoveredStateStore,
+  providerRegistry: ProviderRegistry,
   item?: SourcesElement,
   selectedItems?: SourcesElement[],
 ): Promise<void> {
@@ -975,6 +991,7 @@ async function handleDismissFromSources(
     try {
       logger.info(`Dismissing source item: ${items[0].externalId}`);
       await stateStore.setState(items[0].providerId, items[0].externalId, 'dismissed');
+      await propagateStateToCanonicalPeers(items[0], providerRegistry, stateStore, 'dismissed');
     } catch (err: unknown) {
       handleCommandError('Failed to dismiss item', err);
     }
@@ -986,6 +1003,9 @@ async function handleDismissFromSources(
     await stateStore.setStates(
       items.map(i => ({ providerId: i.providerId, externalId: i.externalId, state: 'dismissed' as const }))
     );
+    for (const i of items) {
+      await propagateStateToCanonicalPeers(i, providerRegistry, stateStore, 'dismissed');
+    }
     void vscode.window.showInformationMessage(`Dismissed ${items.length} items`);
   } catch (err: unknown) {
     handleCommandError('Failed to dismiss items', err);
@@ -1150,9 +1170,9 @@ export function registerCommands(
     vscode.commands.registerCommand('devdocket.dismissFromInbox',
       wrapCommand('Failed to dismiss from inbox', (item: InboxElement, selectedItems?: InboxElement[]) => handleDismissFromInbox(stateStore, providerRegistry, item, selectedItems))),
     vscode.commands.registerCommand('devdocket.acceptFromSources',
-      wrapCommand('Failed to accept from sources', (item: SourcesElement, selectedItems?: SourcesElement[]) => handleAcceptFromSources(workGraph, stateStore, item, selectedItems, revealer))),
+      wrapCommand('Failed to accept from sources', (item: SourcesElement, selectedItems?: SourcesElement[]) => handleAcceptFromSources(workGraph, stateStore, providerRegistry, item, selectedItems, revealer))),
     vscode.commands.registerCommand('devdocket.dismissFromSources',
-      wrapCommand('Failed to dismiss from sources', (item: SourcesElement, selectedItems?: SourcesElement[]) => handleDismissFromSources(stateStore, item, selectedItems))),
+      wrapCommand('Failed to dismiss from sources', (item: SourcesElement, selectedItems?: SourcesElement[]) => handleDismissFromSources(stateStore, providerRegistry, item, selectedItems))),
     vscode.commands.registerCommand('devdocket.switchInboxToTree',
       wrapCommand('Failed to switch inbox layout', () => setViewLayout('inbox', 'tree'))),
     vscode.commands.registerCommand('devdocket.switchInboxToFlat',
