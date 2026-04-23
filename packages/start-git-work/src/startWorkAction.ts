@@ -427,25 +427,45 @@ export class StartWorkAction implements DevDocketAction {
 
     progress.report({ message: 'Creating worktree...' });
 
-    // Determine worktree args based on whether a local branch already exists.
+    // Determine worktree strategy based on whether a local branch already exists.
     // For fork PRs, always create from the remote tracking ref.
     // For same-repo PRs, the branch may only exist as origin/<branch> after fetch.
     const hasLocalBranch = await this.localBranchExists(branchName, repoPath);
-    let worktreeArgs: string[];
-    if (trackingRef) {
-      worktreeArgs = hasLocalBranch
-        ? ['worktree', 'add', worktreePath, branchName]
-        : ['worktree', 'add', '-b', branchName, worktreePath, trackingRef];
-    } else {
-      worktreeArgs = hasLocalBranch
-        ? ['worktree', 'add', worktreePath, branchName]
-        : ['worktree', 'add', '-b', branchName, worktreePath, `origin/${branchName}`];
-    }
+    const worktreeSourceRef = trackingRef ?? `origin/${branchName}`;
 
-    await execFileAsync('git', worktreeArgs, {
-      cwd: repoPath,
-      timeout: 30_000,
-    });
+    if (hasLocalBranch) {
+      try {
+        await execFileAsync('git', ['worktree', 'add', worktreePath, branchName], {
+          cwd: repoPath,
+          timeout: 30_000,
+        });
+      } catch (error) {
+        const gitError = error as { stderr?: string; stdout?: string; message?: string };
+        const gitErrorText = `${gitError.stderr ?? ''}\n${gitError.stdout ?? ''}\n${gitError.message ?? ''}`;
+        const branchAlreadyCheckedOut =
+          gitErrorText.includes('already checked out') &&
+          gitErrorText.includes(branchName);
+
+        if (!branchAlreadyCheckedOut) {
+          throw error;
+        }
+
+        logger.info(
+          `Branch ${branchName} is already checked out in another worktree; creating detached worktree from ${worktreeSourceRef}`,
+        );
+        progress.report({ message: 'Branch already checked out elsewhere; creating detached worktree...' });
+
+        await execFileAsync('git', ['worktree', 'add', '--detach', worktreePath, worktreeSourceRef], {
+          cwd: repoPath,
+          timeout: 30_000,
+        });
+      }
+    } else {
+      await execFileAsync('git', ['worktree', 'add', '-b', branchName, worktreePath, worktreeSourceRef], {
+        cwd: repoPath,
+        timeout: 30_000,
+      });
+    }
 
     logger.info(`Created worktree at ${worktreePath} for PR branch ${branchName}`);
 
