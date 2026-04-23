@@ -22,12 +22,13 @@ export interface PrReview {
 }
 
 /**
- * DevDocket provider that discovers GitHub pull requests authored by the
- * current user and surfaces their review/CI status.
+ * DevDocket provider that discovers GitHub pull requests authored by or
+ * assigned to the current user and surfaces their review/CI status.
  *
- * Uses the GitHub Search API (`author:@me`) to find open PRs, then enriches
- * each with review decisions and mergeable state via the PR detail and
- * reviews REST endpoints.
+ * Uses the GitHub Search API (`author:@me` and `assignee:@me`) to find
+ * open PRs, deduplicates self-authored PRs from assigned results, then
+ * enriches each with review decisions and mergeable state via the PR
+ * detail and reviews REST endpoints.
  *
  * Status values: Open (fallback when detailed PR/review status cannot be
  * determined), Draft, Waiting on reviews, Review received,
