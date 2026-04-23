@@ -25,6 +25,7 @@
     "onView:devdocket.watches",
     "onCommand:devdocket.watchRun",
     "onCommand:devdocket.watchPR",
+    "onCommand:devdocket.watchPRFromItem",
     "onCommand:devdocket.dismissWatch",
     "onCommand:devdocket.dismissAllCompletedWatches",
     "onCommand:devdocket.openWatchUrl",
@@ -504,6 +505,12 @@
         "icon": "$(git-pull-request)"
       },
       {
+        "command": "devdocket.watchPRFromItem",
+        "title": "Watch CI",
+        "category": "DevDocket",
+        "icon": "$(eye)"
+      },
+      {
         "command": "devdocket.dismissWatch",
         "title": "Dismiss Watch",
         "category": "DevDocket",
@@ -701,6 +708,10 @@
         {
           "command": "devdocket.addActivity",
           "when": "false"
+        },
+        {
+          "command": "devdocket.watchPRFromItem",
+          "when": "false"
         }
       ],
       "view/item/context": [
@@ -767,6 +778,16 @@
         {
           "command": "devdocket.openInBrowser",
           "when": "viewItem =~ /hasUrl/ && !listMultiSelection",
+          "group": "2_links"
+        },
+        {
+          "command": "devdocket.watchPRFromItem",
+          "when": "view == devdocket.focus && viewItem =~ /hasUrl/ && !listMultiSelection",
+          "group": "2_links"
+        },
+        {
+          "command": "devdocket.watchPRFromItem",
+          "when": "view == devdocket.queue && viewItem =~ /hasUrl/ && !listMultiSelection",
           "group": "2_links"
         },
         {

@@ -131,6 +131,44 @@ function resolveWatchedPR(arg: unknown): WatchedPR | undefined {
   return undefined;
 }
 
+async function handleWatchPRFromItem(
+  prWatcherRegistry: PRWatcherRegistry,
+  watcherService: WatcherService,
+  arg: unknown,
+): Promise<void> {
+  const url = extractItemUrl(arg);
+  if (!url) {
+    void vscode.window.showWarningMessage('DevDocket: Select an item with a URL to watch its CI.');
+    return;
+  }
+
+  const safeUrl = isSafeUrl(url);
+  if (!safeUrl) {
+    void vscode.window.showWarningMessage('DevDocket: Only http(s) URLs are supported.');
+    return;
+  }
+
+  const prWatcher = prWatcherRegistry.findWatcherForUrl(safeUrl.href);
+  if (!prWatcher) {
+    void vscode.window.showWarningMessage('DevDocket: This item\'s URL is not recognized as a pull request.');
+    return;
+  }
+
+  const identifier = prWatcher.parsePRUrl(safeUrl.href);
+  await watcherService.startPRWatch(identifier);
+  void vscode.window.showInformationMessage(`Now watching PR: ${identifier.displayName}`);
+}
+
+function extractItemUrl(arg: unknown): string | undefined {
+  if (!arg || typeof arg !== 'object') {
+    return undefined;
+  }
+  if ('url' in arg && typeof (arg as { url: unknown }).url === 'string') {
+    return (arg as { url: string }).url;
+  }
+  return undefined;
+}
+
 async function handleDismissWatch(arg: unknown, watcherService: WatcherService): Promise<void> {
   try {
     // Try PR first
@@ -205,6 +243,8 @@ export function registerWatchCommands(
       wrapCommand('Failed to watch pipeline run', () => handleWatchRun(watcherRegistry, prWatcherRegistry, watcherService))),
     vscode.commands.registerCommand('devdocket.watchPR',
       wrapCommand('Failed to watch PR', () => handleWatchPR(prWatcherRegistry, watcherService))),
+    vscode.commands.registerCommand('devdocket.watchPRFromItem',
+      wrapCommand('Failed to watch PR from item', (arg: unknown) => handleWatchPRFromItem(prWatcherRegistry, watcherService, arg))),
     vscode.commands.registerCommand('devdocket.dismissWatch',
       wrapCommand('Failed to dismiss watch', (arg: unknown) => handleDismissWatch(arg, watcherService))),
     vscode.commands.registerCommand('devdocket.dismissAllCompletedWatches',
