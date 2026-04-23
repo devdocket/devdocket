@@ -1257,6 +1257,33 @@ describe('StartWorkAction', () => {
       expect(checkoutCall![1]).toEqual(['checkout', 'feature/ado-branch']);
     });
 
+    it('shows error when ADO branch fetch fails', async () => {
+      mockQuickPickWorktree();
+
+      vi.mocked(execFile).mockImplementation(((cmd: string, args: string[], opts: any, cb: Function) => {
+        if (args[0] === 'fetch') {
+          cb(new Error("fatal: couldn't find remote ref feature/ado-branch"), '', '');
+          return;
+        }
+        cb(null, '', '');
+      }) as any);
+
+      const item = createWorkItem({
+        providerId: 'ado-pr-reviews',
+        externalId: 'org/project/repo/101',
+      });
+      await action.run(item);
+
+      expect(window.showErrorMessage).toHaveBeenCalledWith(
+        "DevDocket: Could not fetch branch 'feature/ado-branch' from origin. The branch may have been deleted.",
+      );
+
+      const worktreeCall = vi.mocked(execFile).mock.calls.find(
+        (call: any[]) => call[1]?.[0] === 'worktree',
+      );
+      expect(worktreeCall).toBeUndefined();
+    });
+
     it('shows error for 404 ADO PR response', async () => {
       mockFetchResponse({}, 404);
       mockQuickPickWorktree();
