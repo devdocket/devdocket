@@ -67,6 +67,17 @@ function mockQuickPickCheckout() {
   vi.mocked(window.showQuickPick).mockResolvedValue({ label: 'Checkout branch', value: 'checkout' } as any);
 }
 
+/** Mocks execFile to fail for local branch existence checks (rev-parse --verify refs/heads/*). */
+function mockNoLocalBranch() {
+  vi.mocked(execFile).mockImplementation(((cmd: string, args: string[], opts: any, cb: Function) => {
+    if (args[0] === 'rev-parse' && args[1] === '--verify' && args[2]?.startsWith('refs/heads/')) {
+      cb(new Error('not a valid ref'), { stdout: '', stderr: '' }, '');
+      return;
+    }
+    cb(null, { stdout: '', stderr: '' }, '');
+  }) as any);
+}
+
 function mockFetchResponse(body: any, status = 200) {
   const mockResponse = {
     ok: status >= 200 && status < 300,
@@ -832,6 +843,7 @@ describe('StartWorkAction', () => {
         },
       }));
       mockQuickPickWorktree();
+      mockNoLocalBranch();
 
       const item = createWorkItem({
         providerId: 'github-my-prs',
@@ -873,6 +885,7 @@ describe('StartWorkAction', () => {
         },
       }));
       mockQuickPickCheckout();
+      mockNoLocalBranch();
 
       const item = createWorkItem({
         providerId: 'github-my-prs',
@@ -919,10 +932,14 @@ describe('StartWorkAction', () => {
       }));
       mockQuickPickWorktree();
 
-      // Make remote add fail (already exists), but fetch succeeds
+      // Make remote add fail (already exists); get-url returns the same URL
       vi.mocked(execFile).mockImplementation(((cmd: string, args: string[], opts: any, cb: Function) => {
         if (args[0] === 'remote' && args[1] === 'add') {
           cb(new Error('remote contributor already exists'), { stdout: '', stderr: '' }, '');
+          return;
+        }
+        if (args[0] === 'remote' && args[1] === 'get-url') {
+          cb(null, { stdout: 'https://github.com/contributor/repo.git\n', stderr: '' }, '');
           return;
         }
         cb(null, { stdout: '', stderr: '' }, '');
@@ -974,6 +991,42 @@ describe('StartWorkAction', () => {
       );
       expect(checkoutCall).toBeDefined();
       expect(checkoutCall![1]).toEqual(['checkout', 'feature/my-branch']);
+    });
+
+    it('creates local branch from origin when no local branch exists (worktree)', async () => {
+      mockQuickPickWorktree();
+      mockNoLocalBranch();
+      const item = createWorkItem({
+        providerId: 'github-my-prs',
+        externalId: 'owner/repo#42',
+      });
+      await action.run(item);
+
+      const worktreeCall = vi.mocked(execFile).mock.calls.find(
+        (call: any[]) => call[1]?.[0] === 'worktree',
+      );
+      expect(worktreeCall).toBeDefined();
+      expect(worktreeCall![1]).toEqual([
+        'worktree', 'add', '-b', 'feature/my-branch',
+        path.join('/mock', 'workspace-pr42'),
+        'origin/feature/my-branch',
+      ]);
+    });
+
+    it('creates local branch from origin when no local branch exists (checkout)', async () => {
+      mockQuickPickCheckout();
+      mockNoLocalBranch();
+      const item = createWorkItem({
+        providerId: 'github-my-prs',
+        externalId: 'owner/repo#42',
+      });
+      await action.run(item);
+
+      const checkoutCall = vi.mocked(execFile).mock.calls.find(
+        (call: any[]) => call[1]?.[0] === 'checkout',
+      );
+      expect(checkoutCall).toBeDefined();
+      expect(checkoutCall![1]).toEqual(['checkout', '-b', 'feature/my-branch', '--track', 'origin/feature/my-branch']);
     });
 
     it('shows error for 404 PR response', async () => {

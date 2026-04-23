@@ -300,6 +300,8 @@ export class StartWorkAction implements DevDocketAction {
       headers: {
         Authorization: `Bearer ${session.accessToken}`,
         Accept: 'application/vnd.github+json',
+        'User-Agent': 'devdocket-start-git-work',
+        'X-GitHub-Api-Version': '2022-11-28',
       },
       signal: AbortSignal.timeout(30_000),
     });
@@ -329,11 +331,19 @@ export class StartWorkAction implements DevDocketAction {
       const forkOwner = pr.head.repo.full_name.split('/')[0];
       const cloneUrl = pr.head.repo.clone_url;
 
-      // Add remote if it doesn't already exist
+      // Add remote if it doesn't already exist; update URL if it points elsewhere
       try {
         await execFileAsync('git', ['remote', 'add', forkOwner, cloneUrl], { cwd: repoPath, timeout: 30_000 });
       } catch (err) {
-        logger.info(`Remote "${forkOwner}" may already exist: ${err instanceof Error ? err.message : String(err)}`);
+        try {
+          const { stdout } = await execFileAsync('git', ['remote', 'get-url', forkOwner], { cwd: repoPath, timeout: 30_000 });
+          if (stdout.trim() !== cloneUrl) {
+            logger.info(`Remote "${forkOwner}" exists with different URL, updating to "${cloneUrl}".`);
+            await execFileAsync('git', ['remote', 'set-url', forkOwner, cloneUrl], { cwd: repoPath, timeout: 30_000 });
+          }
+        } catch {
+          throw err;
+        }
       }
 
       await execFileAsync('git', ['fetch', forkOwner, branchName], { cwd: repoPath, timeout: 30_000 });
@@ -412,10 +422,20 @@ export class StartWorkAction implements DevDocketAction {
 
     progress.report({ message: 'Creating worktree...' });
 
-    // For fork PRs, use -b to create a local branch from the remote tracking ref
-    const worktreeArgs = trackingRef
-      ? ['worktree', 'add', '-b', branchName, worktreePath, trackingRef]
-      : ['worktree', 'add', worktreePath, branchName];
+    // Determine worktree args based on whether a local branch already exists.
+    // For fork PRs, always create from the remote tracking ref.
+    // For same-repo PRs, the branch may only exist as origin/<branch> after fetch.
+    const hasLocalBranch = await this.localBranchExists(branchName, repoPath);
+    let worktreeArgs: string[];
+    if (trackingRef) {
+      worktreeArgs = hasLocalBranch
+        ? ['worktree', 'add', worktreePath, branchName]
+        : ['worktree', 'add', '-b', branchName, worktreePath, trackingRef];
+    } else {
+      worktreeArgs = hasLocalBranch
+        ? ['worktree', 'add', worktreePath, branchName]
+        : ['worktree', 'add', '-b', branchName, worktreePath, `origin/${branchName}`];
+    }
 
     await execFileAsync('git', worktreeArgs, {
       cwd: repoPath,
@@ -455,10 +475,18 @@ export class StartWorkAction implements DevDocketAction {
 
     progress.report({ message: 'Checking out branch...' });
 
-    // For fork PRs, create a local branch from the remote tracking ref to avoid ambiguity
-    const checkoutArgs = trackingRef
-      ? ['checkout', '-b', branchName, trackingRef]
-      : ['checkout', branchName];
+    // Check if the branch already exists locally to pick the right checkout strategy.
+    // For fork PRs without a local branch, create from the remote tracking ref.
+    // For same-repo PRs without a local branch, create from origin/<branch>.
+    const hasLocalBranch = await this.localBranchExists(branchName, repoPath);
+    let checkoutArgs: string[];
+    if (hasLocalBranch) {
+      checkoutArgs = ['checkout', branchName];
+    } else if (trackingRef) {
+      checkoutArgs = ['checkout', '-b', branchName, trackingRef];
+    } else {
+      checkoutArgs = ['checkout', '-b', branchName, '--track', `origin/${branchName}`];
+    }
 
     await execFileAsync('git', checkoutArgs, { cwd: repoPath, timeout: 30_000 });
     logger.info(`Checked out PR branch ${branchName}`);
@@ -495,6 +523,16 @@ export class StartWorkAction implements DevDocketAction {
       }
     }
     return true;
+  }
+
+  /** Checks whether a local branch with the given name already exists. */
+  private async localBranchExists(branchName: string, repoPath: string): Promise<boolean> {
+    try {
+      await execFileAsync('git', ['rev-parse', '--verify', `refs/heads/${branchName}`], { cwd: repoPath, timeout: 30_000 });
+      return true;
+    } catch {
+      return false;
+    }
   }
 
   /**
