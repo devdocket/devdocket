@@ -64,14 +64,14 @@ export class GitHubPrReviewProvider extends BaseGitHubProvider {
         reason: 'review_requested',
       };
       if (pr.state) { item.state = pr.state; }
-      // Both settings produce hard resurfacing (resurfaceVersion) since the user
-      // explicitly opted in. Combine both signals so either change triggers it.
+      // Both signals use soft resurfacing (version) — items only resurface from
+      // History (Done/Archived), never from Queue or Focus.
       const headSha = headShas.get(pr.html_url);
       const reRequestTime = reRequestTimes.get(pr.html_url);
-      const resurfaceParts: string[] = [];
-      if (headSha !== undefined) { resurfaceParts.push(headSha); }
-      if (reRequestTime !== undefined) { resurfaceParts.push(reRequestTime); }
-      if (resurfaceParts.length > 0) { item.resurfaceVersion = resurfaceParts.join('::'); }
+      const versionParts: string[] = [];
+      if (headSha !== undefined) { versionParts.push(headSha); }
+      if (reRequestTime !== undefined) { versionParts.push(reRequestTime); }
+      if (versionParts.length > 0) { item.version = versionParts.join('::'); }
       return item;
     });
 
