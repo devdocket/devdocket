@@ -140,7 +140,7 @@ describe('AdoPRWatcher', () => {
       fetchSpy.mockRestore();
     });
 
-    it('updates displayName with PR title', async () => {
+    it('returns displayName with PR title in snapshot', async () => {
       const id = { ...identifier };
       const fetchSpy = vi.spyOn(globalThis, 'fetch')
         .mockResolvedValueOnce({
@@ -152,8 +152,8 @@ describe('AdoPRWatcher', () => {
           json: async () => ({ value: [] }),
         } as Response);
 
-      await watcher.getPRRunsSnapshot(id);
-      expect(id.displayName).toBe('PR #42: Fix login flow');
+      const snapshot = await watcher.getPRRunsSnapshot(id);
+      expect(snapshot.displayName).toBe('PR #42: Fix login flow');
 
       fetchSpy.mockRestore();
     });

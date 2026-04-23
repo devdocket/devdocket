@@ -190,6 +190,9 @@ export class WatcherService implements vscode.Disposable {
 
     // Fetch initial snapshot
     const snapshot = await prWatcher.getPRRunsSnapshot(identifier);
+    if (snapshot.displayName) {
+      identifier.displayName = snapshot.displayName;
+    }
     const now = new Date().toISOString();
 
     const watchedPR: WatchedPR = {
@@ -452,6 +455,12 @@ export class WatcherService implements vscode.Disposable {
 
         const snapshot = await prWatcher.getPRRunsSnapshot(prWatch.identifier);
         prWatch.lastPolledAt = new Date().toISOString();
+
+        // Apply updated display name from snapshot
+        if (snapshot.displayName && snapshot.displayName !== prWatch.identifier.displayName) {
+          prWatch.identifier.displayName = snapshot.displayName;
+          anyChanged = true;
+        }
 
         // Reset failure count
         this.consecutiveFailures.delete(key);

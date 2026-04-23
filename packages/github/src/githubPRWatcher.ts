@@ -92,10 +92,9 @@ export class GitHubPRWatcher implements DevDocketPRWatcher {
         ? 'closed'
         : 'open';
 
-    // Update display name with PR title
-    if (prData.title) {
-      identifier.displayName = `PR #${identifier.prId}: ${prData.title}`;
-    }
+    const updatedDisplayName = prData.title
+      ? `PR #${identifier.prId}: ${prData.title}`
+      : undefined;
 
     // Fetch check runs for head commit
     const checkRunsData = await this.fetchApi<{ check_runs: GitHubCheckRun[] }>(
@@ -132,7 +131,7 @@ export class GitHubPRWatcher implements DevDocketPRWatcher {
       });
     }
 
-    return { prState, runs };
+    return { prState, runs, displayName: updatedDisplayName };
   }
 
   private async fetchApi<T>(url: string, token?: CancellationTokenLike): Promise<T> {

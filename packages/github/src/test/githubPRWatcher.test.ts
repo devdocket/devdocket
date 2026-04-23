@@ -137,15 +137,15 @@ describe('GitHubPRWatcher', () => {
       expect(result.prState).toBe('closed');
     });
 
-    it('updates displayName with PR title', async () => {
+    it('returns displayName with PR title in snapshot', async () => {
       const identifier = makeIdentifier();
       mockFetchResponses(
         { number: 42, title: 'Fix the widget', state: 'open', merged: false, head: { sha: 'abc123' } },
         { check_runs: [] },
       );
 
-      await watcher.getPRRunsSnapshot(identifier);
-      expect(identifier.displayName).toBe('PR #42: Fix the widget');
+      const snapshot = await watcher.getPRRunsSnapshot(identifier);
+      expect(snapshot.displayName).toBe('PR #42: Fix the widget');
     });
 
     it('deduplicates check runs by check_suite.id', async () => {

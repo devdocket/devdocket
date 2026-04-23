@@ -27,6 +27,8 @@ export type PRState = 'open' | 'merged' | 'closed';
 export interface PRRunsSnapshot {
   prState: PRState;
   runs: RunIdentifier[];
+  /** Updated display name (e.g. with PR title) to apply to the identifier */
+  displayName?: string;
 }
 
 /**

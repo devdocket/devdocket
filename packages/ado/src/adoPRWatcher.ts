@@ -111,10 +111,9 @@ export class AdoPRWatcher implements DevDocketPRWatcher {
         ? 'merged'
         : 'closed';
 
-    // Update display name with PR title
-    if (prData.title) {
-      identifier.displayName = `PR #${identifier.prId}: ${prData.title}`;
-    }
+    const updatedDisplayName = prData.title
+      ? `PR #${identifier.prId}: ${prData.title}`
+      : undefined;
 
     if (token?.isCancellationRequested) {
       const error = new Error('The operation was aborted.');
@@ -162,6 +161,6 @@ export class AdoPRWatcher implements DevDocketPRWatcher {
       logger.warn(`Failed to fetch builds for PR ${identifier.prId}: ${buildsResponse.status} ${buildsResponse.statusText}`);
     }
 
-    return { prState, runs };
+    return { prState, runs, displayName: updatedDisplayName };
   }
 }
