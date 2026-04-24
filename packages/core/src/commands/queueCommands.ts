@@ -44,6 +44,22 @@ async function handleMoveDown(workGraph: WorkGraph, item?: { id?: string }): Pro
   await workGraph.moveItem(item.id, 'down');
 }
 
+async function handleMoveToTop(workGraph: WorkGraph, item?: { id?: string }): Promise<void> {
+  if (!item?.id) {
+    void vscode.window.showInformationMessage('DevDocket: Select an item in the Queue to move.');
+    return;
+  }
+  await workGraph.moveToTop(item.id);
+}
+
+async function handleMoveToBottom(workGraph: WorkGraph, item?: { id?: string }): Promise<void> {
+  if (!item?.id) {
+    void vscode.window.showInformationMessage('DevDocket: Select an item in the Queue to move.');
+    return;
+  }
+  await workGraph.moveToBottom(item.id);
+}
+
 async function handleDeleteItem(workGraph: WorkGraph, item?: { id?: string }, selectedItems?: { id?: string }[]): Promise<void> {
   const ids = resolveItemIds(item, selectedItems);
   if (ids.length === 0) { return; }
@@ -94,6 +110,10 @@ export function registerQueueCommands(
       wrapCommand('Failed to move item up', (item) => handleMoveUp(workGraph, item))),
     vscode.commands.registerCommand('devdocket.moveDown',
       wrapCommand('Failed to move item down', (item) => handleMoveDown(workGraph, item))),
+    vscode.commands.registerCommand('devdocket.moveToTop',
+      wrapCommand('Failed to move item to top', (item) => handleMoveToTop(workGraph, item))),
+    vscode.commands.registerCommand('devdocket.moveToBottom',
+      wrapCommand('Failed to move item to bottom', (item) => handleMoveToBottom(workGraph, item))),
     vscode.commands.registerCommand('devdocket.deleteItem',
       wrapCommand('Failed to delete item', (item, selectedItems) => handleDeleteItem(workGraph, item, selectedItems))),
   );

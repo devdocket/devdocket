@@ -272,6 +272,18 @@
         "icon": "$(arrow-down)"
       },
       {
+        "command": "devdocket.moveToTop",
+        "title": "Move to Top",
+        "category": "DevDocket",
+        "icon": "$(arrow-up)"
+      },
+      {
+        "command": "devdocket.moveToBottom",
+        "title": "Move to Bottom",
+        "category": "DevDocket",
+        "icon": "$(arrow-down)"
+      },
+      {
         "command": "devdocket.focusMoveUp",
         "title": "Move Up",
         "category": "DevDocket",
@@ -280,6 +292,18 @@
       {
         "command": "devdocket.focusMoveDown",
         "title": "Move Down",
+        "category": "DevDocket",
+        "icon": "$(arrow-down)"
+      },
+      {
+        "command": "devdocket.focusMoveToTop",
+        "title": "Move to Top",
+        "category": "DevDocket",
+        "icon": "$(arrow-up)"
+      },
+      {
+        "command": "devdocket.focusMoveToBottom",
+        "title": "Move to Bottom",
         "category": "DevDocket",
         "icon": "$(arrow-down)"
       },
@@ -708,6 +732,11 @@
           "group": "1_actions"
         },
         {
+          "command": "devdocket.moveToTop",
+          "when": "view == devdocket.queue && viewItem =~ /^queueItem/ && !listMultiSelection",
+          "group": "3_reorder@0"
+        },
+        {
           "command": "devdocket.moveUp",
           "when": "view == devdocket.queue && viewItem =~ /^queueItem/ && !listMultiSelection",
           "group": "3_reorder@1"
@@ -718,6 +747,16 @@
           "group": "3_reorder@2"
         },
         {
+          "command": "devdocket.moveToBottom",
+          "when": "view == devdocket.queue && viewItem =~ /^queueItem/ && !listMultiSelection",
+          "group": "3_reorder@3"
+        },
+        {
+          "command": "devdocket.focusMoveToTop",
+          "when": "view == devdocket.focus && viewItem =~ /^(active|paused)/ && !listMultiSelection",
+          "group": "3_reorder@0"
+        },
+        {
           "command": "devdocket.focusMoveUp",
           "when": "view == devdocket.focus && viewItem =~ /^(active|paused)/ && !listMultiSelection",
           "group": "3_reorder@1"
@@ -726,6 +765,11 @@
           "command": "devdocket.focusMoveDown",
           "when": "view == devdocket.focus && viewItem =~ /^(active|paused)/ && !listMultiSelection",
           "group": "3_reorder@2"
+        },
+        {
+          "command": "devdocket.focusMoveToBottom",
+          "when": "view == devdocket.focus && viewItem =~ /^(active|paused)/ && !listMultiSelection",
+          "group": "3_reorder@3"
         },
         {
           "command": "devdocket.openInBrowser",
