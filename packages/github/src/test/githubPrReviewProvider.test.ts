@@ -644,10 +644,11 @@ describe('GitHubPrReviewProvider', () => {
       await provider.refresh();
 
       const items = listener.mock.calls[0][0];
-      expect(items[0].version).toBe('2024-01-15T10:30:00Z');
+      expect(items[0].version).toBeUndefined();
+      expect(items[0].resurfaceVersion).toBe('2024-01-15T10:30:00Z');
     });
 
-    it('combines commit SHA and re-request time when both settings enabled', async () => {
+    it('sets version and resurfaceVersion independently when both settings enabled', async () => {
       mockConfig({ resurfaceOnNewVersion: true, resurfaceOnReRequestedReview: true });
 
       mockFetch
@@ -685,10 +686,11 @@ describe('GitHubPrReviewProvider', () => {
       await provider.refresh();
 
       const items = listener.mock.calls[0][0];
-      expect(items[0].version).toBe('abc123::2024-01-15T10:30:00Z');
+      expect(items[0].version).toBe('abc123');
+      expect(items[0].resurfaceVersion).toBe('2024-01-15T10:30:00Z');
     });
 
-    it('uses latest review_requested event for version', async () => {
+    it('uses latest review_requested event for resurfaceVersion', async () => {
       mockConfig({ resurfaceOnNewVersion: false, resurfaceOnReRequestedReview: true });
 
       mockFetch
@@ -723,7 +725,7 @@ describe('GitHubPrReviewProvider', () => {
       await provider.refresh();
 
       const items = listener.mock.calls[0][0];
-      expect(items[0].version).toBe('2024-01-15T10:30:00Z');
+      expect(items[0].resurfaceVersion).toBe('2024-01-15T10:30:00Z');
     });
 
     it('ignores review_requested events for other users', async () => {
@@ -756,7 +758,7 @@ describe('GitHubPrReviewProvider', () => {
       await provider.refresh();
 
       const items = listener.mock.calls[0][0];
-      expect(items[0].version).toBeUndefined();
+      expect(items[0].resurfaceVersion).toBeUndefined();
     });
 
     it('skips timeline fetch when fetchCurrentUser fails', async () => {
@@ -777,7 +779,7 @@ describe('GitHubPrReviewProvider', () => {
       await provider.refresh();
 
       const items = listener.mock.calls[0][0];
-      expect(items[0].version).toBeUndefined();
+      expect(items[0].resurfaceVersion).toBeUndefined();
       // 2 calls: search + failed /user. No timeline call.
       expect(mockFetch).toHaveBeenCalledTimes(2);
     });
@@ -804,7 +806,7 @@ describe('GitHubPrReviewProvider', () => {
       await provider.refresh();
 
       const items = listener.mock.calls[0][0];
-      expect(items[0].version).toBeUndefined();
+      expect(items[0].resurfaceVersion).toBeUndefined();
     });
 
     it('caches current user login across refreshes', async () => {
@@ -877,7 +879,7 @@ describe('GitHubPrReviewProvider', () => {
       await provider.refresh();
 
       const items = listener.mock.calls[0][0];
-      expect(items[0].version).toBe('2024-01-15T10:30:00Z');
+      expect(items[0].resurfaceVersion).toBe('2024-01-15T10:30:00Z');
     });
   });
 

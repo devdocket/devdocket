@@ -64,14 +64,14 @@ export class GitHubPrReviewProvider extends BaseGitHubProvider {
         reason: 'review_requested',
       };
       if (pr.state) { item.state = pr.state; }
-      // Both signals use soft resurfacing (version) — items only resurface from
-      // History (Done/Archived), never from Queue or Focus.
+      // Head SHA uses soft resurfacing (version) — only resurfaces from
+      // Done/Archived, not from Queue or Focus.
       const headSha = headShas.get(pr.html_url);
+      if (headSha !== undefined) { item.version = headSha; }
+      // Re-request time uses hard resurfacing (resurfaceVersion) — always
+      // resurfaces regardless of work item state.
       const reRequestTime = reRequestTimes.get(pr.html_url);
-      const versionParts: string[] = [];
-      if (headSha !== undefined) { versionParts.push(headSha); }
-      if (reRequestTime !== undefined) { versionParts.push(reRequestTime); }
-      if (versionParts.length > 0) { item.version = versionParts.join('::'); }
+      if (reRequestTime !== undefined) { item.resurfaceVersion = reRequestTime; }
       return item;
     });
 

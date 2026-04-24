@@ -1664,6 +1664,101 @@ describe('ProviderRegistry', () => {
     });
   });
 
+  describe('accepted items without version fields', () => {
+    it('does not resurface accepted item re-emitted with no version or resurfaceVersion', async () => {
+      const getWorkItemState = vi.fn().mockReturnValue(WorkItemState.Done);
+      const reg = new ProviderRegistry(stateStore, undefined, getWorkItemState);
+      const provider = createMockProvider('gh');
+      reg.register(provider);
+
+      stateStore._set('gh', 'pr-1', 'accepted');
+
+      const listener = vi.fn();
+      reg.onDidAddNewUnseenItems(listener);
+
+      provider.fireItems([
+        { externalId: 'pr-1', title: 'PR 1' },
+      ]);
+
+      // Allow handleDiscoveredItems to process
+      await vi.waitFor(() => expect(reg.getDiscoveredItems('gh')).toHaveLength(1));
+      // No state updates should have been made
+      expect(stateStore.setStates).not.toHaveBeenCalled();
+      expect(listener).not.toHaveBeenCalled();
+
+      reg.dispose();
+    });
+
+    it('does not resurface accepted Done item re-emitted with no version after being in History', async () => {
+      const getWorkItemState = vi.fn().mockReturnValue(WorkItemState.Done);
+      const reg = new ProviderRegistry(stateStore, undefined, getWorkItemState);
+      const provider = createMockProvider('gh');
+      reg.register(provider);
+
+      stateStore._set('gh', 'pr-1', 'accepted');
+
+      const listener = vi.fn();
+      reg.onDidAddNewUnseenItems(listener);
+
+      // Re-emit same item multiple times (simulating repeated refreshes with no version)
+      provider.fireItems([{ externalId: 'pr-1', title: 'PR 1' }]);
+      await vi.waitFor(() => expect(reg.getDiscoveredItems('gh')).toHaveLength(1));
+
+      provider.fireItems([{ externalId: 'pr-1', title: 'PR 1' }]);
+      await vi.waitFor(() => expect(reg.getDiscoveredItems('gh')).toHaveLength(1));
+
+      expect(stateStore.setStates).not.toHaveBeenCalled();
+      expect(listener).not.toHaveBeenCalled();
+
+      reg.dispose();
+    });
+
+    it('does not resurface accepted Archived item re-emitted with no version', async () => {
+      const getWorkItemState = vi.fn().mockReturnValue(WorkItemState.Archived);
+      const reg = new ProviderRegistry(stateStore, undefined, getWorkItemState);
+      const provider = createMockProvider('gh');
+      reg.register(provider);
+
+      stateStore._set('gh', 'pr-1', 'accepted');
+
+      const listener = vi.fn();
+      reg.onDidAddNewUnseenItems(listener);
+
+      provider.fireItems([
+        { externalId: 'pr-1', title: 'PR 1' },
+      ]);
+
+      await vi.waitFor(() => expect(reg.getDiscoveredItems('gh')).toHaveLength(1));
+      expect(stateStore.setStates).not.toHaveBeenCalled();
+      expect(listener).not.toHaveBeenCalled();
+
+      reg.dispose();
+    });
+
+    it('does not resurface accepted item with no work item when no version set', async () => {
+      // Work item was deleted (e.g., clearOldHistory) — getWorkItemState returns undefined
+      const getWorkItemState = vi.fn().mockReturnValue(undefined);
+      const reg = new ProviderRegistry(stateStore, undefined, getWorkItemState);
+      const provider = createMockProvider('gh');
+      reg.register(provider);
+
+      stateStore._set('gh', 'pr-1', 'accepted');
+
+      const listener = vi.fn();
+      reg.onDidAddNewUnseenItems(listener);
+
+      provider.fireItems([
+        { externalId: 'pr-1', title: 'PR 1' },
+      ]);
+
+      await vi.waitFor(() => expect(reg.getDiscoveredItems('gh')).toHaveLength(1));
+      expect(stateStore.setStates).not.toHaveBeenCalled();
+      expect(listener).not.toHaveBeenCalled();
+
+      reg.dispose();
+    });
+  });
+
   describe('resolveUrl', () => {
     function nextTick(): Promise<void> {
       return new Promise(resolve => setTimeout(resolve, 0));
