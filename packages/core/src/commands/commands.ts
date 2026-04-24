@@ -781,6 +781,7 @@ async function batchAcceptToFocusItems(
   const stateUpdates: Array<{ providerId: string; externalId: string; state: InboxState }> = [];
   const createdIds: string[] = [];
   const allIds: string[] = [];
+  const reopenedItems: Array<{ id: string; originalState: WorkItemState }> = [];
   let failed = 0;
   let skipped = 0;
 
@@ -794,8 +795,10 @@ async function batchAcceptToFocusItems(
         continue;
       }
       if (existing.state === WorkItemState.Done || existing.state === WorkItemState.Archived) {
+        const originalState = existing.state;
         try {
           await workGraph.transitionState(existing.id, WorkItemState.New);
+          reopenedItems.push({ id: existing.id, originalState });
         } catch (err: unknown) {
           failed++;
           logger.error(`Failed to re-open "${item.title}"`, err);
@@ -833,6 +836,11 @@ async function batchAcceptToFocusItems(
       for (const id of createdIds) {
         try { await workGraph.deleteItem(id); } catch (rollbackErr: unknown) {
           logger.error('Failed to roll back created item after batch setStates failure', rollbackErr);
+        }
+      }
+      for (const { id, originalState } of reopenedItems) {
+        try { await workGraph.transitionState(id, originalState); } catch (rollbackErr: unknown) {
+          logger.error('Failed to roll back re-opened item after batch setStates failure', rollbackErr);
         }
       }
       handleCommandError('Failed to update states after accepting items', err);
