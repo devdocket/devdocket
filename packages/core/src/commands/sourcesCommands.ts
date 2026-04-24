@@ -41,6 +41,7 @@ async function acceptSingleSourceItem(
   if (existing) {
     // Re-open items in terminal states so resurfaced items return to Queue
     if (existing.state === WorkItemState.Done || existing.state === WorkItemState.Archived) {
+      const originalState = existing.state;
       try {
         await workGraph.transitionState(existing.id, WorkItemState.New);
       } catch (err: unknown) {
@@ -50,6 +51,9 @@ async function acceptSingleSourceItem(
       try {
         await stateStore.setState(item.providerId, item.externalId, 'accepted');
       } catch (err: unknown) {
+        try { await workGraph.transitionState(existing.id, originalState); } catch (rollbackErr: unknown) {
+          logger.error('Failed to roll back re-opened item after setState failure', rollbackErr);
+        }
         handleCommandError('Failed to update state for re-opened item', err);
         return;
       }
