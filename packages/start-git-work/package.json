@@ -19,10 +19,11 @@
   ],
   "main": "./dist/extension.js",
   "contributes": {
-    "configuration": {
-      "title": "DevDocket Start Git Work",
-      "properties": {
-        "devdocketStartGitWork.commands": {
+    "configuration": [
+      {
+        "title": "DevDocket Start Git Work",
+        "properties": {
+        "devDocketStartGitWork.commands": {
           "type": "array",
           "scope": "application",
           "items": {
@@ -46,7 +47,8 @@
           "description": "Commands to run after creating a worktree. Each entry specifies a command and optional args. Use {path} in args to reference the worktree path."
         }
       }
-    }
+      }
+    ]
   },
   "scripts": {
     "vscode:prepublish": "npm run build:prod",

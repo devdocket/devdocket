@@ -19,7 +19,7 @@ export async function activate(_context: vscode.ExtensionContext): Promise<void>
   const outputChannel = vscode.window.createOutputChannel('DevDocket ADO');
   _context.subscriptions.push(outputChannel);
 
-  const logLevelConfig = vscode.workspace.getConfiguration('devdocket').get<string>('logLevel', 'info');
+  const logLevelConfig = vscode.workspace.getConfiguration('devDocket').get<string>('logLevel', 'info');
   initLogger(outputChannel, resolveLogLevel(logLevelConfig));
   if (!['debug', 'info', 'warn', 'error'].includes(logLevelConfig)) {
     logger.warn(`Invalid log level '${logLevelConfig}', falling back to 'info'. Valid values: debug, info, warn, error`);
@@ -27,8 +27,8 @@ export async function activate(_context: vscode.ExtensionContext): Promise<void>
 
   _context.subscriptions.push(
     vscode.workspace.onDidChangeConfiguration(e => {
-      if (e.affectsConfiguration('devdocket.logLevel')) {
-        const newLevel = vscode.workspace.getConfiguration('devdocket').get<string>('logLevel', 'info');
+      if (e.affectsConfiguration('devDocket.logLevel')) {
+        const newLevel = vscode.workspace.getConfiguration('devDocket').get<string>('logLevel', 'info');
         setLogLevel(resolveLogLevel(newLevel));
         if (!['debug', 'info', 'warn', 'error'].includes(newLevel)) {
           logger.warn(`Invalid log level '${newLevel}', falling back to 'info'. Valid values: debug, info, warn, error`);
@@ -73,7 +73,7 @@ export async function activate(_context: vscode.ExtensionContext): Promise<void>
     prProvider?.dispose();
     prProvider = undefined;
 
-    const config = vscode.workspace.getConfiguration('devdocketAdo');
+    const config = vscode.workspace.getConfiguration('devDocketAdo');
     const projects = config.get<string[]>('projects', []);
 
     const orgConfigs = parseAdoProjectsConfig(projects);
@@ -140,8 +140,8 @@ export async function activate(_context: vscode.ExtensionContext): Promise<void>
   _context.subscriptions.push(
     vscode.workspace.onDidChangeConfiguration(e => {
       if (
-        e.affectsConfiguration('devdocketAdo.projects') ||
-        e.affectsConfiguration('devdocketAdo.refreshIntervalSeconds')
+        e.affectsConfiguration('devDocketAdo.projects') ||
+        e.affectsConfiguration('devDocketAdo.refreshIntervalSeconds')
       ) {
         configureProviders();
       }

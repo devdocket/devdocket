@@ -35,7 +35,7 @@ export class GitHubPrReviewProvider extends BaseGitHubProvider {
 
     logger.info(`Discovered ${prs.length} PR review requests`);
 
-    const config = vscode.workspace.getConfiguration('devdocketGithub');
+    const config = vscode.workspace.getConfiguration('devDocketGithub');
     const resurfaceOnNewVersion = config.get<boolean>('resurfaceOnNewVersion', true);
     const resurfaceOnReRequestedReview = config.get<boolean>('resurfaceOnReRequestedReview', true);
 
@@ -135,7 +135,7 @@ export class GitHubPrReviewProvider extends BaseGitHubProvider {
   }
 
   private getConfiguredRepos(): string[] {
-    const config = vscode.workspace.getConfiguration('devdocketGithub');
+    const config = vscode.workspace.getConfiguration('devDocketGithub');
     return config.get<string[]>('repos', []);
   }
 

@@ -17,13 +17,13 @@ const VIEW_DEFAULTS: Record<ViewId, ViewLayout> = {
 /**
  * Read the persisted layout for a given view, falling back to its default.
  * 
- * Note: Layout state is stored in VS Code configuration (devdocket.viewLayout)
+ * Note: Layout state is stored in VS Code configuration (devDocket.viewLayout)
  * but is not exposed in the settings UI. Users control layout via the UI toggle
  * in each view's title bar. This could be migrated to globalState in the future
  * (see team decision #304).
  */
 export function getViewLayout(viewId: ViewId): ViewLayout {
-  const config = vscode.workspace.getConfiguration('devdocket');
+  const config = vscode.workspace.getConfiguration('devDocket');
   const layoutsRaw: unknown = config.get('viewLayout');
   const layouts = (layoutsRaw && typeof layoutsRaw === 'object' && !Array.isArray(layoutsRaw))
     ? layoutsRaw as Record<string, unknown>
@@ -67,7 +67,7 @@ export async function setViewLayout(viewId: ViewId, layout: ViewLayout): Promise
 }
 
 async function applyViewLayout(viewId: ViewId, layout: ViewLayout): Promise<void> {
-  const config = vscode.workspace.getConfiguration('devdocket');
+  const config = vscode.workspace.getConfiguration('devDocket');
 
   const inspection = config.inspect('viewLayout');
   const hasWorkspaceValue = inspection?.workspaceValue !== undefined;

@@ -8,6 +8,11 @@ import { WorkItemState, type WorkItem, type DevDocketAction } from '@devdocket/s
 
 const execFileAsync = promisify(execFile);
 
+/** Timeout for lightweight git metadata commands (branch --list, status, rev-parse). */
+const GIT_METADATA_TIMEOUT = 30_000;
+/** Timeout for heavy git operations that touch the working tree (worktree add, checkout, fetch). */
+const GIT_CHECKOUT_TIMEOUT = 300_000;
+
 interface ParsedExternalId {
   repoKey: string;
   itemNumber: string;
@@ -156,13 +161,13 @@ export class StartWorkAction implements DevDocketAction {
 
     progress.report({ message: 'Creating branch...' });
 
-    const { stdout: branchList } = await execFileAsync('git', ['branch', '--list', branchName], { cwd: repoPath, timeout: 30_000 });
+    const { stdout: branchList } = await execFileAsync('git', ['branch', '--list', branchName], { cwd: repoPath, timeout: GIT_METADATA_TIMEOUT });
     if (branchList.trim()) {
       void vscode.window.showErrorMessage(`DevDocket: Branch "${branchName}" already exists.`);
       return;
     }
 
-    await execFileAsync('git', ['branch', branchName, baseBranch], { cwd: repoPath, timeout: 30_000 });
+    await execFileAsync('git', ['branch', branchName, baseBranch], { cwd: repoPath, timeout: GIT_METADATA_TIMEOUT });
     logger.info(`Starting work: creating branch ${branchName}`);
 
     progress.report({ message: 'Creating worktree...' });
@@ -170,11 +175,11 @@ export class StartWorkAction implements DevDocketAction {
     try {
       await execFileAsync('git', ['worktree', 'add', worktreePath, branchName], {
         cwd: repoPath,
-        timeout: 30_000,
+        timeout: GIT_CHECKOUT_TIMEOUT,
       });
     } catch (worktreeErr) {
       try {
-        await execFileAsync('git', ['branch', '-D', branchName], { cwd: repoPath, timeout: 30_000 });
+        await execFileAsync('git', ['branch', '-D', branchName], { cwd: repoPath, timeout: GIT_METADATA_TIMEOUT });
       } catch (rollbackErr) {
         const rollbackMessage = rollbackErr instanceof Error ? rollbackErr.message : String(rollbackErr);
         void vscode.window.showWarningMessage(`DevDocket: Failed to delete branch during rollback — ${rollbackMessage}`);
@@ -222,7 +227,7 @@ export class StartWorkAction implements DevDocketAction {
 
     progress.report({ message: 'Creating and checking out branch...' });
 
-    await execFileAsync('git', ['checkout', '-b', branchName, baseBranch], { cwd: repoPath, timeout: 30_000 });
+    await execFileAsync('git', ['checkout', '-b', branchName, baseBranch], { cwd: repoPath, timeout: GIT_CHECKOUT_TIMEOUT });
     logger.info(`Starting work: checked out new branch ${branchName}`);
 
     try {
@@ -344,7 +349,7 @@ export class StartWorkAction implements DevDocketAction {
 
     // Full fetch to ensure all refs (including the PR branch) are available
     logger.info(`Fetching all refs from remote "${remoteName}"`);
-    await execFileAsync('git', ['fetch', remoteName], { cwd: repoPath, timeout: 30_000 });
+    await execFileAsync('git', ['fetch', remoteName], { cwd: repoPath, timeout: GIT_CHECKOUT_TIMEOUT });
     logger.debug(`Fetch complete for remote "${remoteName}"`);
 
     if (remoteName === 'origin') {
@@ -360,7 +365,7 @@ export class StartWorkAction implements DevDocketAction {
    * new `devdocket-fork-{owner}` remote pointing to it.
    */
   private async findOrAddRemote(cloneUrl: string, fullName: string, repoPath: string): Promise<string> {
-    const { stdout } = await execFileAsync('git', ['remote', '-v'], { cwd: repoPath, timeout: 30_000 });
+    const { stdout } = await execFileAsync('git', ['remote', '-v'], { cwd: repoPath, timeout: GIT_METADATA_TIMEOUT });
     for (const line of stdout.split('\n')) {
       const match = line.match(/^(\S+)\t(\S+)\s+\(fetch\)$/);
       if (match && match[2] === cloneUrl) {
@@ -375,14 +380,14 @@ export class StartWorkAction implements DevDocketAction {
     logger.debug(`No remote found for ${cloneUrl}, adding "${forkRemoteName}"`);
 
     try {
-      await execFileAsync('git', ['remote', 'add', forkRemoteName, cloneUrl], { cwd: repoPath, timeout: 30_000 });
+      await execFileAsync('git', ['remote', 'add', forkRemoteName, cloneUrl], { cwd: repoPath, timeout: GIT_METADATA_TIMEOUT });
       logger.info(`Added remote "${forkRemoteName}" → ${cloneUrl}`);
     } catch (err) {
       try {
-        const { stdout: existingUrl } = await execFileAsync('git', ['remote', 'get-url', forkRemoteName], { cwd: repoPath, timeout: 30_000 });
+        const { stdout: existingUrl } = await execFileAsync('git', ['remote', 'get-url', forkRemoteName], { cwd: repoPath, timeout: GIT_METADATA_TIMEOUT });
         if (existingUrl.trim() !== cloneUrl) {
           logger.info(`Remote "${forkRemoteName}" exists with different URL, updating to "${cloneUrl}".`);
-          await execFileAsync('git', ['remote', 'set-url', forkRemoteName, cloneUrl], { cwd: repoPath, timeout: 30_000 });
+          await execFileAsync('git', ['remote', 'set-url', forkRemoteName, cloneUrl], { cwd: repoPath, timeout: GIT_METADATA_TIMEOUT });
         } else {
           logger.debug(`Remote "${forkRemoteName}" already exists with correct URL`);
         }
@@ -446,7 +451,7 @@ export class StartWorkAction implements DevDocketAction {
 
     logger.info(`Fetching branch "${branchName}" from origin`);
     try {
-      await execFileAsync('git', ['fetch', 'origin', branchName], { cwd: repoPath, timeout: 30_000 });
+      await execFileAsync('git', ['fetch', 'origin', branchName], { cwd: repoPath, timeout: GIT_CHECKOUT_TIMEOUT });
       logger.debug(`Fetch complete for origin/${branchName}`);
     } catch {
       logger.info(`Failed to fetch branch "${branchName}" from origin`);
@@ -496,13 +501,13 @@ export class StartWorkAction implements DevDocketAction {
 
       await execFileAsync('git', ['worktree', 'add', '--detach', worktreePath, trackingRef], {
         cwd: repoPath,
-        timeout: 30_000,
+        timeout: GIT_CHECKOUT_TIMEOUT,
       });
     } else if (hasLocalBranch) {
       try {
         await execFileAsync('git', ['worktree', 'add', worktreePath, branchName], {
           cwd: repoPath,
-          timeout: 30_000,
+          timeout: GIT_CHECKOUT_TIMEOUT,
         });
       } catch (error) {
         const gitError = error as { stderr?: string; stdout?: string; message?: string };
@@ -522,13 +527,13 @@ export class StartWorkAction implements DevDocketAction {
 
         await execFileAsync('git', ['worktree', 'add', '--detach', worktreePath, worktreeSourceRef], {
           cwd: repoPath,
-          timeout: 30_000,
+          timeout: GIT_CHECKOUT_TIMEOUT,
         });
       }
     } else {
       await execFileAsync('git', ['worktree', 'add', '-b', branchName, worktreePath, worktreeSourceRef], {
         cwd: repoPath,
-        timeout: 30_000,
+        timeout: GIT_CHECKOUT_TIMEOUT,
       });
       createdBranch = true;
     }
@@ -596,7 +601,7 @@ export class StartWorkAction implements DevDocketAction {
     }
 
     try {
-      await execFileAsync('git', checkoutArgs, { cwd: repoPath, timeout: 30_000 });
+      await execFileAsync('git', checkoutArgs, { cwd: repoPath, timeout: GIT_CHECKOUT_TIMEOUT });
     } catch (error) {
       const gitError = error as { stderr?: string; stdout?: string; message?: string };
       const gitErrorText = `${gitError.stderr ?? ''}\n${gitError.stdout ?? ''}\n${gitError.message ?? ''}`;
@@ -635,7 +640,7 @@ export class StartWorkAction implements DevDocketAction {
    * Returns true if work can proceed (clean tree or user confirmed).
    */
   private async checkDirtyTree(repoPath: string): Promise<boolean> {
-    const { stdout: statusOutput } = await execFileAsync('git', ['status', '--porcelain'], { cwd: repoPath, timeout: 30_000 });
+    const { stdout: statusOutput } = await execFileAsync('git', ['status', '--porcelain'], { cwd: repoPath, timeout: GIT_METADATA_TIMEOUT });
     if (statusOutput.trim()) {
       const answer = await vscode.window.showWarningMessage(
         'Working tree has uncommitted changes. Checkout anyway?',
@@ -652,7 +657,7 @@ export class StartWorkAction implements DevDocketAction {
   /** Checks whether a local branch with the given name already exists. */
   private async localBranchExists(branchName: string, repoPath: string): Promise<boolean> {
     try {
-      await execFileAsync('git', ['rev-parse', '--verify', `refs/heads/${branchName}`], { cwd: repoPath, timeout: 30_000 });
+      await execFileAsync('git', ['rev-parse', '--verify', `refs/heads/${branchName}`], { cwd: repoPath, timeout: GIT_METADATA_TIMEOUT });
       return true;
     } catch {
       return false;
@@ -683,7 +688,7 @@ export class StartWorkAction implements DevDocketAction {
     worktreePath: string,
     progress: vscode.Progress<{ message?: string }>,
   ): Promise<void> {
-    const commands = vscode.workspace.getConfiguration('devdocketStartGitWork')
+    const commands = vscode.workspace.getConfiguration('devDocketStartGitWork')
       .get<{ command: string; args?: string[] }[]>('commands', []);
 
     for (const cmd of commands) {

@@ -292,7 +292,7 @@ export class AdoPrReviewProvider extends BaseProvider {
       logger.error(`Failed to parse PR response for ${project || org}:`, err);
       return { items: [], failed: true };
     }
-    const resurfaceOnNewVersion = vscode.workspace.getConfiguration('devdocketAdo').get<boolean>('resurfaceOnNewVersion', true);
+    const resurfaceOnNewVersion = vscode.workspace.getConfiguration('devDocketAdo').get<boolean>('resurfaceOnNewVersion', true);
     const items: DiscoveredItem[] = prData.value.map((pr) => {
       const projectName = pr.repository.project.name;
       const repoName = pr.repository.name;

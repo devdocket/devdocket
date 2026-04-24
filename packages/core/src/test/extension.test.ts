@@ -274,9 +274,9 @@ describe('activate()', () => {
   // ------------------------------------------------------------------
   // 13. Log level configuration is read on activation
   // ------------------------------------------------------------------
-  it('reads devdocket.logLevel configuration', async () => {
+  it('reads devDocket.logLevel configuration', async () => {
     await activate(context);
-    expect(vscode.workspace.getConfiguration).toHaveBeenCalledWith('devdocket');
+    expect(vscode.workspace.getConfiguration).toHaveBeenCalledWith('devDocket');
   });
 
   // ------------------------------------------------------------------
@@ -512,7 +512,7 @@ describe('activate()', () => {
 
     // Fire configuration change event on all listeners
     for (const listener of listeners) {
-      listener({ affectsConfiguration: (section: string) => section === 'devdocket.viewLayout' });
+      listener({ affectsConfiguration: (section: string) => section === 'devDocket.viewLayout' });
     }
     await flushMicrotasks();
 
