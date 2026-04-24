@@ -466,3 +466,14 @@ See `.squad/orchestration-log/2026-04-20T16-18-00Z-keaton.md` for full triage de
 
 **Key learning:** Small, focused package.json and configuration changes can be efficiently parallelized. All three PRs required no code changes, only manifest/schema modifications.
 
+
+### 2026-04-29 — Issue #366 (Fix collapsed view expansion on item move)
+
+**Bug fix:** Modified `ViewRevealer.doReveal()` to prevent expanding collapsed views when items move between views.
+- **Problem:** Moving an item to a different view (e.g., Queue → Focus) called `TreeView.reveal()` with default options, which expands the target view even if the user had collapsed it. This disrupted sidebar layout.
+- **Root cause:** `ViewRevealer.doReveal()` called `view.reveal(item, { select: true, focus: false })` without specifying `expand` option. VS Code's TreeView API defaults to expanding the tree to the revealed element.
+- **Fix:** Added `expand: false` to the reveal options: `view.reveal(item, { select: true, focus: false, expand: false })`.
+- **Impact:** Items are now selected in their target view without forcing the view to expand. Users' collapsed view state is preserved.
+- **Files changed:** `packages/core/src/services/viewRevealer.ts` (line 70).
+- **Pattern:** When calling `TreeView.reveal()`, always specify `expand: false` if the goal is to select/highlight an item without disrupting the user's view collapse state.
+
