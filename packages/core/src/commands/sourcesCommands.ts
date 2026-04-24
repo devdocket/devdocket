@@ -51,6 +51,7 @@ async function acceptSingleSourceItem(
         await stateStore.setState(item.providerId, item.externalId, 'accepted');
       } catch (err: unknown) {
         handleCommandError('Failed to update state for re-opened item', err);
+        return;
       }
       void revealer?.revealInQueue(existing.id);
       return;
