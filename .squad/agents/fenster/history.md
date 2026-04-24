@@ -456,3 +456,13 @@ See `.squad/orchestration-log/2026-04-20T16-18-00Z-keaton.md` for full triage de
 
 **Key learning:** VS Code configuration can store data without exposing it in settings UI — just omit the schema. This is a valid pattern for internal state that users shouldn't manually edit.
 
+### 2026-04-24 — Issues #364, #373, #359: Background Session Completion
+
+**Context:** Three parallel background tasks completed successfully (claude-sonnet-4.5 model):
+
+1. **Issue #364 — Fix Watches View Ordering:** Reordered `devdocket.views` entries in `packages/core/package.json` to fix display order in VS Code views container. PR #376 merged.
+2. **Issue #373 — Fix Setting Name Casing:** Converted `contributes.configuration` from object format to array format with explicit "DevDocket" title for proper settings UI display. PR #377 merged.
+3. **Issue #359 — Remove View Layout Settings:** Removed hardcoded layout configuration schema while preserving UI toggle via internal `config.update()`. PR #378 merged.
+
+**Key learning:** Small, focused package.json and configuration changes can be efficiently parallelized. All three PRs required no code changes, only manifest/schema modifications.
+
