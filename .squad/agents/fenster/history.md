@@ -439,3 +439,20 @@ See `.squad/orchestration-log/2026-04-20T16-18-00Z-keaton.md` for full triage de
 - **Files changed:** `packages/core/package.json` (configuration section structure only).
 - **VS Code API insight:** Array-based configuration contributions provide better title control than object-based contributions. When multiple configuration sections are needed, array format is required; using it consistently even for single sections ensures uniform behavior.
 
+
+### 2026-04-23 — Issue #359: Remove View Layout Settings
+
+**Task:** Remove `devdocket.viewLayout` configuration from VS Code settings UI while preserving UI toggle functionality.
+
+**Implementation:**
+- Removed configuration schema from `packages/core/package.json` (lines 119-166)
+- Removed workspace-folder override warning from `viewLayout.ts` (no longer a user-facing setting)
+- Removed test for workspace-folder warning in `viewLayout.test.ts`
+- Added comment in `getViewLayout()` documenting that layout state uses config API internally but could migrate to globalState per decision #304
+
+**Technical approach:** Kept using `config.update()` and `config.get()` internally for storage (undocumented settings still work in VS Code). This is minimal, low-risk, and preserves existing behavior while removing the settings UI clutter.
+
+**Testing:** All tests pass (1237 tests). Build clean.
+
+**Key learning:** VS Code configuration can store data without exposing it in settings UI — just omit the schema. This is a valid pattern for internal state that users shouldn't manually edit.
+
