@@ -1,8 +1,0 @@
-mutation {
-  t1: resolveReviewThread(input: {threadId: "PRRT_kwDOOX1ves6ynxBk"}) {
-    thread { id isResolved }
-  }
-  t2: resolveReviewThread(input: {threadId: "PRRT_kwDOOX1ves6ynxB4"}) {
-    thread { id isResolved }
-  }
-}
