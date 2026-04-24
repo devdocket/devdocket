@@ -718,19 +718,32 @@ async function acceptToFocusSingleInboxItem(
       return;
     }
     if (existing.state === WorkItemState.Done || existing.state === WorkItemState.Archived) {
+      const originalState = existing.state;
       try {
         await workGraph.transitionState(existing.id, WorkItemState.New);
       } catch (err: unknown) {
         handleCommandError('Failed to re-open item', err);
         return;
       }
-    }
-    workItemId = existing.id;
-    try {
-      await stateStore.setState(item.providerId, item.externalId, 'accepted');
-    } catch (err: unknown) {
-      handleCommandError('Failed to update state for existing accepted item', err);
-      return;
+      // Roll back if setState fails to keep workGraph and discovered state consistent
+      workItemId = existing.id;
+      try {
+        await stateStore.setState(item.providerId, item.externalId, 'accepted');
+      } catch (err: unknown) {
+        try { await workGraph.transitionState(existing.id, originalState); } catch (rollbackErr: unknown) {
+          logger.error('Failed to roll back re-opened item after setState failure', rollbackErr);
+        }
+        handleCommandError('Failed to update state for re-opened item', err);
+        return;
+      }
+    } else {
+      workItemId = existing.id;
+      try {
+        await stateStore.setState(item.providerId, item.externalId, 'accepted');
+      } catch (err: unknown) {
+        handleCommandError('Failed to update state for existing accepted item', err);
+        return;
+      }
     }
   } else {
     const group = item.group?.trim();
