@@ -442,7 +442,7 @@ export class ProviderRegistry {
         }
 
         // Log activity only after state was successfully persisted
-        if (this.addActivity && activityEntries.length > 0) {
+        if (!this._disposed && this.addActivity && activityEntries.length > 0) {
           const results = await Promise.allSettled(
             activityEntries.map(entry =>
               this.addActivity!(entry.providerId, entry.externalId, 'version-updated'),
