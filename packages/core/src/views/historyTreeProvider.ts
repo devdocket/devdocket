@@ -5,7 +5,7 @@ import { ProviderRegistry } from '../services/providerRegistry';
 import {
   WorkItemElement, WorkItemViewProvider,
 } from './viewLayout';
-import { buildWorkItemTooltip, getWorkItemIcon, isPrUrl } from './viewUtils';
+import { buildWorkItemTooltip, getWorkItemIcon } from './viewUtils';
 
 export type HistoryElement = WorkItemElement;
 
@@ -55,7 +55,7 @@ export class HistoryTreeProvider extends WorkItemViewProvider {
     let contextValue = contextBase;
     if (item.url) {
       contextValue += '.hasUrl';
-      if (isPrUrl(item.url)) {
+      if (item.isPullRequest) {
         contextValue += '.hasPrUrl';
       }
     }

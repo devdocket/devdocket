@@ -86,6 +86,7 @@ async function acceptSingleInboxItem(
         providerId: item.providerId,
         externalId: item.externalId,
         url: item.url,
+        isPullRequest: item.isPullRequest,
         ...(group ? { group } : {}),
       },
     );
@@ -164,6 +165,7 @@ async function acceptToFocusSingleInboxItem(
           providerId: item.providerId,
           externalId: item.externalId,
           url: item.url,
+          isPullRequest: item.isPullRequest,
           ...(group ? { group } : {}),
         },
       );
@@ -237,6 +239,7 @@ async function batchAcceptToFocusItems(
           providerId: item.providerId,
           externalId: item.externalId,
           url: item.url,
+          isPullRequest: item.isPullRequest,
           ...(group ? { group } : {}),
         },
       );

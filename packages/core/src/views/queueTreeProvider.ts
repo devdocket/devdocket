@@ -5,7 +5,7 @@ import { ProviderRegistry } from '../services/providerRegistry';
 import {
   WorkItemElement, WorkItemViewProvider, isProviderGroupNode, isSubGroupNode,
 } from './viewLayout';
-import { buildWorkItemTooltip, isPrUrl } from './viewUtils';
+import { buildWorkItemTooltip } from './viewUtils';
 
 export type QueueElement = WorkItemElement;
 
@@ -47,7 +47,7 @@ export class QueueTreeProvider extends WorkItemViewProvider implements vscode.Tr
     let contextValue = 'queueItem';
     if (item.url) {
       contextValue += '.hasUrl';
-      if (isPrUrl(item.url)) {
+      if (item.isPullRequest) {
         contextValue += '.hasPrUrl';
       }
     }

@@ -63,6 +63,7 @@ export class GitHubPrReviewProvider extends BaseGitHubProvider {
         group: repoName,
         reason: 'review_requested',
         canonicalId: `github:pull:${repoName}#${pr.number}`,
+        isPullRequest: true,
       };
       if (pr.state) { item.state = pr.state; }
       // Head SHA uses soft resurfacing (version) — resurfaces from

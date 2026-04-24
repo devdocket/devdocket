@@ -52,6 +52,8 @@ export interface DiscoveredItem {
    * Items without `canonicalId` always show individually (backward compatible).
    */
   canonicalId?: string;
+  /** Whether this item represents a pull request. When true, enables Watch CI in the context menu. */
+  isPullRequest?: boolean;
 }
 
 /**

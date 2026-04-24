@@ -74,27 +74,3 @@ export function getWorkItemIcon(state: WorkItemState): vscode.ThemeIcon {
       return new vscode.ThemeIcon('circle-outline');
   }
 }
-
-/**
- * Check if a URL is a recognized PR URL (GitHub or Azure DevOps).
- * Used to distinguish PR URLs from arbitrary URLs for contextValue flags.
- */
-export function isPrUrl(url: string): boolean {
-  try {
-    const u = new URL(url);
-    // GitHub PR
-    if (u.hostname === 'github.com' && /^\/[^/]+\/[^/]+\/pull\/\d+/.test(u.pathname)) {
-      return true;
-    }
-    // ADO PR - exact domain or subdomain
-    if ((u.hostname === 'dev.azure.com' || u.hostname.endsWith('.dev.azure.com')) && u.pathname.includes('/pullrequest/')) {
-      return true;
-    }
-    if ((u.hostname === 'visualstudio.com' || u.hostname.endsWith('.visualstudio.com')) && u.pathname.includes('/pullrequest/')) {
-      return true;
-    }
-    return false;
-  } catch {
-    return false;
-  }
-}

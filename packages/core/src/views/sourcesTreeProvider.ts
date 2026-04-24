@@ -4,7 +4,6 @@ import { ProviderRegistry } from '../services/providerRegistry';
 import { DiscoveredStateStore, InboxState } from '../storage/discoveredStateStore';
 import { ViewLayout, LayoutState } from './viewLayout';
 import { buildProviderTooltip } from './providerTooltip';
-import { isPrUrl } from './viewUtils';
 
 export type SourcesElement = SourceProviderNode | SourceGroupNode | SourceItemNode;
 
@@ -140,7 +139,7 @@ export class SourcesTreeProvider implements vscode.TreeDataProvider<SourcesEleme
         let contextValue = 'sourceItem';
         if (element.url) {
           contextValue += '.hasUrl';
-          if (isPrUrl(element.url)) {
+          if (element.isPullRequest) {
             contextValue += '.hasPrUrl';
           }
         }

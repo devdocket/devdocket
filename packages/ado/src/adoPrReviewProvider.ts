@@ -306,6 +306,7 @@ export class AdoPrReviewProvider extends BaseProvider {
         reason: 'review_requested',
         ...(pr.status ? { state: pr.status } : {}),
         resurfaceVersion: resurfaceOnNewVersion ? pr.lastMergeSourceCommit?.commitId : undefined,
+        isPullRequest: true,
       };
     });
 

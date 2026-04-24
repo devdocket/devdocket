@@ -7,7 +7,6 @@ import { ReadStateStore } from '../storage/readStateStore';
 import { logger } from '../services/logger';
 import { ViewLayout, LayoutState } from './viewLayout';
 import { buildProviderTooltip } from './providerTooltip';
-import { isPrUrl } from './viewUtils';
 
 export interface InboxProviderNode {
   kind: 'provider';
@@ -251,7 +250,7 @@ export class InboxTreeProvider implements vscode.TreeDataProvider<InboxElement> 
     let contextValue = 'inboxItem';
     if (element.url) {
       contextValue += '.hasUrl';
-      if (isPrUrl(element.url)) {
+      if (element.isPullRequest) {
         contextValue += '.hasPrUrl';
       }
     }

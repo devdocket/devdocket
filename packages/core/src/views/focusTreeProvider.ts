@@ -5,7 +5,7 @@ import { ProviderRegistry } from '../services/providerRegistry';
 import {
   WorkItemElement, WorkItemViewProvider, isProviderGroupNode, isSubGroupNode,
 } from './viewLayout';
-import { buildWorkItemTooltip, getWorkItemIcon, isPrUrl } from './viewUtils';
+import { buildWorkItemTooltip, getWorkItemIcon } from './viewUtils';
 
 const DRAG_MIME_TYPE = 'application/vnd.code.tree.devdocket.focus';
 
@@ -57,7 +57,7 @@ export class FocusTreeProvider extends WorkItemViewProvider implements vscode.Tr
     let contextValue = baseContext;
     if (item.url) {
       contextValue += '.hasUrl';
-      if (isPrUrl(item.url)) {
+      if (item.isPullRequest) {
         contextValue += '.hasPrUrl';
       }
     }
