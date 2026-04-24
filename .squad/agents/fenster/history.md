@@ -419,3 +419,12 @@ See `.squad/orchestration-log/2026-04-20T16-18-00Z-keaton.md` for full triage de
 - **Files changed:** packages/ai-reviewer/src/tools/pathValidator.ts (new, 51 lines), packages/ai-reviewer/src/tools/errorUtils.ts (new, 7 lines), updated all 7 tool files to use shared utilities.
 - **Impact:** ~150 lines of duplication eliminated. Security-critical path validation logic now centralized in single source of truth. New tools automatically get consistent validation.
 - **Pattern:** When security-critical validation is duplicated, extract it immediately into shared utilities. Behavior-preserving refactors must maintain identical error messages and validation semantics.
+
+### 2026-04-24 — Issue #364 (Reorder Watches view to appear after Focus)
+
+**Bug fix:** Adjusted view ordering in `packages/core/package.json` to position Watches immediately after Focus.
+- **Problem:** Watches view appeared last in the sidebar (after Sources), not in the intended position after Focus.
+- **Solution:** Moved the `devdocket.watches` view entry in the `contributes.views.devdocket` array from last position to fourth position (after Focus, before History).
+- **Final ordering:** Inbox, Queue, Focus, Watches, History, Sources.
+- **Files changed:** `packages/core/package.json` (line 196-221, reordered views array).
+- **Pattern:** View ordering in VS Code is determined by array position in `package.json` `contributes.views` — simple array reordering changes sidebar presentation order.
