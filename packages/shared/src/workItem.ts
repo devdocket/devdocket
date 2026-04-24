@@ -112,4 +112,6 @@ export interface WorkItemInput {
   title: string;
   /** Optional free-form notes or description. */
   notes?: string;
+  /** Optional URL to the item in its source system (e.g. GitHub issue page). */
+  url?: string;
 }

@@ -209,6 +209,21 @@ export class WorkItemEditorPanel {
       patch.notes = data.notes || undefined;
     }
 
+    // Only allow URL editing for manually created items (not provider-managed)
+    if (!item.providerId && 'url' in data) {
+      const urlValue = data.url.trim();
+      if (urlValue) {
+        // Validate URL before saving
+        if (!isSafeUrl(urlValue)) {
+          throw new Error('Invalid URL. Please enter a valid HTTP or HTTPS URL.');
+        }
+        patch.url = urlValue;
+      } else {
+        // Clear URL if empty
+        patch.url = undefined;
+      }
+    }
+
     if (Object.keys(patch).length === 0) {
       return;
     }

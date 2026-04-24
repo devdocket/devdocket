@@ -220,6 +220,11 @@ ${descriptionSection}
       <label for="notes">Notes</label>
       <textarea id="notes" placeholder="Add notes...">${escapeHtml(item.notes ?? '')}</textarea>
     </div>
+${!item.providerId ? `    <div class="field">
+      <label for="url">URL</label>
+      <input type="url" id="url" value="${escapeAttr(item.url ?? '')}" placeholder="https://..." />
+      <span class="hint">Optional link to open in browser</span>
+    </div>` : ''}
   </div>
   <div class="metadata" aria-label="Item metadata">
     <div class="metadata-heading">Details</div>
@@ -239,14 +244,19 @@ ${providerState && item.providerId ? `      <dt>Provider State</dt>
 ${renderActivityLog(item.activityLog)}
   <script nonce="${nonce}">
     const vscode = acquireVsCodeApi();
-    const fields = ['title', 'notes'];
+    const fields = ['title', 'notes', 'url'];
     let debounceTimer = null;
 
     function getData() {
-      return {
+      const data = {
         title: document.getElementById('title').value.trim(),
         notes: document.getElementById('notes').value.trim(),
       };
+      const urlEl = document.getElementById('url');
+      if (urlEl) {
+        data.url = urlEl.value.trim();
+      }
+      return data;
     }
 
     function scheduleAutosave() {
