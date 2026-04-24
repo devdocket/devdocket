@@ -975,6 +975,7 @@ async function acceptSingleSourceItem(
         await stateStore.setState(item.providerId, item.externalId, 'accepted');
       } catch (err: unknown) {
         handleCommandError('Failed to update state for re-opened item', err);
+        return;
       }
       await propagateStateToCanonicalPeers(item, providerRegistry, stateStore, 'accepted');
       void revealer?.revealInQueue(existing.id);
