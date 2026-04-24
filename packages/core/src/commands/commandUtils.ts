@@ -106,6 +106,16 @@ export async function batchAcceptItems(
   for (const item of items) {
     const existing = workGraph.findItemByProvenance(item.providerId, item.externalId);
     if (existing) {
+      // Re-open items in terminal states so resurfaced items return to Queue
+      if (existing.state === WorkItemState.Done || existing.state === WorkItemState.Archived) {
+        try {
+          await workGraph.transitionState(existing.id, WorkItemState.New);
+        } catch (err: unknown) {
+          failed++;
+          logger.error(`Failed to re-open ${logLabel} "${item.title}"`, err);
+          continue;
+        }
+      }
       stateUpdates.push({ providerId: item.providerId, externalId: item.externalId, state: 'accepted' });
       continue;
     }

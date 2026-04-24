@@ -759,6 +759,41 @@ describe('registerCommands', () => {
       expect(stateStore.setState).toHaveBeenCalledWith('github', 'ext-1', 'accepted');
     });
 
+    it('re-opens Done item back to Queue when accepting resurfaced item', async () => {
+      const existing = createWorkItem({ id: 'wc-done', title: 'Done Item', state: WorkItemState.Done });
+      workGraph.findItemByProvenance.mockReturnValue(existing);
+
+      await invoke('devdocket.acceptFromInbox', makeInboxItem());
+
+      expect(workGraph.transitionState).toHaveBeenCalledWith('wc-done', WorkItemState.New);
+      expect(stateStore.setState).toHaveBeenCalledWith('github', 'ext-1', 'accepted');
+      expect(workGraph.createItem).not.toHaveBeenCalled();
+    });
+
+    it('re-opens Archived item back to Queue when accepting resurfaced item', async () => {
+      const existing = createWorkItem({ id: 'wc-arch', title: 'Archived Item', state: WorkItemState.Archived });
+      workGraph.findItemByProvenance.mockReturnValue(existing);
+
+      await invoke('devdocket.acceptFromInbox', makeInboxItem());
+
+      expect(workGraph.transitionState).toHaveBeenCalledWith('wc-arch', WorkItemState.New);
+      expect(stateStore.setState).toHaveBeenCalledWith('github', 'ext-1', 'accepted');
+      expect(workGraph.createItem).not.toHaveBeenCalled();
+    });
+
+    it('shows error when transitionState fails for re-opening Done item', async () => {
+      const existing = createWorkItem({ id: 'wc-done', title: 'Done Item', state: WorkItemState.Done });
+      workGraph.findItemByProvenance.mockReturnValue(existing);
+      workGraph.transitionState.mockRejectedValue(new Error('transition error'));
+
+      await invoke('devdocket.acceptFromInbox', makeInboxItem());
+
+      expect(vscode.window.showErrorMessage).toHaveBeenCalledWith(
+        'DevDocket: Failed to re-open completed item — transition error',
+      );
+      expect(stateStore.setState).not.toHaveBeenCalled();
+    });
+
     it('shows error when setState fails for existing accepted item', async () => {
       const existing = createWorkItem({ title: 'Already There' });
       workGraph.findItemByProvenance.mockReturnValue(existing);
@@ -1194,28 +1229,26 @@ describe('registerCommands', () => {
       expect(stateStore.setState).toHaveBeenCalledWith('github', 'ext-1', 'accepted');
     });
 
-    it('shows warning and does not transition when item is Done', async () => {
+    it('re-opens Done item and transitions to Focus', async () => {
       const existing = createWorkItem({ id: 'wc-done', state: WorkItemState.Done });
       workGraph.findItemByProvenance.mockReturnValue(existing);
 
       await invoke('devdocket.acceptToFocusFromInbox', makeInboxItem());
 
-      expect(vscode.window.showWarningMessage).toHaveBeenCalledWith(
-        'DevDocket: Item is Done and cannot be moved to Focus',
-      );
-      expect(workGraph.transitionState).not.toHaveBeenCalled();
+      expect(workGraph.transitionState).toHaveBeenCalledWith('wc-done', WorkItemState.New);
+      expect(workGraph.transitionState).toHaveBeenCalledWith('wc-done', WorkItemState.InProgress);
+      expect(stateStore.setState).toHaveBeenCalledWith('github', 'ext-1', 'accepted');
     });
 
-    it('shows warning and does not transition when item is Archived', async () => {
+    it('re-opens Archived item and transitions to Focus', async () => {
       const existing = createWorkItem({ id: 'wc-arch', state: WorkItemState.Archived });
       workGraph.findItemByProvenance.mockReturnValue(existing);
 
       await invoke('devdocket.acceptToFocusFromInbox', makeInboxItem());
 
-      expect(vscode.window.showWarningMessage).toHaveBeenCalledWith(
-        'DevDocket: Item is Archived and cannot be moved to Focus',
-      );
-      expect(workGraph.transitionState).not.toHaveBeenCalled();
+      expect(workGraph.transitionState).toHaveBeenCalledWith('wc-arch', WorkItemState.New);
+      expect(workGraph.transitionState).toHaveBeenCalledWith('wc-arch', WorkItemState.InProgress);
+      expect(stateStore.setState).toHaveBeenCalledWith('github', 'ext-1', 'accepted');
     });
 
     it('returns early with no errors for empty selection', async () => {
@@ -1317,32 +1350,30 @@ describe('registerCommands', () => {
       expect(workGraph.transitionState).not.toHaveBeenCalled();
     });
 
-    it('returns early with error when setState fails for Done item', async () => {
+    it('returns early with error when transitionState fails for Done item', async () => {
       const existing = createWorkItem({ id: 'wc-done-err', state: WorkItemState.Done });
       workGraph.findItemByProvenance.mockReturnValue(existing);
-      stateStore.setState.mockRejectedValue(new Error('state error'));
+      workGraph.transitionState.mockRejectedValue(new Error('transition error'));
 
       await invoke('devdocket.acceptToFocusFromInbox', makeInboxItem());
 
       expect(vscode.window.showErrorMessage).toHaveBeenCalledWith(
-        'DevDocket: Failed to update state for existing completed item — state error',
+        'DevDocket: Failed to re-open completed item — transition error',
       );
-      expect(vscode.window.showWarningMessage).not.toHaveBeenCalled();
-      expect(workGraph.transitionState).not.toHaveBeenCalled();
+      expect(stateStore.setState).not.toHaveBeenCalled();
     });
 
-    it('returns early with error when setState fails for Archived item', async () => {
+    it('returns early with error when transitionState fails for Archived item', async () => {
       const existing = createWorkItem({ id: 'wc-arch-err', state: WorkItemState.Archived });
       workGraph.findItemByProvenance.mockReturnValue(existing);
-      stateStore.setState.mockRejectedValue(new Error('state error'));
+      workGraph.transitionState.mockRejectedValue(new Error('transition error'));
 
       await invoke('devdocket.acceptToFocusFromInbox', makeInboxItem());
 
       expect(vscode.window.showErrorMessage).toHaveBeenCalledWith(
-        'DevDocket: Failed to update state for existing completed item — state error',
+        'DevDocket: Failed to re-open completed item — transition error',
       );
-      expect(vscode.window.showWarningMessage).not.toHaveBeenCalled();
-      expect(workGraph.transitionState).not.toHaveBeenCalled();
+      expect(stateStore.setState).not.toHaveBeenCalled();
     });
 
     it('returns early with error when setState fails for existing New item', async () => {
@@ -1464,7 +1495,7 @@ describe('registerCommands', () => {
       );
     });
 
-    it('skips existing items in non-transitionable states', async () => {
+    it('re-opens Done/Archived items and skips InProgress items', async () => {
       const items = [
         makeInboxItem({ externalId: 'ext-1', title: 'Issue 1' }),
         makeInboxItem({ externalId: 'ext-2', title: 'Issue 2' }),
@@ -1479,11 +1510,12 @@ describe('registerCommands', () => {
       await invoke('devdocket.acceptToFocusFromInbox', items[0], items);
 
       expect(workGraph.createItem).toHaveBeenCalledTimes(1);
-      // Only wc-3 should be transitioned; wc-1 (InProgress) and wc-2 (Done) are skipped
-      expect(workGraph.transitionState).toHaveBeenCalledTimes(1);
+      // wc-2 re-opened (Done→New), then both wc-2 and wc-3 transitioned to InProgress
+      expect(workGraph.transitionState).toHaveBeenCalledWith('wc-2', WorkItemState.New);
+      expect(workGraph.transitionState).toHaveBeenCalledWith('wc-2', WorkItemState.InProgress);
       expect(workGraph.transitionState).toHaveBeenCalledWith('wc-3', WorkItemState.InProgress);
       expect(vscode.window.showInformationMessage).toHaveBeenCalledWith(
-        'Accepted 1 item to Focus; 2 items already in Focus or cannot be moved',
+        'Accepted 2 items to Focus; 1 item already in Focus or cannot be moved',
       );
     });
   });
@@ -1930,6 +1962,28 @@ describe('registerCommands', () => {
       expect(vscode.window.showInformationMessage).toHaveBeenCalledWith(
         'DevDocket: Item already accepted as "Existing"',
       );
+    });
+
+    it('re-opens Done item back to Queue when accepting from sources', async () => {
+      const existing = createWorkItem({ id: 'wc-done', title: 'Done Item', state: WorkItemState.Done });
+      workGraph.findItemByProvenance.mockReturnValue(existing);
+
+      await invoke('devdocket.acceptFromSources', makeSourceItem());
+
+      expect(workGraph.transitionState).toHaveBeenCalledWith('wc-done', WorkItemState.New);
+      expect(stateStore.setState).toHaveBeenCalledWith('github', 'ext-2', 'accepted');
+      expect(workGraph.createItem).not.toHaveBeenCalled();
+    });
+
+    it('re-opens Archived item back to Queue when accepting from sources', async () => {
+      const existing = createWorkItem({ id: 'wc-arch', title: 'Archived Item', state: WorkItemState.Archived });
+      workGraph.findItemByProvenance.mockReturnValue(existing);
+
+      await invoke('devdocket.acceptFromSources', makeSourceItem());
+
+      expect(workGraph.transitionState).toHaveBeenCalledWith('wc-arch', WorkItemState.New);
+      expect(stateStore.setState).toHaveBeenCalledWith('github', 'ext-2', 'accepted');
+      expect(workGraph.createItem).not.toHaveBeenCalled();
     });
 
     it('shows error when setState fails for existing item', async () => {

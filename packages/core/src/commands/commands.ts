@@ -169,6 +169,16 @@ async function batchAcceptItems(
   for (const item of items) {
     const existing = workGraph.findItemByProvenance(item.providerId, item.externalId);
     if (existing) {
+      // Re-open items in terminal states so resurfaced items return to Queue
+      if (existing.state === WorkItemState.Done || existing.state === WorkItemState.Archived) {
+        try {
+          await workGraph.transitionState(existing.id, WorkItemState.New);
+        } catch (err: unknown) {
+          failed++;
+          logger.error(`Failed to re-open ${logLabel} "${item.title}"`, err);
+          continue;
+        }
+      }
       stateUpdates.push({ providerId: item.providerId, externalId: item.externalId, state: 'accepted' });
       continue;
     }
@@ -526,6 +536,22 @@ async function acceptSingleInboxItem(
   logger.info(`Accepting inbox item: ${item.externalId} from ${item.providerId}`);
   const existing = workGraph.findItemByProvenance(item.providerId, item.externalId);
   if (existing) {
+    // Re-open items in terminal states so resurfaced items return to Queue
+    if (existing.state === WorkItemState.Done || existing.state === WorkItemState.Archived) {
+      try {
+        await workGraph.transitionState(existing.id, WorkItemState.New);
+      } catch (err: unknown) {
+        handleCommandError('Failed to re-open completed item', err);
+        return;
+      }
+      try {
+        await stateStore.setState(item.providerId, item.externalId, 'accepted');
+      } catch (err: unknown) {
+        handleCommandError('Failed to update state for re-opened item', err);
+      }
+      void revealer?.revealInQueue(existing.id);
+      return;
+    }
     void vscode.window.showInformationMessage(
       `DevDocket: Item already accepted as "${existing.title}"`
     );
@@ -589,15 +615,11 @@ async function acceptToFocusSingleInboxItem(
     }
     if (existing.state === WorkItemState.Done || existing.state === WorkItemState.Archived) {
       try {
-        await stateStore.setState(item.providerId, item.externalId, 'accepted');
+        await workGraph.transitionState(existing.id, WorkItemState.New);
       } catch (err: unknown) {
-        handleCommandError('Failed to update state for existing completed item', err);
+        handleCommandError('Failed to re-open completed item', err);
         return;
       }
-      void vscode.window.showWarningMessage(
-        `DevDocket: Item is ${existing.state} and cannot be moved to Focus`,
-      );
-      return;
     }
     workItemId = existing.id;
     try {
@@ -666,10 +688,13 @@ async function batchAcceptToFocusItems(
         continue;
       }
       if (existing.state === WorkItemState.Done || existing.state === WorkItemState.Archived) {
-        logger.info(`Skipping "${item.title}" — item is ${existing.state} and cannot be moved to Focus`);
-        stateUpdates.push({ providerId: item.providerId, externalId: item.externalId, state: 'accepted' });
-        skipped++;
-        continue;
+        try {
+          await workGraph.transitionState(existing.id, WorkItemState.New);
+        } catch (err: unknown) {
+          failed++;
+          logger.error(`Failed to re-open "${item.title}"`, err);
+          continue;
+        }
       }
       stateUpdates.push({ providerId: item.providerId, externalId: item.externalId, state: 'accepted' });
       allIds.push(existing.id);
@@ -826,6 +851,22 @@ async function acceptSingleSourceItem(
   logger.info(`Accepting sources item: ${item.externalId}`);
   const existing = workGraph.findItemByProvenance(item.providerId, item.externalId);
   if (existing) {
+    // Re-open items in terminal states so resurfaced items return to Queue
+    if (existing.state === WorkItemState.Done || existing.state === WorkItemState.Archived) {
+      try {
+        await workGraph.transitionState(existing.id, WorkItemState.New);
+      } catch (err: unknown) {
+        handleCommandError('Failed to re-open completed item', err);
+        return;
+      }
+      try {
+        await stateStore.setState(item.providerId, item.externalId, 'accepted');
+      } catch (err: unknown) {
+        handleCommandError('Failed to update state for re-opened item', err);
+      }
+      void revealer?.revealInQueue(existing.id);
+      return;
+    }
     try {
       await stateStore.setState(item.providerId, item.externalId, 'accepted');
     } catch (err: unknown) {
