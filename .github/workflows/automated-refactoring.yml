@@ -93,7 +93,7 @@ jobs:
         with:
           issue-title: 'Automated code refactoring analysis'
           issue-body: ${{ steps.build-body.outputs.body }}
-          issue-labels: 'squad:copilot,automated,refactoring'
+          issue-labels: 'copilot,automated,refactoring'
           dedup-labels: 'automated,refactoring'
           custom-instructions: |
             Follow the complete code-refactorer methodology embedded in the issue body.
