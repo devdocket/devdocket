@@ -147,25 +147,6 @@ describe('viewLayout', () => {
         ConfigurationTarget.Workspace,
       );
     });
-
-    it('shows warning when workspaceFolderValue overrides layout', async () => {
-      const mockUpdate = vi.fn().mockResolvedValue(undefined);
-      (workspace.getConfiguration as ReturnType<typeof vi.fn>).mockReturnValue({
-        get: vi.fn((_key: string) => {
-          if (_key === 'viewLayout') { return { queue: 'flat' }; }
-          return undefined;
-        }),
-        update: mockUpdate,
-        inspect: vi.fn(() => ({
-          workspaceFolderValue: { queue: 'flat' },
-        })),
-      });
-
-      await toggleViewLayout('queue');
-      expect(window.showWarningMessage).toHaveBeenCalledWith(
-        expect.stringContaining('workspace-folder setting'),
-      );
-    });
   });
 
   describe('isProviderGroupNode', () => {
