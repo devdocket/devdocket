@@ -47,7 +47,10 @@ export class WorkGraph {
   }
 
   /** Trim and validate URL, returning normalized href or undefined. */
-  private normalizeUrl(url: string): string | undefined {
+  private normalizeUrl(url: string | undefined): string | undefined {
+    if (!url) {
+      return undefined;
+    }
     const trimmed = url.trim();
     if (trimmed === '') {
       return undefined;
@@ -192,7 +195,7 @@ export class WorkGraph {
       state: WorkItemState.New,
       providerId: provenance?.providerId,
       externalId: provenance?.externalId,
-      url: provenance?.url ?? (input.url ? this.normalizeUrl(input.url) : undefined),
+      url: this.normalizeUrl(provenance?.url) ?? this.normalizeUrl(input.url),
       group: provenance?.group,
       isPullRequest: provenance?.isPullRequest,
       sortOrder,
