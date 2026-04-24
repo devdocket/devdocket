@@ -46,6 +46,16 @@ export class WorkGraph {
     return `${providerId}::${externalId}`;
   }
 
+  /** Trim and validate URL, returning normalized href or undefined. */
+  private normalizeUrl(url: string): string | undefined {
+    const trimmed = url.trim();
+    if (trimmed === '') {
+      return undefined;
+    }
+    const safeUrl = isSafeUrl(trimmed);
+    return safeUrl ? safeUrl.href : undefined;
+  }
+
   /** Load all work items from the backing store into memory. */
   async load(): Promise<void> {
     const items = await this.store.loadAll();
@@ -182,7 +192,7 @@ export class WorkGraph {
       state: WorkItemState.New,
       providerId: provenance?.providerId,
       externalId: provenance?.externalId,
-      url: provenance?.url ?? (input.url && isSafeUrl(input.url) ? input.url : undefined),
+      url: provenance?.url ?? (input.url ? this.normalizeUrl(input.url) : undefined),
       group: provenance?.group,
       isPullRequest: provenance?.isPullRequest,
       sortOrder,
