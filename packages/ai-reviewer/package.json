@@ -133,16 +133,18 @@
         }
       }
     ],
-    "configuration": {
-      "title": "DevDocket AI Actions",
-      "properties": {
+    "configuration": [
+      {
+        "title": "DevDocket AI Actions",
+        "properties": {
         "devDocketAiReview.customPromptPath": {
           "type": "string",
           "default": "",
           "description": "Path to a custom code review prompt file. The file content replaces the built-in review instructions sent to the language model. The PR diff is always appended automatically. Supports absolute paths and paths relative to the workspace folder (single-root workspaces only)."
         }
       }
-    }
+      }
+    ]
   },
   "scripts": {
     "vscode:prepublish": "npm run build",

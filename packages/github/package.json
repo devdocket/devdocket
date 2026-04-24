@@ -19,9 +19,10 @@
   ],
   "main": "./dist/extension.js",
   "contributes": {
-    "configuration": {
-      "title": "DevDocket GitHub",
-      "properties": {
+    "configuration": [
+      {
+        "title": "DevDocket GitHub",
+        "properties": {
         "devDocketGithub.repos": {
           "type": "array",
           "items": {
@@ -46,7 +47,8 @@
           "description": "Resurface PR reviews when review is explicitly re-requested."
         }
       }
-    }
+      }
+    ]
   },
   "scripts": {
     "vscode:prepublish": "npm run build:prod",

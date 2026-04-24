@@ -19,9 +19,10 @@
   ],
   "main": "./dist/extension.js",
   "contributes": {
-    "configuration": {
-      "title": "DevDocket Azure DevOps",
-      "properties": {
+    "configuration": [
+      {
+        "title": "DevDocket Azure DevOps",
+        "properties": {
         "devDocketAdo.projects": {
           "type": "array",
           "items": {
@@ -41,7 +42,8 @@
           "description": "Resurface PR reviews when new iterations are pushed."
         }
       }
-    }
+      }
+    ]
   },
   "scripts": {
     "vscode:prepublish": "npm run build:prod",
