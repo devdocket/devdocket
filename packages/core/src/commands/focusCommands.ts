@@ -48,6 +48,22 @@ async function handleFocusMoveDown(workGraph: WorkGraph, item?: { id?: string })
   await workGraph.moveItem(item.id, 'down');
 }
 
+async function handleFocusMoveToTop(workGraph: WorkGraph, item?: { id?: string }): Promise<void> {
+  if (!item?.id) {
+    void vscode.window.showInformationMessage('DevDocket: Select an item in Focus to move.');
+    return;
+  }
+  await workGraph.moveToTop(item.id);
+}
+
+async function handleFocusMoveToBottom(workGraph: WorkGraph, item?: { id?: string }): Promise<void> {
+  if (!item?.id) {
+    void vscode.window.showInformationMessage('DevDocket: Select an item in Focus to move.');
+    return;
+  }
+  await workGraph.moveToBottom(item.id);
+}
+
 export function registerFocusCommands(
   context: vscode.ExtensionContext,
   workGraph: WorkGraph,
@@ -66,5 +82,9 @@ export function registerFocusCommands(
       wrapCommand('Failed to move focus item up', (item) => handleFocusMoveUp(workGraph, item))),
     vscode.commands.registerCommand('devdocket.focusMoveDown',
       wrapCommand('Failed to move focus item down', (item) => handleFocusMoveDown(workGraph, item))),
+    vscode.commands.registerCommand('devdocket.focusMoveToTop',
+      wrapCommand('Failed to move focus item to top', (item) => handleFocusMoveToTop(workGraph, item))),
+    vscode.commands.registerCommand('devdocket.focusMoveToBottom',
+      wrapCommand('Failed to move focus item to bottom', (item) => handleFocusMoveToBottom(workGraph, item))),
   );
 }
