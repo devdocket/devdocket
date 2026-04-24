@@ -367,7 +367,7 @@ describe('StartWorkAction', () => {
         path.join('/mock', 'workspace-issue123'),
         'issue123',
       ]);
-      expect(thirdCall[2]).toEqual({ cwd: '/mock/workspace', timeout: 30_000 });
+      expect(thirdCall[2]).toEqual({ cwd: '/mock/workspace', timeout: 300_000 });
     });
 
     it('creates branch and worktree with correct names for ADO items', async () => {
@@ -399,7 +399,7 @@ describe('StartWorkAction', () => {
         path.join('/mock', 'workspace-issue456'),
         'issue456',
       ]);
-      expect(thirdCall[2]).toEqual({ cwd: '/mock/workspace', timeout: 30_000 });
+      expect(thirdCall[2]).toEqual({ cwd: '/mock/workspace', timeout: 300_000 });
     });
 
     it('uses user-specified base branch for branch creation', async () => {
@@ -582,7 +582,7 @@ describe('StartWorkAction', () => {
       const checkoutCall = vi.mocked(execFile).mock.calls[1];
       expect(checkoutCall[0]).toBe('git');
       expect(checkoutCall[1]).toEqual(['checkout', '-b', 'issue123', 'origin/dev']);
-      expect(checkoutCall[2]).toEqual({ cwd: '/mock/workspace', timeout: 30_000 });
+      expect(checkoutCall[2]).toEqual({ cwd: '/mock/workspace', timeout: 300_000 });
     });
 
     it('shows success message after checkout', async () => {
