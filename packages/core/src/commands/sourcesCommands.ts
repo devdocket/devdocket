@@ -1,4 +1,5 @@
 import * as vscode from 'vscode';
+import { WorkItemState } from '../models/workItem';
 import { WorkGraph } from '../services/workGraph';
 import { DiscoveredStateStore } from '../storage/discoveredStateStore';
 import { type SourceItemNode, type SourcesElement } from '../views/sourcesTreeProvider';
@@ -38,6 +39,27 @@ async function acceptSingleSourceItem(
   logger.info(`Accepting sources item: ${item.externalId}`);
   const existing = workGraph.findItemByProvenance(item.providerId, item.externalId);
   if (existing) {
+    // Re-open items in terminal states so resurfaced items return to Queue
+    if (existing.state === WorkItemState.Done || existing.state === WorkItemState.Archived) {
+      const originalState = existing.state;
+      try {
+        await workGraph.transitionState(existing.id, WorkItemState.New);
+      } catch (err: unknown) {
+        handleCommandError('Failed to re-open item', err);
+        return;
+      }
+      try {
+        await stateStore.setState(item.providerId, item.externalId, 'accepted');
+      } catch (err: unknown) {
+        try { await workGraph.transitionState(existing.id, originalState); } catch (rollbackErr: unknown) {
+          logger.error('Failed to roll back re-opened item after setState failure', rollbackErr);
+        }
+        handleCommandError('Failed to update state for re-opened item', err);
+        return;
+      }
+      void revealer?.revealInQueue(existing.id);
+      return;
+    }
     try {
       await stateStore.setState(item.providerId, item.externalId, 'accepted');
     } catch (err: unknown) {

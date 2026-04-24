@@ -649,6 +649,48 @@ describe('GitHubPrReviewProvider', () => {
       expect(items[0].resurfaceVersion).toBe('2024-01-15T10:30:00Z');
     });
 
+    it('sets version and resurfaceVersion independently when both settings enabled', async () => {
+      mockConfig({ resurfaceOnNewVersion: true, resurfaceOnReRequestedReview: true });
+
+      mockFetch
+        // Search API
+        .mockResolvedValueOnce({
+          ok: true,
+          json: async () => ({
+            items: [createMockPrWithApi(1, 'PR 1')],
+          }),
+        })
+        // Head SHA
+        .mockResolvedValueOnce({
+          ok: true,
+          json: async () => ({ head: { sha: 'abc123' } }),
+        })
+        // GET /user
+        .mockResolvedValueOnce({
+          ok: true,
+          json: async () => ({ login: 'testuser' }),
+        })
+        // Timeline
+        .mockResolvedValueOnce({
+          ok: true,
+          json: async () => ([
+            {
+              event: 'review_requested',
+              created_at: '2024-01-15T10:30:00Z',
+              requested_reviewer: { login: 'testuser' },
+            },
+          ]),
+        });
+
+      const listener = vi.fn();
+      provider.onDidDiscoverItems(listener);
+      await provider.refresh();
+
+      const items = listener.mock.calls[0][0];
+      expect(items[0].version).toBe('abc123');
+      expect(items[0].resurfaceVersion).toBe('2024-01-15T10:30:00Z');
+    });
+
     it('uses latest review_requested event for resurfaceVersion', async () => {
       mockConfig({ resurfaceOnNewVersion: false, resurfaceOnReRequestedReview: true });
 

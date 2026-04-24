@@ -46,6 +46,27 @@ async function acceptSingleInboxItem(
   logger.info(`Accepting inbox item: ${item.externalId} from ${item.providerId}`);
   const existing = workGraph.findItemByProvenance(item.providerId, item.externalId);
   if (existing) {
+    // Re-open items in terminal states so resurfaced items return to Queue
+    if (existing.state === WorkItemState.Done || existing.state === WorkItemState.Archived) {
+      const originalState = existing.state;
+      try {
+        await workGraph.transitionState(existing.id, WorkItemState.New);
+      } catch (err: unknown) {
+        handleCommandError('Failed to re-open item', err);
+        return;
+      }
+      try {
+        await stateStore.setState(item.providerId, item.externalId, 'accepted');
+      } catch (err: unknown) {
+        try { await workGraph.transitionState(existing.id, originalState); } catch (rollbackErr: unknown) {
+          logger.error('Failed to roll back re-opened item after setState failure', rollbackErr);
+        }
+        handleCommandError('Failed to update state for re-opened item', err);
+        return;
+      }
+      void revealer?.revealInQueue(existing.id);
+      return;
+    }
     void vscode.window.showInformationMessage(
       `DevDocket: Item already accepted as "${existing.title}"`
     );
@@ -107,23 +128,31 @@ async function acceptToFocusSingleInboxItem(
       return;
     }
     if (existing.state === WorkItemState.Done || existing.state === WorkItemState.Archived) {
+      const originalState = existing.state;
+      try {
+        await workGraph.transitionState(existing.id, WorkItemState.New);
+      } catch (err: unknown) {
+        handleCommandError('Failed to re-open item', err);
+        return;
+      }
+      workItemId = existing.id;
       try {
         await stateStore.setState(item.providerId, item.externalId, 'accepted');
       } catch (err: unknown) {
-        handleCommandError('Failed to update state for existing completed item', err);
+        try { await workGraph.transitionState(existing.id, originalState); } catch (rollbackErr: unknown) {
+          logger.error('Failed to roll back re-opened item after setState failure', rollbackErr);
+        }
+        handleCommandError('Failed to update state for re-opened item', err);
         return;
       }
-      void vscode.window.showWarningMessage(
-        `DevDocket: Item is ${existing.state} and cannot be moved to Focus`,
-      );
-      return;
-    }
-    workItemId = existing.id;
-    try {
-      await stateStore.setState(item.providerId, item.externalId, 'accepted');
-    } catch (err: unknown) {
-      handleCommandError('Failed to update state for existing accepted item', err);
-      return;
+    } else {
+      workItemId = existing.id;
+      try {
+        await stateStore.setState(item.providerId, item.externalId, 'accepted');
+      } catch (err: unknown) {
+        handleCommandError('Failed to update state for existing accepted item', err);
+        return;
+      }
     }
   } else {
     const group = item.group?.trim();
@@ -172,6 +201,7 @@ async function batchAcceptToFocusItems(
   const stateUpdates: Array<{ providerId: string; externalId: string; state: InboxState }> = [];
   const createdIds: string[] = [];
   const allIds: string[] = [];
+  const reopenedItems: Array<{ id: string; originalState: WorkItemState }> = [];
   let failed = 0;
   let skipped = 0;
 
@@ -185,10 +215,15 @@ async function batchAcceptToFocusItems(
         continue;
       }
       if (existing.state === WorkItemState.Done || existing.state === WorkItemState.Archived) {
-        logger.info(`Skipping "${item.title}" — item is ${existing.state} and cannot be moved to Focus`);
-        stateUpdates.push({ providerId: item.providerId, externalId: item.externalId, state: 'accepted' });
-        skipped++;
-        continue;
+        const originalState = existing.state;
+        try {
+          await workGraph.transitionState(existing.id, WorkItemState.New);
+          reopenedItems.push({ id: existing.id, originalState });
+        } catch (err: unknown) {
+          failed++;
+          logger.error(`Failed to re-open "${item.title}"`, err);
+          continue;
+        }
       }
       stateUpdates.push({ providerId: item.providerId, externalId: item.externalId, state: 'accepted' });
       allIds.push(existing.id);
@@ -221,6 +256,11 @@ async function batchAcceptToFocusItems(
       for (const id of createdIds) {
         try { await workGraph.deleteItem(id); } catch (rollbackErr: unknown) {
           logger.error('Failed to roll back created item after batch setStates failure', rollbackErr);
+        }
+      }
+      for (const { id, originalState } of reopenedItems) {
+        try { await workGraph.transitionState(id, originalState); } catch (rollbackErr: unknown) {
+          logger.error('Failed to roll back re-opened item after batch setStates failure', rollbackErr);
         }
       }
       handleCommandError('Failed to update states after accepting items', err);

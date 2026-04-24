@@ -3,6 +3,8 @@ import { DevDocketProvider, DiscoveredItem, type ResolvedItem } from '../api/typ
 import { DiscoveredStateStore, InboxState } from '../storage/discoveredStateStore';
 import { ProviderLabelCache } from '../storage/providerLabelCache';
 import { logger } from './logger';
+import { WorkItemState } from '../models/workItem';
+import { type ActivityType } from '../models/activityLog';
 
 /** Health status of a single provider's most recent refresh attempt. */
 export interface ProviderHealthStatus {
@@ -73,6 +75,8 @@ export class ProviderRegistry {
   constructor(
     private readonly stateStore: DiscoveredStateStore,
     private readonly labelCache?: ProviderLabelCache,
+    private readonly getWorkItemState?: (providerId: string, externalId: string) => WorkItemState | undefined,
+    private readonly addActivity?: (providerId: string, externalId: string, type: ActivityType, detail?: string) => Promise<void>,
   ) {}
 
   /**
@@ -355,6 +359,7 @@ export class ProviderRegistry {
 
     const newUnseenUpdates: Array<{ providerId: string; externalId: string; state: 'unseen'; version?: string; resurfaceVersion?: string }> = [];
     const versionBackfills: Array<{ providerId: string; externalId: string; state: InboxState; version?: string; resurfaceVersion?: string }> = [];
+    const activityEntries: Array<{ providerId: string; externalId: string }> = [];
 
     for (const item of items) {
       const existing = this.stateStore.getState(providerId, item.externalId);
@@ -364,13 +369,14 @@ export class ProviderRegistry {
         if (item.resurfaceVersion !== undefined) { update.resurfaceVersion = item.resurfaceVersion; }
         newUnseenUpdates.push(update);
       } else if (existing === 'accepted') {
-        let shouldResurface = false;
+        let versionTriggered = false;
+        let resurfaceVersionTriggered = false;
         let needsBackfill = false;
 
         if (item.version !== undefined) {
           const storedVersion = this.stateStore.getVersion(providerId, item.externalId);
           if (storedVersion !== undefined && storedVersion !== item.version) {
-            shouldResurface = true;
+            versionTriggered = true;
           } else if (storedVersion === undefined) {
             needsBackfill = true;
           }
@@ -379,9 +385,22 @@ export class ProviderRegistry {
         if (item.resurfaceVersion !== undefined) {
           const storedRV = this.stateStore.getResurfaceVersion(providerId, item.externalId);
           if (storedRV !== undefined && storedRV !== item.resurfaceVersion) {
-            shouldResurface = true;
+            resurfaceVersionTriggered = true;
           } else if (storedRV === undefined) {
             needsBackfill = true;
+          }
+        }
+
+        // resurfaceVersion always resurfaces (hard); version checks work item state (soft)
+        let shouldResurface = resurfaceVersionTriggered;
+        let suppressedVersionChange = false;
+        if (versionTriggered && !shouldResurface) {
+          const wiState = this.getWorkItemState?.(providerId, item.externalId);
+          if (wiState === WorkItemState.New || wiState === WorkItemState.InProgress || wiState === WorkItemState.Paused) {
+            // Suppress: backfill version instead of resurfacing
+            suppressedVersionChange = true;
+          } else {
+            shouldResurface = true;
           }
         }
 
@@ -390,11 +409,14 @@ export class ProviderRegistry {
           if (item.version !== undefined) { update.version = item.version; }
           if (item.resurfaceVersion !== undefined) { update.resurfaceVersion = item.resurfaceVersion; }
           newUnseenUpdates.push(update);
-        } else if (needsBackfill) {
+        } else if (suppressedVersionChange || needsBackfill) {
           const update: typeof versionBackfills[number] = { providerId, externalId: item.externalId, state: 'accepted' };
           if (item.version !== undefined) { update.version = item.version; }
           if (item.resurfaceVersion !== undefined) { update.resurfaceVersion = item.resurfaceVersion; }
           versionBackfills.push(update);
+          if (suppressedVersionChange) {
+            activityEntries.push({ providerId, externalId: item.externalId });
+          }
         }
       } else if (existing === 'unseen') {
         if (item.version !== undefined || item.resurfaceVersion !== undefined) {
@@ -418,6 +440,20 @@ export class ProviderRegistry {
         await this.stateStore.setStates(allUpdates);
         if (!this._disposed && newUnseenUpdates.length > 0) {
           this._onDidAddNewUnseenItems.fire(newUnseenUpdates.length);
+        }
+
+        // Log activity only after state was successfully persisted
+        if (!this._disposed && this.addActivity && activityEntries.length > 0) {
+          const results = await Promise.allSettled(
+            activityEntries.map(entry =>
+              this.addActivity!(entry.providerId, entry.externalId, 'version-updated'),
+            ),
+          );
+          for (const result of results) {
+            if (result.status === 'rejected') {
+              logger.error('Failed to log version-updated activity', result.reason);
+            }
+          }
         }
       } catch (err) {
         logger.error('Failed to persist discovered states', err);
