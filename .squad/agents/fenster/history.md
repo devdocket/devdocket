@@ -477,3 +477,15 @@ See `.squad/orchestration-log/2026-04-20T16-18-00Z-keaton.md` for full triage de
 - **Files changed:** `packages/core/src/services/viewRevealer.ts` (line 70).
 - **Pattern:** When calling `TreeView.reveal()`, always specify `expand: false` if the goal is to select/highlight an item without disrupting the user's view collapse state.
 
+
+### 2026-04-26 — Issue #358 (Add URL field to manual work items)
+
+**Feature:** Added optional URL field to manually created work items, enabling "Open in Browser" functionality for user-provided links.
+- **Problem:** Manual work items had no way to associate a URL, while provider-backed items (GitHub issues, etc.) already had URL support via the WorkItem.url field. This prevented users from adding external links to manual items.
+- **Implementation:** Extended WorkItemInput interface with optional url field (non-breaking change). Added URL input field to the editor panel webview, visible only for manually created items (not provider-managed). Integrated validation using existing isSafeUrl() utility before persisting.
+- **URL field visibility:** The URL field appears in the editor panel only when !item.providerId (manual items). Provider-managed items continue to use their provider-supplied URL without user editing.
+- **Validation pattern:** URL validation happens server-side in workItemEditorPanel.saveData() — invalid URLs throw an error shown to the user via vscode.window.showErrorMessage(). This follows the existing security pattern used throughout the codebase.
+- **Context value integration:** The existing contextValue logic (hasUrl suffix) already supports this — no changes needed to tree providers or menu conditions. Setting item.url automatically enables "Open in Browser" in the context menu.
+- **WorkGraph.updateItem extension:** Added URL change tracking to updateItem() — detects both setting and clearing the URL field ('url' in patch), logs to activity log as part of the "updated" entry detail.
+- **Files changed:** packages/shared/src/workItem.ts (WorkItemInput interface), packages/core/src/services/workGraph.ts (updateItem url tracking), packages/core/src/views/editorPanelHtml.ts (URL input field + getData()), packages/core/src/views/workItemEditorPanel.ts (saveData url validation).
+- **Key lesson:** When extending user-editable fields, always validate at save-time (not just client-side), use existing security utilities (isSafeUrl), and restrict editing based on provenance (manual vs provider-managed). The WorkItemInput interface is safe to extend with optional fields — it's used via Partial<WorkItemInput> in updateItem, so new optional fields are backward-compatible.
