@@ -86,21 +86,24 @@ function createMockActionRegistry(): { [K in keyof UsedActionRegistryMethods]: M
   };
 }
 
-type UsedStateStoreMethods = Pick<DiscoveredStateStore, 'setState' | 'setStates'>;
+type UsedStateStoreMethods = Pick<DiscoveredStateStore, 'setState' | 'setStates' | 'getState'>;
 
 function createMockStateStore(): { [K in keyof UsedStateStoreMethods]: Mock } {
   return {
     setState: vi.fn(),
     setStates: vi.fn(),
+    getState: vi.fn(),
   };
 }
 
-type UsedProviderRegistryMethods = Pick<ProviderRegistry, 'refreshAll' | 'resolveUrl'>;
+type UsedProviderRegistryMethods = Pick<ProviderRegistry, 'refreshAll' | 'resolveUrl' | 'getAllDiscoveredItems' | 'getDiscoveredItems'>;
 
 function createMockProviderRegistry(): { [K in keyof UsedProviderRegistryMethods]: Mock } {
   return {
     refreshAll: vi.fn().mockResolvedValue(undefined),
     resolveUrl: vi.fn().mockResolvedValue(undefined),
+    getAllDiscoveredItems: vi.fn().mockReturnValue(new Map()),
+    getDiscoveredItems: vi.fn().mockReturnValue([]),
   };
 }
 
@@ -2002,6 +2005,90 @@ describe('registerCommands', () => {
       expect(vscode.window.showErrorMessage).toHaveBeenCalledWith(
         'DevDocket: Failed to update state after accepting item — disk full',
       );
+    });
+  });
+
+  // ── Sources canonical peer propagation ────────────────────────────
+
+  describe('Sources canonical peer propagation', () => {
+    function setupCanonicalPeers() {
+      const items = new Map<string, any[]>();
+      items.set('prs', [
+        { externalId: 'repo#1', title: 'PR #1', canonicalId: 'github:pull:repo#1' },
+      ]);
+      items.set('reviews', [
+        { externalId: 'repo#1', title: 'PR #1', canonicalId: 'github:pull:repo#1' },
+      ]);
+      providerRegistry.getAllDiscoveredItems.mockReturnValue(items);
+      // stateStore.getState returns undefined (unseen) for peers
+      stateStore.getState.mockReturnValue(undefined);
+    }
+
+    it('acceptFromSources propagates accepted state to canonical peers', async () => {
+      setupCanonicalPeers();
+      const sourceItem = makeSourceItem({
+        providerId: 'prs',
+        externalId: 'repo#1',
+        canonicalId: 'github:pull:repo#1',
+      });
+      workGraph.findItemByProvenance.mockReturnValue(undefined);
+      workGraph.createItem.mockResolvedValue(createWorkItem());
+
+      await invoke('devdocket.acceptFromSources', sourceItem);
+
+      expect(stateStore.setStates).toHaveBeenCalledWith([
+        { providerId: 'reviews', externalId: 'repo#1', state: 'accepted' },
+      ]);
+    });
+
+    it('dismissFromSources propagates dismissed state to canonical peers', async () => {
+      setupCanonicalPeers();
+      const sourceItem = makeSourceItem({
+        providerId: 'prs',
+        externalId: 'repo#1',
+        canonicalId: 'github:pull:repo#1',
+      });
+
+      await invoke('devdocket.dismissFromSources', sourceItem);
+
+      expect(stateStore.setState).toHaveBeenCalledWith('prs', 'repo#1', 'dismissed');
+      expect(stateStore.setStates).toHaveBeenCalledWith([
+        { providerId: 'reviews', externalId: 'repo#1', state: 'dismissed' },
+      ]);
+    });
+
+    it('does not propagate when item has no canonicalId', async () => {
+      providerRegistry.getAllDiscoveredItems.mockReturnValue(new Map());
+      const sourceItem = makeSourceItem({ providerId: 'prs', externalId: 'repo#1' });
+      workGraph.findItemByProvenance.mockReturnValue(undefined);
+      workGraph.createItem.mockResolvedValue(createWorkItem());
+
+      await invoke('devdocket.acceptFromSources', sourceItem);
+
+      expect(stateStore.setStates).not.toHaveBeenCalled();
+    });
+
+    it('does not propagate to already-accepted peers', async () => {
+      const items = new Map<string, any[]>();
+      items.set('prs', [
+        { externalId: 'repo#1', title: 'PR #1', canonicalId: 'github:pull:repo#1' },
+      ]);
+      items.set('reviews', [
+        { externalId: 'repo#1', title: 'PR #1', canonicalId: 'github:pull:repo#1' },
+      ]);
+      providerRegistry.getAllDiscoveredItems.mockReturnValue(items);
+      stateStore.getState.mockReturnValue('accepted');
+
+      const sourceItem = makeSourceItem({
+        providerId: 'prs',
+        externalId: 'repo#1',
+        canonicalId: 'github:pull:repo#1',
+      });
+
+      await invoke('devdocket.dismissFromSources', sourceItem);
+
+      // Peer is already accepted, so setStates should not be called for propagation
+      expect(stateStore.setStates).not.toHaveBeenCalled();
     });
   });
 

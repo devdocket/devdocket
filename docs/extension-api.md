@@ -142,6 +142,16 @@ interface DiscoveredItem {
    * For example, a GitHub provider might group by repository name.
    */
   group?: string;
+
+  /**
+   * Optional cross-provider deduplication key.
+   * Items from different providers that share the same canonicalId are
+   * grouped in the Inbox (one representative shown). Accept/dismiss/read-state
+   * propagates to all items in the group.
+   * Items without canonicalId always show individually (backward compatible).
+   * Use a consistent format like 'github:pull:owner/repo#42'.
+   */
+  canonicalId?: string;
 }
 ```
 
@@ -152,6 +162,7 @@ interface DiscoveredItem {
 - `DiscoveredItem` data is not stored as a persisted record; DevDocket tracks only the inbox state (`unseen`, `accepted`, `dismissed`) for discovered items in `discovered-state.json`.
 - When a user accepts an item from Inbox/Sources, DevDocket creates and persists a new `WorkItem` in `workitems.json` that includes a snapshot of the item's `title`, along with its `providerId`/`externalId`/`url` as provenance metadata.
 - Use `group` to organize items in the Sources tree. Items with the same group value are nested under a folder.
+- Use `canonicalId` when the same entity might be discovered by multiple providers (e.g., a PR found by both "My PRs" and "PR Reviews"). Items sharing a `canonicalId` are deduplicated in the Inbox — one representative is shown and accept/dismiss propagates to all. Use a consistent format like `github:pull:owner/repo#42`. Items without `canonicalId` show individually (backward compatible). The Sources view is unaffected.
 
 ### Registering a Provider
 
@@ -328,6 +339,7 @@ interface DiscoveredItem {
   description?: string;
   url?: string;
   group?: string;
+  canonicalId?: string;
 }
 
 interface Disposable {

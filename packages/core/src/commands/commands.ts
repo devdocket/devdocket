@@ -108,6 +108,87 @@ function wrapCommand<T extends unknown[]>(label: string, fn: (...args: T) => Pro
 }
 
 // ---------------------------------------------------------------------------
+// Canonical ID dedup helpers
+// ---------------------------------------------------------------------------
+
+/** Item with optional canonicalId — accepted by findCanonicalPeers. */
+interface CanonicalItem {
+  providerId: string;
+  externalId: string;
+  canonicalId?: string;
+}
+
+/**
+ * Finds all unseen inbox items from other providers that share the same
+ * canonicalId as the given item. Used to propagate accept/dismiss actions.
+ */
+function findCanonicalPeers(
+  item: CanonicalItem,
+  providerRegistry: ProviderRegistry,
+  stateStore: DiscoveredStateStore,
+): Array<{ providerId: string; externalId: string }> {
+  if (!item.canonicalId) { return []; }
+  const peers: Array<{ providerId: string; externalId: string }> = [];
+  for (const [providerId, items] of providerRegistry.getAllDiscoveredItems()) {
+    for (const discovered of items) {
+      if (discovered.canonicalId !== item.canonicalId) { continue; }
+      if (providerId === item.providerId && discovered.externalId === item.externalId) { continue; }
+      const state = stateStore.getState(providerId, discovered.externalId);
+      if (state !== undefined && state !== 'unseen') { continue; }
+      peers.push({ providerId, externalId: discovered.externalId });
+    }
+  }
+  return peers;
+}
+
+/** Propagates an inbox state change to all canonical peers of the given item. */
+async function propagateStateToCanonicalPeers(
+  item: CanonicalItem,
+  providerRegistry: ProviderRegistry,
+  stateStore: DiscoveredStateStore,
+  state: 'accepted' | 'dismissed',
+): Promise<void> {
+  const peers = findCanonicalPeers(item, providerRegistry, stateStore);
+  if (peers.length === 0) { return; }
+  try {
+    await stateStore.setStates(peers.map(p => ({ ...p, state })));
+  } catch (err: unknown) {
+    logger.error('Failed to propagate state to canonical peers', err);
+  }
+}
+
+/**
+ * Expands a list of inbox items by adding canonical peers that haven't already
+ * been explicitly selected. Ensures accept/dismiss propagates to all duplicates.
+ */
+function expandWithCanonicalPeers(
+  items: InboxItem[],
+  providerRegistry: ProviderRegistry,
+  stateStore: DiscoveredStateStore,
+): InboxItem[] {
+  const keys = new Set(items.map(i => `${i.providerId}::${i.externalId}`));
+  const extra: InboxItem[] = [];
+  for (const item of items) {
+    const peers = findCanonicalPeers(item, providerRegistry, stateStore);
+    for (const peer of peers) {
+      const peerKey = `${peer.providerId}::${peer.externalId}`;
+      if (!keys.has(peerKey)) {
+        keys.add(peerKey);
+        extra.push({
+          kind: 'item',
+          providerId: peer.providerId,
+          externalId: peer.externalId,
+          title: item.title,
+          url: item.url,
+          group: item.group,
+        });
+      }
+    }
+  }
+  return [...items, ...extra];
+}
+
+// ---------------------------------------------------------------------------
 // Individual command handlers
 // ---------------------------------------------------------------------------
 
@@ -503,6 +584,7 @@ async function handleFocusMoveDown(workGraph: WorkGraph, item?: { id?: string })
 async function handleAcceptFromInbox(
   workGraph: WorkGraph,
   stateStore: DiscoveredStateStore,
+  providerRegistry: ProviderRegistry,
   item?: InboxElement,
   selectedItems?: InboxElement[],
   revealer?: ViewRevealer,
@@ -511,16 +593,21 @@ async function handleAcceptFromInbox(
   if (items.length === 0) { return; }
 
   if (items.length === 1) {
-    await acceptSingleInboxItem(workGraph, stateStore, items[0], revealer);
+    await acceptSingleInboxItem(workGraph, stateStore, providerRegistry, items[0], revealer);
     return;
   }
 
   await batchAcceptItems(workGraph, stateStore, items, 'inbox item');
+  // Propagate state to canonical peers (state-only, no work items created)
+  for (const batchItem of items) {
+    await propagateStateToCanonicalPeers(batchItem, providerRegistry, stateStore, 'accepted');
+  }
 }
 
 async function acceptSingleInboxItem(
   workGraph: WorkGraph,
   stateStore: DiscoveredStateStore,
+  providerRegistry: ProviderRegistry,
   item: InboxItem,
   revealer?: ViewRevealer,
 ): Promise<void> {
@@ -535,6 +622,7 @@ async function acceptSingleInboxItem(
     } catch (err: unknown) {
       handleCommandError('Failed to update state for existing accepted item', err);
     }
+    await propagateStateToCanonicalPeers(item, providerRegistry, stateStore, 'accepted');
     return;
   }
   const group = item.group?.trim();
@@ -565,12 +653,15 @@ async function acceptSingleInboxItem(
     handleCommandError('Failed to update state after accepting item', err);
     return;
   }
+  // Propagate accept to canonical peers
+  await propagateStateToCanonicalPeers(item, providerRegistry, stateStore, 'accepted');
   void revealer?.revealInQueue(createdItem.id);
 }
 
 async function acceptToFocusSingleInboxItem(
   workGraph: WorkGraph,
   stateStore: DiscoveredStateStore,
+  providerRegistry: ProviderRegistry,
   item: InboxItem,
   revealer?: ViewRevealer,
 ): Promise<void> {
@@ -586,6 +677,7 @@ async function acceptToFocusSingleInboxItem(
         return;
       }
       void vscode.window.showInformationMessage('DevDocket: Item is already in Focus');
+      await propagateStateToCanonicalPeers(item, providerRegistry, stateStore, 'accepted');
       return;
     }
     if (existing.state === WorkItemState.Done || existing.state === WorkItemState.Archived) {
@@ -598,6 +690,7 @@ async function acceptToFocusSingleInboxItem(
       void vscode.window.showWarningMessage(
         `DevDocket: Item is ${existing.state} and cannot be moved to Focus`,
       );
+      await propagateStateToCanonicalPeers(item, providerRegistry, stateStore, 'accepted');
       return;
     }
     workItemId = existing.id;
@@ -643,6 +736,8 @@ async function acceptToFocusSingleInboxItem(
     handleCommandError('Failed to move item to Focus', err);
     return;
   }
+  // Propagate accept to canonical peers
+  await propagateStateToCanonicalPeers(item, providerRegistry, stateStore, 'accepted');
   void revealer?.revealInFocus(workItemId);
 }
 
@@ -745,6 +840,7 @@ async function batchAcceptToFocusItems(
 async function handleAcceptToFocusFromInbox(
   workGraph: WorkGraph,
   stateStore: DiscoveredStateStore,
+  providerRegistry: ProviderRegistry,
   item?: InboxElement,
   selectedItems?: InboxElement[],
   revealer?: ViewRevealer,
@@ -753,25 +849,33 @@ async function handleAcceptToFocusFromInbox(
   if (items.length === 0) { return; }
 
   if (items.length === 1) {
-    await acceptToFocusSingleInboxItem(workGraph, stateStore, items[0], revealer);
+    await acceptToFocusSingleInboxItem(workGraph, stateStore, providerRegistry, items[0], revealer);
     return;
   }
 
   await batchAcceptToFocusItems(workGraph, stateStore, items);
+  // Propagate state to canonical peers (state-only, no work items created)
+  for (const batchItem of items) {
+    await propagateStateToCanonicalPeers(batchItem, providerRegistry, stateStore, 'accepted');
+  }
 }
 
 async function handleDismissFromInbox(
   stateStore: DiscoveredStateStore,
+  providerRegistry: ProviderRegistry,
   item?: InboxElement,
   selectedItems?: InboxElement[],
 ): Promise<void> {
   const items = resolveInboxItems(item, selectedItems);
   if (items.length === 0) { return; }
 
-  if (items.length === 1) {
+  // Expand with canonical peers so dismiss propagates
+  const expanded = expandWithCanonicalPeers(items, providerRegistry, stateStore);
+
+  if (expanded.length === 1) {
     try {
-      logger.info(`Dismissing inbox item: ${items[0].externalId}`);
-      await stateStore.setState(items[0].providerId, items[0].externalId, 'dismissed');
+      logger.info(`Dismissing inbox item: ${expanded[0].externalId}`);
+      await stateStore.setState(expanded[0].providerId, expanded[0].externalId, 'dismissed');
     } catch (err: unknown) {
       handleCommandError('Failed to dismiss item', err);
     }
@@ -779,11 +883,11 @@ async function handleDismissFromInbox(
   }
 
   try {
-    logger.info(`Batch dismissing ${items.length} inbox items`);
+    logger.info(`Batch dismissing ${expanded.length} inbox items`);
     await stateStore.setStates(
-      items.map(i => ({ providerId: i.providerId, externalId: i.externalId, state: 'dismissed' as const }))
+      expanded.map(i => ({ providerId: i.providerId, externalId: i.externalId, state: 'dismissed' as const }))
     );
-    void vscode.window.showInformationMessage(`Dismissed ${items.length} items`);
+    void vscode.window.showInformationMessage(`Dismissed ${expanded.length} item${expanded.length === 1 ? '' : 's'}`);
   } catch (err: unknown) {
     handleCommandError('Failed to dismiss items', err);
   }
@@ -803,6 +907,7 @@ async function handleRefresh(providerRegistry: ProviderRegistry): Promise<void> 
 async function handleAcceptFromSources(
   workGraph: WorkGraph,
   stateStore: DiscoveredStateStore,
+  providerRegistry: ProviderRegistry,
   item?: SourcesElement,
   selectedItems?: SourcesElement[],
   revealer?: ViewRevealer,
@@ -811,16 +916,21 @@ async function handleAcceptFromSources(
   if (items.length === 0) { return; }
 
   if (items.length === 1) {
-    await acceptSingleSourceItem(workGraph, stateStore, items[0], revealer);
+    await acceptSingleSourceItem(workGraph, stateStore, providerRegistry, items[0], revealer);
     return;
   }
 
   await batchAcceptItems(workGraph, stateStore, items, 'source item');
+  // Propagate accepted state to canonical peers of all batch items
+  for (const i of items) {
+    await propagateStateToCanonicalPeers(i, providerRegistry, stateStore, 'accepted');
+  }
 }
 
 async function acceptSingleSourceItem(
   workGraph: WorkGraph,
   stateStore: DiscoveredStateStore,
+  providerRegistry: ProviderRegistry,
   item: SourceItemNode,
   revealer?: ViewRevealer,
 ): Promise<void> {
@@ -832,6 +942,7 @@ async function acceptSingleSourceItem(
     } catch (err: unknown) {
       handleCommandError('Failed to update state for existing item', err);
     }
+    await propagateStateToCanonicalPeers(item, providerRegistry, stateStore, 'accepted');
     void vscode.window.showInformationMessage(
       `DevDocket: Item already accepted as "${existing.title}"`
     );
@@ -865,10 +976,12 @@ async function acceptSingleSourceItem(
     return;
   }
   void revealer?.revealInQueue(createdItem.id);
+  await propagateStateToCanonicalPeers(item, providerRegistry, stateStore, 'accepted');
 }
 
 async function handleDismissFromSources(
   stateStore: DiscoveredStateStore,
+  providerRegistry: ProviderRegistry,
   item?: SourcesElement,
   selectedItems?: SourcesElement[],
 ): Promise<void> {
@@ -879,6 +992,7 @@ async function handleDismissFromSources(
     try {
       logger.info(`Dismissing source item: ${items[0].externalId}`);
       await stateStore.setState(items[0].providerId, items[0].externalId, 'dismissed');
+      await propagateStateToCanonicalPeers(items[0], providerRegistry, stateStore, 'dismissed');
     } catch (err: unknown) {
       handleCommandError('Failed to dismiss item', err);
     }
@@ -890,6 +1004,9 @@ async function handleDismissFromSources(
     await stateStore.setStates(
       items.map(i => ({ providerId: i.providerId, externalId: i.externalId, state: 'dismissed' as const }))
     );
+    for (const i of items) {
+      await propagateStateToCanonicalPeers(i, providerRegistry, stateStore, 'dismissed');
+    }
     void vscode.window.showInformationMessage(`Dismissed ${items.length} items`);
   } catch (err: unknown) {
     handleCommandError('Failed to dismiss items', err);
@@ -950,15 +1067,15 @@ export function registerCommands(
     vscode.commands.registerCommand('devdocket.moveToQueue',
       wrapCommand('Failed to move item to queue', (item, selectedItems) => handleMoveToQueue(workGraph, item, selectedItems, revealer))),
     vscode.commands.registerCommand('devdocket.acceptFromInbox',
-      wrapCommand('Failed to accept from inbox', (item: InboxElement, selectedItems?: InboxElement[]) => handleAcceptFromInbox(workGraph, stateStore, item, selectedItems, revealer))),
+      wrapCommand('Failed to accept from inbox', (item: InboxElement, selectedItems?: InboxElement[]) => handleAcceptFromInbox(workGraph, stateStore, providerRegistry, item, selectedItems, revealer))),
     vscode.commands.registerCommand('devdocket.acceptToFocusFromInbox',
-      wrapCommand('Failed to accept to focus from inbox', (item: InboxElement, selectedItems?: InboxElement[]) => handleAcceptToFocusFromInbox(workGraph, stateStore, item, selectedItems, revealer))),
+      wrapCommand('Failed to accept to focus from inbox', (item: InboxElement, selectedItems?: InboxElement[]) => handleAcceptToFocusFromInbox(workGraph, stateStore, providerRegistry, item, selectedItems, revealer))),
     vscode.commands.registerCommand('devdocket.dismissFromInbox',
-      wrapCommand('Failed to dismiss from inbox', (item: InboxElement, selectedItems?: InboxElement[]) => handleDismissFromInbox(stateStore, item, selectedItems))),
+      wrapCommand('Failed to dismiss from inbox', (item: InboxElement, selectedItems?: InboxElement[]) => handleDismissFromInbox(stateStore, providerRegistry, item, selectedItems))),
     vscode.commands.registerCommand('devdocket.acceptFromSources',
-      wrapCommand('Failed to accept from sources', (item: SourcesElement, selectedItems?: SourcesElement[]) => handleAcceptFromSources(workGraph, stateStore, item, selectedItems, revealer))),
+      wrapCommand('Failed to accept from sources', (item: SourcesElement, selectedItems?: SourcesElement[]) => handleAcceptFromSources(workGraph, stateStore, providerRegistry, item, selectedItems, revealer))),
     vscode.commands.registerCommand('devdocket.dismissFromSources',
-      wrapCommand('Failed to dismiss from sources', (item: SourcesElement, selectedItems?: SourcesElement[]) => handleDismissFromSources(stateStore, item, selectedItems))),
+      wrapCommand('Failed to dismiss from sources', (item: SourcesElement, selectedItems?: SourcesElement[]) => handleDismissFromSources(stateStore, providerRegistry, item, selectedItems))),
     vscode.commands.registerCommand('devdocket.switchInboxToTree',
       wrapCommand('Failed to switch inbox layout', () => setViewLayout('inbox', 'tree'))),
     vscode.commands.registerCommand('devdocket.switchInboxToFlat',

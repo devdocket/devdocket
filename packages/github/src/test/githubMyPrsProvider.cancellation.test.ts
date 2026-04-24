@@ -86,28 +86,41 @@ describe('GitHubMyPrsProvider — cancellation (AbortSignal wiring)', () => {
   describe('AbortSignal passed to fetch', () => {
     it('passes AbortSignal to search fetch', async () => {
       const { token } = createMockCancellationToken();
-      mockFetch.mockResolvedValueOnce(mockSearchResponse([]));
+      mockFetch.mockResolvedValue(mockSearchResponse([]));
 
       await provider.refresh(token);
 
-      expect(mockFetch).toHaveBeenCalledTimes(1);
-      const fetchOptions = mockFetch.mock.calls[0][1];
-      expect(fetchOptions.signal).toBeInstanceOf(AbortSignal);
+      // 2 calls: author:@me and assignee:@me
+      expect(mockFetch).toHaveBeenCalledTimes(2);
+      for (const call of mockFetch.mock.calls) {
+        expect(call[1].signal).toBeInstanceOf(AbortSignal);
+      }
     });
 
     it('passes AbortSignal to PR detail and review fetch calls', async () => {
       const { token } = createMockCancellationToken();
       const pr = createMockPr(1, 'Test PR');
 
-      mockFetch
-        .mockResolvedValueOnce(mockSearchResponse([pr]))
-        .mockResolvedValueOnce(mockPrDetailResponse({ draft: false }))
-        .mockResolvedValueOnce(mockReviewsResponse([]));
+      mockFetch.mockImplementation(async (url: string) => {
+        if (url.includes('search/issues') && url.includes('author:@me')) {
+          return mockSearchResponse([pr]);
+        }
+        if (url.includes('search/issues') && url.includes('assignee:@me')) {
+          return mockSearchResponse([]);
+        }
+        if (url.endsWith('/pulls/1')) {
+          return mockPrDetailResponse({ draft: false });
+        }
+        if (url.endsWith('/pulls/1/reviews')) {
+          return mockReviewsResponse([]);
+        }
+        return { ok: false, status: 404 };
+      });
 
       await provider.refresh(token);
 
-      // 3 calls: search, PR detail, reviews
-      expect(mockFetch).toHaveBeenCalledTimes(3);
+      // 4 calls: 2 search + PR detail + reviews
+      expect(mockFetch).toHaveBeenCalledTimes(4);
       for (const call of mockFetch.mock.calls) {
         expect(call[1].signal).toBeInstanceOf(AbortSignal);
       }
@@ -277,7 +290,7 @@ describe('GitHubMyPrsProvider — cancellation (AbortSignal wiring)', () => {
     it('resets _isRefreshing after abort', async () => {
       const { token, cancel } = createMockCancellationToken();
 
-      mockFetch.mockImplementationOnce(async () => {
+      mockFetch.mockImplementation(async () => {
         cancel();
         const error = new Error('The operation was aborted.');
         error.name = 'AbortError';
@@ -287,7 +300,12 @@ describe('GitHubMyPrsProvider — cancellation (AbortSignal wiring)', () => {
       await provider.refresh(token);
 
       // Next refresh should proceed
-      mockFetch.mockResolvedValueOnce(mockSearchResponse([]));
+      mockFetch.mockImplementation(async (url: string) => {
+        if (url.includes('search/issues')) {
+          return mockSearchResponse([]);
+        }
+        return { ok: false, status: 404 };
+      });
 
       const listener = vi.fn();
       provider.onDidDiscoverItems(listener);

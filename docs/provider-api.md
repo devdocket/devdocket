@@ -113,6 +113,7 @@ interface DiscoveredItem {
   description?: string;
   url?: string;
   group?: string;
+  canonicalId?: string;
 }
 
 interface DevDocketProvider {
@@ -151,6 +152,7 @@ interface DiscoveredItem {
   description?: string;
   url?: string;
   group?: string;
+  canonicalId?: string;
 }
 
 interface Disposable {
@@ -508,6 +510,26 @@ Each `onDidDiscoverItems` emission **replaces** the provider's entire known item
 
 Set the `group` field on `DiscoveredItem` to organize items under folder nodes in the Inbox and Sources views. For example, a GitHub provider groups issues by repository name.
 
+### Use `canonicalId` for cross-provider deduplication
+
+When the same underlying entity (e.g., a pull request) might be discovered by multiple providers, set `canonicalId` to a shared identifier so DevDocket can deduplicate them in the Inbox.
+
+**How it works:**
+- Items from different providers that share the same `canonicalId` are grouped in the Inbox, and only one representative item is shown.
+- When the user accepts, dismisses, or reads an item, the action propagates to all items in the group.
+- Items without `canonicalId` always show individually — existing providers are unaffected.
+- The Sources view is not affected by `canonicalId` — it continues to show items per provider.
+
+**Format convention:** Use a consistent, deterministic format so that independent providers generate the same `canonicalId` for the same entity. The recommended pattern is `<platform>:<entity-type>:<identifier>`:
+
+| Entity | Example `canonicalId` |
+|--------|----------------------|
+| GitHub PR | `github:pull:octocat/hello-world#42` |
+| GitHub Issue | `github:issue:octocat/hello-world#7` |
+| ADO PR | `ado:pull:myorg/myproject/myrepo#123` |
+
+**When to use it:** If your provider discovers items that another provider might also discover, set `canonicalId`. For example, a "My PRs" provider and a "PR Reviews" provider may both discover the same pull request — giving both items the same `canonicalId` ensures the user sees it only once in their Inbox.
+
 ---
 
 ## API Reference
@@ -640,6 +662,18 @@ interface DiscoveredItem {
    * Items with the same group appear under a folder node.
    */
   group?: string;
+
+  /**
+   * Optional cross-provider deduplication key.
+   * When set, items from different providers that share the same canonicalId
+   * are grouped in the Inbox view and only one representative is shown.
+   * Accept/dismiss/read-state actions propagate to all items in the group.
+   * Items without canonicalId always show individually (backward compatible).
+   *
+   * Use a consistent format so different providers generate matching IDs
+   * for the same entity (e.g., 'github:pull:owner/repo#42').
+   */
+  canonicalId?: string;
 }
 ```
 
