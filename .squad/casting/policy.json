@@ -1,8 +1,0 @@
-{
-  "version": 1,
-  "max_universes_per_repo": 3,
-  "allow_overflow": true,
-  "universes": [
-    "the-usual-suspects"
-  ]
-}
