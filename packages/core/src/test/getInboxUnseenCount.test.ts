@@ -171,4 +171,53 @@ describe('getInboxUnseenCount', () => {
     const seen = new Set(['gh::1', 'gh::2']);
     expect(getInboxUnseenCount(registry, stateStore as any, seen)).toBe(0);
   });
+
+  it('deduplicates items sharing the same canonicalId across providers', () => {
+    const p1 = createMockProvider('prs');
+    const p2 = createMockProvider('reviews');
+    registry.register(p1);
+    registry.register(p2);
+    p1.fireItems([{ externalId: 'repo#1', title: 'PR #1', canonicalId: 'github:pull:repo#1' }]);
+    p2.fireItems([{ externalId: 'repo#1', title: 'PR #1', canonicalId: 'github:pull:repo#1' }]);
+
+    // Should count as 1, not 2
+    expect(getInboxUnseenCount(registry, stateStore as any)).toBe(1);
+  });
+
+  it('does not dedup items without canonicalId', () => {
+    const p1 = createMockProvider('prs');
+    const p2 = createMockProvider('reviews');
+    registry.register(p1);
+    registry.register(p2);
+    p1.fireItems([{ externalId: 'repo#1', title: 'PR #1' }]);
+    p2.fireItems([{ externalId: 'repo#1', title: 'PR #1' }]);
+
+    expect(getInboxUnseenCount(registry, stateStore as any)).toBe(2);
+  });
+
+  it('dedup does not affect items with different canonicalIds', () => {
+    const p1 = createMockProvider('prs');
+    registry.register(p1);
+    p1.fireItems([
+      { externalId: 'repo#1', title: 'PR #1', canonicalId: 'github:pull:repo#1' },
+      { externalId: 'repo#2', title: 'PR #2', canonicalId: 'github:pull:repo#2' },
+    ]);
+
+    expect(getInboxUnseenCount(registry, stateStore as any)).toBe(2);
+  });
+
+  it('treats canonical group as seen when any peer is in seenItems', () => {
+    const p1 = createMockProvider('prs');
+    const p2 = createMockProvider('reviews');
+    registry.register(p1);
+    registry.register(p2);
+    p1.fireItems([{ externalId: 'repo#1', title: 'PR #1', canonicalId: 'github:pull:repo#1' }]);
+    p2.fireItems([{ externalId: 'repo#1', title: 'PR #1', canonicalId: 'github:pull:repo#1' }]);
+
+    // Mark one peer as seen — the representative (prs::repo#1) should also count as seen
+    const seen = new Set(['reviews::repo#1']);
+    // Canonical dedup hides the non-representative peer; the representative (prs::repo#1)
+    // is treated as seen because its canonical peer is in seenItems
+    expect(getInboxUnseenCount(registry, stateStore as any, seen)).toBe(0);
+  });
 });

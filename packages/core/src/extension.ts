@@ -10,6 +10,7 @@ import { ProviderRegistry } from './services/providerRegistry';
 import { checkAutoComplete, showAutoCompleteNotification } from './services/autoComplete';
 import { ActionRegistry } from './services/actionRegistry';
 import { WatcherRegistry } from './services/watcherRegistry';
+import { PRWatcherRegistry } from './services/prWatcherRegistry';
 import { WatcherService } from './services/watcherService';
 import { WatchStore } from './storage/watchStore';
 import { InboxTreeProvider } from './views/inboxTreeProvider';
@@ -30,7 +31,7 @@ import { syncProviderTitles } from './services/titleSync';
 import { getViewLayout, ViewId } from './views/viewLayout';
 import { performance } from 'perf_hooks';
 
-export type { DevDocketApi, DevDocketProvider, DevDocketAction, DiscoveredItem, Disposable, ActivityLogEntry, ActivityType, StateTransitionEvent } from './api/types';
+export type { DevDocketApi, DevDocketProvider, DevDocketAction, DiscoveredItem, Disposable, ActivityLogEntry, ActivityType, StateTransitionEvent, DevDocketPRWatcher } from './api/types';
 export { logger } from './services/logger';
 
 /** Wrap an event callback so unhandled errors (sync or async) are logged instead of crashing. */
@@ -400,9 +401,10 @@ export async function activate(context: vscode.ExtensionContext): Promise<DevDoc
   );
   const ar = new ActionRegistry();
   const wr = new WatcherRegistry(logger);
+  const pwr = new PRWatcherRegistry(logger);
   const watchStore = new WatchStore(storagePath);
-  const ws = new WatcherService(wr, watchStore, logger);
-  const api = new DevDocketApiImpl(pr, ar, wr, wg);
+  const ws = new WatcherService(wr, pwr, watchStore, logger);
+  const api = new DevDocketApiImpl(pr, ar, wr, pwr, wg);
   logger.info(`Store + service init took ${Math.round(performance.now() - initStart)}ms`);
 
   const treeViewStart = performance.now();
@@ -443,6 +445,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<DevDoc
     { dispose: () => ss.dispose() },
     { dispose: () => ws.dispose() },
     { dispose: () => wr.dispose() },
+    { dispose: () => pwr.dispose() },
     { dispose: () => providers.inboxProvider.dispose() },
     { dispose: () => providers.queueProvider.dispose() },
     { dispose: () => providers.focusProvider.dispose() },
@@ -455,7 +458,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<DevDoc
 
   const commandRegStart = performance.now();
   const revealer = new ViewRevealer(wg, views.queueTreeView, views.focusTreeView, views.historyTreeView);
-  registerCommands(context, wg, ar, ss, pr, labelCache, wr, ws, revealer);
+  registerCommands(context, wg, ar, ss, pr, labelCache, wr, pwr, ws, revealer);
   logger.info(`Command registration took ${Math.round(performance.now() - commandRegStart)}ms`);
 
   // Set context keys and listen for layout changes

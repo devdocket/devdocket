@@ -180,6 +180,7 @@ describe('GitHubPrReviewProvider', () => {
       url: 'https://github.com/org/myrepo/pull/42',
       group: 'org/myrepo',
       reason: 'review_requested',
+      canonicalId: 'github:pull:org/myrepo#42',
     });
   });
 

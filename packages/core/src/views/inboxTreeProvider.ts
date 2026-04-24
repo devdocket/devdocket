@@ -1,6 +1,7 @@
 import * as vscode from 'vscode';
 import { DiscoveredItem } from '../api/types';
 import { ProviderRegistry } from '../services/providerRegistry';
+import { buildCanonicalHiddenSet } from '../services/canonicalDedup';
 import { DiscoveredStateStore } from '../storage/discoveredStateStore';
 import { ReadStateStore } from '../storage/readStateStore';
 import { logger } from '../services/logger';
@@ -29,6 +30,7 @@ export interface InboxItem {
   url?: string;
   group?: string;
   reason?: string;
+  canonicalId?: string;
 }
 
 export type InboxElement = InboxProviderNode | InboxGroupNode | InboxItem;
@@ -43,6 +45,7 @@ export class InboxTreeProvider implements vscode.TreeDataProvider<InboxElement> 
   private refreshTimer: ReturnType<typeof setTimeout> | undefined;
   static readonly REFRESH_DEBOUNCE_MS = 50;
   private readonly _layoutState: LayoutState;
+  private cachedHiddenSet: Set<string> | undefined;
 
   get layout(): ViewLayout { return this._layoutState.value; }
   set layout(value: ViewLayout) { this._layoutState.value = value; }
@@ -64,6 +67,7 @@ export class InboxTreeProvider implements vscode.TreeDataProvider<InboxElement> 
     if (this.refreshTimer !== undefined) {
       clearTimeout(this.refreshTimer);
     }
+    this.cachedHiddenSet = undefined;
     this.refreshTimer = setTimeout(() => {
       this.refreshTimer = undefined;
       this.pruneSeenItems();
@@ -116,16 +120,49 @@ export class InboxTreeProvider implements vscode.TreeDataProvider<InboxElement> 
 
   async markSeen(providerId: string, externalId: string): Promise<boolean> {
     const key = `${providerId}::${externalId}`;
-    if (!this.seenItems.has(key)) {
-      this.seenItems.add(key);
-      this._onDidMarkSeen.fire();
+    const peerKeys = this.findCanonicalPeerKeys(providerId, externalId);
+    const allKeys = [key, ...peerKeys];
+    const addedKeys: string[] = [];
+    for (const k of allKeys) {
+      if (!this.seenItems.has(k)) {
+        this.seenItems.add(k);
+        addedKeys.push(k);
+      }
     }
-    return this.readStateStore.add(key);
+    try {
+      if (peerKeys.length > 0) {
+        const newlyAdded = await this.readStateStore.addMany(allKeys);
+        const changed = addedKeys.length > 0;
+        if (changed) {
+          this._onDidMarkSeen.fire();
+        }
+        return changed || newlyAdded.length > 0;
+      }
+      const persisted = await this.readStateStore.add(key);
+      if (addedKeys.length > 0) {
+        this._onDidMarkSeen.fire();
+      }
+      return persisted;
+    } catch (err) {
+      // Roll back in-memory state on persistence failure
+      for (const k of addedKeys) {
+        this.seenItems.delete(k);
+      }
+      throw err;
+    }
   }
 
   /** Marks multiple items as seen in a single write operation. */
   async markSeenBatch(items: Array<{ providerId: string; externalId: string }>): Promise<boolean> {
-    const keys = items.map(i => `${i.providerId}::${i.externalId}`);
+    // Expand with canonical peers
+    const allItems = new Set<string>();
+    for (const item of items) {
+      allItems.add(`${item.providerId}::${item.externalId}`);
+      for (const peerKey of this.findCanonicalPeerKeys(item.providerId, item.externalId)) {
+        allItems.add(peerKey);
+      }
+    }
+    const keys = [...allItems];
     const newKeys = keys.filter(k => !this.seenItems.has(k));
     // Persist first so in-memory state stays consistent on write failure
     const newlyAdded = await this.readStateStore.addMany(keys);
@@ -136,6 +173,43 @@ export class InboxTreeProvider implements vscode.TreeDataProvider<InboxElement> 
       this._onDidMarkSeen.fire();
     }
     return newKeys.length > 0 || newlyAdded.length > 0;
+  }
+
+  /** Finds `providerId::externalId` keys of canonical peers for the given item, excluding already accepted/dismissed peers. */
+  private findCanonicalPeerKeys(providerId: string, externalId: string): string[] {
+    const items = this.providerRegistry.getDiscoveredItems(providerId);
+    const item = items.find(i => i.externalId === externalId);
+    if (!item?.canonicalId) { return []; }
+    const peers: string[] = [];
+    for (const [pid, pItems] of this.providerRegistry.getAllDiscoveredItems()) {
+      for (const pi of pItems) {
+        if (pi.canonicalId !== item.canonicalId) { continue; }
+        if (pid === providerId && pi.externalId === externalId) { continue; }
+        const state = this.stateStore.getState(pid, pi.externalId);
+        if (state !== undefined && state !== 'unseen') { continue; }
+        peers.push(`${pid}::${pi.externalId}`);
+      }
+    }
+    return peers;
+  }
+
+  /** Checks if this item or any canonical peer is marked as read in the persistent store. */
+  private isCanonicalGroupSeen(key: string, canonicalId?: string): boolean {
+    if (this.readStateStore.has(key)) {
+      return true;
+    }
+    if (!canonicalId) { return false; }
+    for (const [pid, pItems] of this.providerRegistry.getAllDiscoveredItems()) {
+      for (const pi of pItems) {
+        if (pi.canonicalId !== canonicalId) { continue; }
+        const peerKey = `${pid}::${pi.externalId}`;
+        if (peerKey === key) { continue; }
+        if (this.readStateStore.has(peerKey)) {
+          return true;
+        }
+      }
+    }
+    return false;
   }
 
   getTreeItem(element: InboxElement): vscode.TreeItem {
@@ -165,7 +239,7 @@ export class InboxTreeProvider implements vscode.TreeDataProvider<InboxElement> 
     }
 
     const key = `${element.providerId}::${element.externalId}`;
-    const isSeen = this.readStateStore.has(key);
+    const isSeen = this.isCanonicalGroupSeen(key, element.canonicalId);
 
     const treeItem = new vscode.TreeItem(element.title, vscode.TreeItemCollapsibleState.None);
     treeItem.id = `inbox::item::${element.providerId}::${element.externalId}`;
@@ -243,11 +317,13 @@ export class InboxTreeProvider implements vscode.TreeDataProvider<InboxElement> 
 
   private getAllUnseenItems(): InboxItem[] {
     const result: InboxItem[] = [];
+    const hidden = this.getCanonicalHiddenSet();
     const allItems = this.providerRegistry.getAllDiscoveredItems();
     for (const [providerId, items] of allItems) {
       for (const item of items) {
         const state = this.stateStore.getState(providerId, item.externalId);
         if (state !== undefined && state !== 'unseen') { continue; }
+        if (hidden.has(`${providerId}::${item.externalId}`)) { continue; }
         result.push(this.toItemNode(providerId, item));
       }
     }
@@ -256,12 +332,14 @@ export class InboxTreeProvider implements vscode.TreeDataProvider<InboxElement> 
 
   private getProviderChildren(providerId: string): (InboxGroupNode | InboxItem)[] {
     const items = this.providerRegistry.getDiscoveredItems(providerId);
+    const hidden = this.getCanonicalHiddenSet();
     const groupCounts = new Map<string, number>();
     const ungrouped: typeof items = [];
 
     for (const item of items) {
       const state = this.stateStore.getState(providerId, item.externalId);
       if (state !== undefined && state !== 'unseen') { continue; }
+      if (hidden.has(`${providerId}::${item.externalId}`)) { continue; }
 
       if (item.group?.trim()) {
         const normalizedGroup = item.group.trim();
@@ -290,11 +368,13 @@ export class InboxTreeProvider implements vscode.TreeDataProvider<InboxElement> 
 
   private getGroupChildren(providerId: string, groupName: string): InboxItem[] {
     const items = this.providerRegistry.getDiscoveredItems(providerId);
+    const hidden = this.getCanonicalHiddenSet();
     const result: InboxItem[] = [];
     for (const item of items) {
       if (item.group?.trim() !== groupName) { continue; }
       const state = this.stateStore.getState(providerId, item.externalId);
       if (state !== undefined && state !== 'unseen') { continue; }
+      if (hidden.has(`${providerId}::${item.externalId}`)) { continue; }
       result.push(this.toItemNode(providerId, item));
     }
     return result.sort((a, b) => a.title.localeCompare(b.title));
@@ -310,23 +390,38 @@ export class InboxTreeProvider implements vscode.TreeDataProvider<InboxElement> 
       url: item.url,
       group: item.group?.trim() || undefined,
       reason: item.reason,
+      canonicalId: item.canonicalId,
     };
+  }
+
+  private getCanonicalHiddenSet(): Set<string> {
+    if (!this.cachedHiddenSet) {
+      this.cachedHiddenSet = buildCanonicalHiddenSet(
+        this.providerRegistry.getAllDiscoveredItems(),
+        (pid, eid) => this.stateStore.getState(pid, eid),
+      );
+    }
+    return this.cachedHiddenSet;
   }
 
   private getGroupUnseenCount(providerId: string, groupName: string): number {
     const items = this.providerRegistry.getDiscoveredItems(providerId);
+    const hidden = this.getCanonicalHiddenSet();
     return items.filter((item) => {
       if (item.group?.trim() !== groupName) { return false; }
       const state = this.stateStore.getState(providerId, item.externalId);
-      return state === undefined || state === 'unseen';
+      if (state !== undefined && state !== 'unseen') { return false; }
+      return !hidden.has(`${providerId}::${item.externalId}`);
     }).length;
   }
 
   private getUnseenCount(providerId: string): number {
     const items = this.providerRegistry.getDiscoveredItems(providerId);
+    const hidden = this.getCanonicalHiddenSet();
     return items.filter((item) => {
       const state = this.stateStore.getState(providerId, item.externalId);
-      return state === undefined || state === 'unseen';
+      if (state !== undefined && state !== 'unseen') { return false; }
+      return !hidden.has(`${providerId}::${item.externalId}`);
     }).length;
   }
 

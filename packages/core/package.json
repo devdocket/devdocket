@@ -24,6 +24,8 @@
     "onCommand:devdocket.clearHistory",
     "onView:devdocket.watches",
     "onCommand:devdocket.watchRun",
+    "onCommand:devdocket.watchPR",
+    "onCommand:devdocket.watchPRFromItem",
     "onCommand:devdocket.dismissWatch",
     "onCommand:devdocket.dismissAllCompletedWatches",
     "onCommand:devdocket.openWatchUrl",
@@ -241,7 +243,7 @@
       },
       {
         "view": "devdocket.watches",
-        "contents": "No pipeline runs being watched.\n[Watch Pipeline Run](command:devdocket.watchRun)"
+        "contents": "No watches yet.\n[Watch Pipeline Run](command:devdocket.watchRun)\n[Watch Pull Request](command:devdocket.watchPR)"
       }
     ],
     "commands": [
@@ -497,6 +499,18 @@
         "icon": "$(add)"
       },
       {
+        "command": "devdocket.watchPR",
+        "title": "DevDocket: Watch Pull Request",
+        "category": "DevDocket",
+        "icon": "$(git-pull-request)"
+      },
+      {
+        "command": "devdocket.watchPRFromItem",
+        "title": "Watch CI",
+        "category": "DevDocket",
+        "icon": "$(eye)"
+      },
+      {
         "command": "devdocket.dismissWatch",
         "title": "Dismiss Watch",
         "category": "DevDocket",
@@ -694,6 +708,10 @@
         {
           "command": "devdocket.addActivity",
           "when": "false"
+        },
+        {
+          "command": "devdocket.watchPRFromItem",
+          "when": "false"
         }
       ],
       "view/item/context": [
@@ -763,6 +781,16 @@
           "group": "2_links"
         },
         {
+          "command": "devdocket.watchPRFromItem",
+          "when": "view == devdocket.focus && viewItem =~ /hasUrl/ && !listMultiSelection",
+          "group": "2_links"
+        },
+        {
+          "command": "devdocket.watchPRFromItem",
+          "when": "view == devdocket.queue && viewItem =~ /hasUrl/ && !listMultiSelection",
+          "group": "2_links"
+        },
+        {
           "command": "devdocket.runAction",
           "when": "((view == devdocket.queue && viewItem =~ /^queueItem/) || (view == devdocket.focus && viewItem =~ /^(active|paused)/)) && !listMultiSelection",
           "group": "0_actions"
@@ -824,12 +852,12 @@
         },
         {
           "command": "devdocket.dismissWatch",
-          "when": "view == devdocket.watches && viewItem =~ /^watchedRun/",
+          "when": "view == devdocket.watches && viewItem =~ /^watchedRun|^watchedPR/",
           "group": "inline"
         },
         {
           "command": "devdocket.openWatchUrl",
-          "when": "view == devdocket.watches && viewItem =~ /^watchedRun/",
+          "when": "view == devdocket.watches && viewItem =~ /^watchedRun|^watchedPR/",
           "group": "1_actions"
         }
       ]
@@ -890,7 +918,7 @@
     "@types/vscode": "^1.85.0",
     "@typescript-eslint/eslint-plugin": "^7.0.0",
     "@typescript-eslint/parser": "^7.0.0",
-    "esbuild": "^0.20.0",
+    "esbuild": "^0.25.0",
     "eslint": "^8.56.0",
     "typescript": "^5.3.0",
     "vitest": "^1.2.0"

@@ -1,14 +1,27 @@
 import * as path from 'path';
 import { logger } from '../services/logger';
 import { SerializedJsonStore } from './serializedJsonStore';
-import type { WatchedRun } from '../services/watcherService';
+import type { WatchedRun, WatchedPR } from '../services/watcherService';
 
 const WATCHES_FILE = 'watches.json';
 const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5 MB
 
 /**
- * Persists watched pipeline runs as a JSON array on disk.
+ * On-disk shape: either a legacy plain array of WatchedRun, or the
+ * new envelope with separate `runs` and `prs` arrays.
+ */
+interface WatchStoreData {
+  runs: WatchedRun[];
+  prs: WatchedPR[];
+}
+
+/**
+ * Persists watched pipeline runs and PR watches as JSON on disk.
  * Extends SerializedJsonStore for write-queue serialization and JSON helpers.
+ *
+ * Supports the legacy plain-array format (runs only); legacy data is
+ * transparently converted on read and written in the new envelope format
+ * on the next save.
  */
 export class WatchStore extends SerializedJsonStore {
   private readonly filePath: string;
@@ -19,40 +32,65 @@ export class WatchStore extends SerializedJsonStore {
   }
 
   /**
-   * Load all persisted watches from disk.
-   * Returns empty array if file doesn't exist or is invalid.
+   * Load all persisted data from disk.
+   * Returns empty arrays if file doesn't exist or is invalid.
+   * Transparently supports the legacy plain-array format (runs only).
    */
-  async loadAll(): Promise<WatchedRun[]> {
+  async loadAll(): Promise<WatchStoreData> {
     let parsed: unknown;
     try {
       parsed = await this.readJson(this.filePath, MAX_FILE_SIZE);
     } catch (err) {
-      // Swallow non-ENOENT errors (e.g. permission issues) gracefully
       logger.warn('Failed to load watches', err);
-      return [];
+      return { runs: [], prs: [] };
     }
     if (parsed === undefined) {
-      return [];
+      return { runs: [], prs: [] };
     }
-    if (!Array.isArray(parsed)) {
-      logger.warn(`Invalid watches data in ${this.filePath}: expected a JSON array`);
+
+    // Legacy migration: plain array → envelope
+    if (Array.isArray(parsed)) {
+      const runs = parsed.filter((item: unknown) => {
+        if (typeof item !== 'object' || item === null) return false;
+        const obj = item as Record<string, unknown>;
+        return obj.identifier && obj.status && typeof obj.watchedAt === 'string';
+      }) as WatchedRun[];
+      return { runs, prs: [] };
+    }
+
+    if (typeof parsed !== 'object' || parsed === null) {
+      logger.warn(`Invalid watches data in ${this.filePath}: expected an object or array`);
       await this.backupFile(this.filePath);
-      return [];
+      return { runs: [], prs: [] };
     }
-    // Basic validation: each entry must have identifier and status
-    return parsed.filter((item: unknown) => {
-      if (typeof item !== 'object' || item === null) return false;
-      const obj = item as Record<string, unknown>;
-      return obj.identifier && obj.status && typeof obj.watchedAt === 'string';
-    }) as WatchedRun[];
+
+    const data = parsed as Record<string, unknown>;
+    const runs = Array.isArray(data.runs)
+      ? (data.runs as unknown[]).filter((item: unknown) => {
+          if (typeof item !== 'object' || item === null) return false;
+          const obj = item as Record<string, unknown>;
+          return obj.identifier && obj.status && typeof obj.watchedAt === 'string';
+        }) as WatchedRun[]
+      : [];
+
+    const prs = Array.isArray(data.prs)
+      ? (data.prs as unknown[]).filter((item: unknown) => {
+          if (typeof item !== 'object' || item === null) return false;
+          const obj = item as Record<string, unknown>;
+          return obj.identifier && typeof obj.watchedAt === 'string' && typeof obj.prState === 'string';
+        }) as WatchedPR[]
+      : [];
+
+    return { runs, prs };
   }
 
   /**
    * Save all watches to disk (serialized through write queue).
    */
-  async saveAll(watches: WatchedRun[]): Promise<void> {
+  async saveAll(runs: WatchedRun[], prs: WatchedPR[]): Promise<void> {
     return this.enqueue(async () => {
-      await this.writeJson(this.filePath, watches);
+      const data: WatchStoreData = { runs, prs };
+      await this.writeJson(this.filePath, data);
     });
   }
 }
