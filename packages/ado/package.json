@@ -22,7 +22,7 @@
     "configuration": {
       "title": "DevDocket Azure DevOps",
       "properties": {
-        "devdocketAdo.projects": {
+        "devDocketAdo.projects": {
           "type": "array",
           "items": {
             "type": "string"
@@ -30,12 +30,12 @@
           "default": [],
           "description": "Azure DevOps organizations and projects to monitor. Each entry is either '<org>' (monitor entire organization) or '<org>/<project>' (monitor a specific project). Supports multiple organizations."
         },
-        "devdocketAdo.refreshIntervalSeconds": {
+        "devDocketAdo.refreshIntervalSeconds": {
           "type": "number",
           "default": 300,
           "description": "How often to refresh Azure DevOps data (in seconds). Minimum 60 seconds for periodic refresh; positive values below 60 are clamped to 60. Set to 0 or a negative value to disable periodic refresh."
         },
-        "devdocketAdo.resurfaceOnNewVersion": {
+        "devDocketAdo.resurfaceOnNewVersion": {
           "type": "boolean",
           "default": true,
           "description": "Resurface PR reviews when new iterations are pushed."

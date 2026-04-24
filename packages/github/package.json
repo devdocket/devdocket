@@ -22,7 +22,7 @@
     "configuration": {
       "title": "DevDocket GitHub",
       "properties": {
-        "devdocketGithub.repos": {
+        "devDocketGithub.repos": {
           "type": "array",
           "items": {
             "type": "string"
@@ -30,17 +30,17 @@
           "default": [],
           "description": "GitHub repositories to watch (e.g. 'owner/repo'). Leave empty to fetch all assigned issues across all repositories."
         },
-        "devdocketGithub.refreshIntervalSeconds": {
+        "devDocketGithub.refreshIntervalSeconds": {
           "type": "number",
           "default": 300,
           "description": "How often to refresh GitHub issues (in seconds). Minimum 60 seconds. Values below 60 are clamped."
         },
-        "devdocketGithub.resurfaceOnNewVersion": {
+        "devDocketGithub.resurfaceOnNewVersion": {
           "type": "boolean",
           "default": true,
           "description": "Resurface PR reviews when new commits are pushed."
         },
-        "devdocketGithub.resurfaceOnReRequestedReview": {
+        "devDocketGithub.resurfaceOnReRequestedReview": {
           "type": "boolean",
           "default": true,
           "description": "Resurface PR reviews when review is explicitly re-requested."

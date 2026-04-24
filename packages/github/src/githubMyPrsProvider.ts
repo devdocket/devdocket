@@ -128,7 +128,7 @@ export class GitHubMyPrsProvider extends BaseGitHubProvider {
   }
 
   private getConfiguredRepos(): string[] {
-    const config = vscode.workspace.getConfiguration('devdocketGithub');
+    const config = vscode.workspace.getConfiguration('devDocketGithub');
     return config.get<string[]>('repos', []);
   }
 

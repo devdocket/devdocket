@@ -22,7 +22,7 @@
     "configuration": {
       "title": "DevDocket Start Git Work",
       "properties": {
-        "devdocketStartGitWork.commands": {
+        "devDocketStartGitWork.commands": {
           "type": "array",
           "scope": "application",
           "items": {

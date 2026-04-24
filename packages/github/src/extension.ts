@@ -66,7 +66,7 @@ export async function activate(_context: vscode.ExtensionContext): Promise<void>
 
   // Register the GitHub issue provider
   issueProvider = new GitHubIssueProvider();
-  const config = vscode.workspace.getConfiguration('devdocketGithub');
+  const config = vscode.workspace.getConfiguration('devDocketGithub');
   const intervalSeconds = validateRefreshInterval(
     config.get<number>('refreshIntervalSeconds', 300), logger,
   );

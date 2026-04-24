@@ -73,7 +73,7 @@ export async function activate(_context: vscode.ExtensionContext): Promise<void>
     prProvider?.dispose();
     prProvider = undefined;
 
-    const config = vscode.workspace.getConfiguration('devdocketAdo');
+    const config = vscode.workspace.getConfiguration('devDocketAdo');
     const projects = config.get<string[]>('projects', []);
 
     const orgConfigs = parseAdoProjectsConfig(projects);
@@ -140,8 +140,8 @@ export async function activate(_context: vscode.ExtensionContext): Promise<void>
   _context.subscriptions.push(
     vscode.workspace.onDidChangeConfiguration(e => {
       if (
-        e.affectsConfiguration('devdocketAdo.projects') ||
-        e.affectsConfiguration('devdocketAdo.refreshIntervalSeconds')
+        e.affectsConfiguration('devDocketAdo.projects') ||
+        e.affectsConfiguration('devDocketAdo.refreshIntervalSeconds')
       ) {
         configureProviders();
       }

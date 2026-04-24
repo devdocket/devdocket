@@ -683,7 +683,7 @@ export class StartWorkAction implements DevDocketAction {
     worktreePath: string,
     progress: vscode.Progress<{ message?: string }>,
   ): Promise<void> {
-    const commands = vscode.workspace.getConfiguration('devdocketStartGitWork')
+    const commands = vscode.workspace.getConfiguration('devDocketStartGitWork')
       .get<{ command: string; args?: string[] }[]>('commands', []);
 
     for (const cmd of commands) {
