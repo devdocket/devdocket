@@ -3,7 +3,8 @@ import { DevDocketProvider, DiscoveredItem, type ResolvedItem } from '../api/typ
 import { DiscoveredStateStore, InboxState } from '../storage/discoveredStateStore';
 import { ProviderLabelCache } from '../storage/providerLabelCache';
 import { logger } from './logger';
-import { WorkItemState, type ActivityType } from '@devdocket/shared';
+import { WorkItemState } from '../models/workItem';
+import { type ActivityType } from '../models/activityLog';
 
 /** Health status of a single provider's most recent refresh attempt. */
 export interface ProviderHealthStatus {
