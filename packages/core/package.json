@@ -207,16 +207,16 @@
           "name": "Focus"
         },
         {
+          "id": "devdocket.watches",
+          "name": "Watches"
+        },
+        {
           "id": "devdocket.history",
           "name": "History"
         },
         {
           "id": "devdocket.sources",
           "name": "Sources"
-        },
-        {
-          "id": "devdocket.watches",
-          "name": "Watches"
         }
       ]
     },
