@@ -397,7 +397,7 @@ export class WatcherService implements vscode.Disposable {
    * Get polling interval from config (in seconds, min 15).
    */
   private getPollingInterval(): number {
-    const config = vscode.workspace.getConfiguration('devdocket.watches');
+    const config = vscode.workspace.getConfiguration('devDocket.watches');
     const interval = config.get<number>('pollingIntervalSeconds', 60);
     return Math.max(interval, 15);
   }

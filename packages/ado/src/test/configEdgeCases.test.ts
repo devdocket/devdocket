@@ -235,31 +235,31 @@ describe('ADO provider config edge cases', () => {
 
     it('affectsConfiguration matches all ADO config keys', () => {
       const relevantKeys = [
-        'devdocketAdo.projects',
-        'devdocketAdo.refreshIntervalSeconds',
+        'devDocketAdo.projects',
+        'devDocketAdo.refreshIntervalSeconds',
       ];
 
       for (const key of relevantKeys) {
         const event = { affectsConfiguration: (k: string) => k === key };
         const shouldReconfigure =
-          event.affectsConfiguration('devdocketAdo.projects') ||
-          event.affectsConfiguration('devdocketAdo.refreshIntervalSeconds');
+          event.affectsConfiguration('devDocketAdo.projects') ||
+          event.affectsConfiguration('devDocketAdo.refreshIntervalSeconds');
         expect(shouldReconfigure).toBe(true);
       }
     });
 
     it('unrelated config changes do not trigger reconfiguration', () => {
       const unrelatedKeys = [
-        'devdocket.logLevel',
-        'devdocketGithub.repos',
+        'devDocket.logLevel',
+        'devDocketGithub.repos',
         'editor.fontSize',
       ];
 
       for (const key of unrelatedKeys) {
         const event = { affectsConfiguration: (k: string) => k === key };
         const shouldReconfigure =
-          event.affectsConfiguration('devdocketAdo.projects') ||
-          event.affectsConfiguration('devdocketAdo.refreshIntervalSeconds');
+          event.affectsConfiguration('devDocketAdo.projects') ||
+          event.affectsConfiguration('devDocketAdo.refreshIntervalSeconds');
         expect(shouldReconfigure).toBe(false);
       }
     });
@@ -281,7 +281,7 @@ describe('ADO provider config edge cases', () => {
 
       vi.mocked(workspace.getConfiguration).mockImplementation((section?: string) => ({
         get: vi.fn((key: string, defaultValue?: any) => {
-          if (section === 'devdocketAdo') {
+          if (section === 'devDocketAdo') {
             return configValues[key] ?? defaultValue;
           }
           return defaultValue;
@@ -339,7 +339,7 @@ describe('ADO provider config edge cases', () => {
       // Change projects
       configValues.projects = ['myorg/NewProject'];
       for (const listener of configChangeListeners) {
-        listener({ affectsConfiguration: (k: string) => k === 'devdocketAdo.projects' });
+        listener({ affectsConfiguration: (k: string) => k === 'devDocketAdo.projects' });
       }
 
       // New providers registered
@@ -355,7 +355,7 @@ describe('ADO provider config edge cases', () => {
       configValues.refreshIntervalSeconds = 0;
       for (const listener of configChangeListeners) {
         listener({
-          affectsConfiguration: (k: string) => k === 'devdocketAdo.refreshIntervalSeconds',
+          affectsConfiguration: (k: string) => k === 'devDocketAdo.refreshIntervalSeconds',
         });
       }
 
