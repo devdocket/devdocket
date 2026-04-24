@@ -259,6 +259,7 @@ describe('resolveUrl', () => {
       expect(result?.externalId).toBe('owner/repo#456');
       expect(result?.group).toBe('owner/repo');
       expect(result?.providerId).toBe('github-pr-reviews');
+      expect(result?.isPullRequest).toBe(true);
 
       expect(mockFetch).toHaveBeenCalledOnce();
       expect(mockFetch).toHaveBeenCalledWith(

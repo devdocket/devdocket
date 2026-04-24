@@ -420,6 +420,7 @@ export class AdoPrReviewProvider extends BaseProvider {
       externalId: `${org}/${projectName}/${repoName}/${id}`,
       group: `${projectName}/${repoName}`,
       providerId: this.id,
+      isPullRequest: true,
     };
   }
 }

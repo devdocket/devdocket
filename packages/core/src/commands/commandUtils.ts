@@ -91,6 +91,7 @@ export interface AcceptableItem {
   title: string;
   url?: string;
   group?: string;
+  isPullRequest?: boolean;
 }
 
 export async function batchAcceptItems(
@@ -126,7 +127,7 @@ export async function batchAcceptItems(
     try {
       const createdItem = await workGraph.createItem(
         { title: formatItemTitle(item) },
-        { providerId: item.providerId, externalId: item.externalId, url: item.url, group: item.group?.trim() || undefined },
+        { providerId: item.providerId, externalId: item.externalId, url: item.url, group: item.group?.trim() || undefined, isPullRequest: item.isPullRequest },
       );
       createdIds.push(createdItem.id);
       stateUpdates.push({ providerId: item.providerId, externalId: item.externalId, state: 'accepted' });

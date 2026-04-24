@@ -79,6 +79,7 @@ async function acceptSingleSourceItem(
         providerId: item.providerId,
         externalId: item.externalId,
         url: item.url,
+        isPullRequest: item.isPullRequest,
         ...(group ? { group } : {}),
       },
     );

@@ -125,6 +125,7 @@ export class GitHubPrReviewProvider extends BaseGitHubProvider {
       externalId: `${canonicalRepo}#${number}`,
       group: canonicalRepo,
       providerId: this.id,
+      isPullRequest: true,
     };
   }
 
