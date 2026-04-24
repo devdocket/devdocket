@@ -93,7 +93,7 @@ export interface WorkItem {
   url?: string;
   /** Optional grouping key for organizing items within a provider in tree views. */
   group?: string;
-  /** Whether this item represents a pull request. When true, enables Watch CI in the context menu. */
+  /** Whether this item represents a pull request. When true and a URL is present, enables Watch CI in the context menu. */
   isPullRequest?: boolean;
   /** Ordering key within items of the same state. Lower values sort first. */
   sortOrder?: number;
