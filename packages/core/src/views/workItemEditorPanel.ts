@@ -210,7 +210,7 @@ export class WorkItemEditorPanel {
     }
 
     // Only allow URL editing for manually created items (not provider-managed)
-    if (!item.providerId && 'url' in data) {
+    if (!item.providerId && typeof data.url === 'string') {
       const urlValue = data.url.trim();
       if (urlValue) {
         // Validate URL before saving
