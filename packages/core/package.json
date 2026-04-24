@@ -96,7 +96,7 @@
       {
         "title": "DevDocket",
         "properties": {
-          "devdocket.logLevel": {
+          "devDocket.logLevel": {
             "type": "string",
             "enum": [
               "debug",
@@ -107,29 +107,29 @@
             "default": "info",
             "description": "Log level for DevDocket output channel"
           },
-          "devdocket.showInboxNotifications": {
+          "devDocket.showInboxNotifications": {
             "type": "boolean",
             "default": true,
             "description": "Show a notification when new items arrive in the Inbox"
           },
-          "devdocket.autoCompleteOnClose": {
+          "devDocket.autoCompleteOnClose": {
             "type": "boolean",
             "default": true,
             "description": "Automatically mark work items as Done when their linked issue or PR is closed or merged externally"
           },
-          "devdocket.historyClearDays": {
+          "devDocket.historyClearDays": {
             "type": "integer",
             "default": 30,
             "minimum": 1,
             "description": "Age threshold in days for the Clear Old History command. Items older than this are removed."
           },
-          "devdocket.watches.pollingIntervalSeconds": {
+          "devDocket.watches.pollingIntervalSeconds": {
             "type": "number",
             "default": 60,
             "minimum": 15,
             "description": "Polling interval in seconds for pipeline watches (minimum 15 seconds)"
           },
-          "devdocket.watches.notifyOnJobFailure": {
+          "devDocket.watches.notifyOnJobFailure": {
             "type": "boolean",
             "default": true,
             "description": "Show a notification when an individual job fails while the pipeline run is still in progress"

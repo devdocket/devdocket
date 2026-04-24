@@ -560,7 +560,7 @@ async function handleDeleteItem(workGraph: WorkGraph, item?: { id?: string }, se
 }
 
 async function handleClearHistory(workGraph: WorkGraph): Promise<void> {
-  const config = vscode.workspace.getConfiguration('devdocket');
+  const config = vscode.workspace.getConfiguration('devDocket');
   const raw = config.get<number>('historyClearDays', 30);
   const maxAgeDays = Number.isFinite(raw) && raw >= 1 ? Math.ceil(raw) : 30;
 

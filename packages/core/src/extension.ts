@@ -50,7 +50,7 @@ function initializeLogging(context: vscode.ExtensionContext): void {
   const outputChannel = vscode.window.createOutputChannel('DevDocket');
   context.subscriptions.push(outputChannel);
 
-  const logLevelConfig = vscode.workspace.getConfiguration('devdocket').get<string>('logLevel', 'info');
+  const logLevelConfig = vscode.workspace.getConfiguration('devDocket').get<string>('logLevel', 'info');
   initLogger(outputChannel, resolveLogLevel(logLevelConfig));
   if (!['debug', 'info', 'warn', 'error'].includes(logLevelConfig)) {
     logger.warn(`Invalid log level '${logLevelConfig}', falling back to 'info'. Valid values: debug, info, warn, error`);
@@ -58,8 +58,8 @@ function initializeLogging(context: vscode.ExtensionContext): void {
 
   context.subscriptions.push(
     vscode.workspace.onDidChangeConfiguration(safeHandler('Error handling configuration change', (e) => {
-      if (e.affectsConfiguration('devdocket.logLevel')) {
-        const newLevel = vscode.workspace.getConfiguration('devdocket').get<string>('logLevel', 'info');
+      if (e.affectsConfiguration('devDocket.logLevel')) {
+        const newLevel = vscode.workspace.getConfiguration('devDocket').get<string>('logLevel', 'info');
         setLogLevel(resolveLogLevel(newLevel));
         if (!['debug', 'info', 'warn', 'error'].includes(newLevel)) {
           logger.warn(`Invalid log level '${newLevel}', falling back to 'info'. Valid values: debug, info, warn, error`);
@@ -287,7 +287,7 @@ function wireEvents(
 
   // Watch notifications
   const jobFailureSub = watcherService.onDidDetectJobFailure(safeHandler('Error handling job failure', ({ run, job }) => {
-    const config = vscode.workspace.getConfiguration('devdocket.watches');
+    const config = vscode.workspace.getConfiguration('devDocket.watches');
     const notifyOnJobFailure = config.get<boolean>('notifyOnJobFailure', true);
     if (!notifyOnJobFailure) {
       return;
@@ -339,7 +339,7 @@ function wireEvents(
   // Per-provider guard prevents overlapping runs; AbortController cancels in-flight checks.
   const autoCompleteControllers = new Map<string, AbortController>();
   const autoCompleteSub = providerRegistry.onDidRefreshProvider(safeHandler('Error handling auto-complete', async (providerId) => {
-    const config = vscode.workspace.getConfiguration('devdocket');
+    const config = vscode.workspace.getConfiguration('devDocket');
     if (!config.get<boolean>('autoCompleteOnClose', true)) {
       return;
     }

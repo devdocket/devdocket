@@ -250,7 +250,7 @@ describe('ADO provider config edge cases', () => {
 
     it('unrelated config changes do not trigger reconfiguration', () => {
       const unrelatedKeys = [
-        'devdocket.logLevel',
+        'devDocket.logLevel',
         'devdocketGithub.repos',
         'editor.fontSize',
       ];
