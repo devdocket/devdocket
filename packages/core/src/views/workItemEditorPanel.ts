@@ -211,17 +211,15 @@ export class WorkItemEditorPanel {
 
     // Only allow URL editing for items without providerId (manual items)
     if (!item.providerId && typeof data.url === 'string') {
-      const urlValue = data.url.trim();
-      if (urlValue) {
-        // Validate URL before saving
-        if (!isSafeUrl(urlValue)) {
-          throw new Error('Invalid URL. Please enter a valid HTTP or HTTPS URL.');
-        }
-        patch.url = urlValue;
-      } else {
+      const trimmedUrl = data.url.trim();
+      if (trimmedUrl === '') {
         // Clear URL if empty
         patch.url = undefined;
+      } else if (isSafeUrl(trimmedUrl)) {
+        // Only persist valid URLs
+        patch.url = trimmedUrl;
       }
+      // If not empty and not valid — silently skip (user is still typing)
     }
 
     if (Object.keys(patch).length === 0) {
