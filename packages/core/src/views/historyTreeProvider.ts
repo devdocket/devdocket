@@ -5,7 +5,7 @@ import { ProviderRegistry } from '../services/providerRegistry';
 import {
   WorkItemElement, WorkItemViewProvider,
 } from './viewLayout';
-import { buildWorkItemTooltip, getWorkItemIcon } from './viewUtils';
+import { buildWorkItemTooltip, getWorkItemIcon, isPrUrl } from './viewUtils';
 
 export type HistoryElement = WorkItemElement;
 
@@ -52,7 +52,14 @@ export class HistoryTreeProvider extends WorkItemViewProvider {
     } else if (item.state === WorkItemState.Archived) {
       contextBase = 'historyItem.archived';
     }
-    treeItem.contextValue = item.url ? `${contextBase}.hasUrl` : contextBase;
+    let contextValue = contextBase;
+    if (item.url) {
+      contextValue += '.hasUrl';
+      if (isPrUrl(item.url)) {
+        contextValue += '.hasPrUrl';
+      }
+    }
+    treeItem.contextValue = contextValue;
     treeItem.command = { command: 'devdocket.editItem', title: 'Open Details', arguments: [item] };
     return treeItem;
   }

@@ -5,7 +5,7 @@ import { ProviderRegistry } from '../services/providerRegistry';
 import {
   WorkItemElement, WorkItemViewProvider, isProviderGroupNode, isSubGroupNode,
 } from './viewLayout';
-import { buildWorkItemTooltip } from './viewUtils';
+import { buildWorkItemTooltip, isPrUrl } from './viewUtils';
 
 export type QueueElement = WorkItemElement;
 
@@ -44,7 +44,14 @@ export class QueueTreeProvider extends WorkItemViewProvider implements vscode.Tr
       ? this.buildDescription(item.group, this.getProviderLabel(item.providerId))
       : undefined;
     treeItem.tooltip = buildWorkItemTooltip(item, title, { showState: false, notesStyle: 'plain' });
-    treeItem.contextValue = item.url ? 'queueItem.hasUrl' : 'queueItem';
+    let contextValue = 'queueItem';
+    if (item.url) {
+      contextValue += '.hasUrl';
+      if (isPrUrl(item.url)) {
+        contextValue += '.hasPrUrl';
+      }
+    }
+    treeItem.contextValue = contextValue;
     treeItem.iconPath = new vscode.ThemeIcon(item.providerId ? 'remote' : 'circle-filled');
     treeItem.command = { command: 'devdocket.editItem', title: 'Open Details', arguments: [item] };
     return treeItem;

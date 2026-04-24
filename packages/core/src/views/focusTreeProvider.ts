@@ -5,7 +5,7 @@ import { ProviderRegistry } from '../services/providerRegistry';
 import {
   WorkItemElement, WorkItemViewProvider, isProviderGroupNode, isSubGroupNode,
 } from './viewLayout';
-import { buildWorkItemTooltip, getWorkItemIcon } from './viewUtils';
+import { buildWorkItemTooltip, getWorkItemIcon, isPrUrl } from './viewUtils';
 
 const DRAG_MIME_TYPE = 'application/vnd.code.tree.devdocket.focus';
 
@@ -53,11 +53,15 @@ export class FocusTreeProvider extends WorkItemViewProvider implements vscode.Tr
     treeItem.iconPath = getWorkItemIcon(item.state);
 
     // contextValue controls which context menu items appear
-    if (item.state === WorkItemState.Paused) {
-      treeItem.contextValue = item.url ? 'paused.hasUrl' : 'paused';
-    } else {
-      treeItem.contextValue = item.url ? 'active.hasUrl' : 'active';
+    const baseContext = item.state === WorkItemState.Paused ? 'paused' : 'active';
+    let contextValue = baseContext;
+    if (item.url) {
+      contextValue += '.hasUrl';
+      if (isPrUrl(item.url)) {
+        contextValue += '.hasPrUrl';
+      }
     }
+    treeItem.contextValue = contextValue;
 
     treeItem.command = { command: 'devdocket.editItem', title: 'Open Details', arguments: [item] };
     return treeItem;

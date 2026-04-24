@@ -4,6 +4,7 @@ import { ProviderRegistry } from '../services/providerRegistry';
 import { DiscoveredStateStore, InboxState } from '../storage/discoveredStateStore';
 import { ViewLayout, LayoutState } from './viewLayout';
 import { buildProviderTooltip } from './providerTooltip';
+import { isPrUrl } from './viewUtils';
 
 export type SourcesElement = SourceProviderNode | SourceGroupNode | SourceItemNode;
 
@@ -136,7 +137,14 @@ export class SourcesTreeProvider implements vscode.TreeDataProvider<SourcesEleme
         const treeItem = new vscode.TreeItem(element.title, vscode.TreeItemCollapsibleState.None);
         treeItem.description = this.buildItemDescription(element.providerId, element.group, state);
         treeItem.tooltip = this.buildItemTooltip(element);
-        treeItem.contextValue = element.url ? 'sourceItem.hasUrl' : 'sourceItem';
+        let contextValue = 'sourceItem';
+        if (element.url) {
+          contextValue += '.hasUrl';
+          if (isPrUrl(element.url)) {
+            contextValue += '.hasPrUrl';
+          }
+        }
+        treeItem.contextValue = contextValue;
         treeItem.iconPath = new vscode.ThemeIcon(icon);
         return treeItem;
       }

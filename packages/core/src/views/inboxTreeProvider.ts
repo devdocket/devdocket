@@ -7,6 +7,7 @@ import { ReadStateStore } from '../storage/readStateStore';
 import { logger } from '../services/logger';
 import { ViewLayout, LayoutState } from './viewLayout';
 import { buildProviderTooltip } from './providerTooltip';
+import { isPrUrl } from './viewUtils';
 
 export interface InboxProviderNode {
   kind: 'provider';
@@ -247,7 +248,14 @@ export class InboxTreeProvider implements vscode.TreeDataProvider<InboxElement> 
       ? this.buildFlatDescription(element)
       : undefined;
     treeItem.tooltip = this.buildTooltip(element);
-    treeItem.contextValue = element.url ? 'inboxItem.hasUrl' : 'inboxItem';
+    let contextValue = 'inboxItem';
+    if (element.url) {
+      contextValue += '.hasUrl';
+      if (isPrUrl(element.url)) {
+        contextValue += '.hasPrUrl';
+      }
+    }
+    treeItem.contextValue = contextValue;
     treeItem.iconPath = new vscode.ThemeIcon(isSeen ? 'circle-outline' : 'circle-filled');
     return treeItem;
   }
