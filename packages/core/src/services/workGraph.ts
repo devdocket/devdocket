@@ -227,11 +227,17 @@ export class WorkGraph {
     if (!item) {
       throw new Error(`Work item not found: ${id}`);
     }
-    // Normalize URL if present in patch (undefined clears, non-empty string validates)
-    let normalizedPatch = patch;
-    if ('url' in patch && typeof patch.url === 'string') {
+    // Normalize URL if present in patch. Empty string or undefined clears.
+    // Non-empty string: validate and normalize, or skip update if invalid.
+    let normalizedPatch = { ...patch };
+    if ('url' in patch && typeof patch.url === 'string' && patch.url !== '') {
       const normalized = this.normalizeUrl(patch.url);
-      normalizedPatch = { ...patch, url: normalized };
+      if (normalized) {
+        normalizedPatch.url = normalized;
+      } else {
+        // Invalid URL - skip update to avoid clearing existing valid URL
+        delete normalizedPatch.url;
+      }
     }
     const changes: string[] = [];
     if (normalizedPatch.title !== undefined && normalizedPatch.title !== item.title) { changes.push('title'); }
