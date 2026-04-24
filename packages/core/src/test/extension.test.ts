@@ -512,7 +512,7 @@ describe('activate()', () => {
 
     // Fire configuration change event on all listeners
     for (const listener of listeners) {
-      listener({ affectsConfiguration: (section: string) => section === 'devdocket.viewLayout' });
+      listener({ affectsConfiguration: (section: string) => section === 'devDocket.viewLayout' });
     }
     await flushMicrotasks();
 

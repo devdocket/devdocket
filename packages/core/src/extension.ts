@@ -263,7 +263,7 @@ function wireEvents(
   }));
   const newItemsSub = providerRegistry.onDidAddNewUnseenItems(safeHandler('Error handling new unseen items notification', (newCount) => {
     if (!initialLoadComplete) { return; }
-    const config = vscode.workspace.getConfiguration('devdocket');
+    const config = vscode.workspace.getConfiguration('devDocket');
     const showNotifications = config.get<boolean>('showInboxNotifications', true);
     if (showNotifications && newCount > 0) {
       void vscode.window.showInformationMessage(
@@ -476,7 +476,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<DevDoc
   }
   context.subscriptions.push(
     vscode.workspace.onDidChangeConfiguration(safeHandler('Error handling viewLayout configuration change', (e) => {
-      if (e.affectsConfiguration('devdocket.viewLayout')) {
+      if (e.affectsConfiguration('devDocket.viewLayout')) {
         for (const id of viewIds) {
           const layout = getViewLayout(id);
           providerMap[id].layout = layout;
