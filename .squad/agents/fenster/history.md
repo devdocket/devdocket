@@ -49,11 +49,21 @@ DevDocket is a VS Code extension monorepo for managing work items from multiple 
 - **Build:** esbuild, CJS, `--external:vscode`, sourcemaps. Root `npm install` + `npm run build`.
 
 ### Completed Issues
-#333 (storage write-queue consolidation), #302 (consolidate shared types), #330 (git auth env vars — credential exposure fix), #299 (fix double disposal), #323 (watch CI pipelines), #322 (auto-complete activity log), #320 (focus view grouping), #282 (provider state in editor), #281 (clickable title), #276 (auto-track authored PRs), #275 (History→Queue transitions), #273 (tree counts), #265 (auto-complete on close), #255 (provider metadata docs), #250 (group context), #249 (accept-to-focus, pre-shipped), #243 (version resurfacing), #240 (create from URL), #233 (provider health), #232 (clear history), #231 (sources icons), #230 (layout toggle), #229 (emoji removal), #227 (provider labels), #223 (dead code cleanup), #222 (responsive layout), #221 (contextual heading), #219 (source URL link), #217 (editor metadata), #216 (provider description), #215 (dynamic titles), #189 (dismissed fix), #178 (ADO filtering), #158 (markdown injection), #157 (API trust boundary), #156 (URL sanitization), #155 (URL scheme validation), #154 (crypto.randomUUID), #153 (JSON validation), #152 (path traversal fix), #12 (AI PR actions), bulk rename (WorkCenter→DevDocket)
+#365 (move to top/bottom commands), #333 (storage write-queue consolidation), #302 (consolidate shared types), #330 (git auth env vars — credential exposure fix), #299 (fix double disposal), #323 (watch CI pipelines), #322 (auto-complete activity log), #320 (focus view grouping), #282 (provider state in editor), #281 (clickable title), #276 (auto-track authored PRs), #275 (History→Queue transitions), #273 (tree counts), #265 (auto-complete on close), #255 (provider metadata docs), #250 (group context), #249 (accept-to-focus, pre-shipped), #243 (version resurfacing), #240 (create from URL), #233 (provider health), #232 (clear history), #231 (sources icons), #230 (layout toggle), #229 (emoji removal), #227 (provider labels), #223 (dead code cleanup), #222 (responsive layout), #221 (contextual heading), #219 (source URL link), #217 (editor metadata), #216 (provider description), #215 (dynamic titles), #189 (dismissed fix), #178 (ADO filtering), #158 (markdown injection), #157 (API trust boundary), #156 (URL sanitization), #155 (URL scheme validation), #154 (crypto.randomUUID), #153 (JSON validation), #152 (path traversal fix), #12 (AI PR actions), bulk rename (WorkCenter→DevDocket)
 
 > **Archived Summary (04-17 and earlier):** Early issues including auto-complete v1 with disappearance detection (#265), large PR fix for walkthrough (#261), clickable title (#281), item activity log (#260), AI model selection (#254), keyboard shortcuts (#226), and dynamic title sync via `titleSync.ts` service (#215). Full learnings in `history-archive.md`
 
 ## Learnings
+
+### 2026-04-24 — Issue #365 (Add Move to Top and Move to Bottom commands)
+
+**Feature:** Added `moveToTop` and `moveToBottom` commands for Queue and Focus views.
+- **WorkGraph methods:** Added `moveToTop(id)` and `moveToBottom(id)` following the pattern of existing `moveItem` method. Both normalize sortOrder indices and re-index siblings when moving items to first/last position.
+- **Command registration:** Added handlers in both `queueCommands.ts` (devdocket.moveToTop/moveToBottom) and `focusCommands.ts` (devdocket.focusMoveToTop/focusMoveToBottom), following the existing pattern where Queue and Focus each have their own command IDs.
+- **Menu placement:** Used group sort order to place commands correctly: `3_reorder@0` (Move to Top), `@1` (Move Up), `@2` (Move Down), `@3` (Move to Bottom).
+- **Existing `moveToEnd` method:** There was already a `moveToEnd` method used for drag-and-drop operations. I added `moveToBottom` as a separate method for consistency with the command naming convention (Top/Bottom vs Up/Down).
+- **Pattern:** For reordering commands, use separate command IDs per view (queue vs focus) and leverage group sort order (`@0`, `@1`, etc.) to control context menu item placement.
+- **Files changed:** `workGraph.ts`, `queueCommands.ts`, `focusCommands.ts`, `package.json`.
 
 ### 2026-04-23 — Issue #302 (Consolidate duplicated type declarations into shared)
 
@@ -419,3 +429,73 @@ See `.squad/orchestration-log/2026-04-20T16-18-00Z-keaton.md` for full triage de
 - **Files changed:** packages/ai-reviewer/src/tools/pathValidator.ts (new, 51 lines), packages/ai-reviewer/src/tools/errorUtils.ts (new, 7 lines), updated all 7 tool files to use shared utilities.
 - **Impact:** ~150 lines of duplication eliminated. Security-critical path validation logic now centralized in single source of truth. New tools automatically get consistent validation.
 - **Pattern:** When security-critical validation is duplicated, extract it immediately into shared utilities. Behavior-preserving refactors must maintain identical error messages and validation semantics.
+
+### 2026-04-24 — Issue #364 (Reorder Watches view to appear after Focus)
+
+**Bug fix:** Adjusted view ordering in `packages/core/package.json` to position Watches immediately after Focus.
+- **Problem:** Watches view appeared last in the sidebar (after Sources), not in the intended position after Focus.
+- **Solution:** Moved the `devdocket.watches` view entry in the `contributes.views.devdocket` array from last position to fourth position (after Focus, before History).
+- **Final ordering:** Inbox, Queue, Focus, Watches, History, Sources.
+- **Files changed:** `packages/core/package.json` (line 196-221, reordered views array).
+- **Pattern:** View ordering in VS Code is determined by array position in `package.json` `contributes.views` — simple array reordering changes sidebar presentation order.
+
+### 2026-04-XX — Issue #373 (VS Code Setting Name Casing)
+
+**PR:** Fixed VS Code settings UI displaying "Devdocket" instead of "DevDocket".
+- **Root cause:** VS Code's settings UI derives the category header from the configuration prefix (`devdocket.`) and title-cases it to "Devdocket" in certain contexts, even when a `configuration.title` field is present. This is a known VS Code behavior where the object-based configuration format may not have the title respected consistently.
+- **Fix:** Converted `configuration` from object format to array format in `packages/core/package.json`. Array format wraps the configuration in square brackets: `[{ title: "DevDocket", properties: {...} }]`. This is the recommended format in newer VS Code API guidelines and ensures the title is consistently respected across all settings UI contexts.
+- **No breaking change:** Settings schema and structure remain identical; only the package.json format changed. All user settings continue to work.
+- **Testing:** Built and tested — all 1942 tests pass. The configuration contribution is validated by VS Code extension host at activation.
+- **Files changed:** `packages/core/package.json` (configuration section structure only).
+- **VS Code API insight:** Array-based configuration contributions provide better title control than object-based contributions. When multiple configuration sections are needed, array format is required; using it consistently even for single sections ensures uniform behavior.
+
+
+### 2026-04-23 — Issue #359: Remove View Layout Settings
+
+**Task:** Remove `devdocket.viewLayout` configuration from VS Code settings UI while preserving UI toggle functionality.
+
+**Implementation:**
+- Removed configuration schema from `packages/core/package.json` (lines 119-166)
+- Removed workspace-folder override warning from `viewLayout.ts` (no longer a user-facing setting)
+- Removed test for workspace-folder warning in `viewLayout.test.ts`
+- Added comment in `getViewLayout()` documenting that layout state uses config API internally but could migrate to globalState per decision #304
+
+**Technical approach:** Kept using `config.update()` and `config.get()` internally for storage (undocumented settings still work in VS Code). This is minimal, low-risk, and preserves existing behavior while removing the settings UI clutter.
+
+**Testing:** All tests pass (1237 tests). Build clean.
+
+**Key learning:** VS Code configuration can store data without exposing it in settings UI — just omit the schema. This is a valid pattern for internal state that users shouldn't manually edit.
+
+### 2026-04-24 — Issues #364, #373, #359: Background Session Completion
+
+**Context:** Three parallel background tasks completed successfully (claude-sonnet-4.5 model):
+
+1. **Issue #364 — Fix Watches View Ordering:** Reordered `devdocket.views` entries in `packages/core/package.json` to fix display order in VS Code views container. PR #376 merged.
+2. **Issue #373 — Fix Setting Name Casing:** Converted `contributes.configuration` from object format to array format with explicit "DevDocket" title for proper settings UI display. PR #377 merged.
+3. **Issue #359 — Remove View Layout Settings:** Removed hardcoded layout configuration schema while preserving UI toggle via internal `config.update()`. PR #378 merged.
+
+**Key learning:** Small, focused package.json and configuration changes can be efficiently parallelized. All three PRs required no code changes, only manifest/schema modifications.
+
+
+### 2026-04-29 — Issue #366 (Fix collapsed view expansion on item move)
+
+**Bug fix:** Modified `ViewRevealer.doReveal()` to prevent expanding collapsed views when items move between views.
+- **Problem:** Moving an item to a different view (e.g., Queue → Focus) called `TreeView.reveal()` with default options, which expands the target view even if the user had collapsed it. This disrupted sidebar layout.
+- **Root cause:** `ViewRevealer.doReveal()` called `view.reveal(item, { select: true, focus: false })` without specifying `expand` option. VS Code's TreeView API defaults to expanding the tree to the revealed element.
+- **Fix:** Added `expand: false` to the reveal options: `view.reveal(item, { select: true, focus: false, expand: false })`.
+- **Impact:** Items are now selected in their target view without forcing the view to expand. Users' collapsed view state is preserved.
+- **Files changed:** `packages/core/src/services/viewRevealer.ts` (line 70).
+- **Pattern:** When calling `TreeView.reveal()`, always specify `expand: false` if the goal is to select/highlight an item without disrupting the user's view collapse state.
+
+
+### 2026-04-26 — Issue #358 (Add URL field to manual work items)
+
+**Feature:** Added optional URL field to manually created work items, enabling "Open in Browser" functionality for user-provided links.
+- **Problem:** Manual work items had no way to associate a URL, while provider-backed items (GitHub issues, etc.) already had URL support via the WorkItem.url field. This prevented users from adding external links to manual items.
+- **Implementation:** Extended WorkItemInput interface with optional url field (non-breaking change). Added URL input field to the editor panel webview, visible only for manually created items (not provider-managed). Integrated validation using existing isSafeUrl() utility before persisting.
+- **URL field visibility:** The URL field appears in the editor panel only when !item.providerId (manual items). Provider-managed items continue to use their provider-supplied URL without user editing.
+- **Validation pattern:** URL validation happens server-side in workItemEditorPanel.saveData() — invalid URLs throw an error shown to the user via vscode.window.showErrorMessage(). This follows the existing security pattern used throughout the codebase.
+- **Context value integration:** The existing contextValue logic (hasUrl suffix) already supports this — no changes needed to tree providers or menu conditions. Setting item.url automatically enables "Open in Browser" in the context menu.
+- **WorkGraph.updateItem extension:** Added URL change tracking to updateItem() — detects both setting and clearing the URL field ('url' in patch), logs to activity log as part of the "updated" entry detail.
+- **Files changed:** packages/shared/src/workItem.ts (WorkItemInput interface), packages/core/src/services/workGraph.ts (updateItem url tracking), packages/core/src/views/editorPanelHtml.ts (URL input field + getData()), packages/core/src/views/workItemEditorPanel.ts (saveData url validation).
+- **Key lesson:** When extending user-editable fields, always validate at save-time (not just client-side), use existing security utilities (isSafeUrl), and restrict editing based on provenance (manual vs provider-managed). The WorkItemInput interface is safe to extend with optional fields — it's used via Partial<WorkItemInput> in updateItem, so new optional fields are backward-compatible.

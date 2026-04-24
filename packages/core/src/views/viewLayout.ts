@@ -14,7 +14,14 @@ const VIEW_DEFAULTS: Record<ViewId, ViewLayout> = {
   watches: 'flat',
 };
 
-/** Read the persisted layout for a given view, falling back to its default. */
+/**
+ * Read the persisted layout for a given view, falling back to its default.
+ * 
+ * Note: Layout state is stored in VS Code configuration (devdocket.viewLayout)
+ * but is not exposed in the settings UI. Users control layout via the UI toggle
+ * in each view's title bar. This could be migrated to globalState in the future
+ * (see team decision #304).
+ */
 export function getViewLayout(viewId: ViewId): ViewLayout {
   const config = vscode.workspace.getConfiguration('devdocket');
   const layoutsRaw: unknown = config.get('viewLayout');
@@ -62,18 +69,7 @@ export async function setViewLayout(viewId: ViewId, layout: ViewLayout): Promise
 async function applyViewLayout(viewId: ViewId, layout: ViewLayout): Promise<void> {
   const config = vscode.workspace.getConfiguration('devdocket');
 
-  // Only target Workspace or Global scope. Workspace-folder scope requires a
-  // resource URI that toggle commands don't have, so updating it without one
-  // could silently write to the wrong folder in multi-root workspaces.
   const inspection = config.inspect('viewLayout');
-
-  if (inspection?.workspaceFolderValue !== undefined) {
-    void vscode.window.showWarningMessage(
-      'A workspace-folder setting is overriding the layout for this view. ' +
-      'Update or remove "devdocket.viewLayout" in your folder settings to use the toggle.',
-    );
-  }
-
   const hasWorkspaceValue = inspection?.workspaceValue !== undefined;
   const scopeValue = hasWorkspaceValue ? inspection.workspaceValue : inspection?.globalValue;
   const target = hasWorkspaceValue

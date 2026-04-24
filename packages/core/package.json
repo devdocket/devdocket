@@ -117,54 +117,6 @@
             "default": true,
             "description": "Automatically mark work items as Done when their linked issue or PR is closed or merged externally"
           },
-          "devdocket.viewLayout": {
-            "type": "object",
-            "default": {},
-            "description": "Per-view layout mode. Keys are view names (inbox, queue, focus, history, sources) and values are 'flat' or 'tree'.",
-            "properties": {
-              "inbox": {
-                "type": "string",
-                "enum": [
-                  "flat",
-                  "tree"
-                ],
-                "default": "tree"
-              },
-              "queue": {
-                "type": "string",
-                "enum": [
-                  "flat",
-                  "tree"
-                ],
-                "default": "flat"
-              },
-              "focus": {
-                "type": "string",
-                "enum": [
-                  "flat",
-                  "tree"
-                ],
-                "default": "flat"
-              },
-              "history": {
-                "type": "string",
-                "enum": [
-                  "flat",
-                  "tree"
-                ],
-                "default": "flat"
-              },
-              "sources": {
-                "type": "string",
-                "enum": [
-                  "flat",
-                  "tree"
-                ],
-                "default": "tree"
-              }
-            },
-            "additionalProperties": false
-          },
           "devdocket.historyClearDays": {
             "type": "integer",
             "default": 30,
@@ -209,16 +161,16 @@
           "name": "Focus"
         },
         {
+          "id": "devdocket.watches",
+          "name": "Watches"
+        },
+        {
           "id": "devdocket.history",
           "name": "History"
         },
         {
           "id": "devdocket.sources",
           "name": "Sources"
-        },
-        {
-          "id": "devdocket.watches",
-          "name": "Watches"
         }
       ]
     },
