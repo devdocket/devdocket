@@ -4,6 +4,7 @@ import { WorkItem, WorkItemInput, WorkItemState } from '../models/workItem';
 import { type ActivityLogEntry, type ActivityType, MAX_ACTIVITY_LOG_ENTRIES } from '../models/activityLog';
 import { ITaskStore } from '../storage/taskStore';
 import { logger } from './logger';
+import { isSafeUrl } from '../utils/url';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -181,7 +182,7 @@ export class WorkGraph {
       state: WorkItemState.New,
       providerId: provenance?.providerId,
       externalId: provenance?.externalId,
-      url: provenance?.url ?? input.url,
+      url: provenance?.url ?? (input.url && isSafeUrl(input.url) ? input.url : undefined),
       group: provenance?.group,
       sortOrder,
       createdAt: now,
