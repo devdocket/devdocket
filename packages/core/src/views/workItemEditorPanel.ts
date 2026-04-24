@@ -209,7 +209,7 @@ export class WorkItemEditorPanel {
       patch.notes = data.notes || undefined;
     }
 
-    // Only allow URL editing for manually created items (not provider-managed)
+    // Only allow URL editing for items without providerId (manual items)
     if (!item.providerId && typeof data.url === 'string') {
       const urlValue = data.url.trim();
       if (urlValue) {
