@@ -86,11 +86,11 @@ export function isPrUrl(url: string): boolean {
     if (u.hostname === 'github.com' && /^\/[^/]+\/[^/]+\/pull\/\d+/.test(u.pathname)) {
       return true;
     }
-    // ADO PR
-    if (u.hostname.endsWith('dev.azure.com') && u.pathname.includes('/pullrequest/')) {
+    // ADO PR - exact domain or subdomain
+    if ((u.hostname === 'dev.azure.com' || u.hostname.endsWith('.dev.azure.com')) && u.pathname.includes('/pullrequest/')) {
       return true;
     }
-    if (u.hostname.endsWith('.visualstudio.com') && u.pathname.includes('/pullrequest/')) {
+    if ((u.hostname === 'visualstudio.com' || u.hostname.endsWith('.visualstudio.com')) && u.pathname.includes('/pullrequest/')) {
       return true;
     }
     return false;
