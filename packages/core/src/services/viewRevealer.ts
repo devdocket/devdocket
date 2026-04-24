@@ -67,7 +67,7 @@ export class ViewRevealer {
 
   private async doReveal(view: WorkItemTreeView, item: WorkItem): Promise<void> {
     try {
-      await view.reveal(item, { select: true, focus: false });
+      await view.reveal(item, { select: true, focus: false, expand: false });
     } catch (err: unknown) {
       logger.debug('Auto-reveal failed (view may not be visible)', err);
     }
