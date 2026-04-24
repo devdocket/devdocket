@@ -49,11 +49,21 @@ DevDocket is a VS Code extension monorepo for managing work items from multiple 
 - **Build:** esbuild, CJS, `--external:vscode`, sourcemaps. Root `npm install` + `npm run build`.
 
 ### Completed Issues
-#333 (storage write-queue consolidation), #302 (consolidate shared types), #330 (git auth env vars — credential exposure fix), #299 (fix double disposal), #323 (watch CI pipelines), #322 (auto-complete activity log), #320 (focus view grouping), #282 (provider state in editor), #281 (clickable title), #276 (auto-track authored PRs), #275 (History→Queue transitions), #273 (tree counts), #265 (auto-complete on close), #255 (provider metadata docs), #250 (group context), #249 (accept-to-focus, pre-shipped), #243 (version resurfacing), #240 (create from URL), #233 (provider health), #232 (clear history), #231 (sources icons), #230 (layout toggle), #229 (emoji removal), #227 (provider labels), #223 (dead code cleanup), #222 (responsive layout), #221 (contextual heading), #219 (source URL link), #217 (editor metadata), #216 (provider description), #215 (dynamic titles), #189 (dismissed fix), #178 (ADO filtering), #158 (markdown injection), #157 (API trust boundary), #156 (URL sanitization), #155 (URL scheme validation), #154 (crypto.randomUUID), #153 (JSON validation), #152 (path traversal fix), #12 (AI PR actions), bulk rename (WorkCenter→DevDocket)
+#365 (move to top/bottom commands), #333 (storage write-queue consolidation), #302 (consolidate shared types), #330 (git auth env vars — credential exposure fix), #299 (fix double disposal), #323 (watch CI pipelines), #322 (auto-complete activity log), #320 (focus view grouping), #282 (provider state in editor), #281 (clickable title), #276 (auto-track authored PRs), #275 (History→Queue transitions), #273 (tree counts), #265 (auto-complete on close), #255 (provider metadata docs), #250 (group context), #249 (accept-to-focus, pre-shipped), #243 (version resurfacing), #240 (create from URL), #233 (provider health), #232 (clear history), #231 (sources icons), #230 (layout toggle), #229 (emoji removal), #227 (provider labels), #223 (dead code cleanup), #222 (responsive layout), #221 (contextual heading), #219 (source URL link), #217 (editor metadata), #216 (provider description), #215 (dynamic titles), #189 (dismissed fix), #178 (ADO filtering), #158 (markdown injection), #157 (API trust boundary), #156 (URL sanitization), #155 (URL scheme validation), #154 (crypto.randomUUID), #153 (JSON validation), #152 (path traversal fix), #12 (AI PR actions), bulk rename (WorkCenter→DevDocket)
 
 > **Archived Summary (04-17 and earlier):** Early issues including auto-complete v1 with disappearance detection (#265), large PR fix for walkthrough (#261), clickable title (#281), item activity log (#260), AI model selection (#254), keyboard shortcuts (#226), and dynamic title sync via `titleSync.ts` service (#215). Full learnings in `history-archive.md`
 
 ## Learnings
+
+### 2026-04-24 — Issue #365 (Add Move to Top and Move to Bottom commands)
+
+**Feature:** Added `moveToTop` and `moveToBottom` commands for Queue and Focus views.
+- **WorkGraph methods:** Added `moveToTop(id)` and `moveToBottom(id)` following the pattern of existing `moveItem` method. Both normalize sortOrder indices and re-index siblings when moving items to first/last position.
+- **Command registration:** Added handlers in both `queueCommands.ts` (devdocket.moveToTop/moveToBottom) and `focusCommands.ts` (devdocket.focusMoveToTop/focusMoveToBottom), following the existing pattern where Queue and Focus each have their own command IDs.
+- **Menu placement:** Used group sort order to place commands correctly: `3_reorder@0` (Move to Top), `@1` (Move Up), `@2` (Move Down), `@3` (Move to Bottom).
+- **Existing `moveToEnd` method:** There was already a `moveToEnd` method used for drag-and-drop operations. I added `moveToBottom` as a separate method for consistency with the command naming convention (Top/Bottom vs Up/Down).
+- **Pattern:** For reordering commands, use separate command IDs per view (queue vs focus) and leverage group sort order (`@0`, `@1`, etc.) to control context menu item placement.
+- **Files changed:** `workGraph.ts`, `queueCommands.ts`, `focusCommands.ts`, `package.json`.
 
 ### 2026-04-23 — Issue #302 (Consolidate duplicated type declarations into shared)
 
