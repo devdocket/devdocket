@@ -215,11 +215,14 @@ export class WorkItemEditorPanel {
       if (trimmedUrl === '') {
         // Clear URL if empty
         patch.url = undefined;
-      } else if (isSafeUrl(trimmedUrl)) {
-        // Only persist valid URLs
-        patch.url = trimmedUrl;
+      } else {
+        const safeUrl = isSafeUrl(trimmedUrl);
+        if (safeUrl) {
+          // Persist normalized URL for consistency
+          patch.url = safeUrl.href;
+        }
+        // If not empty and not valid — silently skip (user is still typing)
       }
-      // If not empty and not valid — silently skip (user is still typing)
     }
 
     if (Object.keys(patch).length === 0) {
