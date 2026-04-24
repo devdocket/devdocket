@@ -66,6 +66,7 @@ export class ViewRevealer {
   }
 
   private async doReveal(view: WorkItemTreeView, item: WorkItem): Promise<void> {
+    if (!view.visible) { return; }
     try {
       await view.reveal(item, { select: true, focus: false, expand: false });
     } catch (err: unknown) {
