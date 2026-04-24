@@ -65,8 +65,8 @@ export class GitHubPrReviewProvider extends BaseGitHubProvider {
         canonicalId: `github:pull:${repoName}#${pr.number}`,
       };
       if (pr.state) { item.state = pr.state; }
-      // Head SHA uses soft resurfacing (version) — only resurfaces from
-      // Done/Archived, not from Queue or Focus.
+      // Head SHA uses soft resurfacing (version) — resurfaces from
+      // Done/Archived or when no work item exists, but not from Queue or Focus.
       const headSha = headShas.get(pr.html_url);
       if (headSha !== undefined) { item.version = headSha; }
       // Re-request time uses hard resurfacing (resurfaceVersion) — always
