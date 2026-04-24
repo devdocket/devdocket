@@ -793,7 +793,7 @@ describe('registerCommands', () => {
       await invoke('devdocket.acceptFromInbox', makeInboxItem());
 
       expect(vscode.window.showErrorMessage).toHaveBeenCalledWith(
-        'DevDocket: Failed to re-open completed item — transition error',
+        'DevDocket: Failed to re-open item — transition error',
       );
       expect(stateStore.setState).not.toHaveBeenCalled();
     });
@@ -1362,7 +1362,7 @@ describe('registerCommands', () => {
       await invoke('devdocket.acceptToFocusFromInbox', makeInboxItem());
 
       expect(vscode.window.showErrorMessage).toHaveBeenCalledWith(
-        'DevDocket: Failed to re-open completed item — transition error',
+        'DevDocket: Failed to re-open item — transition error',
       );
       expect(stateStore.setState).not.toHaveBeenCalled();
     });
@@ -1375,7 +1375,7 @@ describe('registerCommands', () => {
       await invoke('devdocket.acceptToFocusFromInbox', makeInboxItem());
 
       expect(vscode.window.showErrorMessage).toHaveBeenCalledWith(
-        'DevDocket: Failed to re-open completed item — transition error',
+        'DevDocket: Failed to re-open item — transition error',
       );
       expect(stateStore.setState).not.toHaveBeenCalled();
     });

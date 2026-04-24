@@ -44,7 +44,7 @@ async function acceptSingleSourceItem(
       try {
         await workGraph.transitionState(existing.id, WorkItemState.New);
       } catch (err: unknown) {
-        handleCommandError('Failed to re-open completed item', err);
+        handleCommandError('Failed to re-open item', err);
         return;
       }
       try {
