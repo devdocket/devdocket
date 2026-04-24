@@ -10,6 +10,7 @@ import {
   requiredEnum,
   requiredFiniteNumber,
   optionalFiniteNumber,
+  optionalBoolean,
 } from './validation';
 
 const validWorkItemStates = new Set<string>(Object.values(WorkItemState));
@@ -31,6 +32,7 @@ function validateWorkItem(value: unknown, index: number): string | undefined {
     ?? requiredFiniteNumber(result, 'createdAt', ctx)
     ?? requiredFiniteNumber(result, 'updatedAt', ctx)
     ?? optionalString(result, 'url', ctx)
+    ?? optionalBoolean(result, 'isPullRequest', ctx)
     ?? optionalString(result, 'providerId', ctx)
     ?? optionalString(result, 'externalId', ctx)
     ?? optionalString(result, 'description', ctx)

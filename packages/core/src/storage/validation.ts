@@ -63,3 +63,11 @@ export function optionalFiniteNumber(obj: Obj, field: string, context: string): 
   }
   return undefined;
 }
+
+/** Validates an optional boolean field (must be boolean if present). */
+export function optionalBoolean(obj: Obj, field: string, context: string): string | undefined {
+  if (obj[field] !== undefined && typeof obj[field] !== 'boolean') {
+    return `${context} has invalid "${field}" (boolean expected)`;
+  }
+  return undefined;
+}
