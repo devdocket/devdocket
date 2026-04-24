@@ -21,7 +21,7 @@ Provider refreshes are separate — they happen on a periodic schedule or via ex
 - Error → `'unhealthy'` with message
 - Timeout → `'unhealthy'` with "Refresh timed out"
 
-The `onDidChangeProviderHealth` event drives UI reactivity. If a provider catches errors internally and resolves `refresh()` successfully, the registry treats it as healthy — providers should let refresh failures reject so health tracking works correctly.
+The `onDidChangeProviderHealth` event drives UI reactivity. Health tracking only works if providers let refresh failures reject — see `providers.instructions.md` for provider-side guidance.
 
 ## Concurrency Guard
 

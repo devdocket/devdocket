@@ -47,3 +47,10 @@ Tree items append contextValue suffixes for conditional menu items:
 ## PanelManager Lifecycle
 
 `WorkItemEditorPanel` uses a `PanelManager` class instantiated during `activate()` and disposed with the extension context. The static `setPanelManager()` pattern preserves the static API facade while scoping panel cache ownership to the extension lifecycle.
+
+## Webview Security
+
+- CSP: `default-src 'none'` — whitelist only what's needed
+- Use `escapeHtml()` for text content, `escapeAttr()` for attribute values (different escape sets)
+- External links via `postMessage` + `isSafeUrl()` — never open URLs directly from webview
+- Use `appendText()` for user-controlled strings in `MarkdownString`, not `appendMarkdown()` — prevents markdown injection
