@@ -340,6 +340,7 @@ export class WorkGraph {
     this._onDidChange.fire();
   }
 
+  /** Move a work item to the first position among siblings in the same state. */
   async moveToTop(id: string): Promise<void> {
     const item = this.items.get(id);
     if (!item) { return; }
@@ -354,39 +355,6 @@ export class WorkGraph {
 
     const withoutItem = siblings.filter(s => s.id !== item.id);
     withoutItem.unshift(item);
-
-    const itemsToSave: WorkItem[] = [];
-    withoutItem.forEach((sibling, index) => {
-      if (sibling.sortOrder !== index) {
-        const updated = { ...sibling, sortOrder: index, updatedAt: Date.now() };
-        itemsToSave.push(updated);
-      }
-    });
-
-    if (itemsToSave.length > 0) {
-      await this.store.saveAll(itemsToSave);
-      for (const updated of itemsToSave) {
-        this.items.set(updated.id, updated);
-      }
-      this.invalidateStateCache();
-      this._onDidChange.fire();
-    }
-  }
-
-  async moveToBottom(id: string): Promise<void> {
-    const item = this.items.get(id);
-    if (!item) { return; }
-
-    const siblings = this.getItemsByState(item.state)
-      .sort((a, b) => (a.sortOrder ?? Number.MAX_SAFE_INTEGER) - (b.sortOrder ?? Number.MAX_SAFE_INTEGER));
-
-    if (siblings.length === 0) { return; }
-
-    const lastSibling = siblings[siblings.length - 1];
-    if (lastSibling.id === item.id) { return; }
-
-    const withoutItem = siblings.filter(s => s.id !== item.id);
-    withoutItem.push(item);
 
     const itemsToSave: WorkItem[] = [];
     withoutItem.forEach((sibling, index) => {
