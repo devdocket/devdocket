@@ -381,7 +381,7 @@ async function handleCreateItemFromUrl(
   const group = details.group?.trim() || undefined;
   const createdItem = await workGraph.createItem(
     { title: details.title, notes: details.notes },
-    { providerId: details.providerId, externalId: details.externalId, url: details.url, ...(group ? { group } : {}) },
+    { providerId: details.providerId, externalId: details.externalId, url: details.url, isPullRequest: details.isPullRequest, ...(group ? { group } : {}) },
   );
 
   const providerLabel = createdItem.providerId ? labelCache.get(createdItem.providerId) : undefined;
