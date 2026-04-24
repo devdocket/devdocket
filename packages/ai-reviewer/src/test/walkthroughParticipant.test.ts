@@ -1,24 +1,8 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { chat, lm, LanguageModelTextPart, LanguageModelToolCallPart, ChatRequestTurn, mockLogOutputChannel } from 'vscode';
 import { WalkthroughParticipant } from '../walkthroughParticipant';
-import type { RepoManager, WorktreeInfo } from '../repoManager';
-
-function createMockRepoManager(): RepoManager {
-  return {
-    ensureWorktree: vi.fn().mockResolvedValue({
-      worktreePath: '/mock/worktrees/pr-42',
-      clonePath: '/mock/repos/owner-repo',
-      org: 'owner',
-      repo: 'repo',
-      prNumber: '42',
-      headRef: 'pr-42',
-      baseRef: 'origin/main',
-    } as WorktreeInfo),
-    getWorktreeInfo: vi.fn().mockReturnValue(undefined),
-    removeWorktree: vi.fn(),
-    removeRepo: vi.fn(),
-  } as unknown as RepoManager;
-}
+import type { RepoManager } from '../repoManager';
+import { createMockRepoManager } from './testFactories';
 
 function createMockRequest(prompt: string, model?: unknown) {
   return {
