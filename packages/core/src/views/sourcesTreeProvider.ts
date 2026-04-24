@@ -28,6 +28,7 @@ export interface SourceItemNode {
   url?: string;
   group?: string;
   canonicalId?: string;
+  isPullRequest?: boolean;
 }
 
 export class SourcesTreeProvider implements vscode.TreeDataProvider<SourcesElement> {
@@ -241,6 +242,7 @@ export class SourcesTreeProvider implements vscode.TreeDataProvider<SourcesEleme
       url: item.url,
       group: item.group?.trim() || undefined,
       canonicalId: item.canonicalId,
+      isPullRequest: item.isPullRequest,
     };
   }
 

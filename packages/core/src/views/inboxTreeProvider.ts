@@ -31,6 +31,7 @@ export interface InboxItem {
   group?: string;
   reason?: string;
   canonicalId?: string;
+  isPullRequest?: boolean;
 }
 
 export type InboxElement = InboxProviderNode | InboxGroupNode | InboxItem;
@@ -398,6 +399,7 @@ export class InboxTreeProvider implements vscode.TreeDataProvider<InboxElement> 
       group: item.group?.trim() || undefined,
       reason: item.reason,
       canonicalId: item.canonicalId,
+      isPullRequest: item.isPullRequest,
     };
   }
 
