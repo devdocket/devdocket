@@ -374,6 +374,11 @@ export class WorkGraph {
     }
   }
 
+  /** Move a work item to the last position among siblings in the same state. Alias for moveToEnd. */
+  async moveToBottom(id: string): Promise<void> {
+    return this.moveToEnd(id);
+  }
+
   /** Insert a work item before or after a target item (drag-and-drop reorder). */
   async reorderItem(draggedId: string, targetId: string): Promise<void> {
     const dragged = this.items.get(draggedId);

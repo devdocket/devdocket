@@ -57,7 +57,7 @@ async function handleMoveToBottom(workGraph: WorkGraph, item?: { id?: string }):
     void vscode.window.showInformationMessage('DevDocket: Select an item in the Queue to move.');
     return;
   }
-  await workGraph.moveToEnd(item.id);
+  await workGraph.moveToBottom(item.id);
 }
 
 async function handleDeleteItem(workGraph: WorkGraph, item?: { id?: string }, selectedItems?: { id?: string }[]): Promise<void> {

@@ -61,7 +61,7 @@ async function handleFocusMoveToBottom(workGraph: WorkGraph, item?: { id?: strin
     void vscode.window.showInformationMessage('DevDocket: Select an item in Focus to move.');
     return;
   }
-  await workGraph.moveToEnd(item.id);
+  await workGraph.moveToBottom(item.id);
 }
 
 export function registerFocusCommands(
