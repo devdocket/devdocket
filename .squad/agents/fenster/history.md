@@ -428,3 +428,14 @@ See `.squad/orchestration-log/2026-04-20T16-18-00Z-keaton.md` for full triage de
 - **Final ordering:** Inbox, Queue, Focus, Watches, History, Sources.
 - **Files changed:** `packages/core/package.json` (line 196-221, reordered views array).
 - **Pattern:** View ordering in VS Code is determined by array position in `package.json` `contributes.views` — simple array reordering changes sidebar presentation order.
+
+### 2026-04-XX — Issue #373 (VS Code Setting Name Casing)
+
+**PR:** Fixed VS Code settings UI displaying "Devdocket" instead of "DevDocket".
+- **Root cause:** VS Code's settings UI derives the category header from the configuration prefix (`devdocket.`) and title-cases it to "Devdocket" in certain contexts, even when a `configuration.title` field is present. This is a known VS Code behavior where the object-based configuration format may not have the title respected consistently.
+- **Fix:** Converted `configuration` from object format to array format in `packages/core/package.json`. Array format wraps the configuration in square brackets: `[{ title: "DevDocket", properties: {...} }]`. This is the recommended format in newer VS Code API guidelines and ensures the title is consistently respected across all settings UI contexts.
+- **No breaking change:** Settings schema and structure remain identical; only the package.json format changed. All user settings continue to work.
+- **Testing:** Built and tested — all 1942 tests pass. The configuration contribution is validated by VS Code extension host at activation.
+- **Files changed:** `packages/core/package.json` (configuration section structure only).
+- **VS Code API insight:** Array-based configuration contributions provide better title control than object-based contributions. When multiple configuration sections are needed, array format is required; using it consistently even for single sections ensures uniform behavior.
+
