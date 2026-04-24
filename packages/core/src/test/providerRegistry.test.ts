@@ -1376,23 +1376,24 @@ describe('ProviderRegistry', () => {
     });
 
     it('fires onDidChangeProviderHealth when lastRefreshTime changes even if status is same', async () => {
-      const provider = createMockProvider('stable');
-      registry.register(provider);
-      // First refresh resolves immediately → healthy
-      await nextTick();
-
-      const listener = vi.fn();
-      registry.onDidChangeProviderHealth(listener);
-
-      // Guarantee a different timestamp on next refresh
-      const spy = vi.spyOn(Date, 'now').mockReturnValue(Date.now() + 1000);
+      vi.useFakeTimers();
       try {
-        await registry.refreshAll();
-      } finally {
-        spy.mockRestore();
-      }
+        const provider = createMockProvider('stable');
+        registry.register(provider);
+        // First refresh resolves immediately → healthy
+        await vi.advanceTimersByTimeAsync(0);
 
-      expect(listener).toHaveBeenCalledWith('stable');
+        const listener = vi.fn();
+        registry.onDidChangeProviderHealth(listener);
+
+        // Advance faked clock to guarantee a different timestamp
+        vi.setSystemTime(Date.now() + 1000);
+        await registry.refreshAll();
+
+        expect(listener).toHaveBeenCalledWith('stable');
+      } finally {
+        vi.useRealTimers();
+      }
     });
 
     it('clears health status when provider is unregistered', async () => {
