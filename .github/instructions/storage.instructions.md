@@ -44,7 +44,7 @@ Five globalState keys hold persisted data:
 - **`devdocket.workitems`** — Persisted WorkItems with state machine lifecycle (`New` → `InProgress` → `Done` → `Archived`).
 - **`devdocket.discovered-state`** — Thin index mapping `providerId + externalId` → `InboxState` (`unseen` | `accepted` | `dismissed`). Provider item data (title, description, url) is **not persisted** — always read live from the provider.
 - **`devdocket.read-state`** — Set of inbox item IDs the user has viewed.
-- **`devdocket.provider-labels`** — Cached label-to-color mappings from providers.
+- **`devdocket.provider-labels`** — Cached mapping of `providerId` → display label (for example, `"github"` → `"GitHub Issues"`).
 - **`devdocket.watches`** — User-configured watch entries.
 
 ## Provider Items Are References, Not Copies
