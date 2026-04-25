@@ -12,6 +12,7 @@ describe('resolveRepos', () => {
 
   afterEach(() => {
     vi.restoreAllMocks();
+    vi.unstubAllGlobals();
   });
 
   function jsonResponse(data: unknown, headers?: Record<string, string>): Response {
