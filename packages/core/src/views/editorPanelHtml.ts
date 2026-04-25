@@ -1,4 +1,6 @@
 import * as crypto from 'crypto';
+import { marked } from 'marked';
+import sanitizeHtml from 'sanitize-html';
 import { WorkItem, WorkItemState } from '../models/workItem';
 import type { ActivityLogEntry } from '../models/activityLog';
 import { isSafeUrl } from '../utils/url';
@@ -8,7 +10,7 @@ export interface EditorHtmlOptions {
   item: WorkItem;
   /** Display label for the provider, shown only when item.providerId is set. */
   providerLabel?: string;
-  /** Read-only description from the provider. Will be HTML-escaped before rendering. */
+  /** Read-only description from the provider. Rendered as markdown. */
   providerDescription?: string;
   /** Upstream state from the provider (e.g. "open", "closed", "Active"). Will be HTML-escaped. */
   providerState?: string;
@@ -21,7 +23,7 @@ export function getEditorPanelHtml({ cspSource, item, providerLabel, providerDes
   const descriptionSection = providerDescription
     ? `    <div class="field">
       <label id="provider-desc-label">Provider Description</label>
-      <div class="provider-description" role="note" aria-labelledby="provider-desc-label">${escapeHtml(providerDescription)}</div>
+      <div class="provider-description" role="note" aria-labelledby="provider-desc-label">${renderMarkdown(providerDescription)}</div>
     </div>`
     : '';
   return /*html*/ `<!DOCTYPE html>
@@ -29,7 +31,7 @@ export function getEditorPanelHtml({ cspSource, item, providerLabel, providerDes
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src ${cspSource} 'nonce-${nonce}'; script-src 'nonce-${nonce}';">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src ${cspSource} 'nonce-${nonce}'; script-src 'nonce-${nonce}'; img-src https: http:;">
   <style nonce="${nonce}">
     :root {
       --input-bg: var(--vscode-input-background);
@@ -158,9 +160,86 @@ export function getEditorPanelHtml({ cspSource, item, providerLabel, providerDes
       padding: 8px 10px;
       border-left: 3px solid var(--vscode-textBlockQuote-border, var(--vscode-focusBorder));
       background: var(--vscode-textBlockQuote-background, var(--vscode-editor-inactiveSelectionBackground, rgba(128,128,128,0.08)));
-      font-style: italic;
-      white-space: pre-wrap;
       margin-top: 2px;
+      line-height: 1.5;
+    }
+    .provider-description h1,
+    .provider-description h2,
+    .provider-description h3,
+    .provider-description h4,
+    .provider-description h5,
+    .provider-description h6 {
+      margin-top: 12px;
+      margin-bottom: 6px;
+      font-weight: 600;
+    }
+    .provider-description h1 { font-size: 1.3em; }
+    .provider-description h2 { font-size: 1.15em; }
+    .provider-description h3 { font-size: 1.05em; }
+    .provider-description p {
+      margin: 6px 0;
+    }
+    .provider-description ul,
+    .provider-description ol {
+      padding-left: 24px;
+      margin: 6px 0;
+    }
+    .provider-description li {
+      margin: 2px 0;
+    }
+    .provider-description pre {
+      background: var(--vscode-textCodeBlock-background, rgba(128,128,128,0.15));
+      padding: 8px 10px;
+      border-radius: 3px;
+      overflow-x: auto;
+      margin: 6px 0;
+    }
+    .provider-description code {
+      background: var(--vscode-textCodeBlock-background, rgba(128,128,128,0.15));
+      padding: 1px 4px;
+      border-radius: 3px;
+      font-size: 0.9em;
+    }
+    .provider-description pre code {
+      background: none;
+      padding: 0;
+    }
+    .provider-description a {
+      color: var(--vscode-textLink-foreground);
+      text-decoration: none;
+    }
+    .provider-description a:hover {
+      color: var(--vscode-textLink-activeForeground);
+      text-decoration: underline;
+    }
+    .provider-description blockquote {
+      border-left: 3px solid var(--vscode-textBlockQuote-border, var(--vscode-focusBorder));
+      padding: 4px 12px;
+      margin: 6px 0;
+      opacity: 0.85;
+    }
+    .provider-description img {
+      max-width: 100%;
+      height: auto;
+    }
+    .provider-description table {
+      border-collapse: collapse;
+      margin: 6px 0;
+      width: 100%;
+    }
+    .provider-description th,
+    .provider-description td {
+      border: 1px solid var(--vscode-widget-border, rgba(128,128,128,0.35));
+      padding: 4px 8px;
+      text-align: left;
+    }
+    .provider-description th {
+      font-weight: 600;
+    }
+    .provider-description hr {
+      border: none;
+      border-top: 1px solid var(--vscode-widget-border, rgba(128,128,128,0.35));
+      margin: 10px 0;
     }
     .title-link {
       color: var(--vscode-textLink-foreground);
@@ -353,6 +432,31 @@ ${renderActivityLog(item.activityLog)}
       });
     }
 
+    function isExternalUrl(href) {
+      if (!href) return false;
+      try {
+        const url = new URL(href, window.location.href);
+        return url.protocol === 'http:' || url.protocol === 'https:';
+      } catch {
+        return false;
+      }
+    }
+
+    const descEl = document.querySelector('.provider-description');
+    if (descEl) {
+      descEl.addEventListener('click', (e) => {
+        if (!(e.target instanceof Element)) return;
+        const anchor = e.target.closest('a');
+        if (!anchor) return;
+        // Always prevent default to avoid unintended webview navigation
+        e.preventDefault();
+        const href = anchor.getAttribute('href');
+        if (href && isExternalUrl(href)) {
+          vscode.postMessage({ type: 'openUrl', url: href });
+        }
+      });
+    }
+
     window.addEventListener('message', event => {
       const msg = event.data;
       if (msg && msg.type === 'updateTitle' && typeof msg.title === 'string') {
@@ -374,6 +478,29 @@ ${renderActivityLog(item.activityLog)}
   </script>
 </body>
 </html>`;
+}
+
+const sanitizeAllowList: sanitizeHtml.IOptions = {
+  allowedTags: [
+    'h1', 'h2', 'h3', 'h4', 'h5', 'h6',
+    'p', 'br', 'hr',
+    'ul', 'ol', 'li',
+    'blockquote', 'pre', 'code',
+    'em', 'strong', 'a', 'img',
+    'table', 'thead', 'tbody', 'tr', 'th', 'td',
+    'del', 's', 'sup', 'sub',
+    'details', 'summary',
+  ],
+  allowedAttributes: {
+    a: ['href'],
+    img: ['src', 'alt'],
+  },
+  allowedSchemes: ['http', 'https'],
+};
+
+export function renderMarkdown(markdown: string): string {
+  const rawHtml = marked.parse(markdown, { async: false }) as string;
+  return sanitizeHtml(rawHtml, sanitizeAllowList);
 }
 
 function getNonce(): string {

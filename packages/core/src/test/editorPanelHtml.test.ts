@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { getEditorPanelHtml } from '../views/editorPanelHtml';
+import { getEditorPanelHtml, renderMarkdown } from '../views/editorPanelHtml';
 import { WorkItem, WorkItemState } from '../models/workItem';
 
 function makeItem(overrides: Partial<WorkItem> = {}): WorkItem {
@@ -248,33 +248,31 @@ describe('getEditorPanelHtml', () => {
       expect(html).not.toMatch(descLabelPattern);
     });
 
-    it('HTML-escapes the description to prevent XSS', () => {
+    it('strips dangerous attributes from HTML in description', () => {
       const xss = '<img src=x onerror="alert(1)"> & "quotes"';
       const html = getEditorPanelHtml({
         cspSource,
         item: makeItem({ providerId: 'github' }),
         providerDescription: xss,
       });
-      expect(html).not.toContain('<img src=x');
-      expect(html).toContain('&lt;img src=x');
-      expect(html).toContain('&amp;');
+      // onerror handler must be stripped
+      expect(html).not.toContain('onerror');
+      expect(html).not.toContain('alert(1)');
     });
 
-    it('renders the description as a non-editable div, not an input or textarea', () => {
+    it('renders the description as markdown inside a non-editable div', () => {
       const html = getEditorPanelHtml({
         cspSource,
         item: makeItem({ providerId: 'github' }),
         providerDescription: 'Some provider description',
       });
-      // The description should be in a div (inherently read-only), not an input/textarea
-      const descIndex = html.indexOf('Some provider description');
-      expect(descIndex).toBeGreaterThan(-1);
-
-      const before = html.substring(0, descIndex);
-      const lastTagOpen = before.lastIndexOf('<');
-      const containingTag = html.substring(lastTagOpen, descIndex);
-      expect(containingTag).toMatch(/^<div\b/);
-      expect(containingTag).not.toMatch(/^<(input|textarea)\b/);
+      // The description should be rendered as markdown (wrapped in <p>) inside a div
+      expect(html).toContain('<p>Some provider description</p>');
+      expect(html).toContain('class="provider-description"');
+      // Not editable
+      const descDiv = html.match(/<div class="provider-description"[^>]*>([\s\S]*?)<\/div>/);
+      expect(descDiv).not.toBeNull();
+      expect(descDiv![0]).not.toMatch(/<(input|textarea)\b/);
     });
   });
 
@@ -542,5 +540,98 @@ describe('getEditorPanelHtml', () => {
       const html = getEditorPanelHtml({ cspSource, item });
       expect(html).not.toContain('URL is managed by the provider');
     });
+  });
+});
+
+describe('renderMarkdown', () => {
+  it('renders bold text', () => {
+    expect(renderMarkdown('**bold**')).toContain('<strong>bold</strong>');
+  });
+
+  it('renders italic text', () => {
+    expect(renderMarkdown('*italic*')).toContain('<em>italic</em>');
+  });
+
+  it('wraps plain text in a paragraph', () => {
+    expect(renderMarkdown('hello world')).toContain('<p>hello world</p>');
+  });
+
+  it('renders links with href preserved', () => {
+    const result = renderMarkdown('[link](https://example.com)');
+    expect(result).toContain('<a href="https://example.com">link</a>');
+  });
+
+  it('renders images with src and alt', () => {
+    const result = renderMarkdown('![alt text](https://example.com/img.png)');
+    expect(result).toContain('<img src="https://example.com/img.png"');
+    expect(result).toContain('alt="alt text"');
+  });
+
+  it('strips script tags', () => {
+    const result = renderMarkdown('<script>alert("xss")</script>');
+    expect(result).not.toContain('<script');
+    expect(result).not.toContain('alert');
+  });
+
+  it('strips event handler attributes', () => {
+    const result = renderMarkdown('<div onclick="alert(\'xss\')">content</div>');
+    expect(result).not.toContain('onclick');
+    expect(result).toContain('content');
+  });
+
+  it('strips style tags', () => {
+    expect(renderMarkdown('<style>body{color:red}</style>')).not.toContain('<style');
+  });
+
+  it('strips iframe tags', () => {
+    expect(renderMarkdown('<iframe src="https://evil.com"></iframe>')).not.toContain('<iframe');
+  });
+
+  it('renders code blocks', () => {
+    const result = renderMarkdown('```\nconst x = 1;\n```');
+    expect(result).toContain('<pre>');
+    expect(result).toContain('<code>');
+  });
+
+  it('renders inline code', () => {
+    expect(renderMarkdown('use `npm install`')).toContain('<code>npm install</code>');
+  });
+
+  it('renders unordered lists', () => {
+    const result = renderMarkdown('- item 1\n- item 2');
+    expect(result).toContain('<ul>');
+    expect(result).toContain('<li>item 1</li>');
+  });
+
+  it('renders tables', () => {
+    const result = renderMarkdown('| A | B |\n|---|---|\n| 1 | 2 |');
+    expect(result).toContain('<table>');
+    expect(result).toContain('<th>A</th>');
+    expect(result).toContain('<td>1</td>');
+  });
+
+  it('strips javascript: scheme from links', () => {
+    const result = renderMarkdown('<a href="javascript:alert(1)">click</a>');
+    expect(result).not.toContain('javascript:');
+  });
+
+  it('strips data: scheme from image src', () => {
+    const result = renderMarkdown('<img src="data:image/png;base64,abc" alt="test">');
+    expect(result).not.toContain('data:');
+  });
+
+  it('renders ordered lists', () => {
+    const result = renderMarkdown('1. first\n2. second');
+    expect(result).toContain('<ol>');
+    expect(result).toContain('<li>first</li>');
+    expect(result).toContain('<li>second</li>');
+  });
+
+  it('renders details/summary elements', () => {
+    const result = renderMarkdown('<details><summary>Click me</summary>Hidden content</details>');
+    expect(result).toContain('<details>');
+    expect(result).toContain('<summary>');
+    expect(result).toContain('Click me');
+    expect(result).toContain('Hidden content');
   });
 });
