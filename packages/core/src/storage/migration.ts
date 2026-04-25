@@ -36,6 +36,12 @@ export async function migrateToGlobalState(globalState: Memento, storagePath: st
   let allSucceeded = true;
 
   for (const [fileName, stateKey] of Object.entries(FILE_KEY_MAP)) {
+    // Skip keys that already have data — prevents overwriting newer
+    // globalState values when migration retries after a partial failure.
+    if (globalState.get(stateKey) !== undefined) {
+      logger.debug(`Skipping ${fileName} — globalState key "${stateKey}" already populated`);
+      continue;
+    }
     const filePath = path.join(storagePath, fileName);
     try {
       const data = await fs.readFile(filePath, 'utf-8');
