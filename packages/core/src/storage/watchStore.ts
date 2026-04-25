@@ -1,10 +1,8 @@
-import * as path from 'path';
+import type { Memento } from 'vscode';
 import { logger } from '../services/logger';
-import { SerializedJsonStore } from './serializedJsonStore';
 import type { WatchedRun, WatchedPR } from '../services/watcherService';
 
-const WATCHES_FILE = 'watches.json';
-const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5 MB
+const STORAGE_KEY = 'devdocket.watches';
 
 /**
  * On-disk shape: either a legacy plain array of WatchedRun, or the
@@ -16,34 +14,25 @@ interface WatchStoreData {
 }
 
 /**
- * Persists watched pipeline runs and PR watches as JSON on disk.
- * Extends SerializedJsonStore for write-queue serialization and JSON helpers.
+ * Persists watched pipeline runs and PR watches in VS Code globalState.
  *
  * Supports the legacy plain-array format (runs only); legacy data is
- * transparently converted on read and written in the new envelope format
- * on the next save.
+ * transparently converted on read.
  */
-export class WatchStore extends SerializedJsonStore {
-  private readonly filePath: string;
+export class WatchStore {
+  private readonly globalState: Memento;
 
-  constructor(storagePath: string) {
-    super();
-    this.filePath = path.join(storagePath, WATCHES_FILE);
+  constructor(globalState: Memento) {
+    this.globalState = globalState;
   }
 
   /**
-   * Load all persisted data from disk.
-   * Returns empty arrays if file doesn't exist or is invalid.
+   * Load all persisted data from globalState.
+   * Returns empty arrays if no data exists or data is invalid.
    * Transparently supports the legacy plain-array format (runs only).
    */
   async loadAll(): Promise<WatchStoreData> {
-    let parsed: unknown;
-    try {
-      parsed = await this.readJson(this.filePath, MAX_FILE_SIZE);
-    } catch (err) {
-      logger.warn('Failed to load watches', err);
-      return { runs: [], prs: [] };
-    }
+    const parsed = this.globalState.get<unknown>(STORAGE_KEY);
     if (parsed === undefined) {
       return { runs: [], prs: [] };
     }
@@ -59,8 +48,7 @@ export class WatchStore extends SerializedJsonStore {
     }
 
     if (typeof parsed !== 'object' || parsed === null) {
-      logger.warn(`Invalid watches data in ${this.filePath}: expected an object or array`);
-      await this.backupFile(this.filePath);
+      logger.warn('Invalid watches data in globalState: expected an object or array');
       return { runs: [], prs: [] };
     }
 
@@ -85,12 +73,10 @@ export class WatchStore extends SerializedJsonStore {
   }
 
   /**
-   * Save all watches to disk (serialized through write queue).
+   * Save all watches to globalState.
    */
   async saveAll(runs: WatchedRun[], prs: WatchedPR[]): Promise<void> {
-    return this.enqueue(async () => {
-      const data: WatchStoreData = { runs, prs };
-      await this.writeJson(this.filePath, data);
-    });
+    const data: WatchStoreData = { runs, prs };
+    await this.globalState.update(STORAGE_KEY, data);
   }
 }

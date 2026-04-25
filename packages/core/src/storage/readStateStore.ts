@@ -1,45 +1,39 @@
-import * as path from 'path';
+import type { Memento } from 'vscode';
 import { logger } from '../services/logger';
-import { SerializedJsonStore } from './serializedJsonStore';
+
+const STORAGE_KEY = 'devdocket.read-state';
 
 /**
  * Persists the set of inbox item IDs that the user has viewed ("read")
  * so read/unread state survives across VS Code restarts.
  *
- * Stored as a JSON array of composite keys ("providerId::externalId")
- * in read-state.json alongside the other stores.
+ * Stored as a string array in VS Code globalState under the key
+ * "devdocket.read-state".
  */
-export class ReadStateStore extends SerializedJsonStore {
-  private readonly filePath: string;
+export class ReadStateStore {
+  private readonly globalState: Memento;
   private readonly items = new Set<string>();
   private loaded = false;
 
-  constructor(storagePath: string) {
-    super();
-    this.filePath = path.join(storagePath, 'read-state.json');
+  constructor(globalState: Memento) {
+    this.globalState = globalState;
   }
 
   has(key: string): boolean {
     return this.items.has(key);
   }
 
+  private async persist(): Promise<void> {
+    await this.globalState.update(STORAGE_KEY, [...this.items]);
+  }
+
   /** Returns true only when the key is newly added. Persists automatically. */
   async add(key: string): Promise<boolean> {
     if (!this.loaded) { await this.load(); }
-    let added = false;
-    await this.enqueue(async () => {
-      if (this.items.has(key)) { return; }
-      this.items.add(key);
-      added = true;
-      try {
-        await this.writeJson(this.filePath, [...this.items]);
-      } catch (err) {
-        this.items.delete(key);
-        added = false;
-        throw err;
-      }
-    });
-    return added;
+    if (this.items.has(key)) { return false; }
+    this.items.add(key);
+    await this.persist();
+    return true;
   }
 
   /** Adds multiple keys in a single write. Returns keys that were newly added. */
@@ -47,24 +41,15 @@ export class ReadStateStore extends SerializedJsonStore {
     if (keys.length === 0) { return []; }
     if (!this.loaded) { await this.load(); }
     const newlyAdded: string[] = [];
-    await this.enqueue(async () => {
-      for (const key of keys) {
-        if (!this.items.has(key)) {
-          this.items.add(key);
-          newlyAdded.push(key);
-        }
+    for (const key of keys) {
+      if (!this.items.has(key)) {
+        this.items.add(key);
+        newlyAdded.push(key);
       }
-      if (newlyAdded.length === 0) { return; }
-      try {
-        await this.writeJson(this.filePath, [...this.items]);
-      } catch (err) {
-        for (const key of newlyAdded) {
-          this.items.delete(key);
-        }
-        newlyAdded.length = 0;
-        throw err;
-      }
-    });
+    }
+    if (newlyAdded.length > 0) {
+      await this.persist();
+    }
     return newlyAdded;
   }
 
@@ -72,73 +57,34 @@ export class ReadStateStore extends SerializedJsonStore {
     return this.items.values();
   }
 
-  /**
-   * Atomically delete keys and persist, with rollback on write failure.
-   * Both deletes and write are serialized through the writeQueue.
-   */
   async deleteMany(keys: string[]): Promise<void> {
     if (!this.loaded) { await this.load(); }
-    return this.enqueue(async () => {
-      const actuallyDeleted: string[] = [];
-      for (const key of keys) {
-        if (this.items.delete(key)) {
-          actuallyDeleted.push(key);
-        }
-      }
-      if (actuallyDeleted.length === 0) { return; }
-      try {
-        await this.writeJson(this.filePath, [...this.items]);
-      } catch (err) {
-        for (const key of actuallyDeleted) {
-          this.items.add(key);
-        }
-        throw err;
-      }
-    });
+    let changed = false;
+    for (const key of keys) {
+      if (this.items.delete(key)) { changed = true; }
+    }
+    if (changed) {
+      await this.persist();
+    }
   }
 
-  /** Returns a promise that resolves when all queued writes complete. */
-  override flush(): Promise<void> {
-    return super.flush();
-  }
+  /** No-op — globalState writes are immediate. */
+  async flush(): Promise<void> {}
 
   async load(): Promise<void> {
     if (this.loaded) { return; }
-    const parsed = await this.readJson(this.filePath);
-    if (parsed === undefined) {
-      this.items.clear();
-      this.loaded = true;
-      return;
-    }
-    if (!Array.isArray(parsed)) {
-      logger.warn('Read state file does not contain an array — backing up and resetting to empty');
-      await this.backupFile(this.filePath);
-      this.items.clear();
-      this.loaded = true;
-      return;
-    }
+    const parsed = this.globalState.get<unknown[]>(STORAGE_KEY);
     this.items.clear();
-    const maxInvalidEntryWarnings = 5;
-    let invalidEntryCount = 0;
-    for (const item of parsed) {
-      if (typeof item !== 'string') {
-        invalidEntryCount += 1;
-        if (invalidEntryCount <= maxInvalidEntryWarnings) {
+    if (Array.isArray(parsed)) {
+      for (const item of parsed) {
+        if (typeof item === 'string') {
+          this.items.add(item);
+        } else {
           logger.warn(`Skipping invalid read state entry: expected string, got ${typeof item}`);
         }
-        continue;
       }
-      this.items.add(item);
+      logger.debug(`Loaded read state: ${this.items.size} entries`);
     }
-    if (invalidEntryCount > 0) {
-      const suppressed = invalidEntryCount - maxInvalidEntryWarnings;
-      if (suppressed > 0) {
-        logger.warn(`Skipped ${invalidEntryCount} invalid read state entries (${suppressed} additional warnings suppressed)`);
-      } else {
-        logger.warn(`Skipped ${invalidEntryCount} invalid read state entr${invalidEntryCount === 1 ? 'y' : 'ies'}`);
-      }
-    }
-    logger.debug(`Loaded read state: ${this.items.size} entries`);
     this.loaded = true;
   }
 }
