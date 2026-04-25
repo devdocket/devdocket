@@ -185,20 +185,24 @@ describe('GitHubMentionsProvider', () => {
   it('includes activatedAt in search query', async () => {
     const timestamp = '2024-01-15T00:00:00.000Z';
     mockContext = createMockContext({ mentionsActivatedAt: timestamp });
-    provider = new GitHubMentionsProvider(mockContext);
+    const localProvider = new GitHubMentionsProvider(mockContext);
 
-    mockFetch.mockResolvedValueOnce({
-      ok: true,
-      json: async () => ({ items: [] }),
-    });
+    try {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ items: [] }),
+      });
 
-    const listener = vi.fn();
-    provider.onDidDiscoverItems(listener);
-    await provider.refresh();
+      const listener = vi.fn();
+      localProvider.onDidDiscoverItems(listener);
+      await localProvider.refresh();
 
-    const calledUrl = mockFetch.mock.calls[0][0] as string;
-    expect(calledUrl).toContain(`updated:>${timestamp}`);
-    expect(calledUrl).toContain('mentions:@me');
+      const calledUrl = mockFetch.mock.calls[0][0] as string;
+      expect(calledUrl).toContain(`updated:>${timestamp}`);
+      expect(calledUrl).toContain('mentions:@me');
+    } finally {
+      localProvider.dispose();
+    }
   });
 
   it('uses per-repo query when repos are configured', async () => {
