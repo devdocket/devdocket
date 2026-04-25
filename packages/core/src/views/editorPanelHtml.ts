@@ -355,14 +355,25 @@ ${renderActivityLog(item.activityLog)}
       });
     }
 
+    function isExternalUrl(href) {
+      if (!href) return false;
+      try {
+        const url = new URL(href, window.location.href);
+        return url.protocol === 'http:' || url.protocol === 'https:';
+      } catch {
+        return false;
+      }
+    }
+
     const descEl = document.querySelector('.provider-description');
     if (descEl) {
       descEl.addEventListener('click', (e) => {
         if (!(e.target instanceof Element)) return;
         const anchor = e.target.closest('a');
-        if (anchor && anchor.href) {
+        const href = anchor && anchor.getAttribute('href');
+        if (href && isExternalUrl(href)) {
           e.preventDefault();
-          vscode.postMessage({ type: 'openUrl', url: anchor.getAttribute('href') });
+          vscode.postMessage({ type: 'openUrl', url: href });
         }
       });
     }
