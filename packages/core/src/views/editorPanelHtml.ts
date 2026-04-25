@@ -205,6 +205,36 @@ export function getEditorPanelHtml({ cspSource, item, providerLabel, providerDes
     .activity-detail {
       opacity: 0.8;
     }
+    .url-row {
+      display: flex;
+      gap: 6px;
+      align-items: center;
+    }
+    .url-row input {
+      flex: 1;
+    }
+    .url-open-link {
+      flex-shrink: 0;
+      color: var(--vscode-textLink-foreground);
+      cursor: pointer;
+      font-size: 1em;
+      text-decoration: none;
+      padding: 4px;
+      border-radius: 3px;
+      display: inline-flex;
+      align-items: center;
+    }
+    .url-open-link:hover {
+      color: var(--vscode-textLink-activeForeground);
+    }
+    .url-open-link:focus,
+    .url-open-link:focus-visible {
+      outline: 1px solid var(--vscode-focusBorder);
+      outline-offset: 2px;
+    }
+    .url-open-link.hidden {
+      visibility: hidden;
+    }
   </style>
 </head>
 <body>
@@ -214,6 +244,14 @@ export function getEditorPanelHtml({ cspSource, item, providerLabel, providerDes
       <label for="title">Title</label>
       <input type="text" id="title" value="${escapeAttr(item.title)}" ${titleReadonly ? 'readonly aria-readonly="true" aria-describedby="readonly-title-hint"' : ''} />
 ${titleReadonly ? '      <span id="readonly-title-hint" class="hint">Title is managed by the provider</span>' : ''}
+    </div>
+    <div class="field">
+      <label for="url">URL</label>
+      <div class="url-row">
+        <input type="url" id="url" value="${escapeAttr(item.url ?? '')}" placeholder="https://..." ${titleReadonly ? 'readonly aria-readonly="true" aria-describedby="readonly-url-hint"' : ''} />
+        <a href="#" class="url-open-link${item.url && isSafeUrl(item.url) ? '' : ' hidden'}" id="url-open-link" title="Open in Browser" aria-label="Open URL in browser">&#x2197;</a>
+      </div>
+${titleReadonly ? '      <span id="readonly-url-hint" class="hint">URL is managed by the provider</span>' : ''}
     </div>
 ${descriptionSection}
     <div class="field">
@@ -239,13 +277,33 @@ ${providerState && item.providerId ? `      <dt>Provider State</dt>
 ${renderActivityLog(item.activityLog)}
   <script nonce="${nonce}">
     const vscode = acquireVsCodeApi();
-    const fields = ['title', 'notes'];
+    const fields = ['title', 'notes', 'url'];
     let debounceTimer = null;
+
+    function isSafeUrlClient(str) {
+      try {
+        const u = new URL(str);
+        return u.protocol === 'http:' || u.protocol === 'https:';
+      } catch { return false; }
+    }
+
+    function updateUrlLinkVisibility() {
+      const urlEl = document.getElementById('url');
+      const linkEl = document.getElementById('url-open-link');
+      if (!urlEl || !linkEl) return;
+      const val = urlEl.value.trim();
+      if (val && isSafeUrlClient(val)) {
+        linkEl.classList.remove('hidden');
+      } else {
+        linkEl.classList.add('hidden');
+      }
+    }
 
     function getData() {
       return {
         title: document.getElementById('title').value.trim(),
         notes: document.getElementById('notes').value.trim(),
+        url: document.getElementById('url').value.trim(),
       };
     }
 
@@ -267,6 +325,25 @@ ${renderActivityLog(item.activityLog)}
         }
       }
     });
+
+    const urlInput = document.getElementById('url');
+    if (urlInput instanceof HTMLInputElement && !urlInput.readOnly) {
+      urlInput.addEventListener('input', updateUrlLinkVisibility);
+    }
+
+    const urlOpenLink = document.getElementById('url-open-link');
+    if (urlOpenLink) {
+      urlOpenLink.addEventListener('click', (e) => {
+        e.preventDefault();
+        const urlEl = document.getElementById('url');
+        if (urlEl instanceof HTMLInputElement) {
+          const val = urlEl.value.trim();
+          if (val && isSafeUrlClient(val)) {
+            vscode.postMessage({ type: 'openUrl', url: val });
+          }
+        }
+      });
+    }
 
     const titleLink = document.getElementById('title-link');
     if (titleLink) {

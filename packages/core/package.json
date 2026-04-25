@@ -780,12 +780,12 @@
         },
         {
           "command": "devdocket.watchPRFromItem",
-          "when": "view == devdocket.focus && viewItem =~ /hasUrl/ && !listMultiSelection",
+          "when": "view == devdocket.focus && viewItem =~ /watchable/ && !listMultiSelection",
           "group": "2_links"
         },
         {
           "command": "devdocket.watchPRFromItem",
-          "when": "view == devdocket.queue && viewItem =~ /hasUrl/ && !listMultiSelection",
+          "when": "view == devdocket.queue && viewItem =~ /watchable/ && !listMultiSelection",
           "group": "2_links"
         },
         {

@@ -203,6 +203,20 @@ export class WorkItemEditorPanel {
         return;
       }
       patch.title = data.title;
+
+      if ('url' in data) {
+        const rawUrl = data.url || '';
+        // Allow clearing the URL; validate non-empty values
+        if (rawUrl === '') {
+          patch.url = undefined;
+        } else {
+          const safe = isSafeUrl(rawUrl);
+          if (safe) {
+            patch.url = safe.href;
+          }
+          // Silently ignore invalid URLs
+        }
+      }
     }
 
     if ('notes' in data) {

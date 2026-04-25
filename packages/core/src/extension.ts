@@ -126,10 +126,16 @@ function createTreeViews(
   readStateStore: ReadStateStore,
   workGraph: WorkGraph,
   watcherService: WatcherService,
+  watcherRegistry: WatcherRegistry,
+  prWatcherRegistry: PRWatcherRegistry,
 ) {
+  const isWatchable = (url: string): boolean =>
+    watcherRegistry.findWatcherForUrl(url) !== undefined ||
+    prWatcherRegistry.findWatcherForUrl(url) !== undefined;
+
   const inboxProvider = new InboxTreeProvider(providerRegistry, stateStore, readStateStore);
-  const queueProvider = new QueueTreeProvider(workGraph, providerRegistry);
-  const focusProvider = new FocusTreeProvider(workGraph, providerRegistry);
+  const queueProvider = new QueueTreeProvider(workGraph, providerRegistry, isWatchable);
+  const focusProvider = new FocusTreeProvider(workGraph, providerRegistry, isWatchable);
   const sourcesProvider = new SourcesTreeProvider(providerRegistry, stateStore);
   const historyProvider = new HistoryTreeProvider(workGraph, providerRegistry);
   const watchesProvider = new WatchesTreeProvider(watcherService);
@@ -408,7 +414,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<DevDoc
   logger.info(`Store + service init took ${Math.round(performance.now() - initStart)}ms`);
 
   const treeViewStart = performance.now();
-  const treeSetup = createTreeViews(pr, ss, readStateStore, wg, ws);
+  const treeSetup = createTreeViews(pr, ss, readStateStore, wg, ws, wr, pwr);
   logger.info(`Tree view creation took ${Math.round(performance.now() - treeViewStart)}ms`);
 
   const eventWiringStart = performance.now();

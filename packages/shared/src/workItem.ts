@@ -112,4 +112,6 @@ export interface WorkItemInput {
   title: string;
   /** Optional free-form notes or description. */
   notes?: string;
+  /** Optional URL linking to the item in an external system. */
+  url?: string;
 }

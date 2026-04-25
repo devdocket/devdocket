@@ -16,8 +16,9 @@ export class QueueTreeProvider extends WorkItemViewProvider implements vscode.Tr
   readonly dragMimeTypes = [DRAG_MIME_TYPE];
   protected readonly groupPrefix = 'queue';
   protected readonly groupContextValue = 'queueGroup';
+  private readonly isWatchable?: (url: string) => boolean;
 
-  constructor(workGraph: WorkGraph, providerRegistry?: ProviderRegistry) {
+  constructor(workGraph: WorkGraph, providerRegistry?: ProviderRegistry, isWatchable?: (url: string) => boolean) {
     super(
       workGraph,
       'flat',
@@ -26,6 +27,7 @@ export class QueueTreeProvider extends WorkItemViewProvider implements vscode.Tr
       providerRegistry ? (pid, eid) => providerRegistry.getDiscoveredItems(pid).find(d => d.externalId === eid)?.title : undefined,
       providerRegistry?.onDidChangeDiscoveredItems,
     );
+    this.isWatchable = isWatchable;
   }
 
   protected getItems(): WorkItem[] {
@@ -44,7 +46,9 @@ export class QueueTreeProvider extends WorkItemViewProvider implements vscode.Tr
       ? this.buildDescription(item.group, this.getProviderLabel(item.providerId))
       : undefined;
     treeItem.tooltip = buildWorkItemTooltip(item, title, { showState: false, notesStyle: 'plain' });
-    treeItem.contextValue = item.url ? 'queueItem.hasUrl' : 'queueItem';
+    const urlSuffix = item.url ? '.hasUrl' : '';
+    const watchableSuffix = item.url && this.isWatchable?.(item.url) ? '.watchable' : '';
+    treeItem.contextValue = `queueItem${urlSuffix}${watchableSuffix}`;
     treeItem.iconPath = new vscode.ThemeIcon(item.providerId ? 'remote' : 'circle-filled');
     treeItem.command = { command: 'devdocket.editItem', title: 'Open Details', arguments: [item] };
     return treeItem;

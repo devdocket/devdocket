@@ -350,14 +350,14 @@ describe('getEditorPanelHtml', () => {
       const item = makeItem({ url: 'javascript:alert(1)' });
       const html = getEditorPanelHtml({ cspSource, item });
       expect(html).not.toContain('id="title-link"');
-      expect(html).not.toContain('href=');
+      expect(html).not.toMatch(/href="javascript:/);
     });
 
     it('does not render a hyperlink for data: URLs', () => {
       const item = makeItem({ url: 'data:text/html,<h1>hi</h1>' });
       const html = getEditorPanelHtml({ cspSource, item });
       expect(html).not.toContain('id="title-link"');
-      expect(html).not.toContain('href=');
+      expect(html).not.toMatch(/href="data:/);
     });
   });
 
@@ -446,6 +446,101 @@ describe('getEditorPanelHtml', () => {
       });
       const html = getEditorPanelHtml({ cspSource, item });
       expect(html).toContain('custom-type');
+    });
+  });
+
+  describe('URL field', () => {
+    it('renders URL input field in the form', () => {
+      const html = getEditorPanelHtml({ cspSource, item: makeItem() });
+      expect(html).toContain('id="url"');
+      expect(html).toContain('<label for="url">URL</label>');
+    });
+
+    it('renders the URL value when item has a url', () => {
+      const item = makeItem({ url: 'https://github.com/org/repo/issues/1' });
+      const html = getEditorPanelHtml({ cspSource, item });
+      expect(html).toContain('value="https://github.com/org/repo/issues/1"');
+    });
+
+    it('renders empty URL field when item has no url', () => {
+      const item = makeItem({ url: undefined });
+      const html = getEditorPanelHtml({ cspSource, item });
+      expect(html).toMatch(/id="url"[^>]*value=""/);
+    });
+
+    it('URL field is editable for manual items (no providerId)', () => {
+      const item = makeItem({ providerId: undefined });
+      const html = getEditorPanelHtml({ cspSource, item });
+      const urlFieldMatch = html.match(/<input[^>]*id="url"[^>]*>/);
+      expect(urlFieldMatch).not.toBeNull();
+      expect(urlFieldMatch![0]).not.toContain('readonly');
+    });
+
+    it('URL field is read-only for provider items', () => {
+      const item = makeItem({ providerId: 'github', url: 'https://github.com/org/repo/issues/1' });
+      const html = getEditorPanelHtml({ cspSource, item, titleReadonly: true });
+      const urlFieldMatch = html.match(/<input[^>]*id="url"[^>]*>/);
+      expect(urlFieldMatch).not.toBeNull();
+      expect(urlFieldMatch![0]).toContain('readonly');
+    });
+
+    it('shows open-in-browser link when URL is valid', () => {
+      const item = makeItem({ url: 'https://github.com/org/repo/issues/1' });
+      const html = getEditorPanelHtml({ cspSource, item });
+      expect(html).toContain('id="url-open-link"');
+      // The link should not have the hidden class
+      const linkMatch = html.match(/<a[^>]*id="url-open-link"[^>]*>/);
+      expect(linkMatch).not.toBeNull();
+      expect(linkMatch![0]).not.toContain('hidden');
+    });
+
+    it('hides open-in-browser link when URL is empty', () => {
+      const item = makeItem({ url: undefined });
+      const html = getEditorPanelHtml({ cspSource, item });
+      expect(html).toContain('url-open-link');
+      expect(html).toContain('hidden');
+    });
+
+    it('hides open-in-browser link for unsafe URLs', () => {
+      const item = makeItem({ url: 'javascript:alert(1)' });
+      const html = getEditorPanelHtml({ cspSource, item });
+      expect(html).toContain('hidden');
+    });
+
+    it('escapes HTML entities in URL value', () => {
+      const item = makeItem({ url: 'https://evil.com/"><script>alert(1)</script>' });
+      const html = getEditorPanelHtml({ cspSource, item });
+      const urlFieldMatch = html.match(/<input[^>]*id="url"[^>]*>/);
+      expect(urlFieldMatch).not.toBeNull();
+      expect(urlFieldMatch![0]).not.toContain('<script>');
+      expect(urlFieldMatch![0]).toContain('&lt;script&gt;');
+    });
+
+    it('includes URL in autosave getData function', () => {
+      const html = getEditorPanelHtml({ cspSource, item: makeItem() });
+      expect(html).toContain("url: document.getElementById('url').value.trim()");
+    });
+
+    it('includes url in fields array for input listeners', () => {
+      const html = getEditorPanelHtml({ cspSource, item: makeItem() });
+      expect(html).toContain("'url'");
+    });
+
+    it('includes isSafeUrlClient validation in webview script', () => {
+      const html = getEditorPanelHtml({ cspSource, item: makeItem() });
+      expect(html).toContain('isSafeUrlClient');
+    });
+
+    it('shows readonly hint for provider items URL field', () => {
+      const item = makeItem({ providerId: 'github', url: 'https://github.com/org/repo/issues/1' });
+      const html = getEditorPanelHtml({ cspSource, item, titleReadonly: true });
+      expect(html).toContain('URL is managed by the provider');
+    });
+
+    it('does not show readonly hint for manual items URL field', () => {
+      const item = makeItem({ providerId: undefined });
+      const html = getEditorPanelHtml({ cspSource, item });
+      expect(html).not.toContain('URL is managed by the provider');
     });
   });
 });

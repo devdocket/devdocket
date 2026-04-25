@@ -219,6 +219,8 @@ export class WorkGraph {
     if (patch.title !== undefined && patch.title !== item.title) { changes.push('title'); }
     // Detect notes changes including clearing (patch.notes === undefined with key present)
     if ('notes' in patch && patch.notes !== item.notes) { changes.push('notes'); }
+    // Detect url changes including clearing (patch.url === undefined with key present)
+    if ('url' in patch && patch.url !== item.url) { changes.push('url'); }
     // Skip save/event when no fields actually changed (e.g. autosave with identical values)
     if (changes.length === 0) {
       return;
