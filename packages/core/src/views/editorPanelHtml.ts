@@ -31,7 +31,7 @@ export function getEditorPanelHtml({ cspSource, item, providerLabel, providerDes
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src ${cspSource} 'nonce-${nonce}'; script-src 'nonce-${nonce}'; img-src https:;">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src ${cspSource} 'nonce-${nonce}'; script-src 'nonce-${nonce}'; img-src https: http:;">
   <style nonce="${nonce}">
     :root {
       --input-bg: var(--vscode-input-background);
