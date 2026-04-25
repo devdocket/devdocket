@@ -166,11 +166,14 @@ class MockMemento {
   private store = new Map<string, unknown>();
   keys(): readonly string[] { return [...this.store.keys()]; }
   get<T>(key: string, defaultValue?: T): T | undefined {
-    return this.store.has(key) ? this.store.get(key) as T : defaultValue;
+    if (!this.store.has(key)) { return defaultValue; }
+    // Deep-clone on read to match real Memento JSON round-trip behavior
+    return JSON.parse(JSON.stringify(this.store.get(key))) as T;
   }
   async update(key: string, value: unknown): Promise<void> {
     if (value === undefined) { this.store.delete(key); }
-    else { this.store.set(key, value); }
+    // Deep-clone on write to match real Memento JSON serialization
+    else { this.store.set(key, JSON.parse(JSON.stringify(value))); }
   }
 }
 

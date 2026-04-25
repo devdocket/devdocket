@@ -120,6 +120,7 @@ export class DiscoveredStateStore {
    */
   async setStates(items: Array<{ providerId: string; externalId: string; state: InboxState; version?: string; resurfaceVersion?: string }>): Promise<void> {
     if (!this.loaded) { await this.load(); }
+    if (items.length === 0) { return; }
     for (const item of items) {
       const k = this.key(item.providerId, item.externalId);
       const previousRecord = this.cache.get(k);

@@ -118,12 +118,6 @@ describe('ReadStateStore', () => {
     expect(freshStore.has('gh::new')).toBe(true);
   });
 
-  it('flush is a no-op and resolves', async () => {
-    await store.load();
-    await store.add('gh::1');
-    await expect(store.flush()).resolves.toBeUndefined();
-  });
-
   it('addMany returns newly added keys', async () => {
     await store.load();
     await store.add('gh::existing');

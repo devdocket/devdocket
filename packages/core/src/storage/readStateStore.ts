@@ -68,9 +68,6 @@ export class ReadStateStore {
     }
   }
 
-  /** No-op — globalState writes are immediate. */
-  async flush(): Promise<void> {}
-
   async load(): Promise<void> {
     if (this.loaded) { return; }
     const parsed = this.globalState.get<unknown[]>(STORAGE_KEY);
