@@ -27,7 +27,7 @@
           "type": "string",
           "default": "",
           "editPresentation": "multilineText",
-          "description": "Filter which repositories appear in DevDocket. Uses gitignore-style patterns, one per line. By default, all repositories are shown. When patterns are specified, only matching repositories are included.\n\nExamples:\nmyorg/*           # include all repos in myorg\n!myorg/archived-*  # exclude archived repos\nother/specific-repo # include one specific repo\n\nSupports wildcards (*), exclusions (!), and comments (#).\nLeave empty to show all repositories."
+          "description": "Filter out repositories from DevDocket results. Uses gitignore-style patterns, one per line. Matching repositories are excluded; unmatched repositories are shown.\n\nExamples:\nmyorg/old-*          # filter out repos starting with old-\ndevdocket/*          # filter out all devdocket repos\n!devdocket/devdocket # except keep this one\n\nSupports wildcards (*), negation (!), and comments (#).\nLeave empty to show all repositories."
         },
         "devDocketGithub.refreshIntervalSeconds": {
           "type": "number",

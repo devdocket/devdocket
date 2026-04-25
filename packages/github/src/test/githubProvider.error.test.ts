@@ -401,8 +401,9 @@ describe('GitHubIssueProvider — error handling', () => {
       await provider.refresh();
 
       const items = listener.mock.calls[0][0];
+      // 'good/repo' pattern filters OUT good/repo, keeping only other/repo
       expect(items).toHaveLength(1);
-      expect(items[0].title).toBe('#1: Good issue');
+      expect(items[0].title).toBe('#2: Other issue');
     });
 
     it('shows warning for user-triggered refresh when global fetch fails', async () => {

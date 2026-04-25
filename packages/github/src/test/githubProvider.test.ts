@@ -58,7 +58,7 @@ describe('GitHubIssueProvider', () => {
     expect(mockFetch).not.toHaveBeenCalled();
   });
 
-  it('fetches assigned issues from configured repos via global fetch with filtering', async () => {
+  it('filters out configured repos via global fetch, keeps the rest', async () => {
     vi.mocked(workspace.getConfiguration).mockReturnValue({
       get: vi.fn((key: string, defaultValue?: any) => {
         if (key === 'repos') { return 'owner/repo1\nowner/repo2'; }
@@ -87,11 +87,9 @@ describe('GitHubIssueProvider', () => {
     );
     expect(listener).toHaveBeenCalledTimes(1);
     const items = listener.mock.calls[0][0];
-    expect(items).toHaveLength(2);
-    expect(items).toEqual(expect.arrayContaining([
-      expect.objectContaining({ title: '#1: Bug' }),
-      expect.objectContaining({ title: '#2: Feature' }),
-    ]));
+    // Patterns filter OUT repo1 and repo2, keeping only repo3
+    expect(items).toHaveLength(1);
+    expect(items[0]).toEqual(expect.objectContaining({ title: '#3: Other' }));
   });
 
   it('handles legacy array config format (backward compat)', async () => {
@@ -107,6 +105,7 @@ describe('GitHubIssueProvider', () => {
       json: async () => [
         createMockIssue(1, 'Bug', 'owner/repo1'),
         createMockIssue(2, 'Feature', 'owner/repo2'),
+        createMockIssue(3, 'Other', 'owner/repo3'),
       ],
       headers: { get: () => null },
     });
@@ -116,10 +115,10 @@ describe('GitHubIssueProvider', () => {
     await provider.refresh();
 
     expect(listener).toHaveBeenCalledTimes(1);
-    expect(listener).toHaveBeenCalledWith(expect.arrayContaining([
-      expect.objectContaining({ title: '#1: Bug' }),
-      expect.objectContaining({ title: '#2: Feature' }),
-    ]));
+    // Legacy array patterns filter OUT repo1 and repo2, keeping repo3
+    const items = listener.mock.calls[0][0];
+    expect(items).toHaveLength(1);
+    expect(items[0]).toEqual(expect.objectContaining({ title: '#3: Other' }));
   });
 
   it('falls back to /issues?filter=assigned when no repos configured', async () => {
@@ -346,7 +345,7 @@ describe('GitHubIssueProvider', () => {
     vi.useRealTimers();
   });
 
-  it('filters issues through configured patterns with global fetch', async () => {
+  it('filters out matched repos, keeps unmatched (including invalid patterns)', async () => {
     vi.mocked(workspace.getConfiguration).mockReturnValue({
       get: vi.fn((key: string, defaultValue?: any) => {
         if (key === 'repos') { return 'owner/valid\n../traversal\ngood/repo'; }
@@ -372,10 +371,9 @@ describe('GitHubIssueProvider', () => {
     expect(mockFetch).toHaveBeenCalledTimes(1);
     expect(listener).toHaveBeenCalledTimes(1);
     const items = listener.mock.calls[0][0];
-    // Only owner/valid and good/repo match the patterns; ../traversal doesn't match anything
-    expect(items).toHaveLength(2);
-    expect(items[0]).toEqual(expect.objectContaining({ title: '#1: Issue A' }));
-    expect(items[1]).toEqual(expect.objectContaining({ title: '#2: Issue B' }));
+    // owner/valid and good/repo are filtered out; ../traversal matches nothing; other/repo kept
+    expect(items).toHaveLength(1);
+    expect(items[0]).toEqual(expect.objectContaining({ title: '#3: Issue C' }));
   });
 
   it('stopPeriodicRefresh clears the timer', () => {

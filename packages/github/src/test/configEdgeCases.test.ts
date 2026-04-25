@@ -104,7 +104,7 @@ describe('GitHub provider config edge cases', () => {
     it.each([
       ['no slash', 'noslash'],
       ['double slash', 'owner//repo'],
-    ])('invalid repo format (%s) results in global fetch with no matching items', async (_label, repo) => {
+    ])('invalid repo format (%s) results in global fetch with items kept (pattern matches nothing)', async (_label, repo) => {
       vi.mocked(workspace.getConfiguration).mockReturnValue({
         get: vi.fn((key: string, defaultValue?: any) => {
           if (key === 'repos') { return repo; }
@@ -132,8 +132,10 @@ describe('GitHub provider config edge cases', () => {
 
       // Global fetch always happens
       expect(mockFetch).toHaveBeenCalledTimes(1);
-      // Pattern doesn't match any real owner/repo, so all items are filtered out
-      expect(listener).toHaveBeenCalledWith([]);
+      // Invalid pattern doesn't match any owner/repo, so nothing is filtered out
+      expect(listener).toHaveBeenCalledWith(expect.arrayContaining([
+        expect.objectContaining({ externalId: 'owner/repo#1' }),
+      ]));
     });
 
     it.each([

@@ -496,9 +496,9 @@ describe('GitHubPrReviewProvider', () => {
       );
 
       const items = listener.mock.calls[0][0];
-      expect(items).toHaveLength(2);
-      expect(items[0].externalId).toBe('org/repo1#1');
-      expect(items[1].externalId).toBe('org/repo2#2');
+      // Patterns filter OUT repo1 and repo2, keeping only repo3
+      expect(items).toHaveLength(1);
+      expect(items[0].externalId).toBe('org/repo3#3');
     });
 
     it('shows warning on global fetch failure', async () => {

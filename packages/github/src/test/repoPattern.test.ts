@@ -96,63 +96,64 @@ other-owner/specific-repo
 });
 
 describe('matchesRepoPatterns', () => {
-  it('returns false for empty patterns', () => {
-    expect(matchesRepoPatterns('owner/repo', [])).toBe(false);
+  it('returns true for empty patterns (nothing filtered)', () => {
+    expect(matchesRepoPatterns('owner/repo', [])).toBe(true);
   });
 
-  it('matches exact pattern', () => {
+  it('filters out exact match, keeps others', () => {
     const patterns = parseRepoPatterns('owner/repo');
-    expect(matchesRepoPatterns('owner/repo', patterns)).toBe(true);
-    expect(matchesRepoPatterns('owner/other', patterns)).toBe(false);
+    expect(matchesRepoPatterns('owner/repo', patterns)).toBe(false);
+    expect(matchesRepoPatterns('owner/other', patterns)).toBe(true);
   });
 
-  it('matches wildcard pattern', () => {
+  it('filters out wildcard matches, keeps non-matching', () => {
     const patterns = parseRepoPatterns('myorg/*');
-    expect(matchesRepoPatterns('myorg/repo1', patterns)).toBe(true);
-    expect(matchesRepoPatterns('myorg/repo2', patterns)).toBe(true);
-    expect(matchesRepoPatterns('other/repo1', patterns)).toBe(false);
+    expect(matchesRepoPatterns('myorg/repo1', patterns)).toBe(false);
+    expect(matchesRepoPatterns('myorg/repo2', patterns)).toBe(false);
+    expect(matchesRepoPatterns('other/repo1', patterns)).toBe(true);
   });
 
-  it('last match wins', () => {
+  it('last match wins — ! un-filters', () => {
     const patterns = parseRepoPatterns('myorg/*\n!myorg/secret');
-    expect(matchesRepoPatterns('myorg/repo1', patterns)).toBe(true);
-    expect(matchesRepoPatterns('myorg/secret', patterns)).toBe(false);
-  });
-
-  it('exclusion then inclusion restores', () => {
-    const patterns = parseRepoPatterns('myorg/*\n!myorg/secret\nmyorg/secret');
+    expect(matchesRepoPatterns('myorg/repo1', patterns)).toBe(false);
     expect(matchesRepoPatterns('myorg/secret', patterns)).toBe(true);
   });
 
-  it('negation-only: matches nothing (default is exclude)', () => {
-    const patterns = parseRepoPatterns('!myorg/secret');
-    expect(matchesRepoPatterns('myorg/repo1', patterns)).toBe(false);
-    expect(matchesRepoPatterns('other/repo', patterns)).toBe(false);
+  it('re-filtering after ! restores exclusion', () => {
+    const patterns = parseRepoPatterns('myorg/*\n!myorg/secret\nmyorg/secret');
     expect(matchesRepoPatterns('myorg/secret', patterns)).toBe(false);
   });
 
-  it('negation-only with wildcard: matches nothing', () => {
+  it('negation-only: no effect (everything already included)', () => {
+    const patterns = parseRepoPatterns('!myorg/secret');
+    expect(matchesRepoPatterns('myorg/repo1', patterns)).toBe(true);
+    expect(matchesRepoPatterns('other/repo', patterns)).toBe(true);
+    expect(matchesRepoPatterns('myorg/secret', patterns)).toBe(true);
+  });
+
+  it('negation-only with wildcard: no effect', () => {
     const patterns = parseRepoPatterns('!myorg/*');
-    expect(matchesRepoPatterns('myorg/repo1', patterns)).toBe(false);
-    expect(matchesRepoPatterns('other/repo', patterns)).toBe(false);
+    expect(matchesRepoPatterns('myorg/repo1', patterns)).toBe(true);
+    expect(matchesRepoPatterns('other/repo', patterns)).toBe(true);
   });
 
-  it('positive pattern does not match unmentioned repos', () => {
+  it('non-matching repos are kept (not filtered)', () => {
     const patterns = parseRepoPatterns('myorg/repo1');
-    expect(matchesRepoPatterns('myorg/repo2', patterns)).toBe(false);
-    expect(matchesRepoPatterns('other/repo', patterns)).toBe(false);
+    expect(matchesRepoPatterns('myorg/repo1', patterns)).toBe(false);
+    expect(matchesRepoPatterns('myorg/repo2', patterns)).toBe(true);
+    expect(matchesRepoPatterns('other/repo', patterns)).toBe(true);
   });
 
-  it('multiple positive patterns', () => {
+  it('multiple patterns filter out all matched repos', () => {
     const patterns = parseRepoPatterns('owner/repo1\nowner/repo2');
-    expect(matchesRepoPatterns('owner/repo1', patterns)).toBe(true);
-    expect(matchesRepoPatterns('owner/repo2', patterns)).toBe(true);
-    expect(matchesRepoPatterns('owner/repo3', patterns)).toBe(false);
+    expect(matchesRepoPatterns('owner/repo1', patterns)).toBe(false);
+    expect(matchesRepoPatterns('owner/repo2', patterns)).toBe(false);
+    expect(matchesRepoPatterns('owner/repo3', patterns)).toBe(true);
   });
 
   it('case-insensitive matching', () => {
     const patterns = parseRepoPatterns('MyOrg/MyRepo');
-    expect(matchesRepoPatterns('myorg/myrepo', patterns)).toBe(true);
-    expect(matchesRepoPatterns('MYORG/MYREPO', patterns)).toBe(true);
+    expect(matchesRepoPatterns('myorg/myrepo', patterns)).toBe(false);
+    expect(matchesRepoPatterns('MYORG/MYREPO', patterns)).toBe(false);
   });
 });

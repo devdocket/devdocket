@@ -47,15 +47,17 @@ function patternToRegex(pattern: string): RegExp {
 }
 
 /**
- * Check if a repo matches the given patterns using last-match-wins semantics.
- * If no patterns match, returns false (default exclude).
+ * Check if a repo should be included after applying filter patterns.
+ * Works like .gitignore: positive patterns filter OUT (exclude) matching repos,
+ * `!` patterns un-filter (re-include) them. Last match wins.
+ * Returns true if the repo should be kept, false if filtered out.
  */
 export function matchesRepoPatterns(repo: string, patterns: RepoPattern[]): boolean {
-  if (patterns.length === 0) { return false; }
-  let result = false;
+  if (patterns.length === 0) { return true; }
+  let result = true;
   for (const p of patterns) {
     if (p.regex.test(repo)) {
-      result = !p.isExclusion;
+      result = p.isExclusion;
     }
   }
   return result;
