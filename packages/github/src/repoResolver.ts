@@ -117,6 +117,10 @@ async function fetchPaginatedRepos(
     page++;
   }
 
+  if (nextUrl && page >= maxPages) {
+    logger.warn(`Pagination limit (${maxPages} pages) reached listing repos; some repos may be omitted`);
+  }
+
   return allRepos;
 }
 
