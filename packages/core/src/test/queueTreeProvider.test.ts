@@ -170,6 +170,33 @@ describe('QueueTreeProvider', () => {
       expect(treeItem.contextValue).toBe('queueItem');
     });
 
+    it('sets contextValue to "queueItem.hasUrl.watchable" when URL is watchable', async () => {
+      const watchableProvider = new QueueTreeProvider(graph, undefined, () => true);
+      const item = await graph.createItem(
+        { title: 'Watchable' },
+        { providerId: 'github', externalId: 'ext-w1', url: 'https://github.com/owner/repo/pull/1' },
+      );
+      const treeItem = watchableProvider.getTreeItem(item);
+      expect(treeItem.contextValue).toBe('queueItem.hasUrl.watchable');
+    });
+
+    it('sets contextValue to "queueItem.hasUrl" when URL is not watchable', async () => {
+      const unwatchableProvider = new QueueTreeProvider(graph, undefined, () => false);
+      const item = await graph.createItem(
+        { title: 'Not watchable' },
+        { providerId: 'github', externalId: 'ext-w2', url: 'https://example.com' },
+      );
+      const treeItem = unwatchableProvider.getTreeItem(item);
+      expect(treeItem.contextValue).toBe('queueItem.hasUrl');
+    });
+
+    it('does not append watchable when item has no URL even if isWatchable provided', async () => {
+      const watchableProvider = new QueueTreeProvider(graph, undefined, () => true);
+      const item = await graph.createItem({ title: 'No URL watchable' });
+      const treeItem = watchableProvider.getTreeItem(item);
+      expect(treeItem.contextValue).toBe('queueItem');
+    });
+
     it('sets icon to "remote" when item has providerId', async () => {
       const item = await graph.createItem(
         { title: 'Provider item' },

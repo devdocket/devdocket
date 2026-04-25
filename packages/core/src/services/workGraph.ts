@@ -181,7 +181,7 @@ export class WorkGraph {
       state: WorkItemState.New,
       providerId: provenance?.providerId,
       externalId: provenance?.externalId,
-      url: provenance?.url,
+      url: provenance?.url ?? input.url,
       group: provenance?.group,
       sortOrder,
       createdAt: now,
