@@ -41,12 +41,14 @@ export class GitHubPrReviewProvider extends BaseGitHubProvider {
 
     const { prs, failures } = await this.fetchReviewRequestedPrs(accessToken, repos, signal);
 
+    // Parse repo name once per PR
+    const repoNameMap = new Map(prs.map(pr =>
+      [pr.html_url, parseRepoFromUrls(pr.html_url, pr.repository_url)]
+    ));
+
     // Post-filter for negation-only patterns
     const filteredPrs = useGlobalFetch && patterns.length > 0
-      ? prs.filter(pr => {
-          const repoName = parseRepoFromUrls(pr.html_url, pr.repository_url);
-          return matchesRepoPatterns(repoName, patterns);
-        })
+      ? prs.filter(pr => matchesRepoPatterns(repoNameMap.get(pr.html_url)!, patterns))
       : prs;
 
     logger.info(`Discovered ${filteredPrs.length} PR review requests`);
@@ -70,7 +72,7 @@ export class GitHubPrReviewProvider extends BaseGitHubProvider {
     }
 
     const items: DiscoveredItem[] = filteredPrs.map((pr) => {
-      const repoName = parseRepoFromUrls(pr.html_url, pr.repository_url);
+      const repoName = repoNameMap.get(pr.html_url)!;
       const item: DiscoveredItem = {
         externalId: `${repoName}#${pr.number}`,
         title: `#${pr.number}: ${pr.title}`,
