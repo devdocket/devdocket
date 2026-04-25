@@ -416,7 +416,7 @@ const sanitizeAllowList: sanitizeHtml.IOptions = {
     a: ['href'],
     img: ['src', 'alt'],
   },
-  allowedSchemes: ['http', 'https', 'mailto'],
+  allowedSchemes: ['http', 'https'],
 };
 
 export function renderMarkdown(markdown: string): string {
