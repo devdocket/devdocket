@@ -24,7 +24,8 @@ function isNodeError(err: unknown): err is NodeJS.ErrnoException {
 /**
  * One-time migration from JSON files in globalStorageUri to VS Code globalState.
  * Idempotent — safe to run multiple times. Only marks complete when every file
- * is either migrated successfully or confirmed absent (ENOENT).
+ * is either migrated successfully, confirmed absent (ENOENT), or skipped because
+ * its destination globalState key is already populated.
  */
 export async function migrateToGlobalState(globalState: Memento, storagePath: string): Promise<void> {
   if (globalState.get<boolean>(MIGRATED_KEY)) {
