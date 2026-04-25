@@ -81,11 +81,14 @@ export class GitHubMyPrsProvider extends BaseGitHubProvider {
     const authoredUrls = new Set(authoredResult.prs.map(pr => pr.html_url));
     const uniqueAssignedPrs = assignedResult.prs.filter(pr => !authoredUrls.has(pr.html_url));
 
+    // Parse repo name once per PR
+    const allPrsList = [...authoredResult.prs, ...uniqueAssignedPrs];
+    const repoNameMap = new Map(allPrsList.map(pr =>
+      [pr.html_url, parseRepoFromUrls(pr.html_url, pr.repository_url)]
+    ));
+
     // Post-filter for negation-only patterns
-    const repoFilter = (pr: GitHubIssue) => {
-      const repoName = parseRepoFromUrls(pr.html_url, pr.repository_url);
-      return matchesRepoPatterns(repoName, patterns);
-    };
+    const repoFilter = (pr: GitHubIssue) => matchesRepoPatterns(repoNameMap.get(pr.html_url)!, patterns);
     const filteredAuthored = useGlobalFetch && patterns.length > 0
       ? authoredResult.prs.filter(repoFilter)
       : authoredResult.prs;
@@ -103,7 +106,7 @@ export class GitHubMyPrsProvider extends BaseGitHubProvider {
 
     const items: DiscoveredItem[] = [];
     for (const pr of filteredAuthored) {
-      const repoName = parseRepoFromUrls(pr.html_url, pr.repository_url);
+      const repoName = repoNameMap.get(pr.html_url)!;
       const status = statusMap.get(pr.html_url) ?? 'Open';
       items.push({
         externalId: `${repoName}#${pr.number}`,
@@ -117,7 +120,7 @@ export class GitHubMyPrsProvider extends BaseGitHubProvider {
       });
     }
     for (const pr of filteredAssigned) {
-      const repoName = parseRepoFromUrls(pr.html_url, pr.repository_url);
+      const repoName = repoNameMap.get(pr.html_url)!;
       const status = statusMap.get(pr.html_url) ?? 'Open';
       items.push({
         externalId: `${repoName}#${pr.number}`,
