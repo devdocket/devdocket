@@ -1,5 +1,5 @@
 import * as vscode from 'vscode';
-import { DiscoveredItem, combineSignals, runWorkerPool, runWorkerPoolSettled } from '@devdocket/shared';
+import { DiscoveredItem, combineSignals, runWorkerPool } from '@devdocket/shared';
 import { BaseGitHubProvider } from './baseGithubProvider';
 import { logger } from './logger';
 import { parseRepoFromUrls } from './parseRepo';
@@ -41,18 +41,12 @@ export class GitHubMyPrsProvider extends BaseGitHubProvider {
 
   protected async fetchAndPublish(accessToken: string, isUserTriggered: boolean, signal?: AbortSignal): Promise<void> {
     logger.info('Fetching authored and assigned PRs...');
-    const { repos, patterns, useGlobalFetch } = await this.resolveConfiguredRepos(accessToken, signal);
-
-    // Patterns specified positive repos but resolved to nothing — emit empty
-    if (!useGlobalFetch && repos.length === 0 && patterns.length > 0) {
-      this._onDidDiscoverItems.fire([]);
-      return;
-    }
+    const patterns = this.getConfiguredPatterns();
 
     // Fetch authored and assigned PRs in parallel; proceed with partial results if one fails
     const [authoredSettled, assignedSettled] = await Promise.allSettled([
-      this.fetchAuthoredPrs(accessToken, repos, signal),
-      this.fetchAssignedPrs(accessToken, repos, signal),
+      this.fetchAllAuthoredPrs(accessToken, signal),
+      this.fetchAllAssignedPrs(accessToken, signal),
     ]);
 
     const authoredResult = authoredSettled.status === 'fulfilled'
@@ -87,12 +81,12 @@ export class GitHubMyPrsProvider extends BaseGitHubProvider {
       [pr.html_url, parseRepoFromUrls(pr.html_url, pr.repository_url)]
     ));
 
-    // Post-filter for negation-only patterns
+    // Post-filter when patterns are configured
     const repoFilter = (pr: GitHubIssue) => matchesRepoPatterns(repoNameMap.get(pr.html_url)!, patterns);
-    const filteredAuthored = useGlobalFetch && patterns.length > 0
+    const filteredAuthored = patterns.length > 0
       ? authoredResult.prs.filter(repoFilter)
       : authoredResult.prs;
-    const filteredAssigned = useGlobalFetch && patterns.length > 0
+    const filteredAssigned = patterns.length > 0
       ? uniqueAssignedPrs.filter(repoFilter)
       : uniqueAssignedPrs;
 
@@ -149,71 +143,6 @@ export class GitHubMyPrsProvider extends BaseGitHubProvider {
     }
   }
 
-  private async fetchAuthoredPrs(
-    token: string,
-    repos: string[],
-    signal?: AbortSignal,
-  ): Promise<{ prs: GitHubIssue[]; failures: string[] }> {
-    if (repos.length > 0) {
-      return this.fetchPerRepoPrs(token, repos, signal);
-    }
-    return this.fetchAllAuthoredPrs(token, signal);
-  }
-
-  private async fetchPerRepoPrs(
-    token: string,
-    repos: string[],
-    signal?: AbortSignal,
-  ): Promise<{ prs: GitHubIssue[]; failures: string[] }> {
-    const results = await runWorkerPoolSettled(repos, async (repo) => {
-      if (signal?.aborted) {
-        const error = new Error('The operation was aborted.');
-        error.name = 'AbortError';
-        throw error;
-      }
-      return await this.fetchRepoPrs(token, repo, signal);
-    }, 3);
-
-    const allPrs: GitHubIssue[] = [];
-    const failures: string[] = [];
-
-    results.forEach((result, index) => {
-      if (result.status === 'fulfilled') {
-        allPrs.push(...result.value.prs);
-        if (result.value.failed) {
-          failures.push(repos[index]);
-        }
-      } else {
-        failures.push(repos[index]);
-      }
-    });
-
-    return { prs: allPrs, failures };
-  }
-
-  private async fetchRepoPrs(token: string, repo: string, signal?: AbortSignal): Promise<{ prs: GitHubIssue[]; failed: boolean }> {
-    logger.debug(`Fetching authored PRs for repo: ${repo}`);
-    const response = await fetch(
-      `https://api.github.com/search/issues?q=type:pr+state:open+author:@me+repo:${repo}&per_page=100`,
-      {
-        headers: {
-          Authorization: `Bearer ${token}`,
-          Accept: 'application/vnd.github+json',
-          'X-GitHub-Api-Version': '2022-11-28',
-        },
-        signal: combineSignals(signal, 30_000),
-      },
-    );
-
-    if (!response.ok) {
-      logger.error(`Failed to fetch authored PRs for ${repo}: ${response.status}`);
-      return { prs: [], failed: true };
-    }
-
-    const data = (await response.json()) as GitHubSearchResponse;
-    return { prs: data.items, failed: false };
-  }
-
   private async fetchAllAuthoredPrs(token: string, signal?: AbortSignal): Promise<{ prs: GitHubIssue[]; failures: string[] }> {
     let response: Response;
     try {
@@ -241,71 +170,6 @@ export class GitHubMyPrsProvider extends BaseGitHubProvider {
 
     const data = (await response.json()) as GitHubSearchResponse;
     return { prs: data.items, failures: [] };
-  }
-
-  private async fetchAssignedPrs(
-    token: string,
-    repos: string[],
-    signal?: AbortSignal,
-  ): Promise<{ prs: GitHubIssue[]; failures: string[] }> {
-    if (repos.length > 0) {
-      return this.fetchPerRepoAssignedPrs(token, repos, signal);
-    }
-    return this.fetchAllAssignedPrs(token, signal);
-  }
-
-  private async fetchPerRepoAssignedPrs(
-    token: string,
-    repos: string[],
-    signal?: AbortSignal,
-  ): Promise<{ prs: GitHubIssue[]; failures: string[] }> {
-    const results = await runWorkerPoolSettled(repos, async (repo) => {
-      if (signal?.aborted) {
-        const error = new Error('The operation was aborted.');
-        error.name = 'AbortError';
-        throw error;
-      }
-      return await this.fetchRepoAssignedPrs(token, repo, signal);
-    }, 3);
-
-    const allPrs: GitHubIssue[] = [];
-    const failures: string[] = [];
-
-    results.forEach((result, index) => {
-      if (result.status === 'fulfilled') {
-        allPrs.push(...result.value.prs);
-        if (result.value.failed) {
-          failures.push(repos[index]);
-        }
-      } else {
-        failures.push(repos[index]);
-      }
-    });
-
-    return { prs: allPrs, failures };
-  }
-
-  private async fetchRepoAssignedPrs(token: string, repo: string, signal?: AbortSignal): Promise<{ prs: GitHubIssue[]; failed: boolean }> {
-    logger.debug(`Fetching assigned PRs for repo: ${repo}`);
-    const response = await fetch(
-      `https://api.github.com/search/issues?q=type:pr+state:open+assignee:@me+repo:${repo}&per_page=100`,
-      {
-        headers: {
-          Authorization: `Bearer ${token}`,
-          Accept: 'application/vnd.github+json',
-          'X-GitHub-Api-Version': '2022-11-28',
-        },
-        signal: combineSignals(signal, 30_000),
-      },
-    );
-
-    if (!response.ok) {
-      logger.error(`Failed to fetch assigned PRs for ${repo}: ${response.status}`);
-      return { prs: [], failed: true };
-    }
-
-    const data = (await response.json()) as GitHubSearchResponse;
-    return { prs: data.items, failed: false };
   }
 
   private async fetchAllAssignedPrs(token: string, signal?: AbortSignal): Promise<{ prs: GitHubIssue[]; failures: string[] }> {

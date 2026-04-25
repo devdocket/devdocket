@@ -104,7 +104,7 @@ describe('GitHub provider config edge cases', () => {
     it.each([
       ['no slash', 'noslash'],
       ['double slash', 'owner//repo'],
-    ])('invalid repo format (%s) is rejected before fetch with empty discovery', async (_label, repo) => {
+    ])('invalid repo format (%s) results in global fetch with no matching items', async (_label, repo) => {
       vi.mocked(workspace.getConfiguration).mockReturnValue({
         get: vi.fn((key: string, defaultValue?: any) => {
           if (key === 'repos') { return repo; }
@@ -112,12 +112,27 @@ describe('GitHub provider config edge cases', () => {
         }),
       } as any);
 
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => [
+          {
+            number: 1,
+            title: 'Issue',
+            body: 'body',
+            html_url: 'https://github.com/owner/repo/issues/1',
+            repository_url: 'https://api.github.com/repos/owner/repo',
+          },
+        ],
+        headers: { get: () => null },
+      });
+
       const listener = vi.fn();
       provider.onDidDiscoverItems(listener);
       await provider.refresh();
 
-      // REPO_PATTERN validation rejects invalid formats before calling fetch
-      expect(mockFetch).not.toHaveBeenCalled();
+      // Global fetch always happens
+      expect(mockFetch).toHaveBeenCalledTimes(1);
+      // Pattern doesn't match any real owner/repo, so all items are filtered out
       expect(listener).toHaveBeenCalledWith([]);
     });
 
@@ -138,6 +153,7 @@ describe('GitHub provider config edge cases', () => {
       provider.onDidDiscoverItems(listener);
       await provider.refresh();
 
+      // Global fetch is attempted and fails — handled gracefully
       expect(listener).toHaveBeenCalledWith([]);
     });
   });

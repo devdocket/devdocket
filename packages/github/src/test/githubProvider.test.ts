@@ -58,7 +58,7 @@ describe('GitHubIssueProvider', () => {
     expect(mockFetch).not.toHaveBeenCalled();
   });
 
-  it('fetches assigned issues from configured repos', async () => {
+  it('fetches assigned issues from configured repos via global fetch with filtering', async () => {
     vi.mocked(workspace.getConfiguration).mockReturnValue({
       get: vi.fn((key: string, defaultValue?: any) => {
         if (key === 'repos') { return 'owner/repo1\nowner/repo2'; }
@@ -66,37 +66,29 @@ describe('GitHubIssueProvider', () => {
       }),
     } as any);
 
-    mockFetch
-      .mockResolvedValueOnce({
-        ok: true,
-        json: async () => [createMockIssue(1, 'Bug', 'owner/repo1')],
-        headers: { get: () => null },
-      })
-      .mockResolvedValueOnce({
-        ok: true,
-        json: async () => [createMockIssue(2, 'Feature', 'owner/repo2')],
-        headers: { get: () => null },
-      });
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: async () => [
+        createMockIssue(1, 'Bug', 'owner/repo1'),
+        createMockIssue(2, 'Feature', 'owner/repo2'),
+        createMockIssue(3, 'Other', 'owner/repo3'),
+      ],
+      headers: { get: () => null },
+    });
 
     const listener = vi.fn();
     provider.onDidDiscoverItems(listener);
     await provider.refresh();
 
-    expect(mockFetch).toHaveBeenCalledTimes(2);
+    expect(mockFetch).toHaveBeenCalledTimes(1);
     expect(mockFetch).toHaveBeenCalledWith(
-      expect.stringContaining('/repos/owner/repo1/issues'),
-      expect.objectContaining({
-        headers: expect.objectContaining({
-          Authorization: 'Bearer test-token',
-        }),
-      }),
-    );
-    expect(mockFetch).toHaveBeenCalledWith(
-      expect.stringContaining('/repos/owner/repo2/issues'),
+      'https://api.github.com/issues?filter=assigned&state=open&per_page=100',
       expect.any(Object),
     );
     expect(listener).toHaveBeenCalledTimes(1);
-    expect(listener).toHaveBeenCalledWith(expect.arrayContaining([
+    const items = listener.mock.calls[0][0];
+    expect(items).toHaveLength(2);
+    expect(items).toEqual(expect.arrayContaining([
       expect.objectContaining({ title: '#1: Bug' }),
       expect.objectContaining({ title: '#2: Feature' }),
     ]));
@@ -110,17 +102,14 @@ describe('GitHubIssueProvider', () => {
       }),
     } as any);
 
-    mockFetch
-      .mockResolvedValueOnce({
-        ok: true,
-        json: async () => [createMockIssue(1, 'Bug', 'owner/repo1')],
-        headers: { get: () => null },
-      })
-      .mockResolvedValueOnce({
-        ok: true,
-        json: async () => [createMockIssue(2, 'Feature', 'owner/repo2')],
-        headers: { get: () => null },
-      });
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: async () => [
+        createMockIssue(1, 'Bug', 'owner/repo1'),
+        createMockIssue(2, 'Feature', 'owner/repo2'),
+      ],
+      headers: { get: () => null },
+    });
 
     const listener = vi.fn();
     provider.onDidDiscoverItems(listener);
@@ -248,13 +237,6 @@ describe('GitHubIssueProvider', () => {
   });
 
   it('handles non-ok response gracefully', async () => {
-    vi.mocked(workspace.getConfiguration).mockReturnValue({
-      get: vi.fn((key: string, defaultValue?: any) => {
-        if (key === 'repos') { return 'owner/repo1'; }
-        return defaultValue;
-      }),
-    } as any);
-
     mockFetch.mockResolvedValueOnce({ ok: false, status: 403, headers: { get: () => null } });
 
     const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
@@ -262,7 +244,7 @@ describe('GitHubIssueProvider', () => {
     provider.onDidDiscoverItems(listener);
     await provider.refresh();
 
-    // Should fire with empty items since the repo fetch returned empty
+    // Should fire with empty items since the global fetch failed
     expect(listener).toHaveBeenCalledWith([]);
 
     consoleError.mockRestore();
@@ -364,7 +346,7 @@ describe('GitHubIssueProvider', () => {
     vi.useRealTimers();
   });
 
-  it('skips invalid repo identifiers without treating them as fetch failures', async () => {
+  it('filters issues through configured patterns with global fetch', async () => {
     vi.mocked(workspace.getConfiguration).mockReturnValue({
       get: vi.fn((key: string, defaultValue?: any) => {
         if (key === 'repos') { return 'owner/valid\n../traversal\ngood/repo'; }
@@ -372,29 +354,28 @@ describe('GitHubIssueProvider', () => {
       }),
     } as any);
 
-    mockFetch
-      .mockResolvedValueOnce({
-        ok: true,
-        json: async () => [createMockIssue(1, 'Issue A', 'owner/valid')],
-        headers: { get: () => null },
-      })
-      .mockResolvedValueOnce({
-        ok: true,
-        json: async () => [createMockIssue(2, 'Issue B', 'good/repo')],
-        headers: { get: () => null },
-      });
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: async () => [
+        createMockIssue(1, 'Issue A', 'owner/valid'),
+        createMockIssue(2, 'Issue B', 'good/repo'),
+        createMockIssue(3, 'Issue C', 'other/repo'),
+      ],
+      headers: { get: () => null },
+    });
 
     const listener = vi.fn();
     provider.onDidDiscoverItems(listener);
     await provider.refresh();
 
-    // Only 2 fetch calls — invalid repo is skipped
-    expect(mockFetch).toHaveBeenCalledTimes(2);
+    // Global fetch is always called
+    expect(mockFetch).toHaveBeenCalledTimes(1);
     expect(listener).toHaveBeenCalledTimes(1);
     const items = listener.mock.calls[0][0];
+    // Only owner/valid and good/repo match the patterns; ../traversal doesn't match anything
     expect(items).toHaveLength(2);
-    // Invalid repo should not surface as a fetch failure warning
-    expect(window.showWarningMessage).not.toHaveBeenCalled();
+    expect(items[0]).toEqual(expect.objectContaining({ title: '#1: Issue A' }));
+    expect(items[1]).toEqual(expect.objectContaining({ title: '#2: Issue B' }));
   });
 
   it('stopPeriodicRefresh clears the timer', () => {
@@ -545,20 +526,13 @@ describe('GitHubIssueProvider', () => {
   });
 
   it('returns partial results when mid-pagination request fails', async () => {
-    vi.mocked(workspace.getConfiguration).mockReturnValue({
-      get: vi.fn((key: string, defaultValue?: any) => {
-        if (key === 'repos') { return 'owner/repo1'; }
-        return defaultValue;
-      }),
-    } as any);
-
     const consoleWarn = vi.spyOn(console, 'warn').mockImplementation(() => {});
 
     mockFetch
       .mockResolvedValueOnce({
         ok: true,
         json: async () => [createMockIssue(1, 'Survived')],
-        headers: { get: () => '<https://api.github.com/repos/owner/repo1/issues?page=2>; rel="next"' },
+        headers: { get: () => '<https://api.github.com/issues?page=2>; rel="next"' },
       })
       .mockResolvedValueOnce({
         ok: false,
@@ -578,20 +552,13 @@ describe('GitHubIssueProvider', () => {
   });
 
   it('stops paginating at maxPages limit', async () => {
-    vi.mocked(workspace.getConfiguration).mockReturnValue({
-      get: vi.fn((key: string, defaultValue?: any) => {
-        if (key === 'repos') { return 'owner/repo1'; }
-        return defaultValue;
-      }),
-    } as any);
-
     const consoleWarn = vi.spyOn(console, 'warn').mockImplementation(() => {});
 
     for (let i = 0; i < 10; i++) {
       mockFetch.mockResolvedValueOnce({
         ok: true,
-        json: async () => [createMockIssue(i + 1, `Page ${i + 1}`, 'owner/repo1')],
-        headers: { get: () => `<https://api.github.com/repos/owner/repo1/issues?page=${i + 2}>; rel="next"` },
+        json: async () => [createMockIssue(i + 1, `Page ${i + 1}`)],
+        headers: { get: () => `<https://api.github.com/issues?page=${i + 2}>; rel="next"` },
       });
     }
 
@@ -607,20 +574,13 @@ describe('GitHubIssueProvider', () => {
   });
 
   it('returns partial results when mid-pagination network error occurs', async () => {
-    vi.mocked(workspace.getConfiguration).mockReturnValue({
-      get: vi.fn((key: string, defaultValue?: any) => {
-        if (key === 'repos') { return 'owner/repo1'; }
-        return defaultValue;
-      }),
-    } as any);
-
     const consoleWarn = vi.spyOn(console, 'warn').mockImplementation(() => {});
 
     mockFetch
       .mockResolvedValueOnce({
         ok: true,
         json: async () => [createMockIssue(1, 'Survived network error')],
-        headers: { get: () => '<https://api.github.com/repos/owner/repo1/issues?page=2>; rel="next"' },
+        headers: { get: () => '<https://api.github.com/issues?page=2>; rel="next"' },
       })
       .mockRejectedValueOnce(new Error('Network error'));
 

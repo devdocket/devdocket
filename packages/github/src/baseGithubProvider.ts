@@ -1,14 +1,7 @@
 import * as vscode from 'vscode';
 import { BaseProvider, DiscoveredItem } from '@devdocket/shared';
 import { logger } from './logger';
-import { parseRepoPatterns, isNegationOnly, type RepoPattern } from './repoPattern';
-import { resolveRepos } from './repoResolver';
-
-export interface ResolvedRepoConfig {
-  repos: string[];
-  patterns: RepoPattern[];
-  useGlobalFetch: boolean;
-}
+import { parseRepoPatterns, type RepoPattern } from './repoPattern';
 
 /**
  * Base class for GitHub providers that handles the common authentication
@@ -120,26 +113,4 @@ export abstract class BaseGitHubProvider extends BaseProvider {
     return parseRepoPatterns(value);
   }
 
-  /**
-   * Resolve configured patterns into concrete repo names and fetch strategy.
-   * Returns empty repos with useGlobalFetch=true when no patterns are configured
-   * or when only negation patterns exist (requiring a global fetch + post-filter).
-   */
-  protected async resolveConfiguredRepos(
-    accessToken: string,
-    signal?: AbortSignal,
-  ): Promise<ResolvedRepoConfig> {
-    const patterns = this.getConfiguredPatterns();
-
-    if (patterns.length === 0) {
-      return { repos: [], patterns, useGlobalFetch: true };
-    }
-
-    if (isNegationOnly(patterns)) {
-      return { repos: [], patterns, useGlobalFetch: true };
-    }
-
-    const repos = await resolveRepos(patterns, accessToken, signal);
-    return { repos, patterns, useGlobalFetch: false };
-  }
 }

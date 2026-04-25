@@ -471,29 +471,27 @@ describe('GitHubPrReviewProvider', () => {
       );
     });
 
-    it('fetches per-repo when repos are configured', async () => {
+    it('uses global fetch with post-filtering when repos are configured', async () => {
       mockRepos(['org/repo1', 'org/repo2']);
-      mockFetch
-        .mockResolvedValueOnce({
-          ok: true,
-          json: async () => ({ items: [createMockPr(1, 'PR in repo1', 'org/repo1')] }),
-        })
-        .mockResolvedValueOnce({
-          ok: true,
-          json: async () => ({ items: [createMockPr(2, 'PR in repo2', 'org/repo2')] }),
-        });
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          items: [
+            createMockPr(1, 'PR in repo1', 'org/repo1'),
+            createMockPr(2, 'PR in repo2', 'org/repo2'),
+            createMockPr(3, 'PR in repo3', 'org/repo3'),
+          ],
+        }),
+      });
 
       const listener = vi.fn();
       provider.onDidDiscoverItems(listener);
       await provider.refresh();
 
-      expect(mockFetch).toHaveBeenCalledTimes(2);
+      // Single global fetch, not per-repo
+      expect(mockFetch).toHaveBeenCalledTimes(1);
       expect(mockFetch).toHaveBeenCalledWith(
-        'https://api.github.com/search/issues?q=type:pr+state:open+review-requested:@me+repo:org/repo1&per_page=100',
-        expect.any(Object),
-      );
-      expect(mockFetch).toHaveBeenCalledWith(
-        'https://api.github.com/search/issues?q=type:pr+state:open+review-requested:@me+repo:org/repo2&per_page=100',
+        'https://api.github.com/search/issues?q=type:pr+state:open+review-requested:@me&per_page=100',
         expect.any(Object),
       );
 
@@ -503,52 +501,18 @@ describe('GitHubPrReviewProvider', () => {
       expect(items[1].externalId).toBe('org/repo2#2');
     });
 
-    it('collects failures from individual repo fetches', async () => {
-      mockRepos(['org/good', 'org/bad']);
-      mockFetch
-        .mockResolvedValueOnce({
-          ok: true,
-          json: async () => ({ items: [createMockPr(1, 'Good PR', 'org/good')] }),
-        })
-        .mockResolvedValueOnce({ ok: false, status: 404 });
+    it('shows warning on global fetch failure', async () => {
+      mockRepos(['org/repo1']);
+      mockFetch.mockResolvedValueOnce({ ok: false, status: 500 });
 
       const listener = vi.fn();
       provider.onDidDiscoverItems(listener);
       await provider.refresh();
 
-      // Should still fire with the successful items
-      const items = listener.mock.calls[0][0];
-      expect(items).toHaveLength(1);
-      expect(items[0].externalId).toBe('org/good#1');
-
-      // Should show warning for user-triggered refresh
+      expect(listener).toHaveBeenCalledWith([]);
       expect(window.showWarningMessage).toHaveBeenCalledWith(
-        expect.stringContaining('org/bad'),
+        expect.stringContaining('Failed to fetch PR review requests'),
       );
-    });
-
-    it('reports multiple failures with count', async () => {
-      mockRepos(['org/bad1', 'org/bad2']);
-      mockFetch
-        .mockResolvedValueOnce({ ok: false, status: 500 })
-        .mockResolvedValueOnce({ ok: false, status: 500 });
-
-      const listener = vi.fn();
-      provider.onDidDiscoverItems(listener);
-      await provider.refresh();
-
-      expect(window.showWarningMessage).toHaveBeenCalledWith(
-        expect.stringContaining('2 repositories'),
-      );
-    });
-
-    it('handles rejected fetch promises for configured repos', async () => {
-      mockRepos(['org/crash']);
-      mockFetch.mockRejectedValueOnce(new Error('Network error'));
-
-      const listener = vi.fn();
-      provider.onDidDiscoverItems(listener);
-      await expect(provider.refresh()).resolves.toBeUndefined();
     });
   });
 

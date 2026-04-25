@@ -1,5 +1,5 @@
 import * as vscode from 'vscode';
-import { DiscoveredItem, combineSignals, runWorkerPool, runWorkerPoolSettled, safeDecodeComponent, type ResolvedItem } from '@devdocket/shared';
+import { DiscoveredItem, combineSignals, runWorkerPool, safeDecodeComponent, type ResolvedItem } from '@devdocket/shared';
 import { BaseGitHubProvider } from './baseGithubProvider';
 import { logger } from './logger';
 import { parseRepoFromUrls } from './parseRepo';
@@ -31,23 +31,17 @@ export class GitHubPrReviewProvider extends BaseGitHubProvider {
 
   protected async fetchAndPublish(accessToken: string, isUserTriggered: boolean, signal?: AbortSignal): Promise<void> {
     logger.info('Fetching PR review requests...');
-    const { repos, patterns, useGlobalFetch } = await this.resolveConfiguredRepos(accessToken, signal);
+    const patterns = this.getConfiguredPatterns();
 
-    // Patterns specified positive repos but resolved to nothing — emit empty
-    if (!useGlobalFetch && repos.length === 0 && patterns.length > 0) {
-      this._onDidDiscoverItems.fire([]);
-      return;
-    }
-
-    const { prs, failures } = await this.fetchReviewRequestedPrs(accessToken, repos, signal);
+    const { prs, failed } = await this.fetchAllPrReviews(accessToken, signal);
 
     // Parse repo name once per PR
     const repoNameMap = new Map(prs.map(pr =>
       [pr.html_url, parseRepoFromUrls(pr.html_url, pr.repository_url)]
     ));
 
-    // Post-filter for negation-only patterns
-    const filteredPrs = useGlobalFetch && patterns.length > 0
+    // Post-filter when patterns are configured
+    const filteredPrs = patterns.length > 0
       ? prs.filter(pr => matchesRepoPatterns(repoNameMap.get(pr.html_url)!, patterns))
       : prs;
 
@@ -96,10 +90,8 @@ export class GitHubPrReviewProvider extends BaseGitHubProvider {
 
     this._onDidDiscoverItems.fire(items);
 
-    if (failures.length > 0) {
-      const message = failures.length === 1
-        ? `Failed to fetch PR review requests from ${failures[0]}`
-        : `Failed to fetch PR review requests from ${failures.length} repositories`;
+    if (failed) {
+      const message = 'Failed to fetch PR review requests from all repositories';
       if (isUserTriggered) {
         vscode.window.showWarningMessage(`DevDocket GitHub: ${message}`);
       } else {
@@ -150,77 +142,6 @@ export class GitHubPrReviewProvider extends BaseGitHubProvider {
    */
   async getClosedItems(externalIds: string[], signal?: AbortSignal): Promise<string[]> {
     return fetchClosedGitHubItems(externalIds, 'pulls', signal);
-  }
-
-  private async fetchReviewRequestedPrs(
-    token: string,
-    repos: string[],
-    signal?: AbortSignal,
-  ): Promise<{ prs: GitHubIssue[]; failures: string[] }> {
-    if (repos.length > 0) {
-      const results = await this.fetchRepoPrReviewsWithLimit(token, repos, 3, signal);
-
-      const allPrs: GitHubIssue[] = [];
-      const failures: string[] = [];
-
-      results.forEach((result, index) => {
-        if (result.status === 'fulfilled') {
-          const { prs: repoPrs, failed } = result.value;
-          allPrs.push(...repoPrs);
-          if (failed) {
-            failures.push(repos[index]);
-          }
-        } else {
-          failures.push(repos[index]);
-        }
-      });
-
-      return { prs: allPrs, failures };
-    }
-
-    // Fallback: fetch all review-requested PRs across all repos
-    const { prs, failed } = await this.fetchAllPrReviews(token, signal);
-    return { prs, failures: failed ? ['all repositories'] : [] };
-  }
-
-  // Limit concurrent per-repo search API calls to avoid hitting rate limits
-  private async fetchRepoPrReviewsWithLimit(
-    token: string,
-    repos: string[],
-    maxConcurrent: number,
-    signal?: AbortSignal,
-  ): Promise<PromiseSettledResult<{ prs: GitHubIssue[]; failed: boolean }>[]> {
-    return await runWorkerPoolSettled(repos, async (repo) => {
-      if (signal?.aborted) {
-        const error = new Error('The operation was aborted.');
-        error.name = 'AbortError';
-        throw error;
-      }
-      return await this.fetchRepoPrReviews(token, repo, signal);
-    }, maxConcurrent);
-  }
-
-  private async fetchRepoPrReviews(token: string, repo: string, signal?: AbortSignal): Promise<{ prs: GitHubIssue[]; failed: boolean }> {
-    logger.debug(`Fetching PR reviews for repo: ${repo}`);
-    const response = await fetch(
-      `https://api.github.com/search/issues?q=type:pr+state:open+review-requested:@me+repo:${repo}&per_page=100`,
-      {
-        headers: {
-          Authorization: `Bearer ${token}`,
-          Accept: 'application/vnd.github+json',
-          'X-GitHub-Api-Version': '2022-11-28',
-        },
-        signal: combineSignals(signal, 30_000),
-      },
-    );
-
-    if (!response.ok) {
-      logger.error(`Failed to fetch PR reviews for ${repo}: ${response.status}`);
-      return { prs: [], failed: true };
-    }
-
-    const data = (await response.json()) as GitHubSearchResponse;
-    return { prs: data.items, failed: false };
   }
 
   private async fetchAllPrReviews(token: string, signal?: AbortSignal): Promise<{ prs: GitHubIssue[]; failed: boolean }> {

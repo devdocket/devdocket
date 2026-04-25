@@ -27,7 +27,7 @@
           "type": "string",
           "default": "",
           "editPresentation": "multilineText",
-          "description": "Gitignore-style patterns for GitHub repositories to watch. One pattern per line. Supports wildcards (*), exclusions (!), and comments (#). Examples:\nmyorg/*\n!myorg/archived-repo\nother-owner/specific-repo\nLeave empty to fetch all assigned items across all repositories."
+          "description": "Filter which repositories appear in DevDocket. Uses gitignore-style patterns, one per line. By default, all repositories are shown. When patterns are specified, only matching repositories are included.\n\nExamples:\nmyorg/*           # include all repos in myorg\n!myorg/archived-*  # exclude archived repos\nother/specific-repo # include one specific repo\n\nSupports wildcards (*), exclusions (!), and comments (#).\nLeave empty to show all repositories."
         },
         "devDocketGithub.refreshIntervalSeconds": {
           "type": "number",

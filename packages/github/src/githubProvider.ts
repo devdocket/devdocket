@@ -1,5 +1,5 @@
 import * as vscode from 'vscode';
-import { DiscoveredItem, isValidGitHubRepo, combineSignals, safeDecodeComponent, type ResolvedItem } from '@devdocket/shared';
+import { DiscoveredItem, combineSignals, safeDecodeComponent, type ResolvedItem } from '@devdocket/shared';
 import { BaseGitHubProvider } from './baseGithubProvider';
 import { logger } from './logger';
 import { parseRepoFromUrls } from './parseRepo';
@@ -22,15 +22,9 @@ export class GitHubIssueProvider extends BaseGitHubProvider {
 
   protected async fetchAndPublish(accessToken: string, isUserTriggered: boolean, signal?: AbortSignal): Promise<void> {
     logger.info('Fetching assigned issues...');
-    const { repos, patterns, useGlobalFetch } = await this.resolveConfiguredRepos(accessToken, signal);
+    const patterns = this.getConfiguredPatterns();
 
-    // Patterns specified positive repos but resolved to nothing — emit empty
-    if (!useGlobalFetch && repos.length === 0 && patterns.length > 0) {
-      this._onDidDiscoverItems.fire([]);
-      return;
-    }
-
-    const { issues, failures } = await this.fetchAssignedIssues(accessToken, repos, signal);
+    const { issues, failed } = await this.fetchAllAssignedIssues(accessToken, signal);
 
     // Parse repo name once per issue, then filter and map
     const issuesWithRepo = issues.map(issue => ({
@@ -38,7 +32,7 @@ export class GitHubIssueProvider extends BaseGitHubProvider {
       repoName: parseRepoFromUrls(issue.html_url, issue.repository_url),
     }));
 
-    const filteredIssues = useGlobalFetch && patterns.length > 0
+    const filteredIssues = patterns.length > 0
       ? issuesWithRepo.filter(({ repoName }) => matchesRepoPatterns(repoName, patterns))
       : issuesWithRepo;
 
@@ -57,10 +51,8 @@ export class GitHubIssueProvider extends BaseGitHubProvider {
     logger.info(`Discovered ${items.length} GitHub issues`);
     this._onDidDiscoverItems.fire(items);
 
-    if (failures.length > 0) {
-      const message = failures.length === 1
-        ? `Failed to fetch issues from ${failures[0]}`
-        : `Failed to fetch issues from ${failures.length} repositories`;
+    if (failed) {
+      const message = 'Failed to fetch issues from all repositories';
       if (isUserTriggered) {
         void vscode.window.showWarningMessage(`DevDocket GitHub: ${message}`);
       } else {
@@ -111,85 +103,6 @@ export class GitHubIssueProvider extends BaseGitHubProvider {
    */
   async getClosedItems(externalIds: string[], signal?: AbortSignal): Promise<string[]> {
     return fetchClosedGitHubItems(externalIds, 'issues', signal);
-  }
-
-  private async fetchAssignedIssues(
-    token: string,
-    repos: string[],
-    signal?: AbortSignal,
-  ): Promise<{ issues: GitHubIssue[]; failures: string[] }> {
-    if (repos.length > 0) {
-      const validRepos: string[] = [];
-      for (const repo of repos) {
-        if (isValidGitHubRepo(repo)) {
-          validRepos.push(repo);
-        } else {
-          logger.warn('Skipping invalid repo identifier', repo);
-        }
-      }
-
-      const failures: string[] = [];
-
-      const results = await Promise.allSettled(
-        validRepos.map(repo => this.fetchRepoIssues(token, repo, signal))
-      );
-
-      const allIssues: GitHubIssue[] = [];
-
-      results.forEach((result, index) => {
-        if (result.status === 'fulfilled') {
-          const { issues, failed } = result.value;
-          allIssues.push(...issues);
-          if (failed) {
-            failures.push(validRepos[index]);
-          }
-        } else {
-          failures.push(validRepos[index]);
-        }
-      });
-
-      // Propagate cancellation so the refresh stops without publishing partial results
-      const abortedResult = results.find(
-        (r): r is PromiseRejectedResult =>
-          r.status === 'rejected' && r.reason instanceof Error && r.reason.name === 'AbortError',
-      );
-      if (signal?.aborted || abortedResult) {
-        const error = abortedResult?.reason ?? new Error('The operation was aborted.');
-        if (error.name !== 'AbortError') { error.name = 'AbortError'; }
-        throw error;
-      }
-
-      return { issues: allIssues, failures };
-    }
-
-    // Fallback: fetch all assigned issues across all repos
-    const { issues, failed } = await this.fetchAllAssignedIssues(token, signal);
-    return { issues, failures: failed ? ['all repositories'] : [] };
-  }
-
-  private static readonly REPO_PATTERN = /^[A-Za-z0-9._-]+\/[A-Za-z0-9._-]+$/;
-
-  private async fetchRepoIssues(token: string, repo: string, signal?: AbortSignal): Promise<{ issues: GitHubIssue[]; failed: boolean }> {
-    logger.debug(`Fetching issues for repo: ${repo}`);
-    if (!GitHubIssueProvider.REPO_PATTERN.test(repo)) {
-      logger.error(`Invalid repo format, expected owner/name: ${repo}`);
-      return { issues: [], failed: true };
-    }
-    try {
-      const items = await this.fetchPaginated<GitHubIssue>(
-        `https://api.github.com/repos/${repo}/issues?assignee=@me&state=open&per_page=100`,
-        token,
-        10,
-        signal,
-      );
-      // Filter out pull requests (GitHub /issues endpoint returns both issues and PRs)
-      const issues = items.filter(item => !item.pull_request);
-      return { issues, failed: false };
-    } catch (err) {
-      if (err instanceof Error && err.name === 'AbortError' && signal?.aborted) { throw err; }
-      logger.error(`Failed to fetch issues for ${repo}`, err);
-      return { issues: [], failed: true };
-    }
   }
 
   private async fetchAllAssignedIssues(token: string, signal?: AbortSignal): Promise<{ issues: GitHubIssue[]; failed: boolean }> {

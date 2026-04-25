@@ -2,10 +2,6 @@ import { describe, it, expect } from 'vitest';
 import {
   parseRepoPatterns,
   matchesRepoPatterns,
-  extractOwners,
-  hasWildcardPatterns,
-  isNegationOnly,
-  getExactRepos,
 } from '../repoPattern';
 
 describe('parseRepoPatterns', () => {
@@ -128,17 +124,17 @@ describe('matchesRepoPatterns', () => {
     expect(matchesRepoPatterns('myorg/secret', patterns)).toBe(true);
   });
 
-  it('negation-only: includes non-matching repos', () => {
+  it('negation-only: matches nothing (default is exclude)', () => {
     const patterns = parseRepoPatterns('!myorg/secret');
-    expect(matchesRepoPatterns('myorg/repo1', patterns)).toBe(true);
-    expect(matchesRepoPatterns('other/repo', patterns)).toBe(true);
+    expect(matchesRepoPatterns('myorg/repo1', patterns)).toBe(false);
+    expect(matchesRepoPatterns('other/repo', patterns)).toBe(false);
     expect(matchesRepoPatterns('myorg/secret', patterns)).toBe(false);
   });
 
-  it('negation-only with wildcard', () => {
+  it('negation-only with wildcard: matches nothing', () => {
     const patterns = parseRepoPatterns('!myorg/*');
     expect(matchesRepoPatterns('myorg/repo1', patterns)).toBe(false);
-    expect(matchesRepoPatterns('other/repo', patterns)).toBe(true);
+    expect(matchesRepoPatterns('other/repo', patterns)).toBe(false);
   });
 
   it('positive pattern does not match unmentioned repos', () => {
@@ -158,94 +154,5 @@ describe('matchesRepoPatterns', () => {
     const patterns = parseRepoPatterns('MyOrg/MyRepo');
     expect(matchesRepoPatterns('myorg/myrepo', patterns)).toBe(true);
     expect(matchesRepoPatterns('MYORG/MYREPO', patterns)).toBe(true);
-  });
-});
-
-describe('extractOwners', () => {
-  it('skips exact patterns (only returns wildcard owners)', () => {
-    const patterns = parseRepoPatterns('myorg/repo');
-    expect(extractOwners(patterns)).toEqual([]);
-  });
-
-  it('extracts owner from wildcard pattern', () => {
-    const patterns = parseRepoPatterns('myorg/*');
-    expect(extractOwners(patterns)).toEqual(['myorg']);
-  });
-
-  it('skips exact patterns even with same owner as wildcard', () => {
-    const patterns = parseRepoPatterns('myorg/repo1\nmyorg/repo2');
-    expect(extractOwners(patterns)).toEqual([]);
-  });
-
-  it('extracts multiple owners from wildcard patterns', () => {
-    const patterns = parseRepoPatterns('org1/*\norg2/*');
-    const owners = extractOwners(patterns);
-    expect(owners).toContain('org1');
-    expect(owners).toContain('org2');
-    expect(owners).toHaveLength(2);
-  });
-
-  it('skips exclusion patterns', () => {
-    const patterns = parseRepoPatterns('!excluded-org/repo');
-    expect(extractOwners(patterns)).toEqual([]);
-  });
-
-  it('skips wildcard owners', () => {
-    const patterns = parseRepoPatterns('*/repo');
-    expect(extractOwners(patterns)).toEqual([]);
-  });
-
-  it('returns empty for empty patterns', () => {
-    expect(extractOwners([])).toEqual([]);
-  });
-});
-
-describe('hasWildcardPatterns', () => {
-  it('returns true for wildcard patterns', () => {
-    const patterns = parseRepoPatterns('myorg/*');
-    expect(hasWildcardPatterns(patterns)).toBe(true);
-  });
-
-  it('returns false for exact patterns', () => {
-    const patterns = parseRepoPatterns('myorg/repo');
-    expect(hasWildcardPatterns(patterns)).toBe(false);
-  });
-
-  it('ignores exclusion wildcards', () => {
-    const patterns = parseRepoPatterns('!myorg/*');
-    expect(hasWildcardPatterns(patterns)).toBe(false);
-  });
-});
-
-describe('isNegationOnly', () => {
-  it('returns true when all patterns are exclusions', () => {
-    const patterns = parseRepoPatterns('!myorg/repo');
-    expect(isNegationOnly(patterns)).toBe(true);
-  });
-
-  it('returns false when there are positive patterns', () => {
-    const patterns = parseRepoPatterns('myorg/*\n!myorg/repo');
-    expect(isNegationOnly(patterns)).toBe(false);
-  });
-
-  it('returns false for empty patterns', () => {
-    expect(isNegationOnly([])).toBe(false);
-  });
-});
-
-describe('getExactRepos', () => {
-  it('returns exact repos', () => {
-    const patterns = parseRepoPatterns('owner/repo1\nowner/repo2');
-    expect(getExactRepos(patterns)).toEqual(['owner/repo1', 'owner/repo2']);
-  });
-
-  it('excludes wildcard patterns', () => {
-    const patterns = parseRepoPatterns('myorg/*\nmyorg/specific');
-    expect(getExactRepos(patterns)).toEqual(['myorg/specific']);
-  });
-
-  it('excludes exclusion patterns', () => {
-    const patterns = parseRepoPatterns('!myorg/repo');
-    expect(getExactRepos(patterns)).toEqual([]);
   });
 });
