@@ -6,13 +6,11 @@ applyTo: "**/storage/**"
 
 ## Memento-backed Stores
 
-All stores persist data via VS Code's `Memento` (`globalState`) API. Each store:
+All stores persist data via VS Code's `Memento` (`globalState`) API. Each store takes a `Memento` in its constructor and writes via `this.globalState.update(key, data)`.
 
-- Takes a `Memento` in its constructor.
-- Maintains an in-memory cache populated on the first `load()` call.
-- Writes to globalState via `this.globalState.update(key, data)` in a `persist()` method.
+Most stores (e.g., `JsonTaskStore`, `DiscoveredStateStore`, `ReadStateStore`) maintain an in-memory cache populated on first load and expose a private `persist()` method. Simpler stores (e.g., `WatchStore`) read/write directly without a cache. Loading methods vary by store (`loadAll()`, `load()`).
 
-Because `globalState.update()` is atomic from the extension's perspective, there is no write-queue or file-level locking. Stores no longer extend a base class — each store directly implements its own `load()` / `persist()` pattern.
+Because `globalState.update()` is atomic from the extension's perspective, there is no write-queue or file-level locking. Stores no longer extend a base class.
 
 ## One-time Migration
 

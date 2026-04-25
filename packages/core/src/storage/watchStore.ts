@@ -5,7 +5,7 @@ import type { WatchedRun, WatchedPR } from '../services/watcherService';
 const STORAGE_KEY = 'devdocket.watches';
 
 /**
- * On-disk shape: either a legacy plain array of WatchedRun, or the
+ * Persisted shape: either a legacy plain array of WatchedRun, or the
  * new envelope with separate `runs` and `prs` arrays.
  */
 interface WatchStoreData {
