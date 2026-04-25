@@ -233,7 +233,7 @@ export function getEditorPanelHtml({ cspSource, item, providerLabel, providerDes
       outline-offset: 2px;
     }
     .url-open-link.hidden {
-      visibility: hidden;
+      display: none;
     }
   </style>
 </head>
