@@ -73,12 +73,16 @@ export class ReadStateStore {
     const parsed = this.globalState.get<unknown[]>(STORAGE_KEY);
     this.items.clear();
     if (Array.isArray(parsed)) {
+      let invalidCount = 0;
       for (const item of parsed) {
         if (typeof item === 'string') {
           this.items.add(item);
         } else {
-          logger.warn(`Skipping invalid read state entry: expected string, got ${typeof item}`);
+          invalidCount++;
         }
+      }
+      if (invalidCount > 0) {
+        logger.warn(`Skipped ${invalidCount} invalid read state entries (expected strings)`);
       }
       logger.debug(`Loaded read state: ${this.items.size} entries`);
     }
