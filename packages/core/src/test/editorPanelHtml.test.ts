@@ -519,4 +519,24 @@ describe('renderMarkdown', () => {
     const result = renderMarkdown('<a href="javascript:alert(1)">click</a>');
     expect(result).not.toContain('javascript:');
   });
+
+  it('strips data: scheme from image src', () => {
+    const result = renderMarkdown('<img src="data:image/png;base64,abc" alt="test">');
+    expect(result).not.toContain('data:');
+  });
+
+  it('renders ordered lists', () => {
+    const result = renderMarkdown('1. first\n2. second');
+    expect(result).toContain('<ol>');
+    expect(result).toContain('<li>first</li>');
+    expect(result).toContain('<li>second</li>');
+  });
+
+  it('renders details/summary elements', () => {
+    const result = renderMarkdown('<details><summary>Click me</summary>Hidden content</details>');
+    expect(result).toContain('<details>');
+    expect(result).toContain('<summary>');
+    expect(result).toContain('Click me');
+    expect(result).toContain('Hidden content');
+  });
 });
