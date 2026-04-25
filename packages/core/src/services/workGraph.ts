@@ -4,6 +4,7 @@ import { WorkItem, WorkItemInput, WorkItemState } from '../models/workItem';
 import { type ActivityLogEntry, type ActivityType, MAX_ACTIVITY_LOG_ENTRIES } from '../models/activityLog';
 import { ITaskStore } from '../storage/taskStore';
 import { logger } from './logger';
+import { isSafeUrl } from '../utils/url';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -181,7 +182,7 @@ export class WorkGraph {
       state: WorkItemState.New,
       providerId: provenance?.providerId,
       externalId: provenance?.externalId,
-      url: provenance?.url,
+      url: isSafeUrl(provenance?.url?.trim() ?? '')?.href ?? isSafeUrl(input.url?.trim() ?? '')?.href,
       group: provenance?.group,
       sortOrder,
       createdAt: now,
@@ -209,7 +210,7 @@ export class WorkGraph {
     return item;
   }
 
-  /** Apply a partial update (title and/or notes) to an existing work item. */
+  /** Apply a partial update (title, notes, and/or url) to an existing work item. */
   async updateItem(id: string, patch: Partial<WorkItemInput>): Promise<void> {
     const item = this.items.get(id);
     if (!item) {
@@ -219,6 +220,12 @@ export class WorkGraph {
     if (patch.title !== undefined && patch.title !== item.title) { changes.push('title'); }
     // Detect notes changes including clearing (patch.notes === undefined with key present)
     if ('notes' in patch && patch.notes !== item.notes) { changes.push('notes'); }
+    // Detect url changes including clearing (patch.url === undefined with key present)
+    if ('url' in patch) {
+      const sanitized = patch.url ? isSafeUrl(patch.url.trim())?.href : undefined;
+      if (sanitized !== patch.url) { patch = { ...patch, url: sanitized }; }
+      if (sanitized !== item.url) { changes.push('url'); }
+    }
     // Skip save/event when no fields actually changed (e.g. autosave with identical values)
     if (changes.length === 0) {
       return;

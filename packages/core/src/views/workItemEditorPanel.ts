@@ -48,6 +48,7 @@ export class WorkItemEditorPanel {
   private readonly providerRegSub: vscode.Disposable;
   private readonly providerChangeSub: vscode.Disposable;
   private lastDisplayedTitle: string | undefined;
+  private lastDisplayedUrl: string | undefined;
   private lastManagedState: boolean | undefined;
 
   /**
@@ -188,6 +189,11 @@ export class WorkItemEditorPanel {
       this.panel.title = `Edit: ${item.title}`;
       void this.panel.webview.postMessage({ type: 'updateTitle', title: item.title });
     }
+
+    // Re-render when URL changes to keep the title hyperlink and URL field in sync
+    if (item.url !== this.lastDisplayedUrl) {
+      this.update();
+    }
   }
 
   private async saveData(data: Record<string, string>): Promise<void> {
@@ -203,6 +209,20 @@ export class WorkItemEditorPanel {
         return;
       }
       patch.title = data.title;
+
+      if ('url' in data) {
+        const rawUrl = data.url || '';
+        // Allow clearing the URL; validate non-empty values
+        if (rawUrl === '') {
+          patch.url = undefined;
+        } else {
+          const safe = isSafeUrl(rawUrl);
+          if (safe) {
+            patch.url = safe.href;
+          }
+          // Silently ignore invalid URLs
+        }
+      }
     }
 
     if ('notes' in data) {
@@ -211,6 +231,12 @@ export class WorkItemEditorPanel {
 
     if (Object.keys(patch).length === 0) {
       return;
+    }
+
+    // Pre-sync tracked URL before updateItem fires onDidChange synchronously,
+    // preventing a self-triggered full re-render that could wipe unsaved edits.
+    if ('url' in patch) {
+      this.lastDisplayedUrl = patch.url;
     }
 
     await this.workGraph.updateItem(this.itemId, patch);
@@ -223,6 +249,7 @@ export class WorkItemEditorPanel {
       return;
     }
     this.lastDisplayedTitle = item.title;
+    this.lastDisplayedUrl = item.url;
     this.lastManagedState = this.isProviderManaged(item);
     this.panel.title = `Edit: ${item.title}`;
     this.panel.webview.html = this.getHtml(item);

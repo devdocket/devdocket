@@ -16,8 +16,9 @@ export class FocusTreeProvider extends WorkItemViewProvider implements vscode.Tr
   readonly dragMimeTypes = [DRAG_MIME_TYPE];
   protected readonly groupPrefix = 'focus';
   protected readonly groupContextValue = 'focusGroup';
+  private readonly isWatchable?: (url: string) => boolean;
 
-  constructor(workGraph: WorkGraph, providerRegistry?: ProviderRegistry) {
+  constructor(workGraph: WorkGraph, providerRegistry?: ProviderRegistry, isWatchable?: (url: string) => boolean) {
     super(
       workGraph,
       'flat',
@@ -26,6 +27,7 @@ export class FocusTreeProvider extends WorkItemViewProvider implements vscode.Tr
       providerRegistry ? (pid, eid) => providerRegistry.getDiscoveredItems(pid).find(d => d.externalId === eid)?.title : undefined,
       providerRegistry?.onDidChangeDiscoveredItems,
     );
+    this.isWatchable = isWatchable;
   }
 
   protected getItems(): WorkItem[] {
@@ -53,11 +55,10 @@ export class FocusTreeProvider extends WorkItemViewProvider implements vscode.Tr
     treeItem.iconPath = getWorkItemIcon(item.state);
 
     // contextValue controls which context menu items appear
-    if (item.state === WorkItemState.Paused) {
-      treeItem.contextValue = item.url ? 'paused.hasUrl' : 'paused';
-    } else {
-      treeItem.contextValue = item.url ? 'active.hasUrl' : 'active';
-    }
+    const base = item.state === WorkItemState.Paused ? 'paused' : 'active';
+    const urlSuffix = item.url ? '.hasUrl' : '';
+    const watchableSuffix = item.url && this.isWatchable?.(item.url) ? '.watchable' : '';
+    treeItem.contextValue = `${base}${urlSuffix}${watchableSuffix}`;
 
     treeItem.command = { command: 'devdocket.editItem', title: 'Open Details', arguments: [item] };
     return treeItem;

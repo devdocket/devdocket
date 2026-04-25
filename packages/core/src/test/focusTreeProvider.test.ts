@@ -57,6 +57,30 @@ describe('FocusTreeProvider', () => {
       const item = makeItem({ state: WorkItemState.Paused, url: 'https://example.com' });
       expect(provider.getTreeItem(item).contextValue).toBe('paused.hasUrl');
     });
+
+    it('should set contextValue to "active.hasUrl.watchable" when URL is watchable', () => {
+      const watchableProvider = new FocusTreeProvider(workGraph as any, undefined, () => true);
+      const item = makeItem({ state: WorkItemState.InProgress, url: 'https://github.com/owner/repo/pull/1' });
+      expect(watchableProvider.getTreeItem(item).contextValue).toBe('active.hasUrl.watchable');
+    });
+
+    it('should set contextValue to "active.hasUrl" when URL is not watchable', () => {
+      const unwatchableProvider = new FocusTreeProvider(workGraph as any, undefined, () => false);
+      const item = makeItem({ state: WorkItemState.InProgress, url: 'https://example.com' });
+      expect(unwatchableProvider.getTreeItem(item).contextValue).toBe('active.hasUrl');
+    });
+
+    it('should set contextValue to "paused.hasUrl.watchable" when paused URL is watchable', () => {
+      const watchableProvider = new FocusTreeProvider(workGraph as any, undefined, () => true);
+      const item = makeItem({ state: WorkItemState.Paused, url: 'https://github.com/owner/repo/pull/2' });
+      expect(watchableProvider.getTreeItem(item).contextValue).toBe('paused.hasUrl.watchable');
+    });
+
+    it('should not append watchable when item has no URL even if isWatchable provided', () => {
+      const watchableProvider = new FocusTreeProvider(workGraph as any, undefined, () => true);
+      const item = makeItem({ state: WorkItemState.InProgress });
+      expect(watchableProvider.getTreeItem(item).contextValue).toBe('active');
+    });
   });
 
   describe('getTreeItem description', () => {
