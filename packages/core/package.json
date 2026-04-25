@@ -909,10 +909,13 @@
   },
   "dependencies": {
     "@devdocket/shared": "*",
+    "marked": "^18.0.2",
+    "sanitize-html": "^2.17.3",
     "timeago.js": "^4.0.2"
   },
   "devDependencies": {
     "@types/node": "^20.11.0",
+    "@types/sanitize-html": "^2.16.1",
     "@types/vscode": "^1.85.0",
     "@typescript-eslint/eslint-plugin": "^7.0.0",
     "@typescript-eslint/parser": "^7.0.0",
