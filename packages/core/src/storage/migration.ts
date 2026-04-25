@@ -58,7 +58,7 @@ export async function migrateToGlobalState(globalState: Memento, storagePath: st
       if (isNodeError(err) && err.code === 'ENOENT') {
         logger.debug(`No ${fileName} to migrate (file not found)`);
       } else {
-        logger.error(`Failed to migrate ${fileName}: ${err}`);
+        logger.error(`Failed to migrate ${fileName}`, err);
         allSucceeded = false;
       }
     }
