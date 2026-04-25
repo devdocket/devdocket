@@ -32,16 +32,17 @@ export class GitHubIssueProvider extends BaseGitHubProvider {
 
     const { issues, failures } = await this.fetchAssignedIssues(accessToken, repos, signal);
 
-    // Post-filter for negation-only patterns
-    const filteredIssues = useGlobalFetch && patterns.length > 0
-      ? issues.filter(issue => {
-          const repoName = parseRepoFromUrls(issue.html_url, issue.repository_url);
-          return matchesRepoPatterns(repoName, patterns);
-        })
-      : issues;
+    // Parse repo name once per issue, then filter and map
+    const issuesWithRepo = issues.map(issue => ({
+      issue,
+      repoName: parseRepoFromUrls(issue.html_url, issue.repository_url),
+    }));
 
-    const items: DiscoveredItem[] = filteredIssues.map((issue) => {
-      const repoName = parseRepoFromUrls(issue.html_url, issue.repository_url);
+    const filteredIssues = useGlobalFetch && patterns.length > 0
+      ? issuesWithRepo.filter(({ repoName }) => matchesRepoPatterns(repoName, patterns))
+      : issuesWithRepo;
+
+    const items: DiscoveredItem[] = filteredIssues.map(({ issue, repoName }) => {
       return {
         externalId: `${repoName}#${issue.number}`,
         title: `#${issue.number}: ${issue.title}`,
