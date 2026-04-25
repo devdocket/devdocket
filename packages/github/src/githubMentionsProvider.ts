@@ -1,0 +1,269 @@
+import * as vscode from 'vscode';
+import { DiscoveredItem, combineSignals, isValidGitHubRepo, runWorkerPoolSettled, safeDecodeComponent, type ResolvedItem } from '@devdocket/shared';
+import { BaseGitHubProvider } from './baseGithubProvider';
+import { logger } from './logger';
+import { parseRepoFromUrls } from './parseRepo';
+import { getHeaders, retryWithAuth, throwApiError, parseCanonicalRepo, fetchClosedGitHubItems, type GitHubIssue } from './githubApiHelpers';
+
+interface GitHubSearchResponse {
+  items: GitHubIssue[];
+}
+
+const MENTIONS_ACTIVATED_KEY = 'mentionsActivatedAt';
+
+/**
+ * DevDocket provider that discovers GitHub issues and pull requests
+ * where the current user is @mentioned.
+ *
+ * Uses the GitHub Search API with `mentions:@me` to find items.
+ * On first activation, records a timestamp to avoid flooding the
+ * inbox with historical mentions.
+ */
+export class GitHubMentionsProvider extends BaseGitHubProvider {
+  readonly id = 'github-mentions';
+  readonly label = 'GitHub Mentions';
+
+  private readonly _context: vscode.ExtensionContext;
+
+  constructor(context: vscode.ExtensionContext) {
+    super();
+    this._context = context;
+  }
+
+  protected async fetchAndPublish(accessToken: string, isUserTriggered: boolean, signal?: AbortSignal): Promise<void> {
+    logger.info('Fetching mentioned issues and PRs...');
+    const activatedAt = await this.getOrSetActivatedAt();
+    const repos = this.getConfiguredRepos();
+    const { results, failures } = await this.fetchMentionedItems(accessToken, repos, activatedAt, signal);
+
+    const items: DiscoveredItem[] = results.map((issue) => {
+      const repoName = parseRepoFromUrls(issue.html_url, issue.repository_url);
+      const isPr = !!issue.pull_request;
+      return {
+        externalId: `${repoName}#${issue.number}`,
+        title: `#${issue.number}: ${issue.title}`,
+        description: issue.body?.slice(0, 200),
+        url: issue.html_url,
+        group: repoName,
+        reason: 'mentioned',
+        canonicalId: `github:${isPr ? 'pull' : 'issue'}:${repoName}#${issue.number}`,
+        ...(issue.state ? { state: issue.state } : {}),
+      };
+    });
+
+    logger.info(`Discovered ${items.length} mentioned items`);
+    this._onDidDiscoverItems.fire(items);
+
+    if (failures.length > 0) {
+      const message = failures.length === 1
+        ? `Failed to fetch mentions from ${failures[0]}`
+        : `Failed to fetch mentions from ${failures.length} repositories`;
+      if (isUserTriggered) {
+        void vscode.window.showWarningMessage(`DevDocket GitHub: ${message}`);
+      } else {
+        logger.warn(message);
+      }
+    }
+  }
+
+  private static readonly GITHUB_ISSUE_PATTERN = /^https?:\/\/github\.com\/([^/]+)\/([^/]+)\/issues\/(\d+)\b/i;
+  private static readonly GITHUB_PR_PATTERN = /^https?:\/\/github\.com\/([^/]+)\/([^/]+)\/pull\/(\d+)\b/i;
+
+  async resolveUrl(url: string, signal?: AbortSignal): Promise<ResolvedItem | undefined> {
+    const trimmed = url.trim();
+    const issueMatch = trimmed.match(GitHubMentionsProvider.GITHUB_ISSUE_PATTERN);
+    const prMatch = trimmed.match(GitHubMentionsProvider.GITHUB_PR_PATTERN);
+    const match = issueMatch ?? prMatch;
+    if (!match) { return undefined; }
+
+    const [, rawOwner, rawRepo, numStr] = match;
+    const owner = safeDecodeComponent(rawOwner);
+    const repo = safeDecodeComponent(rawRepo);
+    const number = parseInt(numStr, 10);
+    const isPr = !!prMatch;
+
+    const apiPath = isPr ? 'pulls' : 'issues';
+    const apiUrl = `https://api.github.com/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/${apiPath}/${number}`;
+    const headers = await getHeaders();
+    const wasAuthenticated = 'Authorization' in headers;
+
+    let response = await fetch(apiUrl, { headers, signal });
+
+    if (response.status === 404 && !wasAuthenticated && !signal?.aborted) {
+      const retryResponse = await retryWithAuth(apiUrl, signal);
+      if (retryResponse) { response = retryResponse; }
+    }
+
+    if (!response.ok) {
+      const label = isPr ? 'GitHub PR' : 'GitHub issue';
+      throwApiError(response, `${label} ${owner}/${repo}#${number}`);
+    }
+
+    const data = await response.json() as { title: string; body: string | null; html_url: string };
+    const canonicalRepo = parseCanonicalRepo(data.html_url, owner, repo);
+    return {
+      title: `#${number}: ${data.title}`,
+      notes: data.body ?? '',
+      url: data.html_url,
+      externalId: `${canonicalRepo}#${number}`,
+      group: canonicalRepo,
+      providerId: this.id,
+    };
+  }
+
+  /**
+   * Check which of the given external IDs correspond to closed items.
+   * Items are split by canonicalId prefix to call the correct API endpoint.
+   */
+  async getClosedItems(externalIds: string[], signal?: AbortSignal): Promise<string[]> {
+    if (externalIds.length === 0) { return []; }
+
+    // Determine which IDs are PRs vs issues by looking at the last-known canonicalId.
+    // Since we emit canonicalId on every item, the core extension stores it.
+    // However, getClosedItems receives plain externalIds. We check both endpoints.
+    const [closedIssues, closedPrs] = await Promise.all([
+      fetchClosedGitHubItems(externalIds, 'issues', signal),
+      fetchClosedGitHubItems(externalIds, 'pulls', signal),
+    ]);
+
+    // Deduplicate — an ID that appears in both results should only appear once
+    return [...new Set([...closedIssues, ...closedPrs])];
+  }
+
+  private getConfiguredRepos(): string[] {
+    const config = vscode.workspace.getConfiguration('devDocketGithub');
+    return config.get<string[]>('repos', []);
+  }
+
+  /**
+   * Returns the activation timestamp, setting it on first call.
+   * This prevents flooding the inbox with old mentions when the
+   * provider is first enabled.
+   */
+  private async getOrSetActivatedAt(): Promise<string> {
+    const existing = this._context.globalState.get<string>(MENTIONS_ACTIVATED_KEY);
+    if (existing) {
+      return existing;
+    }
+    const now = new Date().toISOString();
+    await this._context.globalState.update(MENTIONS_ACTIVATED_KEY, now);
+    return now;
+  }
+
+  private async fetchMentionedItems(
+    token: string,
+    repos: string[],
+    activatedAt: string,
+    signal?: AbortSignal,
+  ): Promise<{ results: GitHubIssue[]; failures: string[] }> {
+    if (repos.length > 0) {
+      return this.fetchPerRepoMentions(token, repos, activatedAt, signal);
+    }
+    return this.fetchAllMentions(token, activatedAt, signal);
+  }
+
+  private async fetchPerRepoMentions(
+    token: string,
+    repos: string[],
+    activatedAt: string,
+    signal?: AbortSignal,
+  ): Promise<{ results: GitHubIssue[]; failures: string[] }> {
+    const validRepos: string[] = [];
+    for (const repo of repos) {
+      if (isValidGitHubRepo(repo)) {
+        validRepos.push(repo);
+      } else {
+        logger.warn('Skipping invalid repo identifier', repo);
+      }
+    }
+
+    const settled = await runWorkerPoolSettled(validRepos, async (repo) => {
+      if (signal?.aborted) {
+        const error = new Error('The operation was aborted.');
+        error.name = 'AbortError';
+        throw error;
+      }
+      return await this.fetchRepoMentions(token, repo, activatedAt, signal);
+    }, 3);
+
+    const allItems: GitHubIssue[] = [];
+    const failures: string[] = [];
+
+    settled.forEach((result, index) => {
+      if (result.status === 'fulfilled') {
+        const { items, failed } = result.value;
+        allItems.push(...items);
+        if (failed) {
+          failures.push(validRepos[index]);
+        }
+      } else {
+        failures.push(validRepos[index]);
+      }
+    });
+
+    return { results: allItems, failures };
+  }
+
+  private async fetchRepoMentions(
+    token: string,
+    repo: string,
+    activatedAt: string,
+    signal?: AbortSignal,
+  ): Promise<{ items: GitHubIssue[]; failed: boolean }> {
+    logger.debug(`Fetching mentions for repo: ${repo}`);
+    const q = `mentions:@me+created:>${activatedAt}+repo:${repo}`;
+    const response = await fetch(
+      `https://api.github.com/search/issues?q=${q}&per_page=100`,
+      {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          Accept: 'application/vnd.github+json',
+          'X-GitHub-Api-Version': '2022-11-28',
+        },
+        signal: combineSignals(signal, 30_000),
+      },
+    );
+
+    if (!response.ok) {
+      logger.error(`Failed to fetch mentions for ${repo}: ${response.status}`);
+      return { items: [], failed: true };
+    }
+
+    const data = (await response.json()) as GitHubSearchResponse;
+    return { items: data.items, failed: false };
+  }
+
+  private async fetchAllMentions(
+    token: string,
+    activatedAt: string,
+    signal?: AbortSignal,
+  ): Promise<{ results: GitHubIssue[]; failures: string[] }> {
+    const q = `mentions:@me+created:>${activatedAt}`;
+    let response: Response;
+    try {
+      response = await fetch(
+        `https://api.github.com/search/issues?q=${q}&per_page=100`,
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+            Accept: 'application/vnd.github+json',
+            'X-GitHub-Api-Version': '2022-11-28',
+          },
+          signal: combineSignals(signal, 30_000),
+        },
+      );
+    } catch (err: unknown) {
+      if (err instanceof Error && err.name === 'AbortError') { throw err; }
+      logger.error('Failed to fetch mentions', err);
+      return { results: [], failures: ['all repositories'] };
+    }
+
+    if (!response.ok) {
+      logger.error(`Failed to fetch mentions: ${response.status}`);
+      return { results: [], failures: ['all repositories'] };
+    }
+
+    const data = (await response.json()) as GitHubSearchResponse;
+    return { results: data.items, failures: [] };
+  }
+}
