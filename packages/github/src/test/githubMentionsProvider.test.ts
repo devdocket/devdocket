@@ -281,7 +281,7 @@ describe('GitHubMentionsProvider', () => {
       expect(mockFetch).not.toHaveBeenCalled();
     });
 
-    it('checks both issues and pulls endpoints', async () => {
+    it('checks the issues endpoint for closed items', async () => {
       // Mock authentication for getClosedItems (uses silent session)
       vi.mocked(authentication.getSession).mockResolvedValue({
         accessToken: 'test-token',
@@ -290,19 +290,19 @@ describe('GitHubMentionsProvider', () => {
         account: { id: '1', label: 'testuser' },
       } as any);
 
-      // issues endpoint returns closed
+      // GitHub /issues/{N} returns data for both issues and PRs
       mockFetch.mockImplementation(async (url: string) => {
         if (url.includes('/issues/42')) {
           return { ok: true, json: async () => ({ state: 'closed' }) };
-        }
-        if (url.includes('/pulls/42')) {
-          return { ok: true, json: async () => ({ state: 'open' }) };
         }
         return { ok: false, status: 404 };
       });
 
       const result = await provider.getClosedItems(['owner/repo#42']);
       expect(result).toContain('owner/repo#42');
+      // Only the issues endpoint should be called, not pulls
+      const fetchCalls = mockFetch.mock.calls.map(c => c[0] as string);
+      expect(fetchCalls.some((u: string) => u.includes('/pulls/'))).toBe(false);
     });
   });
 

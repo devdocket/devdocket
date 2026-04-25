@@ -113,21 +113,11 @@ export class GitHubMentionsProvider extends BaseGitHubProvider {
 
   /**
    * Check which of the given external IDs correspond to closed items.
-   * Items are split by canonicalId prefix to call the correct API endpoint.
+   * GitHub's /issues/{N} endpoint returns data for both issues and PRs,
+   * so a single call covers both types.
    */
   async getClosedItems(externalIds: string[], signal?: AbortSignal): Promise<string[]> {
-    if (externalIds.length === 0) { return []; }
-
-    // Determine which IDs are PRs vs issues by looking at the last-known canonicalId.
-    // Since we emit canonicalId on every item, the core extension stores it.
-    // However, getClosedItems receives plain externalIds. We check both endpoints.
-    const [closedIssues, closedPrs] = await Promise.all([
-      fetchClosedGitHubItems(externalIds, 'issues', signal),
-      fetchClosedGitHubItems(externalIds, 'pulls', signal),
-    ]);
-
-    // Deduplicate — an ID that appears in both results should only appear once
-    return [...new Set([...closedIssues, ...closedPrs])];
+    return fetchClosedGitHubItems(externalIds, 'issues', signal);
   }
 
   private getConfiguredRepos(): string[] {
@@ -200,6 +190,17 @@ export class GitHubMentionsProvider extends BaseGitHubProvider {
         failures.push(validRepos[index]);
       }
     });
+
+    // Propagate cancellation so the refresh stops without publishing partial results
+    const abortedResult = settled.find(
+      (r): r is PromiseRejectedResult =>
+        r.status === 'rejected' && r.reason instanceof Error && r.reason.name === 'AbortError',
+    );
+    if (signal?.aborted || abortedResult) {
+      const error = abortedResult?.reason ?? new Error('The operation was aborted.');
+      if (error.name !== 'AbortError') { error.name = 'AbortError'; }
+      throw error;
+    }
 
     return { results: allItems, failures };
   }
