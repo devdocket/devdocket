@@ -236,7 +236,7 @@ export class GitHubMentionsProvider extends BaseGitHubProvider {
     activatedAt: string,
     signal?: AbortSignal,
   ): Promise<{ results: GitHubIssue[]; failures: string[] }> {
-    const q = `mentions:@me+created:>${activatedAt}`;
+    const q = `mentions:@me+updated:>${activatedAt}`;
     let response: Response;
     try {
       response = await fetch(
