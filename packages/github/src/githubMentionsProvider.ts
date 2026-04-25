@@ -217,25 +217,37 @@ export class GitHubMentionsProvider extends BaseGitHubProvider {
   ): Promise<{ items: GitHubIssue[]; failed: boolean }> {
     logger.debug(`Fetching mentions for repo: ${repo}`);
     const q = `mentions:@me+updated:>${activatedAt}+repo:${repo}`;
-    const response = await fetch(
-      `https://api.github.com/search/issues?q=${q}&per_page=100`,
-      {
-        headers: {
-          Authorization: `Bearer ${token}`,
-          Accept: 'application/vnd.github+json',
-          'X-GitHub-Api-Version': '2022-11-28',
-        },
-        signal: combineSignals(signal, 30_000),
-      },
-    );
 
-    if (!response.ok) {
-      logger.error(`Failed to fetch mentions for ${repo}: ${response.status}`);
+    try {
+      const response = await fetch(
+        `https://api.github.com/search/issues?q=${q}&per_page=100`,
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+            Accept: 'application/vnd.github+json',
+            'X-GitHub-Api-Version': '2022-11-28',
+          },
+          signal: combineSignals(signal, 30_000),
+        },
+      );
+
+      if (!response.ok) {
+        logger.error(`Failed to fetch mentions for ${repo}: ${response.status}`);
+        return { items: [], failed: true };
+      }
+
+      const data = (await response.json()) as GitHubSearchResponse;
+      return { items: data.items, failed: false };
+    } catch (error) {
+      // Only rethrow for explicit outer cancellation
+      if (signal?.aborted) {
+        const abortError = new Error('The operation was aborted.');
+        abortError.name = 'AbortError';
+        throw abortError;
+      }
+      logger.warn(`Failed to fetch mentions for ${repo}`, error);
       return { items: [], failed: true };
     }
-
-    const data = (await response.json()) as GitHubSearchResponse;
-    return { items: data.items, failed: false };
   }
 
   private async fetchAllMentions(
