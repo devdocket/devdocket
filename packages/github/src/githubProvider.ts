@@ -33,6 +33,7 @@ export class GitHubIssueProvider extends BaseGitHubProvider {
         url: issue.html_url,
         group: repoName,
         reason: 'assigned',
+        canonicalId: `github:issue:${repoName}#${issue.number}`,
         ...(issue.state ? { state: issue.state } : {}),
       };
     });

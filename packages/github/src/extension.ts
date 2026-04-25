@@ -4,17 +4,20 @@ import { GitHubPrReviewProvider } from './githubPrReviewProvider';
 import { GitHubActionsWatcher } from './githubActionsWatcher';
 import { GitHubPRWatcher } from './githubPRWatcher';
 import { GitHubMyPrsProvider } from './githubMyPrsProvider';
+import { GitHubMentionsProvider } from './githubMentionsProvider';
 import { validateRefreshInterval } from '@devdocket/shared';
 import { initLogger, setLogLevel, logger, resolveLogLevel } from './logger';
 
 let issueProvider: GitHubIssueProvider | undefined;
 let prReviewProvider: GitHubPrReviewProvider | undefined;
 let myPrsProvider: GitHubMyPrsProvider | undefined;
+let mentionsProvider: GitHubMentionsProvider | undefined;
 let providerRegistration: vscode.Disposable | undefined;
 let prReviewRegistration: vscode.Disposable | undefined;
 let watcherRegistration: vscode.Disposable | undefined;
 let prWatcherRegistration: vscode.Disposable | undefined;
 let myPrsRegistration: vscode.Disposable | undefined;
+let mentionsRegistration: vscode.Disposable | undefined;
 
 export async function activate(_context: vscode.ExtensionContext): Promise<void> {
   const outputChannel = vscode.window.createOutputChannel('DevDocket GitHub');
@@ -84,6 +87,11 @@ export async function activate(_context: vscode.ExtensionContext): Promise<void>
   myPrsProvider.startPeriodicRefresh(intervalSeconds);
   myPrsRegistration = api.registerProvider(myPrsProvider);
 
+  // Register the GitHub Mentions provider (@mentioned issues and PRs)
+  mentionsProvider = new GitHubMentionsProvider(_context);
+  mentionsProvider.startPeriodicRefresh(intervalSeconds);
+  mentionsRegistration = api.registerProvider(mentionsProvider);
+
   // Register the GitHub Actions watcher
   if (typeof api.registerRunWatcher === 'function') {
     watcherRegistration = api.registerRunWatcher(new GitHubActionsWatcher());
@@ -94,7 +102,7 @@ export async function activate(_context: vscode.ExtensionContext): Promise<void>
     prWatcherRegistration = api.registerPRWatcher(new GitHubPRWatcher());
   }
 
-  const parts = ['3 providers'];
+  const parts = ['4 providers'];
   if (watcherRegistration) { parts.push('1 watcher'); }
   if (prWatcherRegistration) { parts.push('1 PR watcher'); }
   logger.info(`DevDocket GitHub activated, registered ${parts.join(' + ')}`);
@@ -107,8 +115,10 @@ export function deactivate(): void {
   watcherRegistration?.dispose();
   prWatcherRegistration?.dispose();
   myPrsRegistration?.dispose();
+  mentionsRegistration?.dispose();
   issueProvider?.dispose();
   prReviewProvider?.dispose();
   myPrsProvider?.dispose();
+  mentionsProvider?.dispose();
   logger.info('DevDocket GitHub deactivated');
 }
