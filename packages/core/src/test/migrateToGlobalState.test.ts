@@ -32,8 +32,8 @@ describe('migrateToGlobalState', () => {
       'workitems.json': [{ id: 'w1', title: 'Task 1' }],
       'discovered-state.json': [{ providerId: 'gh', externalId: '1', inboxState: 'unseen' }],
       'read-state.json': ['gh::1'],
-      'provider-labels.json': { gh: { bug: '#d73a4a' } },
-      'watches.json': { version: 1, entries: [] },
+      'provider-labels.json': { gh: 'GitHub' },
+      'watches.json': { runs: [], prs: [] },
     };
 
     readFileMock.mockImplementation(async (filePath: string) => {
