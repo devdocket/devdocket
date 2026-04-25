@@ -44,7 +44,7 @@ describe('GitHubMentionsProvider', () => {
   let mockChannel: { appendLine: ReturnType<typeof vi.fn> };
 
   beforeEach(() => {
-    vi.clearAllMocks();
+    vi.resetAllMocks();
     vi.stubGlobal('fetch', mockFetch);
     mockContext = createMockContext();
     provider = new GitHubMentionsProvider(mockContext);
