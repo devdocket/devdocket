@@ -234,6 +234,11 @@ export class WorkItemEditorPanel {
     }
 
     await this.workGraph.updateItem(this.itemId, patch);
+    // Sync tracked URL to prevent self-triggered re-render in checkForUpdates
+    const saved = this.workGraph.getItem(this.itemId);
+    if (saved) {
+      this.lastDisplayedUrl = saved.url;
+    }
   }
 
   private update(): void {
