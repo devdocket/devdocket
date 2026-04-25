@@ -39,9 +39,10 @@ export async function migrateToGlobalState(globalState: Memento, storagePath: st
     const filePath = path.join(storagePath, fileName);
     try {
       const data = await fs.readFile(filePath, 'utf-8');
-      if (data.length > SIZE_WARNING_THRESHOLD) {
+      const dataSizeBytes = Buffer.byteLength(data, 'utf-8');
+      if (dataSizeBytes > SIZE_WARNING_THRESHOLD) {
         logger.warn(
-          `${fileName} is ${(data.length / 1024).toFixed(0)} KB — large values in globalState may degrade performance`,
+          `${fileName} is ${(dataSizeBytes / 1024).toFixed(0)} KB — large values in globalState may degrade performance`,
         );
       }
       const parsed = JSON.parse(data);
