@@ -209,7 +209,7 @@ export class GitHubMentionsProvider extends BaseGitHubProvider {
     signal?: AbortSignal,
   ): Promise<{ items: GitHubIssue[]; failed: boolean }> {
     logger.debug(`Fetching mentions for repo: ${repo}`);
-    const q = `mentions:@me+created:>${activatedAt}+repo:${repo}`;
+    const q = `mentions:@me+updated:>${activatedAt}+repo:${repo}`;
     const response = await fetch(
       `https://api.github.com/search/issues?q=${q}&per_page=100`,
       {

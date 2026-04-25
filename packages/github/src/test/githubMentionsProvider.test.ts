@@ -197,7 +197,7 @@ describe('GitHubMentionsProvider', () => {
     await provider.refresh();
 
     const calledUrl = mockFetch.mock.calls[0][0] as string;
-    expect(calledUrl).toContain(`created:>${timestamp}`);
+    expect(calledUrl).toContain(`updated:>${timestamp}`);
     expect(calledUrl).toContain('mentions:@me');
   });
 
