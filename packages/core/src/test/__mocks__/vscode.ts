@@ -165,6 +165,8 @@ class MockDisposable {
 class MockMemento {
   private store = new Map<string, unknown>();
   keys(): readonly string[] { return [...this.store.keys()]; }
+  get<T>(key: string): T | undefined;
+  get<T>(key: string, defaultValue: T): T;
   get<T>(key: string, defaultValue?: T): T | undefined {
     if (!this.store.has(key)) { return defaultValue; }
     // Deep-clone on read to match real Memento JSON round-trip behavior
