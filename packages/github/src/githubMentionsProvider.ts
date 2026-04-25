@@ -191,14 +191,11 @@ export class GitHubMentionsProvider extends BaseGitHubProvider {
       }
     });
 
-    // Propagate cancellation so the refresh stops without publishing partial results
-    const abortedResult = settled.find(
-      (r): r is PromiseRejectedResult =>
-        r.status === 'rejected' && r.reason instanceof Error && r.reason.name === 'AbortError',
-    );
-    if (signal?.aborted || abortedResult) {
-      const error = abortedResult?.reason ?? new Error('The operation was aborted.');
-      if (error.name !== 'AbortError') { error.name = 'AbortError'; }
+    // Only propagate explicit outer cancellation; per-repo aborts/timeouts are
+    // treated as individual repo failures so partial results can still be published.
+    if (signal?.aborted) {
+      const error = new Error('The operation was aborted.');
+      error.name = 'AbortError';
       throw error;
     }
 
