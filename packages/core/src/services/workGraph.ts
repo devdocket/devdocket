@@ -210,7 +210,7 @@ export class WorkGraph {
     return item;
   }
 
-  /** Apply a partial update (title and/or notes) to an existing work item. */
+  /** Apply a partial update (title, notes, and/or url) to an existing work item. */
   async updateItem(id: string, patch: Partial<WorkItemInput>): Promise<void> {
     const item = this.items.get(id);
     if (!item) {
