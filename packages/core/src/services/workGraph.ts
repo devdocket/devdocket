@@ -182,7 +182,7 @@ export class WorkGraph {
       state: WorkItemState.New,
       providerId: provenance?.providerId,
       externalId: provenance?.externalId,
-      url: isSafeUrl(provenance?.url ?? '')?.href ?? isSafeUrl(input.url ?? '')?.href,
+      url: isSafeUrl(provenance?.url?.trim() ?? '')?.href ?? isSafeUrl(input.url?.trim() ?? '')?.href,
       group: provenance?.group,
       sortOrder,
       createdAt: now,
@@ -222,7 +222,7 @@ export class WorkGraph {
     if ('notes' in patch && patch.notes !== item.notes) { changes.push('notes'); }
     // Detect url changes including clearing (patch.url === undefined with key present)
     if ('url' in patch) {
-      const sanitized = patch.url ? isSafeUrl(patch.url)?.href : undefined;
+      const sanitized = patch.url ? isSafeUrl(patch.url.trim())?.href : undefined;
       if (sanitized !== patch.url) { patch = { ...patch, url: sanitized }; }
       if (sanitized !== item.url) { changes.push('url'); }
     }
