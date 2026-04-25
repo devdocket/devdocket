@@ -32,7 +32,7 @@ export class GitHubMentionsProvider extends BaseGitHubProvider {
 
   protected async fetchAndPublish(accessToken: string, isUserTriggered: boolean, signal?: AbortSignal): Promise<void> {
     logger.info('Fetching mentioned issues and PRs...');
-    const activatedAt = await this.getOrSetActivatedAt();
+    const activatedAt = await this.getOrSetActivatedAt(signal);
     const repos = this.getConfiguredRepos();
     const { results, failures } = await this.fetchMentionedItems(accessToken, repos, activatedAt, signal);
 
@@ -129,13 +129,20 @@ export class GitHubMentionsProvider extends BaseGitHubProvider {
    * Returns the activation timestamp, setting it on first call.
    * This prevents flooding the inbox with old mentions when the
    * provider is first enabled.
+   *
+   * If the current refresh has already been cancelled, do not persist
+   * a new activation timestamp to avoid advancing the watermark
+   * for a refresh that never completed.
    */
-  private async getOrSetActivatedAt(): Promise<string> {
+  private async getOrSetActivatedAt(signal?: AbortSignal): Promise<string> {
     const existing = this._context.globalState.get<string>(MENTIONS_ACTIVATED_KEY);
     if (existing) {
       return existing;
     }
     const now = new Date().toISOString();
+    if (signal?.aborted) {
+      return now;
+    }
     await this._context.globalState.update(MENTIONS_ACTIVATED_KEY, now);
     return now;
   }
