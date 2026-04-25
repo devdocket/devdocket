@@ -41,8 +41,6 @@ export class GitHubPrReviewProvider extends BaseGitHubProvider {
 
     const { prs, failures } = await this.fetchReviewRequestedPrs(accessToken, repos, signal);
 
-    logger.info(`Discovered ${prs.length} PR review requests`);
-
     // Post-filter for negation-only patterns
     const filteredPrs = useGlobalFetch && patterns.length > 0
       ? prs.filter(pr => {
@@ -50,6 +48,8 @@ export class GitHubPrReviewProvider extends BaseGitHubProvider {
           return matchesRepoPatterns(repoName, patterns);
         })
       : prs;
+
+    logger.info(`Discovered ${filteredPrs.length} PR review requests`);
 
     const config = vscode.workspace.getConfiguration('devDocketGithub');
     const resurfaceOnNewVersion = config.get<boolean>('resurfaceOnNewVersion', true);
