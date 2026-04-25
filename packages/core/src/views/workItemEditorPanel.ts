@@ -233,12 +233,13 @@ export class WorkItemEditorPanel {
       return;
     }
 
-    await this.workGraph.updateItem(this.itemId, patch);
-    // Sync tracked URL to prevent self-triggered re-render in checkForUpdates
-    const saved = this.workGraph.getItem(this.itemId);
-    if (saved) {
-      this.lastDisplayedUrl = saved.url;
+    // Pre-sync tracked URL before updateItem fires onDidChange synchronously,
+    // preventing a self-triggered full re-render that could wipe unsaved edits.
+    if ('url' in patch) {
+      this.lastDisplayedUrl = patch.url;
     }
+
+    await this.workGraph.updateItem(this.itemId, patch);
   }
 
   private update(): void {
