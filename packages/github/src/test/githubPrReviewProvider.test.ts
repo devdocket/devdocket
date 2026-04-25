@@ -439,7 +439,7 @@ describe('GitHubPrReviewProvider', () => {
       vi.mocked(workspace.getConfiguration).mockReturnValue({
         get: vi.fn((key: string, defaultValue?: any) => {
           if (key === 'repos') {
-            return repos;
+            return repos.join('\n');
           }
           if (key === 'resurfaceOnNewVersion' || key === 'resurfaceOnReRequestedReview') {
             return false;

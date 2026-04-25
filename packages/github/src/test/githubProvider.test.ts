@@ -61,7 +61,7 @@ describe('GitHubIssueProvider', () => {
   it('fetches assigned issues from configured repos', async () => {
     vi.mocked(workspace.getConfiguration).mockReturnValue({
       get: vi.fn((key: string, defaultValue?: any) => {
-        if (key === 'repos') { return ['owner/repo1', 'owner/repo2']; }
+        if (key === 'repos') { return 'owner/repo1\nowner/repo2'; }
         return defaultValue;
       }),
     } as any);
@@ -219,7 +219,7 @@ describe('GitHubIssueProvider', () => {
   it('handles non-ok response gracefully', async () => {
     vi.mocked(workspace.getConfiguration).mockReturnValue({
       get: vi.fn((key: string, defaultValue?: any) => {
-        if (key === 'repos') { return ['owner/repo1']; }
+        if (key === 'repos') { return 'owner/repo1'; }
         return defaultValue;
       }),
     } as any);
@@ -336,7 +336,7 @@ describe('GitHubIssueProvider', () => {
   it('skips invalid repo identifiers without treating them as fetch failures', async () => {
     vi.mocked(workspace.getConfiguration).mockReturnValue({
       get: vi.fn((key: string, defaultValue?: any) => {
-        if (key === 'repos') { return ['owner/valid', '../traversal', 'good/repo']; }
+        if (key === 'repos') { return 'owner/valid\n../traversal\ngood/repo'; }
         return defaultValue;
       }),
     } as any);
@@ -516,7 +516,7 @@ describe('GitHubIssueProvider', () => {
   it('returns partial results when mid-pagination request fails', async () => {
     vi.mocked(workspace.getConfiguration).mockReturnValue({
       get: vi.fn((key: string, defaultValue?: any) => {
-        if (key === 'repos') { return ['owner/repo1']; }
+        if (key === 'repos') { return 'owner/repo1'; }
         return defaultValue;
       }),
     } as any);
@@ -549,7 +549,7 @@ describe('GitHubIssueProvider', () => {
   it('stops paginating at maxPages limit', async () => {
     vi.mocked(workspace.getConfiguration).mockReturnValue({
       get: vi.fn((key: string, defaultValue?: any) => {
-        if (key === 'repos') { return ['owner/repo1']; }
+        if (key === 'repos') { return 'owner/repo1'; }
         return defaultValue;
       }),
     } as any);
@@ -578,7 +578,7 @@ describe('GitHubIssueProvider', () => {
   it('returns partial results when mid-pagination network error occurs', async () => {
     vi.mocked(workspace.getConfiguration).mockReturnValue({
       get: vi.fn((key: string, defaultValue?: any) => {
-        if (key === 'repos') { return ['owner/repo1']; }
+        if (key === 'repos') { return 'owner/repo1'; }
         return defaultValue;
       }),
     } as any);

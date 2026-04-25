@@ -4,6 +4,8 @@ import { BaseGitHubProvider } from './baseGithubProvider';
 import { logger } from './logger';
 import { parseRepoFromUrls } from './parseRepo';
 import { type GitHubIssue } from './githubApiHelpers';
+import { parseRepoPatterns, matchesRepoPatterns, isNegationOnly, type RepoPattern } from './repoPattern';
+import { resolveRepos } from './repoResolver';
 
 interface GitHubSearchResponse {
   items: GitHubIssue[];
@@ -40,7 +42,19 @@ export class GitHubMyPrsProvider extends BaseGitHubProvider {
 
   protected async fetchAndPublish(accessToken: string, isUserTriggered: boolean, signal?: AbortSignal): Promise<void> {
     logger.info('Fetching authored and assigned PRs...');
-    const repos = this.getConfiguredRepos();
+    const patterns = this.getConfiguredPatterns();
+    let repos: string[];
+    let useGlobalFetch = false;
+
+    if (patterns.length === 0) {
+      repos = [];
+      useGlobalFetch = true;
+    } else if (isNegationOnly(patterns)) {
+      repos = [];
+      useGlobalFetch = true;
+    } else {
+      repos = await resolveRepos(patterns, accessToken, signal);
+    }
 
     // Fetch authored and assigned PRs in parallel; proceed with partial results if one fails
     const [authoredSettled, assignedSettled] = await Promise.allSettled([
@@ -76,14 +90,26 @@ export class GitHubMyPrsProvider extends BaseGitHubProvider {
     const authoredUrls = new Set(authoredResult.prs.map(pr => pr.html_url));
     const uniqueAssignedPrs = assignedResult.prs.filter(pr => !authoredUrls.has(pr.html_url));
 
-    const allPrs = [...authoredResult.prs, ...uniqueAssignedPrs];
+    // Post-filter for negation-only patterns
+    const repoFilter = (pr: GitHubIssue) => {
+      const repoName = parseRepoFromUrls(pr.html_url, pr.repository_url);
+      return matchesRepoPatterns(repoName, patterns);
+    };
+    const filteredAuthored = useGlobalFetch && patterns.length > 0
+      ? authoredResult.prs.filter(repoFilter)
+      : authoredResult.prs;
+    const filteredAssigned = useGlobalFetch && patterns.length > 0
+      ? uniqueAssignedPrs.filter(repoFilter)
+      : uniqueAssignedPrs;
+
+    const allPrs = [...filteredAuthored, ...filteredAssigned];
 
     const statusMap = allPrs.length > 0
       ? await this.fetchPrStatuses(accessToken, allPrs, signal)
       : new Map<string, string>();
 
     const items: DiscoveredItem[] = [];
-    for (const pr of authoredResult.prs) {
+    for (const pr of filteredAuthored) {
       const repoName = parseRepoFromUrls(pr.html_url, pr.repository_url);
       const status = statusMap.get(pr.html_url) ?? 'Open';
       items.push({
@@ -97,7 +123,7 @@ export class GitHubMyPrsProvider extends BaseGitHubProvider {
         canonicalId: `github:pull:${repoName}#${pr.number}`,
       });
     }
-    for (const pr of uniqueAssignedPrs) {
+    for (const pr of filteredAssigned) {
       const repoName = parseRepoFromUrls(pr.html_url, pr.repository_url);
       const status = statusMap.get(pr.html_url) ?? 'Open';
       items.push({
@@ -127,9 +153,11 @@ export class GitHubMyPrsProvider extends BaseGitHubProvider {
     }
   }
 
-  private getConfiguredRepos(): string[] {
+  private getConfiguredPatterns(): RepoPattern[] {
     const config = vscode.workspace.getConfiguration('devDocketGithub');
-    return config.get<string[]>('repos', []);
+    const value = config.get<string>('repos', '');
+    if (!value) { return []; }
+    return parseRepoPatterns(value);
   }
 
   private async fetchAuthoredPrs(

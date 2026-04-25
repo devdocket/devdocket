@@ -138,7 +138,7 @@ describe('GitHubMyPrsProvider', () => {
   it('uses search API with repos when configured', async () => {
     vi.mocked(workspace.getConfiguration).mockReturnValue({
       get: vi.fn((key: string, defaultValue?: any) => {
-        if (key === 'repos') { return ['myorg/myrepo']; }
+        if (key === 'repos') { return 'myorg/myrepo'; }
         return defaultValue;
       }),
     } as any);
@@ -177,7 +177,7 @@ describe('GitHubMyPrsProvider', () => {
   it('reports failures for individual repos', async () => {
     vi.mocked(workspace.getConfiguration).mockReturnValue({
       get: vi.fn((key: string, defaultValue?: any) => {
-        if (key === 'repos') { return ['good/repo', 'bad/repo']; }
+        if (key === 'repos') { return 'good/repo\nbad/repo'; }
         return defaultValue;
       }),
     } as any);
@@ -466,7 +466,7 @@ describe('GitHubMyPrsProvider', () => {
   it('fetches assigned PRs per-repo when repos configured', async () => {
     vi.mocked(workspace.getConfiguration).mockReturnValue({
       get: vi.fn((key: string, defaultValue?: any) => {
-        if (key === 'repos') { return ['myorg/myrepo']; }
+        if (key === 'repos') { return 'myorg/myrepo'; }
         return defaultValue;
       }),
     } as any);

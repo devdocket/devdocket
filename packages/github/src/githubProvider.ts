@@ -4,6 +4,8 @@ import { BaseGitHubProvider } from './baseGithubProvider';
 import { logger } from './logger';
 import { parseRepoFromUrls } from './parseRepo';
 import { getHeaders, retryWithAuth, throwApiError, parseCanonicalRepo, fetchClosedGitHubItems, type GitHubIssue } from './githubApiHelpers';
+import { parseRepoPatterns, matchesRepoPatterns, isNegationOnly, type RepoPattern } from './repoPattern';
+import { resolveRepos } from './repoResolver';
 
 /**
  * DevDocket provider that discovers GitHub issues assigned to the current user.
@@ -21,10 +23,31 @@ export class GitHubIssueProvider extends BaseGitHubProvider {
 
   protected async fetchAndPublish(accessToken: string, isUserTriggered: boolean, signal?: AbortSignal): Promise<void> {
     logger.info('Fetching assigned issues...');
-    const repos = this.getConfiguredRepos();
+    const patterns = this.getConfiguredPatterns();
+    let repos: string[];
+    let useGlobalFetch = false;
+
+    if (patterns.length === 0) {
+      repos = [];
+      useGlobalFetch = true;
+    } else if (isNegationOnly(patterns)) {
+      repos = [];
+      useGlobalFetch = true;
+    } else {
+      repos = await resolveRepos(patterns, accessToken, signal);
+    }
+
     const { issues, failures } = await this.fetchAssignedIssues(accessToken, repos, signal);
 
-    const items: DiscoveredItem[] = issues.map((issue) => {
+    // Post-filter for negation-only patterns
+    const filteredIssues = useGlobalFetch && patterns.length > 0
+      ? issues.filter(issue => {
+          const repoName = parseRepoFromUrls(issue.html_url, issue.repository_url);
+          return matchesRepoPatterns(repoName, patterns);
+        })
+      : issues;
+
+    const items: DiscoveredItem[] = filteredIssues.map((issue) => {
       const repoName = parseRepoFromUrls(issue.html_url, issue.repository_url);
       return {
         externalId: `${repoName}#${issue.number}`,
@@ -96,9 +119,11 @@ export class GitHubIssueProvider extends BaseGitHubProvider {
     return fetchClosedGitHubItems(externalIds, 'issues', signal);
   }
 
-  private getConfiguredRepos(): string[] {
+  private getConfiguredPatterns(): RepoPattern[] {
     const config = vscode.workspace.getConfiguration('devDocketGithub');
-    return config.get<string[]>('repos', []);
+    const value = config.get<string>('repos', '');
+    if (!value) { return []; }
+    return parseRepoPatterns(value);
   }
 
   private async fetchAssignedIssues(

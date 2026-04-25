@@ -24,12 +24,10 @@
         "title": "DevDocket GitHub",
         "properties": {
         "devDocketGithub.repos": {
-          "type": "array",
-          "items": {
-            "type": "string"
-          },
-          "default": [],
-          "description": "GitHub repositories to watch (e.g. 'owner/repo'). Leave empty to fetch all assigned issues across all repositories."
+          "type": "string",
+          "default": "",
+          "editPresentation": "multilineText",
+          "description": "Gitignore-style patterns for GitHub repositories to watch. One pattern per line. Supports wildcards (*), exclusions (!), and comments (#). Examples:\nmyorg/*\n!myorg/archived-repo\nother-owner/specific-repo\nLeave empty to fetch all assigned items across all repositories."
         },
         "devDocketGithub.refreshIntervalSeconds": {
           "type": "number",

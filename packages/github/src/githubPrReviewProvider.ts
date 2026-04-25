@@ -4,6 +4,8 @@ import { BaseGitHubProvider } from './baseGithubProvider';
 import { logger } from './logger';
 import { parseRepoFromUrls } from './parseRepo';
 import { getHeaders, retryWithAuth, throwApiError, parseCanonicalRepo, fetchClosedGitHubItems, type GitHubIssue } from './githubApiHelpers';
+import { parseRepoPatterns, matchesRepoPatterns, isNegationOnly, type RepoPattern } from './repoPattern';
+import { resolveRepos } from './repoResolver';
 
 interface GitHubSearchResponse {
   items: GitHubIssue[];
@@ -30,10 +32,31 @@ export class GitHubPrReviewProvider extends BaseGitHubProvider {
 
   protected async fetchAndPublish(accessToken: string, isUserTriggered: boolean, signal?: AbortSignal): Promise<void> {
     logger.info('Fetching PR review requests...');
-    const repos = this.getConfiguredRepos();
+    const patterns = this.getConfiguredPatterns();
+    let repos: string[];
+    let useGlobalFetch = false;
+
+    if (patterns.length === 0) {
+      repos = [];
+      useGlobalFetch = true;
+    } else if (isNegationOnly(patterns)) {
+      repos = [];
+      useGlobalFetch = true;
+    } else {
+      repos = await resolveRepos(patterns, accessToken, signal);
+    }
+
     const { prs, failures } = await this.fetchReviewRequestedPrs(accessToken, repos, signal);
 
     logger.info(`Discovered ${prs.length} PR review requests`);
+
+    // Post-filter for negation-only patterns
+    const filteredPrs = useGlobalFetch && patterns.length > 0
+      ? prs.filter(pr => {
+          const repoName = parseRepoFromUrls(pr.html_url, pr.repository_url);
+          return matchesRepoPatterns(repoName, patterns);
+        })
+      : prs;
 
     const config = vscode.workspace.getConfiguration('devDocketGithub');
     const resurfaceOnNewVersion = config.get<boolean>('resurfaceOnNewVersion', true);
@@ -41,19 +64,19 @@ export class GitHubPrReviewProvider extends BaseGitHubProvider {
 
     // Fetch head commit SHAs for precise version tracking
     const headShas = resurfaceOnNewVersion
-      ? await this.fetchHeadShas(accessToken, prs, signal)
+      ? await this.fetchHeadShas(accessToken, filteredPrs, signal)
       : new Map<string, string>();
 
     // Fetch re-request timestamps for review re-request detection
     let reRequestTimes = new Map<string, string>();
-    if (resurfaceOnReRequestedReview && prs.length > 0) {
+    if (resurfaceOnReRequestedReview && filteredPrs.length > 0) {
       const currentUser = await this.fetchCurrentUser(accessToken, signal);
       if (currentUser) {
-        reRequestTimes = await this.fetchReRequestTimes(accessToken, prs, currentUser, signal);
+        reRequestTimes = await this.fetchReRequestTimes(accessToken, filteredPrs, currentUser, signal);
       }
     }
 
-    const items: DiscoveredItem[] = prs.map((pr) => {
+    const items: DiscoveredItem[] = filteredPrs.map((pr) => {
       const repoName = parseRepoFromUrls(pr.html_url, pr.repository_url);
       const item: DiscoveredItem = {
         externalId: `${repoName}#${pr.number}`,
@@ -134,9 +157,11 @@ export class GitHubPrReviewProvider extends BaseGitHubProvider {
     return fetchClosedGitHubItems(externalIds, 'pulls', signal);
   }
 
-  private getConfiguredRepos(): string[] {
+  private getConfiguredPatterns(): RepoPattern[] {
     const config = vscode.workspace.getConfiguration('devDocketGithub');
-    return config.get<string[]>('repos', []);
+    const value = config.get<string>('repos', '');
+    if (!value) { return []; }
+    return parseRepoPatterns(value);
   }
 
   private async fetchReviewRequestedPrs(
