@@ -4,8 +4,7 @@ import { BaseGitHubProvider } from './baseGithubProvider';
 import { logger } from './logger';
 import { parseRepoFromUrls } from './parseRepo';
 import { type GitHubIssue } from './githubApiHelpers';
-import { parseRepoPatterns, matchesRepoPatterns, isNegationOnly, type RepoPattern } from './repoPattern';
-import { resolveRepos } from './repoResolver';
+import { matchesRepoPatterns } from './repoPattern';
 
 interface GitHubSearchResponse {
   items: GitHubIssue[];
@@ -42,18 +41,12 @@ export class GitHubMyPrsProvider extends BaseGitHubProvider {
 
   protected async fetchAndPublish(accessToken: string, isUserTriggered: boolean, signal?: AbortSignal): Promise<void> {
     logger.info('Fetching authored and assigned PRs...');
-    const patterns = this.getConfiguredPatterns();
-    let repos: string[];
-    let useGlobalFetch = false;
+    const { repos, patterns, useGlobalFetch } = await this.resolveConfiguredRepos(accessToken, signal);
 
-    if (patterns.length === 0) {
-      repos = [];
-      useGlobalFetch = true;
-    } else if (isNegationOnly(patterns)) {
-      repos = [];
-      useGlobalFetch = true;
-    } else {
-      repos = await resolveRepos(patterns, accessToken, signal);
+    // Patterns specified positive repos but resolved to nothing — emit empty
+    if (!useGlobalFetch && repos.length === 0 && patterns.length > 0) {
+      this._onDidDiscoverItems.fire([]);
+      return;
     }
 
     // Fetch authored and assigned PRs in parallel; proceed with partial results if one fails
@@ -151,13 +144,6 @@ export class GitHubMyPrsProvider extends BaseGitHubProvider {
         logger.warn(message);
       }
     }
-  }
-
-  private getConfiguredPatterns(): RepoPattern[] {
-    const config = vscode.workspace.getConfiguration('devDocketGithub');
-    const value = config.get<string>('repos', '');
-    if (!value) { return []; }
-    return parseRepoPatterns(value);
   }
 
   private async fetchAuthoredPrs(

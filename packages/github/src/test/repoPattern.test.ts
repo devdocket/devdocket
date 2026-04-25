@@ -162,9 +162,9 @@ describe('matchesRepoPatterns', () => {
 });
 
 describe('extractOwners', () => {
-  it('extracts owner from exact pattern', () => {
+  it('skips exact patterns (only returns wildcard owners)', () => {
     const patterns = parseRepoPatterns('myorg/repo');
-    expect(extractOwners(patterns)).toEqual(['myorg']);
+    expect(extractOwners(patterns)).toEqual([]);
   });
 
   it('extracts owner from wildcard pattern', () => {
@@ -172,13 +172,13 @@ describe('extractOwners', () => {
     expect(extractOwners(patterns)).toEqual(['myorg']);
   });
 
-  it('extracts unique owners', () => {
+  it('skips exact patterns even with same owner as wildcard', () => {
     const patterns = parseRepoPatterns('myorg/repo1\nmyorg/repo2');
-    expect(extractOwners(patterns)).toEqual(['myorg']);
+    expect(extractOwners(patterns)).toEqual([]);
   });
 
-  it('extracts multiple owners', () => {
-    const patterns = parseRepoPatterns('org1/repo\norg2/repo');
+  it('extracts multiple owners from wildcard patterns', () => {
+    const patterns = parseRepoPatterns('org1/*\norg2/*');
     const owners = extractOwners(patterns);
     expect(owners).toContain('org1');
     expect(owners).toContain('org2');

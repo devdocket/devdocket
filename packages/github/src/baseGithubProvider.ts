@@ -1,6 +1,14 @@
 import * as vscode from 'vscode';
 import { BaseProvider, DiscoveredItem } from '@devdocket/shared';
 import { logger } from './logger';
+import { parseRepoPatterns, isNegationOnly, type RepoPattern } from './repoPattern';
+import { resolveRepos } from './repoResolver';
+
+export interface ResolvedRepoConfig {
+  repos: string[];
+  patterns: RepoPattern[];
+  useGlobalFetch: boolean;
+}
 
 /**
  * Base class for GitHub providers that handles the common authentication
@@ -96,4 +104,42 @@ export abstract class BaseGitHubProvider extends BaseProvider {
     isUserTriggered: boolean,
     signal?: AbortSignal
   ): Promise<void>;
+
+  /**
+   * Read the `devDocketGithub.repos` setting and parse it into repo patterns.
+   * Handles backward compatibility with the old string[] config format.
+   */
+  protected getConfiguredPatterns(): RepoPattern[] {
+    const config = vscode.workspace.getConfiguration('devDocketGithub');
+    const value = config.get<string | string[]>('repos', '');
+    if (!value || (Array.isArray(value) && value.length === 0)) { return []; }
+    // Backward compat: handle old array format
+    if (Array.isArray(value)) {
+      return parseRepoPatterns(value.join('\n'));
+    }
+    return parseRepoPatterns(value);
+  }
+
+  /**
+   * Resolve configured patterns into concrete repo names and fetch strategy.
+   * Returns empty repos with useGlobalFetch=true when no patterns are configured
+   * or when only negation patterns exist (requiring a global fetch + post-filter).
+   */
+  protected async resolveConfiguredRepos(
+    accessToken: string,
+    signal?: AbortSignal,
+  ): Promise<ResolvedRepoConfig> {
+    const patterns = this.getConfiguredPatterns();
+
+    if (patterns.length === 0) {
+      return { repos: [], patterns, useGlobalFetch: true };
+    }
+
+    if (isNegationOnly(patterns)) {
+      return { repos: [], patterns, useGlobalFetch: true };
+    }
+
+    const repos = await resolveRepos(patterns, accessToken, signal);
+    return { repos, patterns, useGlobalFetch: false };
+  }
 }

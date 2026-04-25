@@ -4,8 +4,7 @@ import { BaseGitHubProvider } from './baseGithubProvider';
 import { logger } from './logger';
 import { parseRepoFromUrls } from './parseRepo';
 import { getHeaders, retryWithAuth, throwApiError, parseCanonicalRepo, fetchClosedGitHubItems, type GitHubIssue } from './githubApiHelpers';
-import { parseRepoPatterns, matchesRepoPatterns, isNegationOnly, type RepoPattern } from './repoPattern';
-import { resolveRepos } from './repoResolver';
+import { matchesRepoPatterns } from './repoPattern';
 
 interface GitHubSearchResponse {
   items: GitHubIssue[];
@@ -32,18 +31,12 @@ export class GitHubPrReviewProvider extends BaseGitHubProvider {
 
   protected async fetchAndPublish(accessToken: string, isUserTriggered: boolean, signal?: AbortSignal): Promise<void> {
     logger.info('Fetching PR review requests...');
-    const patterns = this.getConfiguredPatterns();
-    let repos: string[];
-    let useGlobalFetch = false;
+    const { repos, patterns, useGlobalFetch } = await this.resolveConfiguredRepos(accessToken, signal);
 
-    if (patterns.length === 0) {
-      repos = [];
-      useGlobalFetch = true;
-    } else if (isNegationOnly(patterns)) {
-      repos = [];
-      useGlobalFetch = true;
-    } else {
-      repos = await resolveRepos(patterns, accessToken, signal);
+    // Patterns specified positive repos but resolved to nothing — emit empty
+    if (!useGlobalFetch && repos.length === 0 && patterns.length > 0) {
+      this._onDidDiscoverItems.fire([]);
+      return;
     }
 
     const { prs, failures } = await this.fetchReviewRequestedPrs(accessToken, repos, signal);
@@ -155,13 +148,6 @@ export class GitHubPrReviewProvider extends BaseGitHubProvider {
    */
   async getClosedItems(externalIds: string[], signal?: AbortSignal): Promise<string[]> {
     return fetchClosedGitHubItems(externalIds, 'pulls', signal);
-  }
-
-  private getConfiguredPatterns(): RepoPattern[] {
-    const config = vscode.workspace.getConfiguration('devDocketGithub');
-    const value = config.get<string>('repos', '');
-    if (!value) { return []; }
-    return parseRepoPatterns(value);
   }
 
   private async fetchReviewRequestedPrs(

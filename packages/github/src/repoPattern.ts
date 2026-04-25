@@ -41,7 +41,7 @@ export function parseRepoPatterns(config: string): RepoPattern[] {
  * `*` matches any non-slash characters within a single segment.
  */
 function patternToRegex(pattern: string): RegExp {
-  const escaped = pattern.replace(/[.+^${}()|[\]\\]/g, '\\$&');
+  const escaped = pattern.replace(/[.+?^${}()|[\]\\]/g, '\\$&');
   const withWildcards = escaped.replace(/\*/g, '[^/]*');
   return new RegExp(`^${withWildcards}$`, 'i');
 }
@@ -71,13 +71,14 @@ export function matchesRepoPatterns(repo: string, patterns: RepoPattern[]): bool
 }
 
 /**
- * Extract unique owner names from positive (non-exclusion) patterns.
- * For "myorg/somerepo" → "myorg", for "myorg/*" → "myorg".
+ * Extract unique owner names from positive wildcard patterns only.
+ * Exact patterns are handled separately by getExactRepos, so we only
+ * need API listing for owners that have wildcard repo patterns.
  */
 export function extractOwners(patterns: RepoPattern[]): string[] {
   const owners = new Set<string>();
   for (const p of patterns) {
-    if (p.isExclusion) {
+    if (p.isExclusion || !p.pattern.includes('*')) {
       continue;
     }
     const rawPattern = p.pattern;

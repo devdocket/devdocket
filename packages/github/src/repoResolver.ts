@@ -21,13 +21,17 @@ export async function resolveRepos(
 
   if (hasWildcardPatterns(patterns)) {
     const owners = extractOwners(patterns);
-    for (const owner of owners) {
-      if (signal?.aborted) {
-        const error = new Error('The operation was aborted.');
-        error.name = 'AbortError';
-        throw error;
-      }
-      const repos = await listOwnerRepos(owner, token, signal);
+    const ownerResults = await Promise.all(
+      owners.map(owner => {
+        if (signal?.aborted) {
+          const error = new Error('The operation was aborted.');
+          error.name = 'AbortError';
+          throw error;
+        }
+        return listOwnerRepos(owner, token, signal);
+      })
+    );
+    for (const repos of ownerResults) {
       for (const repo of repos) {
         allRepos.add(repo);
       }
@@ -83,6 +87,7 @@ async function fetchPaginatedRepos(
         headers: {
           Authorization: `Bearer ${token}`,
           Accept: 'application/vnd.github+json',
+          'User-Agent': 'DevDocket-VSCode',
           'X-GitHub-Api-Version': '2022-11-28',
         },
         signal: combineSignals(signal, 30_000),
