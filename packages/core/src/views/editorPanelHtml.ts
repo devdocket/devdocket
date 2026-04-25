@@ -358,6 +358,7 @@ ${renderActivityLog(item.activityLog)}
     const descEl = document.querySelector('.provider-description');
     if (descEl) {
       descEl.addEventListener('click', (e) => {
+        if (!(e.target instanceof Element)) return;
         const anchor = e.target.closest('a');
         if (anchor && anchor.href) {
           e.preventDefault();
