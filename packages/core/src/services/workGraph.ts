@@ -182,7 +182,7 @@ export class WorkGraph {
       state: WorkItemState.New,
       providerId: provenance?.providerId,
       externalId: provenance?.externalId,
-      url: isSafeUrl(provenance?.url ?? input.url ?? '')?.href,
+      url: isSafeUrl(provenance?.url ?? '')?.href ?? isSafeUrl(input.url ?? '')?.href,
       group: provenance?.group,
       sortOrder,
       createdAt: now,
