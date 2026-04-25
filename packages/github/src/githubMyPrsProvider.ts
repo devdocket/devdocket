@@ -77,8 +77,6 @@ export class GitHubMyPrsProvider extends BaseGitHubProvider {
       logger.error('Failed to fetch assigned PRs', err);
     }
 
-    logger.info(`Discovered ${authoredResult.prs.length} authored PRs and ${assignedResult.prs.length} assigned PRs`);
-
     // Filter out self-authored PRs from assigned results to avoid duplicates
     const authoredUrls = new Set(authoredResult.prs.map(pr => pr.html_url));
     const uniqueAssignedPrs = assignedResult.prs.filter(pr => !authoredUrls.has(pr.html_url));
@@ -94,6 +92,8 @@ export class GitHubMyPrsProvider extends BaseGitHubProvider {
     const filteredAssigned = useGlobalFetch && patterns.length > 0
       ? uniqueAssignedPrs.filter(repoFilter)
       : uniqueAssignedPrs;
+
+    logger.info(`Discovered ${filteredAuthored.length} authored PRs and ${filteredAssigned.length} assigned PRs`);
 
     const allPrs = [...filteredAuthored, ...filteredAssigned];
 
