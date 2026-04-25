@@ -102,6 +102,37 @@ describe('GitHubIssueProvider', () => {
     ]));
   });
 
+  it('handles legacy array config format (backward compat)', async () => {
+    vi.mocked(workspace.getConfiguration).mockReturnValue({
+      get: vi.fn((key: string, defaultValue?: any) => {
+        if (key === 'repos') { return ['owner/repo1', 'owner/repo2']; }
+        return defaultValue;
+      }),
+    } as any);
+
+    mockFetch
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => [createMockIssue(1, 'Bug', 'owner/repo1')],
+        headers: { get: () => null },
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => [createMockIssue(2, 'Feature', 'owner/repo2')],
+        headers: { get: () => null },
+      });
+
+    const listener = vi.fn();
+    provider.onDidDiscoverItems(listener);
+    await provider.refresh();
+
+    expect(listener).toHaveBeenCalledTimes(1);
+    expect(listener).toHaveBeenCalledWith(expect.arrayContaining([
+      expect.objectContaining({ title: '#1: Bug' }),
+      expect.objectContaining({ title: '#2: Feature' }),
+    ]));
+  });
+
   it('falls back to /issues?filter=assigned when no repos configured', async () => {
     mockFetch.mockResolvedValueOnce({
       ok: true,
