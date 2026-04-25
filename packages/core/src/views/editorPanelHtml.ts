@@ -370,9 +370,11 @@ ${renderActivityLog(item.activityLog)}
       descEl.addEventListener('click', (e) => {
         if (!(e.target instanceof Element)) return;
         const anchor = e.target.closest('a');
-        const href = anchor && anchor.getAttribute('href');
+        if (!anchor) return;
+        // Always prevent default to avoid unintended webview navigation
+        e.preventDefault();
+        const href = anchor.getAttribute('href');
         if (href && isExternalUrl(href)) {
-          e.preventDefault();
           vscode.postMessage({ type: 'openUrl', url: href });
         }
       });
