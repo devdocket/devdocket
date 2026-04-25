@@ -251,7 +251,7 @@ export class GitHubMentionsProvider extends BaseGitHubProvider {
         },
       );
     } catch (err: unknown) {
-      if (err instanceof Error && err.name === 'AbortError') { throw err; }
+      if (err instanceof Error && err.name === 'AbortError' && signal?.aborted) { throw err; }
       logger.error('Failed to fetch mentions', err);
       return { results: [], failures: ['all repositories'] };
     }
