@@ -95,7 +95,8 @@ async function fetchPaginatedRepos(
     } catch (err) {
       if (err instanceof Error && err.name === 'AbortError') { throw err; }
       logger.warn(`Failed to list repos from ${nextUrl}`, err);
-      return allRepos.length > 0 ? allRepos : null;
+      // Return [] not null — null is reserved for 404 org-not-found fallback
+      return allRepos.length > 0 ? allRepos : [];
     }
 
     if (response.status === 404 && page === 0) {
