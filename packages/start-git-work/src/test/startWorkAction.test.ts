@@ -1518,5 +1518,37 @@ describe('StartWorkAction', () => {
       );
       expect(branchCall).toBeDefined();
     });
+
+    it('rejects GitHub PR with invalid clone URL', async () => {
+      mockFetchResponse(createGitHubPrResponse({
+        head: {
+          ref: 'feature/branch',
+          repo: {
+            full_name: 'evil/repo',
+            clone_url: '--upload-pack=malicious',
+          },
+        },
+        base: {
+          repo: {
+            full_name: 'owner/repo',
+          },
+        },
+      }));
+      mockQuickPickWorktree();
+
+      const item = createWorkItem({
+        providerId: 'github-my-prs',
+        externalId: 'owner/repo#42',
+      });
+      await action.run(item);
+
+      expect(window.showErrorMessage).toHaveBeenCalledWith(
+        expect.stringContaining('invalid clone URL'),
+      );
+      const gitCalls = vi.mocked(execFile).mock.calls.filter(
+        (call: any[]) => call[1]?.[0] === 'remote' || call[1]?.[0] === 'fetch',
+      );
+      expect(gitCalls).toHaveLength(0);
+    });
   });
 });

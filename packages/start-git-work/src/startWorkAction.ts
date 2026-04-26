@@ -15,6 +15,10 @@ function isValidRef(ref: string): boolean {
   return !!ref && !ref.startsWith('-') && SAFE_REF.test(ref);
 }
 
+function isValidCloneUrl(url: string): boolean {
+  return url.startsWith('https://') || url.startsWith('git@');
+}
+
 /** Timeout for lightweight git metadata commands (branch --list, status, rev-parse). */
 const GIT_METADATA_TIMEOUT = 30_000;
 /** Timeout for heavy git operations that touch the working tree (worktree add, checkout, fetch). */
@@ -341,7 +345,7 @@ export class StartWorkAction implements DevDocketAction {
     const branchName = pr.head.ref;
 
     if (!isValidRef(branchName)) {
-      void vscode.window.showErrorMessage(`DevDocket: PR branch name "${branchName}" contains invalid characters.`);
+      void vscode.window.showErrorMessage('DevDocket: PR branch name contains invalid characters.');
       return undefined;
     }
 
@@ -357,6 +361,10 @@ export class StartWorkAction implements DevDocketAction {
     }
 
     const headCloneUrl = pr.head.repo.clone_url;
+    if (!isValidCloneUrl(headCloneUrl)) {
+      void vscode.window.showErrorMessage('DevDocket: PR source repository has an invalid clone URL.');
+      return undefined;
+    }
     logger.debug(`Looking up remote for clone URL: ${headCloneUrl}`);
     const remoteName = await this.findOrAddRemote(headCloneUrl, pr.head.repo.full_name, repoPath);
 
@@ -462,7 +470,7 @@ export class StartWorkAction implements DevDocketAction {
     const branchName = pr.sourceRefName.replace(/^refs\/heads\//, '');
 
     if (!isValidRef(branchName)) {
-      void vscode.window.showErrorMessage(`DevDocket: PR branch name "${branchName}" contains invalid characters.`);
+      void vscode.window.showErrorMessage('DevDocket: PR branch name contains invalid characters.');
       return undefined;
     }
 
