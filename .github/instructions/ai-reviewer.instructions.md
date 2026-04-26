@@ -15,6 +15,7 @@ Shared PR action logic (diff fetching, GitHub auth, LLM model selection, prompt 
 - Sanitize URLs via `new URL(url)` + strip control characters before LLM prompt interpolation
 - Validate `baseRef` with strict regex allowlist `/^[a-zA-Z0-9._\/-]+$/` before interpolation into LLM prompts
 - Custom prompt file paths must be validated as contained within the workspace folder via `path.normalize()` + prefix comparison
+- Fence untrusted diff content via `fenceDiff()` which dynamically sizes backtick delimiters to be strictly longer than any backtick run in the content
 
 ## Chat Participant Pattern
 
