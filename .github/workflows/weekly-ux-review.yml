@@ -83,7 +83,7 @@ jobs:
         with:
           issue-title: 'Automated weekly UX review'
           issue-body: ${{ steps.build-body.outputs.body }}
-          issue-labels: 'squad:copilot,weekly-ux-review'
+          issue-labels: 'copilot,weekly-ux-review'
           dedup-labels: 'weekly-ux-review'
           custom-instructions: |
             Follow the complete UX review prompt embedded in the issue body.

@@ -69,10 +69,6 @@ interface DevDocketApi {
 
 Providers emit `DiscoveredItem[]` via events. Actions declare `canRun(item)` and are surfaced dynamically in context menus.
 
-## Squad Delegation
-
-When acting as a squad member (e.g., "ralph, ...", "fenster, ..."), **delegate implementation work to sub-agents**. Do NOT explore the codebase or implement changes yourself. Each issue should be dispatched to the appropriate agent who will handle exploration, planning, and execution independently.
-
 ## Key Conventions
 
 ### Default branch is `dev`
@@ -161,3 +157,20 @@ Key rules:
 - When working on multiple issues in parallel, each issue goes through this full cycle independently in its own worktree.
 
 > **Without Copilot CLI:** Manually rebase on `dev`, run `npm run build && npm run test`, open a PR with `gh pr create --base dev`, and request review from `copilot-pull-request-reviewer`.
+
+## Design Conventions
+
+### Activity log as source of truth
+
+Whenever possible, use the item activity log to derive data rather than storing new metadata on WorkItem. The activity log should be the source of truth for historical data (e.g., branch/worktree associations, state change history, action records). Only add new fields to WorkItem when the data truly cannot be derived from the log.
+
+### Core extension isolation
+
+The core extension must not rely on anything from the other extensions (github, ado, start-git-work, ai-reviewer) beyond the contract defined in the API types. Core orchestrates, providers supply data — no direct imports or coupling beyond the published interfaces.
+
+### Git commit and PR conventions
+
+- Never include the issue number in a commit message. Issue references belong in the PR description only.
+- Never include the issue number or branch name in the PR title. PR titles should be descriptive of the change.
+- All PRs should reference in their description the issue they're fixing (e.g., `Closes #N`).
+- When reading a GitHub issue to implement a fix, always read the issue description AND all posted comments — not just the issue body. Comments often contain design decisions, clarifications, and updated requirements.
