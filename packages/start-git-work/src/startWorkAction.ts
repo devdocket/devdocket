@@ -8,6 +8,13 @@ import { WorkItemState, type WorkItem, type DevDocketAction } from '@devdocket/s
 
 const execFileAsync = promisify(execFile);
 
+/** Strict allowlist for git ref names — blocks argument injection via leading hyphens. */
+const SAFE_REF = /^[a-zA-Z0-9._\/-]+$/;
+
+function isValidRef(ref: string): boolean {
+  return !!ref && !ref.startsWith('-') && SAFE_REF.test(ref);
+}
+
 /** Timeout for lightweight git metadata commands (branch --list, status, rev-parse). */
 const GIT_METADATA_TIMEOUT = 30_000;
 /** Timeout for heavy git operations that touch the working tree (worktree add, checkout, fetch). */
@@ -332,6 +339,12 @@ export class StartWorkAction implements DevDocketAction {
 
     const pr = await response.json() as GitHubPrResponse;
     const branchName = pr.head.ref;
+
+    if (!isValidRef(branchName)) {
+      void vscode.window.showErrorMessage(`DevDocket: PR branch name "${branchName}" contains invalid characters.`);
+      return undefined;
+    }
+
     const isFork = pr.head.repo ? pr.head.repo.full_name !== pr.base.repo.full_name : false;
     logger.debug(`GitHub PR #${parsed.itemNumber}: head.ref=${branchName}, head.repo=${pr.head.repo?.full_name ?? 'null'}, base.repo=${pr.base.repo.full_name}, isFork=${isFork}`);
 
@@ -447,6 +460,12 @@ export class StartWorkAction implements DevDocketAction {
 
     const pr = await response.json() as AdoPrResponse;
     const branchName = pr.sourceRefName.replace(/^refs\/heads\//, '');
+
+    if (!isValidRef(branchName)) {
+      void vscode.window.showErrorMessage(`DevDocket: PR branch name "${branchName}" contains invalid characters.`);
+      return undefined;
+    }
+
     logger.debug(`ADO PR #${parsed.itemNumber}: sourceRefName=${pr.sourceRefName}, branchName=${branchName}`);
 
     logger.info(`Fetching branch "${branchName}" from origin`);
@@ -790,6 +809,11 @@ export class StartWorkAction implements DevDocketAction {
     const trimmedBranch = selectedBranch.trim();
     if (!trimmedBranch) {
       void vscode.window.showErrorMessage('DevDocket: No base branch provided.');
+      return undefined;
+    }
+
+    if (!isValidRef(trimmedBranch)) {
+      void vscode.window.showErrorMessage('DevDocket: Base branch name contains invalid characters.');
       return undefined;
     }
 
