@@ -404,8 +404,13 @@ export class StartWorkAction implements DevDocketAction {
     for (const line of stdout.split('\n')) {
       const match = line.match(/^(\S+)\t(\S+)\s+\(fetch\)$/);
       if (match && match[2] === cloneUrl) {
-        logger.info(`Found existing remote "${match[1]}" matching ${cloneUrl}`);
-        return match[1];
+        const name = match[1];
+        if (!isValidRef(name)) {
+          logger.warn(`Skipping remote "${name}" — name contains unsafe characters`);
+          continue;
+        }
+        logger.info(`Found existing remote "${name}" matching ${cloneUrl}`);
+        return name;
       }
     }
 
