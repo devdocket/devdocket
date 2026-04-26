@@ -393,7 +393,6 @@ describe('GitHubIssueProvider — error handling', () => {
           createMockIssue(1, 'Good issue', 'good/repo'),
           createMockIssue(2, 'Other issue', 'other/repo'),
         ],
-        headers: { get: () => null },
       });
 
       const listener = vi.fn();
@@ -460,7 +459,6 @@ describe('GitHubIssueProvider — error handling', () => {
         ok: true,
         headers: noLinkHeaders,
         json: async () => { throw new SyntaxError('Invalid JSON'); },
-        headers: { get: () => null },
       });
 
       const listener = vi.fn();
@@ -485,7 +483,6 @@ describe('GitHubIssueProvider — error handling', () => {
         ok: true,
         headers: noLinkHeaders,
         json: async () => [],
-        headers: { get: () => null },
       });
 
       const listener = vi.fn();
