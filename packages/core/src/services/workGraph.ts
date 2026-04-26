@@ -179,6 +179,7 @@ export class WorkGraph {
       id: generateId(),
       title: input.title,
       notes: input.notes,
+      description: input.description,
       state: WorkItemState.New,
       providerId: provenance?.providerId,
       externalId: provenance?.externalId,
@@ -210,7 +211,7 @@ export class WorkGraph {
     return item;
   }
 
-  /** Apply a partial update (title, notes, and/or url) to an existing work item. */
+  /** Apply a partial update (title, notes, description, and/or url) to an existing work item. */
   async updateItem(id: string, patch: Partial<WorkItemInput>): Promise<void> {
     const item = this.items.get(id);
     if (!item) {
