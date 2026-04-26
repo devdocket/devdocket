@@ -81,7 +81,7 @@ export interface WorkItem {
   id: string;
   /** Short human-readable title displayed in tree views. */
   title: string;
-  /** Optional free-form notes or description. */
+  /** Optional free-form notes (user-editable). */
   notes?: string;
   /** Provider-synced description, separate from user-editable notes. */
   description?: string;
@@ -112,7 +112,7 @@ export interface WorkItem {
 export interface WorkItemInput {
   /** Short human-readable title of the work item. */
   title: string;
-  /** Optional free-form notes or description. */
+  /** Optional free-form notes (user-editable). */
   notes?: string;
   /** Optional URL linking to the item in an external system. */
   url?: string;
