@@ -9,9 +9,9 @@ import { matchesRepoPatterns } from './repoPattern';
 /**
  * DevDocket provider that discovers GitHub issues assigned to the current user.
  *
- * Issues are fetched via the GitHub REST API using VS Code's built-in GitHub
- * authentication. When configured repos are specified, only those repos are
- * queried; otherwise all assigned issues across GitHub are returned.
+ * Issues are always fetched globally via the GitHub REST API using VS Code's
+ * built-in GitHub authentication. When filter patterns are configured, results
+ * are post-filtered to exclude matching repositories.
  *
  * Supports periodic background refresh and emits discovered items through
  * the {@link DevDocketProvider.onDidDiscoverItems} event.

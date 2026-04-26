@@ -49,10 +49,14 @@ function patternToRegex(pattern: string): RegExp {
 }
 
 /**
- * Check if a repo should be included after applying filter patterns.
- * Works like .gitignore: positive patterns filter OUT (exclude) matching repos,
- * `!` (negation) patterns un-filter (re-include) them. Last match wins.
- * Returns true if the repo should be kept, false if filtered out.
+ * Determine whether a repo should be kept after applying filter patterns.
+ * Semantics mirror .gitignore: positive patterns mark repos for exclusion,
+ * `!` (negation) patterns re-include previously excluded repos. Last match wins.
+ *
+ * With no patterns, all repos are kept (no filtering).
+ * Negation-only configs are a no-op (nothing to re-include from).
+ *
+ * @returns true if the repo passes the filter (should be kept), false if filtered out.
  */
 export function matchesRepoPatterns(repo: string, patterns: RepoPattern[]): boolean {
   if (patterns.length === 0) { return true; }
