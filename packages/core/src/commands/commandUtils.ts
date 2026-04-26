@@ -89,6 +89,7 @@ export interface AcceptableItem {
   providerId: string;
   externalId: string;
   title: string;
+  description?: string;
   url?: string;
   group?: string;
 }
