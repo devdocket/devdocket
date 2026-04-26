@@ -130,4 +130,15 @@ describe('syncProviderDescriptions', () => {
 
     expect(workGraph.updateItem).not.toHaveBeenCalled();
   });
+
+  it('does not clear description when provider omits description property', async () => {
+    providerRegistry.getAllDiscoveredItems.mockReturnValue(new Map([
+      ['github', [{ externalId: '42', title: 'Bug' }]],
+    ]));
+    workGraph.findItemByProvenance.mockReturnValue({ id: 'item-1', description: 'Existing description' });
+
+    await syncProviderDescriptions(providerRegistry as any, workGraph as any);
+
+    expect(workGraph.updateItem).not.toHaveBeenCalled();
+  });
 });

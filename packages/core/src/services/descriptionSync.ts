@@ -18,7 +18,7 @@ export async function syncProviderDescriptions(
   for (const [providerId, discoveredItems] of providerRegistry.getAllDiscoveredItems()) {
     for (const discovered of discoveredItems) {
       const workItem = workGraph.findItemByProvenance(providerId, discovered.externalId);
-      if (workItem && workItem.description !== discovered.description) {
+      if (workItem && 'description' in discovered && workItem.description !== discovered.description) {
         try {
           await workGraph.updateItem(workItem.id, { description: discovered.description });
           logger.debug(`Synced description for ${providerId}/${discovered.externalId}`);
