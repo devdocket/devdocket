@@ -1413,7 +1413,7 @@ describe('StartWorkAction', () => {
     it('rejects GitHub PR with hyphen-prefixed branch name', async () => {
       mockFetchResponse(createGitHubPrResponse({
         head: {
-          ref: '--upload-pack=malicious',
+          ref: '--malicious',
           repo: {
             full_name: 'owner/repo',
             clone_url: 'https://github.com/owner/repo.git',

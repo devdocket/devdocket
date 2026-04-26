@@ -11,12 +11,26 @@ const execFileAsync = promisify(execFile);
 /** Strict allowlist for git ref names — blocks argument injection via leading hyphens. */
 const SAFE_REF = /^[a-zA-Z0-9._\/-]+$/;
 
-function isValidRef(ref: string): boolean {
-  return !!ref && !ref.startsWith('-') && SAFE_REF.test(ref);
+function isValidRef(ref: unknown): ref is string {
+  return typeof ref === 'string' && ref.length > 0 && !ref.startsWith('-') && SAFE_REF.test(ref);
 }
 
-function isValidCloneUrl(url: string): boolean {
-  return url.startsWith('https://') || url.startsWith('git@');
+/** Rejects whitespace and control characters in clone URLs. */
+const UNSAFE_URL_CHARS = /[\s\x00-\x1f\x7f]/;
+
+function isValidCloneUrl(url: unknown): url is string {
+  if (typeof url !== 'string' || url.length === 0 || UNSAFE_URL_CHARS.test(url)) {
+    return false;
+  }
+  if (url.startsWith('https://')) {
+    try {
+      const parsed = new URL(url);
+      return parsed.protocol === 'https:' && parsed.hostname.length > 0;
+    } catch {
+      return false;
+    }
+  }
+  return url.startsWith('git@');
 }
 
 /** Timeout for lightweight git metadata commands (branch --list, status, rev-parse). */
