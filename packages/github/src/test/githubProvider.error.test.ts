@@ -174,7 +174,7 @@ describe('GitHubIssueProvider — error handling', () => {
       await provider.refresh();
 
       expect(window.showWarningMessage).toHaveBeenCalledWith(
-        expect.stringContaining('Failed to fetch issues'),
+        expect.stringContaining('Failed to fetch assigned issues'),
       );
     });
 
@@ -413,7 +413,7 @@ describe('GitHubIssueProvider — error handling', () => {
       await provider.refresh();
 
       expect(window.showWarningMessage).toHaveBeenCalledWith(
-        expect.stringContaining('Failed to fetch issues'),
+        expect.stringContaining('Failed to fetch assigned issues'),
       );
     });
 

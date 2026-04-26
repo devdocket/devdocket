@@ -52,7 +52,7 @@ export class GitHubIssueProvider extends BaseGitHubProvider {
     this._onDidDiscoverItems.fire(items);
 
     if (failed) {
-      const message = 'Failed to fetch issues from all repositories';
+      const message = 'Failed to fetch assigned issues';
       if (isUserTriggered) {
         void vscode.window.showWarningMessage(`DevDocket GitHub: ${message}`);
       } else {
