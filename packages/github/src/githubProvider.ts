@@ -40,7 +40,7 @@ export class GitHubIssueProvider extends BaseGitHubProvider {
       return {
         externalId: `${repoName}#${issue.number}`,
         title: `#${issue.number}: ${issue.title}`,
-        description: issue.body?.slice(0, 200),
+        description: issue.body ?? undefined,
         url: issue.html_url,
         group: repoName,
         reason: 'assigned',

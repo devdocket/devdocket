@@ -234,6 +234,7 @@ interface AcceptableItem {
   providerId: string;
   externalId: string;
   title: string;
+  description?: string;
   url?: string;
   group?: string;
 }
@@ -270,7 +271,7 @@ async function batchAcceptItems(
     }
     try {
       const createdItem = await workGraph.createItem(
-        { title: formatItemTitle(item) },
+        { title: formatItemTitle(item), description: item.description },
         { providerId: item.providerId, externalId: item.externalId, url: item.url, group: item.group?.trim() || undefined },
       );
       createdIds.push(createdItem.id);
@@ -670,7 +671,7 @@ async function acceptSingleInboxItem(
   let createdItem: Awaited<ReturnType<typeof workGraph.createItem>>;
   try {
     createdItem = await workGraph.createItem(
-      { title: formatItemTitle(item) },
+      { title: formatItemTitle(item), description: item.description },
       {
         providerId: item.providerId,
         externalId: item.externalId,
@@ -754,7 +755,7 @@ async function acceptToFocusSingleInboxItem(
     let createdItem: Awaited<ReturnType<typeof workGraph.createItem>>;
     try {
       createdItem = await workGraph.createItem(
-        { title: formatItemTitle(item) },
+        { title: formatItemTitle(item), description: item.description },
         {
           providerId: item.providerId,
           externalId: item.externalId,
@@ -829,7 +830,7 @@ async function batchAcceptToFocusItems(
     const group = item.group?.trim();
     try {
       const createdItem = await workGraph.createItem(
-        { title: formatItemTitle(item) },
+        { title: formatItemTitle(item), description: item.description },
         {
           providerId: item.providerId,
           externalId: item.externalId,
@@ -1034,7 +1035,7 @@ async function acceptSingleSourceItem(
   let createdItem: Awaited<ReturnType<typeof workGraph.createItem>>;
   try {
     createdItem = await workGraph.createItem(
-      { title: formatItemTitle(item) },
+      { title: formatItemTitle(item), description: item.description },
       {
         providerId: item.providerId,
         externalId: item.externalId,

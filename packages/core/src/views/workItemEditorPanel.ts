@@ -49,6 +49,7 @@ export class WorkItemEditorPanel {
   private readonly providerChangeSub: vscode.Disposable;
   private lastDisplayedTitle: string | undefined;
   private lastDisplayedUrl: string | undefined;
+  private lastDisplayedDescription: string | undefined;
   private lastManagedState: boolean | undefined;
 
   /**
@@ -190,8 +191,8 @@ export class WorkItemEditorPanel {
       void this.panel.webview.postMessage({ type: 'updateTitle', title: item.title });
     }
 
-    // Re-render when URL changes to keep the title hyperlink and URL field in sync
-    if (item.url !== this.lastDisplayedUrl) {
+    // Re-render when URL or description changes
+    if (item.url !== this.lastDisplayedUrl || item.description !== this.lastDisplayedDescription) {
       this.update();
     }
   }
@@ -250,6 +251,7 @@ export class WorkItemEditorPanel {
     }
     this.lastDisplayedTitle = item.title;
     this.lastDisplayedUrl = item.url;
+    this.lastDisplayedDescription = item.description;
     this.lastManagedState = this.isProviderManaged(item);
     this.panel.title = `Edit: ${item.title}`;
     this.panel.webview.html = this.getHtml(item);
@@ -262,8 +264,9 @@ export class WorkItemEditorPanel {
       const discovered = this.providerRegistry
         .getDiscoveredItems(item.providerId)
         .find((d) => d.externalId === item.externalId);
-      providerDescription = discovered?.description ?? undefined;
       providerState = discovered?.state ?? undefined;
+      // Use the synced description from the persisted WorkItem
+      providerDescription = item.description;
     }
     return getEditorPanelHtml({
       cspSource: this.panel.webview.cspSource,

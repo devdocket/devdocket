@@ -241,7 +241,7 @@ describe('GitHubMyPrsProvider', () => {
     expect(items[0].state).toBe('Open');
   });
 
-  it('truncates description to 200 chars', async () => {
+  it('passes full description without truncation', async () => {
     const pr = createMockPr(1, 'Long PR');
     pr.body = 'a'.repeat(500);
 
@@ -266,7 +266,7 @@ describe('GitHubMyPrsProvider', () => {
     await provider.refresh();
 
     const items = listener.mock.calls[0][0];
-    expect(items[0].description).toHaveLength(200);
+    expect(items[0].description).toHaveLength(500);
   });
 
   it('reports all-repos failure for global search', async () => {

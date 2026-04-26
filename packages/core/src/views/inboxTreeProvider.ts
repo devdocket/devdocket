@@ -447,7 +447,6 @@ export class InboxTreeProvider implements vscode.TreeDataProvider<InboxElement> 
       md.appendText(this.formatReason(item.reason));
       md.appendMarkdown('*\n\n');
     }
-    if (item.description) { md.appendText(`${item.description}\n\n`); }
     return md;
   }
 

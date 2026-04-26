@@ -74,7 +74,7 @@ async function acceptSingleSourceItem(
   let createdItem: Awaited<ReturnType<typeof workGraph.createItem>>;
   try {
     createdItem = await workGraph.createItem(
-      { title: formatItemTitle(item) },
+      { title: formatItemTitle(item), description: item.description },
       {
         providerId: item.providerId,
         externalId: item.externalId,

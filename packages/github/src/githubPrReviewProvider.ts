@@ -70,7 +70,7 @@ export class GitHubPrReviewProvider extends BaseGitHubProvider {
       const item: DiscoveredItem = {
         externalId: `${repoName}#${pr.number}`,
         title: `#${pr.number}: ${pr.title}`,
-        description: pr.body?.slice(0, 200),
+        description: pr.body ?? undefined,
         url: pr.html_url,
         group: repoName,
         reason: 'review_requested',

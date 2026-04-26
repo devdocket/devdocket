@@ -395,7 +395,7 @@ describe('SourcesTreeProvider', () => {
   });
 
   describe('getTreeItem tooltip', () => {
-    it('should include title and description in tooltip when item has description', () => {
+    it('should include title but not description in tooltip', () => {
       const node: SourceItemNode = {
         kind: 'item', providerId: 'gh', externalId: '1', title: 'Bug Report',
         description: 'App crashes on startup',
@@ -403,8 +403,8 @@ describe('SourcesTreeProvider', () => {
       const treeItem = provider.getTreeItem(node);
       const tooltip = treeItem.tooltip as MarkdownString;
       expect(tooltip.value).toContain('Bug Report');
-      expect(tooltip.value).toContain('App crashes on startup');
-      expect(tooltip.value).toContain('**Description:**');
+      expect(tooltip.value).not.toContain('App crashes on startup');
+      expect(tooltip.value).not.toContain('**Description:**');
     });
 
     it('should include only title in tooltip when item has no description', () => {
@@ -563,14 +563,14 @@ describe('SourcesTreeProvider', () => {
       expect((treeItem.tooltip as any).value).not.toContain('Description');
     });
 
-    it('should include description in tooltip when present', () => {
+    it('should not include description in tooltip even when present', () => {
       const node: SourceItemNode = {
         kind: 'item', providerId: 'gh', externalId: '1', title: 'Item', description: 'Details here',
       };
       const treeItem = provider.getTreeItem(node);
       expect(treeItem.tooltip).toBeDefined();
       expect((treeItem.tooltip as any).value).toContain('Item');
-      expect((treeItem.tooltip as any).value).toContain('Details here');
+      expect((treeItem.tooltip as any).value).not.toContain('Details here');
     });
   });
 

@@ -207,7 +207,7 @@ describe('GitHubPrReviewProvider', () => {
     expect(items[1].group).toBe('beta/two');
   });
 
-  it('truncates description to 200 chars', async () => {
+  it('passes full description without truncation', async () => {
     const longBody = 'B'.repeat(300);
     mockFetch.mockResolvedValueOnce({
       ok: true,
@@ -221,7 +221,7 @@ describe('GitHubPrReviewProvider', () => {
     await provider.refresh();
 
     const items = listener.mock.calls[0][0];
-    expect(items[0].description).toHaveLength(200);
+    expect(items[0].description).toHaveLength(300);
   });
 
   it('handles undefined body gracefully', async () => {

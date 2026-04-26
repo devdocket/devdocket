@@ -254,11 +254,6 @@ export class SourcesTreeProvider implements vscode.TreeDataProvider<SourcesEleme
     md.appendMarkdown(`**Title:** `);
     md.appendText(item.title);
     md.appendMarkdown(`\n\n`);
-    if (item.description) {
-      md.appendMarkdown(`**Description:** `);
-      md.appendText(item.description);
-      md.appendMarkdown(`\n\n`);
-    }
     return md;
   }
 

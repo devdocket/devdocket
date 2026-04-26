@@ -29,6 +29,7 @@ import { ViewRevealer } from './services/viewRevealer';
 import { initLogger, setLogLevel, logger, resolveLogLevel } from './services/logger';
 import { getInboxUnseenCount } from './services/inboxBadge';
 import { syncProviderTitles } from './services/titleSync';
+import { syncProviderDescriptions } from './services/descriptionSync';
 import { getViewLayout, ViewId } from './views/viewLayout';
 import { performance } from 'perf_hooks';
 
@@ -258,6 +259,10 @@ function wireEvents(
 
     void syncProviderTitles(providerRegistry, workGraph).catch(err => {
       logger.error('Error syncing provider titles', err);
+    });
+
+    void syncProviderDescriptions(providerRegistry, workGraph).catch(err => {
+      logger.error('Error syncing provider descriptions', err);
     });
 
     // Mark initial load complete when loading transitions from true to false
