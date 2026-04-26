@@ -1,50 +1,30 @@
-import * as path from 'path';
-import { logger } from '../services/logger';
-import { SerializedJsonStore } from './serializedJsonStore';
+import type { Memento } from 'vscode';
+
+const STORAGE_KEY = 'devdocket.provider-labels';
 
 /**
  * Persists a mapping of providerId → display label so that tree views
  * can show human-friendly group names immediately on startup, before
  * provider extensions have registered.
  */
-export class ProviderLabelCache extends SerializedJsonStore {
+export class ProviderLabelCache {
+  private readonly globalState: Memento;
   private labels = new Map<string, string>();
-  private readonly filePath: string;
 
-  constructor(storagePath: string) {
-    super();
-    this.filePath = path.join(storagePath, 'provider-labels.json');
+  constructor(globalState: Memento) {
+    this.globalState = globalState;
   }
 
-  /** Load cached labels from disk. Safe to call even if the file does not exist. */
+  /** Load cached labels from globalState. */
   async load(): Promise<void> {
-    const parsed = await this.readJson(this.filePath);
-    if (parsed === undefined) {
-      this.labels.clear();
-      return;
-    }
-
-    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
-      logger.warn('Provider label cache does not contain a valid object — backing up and resetting to empty');
-      await this.backupFile(this.filePath);
-      this.labels.clear();
-      return;
-    }
-
-    const nextLabels = new Map<string, string>();
-    for (const [key, value] of Object.entries(parsed as Record<string, unknown>)) {
-      if (typeof value !== 'string') {
-        logger.warn('Provider label cache contains non-string values — backing up and resetting to empty');
-        await this.backupFile(this.filePath);
-        this.labels.clear();
-        return;
-      }
-      nextLabels.set(key, value);
-    }
-
+    const parsed = this.globalState.get<Record<string, unknown>>(STORAGE_KEY);
     this.labels.clear();
-    for (const [key, value] of nextLabels) {
-      this.labels.set(key, value);
+    if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+      for (const [key, value] of Object.entries(parsed)) {
+        if (typeof value === 'string') {
+          this.labels.set(key, value);
+        }
+      }
     }
   }
 
@@ -53,33 +33,14 @@ export class ProviderLabelCache extends SerializedJsonStore {
     return this.labels.get(providerId);
   }
 
-  /** Update the cached label for a provider and persist to disk. */
+  /** Update the cached label for a provider and persist to globalState. */
   async set(providerId: string, label: string): Promise<void> {
-    if (this.labels.get(providerId) === label) {
-      await this.flush(); // Ensure any in-flight writes have settled
-      return;
-    }
-    const hadPrevious = this.labels.has(providerId);
-    const previousLabel = this.labels.get(providerId);
+    if (this.labels.get(providerId) === label) { return; }
     this.labels.set(providerId, label);
-    await this.enqueue(async () => {
-      try {
-        const obj = Object.create(null) as Record<string, string>;
-        for (const [key, value] of this.labels) {
-          obj[key] = value;
-        }
-        await this.writeJson(this.filePath, obj);
-      } catch (error) {
-        // Roll back in-memory state so future set() calls retry persistence
-        if (this.labels.get(providerId) === label) {
-          if (hadPrevious && previousLabel !== undefined) {
-            this.labels.set(providerId, previousLabel);
-          } else {
-            this.labels.delete(providerId);
-          }
-        }
-        throw error;
-      }
-    });
+    const obj = Object.create(null) as Record<string, string>;
+    for (const [key, value] of this.labels) {
+      obj[key] = value;
+    }
+    await this.globalState.update(STORAGE_KEY, obj);
   }
 }

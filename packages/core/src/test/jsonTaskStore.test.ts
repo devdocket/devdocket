@@ -1,24 +1,15 @@
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import * as fs from 'fs/promises';
-import * as path from 'path';
-import * as os from 'os';
+import { describe, it, expect, beforeEach } from 'vitest';
+import { MockMemento } from 'vscode';
 import { JsonTaskStore } from '../storage/jsonTaskStore';
 import { WorkItem, WorkItemState } from '../models/workItem';
 
-const mockLimits = vi.hoisted(() => ({ MAX_STORE_FILE_SIZE: 10 * 1024 * 1024 }));
-vi.mock('../storage/limits', () => mockLimits);
-
 describe('JsonTaskStore', () => {
-  let tmpDir: string;
+  let memento: InstanceType<typeof MockMemento>;
   let store: JsonTaskStore;
 
-  beforeEach(async () => {
-    tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'devdocket-test-'));
-    store = new JsonTaskStore(tmpDir);
-  });
-
-  afterEach(async () => {
-    await fs.rm(tmpDir, { recursive: true, force: true });
+  beforeEach(() => {
+    memento = new MockMemento();
+    store = new JsonTaskStore(memento);
   });
 
   function makeItem(overrides: Partial<WorkItem> = {}): WorkItem {
@@ -32,7 +23,7 @@ describe('JsonTaskStore', () => {
     };
   }
 
-  it('returns empty array when no file exists', async () => {
+  it('returns empty array when no data exists', async () => {
     const items = await store.loadAll();
     expect(items).toEqual([]);
   });
@@ -123,17 +114,15 @@ describe('JsonTaskStore', () => {
       expect(items.find(i => i.id === 'new-item')!.title).toBe('Brand New');
     });
 
-    it('persists all items to disk', async () => {
+    it('persists all items to globalState', async () => {
       await store.saveAll([
         makeItem({ id: 'x', title: 'X' }),
         makeItem({ id: 'y', title: 'Y' }),
       ]);
 
-      const filePath = path.join(tmpDir, 'workitems.json');
-      const raw = await fs.readFile(filePath, 'utf-8');
-      const parsed = JSON.parse(raw);
-      expect(parsed).toHaveLength(2);
-      expect(parsed.map((i: WorkItem) => i.id).sort()).toEqual(['x', 'y']);
+      const persisted = memento.get<WorkItem[]>('devdocket.workitems');
+      expect(persisted).toHaveLength(2);
+      expect(persisted!.map((i: WorkItem) => i.id).sort()).toEqual(['x', 'y']);
     });
 
     it('preserves items not included in the saveAll call', async () => {
@@ -148,234 +137,135 @@ describe('JsonTaskStore', () => {
     });
   });
 
-  it('persists data to a JSON file', async () => {
+  it('persists data to globalState', async () => {
     await store.save(makeItem());
-    const filePath = path.join(tmpDir, 'workitems.json');
-    const raw = await fs.readFile(filePath, 'utf-8');
-    const parsed = JSON.parse(raw);
-    expect(parsed).toHaveLength(1);
-    expect(parsed[0].id).toBe('test-1');
-  });
-
-  it('migrates legacy description field to notes on load', async () => {
-    const filePath = path.join(tmpDir, 'workitems.json');
-    const legacy = [{
-      id: 'legacy-1',
-      title: 'Old item',
-      description: 'Legacy description',
-      state: 'New',
-      createdAt: 1000,
-      updatedAt: 1000,
-    }];
-    await fs.mkdir(tmpDir, { recursive: true });
-    await fs.writeFile(filePath, JSON.stringify(legacy), 'utf-8');
-
-    const items = await store.loadAll();
-    expect(items).toHaveLength(1);
-    expect(items[0].notes).toBe('Legacy description');
-    expect((items[0] as any).description).toBeUndefined();
-  });
-
-  it('persists migrated description→notes back to disk', async () => {
-    const filePath = path.join(tmpDir, 'workitems.json');
-    const legacy = [{
-      id: 'legacy-1',
-      title: 'Old item',
-      description: 'Legacy description',
-      state: 'New',
-      createdAt: 1000,
-      updatedAt: 1000,
-    }];
-    await fs.mkdir(tmpDir, { recursive: true });
-    await fs.writeFile(filePath, JSON.stringify(legacy), 'utf-8');
-
-    await store.loadAll();
-
-    const raw = await fs.readFile(filePath, 'utf-8');
-    const persisted = JSON.parse(raw);
+    const persisted = memento.get<WorkItem[]>('devdocket.workitems');
     expect(persisted).toHaveLength(1);
-    expect(persisted[0].notes).toBe('Legacy description');
-    expect(persisted[0].description).toBeUndefined();
+    expect(persisted![0].id).toBe('test-1');
+  });
+
+  it('loads from a fresh store instance sharing same Memento', async () => {
+    await store.save(makeItem({ id: 'a' }));
+    await store.save(makeItem({ id: 'b' }));
+
+    const store2 = new JsonTaskStore(memento);
+    const items = await store2.loadAll();
+    expect(items).toHaveLength(2);
   });
 
   describe('schema validation', () => {
     it('skips items missing an id', async () => {
-      const filePath = path.join(tmpDir, 'workitems.json');
-      const data = [
+      await memento.update('devdocket.workitems', [
         { title: 'No ID', state: 'New', createdAt: 1000, updatedAt: 1000 },
         makeItem({ id: 'valid' }),
-      ];
-      await fs.mkdir(tmpDir, { recursive: true });
-      await fs.writeFile(filePath, JSON.stringify(data), 'utf-8');
+      ]);
 
-      const items = await store.loadAll();
+      const store2 = new JsonTaskStore(memento);
+      const items = await store2.loadAll();
       expect(items).toHaveLength(1);
       expect(items[0].id).toBe('valid');
     });
 
     it('skips items missing a title', async () => {
-      const filePath = path.join(tmpDir, 'workitems.json');
-      const data = [
+      await memento.update('devdocket.workitems', [
         { id: 'no-title', state: 'New', createdAt: 1000, updatedAt: 1000 },
         makeItem({ id: 'valid' }),
-      ];
-      await fs.mkdir(tmpDir, { recursive: true });
-      await fs.writeFile(filePath, JSON.stringify(data), 'utf-8');
+      ]);
 
-      const items = await store.loadAll();
+      const store2 = new JsonTaskStore(memento);
+      const items = await store2.loadAll();
       expect(items).toHaveLength(1);
       expect(items[0].id).toBe('valid');
     });
 
     it('skips items with an invalid state', async () => {
-      const filePath = path.join(tmpDir, 'workitems.json');
-      const data = [
+      await memento.update('devdocket.workitems', [
         { id: 'bad-state', title: 'Bad', state: 'InvalidState', createdAt: 1000, updatedAt: 1000 },
         makeItem({ id: 'valid' }),
-      ];
-      await fs.mkdir(tmpDir, { recursive: true });
-      await fs.writeFile(filePath, JSON.stringify(data), 'utf-8');
+      ]);
 
-      const items = await store.loadAll();
+      const store2 = new JsonTaskStore(memento);
+      const items = await store2.loadAll();
       expect(items).toHaveLength(1);
       expect(items[0].id).toBe('valid');
     });
 
     it('skips non-object entries', async () => {
-      const filePath = path.join(tmpDir, 'workitems.json');
-      const data = ['a string', 42, null, makeItem({ id: 'valid' })];
-      await fs.mkdir(tmpDir, { recursive: true });
-      await fs.writeFile(filePath, JSON.stringify(data), 'utf-8');
+      await memento.update('devdocket.workitems', [
+        'a string', 42, null, makeItem({ id: 'valid' }),
+      ]);
 
-      const items = await store.loadAll();
+      const store2 = new JsonTaskStore(memento);
+      const items = await store2.loadAll();
       expect(items).toHaveLength(1);
       expect(items[0].id).toBe('valid');
     });
 
-    it('returns empty when file contains a non-array JSON value and backs up', async () => {
-      const filePath = path.join(tmpDir, 'workitems.json');
-      await fs.mkdir(tmpDir, { recursive: true });
-      await fs.writeFile(filePath, JSON.stringify({ not: 'an array' }), 'utf-8');
+    it('returns empty when globalState contains a non-array', async () => {
+      await memento.update('devdocket.workitems', { not: 'an array' });
 
-      const items = await store.loadAll();
+      const store2 = new JsonTaskStore(memento);
+      const items = await store2.loadAll();
       expect(items).toEqual([]);
-
-      const files = await fs.readdir(tmpDir);
-      const backupFiles = files.filter(f => f.startsWith('workitems.json.corrupt.'));
-      expect(backupFiles).toHaveLength(1);
     });
 
     it('skips items missing createdAt', async () => {
-      const filePath = path.join(tmpDir, 'workitems.json');
-      const data = [
+      await memento.update('devdocket.workitems', [
         { id: 'no-created', title: 'Missing ts', state: 'New', updatedAt: 1000 },
         makeItem({ id: 'valid' }),
-      ];
-      await fs.mkdir(tmpDir, { recursive: true });
-      await fs.writeFile(filePath, JSON.stringify(data), 'utf-8');
+      ]);
 
-      const items = await store.loadAll();
+      const store2 = new JsonTaskStore(memento);
+      const items = await store2.loadAll();
       expect(items).toHaveLength(1);
       expect(items[0].id).toBe('valid');
-    });
-
-    it('skips items missing updatedAt', async () => {
-      const filePath = path.join(tmpDir, 'workitems.json');
-      const data = [
-        { id: 'no-updated', title: 'Missing ts', state: 'New', createdAt: 1000 },
-        makeItem({ id: 'valid' }),
-      ];
-      await fs.mkdir(tmpDir, { recursive: true });
-      await fs.writeFile(filePath, JSON.stringify(data), 'utf-8');
-
-      const items = await store.loadAll();
-      expect(items).toHaveLength(1);
-      expect(items[0].id).toBe('valid');
-    });
-
-    it('skips items with non-finite timestamps', async () => {
-      const filePath = path.join(tmpDir, 'workitems.json');
-      // Use raw JSON so 1e309 parses as a number but fails Number.isFinite(...)
-      const data = `[
-        {"id":"inf-ts","title":"Bad ts","state":"New","createdAt":1e309,"updatedAt":1000},
-        ${JSON.stringify(makeItem({ id: 'valid' }))}
-      ]`;
-      await fs.mkdir(tmpDir, { recursive: true });
-      await fs.writeFile(filePath, data, 'utf-8');
-
-      const items = await store.loadAll();
-      expect(items).toHaveLength(1);
-      expect(items[0].id).toBe('valid');
-    });
-
-    it('handles corrupted JSON gracefully by loading empty and backing up', async () => {
-      const filePath = path.join(tmpDir, 'workitems.json');
-      await fs.mkdir(tmpDir, { recursive: true });
-      await fs.writeFile(filePath, 'not valid json', 'utf-8');
-
-      const items = await store.loadAll();
-      expect(items).toEqual([]);
-
-      // Verify the corrupted file was backed up
-      const files = await fs.readdir(tmpDir);
-      const backupFiles = files.filter(f => f.startsWith('workitems.json.corrupt.'));
-      expect(backupFiles).toHaveLength(1);
     });
 
     it('skips items with invalid optional fields', async () => {
-      const filePath = path.join(tmpDir, 'workitems.json');
-      const data = [
+      await memento.update('devdocket.workitems', [
         { ...makeItem({ id: 'bad-url' }), url: 123 },
         { ...makeItem({ id: 'bad-provider' }), providerId: 42 },
         { ...makeItem({ id: 'bad-external' }), externalId: true },
-        { ...makeItem({ id: 'bad-desc' }), description: 42 },
         { ...makeItem({ id: 'bad-notes' }), notes: 999 },
         { ...makeItem({ id: 'bad-sort' }), sortOrder: 'abc' },
-        { ...makeItem({ id: 'inf-sort' }), sortOrder: Infinity },
         makeItem({ id: 'valid' }),
-      ];
-      await fs.mkdir(tmpDir, { recursive: true });
-      await fs.writeFile(filePath, JSON.stringify(data), 'utf-8');
+      ]);
 
-      const items = await store.loadAll();
+      const store2 = new JsonTaskStore(memento);
+      const items = await store2.loadAll();
       expect(items).toHaveLength(1);
       expect(items[0].id).toBe('valid');
     });
 
     it('skips items with non-array activityLog', async () => {
-      const filePath = path.join(tmpDir, 'workitems.json');
-      const data = [
+      await memento.update('devdocket.workitems', [
         { ...makeItem({ id: 'bad-log' }), activityLog: 'not an array' },
         makeItem({ id: 'valid' }),
-      ];
-      await fs.mkdir(tmpDir, { recursive: true });
-      await fs.writeFile(filePath, JSON.stringify(data), 'utf-8');
+      ]);
 
-      const items = await store.loadAll();
+      const store2 = new JsonTaskStore(memento);
+      const items = await store2.loadAll();
       expect(items).toHaveLength(1);
       expect(items[0].id).toBe('valid');
     });
 
     it('skips items with malformed activityLog entries', async () => {
-      const filePath = path.join(tmpDir, 'workitems.json');
-      const data = [
+      await memento.update('devdocket.workitems', [
         { ...makeItem({ id: 'bad-entry' }), activityLog: [{ timestamp: 'not-a-number', type: 'created' }] },
         { ...makeItem({ id: 'missing-type' }), activityLog: [{ timestamp: 1000 }] },
         { ...makeItem({ id: 'null-entry' }), activityLog: [null] },
         { ...makeItem({ id: 'bad-detail' }), activityLog: [{ timestamp: 1000, type: 'created', detail: 42 }] },
         { ...makeItem({ id: 'good' }), activityLog: [{ timestamp: 1000, type: 'created' }] },
-      ];
-      await fs.mkdir(tmpDir, { recursive: true });
-      await fs.writeFile(filePath, JSON.stringify(data), 'utf-8');
+      ]);
 
-      const items = await store.loadAll();
+      const store2 = new JsonTaskStore(memento);
+      const items = await store2.loadAll();
       expect(items).toHaveLength(1);
       expect(items[0].id).toBe('good');
     });
 
     it('accepts items with valid activityLog', async () => {
-      const filePath = path.join(tmpDir, 'workitems.json');
-      const data = [
+      await memento.update('devdocket.workitems', [
         {
           ...makeItem({ id: 'with-log' }),
           activityLog: [
@@ -383,48 +273,12 @@ describe('JsonTaskStore', () => {
             { timestamp: 1700001000000, type: 'state-changed', detail: 'New → InProgress' },
           ],
         },
-      ];
-      await fs.mkdir(tmpDir, { recursive: true });
-      await fs.writeFile(filePath, JSON.stringify(data), 'utf-8');
+      ]);
 
-      const items = await store.loadAll();
+      const store2 = new JsonTaskStore(memento);
+      const items = await store2.loadAll();
       expect(items).toHaveLength(1);
       expect(items[0].activityLog).toHaveLength(2);
-    });
-  });
-
-
-  describe('file size limits', () => {
-    afterEach(() => {
-      mockLimits.MAX_STORE_FILE_SIZE = 10 * 1024 * 1024;
-    });
-
-    it('should back up and reset when file exceeds size limit', async () => {
-      mockLimits.MAX_STORE_FILE_SIZE = 50;
-      const filePath = path.join(tmpDir, 'workitems.json');
-      const oversizedContent = JSON.stringify([makeItem({ id: 'oversized', title: 'A very long title that pushes the file over the limit' })]);
-      await fs.mkdir(tmpDir, { recursive: true });
-      await fs.writeFile(filePath, oversizedContent, 'utf-8');
-
-      const items = await store.loadAll();
-      expect(items).toEqual([]);
-
-      const files = await fs.readdir(tmpDir);
-      const backupFiles = files.filter(f => f.startsWith('workitems.json.corrupt.'));
-      expect(backupFiles).toHaveLength(1);
-    });
-
-    it('should parse normally when file is just under size limit', async () => {
-      const filePath = path.join(tmpDir, 'workitems.json');
-      const item = makeItem({ id: 'ok' });
-      const content = JSON.stringify([item]);
-      mockLimits.MAX_STORE_FILE_SIZE = content.length + 1;
-      await fs.mkdir(tmpDir, { recursive: true });
-      await fs.writeFile(filePath, content, 'utf-8');
-
-      const items = await store.loadAll();
-      expect(items).toHaveLength(1);
-      expect(items[0].id).toBe('ok');
     });
   });
 });

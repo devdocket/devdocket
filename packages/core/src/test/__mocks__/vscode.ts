@@ -162,6 +162,23 @@ class MockDisposable {
   dispose() { this.callback(); }
 }
 
+class MockMemento {
+  private store = new Map<string, unknown>();
+  keys(): readonly string[] { return [...this.store.keys()]; }
+  get<T>(key: string): T | undefined;
+  get<T>(key: string, defaultValue: T): T;
+  get<T>(key: string, defaultValue?: T): T | undefined {
+    if (!this.store.has(key)) { return defaultValue; }
+    // Deep-clone on read to match real Memento JSON round-trip behavior
+    return JSON.parse(JSON.stringify(this.store.get(key))) as T;
+  }
+  async update(key: string, value: unknown): Promise<void> {
+    if (value === undefined) { this.store.delete(key); }
+    // Deep-clone on write to match real Memento JSON serialization
+    else { this.store.set(key, JSON.parse(JSON.stringify(value))); }
+  }
+}
+
 const workspace = {
   getConfiguration: vi.fn().mockReturnValue({
     get: vi.fn((key: string, defaultValue?: any) => defaultValue),
@@ -210,6 +227,8 @@ export {
   MockCancellationTokenSource as CancellationTokenSource,
   MockDisposable as Disposable,
   MockStatusBarItem as StatusBarItem,
+  MockMemento,
+  MockMemento as Memento,
   TreeItemCollapsibleState,
   ViewColumn,
   ConfigurationTarget,

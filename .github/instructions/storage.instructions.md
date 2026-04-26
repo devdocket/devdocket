@@ -4,17 +4,17 @@ applyTo: "**/storage/**"
 
 # Storage Conventions
 
-## Write Queue Serialization
+## Memento-backed Stores
 
-All JSON-backed stores extend `SerializedJsonStore` (in `serializedJsonStore.ts`), which provides a **writeQueue** (promise chain) via `enqueue()` to prevent concurrent writes from corrupting JSON files. New stores should extend this base class rather than implementing their own queue.
+All stores persist data via VS Code's `Memento` (`globalState`) API. Each store takes a `Memento` in its constructor and writes via `this.globalState.update(key, data)`.
 
-### Base Class Helpers
+Most stores (e.g., `JsonTaskStore`, `DiscoveredStateStore`, `ReadStateStore`) maintain an in-memory cache populated on first load and expose a private `persist()` method. Simpler stores (e.g., `WatchStore`) read/write directly without a cache. Loading methods vary by store (`loadAll()`, `load()`).
 
-- `enqueue(op)` — Serializes write operations through a promise chain.
-- `readJson(filePath, maxSize?)` — Reads, stat-checks, and parses a JSON file with corruption guards and backup.
-- `writeJson(filePath, data)` — Writes pretty-printed JSON, creating the directory if needed.
-- `backupFile(filePath)` — Renames corrupt files with a `.corrupt.<timestamp>` suffix.
-- `flush()` — Returns a promise that resolves when all queued writes complete.
+Because `globalState.update()` is atomic from the extension's perspective, there is no write-queue or file-level locking. Stores no longer extend a base class.
+
+## One-time Migration
+
+`migrateToGlobalState()` in `migration.ts` handles the one-off migration from legacy JSON files (in `globalStorageUri`) to globalState. It is idempotent — guarded by the `devdocket.migrated` flag — and only marks migration complete when every file either migrated successfully or was confirmed absent.
 
 ### Field Validators
 
@@ -37,11 +37,14 @@ return requiredString(obj, 'id', ctx)
 
 ## Data Stores
 
-Two JSON files live in `globalStorageUri`:
+Five globalState keys hold persisted data:
 
-- **`workitems.json`** — Persisted WorkItems with state machine lifecycle (`New` → `InProgress` → `Done` → `Archived`).
-- **`discovered-state.json`** — Thin index mapping `providerId + externalId` → `InboxState` (`unseen` | `accepted` | `dismissed`). Provider item data (title, description, url) is **not persisted** — always read live from the provider.
+- **`devdocket.workitems`** — Persisted WorkItems with state machine lifecycle (`New` → `InProgress` → `Done` → `Archived`).
+- **`devdocket.discovered-state`** — Thin index mapping `providerId + externalId` → `InboxState` (`unseen` | `accepted` | `dismissed`). Provider item data (title, description, url) is **not persisted** — always read live from the provider.
+- **`devdocket.read-state`** — Set of inbox item IDs the user has viewed.
+- **`devdocket.provider-labels`** — Cached mapping of `providerId` → display label (for example, `"github"` → `"GitHub Issues"`).
+- **`devdocket.watches`** — User-configured watch entries.
 
 ## Provider Items Are References, Not Copies
 
-Items in Inbox and Sources are read live from the provider's in-memory data. The only persisted state is the `inboxState` enum. This keeps data fresh and avoids stale copies. Never cache or persist provider item data beyond the thin `discovered-state.json` index.
+Items in Inbox and Sources are read live from the provider's in-memory data. The only persisted state is the `inboxState` enum. This keeps data fresh and avoids stale copies. Never cache or persist provider item data beyond the thin `devdocket.discovered-state` globalState entry.

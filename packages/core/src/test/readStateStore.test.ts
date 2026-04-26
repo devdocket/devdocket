@@ -1,39 +1,27 @@
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import * as fs from 'fs/promises';
-import * as path from 'path';
-import * as os from 'os';
+import { describe, it, expect, beforeEach } from 'vitest';
+import { MockMemento } from 'vscode';
 import { ReadStateStore } from '../storage/readStateStore';
 
-const mockLimits = vi.hoisted(() => ({ MAX_STORE_FILE_SIZE: 10 * 1024 * 1024 }));
-vi.mock('../storage/limits', () => mockLimits);
-
 describe('ReadStateStore', () => {
-  let tmpDir: string;
+  let memento: InstanceType<typeof MockMemento>;
   let store: ReadStateStore;
 
-  beforeEach(async () => {
-    tmpDir = await fs.mkdtemp(path.join(os.tmpdir(), 'devdocket-readstate-test-'));
-    store = new ReadStateStore(tmpDir);
+  beforeEach(() => {
+    memento = new MockMemento();
+    store = new ReadStateStore(memento);
   });
 
-  afterEach(async () => {
-    await store.flush();
-    await fs.rm(tmpDir, { recursive: true, force: true });
-  });
-
-  it('should return false for has() when file is missing on load', async () => {
+  it('should return false for has() when no data exists on load', async () => {
     await store.load();
     expect(store.has('gh::1')).toBe(false);
   });
 
-  it('should add a key and persist to disk', async () => {
+  it('should add a key and persist to globalState', async () => {
     await store.load();
     expect(await store.add('gh::issue-1')).toBe(true);
-    await store.flush();
 
-    const filePath = path.join(tmpDir, 'read-state.json');
-    const raw = await fs.readFile(filePath, 'utf-8');
-    expect(JSON.parse(raw)).toEqual(['gh::issue-1']);
+    const persisted = memento.get<string[]>('devdocket.read-state');
+    expect(persisted).toEqual(['gh::issue-1']);
   });
 
   it('should return false when adding a duplicate key', async () => {
@@ -60,9 +48,8 @@ describe('ReadStateStore', () => {
     expect(store.has('gh::2')).toBe(true);
     expect(store.has('gh::3')).toBe(false);
 
-    const filePath = path.join(tmpDir, 'read-state.json');
-    const raw = await fs.readFile(filePath, 'utf-8');
-    expect(JSON.parse(raw)).toEqual(['gh::2']);
+    const persisted = memento.get<string[]>('devdocket.read-state');
+    expect(persisted).toEqual(['gh::2']);
   });
 
   it('should ignore non-existent keys in deleteMany', async () => {
@@ -85,144 +72,36 @@ describe('ReadStateStore', () => {
     await store.load();
     await store.add('gh::1');
     await store.add('jira::2');
-    await store.flush();
 
-    const store2 = new ReadStateStore(tmpDir);
+    const store2 = new ReadStateStore(memento);
     await store2.load();
     expect(store2.has('gh::1')).toBe(true);
     expect(store2.has('jira::2')).toBe(true);
     expect(store2.has('gh::3')).toBe(false);
   });
 
-  it('should handle corrupted JSON by backing up and loading empty', async () => {
-    const filePath = path.join(tmpDir, 'read-state.json');
-    await fs.writeFile(filePath, 'not valid json', 'utf-8');
-
-    await store.load();
-    expect([...store.keys()]).toEqual([]);
-
-    const files = await fs.readdir(tmpDir);
-    const backupFiles = files.filter(f => f.startsWith('read-state.json.corrupt.'));
-    expect(backupFiles).toHaveLength(1);
-  });
-
-  it('should handle non-array JSON by backing up and resetting', async () => {
-    const filePath = path.join(tmpDir, 'read-state.json');
-    await fs.writeFile(filePath, JSON.stringify({ not: 'an array' }), 'utf-8');
-
-    await store.load();
-    expect([...store.keys()]).toEqual([]);
-
-    const files = await fs.readdir(tmpDir);
-    const backupFiles = files.filter(f => f.startsWith('read-state.json.corrupt.'));
-    expect(backupFiles).toHaveLength(1);
-  });
-
   it('should skip non-string elements in the array', async () => {
-    const filePath = path.join(tmpDir, 'read-state.json');
-    await fs.writeFile(
-      filePath,
-      JSON.stringify(['valid::1', 42, null, true, 'valid::2', { obj: true }]),
-      'utf-8',
-    );
+    await memento.update('devdocket.read-state', ['valid::1', 42, null, true, 'valid::2', { obj: true }]);
 
-    await store.load();
-    const keys = [...store.keys()].sort();
+    const store2 = new ReadStateStore(memento);
+    await store2.load();
+    const keys = [...store2.keys()].sort();
     expect(keys).toEqual(['valid::1', 'valid::2']);
-  });
-
-  describe('file size limits', () => {
-    afterEach(() => {
-      mockLimits.MAX_STORE_FILE_SIZE = 10 * 1024 * 1024;
-    });
-
-    it('should back up and reset when file exceeds size limit', async () => {
-      mockLimits.MAX_STORE_FILE_SIZE = 50;
-      const filePath = path.join(tmpDir, 'read-state.json');
-      const oversizedContent = JSON.stringify(['a'.repeat(60)]);
-      await fs.writeFile(filePath, oversizedContent, 'utf-8');
-
-      await store.load();
-      expect([...store.keys()]).toEqual([]);
-
-      const files = await fs.readdir(tmpDir);
-      const backupFiles = files.filter(f => f.startsWith('read-state.json.corrupt.'));
-      expect(backupFiles).toHaveLength(1);
-    });
-
-    it('should parse normally when file is just under size limit', async () => {
-      const filePath = path.join(tmpDir, 'read-state.json');
-      const content = JSON.stringify(['gh::1', 'gh::2']);
-      mockLimits.MAX_STORE_FILE_SIZE = content.length + 1;
-      await fs.writeFile(filePath, content, 'utf-8');
-
-      await store.load();
-      expect(store.has('gh::1')).toBe(true);
-      expect(store.has('gh::2')).toBe(true);
-    });
-  });
-
-  it('should create storage directory if it does not exist', async () => {
-    const nestedDir = path.join(tmpDir, 'nested', 'path');
-    const nestedStore = new ReadStateStore(nestedDir);
-    await nestedStore.load();
-    await nestedStore.add('gh::1');
-    await nestedStore.flush();
-
-    const filePath = path.join(nestedDir, 'read-state.json');
-    const raw = await fs.readFile(filePath, 'utf-8');
-    expect(JSON.parse(raw)).toEqual(['gh::1']);
   });
 
   it('should only load once (idempotent)', async () => {
     await store.load();
     await store.add('gh::1');
-    await store.flush();
 
     // Second load should be a no-op
     await store.load();
     expect(store.has('gh::1')).toBe(true);
   });
 
-  it('should rollback in-memory state when write fails', async () => {
-    await store.load();
-
-    // Point the store at an invalid path to trigger a write error.
-    const originalPath = (store as any).filePath;
-    (store as any).filePath = path.join(tmpDir, '\0invalid');
-
-    await expect(store.add('gh::fail')).rejects.toThrow();
-    expect(store.has('gh::fail')).toBe(false);
-
-    // Restore path and reset write queue so afterEach cleanup succeeds
-    (store as any).filePath = originalPath;
-    (store as any).writeQueue = Promise.resolve();
-  });
-
-  it('should propagate write errors from deleteMany', async () => {
-    await store.load();
-    await store.add('gh::1');
-    await store.flush();
-
-    // Point to invalid path to trigger write error
-    const originalPath = (store as any).filePath;
-    (store as any).filePath = path.join(tmpDir, '\0invalid');
-
-    await expect(store.deleteMany(['gh::1'])).rejects.toThrow();
-
-    // Verify rollback - key should still be present
-    expect(store.has('gh::1')).toBe(true);
-
-    // Restore path and reset write queue so afterEach cleanup succeeds
-    (store as any).filePath = originalPath;
-    (store as any).writeQueue = Promise.resolve();
-  });
-
   it('should auto-load when deleteMany() is called before load()', async () => {
-    const filePath = path.join(tmpDir, 'read-state.json');
-    await fs.writeFile(filePath, JSON.stringify(['gh::existing', 'gh::remove']), 'utf-8');
+    await memento.update('devdocket.read-state', ['gh::existing', 'gh::remove']);
 
-    const freshStore = new ReadStateStore(tmpDir);
+    const freshStore = new ReadStateStore(memento);
     await freshStore.deleteMany(['gh::remove']);
 
     expect(freshStore.has('gh::existing')).toBe(true);
@@ -230,15 +109,30 @@ describe('ReadStateStore', () => {
   });
 
   it('should auto-load when add() is called before load()', async () => {
-    // Write existing state to disk first
-    const filePath = path.join(tmpDir, 'read-state.json');
-    await fs.writeFile(filePath, JSON.stringify(['gh::existing']), 'utf-8');
+    await memento.update('devdocket.read-state', ['gh::existing']);
 
-    const freshStore = new ReadStateStore(tmpDir);
-    // Call add() without calling load() first
+    const freshStore = new ReadStateStore(memento);
     await freshStore.add('gh::new');
 
     expect(freshStore.has('gh::existing')).toBe(true);
     expect(freshStore.has('gh::new')).toBe(true);
+  });
+
+  it('addMany returns newly added keys', async () => {
+    await store.load();
+    await store.add('gh::existing');
+
+    const newlyAdded = await store.addMany(['gh::existing', 'gh::new-1', 'gh::new-2']);
+    expect(newlyAdded.sort()).toEqual(['gh::new-1', 'gh::new-2']);
+
+    expect(store.has('gh::existing')).toBe(true);
+    expect(store.has('gh::new-1')).toBe(true);
+    expect(store.has('gh::new-2')).toBe(true);
+  });
+
+  it('addMany with empty array returns empty', async () => {
+    await store.load();
+    const result = await store.addMany([]);
+    expect(result).toEqual([]);
   });
 });

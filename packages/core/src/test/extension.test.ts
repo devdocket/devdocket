@@ -1,8 +1,9 @@
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
 import * as vscode from 'vscode';
+import { MockMemento } from 'vscode';
 import { activate, deactivate, logger } from '../extension';
 
-// Stub fs so stores never touch disk
+// Stub fs so migration never touches disk
 vi.mock('fs/promises', () => ({
   readFile: vi.fn().mockRejectedValue(Object.assign(new Error('ENOENT'), { code: 'ENOENT' })),
   writeFile: vi.fn().mockResolvedValue(undefined),
@@ -15,6 +16,7 @@ function createExtensionContext(overrides?: Partial<vscode.ExtensionContext>): v
   return {
     subscriptions: subs,
     globalStorageUri: { fsPath: '/fake/storage' } as any,
+    globalState: new MockMemento(),
     ...overrides,
   } as unknown as vscode.ExtensionContext;
 }
@@ -220,8 +222,8 @@ describe('activate()', () => {
   // 10. State migration: provider-backed items without inbox state get accepted
   // ------------------------------------------------------------------
   it('migrates provider-backed work items to accepted state', async () => {
-    // Seed the store with a work item that has provider info
-    const fs = await import('fs/promises');
+    // Seed the store with a work item that has provider info via globalState
+    const globalState = context.globalState as InstanceType<typeof MockMemento>;
     const workItems = [
       {
         id: 'migr-1',
@@ -233,21 +235,20 @@ describe('activate()', () => {
         updatedAt: Date.now(),
       },
     ];
-    (fs.readFile as ReturnType<typeof vi.fn>)
-      .mockResolvedValueOnce(JSON.stringify(workItems))   // workitems.json
-      .mockRejectedValueOnce(Object.assign(new Error('ENOENT'), { code: 'ENOENT' })); // discovered-state.json
-    (fs.stat as ReturnType<typeof vi.fn>)
-      .mockResolvedValueOnce({ size: 100, isFile: () => true }); // workitems.json stat
+    // Pre-populate globalState so stores load the work item
+    await globalState.update('devdocket.workitems', workItems);
+    // Mark migration as done so migrateToGlobalState is skipped
+    await globalState.update('devdocket.migrated', true);
 
     await activate(context);
 
-    // The writeFile call should include the migration state
-    expect(fs.writeFile).toHaveBeenCalled();
-    const writeCalls = (fs.writeFile as ReturnType<typeof vi.fn>).mock.calls;
-    const stateWriteCall = writeCalls.find((c: any[]) =>
-      typeof c[1] === 'string' && c[1].includes('"accepted"'),
+    // The discovered state should contain the accepted state in globalState
+    const discoveredState = globalState.get<unknown[]>('devdocket.discovered-state');
+    expect(discoveredState).toBeDefined();
+    const acceptedRecord = (discoveredState as any[]).find(
+      (r: any) => r.providerId === 'gh' && r.externalId === 'ext-99' && r.inboxState === 'accepted',
     );
-    expect(stateWriteCall).toBeDefined();
+    expect(acceptedRecord).toBeDefined();
   });
 
   // ------------------------------------------------------------------

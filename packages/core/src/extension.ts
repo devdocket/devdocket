@@ -5,6 +5,7 @@ import { JsonTaskStore } from './storage/jsonTaskStore';
 import { DiscoveredStateStore } from './storage/discoveredStateStore';
 import { ReadStateStore } from './storage/readStateStore';
 import { ProviderLabelCache } from './storage/providerLabelCache';
+import { migrateToGlobalState } from './storage/migration';
 import { WorkGraph } from './services/workGraph';
 import { ProviderRegistry } from './services/providerRegistry';
 import { checkAutoComplete, showAutoCompleteNotification } from './services/autoComplete';
@@ -69,21 +70,21 @@ function initializeLogging(context: vscode.ExtensionContext): void {
   );
 }
 
-async function loadStores(storagePath: string): Promise<{ workGraph: WorkGraph; stateStore: DiscoveredStateStore; readStateStore: ReadStateStore; labelCache: ProviderLabelCache }> {
-  const store = new JsonTaskStore(storagePath);
+async function loadStores(globalState: vscode.Memento): Promise<{ workGraph: WorkGraph; stateStore: DiscoveredStateStore; readStateStore: ReadStateStore; labelCache: ProviderLabelCache }> {
+  const store = new JsonTaskStore(globalState);
   const wg = new WorkGraph(store);
   await wg.load();
   logger.debug(`Loaded ${wg.getAll().length} work items`);
 
-  const ss = new DiscoveredStateStore(storagePath);
+  const ss = new DiscoveredStateStore(globalState);
   await ss.load();
   logger.debug('Loaded discovered state');
 
-  const readStateStore = new ReadStateStore(storagePath);
+  const readStateStore = new ReadStateStore(globalState);
   await readStateStore.load();
   logger.debug('Loaded read state');
 
-  const labelCache = new ProviderLabelCache(storagePath);
+  const labelCache = new ProviderLabelCache(globalState);
   try {
     await labelCache.load();
     logger.debug('Loaded provider label cache');
@@ -394,7 +395,8 @@ export async function activate(context: vscode.ExtensionContext): Promise<DevDoc
 
   const initStart = performance.now();
   const storagePath = context.globalStorageUri.fsPath;
-  const { workGraph: wg, stateStore: ss, readStateStore, labelCache } = await loadStores(storagePath);
+  await migrateToGlobalState(context.globalState, storagePath);
+  const { workGraph: wg, stateStore: ss, readStateStore, labelCache } = await loadStores(context.globalState);
   await migrateDiscoveredState(wg, ss);
 
   const pr = new ProviderRegistry(
@@ -408,7 +410,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<DevDoc
   const ar = new ActionRegistry();
   const wr = new WatcherRegistry(logger);
   const pwr = new PRWatcherRegistry(logger);
-  const watchStore = new WatchStore(storagePath);
+  const watchStore = new WatchStore(context.globalState);
   const ws = new WatcherService(wr, pwr, watchStore, logger);
   const api = new DevDocketApiImpl(pr, ar, wr, pwr, wg);
   logger.info(`Store + service init took ${Math.round(performance.now() - initStart)}ms`);
