@@ -155,7 +155,7 @@ describe('AdoWorkItemProvider', () => {
     expect(items[0].description).toBe('Bold text link');
   });
 
-  it('truncates description to 200 chars', async () => {
+  it('passes full description without truncation after stripping HTML', async () => {
     const longDescription = '<p>' + 'A'.repeat(300) + '</p>';
     mockFetch
       .mockResolvedValueOnce({
@@ -180,7 +180,7 @@ describe('AdoWorkItemProvider', () => {
     await provider.refresh();
 
     const items = listener.mock.calls[0][0];
-    expect(items[0].description!.length).toBe(200);
+    expect(items[0].description!.length).toBe(300);
   });
 
   it('fires empty items when WIQL returns no work items', async () => {

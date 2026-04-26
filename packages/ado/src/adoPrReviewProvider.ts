@@ -300,7 +300,7 @@ export class AdoPrReviewProvider extends BaseProvider {
       return {
         externalId: `${org}/${projectName}/${repoName}/${pr.pullRequestId}`,
         title: `PR ${pr.pullRequestId}: ${pr.title}`,
-        description: pr.description?.slice(0, 200),
+        description: pr.description ?? undefined,
         url: `${repoUrl}/pullrequest/${pr.pullRequestId}`,
         group: `${projectName}/${repoName}`,
         reason: 'review_requested',
