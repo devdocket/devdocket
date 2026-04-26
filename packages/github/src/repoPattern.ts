@@ -6,15 +6,15 @@ export interface RepoPattern {
 
 /**
  * Parse a multiline config string into an array of repo patterns.
- * Supports gitignore-style syntax: full-line and inline comments (#),
- * negation (!), and wildcards (*).
+ * Supports gitignore-style syntax: full-line comments (lines starting with #),
+ * trailing comments (# preceded by whitespace), negation (!), and wildcards (*).
  */
 export function parseRepoPatterns(config: string): RepoPattern[] {
   const lines = config.split('\n');
   const patterns: RepoPattern[] = [];
 
   for (const rawLine of lines) {
-    // Strip inline comments (# preceded by whitespace) and trim
+    // Strip trailing comments (# preceded by whitespace) and trim
     const line = rawLine.replace(/\s+#.*$/, '').trim();
     if (line === '' || line.startsWith('#')) {
       continue;
