@@ -75,6 +75,23 @@ Providers emit `DiscoveredItem[]` via events. Actions declare `canRun(item)` and
 
 All work should be based from the `dev` branch. Create feature branches from `dev` and PR back to `dev`.
 
+### Use git worktrees for feature branches
+
+Always use `git worktree` to work on feature branches instead of switching branches in the main checkout. This keeps the main working tree on `dev` and avoids disrupting other work. Use the `using-git-worktrees` skill when available.
+
+```bash
+# Create a worktree for a feature branch
+git worktree add ../devdocket-description-sync-391 -b description-sync-391 dev
+
+# Work in the worktree
+cd ../devdocket-description-sync-391
+
+# Clean up after merging
+git worktree remove ../devdocket-description-sync-391
+```
+
+Never use `git checkout` or `git switch` to move the main working tree off `dev`.
+
 ### Use merge commits, not rebase
 
 When resolving merge conflicts or syncing with `dev`, use `git merge origin/dev` instead of `git rebase`. This preserves commit history and avoids force-push issues.
