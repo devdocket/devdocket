@@ -304,7 +304,7 @@ export class AdoWorkItemProvider extends BaseProvider {
       return {
         externalId: `${org}/${projectName}/${wi.id}`,
         title: `${wiType} ${wi.id}: ${wi.fields['System.Title']}`,
-        description: wi.fields['System.Description']?.replace(/<[^>]*>/g, '') ?? undefined,
+        description: wi.fields['System.Description']?.replace(/<[^>]*(>|$)/g, '') ?? undefined,
         url: wi._links.html.href,
         group: `${org}/${projectName}`,
         reason: 'assigned',
