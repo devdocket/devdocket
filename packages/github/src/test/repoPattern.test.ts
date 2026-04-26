@@ -77,6 +77,12 @@ describe('parseRepoPatterns', () => {
     expect(parseRepoPatterns('')).toHaveLength(0);
   });
 
+  it('skips patterns without a slash (invalid owner/repo format)', () => {
+    const patterns = parseRepoPatterns('noslash\nowner/repo');
+    expect(patterns).toHaveLength(1);
+    expect(patterns[0].pattern).toBe('owner/repo');
+  });
+
   it('returns empty for comments-only config', () => {
     expect(parseRepoPatterns('# comment\n# another')).toHaveLength(0);
   });

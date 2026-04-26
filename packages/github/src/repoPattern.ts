@@ -31,6 +31,11 @@ export function parseRepoPatterns(config: string): RepoPattern[] {
       continue;
     }
 
+    // Patterns must be in owner/repo format to match GitHub repo names
+    if (!patternText.includes('/')) {
+      continue;
+    }
+
     const regex = patternToRegex(patternText);
     patterns.push({ pattern: isNegation ? `!${patternText}` : patternText, isNegation, regex });
   }
