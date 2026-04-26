@@ -132,9 +132,7 @@ export class GitHubMyPrsProvider extends BaseGitHubProvider {
 
     const failures = [...new Set([...authoredResult.failures, ...assignedResult.failures])];
     if (failures.length > 0) {
-      const message = failures.length === 1
-        ? `Failed to fetch PRs from ${failures[0]}`
-        : `Failed to fetch PRs from ${failures.length} repositories`;
+      const message = 'Failed to fetch PRs';
       if (isUserTriggered) {
         void vscode.window.showWarningMessage(`DevDocket GitHub: ${message}`);
       } else {
@@ -160,12 +158,12 @@ export class GitHubMyPrsProvider extends BaseGitHubProvider {
     } catch (err: unknown) {
       if (err instanceof Error && err.name === 'AbortError') { throw err; }
       logger.error('Failed to fetch authored PRs', err);
-      return { prs: [], failures: ['global fetch'] };
+      return { prs: [], failures: ['authored PR search'] };
     }
 
     if (!response.ok) {
       logger.error(`Failed to fetch authored PRs: ${response.status}`);
-      return { prs: [], failures: ['global fetch'] };
+      return { prs: [], failures: ['authored PR search'] };
     }
 
     const data = (await response.json()) as GitHubSearchResponse;
@@ -189,12 +187,12 @@ export class GitHubMyPrsProvider extends BaseGitHubProvider {
     } catch (err: unknown) {
       if (err instanceof Error && err.name === 'AbortError') { throw err; }
       logger.error('Failed to fetch assigned PRs', err);
-      return { prs: [], failures: ['global fetch'] };
+      return { prs: [], failures: ['assigned PR search'] };
     }
 
     if (!response.ok) {
       logger.error(`Failed to fetch assigned PRs: ${response.status}`);
-      return { prs: [], failures: ['global fetch'] };
+      return { prs: [], failures: ['assigned PR search'] };
     }
 
     const data = (await response.json()) as GitHubSearchResponse;
