@@ -1,1 +1,0 @@
-Acknowledged — the function is module-private and the name is documented with a JSDoc comment explaining it blocks argument injection. Renaming would be a style preference without functional impact, so leaving as-is.

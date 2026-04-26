@@ -1,1 +1,0 @@
-Fixed in a9fca42 — changed test ref to `--malicious` to directly test the leading-hyphen check.

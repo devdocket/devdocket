@@ -1,1 +1,0 @@
-Fixed in a9fca42 — both helpers now accept `unknown` and validate `typeof` before calling string methods.

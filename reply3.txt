@@ -1,1 +1,0 @@
-Fixed in a9fca42 — `isValidCloneUrl` now rejects whitespace/control characters and validates `https://` URLs via `new URL()` with hostname check. Kept `git@` prefix-only check since the scp-style format varies across providers.
