@@ -135,10 +135,10 @@ describe('GitHubMyPrsProvider', () => {
     expect(items[1].canonicalId).toBe('github:pull:owner/repo#2');
   });
 
-  it('uses search API with repos when configured', async () => {
+  it('uses global search and filters when repos configured', async () => {
     vi.mocked(workspace.getConfiguration).mockReturnValue({
       get: vi.fn((key: string, defaultValue?: any) => {
-        if (key === 'repos') { return ['myorg/myrepo']; }
+        if (key === 'filteredRepos') { return 'myorg/myrepo'; }
         return defaultValue;
       }),
     } as any);
@@ -149,12 +149,14 @@ describe('GitHubMyPrsProvider', () => {
     provider.onDidDiscoverItems(listener);
     await provider.refresh();
 
-    // 2 calls: author:@me and assignee:@me
+    // 2 calls: author:@me and assignee:@me (global, no repo: param)
     expect(mockFetch).toHaveBeenCalledTimes(2);
     const authorUrl = mockFetch.mock.calls.find((c: any[]) => c[0].includes('author:@me'))?.[0];
-    expect(authorUrl).toContain('repo:myorg/myrepo');
+    expect(authorUrl).toBeDefined();
+    expect(authorUrl).not.toContain('repo:');
     const assigneeUrl = mockFetch.mock.calls.find((c: any[]) => c[0].includes('assignee:@me'))?.[0];
-    expect(assigneeUrl).toContain('repo:myorg/myrepo');
+    expect(assigneeUrl).toBeDefined();
+    expect(assigneeUrl).not.toContain('repo:');
   });
 
   it('uses global search when no repos configured', async () => {
@@ -174,25 +176,14 @@ describe('GitHubMyPrsProvider', () => {
     expect(assigneeUrl).not.toContain('repo:');
   });
 
-  it('reports failures for individual repos', async () => {
-    vi.mocked(workspace.getConfiguration).mockReturnValue({
-      get: vi.fn((key: string, defaultValue?: any) => {
-        if (key === 'repos') { return ['good/repo', 'bad/repo']; }
-        return defaultValue;
-      }),
-    } as any);
-
-    mockFetch.mockImplementation(async (url: string) => {
-      if (url.includes('bad/repo')) {
-        return mockFailedResponse();
-      }
-      return mockSearchResponse([]);
-    });
+  it('reports failures for global fetch', async () => {
+    mockFetch.mockResolvedValue(mockFailedResponse());
 
     const listener = vi.fn();
     provider.onDidDiscoverItems(listener);
     await provider.refresh();
 
+    // Should still fire with empty items
     expect(listener).toHaveBeenCalledTimes(1);
     expect(listener.mock.calls[0][0]).toHaveLength(0);
   });
@@ -463,25 +454,6 @@ describe('GitHubMyPrsProvider', () => {
     expect(items[0].state).toBe('Ready to merge');
   });
 
-  it('fetches assigned PRs per-repo when repos configured', async () => {
-    vi.mocked(workspace.getConfiguration).mockReturnValue({
-      get: vi.fn((key: string, defaultValue?: any) => {
-        if (key === 'repos') { return ['myorg/myrepo']; }
-        return defaultValue;
-      }),
-    } as any);
-
-    mockFetch.mockResolvedValue(mockSearchResponse([]));
-
-    const listener = vi.fn();
-    provider.onDidDiscoverItems(listener);
-    await provider.refresh();
-
-    const assigneeCall = mockFetch.mock.calls.find((c: any[]) =>
-      c[0].includes('assignee:@me') && c[0].includes('repo:myorg/myrepo')
-    );
-    expect(assigneeCall).toBeDefined();
-  });
 });
 
 describe('GitHubMyPrsProvider.determinePrStatus', () => {

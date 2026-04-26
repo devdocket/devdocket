@@ -1,6 +1,7 @@
 import * as vscode from 'vscode';
 import { BaseProvider, DiscoveredItem } from '@devdocket/shared';
 import { logger } from './logger';
+import { parseRepoPatterns, type RepoPattern } from './repoPattern';
 
 /**
  * Base class for GitHub providers that handles the common authentication
@@ -96,4 +97,15 @@ export abstract class BaseGitHubProvider extends BaseProvider {
     isUserTriggered: boolean,
     signal?: AbortSignal
   ): Promise<void>;
+
+  /**
+   * Read the `devDocketGithub.filteredRepos` setting and parse it into repo patterns.
+   */
+  protected getConfiguredPatterns(): RepoPattern[] {
+    const config = vscode.workspace.getConfiguration('devDocketGithub');
+    const value = config.get<string>('filteredRepos', '');
+    if (!value || typeof value !== 'string') { return []; }
+    return parseRepoPatterns(value);
+  }
+
 }

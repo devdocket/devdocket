@@ -208,37 +208,41 @@ describe('GitHubPrReviewProvider — cancellation (AbortSignal wiring)', () => {
   // ── Worker pool abort ──────────────────────────────────────────────
 
   describe('worker pool abort', () => {
-    it('stops repo worker pool when signal is aborted', async () => {
+    it('stops head SHA worker pool when signal is aborted', async () => {
       const { token, cancel } = createMockCancellationToken();
-      const repos = ['a/r1', 'a/r2', 'a/r3', 'a/r4', 'a/r5'];
+      const prs = Array.from({ length: 5 }, (_, i) => createMockPr(i + 1, `PR ${i + 1}`));
 
       vi.mocked(workspace.getConfiguration).mockReturnValue({
         get: vi.fn((key: string, defaultValue?: any) => {
-          if (key === 'repos') { return repos; }
-          if (key === 'resurfaceOnNewVersion' || key === 'resurfaceOnReRequestedReview') {
-            return false;
-          }
+          if (key === 'resurfaceOnNewVersion') { return true; }
+          if (key === 'resurfaceOnReRequestedReview') { return false; }
           return defaultValue;
         }),
       } as any);
 
-      let repoFetchCount = 0;
+      let fetchCount = 0;
       mockFetch.mockImplementation(async () => {
-        repoFetchCount++;
-        if (repoFetchCount >= 2) {
+        fetchCount++;
+        if (fetchCount === 1) {
+          // Search succeeds
+          return { ok: true, json: async () => ({ items: prs }) };
+        }
+        // Head SHA fetches: cancel on second one
+        if (fetchCount >= 3) {
           cancel();
           const error = new Error('The operation was aborted.');
           error.name = 'AbortError';
           throw error;
         }
-        return { ok: true, json: async () => ({ items: [] }) };
+        return { ok: true, json: async () => ({ head: { sha: 'abc' } }) };
       });
 
       const listener = vi.fn();
       provider.onDidDiscoverItems(listener);
       await provider.refresh(token);
 
-      expect(repoFetchCount).toBeLessThan(5);
+      // Should NOT have fetched all 5 PRs' head SHAs
+      expect(fetchCount).toBeLessThan(6);
       expect(listener).not.toHaveBeenCalled();
     });
   });

@@ -235,37 +235,6 @@ describe('GitHubMyPrsProvider — cancellation (AbortSignal wiring)', () => {
       expect(listener).not.toHaveBeenCalled();
     });
 
-    it('stops worker pool when signal is aborted during fetchPerRepoPrs', async () => {
-      const { token, cancel } = createMockCancellationToken();
-      const repos = ['owner/repo1', 'owner/repo2', 'owner/repo3', 'owner/repo4', 'owner/repo5'];
-
-      vi.mocked(workspace.getConfiguration).mockReturnValue({
-        get: vi.fn((key: string, defaultValue?: any) => {
-          if (key === 'repos') { return repos; }
-          return defaultValue;
-        }),
-      } as any);
-
-      let repoFetchCount = 0;
-      mockFetch.mockImplementation(async () => {
-        repoFetchCount++;
-        if (repoFetchCount >= 2) {
-          cancel();
-          const error = new Error('The operation was aborted.');
-          error.name = 'AbortError';
-          throw error;
-        }
-        return mockSearchResponse([createMockPr(1, 'PR', repos[repoFetchCount - 1])]);
-      });
-
-      const listener = vi.fn();
-      provider.onDidDiscoverItems(listener);
-      await provider.refresh(token);
-
-      // Workers should have stopped early
-      expect(repoFetchCount).toBeLessThan(5);
-      expect(listener).not.toHaveBeenCalled();
-    });
   });
 
   // ── Cleanup ────────────────────────────────────────────────────────

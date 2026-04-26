@@ -46,7 +46,7 @@ function createMockIssue(number: number, title: string, repo = 'owner/repo') {
 function configureRepos(repos: string[]) {
   vi.mocked(workspace.getConfiguration).mockReturnValue({
     get: vi.fn((key: string, defaultValue?: any) => {
-      if (key === 'repos') { return repos; }
+      if (key === 'filteredRepos') { return repos.join('\n'); }
       return defaultValue;
     }),
   } as any);
@@ -126,21 +126,15 @@ describe('GitHubIssueProvider — cancellation (AbortSignal wiring)', () => {
       expect(signal2).toBeInstanceOf(AbortSignal);
     });
 
-    it('passes AbortSignal to per-repo fetch calls', async () => {
+    it('passes AbortSignal to fetch calls even with repos configured', async () => {
       const { token } = createMockCancellationToken();
       configureRepos(['owner/repo1', 'owner/repo2']);
 
-      mockFetch
-        .mockResolvedValueOnce({
-          ok: true,
-          headers: noLinkHeaders,
-          json: async () => [createMockIssue(1, 'Issue 1', 'owner/repo1')],
-        })
-        .mockResolvedValueOnce({
-          ok: true,
-          headers: noLinkHeaders,
-          json: async () => [createMockIssue(2, 'Issue 2', 'owner/repo2')],
-        });
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        headers: noLinkHeaders,
+        json: async () => [createMockIssue(1, 'Issue 1', 'owner/repo1')],
+      });
 
       await provider.refresh(token);
 
@@ -198,22 +192,11 @@ describe('GitHubIssueProvider — cancellation (AbortSignal wiring)', () => {
       expect(errorLogged).toBe(false);
     });
 
-    it('does not publish partial results when abort happens during per-repo fetch', async () => {
+    it('does not publish items when abort happens during global fetch with repos configured', async () => {
       const { token, cancel } = createMockCancellationToken();
       configureRepos(['owner/repo1', 'owner/repo2']);
 
-      let fetchCount = 0;
       mockFetch.mockImplementation(async () => {
-        fetchCount++;
-        if (fetchCount === 1) {
-          // First repo succeeds
-          return {
-            ok: true,
-            headers: noLinkHeaders,
-            json: async () => [createMockIssue(1, 'Issue 1', 'owner/repo1')],
-          };
-        }
-        // Second repo: cancel fires mid-fetch
         cancel();
         const error = new Error('The operation was aborted.');
         error.name = 'AbortError';
@@ -224,8 +207,7 @@ describe('GitHubIssueProvider — cancellation (AbortSignal wiring)', () => {
       provider.onDidDiscoverItems(listener);
       await provider.refresh(token);
 
-      // Even though repo1 succeeded, no items should be published
-      // because the overall operation was cancelled
+      // Global fetch aborted — no items should be published
       expect(listener).not.toHaveBeenCalled();
     });
   });

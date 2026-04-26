@@ -19,7 +19,7 @@ function createMockIssue(number: number, title: string, repo = 'owner/repo') {
 function configureRepos(repos: string[]) {
   vi.mocked(workspace.getConfiguration).mockReturnValue({
     get: vi.fn((key: string, defaultValue?: any) => {
-      if (key === 'repos') { return repos; }
+      if (key === 'filteredRepos') { return repos.join('\n'); }
       return defaultValue;
     }),
   } as any);
@@ -174,7 +174,7 @@ describe('GitHubIssueProvider — error handling', () => {
       await provider.refresh();
 
       expect(window.showWarningMessage).toHaveBeenCalledWith(
-        expect.stringContaining('Failed to fetch issues'),
+        expect.stringContaining('Failed to fetch assigned issues'),
       );
     });
 
@@ -380,96 +380,58 @@ describe('GitHubIssueProvider — error handling', () => {
     });
   });
 
-  // ── Partial failures across multiple repos ──────────────────────────
+  // ── Global fetch failures with configured repos ─────────────────────
 
-  describe('partial failures across multiple repos', () => {
-    it('returns issues from successful repos when some fail with HTTP errors', async () => {
-      configureRepos(['good/repo', 'bad/repo']);
+  describe('global fetch failures with configured repos', () => {
+    it('returns filtered issues from successful global fetch', async () => {
+      configureRepos(['good/repo']);
 
-      mockFetch
-        .mockResolvedValueOnce({
-          ok: true,
-          headers: noLinkHeaders,
-          json: async () => [createMockIssue(1, 'Good issue', 'good/repo')],
-          headers: { get: () => null },
-        })
-        .mockResolvedValueOnce({ ok: false, status: 404 });
-
-      const listener = vi.fn();
-      provider.onDidDiscoverItems(listener);
-      await provider.refresh();
-
-      const items = listener.mock.calls[0][0];
-      expect(items).toHaveLength(1);
-      expect(items[0].title).toBe('#1: Good issue');
-    });
-
-    it('shows warning listing failed repo count for user-triggered refresh', async () => {
-      configureRepos(['good/repo', 'bad/repo1', 'bad/repo2']);
-
-      mockFetch
-        .mockResolvedValueOnce({
-          ok: true,
-          headers: noLinkHeaders,
-          json: async () => [createMockIssue(1, 'OK', 'good/repo')],
-          headers: { get: () => null },
-        })
-        .mockResolvedValueOnce({ ok: false, status: 500 })
-        .mockResolvedValueOnce({ ok: false, status: 403 });
-
-      await provider.refresh();
-
-      expect(window.showWarningMessage).toHaveBeenCalledWith(
-        expect.stringContaining('2 repositories'),
-      );
-    });
-
-    it('shows warning with repo name when single repo fails', async () => {
-      configureRepos(['good/repo', 'bad/repo']);
-
-      mockFetch
-        .mockResolvedValueOnce({
-          ok: true,
-          headers: noLinkHeaders,
-          json: async () => [createMockIssue(1, 'OK', 'good/repo')],
-          headers: { get: () => null },
-        })
-        .mockResolvedValueOnce({ ok: false, status: 500 });
-
-      await provider.refresh();
-
-      expect(window.showWarningMessage).toHaveBeenCalledWith(
-        expect.stringContaining('bad/repo'),
-      );
-    });
-
-    it('returns issues from successful repos when some reject with network errors', async () => {
-      configureRepos(['good/repo', 'bad/repo']);
-
-      mockFetch
-        .mockResolvedValueOnce({
-          ok: true,
-          headers: noLinkHeaders,
-          json: async () => [createMockIssue(1, 'Works', 'good/repo')],
-          headers: { get: () => null },
-        })
-        .mockRejectedValueOnce(new Error('ETIMEDOUT'));
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        headers: noLinkHeaders,
+        json: async () => [
+          createMockIssue(1, 'Good issue', 'good/repo'),
+          createMockIssue(2, 'Other issue', 'other/repo'),
+        ],
+      });
 
       const listener = vi.fn();
       provider.onDidDiscoverItems(listener);
       await provider.refresh();
 
       const items = listener.mock.calls[0][0];
+      // 'good/repo' pattern filters OUT good/repo, keeping only other/repo
       expect(items).toHaveLength(1);
-      expect(items[0].title).toBe('#1: Works');
+      expect(items[0].title).toBe('#2: Other issue');
     });
 
-    it('fires event with empty items when all repos fail', async () => {
+    it('shows warning for user-triggered refresh when global fetch fails', async () => {
+      configureRepos(['good/repo']);
+
+      mockFetch.mockResolvedValueOnce({ ok: false, status: 500 });
+
+      await provider.refresh();
+
+      expect(window.showWarningMessage).toHaveBeenCalledWith(
+        expect.stringContaining('Failed to fetch assigned issues'),
+      );
+    });
+
+    it('does not show warning for background refresh when global fetch fails', async () => {
+      configureRepos(['good/repo']);
+
+      mockFetch.mockResolvedValueOnce({ ok: false, status: 500 });
+
+      const refreshBg = (provider as any).refreshInBackground.bind(provider);
+      await refreshBg();
+
+      expect(window.showWarningMessage).not.toHaveBeenCalled();
+    });
+
+    it('fires event with empty items when global fetch fails with repos configured', async () => {
       configureRepos(['bad/repo1', 'bad/repo2']);
 
-      mockFetch
-        .mockResolvedValueOnce({ ok: false, status: 500 })
-        .mockRejectedValueOnce(new Error('Network error'));
+      mockFetch.mockResolvedValueOnce({ ok: false, status: 500 });
 
       const listener = vi.fn();
       provider.onDidDiscoverItems(listener);
@@ -478,30 +440,32 @@ describe('GitHubIssueProvider — error handling', () => {
       expect(listener).toHaveBeenCalledWith([]);
     });
 
-    it('handles mix of JSON parse errors and successes across repos', async () => {
-      configureRepos(['good/repo', 'broken/repo']);
+    it('handles network error on global fetch with repos configured', async () => {
+      configureRepos(['good/repo', 'bad/repo']);
 
-      mockFetch
-        .mockResolvedValueOnce({
-          ok: true,
-          headers: noLinkHeaders,
-          json: async () => [createMockIssue(1, 'OK', 'good/repo')],
-          headers: { get: () => null },
-        })
-        .mockResolvedValueOnce({
-          ok: true,
-          headers: noLinkHeaders,
-          json: async () => { throw new SyntaxError('Invalid JSON'); },
-          headers: { get: () => null },
-        });
+      mockFetch.mockRejectedValueOnce(new Error('ETIMEDOUT'));
 
       const listener = vi.fn();
       provider.onDidDiscoverItems(listener);
       await provider.refresh();
 
-      const items = listener.mock.calls[0][0];
-      expect(items).toHaveLength(1);
-      expect(items[0].title).toBe('#1: OK');
+      expect(listener).toHaveBeenCalledWith([]);
+    });
+
+    it('handles JSON parse error on global fetch', async () => {
+      configureRepos(['good/repo', 'broken/repo']);
+
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        headers: noLinkHeaders,
+        json: async () => { throw new SyntaxError('Invalid JSON'); },
+      });
+
+      const listener = vi.fn();
+      provider.onDidDiscoverItems(listener);
+      await provider.refresh();
+
+      expect(listener).toHaveBeenCalledWith([]);
     });
   });
 
@@ -519,7 +483,6 @@ describe('GitHubIssueProvider — error handling', () => {
         ok: true,
         headers: noLinkHeaders,
         json: async () => [],
-        headers: { get: () => null },
       });
 
       const listener = vi.fn();
