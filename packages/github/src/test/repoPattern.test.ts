@@ -9,7 +9,7 @@ describe('parseRepoPatterns', () => {
     const patterns = parseRepoPatterns('owner/repo');
     expect(patterns).toHaveLength(1);
     expect(patterns[0].pattern).toBe('owner/repo');
-    expect(patterns[0].isExclusion).toBe(false);
+    expect(patterns[0].isNegation).toBe(false);
   });
 
   it('parses multiple patterns', () => {
@@ -30,7 +30,7 @@ describe('parseRepoPatterns', () => {
   it('parses exclusion patterns', () => {
     const patterns = parseRepoPatterns('!owner/repo');
     expect(patterns).toHaveLength(1);
-    expect(patterns[0].isExclusion).toBe(true);
+    expect(patterns[0].isNegation).toBe(true);
     expect(patterns[0].regex.test('owner/repo')).toBe(true);
   });
 
@@ -38,6 +38,21 @@ describe('parseRepoPatterns', () => {
     const patterns = parseRepoPatterns('# this is a comment\nowner/repo');
     expect(patterns).toHaveLength(1);
     expect(patterns[0].pattern).toBe('owner/repo');
+  });
+
+  it('strips inline trailing comments', () => {
+    const patterns = parseRepoPatterns('myorg/* # include all repos');
+    expect(patterns).toHaveLength(1);
+    // The inline comment is stripped, so the pattern is just 'myorg/*'
+    expect(patterns[0].regex.test('myorg/repo1')).toBe(true);
+    expect(patterns[0].regex.test('other/repo1')).toBe(false);
+  });
+
+  it('strips inline comment from negation pattern', () => {
+    const patterns = parseRepoPatterns('!myorg/secret # keep this one');
+    expect(patterns).toHaveLength(1);
+    expect(patterns[0].isNegation).toBe(true);
+    expect(patterns[0].regex.test('myorg/secret')).toBe(true);
   });
 
   it('skips empty lines', () => {
@@ -54,7 +69,7 @@ describe('parseRepoPatterns', () => {
   it('handles exclusion with whitespace after !', () => {
     const patterns = parseRepoPatterns('! owner/repo');
     expect(patterns).toHaveLength(1);
-    expect(patterns[0].isExclusion).toBe(true);
+    expect(patterns[0].isNegation).toBe(true);
     expect(patterns[0].regex.test('owner/repo')).toBe(true);
   });
 
@@ -75,11 +90,11 @@ other-owner/specific-repo
     const patterns = parseRepoPatterns(config);
     expect(patterns).toHaveLength(3);
     expect(patterns[0].pattern).toBe('myorg/*');
-    expect(patterns[0].isExclusion).toBe(false);
+    expect(patterns[0].isNegation).toBe(false);
     expect(patterns[1].pattern).toBe('!myorg/archived-repo');
-    expect(patterns[1].isExclusion).toBe(true);
+    expect(patterns[1].isNegation).toBe(true);
     expect(patterns[2].pattern).toBe('other-owner/specific-repo');
-    expect(patterns[2].isExclusion).toBe(false);
+    expect(patterns[2].isNegation).toBe(false);
   });
 
   it('matches are case-insensitive', () => {

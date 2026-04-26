@@ -1,27 +1,29 @@
 export interface RepoPattern {
   pattern: string;
-  isExclusion: boolean;
+  isNegation: boolean;
   regex: RegExp;
 }
 
 /**
  * Parse a multiline config string into an array of repo patterns.
- * Supports gitignore-style syntax: comments (#), exclusions (!), wildcards (*).
+ * Supports gitignore-style syntax: full-line and inline comments (#),
+ * negation (!), and wildcards (*).
  */
 export function parseRepoPatterns(config: string): RepoPattern[] {
   const lines = config.split('\n');
   const patterns: RepoPattern[] = [];
 
   for (const rawLine of lines) {
-    const line = rawLine.trim();
+    // Strip inline comments (# preceded by whitespace) and trim
+    const line = rawLine.replace(/\s+#.*$/, '').trim();
     if (line === '' || line.startsWith('#')) {
       continue;
     }
 
-    let isExclusion = false;
+    let isNegation = false;
     let patternText = line;
     if (patternText.startsWith('!')) {
-      isExclusion = true;
+      isNegation = true;
       patternText = patternText.slice(1).trim();
     }
 
@@ -30,7 +32,7 @@ export function parseRepoPatterns(config: string): RepoPattern[] {
     }
 
     const regex = patternToRegex(patternText);
-    patterns.push({ pattern: line, isExclusion, regex });
+    patterns.push({ pattern: line, isNegation, regex });
   }
 
   return patterns;
@@ -49,7 +51,7 @@ function patternToRegex(pattern: string): RegExp {
 /**
  * Check if a repo should be included after applying filter patterns.
  * Works like .gitignore: positive patterns filter OUT (exclude) matching repos,
- * `!` patterns un-filter (re-include) them. Last match wins.
+ * `!` (negation) patterns un-filter (re-include) them. Last match wins.
  * Returns true if the repo should be kept, false if filtered out.
  */
 export function matchesRepoPatterns(repo: string, patterns: RepoPattern[]): boolean {
@@ -57,7 +59,7 @@ export function matchesRepoPatterns(repo: string, patterns: RepoPattern[]): bool
   let result = true;
   for (const p of patterns) {
     if (p.regex.test(repo)) {
-      result = p.isExclusion;
+      result = p.isNegation;
     }
   }
   return result;
