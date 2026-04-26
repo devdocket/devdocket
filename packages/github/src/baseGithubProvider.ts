@@ -99,12 +99,12 @@ export abstract class BaseGitHubProvider extends BaseProvider {
   ): Promise<void>;
 
   /**
-   * Read the `devDocketGithub.repos` setting and parse it into repo patterns.
+   * Read the `devDocketGithub.filteredRepos` setting and parse it into repo patterns.
    * Handles backward compatibility with the old string[] config format.
    */
   protected getConfiguredPatterns(): RepoPattern[] {
     const config = vscode.workspace.getConfiguration('devDocketGithub');
-    const value = config.get<string | string[]>('repos', '');
+    const value = config.get<string | string[]>('filteredRepos', '');
     if (!value || (Array.isArray(value) && value.length === 0)) { return []; }
     // Backward compat: handle old array format
     if (Array.isArray(value)) {

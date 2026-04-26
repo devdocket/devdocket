@@ -19,7 +19,7 @@ function createMockIssue(number: number, title: string, repo = 'owner/repo') {
 function configureRepos(repos: string[]) {
   vi.mocked(workspace.getConfiguration).mockReturnValue({
     get: vi.fn((key: string, defaultValue?: any) => {
-      if (key === 'repos') { return repos.join('\n'); }
+      if (key === 'filteredRepos') { return repos.join('\n'); }
       return defaultValue;
     }),
   } as any);

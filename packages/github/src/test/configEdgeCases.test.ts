@@ -107,7 +107,7 @@ describe('GitHub provider config edge cases', () => {
     ])('invalid repo format (%s) results in global fetch with items kept (pattern matches nothing)', async (_label, repo) => {
       vi.mocked(workspace.getConfiguration).mockReturnValue({
         get: vi.fn((key: string, defaultValue?: any) => {
-          if (key === 'repos') { return repo; }
+          if (key === 'filteredRepos') { return repo; }
           return defaultValue;
         }),
       } as any);
@@ -144,7 +144,7 @@ describe('GitHub provider config edge cases', () => {
     ])('fetch rejection (%s) is handled gracefully with empty discovery', async (_label, repo) => {
       vi.mocked(workspace.getConfiguration).mockReturnValue({
         get: vi.fn((key: string, defaultValue?: any) => {
-          if (key === 'repos') { return repo; }
+          if (key === 'filteredRepos') { return repo; }
           return defaultValue;
         }),
       } as any);

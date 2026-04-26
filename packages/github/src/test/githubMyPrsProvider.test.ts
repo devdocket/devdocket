@@ -138,7 +138,7 @@ describe('GitHubMyPrsProvider', () => {
   it('uses global search and filters when repos configured', async () => {
     vi.mocked(workspace.getConfiguration).mockReturnValue({
       get: vi.fn((key: string, defaultValue?: any) => {
-        if (key === 'repos') { return 'myorg/myrepo'; }
+        if (key === 'filteredRepos') { return 'myorg/myrepo'; }
         return defaultValue;
       }),
     } as any);

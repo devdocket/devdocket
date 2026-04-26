@@ -61,7 +61,7 @@ describe('GitHubIssueProvider', () => {
   it('filters out configured repos via global fetch, keeps the rest', async () => {
     vi.mocked(workspace.getConfiguration).mockReturnValue({
       get: vi.fn((key: string, defaultValue?: any) => {
-        if (key === 'repos') { return 'owner/repo1\nowner/repo2'; }
+        if (key === 'filteredRepos') { return 'owner/repo1\nowner/repo2'; }
         return defaultValue;
       }),
     } as any);
@@ -95,7 +95,7 @@ describe('GitHubIssueProvider', () => {
   it('handles legacy array config format (backward compat)', async () => {
     vi.mocked(workspace.getConfiguration).mockReturnValue({
       get: vi.fn((key: string, defaultValue?: any) => {
-        if (key === 'repos') { return ['owner/repo1', 'owner/repo2']; }
+        if (key === 'filteredRepos') { return ['owner/repo1', 'owner/repo2']; }
         return defaultValue;
       }),
     } as any);
@@ -348,7 +348,7 @@ describe('GitHubIssueProvider', () => {
   it('filters out matched repos, keeps unmatched (including invalid patterns)', async () => {
     vi.mocked(workspace.getConfiguration).mockReturnValue({
       get: vi.fn((key: string, defaultValue?: any) => {
-        if (key === 'repos') { return 'owner/valid\n../traversal\ngood/repo'; }
+        if (key === 'filteredRepos') { return 'owner/valid\n../traversal\ngood/repo'; }
         return defaultValue;
       }),
     } as any);
