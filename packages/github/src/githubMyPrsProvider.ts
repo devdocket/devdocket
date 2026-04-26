@@ -160,12 +160,12 @@ export class GitHubMyPrsProvider extends BaseGitHubProvider {
     } catch (err: unknown) {
       if (err instanceof Error && err.name === 'AbortError') { throw err; }
       logger.error('Failed to fetch authored PRs', err);
-      return { prs: [], failures: ['all repositories'] };
+      return { prs: [], failures: ['global fetch'] };
     }
 
     if (!response.ok) {
       logger.error(`Failed to fetch authored PRs: ${response.status}`);
-      return { prs: [], failures: ['all repositories'] };
+      return { prs: [], failures: ['global fetch'] };
     }
 
     const data = (await response.json()) as GitHubSearchResponse;
@@ -189,12 +189,12 @@ export class GitHubMyPrsProvider extends BaseGitHubProvider {
     } catch (err: unknown) {
       if (err instanceof Error && err.name === 'AbortError') { throw err; }
       logger.error('Failed to fetch assigned PRs', err);
-      return { prs: [], failures: ['all repositories'] };
+      return { prs: [], failures: ['global fetch'] };
     }
 
     if (!response.ok) {
       logger.error(`Failed to fetch assigned PRs: ${response.status}`);
-      return { prs: [], failures: ['all repositories'] };
+      return { prs: [], failures: ['global fetch'] };
     }
 
     const data = (await response.json()) as GitHubSearchResponse;
