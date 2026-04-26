@@ -92,7 +92,7 @@ describe('GitHubIssueProvider', () => {
     expect(items[0]).toEqual(expect.objectContaining({ title: '#3: Other' }));
   });
 
-  it('handles legacy array config format (backward compat)', async () => {
+  it('ignores non-string config values (e.g. legacy array)', async () => {
     vi.mocked(workspace.getConfiguration).mockReturnValue({
       get: vi.fn((key: string, defaultValue?: any) => {
         if (key === 'filteredRepos') { return ['owner/repo1', 'owner/repo2']; }
@@ -105,7 +105,6 @@ describe('GitHubIssueProvider', () => {
       json: async () => [
         createMockIssue(1, 'Bug', 'owner/repo1'),
         createMockIssue(2, 'Feature', 'owner/repo2'),
-        createMockIssue(3, 'Other', 'owner/repo3'),
       ],
       headers: { get: () => null },
     });
@@ -115,10 +114,9 @@ describe('GitHubIssueProvider', () => {
     await provider.refresh();
 
     expect(listener).toHaveBeenCalledTimes(1);
-    // Legacy array patterns filter OUT repo1 and repo2, keeping repo3
+    // Non-string value is ignored — no filtering applied, all items kept
     const items = listener.mock.calls[0][0];
-    expect(items).toHaveLength(1);
-    expect(items[0]).toEqual(expect.objectContaining({ title: '#3: Other' }));
+    expect(items).toHaveLength(2);
   });
 
   it('falls back to /issues?filter=assigned when no repos configured', async () => {
