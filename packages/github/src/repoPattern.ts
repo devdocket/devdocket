@@ -32,7 +32,7 @@ export function parseRepoPatterns(config: string): RepoPattern[] {
     }
 
     const regex = patternToRegex(patternText);
-    patterns.push({ pattern: line, isNegation, regex });
+    patterns.push({ pattern: isNegation ? `!${patternText}` : patternText, isNegation, regex });
   }
 
   return patterns;
