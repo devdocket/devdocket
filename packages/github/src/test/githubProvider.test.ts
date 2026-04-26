@@ -203,7 +203,7 @@ describe('GitHubIssueProvider', () => {
     expect(items[0]).not.toHaveProperty('state');
   });
 
-  it('truncates description to 200 chars', async () => {
+  it('passes full description without truncation', async () => {
     const longBody = 'A'.repeat(300);
     mockFetch.mockResolvedValueOnce({
       ok: true,
@@ -219,7 +219,7 @@ describe('GitHubIssueProvider', () => {
     await provider.refresh();
 
     const items = listener.mock.calls[0][0];
-    expect(items[0].description).toHaveLength(200);
+    expect(items[0].description).toHaveLength(300);
   });
 
   it('handles fetch errors gracefully', async () => {

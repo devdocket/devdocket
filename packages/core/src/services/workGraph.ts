@@ -220,6 +220,8 @@ export class WorkGraph {
     if (patch.title !== undefined && patch.title !== item.title) { changes.push('title'); }
     // Detect notes changes including clearing (patch.notes === undefined with key present)
     if ('notes' in patch && patch.notes !== item.notes) { changes.push('notes'); }
+    // Detect description changes including clearing
+    if ('description' in patch && patch.description !== item.description) { changes.push('description'); }
     // Detect url changes including clearing (patch.url === undefined with key present)
     if ('url' in patch) {
       const sanitized = patch.url ? isSafeUrl(patch.url.trim())?.href : undefined;

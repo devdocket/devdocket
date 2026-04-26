@@ -585,13 +585,13 @@ describe('InboxTreeProvider', () => {
   });
 
   describe('getTreeItem tooltip', () => {
-    it('should include title and description in tooltip', () => {
+    it('should include title in tooltip but not description', () => {
       const item: InboxItem = { kind: 'item', providerId: 'gh', externalId: '1', title: 'Bug fix', description: 'Fix the crash on startup' };
       const treeItem = provider.getTreeItem(item);
       expect(treeItem.tooltip).toBeInstanceOf(MarkdownString);
       const tooltip = treeItem.tooltip as MarkdownString;
       expect(tooltip.value).toContain('Bug fix');
-      expect(tooltip.value).toContain('Fix the crash on startup');
+      expect(tooltip.value).not.toContain('Fix the crash on startup');
     });
 
     it('should only include title when item has no description', () => {
@@ -624,23 +624,13 @@ describe('InboxTreeProvider', () => {
       appendMarkdownSpy.mockRestore();
     });
 
-    it('uses appendText for description to prevent markdown injection', () => {
-      const maliciousDesc = '![img](https://evil.com/track.png)';
-      const item: InboxItem = { kind: 'item', providerId: 'gh', externalId: '1', title: 'Safe', description: maliciousDesc };
+    it('does not render description in tooltip', () => {
+      const item: InboxItem = { kind: 'item', providerId: 'gh', externalId: '1', title: 'Safe', description: 'Some description' };
 
-      const appendTextSpy = vi.spyOn(MarkdownString.prototype, 'appendText');
-      const appendMarkdownSpy = vi.spyOn(MarkdownString.prototype, 'appendMarkdown');
+      const treeItem = provider.getTreeItem(item);
+      const tooltip = treeItem.tooltip as MarkdownString;
 
-      provider.getTreeItem(item);
-
-      const textCalls = appendTextSpy.mock.calls.map(c => c[0]);
-      const mdCalls = appendMarkdownSpy.mock.calls.map(c => c[0]);
-
-      expect(textCalls).toContainEqual(expect.stringContaining(maliciousDesc));
-      expect(mdCalls).not.toContainEqual(expect.stringContaining(maliciousDesc));
-
-      appendTextSpy.mockRestore();
-      appendMarkdownSpy.mockRestore();
+      expect(tooltip.value).not.toContain('Some description');
     });
 
     it('uses appendText for reason to prevent markdown injection', () => {

@@ -262,9 +262,10 @@ export class WorkItemEditorPanel {
       const discovered = this.providerRegistry
         .getDiscoveredItems(item.providerId)
         .find((d) => d.externalId === item.externalId);
-      providerDescription = discovered?.description ?? undefined;
       providerState = discovered?.state ?? undefined;
     }
+    // Use the synced description from the persisted WorkItem
+    providerDescription = item.description;
     return getEditorPanelHtml({
       cspSource: this.panel.webview.cspSource,
       item,
