@@ -125,7 +125,7 @@ export async function batchAcceptItems(
     }
     try {
       const createdItem = await workGraph.createItem(
-        { title: formatItemTitle(item) },
+        { title: formatItemTitle(item), description: item.description },
         { providerId: item.providerId, externalId: item.externalId, url: item.url, group: item.group?.trim() || undefined },
       );
       createdIds.push(createdItem.id);
