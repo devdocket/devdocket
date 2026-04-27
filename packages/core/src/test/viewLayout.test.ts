@@ -5,11 +5,11 @@ import { getViewLayout, toggleViewLayout, isProviderGroupNode, ProviderGroupNode
 describe('viewLayout', () => {
   let memento: InstanceType<typeof MockMemento>;
 
-  beforeEach(() => {
+  beforeEach(async () => {
     vi.clearAllMocks();
     _resetViewLayoutStore();
     memento = new MockMemento();
-    initViewLayoutStore(memento);
+    await initViewLayoutStore(memento);
   });
 
   describe('getViewLayout', () => {

@@ -24,7 +24,8 @@ const changeListeners: Array<(viewId: ViewId, layout: ViewLayout) => void> = [];
 
 /**
  * Initialize the view-layout store with a Memento backend.
- * Must be called once during activation before any read/write.
+ * Must be called once during activation before any persist operation.
+ * Reads (getViewLayout) return defaults if called before init.
  *
  * Performs a one-time migration from the legacy configuration-based
  * storage (`devDocket.viewLayout` in VS Code settings) if globalState
