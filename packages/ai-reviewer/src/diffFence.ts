@@ -1,6 +1,6 @@
 /**
  * Build a fenced code block whose delimiter is strictly longer than any
- * backtick run inside {@link content}, preventing prompt-injection escapes.
+ * backtick run inside `content`, preventing prompt-injection escapes.
  *
  * The minimum fence length is 4 (matching the previous hard-coded delimiter).
  */
