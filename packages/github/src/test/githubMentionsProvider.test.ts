@@ -205,25 +205,81 @@ describe('GitHubMentionsProvider', () => {
     }
   });
 
-  it('uses per-repo query when repos are configured', async () => {
+  it('filters results when filteredRepos patterns are configured', async () => {
     vi.mocked(workspace.getConfiguration).mockReturnValue({
       get: vi.fn((key: string, defaultValue?: any) => {
-        if (key === 'repos') { return ['org/repo1']; }
+        if (key === 'filteredRepos') { return 'org/excluded-repo'; }
         return defaultValue;
       }),
     } as any);
 
     mockFetch.mockResolvedValueOnce({
       ok: true,
-      json: async () => ({ items: [createMockIssue(1, 'Mentioned', 'org/repo1')] }),
+      json: async () => ({
+        items: [
+          createMockIssue(1, 'Included', 'org/included-repo'),
+          createMockIssue(2, 'Excluded', 'org/excluded-repo'),
+        ],
+      }),
     });
 
     const listener = vi.fn();
     provider.onDidDiscoverItems(listener);
     await provider.refresh();
 
-    const calledUrl = mockFetch.mock.calls[0][0] as string;
-    expect(calledUrl).toContain('repo:org/repo1');
+    const items = listener.mock.calls[0][0];
+    expect(items).toHaveLength(1);
+    expect(items[0].externalId).toBe('org/included-repo#1');
+  });
+
+  it('passes all results when no patterns are configured', async () => {
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({
+        items: [
+          createMockIssue(1, 'First', 'org/repo1'),
+          createMockIssue(2, 'Second', 'org/repo2'),
+        ],
+      }),
+    });
+
+    const listener = vi.fn();
+    provider.onDidDiscoverItems(listener);
+    await provider.refresh();
+
+    const items = listener.mock.calls[0][0];
+    expect(items).toHaveLength(2);
+  });
+
+  it('negation patterns re-include previously excluded repos', async () => {
+    vi.mocked(workspace.getConfiguration).mockReturnValue({
+      get: vi.fn((key: string, defaultValue?: any) => {
+        if (key === 'filteredRepos') { return 'org/*\n!org/special'; }
+        return defaultValue;
+      }),
+    } as any);
+
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({
+        items: [
+          createMockIssue(1, 'Excluded', 'org/normal'),
+          createMockIssue(2, 'Re-included', 'org/special'),
+          createMockIssue(3, 'Other org', 'other/repo'),
+        ],
+      }),
+    });
+
+    const listener = vi.fn();
+    provider.onDidDiscoverItems(listener);
+    await provider.refresh();
+
+    const items = listener.mock.calls[0][0];
+    expect(items).toHaveLength(2);
+    const ids = items.map((i: any) => i.externalId);
+    expect(ids).toContain('org/special#2');
+    expect(ids).toContain('other/repo#3');
+    expect(ids).not.toContain('org/normal#1');
   });
 
   it('uses all-repos query when no repos are configured', async () => {
