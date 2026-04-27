@@ -1,151 +1,88 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { workspace, ConfigurationTarget, window } from 'vscode';
-import { getViewLayout, toggleViewLayout, isProviderGroupNode, ProviderGroupNode, LayoutState } from '../views/viewLayout';
+import { MockMemento } from 'vscode';
+import { getViewLayout, toggleViewLayout, isProviderGroupNode, ProviderGroupNode, LayoutState, initViewLayoutStore, onDidChangeLayout, _resetViewLayoutStore } from '../views/viewLayout';
 
 describe('viewLayout', () => {
+  let memento: InstanceType<typeof MockMemento>;
+
   beforeEach(() => {
     vi.clearAllMocks();
+    _resetViewLayoutStore();
+    memento = new MockMemento();
+    initViewLayoutStore(memento);
   });
 
   describe('getViewLayout', () => {
-    it('returns default "tree" for inbox when no config set', () => {
+    it('returns default "tree" for inbox when no state set', () => {
       expect(getViewLayout('inbox')).toBe('tree');
     });
 
-    it('returns default "flat" for queue when no config set', () => {
+    it('returns default "flat" for queue when no state set', () => {
       expect(getViewLayout('queue')).toBe('flat');
     });
 
-    it('returns default "flat" for focus when no config set', () => {
+    it('returns default "flat" for focus when no state set', () => {
       expect(getViewLayout('focus')).toBe('flat');
     });
 
-    it('returns default "flat" for history when no config set', () => {
+    it('returns default "flat" for history when no state set', () => {
       expect(getViewLayout('history')).toBe('flat');
     });
 
-    it('returns default "tree" for sources when no config set', () => {
+    it('returns default "tree" for sources when no state set', () => {
       expect(getViewLayout('sources')).toBe('tree');
     });
 
-    it('returns configured value when set', () => {
-      (workspace.getConfiguration as ReturnType<typeof vi.fn>).mockReturnValue({
-        get: vi.fn((_key: string, defaultValue?: any) => {
-          if (_key === 'viewLayout') { return { inbox: 'flat' }; }
-          return defaultValue;
-        }),
-      });
+    it('returns stored value when set', async () => {
+      await memento.update('devdocket.viewLayout', { inbox: 'flat' });
       expect(getViewLayout('inbox')).toBe('flat');
     });
 
-    it('falls back to default for invalid values', () => {
-      (workspace.getConfiguration as ReturnType<typeof vi.fn>).mockReturnValue({
-        get: vi.fn((_key: string, defaultValue?: any) => {
-          if (_key === 'viewLayout') { return { inbox: 'invalid' }; }
-          return defaultValue;
-        }),
-      });
+    it('falls back to default for invalid values', async () => {
+      await memento.update('devdocket.viewLayout', { inbox: 'invalid' });
       expect(getViewLayout('inbox')).toBe('tree');
     });
   });
 
   describe('toggleViewLayout', () => {
     it('toggles from tree to flat', async () => {
-      const mockUpdate = vi.fn().mockResolvedValue(undefined);
-      (workspace.getConfiguration as ReturnType<typeof vi.fn>).mockReturnValue({
-        get: vi.fn((_key: string, defaultValue?: any) => {
-          if (_key === 'viewLayout') { return { inbox: 'tree' }; }
-          return defaultValue;
-        }),
-        update: mockUpdate,
-        inspect: vi.fn(() => undefined),
-      });
+      await memento.update('devdocket.viewLayout', { inbox: 'tree' });
 
       await toggleViewLayout('inbox');
-      expect(mockUpdate).toHaveBeenCalledWith(
-        'viewLayout',
-        expect.objectContaining({ inbox: 'flat' }),
-        ConfigurationTarget.Global,
-      );
+      const stored = memento.get<Record<string, string>>('devdocket.viewLayout');
+      expect(stored?.inbox).toBe('flat');
     });
 
     it('toggles from flat to tree', async () => {
-      const mockUpdate = vi.fn().mockResolvedValue(undefined);
-      (workspace.getConfiguration as ReturnType<typeof vi.fn>).mockReturnValue({
-        get: vi.fn((_key: string, defaultValue?: any) => {
-          if (_key === 'viewLayout') { return { queue: 'flat' }; }
-          return defaultValue;
-        }),
-        update: mockUpdate,
-        inspect: vi.fn(() => undefined),
-      });
+      await memento.update('devdocket.viewLayout', { queue: 'flat' });
 
       await toggleViewLayout('queue');
-      expect(mockUpdate).toHaveBeenCalledWith(
-        'viewLayout',
-        expect.objectContaining({ queue: 'tree' }),
-        ConfigurationTarget.Global,
-      );
+      const stored = memento.get<Record<string, string>>('devdocket.viewLayout');
+      expect(stored?.queue).toBe('tree');
     });
 
-    it('uses default when no config exists yet', async () => {
-      const mockUpdate = vi.fn().mockResolvedValue(undefined);
-      (workspace.getConfiguration as ReturnType<typeof vi.fn>).mockReturnValue({
-        get: vi.fn((_key: string, defaultValue?: any) => defaultValue),
-        update: mockUpdate,
-        inspect: vi.fn(() => undefined),
-      });
-
+    it('uses default when no state exists yet', async () => {
       // sources defaults to 'tree', so toggle should set to 'flat'
       await toggleViewLayout('sources');
-      expect(mockUpdate).toHaveBeenCalledWith(
-        'viewLayout',
-        expect.objectContaining({ sources: 'flat' }),
-        ConfigurationTarget.Global,
-      );
+      const stored = memento.get<Record<string, string>>('devdocket.viewLayout');
+      expect(stored?.sources).toBe('flat');
     });
 
-    it('updates workspace scope when workspaceValue exists', async () => {
-      const mockUpdate = vi.fn().mockResolvedValue(undefined);
-      (workspace.getConfiguration as ReturnType<typeof vi.fn>).mockReturnValue({
-        get: vi.fn((_key: string) => {
-          if (_key === 'viewLayout') { return { focus: 'flat' }; }
-          return undefined;
-        }),
-        update: mockUpdate,
-        inspect: vi.fn(() => ({
-          workspaceValue: { focus: 'flat' },
-        })),
-      });
-
-      await toggleViewLayout('focus');
-      expect(mockUpdate).toHaveBeenCalledWith(
-        'viewLayout',
-        expect.objectContaining({ focus: 'tree' }),
-        ConfigurationTarget.Workspace,
-      );
-    });
-
-    it('prefers workspace scope even when workspaceFolder value exists', async () => {
-      const mockUpdate = vi.fn().mockResolvedValue(undefined);
-      (workspace.getConfiguration as ReturnType<typeof vi.fn>).mockReturnValue({
-        get: vi.fn((_key: string) => {
-          if (_key === 'viewLayout') { return { inbox: 'flat' }; }
-          return undefined;
-        }),
-        update: mockUpdate,
-        inspect: vi.fn(() => ({
-          workspaceValue: { inbox: 'flat' },
-          workspaceFolderValue: { inbox: 'flat' },
-        })),
-      });
+    it('fires onDidChangeLayout listener', async () => {
+      const listener = vi.fn();
+      onDidChangeLayout(listener);
 
       await toggleViewLayout('inbox');
-      expect(mockUpdate).toHaveBeenCalledWith(
-        'viewLayout',
-        expect.objectContaining({ inbox: 'tree' }),
-        ConfigurationTarget.Workspace,
-      );
+      expect(listener).toHaveBeenCalledWith('inbox', 'flat');
+    });
+
+    it('stops firing after dispose', async () => {
+      const listener = vi.fn();
+      const sub = onDidChangeLayout(listener);
+      sub.dispose();
+
+      await toggleViewLayout('inbox');
+      expect(listener).not.toHaveBeenCalled();
     });
   });
 
@@ -179,82 +116,39 @@ describe('viewLayout', () => {
 
   describe('toggleViewLayout — edge cases', () => {
     it('preserves sibling view layouts when toggling one view', async () => {
-      const mockUpdate = vi.fn().mockResolvedValue(undefined);
-      (workspace.getConfiguration as ReturnType<typeof vi.fn>).mockReturnValue({
-        get: vi.fn((_key: string) => {
-          if (_key === 'viewLayout') { return { inbox: 'tree', queue: 'tree', focus: 'tree' }; }
-          return undefined;
-        }),
-        update: mockUpdate,
-        inspect: vi.fn(() => ({
-          globalValue: { inbox: 'tree', queue: 'tree', focus: 'tree' },
-        })),
-      });
+      await memento.update('devdocket.viewLayout', { inbox: 'tree', queue: 'tree', focus: 'tree' });
 
       await toggleViewLayout('inbox');
-      const persisted = mockUpdate.mock.calls[0][1];
-      expect(persisted.inbox).toBe('flat');
-      expect(persisted.queue).toBe('tree');
-      expect(persisted.focus).toBe('tree');
+      const stored = memento.get<Record<string, string>>('devdocket.viewLayout')!;
+      expect(stored.inbox).toBe('flat');
+      expect(stored.queue).toBe('tree');
+      expect(stored.focus).toBe('tree');
     });
 
-    it('strips invalid view IDs from stored config during toggle', async () => {
-      const mockUpdate = vi.fn().mockResolvedValue(undefined);
-      (workspace.getConfiguration as ReturnType<typeof vi.fn>).mockReturnValue({
-        get: vi.fn((_key: string) => {
-          if (_key === 'viewLayout') { return { inbox: 'tree', bogusView: 'flat' }; }
-          return undefined;
-        }),
-        update: mockUpdate,
-        inspect: vi.fn(() => ({
-          globalValue: { inbox: 'tree', bogusView: 'flat' },
-        })),
-      });
+    it('strips invalid view IDs from stored state during toggle', async () => {
+      await memento.update('devdocket.viewLayout', { inbox: 'tree', bogusView: 'flat' });
 
       await toggleViewLayout('inbox');
-      const persisted = mockUpdate.mock.calls[0][1];
-      expect(persisted.inbox).toBe('flat');
-      expect(persisted).not.toHaveProperty('bogusView');
+      const stored = memento.get<Record<string, string>>('devdocket.viewLayout')!;
+      expect(stored.inbox).toBe('flat');
+      expect(stored).not.toHaveProperty('bogusView');
     });
 
-    it('strips invalid layout values from stored config during toggle', async () => {
-      const mockUpdate = vi.fn().mockResolvedValue(undefined);
-      (workspace.getConfiguration as ReturnType<typeof vi.fn>).mockReturnValue({
-        get: vi.fn((_key: string) => {
-          if (_key === 'viewLayout') { return { inbox: 'tree', focus: 'invalid' }; }
-          return undefined;
-        }),
-        update: mockUpdate,
-        inspect: vi.fn(() => ({
-          globalValue: { inbox: 'tree', focus: 'invalid' },
-        })),
-      });
+    it('strips invalid layout values from stored state during toggle', async () => {
+      await memento.update('devdocket.viewLayout', { inbox: 'tree', focus: 'invalid' });
 
       await toggleViewLayout('inbox');
-      const persisted = mockUpdate.mock.calls[0][1];
-      expect(persisted.inbox).toBe('flat');
-      expect(persisted).not.toHaveProperty('focus');
+      const stored = memento.get<Record<string, string>>('devdocket.viewLayout')!;
+      expect(stored.inbox).toBe('flat');
+      expect(stored).not.toHaveProperty('focus');
     });
 
-    it('reads from globalValue scope when no workspaceValue exists', async () => {
-      const mockUpdate = vi.fn().mockResolvedValue(undefined);
-      (workspace.getConfiguration as ReturnType<typeof vi.fn>).mockReturnValue({
-        get: vi.fn((_key: string) => {
-          if (_key === 'viewLayout') { return { history: 'tree' }; }
-          return undefined;
-        }),
-        update: mockUpdate,
-        inspect: vi.fn(() => ({
-          globalValue: { history: 'tree' },
-        })),
-      });
+    it('persists to globalState', async () => {
+      await memento.update('devdocket.viewLayout', { history: 'tree' });
 
       await toggleViewLayout('history');
-      expect(mockUpdate).toHaveBeenCalledWith(
-        'viewLayout',
-        expect.objectContaining({ history: 'flat' }),
-        ConfigurationTarget.Global,
-      );
+      const stored = memento.get<Record<string, string>>('devdocket.viewLayout')!;
+      expect(stored.history).toBe('flat');
     });
   });
 
