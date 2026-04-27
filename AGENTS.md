@@ -199,7 +199,8 @@ The core extension must not rely on anything from the other extensions (github, 
 When working on multiple independent tasks (e.g., fixing several unrelated bugs), **do not** manually explore the codebase yourself before dispatching agents. Instead, delegate the work immediately — each sub-agent is responsible for its own exploration, understanding, implementation, and testing. The orchestrating agent's job is to:
 
 1. Read the issue descriptions to understand scope and independence.
-2. Dispatch sub-agents with full context (issue description, relevant file paths, conventions).
-3. Wait for results, then validate (run the full test suite, review if needed).
+2. Read any relevant instruction or convention documents needed to understand repo rules and delegate correctly.
+3. Dispatch sub-agents with full context (issue description, relevant file paths, conventions).
+4. Wait for results, then validate (run the full test suite, review if needed).
 
-Do not pre-read source files, test files, or instruction files "just to understand" before delegating — that duplicates work the sub-agent will do anyway and wastes context window.
+Do not pre-read source files or test files "just to understand" before delegating, except for minimal inspection needed to identify ownership or routing. Instruction files and convention documents may be read when needed to provide sub-agents with accurate context and constraints.
