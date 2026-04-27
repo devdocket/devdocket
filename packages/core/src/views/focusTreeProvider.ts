@@ -19,14 +19,8 @@ export class FocusTreeProvider extends WorkItemViewProvider implements vscode.Tr
   private readonly isWatchable?: (url: string) => boolean;
 
   constructor(workGraph: WorkGraph, providerRegistry?: ProviderRegistry, isWatchable?: (url: string) => boolean) {
-    super(
-      workGraph,
-      'flat',
-      providerRegistry ? id => providerRegistry.getProviderLabel(id) : undefined,
-      providerRegistry?.onDidRegisterProvider,
-      providerRegistry ? (pid, eid) => providerRegistry.getDiscoveredItems(pid).find(d => d.externalId === eid)?.title : undefined,
-      providerRegistry?.onDidChangeDiscoveredItems,
-    );
+    const [lr, pce, tr, dice] = FocusTreeProvider.buildProviderArgs(providerRegistry);
+    super(workGraph, 'flat', lr, pce, tr, dice);
     this.isWatchable = isWatchable;
   }
 

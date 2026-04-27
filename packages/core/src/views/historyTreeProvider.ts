@@ -14,14 +14,8 @@ export class HistoryTreeProvider extends WorkItemViewProvider {
   protected readonly groupContextValue = 'historyGroup';
 
   constructor(workGraph: WorkGraph, providerRegistry?: ProviderRegistry) {
-    super(
-      workGraph,
-      'flat',
-      providerRegistry ? id => providerRegistry.getProviderLabel(id) : undefined,
-      providerRegistry?.onDidRegisterProvider,
-      providerRegistry ? (pid, eid) => providerRegistry.getDiscoveredItems(pid).find(d => d.externalId === eid)?.title : undefined,
-      providerRegistry?.onDidChangeDiscoveredItems,
-    );
+    const [lr, pce, tr, dice] = HistoryTreeProvider.buildProviderArgs(providerRegistry);
+    super(workGraph, 'flat', lr, pce, tr, dice);
   }
 
   protected getItems(): WorkItem[] {

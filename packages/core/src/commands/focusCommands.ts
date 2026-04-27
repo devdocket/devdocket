@@ -2,7 +2,7 @@ import * as vscode from 'vscode';
 import { WorkItemState } from '../models/workItem';
 import { WorkGraph } from '../services/workGraph';
 import type { ViewRevealer } from '../services/viewRevealer';
-import { wrapCommand, resolveItemIds, batchTransition } from './commandUtils';
+import { wrapCommand, resolveItemIds, batchTransition, requireItemToMove } from './commandUtils';
 
 async function handleCompleteItem(workGraph: WorkGraph, item?: { id?: string }, selectedItems?: { id?: string }[], revealer?: ViewRevealer): Promise<void> {
   const ids = resolveItemIds(item, selectedItems);
@@ -33,35 +33,19 @@ async function handleMoveToQueue(workGraph: WorkGraph, item?: { id?: string }, s
 }
 
 async function handleFocusMoveUp(workGraph: WorkGraph, item?: { id?: string }): Promise<void> {
-  if (!item?.id) {
-    void vscode.window.showInformationMessage('DevDocket: Select an item in Focus to move.');
-    return;
-  }
-  await workGraph.moveItem(item.id, 'up');
+  await requireItemToMove('Focus', item, id => workGraph.moveItem(id, 'up'));
 }
 
 async function handleFocusMoveDown(workGraph: WorkGraph, item?: { id?: string }): Promise<void> {
-  if (!item?.id) {
-    void vscode.window.showInformationMessage('DevDocket: Select an item in Focus to move.');
-    return;
-  }
-  await workGraph.moveItem(item.id, 'down');
+  await requireItemToMove('Focus', item, id => workGraph.moveItem(id, 'down'));
 }
 
 async function handleFocusMoveToTop(workGraph: WorkGraph, item?: { id?: string }): Promise<void> {
-  if (!item?.id) {
-    void vscode.window.showInformationMessage('DevDocket: Select an item in Focus to move.');
-    return;
-  }
-  await workGraph.moveToTop(item.id);
+  await requireItemToMove('Focus', item, id => workGraph.moveToTop(id));
 }
 
 async function handleFocusMoveToBottom(workGraph: WorkGraph, item?: { id?: string }): Promise<void> {
-  if (!item?.id) {
-    void vscode.window.showInformationMessage('DevDocket: Select an item in Focus to move.');
-    return;
-  }
-  await workGraph.moveToBottom(item.id);
+  await requireItemToMove('Focus', item, id => workGraph.moveToBottom(id));
 }
 
 export function registerFocusCommands(
