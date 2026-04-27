@@ -30,7 +30,7 @@ const changeListeners: Array<(viewId: ViewId, layout: ViewLayout) => void> = [];
  * storage (`devDocket.viewLayout` in VS Code settings) if globalState
  * has no layouts yet.
  */
-export function initViewLayoutStore(memento: vscode.Memento): void {
+export async function initViewLayoutStore(memento: vscode.Memento): Promise<void> {
   globalState = memento;
 
   // One-time migration from legacy config-based storage
@@ -39,7 +39,7 @@ export function initViewLayoutStore(memento: vscode.Memento): void {
     const legacy: unknown = config.get('viewLayout');
     const migrated = sanitizeLayouts(legacy);
     if (Object.keys(migrated).length > 0) {
-      void globalState.update(STORAGE_KEY, migrated);
+      await globalState.update(STORAGE_KEY, migrated);
     }
   }
 }
@@ -102,8 +102,12 @@ async function applyViewLayout(viewId: ViewId, layout: ViewLayout): Promise<void
   const existing = sanitizeLayouts(globalState.get(STORAGE_KEY));
   existing[viewId] = layout;
   await globalState.update(STORAGE_KEY, existing);
-  for (const listener of changeListeners) {
-    listener(viewId, layout);
+  for (const listener of [...changeListeners]) {
+    try {
+      listener(viewId, layout);
+    } catch {
+      // Isolate listener errors so remaining listeners still fire
+    }
   }
 }
 

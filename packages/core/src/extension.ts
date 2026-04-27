@@ -404,7 +404,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<DevDoc
   const initStart = performance.now();
   const storagePath = context.globalStorageUri.fsPath;
   await migrateToGlobalState(context.globalState, storagePath);
-  initViewLayoutStore(context.globalState);
+  await initViewLayoutStore(context.globalState);
   const { workGraph: wg, stateStore: ss, readStateStore, labelCache } = await loadStores(context.globalState);
   await migrateDiscoveredState(wg, ss);
 
