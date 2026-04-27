@@ -4,7 +4,7 @@
  *
  * Picks whichever fence character (backtick or tilde) yields the shorter
  * delimiter to avoid prompt bloat from adversarial inputs. If the required
- * fence would still exceed {@link MAX_FENCE}, long runs of the chosen
+ * fence would still exceed `MAX_FENCE`, long runs of the chosen
  * character are truncated in the content to stay within the bound.
  *
  * The minimum fence length is 4 (matching the previous hard-coded delimiter).
