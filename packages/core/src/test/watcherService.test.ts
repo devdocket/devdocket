@@ -583,23 +583,16 @@ describe('WatcherService', () => {
     it('disposes config subscription when service is disposed', async () => {
       const { workspace } = await import('../test/__mocks__/vscode');
 
-      // Add a watch so polling is active
-      const watcher = createMockWatcher('test');
-      registry.register(watcher);
-      await service.startWatch(createIdentifier());
+      // Verify the config listener is registered
+      const emitter = workspace._onDidChangeConfigurationEmitter;
+      const listenersBefore = (emitter as any).listeners.length;
+      expect(listenersBefore).toBeGreaterThan(0);
 
-      // Dispose the service
+      // Dispose the service — should remove the config listener
       service.dispose();
 
-      // Fire configuration change — should not restart polling
-      workspace._onDidChangeConfigurationEmitter.fire({
-        affectsConfiguration: (section: string) => section === 'devDocket.watches.pollingIntervalSeconds',
-      });
-
-      await vi.advanceTimersByTimeAsync(60000);
-      // getRunStatus was called once during the initial startWatch poll cycle;
-      // after dispose, no more polls should occur
-      expect(watcher.getRunStatus).toHaveBeenCalledTimes(1);
+      const listenersAfter = (emitter as any).listeners.length;
+      expect(listenersAfter).toBe(listenersBefore - 1);
     });
   });
 });
