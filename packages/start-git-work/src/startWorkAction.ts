@@ -357,7 +357,15 @@ export class StartWorkAction implements DevDocketAction {
 
     const pr = await response.json() as GitHubPrResponse;
 
-    if (!pr || typeof pr !== 'object' || !pr.head || typeof pr.head.ref !== 'string') {
+    if (
+      !pr ||
+      typeof pr !== 'object' ||
+      !pr.head ||
+      typeof pr.head.ref !== 'string' ||
+      !pr.base ||
+      !pr.base.repo ||
+      typeof pr.base.repo.full_name !== 'string'
+    ) {
       void vscode.window.showErrorMessage('DevDocket: GitHub API returned an unexpected response shape.');
       return undefined;
     }
