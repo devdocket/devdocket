@@ -257,14 +257,6 @@ function wireEvents(
   const discoveredSub = providerRegistry.onDidChangeDiscoveredItems(safeHandler('Error handling discovered items change', () => {
     scheduleUiUpdate();
 
-    void syncProviderTitles(providerRegistry, workGraph).catch(err => {
-      logger.error('Error syncing provider titles', err);
-    });
-
-    void syncProviderDescriptions(providerRegistry, workGraph).catch(err => {
-      logger.error('Error syncing provider descriptions', err);
-    });
-
     // Mark initial load complete when loading transitions from true to false
     if (!initialLoadComplete) {
       if (wasLoading && !providerRegistry.loading) {
@@ -351,6 +343,14 @@ function wireEvents(
   // Per-provider guard prevents overlapping runs; AbortController cancels in-flight checks.
   const autoCompleteControllers = new Map<string, AbortController>();
   const autoCompleteSub = providerRegistry.onDidRefreshProvider(safeHandler('Error handling auto-complete', async (providerId) => {
+    void syncProviderTitles(providerId, providerRegistry, workGraph).catch(err => {
+      logger.error('Error syncing provider titles', err);
+    });
+
+    void syncProviderDescriptions(providerId, providerRegistry, workGraph).catch(err => {
+      logger.error('Error syncing provider descriptions', err);
+    });
+
     const config = vscode.workspace.getConfiguration('devDocket');
     if (!config.get<boolean>('autoCompleteOnClose', true)) {
       return;

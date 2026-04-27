@@ -12,19 +12,22 @@ import { logger } from './logger';
  * persisted value should reflect that).
  */
 export async function syncProviderDescriptions(
+  providerId: string,
   providerRegistry: ProviderRegistry,
   workGraph: WorkGraph,
 ): Promise<void> {
-  for (const [providerId, discoveredItems] of providerRegistry.getAllDiscoveredItems()) {
-    for (const discovered of discoveredItems) {
-      const workItem = workGraph.findItemByProvenance(providerId, discovered.externalId);
-      if (workItem && 'description' in discovered && workItem.description !== discovered.description) {
-        try {
-          await workGraph.updateItem(workItem.id, { description: discovered.description });
-          logger.debug(`Synced description for ${providerId}/${discovered.externalId}`);
-        } catch (err) {
-          logger.error(`Failed to sync description for ${providerId}/${discovered.externalId}`, err);
-        }
+  const discoveredItems = providerRegistry.getAllDiscoveredItems().get(providerId);
+  if (!discoveredItems) {
+    return;
+  }
+  for (const discovered of discoveredItems) {
+    const workItem = workGraph.findItemByProvenance(providerId, discovered.externalId);
+    if (workItem && 'description' in discovered && workItem.description !== discovered.description) {
+      try {
+        await workGraph.updateItem(workItem.id, { description: discovered.description });
+        logger.debug(`Synced description for ${providerId}/${discovered.externalId}`);
+      } catch (err) {
+        logger.error(`Failed to sync description for ${providerId}/${discovered.externalId}`, err);
       }
     }
   }

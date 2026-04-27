@@ -30,7 +30,7 @@ describe('syncProviderTitles', () => {
     ]));
     workGraph.findItemByProvenance.mockReturnValue({ id: 'item-1', title: 'Old Title' });
 
-    await syncProviderTitles(providerRegistry as any, workGraph as any);
+    await syncProviderTitles('github', providerRegistry as any, workGraph as any);
 
     expect(workGraph.findItemByProvenance).toHaveBeenCalledWith('github', '42');
     expect(workGraph.updateItem).toHaveBeenCalledWith('item-1', { title: 'New Title' });
@@ -42,7 +42,7 @@ describe('syncProviderTitles', () => {
     ]));
     workGraph.findItemByProvenance.mockReturnValue({ id: 'item-1', title: 'Same Title' });
 
-    await syncProviderTitles(providerRegistry as any, workGraph as any);
+    await syncProviderTitles('github', providerRegistry as any, workGraph as any);
 
     expect(workGraph.updateItem).not.toHaveBeenCalled();
   });
@@ -53,31 +53,45 @@ describe('syncProviderTitles', () => {
     ]));
     workGraph.findItemByProvenance.mockReturnValue(undefined);
 
-    await syncProviderTitles(providerRegistry as any, workGraph as any);
+    await syncProviderTitles('github', providerRegistry as any, workGraph as any);
 
     expect(workGraph.updateItem).not.toHaveBeenCalled();
   });
 
-  it('handles multiple providers and items', async () => {
+  it('only scans the specified provider, not others', async () => {
     providerRegistry.getAllDiscoveredItems.mockReturnValue(new Map([
       ['github', [
         { externalId: '1', title: 'Updated GH' },
-        { externalId: '2', title: 'Same GH' },
       ]],
       ['ado', [
         { externalId: '100', title: 'Updated ADO' },
       ]],
     ]));
     workGraph.findItemByProvenance
-      .mockReturnValueOnce({ id: 'gh-1', title: 'Old GH' })
-      .mockReturnValueOnce({ id: 'gh-2', title: 'Same GH' })
-      .mockReturnValueOnce({ id: 'ado-1', title: 'Old ADO' });
+      .mockReturnValueOnce({ id: 'gh-1', title: 'Old GH' });
 
-    await syncProviderTitles(providerRegistry as any, workGraph as any);
+    await syncProviderTitles('github', providerRegistry as any, workGraph as any);
 
-    expect(workGraph.updateItem).toHaveBeenCalledTimes(2);
+    expect(workGraph.updateItem).toHaveBeenCalledTimes(1);
     expect(workGraph.updateItem).toHaveBeenCalledWith('gh-1', { title: 'Updated GH' });
-    expect(workGraph.updateItem).toHaveBeenCalledWith('ado-1', { title: 'Updated ADO' });
+    expect(workGraph.findItemByProvenance).not.toHaveBeenCalledWith('ado', expect.anything());
+  });
+
+  it('handles multiple items within the specified provider', async () => {
+    providerRegistry.getAllDiscoveredItems.mockReturnValue(new Map([
+      ['github', [
+        { externalId: '1', title: 'Updated GH' },
+        { externalId: '2', title: 'Same GH' },
+      ]],
+    ]));
+    workGraph.findItemByProvenance
+      .mockReturnValueOnce({ id: 'gh-1', title: 'Old GH' })
+      .mockReturnValueOnce({ id: 'gh-2', title: 'Same GH' });
+
+    await syncProviderTitles('github', providerRegistry as any, workGraph as any);
+
+    expect(workGraph.updateItem).toHaveBeenCalledTimes(1);
+    expect(workGraph.updateItem).toHaveBeenCalledWith('gh-1', { title: 'Updated GH' });
   });
 
   it('continues syncing other items when one update fails', async () => {
@@ -94,16 +108,16 @@ describe('syncProviderTitles', () => {
       .mockRejectedValueOnce(new Error('write error'))
       .mockResolvedValueOnce(undefined);
 
-    await syncProviderTitles(providerRegistry as any, workGraph as any);
+    await syncProviderTitles('github', providerRegistry as any, workGraph as any);
 
     expect(workGraph.updateItem).toHaveBeenCalledTimes(2);
     expect(workGraph.updateItem).toHaveBeenCalledWith('item-2', { title: 'Updated' });
   });
 
-  it('does nothing when no providers have items', async () => {
+  it('does nothing when provider has no items', async () => {
     providerRegistry.getAllDiscoveredItems.mockReturnValue(new Map());
 
-    await syncProviderTitles(providerRegistry as any, workGraph as any);
+    await syncProviderTitles('github', providerRegistry as any, workGraph as any);
 
     expect(workGraph.findItemByProvenance).not.toHaveBeenCalled();
     expect(workGraph.updateItem).not.toHaveBeenCalled();
@@ -115,7 +129,7 @@ describe('syncProviderTitles', () => {
     ]));
     workGraph.findItemByProvenance.mockReturnValue({ id: 'item-1', title: 'Good Title' });
 
-    await syncProviderTitles(providerRegistry as any, workGraph as any);
+    await syncProviderTitles('github', providerRegistry as any, workGraph as any);
 
     expect(workGraph.updateItem).not.toHaveBeenCalled();
   });
@@ -126,7 +140,7 @@ describe('syncProviderTitles', () => {
     ]));
     workGraph.findItemByProvenance.mockReturnValue({ id: 'item-1', title: 'Good Title' });
 
-    await syncProviderTitles(providerRegistry as any, workGraph as any);
+    await syncProviderTitles('github', providerRegistry as any, workGraph as any);
 
     expect(workGraph.updateItem).not.toHaveBeenCalled();
   });
