@@ -1,6 +1,14 @@
 import { describe, it, expect } from 'vitest';
 import { fenceDiff } from '../diffFence';
 
+function longestRunIn(text: string, char: string): number {
+  let max = 0, cur = 0;
+  for (const c of text) {
+    if (c === char) { cur++; if (cur > max) max = cur; } else { cur = 0; }
+  }
+  return max;
+}
+
 describe('fenceDiff', () => {
   it('wraps simple content with 4-backtick fence', () => {
     const result = fenceDiff('+added line');
@@ -77,5 +85,19 @@ describe('fenceDiff', () => {
     // Should pick tildes (fence = 4) instead of backticks (fence = 1001)
     expect(result).toMatch(/^~{4}diff\n/);
     expect(result).toMatch(/\n~{4}$/);
+  });
+
+  it('caps fence length when both characters have long runs', () => {
+    // Adversarial: long runs of both backticks and tildes
+    const content = '`'.repeat(50) + '\n' + '~'.repeat(50);
+    const result = fenceDiff(content);
+    const lines = result.split('\n');
+    const openFence = lines[0].replace('diff', '');
+    // Fence should be capped at 10 characters max
+    expect(openFence.length).toBeLessThanOrEqual(10);
+    // Content backtick runs are truncated to 9 (MAX_FENCE - 1)
+    const contentLines = lines.slice(1, -1);
+    const contentText = contentLines.join('\n');
+    expect(longestRunIn(contentText, openFence[0])).toBeLessThan(openFence.length);
   });
 });
