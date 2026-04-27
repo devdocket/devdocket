@@ -1,5 +1,6 @@
 import * as vscode from 'vscode';
 import type { Memento } from 'vscode';
+import type { DiscoveredItem } from '../api/types';
 import { logger } from '../services/logger';
 import {
   validateObject,
@@ -169,6 +170,49 @@ export class DiscoveredStateStore {
       logger.debug(`Loaded discovered state: ${this.cache.size} entries`);
     }
     this.loaded = true;
+  }
+
+  /**
+   * Removes persisted state records for items that are no longer reported by
+   * their provider. Providers with empty item arrays are skipped to avoid
+   * pruning during transient API failures.
+   *
+   * @returns The number of records removed.
+   */
+  async prune(activeItems: Map<string, DiscoveredItem[]>): Promise<number> {
+    if (!this.loaded) { await this.load(); }
+
+    // Build a set of active composite keys and collect provider IDs that
+    // actually have items. Providers with empty arrays are excluded so their
+    // records survive transient failures.
+    const activeKeys = new Set<string>();
+    const activeProviderIds = new Set<string>();
+    for (const [providerId, items] of activeItems) {
+      if (items.length === 0) { continue; }
+      activeProviderIds.add(providerId);
+      for (const item of items) {
+        activeKeys.add(this.key(providerId, item.externalId));
+      }
+    }
+
+    if (activeProviderIds.size === 0) { return 0; }
+
+    const staleKeys: string[] = [];
+    for (const [k, record] of this.cache) {
+      if (activeProviderIds.has(record.providerId) && !activeKeys.has(k)) {
+        staleKeys.push(k);
+      }
+    }
+
+    if (staleKeys.length === 0) { return 0; }
+
+    for (const k of staleKeys) {
+      this.cache.delete(k);
+    }
+
+    await this.persist();
+    this._onDidChange.fire();
+    return staleKeys.length;
   }
 
   /** Disposes the change event emitter. */

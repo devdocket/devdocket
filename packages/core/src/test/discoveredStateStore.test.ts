@@ -553,4 +553,132 @@ describe('DiscoveredStateStore', () => {
       freshStore.dispose();
     });
   });
+
+  // ── prune ──────────────────────────────────────────────────────────
+
+  describe('prune', () => {
+    it('should remove stale records for providers that have active items', async () => {
+      await store.setStates([
+        { providerId: 'gh', externalId: 'issue-1', state: 'accepted' },
+        { providerId: 'gh', externalId: 'issue-2', state: 'accepted' },
+        { providerId: 'gh', externalId: 'issue-3', state: 'dismissed' },
+      ]);
+
+      const activeItems = new Map([
+        ['gh', [
+          { externalId: 'issue-1', title: 'Issue 1' },
+          { externalId: 'issue-2', title: 'Issue 2' },
+        ]],
+      ]);
+
+      const pruned = await store.prune(activeItems);
+
+      expect(pruned).toBe(1);
+      expect(store.getState('gh', 'issue-1')).toBe('accepted');
+      expect(store.getState('gh', 'issue-2')).toBe('accepted');
+      expect(store.getState('gh', 'issue-3')).toBeUndefined();
+    });
+
+    it('should skip providers with empty item arrays', async () => {
+      await store.setStates([
+        { providerId: 'gh', externalId: 'issue-1', state: 'accepted' },
+      ]);
+
+      const activeItems = new Map([
+        ['gh', []],
+      ]);
+
+      const pruned = await store.prune(activeItems);
+
+      expect(pruned).toBe(0);
+      expect(store.getState('gh', 'issue-1')).toBe('accepted');
+    });
+
+    it('should not prune when no active providers have items', async () => {
+      await store.setStates([
+        { providerId: 'gh', externalId: 'issue-1', state: 'unseen' },
+        { providerId: 'jira', externalId: 'task-1', state: 'accepted' },
+      ]);
+
+      const activeItems = new Map([
+        ['gh', []],
+        ['jira', []],
+      ]);
+
+      const pruned = await store.prune(activeItems);
+
+      expect(pruned).toBe(0);
+      expect(store.getState('gh', 'issue-1')).toBe('unseen');
+      expect(store.getState('jira', 'task-1')).toBe('accepted');
+    });
+
+    it('should only prune keys belonging to active providers', async () => {
+      await store.setStates([
+        { providerId: 'gh', externalId: 'issue-1', state: 'accepted' },
+        { providerId: 'gh', externalId: 'issue-2', state: 'accepted' },
+        { providerId: 'jira', externalId: 'task-1', state: 'dismissed' },
+      ]);
+
+      // Only 'gh' is in the active map; 'jira' is absent entirely.
+      const activeItems = new Map([
+        ['gh', [
+          { externalId: 'issue-1', title: 'Issue 1' },
+        ]],
+      ]);
+
+      const pruned = await store.prune(activeItems);
+
+      expect(pruned).toBe(1);
+      expect(store.getState('gh', 'issue-1')).toBe('accepted');
+      expect(store.getState('gh', 'issue-2')).toBeUndefined();
+      // jira records preserved — provider not in active map
+      expect(store.getState('jira', 'task-1')).toBe('dismissed');
+    });
+
+    it('should fire onDidChange when records are pruned', async () => {
+      await store.setState('gh', 'issue-1', 'accepted');
+      await store.setState('gh', 'issue-2', 'accepted');
+
+      const listener = vi.fn();
+      store.onDidChange(listener);
+
+      const activeItems = new Map([
+        ['gh', [{ externalId: 'issue-1', title: 'Issue 1' }]],
+      ]);
+
+      await store.prune(activeItems);
+
+      expect(listener).toHaveBeenCalledTimes(1);
+    });
+
+    it('should not fire onDidChange when nothing is pruned', async () => {
+      await store.setState('gh', 'issue-1', 'accepted');
+
+      const listener = vi.fn();
+      store.onDidChange(listener);
+
+      const activeItems = new Map([
+        ['gh', [{ externalId: 'issue-1', title: 'Issue 1' }]],
+      ]);
+
+      await store.prune(activeItems);
+
+      expect(listener).not.toHaveBeenCalled();
+    });
+
+    it('should return the count of pruned records', async () => {
+      await store.setStates([
+        { providerId: 'gh', externalId: 'issue-1', state: 'accepted' },
+        { providerId: 'gh', externalId: 'issue-2', state: 'dismissed' },
+        { providerId: 'gh', externalId: 'issue-3', state: 'unseen' },
+      ]);
+
+      const activeItems = new Map([
+        ['gh', [{ externalId: 'issue-1', title: 'Issue 1' }]],
+      ]);
+
+      const pruned = await store.prune(activeItems);
+      expect(pruned).toBe(2);
+    });
+  });
 });

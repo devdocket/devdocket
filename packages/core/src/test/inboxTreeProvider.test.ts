@@ -17,6 +17,7 @@ function createMockStateStore() {
     }),
     load: vi.fn(async () => {}),
     loadAll: vi.fn(async () => []),
+    prune: vi.fn(async () => 0),
     onDidChange: emitter.event,
     dispose: vi.fn(),
     _set: (providerId: string, externalId: string, state: string) => {
@@ -581,6 +582,23 @@ describe('InboxTreeProvider', () => {
       // Item should still be seen because pruning was skipped while loading
       const item: InboxItem = { kind: 'item', providerId: 'gh', externalId: '1', title: 'Bug' };
       expect((provider.getTreeItem(item).iconPath as any).id).toBe('circle-outline');
+    });
+
+    it('should call stateStore.prune during debounced refresh', async () => {
+      registry._setItems('gh', [{ externalId: '1', title: 'Bug' }]);
+      registry._fire();
+      await vi.advanceTimersByTimeAsync(DEBOUNCE_MS);
+
+      expect(stateStore.prune).toHaveBeenCalledWith(registry.getAllDiscoveredItems());
+    });
+
+    it('should skip stateStore.prune while providers are loading', async () => {
+      registry._setItems('gh', [{ externalId: '1', title: 'Bug' }]);
+      registry._setLoading(true);
+      registry._fire();
+      await vi.advanceTimersByTimeAsync(DEBOUNCE_MS);
+
+      expect(stateStore.prune).not.toHaveBeenCalled();
     });
   });
 
