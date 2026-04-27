@@ -5,6 +5,7 @@
 
 import { joinSession } from "@github/copilot-sdk/extension";
 import { execSync } from "node:child_process";
+import { resolve } from "node:path";
 
 // Extracts all issue references: #N, issue N, issue #N, or GitHub issue URLs
 const ISSUE_REF_PATTERN =
@@ -17,6 +18,19 @@ const FIX_INTENT_PATTERN =
 let isFixingIssue = false;
 let mainTreePath = null;
 let defaultBranch = null;
+
+/** Detect the git main working tree (not a worktree) path. */
+function detectMainTreePath(cwd) {
+    try {
+        // git worktree list --porcelain: first "worktree" line is always the main tree
+        const output = execSync("git worktree list --porcelain", { cwd, encoding: "utf8" });
+        const match = output.match(/^worktree\s+(.+)$/m);
+        if (match) return match[1].trim();
+    } catch {
+        // fall through
+    }
+    return cwd;
+}
 
 function getDefaultBranch(cwd) {
     if (defaultBranch) return defaultBranch;
@@ -42,7 +56,7 @@ function normalizePath(p) {
 
 function isUnderMainTree(filePath) {
     if (!mainTreePath) return false;
-    const norm = normalizePath(filePath);
+    const norm = normalizePath(resolve(filePath));
     const main = normalizePath(mainTreePath);
     return norm.startsWith(main + "/") || norm === main;
 }
@@ -127,7 +141,7 @@ ${perIssueSteps}`;
 const session = await joinSession({
     hooks: {
         onUserPromptSubmitted: async (input) => {
-            mainTreePath = input.cwd;
+            mainTreePath = detectMainTreePath(input.cwd);
 
             const hasFix = FIX_INTENT_PATTERN.test(input.prompt);
             const issueNumbers = hasFix ? extractIssueNumbers(input.prompt) : [];
