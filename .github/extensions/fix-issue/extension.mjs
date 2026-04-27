@@ -127,16 +127,15 @@ ${perIssueSteps}`;
 const session = await joinSession({
     hooks: {
         onUserPromptSubmitted: async (input) => {
-            if (!mainTreePath) {
-                mainTreePath = input.cwd;
-            }
+            mainTreePath = input.cwd;
 
-            if (!FIX_INTENT_PATTERN.test(input.prompt)) return;
+            const hasFix = FIX_INTENT_PATTERN.test(input.prompt);
+            const issueNumbers = hasFix ? extractIssueNumbers(input.prompt) : [];
 
-            const issueNumbers = extractIssueNumbers(input.prompt);
-            if (issueNumbers.length === 0) return;
+            // Reset when user moves on to a non-fix task
+            isFixingIssue = hasFix && issueNumbers.length > 0;
 
-            isFixingIssue = true;
+            if (!isFixingIssue) return;
 
             const branch = getDefaultBranch(input.cwd);
             const workflow =
