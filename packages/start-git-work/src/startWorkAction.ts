@@ -8,6 +8,31 @@ import { WorkItemState, type WorkItem, type DevDocketAction } from '@devdocket/s
 
 const execFileAsync = promisify(execFile);
 
+/** Strict allowlist for git ref names — blocks argument injection via leading hyphens. */
+const SAFE_REF = /^[a-zA-Z0-9._\/-]+$/;
+
+function isValidRef(ref: unknown): ref is string {
+  return typeof ref === 'string' && ref.length > 0 && !ref.startsWith('-') && SAFE_REF.test(ref);
+}
+
+/** Rejects whitespace and control characters in clone URLs. */
+const UNSAFE_URL_CHARS = /[\s\x00-\x1f\x7f]/;
+
+function isValidCloneUrl(url: unknown): url is string {
+  if (typeof url !== 'string' || url.length === 0 || UNSAFE_URL_CHARS.test(url)) {
+    return false;
+  }
+  if (url.startsWith('https://')) {
+    try {
+      const parsed = new URL(url);
+      return parsed.protocol === 'https:' && parsed.hostname.length > 0;
+    } catch {
+      return false;
+    }
+  }
+  return url.startsWith('git@');
+}
+
 /** Timeout for lightweight git metadata commands (branch --list, status, rev-parse). */
 const GIT_METADATA_TIMEOUT = 30_000;
 /** Timeout for heavy git operations that touch the working tree (worktree add, checkout, fetch). */
@@ -331,7 +356,27 @@ export class StartWorkAction implements DevDocketAction {
     }
 
     const pr = await response.json() as GitHubPrResponse;
+
+    if (
+      !pr ||
+      typeof pr !== 'object' ||
+      !pr.head ||
+      typeof pr.head.ref !== 'string' ||
+      !pr.base ||
+      !pr.base.repo ||
+      typeof pr.base.repo.full_name !== 'string'
+    ) {
+      void vscode.window.showErrorMessage('DevDocket: GitHub API returned an unexpected response shape.');
+      return undefined;
+    }
+
     const branchName = pr.head.ref;
+
+    if (!isValidRef(branchName)) {
+      void vscode.window.showErrorMessage('DevDocket: PR branch name contains invalid characters.');
+      return undefined;
+    }
+
     const isFork = pr.head.repo ? pr.head.repo.full_name !== pr.base.repo.full_name : false;
     logger.debug(`GitHub PR #${parsed.itemNumber}: head.ref=${branchName}, head.repo=${pr.head.repo?.full_name ?? 'null'}, base.repo=${pr.base.repo.full_name}, isFork=${isFork}`);
 
@@ -344,8 +389,18 @@ export class StartWorkAction implements DevDocketAction {
     }
 
     const headCloneUrl = pr.head.repo.clone_url;
+    if (!isValidCloneUrl(headCloneUrl)) {
+      void vscode.window.showErrorMessage('DevDocket: PR source repository has an invalid clone URL.');
+      return undefined;
+    }
+    const fullName = pr.head.repo.full_name;
+    if (typeof fullName !== 'string' || !/^[a-zA-Z0-9._-]+\/[a-zA-Z0-9._-]+$/.test(fullName)) {
+      void vscode.window.showErrorMessage('DevDocket: PR source repository has an invalid full name.');
+      return undefined;
+    }
+
     logger.debug(`Looking up remote for clone URL: ${headCloneUrl}`);
-    const remoteName = await this.findOrAddRemote(headCloneUrl, pr.head.repo.full_name, repoPath);
+    const remoteName = await this.findOrAddRemote(headCloneUrl, fullName, repoPath);
 
     // Full fetch to ensure all refs (including the PR branch) are available
     logger.info(`Fetching all refs from remote "${remoteName}"`);
@@ -369,8 +424,13 @@ export class StartWorkAction implements DevDocketAction {
     for (const line of stdout.split('\n')) {
       const match = line.match(/^(\S+)\t(\S+)\s+\(fetch\)$/);
       if (match && match[2] === cloneUrl) {
-        logger.info(`Found existing remote "${match[1]}" matching ${cloneUrl}`);
-        return match[1];
+        const name = match[1];
+        if (!isValidRef(name)) {
+          logger.warn(`Skipping remote "${name}" — name contains unsafe characters`);
+          continue;
+        }
+        logger.info(`Found existing remote "${name}" matching ${cloneUrl}`);
+        return name;
       }
     }
 
@@ -446,7 +506,19 @@ export class StartWorkAction implements DevDocketAction {
     }
 
     const pr = await response.json() as AdoPrResponse;
+
+    if (typeof pr?.sourceRefName !== 'string') {
+      void vscode.window.showErrorMessage('DevDocket: ADO API returned an unexpected response shape.');
+      return undefined;
+    }
+
     const branchName = pr.sourceRefName.replace(/^refs\/heads\//, '');
+
+    if (!isValidRef(branchName)) {
+      void vscode.window.showErrorMessage('DevDocket: PR branch name contains invalid characters.');
+      return undefined;
+    }
+
     logger.debug(`ADO PR #${parsed.itemNumber}: sourceRefName=${pr.sourceRefName}, branchName=${branchName}`);
 
     logger.info(`Fetching branch "${branchName}" from origin`);
@@ -790,6 +862,11 @@ export class StartWorkAction implements DevDocketAction {
     const trimmedBranch = selectedBranch.trim();
     if (!trimmedBranch) {
       void vscode.window.showErrorMessage('DevDocket: No base branch provided.');
+      return undefined;
+    }
+
+    if (!isValidRef(trimmedBranch)) {
+      void vscode.window.showErrorMessage('DevDocket: Base branch name contains invalid characters.');
       return undefined;
     }
 

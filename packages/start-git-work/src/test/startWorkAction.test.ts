@@ -1408,4 +1408,147 @@ describe('StartWorkAction', () => {
       );
     });
   });
+
+  describe('git ref validation (security)', () => {
+    it('rejects GitHub PR with hyphen-prefixed branch name', async () => {
+      mockFetchResponse(createGitHubPrResponse({
+        head: {
+          ref: '--malicious',
+          repo: {
+            full_name: 'owner/repo',
+            clone_url: 'https://github.com/owner/repo.git',
+          },
+        },
+      }));
+      mockQuickPickWorktree();
+
+      const item = createWorkItem({
+        providerId: 'github-my-prs',
+        externalId: 'owner/repo#42',
+      });
+      await action.run(item);
+
+      expect(window.showErrorMessage).toHaveBeenCalledWith(
+        expect.stringContaining('invalid characters'),
+      );
+      // No git checkout/worktree commands should have been made
+      const gitCalls = vi.mocked(execFile).mock.calls.filter(
+        (call: any[]) => call[1]?.[0] === 'checkout' || call[1]?.[0] === 'worktree' || call[1]?.[0] === 'fetch',
+      );
+      expect(gitCalls).toHaveLength(0);
+    });
+
+    it('rejects ADO PR with hyphen-prefixed branch name', async () => {
+      mockFetchResponse({ sourceRefName: 'refs/heads/--malicious' });
+      mockQuickPickWorktree();
+
+      const item = createWorkItem({
+        providerId: 'ado-pr-reviews',
+        externalId: 'org/project/repo/101',
+      });
+      await action.run(item);
+
+      expect(window.showErrorMessage).toHaveBeenCalledWith(
+        expect.stringContaining('invalid characters'),
+      );
+      // No git checkout/worktree commands should have been made
+      const gitCalls = vi.mocked(execFile).mock.calls.filter(
+        (call: any[]) => call[1]?.[0] === 'checkout' || call[1]?.[0] === 'worktree' || call[1]?.[0] === 'fetch',
+      );
+      expect(gitCalls).toHaveLength(0);
+    });
+
+    it('rejects base branch with hyphen prefix', async () => {
+      mockInputBox('/mock/workspace', '--evil-flag');
+
+      const item = createWorkItem();
+      await action.run(item);
+
+      expect(window.showErrorMessage).toHaveBeenCalledWith(
+        'DevDocket: Base branch name contains invalid characters.',
+      );
+      // No branch/checkout git commands should have been made
+      const gitCalls = vi.mocked(execFile).mock.calls.filter(
+        (call: any[]) => call[1]?.[0] === 'branch' || call[1]?.[0] === 'checkout' || call[1]?.[0] === 'worktree',
+      );
+      expect(gitCalls).toHaveLength(0);
+    });
+
+    it('allows valid GitHub PR branch names', async () => {
+      mockFetchResponse(createGitHubPrResponse({
+        head: {
+          ref: 'feature/my-branch',
+          repo: {
+            full_name: 'owner/repo',
+            clone_url: 'https://github.com/owner/repo.git',
+          },
+        },
+      }));
+      mockQuickPickWorktree();
+
+      const item = createWorkItem({
+        providerId: 'github-my-prs',
+        externalId: 'owner/repo#42',
+      });
+      await action.run(item);
+
+      // Should NOT show an error about invalid characters
+      expect(window.showErrorMessage).not.toHaveBeenCalledWith(
+        expect.stringContaining('invalid characters'),
+      );
+      // Should have proceeded to git operations
+      const fetchCall = vi.mocked(execFile).mock.calls.find(
+        (call: any[]) => call[1]?.[0] === 'fetch',
+      );
+      expect(fetchCall).toBeDefined();
+    });
+
+    it('allows valid base branch like origin/dev', async () => {
+      mockInputBox('/mock/workspace', 'origin/dev');
+
+      const item = createWorkItem();
+      await action.run(item);
+
+      expect(window.showErrorMessage).not.toHaveBeenCalledWith(
+        'DevDocket: Base branch name contains invalid characters.',
+      );
+      // Should have proceeded to git operations
+      const branchCall = vi.mocked(execFile).mock.calls.find(
+        (call: any[]) => call[1]?.[0] === 'branch' && call[1]?.[1] !== '--list',
+      );
+      expect(branchCall).toBeDefined();
+    });
+
+    it('rejects GitHub PR with invalid clone URL', async () => {
+      mockFetchResponse(createGitHubPrResponse({
+        head: {
+          ref: 'feature/branch',
+          repo: {
+            full_name: 'evil/repo',
+            clone_url: '--upload-pack=malicious',
+          },
+        },
+        base: {
+          repo: {
+            full_name: 'owner/repo',
+          },
+        },
+      }));
+      mockQuickPickWorktree();
+
+      const item = createWorkItem({
+        providerId: 'github-my-prs',
+        externalId: 'owner/repo#42',
+      });
+      await action.run(item);
+
+      expect(window.showErrorMessage).toHaveBeenCalledWith(
+        expect.stringContaining('invalid clone URL'),
+      );
+      const gitCalls = vi.mocked(execFile).mock.calls.filter(
+        (call: any[]) => call[1]?.[0] === 'remote' || call[1]?.[0] === 'fetch',
+      );
+      expect(gitCalls).toHaveLength(0);
+    });
+  });
 });
