@@ -498,6 +498,12 @@ export class StartWorkAction implements DevDocketAction {
     }
 
     const pr = await response.json() as AdoPrResponse;
+
+    if (typeof pr?.sourceRefName !== 'string') {
+      void vscode.window.showErrorMessage('DevDocket: ADO API returned an unexpected response shape.');
+      return undefined;
+    }
+
     const branchName = pr.sourceRefName.replace(/^refs\/heads\//, '');
 
     if (!isValidRef(branchName)) {
