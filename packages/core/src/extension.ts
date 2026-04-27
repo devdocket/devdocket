@@ -338,11 +338,10 @@ function wireEvents(
     }
   }));
 
-  // Auto-complete: after each provider refresh, scan all WorkGraph items with
-  // that providerId and check whether their external items are closed/merged.
-  // Per-provider guard prevents overlapping runs; AbortController cancels in-flight checks.
+  // Provider refresh handler: sync titles/descriptions and auto-complete.
+  // Per-provider guard prevents overlapping auto-complete runs; AbortController cancels in-flight checks.
   const autoCompleteControllers = new Map<string, AbortController>();
-  const autoCompleteSub = providerRegistry.onDidRefreshProvider(safeHandler('Error handling auto-complete', async (providerId) => {
+  const autoCompleteSub = providerRegistry.onDidRefreshProvider(safeHandler('Error handling provider refresh', async (providerId) => {
     void syncProviderTitles(providerId, providerRegistry, workGraph).catch(err => {
       logger.error('Error syncing provider titles', err);
     });
