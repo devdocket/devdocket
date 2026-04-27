@@ -2,6 +2,7 @@ import * as vscode from 'vscode';
 import type { WorkItem, DevDocketAction } from './types';
 import { parsePrUrl } from './prUrl';
 import { confirmAiUsage } from './confirmAiUsage';
+import { fenceDiff } from './diffFence';
 
 /**
  * Sanitize a URL before interpolating it into an LLM prompt.
@@ -219,11 +220,7 @@ export abstract class BasePrAction implements DevDocketAction {
 
       const messages = [
         vscode.LanguageModelChatMessage.User(
-          `${runtimeInstructions}${reviewPrompt}
-
-\`\`\`\`diff
-${diff.slice(0, maxDiffLength)}
-\`\`\`\``
+          `${runtimeInstructions}${reviewPrompt}\n\n${fenceDiff(diff.slice(0, maxDiffLength))}`
         ),
       ];
 

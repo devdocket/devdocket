@@ -1,6 +1,7 @@
 import * as vscode from 'vscode';
 import { BasePrAction, sanitizePrUrl } from './basePrAction';
 import { DEFAULT_REVIEW_PROMPT } from './defaultPrompt';
+import { fenceDiff } from './diffFence';
 import { truncateToolContent } from './toolUtils';
 import { gitExec } from './tools/gitUtils';
 import type { RepoManager, WorktreeInfo } from './repoManager';
@@ -173,11 +174,7 @@ ${displayList || '(file list unavailable — use devdocket-getDiff to get the st
 
       const messages: vscode.LanguageModelChatMessage[] = [
         vscode.LanguageModelChatMessage.User(
-          `${runtimeInstructions}${repoContext}${truncationInstructions}${reviewPrompt}
-
-\`\`\`\`diff
-${diff.slice(0, maxDiffLength)}
-\`\`\`\``,
+          `${runtimeInstructions}${repoContext}${truncationInstructions}${reviewPrompt}\n\n${fenceDiff(diff.slice(0, maxDiffLength))}`,
         ),
       ];
 
