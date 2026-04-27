@@ -45,8 +45,8 @@ export class GitHubMyPrsProvider extends BaseGitHubProvider {
 
     // Fetch authored and assigned PRs in parallel; proceed with partial results if one fails
     const [authoredSettled, assignedSettled] = await Promise.allSettled([
-      this.fetchAllAuthoredPrs(accessToken, signal),
-      this.fetchAllAssignedPrs(accessToken, signal),
+      this.fetchPrsByFilter(accessToken, 'author', signal),
+      this.fetchPrsByFilter(accessToken, 'assignee', signal),
     ]);
 
     const authoredResult = authoredSettled.status === 'fulfilled'
@@ -141,11 +141,17 @@ export class GitHubMyPrsProvider extends BaseGitHubProvider {
     }
   }
 
-  private async fetchAllAuthoredPrs(token: string, signal?: AbortSignal): Promise<{ prs: GitHubIssue[]; failures: string[] }> {
+  private async fetchPrsByFilter(
+    token: string,
+    filter: 'author' | 'assignee',
+    signal?: AbortSignal,
+  ): Promise<{ prs: GitHubIssue[]; failures: string[] }> {
+    const label = filter === 'author' ? 'authored' : 'assigned';
+    const searchLabel = `${label} PR search`;
     let response: Response;
     try {
       response = await fetch(
-        'https://api.github.com/search/issues?q=type:pr+state:open+author:@me&per_page=100',
+        `https://api.github.com/search/issues?q=type:pr+state:open+${filter}:@me&per_page=100`,
         {
           headers: {
             Authorization: `Bearer ${token}`,
@@ -157,42 +163,13 @@ export class GitHubMyPrsProvider extends BaseGitHubProvider {
       );
     } catch (err: unknown) {
       if (err instanceof Error && err.name === 'AbortError') { throw err; }
-      logger.error('Failed to fetch authored PRs', err);
-      return { prs: [], failures: ['authored PR search'] };
+      logger.error(`Failed to fetch ${label} PRs`, err);
+      return { prs: [], failures: [searchLabel] };
     }
 
     if (!response.ok) {
-      logger.error(`Failed to fetch authored PRs: ${response.status}`);
-      return { prs: [], failures: ['authored PR search'] };
-    }
-
-    const data = (await response.json()) as GitHubSearchResponse;
-    return { prs: data.items, failures: [] };
-  }
-
-  private async fetchAllAssignedPrs(token: string, signal?: AbortSignal): Promise<{ prs: GitHubIssue[]; failures: string[] }> {
-    let response: Response;
-    try {
-      response = await fetch(
-        'https://api.github.com/search/issues?q=type:pr+state:open+assignee:@me&per_page=100',
-        {
-          headers: {
-            Authorization: `Bearer ${token}`,
-            Accept: 'application/vnd.github+json',
-            'X-GitHub-Api-Version': '2022-11-28',
-          },
-          signal: combineSignals(signal, 30_000),
-        },
-      );
-    } catch (err: unknown) {
-      if (err instanceof Error && err.name === 'AbortError') { throw err; }
-      logger.error('Failed to fetch assigned PRs', err);
-      return { prs: [], failures: ['assigned PR search'] };
-    }
-
-    if (!response.ok) {
-      logger.error(`Failed to fetch assigned PRs: ${response.status}`);
-      return { prs: [], failures: ['assigned PR search'] };
+      logger.error(`Failed to fetch ${label} PRs: ${response.status}`);
+      return { prs: [], failures: [searchLabel] };
     }
 
     const data = (await response.json()) as GitHubSearchResponse;

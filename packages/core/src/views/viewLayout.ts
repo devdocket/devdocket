@@ -1,5 +1,6 @@
 import * as vscode from 'vscode';
 import { WorkItem } from '../models/workItem';
+import type { ProviderRegistry } from '../services/providerRegistry';
 
 export type ViewLayout = 'flat' | 'tree';
 
@@ -493,6 +494,25 @@ export abstract class WorkItemViewProvider implements vscode.TreeDataProvider<Wo
       this._layoutState.value,
       this.labelResolver,
     );
+  }
+
+  /**
+   * Build the four resolver arguments for the WorkItemViewProvider constructor
+   * from an optional ProviderRegistry. Subclasses with a ProviderRegistry
+   * parameter use this to avoid repeating the same closure construction.
+   */
+  protected static buildProviderArgs(registry: ProviderRegistry | undefined): [
+    LabelResolver | undefined,
+    vscode.Event<void> | undefined,
+    TitleResolver | undefined,
+    vscode.Event<void> | undefined,
+  ] {
+    return [
+      registry ? (id: string) => registry.getProviderLabel(id) : undefined,
+      registry?.onDidRegisterProvider,
+      registry ? (pid: string, eid: string) => registry.getDiscoveredItems(pid).find(d => d.externalId === eid)?.title : undefined,
+      registry?.onDidChangeDiscoveredItems,
+    ];
   }
 
   dispose(): void {

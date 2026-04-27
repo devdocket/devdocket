@@ -3,7 +3,7 @@ import { WorkItemState } from '../models/workItem';
 import { WorkGraph } from '../services/workGraph';
 import { logger } from '../services/logger';
 import type { ViewRevealer } from '../services/viewRevealer';
-import { wrapCommand, resolveItemIds, batchTransition } from './commandUtils';
+import { wrapCommand, resolveItemIds, batchTransition, requireItemToMove } from './commandUtils';
 
 async function handleCreateItem(workGraph: WorkGraph, revealer?: ViewRevealer): Promise<void> {
   const title = await vscode.window.showInputBox({
@@ -29,35 +29,19 @@ async function handleAcceptToFocus(workGraph: WorkGraph, item?: { id?: string },
 }
 
 async function handleMoveUp(workGraph: WorkGraph, item?: { id?: string }): Promise<void> {
-  if (!item?.id) {
-    void vscode.window.showInformationMessage('DevDocket: Select an item in the Queue to move.');
-    return;
-  }
-  await workGraph.moveItem(item.id, 'up');
+  await requireItemToMove('the Queue', item, id => workGraph.moveItem(id, 'up'));
 }
 
 async function handleMoveDown(workGraph: WorkGraph, item?: { id?: string }): Promise<void> {
-  if (!item?.id) {
-    void vscode.window.showInformationMessage('DevDocket: Select an item in the Queue to move.');
-    return;
-  }
-  await workGraph.moveItem(item.id, 'down');
+  await requireItemToMove('the Queue', item, id => workGraph.moveItem(id, 'down'));
 }
 
 async function handleMoveToTop(workGraph: WorkGraph, item?: { id?: string }): Promise<void> {
-  if (!item?.id) {
-    void vscode.window.showInformationMessage('DevDocket: Select an item in the Queue to move.');
-    return;
-  }
-  await workGraph.moveToTop(item.id);
+  await requireItemToMove('the Queue', item, id => workGraph.moveToTop(id));
 }
 
 async function handleMoveToBottom(workGraph: WorkGraph, item?: { id?: string }): Promise<void> {
-  if (!item?.id) {
-    void vscode.window.showInformationMessage('DevDocket: Select an item in the Queue to move.');
-    return;
-  }
-  await workGraph.moveToBottom(item.id);
+  await requireItemToMove('the Queue', item, id => workGraph.moveToBottom(id));
 }
 
 async function handleDeleteItem(workGraph: WorkGraph, item?: { id?: string }, selectedItems?: { id?: string }[]): Promise<void> {

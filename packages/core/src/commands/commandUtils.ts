@@ -48,6 +48,23 @@ export function wrapCommand<T extends unknown[]>(label: string, fn: (...args: T)
 }
 
 /**
+ * Guard for move commands that require an item to be selected.
+ * Shows a hint message if no item (or no id) is provided; otherwise
+ * calls the given move operation with the item's id.
+ */
+export async function requireItemToMove(
+  viewName: string,
+  item: { id?: string } | undefined,
+  fn: (id: string) => Promise<void>,
+): Promise<void> {
+  if (!item?.id) {
+    void vscode.window.showInformationMessage(`DevDocket: Select an item in ${viewName} to move.`);
+    return;
+  }
+  await fn(item.id);
+}
+
+/**
  * Transitions multiple items to a target state. Single items use the direct
  * path (errors bubble to wrapCommand). Batches continue on individual failures
  * and show a summary message.
