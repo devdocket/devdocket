@@ -385,8 +385,14 @@ export class StartWorkAction implements DevDocketAction {
       void vscode.window.showErrorMessage('DevDocket: PR source repository has an invalid clone URL.');
       return undefined;
     }
+    const fullName = pr.head.repo.full_name;
+    if (typeof fullName !== 'string' || !/^[a-zA-Z0-9._-]+\/[a-zA-Z0-9._-]+$/.test(fullName)) {
+      void vscode.window.showErrorMessage('DevDocket: PR source repository has an invalid full name.');
+      return undefined;
+    }
+
     logger.debug(`Looking up remote for clone URL: ${headCloneUrl}`);
-    const remoteName = await this.findOrAddRemote(headCloneUrl, pr.head.repo.full_name, repoPath);
+    const remoteName = await this.findOrAddRemote(headCloneUrl, fullName, repoPath);
 
     // Full fetch to ensure all refs (including the PR branch) are available
     logger.info(`Fetching all refs from remote "${remoteName}"`);
