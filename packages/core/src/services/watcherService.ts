@@ -47,6 +47,7 @@ export class WatcherService implements vscode.Disposable {
   private pollTimer: NodeJS.Timeout | undefined;
   private isPollInFlight = false;
   private consecutiveFailures = new Map<string, number>();
+  private configSubscription: vscode.Disposable | undefined;
   
   private readonly _onDidChangeWatchedRuns = new vscode.EventEmitter<WatchedRun[]>();
   readonly onDidChangeWatchedRuns = this._onDidChangeWatchedRuns.event;
@@ -68,7 +69,14 @@ export class WatcherService implements vscode.Disposable {
     private prWatcherRegistry: PRWatcherRegistry,
     private watchStore: WatchStore,
     private logger: { info: (msg: string) => void; warn: (msg: string) => void; error: (msg: string) => void }
-  ) {}
+  ) {
+    this.configSubscription = vscode.workspace.onDidChangeConfiguration(e => {
+      if (e.affectsConfiguration('devDocket.watches.pollingIntervalSeconds') && this.pollTimer) {
+        this.stopPolling();
+        this.ensurePollingActive();
+      }
+    });
+  }
 
   /**
    * Load persisted watches from disk and resume polling for active ones.
@@ -736,6 +744,7 @@ export class WatcherService implements vscode.Disposable {
   }
 
   dispose(): void {
+    this.configSubscription?.dispose();
     this.stopPolling();
     this._onDidChangeWatchedRuns.dispose();
     this._onDidDetectJobFailure.dispose();

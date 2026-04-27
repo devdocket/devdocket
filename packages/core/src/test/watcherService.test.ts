@@ -527,4 +527,79 @@ describe('WatcherService', () => {
       expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining('Failed to add child run'));
     });
   });
+
+  describe('configuration change handling', () => {
+    it('restarts polling with new interval when config changes while polling is active', async () => {
+      const watcher = createMockWatcher('test');
+      registry.register(watcher);
+
+      const identifier = createIdentifier();
+      await service.startWatch(identifier);
+      // startWatch calls getRunStatus once for initial fetch
+      expect(watcher.getRunStatus).toHaveBeenCalledTimes(1);
+
+      // Advance to trigger one poll tick
+      await vi.advanceTimersByTimeAsync(60000);
+      expect(watcher.getRunStatus).toHaveBeenCalledTimes(2);
+
+      // Change the config to a 30s interval
+      const { workspace } = await import('../test/__mocks__/vscode');
+      workspace.getConfiguration.mockReturnValue({
+        get: vi.fn((key: string, defaultValue?: any) => {
+          if (key === 'pollingIntervalSeconds') { return 30; }
+          return defaultValue;
+        }),
+        update: vi.fn().mockResolvedValue(undefined),
+        inspect: vi.fn(() => undefined),
+      });
+
+      // Fire configuration change event
+      workspace._onDidChangeConfigurationEmitter.fire({
+        affectsConfiguration: (section: string) => section === 'devDocket.watches.pollingIntervalSeconds',
+      });
+
+      // Reset call count to measure new interval
+      (watcher.getRunStatus as ReturnType<typeof vi.fn>).mockClear();
+
+      // Advance 30s — should trigger poll with new interval
+      await vi.advanceTimersByTimeAsync(30000);
+      expect(watcher.getRunStatus).toHaveBeenCalledTimes(1);
+    });
+
+    it('does nothing when config changes but polling is not active', async () => {
+      // No watches added, so polling is not active
+      const { workspace } = await import('../test/__mocks__/vscode');
+
+      // Fire configuration change — should not throw or start polling
+      workspace._onDidChangeConfigurationEmitter.fire({
+        affectsConfiguration: (section: string) => section === 'devDocket.watches.pollingIntervalSeconds',
+      });
+
+      // Advance time — no polling should have started
+      await vi.advanceTimersByTimeAsync(60000);
+      expect(logger.info).not.toHaveBeenCalledWith(expect.stringContaining('Started polling'));
+    });
+
+    it('disposes config subscription when service is disposed', async () => {
+      const { workspace } = await import('../test/__mocks__/vscode');
+
+      // Add a watch so polling is active
+      const watcher = createMockWatcher('test');
+      registry.register(watcher);
+      await service.startWatch(createIdentifier());
+
+      // Dispose the service
+      service.dispose();
+
+      // Fire configuration change — should not restart polling
+      workspace._onDidChangeConfigurationEmitter.fire({
+        affectsConfiguration: (section: string) => section === 'devDocket.watches.pollingIntervalSeconds',
+      });
+
+      await vi.advanceTimersByTimeAsync(60000);
+      // getRunStatus was called once during the initial startWatch poll cycle;
+      // after dispose, no more polls should occur
+      expect(watcher.getRunStatus).toHaveBeenCalledTimes(1);
+    });
+  });
 });
