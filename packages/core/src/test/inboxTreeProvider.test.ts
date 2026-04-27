@@ -17,6 +17,7 @@ function createMockStateStore() {
     }),
     load: vi.fn(async () => {}),
     loadAll: vi.fn(async () => []),
+    prune: vi.fn(async () => 0),
     onDidChange: emitter.event,
     dispose: vi.fn(),
     _set: (providerId: string, externalId: string, state: string) => {
