@@ -34,8 +34,7 @@ export function fenceDiff(content: string): string {
 
 /** Replace any consecutive run of `char` longer than `maxLen` with exactly `maxLen` copies. */
 function truncateRuns(text: string, char: string, maxLen: number): string {
-  const escaped = char === '`' ? '`' : '~';
-  return text.replace(new RegExp(`${escapeRegex(escaped)}{${maxLen + 1},}`, 'g'), char.repeat(maxLen));
+  return text.replace(new RegExp(`${escapeRegex(char)}{${maxLen + 1},}`, 'g'), char.repeat(maxLen));
 }
 
 function escapeRegex(str: string): string {
