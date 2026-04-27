@@ -1,5 +1,7 @@
 # DevDocket VS Code Extension Agent Instructions
 
+> **⚠️ BEFORE making any code changes:** Create a git worktree and feature branch. Never modify files directly in the main working tree. See [Use git worktrees for feature branches](#use-git-worktrees-for-feature-branches).
+
 ## Build & Test
 
 ```bash
