@@ -92,6 +92,8 @@ git worktree remove ../devdocket-description-sync-391
 
 Never use `git checkout` or `git switch` to move the main working tree off `dev`.
 
+**This applies to sub-agents too.** When dispatching sub-agents for independent tasks, the orchestrating agent must create a worktree and feature branch for each sub-agent *before* dispatching, and instruct each sub-agent to work exclusively in its assigned worktree. Sub-agents must never make changes directly in the main working tree. The orchestrating agent is responsible for worktree setup and cleanup — sub-agents just receive a working directory path.
+
 ### Use merge commits, not rebase
 
 When resolving merge conflicts or syncing with `dev`, use `git merge origin/dev` instead of `git rebase`. This preserves commit history and avoids force-push issues.
@@ -191,3 +193,13 @@ The core extension must not rely on anything from the other extensions (github, 
 - Never include the issue number or branch name in the PR title. PR titles should be descriptive of the change.
 - All PRs should reference in their description the issue they're fixing (e.g., `Closes #N`).
 - When reading a GitHub issue to implement a fix, always read the issue description AND all posted comments — not just the issue body. Comments often contain design decisions, clarifications, and updated requirements.
+
+### Delegate exploration and implementation to sub-agents
+
+When working on multiple independent tasks (e.g., fixing several unrelated bugs), **do not** manually explore the codebase yourself before dispatching agents. Instead, delegate the work immediately — each sub-agent is responsible for its own exploration, understanding, implementation, and testing. The orchestrating agent's job is to:
+
+1. Read the issue descriptions to understand scope and independence.
+2. Dispatch sub-agents with full context (issue description, relevant file paths, conventions).
+3. Wait for results, then validate (run the full test suite, review if needed).
+
+Do not pre-read source files, test files, or instruction files "just to understand" before delegating — that duplicates work the sub-agent will do anyway and wastes context window.
