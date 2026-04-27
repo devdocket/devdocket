@@ -342,13 +342,17 @@ function wireEvents(
   // Per-provider guard prevents overlapping auto-complete runs; AbortController cancels in-flight checks.
   const autoCompleteControllers = new Map<string, AbortController>();
   const autoCompleteSub = providerRegistry.onDidRefreshProvider(safeHandler('Error handling provider refresh', async (providerId) => {
-    void syncProviderTitles(providerId, providerRegistry, workGraph).catch(err => {
+    try {
+      await syncProviderTitles(providerId, providerRegistry, workGraph);
+    } catch (err) {
       logger.error('Error syncing provider titles', err);
-    });
+    }
 
-    void syncProviderDescriptions(providerId, providerRegistry, workGraph).catch(err => {
+    try {
+      await syncProviderDescriptions(providerId, providerRegistry, workGraph);
+    } catch (err) {
       logger.error('Error syncing provider descriptions', err);
-    });
+    }
 
     const config = vscode.workspace.getConfiguration('devDocket');
     if (!config.get<boolean>('autoCompleteOnClose', true)) {
