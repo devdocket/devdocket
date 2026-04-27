@@ -583,6 +583,23 @@ describe('InboxTreeProvider', () => {
       const item: InboxItem = { kind: 'item', providerId: 'gh', externalId: '1', title: 'Bug' };
       expect((provider.getTreeItem(item).iconPath as any).id).toBe('circle-outline');
     });
+
+    it('should call stateStore.prune during debounced refresh', async () => {
+      registry._setItems('gh', [{ externalId: '1', title: 'Bug' }]);
+      registry._fire();
+      await vi.advanceTimersByTimeAsync(DEBOUNCE_MS);
+
+      expect(stateStore.prune).toHaveBeenCalledWith(registry.getAllDiscoveredItems());
+    });
+
+    it('should skip stateStore.prune while providers are loading', async () => {
+      registry._setItems('gh', [{ externalId: '1', title: 'Bug' }]);
+      registry._setLoading(true);
+      registry._fire();
+      await vi.advanceTimersByTimeAsync(DEBOUNCE_MS);
+
+      expect(stateStore.prune).not.toHaveBeenCalled();
+    });
   });
 
   describe('getTreeItem tooltip', () => {

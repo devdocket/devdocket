@@ -71,9 +71,15 @@ export class InboxTreeProvider implements vscode.TreeDataProvider<InboxElement> 
     this.refreshTimer = setTimeout(() => {
       this.refreshTimer = undefined;
       this.pruneSeenItems();
-      void this.stateStore.prune(this.providerRegistry.getAllDiscoveredItems()).catch(err =>
-        logger.error('Failed to prune discovered state', err)
-      );
+      // Skip pruning while providers are still loading to avoid removing
+      // records for items that haven't been fetched yet.
+      // Note: prune() fires stateStore.onDidChange which re-triggers
+      // scheduleRefresh; the second pass finds nothing to prune and exits.
+      if (!this.providerRegistry.loading) {
+        void this.stateStore.prune(this.providerRegistry.getAllDiscoveredItems()).catch(err =>
+          logger.error('Failed to prune discovered state', err)
+        );
+      }
       this._onDidChangeTreeData.fire();
     }, InboxTreeProvider.REFRESH_DEBOUNCE_MS);
   }
