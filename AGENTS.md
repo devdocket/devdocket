@@ -172,7 +172,8 @@ When creating pull requests in an environment with [GitHub Copilot CLI](https://
 - **Phase 3 (Remote Loop):** Run Copilot PR review via `copilot-pr-review` skill, fix comments (one commit per comment), verify CI, resolve merge conflicts. Any code change in this phase triggers a re-run of Phase 1.
 
 Key rules:
-- **Never skip or shortcut the process.** Every PR goes through all phases.
+- **Never skip or shortcut the process.** Every PR goes through all phases. Do NOT push branches or create PRs via `gh pr create` until the `create-pr` skill's Phase 1 (local loop) is complete.
+- **Invoke the `create-pr` skill before creating any PR.** The skill must be loaded and its phases followed in order. Never hand-roll `gh pr create` or `git push` without the skill orchestrating it.
 - **Any code change re-triggers the local loop** — whether from code review, Copilot feedback, CI fix, or conflict resolution.
 - **Use `superpowers:code-reviewer` agent** for code review, not a generic code-review agent.
 - When working on multiple issues in parallel, each issue goes through this full cycle independently in its own worktree.
