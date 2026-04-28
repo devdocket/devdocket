@@ -4,11 +4,13 @@
 
 import { readFileSync, readdirSync } from 'fs';
 import { resolve, relative, dirname } from 'path';
+import { fileURLToPath } from 'url';
 
 // Exempt packages that are not providers/actions
 const EXEMPT_PACKAGES = new Set(['core', 'shared']);
 
-const repoRoot = resolve(import.meta.dirname, '..');
+const __dirname = dirname(fileURLToPath(import.meta.url));
+const repoRoot = resolve(__dirname, '..');
 
 function discoverConsumerPackages() {
   const pkgsDir = resolve(repoRoot, 'packages');
