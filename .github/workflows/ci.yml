@@ -207,10 +207,14 @@ jobs:
   ci-gate:
     runs-on: ubuntu-latest
     if: always()
-    needs: [build-shared, build-core, build-github, build-ado, build-start-git-work, build-ai-reviewer]
+    needs: [detect-changes, build-shared, build-core, build-github, build-ado, build-start-git-work, build-ai-reviewer]
     steps:
       - name: Check results
         run: |
+          if [[ "${{ needs.detect-changes.result == 'failure' || needs.detect-changes.result == 'cancelled' }}" == "true" ]]; then
+            echo "detect-changes failed or was cancelled"
+            exit 1
+          fi
           if [[ "${{ contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled') }}" == "true" ]]; then
             echo "One or more jobs failed or were cancelled"
             exit 1
