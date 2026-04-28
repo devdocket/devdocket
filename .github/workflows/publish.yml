@@ -48,6 +48,13 @@ jobs:
 
       - uses: actions/checkout@v4
 
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install dependencies
+        run: npm ci
+
       - name: Verify version matches tag
         run: |
           PKG_VERSION=$(node -p "require('./${{ steps.parse.outputs.package_dir }}/package.json').version")
@@ -55,13 +62,6 @@ jobs:
             echo "::error::Tag version (${{ steps.parse.outputs.version }}) does not match package.json version ($PKG_VERSION)"
             exit 1
           fi
-
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-
-      - name: Install dependencies
-        run: npm ci
 
       - name: Build shared
         run: cd packages/shared && npm run build
