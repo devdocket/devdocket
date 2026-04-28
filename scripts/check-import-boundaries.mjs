@@ -27,7 +27,7 @@ const NODE_BUILTINS = new Set([
   'worker_threads', 'zlib',
 ]);
 
-const IMPORT_RE = /(?:import|export)\s+(?:.*?\s+from\s+)?['"]([^'"]+)['"]/g;
+const IMPORT_RE = /(?:import|export)\s+(?:[\s\S]*?\s+from\s+)?['"]([^'"]+)['"]/g;
 const REQUIRE_RE = /require\s*\(\s*['"]([^'"]+)['"]\s*\)/g;
 const DYNAMIC_IMPORT_RE = /\bimport\s*\(\s*['"]([^'"]+)['"]\s*\)/g;
 
@@ -59,16 +59,22 @@ function collectTsFiles(dir, results) {
   }
 }
 
-function extractSpecifiersFromLine(line) {
-  const specifiers = [];
+function stripSingleLineComments(content) {
+  return content.replace(/\/\/.*$/gm, '');
+}
+
+function extractSpecifiers(content) {
+  const results = [];
+  const stripped = stripSingleLineComments(content);
   for (const re of [IMPORT_RE, REQUIRE_RE, DYNAMIC_IMPORT_RE]) {
     re.lastIndex = 0;
     let match;
-    while ((match = re.exec(line)) !== null) {
-      specifiers.push(match[1]);
+    while ((match = re.exec(stripped)) !== null) {
+      const line = stripped.slice(0, match.index).split('\n').length;
+      results.push({ specifier: match[1], line });
     }
   }
-  return specifiers;
+  return results;
 }
 
 function isNodeBuiltin(specifier) {
@@ -106,15 +112,12 @@ for (const pkgDir of consumerPackages) {
 
   for (const filePath of files) {
     const content = readFileSync(filePath, 'utf-8');
-    const lines = content.split('\n');
     const relFile = relative(repoRoot, filePath).replaceAll('\\', '/');
+    const specifiers = extractSpecifiers(content);
 
-    for (let i = 0; i < lines.length; i++) {
-      const specifiers = extractSpecifiersFromLine(lines[i]);
-      for (const specifier of specifiers) {
-        if (!isAllowedImport(specifier) || isRelativeEscape(specifier, filePath, pkgDir)) {
-          violations.push({ file: relFile, line: i + 1, specifier });
-        }
+    for (const { specifier, line } of specifiers) {
+      if (!isAllowedImport(specifier) || isRelativeEscape(specifier, filePath, pkgDir)) {
+        violations.push({ file: relFile, line, specifier });
       }
     }
   }
