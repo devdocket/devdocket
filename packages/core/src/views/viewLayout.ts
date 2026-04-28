@@ -15,17 +15,48 @@ const VIEW_DEFAULTS: Record<ViewId, ViewLayout> = {
   watches: 'flat',
 };
 
+const STORAGE_KEY = 'devdocket.viewLayout';
+
+const VALID_VIEW_IDS: ReadonlySet<string> = new Set<ViewId>(['inbox', 'queue', 'focus', 'history', 'sources', 'watches']);
+
+let globalState: vscode.Memento | undefined;
+const changeListeners: Array<(viewId: ViewId, layout: ViewLayout) => void> = [];
+
 /**
- * Read the persisted layout for a given view, falling back to its default.
- * 
- * Note: Layout state is stored in VS Code configuration (devDocket.viewLayout)
- * but is not exposed in the settings UI. Users control layout via the UI toggle
- * in each view's title bar. This could be migrated to globalState in the future
- * (see team decision #304).
+ * Initialize the view-layout store with a Memento backend.
+ * Must be called once during activation before any persist operation.
+ * Reads (getViewLayout) return defaults if called before init.
+ *
+ * Performs a one-time migration from the legacy configuration-based
+ * storage (`devDocket.viewLayout` in VS Code settings) if globalState
+ * has no layouts yet.
  */
+export async function initViewLayoutStore(memento: vscode.Memento): Promise<void> {
+  globalState = memento;
+
+  // One-time migration from legacy config-based storage
+  if (globalState.get(STORAGE_KEY) === undefined) {
+    const config = vscode.workspace.getConfiguration('devDocket');
+    const legacy: unknown = config.get('viewLayout');
+    const migrated = sanitizeLayouts(legacy);
+    if (Object.keys(migrated).length > 0) {
+      await globalState.update(STORAGE_KEY, migrated);
+    }
+  }
+}
+
+/** Subscribe to layout changes. Returns a disposable that removes the listener. */
+export function onDidChangeLayout(listener: (viewId: ViewId, layout: ViewLayout) => void): vscode.Disposable {
+  changeListeners.push(listener);
+  return { dispose: () => { const i = changeListeners.indexOf(listener); if (i >= 0) { changeListeners.splice(i, 1); } } };
+}
+
+/** Read the persisted layout for a given view, falling back to its default. */
 export function getViewLayout(viewId: ViewId): ViewLayout {
-  const config = vscode.workspace.getConfiguration('devDocket');
-  const layoutsRaw: unknown = config.get('viewLayout');
+  if (!globalState) {
+    return VIEW_DEFAULTS[viewId];
+  }
+  const layoutsRaw: unknown = globalState.get(STORAGE_KEY);
   const layouts = (layoutsRaw && typeof layoutsRaw === 'object' && !Array.isArray(layoutsRaw))
     ? layoutsRaw as Record<string, unknown>
     : {};
@@ -35,8 +66,6 @@ export function getViewLayout(viewId: ViewId): ViewLayout {
   }
   return VIEW_DEFAULTS[viewId];
 }
-
-const VALID_VIEW_IDS: ReadonlySet<string> = new Set<ViewId>(['inbox', 'queue', 'focus', 'history', 'sources', 'watches']);
 
 /** Extract only valid ViewId keys with valid ViewLayout values from an unknown object. */
 function sanitizeLayouts(raw: unknown): Record<string, string> {
@@ -68,19 +97,25 @@ export async function setViewLayout(viewId: ViewId, layout: ViewLayout): Promise
 }
 
 async function applyViewLayout(viewId: ViewId, layout: ViewLayout): Promise<void> {
-  const config = vscode.workspace.getConfiguration('devDocket');
+  if (!globalState) {
+    throw new Error('View layout store not initialized — call initViewLayoutStore() first');
+  }
+  const existing = sanitizeLayouts(globalState.get(STORAGE_KEY));
+  existing[viewId] = layout;
+  await globalState.update(STORAGE_KEY, existing);
+  for (const listener of [...changeListeners]) {
+    try {
+      listener(viewId, layout);
+    } catch {
+      // Isolate listener errors so remaining listeners still fire
+    }
+  }
+}
 
-  const inspection = config.inspect('viewLayout');
-  const hasWorkspaceValue = inspection?.workspaceValue !== undefined;
-  const scopeValue = hasWorkspaceValue ? inspection.workspaceValue : inspection?.globalValue;
-  const target = hasWorkspaceValue
-    ? vscode.ConfigurationTarget.Workspace
-    : vscode.ConfigurationTarget.Global;
-
-  const layouts = sanitizeLayouts(scopeValue);
-  layouts[viewId] = layout;
-
-  await config.update('viewLayout', layouts, target);
+/** @internal — reset module state between tests. */
+export function _resetViewLayoutStore(): void {
+  globalState = undefined;
+  changeListeners.length = 0;
 }
 
 /**

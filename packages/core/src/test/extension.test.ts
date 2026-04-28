@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
 import * as vscode from 'vscode';
 import { MockMemento } from 'vscode';
 import { activate, deactivate, logger } from '../extension';
+import { _resetViewLayoutStore } from '../views/viewLayout';
 
 // Stub fs so migration never touches disk
 vi.mock('fs/promises', () => ({
@@ -38,6 +39,7 @@ describe('activate()', () => {
   });
 
   afterEach(() => {
+    _resetViewLayoutStore();
     // Dispose everything activate pushed into subscriptions.
     // Surface disposal errors so cleanup bugs are caught.
     const errors: unknown[] = [];
@@ -486,52 +488,28 @@ describe('activate()', () => {
   });
 
   // ------------------------------------------------------------------
-  // 19. Layout config change updates provider layouts and context keys
+  // 19. Layout change updates provider layouts and context keys
   // ------------------------------------------------------------------
-  it('updates provider layouts and context keys on configuration change', async () => {
+  it('updates provider layouts and context keys on layout toggle', async () => {
     await activate(context);
     await flushMicrotasks();
 
     const executeCommand = vscode.commands.executeCommand as ReturnType<typeof vi.fn>;
     executeCommand.mockClear();
 
-    // Simulate a configuration change for devdocket.viewLayout
-    const onDidChangeCfg = vscode.workspace.onDidChangeConfiguration as ReturnType<typeof vi.fn>;
-    // Find the viewLayout config listener (the last registered one)
-    const listeners = onDidChangeCfg.mock.calls.map((c: any[]) => c[0]);
-    expect(listeners.length).toBeGreaterThan(0);
+    // Import the functions to trigger a layout change
+    const { toggleViewLayout } = await import('../views/viewLayout');
 
-    // Mock getConfiguration to return a specific layout
-    (vscode.workspace.getConfiguration as ReturnType<typeof vi.fn>).mockReturnValue({
-      get: vi.fn((_key: string) => {
-        if (_key === 'viewLayout') { return { focus: 'tree', queue: 'tree' }; }
-        return undefined;
-      }),
-      update: vi.fn().mockResolvedValue(undefined),
-      inspect: vi.fn(() => undefined),
-    });
-
-    // Fire configuration change event on all listeners
-    for (const listener of listeners) {
-      listener({ affectsConfiguration: (section: string) => section === 'devDocket.viewLayout' });
-    }
+    // Toggle focus from default 'flat' → 'tree'
+    await toggleViewLayout('focus');
     await flushMicrotasks();
 
-    // setContext should have been called for all five views
+    // setContext should have been called for the toggled view
     const setContextCalls = executeCommand.mock.calls.filter(
       (c: any[]) => c[0] === 'setContext' && typeof c[1] === 'string' && c[1].endsWith('Layout'),
     );
-    const contextKeys = setContextCalls.map((c: any[]) => c[1]);
-    expect(contextKeys).toContain('devdocket.focusLayout');
-    expect(contextKeys).toContain('devdocket.queueLayout');
-
-    // Verify context key values reflect the updated layout
     const contextMap = Object.fromEntries(setContextCalls.map((c: any[]) => [c[1], c[2]]));
     expect(contextMap['devdocket.focusLayout']).toBe('tree');
-    expect(contextMap['devdocket.queueLayout']).toBe('tree');
-    // Views not in the override should still have their defaults
-    expect(contextMap['devdocket.inboxLayout']).toBe('tree');
-    expect(contextMap['devdocket.historyLayout']).toBe('flat');
   });
 });
 

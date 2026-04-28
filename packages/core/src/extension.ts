@@ -30,7 +30,7 @@ import { initLogger, setLogLevel, logger, resolveLogLevel } from './services/log
 import { getInboxUnseenCount } from './services/inboxBadge';
 import { syncProviderTitles } from './services/titleSync';
 import { syncProviderDescriptions } from './services/descriptionSync';
-import { getViewLayout, ViewId } from './views/viewLayout';
+import { getViewLayout, initViewLayoutStore, onDidChangeLayout, ViewId } from './views/viewLayout';
 import { performance } from 'perf_hooks';
 
 export type { DevDocketApi, DevDocketProvider, DevDocketAction, DiscoveredItem, Disposable, ActivityLogEntry, ActivityType, StateTransitionEvent, DevDocketPRWatcher } from './api/types';
@@ -404,6 +404,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<DevDoc
   const initStart = performance.now();
   const storagePath = context.globalStorageUri.fsPath;
   await migrateToGlobalState(context.globalState, storagePath);
+  await initViewLayoutStore(context.globalState);
   const { workGraph: wg, stateStore: ss, readStateStore, labelCache } = await loadStores(context.globalState);
   await migrateDiscoveredState(wg, ss);
 
@@ -491,15 +492,10 @@ export async function activate(context: vscode.ExtensionContext): Promise<DevDoc
     void vscode.commands.executeCommand('setContext', `devdocket.${id}Layout`, getViewLayout(id));
   }
   context.subscriptions.push(
-    vscode.workspace.onDidChangeConfiguration(safeHandler('Error handling viewLayout configuration change', (e) => {
-      if (e.affectsConfiguration('devDocket.viewLayout')) {
-        for (const id of viewIds) {
-          const layout = getViewLayout(id);
-          providerMap[id].layout = layout;
-          void vscode.commands.executeCommand('setContext', `devdocket.${id}Layout`, layout);
-        }
-      }
-    })),
+    onDidChangeLayout((viewId, layout) => {
+      providerMap[viewId].layout = layout;
+      void vscode.commands.executeCommand('setContext', `devdocket.${viewId}Layout`, layout);
+    }),
   );
 
   logger.info(`DevDocket activated in ${Math.round(performance.now() - activationStart)}ms`);
