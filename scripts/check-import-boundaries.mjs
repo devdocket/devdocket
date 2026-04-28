@@ -96,6 +96,8 @@ function isRelativeEscape(specifier, filePath, pkgDir) {
 
 function isAllowedImport(specifier) {
   if (specifier.startsWith('.')) return true;
+  // Block absolute paths and repo-relative paths
+  if (specifier.startsWith('/') || specifier.startsWith('packages/')) return false;
   if (specifier === '@devdocket/shared' || specifier.startsWith('@devdocket/shared/')) return true;
   if (specifier === 'vscode') return true;
   if (isNodeBuiltin(specifier)) return true;
