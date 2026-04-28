@@ -18,8 +18,8 @@ jobs:
       core: ${{ steps.filter.outputs.core }}
       github: ${{ steps.filter.outputs.github }}
       ado: ${{ steps.filter.outputs.ado }}
-      start-git-work: ${{ steps.filter.outputs.start-git-work }}
-      ai-reviewer: ${{ steps.filter.outputs.ai-reviewer }}
+      start_git_work: ${{ steps.filter.outputs.start_git_work }}
+      ai_reviewer: ${{ steps.filter.outputs.ai_reviewer }}
     steps:
       - uses: actions/checkout@v4
 
@@ -50,13 +50,13 @@ jobs:
               - 'package.json'
               - 'package-lock.json'
               - '.github/workflows/**'
-            start-git-work:
+            start_git_work:
               - 'packages/start-git-work/**'
               - 'packages/shared/**'
               - 'package.json'
               - 'package-lock.json'
               - '.github/workflows/**'
-            ai-reviewer:
+            ai_reviewer:
               - 'packages/ai-reviewer/**'
               - 'packages/shared/**'
               - 'package.json'
@@ -158,7 +158,7 @@ jobs:
 
   build-start-git-work:
     needs: detect-changes
-    if: needs.detect-changes.outputs.start-git-work == 'true'
+    if: needs.detect-changes.outputs.start_git_work == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -182,7 +182,7 @@ jobs:
 
   build-ai-reviewer:
     needs: detect-changes
-    if: needs.detect-changes.outputs.ai-reviewer == 'true'
+    if: needs.detect-changes.outputs.ai_reviewer == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
