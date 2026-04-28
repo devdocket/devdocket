@@ -3,7 +3,7 @@
 // npm packages, and relative paths within the same package.
 
 import { readFileSync, readdirSync } from 'fs';
-import { resolve, relative, dirname } from 'path';
+import { resolve, relative, dirname, isAbsolute } from 'path';
 import { fileURLToPath } from 'url';
 
 // Exempt packages that are not providers/actions
@@ -98,8 +98,9 @@ function isRelativeEscape(specifier, filePath, pkgDir) {
 
 function isAllowedImport(specifier) {
   if (specifier.startsWith('.')) return true;
-  // Block absolute paths and repo-relative paths
-  if (specifier.startsWith('/') || specifier.startsWith('packages/')) return false;
+  // Block absolute paths (Unix, Windows, UNC), file:// URLs, and repo-relative paths
+  const normalized = specifier.replace(/\\/g, '/');
+  if (isAbsolute(normalized) || normalized.startsWith('file:') || normalized.startsWith('packages/')) return false;
   if (specifier === '@devdocket/shared' || specifier.startsWith('@devdocket/shared/')) return true;
   if (specifier === 'vscode') return true;
   if (isNodeBuiltin(specifier)) return true;
