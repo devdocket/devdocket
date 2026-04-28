@@ -72,10 +72,10 @@ jobs:
           npm run build:prod --if-present || npm run build
 
       - name: Package extension
-        run: cd ${{ steps.parse.outputs.package_dir }} && npx vsce package
+        run: cd ${{ steps.parse.outputs.package_dir }} && npx @vscode/vsce package
 
       - name: Publish extension
-        run: cd ${{ steps.parse.outputs.package_dir }} && npx vsce publish
+        run: cd ${{ steps.parse.outputs.package_dir }} && npx @vscode/vsce publish
         env:
           VSCE_PAT: ${{ secrets.VSCE_PAT }}
 
