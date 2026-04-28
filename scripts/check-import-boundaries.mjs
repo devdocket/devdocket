@@ -5,12 +5,17 @@
 import { readFileSync, readdirSync } from 'fs';
 import { resolve, relative, dirname } from 'path';
 
-const CONSUMER_PACKAGES = [
-  'packages/github',
-  'packages/ado',
-  'packages/start-git-work',
-  'packages/ai-reviewer',
-];
+// Exempt packages that are not providers/actions
+const EXEMPT_PACKAGES = new Set(['core', 'shared']);
+
+const repoRoot = resolve(import.meta.dirname, '..');
+
+function discoverConsumerPackages() {
+  const pkgsDir = resolve(repoRoot, 'packages');
+  return readdirSync(pkgsDir, { withFileTypes: true })
+    .filter(e => e.isDirectory() && !EXEMPT_PACKAGES.has(e.name))
+    .map(e => `packages/${e.name}`);
+}
 
 const NODE_BUILTINS = new Set([
   'assert', 'async_hooks', 'buffer', 'child_process', 'cluster', 'console',
@@ -22,10 +27,11 @@ const NODE_BUILTINS = new Set([
   'worker_threads', 'zlib',
 ]);
 
-const IMPORT_RE = /(?:import|export)\s+(?:[\s\S]*?\s+from\s+)?['"]([^'"]+)['"]/g;
+const IMPORT_RE = /(?:import|export)\s+(?:.*?\s+from\s+)?['"]([^'"]+)['"]/g;
 const REQUIRE_RE = /require\s*\(\s*['"]([^'"]+)['"]\s*\)/g;
+const DYNAMIC_IMPORT_RE = /\bimport\s*\(\s*['"]([^'"]+)['"]\s*\)/g;
 
-const repoRoot = resolve(import.meta.dirname, '..');
+const SKIP_DIRS = new Set(['test', '__tests__', '__mocks__', 'node_modules']);
 
 function collectTsFiles(dir, results) {
   let entries;
@@ -38,7 +44,7 @@ function collectTsFiles(dir, results) {
   for (const entry of entries) {
     const fullPath = resolve(dir, entry.name);
     if (entry.isDirectory()) {
-      if (entry.name === 'test' || entry.name === '__tests__' || entry.name === '__mocks__') {
+      if (SKIP_DIRS.has(entry.name)) {
         continue;
       }
       collectTsFiles(fullPath, results);
@@ -53,12 +59,12 @@ function collectTsFiles(dir, results) {
   }
 }
 
-function extractSpecifiers(content) {
+function extractSpecifiersFromLine(line) {
   const specifiers = [];
-  for (const re of [IMPORT_RE, REQUIRE_RE]) {
+  for (const re of [IMPORT_RE, REQUIRE_RE, DYNAMIC_IMPORT_RE]) {
     re.lastIndex = 0;
     let match;
-    while ((match = re.exec(content)) !== null) {
+    while ((match = re.exec(line)) !== null) {
       specifiers.push(match[1]);
     }
   }
@@ -79,41 +85,36 @@ function isRelativeEscape(specifier, filePath, pkgDir) {
   return relative(pkgRoot, resolved).startsWith('..');
 }
 
-function isForbiddenBareImport(specifier) {
-  // Any @devdocket/* import other than @devdocket/shared is forbidden
-  if (specifier.startsWith('@devdocket/') && !specifier.startsWith('@devdocket/shared')) {
-    return true;
-  }
-  return false;
-}
-
 function isAllowedImport(specifier) {
   if (specifier.startsWith('.')) return true;
   if (specifier === '@devdocket/shared' || specifier.startsWith('@devdocket/shared/')) return true;
   if (specifier === 'vscode') return true;
   if (isNodeBuiltin(specifier)) return true;
-  if (isForbiddenBareImport(specifier)) return false;
+  // Any other @devdocket/* import is forbidden
+  if (specifier.startsWith('@devdocket/')) return false;
   // Other bare specifiers are npm packages
   return true;
 }
 
+const consumerPackages = discoverConsumerPackages();
 const violations = [];
 
-for (const pkgDir of CONSUMER_PACKAGES) {
+for (const pkgDir of consumerPackages) {
   const srcDir = resolve(repoRoot, pkgDir, 'src');
   const files = [];
   collectTsFiles(srcDir, files);
 
   for (const filePath of files) {
     const content = readFileSync(filePath, 'utf-8');
-    const specifiers = extractSpecifiers(content);
+    const lines = content.split('\n');
     const relFile = relative(repoRoot, filePath).replaceAll('\\', '/');
 
-    for (const specifier of specifiers) {
-      if (!isAllowedImport(specifier)) {
-        violations.push({ file: relFile, specifier });
-      } else if (isRelativeEscape(specifier, filePath, pkgDir)) {
-        violations.push({ file: relFile, specifier });
+    for (let i = 0; i < lines.length; i++) {
+      const specifiers = extractSpecifiersFromLine(lines[i]);
+      for (const specifier of specifiers) {
+        if (!isAllowedImport(specifier) || isRelativeEscape(specifier, filePath, pkgDir)) {
+          violations.push({ file: relFile, line: i + 1, specifier });
+        }
       }
     }
   }
@@ -121,8 +122,8 @@ for (const pkgDir of CONSUMER_PACKAGES) {
 
 if (violations.length > 0) {
   console.error('Import boundary violations found:\n');
-  for (const { file, specifier } of violations) {
-    console.error(`  ${file}`);
+  for (const { file, line, specifier } of violations) {
+    console.error(`  ${file}:${line}`);
     console.error(`    Forbidden import: ${specifier}\n`);
   }
   console.error(
