@@ -69,7 +69,11 @@ jobs:
       - name: Build target package
         run: |
           cd ${{ steps.parse.outputs.package_dir }}
-          npm run build:prod --if-present || npm run build
+          if node -e "process.exit(require('./package.json').scripts && require('./package.json').scripts['build:prod'] ? 0 : 1)"; then
+            npm run build:prod
+          else
+            npm run build
+          fi
 
       - name: Package extension
         run: cd ${{ steps.parse.outputs.package_dir }} && npx @vscode/vsce package
