@@ -8,7 +8,7 @@
     "build": "tsc",
     "build:prod": "tsc",
     "clean": "node -e \"require('fs').rmSync('dist',{recursive:true,force:true})\"",
-    "prepare": "tsc",
+    "prepare": "npm run build",
     "test": "vitest run",
     "lint": "echo No lint needed"
   },
