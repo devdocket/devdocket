@@ -138,7 +138,7 @@ Replace \`<slug>\` with a short kebab-case description of each fix.
 ${perIssueSteps}`;
 }
 
-const session = await joinSession({
+await joinSession({
     hooks: {
         onUserPromptSubmitted: async (input) => {
             mainTreePath = detectMainTreePath(input.cwd);
