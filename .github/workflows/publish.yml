@@ -36,7 +36,7 @@ jobs:
               ;;
           esac
 
-          if ! echo "$VERSION" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+'; then
+          if ! echo "$VERSION" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+(-[a-zA-Z0-9.]+)?(\+[a-zA-Z0-9.]+)?$'; then
             echo "::error::Version '$VERSION' is not valid semver"
             exit 1
           fi
@@ -81,11 +81,13 @@ jobs:
 
       - name: Create GitHub Release
         run: |
-          VSIX_FILE=$(ls ${{ steps.parse.outputs.package_dir }}/*.vsix)
-          if [ -z "$VSIX_FILE" ]; then
-            echo "::error::No .vsix file found"
+          shopt -s nullglob
+          VSIX_FILES=( ${{ steps.parse.outputs.package_dir }}/*.vsix )
+          if [ ${#VSIX_FILES[@]} -ne 1 ]; then
+            echo "::error::Expected exactly 1 .vsix file, found ${#VSIX_FILES[@]}"
             exit 1
           fi
+          VSIX_FILE="${VSIX_FILES[0]}"
           gh release create "${{ steps.parse.outputs.tag }}" \
             "$VSIX_FILE" \
             --title "${{ steps.parse.outputs.tag }}" \
