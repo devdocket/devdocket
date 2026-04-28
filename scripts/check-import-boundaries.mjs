@@ -59,13 +59,16 @@ function collectTsFiles(dir, results) {
   }
 }
 
-function stripSingleLineComments(content) {
-  return content.replace(/\/\/.*$/gm, '');
+function stripFullLineComments(content) {
+  return content.split('\n').map(line => {
+    const trimmed = line.trimStart();
+    return trimmed.startsWith('//') ? '' : line;
+  }).join('\n');
 }
 
 function extractSpecifiers(content) {
   const results = [];
-  const stripped = stripSingleLineComments(content);
+  const stripped = stripFullLineComments(content);
   for (const re of [IMPORT_RE, REQUIRE_RE, DYNAMIC_IMPORT_RE]) {
     re.lastIndex = 0;
     let match;
