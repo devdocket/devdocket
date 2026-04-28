@@ -22,7 +22,7 @@ jobs:
           TAG="${GITHUB_REF#refs/tags/}"
           # Extract package prefix (everything before the last -vX.Y.Z)
           PACKAGE_NAME="${TAG%-v*}"
-          VERSION="${TAG#*-v}"
+          VERSION="${TAG##*-v}"
 
           case "$PACKAGE_NAME" in
             core)           PACKAGE_DIR="packages/core" ;;
