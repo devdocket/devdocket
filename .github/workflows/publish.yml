@@ -121,6 +121,20 @@ jobs:
         env:
           VSCE_PAT: ${{ secrets.VSCE_PAT }}
 
+      - name: Generate release notes
+        run: |
+          PREV_TAG=$(git tag -l '${{ steps.parse.outputs.package_name }}-v*' --sort=-v:refname | grep -vFx "${GITHUB_REF_NAME}" | head -n1)
+          if [ -n "$PREV_TAG" ]; then
+            RANGE="${PREV_TAG}..${GITHUB_REF_NAME}"
+          else
+            RANGE="$GITHUB_REF_NAME"
+          fi
+          NOTES=$(git log "$RANGE" --pretty=format:"* %s (%h)" -- "${{ steps.parse.outputs.package_dir }}/")
+          if [ -z "$NOTES" ]; then
+            NOTES="* No notable changes in this release"
+          fi
+          printf '%s\n' "$NOTES" > release-notes.md
+
       - name: Create GitHub Release
         run: |
           shopt -s nullglob
@@ -133,6 +147,6 @@ jobs:
           gh release create "${{ steps.parse.outputs.tag }}" \
             "$VSIX_FILE" \
             --title "${{ steps.parse.outputs.tag }}" \
-            --generate-notes
+            --notes-file release-notes.md
         env:
           GH_TOKEN: ${{ github.token }}
