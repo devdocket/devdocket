@@ -97,7 +97,7 @@ jobs:
           # single quotes are intentional to avoid premature shell expansion.
           echo '//npm.pkg.github.com/:_authToken=${NODE_AUTH_TOKEN}' >> .npmrc
           echo "{\"dependencies\":{\"@devdocket/shared\":\"$SHARED_VERSION\"}}" > package.json
-          npm install
+          npm install --ignore-scripts --no-audit --no-fund
           cp -r node_modules/@devdocket/shared "$GITHUB_WORKSPACE/node_modules/@devdocket/shared"
           cd "$GITHUB_WORKSPACE"
           rm -rf "$TMPDIR"
