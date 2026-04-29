@@ -21,9 +21,23 @@ jobs:
         id: parse
         run: |
           TAG="${GITHUB_REF#refs/tags/}"
-          # Extract package prefix (everything before the last -vX.Y.Z)
-          PACKAGE_NAME="${TAG%-v*}"
-          VERSION="${TAG##*-v}"
+
+          # Match against known package prefixes to extract name and version.
+          # This avoids ambiguity when semver pre-release metadata contains "-v".
+          PACKAGE_NAME=""
+          VERSION=""
+          for PREFIX in core github ado start-git-work ai-reviewer; do
+            if [[ "$TAG" == "$PREFIX-v"* ]]; then
+              PACKAGE_NAME="$PREFIX"
+              VERSION="${TAG#"$PREFIX-v"}"
+              break
+            fi
+          done
+
+          if [ -z "$PACKAGE_NAME" ]; then
+            echo "::error::Tag '$TAG' does not match any known package prefix"
+            exit 1
+          fi
 
           case "$PACKAGE_NAME" in
             core)           PACKAGE_DIR="packages/core" ;;
