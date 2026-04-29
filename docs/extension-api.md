@@ -356,31 +356,7 @@ This example shows a provider that discovers items from a hypothetical task API.
 
 ```ts
 import * as vscode from 'vscode';
-
-interface DiscoveredItem {
-  externalId: string;
-  title: string;
-  description?: string;
-  url?: string;
-  group?: string;
-  canonicalId?: string;
-}
-
-interface Disposable {
-  dispose(): void;
-}
-
-interface Event<T> {
-  (listener: (e: T) => void): Disposable;
-}
-
-interface DevDocketProvider {
-  readonly id: string;
-  readonly label: string;
-  readonly onDidDiscoverItems: Event<DiscoveredItem[]>;
-  refresh(token?: vscode.CancellationToken): Promise<void>;
-  getClosedItems?(externalIds: string[], signal?: AbortSignal): Promise<string[]>;
-}
+import { DiscoveredItem, DevDocketProvider } from '@devdocket/shared';
 
 class MyTaskProvider implements DevDocketProvider {
   readonly id = 'my-tasks';
@@ -445,34 +421,7 @@ This example shows an action that opens a dashboard page for a work item using i
 
 ```ts
 import * as vscode from 'vscode';
-
-enum WorkItemState {
-  New = 'New',
-  InProgress = 'InProgress',
-  Paused = 'Paused',
-  Done = 'Done',
-  Archived = 'Archived',
-}
-
-interface WorkItem {
-  id: string;
-  title: string;
-  notes?: string;
-  state: WorkItemState;
-  providerId?: string;
-  externalId?: string;
-  url?: string;
-  sortOrder?: number;
-  createdAt: number;
-  updatedAt: number;
-}
-
-interface DevDocketAction {
-  readonly id: string;
-  readonly label: string;
-  canRun(item: Readonly<WorkItem>): boolean;
-  run(item: Readonly<WorkItem>): Promise<void>;
-}
+import { WorkItem, WorkItemState, DevDocketAction } from '@devdocket/shared';
 
 class OpenDashboardAction implements DevDocketAction {
   readonly id = 'my-tasks.openDashboard';
