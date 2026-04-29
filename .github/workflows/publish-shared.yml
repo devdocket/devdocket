@@ -53,7 +53,7 @@ jobs:
       - name: Generate release notes
         run: |
           # Find the previous shared-v* tag to scope the changelog
-          PREV_TAG=$(git tag -l 'shared-v*' --sort=-v:refname | grep -v "^${GITHUB_REF_NAME}$" | head -n1)
+          PREV_TAG=$(git tag -l 'shared-v*' --sort=-v:refname | grep -vFx "${GITHUB_REF_NAME}" | head -n1)
           if [ -n "$PREV_TAG" ]; then
             RANGE="${PREV_TAG}..${GITHUB_REF_NAME}"
           else
