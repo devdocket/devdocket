@@ -36,7 +36,7 @@ npm install @devdocket/shared
 You can then import types directly instead of redefining them:
 
 ```ts
-import { BaseProvider, DiscoveredItem } from '@devdocket/shared';
+import { BaseProvider, type DiscoveredItem } from '@devdocket/shared';
 ```
 
 ### Acquiring the API
@@ -356,7 +356,7 @@ This example shows a provider that discovers items from a hypothetical task API.
 
 ```ts
 import * as vscode from 'vscode';
-import { DiscoveredItem, DevDocketProvider } from '@devdocket/shared';
+import type { DiscoveredItem, DevDocketProvider } from '@devdocket/shared';
 
 class MyTaskProvider implements DevDocketProvider {
   readonly id = 'my-tasks';
@@ -421,7 +421,7 @@ This example shows an action that opens a dashboard page for a work item using i
 
 ```ts
 import * as vscode from 'vscode';
-import { WorkItem, WorkItemState, DevDocketAction } from '@devdocket/shared';
+import { WorkItemState, type WorkItem, type DevDocketAction } from '@devdocket/shared';
 
 class OpenDashboardAction implements DevDocketAction {
   readonly id = 'my-tasks.openDashboard';

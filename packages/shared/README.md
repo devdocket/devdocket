@@ -21,7 +21,7 @@ npm install @devdocket/shared
 ## Usage
 
 ```typescript
-import { BaseProvider, DiscoveredItem, Event } from '@devdocket/shared';
+import { BaseProvider, type DiscoveredItem, type Event } from '@devdocket/shared';
 ```
 
 See the [DevDocket documentation](https://github.com/devdocket/devdocket) for details on building provider and action extensions.
