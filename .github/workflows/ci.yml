@@ -9,9 +9,64 @@ on:
 
 permissions:
   contents: read
+  pull-requests: read
 
 jobs:
-  build-and-test:
+  detect-changes:
+    runs-on: ubuntu-latest
+    outputs:
+      shared: ${{ steps.filter.outputs.shared }}
+      core: ${{ steps.filter.outputs.core }}
+      github: ${{ steps.filter.outputs.github }}
+      ado: ${{ steps.filter.outputs.ado }}
+      start_git_work: ${{ steps.filter.outputs.start_git_work }}
+      ai_reviewer: ${{ steps.filter.outputs.ai_reviewer }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            shared:
+              - 'packages/shared/**'
+              - 'package.json'
+              - 'package-lock.json'
+              - '.github/workflows/**'
+            core:
+              - 'packages/core/**'
+              - 'packages/shared/**'
+              - 'package.json'
+              - 'package-lock.json'
+              - '.github/workflows/**'
+            github:
+              - 'packages/github/**'
+              - 'packages/shared/**'
+              - 'package.json'
+              - 'package-lock.json'
+              - '.github/workflows/**'
+            ado:
+              - 'packages/ado/**'
+              - 'packages/shared/**'
+              - 'package.json'
+              - 'package-lock.json'
+              - '.github/workflows/**'
+            start_git_work:
+              - 'packages/start-git-work/**'
+              - 'packages/shared/**'
+              - 'package.json'
+              - 'package-lock.json'
+              - '.github/workflows/**'
+            ai_reviewer:
+              - 'packages/ai-reviewer/**'
+              - 'packages/shared/**'
+              - 'package.json'
+              - 'package-lock.json'
+              - '.github/workflows/**'
+
+  build-shared:
+    needs: detect-changes
+    if: needs.detect-changes.outputs.shared == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -19,12 +74,149 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
+          cache: 'npm'
 
       - name: Install dependencies
         run: npm ci
 
-      - name: Build
-        run: npm run build
+      - name: Build shared
+        run: cd packages/shared && npm run build
 
-      - name: Test
-        run: npm run test
+      - name: Test shared
+        run: cd packages/shared && npm run test
+
+  build-core:
+    needs: detect-changes
+    if: needs.detect-changes.outputs.core == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build shared
+        run: cd packages/shared && npm run build
+
+      - name: Build core
+        run: cd packages/core && npm run build
+
+      - name: Test core
+        run: cd packages/core && npm run test
+
+  build-github:
+    needs: detect-changes
+    if: needs.detect-changes.outputs.github == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build shared
+        run: cd packages/shared && npm run build
+
+      - name: Build github
+        run: cd packages/github && npm run build
+
+      - name: Test github
+        run: cd packages/github && npm run test
+
+  build-ado:
+    needs: detect-changes
+    if: needs.detect-changes.outputs.ado == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build shared
+        run: cd packages/shared && npm run build
+
+      - name: Build ado
+        run: cd packages/ado && npm run build
+
+      - name: Test ado
+        run: cd packages/ado && npm run test
+
+  build-start-git-work:
+    needs: detect-changes
+    if: needs.detect-changes.outputs.start_git_work == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build shared
+        run: cd packages/shared && npm run build
+
+      - name: Build start-git-work
+        run: cd packages/start-git-work && npm run build
+
+      - name: Test start-git-work
+        run: cd packages/start-git-work && npm run test
+
+  build-ai-reviewer:
+    needs: detect-changes
+    if: needs.detect-changes.outputs.ai_reviewer == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build shared
+        run: cd packages/shared && npm run build
+
+      - name: Build ai-reviewer
+        run: cd packages/ai-reviewer && npm run build
+
+      - name: Test ai-reviewer
+        run: cd packages/ai-reviewer && npm run test
+
+  ci-gate:
+    runs-on: ubuntu-latest
+    if: always()
+    needs: [detect-changes, build-shared, build-core, build-github, build-ado, build-start-git-work, build-ai-reviewer]
+    steps:
+      - name: Check results
+        run: |
+          if [[ "${{ needs.detect-changes.result == 'failure' || needs.detect-changes.result == 'cancelled' }}" == "true" ]]; then
+            echo "detect-changes failed or was cancelled"
+            exit 1
+          fi
+          if [[ "${{ contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled') }}" == "true" ]]; then
+            echo "One or more jobs failed or were cancelled"
+            exit 1
+          fi

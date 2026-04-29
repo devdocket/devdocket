@@ -6,9 +6,10 @@
     "packages/*"
   ],
   "scripts": {
-    "build": "npm run build --workspaces",
-    "build:prod": "npm run build:prod --workspaces",
+    "build": "npm run build -w @devdocket/shared && npm run build --workspaces",
+    "build:prod": "npm run build:prod -w @devdocket/shared && npm run build:prod --workspaces",
     "test": "npm run test --workspaces",
-    "lint": "npm run lint --workspaces"
+    "check-boundaries": "node scripts/check-import-boundaries.mjs",
+    "lint": "npm run check-boundaries && npm run lint --workspaces"
   }
 }
