@@ -48,10 +48,13 @@ jobs:
           echo "package_dir=$PACKAGE_DIR" >> "$GITHUB_OUTPUT"
 
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - uses: actions/setup-node@v4
         with:
           node-version: 22
+          cache: 'npm'
 
       - name: Install dependencies
         run: npm ci
@@ -71,12 +74,15 @@ jobs:
           # shared code, so this ensures prod builds bundle the same artifact
           # that third-party consumers install.
           # (See publish-shared.yml for how @devdocket/shared is published.)
+          SHARED_VERSION=$(node -p "require('./packages/shared/package.json').version")
           rm -rf node_modules/@devdocket/shared
           TMPDIR=$(mktemp -d)
           cd "$TMPDIR"
           echo '@devdocket:registry=https://npm.pkg.github.com' > .npmrc
+          # npm expands ${NODE_AUTH_TOKEN} at runtime from the environment;
+          # single quotes are intentional to avoid premature shell expansion.
           echo '//npm.pkg.github.com/:_authToken=${NODE_AUTH_TOKEN}' >> .npmrc
-          echo '{"dependencies":{"@devdocket/shared":"*"}}' > package.json
+          echo "{\"dependencies\":{\"@devdocket/shared\":\"$SHARED_VERSION\"}}" > package.json
           npm install
           cp -r node_modules/@devdocket/shared "$GITHUB_WORKSPACE/node_modules/@devdocket/shared"
           rm -rf "$TMPDIR"
@@ -85,7 +91,7 @@ jobs:
 
       - name: Build target package
         run: |
-          cd ${{ steps.parse.outputs.package_dir }}
+          cd "${{ steps.parse.outputs.package_dir }}"
           if node -e "process.exit(require('./package.json').scripts && require('./package.json').scripts['build:prod'] ? 0 : 1)"; then
             npm run build:prod
           else
@@ -93,17 +99,17 @@ jobs:
           fi
 
       - name: Package extension
-        run: cd ${{ steps.parse.outputs.package_dir }} && npx @vscode/vsce package
+        run: cd "${{ steps.parse.outputs.package_dir }}" && npx @vscode/vsce package
 
       - name: Publish extension
-        run: cd ${{ steps.parse.outputs.package_dir }} && npx @vscode/vsce publish
+        run: cd "${{ steps.parse.outputs.package_dir }}" && npx @vscode/vsce publish
         env:
           VSCE_PAT: ${{ secrets.VSCE_PAT }}
 
       - name: Create GitHub Release
         run: |
           shopt -s nullglob
-          VSIX_FILES=( ${{ steps.parse.outputs.package_dir }}/*.vsix )
+          VSIX_FILES=( "${{ steps.parse.outputs.package_dir }}"/*.vsix )
           if [ ${#VSIX_FILES[@]} -ne 1 ]; then
             echo "::error::Expected exactly 1 .vsix file, found ${#VSIX_FILES[@]}"
             exit 1
