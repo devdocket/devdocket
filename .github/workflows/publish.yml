@@ -113,6 +113,9 @@ jobs:
             npm run build
           fi
 
+      - name: Test target package
+        run: cd "${{ steps.parse.outputs.package_dir }}" && npm run test
+
       - name: Package extension
         run: cd "${{ steps.parse.outputs.package_dir }}" && npx @vscode/vsce package
 
