@@ -64,7 +64,7 @@ jobs:
           if [ -z "$NOTES" ]; then
             NOTES="* No changes to packages/shared in this release"
           fi
-          echo "$NOTES" > release-notes.md
+          printf '%s\n' "$NOTES" > release-notes.md
 
       - name: Create GitHub Release
         run: gh release create "$GITHUB_REF_NAME" --title "$GITHUB_REF_NAME" --notes-file release-notes.md
