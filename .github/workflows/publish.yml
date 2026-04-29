@@ -85,6 +85,7 @@ jobs:
           echo "{\"dependencies\":{\"@devdocket/shared\":\"$SHARED_VERSION\"}}" > package.json
           npm install
           cp -r node_modules/@devdocket/shared "$GITHUB_WORKSPACE/node_modules/@devdocket/shared"
+          cd "$GITHUB_WORKSPACE"
           rm -rf "$TMPDIR"
         env:
           NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
