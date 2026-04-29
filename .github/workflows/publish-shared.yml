@@ -14,6 +14,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - uses: actions/setup-node@v4
         with:
@@ -48,7 +50,23 @@ jobs:
         env:
           NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Generate release notes
+        run: |
+          # Find the previous shared-v* tag to scope the changelog
+          PREV_TAG=$(git tag -l 'shared-v*' --sort=-v:refname | grep -v "^${GITHUB_REF_NAME}$" | head -n1)
+          if [ -n "$PREV_TAG" ]; then
+            RANGE="${PREV_TAG}..${GITHUB_REF_NAME}"
+          else
+            RANGE="$GITHUB_REF_NAME"
+          fi
+          # Only include commits that touched packages/shared/
+          NOTES=$(git log "$RANGE" --pretty=format:"* %s (%h)" -- packages/shared/)
+          if [ -z "$NOTES" ]; then
+            NOTES="* No changes to packages/shared in this release"
+          fi
+          echo "$NOTES" > release-notes.md
+
       - name: Create GitHub Release
-        run: gh release create "$GITHUB_REF_NAME" --title "$GITHUB_REF_NAME" --generate-notes
+        run: gh release create "$GITHUB_REF_NAME" --title "$GITHUB_REF_NAME" --notes-file release-notes.md
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
