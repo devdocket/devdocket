@@ -15,6 +15,30 @@ Your extension must declare a dependency on DevDocket so that VS Code activates 
 }
 ```
 
+### Installing `@devdocket/shared`
+
+The `@devdocket/shared` package provides the TypeScript types and base classes (`DiscoveredItem`, `BaseProvider`, `Event`, `Disposable`, etc.) needed to build providers and actions with full type safety.
+
+The package is published to the GitHub Packages npm registry. Add a `.npmrc` file to your project to configure the `@devdocket` scope:
+
+```ini
+@devdocket:registry=https://npm.pkg.github.com
+```
+
+Then install the package:
+
+```bash
+npm install @devdocket/shared
+```
+
+> **Note:** GitHub Packages requires authentication. See [GitHub's docs on authenticating to GitHub Packages](https://docs.github.com/en/packages/working-with-a-github-packages-registry/working-with-the-npm-registry#authenticating-to-github-packages) for setup instructions.
+
+You can then import types directly instead of redefining them:
+
+```ts
+import { BaseProvider, DiscoveredItem } from '@devdocket/shared';
+```
+
 ### Acquiring the API
 
 In your extension's `activate()` function, acquire the `DevDocketApi` from the core extension:
