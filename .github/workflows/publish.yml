@@ -123,7 +123,7 @@ jobs:
 
       - name: Generate release notes
         run: |
-          PREV_TAG=$(git tag -l '${{ steps.parse.outputs.package_name }}-v*' --sort=-v:refname | grep -vFx "${GITHUB_REF_NAME}" | head -n1)
+          PREV_TAG=$(git tag -l '${{ steps.parse.outputs.package_name }}-v*' --sort=-v:refname | grep -vFx "${GITHUB_REF_NAME}" | head -n1 || true)
           if [ -n "$PREV_TAG" ]; then
             RANGE="${PREV_TAG}..${GITHUB_REF_NAME}"
           else
