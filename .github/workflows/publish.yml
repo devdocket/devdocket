@@ -11,6 +11,7 @@ on:
 
 permissions:
   contents: write
+  packages: read
 
 jobs:
   publish:
@@ -63,8 +64,24 @@ jobs:
             exit 1
           fi
 
-      - name: Build shared
-        run: cd packages/shared && npm run build
+      - name: Install @devdocket/shared from registry
+        run: |
+          # Replace workspace-linked @devdocket/shared with the published package
+          # from GitHub Packages. Extensions use esbuild --bundle which inlines
+          # shared code, so this ensures prod builds bundle the same artifact
+          # that third-party consumers install.
+          # (See publish-shared.yml for how @devdocket/shared is published.)
+          rm -rf node_modules/@devdocket/shared
+          TMPDIR=$(mktemp -d)
+          cd "$TMPDIR"
+          echo '@devdocket:registry=https://npm.pkg.github.com' > .npmrc
+          echo '//npm.pkg.github.com/:_authToken=${NODE_AUTH_TOKEN}' >> .npmrc
+          echo '{"dependencies":{"@devdocket/shared":"*"}}' > package.json
+          npm install
+          cp -r node_modules/@devdocket/shared "$GITHUB_WORKSPACE/node_modules/@devdocket/shared"
+          rm -rf "$TMPDIR"
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Build target package
         run: |
