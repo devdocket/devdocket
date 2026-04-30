@@ -4,11 +4,7 @@ import { BaseGitHubProvider } from './baseGithubProvider';
 import { logger } from './logger';
 import { parseRepoFromUrls } from './parseRepo';
 import { matchesRepoPatterns } from './repoPattern';
-import { getHeaders, retryWithAuth, throwApiError, parseCanonicalRepo, fetchClosedGitHubItems, type GitHubIssue } from './githubApiHelpers';
-
-interface GitHubSearchResponse {
-  items: GitHubIssue[];
-}
+import { getHeaders, getGitHubAuthHeaders, retryWithAuth, throwApiError, parseCanonicalRepo, fetchClosedGitHubItems, type GitHubIssue, type GitHubSearchResponse } from './githubApiHelpers';
 
 const MENTIONS_ACTIVATED_KEY = 'mentionsActivatedAt';
 
@@ -162,11 +158,7 @@ export class GitHubMentionsProvider extends BaseGitHubProvider {
       response = await fetch(
         `https://api.github.com/search/issues?q=${q}&per_page=100`,
         {
-          headers: {
-            Authorization: `Bearer ${token}`,
-            Accept: 'application/vnd.github+json',
-            'X-GitHub-Api-Version': '2022-11-28',
-          },
+          headers: getGitHubAuthHeaders(token),
           signal: combineSignals(signal, 30_000),
         },
       );

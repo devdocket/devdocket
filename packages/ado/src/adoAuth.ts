@@ -1,6 +1,6 @@
 import * as vscode from 'vscode';
 
-const ADO_AUTH_SCOPE = '499b84ac-1321-427f-aa17-267ca6975798/.default';
+export const ADO_AUTH_SCOPE = '499b84ac-1321-427f-aa17-267ca6975798/.default';
 
 /** Get ADO API headers, attaching auth if a silent session is available. */
 export async function getAdoHeaders(): Promise<Record<string, string>> {

@@ -1,14 +1,10 @@
 import * as vscode from 'vscode';
-import { DiscoveredItem, combineSignals, runWorkerPool, safeDecodeComponent, type ResolvedItem } from '@devdocket/shared';
+import { DiscoveredItem, combineSignals, createAbortError, runWorkerPool, safeDecodeComponent, type ResolvedItem } from '@devdocket/shared';
 import { BaseGitHubProvider } from './baseGithubProvider';
 import { logger } from './logger';
 import { parseRepoFromUrls } from './parseRepo';
-import { getHeaders, retryWithAuth, throwApiError, parseCanonicalRepo, fetchClosedGitHubItems, type GitHubIssue } from './githubApiHelpers';
+import { getHeaders, getGitHubAuthHeaders, retryWithAuth, throwApiError, parseCanonicalRepo, fetchClosedGitHubItems, type GitHubIssue, type GitHubSearchResponse } from './githubApiHelpers';
 import { matchesRepoPatterns } from './repoPattern';
-
-interface GitHubSearchResponse {
-  items: GitHubIssue[];
-}
 
 interface TimelineEvent {
   event?: string;
@@ -148,11 +144,7 @@ export class GitHubPrReviewProvider extends BaseGitHubProvider {
     const response = await fetch(
       'https://api.github.com/search/issues?q=type:pr+state:open+review-requested:@me&per_page=100',
       {
-        headers: {
-          Authorization: `Bearer ${token}`,
-          Accept: 'application/vnd.github+json',
-          'X-GitHub-Api-Version': '2022-11-28',
-        },
+        headers: getGitHubAuthHeaders(token),
         signal: combineSignals(signal, 30_000),
       },
     );
@@ -180,17 +172,11 @@ export class GitHubPrReviewProvider extends BaseGitHubProvider {
 
     await runWorkerPool(prsWithApiUrl, async (pr) => {
       if (signal?.aborted) {
-        const error = new Error('The operation was aborted.');
-        error.name = 'AbortError';
-        throw error;
+        throw createAbortError();
       }
       try {
         const response = await fetch(pr.pull_request!.url, {
-          headers: {
-            Authorization: `Bearer ${token}`,
-            Accept: 'application/vnd.github+json',
-            'X-GitHub-Api-Version': '2022-11-28',
-          },
+          headers: getGitHubAuthHeaders(token),
           signal: combineSignals(signal, 30_000),
         });
         if (response.ok) {
@@ -223,11 +209,7 @@ export class GitHubPrReviewProvider extends BaseGitHubProvider {
 
     try {
       const response = await fetch('https://api.github.com/user', {
-        headers: {
-          Authorization: `Bearer ${token}`,
-          Accept: 'application/vnd.github+json',
-          'X-GitHub-Api-Version': '2022-11-28',
-        },
+        headers: getGitHubAuthHeaders(token),
         signal: combineSignals(signal, 30_000),
       });
       if (response.ok) {
@@ -261,9 +243,7 @@ export class GitHubPrReviewProvider extends BaseGitHubProvider {
 
     await runWorkerPool(prs, async (pr) => {
       if (signal?.aborted) {
-        const error = new Error('The operation was aborted.');
-        error.name = 'AbortError';
-        throw error;
+        throw createAbortError();
       }
       try {
         // Only fetches the first page (100 events). For PRs with very extensive
@@ -271,11 +251,7 @@ export class GitHubPrReviewProvider extends BaseGitHubProvider {
         // trade-off to limit API calls.
         const timelineUrl = `${pr.repository_url}/issues/${pr.number}/timeline?per_page=100`;
         const response = await fetch(timelineUrl, {
-          headers: {
-            Authorization: `Bearer ${token}`,
-            Accept: 'application/vnd.github+json',
-            'X-GitHub-Api-Version': '2022-11-28',
-          },
+          headers: getGitHubAuthHeaders(token),
           signal: combineSignals(signal, 30_000),
         });
         if (response.ok) {

@@ -1,4 +1,17 @@
 /**
+ * Creates an AbortError with the standard 'The operation was aborted.' message.
+ * Use this instead of the three-line pattern for consistency:
+ *   const error = new Error('The operation was aborted.');
+ *   error.name = 'AbortError';
+ *   throw error;
+ */
+export function createAbortError(): Error {
+  const error = new Error('The operation was aborted.');
+  error.name = 'AbortError';
+  return error;
+}
+
+/**
  * Combines a cancellation signal with a per-request timeout into a single AbortSignal.
  * Node 18 compatible — does not use AbortSignal.any() (requires Node 20.3+).
  *

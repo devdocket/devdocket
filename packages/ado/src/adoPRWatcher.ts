@@ -6,7 +6,7 @@ import type {
   RunIdentifier,
   CancellationTokenLike,
 } from '@devdocket/shared';
-import { safeDecodeComponent } from '@devdocket/shared';
+import { createAbortError, safeDecodeComponent } from '@devdocket/shared';
 import { getAdoHeaders, throwAdoApiError } from './adoAuth';
 import { logger } from './logger';
 
@@ -86,9 +86,7 @@ export class AdoPRWatcher implements DevDocketPRWatcher {
     const headers = await getAdoHeaders();
 
     if (token?.isCancellationRequested) {
-      const error = new Error('The operation was aborted.');
-      error.name = 'AbortError';
-      throw error;
+      throw createAbortError();
     }
 
     // Fetch PR details
@@ -119,9 +117,7 @@ export class AdoPRWatcher implements DevDocketPRWatcher {
       : undefined;
 
     if (token?.isCancellationRequested) {
-      const error = new Error('The operation was aborted.');
-      error.name = 'AbortError';
-      throw error;
+      throw createAbortError();
     }
 
     // Fetch builds triggered by this PR via its merge ref branch

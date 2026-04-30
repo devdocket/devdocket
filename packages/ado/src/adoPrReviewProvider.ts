@@ -2,7 +2,7 @@ import * as vscode from 'vscode';
 import { BaseProvider, DiscoveredItem, isValidUrlSegment, combineSignals, runWorkerPool, safeDecodeComponent, type ResolvedItem } from '@devdocket/shared';
 import { logger } from './logger';
 import { OrgConfig } from './configParser';
-import { getAdoHeaders, retryAdoWithAuth, throwAdoApiError } from './adoAuth';
+import { getAdoHeaders, retryAdoWithAuth, throwAdoApiError, ADO_AUTH_SCOPE } from './adoAuth';
 
 interface AdoPullRequest {
   pullRequestId: number;
@@ -23,9 +23,6 @@ interface AdoPullRequest {
 interface ConnectionData {
   authenticatedUser: { id: string };
 }
-
-// Azure DevOps REST API scope for authentication
-const ADO_AUTH_SCOPE = '499b84ac-1321-427f-aa17-267ca6975798/.default';
 
 /**
  * DevDocket provider that discovers Azure DevOps pull requests where the

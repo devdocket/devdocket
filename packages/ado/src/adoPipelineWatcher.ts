@@ -7,7 +7,7 @@ import type {
   RunConclusion,
   CancellationTokenLike,
 } from '@devdocket/shared';
-import { safeDecodeComponent } from '@devdocket/shared';
+import { createAbortError, safeDecodeComponent } from '@devdocket/shared';
 import { getAdoHeaders, throwAdoApiError } from './adoAuth';
 import { logger } from './logger';
 
@@ -86,9 +86,7 @@ export class AdoPipelineWatcher implements DevDocketRunWatcher {
     const headers = await getAdoHeaders();
 
     if (token?.isCancellationRequested) {
-      const error = new Error('The operation was aborted.');
-      error.name = 'AbortError';
-      throw error;
+      throw createAbortError();
     }
 
     // Fetch build details
@@ -113,9 +111,7 @@ export class AdoPipelineWatcher implements DevDocketRunWatcher {
       : `Build ${buildData.buildNumber}`;
 
     if (token?.isCancellationRequested) {
-      const error = new Error('The operation was aborted.');
-      error.name = 'AbortError';
-      throw error;
+      throw createAbortError();
     }
 
     // Fetch timeline for job details
