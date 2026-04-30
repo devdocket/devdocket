@@ -2,7 +2,7 @@ import * as vscode from 'vscode';
 import { BaseProvider, DiscoveredItem, isValidUrlSegment, combineSignals, safeDecodeComponent, type ResolvedItem } from '@devdocket/shared';
 import { logger } from './logger';
 import { OrgConfig } from './configParser';
-import { getAdoHeaders, retryAdoWithAuth, throwAdoApiError } from './adoAuth';
+import { getAdoHeaders, retryAdoWithAuth, throwAdoApiError, ADO_AUTH_SCOPE } from './adoAuth';
 
 // Azure DevOps WIQL query response
 interface WiqlResponse {
@@ -29,9 +29,6 @@ interface WorkItemTypeState {
   name: string;
   category: string;
 }
-
-// Azure DevOps REST API scope for authentication
-const ADO_AUTH_SCOPE = '499b84ac-1321-427f-aa17-267ca6975798/.default';
 
 // Terminal state categories (Completed, Removed, Resolved) that indicate non-active work
 const TERMINAL_CATEGORIES: ReadonlySet<string> = new Set(['Completed', 'Removed', 'Resolved']);

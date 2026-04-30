@@ -1,9 +1,9 @@
 import * as vscode from 'vscode';
-import { DiscoveredItem, combineSignals, safeDecodeComponent, type ResolvedItem } from '@devdocket/shared';
+import { DiscoveredItem, combineSignals, createAbortError, safeDecodeComponent, type ResolvedItem } from '@devdocket/shared';
 import { BaseGitHubProvider } from './baseGithubProvider';
 import { logger } from './logger';
 import { parseRepoFromUrls } from './parseRepo';
-import { getHeaders, retryWithAuth, throwApiError, parseCanonicalRepo, fetchClosedGitHubItems, type GitHubIssue } from './githubApiHelpers';
+import { getHeaders, getGitHubAuthHeaders, retryWithAuth, throwApiError, parseCanonicalRepo, fetchClosedGitHubItems, type GitHubIssue } from './githubApiHelpers';
 import { matchesRepoPatterns } from './repoPattern';
 
 /**
@@ -131,18 +131,12 @@ export class GitHubIssueProvider extends BaseGitHubProvider {
 
     while (nextUrl && page < maxPages) {
       if (signal?.aborted) {
-        const error = new Error('The operation was aborted.');
-        error.name = 'AbortError';
-        throw error;
+        throw createAbortError();
       }
       let response: Response;
       try {
         response = await fetch(nextUrl, {
-          headers: {
-            Authorization: `Bearer ${token}`,
-            Accept: 'application/vnd.github+json',
-            'X-GitHub-Api-Version': '2022-11-28',
-          },
+          headers: getGitHubAuthHeaders(token),
           signal: combineSignals(signal, 30_000),
         });
       } catch (err) {

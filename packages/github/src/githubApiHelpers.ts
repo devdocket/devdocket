@@ -1,5 +1,5 @@
 import * as vscode from 'vscode';
-import { isValidGitHubRepo, runWorkerPoolSettled } from '@devdocket/shared';
+import { isValidGitHubRepo, createAbortError, runWorkerPoolSettled } from '@devdocket/shared';
 import { logger } from './logger';
 
 export interface GitHubIssue {
@@ -10,6 +10,22 @@ export interface GitHubIssue {
   html_url: string;
   repository_url: string;
   pull_request?: { url: string };
+}
+
+export interface GitHubSearchResponse {
+  items: GitHubIssue[];
+}
+
+/**
+ * Returns GitHub REST API headers for an authenticated request using the provided token.
+ * Used by all provider fetch methods that have an access token available.
+ */
+export function getGitHubAuthHeaders(token: string): Record<string, string> {
+  return {
+    Authorization: `Bearer ${token}`,
+    Accept: 'application/vnd.github+json',
+    'X-GitHub-Api-Version': '2022-11-28',
+  };
 }
 
 /** Get GitHub API headers, attaching auth if a silent session is available. */
@@ -111,9 +127,7 @@ export async function fetchClosedGitHubItems(
     parsed,
     async (item) => {
       if (signal?.aborted) {
-        const error = new Error('The operation was aborted.');
-        error.name = 'AbortError';
-        throw error;
+        throw createAbortError();
       }
       const response = await fetch(
         `https://api.github.com/repos/${encodeURIComponent(item.owner)}/${encodeURIComponent(item.repoName)}/${apiType}/${item.number}`,

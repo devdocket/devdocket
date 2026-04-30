@@ -1,14 +1,10 @@
 import * as vscode from 'vscode';
-import { DiscoveredItem, combineSignals, runWorkerPool } from '@devdocket/shared';
+import { DiscoveredItem, combineSignals, createAbortError, runWorkerPool } from '@devdocket/shared';
 import { BaseGitHubProvider } from './baseGithubProvider';
 import { logger } from './logger';
 import { parseRepoFromUrls } from './parseRepo';
-import { type GitHubIssue } from './githubApiHelpers';
+import { getGitHubAuthHeaders, type GitHubIssue, type GitHubSearchResponse } from './githubApiHelpers';
 import { matchesRepoPatterns } from './repoPattern';
-
-interface GitHubSearchResponse {
-  items: GitHubIssue[];
-}
 
 export interface PrDetail {
   draft?: boolean;
@@ -153,11 +149,7 @@ export class GitHubMyPrsProvider extends BaseGitHubProvider {
       response = await fetch(
         `https://api.github.com/search/issues?q=type:pr+state:open+${filter}:@me&per_page=100`,
         {
-          headers: {
-            Authorization: `Bearer ${token}`,
-            Accept: 'application/vnd.github+json',
-            'X-GitHub-Api-Version': '2022-11-28',
-          },
+          headers: getGitHubAuthHeaders(token),
           signal: combineSignals(signal, 30_000),
         },
       );
@@ -189,9 +181,7 @@ export class GitHubMyPrsProvider extends BaseGitHubProvider {
 
     await runWorkerPool(prsWithApiUrl, async (pr) => {
       if (signal?.aborted) {
-        const error = new Error('The operation was aborted.');
-        error.name = 'AbortError';
-        throw error;
+        throw createAbortError();
       }
       try {
         const status = await this.fetchSinglePrStatus(token, pr, signal);
@@ -208,11 +198,7 @@ export class GitHubMyPrsProvider extends BaseGitHubProvider {
   }
 
   private async fetchSinglePrStatus(token: string, pr: GitHubIssue, signal?: AbortSignal): Promise<string | undefined> {
-    const headers = {
-      Authorization: `Bearer ${token}`,
-      Accept: 'application/vnd.github+json',
-      'X-GitHub-Api-Version': '2022-11-28',
-    };
+    const headers = getGitHubAuthHeaders(token);
 
     // Fetch PR details (draft, mergeable state)
     const detailResponse = await fetch(pr.pull_request!.url, { headers, signal: combineSignals(signal, 30_000) });
