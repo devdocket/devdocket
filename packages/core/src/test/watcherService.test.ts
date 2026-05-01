@@ -298,6 +298,20 @@ describe('WatcherService', () => {
       };
     }
 
+    it('reports watched PRs even after they are dismissed', async () => {
+      const prWatcher = createMockPRWatcher();
+      prRegistry.register(prWatcher);
+      const identifier = createPRIdentifier();
+
+      expect(service.isPRWatched(identifier)).toBe(false);
+
+      await service.startPRWatch(identifier);
+      expect(service.isPRWatched(identifier)).toBe(true);
+
+      service.dismissPRWatch(identifier);
+      expect(service.isPRWatched(identifier)).toBe(true);
+    });
+
     it('starts a PR watch and fires change events', async () => {
       const prWatcher = createMockPRWatcher();
       prRegistry.register(prWatcher);

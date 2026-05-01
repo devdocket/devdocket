@@ -331,6 +331,13 @@ export class WatcherService implements vscode.Disposable {
   }
 
   /**
+   * Check whether a PR has ever been watched in this session, including dismissed watches.
+   */
+  isPRWatched(identifier: PRIdentifier): boolean {
+    return this.prWatches.has(this.getPRWatchKey(identifier));
+  }
+
+  /**
    * Get active standalone watches (not dismissed, no parent PR).
    */
   getActiveStandaloneWatches(): WatchedRun[] {

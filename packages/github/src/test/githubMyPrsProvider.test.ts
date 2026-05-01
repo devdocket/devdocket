@@ -127,11 +127,13 @@ describe('GitHubMyPrsProvider', () => {
     expect(items[0].state).toBe('Waiting on reviews');
     expect(items[0].group).toBe('owner/repo');
     expect(items[0].reason).toBe('You authored this PR');
+    expect(items[0].authored).toBe(true);
     expect(items[0].canonicalId).toBe('github:pull:owner/repo#1');
 
     expect(items[1].externalId).toBe('owner/repo#2');
     expect(items[1].state).toBe('Draft');
     expect(items[1].reason).toBe('You authored this PR');
+    expect(items[1].authored).toBe(true);
     expect(items[1].canonicalId).toBe('github:pull:owner/repo#2');
   });
 
@@ -329,9 +331,11 @@ describe('GitHubMyPrsProvider', () => {
 
     expect(items[0].externalId).toBe('owner/repo#1');
     expect(items[0].reason).toBe('You authored this PR');
+    expect(items[0].authored).toBe(true);
 
     expect(items[1].externalId).toBe('other/repo#2');
     expect(items[1].reason).toBe('You are assigned to this PR');
+    expect(items[1].authored).toBeUndefined();
   });
 
   it('excludes self-authored PRs from assigned results', async () => {

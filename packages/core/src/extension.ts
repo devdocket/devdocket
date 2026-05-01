@@ -122,6 +122,45 @@ async function migrateDiscoveredState(workGraph: WorkGraph, stateStore: Discover
   }
 }
 
+function isAutoWatchCandidate(item: { authored?: boolean; url?: string }): item is { authored: true; url: string } {
+  return item.authored === true && typeof item.url === 'string';
+}
+
+export async function autoWatchAuthoredPRs(
+  providerId: string,
+  providerRegistry: ProviderRegistry,
+  prWatcherRegistry: PRWatcherRegistry,
+  watcherService: WatcherService,
+  signal: AbortSignal,
+): Promise<void> {
+  const items = providerRegistry.getDiscoveredItems(providerId).filter(isAutoWatchCandidate);
+
+  for (const item of items) {
+    if (signal.aborted) {
+      return;
+    }
+
+    try {
+      const prWatcher = prWatcherRegistry.findWatcherForUrl(item.url);
+      if (!prWatcher) {
+        continue;
+      }
+
+      const identifier = prWatcher.parsePRUrl(item.url);
+      if (watcherService.isPRWatched(identifier)) {
+        continue;
+      }
+
+      await watcherService.startPRWatch(identifier);
+    } catch (err) {
+      if (signal.aborted) {
+        return;
+      }
+      logger.warn(`Failed to auto-watch authored PR from provider ${providerId}: ${String(err)}`);
+    }
+  }
+}
+
 function createTreeViews(
   providerRegistry: ProviderRegistry,
   stateStore: DiscoveredStateStore,
@@ -338,8 +377,9 @@ function wireEvents(
     }
   }));
 
-  // Provider refresh handler: sync titles/descriptions and auto-complete.
-  // Per-provider guard prevents overlapping auto-complete runs; AbortController cancels in-flight checks.
+  // Provider refresh handler: sync titles/descriptions, auto-watch authored PRs, and auto-complete.
+  // Per-provider guards prevent overlapping runs; AbortController cancels in-flight checks.
+  const autoWatchControllers = new Map<string, AbortController>();
   const autoCompleteControllers = new Map<string, AbortController>();
   const autoCompleteSub = providerRegistry.onDidRefreshProvider(safeHandler('Error handling provider refresh', async (providerId) => {
     try {
@@ -352,6 +392,23 @@ function wireEvents(
       await syncProviderDescriptions(providerId, providerRegistry, workGraph);
     } catch (err) {
       logger.error('Error syncing provider descriptions', err);
+    }
+
+    const watchConfig = vscode.workspace.getConfiguration('devDocket.watches');
+    if (watchConfig.get<boolean>('autoWatchAuthoredPRs', true)) {
+      const prevAutoWatch = autoWatchControllers.get(providerId);
+      if (prevAutoWatch) {
+        prevAutoWatch.abort();
+      }
+      const autoWatchController = new AbortController();
+      autoWatchControllers.set(providerId, autoWatchController);
+      try {
+        await autoWatchAuthoredPRs(providerId, providerRegistry, prWatcherRegistry, watcherService, autoWatchController.signal);
+      } finally {
+        if (autoWatchControllers.get(providerId) === autoWatchController) {
+          autoWatchControllers.delete(providerId);
+        }
+      }
     }
 
     const config = vscode.workspace.getConfiguration('devDocket');
@@ -375,7 +432,13 @@ function wireEvents(
     }
   }));
 
-  // Abort all in-flight auto-complete checks on disposal
+  // Abort all in-flight auto-watch and auto-complete checks on disposal
+  const autoWatchCleanup = { dispose: () => {
+    for (const controller of autoWatchControllers.values()) {
+      controller.abort();
+    }
+    autoWatchControllers.clear();
+  }};
   const autoCompleteCleanup = { dispose: () => {
     for (const controller of autoCompleteControllers.values()) {
       controller.abort();
@@ -383,7 +446,19 @@ function wireEvents(
     autoCompleteControllers.clear();
   }};
 
-  return [discoveredSub, newItemsSub, providerRegSub, stateStoreSub, markSeenSub, workGraphSub, jobFailureSub, runCompleteSub, autoCompleteSub, autoCompleteCleanup];
+  return [
+    discoveredSub,
+    newItemsSub,
+    providerRegSub,
+    stateStoreSub,
+    markSeenSub,
+    workGraphSub,
+    jobFailureSub,
+    runCompleteSub,
+    autoCompleteSub,
+    autoWatchCleanup,
+    autoCompleteCleanup,
+  ];
 }
 
 /**

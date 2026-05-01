@@ -23,6 +23,8 @@ export interface DiscoveredItem {
   description?: string;
   /** Optional URL linking back to the item in its source system. */
   url?: string;
+  /** Optional flag indicating the current user authored the item. */
+  authored?: boolean;
   /** Optional grouping key used to organize items in the UI (for example, in the Inbox and Sources views). */
   group?: string;
   /** Optional notification reason explaining why this item was surfaced (e.g. `"assigned"`, `"review_requested"`). */

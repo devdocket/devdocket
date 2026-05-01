@@ -133,6 +133,11 @@
             "type": "boolean",
             "default": true,
             "description": "Show a notification when an individual job fails while the pipeline run is still in progress"
+          },
+          "devDocket.watches.autoWatchAuthoredPRs": {
+            "type": "boolean",
+            "default": true,
+            "description": "Automatically watch authored pull requests when a provider refresh discovers them"
           }
         }
       }
