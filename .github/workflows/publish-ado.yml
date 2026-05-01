@@ -50,13 +50,13 @@ jobs:
         working-directory: packages/ado
         run: |
           rm -f ./*.vsix
-          npx @vscode/vsce package
+          npx @vscode/vsce@3 package
           VSIX_FILE=$(ls -1 *.vsix | head -n1)
           echo "vsix_path=packages/ado/$VSIX_FILE" >> "$GITHUB_OUTPUT"
 
       - name: Publish to VS Code Marketplace
         working-directory: packages/ado
-        run: npx @vscode/vsce publish -p "$VSCE_PAT"
+        run: npx @vscode/vsce@3 publish -p "$VSCE_PAT"
         env:
           VSCE_PAT: ${{ secrets.VSCE_PAT }}
 
