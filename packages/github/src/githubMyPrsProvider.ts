@@ -130,6 +130,7 @@ export class GitHubMyPrsProvider extends BaseGitHubProvider {
         title: `#${pr.number}: ${pr.title}`,
         description: pr.body ?? undefined,
         url: pr.html_url,
+        authored: true,
         group: repoName,
         reason: 'You authored this PR',
         state: metadata?.status ?? 'Open',

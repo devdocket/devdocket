@@ -96,7 +96,7 @@ function createMockStateStore(): { [K in keyof UsedStateStoreMethods]: Mock } {
   };
 }
 
-type UsedProviderRegistryMethods = Pick<ProviderRegistry, 'refreshAll' | 'resolveUrl' | 'getAllDiscoveredItems' | 'getDiscoveredItems'>;
+type UsedProviderRegistryMethods = Pick<ProviderRegistry, 'refreshAll' | 'resolveUrl' | 'getAllDiscoveredItems' | 'getDiscoveredItems' | 'getProviderLabel'>;
 
 function createMockProviderRegistry(): { [K in keyof UsedProviderRegistryMethods]: Mock } {
   return {
@@ -104,6 +104,7 @@ function createMockProviderRegistry(): { [K in keyof UsedProviderRegistryMethods
     resolveUrl: vi.fn().mockResolvedValue(undefined),
     getAllDiscoveredItems: vi.fn().mockReturnValue(new Map()),
     getDiscoveredItems: vi.fn().mockReturnValue([]),
+    getProviderLabel: vi.fn((providerId: string) => providerId),
   };
 }
 
@@ -182,6 +183,7 @@ describe('registerCommands', () => {
       'devdocket.deleteItem',
       'devdocket.editItem',
       'devdocket.openInBrowser',
+      'devdocket.copyUrl',
       'devdocket.runAction',
       'devdocket.moveUp',
       'devdocket.moveDown',
@@ -191,6 +193,9 @@ describe('registerCommands', () => {
       'devdocket.acceptFromInbox',
       'devdocket.acceptToFocusFromInbox',
       'devdocket.dismissFromInbox',
+      'devdocket.acceptAllFromInbox',
+      'devdocket.acceptAllToFocusFromInbox',
+      'devdocket.dismissAllFromInbox',
       'devdocket.acceptFromSources',
       'devdocket.dismissFromSources',
       'devdocket.createItemFromUrl',
@@ -223,11 +228,21 @@ describe('registerCommands', () => {
   // ── createItem ───────────────────────────────────────────────────
 
   describe('devdocket.createItem', () => {
-    it('creates item when user provides a title', async () => {
+    it('creates item when user provides a title and opens the editor', async () => {
       (vscode.window.showInputBox as Mock).mockResolvedValue('My Task');
+      const createdItem = createWorkItem({ id: 'wc-created', title: 'My Task' });
+      workGraph.createItem.mockResolvedValue(createdItem);
+
       await invoke('devdocket.createItem');
 
       expect(workGraph.createItem).toHaveBeenCalledWith({ title: 'My Task' });
+      expect(WorkItemEditorPanel.open).toHaveBeenCalledWith(
+        ctx,
+        workGraph,
+        providerRegistry,
+        createdItem,
+        undefined,
+      );
       expect(vscode.window.showInformationMessage).toHaveBeenCalledWith(
         'DevDocket: Created "My Task"',
       );
@@ -235,6 +250,8 @@ describe('registerCommands', () => {
 
     it('trims whitespace from the title', async () => {
       (vscode.window.showInputBox as Mock).mockResolvedValue('  Padded  ');
+      workGraph.createItem.mockResolvedValue(createWorkItem({ id: 'wc-trimmed', title: 'Padded' }));
+
       await invoke('devdocket.createItem');
 
       expect(workGraph.createItem).toHaveBeenCalledWith({ title: 'Padded' });
@@ -501,6 +518,66 @@ describe('registerCommands', () => {
         'DevDocket: Select an item to open in the browser.',
       );
       expect(vscode.env.openExternal).not.toHaveBeenCalled();
+    });
+  });
+
+  // ── copyUrl ──────────────────────────────────────────────────────
+
+  describe('devdocket.copyUrl', () => {
+    it('copies workItem url when found', async () => {
+      const item = createWorkItem({ url: 'https://example.com' });
+      workGraph.getItem.mockReturnValue(item);
+
+      await invoke('devdocket.copyUrl', { id: item.id });
+
+      expect(vscode.env.clipboard.writeText).toHaveBeenCalledWith('https://example.com');
+      expect(vscode.window.setStatusBarMessage).toHaveBeenCalledWith('DevDocket: URL copied to clipboard', 3000);
+    });
+
+    it('falls back to item.url when workItem has no url', async () => {
+      workGraph.getItem.mockReturnValue(createWorkItem({ url: undefined }));
+
+      await invoke('devdocket.copyUrl', { id: 'wc-1', url: 'https://fallback.com' });
+
+      expect(vscode.env.clipboard.writeText).toHaveBeenCalledWith('https://fallback.com');
+    });
+
+    it('falls back to tree node url when workItem is not found', async () => {
+      workGraph.getItem.mockReturnValue(undefined);
+
+      await invoke('devdocket.copyUrl', { id: 'wc-gone', url: 'https://tree-fallback.com' });
+
+      expect(vscode.env.clipboard.writeText).toHaveBeenCalledWith('https://tree-fallback.com');
+    });
+
+    it('copies url from item without id (Inbox/Sources items)', async () => {
+      await invoke('devdocket.copyUrl', { url: 'https://provider-item.com' });
+
+      expect(workGraph.getItem).not.toHaveBeenCalled();
+      expect(vscode.env.clipboard.writeText).toHaveBeenCalledWith('https://provider-item.com');
+    });
+
+    it('copies non-http URLs without filtering (copy is not navigation)', async () => {
+      await invoke('devdocket.copyUrl', { url: 'javascript:alert(1)' });
+
+      expect(vscode.env.clipboard.writeText).toHaveBeenCalledWith('javascript:alert(1)');
+      expect(vscode.window.showWarningMessage).not.toHaveBeenCalled();
+    });
+
+    it('shows warning when neither source has a url', async () => {
+      workGraph.getItem.mockReturnValue(createWorkItem({ url: undefined }));
+
+      await invoke('devdocket.copyUrl', { id: 'wc-1' });
+
+      expect(vscode.env.clipboard.writeText).not.toHaveBeenCalled();
+      expect(vscode.window.showWarningMessage).toHaveBeenCalledWith('This item has no URL to copy.');
+    });
+
+    it('shows warning when item has neither id nor url', async () => {
+      await invoke('devdocket.copyUrl', {});
+
+      expect(vscode.env.clipboard.writeText).not.toHaveBeenCalled();
+      expect(vscode.window.showWarningMessage).toHaveBeenCalledWith('DevDocket: Select an item to copy its URL.');
     });
   });
 
@@ -942,6 +1019,40 @@ describe('registerCommands', () => {
       );
     });
 
+    it('batches canonical peer propagation for multi-select acceptance', async () => {
+      const items = [
+        makeInboxItem({ providerId: 'prs', externalId: 'repo#1', title: 'Issue 1', canonicalId: 'github:pull:repo#1' }),
+        makeInboxItem({ providerId: 'prs', externalId: 'repo#2', title: 'Issue 2', canonicalId: 'github:pull:repo#2' }),
+      ];
+      mockDiscoveredInboxItems([
+        ['prs', [
+          { externalId: 'repo#1', title: 'Issue 1', canonicalId: 'github:pull:repo#1' },
+          { externalId: 'repo#2', title: 'Issue 2', canonicalId: 'github:pull:repo#2' },
+        ]],
+        ['reviews', [
+          { externalId: 'repo#1', title: 'Issue 1', canonicalId: 'github:pull:repo#1' },
+          { externalId: 'repo#2', title: 'Issue 2', canonicalId: 'github:pull:repo#2' },
+        ]],
+      ]);
+      stateStore.getState.mockReturnValue(undefined);
+      workGraph.findItemByProvenance.mockReturnValue(undefined);
+      workGraph.createItem
+        .mockResolvedValueOnce(createWorkItem({ id: 'wc-1' }))
+        .mockResolvedValueOnce(createWorkItem({ id: 'wc-2' }));
+
+      await invoke('devdocket.acceptFromInbox', items[0], items);
+
+      expect(stateStore.setStates).toHaveBeenCalledTimes(2);
+      expect(stateStore.setStates).toHaveBeenNthCalledWith(1, [
+        { providerId: 'prs', externalId: 'repo#1', state: 'accepted' },
+        { providerId: 'prs', externalId: 'repo#2', state: 'accepted' },
+      ]);
+      expect(stateStore.setStates).toHaveBeenNthCalledWith(2, [
+        { providerId: 'reviews', externalId: 'repo#1', state: 'accepted' },
+        { providerId: 'reviews', externalId: 'repo#2', state: 'accepted' },
+      ]);
+    });
+
     it('skips already-accepted items in batch', async () => {
       const items = [
         makeInboxItem({ externalId: 'ext-1', title: 'Issue 1' }),
@@ -1013,6 +1124,38 @@ describe('registerCommands', () => {
       expect(vscode.window.showInformationMessage).toHaveBeenCalledWith(
         'Accepted 2 of 3 items to Queue',
       );
+    });
+
+    it('propagates canonical peers only for items accepted successfully', async () => {
+      const items = [
+        makeInboxItem({ providerId: 'prs', externalId: 'repo#1', title: 'Issue 1', canonicalId: 'github:pull:repo#1' }),
+        makeInboxItem({ providerId: 'prs', externalId: 'repo#2', title: 'Issue 2', canonicalId: 'github:pull:repo#2' }),
+      ];
+      mockDiscoveredInboxItems([
+        ['prs', [
+          { externalId: 'repo#1', title: 'Issue 1', canonicalId: 'github:pull:repo#1' },
+          { externalId: 'repo#2', title: 'Issue 2', canonicalId: 'github:pull:repo#2' },
+        ]],
+        ['reviews', [
+          { externalId: 'repo#1', title: 'Issue 1', canonicalId: 'github:pull:repo#1' },
+          { externalId: 'repo#2', title: 'Issue 2', canonicalId: 'github:pull:repo#2' },
+        ]],
+      ]);
+      stateStore.getState.mockReturnValue(undefined);
+      workGraph.findItemByProvenance.mockReturnValue(undefined);
+      workGraph.createItem
+        .mockResolvedValueOnce(createWorkItem({ id: 'wc-1' }))
+        .mockRejectedValueOnce(new Error('create failed'));
+
+      await invoke('devdocket.acceptFromInbox', items[0], items);
+
+      expect(stateStore.setStates).toHaveBeenCalledTimes(2);
+      expect(stateStore.setStates).toHaveBeenNthCalledWith(1, [
+        { providerId: 'prs', externalId: 'repo#1', state: 'accepted' },
+      ]);
+      expect(stateStore.setStates).toHaveBeenNthCalledWith(2, [
+        { providerId: 'reviews', externalId: 'repo#1', state: 'accepted' },
+      ]);
     });
 
     it('uses single-item path when selectedItems has one item', async () => {
@@ -1146,6 +1289,304 @@ describe('registerCommands', () => {
 
       expect(stateStore.setState).toHaveBeenCalledWith('github', 'ext-ctx', 'dismissed');
       expect(stateStore.setStates).not.toHaveBeenCalled();
+    });
+  });
+
+  function mockDiscoveredInboxItems(entries: Array<[string, any[]]>) {
+    const discovered = new Map(entries);
+    providerRegistry.getAllDiscoveredItems.mockReturnValue(discovered);
+    providerRegistry.getDiscoveredItems.mockImplementation((providerId: string) => discovered.get(providerId) ?? []);
+  }
+
+  describe('bulk inbox node commands', () => {
+    it('dismisses all unseen provider items after confirmation', async () => {
+      const providerNode: InboxProviderNode = { kind: 'provider', providerId: 'github', label: 'GitHub' };
+      mockDiscoveredInboxItems([['github', [
+        { externalId: 'ext-1', title: 'Issue 1' },
+        { externalId: 'ext-2', title: 'Issue 2' },
+        { externalId: 'ext-3', title: 'Done already' },
+      ]]]);
+      stateStore.getState.mockImplementation((_providerId: string, externalId: string) => externalId === 'ext-3' ? 'accepted' : undefined);
+      (vscode.window.showWarningMessage as Mock).mockResolvedValueOnce('Dismiss All');
+
+      await invoke('devdocket.dismissAllFromInbox', providerNode);
+
+      expect(vscode.window.showWarningMessage).toHaveBeenNthCalledWith(
+        1,
+        'Dismiss 2 items from "GitHub"?',
+        { modal: true },
+        'Dismiss All',
+      );
+      expect(stateStore.setStates).toHaveBeenCalledWith([
+        { providerId: 'github', externalId: 'ext-1', state: 'dismissed' },
+        { providerId: 'github', externalId: 'ext-2', state: 'dismissed' },
+      ]);
+      expect(vscode.window.showInformationMessage).toHaveBeenCalledWith('Dismissed 2 items');
+    });
+
+    it('shows the expanded canonical peer count in bulk dismiss confirmation', async () => {
+      const providerNode: InboxProviderNode = { kind: 'provider', providerId: 'prs', label: 'GitHub' };
+      mockDiscoveredInboxItems([
+        ['prs', [
+          { externalId: 'repo#1', title: 'PR #1', canonicalId: 'github:pull:repo#1' },
+          { externalId: 'repo#2', title: 'PR #2', canonicalId: 'github:pull:repo#2' },
+        ]],
+        ['reviews', [
+          { externalId: 'repo#1', title: 'PR #1', canonicalId: 'github:pull:repo#1' },
+          { externalId: 'repo#2', title: 'PR #2', canonicalId: 'github:pull:repo#2' },
+        ]],
+      ]);
+      stateStore.getState.mockReturnValue(undefined);
+      (vscode.window.showWarningMessage as Mock).mockResolvedValueOnce('Dismiss All');
+
+      await invoke('devdocket.dismissAllFromInbox', providerNode);
+
+      expect(vscode.window.showWarningMessage).toHaveBeenNthCalledWith(
+        1,
+        'Dismiss 4 items from "GitHub"?',
+        { modal: true },
+        'Dismiss All',
+      );
+      expect(stateStore.setStates).toHaveBeenCalledWith([
+        { providerId: 'prs', externalId: 'repo#1', state: 'dismissed' },
+        { providerId: 'prs', externalId: 'repo#2', state: 'dismissed' },
+        { providerId: 'reviews', externalId: 'repo#1', state: 'dismissed' },
+        { providerId: 'reviews', externalId: 'repo#2', state: 'dismissed' },
+      ]);
+      expect(vscode.window.showInformationMessage).toHaveBeenCalledWith('Dismissed 4 items');
+    });
+
+    it('dismisses all unseen group items after confirmation', async () => {
+      const groupNode: InboxGroupNode = { kind: 'group', providerId: 'github', groupName: 'My Mentions', unseenCount: 2 };
+      providerRegistry.getProviderLabel.mockReturnValue('GitHub');
+      mockDiscoveredInboxItems([['github', [
+        { externalId: 'ext-1', title: 'Issue 1', group: 'My Mentions' },
+        { externalId: 'ext-2', title: 'Issue 2', group: 'My Mentions' },
+        { externalId: 'ext-3', title: 'Issue 3', group: 'Other' },
+      ]]]);
+      stateStore.getState.mockReturnValue(undefined);
+      (vscode.window.showWarningMessage as Mock).mockResolvedValueOnce('Dismiss All');
+
+      await invoke('devdocket.dismissAllFromInbox', groupNode);
+
+      expect(vscode.window.showWarningMessage).toHaveBeenNthCalledWith(
+        1,
+        'Dismiss 2 items from "GitHub > My Mentions"?',
+        { modal: true },
+        'Dismiss All',
+      );
+      expect(stateStore.setStates).toHaveBeenCalledWith([
+        { providerId: 'github', externalId: 'ext-1', state: 'dismissed' },
+        { providerId: 'github', externalId: 'ext-2', state: 'dismissed' },
+      ]);
+    });
+
+    it('accepts all provider items to Queue after confirmation', async () => {
+      const providerNode: InboxProviderNode = { kind: 'provider', providerId: 'github', label: 'GitHub' };
+      mockDiscoveredInboxItems([['github', [
+        { externalId: 'ext-1', title: 'Issue 1' },
+        { externalId: 'ext-2', title: 'Issue 2' },
+      ]]]);
+      stateStore.getState.mockReturnValue(undefined);
+      workGraph.findItemByProvenance.mockReturnValue(undefined);
+      workGraph.createItem
+        .mockResolvedValueOnce(createWorkItem({ id: 'wc-1' }))
+        .mockResolvedValueOnce(createWorkItem({ id: 'wc-2' }));
+      (vscode.window.showInformationMessage as Mock).mockResolvedValueOnce('Accept All to Queue');
+
+      await invoke('devdocket.acceptAllFromInbox', providerNode);
+
+      expect(vscode.window.showInformationMessage).toHaveBeenNthCalledWith(
+        1,
+        'Accept 2 items from "GitHub" to Queue?',
+        { modal: true },
+        'Accept All to Queue',
+      );
+      expect(stateStore.setStates).toHaveBeenCalledWith([
+        { providerId: 'github', externalId: 'ext-1', state: 'accepted' },
+        { providerId: 'github', externalId: 'ext-2', state: 'accepted' },
+      ]);
+    });
+
+    it('accepts all group items to Queue after confirmation', async () => {
+      const groupNode: InboxGroupNode = { kind: 'group', providerId: 'github', groupName: 'My Mentions', unseenCount: 2 };
+      providerRegistry.getProviderLabel.mockReturnValue('GitHub');
+      mockDiscoveredInboxItems([['github', [
+        { externalId: 'ext-1', title: 'Issue 1', group: 'My Mentions' },
+        { externalId: 'ext-2', title: 'Issue 2', group: 'My Mentions' },
+        { externalId: 'ext-3', title: 'Issue 3', group: 'Other' },
+      ]]]);
+      stateStore.getState.mockReturnValue(undefined);
+      workGraph.findItemByProvenance.mockReturnValue(undefined);
+      workGraph.createItem
+        .mockResolvedValueOnce(createWorkItem({ id: 'wc-1' }))
+        .mockResolvedValueOnce(createWorkItem({ id: 'wc-2' }));
+      (vscode.window.showInformationMessage as Mock).mockResolvedValueOnce('Accept All to Queue');
+
+      await invoke('devdocket.acceptAllFromInbox', groupNode);
+
+      expect(vscode.window.showInformationMessage).toHaveBeenNthCalledWith(
+        1,
+        'Accept 2 items from "GitHub > My Mentions" to Queue?',
+        { modal: true },
+        'Accept All to Queue',
+      );
+      expect(stateStore.setStates).toHaveBeenCalledWith([
+        { providerId: 'github', externalId: 'ext-1', state: 'accepted' },
+        { providerId: 'github', externalId: 'ext-2', state: 'accepted' },
+      ]);
+    });
+
+    it('accepts all provider items to Focus after confirmation', async () => {
+      const providerNode: InboxProviderNode = { kind: 'provider', providerId: 'github', label: 'GitHub' };
+      mockDiscoveredInboxItems([['github', [
+        { externalId: 'ext-1', title: 'Issue 1' },
+        { externalId: 'ext-2', title: 'Issue 2' },
+      ]]]);
+      stateStore.getState.mockReturnValue(undefined);
+      workGraph.findItemByProvenance.mockReturnValue(undefined);
+      workGraph.createItem
+        .mockResolvedValueOnce(createWorkItem({ id: 'wc-1' }))
+        .mockResolvedValueOnce(createWorkItem({ id: 'wc-2' }));
+      (vscode.window.showInformationMessage as Mock).mockResolvedValueOnce('Accept All to Focus');
+
+      await invoke('devdocket.acceptAllToFocusFromInbox', providerNode);
+
+      expect(vscode.window.showInformationMessage).toHaveBeenNthCalledWith(
+        1,
+        'Accept 2 items from "GitHub" to Focus?',
+        { modal: true },
+        'Accept All to Focus',
+      );
+      expect(workGraph.transitionState).toHaveBeenCalledWith('wc-1', WorkItemState.InProgress);
+      expect(workGraph.transitionState).toHaveBeenCalledWith('wc-2', WorkItemState.InProgress);
+    });
+
+    it('accepts all group items to Focus after confirmation', async () => {
+      const groupNode: InboxGroupNode = { kind: 'group', providerId: 'github', groupName: 'My Mentions', unseenCount: 2 };
+      providerRegistry.getProviderLabel.mockReturnValue('GitHub');
+      mockDiscoveredInboxItems([['github', [
+        { externalId: 'ext-1', title: 'Issue 1', group: 'My Mentions' },
+        { externalId: 'ext-2', title: 'Issue 2', group: 'My Mentions' },
+        { externalId: 'ext-3', title: 'Issue 3', group: 'Other' },
+      ]]]);
+      stateStore.getState.mockReturnValue(undefined);
+      workGraph.findItemByProvenance.mockReturnValue(undefined);
+      workGraph.createItem
+        .mockResolvedValueOnce(createWorkItem({ id: 'wc-1' }))
+        .mockResolvedValueOnce(createWorkItem({ id: 'wc-2' }));
+      (vscode.window.showInformationMessage as Mock).mockResolvedValueOnce('Accept All to Focus');
+
+      await invoke('devdocket.acceptAllToFocusFromInbox', groupNode);
+
+      expect(vscode.window.showInformationMessage).toHaveBeenNthCalledWith(
+        1,
+        'Accept 2 items from "GitHub > My Mentions" to Focus?',
+        { modal: true },
+        'Accept All to Focus',
+      );
+      expect(workGraph.transitionState).toHaveBeenCalledWith('wc-1', WorkItemState.InProgress);
+      expect(workGraph.transitionState).toHaveBeenCalledWith('wc-2', WorkItemState.InProgress);
+    });
+
+    it('does nothing for empty nodes without confirming', async () => {
+      const providerNode: InboxProviderNode = { kind: 'provider', providerId: 'github', label: 'GitHub' };
+      mockDiscoveredInboxItems([['github', []]]);
+
+      await invoke('devdocket.acceptAllFromInbox', providerNode);
+      await invoke('devdocket.acceptAllToFocusFromInbox', providerNode);
+      await invoke('devdocket.dismissAllFromInbox', providerNode);
+
+      expect(vscode.window.showInformationMessage).not.toHaveBeenCalled();
+      expect(vscode.window.showWarningMessage).not.toHaveBeenCalled();
+      expect(stateStore.setState).not.toHaveBeenCalled();
+      expect(stateStore.setStates).not.toHaveBeenCalled();
+    });
+
+    it('does nothing when the user cancels bulk confirmation', async () => {
+      const providerNode: InboxProviderNode = { kind: 'provider', providerId: 'github', label: 'GitHub' };
+      mockDiscoveredInboxItems([['github', [
+        { externalId: 'ext-1', title: 'Issue 1' },
+      ]]]);
+      stateStore.getState.mockReturnValue(undefined);
+      (vscode.window.showInformationMessage as Mock).mockResolvedValueOnce(undefined);
+      (vscode.window.showWarningMessage as Mock).mockResolvedValueOnce(undefined);
+
+      await invoke('devdocket.acceptAllFromInbox', providerNode);
+      await invoke('devdocket.dismissAllFromInbox', providerNode);
+
+      expect(workGraph.createItem).not.toHaveBeenCalled();
+      expect(workGraph.transitionState).not.toHaveBeenCalled();
+      expect(stateStore.setState).not.toHaveBeenCalled();
+      expect(stateStore.setStates).not.toHaveBeenCalled();
+    });
+
+    it('keeps canonical-hidden peers out of provider resolution while propagating acceptance', async () => {
+      const providerNode: InboxProviderNode = { kind: 'provider', providerId: 'prs', label: 'GitHub' };
+      mockDiscoveredInboxItems([
+        ['prs', [
+          { externalId: 'repo#1', title: 'PR #1', canonicalId: 'github:pull:repo#1' },
+          { externalId: 'repo#2', title: 'PR #2', canonicalId: 'github:pull:repo#2' },
+        ]],
+        ['reviews', [
+          { externalId: 'repo#1', title: 'PR #1', canonicalId: 'github:pull:repo#1' },
+          { externalId: 'repo#2', title: 'PR #2', canonicalId: 'github:pull:repo#2' },
+        ]],
+      ]);
+      stateStore.getState.mockReturnValue(undefined);
+      workGraph.findItemByProvenance.mockReturnValue(undefined);
+      workGraph.createItem
+        .mockResolvedValueOnce(createWorkItem({ id: 'wc-1' }))
+        .mockResolvedValueOnce(createWorkItem({ id: 'wc-2' }));
+      (vscode.window.showInformationMessage as Mock).mockResolvedValueOnce('Accept All to Queue');
+
+      await invoke('devdocket.acceptAllFromInbox', providerNode);
+
+      expect(workGraph.createItem).toHaveBeenCalledTimes(2);
+      expect(stateStore.setStates).toHaveBeenCalledTimes(2);
+      expect(stateStore.setStates).toHaveBeenNthCalledWith(1, [
+        { providerId: 'prs', externalId: 'repo#1', state: 'accepted' },
+        { providerId: 'prs', externalId: 'repo#2', state: 'accepted' },
+      ]);
+      expect(stateStore.setStates).toHaveBeenNthCalledWith(2, [
+        { providerId: 'reviews', externalId: 'repo#1', state: 'accepted' },
+        { providerId: 'reviews', externalId: 'repo#2', state: 'accepted' },
+      ]);
+    });
+
+    it('accepts canonical-hidden peers to Focus with a single propagation batch', async () => {
+      const providerNode: InboxProviderNode = { kind: 'provider', providerId: 'prs', label: 'GitHub' };
+      mockDiscoveredInboxItems([
+        ['prs', [
+          { externalId: 'repo#1', title: 'PR #1', canonicalId: 'github:pull:repo#1' },
+          { externalId: 'repo#2', title: 'PR #2', canonicalId: 'github:pull:repo#2' },
+        ]],
+        ['reviews', [
+          { externalId: 'repo#1', title: 'PR #1', canonicalId: 'github:pull:repo#1' },
+          { externalId: 'repo#2', title: 'PR #2', canonicalId: 'github:pull:repo#2' },
+        ]],
+      ]);
+      stateStore.getState.mockReturnValue(undefined);
+      workGraph.findItemByProvenance.mockReturnValue(undefined);
+      workGraph.createItem
+        .mockResolvedValueOnce(createWorkItem({ id: 'wc-1' }))
+        .mockResolvedValueOnce(createWorkItem({ id: 'wc-2' }));
+      (vscode.window.showInformationMessage as Mock).mockResolvedValueOnce('Accept All to Focus');
+
+      await invoke('devdocket.acceptAllToFocusFromInbox', providerNode);
+
+      expect(workGraph.createItem).toHaveBeenCalledTimes(2);
+      expect(stateStore.setStates).toHaveBeenCalledTimes(2);
+      expect(stateStore.setStates).toHaveBeenNthCalledWith(1, [
+        { providerId: 'prs', externalId: 'repo#1', state: 'accepted' },
+        { providerId: 'prs', externalId: 'repo#2', state: 'accepted' },
+      ]);
+      expect(stateStore.setStates).toHaveBeenNthCalledWith(2, [
+        { providerId: 'reviews', externalId: 'repo#1', state: 'accepted' },
+        { providerId: 'reviews', externalId: 'repo#2', state: 'accepted' },
+      ]);
+      expect(workGraph.transitionState).toHaveBeenCalledWith('wc-1', WorkItemState.InProgress);
+      expect(workGraph.transitionState).toHaveBeenCalledWith('wc-2', WorkItemState.InProgress);
     });
   });
 
@@ -1476,6 +1917,42 @@ describe('registerCommands', () => {
       );
     });
 
+    it('batches canonical peer propagation for multi-select accept-to-focus', async () => {
+      const items = [
+        makeInboxItem({ providerId: 'prs', externalId: 'repo#1', title: 'Issue 1', canonicalId: 'github:pull:repo#1' }),
+        makeInboxItem({ providerId: 'prs', externalId: 'repo#2', title: 'Issue 2', canonicalId: 'github:pull:repo#2' }),
+      ];
+      mockDiscoveredInboxItems([
+        ['prs', [
+          { externalId: 'repo#1', title: 'Issue 1', canonicalId: 'github:pull:repo#1' },
+          { externalId: 'repo#2', title: 'Issue 2', canonicalId: 'github:pull:repo#2' },
+        ]],
+        ['reviews', [
+          { externalId: 'repo#1', title: 'Issue 1', canonicalId: 'github:pull:repo#1' },
+          { externalId: 'repo#2', title: 'Issue 2', canonicalId: 'github:pull:repo#2' },
+        ]],
+      ]);
+      stateStore.getState.mockReturnValue(undefined);
+      workGraph.findItemByProvenance.mockReturnValue(undefined);
+      workGraph.createItem
+        .mockResolvedValueOnce(createWorkItem({ id: 'wc-1' }))
+        .mockResolvedValueOnce(createWorkItem({ id: 'wc-2' }));
+
+      await invoke('devdocket.acceptToFocusFromInbox', items[0], items);
+
+      expect(stateStore.setStates).toHaveBeenCalledTimes(2);
+      expect(stateStore.setStates).toHaveBeenNthCalledWith(1, [
+        { providerId: 'prs', externalId: 'repo#1', state: 'accepted' },
+        { providerId: 'prs', externalId: 'repo#2', state: 'accepted' },
+      ]);
+      expect(stateStore.setStates).toHaveBeenNthCalledWith(2, [
+        { providerId: 'reviews', externalId: 'repo#1', state: 'accepted' },
+        { providerId: 'reviews', externalId: 'repo#2', state: 'accepted' },
+      ]);
+      expect(workGraph.transitionState).toHaveBeenCalledWith('wc-1', WorkItemState.InProgress);
+      expect(workGraph.transitionState).toHaveBeenCalledWith('wc-2', WorkItemState.InProgress);
+    });
+
     it('continues processing when some createItem calls fail', async () => {
       const items = [
         makeInboxItem({ externalId: 'ext-1', title: 'Issue 1' }),
@@ -1503,6 +1980,38 @@ describe('registerCommands', () => {
       expect(vscode.window.showErrorMessage).toHaveBeenCalledWith(
         'DevDocket: Failed to process 1 item(s); see Output for details',
       );
+    });
+
+    it('propagates canonical peers only for items accepted to Focus successfully', async () => {
+      const items = [
+        makeInboxItem({ providerId: 'prs', externalId: 'repo#1', title: 'Issue 1', canonicalId: 'github:pull:repo#1' }),
+        makeInboxItem({ providerId: 'prs', externalId: 'repo#2', title: 'Issue 2', canonicalId: 'github:pull:repo#2' }),
+      ];
+      mockDiscoveredInboxItems([
+        ['prs', [
+          { externalId: 'repo#1', title: 'Issue 1', canonicalId: 'github:pull:repo#1' },
+          { externalId: 'repo#2', title: 'Issue 2', canonicalId: 'github:pull:repo#2' },
+        ]],
+        ['reviews', [
+          { externalId: 'repo#1', title: 'Issue 1', canonicalId: 'github:pull:repo#1' },
+          { externalId: 'repo#2', title: 'Issue 2', canonicalId: 'github:pull:repo#2' },
+        ]],
+      ]);
+      stateStore.getState.mockReturnValue(undefined);
+      workGraph.findItemByProvenance.mockReturnValue(undefined);
+      workGraph.createItem
+        .mockResolvedValueOnce(createWorkItem({ id: 'wc-1' }))
+        .mockRejectedValueOnce(new Error('create failed'));
+
+      await invoke('devdocket.acceptToFocusFromInbox', items[0], items);
+
+      expect(stateStore.setStates).toHaveBeenCalledTimes(2);
+      expect(stateStore.setStates).toHaveBeenNthCalledWith(1, [
+        { providerId: 'prs', externalId: 'repo#1', state: 'accepted' },
+      ]);
+      expect(stateStore.setStates).toHaveBeenNthCalledWith(2, [
+        { providerId: 'reviews', externalId: 'repo#1', state: 'accepted' },
+      ]);
     });
 
     it('rolls back createdIds when batch setStates fails', async () => {

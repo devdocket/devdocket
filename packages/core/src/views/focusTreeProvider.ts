@@ -2,6 +2,7 @@ import * as vscode from 'vscode';
 import { WorkItem, WorkItemState } from '../models/workItem';
 import { WorkGraph } from '../services/workGraph';
 import { ProviderRegistry } from '../services/providerRegistry';
+import { ActionRegistry } from '../services/actionRegistry';
 import {
   WorkItemElement, WorkItemViewProvider, isProviderGroupNode, isSubGroupNode,
 } from './viewLayout';
@@ -16,12 +17,23 @@ export class FocusTreeProvider extends WorkItemViewProvider implements vscode.Tr
   readonly dragMimeTypes = [DRAG_MIME_TYPE];
   protected readonly groupPrefix = 'focus';
   protected readonly groupContextValue = 'focusGroup';
+  private readonly actionRegistry?: ActionRegistry;
   private readonly isWatchable?: (url: string) => boolean;
 
-  constructor(workGraph: WorkGraph, providerRegistry?: ProviderRegistry, isWatchable?: (url: string) => boolean) {
+  constructor(
+    workGraph: WorkGraph,
+    providerRegistry?: ProviderRegistry,
+    actionRegistry?: ActionRegistry,
+    isWatchable?: (url: string) => boolean,
+  ) {
     const [lr, pce, tr, dice] = FocusTreeProvider.buildProviderArgs(providerRegistry);
     super(workGraph, 'flat', lr, pce, tr, dice);
+
+    this.actionRegistry = actionRegistry;
     this.isWatchable = isWatchable;
+    if (this.actionRegistry) {
+      this.disposables.push(this.actionRegistry.onDidChangeRegistrations(() => this.refresh()));
+    }
   }
 
   protected getItems(): WorkItem[] {
@@ -52,7 +64,8 @@ export class FocusTreeProvider extends WorkItemViewProvider implements vscode.Tr
     const base = item.state === WorkItemState.Paused ? 'paused' : 'active';
     const urlSuffix = item.url ? '.hasUrl' : '';
     const watchableSuffix = item.url && this.isWatchable?.(item.url) ? '.watchable' : '';
-    treeItem.contextValue = `${base}${urlSuffix}${watchableSuffix}`;
+    const hasActionsSuffix = this.actionRegistry?.hasActionsFor(item) ? '.hasActions' : '';
+    treeItem.contextValue = `${base}${urlSuffix}${watchableSuffix}${hasActionsSuffix}`;
 
     treeItem.command = { command: 'devdocket.editItem', title: 'Open Details', arguments: [item] };
     return treeItem;

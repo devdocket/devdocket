@@ -88,6 +88,19 @@
               "onCommand:devdocket.acceptToFocusFromInbox",
               "onCommand:devdocket.completeItem"
             ]
+          },
+          {
+            "id": "monitorPipelines",
+            "title": "Watch CI Pipelines and PRs",
+            "description": "Monitor GitHub Actions and Azure DevOps Pipelines runs without leaving VS Code.",
+            "media": {
+              "markdown": "media/walkthroughs/watches.md"
+            },
+            "completionEvents": [
+              "onCommand:devdocket.watchRun",
+              "onCommand:devdocket.watchPR",
+              "onCommand:devdocket.watchPRFromItem"
+            ]
           }
         ]
       }
@@ -133,6 +146,11 @@
             "type": "boolean",
             "default": true,
             "description": "Show a notification when an individual job fails while the pipeline run is still in progress"
+          },
+          "devDocket.watches.autoWatchAuthoredPRs": {
+            "type": "boolean",
+            "default": true,
+            "description": "Automatically watch authored pull requests when a provider refresh discovers them"
           }
         }
       }
@@ -197,7 +215,7 @@
       },
       {
         "view": "devdocket.watches",
-        "contents": "No watches yet.\n[Watch Pipeline Run](command:devdocket.watchRun)\n[Watch Pull Request](command:devdocket.watchPR)"
+        "contents": "No watches yet.\nWatches notify you when a GitHub Actions workflow run or an Azure DevOps pipeline run completes or fails, or when a PR is merged — right inside VS Code.\n[Watch Pipeline Run](command:devdocket.watchRun)\n[Watch Pull Request](command:devdocket.watchPR)"
       }
     ],
     "commands": [
@@ -254,6 +272,12 @@
         "title": "Open in Browser",
         "category": "DevDocket",
         "icon": "$(link-external)"
+      },
+      {
+        "command": "devdocket.copyUrl",
+        "title": "Copy URL",
+        "category": "DevDocket",
+        "icon": "$(copy)"
       },
       {
         "command": "devdocket.runAction",
@@ -322,8 +346,25 @@
         "icon": "$(rocket)"
       },
       {
+        "command": "devdocket.acceptAllFromInbox",
+        "title": "Accept All to Queue",
+        "category": "DevDocket",
+        "icon": "$(check)"
+      },
+      {
+        "command": "devdocket.acceptAllToFocusFromInbox",
+        "title": "Accept All to Focus",
+        "category": "DevDocket"
+      },
+      {
         "command": "devdocket.dismissFromInbox",
         "title": "Dismiss",
+        "category": "DevDocket",
+        "icon": "$(close)"
+      },
+      {
+        "command": "devdocket.dismissAllFromInbox",
+        "title": "Dismiss All",
         "category": "DevDocket",
         "icon": "$(close)"
       },
@@ -690,6 +731,10 @@
         {
           "command": "devdocket.watchPRFromItem",
           "when": "false"
+        },
+        {
+          "command": "devdocket.copyUrl",
+          "when": "false"
         }
       ],
       "view/item/context": [
@@ -776,21 +821,26 @@
         {
           "command": "devdocket.openInBrowser",
           "when": "viewItem =~ /hasUrl/ && !listMultiSelection",
-          "group": "2_links"
+          "group": "2_links@0"
+        },
+        {
+          "command": "devdocket.copyUrl",
+          "when": "viewItem =~ /hasUrl/ && !listMultiSelection",
+          "group": "2_links@1"
         },
         {
           "command": "devdocket.watchPRFromItem",
           "when": "view == devdocket.focus && viewItem =~ /watchable/ && !listMultiSelection",
-          "group": "2_links"
+          "group": "2_links@2"
         },
         {
           "command": "devdocket.watchPRFromItem",
           "when": "view == devdocket.queue && viewItem =~ /watchable/ && !listMultiSelection",
-          "group": "2_links"
+          "group": "2_links@2"
         },
         {
           "command": "devdocket.runAction",
-          "when": "((view == devdocket.queue && viewItem =~ /^queueItem/) || (view == devdocket.focus && viewItem =~ /^(active|paused)/)) && !listMultiSelection",
+          "when": "((view == devdocket.queue && viewItem =~ /^queueItem/) || (view == devdocket.focus && viewItem =~ /^(active|paused)/)) && viewItem =~ /\\.hasActions/ && !listMultiSelection",
           "group": "0_actions"
         },
         {
@@ -816,6 +866,31 @@
         {
           "command": "devdocket.acceptToFocusFromInbox",
           "when": "view == devdocket.inbox && viewItem =~ /inboxItem/",
+          "group": "1_actions"
+        },
+        {
+          "command": "devdocket.acceptAllFromInbox",
+          "when": "view == devdocket.inbox && viewItem =~ /inboxProvider|inboxGroup/",
+          "group": "inline"
+        },
+        {
+          "command": "devdocket.dismissAllFromInbox",
+          "when": "view == devdocket.inbox && viewItem =~ /inboxProvider|inboxGroup/",
+          "group": "inline"
+        },
+        {
+          "command": "devdocket.acceptAllFromInbox",
+          "when": "view == devdocket.inbox && viewItem =~ /inboxProvider|inboxGroup/",
+          "group": "1_actions"
+        },
+        {
+          "command": "devdocket.acceptAllToFocusFromInbox",
+          "when": "view == devdocket.inbox && viewItem =~ /inboxProvider|inboxGroup/",
+          "group": "1_actions"
+        },
+        {
+          "command": "devdocket.dismissAllFromInbox",
+          "when": "view == devdocket.inbox && viewItem =~ /inboxProvider|inboxGroup/",
           "group": "1_actions"
         },
         {

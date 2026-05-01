@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
 import * as vscode from 'vscode';
 import { MockMemento } from 'vscode';
-import { activate, deactivate, logger } from '../extension';
+import { activate, autoWatchAuthoredPRs, deactivate, logger } from '../extension';
 import { _resetViewLayoutStore } from '../views/viewLayout';
 
 // Stub fs so migration never touches disk
@@ -221,7 +221,209 @@ describe('activate()', () => {
   });
 
   // ------------------------------------------------------------------
-  // 10. State migration: provider-backed items without inbox state get accepted
+  // 10. Auto-watch: authored PRs are watched on provider refresh
+  // ------------------------------------------------------------------
+  it('auto-watches authored PRs discovered on provider refresh', async () => {
+    const providerRegistry = {
+      getDiscoveredItems: vi.fn().mockReturnValue([
+        {
+          externalId: 'owner/repo#42',
+          title: '#42: Authored PR',
+          url: 'https://github.com/owner/repo/pull/42',
+          authored: true,
+        },
+        {
+          externalId: 'owner/repo#99',
+          title: '#99: Assigned PR',
+          url: 'https://github.com/owner/repo/pull/99',
+        },
+      ]),
+    } as any;
+    const identifier = {
+      providerId: 'github-prs',
+      prId: '42',
+      displayName: 'PR #42',
+      url: 'https://github.com/owner/repo/pull/42',
+      repo: 'owner/repo',
+    };
+    const prWatcher = {
+      parsePRUrl: vi.fn().mockReturnValue(identifier),
+    };
+    const prWatcherRegistry = {
+      findWatcherForUrl: vi.fn((url: string) => url.includes('/pull/42') ? prWatcher : undefined),
+    } as any;
+    const watcherService = {
+      isPRWatched: vi.fn().mockReturnValue(false),
+      startPRWatch: vi.fn().mockResolvedValue(undefined),
+    } as any;
+
+    await autoWatchAuthoredPRs(
+      'github-my-prs',
+      providerRegistry,
+      prWatcherRegistry,
+      watcherService,
+      new AbortController().signal,
+    );
+
+    expect(prWatcherRegistry.findWatcherForUrl).toHaveBeenCalledWith('https://github.com/owner/repo/pull/42');
+    expect(prWatcher.parsePRUrl).toHaveBeenCalledWith('https://github.com/owner/repo/pull/42');
+    expect(watcherService.isPRWatched).toHaveBeenCalledWith(identifier);
+    expect(watcherService.startPRWatch).toHaveBeenCalledWith(identifier);
+  });
+
+  it('runs auto-watch and auto-complete in parallel after provider refresh', async () => {
+    const globalState = context.globalState as InstanceType<typeof MockMemento>;
+    const now = Date.now();
+    await globalState.update('devdocket.workitems', [
+      {
+        id: 'auto-complete-item',
+        title: 'Closed PR',
+        state: 'New',
+        providerId: 'github-my-prs',
+        externalId: 'owner/repo#42',
+        createdAt: now,
+        updatedAt: now,
+      },
+    ]);
+    await globalState.update('devdocket.migrated', true);
+
+    const api = await activate(context);
+
+    let resolveSnapshot: ((value: { prState: 'open'; runs: []; displayName?: string }) => void) | undefined;
+    const snapshotPromise = new Promise<{ prState: 'open'; runs: []; displayName?: string }>((resolve) => {
+      resolveSnapshot = resolve;
+    });
+
+    api.registerPRWatcher({
+      id: 'github-prs',
+      label: 'GitHub PRs',
+      canWatch: (url: string) => url.includes('/pull/'),
+      parsePRUrl: (url: string) => ({
+        providerId: 'github-prs',
+        prId: '42',
+        displayName: 'PR #42',
+        url,
+        repo: 'owner/repo',
+      }),
+      getPRRunsSnapshot: vi.fn(() => snapshotPromise),
+    } as any);
+
+    const itemEmitter = new (vscode.EventEmitter as any)();
+    const provider = {
+      id: 'github-my-prs',
+      label: 'My PRs',
+      onDidDiscoverItems: itemEmitter.event,
+      refresh: vi.fn(async () => {
+        itemEmitter.fire([
+          {
+            externalId: 'owner/repo#42',
+            title: 'Closed PR',
+            url: 'https://github.com/owner/repo/pull/42',
+            authored: true,
+          },
+        ]);
+      }),
+      getClosedItems: vi.fn(async (externalIds: string[]) => externalIds.filter(id => id === 'owner/repo#42')),
+    };
+
+    api.registerProvider(provider as any);
+    await flushMicrotasks();
+    await flushMicrotasks();
+
+    expect(provider.getClosedItems).toHaveBeenCalledWith(['owner/repo#42'], expect.any(AbortSignal));
+
+    resolveSnapshot?.({ prState: 'open', runs: [] });
+    await flushMicrotasks();
+  });
+
+  it('does not recreate auto-watched PRs on later refreshes', async () => {
+    const providerRegistry = {
+      getDiscoveredItems: vi.fn().mockReturnValue([
+        {
+          externalId: 'owner/repo#42',
+          title: '#42: Authored PR',
+          url: 'https://github.com/owner/repo/pull/42',
+          authored: true,
+        },
+      ]),
+    } as any;
+    const identifier = {
+      providerId: 'github-prs',
+      prId: '42',
+      displayName: 'PR #42',
+      url: 'https://github.com/owner/repo/pull/42',
+      repo: 'owner/repo',
+    };
+    const prWatcher = {
+      parsePRUrl: vi.fn().mockReturnValue(identifier),
+    };
+    const prWatcherRegistry = {
+      findWatcherForUrl: vi.fn().mockReturnValue(prWatcher),
+    } as any;
+    const watcherService = {
+      isPRWatched: vi.fn().mockReturnValue(true),
+      startPRWatch: vi.fn().mockResolvedValue(undefined),
+    } as any;
+
+    await autoWatchAuthoredPRs(
+      'github-my-prs',
+      providerRegistry,
+      prWatcherRegistry,
+      watcherService,
+      new AbortController().signal,
+    );
+
+    expect(prWatcher.parsePRUrl).toHaveBeenCalledTimes(1);
+    expect(watcherService.startPRWatch).not.toHaveBeenCalled();
+  });
+
+  it('logs auto-watch failures with URL context and error details', async () => {
+    const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => undefined);
+    const providerRegistry = {
+      getDiscoveredItems: vi.fn().mockReturnValue([
+        {
+          externalId: 'owner/repo#42',
+          title: '#42: Authored PR',
+          url: 'https://github.com/owner/repo/pull/42',
+          authored: true,
+        },
+      ]),
+    } as any;
+    const identifier = {
+      providerId: 'github-prs',
+      prId: '42',
+      displayName: 'PR #42',
+      url: 'https://github.com/owner/repo/pull/42',
+      repo: 'owner/repo',
+    };
+    const prWatcherRegistry = {
+      findWatcherForUrl: vi.fn().mockReturnValue({
+        parsePRUrl: vi.fn().mockReturnValue(identifier),
+      }),
+    } as any;
+    const error = new Error('boom');
+    const watcherService = {
+      isPRWatched: vi.fn().mockReturnValue(false),
+      startPRWatch: vi.fn().mockRejectedValue(error),
+    } as any;
+
+    await autoWatchAuthoredPRs(
+      'github-my-prs',
+      providerRegistry,
+      prWatcherRegistry,
+      watcherService,
+      new AbortController().signal,
+    );
+
+    expect(warnSpy).toHaveBeenCalledWith(
+      'Failed to auto-watch authored PR from provider github-my-prs',
+      { url: 'https://github.com/owner/repo/pull/42' },
+      error,
+    );
+  });
+
+  // ------------------------------------------------------------------
+  // 11. State migration: provider-backed items without inbox state get accepted
   // ------------------------------------------------------------------
   it('migrates provider-backed work items to accepted state', async () => {
     // Seed the store with a work item that has provider info via globalState

@@ -314,25 +314,26 @@ describe('AdoPrReviewProvider', () => {
     );
   });
 
-  it('fires empty items when refresh catch block is hit', async () => {
+  it('fires empty items and rethrows when refresh catch block is hit', async () => {
     vi.spyOn(provider as any, 'fetchAndPublishPrs').mockRejectedValue(new Error('unexpected'));
 
     const listener = vi.fn();
     provider.onDidDiscoverItems(listener);
-    await provider.refresh();
+
+    await expect(provider.refresh()).rejects.toThrow('unexpected');
 
     expect(listener).toHaveBeenCalledTimes(1);
     expect(listener).toHaveBeenCalledWith([]);
   });
 
-  it('fires empty items when doBackgroundRefresh catch block is hit', async () => {
+  it('fires empty items and rethrows when doBackgroundRefresh catch block is hit', async () => {
     vi.spyOn(provider as any, 'fetchAndPublishPrs').mockRejectedValue(new Error('unexpected'));
 
     const listener = vi.fn();
     provider.onDidDiscoverItems(listener);
 
     const refreshBg = (provider as any).refreshInBackground.bind(provider);
-    await refreshBg();
+    await expect(refreshBg()).rejects.toThrow('unexpected');
 
     expect(listener).toHaveBeenCalledTimes(1);
     expect(listener).toHaveBeenCalledWith([]);
@@ -594,6 +595,27 @@ describe('AdoPrReviewProvider', () => {
 
       expect(result).toEqual([]);
       expect(mockFetch).not.toHaveBeenCalled();
+    });
+
+    it('throws AbortError when cancellation is already requested', async () => {
+      const controller = new AbortController();
+      controller.abort();
+
+      await expect(
+        provider.getClosedItems(['myorg/MyProject/myrepo/101'], controller.signal),
+      ).rejects.toMatchObject({ name: 'AbortError' });
+      expect(mockFetch).not.toHaveBeenCalled();
+    });
+
+    it('passes a combined timeout signal to PR status fetches', async () => {
+      const controller = new AbortController();
+      mockFetch.mockResolvedValueOnce({ ok: true, json: async () => ({ status: 'completed' }) });
+
+      await provider.getClosedItems(['myorg/MyProject/myrepo/101'], controller.signal);
+
+      const fetchCall = mockFetch.mock.calls[0];
+      expect(fetchCall[1].signal).toBeInstanceOf(AbortSignal);
+      expect(fetchCall[1].signal).not.toBe(controller.signal);
     });
 
     it('returns empty array for empty input', async () => {

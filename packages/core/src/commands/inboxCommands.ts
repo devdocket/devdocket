@@ -1,8 +1,15 @@
 import * as vscode from 'vscode';
 import { WorkItemState } from '../models/workItem';
 import { WorkGraph } from '../services/workGraph';
+import { ProviderRegistry } from '../services/providerRegistry';
+import { buildCanonicalHiddenSet } from '../services/canonicalDedup';
 import { DiscoveredStateStore, type InboxState } from '../storage/discoveredStateStore';
-import { type InboxItem, type InboxElement } from '../views/inboxTreeProvider';
+import {
+  type InboxItem,
+  type InboxElement,
+  type InboxProviderNode,
+  type InboxGroupNode,
+} from '../views/inboxTreeProvider';
 import { logger } from '../services/logger';
 import type { ViewRevealer } from '../services/viewRevealer';
 import {
@@ -11,6 +18,7 @@ import {
   formatItemTitle,
   batchAcceptItems,
 } from './commandUtils';
+import { expandWithClosesRelatedInboxItems } from './commands';
 
 function isInboxItem(i?: InboxElement): i is InboxItem {
   return !!i && i.kind === 'item' && !!i.providerId && !!i.externalId;
@@ -37,9 +45,149 @@ function resolveInboxItems(item?: InboxElement, selectedItems?: InboxElement[]):
   return [];
 }
 
+function isBulkInboxNode(node?: InboxElement): node is InboxProviderNode | InboxGroupNode {
+  return !!node && (node.kind === 'provider' || node.kind === 'group');
+}
+
+interface CanonicalItem {
+  providerId: string;
+  externalId: string;
+  canonicalId?: string;
+}
+
+function findCanonicalPeers(
+  item: CanonicalItem,
+  providerRegistry: ProviderRegistry,
+  stateStore: DiscoveredStateStore,
+): Array<{ providerId: string; externalId: string }> {
+  if (!item.canonicalId) { return []; }
+  const peers: Array<{ providerId: string; externalId: string }> = [];
+  for (const [providerId, items] of providerRegistry.getAllDiscoveredItems()) {
+    for (const discovered of items) {
+      if (discovered.canonicalId !== item.canonicalId) { continue; }
+      if (providerId === item.providerId && discovered.externalId === item.externalId) { continue; }
+      const state = stateStore.getState(providerId, discovered.externalId);
+      if (state !== undefined && state !== 'unseen') { continue; }
+      peers.push({ providerId, externalId: discovered.externalId });
+    }
+  }
+  return peers;
+}
+
+async function propagateStateToCanonicalPeers(
+  item: CanonicalItem,
+  providerRegistry: ProviderRegistry,
+  stateStore: DiscoveredStateStore,
+  state: 'accepted' | 'dismissed',
+): Promise<void> {
+  const peers = findCanonicalPeers(item, providerRegistry, stateStore);
+  if (peers.length === 0) { return; }
+  try {
+    await stateStore.setStates(peers.map(peer => ({ ...peer, state })));
+  } catch (err: unknown) {
+    logger.error('Failed to propagate state to canonical peers', err);
+  }
+}
+
+function expandWithCanonicalPeers(
+  items: InboxItem[],
+  providerRegistry: ProviderRegistry,
+  stateStore: DiscoveredStateStore,
+): InboxItem[] {
+  const keys = new Set(items.map(i => `${i.providerId}::${i.externalId}`));
+  const extra: InboxItem[] = [];
+  for (const item of items) {
+    const peers = findCanonicalPeers(item, providerRegistry, stateStore);
+    for (const peer of peers) {
+      const peerKey = `${peer.providerId}::${peer.externalId}`;
+      if (keys.has(peerKey)) { continue; }
+      keys.add(peerKey);
+      extra.push({
+        kind: 'item',
+        providerId: peer.providerId,
+        externalId: peer.externalId,
+        title: item.title,
+        description: item.description,
+        url: item.url,
+        group: item.group,
+        canonicalId: item.canonicalId,
+      });
+    }
+  }
+  return [...items, ...extra];
+}
+
+async function propagateStateToCanonicalPeersBatch(
+  items: InboxItem[],
+  providerRegistry: ProviderRegistry,
+  stateStore: DiscoveredStateStore,
+  state: 'accepted' | 'dismissed',
+): Promise<void> {
+  const expanded = expandWithCanonicalPeers(items, providerRegistry, stateStore);
+  const itemKeys = new Set(items.map(item => `${item.providerId}::${item.externalId}`));
+  const peers = expanded.filter(item => !itemKeys.has(`${item.providerId}::${item.externalId}`));
+  if (peers.length === 0) { return; }
+  try {
+    await stateStore.setStates(peers.map(peer => ({ providerId: peer.providerId, externalId: peer.externalId, state })));
+  } catch (err: unknown) {
+    logger.error('Failed to propagate state to canonical peers', err);
+  }
+}
+
+function resolveBulkInboxItems(
+  node: InboxProviderNode | InboxGroupNode,
+  providerRegistry: ProviderRegistry,
+  stateStore: DiscoveredStateStore,
+): InboxItem[] {
+  const hidden = buildCanonicalHiddenSet(
+    providerRegistry.getAllDiscoveredItems(),
+    (providerId, externalId) => stateStore.getState(providerId, externalId),
+  );
+
+  return providerRegistry.getDiscoveredItems(node.providerId)
+    .filter(item => {
+      if (node.kind === 'group' && item.group?.trim() !== node.groupName) { return false; }
+      const state = stateStore.getState(node.providerId, item.externalId);
+      if (state !== undefined && state !== 'unseen') { return false; }
+      return !hidden.has(`${node.providerId}::${item.externalId}`);
+    })
+    .map(item => ({
+      kind: 'item' as const,
+      providerId: node.providerId,
+      externalId: item.externalId,
+      title: item.title,
+      description: item.description,
+      url: item.url,
+      group: item.group,
+      reason: item.reason,
+      canonicalId: item.canonicalId,
+    }))
+    .sort((a, b) => a.title.localeCompare(b.title));
+}
+
+function getBulkNodePath(node: InboxProviderNode | InboxGroupNode, providerRegistry: ProviderRegistry): string {
+  if (node.kind === 'provider') {
+    return node.label;
+  }
+
+  return `${providerRegistry.getProviderLabel(node.providerId)} > ${node.groupName}`;
+}
+
+function formatBulkInboxMessage(
+  verb: 'Dismiss' | 'Accept',
+  count: number,
+  node: InboxProviderNode | InboxGroupNode,
+  providerRegistry: ProviderRegistry,
+  destination?: 'Queue' | 'Focus',
+): string {
+  const suffix = destination ? ` to ${destination}` : '';
+  return `${verb} ${count} item${count === 1 ? '' : 's'} from "${getBulkNodePath(node, providerRegistry)}"${suffix}?`;
+}
+
 async function acceptSingleInboxItem(
   workGraph: WorkGraph,
   stateStore: DiscoveredStateStore,
+  providerRegistry: ProviderRegistry,
   item: InboxItem,
   revealer?: ViewRevealer,
 ): Promise<void> {
@@ -64,6 +212,7 @@ async function acceptSingleInboxItem(
         handleCommandError('Failed to update state for re-opened item', err);
         return;
       }
+      await propagateStateToCanonicalPeers(item, providerRegistry, stateStore, 'accepted');
       void revealer?.revealInQueue(existing.id);
       return;
     }
@@ -74,7 +223,9 @@ async function acceptSingleInboxItem(
       await stateStore.setState(item.providerId, item.externalId, 'accepted');
     } catch (err: unknown) {
       handleCommandError('Failed to update state for existing accepted item', err);
+      return;
     }
+    await propagateStateToCanonicalPeers(item, providerRegistry, stateStore, 'accepted');
     return;
   }
   const group = item.group?.trim();
@@ -104,12 +255,14 @@ async function acceptSingleInboxItem(
     handleCommandError('Failed to update state after accepting item', err);
     return;
   }
+  await propagateStateToCanonicalPeers(item, providerRegistry, stateStore, 'accepted');
   void revealer?.revealInQueue(createdItem.id);
 }
 
 async function acceptToFocusSingleInboxItem(
   workGraph: WorkGraph,
   stateStore: DiscoveredStateStore,
+  providerRegistry: ProviderRegistry,
   item: InboxItem,
   revealer?: ViewRevealer,
 ): Promise<void> {
@@ -125,6 +278,7 @@ async function acceptToFocusSingleInboxItem(
         return;
       }
       void vscode.window.showInformationMessage('DevDocket: Item is already in Focus');
+      await propagateStateToCanonicalPeers(item, providerRegistry, stateStore, 'accepted');
       return;
     }
     if (existing.state === WorkItemState.Done || existing.state === WorkItemState.Archived) {
@@ -190,6 +344,7 @@ async function acceptToFocusSingleInboxItem(
     handleCommandError('Failed to move item to Focus', err);
     return;
   }
+  await propagateStateToCanonicalPeers(item, providerRegistry, stateStore, 'accepted');
   void revealer?.revealInFocus(workItemId);
 }
 
@@ -197,8 +352,9 @@ async function batchAcceptToFocusItems(
   workGraph: WorkGraph,
   stateStore: DiscoveredStateStore,
   items: InboxItem[],
-): Promise<void> {
+): Promise<InboxItem[]> {
   const stateUpdates: Array<{ providerId: string; externalId: string; state: InboxState }> = [];
+  const acceptedItems: InboxItem[] = [];
   const createdIds: string[] = [];
   const allIds: string[] = [];
   const reopenedItems: Array<{ id: string; originalState: WorkItemState }> = [];
@@ -211,6 +367,7 @@ async function batchAcceptToFocusItems(
       if (existing.state === WorkItemState.InProgress || existing.state === WorkItemState.Paused) {
         logger.info(`Skipping "${item.title}" — already in Focus`);
         stateUpdates.push({ providerId: item.providerId, externalId: item.externalId, state: 'accepted' });
+        acceptedItems.push(item);
         skipped++;
         continue;
       }
@@ -226,6 +383,7 @@ async function batchAcceptToFocusItems(
         }
       }
       stateUpdates.push({ providerId: item.providerId, externalId: item.externalId, state: 'accepted' });
+      acceptedItems.push(item);
       allIds.push(existing.id);
       continue;
     }
@@ -243,6 +401,7 @@ async function batchAcceptToFocusItems(
       createdIds.push(createdItem.id);
       allIds.push(createdItem.id);
       stateUpdates.push({ providerId: item.providerId, externalId: item.externalId, state: 'accepted' });
+      acceptedItems.push(item);
     } catch (err: unknown) {
       failed++;
       logger.error(`Failed to accept inbox item to Focus "${item.title}"`, err);
@@ -264,7 +423,7 @@ async function batchAcceptToFocusItems(
         }
       }
       handleCommandError('Failed to update states after accepting items', err);
-      return;
+      return [];
     }
   }
 
@@ -297,56 +456,73 @@ async function batchAcceptToFocusItems(
       `DevDocket: Failed to process ${failed + transitionFailed} item(s); see Output for details`,
     );
   }
+
+  return acceptedItems;
 }
 
 async function handleAcceptFromInbox(
   workGraph: WorkGraph,
   stateStore: DiscoveredStateStore,
+  providerRegistry: ProviderRegistry,
   item?: InboxElement,
   selectedItems?: InboxElement[],
   revealer?: ViewRevealer,
 ): Promise<void> {
-  const items = resolveInboxItems(item, selectedItems);
+  const items = expandWithClosesRelatedInboxItems(
+    resolveInboxItems(item, selectedItems),
+    providerRegistry,
+    stateStore,
+  );
   if (items.length === 0) { return; }
 
   if (items.length === 1) {
-    await acceptSingleInboxItem(workGraph, stateStore, items[0], revealer);
+    await acceptSingleInboxItem(workGraph, stateStore, providerRegistry, items[0], revealer);
     return;
   }
 
-  await batchAcceptItems(workGraph, stateStore, items, 'inbox item');
+  const acceptedItems = await batchAcceptItems(workGraph, stateStore, items, 'inbox item');
+  await propagateStateToCanonicalPeersBatch(acceptedItems, providerRegistry, stateStore, 'accepted');
 }
 
 async function handleAcceptToFocusFromInbox(
   workGraph: WorkGraph,
   stateStore: DiscoveredStateStore,
+  providerRegistry: ProviderRegistry,
   item?: InboxElement,
   selectedItems?: InboxElement[],
   revealer?: ViewRevealer,
 ): Promise<void> {
-  const items = resolveInboxItems(item, selectedItems);
+  const items = expandWithClosesRelatedInboxItems(
+    resolveInboxItems(item, selectedItems),
+    providerRegistry,
+    stateStore,
+  );
   if (items.length === 0) { return; }
 
   if (items.length === 1) {
-    await acceptToFocusSingleInboxItem(workGraph, stateStore, items[0], revealer);
+    await acceptToFocusSingleInboxItem(workGraph, stateStore, providerRegistry, items[0], revealer);
     return;
   }
 
-  await batchAcceptToFocusItems(workGraph, stateStore, items);
+  const acceptedItems = await batchAcceptToFocusItems(workGraph, stateStore, items);
+  await propagateStateToCanonicalPeersBatch(acceptedItems, providerRegistry, stateStore, 'accepted');
 }
 
 async function handleDismissFromInbox(
   stateStore: DiscoveredStateStore,
+  providerRegistry: ProviderRegistry,
   item?: InboxElement,
   selectedItems?: InboxElement[],
 ): Promise<void> {
   const items = resolveInboxItems(item, selectedItems);
   if (items.length === 0) { return; }
 
-  if (items.length === 1) {
+  const expanded = expandWithCanonicalPeers(items, providerRegistry, stateStore);
+
+  if (expanded.length === 1) {
     try {
-      logger.info(`Dismissing inbox item: ${items[0].externalId}`);
-      await stateStore.setState(items[0].providerId, items[0].externalId, 'dismissed');
+      logger.info(`Dismissing inbox item: ${expanded[0].externalId}`);
+      await stateStore.setState(expanded[0].providerId, expanded[0].externalId, 'dismissed');
     } catch (err: unknown) {
       handleCommandError('Failed to dismiss item', err);
     }
@@ -354,11 +530,84 @@ async function handleDismissFromInbox(
   }
 
   try {
-    logger.info(`Batch dismissing ${items.length} inbox items`);
+    logger.info(`Batch dismissing ${expanded.length} inbox items`);
     await stateStore.setStates(
-      items.map(i => ({ providerId: i.providerId, externalId: i.externalId, state: 'dismissed' as const }))
+      expanded.map(i => ({ providerId: i.providerId, externalId: i.externalId, state: 'dismissed' as const }))
     );
-    void vscode.window.showInformationMessage(`Dismissed ${items.length} items`);
+    void vscode.window.showInformationMessage(`Dismissed ${expanded.length} item${expanded.length === 1 ? '' : 's'}`);
+  } catch (err: unknown) {
+    handleCommandError('Failed to dismiss items', err);
+  }
+}
+
+async function handleAcceptAllFromInbox(
+  workGraph: WorkGraph,
+  stateStore: DiscoveredStateStore,
+  providerRegistry: ProviderRegistry,
+  node?: InboxElement,
+): Promise<void> {
+  if (!isBulkInboxNode(node)) { return; }
+
+  const items = resolveBulkInboxItems(node, providerRegistry, stateStore);
+  if (items.length === 0) { return; }
+
+  const confirm = await vscode.window.showInformationMessage(
+    formatBulkInboxMessage('Accept', items.length, node, providerRegistry, 'Queue'),
+    { modal: true },
+    'Accept All to Queue',
+  );
+  if (confirm !== 'Accept All to Queue') { return; }
+
+  const acceptedItems = await batchAcceptItems(workGraph, stateStore, items, 'inbox item');
+  await propagateStateToCanonicalPeersBatch(acceptedItems, providerRegistry, stateStore, 'accepted');
+}
+
+async function handleAcceptAllToFocusFromInbox(
+  workGraph: WorkGraph,
+  stateStore: DiscoveredStateStore,
+  providerRegistry: ProviderRegistry,
+  node?: InboxElement,
+): Promise<void> {
+  if (!isBulkInboxNode(node)) { return; }
+
+  const items = resolveBulkInboxItems(node, providerRegistry, stateStore);
+  if (items.length === 0) { return; }
+
+  const confirm = await vscode.window.showInformationMessage(
+    formatBulkInboxMessage('Accept', items.length, node, providerRegistry, 'Focus'),
+    { modal: true },
+    'Accept All to Focus',
+  );
+  if (confirm !== 'Accept All to Focus') { return; }
+
+  const acceptedItems = await batchAcceptToFocusItems(workGraph, stateStore, items);
+  await propagateStateToCanonicalPeersBatch(acceptedItems, providerRegistry, stateStore, 'accepted');
+}
+
+async function handleDismissAllFromInbox(
+  stateStore: DiscoveredStateStore,
+  providerRegistry: ProviderRegistry,
+  node?: InboxElement,
+): Promise<void> {
+  if (!isBulkInboxNode(node)) { return; }
+
+  const items = resolveBulkInboxItems(node, providerRegistry, stateStore);
+  if (items.length === 0) { return; }
+
+  const expanded = expandWithCanonicalPeers(items, providerRegistry, stateStore);
+  const confirm = await vscode.window.showWarningMessage(
+    formatBulkInboxMessage('Dismiss', expanded.length, node, providerRegistry),
+    { modal: true },
+    'Dismiss All',
+  );
+  if (confirm !== 'Dismiss All') { return; }
+
+  try {
+    logger.info(`Batch dismissing ${expanded.length} inbox items from node ${getBulkNodePath(node, providerRegistry)}`);
+    await stateStore.setStates(
+      expanded.map(i => ({ providerId: i.providerId, externalId: i.externalId, state: 'dismissed' as const }))
+    );
+    void vscode.window.showInformationMessage(`Dismissed ${expanded.length} item${expanded.length === 1 ? '' : 's'}`);
   } catch (err: unknown) {
     handleCommandError('Failed to dismiss items', err);
   }
@@ -368,14 +617,21 @@ export function registerInboxCommands(
   context: vscode.ExtensionContext,
   workGraph: WorkGraph,
   stateStore: DiscoveredStateStore,
+  providerRegistry: ProviderRegistry,
   revealer?: ViewRevealer,
 ): void {
   context.subscriptions.push(
     vscode.commands.registerCommand('devdocket.acceptFromInbox',
-      wrapCommand('Failed to accept from inbox', (item?: InboxElement, selectedItems?: InboxElement[]) => handleAcceptFromInbox(workGraph, stateStore, item, selectedItems, revealer))),
+      wrapCommand('Failed to accept from inbox', (item?: InboxElement, selectedItems?: InboxElement[]) => handleAcceptFromInbox(workGraph, stateStore, providerRegistry, item, selectedItems, revealer))),
     vscode.commands.registerCommand('devdocket.acceptToFocusFromInbox',
-      wrapCommand('Failed to accept to focus from inbox', (item?: InboxElement, selectedItems?: InboxElement[]) => handleAcceptToFocusFromInbox(workGraph, stateStore, item, selectedItems, revealer))),
+      wrapCommand('Failed to accept to focus from inbox', (item?: InboxElement, selectedItems?: InboxElement[]) => handleAcceptToFocusFromInbox(workGraph, stateStore, providerRegistry, item, selectedItems, revealer))),
     vscode.commands.registerCommand('devdocket.dismissFromInbox',
-      wrapCommand('Failed to dismiss from inbox', (item?: InboxElement, selectedItems?: InboxElement[]) => handleDismissFromInbox(stateStore, item, selectedItems))),
+      wrapCommand('Failed to dismiss from inbox', (item?: InboxElement, selectedItems?: InboxElement[]) => handleDismissFromInbox(stateStore, providerRegistry, item, selectedItems))),
+    vscode.commands.registerCommand('devdocket.acceptAllFromInbox',
+      wrapCommand('Failed to accept all from inbox', (item?: InboxElement) => handleAcceptAllFromInbox(workGraph, stateStore, providerRegistry, item))),
+    vscode.commands.registerCommand('devdocket.acceptAllToFocusFromInbox',
+      wrapCommand('Failed to accept all to focus from inbox', (item?: InboxElement) => handleAcceptAllToFocusFromInbox(workGraph, stateStore, providerRegistry, item))),
+    vscode.commands.registerCommand('devdocket.dismissAllFromInbox',
+      wrapCommand('Failed to dismiss all from inbox', (item?: InboxElement) => handleDismissAllFromInbox(stateStore, providerRegistry, item))),
   );
 }

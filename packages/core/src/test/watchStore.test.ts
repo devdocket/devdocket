@@ -96,6 +96,21 @@ describe('WatchStore', () => {
     });
   });
 
+  describe('hasPRWatch', () => {
+    it('returns true for persisted dismissed PR watches', async () => {
+      const prWatch = createTestPRWatch({ dismissed: true });
+      await memento.update('devdocket.watches', { runs: [], prs: [prWatch] });
+
+      await expect(store.hasPRWatch(prWatch.identifier)).resolves.toBe(true);
+    });
+
+    it('returns false when the PR watch is not persisted', async () => {
+      await memento.update('devdocket.watches', { runs: [], prs: [] });
+
+      await expect(store.hasPRWatch(createTestPRWatch().identifier)).resolves.toBe(false);
+    });
+  });
+
   describe('saveAll', () => {
     it('saves watches to globalState in envelope format', async () => {
       const watch = createTestWatch();
