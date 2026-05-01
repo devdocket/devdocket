@@ -1,6 +1,8 @@
 import * as vscode from 'vscode';
-import { WorkItemState } from '../models/workItem';
+import type { DiscoveredItem } from '../api/types';
+import { type WorkItem, WorkItemState } from '../models/workItem';
 import { ActionRegistry } from '../services/actionRegistry';
+import { buildCanonicalHiddenSet } from '../services/canonicalDedup';
 import { logger } from '../services/logger';
 import { ProviderRegistry } from '../services/providerRegistry';
 import { WatcherService } from '../services/watcherService';
@@ -8,7 +10,9 @@ import { WorkGraph } from '../services/workGraph';
 import { DiscoveredStateStore } from '../storage/discoveredStateStore';
 import { ReadStateStore } from '../storage/readStateStore';
 import { isSafeUrl } from '../utils/url';
-import type { WebviewMessage } from './missionControlTypes';
+import { buildTierColorCss } from '../webview/shared/colors';
+import { formatRelativeTime } from '../webview/shared/timeUtils';
+import type { BadgeData, ItemCardData, TierData, WebviewMessage } from './missionControlTypes';
 
 export class MissionControlViewProvider implements vscode.WebviewViewProvider {
   public static readonly viewId = 'devdocket.missionControl';
@@ -67,7 +71,7 @@ export class MissionControlViewProvider implements vscode.WebviewViewProvider {
 
     void this.view.webview.postMessage({
       type: 'updateItems',
-      tiers: [],
+      tiers: this.buildTierData(),
     });
     void this.view.webview.postMessage({
       type: 'updateSources',
@@ -75,11 +79,249 @@ export class MissionControlViewProvider implements vscode.WebviewViewProvider {
     });
   }
 
+  private buildTierData(): TierData[] {
+    const allDiscoveredItems = this.providerRegistry.getAllDiscoveredItems();
+    const hiddenCanonicalKeys = buildCanonicalHiddenSet(
+      allDiscoveredItems,
+      (providerId, externalId) => this.stateStore.getState(providerId, externalId),
+    );
+    const discoveredItemMap = this.buildDiscoveredItemMap(allDiscoveredItems);
+
+    const incomingItems: ItemCardData[] = [];
+    for (const [providerId, items] of allDiscoveredItems) {
+      for (const discoveredItem of items) {
+        const inboxState = this.stateStore.getState(providerId, discoveredItem.externalId);
+        if (inboxState !== undefined && inboxState !== 'unseen') {
+          continue;
+        }
+
+        const key = getDiscoveredItemKey(providerId, discoveredItem.externalId);
+        if (hiddenCanonicalKeys.has(key)) {
+          continue;
+        }
+
+        incomingItems.push(
+          this.buildIncomingCardData(
+            providerId,
+            discoveredItem,
+            this.workGraph.findItemByProvenance(providerId, discoveredItem.externalId),
+          ),
+        );
+      }
+    }
+    incomingItems.reverse();
+
+    const inProgressItems = this.workGraph
+      .getItemsByState(WorkItemState.InProgress)
+      .sort((a, b) => this.compareUrgencyThenUpdated(a, b, discoveredItemMap))
+      .map(item => this.buildWorkItemCardData(item, 'inProgress', discoveredItemMap));
+
+    const readyToStartItems = this.workGraph
+      .getItemsByState(WorkItemState.New)
+      .sort((a, b) => {
+        const urgency = this.compareUrgency(a, b, discoveredItemMap);
+        if (urgency !== 0) {
+          return urgency;
+        }
+
+        return (a.sortOrder ?? Number.MAX_SAFE_INTEGER) - (b.sortOrder ?? Number.MAX_SAFE_INTEGER)
+          || b.updatedAt - a.updatedAt;
+      })
+      .map(item => this.buildWorkItemCardData(item, 'readyToStart', discoveredItemMap));
+
+    const pausedItems = this.workGraph
+      .getItemsByState(WorkItemState.Paused)
+      .sort((a, b) => a.updatedAt - b.updatedAt)
+      .map(item => this.buildWorkItemCardData(item, 'paused', discoveredItemMap));
+
+    const doneItems = this.workGraph
+      .getItemsByState(WorkItemState.Done, WorkItemState.Archived)
+      .sort((a, b) => b.updatedAt - a.updatedAt)
+      .map(item => this.buildWorkItemCardData(item, 'done', discoveredItemMap));
+
+    return [
+      { id: 'incoming', name: 'Incoming', icon: '↓', items: incomingItems, collapsed: false },
+      { id: 'in-progress', name: 'In Progress', icon: '▶', items: inProgressItems, collapsed: false },
+      { id: 'ready-to-start', name: 'Ready to Start', icon: '○', items: readyToStartItems, collapsed: false },
+      { id: 'paused', name: 'Paused', icon: '⏸', items: pausedItems, collapsed: false },
+      { id: 'done', name: 'Done', icon: '✓', items: doneItems, collapsed: true },
+    ].filter(tier => tier.items.length > 0);
+  }
+
+  private buildDiscoveredItemMap(allDiscoveredItems: Iterable<[string, readonly DiscoveredItem[]]>): Map<string, DiscoveredItem> {
+    const discoveredItemMap = new Map<string, DiscoveredItem>();
+    for (const [providerId, items] of allDiscoveredItems) {
+      for (const item of items) {
+        discoveredItemMap.set(getDiscoveredItemKey(providerId, item.externalId), item);
+      }
+    }
+    return discoveredItemMap;
+  }
+
+  private compareUrgency(a: WorkItem, b: WorkItem, discoveredItemMap: Map<string, DiscoveredItem>): number {
+    const aUrgent = this.isUrgentWorkItem(a, discoveredItemMap);
+    const bUrgent = this.isUrgentWorkItem(b, discoveredItemMap);
+    if (aUrgent === bUrgent) {
+      return 0;
+    }
+    return aUrgent ? -1 : 1;
+  }
+
+  private compareUrgencyThenUpdated(a: WorkItem, b: WorkItem, discoveredItemMap: Map<string, DiscoveredItem>): number {
+    const urgency = this.compareUrgency(a, b, discoveredItemMap);
+    if (urgency !== 0) {
+      return urgency;
+    }
+    return b.updatedAt - a.updatedAt;
+  }
+
+  private isUrgentWorkItem(item: WorkItem, discoveredItemMap: Map<string, DiscoveredItem>): boolean {
+    return this.isUrgentDiscoveredItem(this.getDiscoveredItemForWorkItem(item, discoveredItemMap));
+  }
+
+  private isUrgentDiscoveredItem(discoveredItem?: DiscoveredItem): boolean {
+    return normalizeText(discoveredItem?.state) === 'changes requested';
+  }
+
+  private getDiscoveredItemForWorkItem(item: WorkItem, discoveredItemMap: Map<string, DiscoveredItem>): DiscoveredItem | undefined {
+    if (!item.providerId || !item.externalId) {
+      return undefined;
+    }
+    return discoveredItemMap.get(getDiscoveredItemKey(item.providerId, item.externalId));
+  }
+
+  private buildIncomingCardData(providerId: string, discoveredItem: DiscoveredItem, existingWorkItem?: WorkItem): ItemCardData {
+    const workContext = existingWorkItem ? extractWorkContext(existingWorkItem) : {};
+    return {
+      id: existingWorkItem?.id ?? getDiscoveredItemKey(providerId, discoveredItem.externalId),
+      title: discoveredItem.title,
+      relativeTime: existingWorkItem ? this.formatItemTime(existingWorkItem.updatedAt) : '',
+      badges: this.buildBadges(providerId, discoveredItem),
+      branchName: workContext.branchName,
+      repoName: workContext.repoName,
+      tierType: 'incoming',
+      isUnseen: true,
+      isUrgent: this.isUrgentDiscoveredItem(discoveredItem),
+      providerId,
+      externalId: discoveredItem.externalId,
+    };
+  }
+
+  private buildWorkItemCardData(
+    item: WorkItem,
+    tierType: ItemCardData['tierType'],
+    discoveredItemMap: Map<string, DiscoveredItem>,
+  ): ItemCardData {
+    const discoveredItem = this.getDiscoveredItemForWorkItem(item, discoveredItemMap);
+    const workContext = extractWorkContext(item);
+    return {
+      id: item.id,
+      title: item.title,
+      relativeTime: this.formatItemTime(item.updatedAt),
+      badges: this.buildBadges(item.providerId, discoveredItem),
+      branchName: workContext.branchName,
+      repoName: workContext.repoName,
+      tierType,
+      isUrgent: this.isUrgentWorkItem(item, discoveredItemMap),
+      providerId: item.providerId,
+      externalId: item.externalId,
+    };
+  }
+
+  private formatItemTime(timestamp: number): string {
+    return formatRelativeTime(timestamp);
+  }
+
+  private buildBadges(providerId?: string, discoveredItem?: DiscoveredItem): BadgeData[] {
+    const badges: BadgeData[] = [];
+    const providerBadge = this.buildProviderBadge(providerId);
+    if (providerBadge) {
+      badges.push(providerBadge);
+    }
+
+    const stateBadge = this.buildStateBadge(discoveredItem);
+    if (stateBadge) {
+      badges.push(stateBadge);
+    }
+
+    return badges;
+  }
+
+  private buildProviderBadge(providerId?: string): BadgeData | undefined {
+    if (!providerId) {
+      return undefined;
+    }
+
+    const normalizedProviderId = providerId.toLowerCase();
+    if (normalizedProviderId.includes('github')) {
+      return { label: 'GitHub', type: 'provider', variant: 'github' };
+    }
+    if (normalizedProviderId.includes('ado')) {
+      return { label: 'ADO', type: 'provider', variant: 'ado' };
+    }
+
+    return { label: 'Manual', type: 'provider', variant: 'manual' };
+  }
+
+  private buildStateBadge(discoveredItem?: DiscoveredItem): BadgeData | undefined {
+    if (!discoveredItem) {
+      return undefined;
+    }
+
+    const normalizedReason = normalizeText(discoveredItem.reason);
+    if (normalizedReason === 'review requested') {
+      return { label: 'PR Review', type: 'state', variant: 'review-requested' };
+    }
+
+    const normalizedState = normalizeText(discoveredItem.state);
+    switch (normalizedState) {
+      case 'changes requested':
+        return { label: 'Changes requested', type: 'state', variant: 'changes-requested' };
+      case 'approved':
+        return { label: 'Approved', type: 'state', variant: 'approved' };
+      case 'draft':
+        return { label: 'Draft', type: 'state', variant: 'draft' };
+      case 'ready to merge':
+        return { label: 'Ready to merge', type: 'state', variant: 'ready-to-merge' };
+      case 'closed':
+      case 'merged':
+        return {
+          label: discoveredItem.state?.trim() || toDisplayLabel(normalizedState),
+          type: 'state',
+          variant: 'closed',
+        };
+      case 'active':
+      case 'open':
+        return { label: 'Issue · open', type: 'state', variant: 'open' };
+      case 'review received':
+        return { label: 'Review received', type: 'state', variant: 'open' };
+      case 'waiting on reviews':
+        return { label: 'Waiting on reviews', type: 'state', variant: 'open' };
+      default:
+        return undefined;
+    }
+  }
+
   private async handleMessage(message: WebviewMessage): Promise<void> {
     switch (message.type) {
-      case 'openItem':
-        await vscode.commands.executeCommand('devdocket.editItem', { id: message.itemId });
+      case 'openItem': {
+        const workItem = this.workGraph.getItem(message.itemId);
+        if (workItem) {
+          await vscode.commands.executeCommand('devdocket.editItem', { id: message.itemId });
+          break;
+        }
+
+        const discoveredKey = parseDiscoveredItemKey(message.itemId);
+        if (discoveredKey) {
+          const discoveredItem = this.providerRegistry
+            .getDiscoveredItems(discoveredKey.providerId)
+            .find(item => item.externalId === discoveredKey.externalId);
+          if (discoveredItem?.url && isSafeUrl(discoveredItem.url)) {
+            await vscode.env.openExternal(vscode.Uri.parse(discoveredItem.url));
+          }
+        }
         break;
+      }
       case 'acceptItem':
         await this.handleAcceptItem(message.providerId, message.externalId);
         break;
@@ -218,6 +460,128 @@ export class MissionControlViewProvider implements vscode.WebviewViewProvider {
       display: flex;
       flex-direction: column;
     }
+    .my-work-tab {
+      padding: 12px;
+    }
+    .tiers {
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+    .tier-section {
+      border-left: 3px solid transparent;
+      border-radius: 6px;
+      background: var(--vscode-editorWidget-background, var(--vscode-sideBar-background));
+      padding: 10px 12px;
+    }
+    .tier-section.tier-incoming { border-left-color: var(--tier-incoming); }
+    .tier-section.tier-in-progress { border-left-color: var(--tier-in-progress); }
+    .tier-section.tier-ready-to-start { border-left-color: var(--tier-ready); }
+    .tier-section.tier-paused { border-left-color: var(--tier-paused); }
+    .tier-section.tier-done { border-left-color: var(--tier-done); }
+    .tier-header {
+      width: 100%;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      background: transparent;
+      border: none;
+      color: inherit;
+      cursor: pointer;
+      padding: 0;
+      text-align: left;
+      font: inherit;
+    }
+    .tier-header:focus-visible,
+    .item-card:focus-visible {
+      outline: 1px solid var(--vscode-focusBorder);
+      outline-offset: 2px;
+    }
+    .tier-count,
+    .tier-toggle,
+    .item-time,
+    .item-meta {
+      color: var(--vscode-descriptionForeground);
+    }
+    .tier-toggle {
+      margin-left: auto;
+    }
+    .tier-items {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      margin-top: 10px;
+    }
+    .item-card {
+      width: 100%;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      padding: 10px 12px;
+      border: none;
+      border-left: 3px solid transparent;
+      border-radius: 6px;
+      background: var(--vscode-list-inactiveSelectionBackground, rgba(127, 127, 127, 0.08));
+      color: inherit;
+      cursor: pointer;
+      text-align: left;
+      font: inherit;
+    }
+    .item-card.item-card--incoming { border-left-color: var(--tier-incoming); }
+    .item-card.item-card--in-progress { border-left-color: var(--tier-in-progress); }
+    .item-card.item-card--ready-to-start { border-left-color: var(--tier-ready); }
+    .item-card.item-card--paused { border-left-color: var(--tier-paused); }
+    .item-card.item-card--done { border-left-color: var(--tier-done); }
+    .item-card.urgent { border-left-color: var(--tier-urgent); }
+    .item-card.selected {
+      outline: 1px solid var(--vscode-focusBorder);
+      outline-offset: 0;
+    }
+    .item-card:hover {
+      background: var(--vscode-list-hoverBackground, rgba(127, 127, 127, 0.12));
+    }
+    .item-line-1 {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 8px;
+    }
+    .item-title-wrap {
+      display: flex;
+      align-items: flex-start;
+      gap: 6px;
+      min-width: 0;
+      flex: 1;
+    }
+    .item-title {
+      font-weight: 600;
+      word-break: break-word;
+    }
+    .item-time {
+      flex-shrink: 0;
+      white-space: nowrap;
+    }
+    .unseen-dot {
+      color: var(--tier-incoming);
+      line-height: 1.2;
+    }
+    .badge-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+    }
+    .badge-pill {
+      display: inline-flex;
+      align-items: center;
+      border-radius: 999px;
+      padding: 2px 8px;
+      font-size: 11px;
+      font-weight: 600;
+      line-height: 1.4;
+    }
+    .item-meta {
+      font-size: 11px;
+    }
     .empty-state, .placeholder {
       padding: 16px;
       color: var(--vscode-descriptionForeground);
@@ -225,20 +589,10 @@ export class MissionControlViewProvider implements vscode.WebviewViewProvider {
       font-style: italic;
     }
     :root {
-      --tier-incoming: #3794FF;
-      --tier-in-progress: #89D185;
-      --tier-urgent: #F14C4C;
-      --tier-ready: #6E6E6E;
-      --tier-paused: #CCA700;
-      --tier-done: #6E6E6E;
+      ${buildTierColorCss('dark')}
     }
     body.vscode-light {
-      --tier-incoming: #005FB8;
-      --tier-in-progress: #388A34;
-      --tier-urgent: #CD2D2D;
-      --tier-ready: #B0B0B0;
-      --tier-paused: #BF8803;
-      --tier-done: #B0B0B0;
+      ${buildTierColorCss('light')}
     }
   </style>
 </head>
@@ -248,6 +602,64 @@ export class MissionControlViewProvider implements vscode.WebviewViewProvider {
 </body>
 </html>`;
   }
+}
+
+function getDiscoveredItemKey(providerId: string, externalId: string): string {
+  return `${providerId}::${externalId}`;
+}
+
+function normalizeText(value?: string): string {
+  return value?.trim().toLowerCase().replace(/[_-]+/g, ' ').replace(/\s+/g, ' ') ?? '';
+}
+
+function parseDiscoveredItemKey(value: string): { providerId: string; externalId: string } | undefined {
+  const separatorIndex = value.indexOf('::');
+  if (separatorIndex <= 0) {
+    return undefined;
+  }
+
+  return {
+    providerId: value.slice(0, separatorIndex),
+    externalId: value.slice(separatorIndex + 2),
+  };
+}
+
+function toDisplayLabel(value: string): string {
+  return value.replace(/\b\w/g, char => char.toUpperCase());
+}
+
+function extractWorkContext(item: WorkItem): { branchName?: string; repoName?: string } {
+  const entries = item.activityLog ?? [];
+  for (let i = entries.length - 1; i >= 0; i--) {
+    const entry = entries[i];
+    if (entry.type !== 'work-started' || !entry.detail) {
+      continue;
+    }
+
+    try {
+      const parsed = JSON.parse(entry.detail) as { branchName?: unknown; repoPath?: unknown; worktreePath?: unknown };
+      const branchName = typeof parsed.branchName === 'string' && parsed.branchName.length > 0 ? parsed.branchName : undefined;
+      const repoName = extractRepoName(
+        typeof parsed.repoPath === 'string' ? parsed.repoPath : typeof parsed.worktreePath === 'string' ? parsed.worktreePath : undefined,
+      );
+      if (branchName || repoName) {
+        return { branchName, repoName };
+      }
+    } catch {
+      continue;
+    }
+  }
+
+  return {};
+}
+
+function extractRepoName(pathValue?: string): string | undefined {
+  if (!pathValue) {
+    return undefined;
+  }
+
+  const segments = pathValue.split(/[\\/]/).filter(Boolean);
+  return segments.length > 0 ? segments[segments.length - 1] : undefined;
 }
 
 function getNonce(): string {

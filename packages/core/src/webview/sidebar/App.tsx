@@ -1,12 +1,14 @@
 import { useEffect, useState } from 'preact/hooks';
-import { TabBar } from './components/TabBar';
 import type { ExtensionMessage, SourceProviderData, TierData } from '../shared/types';
 import { postMessage } from '../shared/messaging';
+import { TabBar } from './components/TabBar';
+import { TierSection } from './components/TierSection';
 
 export function App() {
   const [activeTab, setActiveTab] = useState<'myWork' | 'sources'>('myWork');
   const [tiers, setTiers] = useState<TierData[]>([]);
   const [sources, setSources] = useState<SourceProviderData[]>([]);
+  const [selectedItemId, setSelectedItemId] = useState<string | null>(null);
 
   useEffect(() => {
     const handler = (event: MessageEvent<ExtensionMessage>) => {
@@ -19,6 +21,7 @@ export function App() {
           setSources(msg.providers);
           break;
         case 'selectItem':
+          setSelectedItemId(msg.itemId);
           break;
         case 'updateWatches':
           break;
@@ -43,7 +46,19 @@ export function App() {
               <div class="empty-state">No items yet</div>
             ) : (
               <div class="tiers">
-                <div class="placeholder">My Work content coming in Phase 2</div>
+                {tiers.map(tier => (
+                  <TierSection
+                    key={tier.id}
+                    tier={{
+                      ...tier,
+                      items: tier.items.map(item => ({
+                        ...item,
+                        isSelected: item.id === selectedItemId,
+                      })),
+                    }}
+                    onItemClick={(id) => postMessage({ type: 'openItem', itemId: id })}
+                  />
+                ))}
               </div>
             )}
           </div>
