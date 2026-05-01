@@ -4,6 +4,7 @@ import {
   DiscoveredItem,
   isValidUrlSegment,
   combineSignals,
+  createAbortError,
   runWorkerPool,
   safeDecodeComponent,
   type ResolvedItem,
@@ -289,7 +290,7 @@ export abstract class BaseAdoPrProvider extends BaseProvider {
 
     await runWorkerPool(parsed, async item => {
       if (signal?.aborted) {
-        throw new DOMException('Aborted', 'AbortError');
+        throw createAbortError();
       }
       try {
         if (!isValidUrlSegment(item.org) || !isValidUrlSegment(item.project) || !isValidUrlSegment(item.repo)) {
