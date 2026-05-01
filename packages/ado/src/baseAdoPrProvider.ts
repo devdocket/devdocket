@@ -298,7 +298,7 @@ export abstract class BaseAdoPrProvider extends BaseProvider {
         const url = `https://dev.azure.com/${encodeURIComponent(item.org)}/${encodeURIComponent(item.project)}/_apis/git/repositories/${encodeURIComponent(item.repo)}/pullrequests/${item.prId}?api-version=7.1`;
         const response = await fetch(url, {
           headers: { Authorization: `Bearer ${token}` },
-          signal,
+          signal: combineSignals(signal, 30_000),
         });
         if (response.ok) {
           const data = await response.json() as { status?: string };

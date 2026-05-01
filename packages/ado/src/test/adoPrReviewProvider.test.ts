@@ -607,6 +607,17 @@ describe('AdoPrReviewProvider', () => {
       expect(mockFetch).not.toHaveBeenCalled();
     });
 
+    it('passes a combined timeout signal to PR status fetches', async () => {
+      const controller = new AbortController();
+      mockFetch.mockResolvedValueOnce({ ok: true, json: async () => ({ status: 'completed' }) });
+
+      await provider.getClosedItems(['myorg/MyProject/myrepo/101'], controller.signal);
+
+      const fetchCall = mockFetch.mock.calls[0];
+      expect(fetchCall[1].signal).toBeInstanceOf(AbortSignal);
+      expect(fetchCall[1].signal).not.toBe(controller.signal);
+    });
+
     it('returns empty array for empty input', async () => {
       const result = await provider.getClosedItems([]);
 
