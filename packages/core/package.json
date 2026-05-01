@@ -796,12 +796,12 @@
         {
           "command": "devdocket.watchPRFromItem",
           "when": "view == devdocket.focus && viewItem =~ /watchable/ && !listMultiSelection",
-          "group": "2_links"
+          "group": "2_links@2"
         },
         {
           "command": "devdocket.watchPRFromItem",
           "when": "view == devdocket.queue && viewItem =~ /watchable/ && !listMultiSelection",
-          "group": "2_links"
+          "group": "2_links@2"
         },
         {
           "command": "devdocket.runAction",
