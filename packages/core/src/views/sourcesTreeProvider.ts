@@ -32,6 +32,7 @@ export interface SourceItemNode {
   linkedParentProviderId?: string;
   linkedParentExternalId?: string;
   linkedRelation?: 'closes' | 'linked';
+  linkedDirection?: 'forward' | 'reverse';
   linkedNodeId?: string;
 }
 
@@ -304,6 +305,7 @@ export class SourcesTreeProvider implements vscode.TreeDataProvider<SourcesEleme
             linkedParentProviderId: parent.providerId,
             linkedParentExternalId: parent.externalId,
             linkedRelation: relatedItem.relation,
+            linkedDirection: 'forward',
             linkedNodeId: nodeId,
           }));
         }
@@ -323,6 +325,7 @@ export class SourcesTreeProvider implements vscode.TreeDataProvider<SourcesEleme
           linkedParentProviderId: parent.providerId,
           linkedParentExternalId: parent.externalId,
           linkedRelation: relation,
+          linkedDirection: 'reverse',
           linkedNodeId: nodeId,
         }));
       }
@@ -343,7 +346,7 @@ export class SourcesTreeProvider implements vscode.TreeDataProvider<SourcesEleme
     }
 
     const parent = this.findDiscoveredItem(item.linkedParentProviderId, item.linkedParentExternalId);
-    return buildLinkDescription(item.linkedRelation, parent?.externalId, parent?.title);
+    return buildLinkDescription(item.linkedRelation, item.linkedDirection ?? 'forward', parent?.externalId, parent?.title);
   }
 
   private findDiscoveredItem(providerId: string, externalId: string): DiscoveredItem | undefined {

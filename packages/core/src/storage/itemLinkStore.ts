@@ -22,6 +22,8 @@ export interface ItemLink {
   itemId2: string;
   relation: ItemLinkRelation;
   origin: ItemLinkOrigin;
+  /** The item that declared the relationship (e.g., the PR that says "Closes #N"). */
+  sourceItemId?: string;
 }
 
 function validateItemLink(value: unknown, index: number): string | undefined {
@@ -100,6 +102,7 @@ export class ItemLinkStore {
     itemId2: string,
     relation: ItemLinkRelation,
     origin: ItemLinkOrigin = 'provider',
+    sourceItemId?: string,
   ): Promise<{ link: ItemLink; created: boolean; updated: boolean } | undefined> {
     if (itemId1 === itemId2) {
       return undefined;
@@ -109,7 +112,7 @@ export class ItemLinkStore {
     const key = ItemLinkStore.pairKey(normalizedItemId1, normalizedItemId2);
     const existing = this.cache.get(key);
     if (existing) {
-      if (existing.relation === relation && existing.origin === origin) {
+      if (existing.relation === relation && existing.origin === origin && existing.sourceItemId === sourceItemId) {
         return { link: existing, created: false, updated: false };
       }
 
@@ -119,6 +122,7 @@ export class ItemLinkStore {
         itemId2: normalizedItemId2,
         relation,
         origin,
+        sourceItemId,
       };
       this.cache.set(key, updated);
       await this.persist();
@@ -132,6 +136,7 @@ export class ItemLinkStore {
       itemId2: normalizedItemId2,
       relation,
       origin,
+      sourceItemId,
     };
     this.cache.set(key, createdLink);
     await this.persist();

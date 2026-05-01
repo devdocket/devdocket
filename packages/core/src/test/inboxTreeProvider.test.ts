@@ -165,14 +165,22 @@ describe('InboxTreeProvider', () => {
       }]);
       registry._setItems('github', [{ externalId: 'owner/repo#7', title: 'Issue 7' }]);
 
-      const parentItems = provider.getChildren(providerNode('github-my-prs')) as InboxItem[];
-      expect(parentItems).toHaveLength(1);
-      const linkedChildren = provider.getChildren(parentItems[0]) as InboxItem[];
+      // Under the PR parent: issue child shows "Closed by" (forward: parent declared the link)
+      const prItems = provider.getChildren(providerNode('github-my-prs')) as InboxItem[];
+      expect(prItems).toHaveLength(1);
+      const prChildren = provider.getChildren(prItems[0]) as InboxItem[];
+      expect(prChildren).toHaveLength(1);
+      expect(prChildren[0].externalId).toBe('owner/repo#7');
+      expect(provider.getTreeItem(prItems[0]).collapsibleState).toBe(TreeItemCollapsibleState.Collapsed);
+      expect(provider.getTreeItem(prChildren[0]).description).toBe('Closed by #42');
 
-      expect(linkedChildren).toHaveLength(1);
-      expect(linkedChildren[0].externalId).toBe('owner/repo#7');
-      expect(provider.getTreeItem(parentItems[0]).collapsibleState).toBe(TreeItemCollapsibleState.Collapsed);
-      expect(provider.getTreeItem(linkedChildren[0]).description).toBe('Closes #42');
+      // Under the issue parent: PR child shows "Closes" (reverse: child declared the link)
+      const issueItems = provider.getChildren(providerNode('github')) as InboxItem[];
+      expect(issueItems).toHaveLength(1);
+      const issueChildren = provider.getChildren(issueItems[0]) as InboxItem[];
+      expect(issueChildren).toHaveLength(1);
+      expect(issueChildren[0].externalId).toBe('owner/repo#42');
+      expect(provider.getTreeItem(issueChildren[0]).description).toBe('Closes #7');
     });
 
     it('should pass through group field from discovered item', () => {

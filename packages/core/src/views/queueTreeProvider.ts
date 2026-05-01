@@ -80,14 +80,17 @@ export class QueueTreeProvider extends WorkItemViewProvider implements vscode.Tr
           return undefined;
         }
 
+        // If child is the source (e.g., the PR that declared "closes"), it's reverse direction
+        const direction: 'forward' | 'reverse' = link.sourceItemId === childId ? 'reverse' : 'forward';
         return {
           ...child,
           linkedParentId: item.id,
           linkedRelation: link.relation,
+          linkedDirection: direction,
           linkedNodeId: `${child.id}::linked::${item.id}`,
         };
       })
-      .filter((child): child is WorkItem & { linkedParentId: string; linkedRelation: 'closes' | 'linked'; linkedNodeId: string } => child !== undefined);
+      .filter((child): child is WorkItem & { linkedParentId: string; linkedRelation: 'closes' | 'linked'; linkedDirection: 'forward' | 'reverse'; linkedNodeId: string } => child !== undefined);
 
     const sortedChildren = sortLinkedNodes(linkedChildren);
     this.linkedChildrenCache.set(item.id, sortedChildren);
@@ -121,7 +124,7 @@ export class QueueTreeProvider extends WorkItemViewProvider implements vscode.Tr
     }
 
     const parent = this.workGraph.getItem(item.linkedParentId);
-    return buildLinkDescription(item.linkedRelation, parent?.externalId, parent?.title);
+    return buildLinkDescription(item.linkedRelation, item.linkedDirection ?? 'forward', parent?.externalId, parent?.title);
   }
 
   handleDrag(source: readonly QueueElement[], dataTransfer: vscode.DataTransfer): void {

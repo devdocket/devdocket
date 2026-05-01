@@ -82,7 +82,7 @@ export class LinkingService implements vscode.Disposable {
     const existingProviderLinks = (await this.linkStore.loadAll()).filter(link => link.origin === 'provider');
 
     for (const expected of expectedLinks.values()) {
-      const result = await this.linkStore.upsertLink(expected.itemId1, expected.itemId2, expected.relation, expected.origin);
+      const result = await this.linkStore.upsertLink(expected.itemId1, expected.itemId2, expected.relation, expected.origin, expected.sourceItemId);
       if (result.created) {
         await this.logLinkActivity('item-linked', result.link);
       }
@@ -101,8 +101,8 @@ export class LinkingService implements vscode.Disposable {
     }
   }
 
-  private buildExpectedProviderLinks(): Map<string, { itemId1: string; itemId2: string; relation: ItemLinkRelation; origin: 'provider' }> {
-    const expected = new Map<string, { itemId1: string; itemId2: string; relation: ItemLinkRelation; origin: 'provider' }>();
+  private buildExpectedProviderLinks(): Map<string, { itemId1: string; itemId2: string; relation: ItemLinkRelation; origin: 'provider'; sourceItemId: string }> {
+    const expected = new Map<string, { itemId1: string; itemId2: string; relation: ItemLinkRelation; origin: 'provider'; sourceItemId: string }>();
     const itemsByExternalId = new Map<string, WorkItem[]>();
     for (const item of this.workGraph.getAll()) {
       if (!item.externalId) {
@@ -139,6 +139,7 @@ export class LinkingService implements vscode.Disposable {
                 itemId2: sourceItem.id.localeCompare(targetItem.id) <= 0 ? targetItem.id : sourceItem.id,
                 relation: existing?.relation === 'closes' || relatedItem.relation === 'closes' ? 'closes' : 'linked',
                 origin: 'provider',
+                sourceItemId: sourceItem.id,
               });
             }
           }

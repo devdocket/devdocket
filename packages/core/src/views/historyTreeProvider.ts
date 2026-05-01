@@ -65,14 +65,16 @@ export class HistoryTreeProvider extends WorkItemViewProvider {
           return undefined;
         }
 
+        const direction: 'forward' | 'reverse' = link.sourceItemId === childId ? 'reverse' : 'forward';
         return {
           ...child,
           linkedParentId: item.id,
           linkedRelation: link.relation,
+          linkedDirection: direction,
           linkedNodeId: `${child.id}::linked::${item.id}`,
         };
       })
-      .filter((child): child is WorkItem & { linkedParentId: string; linkedRelation: 'closes' | 'linked'; linkedNodeId: string } => child !== undefined);
+      .filter((child): child is WorkItem & { linkedParentId: string; linkedRelation: 'closes' | 'linked'; linkedDirection: 'forward' | 'reverse'; linkedNodeId: string } => child !== undefined);
 
     const sortedChildren = sortLinkedNodes(linkedChildren);
     this.linkedChildrenCache.set(item.id, sortedChildren);
@@ -115,7 +117,7 @@ export class HistoryTreeProvider extends WorkItemViewProvider {
     }
 
     const parent = this.workGraph.getItem(item.linkedParentId);
-    return buildLinkDescription(item.linkedRelation, parent?.externalId, parent?.title);
+    return buildLinkDescription(item.linkedRelation, item.linkedDirection ?? 'forward', parent?.externalId, parent?.title);
   }
 
   private getStateLabel(state: WorkItemState): string {

@@ -1,4 +1,5 @@
 export type LinkRelation = 'closes' | 'linked';
+export type LinkDirection = 'forward' | 'reverse';
 
 function formatLinkedReference(externalId?: string, fallback?: string): string | undefined {
   const trimmedExternalId = externalId?.trim();
@@ -13,11 +14,17 @@ function formatLinkedReference(externalId?: string, fallback?: string): string |
 
 export function buildLinkDescription(
   relation: LinkRelation,
+  direction: LinkDirection,
   externalId?: string,
   fallback?: string,
 ): string {
   const label = formatLinkedReference(externalId, fallback) ?? 'item';
-  return relation === 'closes' ? `Closes ${label}` : `Linked to ${label}`;
+  if (relation === 'closes') {
+    // Forward: parent has relatedItems pointing to child → child is being closed
+    // Reverse: child has relatedItems pointing to parent → child closes the parent
+    return direction === 'reverse' ? `Closes ${label}` : `Closed by ${label}`;
+  }
+  return `Linked to ${label}`;
 }
 
 export function sortLinkedNodes<T extends { title: string; linkedRelation: LinkRelation }>(nodes: T[]): T[] {

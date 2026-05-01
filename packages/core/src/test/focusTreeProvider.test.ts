@@ -38,7 +38,7 @@ function createMockAction(id: string, canRun: (item: WorkItem) => boolean = () =
   };
 }
 
-function createMockLinkStore(links: Array<{ itemId1: string; itemId2: string; relation: 'closes' | 'linked' }>) {
+function createMockLinkStore(links: Array<{ itemId1: string; itemId2: string; relation: 'closes' | 'linked'; sourceItemId?: string }>) {
   const emitter = new EventEmitter<void>();
   return {
     getLinksForItem: vi.fn((itemId: string) => links.filter(link => link.itemId1 === itemId || link.itemId2 === itemId)),
@@ -283,7 +283,7 @@ describe('FocusTreeProvider', () => {
       const itemMap = new Map([[parent.id, parent], [child.id, child]]);
       workGraph.getItemsByState.mockReturnValue([parent, child]);
       workGraph.getItem.mockImplementation((id: string) => itemMap.get(id));
-      const linkStore = createMockLinkStore([{ itemId1: parent.id, itemId2: child.id, relation: 'closes' }]);
+      const linkStore = createMockLinkStore([{ itemId1: parent.id, itemId2: child.id, relation: 'closes', sourceItemId: child.id }]);
       const linkedProvider = new FocusTreeProvider(workGraph as any, undefined, undefined, undefined, linkStore as any);
 
       const linkedChildren = linkedProvider.getChildren(parent) as WorkItem[];
@@ -291,6 +291,26 @@ describe('FocusTreeProvider', () => {
       expect(linkedChildren[0].id).toBe(child.id);
       expect(linkedProvider.getTreeItem(parent).collapsibleState).toBe(TreeItemCollapsibleState.Collapsed);
       expect(linkedProvider.getTreeItem(linkedChildren[0]).description).toBe('Closes #42');
+    });
+
+    it('shows "Closed by" for the target of a closes link', () => {
+      const prItem = makeItem({ id: 'pr-1', title: 'Fix PR', externalId: 'owner/repo#10', providerId: 'github-my-prs' });
+      const issueItem = makeItem({ id: 'issue-1', title: 'Bug', externalId: 'owner/repo#5', providerId: 'github' });
+      const itemMap = new Map([[prItem.id, prItem], [issueItem.id, issueItem]]);
+      workGraph.getItemsByState.mockReturnValue([prItem, issueItem]);
+      workGraph.getItem.mockImplementation((id: string) => itemMap.get(id));
+      const linkStore = createMockLinkStore([{ itemId1: issueItem.id, itemId2: prItem.id, relation: 'closes', sourceItemId: prItem.id }]);
+      const linkedProvider = new FocusTreeProvider(workGraph as any, undefined, undefined, undefined, linkStore as any);
+
+      // Under PR parent: issue child says "Closed by"
+      const prChildren = linkedProvider.getChildren(prItem) as WorkItem[];
+      expect(prChildren).toHaveLength(1);
+      expect(linkedProvider.getTreeItem(prChildren[0]).description).toContain('Closed by #10');
+
+      // Under issue parent: PR child says "Closes"
+      const issueChildren = linkedProvider.getChildren(issueItem) as WorkItem[];
+      expect(issueChildren).toHaveLength(1);
+      expect(linkedProvider.getTreeItem(issueChildren[0]).description).toContain('Closes #5');
     });
   });
 

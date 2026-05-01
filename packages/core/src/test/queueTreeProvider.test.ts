@@ -39,7 +39,7 @@ function createMockAction(id: string, canRun: (item: WorkItem) => boolean = () =
   };
 }
 
-function createMockLinkStore(links: Array<{ itemId1: string; itemId2: string; relation: 'closes' | 'linked' }>) {
+function createMockLinkStore(links: Array<{ itemId1: string; itemId2: string; relation: 'closes' | 'linked'; sourceItemId?: string }>) {
   const emitter = new EventEmitter<void>();
   return {
     getLinksForItem: vi.fn((itemId: string) => links.filter(link => link.itemId1 === itemId || link.itemId2 === itemId)),
@@ -112,7 +112,7 @@ describe('QueueTreeProvider', () => {
     it('nests linked queue items beneath their parent item', async () => {
       const parent = await graph.createItem({ title: 'Parent task' }, { providerId: 'github', externalId: 'owner/repo#42' });
       const child = await graph.createItem({ title: 'Linked task' }, { providerId: 'github', externalId: 'owner/repo#7' });
-      const linkStore = createMockLinkStore([{ itemId1: parent.id, itemId2: child.id, relation: 'closes' }]);
+      const linkStore = createMockLinkStore([{ itemId1: parent.id, itemId2: child.id, relation: 'closes', sourceItemId: child.id }]);
       const linkedProvider = new QueueTreeProvider(graph, undefined, undefined, undefined, linkStore as any);
 
       const linkedChildren = linkedProvider.getChildren(parent) as WorkItem[];
@@ -120,6 +120,26 @@ describe('QueueTreeProvider', () => {
       expect(linkedChildren[0].id).toBe(child.id);
       expect(linkedProvider.getTreeItem(parent).collapsibleState).toBe(TreeItemCollapsibleState.Collapsed);
       expect(linkedProvider.getTreeItem(linkedChildren[0]).description).toBe('github · Closes #42');
+    });
+
+    it('shows "Closed by" when child is the target of a closes link', async () => {
+      const prItem = await graph.createItem({ title: 'Fix bug PR' }, { providerId: 'github-my-prs', externalId: 'owner/repo#10' });
+      const issueItem = await graph.createItem({ title: 'Bug report' }, { providerId: 'github', externalId: 'owner/repo#5' });
+      // PR is source (it declared "closes"), issue is target
+      const linkStore = createMockLinkStore([{ itemId1: issueItem.id, itemId2: prItem.id, relation: 'closes', sourceItemId: prItem.id }]);
+      const linkedProvider = new QueueTreeProvider(graph, undefined, undefined, undefined, linkStore as any);
+
+      // Under the PR parent, the issue child should say "Closed by #10" (the PR)
+      const prChildren = linkedProvider.getChildren(prItem) as WorkItem[];
+      expect(prChildren).toHaveLength(1);
+      expect(prChildren[0].id).toBe(issueItem.id);
+      expect(linkedProvider.getTreeItem(prChildren[0]).description).toContain('Closed by #10');
+
+      // Under the issue parent, the PR child should say "Closes #5" (the issue)
+      const issueChildren = linkedProvider.getChildren(issueItem) as WorkItem[];
+      expect(issueChildren).toHaveLength(1);
+      expect(issueChildren[0].id).toBe(prItem.id);
+      expect(linkedProvider.getTreeItem(issueChildren[0]).description).toContain('Closes #5');
     });
   });
 

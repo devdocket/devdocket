@@ -35,6 +35,7 @@ export interface InboxItem {
   linkedParentProviderId?: string;
   linkedParentExternalId?: string;
   linkedRelation?: 'closes' | 'linked';
+  linkedDirection?: 'forward' | 'reverse';
   linkedNodeId?: string;
 }
 
@@ -437,6 +438,7 @@ export class InboxTreeProvider implements vscode.TreeDataProvider<InboxElement> 
             linkedParentProviderId: parent.providerId,
             linkedParentExternalId: parent.externalId,
             linkedRelation: relatedItem.relation,
+            linkedDirection: 'forward',
             linkedNodeId: nodeId,
           }));
         }
@@ -456,6 +458,7 @@ export class InboxTreeProvider implements vscode.TreeDataProvider<InboxElement> 
           linkedParentProviderId: parent.providerId,
           linkedParentExternalId: parent.externalId,
           linkedRelation: relation,
+          linkedDirection: 'reverse',
           linkedNodeId: nodeId,
         }));
       }
@@ -476,7 +479,7 @@ export class InboxTreeProvider implements vscode.TreeDataProvider<InboxElement> 
     }
 
     const parent = this.findVisibleInboxItem(item.linkedParentProviderId, item.linkedParentExternalId);
-    return buildLinkDescription(item.linkedRelation, parent?.externalId, parent?.title);
+    return buildLinkDescription(item.linkedRelation, item.linkedDirection ?? 'forward', parent?.externalId, parent?.title);
   }
 
   private findVisibleInboxItem(providerId: string, externalId: string): DiscoveredItem | undefined {

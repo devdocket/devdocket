@@ -353,6 +353,7 @@ export function isSubGroupNode(element: unknown): element is SubGroupNode {
 export interface LinkedWorkItemNode extends WorkItem {
   linkedParentId: string;
   linkedRelation: LinkRelation;
+  linkedDirection: 'forward' | 'reverse';
   linkedNodeId: string;
 }
 
