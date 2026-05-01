@@ -497,8 +497,8 @@ async function handleAcceptToFocusFromInbox(
     return;
   }
 
-  await batchAcceptToFocusItems(workGraph, stateStore, items);
-  for (const batchItem of items) {
+  const acceptedItems = await batchAcceptToFocusItems(workGraph, stateStore, items);
+  for (const batchItem of acceptedItems) {
     await propagateStateToCanonicalPeers(batchItem, providerRegistry, stateStore, 'accepted');
   }
 }
