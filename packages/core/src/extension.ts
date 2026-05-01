@@ -156,7 +156,7 @@ export async function autoWatchAuthoredPRs(
       if (signal.aborted) {
         return;
       }
-      logger.warn(`Failed to auto-watch authored PR from provider ${providerId}: ${String(err)}`);
+      logger.warn(`Failed to auto-watch authored PR from provider ${providerId}`, { url: item.url }, err);
     }
   }
 }

@@ -377,6 +377,51 @@ describe('activate()', () => {
     expect(watcherService.startPRWatch).not.toHaveBeenCalled();
   });
 
+  it('logs auto-watch failures with URL context and error details', async () => {
+    const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => undefined);
+    const providerRegistry = {
+      getDiscoveredItems: vi.fn().mockReturnValue([
+        {
+          externalId: 'owner/repo#42',
+          title: '#42: Authored PR',
+          url: 'https://github.com/owner/repo/pull/42',
+          authored: true,
+        },
+      ]),
+    } as any;
+    const identifier = {
+      providerId: 'github-prs',
+      prId: '42',
+      displayName: 'PR #42',
+      url: 'https://github.com/owner/repo/pull/42',
+      repo: 'owner/repo',
+    };
+    const prWatcherRegistry = {
+      findWatcherForUrl: vi.fn().mockReturnValue({
+        parsePRUrl: vi.fn().mockReturnValue(identifier),
+      }),
+    } as any;
+    const error = new Error('boom');
+    const watcherService = {
+      isPRWatched: vi.fn().mockReturnValue(false),
+      startPRWatch: vi.fn().mockRejectedValue(error),
+    } as any;
+
+    await autoWatchAuthoredPRs(
+      'github-my-prs',
+      providerRegistry,
+      prWatcherRegistry,
+      watcherService,
+      new AbortController().signal,
+    );
+
+    expect(warnSpy).toHaveBeenCalledWith(
+      'Failed to auto-watch authored PR from provider github-my-prs',
+      { url: 'https://github.com/owner/repo/pull/42' },
+      error,
+    );
+  });
+
   // ------------------------------------------------------------------
   // 11. State migration: provider-backed items without inbox state get accepted
   // ------------------------------------------------------------------
