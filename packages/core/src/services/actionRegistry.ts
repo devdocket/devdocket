@@ -13,6 +13,8 @@ import { Registry } from './registry';
  */
 export class ActionRegistry {
   private readonly registry = new Registry<DevDocketAction>('Action');
+  private readonly _onDidChange = new vscode.EventEmitter<void>();
+  readonly onDidChangeRegistrations: vscode.Event<void> = this._onDidChange.event;
 
   /**
    * Register an action and make it available in work-item context menus.
@@ -22,7 +24,22 @@ export class ActionRegistry {
    * @throws If an action with the same {@link DevDocketAction.id} is already registered.
    */
   register(action: DevDocketAction): vscode.Disposable {
-    return this.registry.register(action);
+    const registration = this.registry.register(action);
+    this._onDidChange.fire();
+
+    let disposed = false;
+    return new vscode.Disposable(() => {
+      if (disposed) {
+        return;
+      }
+      disposed = true;
+
+      const wasRegistered = this.registry.get(action.id) === action;
+      registration.dispose();
+      if (wasRegistered) {
+        this._onDidChange.fire();
+      }
+    });
   }
 
   /**
@@ -35,9 +52,38 @@ export class ActionRegistry {
    * @returns An array of actions that can be run on the item.
    */
   getActionsFor(item: WorkItem): DevDocketAction[] {
-    const matching = this.registry.getAll().filter((a) => a.canRun(item));
+    const matching = this.registry.getAll().filter((action) => {
+      try {
+        return action.canRun(item);
+      } catch {
+        return false;
+      }
+    });
     logger.debug(`Found ${matching.length} actions for item ${item.id}`);
     return matching;
+  }
+
+  /**
+   * Determine whether any registered action can run for a given work item.
+   *
+   * This is intended for rendering paths that only need a yes/no answer and
+   * must not allow third-party action predicates to break the UI.
+   *
+   * @param item - The work item to match actions against.
+   * @returns `true` when at least one action can run for the item.
+   */
+  hasActionsFor(item: WorkItem): boolean {
+    try {
+      return this.registry.getAll().some((action) => {
+        try {
+          return action.canRun(item);
+        } catch {
+          return false;
+        }
+      });
+    } catch {
+      return false;
+    }
   }
 
   /**
@@ -52,6 +98,11 @@ export class ActionRegistry {
 
   /** Release all registered actions. */
   dispose(): void {
+    const hadActions = this.registry.size > 0;
     this.registry.clear();
+    if (hadActions) {
+      this._onDidChange.fire();
+    }
+    this._onDidChange.dispose();
   }
 }

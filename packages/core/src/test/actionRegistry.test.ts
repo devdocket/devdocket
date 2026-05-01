@@ -56,6 +56,17 @@ describe('ActionRegistry', () => {
     expect(registry.getAction('removable')).toBeUndefined();
   });
 
+  it('fires onDidChangeRegistrations when actions are registered and unregistered', () => {
+    const listener = vi.fn();
+    registry.onDidChangeRegistrations(listener);
+
+    const disposable = registry.register(createMockAction('eventful'));
+    expect(listener).toHaveBeenCalledTimes(1);
+
+    disposable.dispose();
+    expect(listener).toHaveBeenCalledTimes(2);
+  });
+
   it('returns registered action from getAction', () => {
     const action = createMockAction('findme');
     registry.register(action);
@@ -96,6 +107,44 @@ describe('ActionRegistry', () => {
     expect(actions).toHaveLength(0);
   });
 
+  it('skips actions from getActionsFor when canRun throws', () => {
+    const item = createWorkItem();
+    const safeAction = createMockAction('safe');
+    registry.register(createMockAction('throwing', () => {
+      throw new Error('boom');
+    }));
+    registry.register(safeAction);
+
+    expect(registry.getActionsFor(item)).toEqual([safeAction]);
+  });
+
+  it('returns true from hasActionsFor when an action can run', () => {
+    const item = createWorkItem({ providerId: 'github' });
+    registry.register(createMockAction('github-only', (i) => i.providerId === 'github'));
+
+    expect(registry.hasActionsFor(item)).toBe(true);
+  });
+
+  it('short-circuits hasActionsFor after the first matching action', () => {
+    const item = createWorkItem();
+    const skippedCanRun = vi.fn(() => false);
+
+    registry.register(createMockAction('first-match', () => true));
+    registry.register(createMockAction('skipped', skippedCanRun));
+
+    expect(registry.hasActionsFor(item)).toBe(true);
+    expect(skippedCanRun).not.toHaveBeenCalled();
+  });
+
+  it('returns false from hasActionsFor when canRun throws', () => {
+    const item = createWorkItem();
+    registry.register(createMockAction('throwing', () => {
+      throw new Error('boom');
+    }));
+
+    expect(registry.hasActionsFor(item)).toBe(false);
+  });
+
   it('clears all actions on dispose', () => {
     registry.register(createMockAction('a1'));
     registry.register(createMockAction('a2'));
@@ -104,6 +153,18 @@ describe('ActionRegistry', () => {
 
     expect(registry.getAction('a1')).toBeUndefined();
     expect(registry.getAction('a2')).toBeUndefined();
+  });
+
+  it('fires onDidChangeRegistrations when dispose clears registrations', () => {
+    const listener = vi.fn();
+    registry.onDidChangeRegistrations(listener);
+
+    registry.register(createMockAction('a1'));
+    listener.mockClear();
+
+    registry.dispose();
+
+    expect(listener).toHaveBeenCalledTimes(1);
   });
 
   it('getActionsFor returns empty array when registry is empty', () => {

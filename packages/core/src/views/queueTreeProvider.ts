@@ -2,6 +2,7 @@ import * as vscode from 'vscode';
 import { WorkItem, WorkItemState } from '../models/workItem';
 import { WorkGraph } from '../services/workGraph';
 import { ProviderRegistry } from '../services/providerRegistry';
+import { ActionRegistry } from '../services/actionRegistry';
 import {
   WorkItemElement, WorkItemViewProvider, isProviderGroupNode, isSubGroupNode,
 } from './viewLayout';
@@ -16,12 +17,23 @@ export class QueueTreeProvider extends WorkItemViewProvider implements vscode.Tr
   readonly dragMimeTypes = [DRAG_MIME_TYPE];
   protected readonly groupPrefix = 'queue';
   protected readonly groupContextValue = 'queueGroup';
+  private readonly actionRegistry?: ActionRegistry;
   private readonly isWatchable?: (url: string) => boolean;
 
-  constructor(workGraph: WorkGraph, providerRegistry?: ProviderRegistry, isWatchable?: (url: string) => boolean) {
+  constructor(
+    workGraph: WorkGraph,
+    providerRegistry?: ProviderRegistry,
+    actionRegistry?: ActionRegistry,
+    isWatchable?: (url: string) => boolean,
+  ) {
     const [lr, pce, tr, dice] = QueueTreeProvider.buildProviderArgs(providerRegistry);
     super(workGraph, 'flat', lr, pce, tr, dice);
+
+    this.actionRegistry = actionRegistry;
     this.isWatchable = isWatchable;
+    if (this.actionRegistry) {
+      this.disposables.push(this.actionRegistry.onDidChangeRegistrations(() => this.refresh()));
+    }
   }
 
   protected getItems(): WorkItem[] {
@@ -42,7 +54,8 @@ export class QueueTreeProvider extends WorkItemViewProvider implements vscode.Tr
     treeItem.tooltip = buildWorkItemTooltip(item, title, { showState: false, notesStyle: 'plain' });
     const urlSuffix = item.url ? '.hasUrl' : '';
     const watchableSuffix = item.url && this.isWatchable?.(item.url) ? '.watchable' : '';
-    treeItem.contextValue = `queueItem${urlSuffix}${watchableSuffix}`;
+    const hasActionsSuffix = this.actionRegistry?.hasActionsFor(item) ? '.hasActions' : '';
+    treeItem.contextValue = `queueItem${urlSuffix}${watchableSuffix}${hasActionsSuffix}`;
     treeItem.iconPath = new vscode.ThemeIcon(item.providerId ? 'remote' : 'circle-filled');
     treeItem.command = { command: 'devdocket.editItem', title: 'Open Details', arguments: [item] };
     return treeItem;

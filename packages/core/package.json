@@ -818,7 +818,7 @@
         },
         {
           "command": "devdocket.runAction",
-          "when": "((view == devdocket.queue && viewItem =~ /^queueItem/) || (view == devdocket.focus && viewItem =~ /^(active|paused)/)) && !listMultiSelection",
+          "when": "((view == devdocket.queue && viewItem =~ /^queueItem/) || (view == devdocket.focus && viewItem =~ /^(active|paused)/)) && viewItem =~ /\\.hasActions/ && !listMultiSelection",
           "group": "0_actions"
         },
         {
