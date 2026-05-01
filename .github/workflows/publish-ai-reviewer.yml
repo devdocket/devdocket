@@ -66,7 +66,7 @@ jobs:
           if [ -z "$PREV_TAG" ]; then
             NOTES=$(git log --pretty=format:"* %s (%h)" -- packages/ai-reviewer/)
           else
-            NOTES=$(git log "$PREV_TAG"..HEAD --pretty=format:"* %s (%h)" -- packages/ai-reviewer/)
+            NOTES=$(git log "$PREV_TAG".."$GITHUB_REF_NAME" --pretty=format:"* %s (%h)" -- packages/ai-reviewer/)
           fi
           if [ -z "$NOTES" ]; then
             NOTES="* No changes to packages/ai-reviewer in this release"
