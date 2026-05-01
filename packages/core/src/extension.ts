@@ -224,6 +224,7 @@ function wireEvents(
   stateStore: DiscoveredStateStore,
   workGraph: WorkGraph,
   watcherService: WatcherService,
+  prWatcherRegistry: PRWatcherRegistry,
   { providers, views }: ReturnType<typeof createTreeViews>,
 ): vscode.Disposable[] {
   const { inboxProvider, queueProvider, focusProvider, historyProvider } = providers;
@@ -516,7 +517,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<DevDoc
   logger.info(`Tree view creation took ${Math.round(performance.now() - treeViewStart)}ms`);
 
   const eventWiringStart = performance.now();
-  const eventDisposables = wireEvents(pr, ss, wg, ws, treeSetup);
+  const eventDisposables = wireEvents(pr, ss, wg, ws, pwr, treeSetup);
   logger.info(`Event wiring took ${Math.round(performance.now() - eventWiringStart)}ms`);
 
   const { providers, views, disposables: viewDisposables } = treeSetup;
