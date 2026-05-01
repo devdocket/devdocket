@@ -315,7 +315,13 @@ async function batchAcceptItems(
   }
 }
 
-async function handleCreateItem(workGraph: WorkGraph, revealer?: ViewRevealer): Promise<void> {
+async function handleCreateItem(
+  context: vscode.ExtensionContext,
+  workGraph: WorkGraph,
+  providerRegistry: ProviderRegistry,
+  labelCache: ProviderLabelCache,
+  revealer?: ViewRevealer,
+): Promise<void> {
   const title = await vscode.window.showInputBox({
     prompt: 'Work item title',
     placeHolder: 'e.g. Fix login redirect bug',
@@ -327,6 +333,8 @@ async function handleCreateItem(workGraph: WorkGraph, revealer?: ViewRevealer): 
 
   logger.info(`Creating new work item: ${title.trim()}`);
   const createdItem = await workGraph.createItem({ title: title.trim() });
+  const providerLabel = createdItem.providerId ? labelCache.get(createdItem.providerId) : undefined;
+  void WorkItemEditorPanel.open(context, workGraph, providerRegistry, createdItem, providerLabel);
   void vscode.window.showInformationMessage(`DevDocket: Created "${title.trim()}"`);
   void revealer?.revealInQueue(createdItem.id);
 }
@@ -1132,7 +1140,7 @@ export function registerCommands(
     vscode.commands.registerCommand('devdocket.refresh',
       wrapCommand('Failed to refresh', () => handleRefresh(providerRegistry))),
     vscode.commands.registerCommand('devdocket.createItem',
-      wrapCommand('Failed to create item', () => handleCreateItem(workGraph, revealer))),
+      wrapCommand('Failed to create item', () => handleCreateItem(context, workGraph, providerRegistry, labelCache, revealer))),
     vscode.commands.registerCommand('devdocket.createItemFromUrl',
       wrapCommand('Failed to create item from URL', () => handleCreateItemFromUrl(context, workGraph, providerRegistry, labelCache, revealer))),
     vscode.commands.registerCommand('devdocket.acceptToFocus',

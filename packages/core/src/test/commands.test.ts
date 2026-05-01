@@ -224,11 +224,21 @@ describe('registerCommands', () => {
   // ── createItem ───────────────────────────────────────────────────
 
   describe('devdocket.createItem', () => {
-    it('creates item when user provides a title', async () => {
+    it('creates item when user provides a title and opens the editor', async () => {
       (vscode.window.showInputBox as Mock).mockResolvedValue('My Task');
+      const createdItem = createWorkItem({ id: 'wc-created', title: 'My Task' });
+      workGraph.createItem.mockResolvedValue(createdItem);
+
       await invoke('devdocket.createItem');
 
       expect(workGraph.createItem).toHaveBeenCalledWith({ title: 'My Task' });
+      expect(WorkItemEditorPanel.open).toHaveBeenCalledWith(
+        ctx,
+        workGraph,
+        providerRegistry,
+        createdItem,
+        undefined,
+      );
       expect(vscode.window.showInformationMessage).toHaveBeenCalledWith(
         'DevDocket: Created "My Task"',
       );
@@ -236,6 +246,8 @@ describe('registerCommands', () => {
 
     it('trims whitespace from the title', async () => {
       (vscode.window.showInputBox as Mock).mockResolvedValue('  Padded  ');
+      workGraph.createItem.mockResolvedValue(createWorkItem({ id: 'wc-trimmed', title: 'Padded' }));
+
       await invoke('devdocket.createItem');
 
       expect(workGraph.createItem).toHaveBeenCalledWith({ title: 'Padded' });
