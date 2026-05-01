@@ -370,6 +370,9 @@ export class MissionControlViewProvider implements vscode.WebviewViewProvider {
       case 'acceptItem':
         await this.handleAcceptItem(message.providerId, message.externalId);
         break;
+      case 'acceptAll':
+        await this.handleAcceptAll();
+        break;
       case 'dismissItem':
         await this.handleDismissItem(message.providerId, message.externalId);
         break;
@@ -380,6 +383,9 @@ export class MissionControlViewProvider implements vscode.WebviewViewProvider {
         break;
       case 'createItem':
         await vscode.commands.executeCommand('devdocket.createItem');
+        break;
+      case 'clearHistory':
+        await vscode.commands.executeCommand('devdocket.clearHistory');
         break;
       case 'runAction':
         await vscode.commands.executeCommand('devdocket.runAction', { id: message.itemId });
@@ -420,6 +426,21 @@ export class MissionControlViewProvider implements vscode.WebviewViewProvider {
     } catch (err) {
       logger.error('MissionControl: accept failed', err);
       void vscode.window.showErrorMessage(`Failed to accept item: ${err instanceof Error ? err.message : String(err)}`);
+    }
+  }
+
+  private async handleAcceptAll(): Promise<void> {
+    const incomingTier = this.buildTierData().find(tier => tier.id === 'incoming');
+    if (!incomingTier) {
+      return;
+    }
+
+    for (const item of incomingTier.items) {
+      if (!item.providerId || !item.externalId) {
+        continue;
+      }
+
+      await this.handleAcceptItem(item.providerId, item.externalId);
     }
   }
 
@@ -470,8 +491,15 @@ export class MissionControlViewProvider implements vscode.WebviewViewProvider {
     #root { height: 100vh; display: flex; flex-direction: column; }
     .tab-bar {
       display: flex;
+      align-items: stretch;
+      gap: 4px;
       border-bottom: 1px solid var(--vscode-widget-border);
       flex-shrink: 0;
+      padding-right: 8px;
+    }
+    .tab-list {
+      display: flex;
+      flex: 1;
     }
     .tab {
       flex: 1;
@@ -492,9 +520,25 @@ export class MissionControlViewProvider implements vscode.WebviewViewProvider {
       color: var(--vscode-foreground);
       border-bottom-color: var(--vscode-focusBorder);
     }
-    .tab:focus-visible {
+    .tab:focus-visible,
+    .tab-action:focus-visible {
       outline: 1px solid var(--vscode-focusBorder);
       outline-offset: -1px;
+    }
+    .tab-action {
+      align-self: center;
+      padding: 4px 8px;
+      background: transparent;
+      border: 1px solid transparent;
+      border-radius: 4px;
+      color: var(--vscode-descriptionForeground);
+      cursor: pointer;
+      font-size: 14px;
+      line-height: 1;
+    }
+    .tab-action:hover {
+      color: var(--vscode-foreground);
+      background: var(--vscode-toolbar-hoverBackground, rgba(127, 127, 127, 0.12));
     }
     .tab-content {
       flex: 1;
@@ -527,23 +571,46 @@ export class MissionControlViewProvider implements vscode.WebviewViewProvider {
     .tier-section.tier-paused { border-left-color: var(--tier-paused); }
     .tier-section.tier-done { border-left-color: var(--tier-done); }
     .tier-header {
-      width: 100%;
       display: flex;
       align-items: center;
       gap: 6px;
+    }
+    .tier-header-main,
+    .tier-toggle-button,
+    .tier-header-action {
       background: transparent;
       border: none;
       color: inherit;
       cursor: pointer;
       padding: 0;
-      text-align: left;
       font: inherit;
     }
-    .tier-header:focus-visible,
+    .tier-header-main {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      min-width: 0;
+      flex: 1;
+      text-align: left;
+    }
+    .tier-header-action {
+      color: var(--vscode-textLink-foreground, var(--vscode-foreground));
+    }
+    .tier-header-action:hover {
+      text-decoration: underline;
+    }
+    .tier-toggle-button {
+      display: inline-flex;
+      align-items: center;
+    }
+    .tier-header-main:focus-visible,
+    .tier-toggle-button:focus-visible,
+    .tier-header-action:focus-visible,
     .source-provider-header:focus-visible,
     .source-group-header:focus-visible,
-    .item-card:focus-visible,
-    .source-item:focus-visible {
+    .item-card-main:focus-visible,
+    .source-item:focus-visible,
+    .item-action-btn:focus-visible {
       outline: 1px solid var(--vscode-focusBorder);
       outline-offset: 2px;
     }
@@ -552,9 +619,6 @@ export class MissionControlViewProvider implements vscode.WebviewViewProvider {
     .item-time,
     .item-meta {
       color: var(--vscode-descriptionForeground);
-    }
-    .tier-toggle {
-      margin-left: auto;
     }
     .tier-items {
       display: flex;
@@ -675,15 +739,21 @@ export class MissionControlViewProvider implements vscode.WebviewViewProvider {
       color: var(--vscode-problemsWarningIcon-foreground, var(--vscode-editorWarning-foreground));
     }
     .item-card {
+      position: relative;
       width: 100%;
-      display: flex;
-      flex-direction: column;
-      gap: 6px;
-      padding: 10px 12px;
       border: none;
       border-left: 3px solid transparent;
       border-radius: 6px;
       background: var(--vscode-list-inactiveSelectionBackground, rgba(127, 127, 127, 0.08));
+    }
+    .item-card-main {
+      width: 100%;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      padding: 10px 72px 10px 12px;
+      background: transparent;
+      border: none;
       color: inherit;
       cursor: pointer;
       text-align: left;
@@ -699,8 +769,35 @@ export class MissionControlViewProvider implements vscode.WebviewViewProvider {
       outline: 1px solid var(--vscode-focusBorder);
       outline-offset: 0;
     }
-    .item-card:hover {
+    .item-card:hover,
+    .item-card:focus-within {
       background: var(--vscode-list-hoverBackground, rgba(127, 127, 127, 0.12));
+    }
+    .item-actions {
+      position: absolute;
+      right: 8px;
+      top: 50%;
+      transform: translateY(-50%);
+      display: flex;
+      gap: 4px;
+      opacity: 0;
+      transition: opacity 0.15s;
+    }
+    .item-card:hover .item-actions,
+    .item-card:focus-within .item-actions {
+      opacity: 1;
+    }
+    .item-action-btn {
+      background: var(--vscode-button-secondaryBackground, rgba(127,127,127,0.2));
+      color: var(--vscode-button-secondaryForeground, var(--vscode-foreground));
+      border: none;
+      border-radius: 3px;
+      padding: 2px 6px;
+      cursor: pointer;
+      font-size: 12px;
+    }
+    .item-action-btn:hover {
+      background: var(--vscode-button-secondaryHoverBackground, rgba(127,127,127,0.3));
     }
     .item-line-1 {
       display: flex;

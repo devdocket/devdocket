@@ -7,10 +7,12 @@ export type ExtensionMessage =
 export type WebviewMessage =
   | { type: 'openItem'; itemId: string }
   | { type: 'acceptItem'; providerId: string; externalId: string }
+  | { type: 'acceptAll' }
   | { type: 'dismissItem'; providerId: string; externalId: string }
   | { type: 'transitionState'; itemId: string; targetState: string }
   | { type: 'reorderItems'; itemIds: string[] }
   | { type: 'createItem' }
+  | { type: 'clearHistory' }
   | { type: 'runAction'; itemId: string }
   | { type: 'openUrl'; url: string }
   | { type: 'switchTab'; tab: 'myWork' | 'sources' };

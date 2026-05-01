@@ -39,17 +39,32 @@ export function App() {
 
   return (
     <div class="mission-control">
-      <TabBar activeTab={activeTab} onTabSwitch={handleTabSwitch} />
+      <TabBar
+        activeTab={activeTab}
+        onTabSwitch={handleTabSwitch}
+        onCreateItem={() => postMessage({ type: 'createItem' })}
+      />
       <div class="tab-content">
         {activeTab === 'sources' ? (
-          <SourcesView
-            providers={sources}
-            onAcceptItem={(providerId, externalId) =>
-              postMessage({ type: 'acceptItem', providerId, externalId })
-            }
-          />
+          <div
+            role="tabpanel"
+            id="mission-control-panel-sources"
+            aria-labelledby="mission-control-tab-sources"
+          >
+            <SourcesView
+              providers={sources}
+              onAcceptItem={(providerId, externalId) =>
+                postMessage({ type: 'acceptItem', providerId, externalId })
+              }
+            />
+          </div>
         ) : (
-          <div class="my-work-tab">
+          <div
+            class="my-work-tab"
+            role="tabpanel"
+            id="mission-control-panel-my-work"
+            aria-labelledby="mission-control-tab-my-work"
+          >
             {tiers.length === 0 ? (
               <div class="empty-state">No items yet</div>
             ) : (
@@ -65,6 +80,11 @@ export function App() {
                       })),
                     }}
                     onItemClick={(id) => postMessage({ type: 'openItem', itemId: id })}
+                    onAcceptItem={(providerId, externalId) => postMessage({ type: 'acceptItem', providerId, externalId })}
+                    onDismissItem={(providerId, externalId) => postMessage({ type: 'dismissItem', providerId, externalId })}
+                    onTransitionState={(itemId, targetState) => postMessage({ type: 'transitionState', itemId, targetState })}
+                    onAcceptAll={tier.id === 'incoming' ? () => postMessage({ type: 'acceptAll' }) : undefined}
+                    onClearHistory={tier.id === 'done' ? () => postMessage({ type: 'clearHistory' }) : undefined}
                   />
                 ))}
               </div>
