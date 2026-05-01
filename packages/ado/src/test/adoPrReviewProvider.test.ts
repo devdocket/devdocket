@@ -597,6 +597,16 @@ describe('AdoPrReviewProvider', () => {
       expect(mockFetch).not.toHaveBeenCalled();
     });
 
+    it('throws AbortError when cancellation is already requested', async () => {
+      const controller = new AbortController();
+      controller.abort();
+
+      await expect(
+        provider.getClosedItems(['myorg/MyProject/myrepo/101'], controller.signal),
+      ).rejects.toMatchObject({ name: 'AbortError' });
+      expect(mockFetch).not.toHaveBeenCalled();
+    });
+
     it('returns empty array for empty input', async () => {
       const result = await provider.getClosedItems([]);
 

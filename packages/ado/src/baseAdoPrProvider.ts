@@ -289,7 +289,7 @@ export abstract class BaseAdoPrProvider extends BaseProvider {
 
     await runWorkerPool(parsed, async item => {
       if (signal?.aborted) {
-        return;
+        throw new DOMException('Aborted', 'AbortError');
       }
       try {
         if (!isValidUrlSegment(item.org) || !isValidUrlSegment(item.project) || !isValidUrlSegment(item.repo)) {
@@ -309,8 +309,8 @@ export abstract class BaseAdoPrProvider extends BaseProvider {
           logger.debug(`Failed to check PR ${item.id}: ${response.status}`);
         }
       } catch (err) {
-        if (signal?.aborted) {
-          return;
+        if (err instanceof Error && err.name === 'AbortError' && signal?.aborted) {
+          throw err;
         }
         logger.debug(`Failed to check PR ${item.id}: ${String(err)}`);
       }
