@@ -2,7 +2,9 @@ export type ExtensionMessage =
   | { type: 'updateItems'; tiers: TierData[] }
   | { type: 'updateSources'; providers: SourceProviderData[] }
   | { type: 'selectItem'; itemId: string }
-  | { type: 'updateWatches'; watches: WatchData[] };
+  | { type: 'updateWatches'; watches: WatchData[] }
+  | { type: 'updateEditorItem'; item: EditorItemData }
+  | { type: 'updateTitle'; title: string };
 
 export type WebviewMessage =
   | { type: 'openItem'; itemId: string }
@@ -15,7 +17,8 @@ export type WebviewMessage =
   | { type: 'clearHistory' }
   | { type: 'runAction'; itemId: string }
   | { type: 'openUrl'; url: string }
-  | { type: 'switchTab'; tab: 'myWork' | 'sources' };
+  | { type: 'switchTab'; tab: 'myWork' | 'sources' }
+  | { type: 'autosave'; data: { title?: string; notes?: string; url?: string } };
 
 export interface TierData {
   id: string;
@@ -44,6 +47,31 @@ export interface BadgeData {
   label: string;
   type: 'provider' | 'state' | 'ci';
   variant: string;
+}
+
+export interface EditorItemData {
+  id: string;
+  title: string;
+  notes?: string;
+  url?: string;
+  description?: string;
+  state: string;
+  providerLabel?: string;
+  providerState?: string;
+  group?: string;
+  createdAt: number;
+  updatedAt: number;
+  badges: BadgeData[];
+  branchName?: string;
+  repoName?: string;
+  isProviderManaged: boolean;
+  validTransitions: string[];
+  hasActions: boolean;
+  activityLog: Array<{ timestamp: number; type: string; detail?: string }>;
+  relatedItems: Array<{ id: string; title: string; state: string; badges: BadgeData[] }>;
+  isIncoming?: boolean;
+  providerId?: string;
+  externalId?: string;
 }
 
 export interface SourceProviderData {

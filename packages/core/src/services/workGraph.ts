@@ -8,7 +8,7 @@ import { isSafeUrl } from '../utils/url';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
-const VALID_TRANSITIONS: ReadonlyMap<WorkItemState, ReadonlySet<WorkItemState>> = new Map<WorkItemState, ReadonlySet<WorkItemState>>([
+export const VALID_TRANSITIONS: ReadonlyMap<WorkItemState, ReadonlySet<WorkItemState>> = new Map<WorkItemState, ReadonlySet<WorkItemState>>([
   [WorkItemState.New, new Set([WorkItemState.InProgress, WorkItemState.Done, WorkItemState.Archived])],
   [WorkItemState.InProgress, new Set([WorkItemState.Paused, WorkItemState.Done, WorkItemState.New, WorkItemState.Archived])],
   [WorkItemState.Paused, new Set([WorkItemState.InProgress, WorkItemState.Done, WorkItemState.New, WorkItemState.Archived])],

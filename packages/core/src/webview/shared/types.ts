@@ -1,5 +1,6 @@
 export type {
   BadgeData,
+  EditorItemData,
   ExtensionMessage,
   ItemCardData,
   SourceGroupData,

@@ -981,8 +981,8 @@
   },
   "scripts": {
     "vscode:prepublish": "npm run build:prod",
-    "build": "esbuild src/extension.ts --bundle --outfile=dist/extension.js --external:vscode --format=cjs --platform=node --sourcemap && esbuild src/webview/sidebar/index.tsx --bundle --outfile=webview-dist/sidebar.js --format=esm --platform=browser --jsx=automatic --jsx-import-source=preact --sourcemap",
-    "build:prod": "esbuild src/extension.ts --bundle --outfile=dist/extension.js --external:vscode --format=cjs --platform=node --minify --sourcemap && esbuild src/webview/sidebar/index.tsx --bundle --outfile=webview-dist/sidebar.js --format=esm --platform=browser --jsx=automatic --jsx-import-source=preact --minify --sourcemap",
+    "build": "esbuild src/extension.ts --bundle --outfile=dist/extension.js --external:vscode --format=cjs --platform=node --sourcemap && esbuild src/webview/sidebar/index.tsx --bundle --outfile=webview-dist/sidebar.js --format=esm --platform=browser --jsx=automatic --jsx-import-source=preact --sourcemap && esbuild src/webview/editor/index.tsx --bundle --outfile=webview-dist/editor.js --format=esm --platform=browser --jsx=automatic --jsx-import-source=preact --sourcemap",
+    "build:prod": "esbuild src/extension.ts --bundle --outfile=dist/extension.js --external:vscode --format=cjs --platform=node --minify --sourcemap && esbuild src/webview/sidebar/index.tsx --bundle --outfile=webview-dist/sidebar.js --format=esm --platform=browser --jsx=automatic --jsx-import-source=preact --minify --sourcemap && esbuild src/webview/editor/index.tsx --bundle --outfile=webview-dist/editor.js --format=esm --platform=browser --jsx=automatic --jsx-import-source=preact --minify --sourcemap",
     "watch": "esbuild src/extension.ts --bundle --outfile=dist/extension.js --external:vscode --format=cjs --platform=node --sourcemap --watch",
     "lint": "eslint src",
     "test": "vitest run",
