@@ -2,6 +2,9 @@ import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
 import * as vscode from 'vscode';
 import { MockMemento } from 'vscode';
 import { activate, autoWatchAuthoredPRs, deactivate, logger } from '../extension';
+import { MissionControlViewProvider } from '../views/missionControlViewProvider';
+import { WatchPanelProvider } from '../views/watchPanelProvider';
+import { WorkItemEditorPanel } from '../views/workItemEditorPanel';
 
 // Stub fs so migration never touches disk
 vi.mock('fs/promises', () => ({
@@ -27,6 +30,20 @@ async function flushMicrotasks(): Promise<void> {
   // Two rounds help nested microtasks scheduled by earlier microtasks settle too.
   await Promise.resolve();
   await Promise.resolve();
+}
+
+function getCommandHandler(commandId: string): (...args: any[]) => any {
+  const registerCommand = vscode.commands.registerCommand as ReturnType<typeof vi.fn>;
+  const registration = registerCommand.mock.calls.find((call: any[]) => call[0] === commandId);
+  if (!registration) {
+    throw new Error(`Command not registered: ${commandId}`);
+  }
+  return registration[1];
+}
+
+function getMissionControlProvider(): MissionControlViewProvider {
+  const registerWebviewViewProvider = vscode.window.registerWebviewViewProvider as ReturnType<typeof vi.fn>;
+  return registerWebviewViewProvider.mock.calls[0][1] as MissionControlViewProvider;
 }
 
 describe('activate()', () => {
@@ -81,7 +98,7 @@ describe('activate()', () => {
     await activate(context);
     expect(vscode.window.registerWebviewViewProvider).toHaveBeenCalledWith(
       'devdocket.missionControl',
-      expect.anything(),
+      expect.any(MissionControlViewProvider),
       expect.objectContaining({ webviewOptions: { retainContextWhenHidden: true } }),
     );
   });
@@ -118,6 +135,78 @@ describe('activate()', () => {
     expect(incomingStatusBar.command).toBe('devdocket.missionControl.focus');
     expect(incomingStatusBar.hide).toHaveBeenCalled();
     expect(incomingStatusBar.show).not.toHaveBeenCalled();
+  });
+
+  it('updates the incoming status bar as provider items are discovered and dismissed', async () => {
+    const api = await activate(context);
+    const createStatusBarItem = vscode.window.createStatusBarItem as ReturnType<typeof vi.fn>;
+    const incomingStatusBar = createStatusBarItem.mock.results[1].value;
+    const dismissFromInbox = getCommandHandler('devdocket.dismissFromInbox');
+    const itemEmitter = new (vscode.EventEmitter as any)();
+
+    api.registerProvider({
+      id: 'github',
+      label: 'GitHub',
+      onDidDiscoverItems: itemEmitter.event,
+      refresh: vi.fn(async () => {
+        itemEmitter.fire([
+          { externalId: '1', title: 'Incoming issue', url: 'https://github.com/org/repo/issues/1' },
+        ]);
+      }),
+    } as any);
+    await flushMicrotasks();
+    await flushMicrotasks();
+
+    expect(incomingStatusBar.text).toBe('⚡ 1 incoming');
+    expect(incomingStatusBar.show).toHaveBeenCalled();
+
+    await dismissFromInbox({ providerId: 'github', externalId: '1', title: 'Incoming issue' });
+    await flushMicrotasks();
+
+    expect(incomingStatusBar.hide).toHaveBeenCalled();
+  });
+
+  it('wires work graph, provider registry, and state store changes to Mission Control refresh', async () => {
+    const api = await activate(context);
+    const missionControlProvider = getMissionControlProvider();
+    const scheduleRefreshSpy = vi.spyOn(missionControlProvider, 'scheduleRefresh');
+    vi.spyOn(WorkItemEditorPanel, 'open').mockImplementation(() => undefined);
+
+    (vscode.window.showInputBox as ReturnType<typeof vi.fn>).mockResolvedValue('Created from command');
+    await getCommandHandler('devdocket.createItem')();
+    await flushMicrotasks();
+    expect(scheduleRefreshSpy).toHaveBeenCalled();
+
+    scheduleRefreshSpy.mockClear();
+    const itemEmitter = new (vscode.EventEmitter as any)();
+    api.registerProvider({
+      id: 'provider-refresh',
+      label: 'Provider Refresh',
+      onDidDiscoverItems: itemEmitter.event,
+      refresh: vi.fn(async () => {
+        itemEmitter.fire([{ externalId: '2', title: 'Provider item', url: 'https://example.com/item/2' }]);
+      }),
+    } as any);
+    await flushMicrotasks();
+    await flushMicrotasks();
+    expect(scheduleRefreshSpy).toHaveBeenCalled();
+
+    scheduleRefreshSpy.mockClear();
+    await getCommandHandler('devdocket.dismissFromInbox')({ providerId: 'provider-refresh', externalId: '2', title: 'Provider item' });
+    await flushMicrotasks();
+    expect(scheduleRefreshSpy).toHaveBeenCalled();
+  });
+
+  it('creates a watch panel provider and opens it through the registered command', async () => {
+    await activate(context);
+
+    const watchPanelProvider = context.subscriptions.find(subscription => subscription instanceof WatchPanelProvider);
+    expect(watchPanelProvider).toBeInstanceOf(WatchPanelProvider);
+
+    const openSpy = vi.spyOn(watchPanelProvider as WatchPanelProvider, 'open').mockImplementation(() => undefined);
+    await getCommandHandler('devdocket.showWatchesQuickPick')();
+
+    expect(openSpy).toHaveBeenCalled();
   });
 
   // ------------------------------------------------------------------

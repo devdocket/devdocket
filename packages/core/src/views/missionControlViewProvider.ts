@@ -126,8 +126,8 @@ export class MissionControlViewProvider implements vscode.WebviewViewProvider {
 
     const readyToStartItems = this.workGraph
       .getItemsByState(WorkItemState.New)
-      .sort((a, b) => (a.sortOrder ?? Number.MAX_SAFE_INTEGER) - (b.sortOrder ?? Number.MAX_SAFE_INTEGER)
-        || this.compareUrgency(a, b, discoveredItemMap)
+      .sort((a, b) => this.compareUrgency(a, b, discoveredItemMap)
+        || (a.sortOrder ?? Number.MAX_SAFE_INTEGER) - (b.sortOrder ?? Number.MAX_SAFE_INTEGER)
         || b.updatedAt - a.updatedAt)
       .map(item => this.buildWorkItemCardData(item, 'readyToStart', discoveredItemMap));
 

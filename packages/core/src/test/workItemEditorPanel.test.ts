@@ -198,8 +198,15 @@ describe('WorkItemEditorPanel', () => {
     expect(mock.panel.webview.postMessage).toHaveBeenCalledWith({ type: 'updateTitle', title: 'Renamed' });
   });
 
-  it('posts updateEditorItem when provider data changes', () => {
-    const item = makeItem({ id: 'item-1', title: 'Primary', providerId: 'github', externalId: '42' });
+  it('posts updateEditorItem with synced description, action transitions, and related items when provider data changes', () => {
+    const item = makeItem({
+      id: 'item-1',
+      title: 'Primary',
+      description: '## Updated description',
+      providerId: 'github',
+      externalId: '42',
+      state: WorkItemState.New,
+    });
     const peer = makeItem({ id: 'peer-1', title: 'Peer', providerId: 'ado', externalId: '99', state: WorkItemState.InProgress });
     const workGraph = createMockWorkGraph(item, { 'ado::99': peer });
     const providerRegistry = createMockProviderRegistry({
@@ -226,8 +233,10 @@ describe('WorkItemEditorPanel', () => {
     expect(mock.panel.webview.postMessage).toHaveBeenCalledWith(expect.objectContaining({
       type: 'updateEditorItem',
       item: expect.objectContaining({
+        description: '<h2>Updated description</h2>\n',
         providerState: 'closed',
         hasActions: true,
+        validTransitions: expect.arrayContaining(['InProgress', 'Done', 'Archived']),
         relatedItems: [expect.objectContaining({ id: 'peer-1', title: 'Peer' })],
       }),
     }));
@@ -254,6 +263,29 @@ describe('WorkItemEditorPanel', () => {
       title: 'Updated title',
       notes: 'Some notes',
       url: 'https://example.com/items/1',
+    });
+  });
+
+  it('flushes pending autosave data when the panel is disposed', async () => {
+    const item = makeItem({ title: 'Original' });
+    const workGraph = createMockWorkGraph(item);
+    const { mock } = openPanel(item, workGraph);
+
+    mock.simulateMessage({
+      type: 'autosave',
+      data: {
+        title: ' Updated before close ',
+        notes: ' Draft notes ',
+      },
+    });
+
+    mock.simulateDispose();
+
+    await vi.waitFor(() => {
+      expect(workGraph.updateItem).toHaveBeenCalledWith('item-1', {
+        title: 'Updated before close',
+        notes: 'Draft notes',
+      });
     });
   });
 

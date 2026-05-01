@@ -132,6 +132,7 @@ describe('registerCommands', () => {
   let stateStore: ReturnType<typeof createMockStateStore>;
   let providerRegistry: ReturnType<typeof createMockProviderRegistry>;
   let labelCache: ReturnType<typeof createMockLabelCache>;
+  let watchPanelProvider: { open: Mock };
   let ctx: vscode.ExtensionContext;
 
   beforeEach(() => {
@@ -154,6 +155,7 @@ describe('registerCommands', () => {
     stateStore = createMockStateStore();
     providerRegistry = createMockProviderRegistry();
     labelCache = createMockLabelCache();
+    watchPanelProvider = { open: vi.fn() };
     ctx = createMockContext();
 
     registerCommands(
@@ -166,7 +168,7 @@ describe('registerCommands', () => {
       {} as WatcherRegistry,
       {} as PRWatcherRegistry,
       {} as WatcherService,
-      { open: vi.fn() } as any,
+      watchPanelProvider as any,
     );
   });
 
@@ -211,6 +213,7 @@ describe('registerCommands', () => {
       'devdocket.createItemFromUrl',
       'devdocket.clearHistory',
       'devdocket.addActivity',
+      'devdocket.showWatchesQuickPick',
     ];
     for (const cmd of expected) {
       expect(commandHandlers.has(cmd), `missing command: ${cmd}`).toBe(true);
@@ -232,6 +235,14 @@ describe('registerCommands', () => {
         expect.any(Function),
       );
       expect(providerRegistry.refreshAll).toHaveBeenCalled();
+    });
+  });
+
+  describe('devdocket.showWatchesQuickPick', () => {
+    it('opens the watch panel provider', async () => {
+      await invoke('devdocket.showWatchesQuickPick');
+
+      expect(watchPanelProvider.open).toHaveBeenCalled();
     });
   });
 

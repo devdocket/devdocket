@@ -32,11 +32,30 @@ describe('getEditorPanelHtml', () => {
     });
 
     expect(html).toContain('<!DOCTYPE html>');
-    expect(html).toContain("Content-Security-Policy");
-    expect(html).toContain("https://example.test/editor.js");
-    expect(html).toContain("window.__DEVDOCKET_EDITOR_BOOTSTRAP__");
+    expect(html).toContain('Content-Security-Policy');
+    expect(html).toContain('https://example.test/editor.js');
+    expect(html).toContain('window.__DEVDOCKET_EDITOR_BOOTSTRAP__');
+    expect(html).toContain('<div id="root"></div>');
     expect(html).toMatch(/<script nonce="[^"]+" type="module" src="https:\/\/example\.test\/editor\.js"><\/script>/);
-    expect(html).not.toContain("unsafe-inline");
+    expect(html).not.toContain('unsafe-inline');
+  });
+
+  it('bootstraps the editor app with transitions, activity, and related item data', () => {
+    const html = getEditorPanelHtml({
+      cspSource: 'https://example.test',
+      scriptUri: 'https://example.test/editor.js',
+      initialItem: makeEditorItem({
+        validTransitions: ['InProgress', 'Done'],
+        hasActions: true,
+        activityLog: [{ timestamp: 123, type: 'work-started', detail: '{"branchName":"feature/test"}' }],
+        relatedItems: [{ id: 'peer-1', title: 'Peer item', state: 'Paused', badges: [{ label: 'GitHub', type: 'provider', variant: 'github' }] }],
+      }),
+    });
+
+    expect(html).toContain('"validTransitions":["InProgress","Done"]');
+    expect(html).toContain('"hasActions":true');
+    expect(html).toContain('"activityLog":[{"timestamp":123,"type":"work-started"');
+    expect(html).toContain('"relatedItems":[{"id":"peer-1","title":"Peer item"');
   });
 
   it('escapes bootstrap data before embedding it in the HTML shell', () => {

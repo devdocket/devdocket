@@ -42,7 +42,7 @@ describe('WatchPanelProvider', () => {
     vi.clearAllMocks();
   });
 
-  it('opens the panel and posts grouped watch data', () => {
+  it('assembles PR watches with child runs and standalone run watches from the watcher service', () => {
     const mockPanel = createMockWebviewPanel();
     vi.mocked(window.createWebviewPanel).mockReturnValue(mockPanel.panel as any);
 
@@ -50,10 +50,12 @@ describe('WatchPanelProvider', () => {
       getActivePRWatches: vi.fn(() => [{
         identifier: { providerId: 'github-pr', repo: 'owner/repo', prId: '42', displayName: 'PR #42', url: 'https://github.com/owner/repo/pull/42' },
         prState: 'open',
+        hasWarning: true,
+        errorMessage: 'Polling failed',
       }]),
       getActiveStandaloneWatches: vi.fn(() => [{
-        identifier: { providerId: 'github-actions', repo: 'owner/repo', runId: '99', displayName: 'CI', url: 'https://github.com/owner/repo/actions/runs/99' },
-        status: { overallState: 'completed', conclusion: 'success', jobs: [], startedAt: new Date(Date.now() - 60_000).toISOString() },
+        identifier: { providerId: 'github-actions', runId: '200', displayName: 'Deploy', url: 'https://github.com/owner/repo/actions/runs/200' },
+        status: { overallState: 'running', jobs: [], startedAt: new Date(Date.now() - 60_000).toISOString() },
         watchedAt: new Date(Date.now() - 60_000).toISOString(),
       }]),
       getPRWatchKey: vi.fn(() => 'pr:github-pr:owner/repo:42'),
@@ -64,8 +66,11 @@ describe('WatchPanelProvider', () => {
           conclusion: 'failure',
           jobs: [{ name: 'test', state: 'completed', conclusion: 'failure' }],
           startedAt: new Date(Date.now() - 120_000).toISOString(),
+          completedAt: new Date(Date.now() - 30_000).toISOString(),
         },
         watchedAt: new Date(Date.now() - 120_000).toISOString(),
+        hasWarning: true,
+        errorMessage: '3 consecutive failures',
       }]),
       getProviderLabel: vi.fn(() => 'GitHub Actions'),
       getActiveWatches: vi.fn(() => []),
@@ -74,7 +79,7 @@ describe('WatchPanelProvider', () => {
       dismissWatch: vi.fn(),
     };
 
-    const provider = new WatchPanelProvider({ fsPath: 'C:\\repo' } as any, watcherService as any);
+    const provider = new WatchPanelProvider(vscode.Uri.file('C:\\repo') as any, watcherService as any);
     provider.open();
 
     expect(window.createWebviewPanel).toHaveBeenCalledWith(
@@ -83,15 +88,38 @@ describe('WatchPanelProvider', () => {
       vscode.ViewColumn.Beside,
       expect.objectContaining({ enableScripts: true, retainContextWhenHidden: true }),
     );
+    expect(mockPanel.panel.title).toBe('CI Watches (2)');
     expect(mockPanel.panel.webview.html).toContain('watchPanel.js');
     expect(mockPanel.panel.webview.postMessage).toHaveBeenCalledWith(expect.objectContaining({
       type: 'updateWatchPanel',
-      prWatches: [expect.objectContaining({ title: 'PR #42' })],
-      runWatches: [expect.objectContaining({ name: 'CI' })],
+      prWatches: [expect.objectContaining({
+        id: 'pr:github-pr:owner/repo:42',
+        title: 'PR #42',
+        repo: 'owner/repo',
+        state: 'open',
+        hasWarning: true,
+        errorMessage: 'Polling failed',
+        runs: [expect.objectContaining({
+          id: 'run:github-actions:owner/repo:100',
+          name: 'PR CI',
+          repo: 'owner/repo',
+          state: 'completed',
+          conclusion: 'failure',
+          hasWarning: true,
+          errorMessage: '3 consecutive failures',
+          failurePreview: '3 consecutive failures',
+        })],
+      })],
+      runWatches: [expect.objectContaining({
+        id: 'run:github-actions::200',
+        name: 'Deploy',
+        repo: 'GitHub Actions',
+        state: 'in_progress',
+      })],
     }));
   });
 
-  it('handles webview commands for dismissing and opening watches', async () => {
+  it('handles dismiss completed, open URL, and dismiss watch webview commands', async () => {
     const mockPanel = createMockWebviewPanel();
     vi.mocked(window.createWebviewPanel).mockReturnValue(mockPanel.panel as any);
 
@@ -109,16 +137,19 @@ describe('WatchPanelProvider', () => {
       dismissWatch: vi.fn(),
     };
 
-    const provider = new WatchPanelProvider({ fsPath: 'C:\\repo' } as any, watcherService as any);
+    const provider = new WatchPanelProvider(vscode.Uri.file('C:\\repo') as any, watcherService as any);
     provider.open();
 
     await mockPanel.simulateMessage({ type: 'dismissCompletedWatches' });
     await mockPanel.simulateMessage({ type: 'openWatchUrl', url: runIdentifier.url });
+    await mockPanel.simulateMessage({ type: 'openWatchUrl', url: 'javascript:alert(1)' });
     await mockPanel.simulateMessage({ type: 'dismissWatch', watchId: 'pr:github-pr:owner/repo:42' });
     await mockPanel.simulateMessage({ type: 'dismissWatch', watchId: 'run:github-actions:owner/repo:99' });
 
     expect(watcherService.dismissAllCompleted).toHaveBeenCalled();
     expect(env.openExternal).toHaveBeenCalledTimes(1);
+    expect(env.openExternal).toHaveBeenCalledWith(expect.objectContaining({ path: 'https://github.com/owner/repo/actions/runs/99' }));
+    expect(window.showWarningMessage).toHaveBeenCalledWith('Can only open http(s) URLs in the browser.');
     expect(watcherService.dismissPRWatch).toHaveBeenCalledWith(prIdentifier);
     expect(watcherService.dismissWatch).toHaveBeenCalledWith(runIdentifier);
   });
