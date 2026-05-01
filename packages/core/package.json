@@ -210,7 +210,7 @@
       },
       {
         "view": "devdocket.watches",
-        "contents": "No watches yet.\nWatches notify you when a GitHub Actions or Azure Pipelines run completes or fails, or when a PR is merged — right inside VS Code.\n[Watch Pipeline Run](command:devdocket.watchRun)\n[Watch Pull Request](command:devdocket.watchPR)"
+        "contents": "No watches yet.\nWatches notify you when a GitHub Actions workflow run or an Azure DevOps pipeline run completes or fails, or when a PR is merged — right inside VS Code.\n[Watch Pipeline Run](command:devdocket.watchRun)\n[Watch Pull Request](command:devdocket.watchPR)"
       }
     ],
     "commands": [
