@@ -11,6 +11,16 @@ export interface Event<T> {
 }
 
 /**
+ * Reference to another provider item related to a discovered item.
+ */
+export interface RelatedItemRef {
+  /** Provider-stable external identifier (for example, `owner/repo#123`). */
+  externalId: string;
+  /** Whether the relationship closes the target item or is informational only. */
+  relation: 'closes' | 'linked';
+}
+
+/**
  * An item discovered by a provider.
  * Provider data is kept in memory and read live — only the inbox state is persisted.
  */
@@ -52,6 +62,8 @@ export interface DiscoveredItem {
    * Items without `canonicalId` always show individually (backward compatible).
    */
   canonicalId?: string;
+  /** Optional relationship hints to other discovered items. */
+  relatedItems?: RelatedItemRef[];
 }
 
 /**

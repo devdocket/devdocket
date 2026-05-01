@@ -726,6 +726,33 @@ describe('registerCommands', () => {
       expect(stateStore.setState).toHaveBeenCalledWith('github', 'ext-1', 'accepted');
     });
 
+    it('accepts closes-related inbox items as a unit', async () => {
+      const inboxItem = makeInboxItem({ externalId: 'org/repo#1', title: 'Issue #1' });
+      const relatedPr = {
+        externalId: 'org/repo#101',
+        title: '#101: Fix issue',
+        relatedItems: [{ externalId: 'org/repo#1', relation: 'closes' }],
+      };
+      providerRegistry.getAllDiscoveredItems.mockReturnValue(new Map([
+        ['github', [{ externalId: 'org/repo#1', title: 'Issue #1' }]],
+        ['github-my-prs', [relatedPr]],
+      ]));
+      stateStore.getState.mockReturnValue(undefined);
+      workGraph.findItemByProvenance.mockReturnValue(undefined);
+      workGraph.createItem
+        .mockResolvedValueOnce(createWorkItem({ id: 'wc-issue-1' }))
+        .mockResolvedValueOnce(createWorkItem({ id: 'wc-pr-101' }));
+
+      await invoke('devdocket.acceptFromInbox', inboxItem);
+
+      expect(workGraph.createItem).toHaveBeenCalledTimes(2);
+      expect(stateStore.setStates).toHaveBeenCalledWith(expect.arrayContaining([
+        { providerId: 'github', externalId: 'org/repo#1', state: 'accepted' },
+        { providerId: 'github-my-prs', externalId: 'org/repo#101', state: 'accepted' },
+      ]));
+      expect(stateStore.setState).not.toHaveBeenCalled();
+    });
+
     it('prefixes group to title when group is present', async () => {
       const inboxItem = makeInboxItem({ group: 'org/repo' });
       workGraph.findItemByProvenance.mockReturnValue(undefined);
@@ -1194,6 +1221,33 @@ describe('registerCommands', () => {
       );
       expect(stateStore.setState).toHaveBeenCalledWith('github', 'ext-1', 'accepted');
       expect(workGraph.transitionState).toHaveBeenCalledWith('wc-new-1', WorkItemState.InProgress);
+    });
+
+    it('accepts closes-related inbox items to Focus as a unit', async () => {
+      const inboxItem = makeInboxItem({ externalId: 'org/repo#1', title: 'Issue #1' });
+      providerRegistry.getAllDiscoveredItems.mockReturnValue(new Map([
+        ['github', [{ externalId: 'org/repo#1', title: 'Issue #1' }]],
+        ['github-my-prs', [{
+          externalId: 'org/repo#101',
+          title: '#101: Fix issue',
+          relatedItems: [{ externalId: 'org/repo#1', relation: 'closes' }],
+        }]],
+      ]));
+      stateStore.getState.mockReturnValue(undefined);
+      workGraph.findItemByProvenance.mockReturnValue(undefined);
+      workGraph.createItem
+        .mockResolvedValueOnce(createWorkItem({ id: 'wc-issue-1' }))
+        .mockResolvedValueOnce(createWorkItem({ id: 'wc-pr-101' }));
+
+      await invoke('devdocket.acceptToFocusFromInbox', inboxItem);
+
+      expect(workGraph.createItem).toHaveBeenCalledTimes(2);
+      expect(stateStore.setStates).toHaveBeenCalledWith(expect.arrayContaining([
+        { providerId: 'github', externalId: 'org/repo#1', state: 'accepted' },
+        { providerId: 'github-my-prs', externalId: 'org/repo#101', state: 'accepted' },
+      ]));
+      expect(workGraph.transitionState).toHaveBeenCalledWith('wc-issue-1', WorkItemState.InProgress);
+      expect(workGraph.transitionState).toHaveBeenCalledWith('wc-pr-101', WorkItemState.InProgress);
     });
 
     it('sets state to accepted and transitions existing New item to InProgress', async () => {

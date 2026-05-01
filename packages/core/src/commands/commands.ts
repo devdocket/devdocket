@@ -188,6 +188,76 @@ function expandWithCanonicalPeers(
   return [...items, ...extra];
 }
 
+function toInboxItem(providerId: string, discoveredItem: { externalId: string; title: string; description?: string; url?: string; group?: string; reason?: string; canonicalId?: string }): InboxItem {
+  return {
+    kind: 'item',
+    providerId,
+    externalId: discoveredItem.externalId,
+    title: discoveredItem.title,
+    description: discoveredItem.description,
+    url: discoveredItem.url,
+    group: discoveredItem.group,
+    reason: discoveredItem.reason,
+    canonicalId: discoveredItem.canonicalId,
+  };
+}
+
+function expandWithClosesRelatedInboxItems(
+  items: InboxItem[],
+  providerRegistry: ProviderRegistry,
+  stateStore: DiscoveredStateStore,
+): InboxItem[] {
+  const result = new Map(items.map(item => [`${item.providerId}::${item.externalId}`, item]));
+  const queue = [...items];
+
+  while (queue.length > 0) {
+    const current = queue.shift()!;
+    for (const [providerId, discoveredItems] of providerRegistry.getAllDiscoveredItems()) {
+      for (const discoveredItem of discoveredItems) {
+        const discoveredKey = `${providerId}::${discoveredItem.externalId}`;
+        const directlyRelated = providerId === current.providerId
+          && discoveredItem.externalId === current.externalId
+          && discoveredItem.relatedItems?.some(ref => ref.relation === 'closes');
+        const reverseRelated = discoveredItem.relatedItems?.some(
+          ref => ref.relation === 'closes' && ref.externalId === current.externalId,
+        );
+
+        if (!directlyRelated && !reverseRelated) {
+          continue;
+        }
+
+        const candidateItems = directlyRelated
+          ? (discoveredItem.relatedItems ?? [])
+              .filter(ref => ref.relation === 'closes')
+              .flatMap(ref => {
+                const matches: InboxItem[] = [];
+                for (const [candidateProviderId, candidateDiscoveredItems] of providerRegistry.getAllDiscoveredItems()) {
+                  for (const candidateDiscoveredItem of candidateDiscoveredItems) {
+                    if (candidateDiscoveredItem.externalId === ref.externalId) {
+                      matches.push(toInboxItem(candidateProviderId, candidateDiscoveredItem));
+                    }
+                  }
+                }
+                return matches;
+              })
+          : [toInboxItem(providerId, discoveredItem)];
+
+        for (const candidate of candidateItems) {
+          const candidateKey = `${candidate.providerId}::${candidate.externalId}`;
+          const candidateState = stateStore.getState(candidate.providerId, candidate.externalId);
+          if ((candidateState !== undefined && candidateState !== 'unseen') || result.has(candidateKey)) {
+            continue;
+          }
+          result.set(candidateKey, candidate);
+          queue.push(candidate);
+        }
+      }
+    }
+  }
+
+  return [...result.values()];
+}
+
 // ---------------------------------------------------------------------------
 // Individual command handlers
 // ---------------------------------------------------------------------------
@@ -609,7 +679,11 @@ async function handleAcceptFromInbox(
   selectedItems?: InboxElement[],
   revealer?: ViewRevealer,
 ): Promise<void> {
-  const items = resolveInboxItems(item, selectedItems);
+  const items = expandWithClosesRelatedInboxItems(
+    resolveInboxItems(item, selectedItems),
+    providerRegistry,
+    stateStore,
+  );
   if (items.length === 0) { return; }
 
   if (items.length === 1) {
@@ -906,7 +980,11 @@ async function handleAcceptToFocusFromInbox(
   selectedItems?: InboxElement[],
   revealer?: ViewRevealer,
 ): Promise<void> {
-  const items = resolveInboxItems(item, selectedItems);
+  const items = expandWithClosesRelatedInboxItems(
+    resolveInboxItems(item, selectedItems),
+    providerRegistry,
+    stateStore,
+  );
   if (items.length === 0) { return; }
 
   if (items.length === 1) {

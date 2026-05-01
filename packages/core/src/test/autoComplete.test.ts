@@ -128,6 +128,31 @@ describe('checkAutoComplete', () => {
       expect(autoIdx).toBeGreaterThan(stateIdx);
     });
 
+    it('does not propagate auto-complete through closes links', async () => {
+      const issue = await graph.createItem(
+        { title: 'Closed issue' },
+        { providerId, externalId: 'ext-5' },
+      );
+      const pr = await graph.createItem(
+        { title: 'Linked PR' },
+        { providerId, externalId: 'ext-6' },
+      );
+      graph.setLinkLookup((itemId) => itemId === issue.id || itemId === pr.id
+        ? [{ id: 'link-1', itemId1: issue.id, itemId2: pr.id, relation: 'closes', origin: 'provider' }]
+        : []);
+
+      const registry = createMockRegistry({
+        getProvider: () => ({
+          getClosedItems: async () => ['ext-5'],
+        }),
+      });
+
+      await checkAutoComplete(providerId, graph, registry);
+
+      expect(graph.getItem(issue.id)?.state).toBe(WorkItemState.Done);
+      expect(graph.getItem(pr.id)?.state).toBe(WorkItemState.New);
+    });
+
     it('returns completed titles', async () => {
       await graph.createItem(
         { title: 'Closed issue' },

@@ -911,6 +911,76 @@ describe('WorkGraph', () => {
     });
   });
 
+  describe('closes-linked state propagation', () => {
+    it('propagates transitions to closes-linked items', async () => {
+      const issue = await graph.createItem({ title: 'Issue' });
+      const pr = await graph.createItem({ title: 'PR' });
+      graph.setLinkLookup((itemId) => itemId === issue.id || itemId === pr.id
+        ? [{ id: 'link-1', itemId1: issue.id, itemId2: pr.id, relation: 'closes', origin: 'provider' }]
+        : []);
+
+      await graph.transitionState(issue.id, WorkItemState.InProgress);
+
+      expect(graph.getItem(issue.id)?.state).toBe(WorkItemState.InProgress);
+      expect(graph.getItem(pr.id)?.state).toBe(WorkItemState.InProgress);
+    });
+
+    it('does not propagate transitions for linked-only relations', async () => {
+      const issue = await graph.createItem({ title: 'Issue' });
+      const pr = await graph.createItem({ title: 'PR' });
+      graph.setLinkLookup((itemId) => itemId === issue.id || itemId === pr.id
+        ? [{ id: 'link-1', itemId1: issue.id, itemId2: pr.id, relation: 'linked', origin: 'provider' }]
+        : []);
+
+      await graph.transitionState(issue.id, WorkItemState.Done);
+
+      expect(graph.getItem(pr.id)?.state).toBe(WorkItemState.New);
+    });
+
+    it('propagates only one hop across closes links', async () => {
+      const issue = await graph.createItem({ title: 'Issue' });
+      const pr = await graph.createItem({ title: 'PR' });
+      const siblingPr = await graph.createItem({ title: 'Sibling PR' });
+      graph.setLinkLookup((itemId) => {
+        if (itemId === issue.id) {
+          return [{ id: 'link-1', itemId1: issue.id, itemId2: pr.id, relation: 'closes', origin: 'provider' }];
+        }
+        if (itemId === pr.id) {
+          return [
+            { id: 'link-1', itemId1: issue.id, itemId2: pr.id, relation: 'closes', origin: 'provider' },
+            { id: 'link-2', itemId1: pr.id, itemId2: siblingPr.id, relation: 'closes', origin: 'provider' },
+          ];
+        }
+        if (itemId === siblingPr.id) {
+          return [{ id: 'link-2', itemId1: pr.id, itemId2: siblingPr.id, relation: 'closes', origin: 'provider' }];
+        }
+        return [];
+      });
+
+      await graph.transitionState(issue.id, WorkItemState.Done);
+
+      expect(graph.getItem(pr.id)?.state).toBe(WorkItemState.Done);
+      expect(graph.getItem(siblingPr.id)?.state).toBe(WorkItemState.New);
+    });
+
+    it('reopens archived closes-linked items before starting them', async () => {
+      const issue = await graph.createItem({ title: 'Issue' });
+      const pr = await graph.createItem({ title: 'PR' });
+      await graph.transitionState(pr.id, WorkItemState.Archived);
+      graph.setLinkLookup((itemId) => itemId === issue.id || itemId === pr.id
+        ? [{ id: 'link-1', itemId1: issue.id, itemId2: pr.id, relation: 'closes', origin: 'provider' }]
+        : []);
+
+      await graph.transitionState(issue.id, WorkItemState.InProgress);
+
+      expect(graph.getItem(pr.id)?.state).toBe(WorkItemState.InProgress);
+      expect(graph.getItem(pr.id)?.activityLog?.slice(-2).map(entry => entry.detail)).toEqual([
+        'Archived → New',
+        'New → InProgress',
+      ]);
+    });
+  });
+
   describe('activity log', () => {
     it('records a created entry on createItem', async () => {
       const item = await graph.createItem({ title: 'Test' });

@@ -14,6 +14,7 @@ import { WatcherRegistry } from './services/watcherRegistry';
 import { PRWatcherRegistry } from './services/prWatcherRegistry';
 import { WatcherService } from './services/watcherService';
 import { WatchStore } from './storage/watchStore';
+import { ItemLinkStore } from './storage/itemLinkStore';
 import { InboxTreeProvider } from './views/inboxTreeProvider';
 import { QueueTreeProvider } from './views/queueTreeProvider';
 import { FocusTreeProvider } from './views/focusTreeProvider';
@@ -32,6 +33,7 @@ import { syncProviderTitles } from './services/titleSync';
 import { syncProviderDescriptions } from './services/descriptionSync';
 import { getViewLayout, initViewLayoutStore, onDidChangeLayout, ViewId } from './views/viewLayout';
 import { performance } from 'perf_hooks';
+import { LinkingService } from './services/linkingService';
 
 export type { DevDocketApi, DevDocketProvider, DevDocketAction, DiscoveredItem, Disposable, ActivityLogEntry, ActivityType, StateTransitionEvent, DevDocketPRWatcher } from './api/types';
 export { logger } from './services/logger';
@@ -71,7 +73,7 @@ function initializeLogging(context: vscode.ExtensionContext): void {
   );
 }
 
-async function loadStores(globalState: vscode.Memento): Promise<{ workGraph: WorkGraph; stateStore: DiscoveredStateStore; readStateStore: ReadStateStore; labelCache: ProviderLabelCache }> {
+async function loadStores(globalState: vscode.Memento): Promise<{ workGraph: WorkGraph; stateStore: DiscoveredStateStore; readStateStore: ReadStateStore; labelCache: ProviderLabelCache; linkStore: ItemLinkStore }> {
   const store = new JsonTaskStore(globalState);
   const wg = new WorkGraph(store);
   await wg.load();
@@ -93,7 +95,11 @@ async function loadStores(globalState: vscode.Memento): Promise<{ workGraph: Wor
     logger.debug('Failed to load provider label cache; continuing with empty cache', err);
   }
 
-  return { workGraph: wg, stateStore: ss, readStateStore, labelCache };
+  const linkStore = new ItemLinkStore(globalState);
+  await linkStore.load();
+  logger.debug('Loaded item links');
+
+  return { workGraph: wg, stateStore: ss, readStateStore, labelCache, linkStore };
 }
 
 async function migrateDiscoveredState(workGraph: WorkGraph, stateStore: DiscoveredStateStore): Promise<void> {
@@ -405,7 +411,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<DevDoc
   const storagePath = context.globalStorageUri.fsPath;
   await migrateToGlobalState(context.globalState, storagePath);
   await initViewLayoutStore(context.globalState);
-  const { workGraph: wg, stateStore: ss, readStateStore, labelCache } = await loadStores(context.globalState);
+  const { workGraph: wg, stateStore: ss, readStateStore, labelCache, linkStore } = await loadStores(context.globalState);
   await migrateDiscoveredState(wg, ss);
 
   const pr = new ProviderRegistry(
@@ -421,6 +427,8 @@ export async function activate(context: vscode.ExtensionContext): Promise<DevDoc
   const pwr = new PRWatcherRegistry(logger);
   const watchStore = new WatchStore(context.globalState);
   const ws = new WatcherService(wr, pwr, watchStore, logger);
+  wg.setLinkLookup((itemId) => linkStore.getLinksForItem(itemId));
+  const linkingService = new LinkingService(wg, pr, linkStore);
   const api = new DevDocketApiImpl(pr, ar, wr, pwr, wg);
   logger.info(`Store + service init took ${Math.round(performance.now() - initStart)}ms`);
 
@@ -461,6 +469,8 @@ export async function activate(context: vscode.ExtensionContext): Promise<DevDoc
     { dispose: () => wg.dispose() },
     { dispose: () => ss.dispose() },
     { dispose: () => ws.dispose() },
+    { dispose: () => linkStore.dispose() },
+    { dispose: () => linkingService.dispose() },
     { dispose: () => wr.dispose() },
     { dispose: () => pwr.dispose() },
     { dispose: () => providers.inboxProvider.dispose() },

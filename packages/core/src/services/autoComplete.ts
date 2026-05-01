@@ -83,7 +83,7 @@ export async function checkAutoComplete(
       }
       try {
         const oldState = currentItem.state;
-        await workGraph.transitionState(currentItem.id, WorkItemState.Done);
+        await workGraph.transitionState(currentItem.id, WorkItemState.Done, { propagate: false });
         completedTitles.push(currentItem.title);
         logger.info(`Auto-completed work item "${currentItem.title}" (${currentItem.id}) — external item closed/merged`);
         try {

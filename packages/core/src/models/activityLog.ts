@@ -10,7 +10,7 @@ import type { ActivityType } from '@devdocket/shared';
 export const MAX_ACTIVITY_LOG_ENTRIES = 100;
 
 /** All valid activity type values, for runtime validation. */
-export const ACTIVITY_TYPES = ['created', 'state-changed', 'updated', 'action-executed', 'auto-completed', 'work-started', 'cleanup', 'cleanup-dismissed', 'version-updated'] as const satisfies readonly ActivityType[];
+export const ACTIVITY_TYPES = ['created', 'state-changed', 'updated', 'action-executed', 'auto-completed', 'work-started', 'cleanup', 'cleanup-dismissed', 'version-updated', 'item-linked', 'item-unlinked'] as const satisfies readonly ActivityType[];
 
 // Compile-time exhaustiveness check: fails if a new ActivityType is added to
 // @devdocket/shared without updating ACTIVITY_TYPES above.

@@ -119,8 +119,8 @@ describe('GitHubMyPrsProvider — cancellation (AbortSignal wiring)', () => {
 
       await provider.refresh(token);
 
-      // 4 calls: 2 search + PR detail + reviews
-      expect(mockFetch).toHaveBeenCalledTimes(4);
+      // 5 calls: 2 search + PR detail + reviews + related-items GraphQL lookup
+      expect(mockFetch).toHaveBeenCalledTimes(5);
       for (const call of mockFetch.mock.calls) {
         expect(call[1].signal).toBeInstanceOf(AbortSignal);
       }

@@ -3,6 +3,7 @@ import * as vscode from 'vscode';
 import { WorkItem, WorkItemInput, WorkItemState } from '../models/workItem';
 import { type ActivityLogEntry, type ActivityType, MAX_ACTIVITY_LOG_ENTRIES } from '../models/activityLog';
 import { ITaskStore } from '../storage/taskStore';
+import type { ItemLink } from '../storage/itemLinkStore';
 import { logger } from './logger';
 import { isSafeUrl } from '../utils/url';
 
@@ -28,6 +29,7 @@ export class WorkGraph {
   private readonly duplicateProvenanceCounts: Map<string, number> = new Map();
   /** Lazily-built index of items grouped by state; nulled on any mutation to {@link items}. */
   private stateCache: Map<WorkItemState, WorkItem[]> | null = null;
+  private linkLookup?: (itemId: string) => readonly ItemLink[];
   private readonly _onDidChange = new vscode.EventEmitter<void>();
   private readonly _onDidTransitionState = new vscode.EventEmitter<{ itemId: string; item: WorkItem; oldState: string; newState: string }>();
   /**
@@ -41,6 +43,10 @@ export class WorkGraph {
   readonly onDidTransitionState = this._onDidTransitionState.event;
 
   constructor(private readonly store: ITaskStore) {}
+
+  setLinkLookup(linkLookup: (itemId: string) => readonly ItemLink[]): void {
+    this.linkLookup = linkLookup;
+  }
 
   private static provenanceKey(providerId: string, externalId: string): string {
     return `${providerId}::${externalId}`;
@@ -161,6 +167,11 @@ export class WorkGraph {
     return this.items.get(id);
   }
 
+  /** Find all work items with the given external ID, regardless of provider. */
+  findItemsByExternalId(externalId: string): WorkItem[] {
+    return this.getAll().filter(item => item.externalId === externalId);
+  }
+
   /** Find a work item by its provider-scoped provenance (provider ID + external ID). */
   findItemByProvenance(providerId: string, externalId: string): WorkItem | undefined {
     const id = this.provenanceIndex.get(WorkGraph.provenanceKey(providerId, externalId));
@@ -252,7 +263,11 @@ export class WorkGraph {
   }
 
   /** Transition a work item to a new lifecycle state. */
-  async transitionState(id: string, newState: WorkItemState): Promise<void> {
+  async transitionState(
+    id: string,
+    newState: WorkItemState,
+    options?: { propagate?: boolean; visited?: Set<string> },
+  ): Promise<void> {
     const item = this.items.get(id);
     if (!item) {
       throw new Error(`Work item not found: ${id}`);
@@ -293,6 +308,68 @@ export class WorkGraph {
     this._onDidChange.fire();
     this._onDidTransitionState.fire({ itemId: id, item: updated, oldState: item.state, newState });
     logger.info(`Transitioned work item ${id} to ${newState}`);
+
+    if (options?.propagate === false || !this.shouldPropagateLinkedState(newState)) {
+      return;
+    }
+
+    const visited = options?.visited ?? new Set<string>();
+    visited.add(id);
+    await this.propagateLinkedTransition(id, newState, visited);
+  }
+
+  private shouldPropagateLinkedState(newState: WorkItemState): boolean {
+    return newState === WorkItemState.New
+      || newState === WorkItemState.InProgress
+      || newState === WorkItemState.Paused
+      || newState === WorkItemState.Done
+      || newState === WorkItemState.Archived;
+  }
+
+  private async propagateLinkedTransition(id: string, newState: WorkItemState, visited: Set<string>): Promise<void> {
+    const links = this.linkLookup?.(id) ?? [];
+    for (const link of links) {
+      if (link.relation !== 'closes') {
+        continue;
+      }
+
+      const linkedItemId = link.itemId1 === id ? link.itemId2 : link.itemId1;
+      if (visited.has(linkedItemId)) {
+        continue;
+      }
+
+      const linkedItem = this.items.get(linkedItemId);
+      if (!linkedItem || linkedItem.state === newState) {
+        continue;
+      }
+
+      const transitionPath = this.buildPropagationPath(linkedItem.state, newState);
+      if (!transitionPath) {
+        continue;
+      }
+
+      visited.add(linkedItemId);
+      for (const step of transitionPath) {
+        await this.transitionState(linkedItemId, step, { propagate: false, visited });
+      }
+    }
+  }
+
+  private buildPropagationPath(currentState: WorkItemState, targetState: WorkItemState): WorkItemState[] | undefined {
+    if (currentState === targetState) {
+      return [];
+    }
+
+    const directTargets = VALID_TRANSITIONS.get(currentState);
+    if (directTargets?.has(targetState)) {
+      return [targetState];
+    }
+
+    if (targetState === WorkItemState.InProgress && (currentState === WorkItemState.Done || currentState === WorkItemState.Archived)) {
+      return [WorkItemState.New, WorkItemState.InProgress];
+    }
+
+    return undefined;
   }
 
   /** Swap a work item one position up or down among siblings in the same state. */

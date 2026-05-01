@@ -1,5 +1,5 @@
 import * as vscode from 'vscode';
-import { DiscoveredItem, combineSignals, createAbortError, runWorkerPool } from '@devdocket/shared';
+import { DiscoveredItem, RelatedItemRef, combineSignals, createAbortError, runWorkerPool } from '@devdocket/shared';
 import { BaseGitHubProvider } from './baseGithubProvider';
 import { logger } from './logger';
 import { parseRepoFromUrls } from './parseRepo';
@@ -16,6 +16,33 @@ export interface PrReview {
   user?: { id?: number; login?: string };
   state?: string;
   submitted_at?: string;
+}
+
+interface PrMetadata {
+  status?: string;
+  relatedItems?: RelatedItemRef[];
+}
+
+interface GraphQlResponse<T> {
+  data?: T;
+  errors?: Array<{ message?: string }>;
+}
+
+interface CrossReferencedTimelineResponse {
+  repository?: {
+    pullRequest?: {
+      timelineItems?: {
+        nodes?: Array<{
+          willCloseTarget?: boolean;
+          source?: {
+            __typename?: string;
+            number?: number;
+            repository?: { nameWithOwner?: string };
+          };
+        }>;
+      };
+    };
+  };
 }
 
 /**
@@ -90,14 +117,14 @@ export class GitHubMyPrsProvider extends BaseGitHubProvider {
 
     const allPrs = [...filteredAuthored, ...filteredAssigned];
 
-    const statusMap = allPrs.length > 0
-      ? await this.fetchPrStatuses(accessToken, allPrs, signal)
-      : new Map<string, string>();
+    const metadataMap = allPrs.length > 0
+      ? await this.fetchPrMetadata(accessToken, allPrs, repoNameMap, signal)
+      : new Map<string, PrMetadata>();
 
     const items: DiscoveredItem[] = [];
     for (const pr of filteredAuthored) {
       const repoName = repoNameMap.get(pr.html_url)!;
-      const status = statusMap.get(pr.html_url) ?? 'Open';
+      const metadata = metadataMap.get(pr.html_url);
       items.push({
         externalId: `${repoName}#${pr.number}`,
         title: `#${pr.number}: ${pr.title}`,
@@ -105,13 +132,14 @@ export class GitHubMyPrsProvider extends BaseGitHubProvider {
         url: pr.html_url,
         group: repoName,
         reason: 'You authored this PR',
-        state: status,
+        state: metadata?.status ?? 'Open',
         canonicalId: `github:pull:${repoName}#${pr.number}`,
+        relatedItems: metadata?.relatedItems,
       });
     }
     for (const pr of filteredAssigned) {
       const repoName = repoNameMap.get(pr.html_url)!;
-      const status = statusMap.get(pr.html_url) ?? 'Open';
+      const metadata = metadataMap.get(pr.html_url);
       items.push({
         externalId: `${repoName}#${pr.number}`,
         title: `#${pr.number}: ${pr.title}`,
@@ -119,8 +147,9 @@ export class GitHubMyPrsProvider extends BaseGitHubProvider {
         url: pr.html_url,
         group: repoName,
         reason: 'You are assigned to this PR',
-        state: status,
+        state: metadata?.status ?? 'Open',
         canonicalId: `github:pull:${repoName}#${pr.number}`,
+        relatedItems: metadata?.relatedItems,
       });
     }
 
@@ -169,11 +198,16 @@ export class GitHubMyPrsProvider extends BaseGitHubProvider {
   }
 
   /**
-   * Fetches PR details and reviews for each PR to determine its status.
+   * Fetches PR details, reviews, and related issue references for each PR.
    * Uses concurrent workers to limit API call rate.
    */
-  private async fetchPrStatuses(token: string, prs: GitHubIssue[], signal?: AbortSignal): Promise<Map<string, string>> {
-    const result = new Map<string, string>();
+  private async fetchPrMetadata(
+    token: string,
+    prs: GitHubIssue[],
+    repoNameMap: Map<string, string>,
+    signal?: AbortSignal,
+  ): Promise<Map<string, PrMetadata>> {
+    const result = new Map<string, PrMetadata>();
     const prsWithApiUrl = prs.filter(pr => pr.pull_request?.url);
     if (prsWithApiUrl.length === 0) {
       return result;
@@ -184,27 +218,34 @@ export class GitHubMyPrsProvider extends BaseGitHubProvider {
         throw createAbortError();
       }
       try {
-        const status = await this.fetchSinglePrStatus(token, pr, signal);
-        if (status) {
-          result.set(pr.html_url, status);
+        const repoName = repoNameMap.get(pr.html_url);
+        if (!repoName) {
+          return;
         }
+        const metadata = await this.fetchSinglePrMetadata(token, pr, repoName, signal);
+        result.set(pr.html_url, metadata);
       } catch (error) {
         if (error instanceof Error && error.name === 'AbortError' && signal?.aborted) { throw error; }
-        logger.debug(`Failed to fetch status for PR ${pr.html_url}: ${String(error)}`);
+        logger.debug(`Failed to fetch metadata for PR ${pr.html_url}: ${String(error)}`);
       }
     }, 3);
 
     return result;
   }
 
-  private async fetchSinglePrStatus(token: string, pr: GitHubIssue, signal?: AbortSignal): Promise<string | undefined> {
+  private async fetchSinglePrMetadata(
+    token: string,
+    pr: GitHubIssue,
+    repoName: string,
+    signal?: AbortSignal,
+  ): Promise<PrMetadata> {
     const headers = getGitHubAuthHeaders(token);
 
     // Fetch PR details (draft, mergeable state)
     const detailResponse = await fetch(pr.pull_request!.url, { headers, signal: combineSignals(signal, 30_000) });
     if (!detailResponse.ok) {
       logger.debug(`Failed to fetch PR detail for ${pr.html_url}: ${detailResponse.status}`);
-      return undefined;
+      return {};
     }
     const detail = (await detailResponse.json()) as PrDetail;
 
@@ -214,11 +255,98 @@ export class GitHubMyPrsProvider extends BaseGitHubProvider {
     const reviewsResponse = await fetch(reviewsUrl, { headers, signal: combineSignals(signal, 30_000) });
     if (!reviewsResponse.ok) {
       logger.debug(`Failed to fetch reviews for ${pr.html_url}: ${reviewsResponse.status}`);
-      return undefined;
+      return {};
     }
     const reviews = (await reviewsResponse.json()) as PrReview[];
 
-    return GitHubMyPrsProvider.determinePrStatus(detail, reviews);
+    let relatedItems: RelatedItemRef[] | undefined;
+    try {
+      relatedItems = await this.fetchRelatedItems(token, repoName, pr.number, signal);
+    } catch (error) {
+      if (error instanceof Error && error.name === 'AbortError' && signal?.aborted) {
+        throw error;
+      }
+      logger.debug(`Failed to fetch related items for PR ${pr.html_url}: ${String(error)}`);
+    }
+
+    return {
+      status: GitHubMyPrsProvider.determinePrStatus(detail, reviews),
+      relatedItems,
+    };
+  }
+
+  private async fetchRelatedItems(
+    token: string,
+    repoName: string,
+    prNumber: number,
+    signal?: AbortSignal,
+  ): Promise<RelatedItemRef[] | undefined> {
+    const [owner, repo] = repoName.split('/');
+    const response = await fetch('https://api.github.com/graphql', {
+      method: 'POST',
+      headers: {
+        ...getGitHubAuthHeaders(token),
+        'Content-Type': 'application/json',
+      },
+      signal: combineSignals(signal, 30_000),
+      body: JSON.stringify({
+        query: `query RelatedItems($owner: String!, $name: String!, $number: Int!) {
+          repository(owner: $owner, name: $name) {
+            pullRequest(number: $number) {
+              timelineItems(itemTypes: CROSS_REFERENCED_EVENT, first: 100) {
+                nodes {
+                  ... on CrossReferencedEvent {
+                    willCloseTarget
+                    source {
+                      __typename
+                      ... on Issue {
+                        number
+                        repository {
+                          nameWithOwner
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }`,
+        variables: { owner, name: repo, number: prNumber },
+      }),
+    });
+
+    if (!response.ok) {
+      logger.debug(`Failed to fetch related items for ${repoName}#${prNumber}: ${response.status}`);
+      return undefined;
+    }
+
+    const data = (await response.json()) as GraphQlResponse<CrossReferencedTimelineResponse>;
+    if (data.errors && data.errors.length > 0) {
+      logger.debug(`GraphQL returned errors for ${repoName}#${prNumber}: ${data.errors.map(error => error.message).join(', ')}`);
+      return undefined;
+    }
+
+    const links = new Map<string, RelatedItemRef>();
+    for (const node of data.data?.repository?.pullRequest?.timelineItems?.nodes ?? []) {
+      if (node.source?.__typename !== 'Issue') {
+        continue;
+      }
+      const nameWithOwner = node.source.repository?.nameWithOwner;
+      const number = node.source.number;
+      if (!nameWithOwner || typeof number !== 'number') {
+        continue;
+      }
+
+      const externalId = `${nameWithOwner}#${number}`;
+      const relation: RelatedItemRef['relation'] = node.willCloseTarget ? 'closes' : 'linked';
+      const existing = links.get(externalId);
+      if (!existing || relation === 'closes') {
+        links.set(externalId, { externalId, relation });
+      }
+    }
+
+    return links.size > 0 ? [...links.values()] : undefined;
   }
 
   /**

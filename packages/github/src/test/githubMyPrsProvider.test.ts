@@ -135,6 +135,70 @@ describe('GitHubMyPrsProvider', () => {
     expect(items[1].canonicalId).toBe('github:pull:owner/repo#2');
   });
 
+  it('emits related issue references for PR cross references', async () => {
+    const pr = createMockPr(101, 'Fix issue');
+
+    mockFetch.mockImplementation(async (url: string) => {
+      if (url.includes('search/issues') && url.includes('author:@me')) {
+        return mockSearchResponse([pr]);
+      }
+      if (url.includes('search/issues') && url.includes('assignee:@me')) {
+        return mockSearchResponse([]);
+      }
+      if (url.endsWith('/pulls/101')) {
+        return mockPrDetailResponse({ draft: false, mergeable_state: 'clean' });
+      }
+      if (url.endsWith('/pulls/101/reviews')) {
+        return mockReviewsResponse([{ state: 'APPROVED', user: { id: 1 }, submitted_at: '2025-01-01T00:00:00Z' }]);
+      }
+      if (url.includes('/graphql')) {
+        return {
+          ok: true,
+          json: async () => ({
+            data: {
+              repository: {
+                pullRequest: {
+                  timelineItems: {
+                    nodes: [
+                      {
+                        willCloseTarget: true,
+                        source: {
+                          __typename: 'Issue',
+                          number: 1,
+                          repository: { nameWithOwner: 'owner/repo' },
+                        },
+                      },
+                      {
+                        willCloseTarget: false,
+                        source: {
+                          __typename: 'Issue',
+                          number: 2,
+                          repository: { nameWithOwner: 'owner/repo' },
+                        },
+                      },
+                    ],
+                  },
+                },
+              },
+            },
+          }),
+        };
+      }
+      return mockFailedResponse(404);
+    });
+
+    const listener = vi.fn();
+    provider.onDidDiscoverItems(listener);
+    await provider.refresh();
+
+    const items = listener.mock.calls[0][0];
+    expect(items[0].state).toBe('Ready to merge');
+    expect(items[0].relatedItems).toEqual([
+      { externalId: 'owner/repo#1', relation: 'closes' },
+      { externalId: 'owner/repo#2', relation: 'linked' },
+    ]);
+  });
+
   it('uses global search and filters when repos configured', async () => {
     vi.mocked(workspace.getConfiguration).mockReturnValue({
       get: vi.fn((key: string, defaultValue?: any) => {

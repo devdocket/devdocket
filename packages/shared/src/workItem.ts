@@ -10,8 +10,10 @@
  * - `cleanup` — git branch and/or worktree was cleaned up.
  * - `cleanup-dismissed` — user declined cleanup prompt for this item.
  * - `version-updated` — a provider version change was suppressed because the item is in Queue or Focus.
+ * - `item-linked` — a relationship to another work item was created from provider data.
+ * - `item-unlinked` — a provider-driven relationship to another work item was removed.
  */
-export type ActivityType = 'created' | 'state-changed' | 'updated' | 'action-executed' | 'auto-completed' | 'work-started' | 'cleanup' | 'cleanup-dismissed' | 'version-updated';
+export type ActivityType = 'created' | 'state-changed' | 'updated' | 'action-executed' | 'auto-completed' | 'work-started' | 'cleanup' | 'cleanup-dismissed' | 'version-updated' | 'item-linked' | 'item-unlinked';
 
 /**
  * A single, immutable entry in a work item's activity log.
