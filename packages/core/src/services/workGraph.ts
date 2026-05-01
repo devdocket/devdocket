@@ -167,11 +167,6 @@ export class WorkGraph {
     return this.items.get(id);
   }
 
-  /** Find all work items with the given external ID, regardless of provider. */
-  findItemsByExternalId(externalId: string): WorkItem[] {
-    return this.getAll().filter(item => item.externalId === externalId);
-  }
-
   /** Find a work item by its provider-scoped provenance (provider ID + external ID). */
   findItemByProvenance(providerId: string, externalId: string): WorkItem | undefined {
     const id = this.provenanceIndex.get(WorkGraph.provenanceKey(providerId, externalId));
