@@ -322,8 +322,25 @@
         "icon": "$(rocket)"
       },
       {
+        "command": "devdocket.acceptAllFromInbox",
+        "title": "Accept All to Queue",
+        "category": "DevDocket",
+        "icon": "$(check)"
+      },
+      {
+        "command": "devdocket.acceptAllToFocusFromInbox",
+        "title": "Accept All to Focus",
+        "category": "DevDocket"
+      },
+      {
         "command": "devdocket.dismissFromInbox",
         "title": "Dismiss",
+        "category": "DevDocket",
+        "icon": "$(close)"
+      },
+      {
+        "command": "devdocket.dismissAllFromInbox",
+        "title": "Dismiss All",
         "category": "DevDocket",
         "icon": "$(close)"
       },
@@ -816,6 +833,31 @@
         {
           "command": "devdocket.acceptToFocusFromInbox",
           "when": "view == devdocket.inbox && viewItem =~ /inboxItem/",
+          "group": "1_actions"
+        },
+        {
+          "command": "devdocket.acceptAllFromInbox",
+          "when": "view == devdocket.inbox && viewItem =~ /inboxProvider|inboxGroup/",
+          "group": "inline"
+        },
+        {
+          "command": "devdocket.dismissAllFromInbox",
+          "when": "view == devdocket.inbox && viewItem =~ /inboxProvider|inboxGroup/",
+          "group": "inline"
+        },
+        {
+          "command": "devdocket.acceptAllFromInbox",
+          "when": "view == devdocket.inbox && viewItem =~ /inboxProvider|inboxGroup/",
+          "group": "1_actions"
+        },
+        {
+          "command": "devdocket.acceptAllToFocusFromInbox",
+          "when": "view == devdocket.inbox && viewItem =~ /inboxProvider|inboxGroup/",
+          "group": "1_actions"
+        },
+        {
+          "command": "devdocket.dismissAllFromInbox",
+          "when": "view == devdocket.inbox && viewItem =~ /inboxProvider|inboxGroup/",
           "group": "1_actions"
         },
         {

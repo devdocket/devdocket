@@ -17,6 +17,7 @@ import { WatcherService } from '../services/watcherService';
 import { WatcherRegistry } from '../services/watcherRegistry';
 import { PRWatcherRegistry } from '../services/prWatcherRegistry';
 import { registerWatchCommands } from './watchCommands';
+import { registerInboxCommands } from './inboxCommands';
 import { showProviderHealthQuickPick } from '../views/providerHealthStatusBar';
 import { isSafeUrl } from '../utils/url';
 
@@ -1149,12 +1150,6 @@ export function registerCommands(
       wrapCommand('Failed to move focus item down', (item) => handleFocusMoveDown(workGraph, item))),
     vscode.commands.registerCommand('devdocket.moveToQueue',
       wrapCommand('Failed to move item to queue', (item, selectedItems) => handleMoveToQueue(workGraph, item, selectedItems, revealer))),
-    vscode.commands.registerCommand('devdocket.acceptFromInbox',
-      wrapCommand('Failed to accept from inbox', (item: InboxElement, selectedItems?: InboxElement[]) => handleAcceptFromInbox(workGraph, stateStore, providerRegistry, item, selectedItems, revealer))),
-    vscode.commands.registerCommand('devdocket.acceptToFocusFromInbox',
-      wrapCommand('Failed to accept to focus from inbox', (item: InboxElement, selectedItems?: InboxElement[]) => handleAcceptToFocusFromInbox(workGraph, stateStore, providerRegistry, item, selectedItems, revealer))),
-    vscode.commands.registerCommand('devdocket.dismissFromInbox',
-      wrapCommand('Failed to dismiss from inbox', (item: InboxElement, selectedItems?: InboxElement[]) => handleDismissFromInbox(stateStore, providerRegistry, item, selectedItems))),
     vscode.commands.registerCommand('devdocket.acceptFromSources',
       wrapCommand('Failed to accept from sources', (item: SourcesElement, selectedItems?: SourcesElement[]) => handleAcceptFromSources(workGraph, stateStore, providerRegistry, item, selectedItems, revealer))),
     vscode.commands.registerCommand('devdocket.dismissFromSources',
@@ -1210,5 +1205,6 @@ export function registerCommands(
       }),
   );
 
+  registerInboxCommands(context, workGraph, stateStore, providerRegistry, revealer);
   registerWatchCommands(context, watcherRegistry, prWatcherRegistry, watcherService);
 }
