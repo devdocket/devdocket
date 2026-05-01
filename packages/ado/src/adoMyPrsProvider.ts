@@ -1,7 +1,7 @@
 import { combineSignals, runWorkerPool, type DiscoveredItem } from '@devdocket/shared';
 import { BaseAdoPrProvider, type AdoPullRequest } from './baseAdoPrProvider';
 import { logger } from './logger';
-import { OrgConfig } from './configParser';
+import type { OrgConfig } from './configParser';
 
 export class AdoMyPrsProvider extends BaseAdoPrProvider {
   readonly id = 'ado-my-prs';
@@ -39,6 +39,9 @@ export class AdoMyPrsProvider extends BaseAdoPrProvider {
 
       const detailUrl = `https://dev.azure.com/${encodeURIComponent(parsed.org)}/${encodeURIComponent(parsed.project)}/_apis/git/repositories/${encodeURIComponent(parsed.repo)}/pullrequests/${parsed.prId}?api-version=7.1`;
 
+      // runWorkerPool processes candidates concurrently, but each worker only writes back
+      // to the unique index captured when candidates was built, so mutating items[index]
+      // in place is safe here.
       try {
         const response = await fetch(detailUrl, {
           headers: { Authorization: `Bearer ${token}` },
