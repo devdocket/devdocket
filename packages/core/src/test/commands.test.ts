@@ -541,7 +541,7 @@ describe('registerCommands', () => {
       expect(vscode.env.clipboard.writeText).toHaveBeenCalledWith('https://provider-item.com');
     });
 
-    it('copies unsafe url-only item without validation', async () => {
+    it('copies non-http URLs without filtering (copy is not navigation)', async () => {
       await invoke('devdocket.copyUrl', { url: 'javascript:alert(1)' });
 
       expect(vscode.env.clipboard.writeText).toHaveBeenCalledWith('javascript:alert(1)');

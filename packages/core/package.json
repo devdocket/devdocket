@@ -259,7 +259,7 @@
         "command": "devdocket.copyUrl",
         "title": "Copy URL",
         "category": "DevDocket",
-        "icon": "$(clippy)"
+        "icon": "$(copy)"
       },
       {
         "command": "devdocket.runAction",

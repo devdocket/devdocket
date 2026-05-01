@@ -122,6 +122,7 @@ async function handleCopyUrl(workGraph: WorkGraph, item?: { id?: string; url?: s
     return;
   }
 
+  // Copy intentionally preserves non-http URLs because clipboard transfer is not a navigation action.
   await vscode.env.clipboard.writeText(url);
   vscode.window.setStatusBarMessage('DevDocket: URL copied to clipboard', 3000);
 }
