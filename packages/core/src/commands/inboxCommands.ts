@@ -475,8 +475,8 @@ async function handleAcceptFromInbox(
     return;
   }
 
-  await batchAcceptItems(workGraph, stateStore, items, 'inbox item');
-  for (const batchItem of items) {
+  const acceptedItems = await batchAcceptItems(workGraph, stateStore, items, 'inbox item');
+  for (const batchItem of acceptedItems) {
     await propagateStateToCanonicalPeers(batchItem, providerRegistry, stateStore, 'accepted');
   }
 }
