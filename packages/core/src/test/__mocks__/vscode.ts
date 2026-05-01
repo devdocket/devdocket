@@ -89,6 +89,7 @@ const window = {
     };
   }),
   createWebviewPanel: vi.fn(),
+  registerWebviewViewProvider: vi.fn(() => ({ dispose: vi.fn() })),
   createOutputChannel: vi.fn(() => ({
     appendLine: vi.fn(),
     append: vi.fn(),

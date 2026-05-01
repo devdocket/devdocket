@@ -210,8 +210,8 @@ export class SourcesTreeProvider implements vscode.TreeDataProvider<SourcesEleme
     }
 
     return result.sort((a, b) => {
-      const aLabel = a.kind === 'group' ? a.groupName : a.title;
-      const bLabel = b.kind === 'group' ? b.groupName : b.title;
+      const aLabel = a.kind === 'group' ? a.groupName : a.kind === 'item' ? a.title : a.label;
+      const bLabel = b.kind === 'group' ? b.groupName : b.kind === 'item' ? b.title : b.label;
       return aLabel.localeCompare(bLabel);
     });
   }

@@ -14,7 +14,7 @@ import { WatcherRegistry } from './services/watcherRegistry';
 import { PRWatcherRegistry } from './services/prWatcherRegistry';
 import { WatcherService } from './services/watcherService';
 import { WatchStore } from './storage/watchStore';
-import { InboxTreeProvider } from './views/inboxTreeProvider';
+import { InboxTreeProvider, type InboxItem } from './views/inboxTreeProvider';
 import { QueueTreeProvider } from './views/queueTreeProvider';
 import { FocusTreeProvider } from './views/focusTreeProvider';
 import { SourcesTreeProvider } from './views/sourcesTreeProvider';
@@ -23,6 +23,7 @@ import { WatchesTreeProvider } from './views/watchesTreeProvider';
 import { WatchesStatusBar } from './views/watchesStatusBar';
 import { ProviderHealthStatusBar } from './views/providerHealthStatusBar';
 import { WorkItemEditorPanel, PanelManager } from './views/workItemEditorPanel';
+import { MissionControlViewProvider } from './views/missionControlViewProvider';
 import { registerCommands } from './commands/commands';
 import { isSafeUrl } from './utils/url';
 import { ViewRevealer } from './services/viewRevealer';
@@ -141,12 +142,17 @@ export async function autoWatchAuthoredPRs(
     }
 
     try {
-      const prWatcher = prWatcherRegistry.findWatcherForUrl(item.url);
+      const itemUrl = item.url;
+      if (!itemUrl) {
+        continue;
+      }
+
+      const prWatcher = prWatcherRegistry.findWatcherForUrl(itemUrl);
       if (!prWatcher) {
         continue;
       }
 
-      const identifier = prWatcher.parsePRUrl(item.url);
+      const identifier = prWatcher.parsePRUrl(itemUrl);
       if (await watcherService.isPRWatched(identifier)) {
         continue;
       }
@@ -200,8 +206,7 @@ function createTreeViews(
   const inboxSelectionSub = inboxTreeView.onDidChangeSelection((e) => {
     void (async () => {
       const items = e.selection.filter(
-        (item): item is { kind: 'item'; providerId: string; externalId: string } =>
-          item.kind === 'item',
+        (item): item is InboxItem => item.kind === 'item',
       );
       if (items.length === 0) { return; }
       const changed = await inboxProvider.markSeenBatch(items);
@@ -526,6 +531,26 @@ export async function activate(context: vscode.ExtensionContext): Promise<DevDoc
   // Create status bar items
   const watchesStatusBar = new WatchesStatusBar(ws);
   const providerHealthStatusBar = new ProviderHealthStatusBar(pr);
+
+  const missionControlProvider = new MissionControlViewProvider(
+    context.extensionUri,
+    wg,
+    pr,
+    ss,
+    readStateStore,
+    ws,
+    ar,
+  );
+  context.subscriptions.push(
+    vscode.window.registerWebviewViewProvider(
+      MissionControlViewProvider.viewId,
+      missionControlProvider,
+      { webviewOptions: { retainContextWhenHidden: true } },
+    ),
+    wg.onDidChange(safeHandler('mc:workGraph', () => missionControlProvider.scheduleRefresh())),
+    pr.onDidChangeDiscoveredItems(safeHandler('mc:discovered', () => missionControlProvider.scheduleRefresh())),
+    ss.onDidChange(safeHandler('mc:stateStore', () => missionControlProvider.scheduleRefresh())),
+  );
 
   // Load persisted watches (must happen after tree views are registered to show restored watches)
   ws.loadPersistedWatches().catch(err => {

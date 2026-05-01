@@ -112,7 +112,7 @@ export async function showProviderHealthQuickPick(providerRegistry: ProviderRegi
                  health.status === 'healthy' ? '$(pass)' :
                  '$(circle-outline)';
     
-    let description = health.status;
+    let description: string = health.status;
     if (health.lastError) {
       description = `${health.status} — ${sanitizeError(health.lastError)}`;
     }
