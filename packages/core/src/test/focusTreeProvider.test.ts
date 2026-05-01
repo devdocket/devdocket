@@ -110,6 +110,17 @@ describe('FocusTreeProvider', () => {
       expect(actionableProvider.getTreeItem(item).contextValue).toBe('paused.hasUrl.watchable.hasActions');
     });
 
+    it('should not append hasActions when canRun throws', () => {
+      const actionRegistry = new ActionRegistry();
+      actionRegistry.register(createMockAction('throwing', () => {
+        throw new Error('boom');
+      }));
+      const actionableProvider = new FocusTreeProvider(workGraph as any, undefined, actionRegistry);
+      const item = makeItem({ state: WorkItemState.InProgress });
+
+      expect(actionableProvider.getTreeItem(item).contextValue).toBe('active');
+    });
+
     it('should not append hasActions when no registered action can run', () => {
       const actionRegistry = new ActionRegistry();
       actionRegistry.register(createMockAction('paused-only', (item) => item.state === WorkItemState.Paused));

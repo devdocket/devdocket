@@ -64,7 +64,7 @@ export class FocusTreeProvider extends WorkItemViewProvider implements vscode.Tr
     const base = item.state === WorkItemState.Paused ? 'paused' : 'active';
     const urlSuffix = item.url ? '.hasUrl' : '';
     const watchableSuffix = item.url && this.isWatchable?.(item.url) ? '.watchable' : '';
-    const hasActionsSuffix = this.actionRegistry?.getActionsFor(item).length ? '.hasActions' : '';
+    const hasActionsSuffix = this.actionRegistry?.hasActionsFor(item) ? '.hasActions' : '';
     treeItem.contextValue = `${base}${urlSuffix}${watchableSuffix}${hasActionsSuffix}`;
 
     treeItem.command = { command: 'devdocket.editItem', title: 'Open Details', arguments: [item] };
