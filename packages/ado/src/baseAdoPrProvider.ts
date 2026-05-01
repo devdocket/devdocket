@@ -196,9 +196,7 @@ export abstract class BaseAdoPrProvider extends BaseProvider {
         if (abortedResult) {
           throw abortedResult.reason;
         }
-        const abortError = new Error('The operation was aborted.');
-        abortError.name = 'AbortError';
-        throw abortError;
+        throw createAbortError();
       }
     }
 
