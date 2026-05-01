@@ -1,0 +1,112 @@
+import { useState } from 'preact/hooks';
+import type { SourceGroupData, SourceProviderData } from '../../shared/types';
+import { SourceItem } from './SourceItem';
+
+interface SourcesViewProps {
+  providers: SourceProviderData[];
+  onAcceptItem: (providerId: string, externalId: string) => void;
+}
+
+export function SourcesView({ providers, onAcceptItem }: SourcesViewProps) {
+  if (providers.length === 0) {
+    return <div class="empty-state">No sources yet</div>;
+  }
+
+  return (
+    <div class="sources-tab">
+      <div class="sources-list">
+        {providers.map(provider => (
+          <ProviderSection
+            key={provider.providerId}
+            provider={provider}
+            onAcceptItem={onAcceptItem}
+          />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+interface ProviderSectionProps {
+  provider: SourceProviderData;
+  onAcceptItem: (providerId: string, externalId: string) => void;
+}
+
+function ProviderSection({ provider, onAcceptItem }: ProviderSectionProps) {
+  const [collapsed, setCollapsed] = useState(false);
+  const itemCount = provider.groups.reduce((total, group) => total + group.items.length, 0);
+
+  return (
+    <section class={`source-provider ${provider.isHealthy ? '' : 'unhealthy'}`.trim()}>
+      <button
+        type="button"
+        class="source-provider-header"
+        onClick={() => setCollapsed(value => !value)}
+        aria-expanded={!collapsed}
+      >
+        <span class="source-provider-title">
+          <span>{provider.label}</span>
+          {!provider.isHealthy ? <span class="health-warning" aria-label="Provider unhealthy">⚠</span> : null}
+        </span>
+        <span class="source-provider-meta">
+          <span>({itemCount})</span>
+          <span class="source-provider-toggle" aria-hidden="true">{collapsed ? '▸' : '▾'}</span>
+        </span>
+      </button>
+      {!collapsed ? (
+        <div class="source-provider-groups">
+          {provider.groups.length === 0 ? (
+            <div class="source-empty">No items found</div>
+          ) : (
+            provider.groups.map(group => (
+              <GroupSection
+                key={`${provider.providerId}-${group.name}`}
+                providerId={provider.providerId}
+                group={group}
+                onAcceptItem={onAcceptItem}
+              />
+            ))
+          )}
+        </div>
+      ) : null}
+    </section>
+  );
+}
+
+interface GroupSectionProps {
+  providerId: string;
+  group: SourceGroupData;
+  onAcceptItem: (providerId: string, externalId: string) => void;
+}
+
+function GroupSection({ providerId, group, onAcceptItem }: GroupSectionProps) {
+  const [collapsed, setCollapsed] = useState(false);
+
+  return (
+    <section class="source-group">
+      <button
+        type="button"
+        class="source-group-header"
+        onClick={() => setCollapsed(value => !value)}
+        aria-expanded={!collapsed}
+      >
+        <span class="source-group-title">{group.name}</span>
+        <span class="source-group-meta">
+          <span>({group.items.length})</span>
+          <span class="source-group-toggle" aria-hidden="true">{collapsed ? '▸' : '▾'}</span>
+        </span>
+      </button>
+      {!collapsed ? (
+        <div class="source-group-items">
+          {group.items.map(item => (
+            <SourceItem
+              key={`${item.providerId}-${item.externalId}`}
+              item={item}
+              onAccept={() => onAcceptItem(providerId, item.externalId)}
+            />
+          ))}
+        </div>
+      ) : null}
+    </section>
+  );
+}

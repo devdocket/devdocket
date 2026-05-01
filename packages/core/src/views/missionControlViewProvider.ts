@@ -12,7 +12,15 @@ import { ReadStateStore } from '../storage/readStateStore';
 import { isSafeUrl } from '../utils/url';
 import { buildTierColorCss } from '../webview/shared/colors';
 import { formatRelativeTime } from '../webview/shared/timeUtils';
-import type { BadgeData, ItemCardData, TierData, WebviewMessage } from './missionControlTypes';
+import type {
+  BadgeData,
+  ItemCardData,
+  SourceGroupData,
+  SourceItemData,
+  SourceProviderData,
+  TierData,
+  WebviewMessage,
+} from './missionControlTypes';
 
 export class MissionControlViewProvider implements vscode.WebviewViewProvider {
   public static readonly viewId = 'devdocket.missionControl';
@@ -75,7 +83,7 @@ export class MissionControlViewProvider implements vscode.WebviewViewProvider {
     });
     void this.view.webview.postMessage({
       type: 'updateSources',
-      providers: [],
+      providers: this.buildSourcesData(),
     });
   }
 
@@ -146,6 +154,43 @@ export class MissionControlViewProvider implements vscode.WebviewViewProvider {
       { id: 'paused', name: 'Paused', icon: '⏸', items: pausedItems, collapsed: false },
       { id: 'done', name: 'Done', icon: '✓', items: doneItems, collapsed: true },
     ].filter(tier => tier.items.length > 0);
+  }
+
+  private buildSourcesData(): SourceProviderData[] {
+    return Array.from(this.providerRegistry.getAllDiscoveredItems())
+      .map(([providerId, items]) => {
+        const groups = new Map<string, SourceItemData[]>();
+
+        for (const item of items) {
+          const groupName = item.group?.trim() || 'Ungrouped';
+          const state = this.stateStore.getState(providerId, item.externalId);
+          const groupItems = groups.get(groupName) ?? [];
+          groupItems.push({
+            externalId: item.externalId,
+            providerId,
+            title: item.title,
+            badges: this.buildBadges(providerId, item),
+            isAccepted: state === 'accepted',
+            isDismissed: state === 'dismissed',
+          });
+          groups.set(groupName, groupItems);
+        }
+
+        const sortedGroups: SourceGroupData[] = Array.from(groups.entries())
+          .map(([name, groupItems]) => ({
+            name,
+            items: groupItems.sort((a, b) => a.title.localeCompare(b.title)),
+          }))
+          .sort((a, b) => a.name.localeCompare(b.name));
+
+        return {
+          providerId,
+          label: this.providerRegistry.getProviderLabel(providerId),
+          isHealthy: this.providerRegistry.getProviderHealth(providerId).status !== 'unhealthy',
+          groups: sortedGroups,
+        };
+      })
+      .sort((a, b) => a.label.localeCompare(b.label));
   }
 
   private buildDiscoveredItemMap(allDiscoveredItems: Iterable<[string, readonly DiscoveredItem[]]>): Map<string, DiscoveredItem> {
@@ -460,10 +505,12 @@ export class MissionControlViewProvider implements vscode.WebviewViewProvider {
       display: flex;
       flex-direction: column;
     }
-    .my-work-tab {
+    .my-work-tab,
+    .sources-tab {
       padding: 12px;
     }
-    .tiers {
+    .tiers,
+    .sources-list {
       display: flex;
       flex-direction: column;
       gap: 12px;
@@ -493,7 +540,10 @@ export class MissionControlViewProvider implements vscode.WebviewViewProvider {
       font: inherit;
     }
     .tier-header:focus-visible,
-    .item-card:focus-visible {
+    .source-provider-header:focus-visible,
+    .source-group-header:focus-visible,
+    .item-card:focus-visible,
+    .source-item:focus-visible {
       outline: 1px solid var(--vscode-focusBorder);
       outline-offset: 2px;
     }
@@ -511,6 +561,118 @@ export class MissionControlViewProvider implements vscode.WebviewViewProvider {
       flex-direction: column;
       gap: 8px;
       margin-top: 10px;
+    }
+    .source-provider,
+    .source-group {
+      border-left: 3px solid transparent;
+      border-radius: 6px;
+      background: var(--vscode-editorWidget-background, var(--vscode-sideBar-background));
+      padding: 10px 12px;
+    }
+    .source-provider {
+      border-left-color: var(--vscode-textLink-foreground);
+    }
+    .source-provider.unhealthy {
+      border-left-color: var(--vscode-problemsWarningIcon-foreground, var(--vscode-editorWarning-foreground));
+    }
+    .source-provider-header,
+    .source-group-header {
+      width: 100%;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      background: transparent;
+      border: none;
+      color: inherit;
+      cursor: pointer;
+      padding: 0;
+      text-align: left;
+      font: inherit;
+    }
+    .source-provider-title,
+    .source-group-title {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      min-width: 0;
+      flex: 1;
+    }
+    .source-provider-meta,
+    .source-group-meta {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      color: var(--vscode-descriptionForeground);
+    }
+    .source-provider-toggle,
+    .source-group-toggle {
+      color: var(--vscode-descriptionForeground);
+    }
+    .source-provider-groups,
+    .source-group-items {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      margin-top: 10px;
+    }
+    .source-item {
+      width: 100%;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      padding: 10px 12px;
+      border: none;
+      border-left: 3px solid transparent;
+      border-radius: 6px;
+      background: var(--vscode-list-inactiveSelectionBackground, rgba(127, 127, 127, 0.08));
+      color: inherit;
+      cursor: pointer;
+      text-align: left;
+      font: inherit;
+    }
+    .source-item.accepted {
+      border-left-color: var(--vscode-testing-iconPassed, var(--vscode-charts-green));
+    }
+    .source-item.dismissed {
+      opacity: 0.65;
+    }
+    .source-item:disabled {
+      cursor: default;
+    }
+    .source-item:hover:not(:disabled) {
+      background: var(--vscode-list-hoverBackground, rgba(127, 127, 127, 0.12));
+    }
+    .source-item-line {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 8px;
+    }
+    .source-item-title-wrap {
+      display: flex;
+      align-items: flex-start;
+      gap: 6px;
+      min-width: 0;
+      flex: 1;
+    }
+    .source-item-title {
+      font-weight: 600;
+      word-break: break-word;
+    }
+    .source-item-status {
+      color: var(--vscode-descriptionForeground);
+      white-space: nowrap;
+    }
+    .source-item-status.accepted-mark {
+      color: var(--vscode-testing-iconPassed, var(--vscode-charts-green));
+      font-weight: 600;
+    }
+    .source-empty {
+      color: var(--vscode-descriptionForeground);
+      font-style: italic;
+    }
+    .health-warning {
+      color: var(--vscode-problemsWarningIcon-foreground, var(--vscode-editorWarning-foreground));
     }
     .item-card {
       width: 100%;

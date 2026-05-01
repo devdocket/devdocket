@@ -549,6 +549,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<DevDoc
     ),
     wg.onDidChange(safeHandler('mc:workGraph', () => missionControlProvider.scheduleRefresh())),
     pr.onDidChangeDiscoveredItems(safeHandler('mc:discovered', () => missionControlProvider.scheduleRefresh())),
+    pr.onDidChangeProviderHealth(safeHandler('mc:health', () => missionControlProvider.scheduleRefresh())),
     ss.onDidChange(safeHandler('mc:stateStore', () => missionControlProvider.scheduleRefresh())),
   );
 

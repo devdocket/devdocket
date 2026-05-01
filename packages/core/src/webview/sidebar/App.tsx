@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'preact/hooks';
 import type { ExtensionMessage, SourceProviderData, TierData } from '../shared/types';
 import { postMessage } from '../shared/messaging';
+import { SourcesView } from './components/SourcesView';
 import { TabBar } from './components/TabBar';
 import { TierSection } from './components/TierSection';
 
@@ -40,7 +41,14 @@ export function App() {
     <div class="mission-control">
       <TabBar activeTab={activeTab} onTabSwitch={handleTabSwitch} />
       <div class="tab-content">
-        {activeTab === 'myWork' ? (
+        {activeTab === 'sources' ? (
+          <SourcesView
+            providers={sources}
+            onAcceptItem={(providerId, externalId) =>
+              postMessage({ type: 'acceptItem', providerId, externalId })
+            }
+          />
+        ) : (
           <div class="my-work-tab">
             {tiers.length === 0 ? (
               <div class="empty-state">No items yet</div>
@@ -60,14 +68,6 @@ export function App() {
                   />
                 ))}
               </div>
-            )}
-          </div>
-        ) : (
-          <div class="sources-tab">
-            {sources.length === 0 ? (
-              <div class="empty-state">No sources yet</div>
-            ) : (
-              <div class="placeholder">Sources content coming in Phase 3</div>
             )}
           </div>
         )}
