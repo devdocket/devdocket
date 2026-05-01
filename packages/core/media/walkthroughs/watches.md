@@ -13,7 +13,7 @@ If you have a provider-linked item in **Focus** or **Queue**:
 
 You can also add a watch manually:
 - Open the Command Palette and run **DevDocket: Watch Pipeline Run** or **DevDocket: Watch Pull Request**
-- Or use the button below to start watching a pipeline run now
+- Or use the buttons below to start watching now
 
 ---
 
