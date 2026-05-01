@@ -111,4 +111,24 @@ describe('LinkingService', () => {
     });
     expect(workGraph.getItem(pr.id)?.activityLog?.at(-1)?.type).toBe('item-unlinked');
   });
+
+  it('skips queued reconciliation after disposal', async () => {
+    const localWorkGraph = new WorkGraph(createMockStore());
+    await localWorkGraph.load();
+    const localLinkStore = new ItemLinkStore(new MockMemento());
+    await localLinkStore.load();
+    const localProviderRegistry = createMockProviderRegistry();
+    const localLinkingService = new LinkingService(localWorkGraph, localProviderRegistry as any, localLinkStore);
+
+    localProviderRegistry.getAllDiscoveredItems.mockClear();
+    localLinkingService.dispose();
+
+    await new Promise(resolve => setTimeout(resolve, 0));
+
+    expect(localProviderRegistry.getAllDiscoveredItems).not.toHaveBeenCalled();
+
+    localProviderRegistry.dispose();
+    localLinkStore.dispose();
+    localWorkGraph.dispose();
+  });
 });

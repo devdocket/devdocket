@@ -42,6 +42,10 @@ export class LinkingService implements vscode.Disposable {
   }
 
   private async reconcile(): Promise<void> {
+    if (this.disposed) {
+      return;
+    }
+
     if (this.reconcileInFlight) {
       this.reconcileAgain = true;
       return;
