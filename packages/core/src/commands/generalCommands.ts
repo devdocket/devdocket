@@ -110,23 +110,6 @@ async function handleOpenInBrowser(workGraph: WorkGraph, item?: { id?: string; u
   }
 }
 
-async function handleCopyUrl(workGraph: WorkGraph, item?: { id?: string; url?: string }): Promise<void> {
-  if (!item || (!item.id && !item.url)) {
-    void vscode.window.showWarningMessage('DevDocket: Select an item to copy its URL.');
-    return;
-  }
-  const workItem = item.id ? workGraph.getItem(item.id) : undefined;
-  const url = workItem?.url ?? item.url;
-  if (!url) {
-    void vscode.window.showWarningMessage('This item has no URL to copy.');
-    return;
-  }
-
-  // Copy intentionally preserves non-http URLs because clipboard transfer is not a navigation action.
-  await vscode.env.clipboard.writeText(url);
-  vscode.window.setStatusBarMessage('DevDocket: URL copied to clipboard', 3000);
-}
-
 async function handleRunAction(
   workGraph: WorkGraph,
   actionRegistry: ActionRegistry,
@@ -190,8 +173,6 @@ export function registerGeneralCommands(
       wrapCommand('Failed to open editor', (item) => handleEditItem(context, workGraph, providerRegistry, labelCache, item))),
     vscode.commands.registerCommand('devdocket.openInBrowser',
       wrapCommand('Failed to open in browser', (item) => handleOpenInBrowser(workGraph, item))),
-    vscode.commands.registerCommand('devdocket.copyUrl',
-      wrapCommand('Failed to copy URL', (item) => handleCopyUrl(workGraph, item))),
     vscode.commands.registerCommand('devdocket.runAction',
       wrapCommand('Failed to run action', (item) => handleRunAction(workGraph, actionRegistry, item))),
     vscode.commands.registerCommand('devdocket.showProviderHealthQuickPick',
