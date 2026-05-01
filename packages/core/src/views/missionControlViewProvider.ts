@@ -549,6 +549,17 @@ export class MissionControlViewProvider implements vscode.WebviewViewProvider {
       display: flex;
       flex-direction: column;
     }
+    .sr-only {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      padding: 0;
+      margin: -1px;
+      overflow: hidden;
+      clip: rect(0, 0, 0, 0);
+      white-space: nowrap;
+      border: 0;
+    }
     .my-work-tab,
     .sources-tab {
       padding: 12px;
@@ -608,11 +619,14 @@ export class MissionControlViewProvider implements vscode.WebviewViewProvider {
     .tier-header-action:focus-visible,
     .source-provider-header:focus-visible,
     .source-group-header:focus-visible,
-    .item-card-main:focus-visible,
     .source-item:focus-visible,
     .item-action-btn:focus-visible {
       outline: 1px solid var(--vscode-focusBorder);
       outline-offset: 2px;
+    }
+    .item-card:focus-visible {
+      outline: 1px solid var(--vscode-focusBorder);
+      outline-offset: -1px;
     }
     .tier-count,
     .tier-toggle,
@@ -745,6 +759,7 @@ export class MissionControlViewProvider implements vscode.WebviewViewProvider {
       border-left: 3px solid transparent;
       border-radius: 6px;
       background: var(--vscode-list-inactiveSelectionBackground, rgba(127, 127, 127, 0.08));
+      cursor: pointer;
     }
     .item-card-main {
       width: 100%;
@@ -781,11 +796,13 @@ export class MissionControlViewProvider implements vscode.WebviewViewProvider {
       display: flex;
       gap: 4px;
       opacity: 0;
+      pointer-events: none;
       transition: opacity 0.15s;
     }
     .item-card:hover .item-actions,
-    .item-card:focus-within .item-actions {
+    .item-card.actions-open .item-actions {
       opacity: 1;
+      pointer-events: auto;
     }
     .item-action-btn {
       background: var(--vscode-button-secondaryBackground, rgba(127,127,127,0.2));

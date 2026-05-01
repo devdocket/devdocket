@@ -37,7 +37,11 @@ function ProviderSection({ provider, onAcceptItem }: ProviderSectionProps) {
   const itemCount = provider.groups.reduce((total, group) => total + group.items.length, 0);
 
   return (
-    <section class={`source-provider ${provider.isHealthy ? '' : 'unhealthy'}`.trim()}>
+    <section
+      class={`source-provider ${provider.isHealthy ? '' : 'unhealthy'}`.trim()}
+      role="group"
+      aria-label={provider.label}
+    >
       <button
         type="button"
         class="source-provider-header"
@@ -81,9 +85,10 @@ interface GroupSectionProps {
 
 function GroupSection({ providerId, group, onAcceptItem }: GroupSectionProps) {
   const [collapsed, setCollapsed] = useState(false);
+  const itemCountLabel = `${group.name}, ${group.items.length} item${group.items.length === 1 ? '' : 's'}`;
 
   return (
-    <section class="source-group">
+    <section class="source-group" role="group" aria-label={itemCountLabel}>
       <button
         type="button"
         class="source-group-header"

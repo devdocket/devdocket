@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'preact/hooks';
+import { useEffect, useRef, useState } from 'preact/hooks';
 import type { ExtensionMessage, SourceProviderData, TierData } from '../shared/types';
 import { postMessage } from '../shared/messaging';
 import { SourcesView } from './components/SourcesView';
@@ -10,14 +10,40 @@ export function App() {
   const [tiers, setTiers] = useState<TierData[]>([]);
   const [sources, setSources] = useState<SourceProviderData[]>([]);
   const [selectedItemId, setSelectedItemId] = useState<string | null>(null);
+  const [announcement, setAnnouncement] = useState('');
+  const previousTiersRef = useRef<TierData[] | undefined>(undefined);
+  const announcementFrameRef = useRef<number | undefined>(undefined);
+
+  const announce = (message?: string) => {
+    if (!message) {
+      return;
+    }
+
+    if (announcementFrameRef.current !== undefined) {
+      cancelAnimationFrame(announcementFrameRef.current);
+    }
+
+    setAnnouncement('');
+    announcementFrameRef.current = requestAnimationFrame(() => {
+      setAnnouncement(message);
+      announcementFrameRef.current = undefined;
+    });
+  };
 
   useEffect(() => {
     const handler = (event: MessageEvent<ExtensionMessage>) => {
       const msg = event.data;
       switch (msg.type) {
-        case 'updateItems':
-          setTiers(msg.tiers);
+        case 'updateItems': {
+          const nextTiers = msg.tiers;
+          const previousTiers = previousTiersRef.current;
+          if (previousTiers) {
+            announce(buildLiveAnnouncement(previousTiers, nextTiers));
+          }
+          previousTiersRef.current = nextTiers;
+          setTiers(nextTiers);
           break;
+        }
         case 'updateSources':
           setSources(msg.providers);
           break;
@@ -28,8 +54,14 @@ export function App() {
           break;
       }
     };
+
     window.addEventListener('message', handler);
-    return () => window.removeEventListener('message', handler);
+    return () => {
+      window.removeEventListener('message', handler);
+      if (announcementFrameRef.current !== undefined) {
+        cancelAnimationFrame(announcementFrameRef.current);
+      }
+    };
   }, []);
 
   const handleTabSwitch = (tab: 'myWork' | 'sources') => {
@@ -44,6 +76,9 @@ export function App() {
         onTabSwitch={handleTabSwitch}
         onCreateItem={() => postMessage({ type: 'createItem' })}
       />
+      <div class="sr-only" role="status" aria-live="polite" aria-atomic="true">
+        {announcement}
+      </div>
       <div class="tab-content">
         {activeTab === 'sources' ? (
           <div
@@ -94,4 +129,74 @@ export function App() {
       </div>
     </div>
   );
+}
+
+interface ItemLocation {
+  title: string;
+  tierId: string;
+  tierName: string;
+}
+
+function buildLiveAnnouncement(previousTiers: TierData[], nextTiers: TierData[]): string | undefined {
+  const messages: string[] = [];
+  const incomingDelta = getIncomingCount(nextTiers) - getIncomingCount(previousTiers);
+  if (incomingDelta > 0) {
+    messages.push(`${incomingDelta} new incoming item${incomingDelta === 1 ? '' : 's'}`);
+  }
+
+  const movedItems = findMovedItems(previousTiers, nextTiers);
+  if (movedItems.length === 1) {
+    messages.push(`${movedItems[0].title} moved to ${movedItems[0].tierName}`);
+  } else if (movedItems.length > 1) {
+    const destinationCounts = new Map<string, { count: number; tierName: string }>();
+    for (const item of movedItems) {
+      const destination = destinationCounts.get(item.tierId) ?? { count: 0, tierName: item.tierName };
+      destination.count += 1;
+      destinationCounts.set(item.tierId, destination);
+    }
+
+    if (destinationCounts.size === 1) {
+      const [{ count, tierName }] = Array.from(destinationCounts.values());
+      messages.push(`${count} items moved to ${tierName}`);
+    } else {
+      messages.push(`${movedItems.length} items changed state`);
+    }
+  }
+
+  return messages.length > 0 ? messages.join('. ') : undefined;
+}
+
+function getIncomingCount(tiers: TierData[]): number {
+  return tiers.find(tier => tier.id === 'incoming')?.items.length ?? 0;
+}
+
+function findMovedItems(previousTiers: TierData[], nextTiers: TierData[]): ItemLocation[] {
+  const previousLocations = buildItemLocations(previousTiers);
+  const nextLocations = buildItemLocations(nextTiers);
+  const movedItems: ItemLocation[] = [];
+
+  for (const [itemId, nextLocation] of nextLocations) {
+    const previousLocation = previousLocations.get(itemId);
+    if (previousLocation && previousLocation.tierId !== nextLocation.tierId) {
+      movedItems.push(nextLocation);
+    }
+  }
+
+  return movedItems;
+}
+
+function buildItemLocations(tiers: TierData[]): Map<string, ItemLocation> {
+  const locations = new Map<string, ItemLocation>();
+
+  for (const tier of tiers) {
+    for (const item of tier.items) {
+      locations.set(item.id, {
+        title: item.title,
+        tierId: tier.id,
+        tierName: tier.name,
+      });
+    }
+  }
+
+  return locations;
 }

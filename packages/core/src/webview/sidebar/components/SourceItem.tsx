@@ -16,7 +16,7 @@ export function SourceItem({ item, onAccept }: SourceItemProps) {
       class={`source-item ${item.isAccepted ? 'accepted' : ''} ${item.isDismissed ? 'dismissed' : ''}`.trim()}
       onClick={item.isAccepted ? undefined : onAccept}
       disabled={item.isAccepted}
-      aria-label={item.isAccepted ? `${item.title} accepted` : `Accept ${item.title}`}
+      aria-label={buildSourceItemAriaLabel(item)}
     >
       <div class="source-item-line">
         <div class="source-item-title-wrap">
@@ -33,4 +33,11 @@ export function SourceItem({ item, onAccept }: SourceItemProps) {
       ) : null}
     </button>
   );
+}
+
+function buildSourceItemAriaLabel(item: SourceItemData): string {
+  const status = item.isAccepted ? 'accepted' : item.isDismissed ? 'dismissed' : 'available';
+  const badgeLabels = item.badges.map(badge => badge.label);
+
+  return [item.title, status, ...badgeLabels].join(', ');
 }
