@@ -394,6 +394,8 @@ function wireEvents(
       logger.error('Error syncing provider descriptions', err);
     }
 
+    const refreshTasks: Promise<void>[] = [];
+
     const watchConfig = vscode.workspace.getConfiguration('devDocket.watches');
     if (watchConfig.get<boolean>('autoWatchAuthoredPRs', true)) {
       const prevAutoWatch = autoWatchControllers.get(providerId);
@@ -402,32 +404,42 @@ function wireEvents(
       }
       const autoWatchController = new AbortController();
       autoWatchControllers.set(providerId, autoWatchController);
-      try {
-        await autoWatchAuthoredPRs(providerId, providerRegistry, prWatcherRegistry, watcherService, autoWatchController.signal);
-      } finally {
-        if (autoWatchControllers.get(providerId) === autoWatchController) {
-          autoWatchControllers.delete(providerId);
+      refreshTasks.push((async () => {
+        try {
+          await autoWatchAuthoredPRs(providerId, providerRegistry, prWatcherRegistry, watcherService, autoWatchController.signal);
+        } finally {
+          if (autoWatchControllers.get(providerId) === autoWatchController) {
+            autoWatchControllers.delete(providerId);
+          }
         }
-      }
+      })());
     }
 
     const config = vscode.workspace.getConfiguration('devDocket');
-    if (!config.get<boolean>('autoCompleteOnClose', true)) {
-      return;
+    if (config.get<boolean>('autoCompleteOnClose', true)) {
+      // Abort any in-flight check for this provider
+      const prev = autoCompleteControllers.get(providerId);
+      if (prev) {
+        prev.abort();
+      }
+      const controller = new AbortController();
+      autoCompleteControllers.set(providerId, controller);
+      refreshTasks.push((async () => {
+        try {
+          const completedTitles = await checkAutoComplete(providerId, workGraph, providerRegistry, controller.signal);
+          showAutoCompleteNotification(completedTitles);
+        } finally {
+          if (autoCompleteControllers.get(providerId) === controller) {
+            autoCompleteControllers.delete(providerId);
+          }
+        }
+      })());
     }
-    // Abort any in-flight check for this provider
-    const prev = autoCompleteControllers.get(providerId);
-    if (prev) {
-      prev.abort();
-    }
-    const controller = new AbortController();
-    autoCompleteControllers.set(providerId, controller);
-    try {
-      const completedTitles = await checkAutoComplete(providerId, workGraph, providerRegistry, controller.signal);
-      showAutoCompleteNotification(completedTitles);
-    } finally {
-      if (autoCompleteControllers.get(providerId) === controller) {
-        autoCompleteControllers.delete(providerId);
+
+    const results = await Promise.allSettled(refreshTasks);
+    for (const result of results) {
+      if (result.status === 'rejected') {
+        logger.error(`Error running provider refresh follow-up for ${providerId}`, result.reason);
       }
     }
   }));
