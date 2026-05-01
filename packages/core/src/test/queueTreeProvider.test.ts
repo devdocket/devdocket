@@ -228,6 +228,17 @@ describe('QueueTreeProvider', () => {
       expect(actionableProvider.getTreeItem(item).contextValue).toBe('queueItem.hasUrl.watchable.hasActions');
     });
 
+    it('does not append hasActions when canRun throws', async () => {
+      const actionRegistry = new ActionRegistry();
+      actionRegistry.register(createMockAction('throwing', () => {
+        throw new Error('boom');
+      }));
+      const actionableProvider = new QueueTreeProvider(graph, undefined, actionRegistry);
+      const item = await graph.createItem({ title: 'Throwing action' });
+
+      expect(actionableProvider.getTreeItem(item).contextValue).toBe('queueItem');
+    });
+
     it('sets icon to "remote" when item has providerId', async () => {
       const item = await graph.createItem(
         { title: 'Provider item' },

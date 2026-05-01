@@ -107,6 +107,33 @@ describe('ActionRegistry', () => {
     expect(actions).toHaveLength(0);
   });
 
+  it('returns true from hasActionsFor when an action can run', () => {
+    const item = createWorkItem({ providerId: 'github' });
+    registry.register(createMockAction('github-only', (i) => i.providerId === 'github'));
+
+    expect(registry.hasActionsFor(item)).toBe(true);
+  });
+
+  it('short-circuits hasActionsFor after the first matching action', () => {
+    const item = createWorkItem();
+    const skippedCanRun = vi.fn(() => false);
+
+    registry.register(createMockAction('first-match', () => true));
+    registry.register(createMockAction('skipped', skippedCanRun));
+
+    expect(registry.hasActionsFor(item)).toBe(true);
+    expect(skippedCanRun).not.toHaveBeenCalled();
+  });
+
+  it('returns false from hasActionsFor when canRun throws', () => {
+    const item = createWorkItem();
+    registry.register(createMockAction('throwing', () => {
+      throw new Error('boom');
+    }));
+
+    expect(registry.hasActionsFor(item)).toBe(false);
+  });
+
   it('clears all actions on dispose', () => {
     registry.register(createMockAction('a1'));
     registry.register(createMockAction('a2'));

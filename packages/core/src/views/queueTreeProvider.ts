@@ -54,7 +54,7 @@ export class QueueTreeProvider extends WorkItemViewProvider implements vscode.Tr
     treeItem.tooltip = buildWorkItemTooltip(item, title, { showState: false, notesStyle: 'plain' });
     const urlSuffix = item.url ? '.hasUrl' : '';
     const watchableSuffix = item.url && this.isWatchable?.(item.url) ? '.watchable' : '';
-    const hasActionsSuffix = this.actionRegistry?.getActionsFor(item).length ? '.hasActions' : '';
+    const hasActionsSuffix = this.actionRegistry?.hasActionsFor(item) ? '.hasActions' : '';
     treeItem.contextValue = `queueItem${urlSuffix}${watchableSuffix}${hasActionsSuffix}`;
     treeItem.iconPath = new vscode.ThemeIcon(item.providerId ? 'remote' : 'circle-filled');
     treeItem.command = { command: 'devdocket.editItem', title: 'Open Details', arguments: [item] };

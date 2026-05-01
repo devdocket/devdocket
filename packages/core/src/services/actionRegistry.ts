@@ -58,6 +58,29 @@ export class ActionRegistry {
   }
 
   /**
+   * Determine whether any registered action can run for a given work item.
+   *
+   * This is intended for rendering paths that only need a yes/no answer and
+   * must not allow third-party action predicates to break the UI.
+   *
+   * @param item - The work item to match actions against.
+   * @returns `true` when at least one action can run for the item.
+   */
+  hasActionsFor(item: WorkItem): boolean {
+    try {
+      return this.registry.getAll().some((action) => {
+        try {
+          return action.canRun(item);
+        } catch {
+          return false;
+        }
+      });
+    } catch {
+      return false;
+    }
+  }
+
+  /**
    * Look up a registered action by its unique identifier.
    *
    * @param id - The action identifier to search for.
