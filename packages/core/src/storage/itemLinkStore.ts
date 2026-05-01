@@ -101,6 +101,9 @@ export class ItemLinkStore {
     relation: ItemLinkRelation,
     origin: ItemLinkOrigin = 'provider',
   ): Promise<{ link: ItemLink; created: boolean; updated: boolean }> {
+    if (itemId1 === itemId2) {
+      return { link: { id: '', itemId1, itemId2, relation, origin }, created: false, updated: false };
+    }
     await this.load();
     const [normalizedItemId1, normalizedItemId2] = ItemLinkStore.normalizePair(itemId1, itemId2);
     const key = ItemLinkStore.pairKey(normalizedItemId1, normalizedItemId2);
