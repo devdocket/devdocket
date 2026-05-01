@@ -315,10 +315,40 @@ describe('WatcherService', () => {
 
     it('reports dismissed PR watches persisted from a previous session', async () => {
       const identifier = createPRIdentifier();
-      (watchStore.hasPRWatch as ReturnType<typeof vi.fn>).mockResolvedValue(true);
+      (watchStore.loadAll as ReturnType<typeof vi.fn>).mockResolvedValue({
+        runs: [],
+        prs: [{
+          identifier,
+          prState: 'closed',
+          childRunKeys: [],
+          watchedAt: new Date().toISOString(),
+          lastPolledAt: new Date().toISOString(),
+          dismissed: true,
+        }],
+      });
 
       await expect(service.isPRWatched(identifier)).resolves.toBe(true);
-      expect(watchStore.hasPRWatch).toHaveBeenCalledWith(identifier);
+      expect(watchStore.loadAll).toHaveBeenCalledTimes(1);
+    });
+
+    it('caches persisted PR watch lookups across repeated checks', async () => {
+      const identifier = createPRIdentifier();
+      (watchStore.loadAll as ReturnType<typeof vi.fn>).mockResolvedValue({
+        runs: [],
+        prs: [{
+          identifier,
+          prState: 'closed',
+          childRunKeys: [],
+          watchedAt: new Date().toISOString(),
+          lastPolledAt: new Date().toISOString(),
+          dismissed: true,
+        }],
+      });
+
+      await expect(service.isPRWatched(identifier)).resolves.toBe(true);
+      await expect(service.isPRWatched(identifier)).resolves.toBe(true);
+
+      expect(watchStore.loadAll).toHaveBeenCalledTimes(1);
     });
 
     it('starts a PR watch and fires change events', async () => {
