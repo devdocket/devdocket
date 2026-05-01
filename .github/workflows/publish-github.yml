@@ -63,10 +63,10 @@ jobs:
       - name: Generate release notes
         run: |
           PREV_TAG=$(git tag -l 'github-v*' --sort=-v:refname | grep -vFx "${GITHUB_REF_NAME}" | head -n1)
-          if [ -n "$PREV_TAG" ]; then
-            NOTES=$(git log "${PREV_TAG}..${GITHUB_REF_NAME}" --pretty=format:"* %s (%h)" -- packages/github/)
+          if [ -z "$PREV_TAG" ]; then
+            NOTES=$(git log --pretty=format:"* %s (%h)" -- packages/github/)
           else
-            NOTES=$(git log -1 "$GITHUB_REF_NAME" --pretty=format:"* %s (%h)" -- packages/github/)
+            NOTES=$(git log "$PREV_TAG"..HEAD --pretty=format:"* %s (%h)" -- packages/github/)
           fi
           if [ -z "$NOTES" ]; then
             NOTES="* No changes to packages/github in this release"

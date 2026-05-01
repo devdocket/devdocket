@@ -63,10 +63,10 @@ jobs:
       - name: Generate release notes
         run: |
           PREV_TAG=$(git tag -l 'core-v*' --sort=-v:refname | grep -vFx "${GITHUB_REF_NAME}" | head -n1)
-          if [ -n "$PREV_TAG" ]; then
-            NOTES=$(git log "${PREV_TAG}..${GITHUB_REF_NAME}" --pretty=format:"* %s (%h)" -- packages/core/)
+          if [ -z "$PREV_TAG" ]; then
+            NOTES=$(git log --pretty=format:"* %s (%h)" -- packages/core/)
           else
-            NOTES=$(git log -1 "$GITHUB_REF_NAME" --pretty=format:"* %s (%h)" -- packages/core/)
+            NOTES=$(git log "$PREV_TAG"..HEAD --pretty=format:"* %s (%h)" -- packages/core/)
           fi
           if [ -z "$NOTES" ]; then
             NOTES="* No changes to packages/core in this release"

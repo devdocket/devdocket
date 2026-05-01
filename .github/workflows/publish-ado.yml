@@ -63,10 +63,10 @@ jobs:
       - name: Generate release notes
         run: |
           PREV_TAG=$(git tag -l 'ado-v*' --sort=-v:refname | grep -vFx "${GITHUB_REF_NAME}" | head -n1)
-          if [ -n "$PREV_TAG" ]; then
-            NOTES=$(git log "${PREV_TAG}..${GITHUB_REF_NAME}" --pretty=format:"* %s (%h)" -- packages/ado/)
+          if [ -z "$PREV_TAG" ]; then
+            NOTES=$(git log --pretty=format:"* %s (%h)" -- packages/ado/)
           else
-            NOTES=$(git log -1 "$GITHUB_REF_NAME" --pretty=format:"* %s (%h)" -- packages/ado/)
+            NOTES=$(git log "$PREV_TAG"..HEAD --pretty=format:"* %s (%h)" -- packages/ado/)
           fi
           if [ -z "$NOTES" ]; then
             NOTES="* No changes to packages/ado in this release"
