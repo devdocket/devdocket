@@ -111,13 +111,14 @@ export interface AcceptableItem {
   group?: string;
 }
 
-export async function batchAcceptItems(
+export async function batchAcceptItems<T extends AcceptableItem>(
   workGraph: WorkGraph,
   stateStore: DiscoveredStateStore,
-  items: AcceptableItem[],
+  items: T[],
   logLabel: string,
-): Promise<void> {
+): Promise<T[]> {
   const stateUpdates: Array<{ providerId: string; externalId: string; state: InboxState }> = [];
+  const acceptedItems: T[] = [];
   const createdIds: string[] = [];
   // Track re-opened items so we can roll back on setStates failure
   const reopenedItems: Array<{ id: string; originalState: WorkItemState }> = [];
@@ -139,6 +140,7 @@ export async function batchAcceptItems(
         }
       }
       stateUpdates.push({ providerId: item.providerId, externalId: item.externalId, state: 'accepted' });
+      acceptedItems.push(item);
       continue;
     }
     try {
@@ -148,6 +150,7 @@ export async function batchAcceptItems(
       );
       createdIds.push(createdItem.id);
       stateUpdates.push({ providerId: item.providerId, externalId: item.externalId, state: 'accepted' });
+      acceptedItems.push(item);
     } catch (err: unknown) {
       failed++;
       logger.error(`Failed to accept ${logLabel} "${item.title}"`, err);
@@ -169,7 +172,7 @@ export async function batchAcceptItems(
         }
       }
       handleCommandError('Failed to update states after accepting items', err);
-      return;
+      return [];
     }
   }
 
@@ -185,4 +188,6 @@ export async function batchAcceptItems(
       `DevDocket: Failed to accept ${failed} item(s); see Output for details`,
     );
   }
+
+  return acceptedItems;
 }

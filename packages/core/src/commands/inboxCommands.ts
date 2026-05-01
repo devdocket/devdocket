@@ -116,6 +116,23 @@ function expandWithCanonicalPeers(
   return [...items, ...extra];
 }
 
+async function propagateStateToCanonicalPeersBatch(
+  items: InboxItem[],
+  providerRegistry: ProviderRegistry,
+  stateStore: DiscoveredStateStore,
+  state: 'accepted' | 'dismissed',
+): Promise<void> {
+  const expanded = expandWithCanonicalPeers(items, providerRegistry, stateStore);
+  const itemKeys = new Set(items.map(item => `${item.providerId}::${item.externalId}`));
+  const peers = expanded.filter(item => !itemKeys.has(`${item.providerId}::${item.externalId}`));
+  if (peers.length === 0) { return; }
+  try {
+    await stateStore.setStates(peers.map(peer => ({ providerId: peer.providerId, externalId: peer.externalId, state })));
+  } catch (err: unknown) {
+    logger.error('Failed to propagate state to canonical peers', err);
+  }
+}
+
 function resolveBulkInboxItems(
   node: InboxProviderNode | InboxGroupNode,
   providerRegistry: ProviderRegistry,
@@ -334,8 +351,9 @@ async function batchAcceptToFocusItems(
   workGraph: WorkGraph,
   stateStore: DiscoveredStateStore,
   items: InboxItem[],
-): Promise<void> {
+): Promise<InboxItem[]> {
   const stateUpdates: Array<{ providerId: string; externalId: string; state: InboxState }> = [];
+  const acceptedItems: InboxItem[] = [];
   const createdIds: string[] = [];
   const allIds: string[] = [];
   const reopenedItems: Array<{ id: string; originalState: WorkItemState }> = [];
@@ -348,6 +366,7 @@ async function batchAcceptToFocusItems(
       if (existing.state === WorkItemState.InProgress || existing.state === WorkItemState.Paused) {
         logger.info(`Skipping "${item.title}" — already in Focus`);
         stateUpdates.push({ providerId: item.providerId, externalId: item.externalId, state: 'accepted' });
+        acceptedItems.push(item);
         skipped++;
         continue;
       }
@@ -363,6 +382,7 @@ async function batchAcceptToFocusItems(
         }
       }
       stateUpdates.push({ providerId: item.providerId, externalId: item.externalId, state: 'accepted' });
+      acceptedItems.push(item);
       allIds.push(existing.id);
       continue;
     }
@@ -380,6 +400,7 @@ async function batchAcceptToFocusItems(
       createdIds.push(createdItem.id);
       allIds.push(createdItem.id);
       stateUpdates.push({ providerId: item.providerId, externalId: item.externalId, state: 'accepted' });
+      acceptedItems.push(item);
     } catch (err: unknown) {
       failed++;
       logger.error(`Failed to accept inbox item to Focus "${item.title}"`, err);
@@ -401,7 +422,7 @@ async function batchAcceptToFocusItems(
         }
       }
       handleCommandError('Failed to update states after accepting items', err);
-      return;
+      return [];
     }
   }
 
@@ -434,6 +455,8 @@ async function batchAcceptToFocusItems(
       `DevDocket: Failed to process ${failed + transitionFailed} item(s); see Output for details`,
     );
   }
+
+  return acceptedItems;
 }
 
 async function handleAcceptFromInbox(
@@ -530,10 +553,8 @@ async function handleAcceptAllFromInbox(
   );
   if (confirm !== 'Accept All to Queue') { return; }
 
-  await batchAcceptItems(workGraph, stateStore, items, 'inbox item');
-  for (const batchItem of items) {
-    await propagateStateToCanonicalPeers(batchItem, providerRegistry, stateStore, 'accepted');
-  }
+  const acceptedItems = await batchAcceptItems(workGraph, stateStore, items, 'inbox item');
+  await propagateStateToCanonicalPeersBatch(acceptedItems, providerRegistry, stateStore, 'accepted');
 }
 
 async function handleAcceptAllToFocusFromInbox(
@@ -554,10 +575,8 @@ async function handleAcceptAllToFocusFromInbox(
   );
   if (confirm !== 'Accept All to Focus') { return; }
 
-  await batchAcceptToFocusItems(workGraph, stateStore, items);
-  for (const batchItem of items) {
-    await propagateStateToCanonicalPeers(batchItem, providerRegistry, stateStore, 'accepted');
-  }
+  const acceptedItems = await batchAcceptToFocusItems(workGraph, stateStore, items);
+  await propagateStateToCanonicalPeersBatch(acceptedItems, providerRegistry, stateStore, 'accepted');
 }
 
 async function handleDismissAllFromInbox(
@@ -583,6 +602,7 @@ async function handleDismissAllFromInbox(
     await stateStore.setStates(
       expanded.map(i => ({ providerId: i.providerId, externalId: i.externalId, state: 'dismissed' as const }))
     );
+    void vscode.window.showInformationMessage(`Dismissed ${expanded.length} item${expanded.length === 1 ? '' : 's'}`);
   } catch (err: unknown) {
     handleCommandError('Failed to dismiss items', err);
   }
