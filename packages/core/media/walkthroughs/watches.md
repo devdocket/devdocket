@@ -18,3 +18,5 @@ You can also add a watch manually:
 ---
 
 [Watch a Pipeline Run](command:devdocket.watchRun)
+
+[Watch a Pull Request](command:devdocket.watchPR)
