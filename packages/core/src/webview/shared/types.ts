@@ -7,6 +7,8 @@ export type {
   SourceItemData,
   SourceProviderData,
   TierData,
+  PRWatchData,
+  RunWatchData,
   WatchData,
   WebviewMessage,
 } from '../../views/missionControlTypes';

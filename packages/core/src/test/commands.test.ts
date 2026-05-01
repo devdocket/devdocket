@@ -157,7 +157,18 @@ describe('registerCommands', () => {
     labelCache = createMockLabelCache();
     ctx = createMockContext();
 
-    registerCommands(ctx, workGraph as any, actionRegistry as any, stateStore as any, providerRegistry as any, labelCache as any, {} as WatcherRegistry, {} as PRWatcherRegistry, {} as WatcherService);
+    registerCommands(
+      ctx,
+      workGraph as any,
+      actionRegistry as any,
+      stateStore as any,
+      providerRegistry as any,
+      labelCache as any,
+      {} as WatcherRegistry,
+      {} as PRWatcherRegistry,
+      {} as WatcherService,
+      { open: vi.fn() } as any,
+    );
   });
 
   // helper to invoke a registered command

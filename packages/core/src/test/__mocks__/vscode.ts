@@ -220,7 +220,9 @@ const StatusBarAlignment = {
 class MockStatusBarItem {
   text = '';
   tooltip: string | undefined;
-  command: string | undefined;
+  command: string | { command: string; title: string } | undefined;
+  color: any;
+  backgroundColor: any;
   show = vi.fn();
   hide = vi.fn();
   dispose = vi.fn();

@@ -19,6 +19,7 @@ import { PRWatcherRegistry } from '../services/prWatcherRegistry';
 import { registerWatchCommands } from './watchCommands';
 import { registerInboxCommands } from './inboxCommands';
 import { showProviderHealthQuickPick } from '../views/providerHealthStatusBar';
+import type { WatchPanelProvider } from '../views/watchPanelProvider';
 import { isSafeUrl } from '../utils/url';
 
 /**
@@ -757,6 +758,7 @@ export function registerCommands(
   watcherRegistry: WatcherRegistry,
   prWatcherRegistry: PRWatcherRegistry,
   watcherService: WatcherService,
+  watchPanelProvider: WatchPanelProvider,
   revealer?: ViewRevealer,
 ): void {
   context.subscriptions.push(
@@ -854,5 +856,5 @@ export function registerCommands(
   );
 
   registerInboxCommands(context, workGraph, stateStore, providerRegistry, revealer);
-  registerWatchCommands(context, watcherRegistry, prWatcherRegistry, watcherService);
+  registerWatchCommands(context, watcherRegistry, prWatcherRegistry, watcherService, watchPanelProvider);
 }

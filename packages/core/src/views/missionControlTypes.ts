@@ -3,6 +3,7 @@ export type ExtensionMessage =
   | { type: 'updateSources'; providers: SourceProviderData[] }
   | { type: 'selectItem'; itemId: string }
   | { type: 'updateWatches'; watches: WatchData[] }
+  | { type: 'updateWatchPanel'; prWatches: PRWatchData[]; runWatches: RunWatchData[] }
   | { type: 'updateEditorItem'; item: EditorItemData }
   | { type: 'updateTitle'; title: string };
 
@@ -17,6 +18,9 @@ export type WebviewMessage =
   | { type: 'clearHistory' }
   | { type: 'runAction'; itemId: string }
   | { type: 'openUrl'; url: string }
+  | { type: 'openWatchUrl'; url: string }
+  | { type: 'dismissCompletedWatches' }
+  | { type: 'dismissWatch'; watchId: string }
   | { type: 'switchTab'; tab: 'myWork' | 'sources' }
   | { type: 'autosave'; data: { title?: string; notes?: string; url?: string } };
 
@@ -93,6 +97,30 @@ export interface SourceItemData {
   badges: BadgeData[];
   isAccepted: boolean;
   isDismissed: boolean;
+}
+
+export interface PRWatchData {
+  id: string;
+  title: string;
+  repo: string;
+  state: 'open' | 'merged' | 'closed';
+  url?: string;
+  runs: RunWatchData[];
+  hasWarning?: boolean;
+  errorMessage?: string;
+}
+
+export interface RunWatchData {
+  id: string;
+  name: string;
+  repo: string;
+  state: 'queued' | 'in_progress' | 'completed';
+  conclusion?: string;
+  url?: string;
+  elapsedTime?: string;
+  hasWarning?: boolean;
+  errorMessage?: string;
+  failurePreview?: string;
 }
 
 export interface WatchData {

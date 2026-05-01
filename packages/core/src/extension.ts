@@ -22,6 +22,7 @@ import { HistoryTreeProvider } from './views/historyTreeProvider';
 import { WatchesTreeProvider } from './views/watchesTreeProvider';
 import { WatchesStatusBar } from './views/watchesStatusBar';
 import { ProviderHealthStatusBar } from './views/providerHealthStatusBar';
+import { WatchPanelProvider } from './views/watchPanelProvider';
 import { WorkItemEditorPanel, PanelManager } from './views/workItemEditorPanel';
 import { MissionControlViewProvider } from './views/missionControlViewProvider';
 import { registerCommands } from './commands/commands';
@@ -528,8 +529,24 @@ export async function activate(context: vscode.ExtensionContext): Promise<DevDoc
 
   const { providers, views, disposables: viewDisposables } = treeSetup;
 
+  const watchPanelProvider = new WatchPanelProvider(context.extensionUri, ws);
+
   // Create status bar items
   const watchesStatusBar = new WatchesStatusBar(ws);
+  const incomingStatusBar = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 101);
+  incomingStatusBar.command = 'devdocket.missionControl.focus';
+  const updateIncomingStatusBar = () => {
+    const count = getInboxUnseenCount(pr, ss);
+    if (count > 0) {
+      incomingStatusBar.text = `⚡ ${count} incoming`;
+      incomingStatusBar.tooltip = `Open Mission Control (${count} incoming item${count === 1 ? '' : 's'})`;
+      incomingStatusBar.show();
+      return;
+    }
+    incomingStatusBar.hide();
+  };
+  updateIncomingStatusBar();
+
   const providerHealthStatusBar = new ProviderHealthStatusBar(pr);
 
   const missionControlProvider = new MissionControlViewProvider(
@@ -551,6 +568,12 @@ export async function activate(context: vscode.ExtensionContext): Promise<DevDoc
     pr.onDidChangeDiscoveredItems(safeHandler('mc:discovered', () => missionControlProvider.scheduleRefresh())),
     pr.onDidChangeProviderHealth(safeHandler('mc:health', () => missionControlProvider.scheduleRefresh())),
     ss.onDidChange(safeHandler('mc:stateStore', () => missionControlProvider.scheduleRefresh())),
+    ws.onDidChangeWatchedRuns(safeHandler('mc:watchedRuns', () => missionControlProvider.scheduleRefresh())),
+    ws.onDidChangePRWatches(safeHandler('mc:watchedPRs', () => missionControlProvider.scheduleRefresh())),
+    pr.onDidChangeDiscoveredItems(safeHandler('incoming:discovered', updateIncomingStatusBar)),
+    ss.onDidChange(safeHandler('incoming:stateStore', updateIncomingStatusBar)),
+    ws.onDidChangeWatchedRuns(safeHandler('watch-panel:runs', () => watchPanelProvider.refresh())),
+    ws.onDidChangePRWatches(safeHandler('watch-panel:prs', () => watchPanelProvider.refresh())),
   );
 
   // Load persisted watches (must happen after tree views are registered to show restored watches)
@@ -572,7 +595,9 @@ export async function activate(context: vscode.ExtensionContext): Promise<DevDoc
     ...Object.values(views),
     ...viewDisposables,
     ...eventDisposables,
+    watchPanelProvider,
     watchesStatusBar,
+    incomingStatusBar,
     providerHealthStatusBar,
     { dispose: () => wg.dispose() },
     { dispose: () => ss.dispose() },
@@ -591,7 +616,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<DevDoc
 
   const commandRegStart = performance.now();
   const revealer = new ViewRevealer(wg, views.queueTreeView, views.focusTreeView, views.historyTreeView);
-  registerCommands(context, wg, ar, ss, pr, labelCache, wr, pwr, ws, revealer);
+  registerCommands(context, wg, ar, ss, pr, labelCache, wr, pwr, ws, watchPanelProvider, revealer);
   logger.info(`Command registration took ${Math.round(performance.now() - commandRegStart)}ms`);
 
   // Set context keys and listen for layout changes

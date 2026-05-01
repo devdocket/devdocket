@@ -5,7 +5,7 @@ import { ActionRegistry } from '../services/actionRegistry';
 import { buildCanonicalHiddenSet } from '../services/canonicalDedup';
 import { logger } from '../services/logger';
 import { ProviderRegistry } from '../services/providerRegistry';
-import { WatcherService } from '../services/watcherService';
+import { WatcherService, type WatchedPR, type WatchedRun } from '../services/watcherService';
 import { WorkGraph } from '../services/workGraph';
 import { DiscoveredStateStore } from '../storage/discoveredStateStore';
 import { ReadStateStore } from '../storage/readStateStore';
@@ -163,7 +163,7 @@ export class MissionControlViewProvider implements vscode.WebviewViewProvider {
             externalId: item.externalId,
             providerId,
             title: item.title,
-            badges: this.buildBadges(providerId, item),
+            badges: this.buildBadges(providerId, item, item.url),
             isAccepted: state === 'accepted',
             isDismissed: state === 'dismissed',
           });
@@ -235,7 +235,7 @@ export class MissionControlViewProvider implements vscode.WebviewViewProvider {
       id: existingWorkItem?.id ?? getDiscoveredItemKey(providerId, discoveredItem.externalId),
       title: discoveredItem.title,
       relativeTime: existingWorkItem ? this.formatItemTime(existingWorkItem.updatedAt) : '',
-      badges: this.buildBadges(providerId, discoveredItem),
+      badges: this.buildBadges(providerId, discoveredItem, discoveredItem.url),
       branchName: workContext.branchName,
       repoName: workContext.repoName,
       tierType: 'incoming',
@@ -257,7 +257,7 @@ export class MissionControlViewProvider implements vscode.WebviewViewProvider {
       id: item.id,
       title: item.title,
       relativeTime: this.formatItemTime(item.updatedAt),
-      badges: this.buildBadges(item.providerId, discoveredItem),
+      badges: this.buildBadges(item.providerId, discoveredItem, item.url),
       branchName: workContext.branchName,
       repoName: workContext.repoName,
       tierType,
@@ -271,7 +271,7 @@ export class MissionControlViewProvider implements vscode.WebviewViewProvider {
     return formatRelativeTime(timestamp);
   }
 
-  private buildBadges(providerId?: string, discoveredItem?: DiscoveredItem): BadgeData[] {
+  private buildBadges(providerId?: string, discoveredItem?: DiscoveredItem, itemUrl?: string): BadgeData[] {
     const badges: BadgeData[] = [];
     const providerBadge = this.buildProviderBadge(providerId);
     if (providerBadge) {
@@ -281,6 +281,11 @@ export class MissionControlViewProvider implements vscode.WebviewViewProvider {
     const stateBadge = this.buildStateBadge(discoveredItem);
     if (stateBadge) {
       badges.push(stateBadge);
+    }
+
+    const ciBadge = this.buildCIBadge(discoveredItem?.url ?? itemUrl);
+    if (ciBadge) {
+      badges.push(ciBadge);
     }
 
     return badges;
@@ -339,6 +344,55 @@ export class MissionControlViewProvider implements vscode.WebviewViewProvider {
       default:
         return undefined;
     }
+  }
+
+  private buildCIBadge(url?: string): BadgeData | undefined {
+    if (!url) {
+      return undefined;
+    }
+
+    const watchedRun = this.watcherService
+      .getActiveWatches()
+      .find(runWatch => runWatch.identifier.url === url);
+    if (watchedRun) {
+      return this.getRunCIBadge(watchedRun);
+    }
+
+    const watchedPR = this.watcherService
+      .getActivePRWatches()
+      .find(prWatch => prWatch.identifier.url === url);
+    if (watchedPR) {
+      return this.getPRCIBadge(watchedPR);
+    }
+
+    return undefined;
+  }
+
+  private getRunCIBadge(watchedRun: WatchedRun): BadgeData {
+    if (watchedRun.hasWarning || isFailedRun(watchedRun)) {
+      return { label: 'CI failed', type: 'ci', variant: 'ci-fail' };
+    }
+    if (watchedRun.status.overallState !== 'completed') {
+      return { label: 'CI running', type: 'ci', variant: 'ci-running' };
+    }
+    return { label: 'CI passed', type: 'ci', variant: 'ci-pass' };
+  }
+
+  private getPRCIBadge(watchedPR: WatchedPR): BadgeData | undefined {
+    const childRuns = this.watcherService.getChildRuns(this.watcherService.getPRWatchKey(watchedPR.identifier));
+    if (watchedPR.hasWarning || childRuns.some(runWatch => runWatch.hasWarning || isFailedRun(runWatch))) {
+      return { label: 'CI failed', type: 'ci', variant: 'ci-fail' };
+    }
+    if (childRuns.some(runWatch => runWatch.status.overallState !== 'completed')) {
+      return { label: 'CI running', type: 'ci', variant: 'ci-running' };
+    }
+    if (childRuns.length > 0 && childRuns.every(runWatch => runWatch.status.conclusion === 'success')) {
+      return { label: 'CI passed', type: 'ci', variant: 'ci-pass' };
+    }
+    if (watchedPR.prState === 'open') {
+      return { label: 'CI running', type: 'ci', variant: 'ci-running' };
+    }
+    return undefined;
   }
 
   private async handleMessage(message: WebviewMessage): Promise<void> {
@@ -966,6 +1020,12 @@ export class MissionControlViewProvider implements vscode.WebviewViewProvider {
 
 function getDiscoveredItemKey(providerId: string, externalId: string): string {
   return `${providerId}::${externalId}`;
+}
+
+function isFailedRun(runWatch: WatchedRun): boolean {
+  return runWatch.status.overallState === 'completed'
+    && runWatch.status.conclusion !== undefined
+    && runWatch.status.conclusion !== 'success';
 }
 
 function normalizeText(value?: string): string {
