@@ -314,25 +314,26 @@ describe('AdoPrReviewProvider', () => {
     );
   });
 
-  it('fires empty items when refresh catch block is hit', async () => {
+  it('fires empty items and rethrows when refresh catch block is hit', async () => {
     vi.spyOn(provider as any, 'fetchAndPublishPrs').mockRejectedValue(new Error('unexpected'));
 
     const listener = vi.fn();
     provider.onDidDiscoverItems(listener);
-    await provider.refresh();
+
+    await expect(provider.refresh()).rejects.toThrow('unexpected');
 
     expect(listener).toHaveBeenCalledTimes(1);
     expect(listener).toHaveBeenCalledWith([]);
   });
 
-  it('fires empty items when doBackgroundRefresh catch block is hit', async () => {
+  it('fires empty items and rethrows when doBackgroundRefresh catch block is hit', async () => {
     vi.spyOn(provider as any, 'fetchAndPublishPrs').mockRejectedValue(new Error('unexpected'));
 
     const listener = vi.fn();
     provider.onDidDiscoverItems(listener);
 
     const refreshBg = (provider as any).refreshInBackground.bind(provider);
-    await refreshBg();
+    await expect(refreshBg()).rejects.toThrow('unexpected');
 
     expect(listener).toHaveBeenCalledTimes(1);
     expect(listener).toHaveBeenCalledWith([]);

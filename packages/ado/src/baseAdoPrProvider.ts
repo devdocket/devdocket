@@ -92,8 +92,9 @@ export abstract class BaseAdoPrProvider extends BaseProvider {
       if (err instanceof Error && err.name === 'AbortError' && abortController.signal.aborted && token?.isCancellationRequested) {
         logger.debug(`ADO ${this.logLabel} fetch aborted due to cancellation`);
       } else {
-        this._onDidDiscoverItems.fire([]);
         logger.error(`Failed to fetch ${this.logLabel}:`, err);
+        this._onDidDiscoverItems.fire([]);
+        throw err;
       }
     } finally {
       cancelListener?.dispose();
@@ -115,8 +116,9 @@ export abstract class BaseAdoPrProvider extends BaseProvider {
 
       await this.fetchAndPublishPrs(session.accessToken, false, session.account.id);
     } catch (err) {
-      this._onDidDiscoverItems.fire([]);
       logger.error(`Failed to fetch ${this.logLabel}:`, err);
+      this._onDidDiscoverItems.fire([]);
+      throw err;
     }
   }
 
