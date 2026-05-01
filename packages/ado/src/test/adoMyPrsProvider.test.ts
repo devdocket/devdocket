@@ -84,7 +84,7 @@ describe('AdoMyPrsProvider', () => {
 
   it('has correct id and label', () => {
     expect(provider.id).toBe('ado-my-prs');
-    expect(provider.label).toBe('Azure DevOps My PRs');
+    expect(provider.label).toBe('My Azure DevOps PRs');
   });
 
   it('fires empty items when no auth session exists', async () => {

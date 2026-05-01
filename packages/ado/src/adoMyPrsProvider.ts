@@ -5,7 +5,7 @@ import type { OrgConfig } from './configParser';
 
 export class AdoMyPrsProvider extends BaseAdoPrProvider {
   readonly id = 'ado-my-prs';
-  readonly label = 'Azure DevOps My PRs';
+  readonly label = 'My Azure DevOps PRs';
 
   protected readonly searchCriteriaParam = 'creatorId' as const;
   protected readonly itemReason = 'You authored this PR';
