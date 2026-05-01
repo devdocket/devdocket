@@ -191,7 +191,7 @@ export abstract class BaseAdoPrProvider extends BaseProvider {
         (result): result is PromiseRejectedResult =>
           result.status === 'rejected' && result.reason instanceof Error && result.reason.name === 'AbortError',
       );
-      if (signal?.aborted || abortedResult) {
+      if (signal?.aborted) {
         if (abortedResult) {
           throw abortedResult.reason;
         }

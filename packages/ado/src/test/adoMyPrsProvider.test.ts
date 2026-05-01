@@ -165,6 +165,48 @@ describe('AdoMyPrsProvider', () => {
     expect(items[0]).not.toHaveProperty('resurfaceVersion');
   });
 
+  it('keeps partial results when one project times out without cancellation', async () => {
+    provider.dispose();
+    provider = new AdoMyPrsProvider([{ org: 'myorg', projects: ['ProjectA', 'ProjectB'] }]);
+
+    mockFetch.mockImplementation(async (url: string) => {
+      if (url.includes('/connectiondata')) {
+        return mockConnectionData('author-123');
+      }
+      if (url.includes('/ProjectA/_apis/git/pullrequests')) {
+        return {
+          ok: true,
+          json: async () => ({ value: [createMockPr(101, 'Project A PR', 'ProjectA', 'repo1')] }),
+        };
+      }
+      if (url.includes('/ProjectB/_apis/git/pullrequests')) {
+        const error = new Error('The operation was aborted.');
+        error.name = 'AbortError';
+        throw error;
+      }
+      if (url.includes('/repositories/repo1/pullrequests/101?')) {
+        return { ok: true, json: async () => ({ reviewers: [{ vote: 0 }] }) };
+      }
+      throw new Error(`Unexpected fetch call: ${url}`);
+    });
+
+    const listener = vi.fn();
+    provider.onDidDiscoverItems(listener);
+
+    await expect(provider.refresh()).resolves.toBeUndefined();
+
+    expect(listener).toHaveBeenCalledTimes(1);
+    expect(listener.mock.calls[0][0]).toEqual([
+      expect.objectContaining({
+        externalId: 'myorg/ProjectA/repo1/101',
+        state: 'Waiting on reviews',
+      }),
+    ]);
+    expect(window.showWarningMessage).toHaveBeenCalledWith(
+      'DevDocket ADO: My PRs errors: failed to fetch from myorg/ProjectB',
+    );
+  });
+
   it('maps vote statuses from PR detail data', async () => {
     mockFetch.mockImplementation(async (url: string) => {
       if (url.includes('/connectiondata')) {
