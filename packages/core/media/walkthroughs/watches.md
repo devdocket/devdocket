@@ -1,6 +1,6 @@
 # Watch CI Pipelines and PRs
 
-Watches are fire-and-forget monitoring for CI pipelines and pull requests. DevDocket notifies you in VS Code when a GitHub Actions or Azure Pipelines run completes or fails, or when a pull request is merged.
+Watches are fire-and-forget monitoring for CI pipelines and pull requests. DevDocket notifies you in VS Code when a GitHub Actions workflow run or an Azure DevOps pipeline run completes or fails, or when a pull request is merged.
 
 ## Add a Watch from a Work Item
 
