@@ -1758,6 +1758,42 @@ describe('registerCommands', () => {
       );
     });
 
+    it('batches canonical peer propagation for multi-select accept-to-focus', async () => {
+      const items = [
+        makeInboxItem({ providerId: 'prs', externalId: 'repo#1', title: 'Issue 1', canonicalId: 'github:pull:repo#1' }),
+        makeInboxItem({ providerId: 'prs', externalId: 'repo#2', title: 'Issue 2', canonicalId: 'github:pull:repo#2' }),
+      ];
+      mockDiscoveredInboxItems([
+        ['prs', [
+          { externalId: 'repo#1', title: 'Issue 1', canonicalId: 'github:pull:repo#1' },
+          { externalId: 'repo#2', title: 'Issue 2', canonicalId: 'github:pull:repo#2' },
+        ]],
+        ['reviews', [
+          { externalId: 'repo#1', title: 'Issue 1', canonicalId: 'github:pull:repo#1' },
+          { externalId: 'repo#2', title: 'Issue 2', canonicalId: 'github:pull:repo#2' },
+        ]],
+      ]);
+      stateStore.getState.mockReturnValue(undefined);
+      workGraph.findItemByProvenance.mockReturnValue(undefined);
+      workGraph.createItem
+        .mockResolvedValueOnce(createWorkItem({ id: 'wc-1' }))
+        .mockResolvedValueOnce(createWorkItem({ id: 'wc-2' }));
+
+      await invoke('devdocket.acceptToFocusFromInbox', items[0], items);
+
+      expect(stateStore.setStates).toHaveBeenCalledTimes(2);
+      expect(stateStore.setStates).toHaveBeenNthCalledWith(1, [
+        { providerId: 'prs', externalId: 'repo#1', state: 'accepted' },
+        { providerId: 'prs', externalId: 'repo#2', state: 'accepted' },
+      ]);
+      expect(stateStore.setStates).toHaveBeenNthCalledWith(2, [
+        { providerId: 'reviews', externalId: 'repo#1', state: 'accepted' },
+        { providerId: 'reviews', externalId: 'repo#2', state: 'accepted' },
+      ]);
+      expect(workGraph.transitionState).toHaveBeenCalledWith('wc-1', WorkItemState.InProgress);
+      expect(workGraph.transitionState).toHaveBeenCalledWith('wc-2', WorkItemState.InProgress);
+    });
+
     it('continues processing when some createItem calls fail', async () => {
       const items = [
         makeInboxItem({ externalId: 'ext-1', title: 'Issue 1' }),
