@@ -281,6 +281,10 @@ export class GitHubMyPrsProvider extends BaseGitHubProvider {
     prNumber: number,
     signal?: AbortSignal,
   ): Promise<RelatedItemRef[] | undefined> {
+    if (!repoName.includes('/')) {
+      logger.debug(`Skipping cross-reference query for invalid repo name: ${repoName}`);
+      return undefined;
+    }
     const [owner, repo] = repoName.split('/');
     const response = await fetch('https://api.github.com/graphql', {
       method: 'POST',
