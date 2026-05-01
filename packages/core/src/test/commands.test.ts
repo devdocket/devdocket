@@ -182,6 +182,7 @@ describe('registerCommands', () => {
       'devdocket.deleteItem',
       'devdocket.editItem',
       'devdocket.openInBrowser',
+      'devdocket.copyUrl',
       'devdocket.runAction',
       'devdocket.moveUp',
       'devdocket.moveDown',
@@ -501,6 +502,66 @@ describe('registerCommands', () => {
         'DevDocket: Select an item to open in the browser.',
       );
       expect(vscode.env.openExternal).not.toHaveBeenCalled();
+    });
+  });
+
+  // ── copyUrl ──────────────────────────────────────────────────────
+
+  describe('devdocket.copyUrl', () => {
+    it('copies workItem url when found', async () => {
+      const item = createWorkItem({ url: 'https://example.com' });
+      workGraph.getItem.mockReturnValue(item);
+
+      await invoke('devdocket.copyUrl', { id: item.id });
+
+      expect(vscode.env.clipboard.writeText).toHaveBeenCalledWith('https://example.com');
+      expect(vscode.window.setStatusBarMessage).toHaveBeenCalledWith('DevDocket: URL copied to clipboard', 3000);
+    });
+
+    it('falls back to item.url when workItem has no url', async () => {
+      workGraph.getItem.mockReturnValue(createWorkItem({ url: undefined }));
+
+      await invoke('devdocket.copyUrl', { id: 'wc-1', url: 'https://fallback.com' });
+
+      expect(vscode.env.clipboard.writeText).toHaveBeenCalledWith('https://fallback.com');
+    });
+
+    it('falls back to tree node url when workItem is not found', async () => {
+      workGraph.getItem.mockReturnValue(undefined);
+
+      await invoke('devdocket.copyUrl', { id: 'wc-gone', url: 'https://tree-fallback.com' });
+
+      expect(vscode.env.clipboard.writeText).toHaveBeenCalledWith('https://tree-fallback.com');
+    });
+
+    it('copies url from item without id (Inbox/Sources items)', async () => {
+      await invoke('devdocket.copyUrl', { url: 'https://provider-item.com' });
+
+      expect(workGraph.getItem).not.toHaveBeenCalled();
+      expect(vscode.env.clipboard.writeText).toHaveBeenCalledWith('https://provider-item.com');
+    });
+
+    it('copies unsafe url-only item without validation', async () => {
+      await invoke('devdocket.copyUrl', { url: 'javascript:alert(1)' });
+
+      expect(vscode.env.clipboard.writeText).toHaveBeenCalledWith('javascript:alert(1)');
+      expect(vscode.window.showWarningMessage).not.toHaveBeenCalled();
+    });
+
+    it('shows warning when neither source has a url', async () => {
+      workGraph.getItem.mockReturnValue(createWorkItem({ url: undefined }));
+
+      await invoke('devdocket.copyUrl', { id: 'wc-1' });
+
+      expect(vscode.env.clipboard.writeText).not.toHaveBeenCalled();
+      expect(vscode.window.showWarningMessage).toHaveBeenCalledWith('This item has no URL to copy.');
+    });
+
+    it('shows warning when item has neither id nor url', async () => {
+      await invoke('devdocket.copyUrl', {});
+
+      expect(vscode.env.clipboard.writeText).not.toHaveBeenCalled();
+      expect(vscode.window.showWarningMessage).toHaveBeenCalledWith('DevDocket: Select an item to copy its URL.');
     });
   });
 

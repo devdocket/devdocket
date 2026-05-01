@@ -256,6 +256,12 @@
         "icon": "$(link-external)"
       },
       {
+        "command": "devdocket.copyUrl",
+        "title": "Copy URL",
+        "category": "DevDocket",
+        "icon": "$(clippy)"
+      },
+      {
         "command": "devdocket.runAction",
         "title": "Run Action…",
         "category": "DevDocket",
@@ -690,6 +696,10 @@
         {
           "command": "devdocket.watchPRFromItem",
           "when": "false"
+        },
+        {
+          "command": "devdocket.copyUrl",
+          "when": "false"
         }
       ],
       "view/item/context": [
@@ -775,6 +785,11 @@
         },
         {
           "command": "devdocket.openInBrowser",
+          "when": "viewItem =~ /hasUrl/ && !listMultiSelection",
+          "group": "2_links"
+        },
+        {
+          "command": "devdocket.copyUrl",
           "when": "viewItem =~ /hasUrl/ && !listMultiSelection",
           "group": "2_links"
         },

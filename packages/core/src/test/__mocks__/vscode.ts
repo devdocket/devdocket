@@ -65,6 +65,7 @@ const window = {
   showWarningMessage: vi.fn(),
   showErrorMessage: vi.fn(),
   showQuickPick: vi.fn(),
+  setStatusBarMessage: vi.fn(() => ({ dispose: vi.fn() })),
   withProgress: vi.fn((_options: any, task: (progress: any, token: any) => Promise<any>) => {
     const cancellationEmitter = new MockEventEmitter();
     return task(
@@ -108,6 +109,9 @@ const commands = {
 
 const env = {
   openExternal: vi.fn(),
+  clipboard: {
+    writeText: vi.fn().mockResolvedValue(undefined),
+  },
 };
 
 const Uri = {
