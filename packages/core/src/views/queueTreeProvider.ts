@@ -23,18 +23,13 @@ export class QueueTreeProvider extends WorkItemViewProvider implements vscode.Tr
   constructor(
     workGraph: WorkGraph,
     providerRegistry?: ProviderRegistry,
-    actionRegistryOrIsWatchable?: ActionRegistry | ((url: string) => boolean),
+    actionRegistry?: ActionRegistry,
     isWatchable?: (url: string) => boolean,
   ) {
     const [lr, pce, tr, dice] = QueueTreeProvider.buildProviderArgs(providerRegistry);
     super(workGraph, 'flat', lr, pce, tr, dice);
 
-    if (typeof actionRegistryOrIsWatchable === 'function') {
-      this.isWatchable = actionRegistryOrIsWatchable;
-      return;
-    }
-
-    this.actionRegistry = actionRegistryOrIsWatchable;
+    this.actionRegistry = actionRegistry;
     this.isWatchable = isWatchable;
     if (this.actionRegistry) {
       this.disposables.push(this.actionRegistry.onDidChangeRegistrations(() => this.refresh()));
