@@ -3,7 +3,6 @@ import { WorkItemState } from '../models/workItem';
 import { WorkGraph } from '../services/workGraph';
 import { DiscoveredStateStore, type InboxState } from '../storage/discoveredStateStore';
 import { logger } from '../services/logger';
-import type { ViewRevealer } from '../services/viewRevealer';
 
 /**
  * Resolves item IDs from VS Code multi-select args for WorkItem-based views.
@@ -74,11 +73,9 @@ export async function batchTransition(
   ids: string[],
   targetState: WorkItemState,
   successMessage: (count: number) => string,
-  revealer?: ViewRevealer,
 ): Promise<void> {
   if (ids.length === 1) {
     await workGraph.transitionState(ids[0], targetState);
-    void revealer?.revealByState(ids[0]);
     return;
   }
   const failedIds: string[] = [];

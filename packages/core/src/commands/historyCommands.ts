@@ -1,14 +1,13 @@
 import * as vscode from 'vscode';
 import { WorkItemState } from '../models/workItem';
 import { WorkGraph } from '../services/workGraph';
-import type { ViewRevealer } from '../services/viewRevealer';
 import { wrapCommand, resolveItemIds, batchTransition } from './commandUtils';
 
-async function handleArchiveItem(workGraph: WorkGraph, item?: { id?: string }, selectedItems?: { id?: string }[], revealer?: ViewRevealer): Promise<void> {
+async function handleArchiveItem(workGraph: WorkGraph, item?: { id?: string }, selectedItems?: { id?: string }[]): Promise<void> {
   const ids = resolveItemIds(item, selectedItems);
   if (ids.length === 0) { return; }
   await batchTransition(workGraph, ids, WorkItemState.Archived,
-    (n) => `Archived ${n} item${n === 1 ? '' : 's'}`, revealer);
+    (n) => `Archived ${n} item${n === 1 ? '' : 's'}`);
 }
 
 async function handleClearHistory(workGraph: WorkGraph): Promise<void> {
@@ -39,11 +38,10 @@ async function handleClearHistory(workGraph: WorkGraph): Promise<void> {
 export function registerHistoryCommands(
   context: vscode.ExtensionContext,
   workGraph: WorkGraph,
-  revealer?: ViewRevealer,
 ): void {
   context.subscriptions.push(
     vscode.commands.registerCommand('devdocket.archiveItem',
-      wrapCommand('Failed to archive item', (item, selectedItems) => handleArchiveItem(workGraph, item, selectedItems, revealer))),
+      wrapCommand('Failed to archive item', (item, selectedItems) => handleArchiveItem(workGraph, item, selectedItems))),
     vscode.commands.registerCommand('devdocket.clearHistory',
       wrapCommand('Failed to clear history', () => handleClearHistory(workGraph))),
   );

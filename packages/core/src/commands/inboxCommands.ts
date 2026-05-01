@@ -9,9 +9,8 @@ import {
   type InboxElement,
   type InboxProviderNode,
   type InboxGroupNode,
-} from '../views/inboxTreeProvider';
+} from './commandItemTypes';
 import { logger } from '../services/logger';
-import type { ViewRevealer } from '../services/viewRevealer';
 import {
   wrapCommand,
   handleCommandError,
@@ -188,7 +187,6 @@ async function acceptSingleInboxItem(
   stateStore: DiscoveredStateStore,
   providerRegistry: ProviderRegistry,
   item: InboxItem,
-  revealer?: ViewRevealer,
 ): Promise<void> {
   logger.info(`Accepting inbox item: ${item.externalId} from ${item.providerId}`);
   const existing = workGraph.findItemByProvenance(item.providerId, item.externalId);
@@ -212,7 +210,6 @@ async function acceptSingleInboxItem(
         return;
       }
       await propagateStateToCanonicalPeers(item, providerRegistry, stateStore, 'accepted');
-      void revealer?.revealInQueue(existing.id);
       return;
     }
     void vscode.window.showInformationMessage(
@@ -255,7 +252,6 @@ async function acceptSingleInboxItem(
     return;
   }
   await propagateStateToCanonicalPeers(item, providerRegistry, stateStore, 'accepted');
-  void revealer?.revealInQueue(createdItem.id);
 }
 
 async function acceptToFocusSingleInboxItem(
@@ -263,7 +259,6 @@ async function acceptToFocusSingleInboxItem(
   stateStore: DiscoveredStateStore,
   providerRegistry: ProviderRegistry,
   item: InboxItem,
-  revealer?: ViewRevealer,
 ): Promise<void> {
   logger.info(`Accepting inbox item to Focus: ${item.externalId} from ${item.providerId}`);
   let workItemId: string;
@@ -344,7 +339,6 @@ async function acceptToFocusSingleInboxItem(
     return;
   }
   await propagateStateToCanonicalPeers(item, providerRegistry, stateStore, 'accepted');
-  void revealer?.revealInFocus(workItemId);
 }
 
 async function batchAcceptToFocusItems(
@@ -465,13 +459,12 @@ async function handleAcceptFromInbox(
   providerRegistry: ProviderRegistry,
   item?: InboxElement,
   selectedItems?: InboxElement[],
-  revealer?: ViewRevealer,
 ): Promise<void> {
   const items = resolveInboxItems(item, selectedItems);
   if (items.length === 0) { return; }
 
   if (items.length === 1) {
-    await acceptSingleInboxItem(workGraph, stateStore, providerRegistry, items[0], revealer);
+    await acceptSingleInboxItem(workGraph, stateStore, providerRegistry, items[0]);
     return;
   }
 
@@ -485,13 +478,12 @@ async function handleAcceptToFocusFromInbox(
   providerRegistry: ProviderRegistry,
   item?: InboxElement,
   selectedItems?: InboxElement[],
-  revealer?: ViewRevealer,
 ): Promise<void> {
   const items = resolveInboxItems(item, selectedItems);
   if (items.length === 0) { return; }
 
   if (items.length === 1) {
-    await acceptToFocusSingleInboxItem(workGraph, stateStore, providerRegistry, items[0], revealer);
+    await acceptToFocusSingleInboxItem(workGraph, stateStore, providerRegistry, items[0]);
     return;
   }
 
@@ -609,13 +601,12 @@ export function registerInboxCommands(
   workGraph: WorkGraph,
   stateStore: DiscoveredStateStore,
   providerRegistry: ProviderRegistry,
-  revealer?: ViewRevealer,
 ): void {
   context.subscriptions.push(
     vscode.commands.registerCommand('devdocket.acceptFromInbox',
-      wrapCommand('Failed to accept from inbox', (item?: InboxElement, selectedItems?: InboxElement[]) => handleAcceptFromInbox(workGraph, stateStore, providerRegistry, item, selectedItems, revealer))),
+      wrapCommand('Failed to accept from inbox', (item?: InboxElement, selectedItems?: InboxElement[]) => handleAcceptFromInbox(workGraph, stateStore, providerRegistry, item, selectedItems))),
     vscode.commands.registerCommand('devdocket.acceptToFocusFromInbox',
-      wrapCommand('Failed to accept to focus from inbox', (item?: InboxElement, selectedItems?: InboxElement[]) => handleAcceptToFocusFromInbox(workGraph, stateStore, providerRegistry, item, selectedItems, revealer))),
+      wrapCommand('Failed to accept to focus from inbox', (item?: InboxElement, selectedItems?: InboxElement[]) => handleAcceptToFocusFromInbox(workGraph, stateStore, providerRegistry, item, selectedItems))),
     vscode.commands.registerCommand('devdocket.dismissFromInbox',
       wrapCommand('Failed to dismiss from inbox', (item?: InboxElement, selectedItems?: InboxElement[]) => handleDismissFromInbox(stateStore, providerRegistry, item, selectedItems))),
     vscode.commands.registerCommand('devdocket.acceptAllFromInbox',

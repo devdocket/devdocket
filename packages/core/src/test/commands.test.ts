@@ -11,8 +11,7 @@ import type { ProviderLabelCache } from '../storage/providerLabelCache';
 import type { WatcherRegistry } from '../services/watcherRegistry';
 import type { PRWatcherRegistry } from '../services/prWatcherRegistry';
 import type { WatcherService } from '../services/watcherService';
-import type { InboxItem, InboxProviderNode, InboxGroupNode } from '../views/inboxTreeProvider';
-import type { SourceItemNode, SourceProviderNode, SourceGroupNode } from '../views/sourcesTreeProvider';
+import type { InboxItem, InboxProviderNode, InboxGroupNode, SourceItemNode, SourceProviderNode, SourceGroupNode } from '../commands/commandItemTypes';
 import { WorkItemEditorPanel } from '../views/workItemEditorPanel';
 import { logger } from '../services/logger';
 

@@ -14,12 +14,6 @@ import { WatcherRegistry } from './services/watcherRegistry';
 import { PRWatcherRegistry } from './services/prWatcherRegistry';
 import { WatcherService } from './services/watcherService';
 import { WatchStore } from './storage/watchStore';
-import { InboxTreeProvider, type InboxItem } from './views/inboxTreeProvider';
-import { QueueTreeProvider } from './views/queueTreeProvider';
-import { FocusTreeProvider } from './views/focusTreeProvider';
-import { SourcesTreeProvider } from './views/sourcesTreeProvider';
-import { HistoryTreeProvider } from './views/historyTreeProvider';
-import { WatchesTreeProvider } from './views/watchesTreeProvider';
 import { WatchesStatusBar } from './views/watchesStatusBar';
 import { ProviderHealthStatusBar } from './views/providerHealthStatusBar';
 import { WatchPanelProvider } from './views/watchPanelProvider';
@@ -27,12 +21,10 @@ import { WorkItemEditorPanel, PanelManager } from './views/workItemEditorPanel';
 import { MissionControlViewProvider } from './views/missionControlViewProvider';
 import { registerCommands } from './commands/commands';
 import { isSafeUrl } from './utils/url';
-import { ViewRevealer } from './services/viewRevealer';
 import { initLogger, setLogLevel, logger, resolveLogLevel } from './services/logger';
 import { getInboxUnseenCount } from './services/inboxBadge';
 import { syncProviderTitles } from './services/titleSync';
 import { syncProviderDescriptions } from './services/descriptionSync';
-import { getViewLayout, initViewLayoutStore, onDidChangeLayout, ViewId } from './views/viewLayout';
 import { performance } from 'perf_hooks';
 
 export type { DevDocketApi, DevDocketProvider, DevDocketAction, DiscoveredItem, Disposable, ActivityLogEntry, ActivityType, StateTransitionEvent, DevDocketPRWatcher } from './api/types';
@@ -168,143 +160,16 @@ export async function autoWatchAuthoredPRs(
   }
 }
 
-function createTreeViews(
-  providerRegistry: ProviderRegistry,
-  actionRegistry: ActionRegistry,
-  stateStore: DiscoveredStateStore,
-  readStateStore: ReadStateStore,
-  workGraph: WorkGraph,
-  watcherService: WatcherService,
-  watcherRegistry: WatcherRegistry,
-  prWatcherRegistry: PRWatcherRegistry,
-) {
-  const isWatchable = (url: string): boolean =>
-    watcherRegistry.findWatcherForUrl(url) !== undefined ||
-    prWatcherRegistry.findWatcherForUrl(url) !== undefined;
-
-  const inboxProvider = new InboxTreeProvider(providerRegistry, stateStore, readStateStore);
-  const queueProvider = new QueueTreeProvider(workGraph, providerRegistry, actionRegistry, isWatchable);
-  const focusProvider = new FocusTreeProvider(workGraph, providerRegistry, actionRegistry, isWatchable);
-  const sourcesProvider = new SourcesTreeProvider(providerRegistry, stateStore);
-  const historyProvider = new HistoryTreeProvider(workGraph, providerRegistry);
-  const watchesProvider = new WatchesTreeProvider(watcherService);
-
-  // Apply persisted layout settings
-  inboxProvider.layout = getViewLayout('inbox');
-  queueProvider.layout = getViewLayout('queue');
-  focusProvider.layout = getViewLayout('focus');
-  sourcesProvider.layout = getViewLayout('sources');
-  historyProvider.layout = getViewLayout('history');
-  watchesProvider.layout = getViewLayout('watches');
-
-  const inboxTreeView = vscode.window.createTreeView('devdocket.inbox', { treeDataProvider: inboxProvider, canSelectMany: true });
-  const sourcesTreeView = vscode.window.createTreeView('devdocket.sources', { treeDataProvider: sourcesProvider, canSelectMany: true });
-  const queueTreeView = vscode.window.createTreeView('devdocket.queue', { treeDataProvider: queueProvider, dragAndDropController: queueProvider, canSelectMany: true });
-  const focusTreeView = vscode.window.createTreeView('devdocket.focus', { treeDataProvider: focusProvider, dragAndDropController: focusProvider, canSelectMany: true });
-  const historyTreeView = vscode.window.createTreeView('devdocket.history', { treeDataProvider: historyProvider, canSelectMany: true });
-  const watchesTreeView = vscode.window.createTreeView('devdocket.watches', { treeDataProvider: watchesProvider });
-
-  const inboxSelectionSub = inboxTreeView.onDidChangeSelection((e) => {
-    void (async () => {
-      const items = e.selection.filter(
-        (item): item is InboxItem => item.kind === 'item',
-      );
-      if (items.length === 0) { return; }
-      const changed = await inboxProvider.markSeenBatch(items);
-      if (changed) {
-        inboxProvider.refresh();
-      }
-    })().catch(err => logger.error('Failed to mark inbox item as seen', err));
-  });
-
-  return {
-    providers: { inboxProvider, queueProvider, focusProvider, sourcesProvider, historyProvider, watchesProvider },
-    views: { inboxTreeView, queueTreeView, focusTreeView, sourcesTreeView, historyTreeView, watchesTreeView },
-    disposables: [inboxSelectionSub] as vscode.Disposable[],
-  };
-}
-
-// Wires up all event-driven UI updates: view messages, inbox badge,
-// coalesced provider events, new-item notifications, and watch notifications.
 function wireEvents(
   providerRegistry: ProviderRegistry,
-  stateStore: DiscoveredStateStore,
   workGraph: WorkGraph,
   watcherService: WatcherService,
   prWatcherRegistry: PRWatcherRegistry,
-  { providers, views }: ReturnType<typeof createTreeViews>,
 ): vscode.Disposable[] {
-  const { inboxProvider, queueProvider, focusProvider, historyProvider } = providers;
-  const { inboxTreeView, sourcesTreeView, queueTreeView, focusTreeView, historyTreeView } = views;
-
-  // View message state: empty by default, loading when providers are fetching
-  const updateViewMessages = () => {
-    if (providerRegistry.loading) {
-      sourcesTreeView.message = 'Loading…';
-      inboxTreeView.message = 'Loading…';
-    } else if (providerRegistry.getAllDiscoveredItems().size === 0) {
-      sourcesTreeView.message = 'No sources connected';
-      inboxTreeView.message = 'No new items';
-    } else {
-      // Providers loaded — show empty messages only if views have no content
-      const hasDiscoveredItems = [...providerRegistry.getAllDiscoveredItems().values()].some(items => items.length > 0);
-      sourcesTreeView.message = hasDiscoveredItems ? undefined : 'No items found';
-
-      const hasInboxItems = inboxProvider.getChildren().length > 0;
-      inboxTreeView.message = hasInboxItems ? undefined : 'No new items';
-    }
-  };
-
-  const updateWorkViewMessages = () => {
-    queueTreeView.message = queueProvider.getChildren().length > 0 ? undefined : 'No items in queue';
-    focusTreeView.message = focusProvider.getChildren().length > 0 ? undefined : 'No active work';
-    historyTreeView.message = historyProvider.getChildren().length > 0 ? undefined : 'No history items';
-  };
-
-  const workGraphSub = workGraph.onDidChange(safeHandler('Error handling work graph change', updateWorkViewMessages));
   let initialLoadComplete = false;
   let wasLoading = false;
 
-  const updateInboxBadge = () => {
-    const count = getInboxUnseenCount(providerRegistry, stateStore, inboxProvider.sessionSeenItems);
-    inboxTreeView.badge = count > 0 ? { value: count, tooltip: `${count} unseen item${count === 1 ? '' : 's'}` } : undefined;
-  };
-
-  // Coalesce UI updates so that when both onDidChangeDiscoveredItems and
-  // stateStore.onDidChange fire in the same microtask (e.g. during a discovery
-  // batch that calls setStates), we only run the full unseen-count scan once.
-  let uiUpdateScheduled = false;
-  const scheduleUiUpdate = () => {
-    if (uiUpdateScheduled) { return; }
-    uiUpdateScheduled = true;
-    queueMicrotask(() => {
-      try {
-        try {
-          updateViewMessages();
-        } catch (err: unknown) {
-          logger.error('Error updating view messages', err);
-        }
-        try {
-          updateInboxBadge();
-        } catch (err: unknown) {
-          logger.error('Error updating inbox badge', err);
-        }
-      } finally {
-        uiUpdateScheduled = false;
-      }
-    });
-  };
-
-  // Set initial state
-  updateWorkViewMessages();
-  updateViewMessages();
-  updateInboxBadge();
-
-  const providerRegSub = providerRegistry.onDidRegisterProvider(safeHandler('Error handling provider registration', scheduleUiUpdate));
   const discoveredSub = providerRegistry.onDidChangeDiscoveredItems(safeHandler('Error handling discovered items change', () => {
-    scheduleUiUpdate();
-
-    // Mark initial load complete when loading transitions from true to false
     if (!initialLoadComplete) {
       if (wasLoading && !providerRegistry.loading) {
         initialLoadComplete = true;
@@ -312,44 +177,41 @@ function wireEvents(
       wasLoading = wasLoading || providerRegistry.loading;
     }
   }));
+
   const newItemsSub = providerRegistry.onDidAddNewUnseenItems(safeHandler('Error handling new unseen items notification', (newCount) => {
     if (!initialLoadComplete) { return; }
     const config = vscode.workspace.getConfiguration('devDocket');
     const showNotifications = config.get<boolean>('showInboxNotifications', true);
     if (showNotifications && newCount > 0) {
       void vscode.window.showInformationMessage(
-        `DevDocket: ${newCount} new item${newCount === 1 ? '' : 's'} in Inbox`,
-        'Show Inbox'
+        `DevDocket: ${newCount} new item${newCount === 1 ? '' : 's'} in Incoming`,
+        'Open Mission Control',
       ).then(
         action => {
-          if (action === 'Show Inbox') {
-            vscode.commands.executeCommand('devdocket.inbox.focus').then(
+          if (action === 'Open Mission Control') {
+            vscode.commands.executeCommand('devdocket.missionControl.focus').then(
               undefined,
-              () => { /* view focus is best-effort */ }
+              () => { /* view focus is best-effort */ },
             );
           }
         },
-        () => { /* notification is best-effort */ }
+        () => { /* notification is best-effort */ },
       );
     }
   }));
-  const stateStoreSub = stateStore.onDidChange(safeHandler('Error handling state store change', scheduleUiUpdate));
-  const markSeenSub = inboxProvider.onDidMarkSeen(safeHandler('Error handling mark seen', scheduleUiUpdate));
 
-  // Watch notifications
   const jobFailureSub = watcherService.onDidDetectJobFailure(safeHandler('Error handling job failure', ({ run, job }) => {
     const config = vscode.workspace.getConfiguration('devDocket.watches');
     const notifyOnJobFailure = config.get<boolean>('notifyOnJobFailure', true);
     if (!notifyOnJobFailure) {
       return;
     }
-    
-    // Count still-running jobs
+
     const runningCount = run.status.jobs.filter(j => j.state === 'running').length;
     const message = runningCount > 0
       ? `Job '${job.name}' failed in ${run.identifier.displayName} (${runningCount} job${runningCount === 1 ? '' : 's'} still running)`
       : `Job '${job.name}' failed in ${run.identifier.displayName}`;
-    
+
     void vscode.window.showWarningMessage(message, 'View Run').then(action => {
       if (action === 'View Run') {
         const safe = isSafeUrl(run.identifier.url);
@@ -363,7 +225,7 @@ function wireEvents(
   const runCompleteSub = watcherService.onDidCompleteRun(safeHandler('Error handling run completion', (run) => {
     const isSuccess = run.status.conclusion === 'success';
     const message = `${run.identifier.displayName} ${isSuccess ? 'succeeded' : run.status.conclusion || 'completed'}`;
-    
+
     if (isSuccess) {
       void vscode.window.showInformationMessage(message, 'View Run').then(action => {
         if (action === 'View Run') {
@@ -385,8 +247,6 @@ function wireEvents(
     }
   }));
 
-  // Provider refresh handler: sync titles/descriptions, auto-watch authored PRs, and auto-complete.
-  // Per-provider guards prevent overlapping runs; AbortController cancels in-flight checks.
   const autoWatchControllers = new Map<string, AbortController>();
   const autoCompleteControllers = new Map<string, AbortController>();
   const autoCompleteSub = providerRegistry.onDidRefreshProvider(safeHandler('Error handling provider refresh', async (providerId) => {
@@ -425,7 +285,6 @@ function wireEvents(
 
     const config = vscode.workspace.getConfiguration('devDocket');
     if (config.get<boolean>('autoCompleteOnClose', true)) {
-      // Abort any in-flight check for this provider
       const prev = autoCompleteControllers.get(providerId);
       if (prev) {
         prev.abort();
@@ -452,7 +311,6 @@ function wireEvents(
     }
   }));
 
-  // Abort all in-flight auto-watch and auto-complete checks on disposal
   const autoWatchCleanup = { dispose: () => {
     for (const controller of autoWatchControllers.values()) {
       controller.abort();
@@ -469,10 +327,6 @@ function wireEvents(
   return [
     discoveredSub,
     newItemsSub,
-    providerRegSub,
-    stateStoreSub,
-    markSeenSub,
-    workGraphSub,
     jobFailureSub,
     runCompleteSub,
     autoCompleteSub,
@@ -485,7 +339,7 @@ function wireEvents(
  * Activate the DevDocket extension.
  *
  * Initialises storage, loads persisted work items and discovered-item state,
- * registers all tree views (Inbox, Queue, Focus, History, Sources), and
+ * registers the Mission Control webview, status bars, and watch panel, and
  * returns the public {@link DevDocketApi} for provider extensions to consume.
  *
  * @param context - The VS Code extension context provided at activation.
@@ -499,7 +353,6 @@ export async function activate(context: vscode.ExtensionContext): Promise<DevDoc
   const initStart = performance.now();
   const storagePath = context.globalStorageUri.fsPath;
   await migrateToGlobalState(context.globalState, storagePath);
-  await initViewLayoutStore(context.globalState);
   const { workGraph: wg, stateStore: ss, readStateStore, labelCache } = await loadStores(context.globalState);
   await migrateDiscoveredState(wg, ss);
 
@@ -519,17 +372,11 @@ export async function activate(context: vscode.ExtensionContext): Promise<DevDoc
   const api = new DevDocketApiImpl(pr, ar, wr, pwr, wg);
   logger.info(`Store + service init took ${Math.round(performance.now() - initStart)}ms`);
 
-  const treeViewStart = performance.now();
-  const treeSetup = createTreeViews(pr, ar, ss, readStateStore, wg, ws, wr, pwr);
-  logger.info(`Tree view creation took ${Math.round(performance.now() - treeViewStart)}ms`);
+  const watchPanelProvider = new WatchPanelProvider(context.extensionUri, ws);
 
   const eventWiringStart = performance.now();
-  const eventDisposables = wireEvents(pr, ss, wg, ws, pwr, treeSetup);
+  const eventDisposables = wireEvents(pr, wg, ws, pwr);
   logger.info(`Event wiring took ${Math.round(performance.now() - eventWiringStart)}ms`);
-
-  const { providers, views, disposables: viewDisposables } = treeSetup;
-
-  const watchPanelProvider = new WatchPanelProvider(context.extensionUri, ws);
 
   // Create status bar items
   const watchesStatusBar = new WatchesStatusBar(ws);
@@ -576,7 +423,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<DevDoc
     ws.onDidChangePRWatches(safeHandler('watch-panel:prs', () => watchPanelProvider.refresh())),
   );
 
-  // Load persisted watches (must happen after tree views are registered to show restored watches)
+  // Load persisted watches after the watch services are ready.
   ws.loadPersistedWatches().catch(err => {
     logger.error('Failed to load persisted watches', err);
   });
@@ -592,8 +439,6 @@ export async function activate(context: vscode.ExtensionContext): Promise<DevDoc
   // before WorkGraph is disposed.
   context.subscriptions.push(
     panelManager,
-    ...Object.values(views),
-    ...viewDisposables,
     ...eventDisposables,
     watchPanelProvider,
     watchesStatusBar,
@@ -604,40 +449,13 @@ export async function activate(context: vscode.ExtensionContext): Promise<DevDoc
     { dispose: () => ws.dispose() },
     { dispose: () => wr.dispose() },
     { dispose: () => pwr.dispose() },
-    { dispose: () => providers.inboxProvider.dispose() },
-    { dispose: () => providers.queueProvider.dispose() },
-    { dispose: () => providers.focusProvider.dispose() },
-    { dispose: () => providers.sourcesProvider.dispose() },
-    { dispose: () => providers.historyProvider.dispose() },
-    { dispose: () => providers.watchesProvider.dispose() },
     { dispose: () => pr.dispose() },
     { dispose: () => ar.dispose() },
   );
 
   const commandRegStart = performance.now();
-  const revealer = new ViewRevealer(wg, views.queueTreeView, views.focusTreeView, views.historyTreeView);
-  registerCommands(context, wg, ar, ss, pr, labelCache, wr, pwr, ws, watchPanelProvider, revealer);
+  registerCommands(context, wg, ar, ss, pr, labelCache, wr, pwr, ws, watchPanelProvider);
   logger.info(`Command registration took ${Math.round(performance.now() - commandRegStart)}ms`);
-
-  // Set context keys and listen for layout changes
-  const viewIds: ViewId[] = ['inbox', 'queue', 'focus', 'history', 'sources', 'watches'];
-  const providerMap: Record<ViewId, { layout: import('./views/viewLayout').ViewLayout }> = {
-    inbox: providers.inboxProvider,
-    queue: providers.queueProvider,
-    focus: providers.focusProvider,
-    history: providers.historyProvider,
-    sources: providers.sourcesProvider,
-    watches: providers.watchesProvider,
-  };
-  for (const id of viewIds) {
-    void vscode.commands.executeCommand('setContext', `devdocket.${id}Layout`, getViewLayout(id));
-  }
-  context.subscriptions.push(
-    onDidChangeLayout((viewId, layout) => {
-      providerMap[viewId].layout = layout;
-      void vscode.commands.executeCommand('setContext', `devdocket.${viewId}Layout`, layout);
-    }),
-  );
 
   logger.info(`DevDocket activated in ${Math.round(performance.now() - activationStart)}ms`);
   return api;
