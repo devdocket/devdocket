@@ -147,7 +147,7 @@ export async function autoWatchAuthoredPRs(
       }
 
       const identifier = prWatcher.parsePRUrl(item.url);
-      if (watcherService.isPRWatched(identifier)) {
+      if (await watcherService.isPRWatched(identifier)) {
         continue;
       }
 

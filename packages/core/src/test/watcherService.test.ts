@@ -44,6 +44,7 @@ function createIdentifier(providerId: string = 'test'): RunIdentifier {
 function createMockWatchStore(): WatchStore {
   return {
     loadAll: vi.fn().mockResolvedValue({ runs: [], prs: [] }),
+    hasPRWatch: vi.fn().mockResolvedValue(false),
     saveAll: vi.fn().mockResolvedValue(undefined),
   } as unknown as WatchStore;
 }
@@ -303,13 +304,21 @@ describe('WatcherService', () => {
       prRegistry.register(prWatcher);
       const identifier = createPRIdentifier();
 
-      expect(service.isPRWatched(identifier)).toBe(false);
+      await expect(service.isPRWatched(identifier)).resolves.toBe(false);
 
       await service.startPRWatch(identifier);
-      expect(service.isPRWatched(identifier)).toBe(true);
+      await expect(service.isPRWatched(identifier)).resolves.toBe(true);
 
       service.dismissPRWatch(identifier);
-      expect(service.isPRWatched(identifier)).toBe(true);
+      await expect(service.isPRWatched(identifier)).resolves.toBe(true);
+    });
+
+    it('reports dismissed PR watches persisted from a previous session', async () => {
+      const identifier = createPRIdentifier();
+      (watchStore.hasPRWatch as ReturnType<typeof vi.fn>).mockResolvedValue(true);
+
+      await expect(service.isPRWatched(identifier)).resolves.toBe(true);
+      expect(watchStore.hasPRWatch).toHaveBeenCalledWith(identifier);
     });
 
     it('starts a PR watch and fires change events', async () => {

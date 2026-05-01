@@ -331,10 +331,15 @@ export class WatcherService implements vscode.Disposable {
   }
 
   /**
-   * Check whether a PR has ever been watched in this session, including dismissed watches.
+   * Check whether a PR has ever been watched, including dismissed watches restored from persistence.
    */
-  isPRWatched(identifier: PRIdentifier): boolean {
-    return this.prWatches.has(this.getPRWatchKey(identifier));
+  async isPRWatched(identifier: PRIdentifier): Promise<boolean> {
+    const key = this.getPRWatchKey(identifier);
+    if (this.prWatches.has(key)) {
+      return true;
+    }
+
+    return this.watchStore.hasPRWatch(identifier);
   }
 
   /**
