@@ -1,10 +1,11 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { DataTransfer, DataTransferItem, EventEmitter, MarkdownString, TreeItemCollapsibleState } from 'vscode';
 import { WorkGraph } from '../services/workGraph';
-import { WorkItemState } from '../models/workItem';
+import { WorkItem, WorkItemState } from '../models/workItem';
 import { ITaskStore } from '../storage/taskStore';
 import { QueueTreeProvider } from '../views/queueTreeProvider';
 import { ProviderRegistry } from '../services/providerRegistry';
+import { ActionRegistry } from '../services/actionRegistry';
 
 function createMockStore(): ITaskStore {
   const items: Map<string, any> = new Map();
@@ -27,6 +28,15 @@ function createMockProviderRegistry(): ProviderRegistry {
     getDiscoveredItems: vi.fn(() => []),
     onDidRegisterProvider: emitter.event,
   } as any;
+}
+
+function createMockAction(id: string, canRun: (item: WorkItem) => boolean = () => true) {
+  return {
+    id,
+    label: `Action ${id}`,
+    canRun: vi.fn(canRun),
+    run: vi.fn(async () => {}),
+  };
 }
 
 const DRAG_MIME_TYPE = 'application/vnd.code.tree.devdocket.queue';
@@ -195,6 +205,27 @@ describe('QueueTreeProvider', () => {
       const item = await graph.createItem({ title: 'No URL watchable' });
       const treeItem = watchableProvider.getTreeItem(item);
       expect(treeItem.contextValue).toBe('queueItem');
+    });
+
+    it('sets contextValue to "queueItem.hasActions" when actions are available', async () => {
+      const actionRegistry = new ActionRegistry();
+      actionRegistry.register(createMockAction('queue-action'));
+      const actionableProvider = new QueueTreeProvider(graph, undefined, actionRegistry);
+      const item = await graph.createItem({ title: 'Actionable' });
+
+      expect(actionableProvider.getTreeItem(item).contextValue).toBe('queueItem.hasActions');
+    });
+
+    it('appends hasActions after watchable when actions are available', async () => {
+      const actionRegistry = new ActionRegistry();
+      actionRegistry.register(createMockAction('queue-watchable'));
+      const actionableProvider = new QueueTreeProvider(graph, undefined, actionRegistry, () => true);
+      const item = await graph.createItem(
+        { title: 'Actionable Watchable' },
+        { providerId: 'github', externalId: 'ext-action', url: 'https://github.com/owner/repo/pull/1' },
+      );
+
+      expect(actionableProvider.getTreeItem(item).contextValue).toBe('queueItem.hasUrl.watchable.hasActions');
     });
 
     it('sets icon to "remote" when item has providerId', async () => {
@@ -460,6 +491,19 @@ describe('QueueTreeProvider', () => {
 
       provider.refresh();
       expect(listener).toHaveBeenCalledTimes(1);
+    });
+
+    it('fires onDidChangeTreeData when action registrations change', () => {
+      const actionRegistry = new ActionRegistry();
+      const actionableProvider = new QueueTreeProvider(graph, undefined, actionRegistry);
+      const listener = vi.fn();
+      actionableProvider.onDidChangeTreeData(listener);
+
+      const registration = actionRegistry.register(createMockAction('queue-refresh'));
+      expect(listener).toHaveBeenCalledTimes(1);
+
+      registration.dispose();
+      expect(listener).toHaveBeenCalledTimes(2);
     });
 
     it('fires event for each workGraph change', async () => {

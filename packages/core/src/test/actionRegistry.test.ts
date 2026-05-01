@@ -56,6 +56,17 @@ describe('ActionRegistry', () => {
     expect(registry.getAction('removable')).toBeUndefined();
   });
 
+  it('fires onDidChangeRegistrations when actions are registered and unregistered', () => {
+    const listener = vi.fn();
+    registry.onDidChangeRegistrations(listener);
+
+    const disposable = registry.register(createMockAction('eventful'));
+    expect(listener).toHaveBeenCalledTimes(1);
+
+    disposable.dispose();
+    expect(listener).toHaveBeenCalledTimes(2);
+  });
+
   it('returns registered action from getAction', () => {
     const action = createMockAction('findme');
     registry.register(action);
@@ -104,6 +115,18 @@ describe('ActionRegistry', () => {
 
     expect(registry.getAction('a1')).toBeUndefined();
     expect(registry.getAction('a2')).toBeUndefined();
+  });
+
+  it('fires onDidChangeRegistrations when dispose clears registrations', () => {
+    const listener = vi.fn();
+    registry.onDidChangeRegistrations(listener);
+
+    registry.register(createMockAction('a1'));
+    listener.mockClear();
+
+    registry.dispose();
+
+    expect(listener).toHaveBeenCalledTimes(1);
   });
 
   it('getActionsFor returns empty array when registry is empty', () => {

@@ -124,6 +124,7 @@ async function migrateDiscoveredState(workGraph: WorkGraph, stateStore: Discover
 
 function createTreeViews(
   providerRegistry: ProviderRegistry,
+  actionRegistry: ActionRegistry,
   stateStore: DiscoveredStateStore,
   readStateStore: ReadStateStore,
   workGraph: WorkGraph,
@@ -136,8 +137,8 @@ function createTreeViews(
     prWatcherRegistry.findWatcherForUrl(url) !== undefined;
 
   const inboxProvider = new InboxTreeProvider(providerRegistry, stateStore, readStateStore);
-  const queueProvider = new QueueTreeProvider(workGraph, providerRegistry, isWatchable);
-  const focusProvider = new FocusTreeProvider(workGraph, providerRegistry, isWatchable);
+  const queueProvider = new QueueTreeProvider(workGraph, providerRegistry, actionRegistry, isWatchable);
+  const focusProvider = new FocusTreeProvider(workGraph, providerRegistry, actionRegistry, isWatchable);
   const sourcesProvider = new SourcesTreeProvider(providerRegistry, stateStore);
   const historyProvider = new HistoryTreeProvider(workGraph, providerRegistry);
   const watchesProvider = new WatchesTreeProvider(watcherService);
@@ -425,7 +426,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<DevDoc
   logger.info(`Store + service init took ${Math.round(performance.now() - initStart)}ms`);
 
   const treeViewStart = performance.now();
-  const treeSetup = createTreeViews(pr, ss, readStateStore, wg, ws, wr, pwr);
+  const treeSetup = createTreeViews(pr, ar, ss, readStateStore, wg, ws, wr, pwr);
   logger.info(`Tree view creation took ${Math.round(performance.now() - treeViewStart)}ms`);
 
   const eventWiringStart = performance.now();

@@ -13,6 +13,8 @@ import { Registry } from './registry';
  */
 export class ActionRegistry {
   private readonly registry = new Registry<DevDocketAction>('Action');
+  private readonly _onDidChange = new vscode.EventEmitter<void>();
+  readonly onDidChangeRegistrations: vscode.Event<void> = this._onDidChange.event;
 
   /**
    * Register an action and make it available in work-item context menus.
@@ -22,7 +24,22 @@ export class ActionRegistry {
    * @throws If an action with the same {@link DevDocketAction.id} is already registered.
    */
   register(action: DevDocketAction): vscode.Disposable {
-    return this.registry.register(action);
+    const registration = this.registry.register(action);
+    this._onDidChange.fire();
+
+    let disposed = false;
+    return new vscode.Disposable(() => {
+      if (disposed) {
+        return;
+      }
+      disposed = true;
+
+      const wasRegistered = this.registry.get(action.id) === action;
+      registration.dispose();
+      if (wasRegistered) {
+        this._onDidChange.fire();
+      }
+    });
   }
 
   /**
@@ -52,6 +69,11 @@ export class ActionRegistry {
 
   /** Release all registered actions. */
   dispose(): void {
+    const hadActions = this.registry.size > 0;
     this.registry.clear();
+    if (hadActions) {
+      this._onDidChange.fire();
+    }
+    this._onDidChange.dispose();
   }
 }

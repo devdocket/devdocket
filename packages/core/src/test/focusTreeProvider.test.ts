@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { EventEmitter, DataTransfer, DataTransferItem, window } from 'vscode';
 import { WorkItem, WorkItemState } from '../models/workItem';
+import { ActionRegistry } from '../services/actionRegistry';
 import { FocusTreeProvider } from '../views/focusTreeProvider';
 
 const DRAG_MIME_TYPE = 'application/vnd.code.tree.devdocket.focus';
@@ -25,6 +26,15 @@ function makeItem(overrides: Partial<WorkItem> = {}): WorkItem {
     createdAt: 1700000000000,
     updatedAt: 1700000000000,
     ...overrides,
+  };
+}
+
+function createMockAction(id: string, canRun: (item: WorkItem) => boolean = () => true) {
+  return {
+    id,
+    label: `Action ${id}`,
+    canRun: vi.fn(canRun),
+    run: vi.fn(async () => {}),
   };
 }
 
@@ -80,6 +90,33 @@ describe('FocusTreeProvider', () => {
       const watchableProvider = new FocusTreeProvider(workGraph as any, undefined, () => true);
       const item = makeItem({ state: WorkItemState.InProgress });
       expect(watchableProvider.getTreeItem(item).contextValue).toBe('active');
+    });
+
+    it('should set contextValue to "active.hasActions" when actions are available', () => {
+      const actionRegistry = new ActionRegistry();
+      actionRegistry.register(createMockAction('focus-action'));
+      const actionableProvider = new FocusTreeProvider(workGraph as any, undefined, actionRegistry);
+      const item = makeItem({ state: WorkItemState.InProgress });
+
+      expect(actionableProvider.getTreeItem(item).contextValue).toBe('active.hasActions');
+    });
+
+    it('should append hasActions after watchable for paused items with actions', () => {
+      const actionRegistry = new ActionRegistry();
+      actionRegistry.register(createMockAction('paused-action'));
+      const actionableProvider = new FocusTreeProvider(workGraph as any, undefined, actionRegistry, () => true);
+      const item = makeItem({ state: WorkItemState.Paused, url: 'https://github.com/owner/repo/pull/2' });
+
+      expect(actionableProvider.getTreeItem(item).contextValue).toBe('paused.hasUrl.watchable.hasActions');
+    });
+
+    it('should not append hasActions when no registered action can run', () => {
+      const actionRegistry = new ActionRegistry();
+      actionRegistry.register(createMockAction('paused-only', (item) => item.state === WorkItemState.Paused));
+      const actionableProvider = new FocusTreeProvider(workGraph as any, undefined, actionRegistry);
+      const item = makeItem({ state: WorkItemState.InProgress });
+
+      expect(actionableProvider.getTreeItem(item).contextValue).toBe('active');
     });
   });
 
@@ -478,6 +515,19 @@ describe('FocusTreeProvider', () => {
       provider.onDidChangeTreeData(listener);
       workGraph._fire();
       expect(listener).toHaveBeenCalledTimes(1);
+    });
+
+    it('should refresh when action registrations change', () => {
+      const actionRegistry = new ActionRegistry();
+      const actionableProvider = new FocusTreeProvider(workGraph as any, undefined, actionRegistry);
+      const listener = vi.fn();
+      actionableProvider.onDidChangeTreeData(listener);
+
+      const registration = actionRegistry.register(createMockAction('focus-refresh'));
+      expect(listener).toHaveBeenCalledTimes(1);
+
+      registration.dispose();
+      expect(listener).toHaveBeenCalledTimes(2);
     });
   });
 
