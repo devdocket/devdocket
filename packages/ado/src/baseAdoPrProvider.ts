@@ -177,7 +177,7 @@ export abstract class BaseAdoPrProvider extends BaseProvider {
         } else {
           fetchFailures.push(target);
           const reason = (result as PromiseRejectedResult).reason;
-          const isAbortError = reason instanceof Error && reason.name === 'AbortError';
+          const isAbortError = reason instanceof Error && (reason.name === 'AbortError' || reason.name === 'TimeoutError');
           if (!isAbortError && !signal?.aborted) {
             logger.error(
               `Failed to fetch ${this.logLabel} from ${target}:`,

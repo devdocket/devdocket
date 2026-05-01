@@ -180,8 +180,8 @@ describe('AdoMyPrsProvider', () => {
         };
       }
       if (url.includes('/ProjectB/_apis/git/pullrequests')) {
-        const error = new Error('The operation was aborted.');
-        error.name = 'AbortError';
+        const error = new Error('The operation timed out.');
+        error.name = 'TimeoutError';
         throw error;
       }
       if (url.includes('/repositories/repo1/pullrequests/101?')) {
@@ -205,6 +205,11 @@ describe('AdoMyPrsProvider', () => {
     expect(window.showWarningMessage).toHaveBeenCalledWith(
       'DevDocket ADO: My PRs errors: failed to fetch from myorg/ProjectB',
     );
+    expect(
+      mockChannel.appendLine.mock.calls.some(
+        (call: string[]) => call[0].includes('[ERROR]') && call[0].includes('Failed to fetch My PRs from myorg/ProjectB'),
+      ),
+    ).toBe(false);
   });
 
   it('maps vote statuses from PR detail data', async () => {
