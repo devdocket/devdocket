@@ -202,6 +202,53 @@ function toInboxItem(providerId: string, discoveredItem: { externalId: string; t
   };
 }
 
+interface IndexedDiscoveredItem {
+  providerId: string;
+  discoveredItem: DiscoveredItem;
+  inboxItem: InboxItem;
+}
+
+interface ClosesRelatedIndexEntry {
+  exactMatches: IndexedDiscoveredItem[];
+  reverseMatches: IndexedDiscoveredItem[];
+}
+
+function getOrCreateClosesRelatedIndexEntry(
+  index: Map<string, ClosesRelatedIndexEntry>,
+  externalId: string,
+): ClosesRelatedIndexEntry {
+  let entry = index.get(externalId);
+  if (!entry) {
+    entry = { exactMatches: [], reverseMatches: [] };
+    index.set(externalId, entry);
+  }
+  return entry;
+}
+
+function buildClosesRelatedIndex(providerRegistry: ProviderRegistry): Map<string, ClosesRelatedIndexEntry> {
+  const index = new Map<string, ClosesRelatedIndexEntry>();
+
+  for (const [providerId, discoveredItems] of providerRegistry.getAllDiscoveredItems()) {
+    for (const discoveredItem of discoveredItems) {
+      const indexedItem: IndexedDiscoveredItem = {
+        providerId,
+        discoveredItem,
+        inboxItem: toInboxItem(providerId, discoveredItem),
+      };
+      getOrCreateClosesRelatedIndexEntry(index, discoveredItem.externalId).exactMatches.push(indexedItem);
+
+      for (const ref of discoveredItem.relatedItems ?? []) {
+        if (ref.relation !== 'closes') {
+          continue;
+        }
+        getOrCreateClosesRelatedIndexEntry(index, ref.externalId).reverseMatches.push(indexedItem);
+      }
+    }
+  }
+
+  return index;
+}
+
 function expandWithClosesRelatedInboxItems(
   items: InboxItem[],
   providerRegistry: ProviderRegistry,
@@ -209,48 +256,50 @@ function expandWithClosesRelatedInboxItems(
 ): InboxItem[] {
   const result = new Map(items.map(item => [`${item.providerId}::${item.externalId}`, item]));
   const queue = [...items];
+  const closesRelatedIndex = buildClosesRelatedIndex(providerRegistry);
 
   while (queue.length > 0) {
     const current = queue.shift()!;
-    for (const [providerId, discoveredItems] of providerRegistry.getAllDiscoveredItems()) {
-      for (const discoveredItem of discoveredItems) {
-        const discoveredKey = `${providerId}::${discoveredItem.externalId}`;
-        const directlyRelated = providerId === current.providerId
-          && discoveredItem.externalId === current.externalId
-          && discoveredItem.relatedItems?.some(ref => ref.relation === 'closes');
-        const reverseRelated = discoveredItem.relatedItems?.some(
-          ref => ref.relation === 'closes' && ref.externalId === current.externalId,
-        );
+    const relatedEntry = closesRelatedIndex.get(current.externalId);
+    if (!relatedEntry) {
+      continue;
+    }
 
-        if (!directlyRelated && !reverseRelated) {
-          continue;
-        }
+    const relatedItems = [
+      ...relatedEntry.exactMatches
+        .filter(match => match.providerId === current.providerId && match.discoveredItem.relatedItems?.some(ref => ref.relation === 'closes')),
+      ...relatedEntry.reverseMatches,
+    ];
 
-        const candidateItems = directlyRelated
-          ? (discoveredItem.relatedItems ?? [])
-              .filter(ref => ref.relation === 'closes')
-              .flatMap(ref => {
-                const matches: InboxItem[] = [];
-                for (const [candidateProviderId, candidateDiscoveredItems] of providerRegistry.getAllDiscoveredItems()) {
-                  for (const candidateDiscoveredItem of candidateDiscoveredItems) {
-                    if (candidateDiscoveredItem.externalId === ref.externalId) {
-                      matches.push(toInboxItem(candidateProviderId, candidateDiscoveredItem));
-                    }
+    for (const { providerId, discoveredItem, inboxItem } of relatedItems) {
+      const directlyRelated = providerId === current.providerId
+        && discoveredItem.externalId === current.externalId
+        && discoveredItem.relatedItems?.some(ref => ref.relation === 'closes');
+
+      const candidateItems = directlyRelated
+        ? (discoveredItem.relatedItems ?? [])
+            .filter(ref => ref.relation === 'closes')
+            .flatMap(ref => {
+              const matches: InboxItem[] = [];
+              for (const [candidateProviderId, candidateDiscoveredItems] of providerRegistry.getAllDiscoveredItems()) {
+                for (const candidateDiscoveredItem of candidateDiscoveredItems) {
+                  if (candidateDiscoveredItem.externalId === ref.externalId) {
+                    matches.push(toInboxItem(candidateProviderId, candidateDiscoveredItem));
                   }
                 }
-                return matches;
-              })
-          : [toInboxItem(providerId, discoveredItem)];
+              }
+              return matches;
+            })
+        : [inboxItem];
 
-        for (const candidate of candidateItems) {
-          const candidateKey = `${candidate.providerId}::${candidate.externalId}`;
-          const candidateState = stateStore.getState(candidate.providerId, candidate.externalId);
-          if ((candidateState !== undefined && candidateState !== 'unseen') || result.has(candidateKey)) {
-            continue;
-          }
-          result.set(candidateKey, candidate);
-          queue.push(candidate);
+      for (const candidate of candidateItems) {
+        const candidateKey = `${candidate.providerId}::${candidate.externalId}`;
+        const candidateState = stateStore.getState(candidate.providerId, candidate.externalId);
+        if ((candidateState !== undefined && candidateState !== 'unseen') || result.has(candidateKey)) {
+          continue;
         }
+        result.set(candidateKey, candidate);
+        queue.push(candidate);
       }
     }
   }
