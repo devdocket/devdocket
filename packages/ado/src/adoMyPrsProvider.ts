@@ -77,10 +77,12 @@ export class AdoMyPrsProvider extends BaseAdoPrProvider {
     if (votes.some(vote => vote === -5)) {
       return 'Waiting for author';
     }
-    if (votes.length === 0 || votes.every(vote => vote === 0)) {
+
+    const nonZeroVotes = votes.filter(vote => vote !== 0);
+    if (nonZeroVotes.length === 0) {
       return 'Waiting on reviews';
     }
-    if (votes.every(vote => vote >= 5)) {
+    if (nonZeroVotes.every(vote => vote >= 5)) {
       return 'Approved';
     }
     return 'Review in progress';

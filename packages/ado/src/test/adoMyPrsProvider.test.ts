@@ -260,7 +260,7 @@ describe('AdoMyPrsProvider', () => {
       'Rejected',
       'Waiting for author',
       'Approved',
-      'Review in progress',
+      'Approved',
       'Waiting on reviews',
     ]);
   });
