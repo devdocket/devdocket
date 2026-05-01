@@ -1,4 +1,4 @@
-import { combineSignals, runWorkerPool, type DiscoveredItem } from '@devdocket/shared';
+import { combineSignals, createAbortError, runWorkerPool, type DiscoveredItem } from '@devdocket/shared';
 import { BaseAdoPrProvider, type AdoPullRequest } from './baseAdoPrProvider';
 import { logger } from './logger';
 import type { OrgConfig } from './configParser';
@@ -32,9 +32,7 @@ export class AdoMyPrsProvider extends BaseAdoPrProvider {
 
     await runWorkerPool(candidates, async ({ item, index, parsed }) => {
       if (signal?.aborted) {
-        const abortError = new Error('The operation was aborted.');
-        abortError.name = 'AbortError';
-        throw abortError;
+        throw createAbortError();
       }
 
       const detailUrl = `https://dev.azure.com/${encodeURIComponent(parsed.org)}/${encodeURIComponent(parsed.project)}/_apis/git/repositories/${encodeURIComponent(parsed.repo)}/pullrequests/${parsed.prId}?api-version=7.1`;
