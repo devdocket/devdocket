@@ -28,17 +28,13 @@ interface GraphQlResponse<T> {
   errors?: Array<{ message?: string }>;
 }
 
-interface CrossReferencedTimelineResponse {
+interface ClosingIssuesResponse {
   repository?: {
     pullRequest?: {
-      timelineItems?: {
+      closingIssuesReferences?: {
         nodes?: Array<{
-          willCloseTarget?: boolean;
-          source?: {
-            __typename?: string;
-            number?: number;
-            repository?: { nameWithOwner?: string };
-          };
+          number?: number;
+          repository?: { nameWithOwner?: string };
         }>;
       };
     };
@@ -298,19 +294,11 @@ export class GitHubMyPrsProvider extends BaseGitHubProvider {
         query: `query RelatedItems($owner: String!, $name: String!, $number: Int!) {
           repository(owner: $owner, name: $name) {
             pullRequest(number: $number) {
-              timelineItems(itemTypes: CROSS_REFERENCED_EVENT, first: 100) {
+              closingIssuesReferences(first: 50) {
                 nodes {
-                  ... on CrossReferencedEvent {
-                    willCloseTarget
-                    source {
-                      __typename
-                      ... on Issue {
-                        number
-                        repository {
-                          nameWithOwner
-                        }
-                      }
-                    }
+                  number
+                  repository {
+                    nameWithOwner
                   }
                 }
               }
@@ -326,29 +314,22 @@ export class GitHubMyPrsProvider extends BaseGitHubProvider {
       return undefined;
     }
 
-    const data = (await response.json()) as GraphQlResponse<CrossReferencedTimelineResponse>;
+    const data = (await response.json()) as GraphQlResponse<ClosingIssuesResponse>;
     if (data.errors && data.errors.length > 0) {
       logger.debug(`GraphQL returned errors for ${repoName}#${prNumber}: ${data.errors.map(error => error.message).join(', ')}`);
       return undefined;
     }
 
     const links = new Map<string, RelatedItemRef>();
-    for (const node of data.data?.repository?.pullRequest?.timelineItems?.nodes ?? []) {
-      if (node.source?.__typename !== 'Issue') {
-        continue;
-      }
-      const nameWithOwner = node.source.repository?.nameWithOwner;
-      const number = node.source.number;
+    for (const node of data.data?.repository?.pullRequest?.closingIssuesReferences?.nodes ?? []) {
+      const nameWithOwner = node.repository?.nameWithOwner;
+      const number = node.number;
       if (!nameWithOwner || typeof number !== 'number') {
         continue;
       }
 
       const externalId = `${nameWithOwner}#${number}`;
-      const relation: RelatedItemRef['relation'] = node.willCloseTarget ? 'closes' : 'linked';
-      const existing = links.get(externalId);
-      if (!existing || relation === 'closes') {
-        links.set(externalId, { externalId, relation });
-      }
+      links.set(externalId, { externalId, relation: 'closes' });
     }
 
     return links.size > 0 ? [...links.values()] : undefined;

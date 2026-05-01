@@ -53,6 +53,7 @@ export class InboxTreeProvider implements vscode.TreeDataProvider<InboxElement> 
   private cachedHiddenSet: Set<string> | undefined;
   private linkedChildrenCache = new Map<string, InboxItem[]>();
   private visibleItemsByExternalIdCache: Map<string, Array<{ providerId: string; item: DiscoveredItem }>> | undefined;
+  private reverseRelatedIndexCache: Map<string, Array<{ providerId: string; item: DiscoveredItem; relation: 'closes' | 'linked' }>> | undefined;
 
   get layout(): ViewLayout { return this._layoutState.value; }
   set layout(value: ViewLayout) { this._layoutState.value = value; }
@@ -77,6 +78,7 @@ export class InboxTreeProvider implements vscode.TreeDataProvider<InboxElement> 
     this.cachedHiddenSet = undefined;
     this.linkedChildrenCache.clear();
     this.visibleItemsByExternalIdCache = undefined;
+    this.reverseRelatedIndexCache = undefined;
     this.refreshTimer = setTimeout(() => {
       this.refreshTimer = undefined;
       this.pruneSeenItems();
@@ -138,6 +140,7 @@ export class InboxTreeProvider implements vscode.TreeDataProvider<InboxElement> 
     this.cachedHiddenSet = undefined;
     this.linkedChildrenCache.clear();
     this.visibleItemsByExternalIdCache = undefined;
+    this.reverseRelatedIndexCache = undefined;
     this._onDidChangeTreeData.fire();
   }
 
@@ -414,22 +417,49 @@ export class InboxTreeProvider implements vscode.TreeDataProvider<InboxElement> 
     }
 
     const discoveredItem = this.findVisibleInboxItem(parent.providerId, parent.externalId);
-    if (!discoveredItem?.relatedItems?.length) {
+    if (!discoveredItem) {
       return [];
     }
 
     const visibleItemsByExternalId = this.getVisibleInboxItemsByExternalId();
-    const linkedChildren = discoveredItem.relatedItems
-      .flatMap((relatedItem) => (visibleItemsByExternalId.get(relatedItem.externalId) ?? [])
-        // Inbox nesting only shows linked items from other provider groups.
-        .filter(match => match.providerId !== parent.providerId)
-        .map(match => this.toItemNode(match.providerId, match.item, {
+    const linkedChildren: InboxItem[] = [];
+    const seenKeys = new Set<string>();
+
+    // Forward: this item's relatedItems → find matching visible items from other providers
+    if (discoveredItem.relatedItems?.length) {
+      for (const relatedItem of discoveredItem.relatedItems) {
+        for (const match of visibleItemsByExternalId.get(relatedItem.externalId) ?? []) {
+          if (match.providerId === parent.providerId) { continue; }
+          const nodeId = `inbox::item::${match.providerId}::${match.item.externalId}::linked::${parent.providerId}::${parent.externalId}`;
+          if (seenKeys.has(nodeId)) { continue; }
+          seenKeys.add(nodeId);
+          linkedChildren.push(this.toItemNode(match.providerId, match.item, {
+            linkedParentProviderId: parent.providerId,
+            linkedParentExternalId: parent.externalId,
+            linkedRelation: relatedItem.relation,
+            linkedNodeId: nodeId,
+          }));
+        }
+      }
+    }
+
+    // Reverse: find visible items from other providers whose relatedItems reference this item
+    const reverseIndex = this.getReverseRelatedIndex();
+    const reverseMatches = reverseIndex.get(parent.externalId);
+    if (reverseMatches) {
+      for (const { providerId, item, relation } of reverseMatches) {
+        if (providerId === parent.providerId) { continue; }
+        const nodeId = `inbox::item::${providerId}::${item.externalId}::linked::${parent.providerId}::${parent.externalId}`;
+        if (seenKeys.has(nodeId)) { continue; }
+        seenKeys.add(nodeId);
+        linkedChildren.push(this.toItemNode(providerId, item, {
           linkedParentProviderId: parent.providerId,
           linkedParentExternalId: parent.externalId,
-          linkedRelation: relatedItem.relation,
-          linkedNodeId: `inbox::item::${match.providerId}::${match.item.externalId}::linked::${parent.providerId}::${parent.externalId}`,
-        })))
-      .filter((item, index, items) => items.findIndex(candidate => candidate.linkedNodeId === item.linkedNodeId) === index);
+          linkedRelation: relation,
+          linkedNodeId: nodeId,
+        }));
+      }
+    }
 
     const sortedChildren = sortLinkedNodes(linkedChildren as Array<InboxItem & { linkedRelation: 'closes' | 'linked' }>);
     this.linkedChildrenCache.set(cacheKey, sortedChildren);
@@ -480,6 +510,31 @@ export class InboxTreeProvider implements vscode.TreeDataProvider<InboxElement> 
 
     this.visibleItemsByExternalIdCache = visibleItemsByExternalId;
     return visibleItemsByExternalId;
+  }
+
+  /** Builds a reverse index: externalId → items from other providers whose relatedItems reference it. */
+  private getReverseRelatedIndex(): Map<string, Array<{ providerId: string; item: DiscoveredItem; relation: 'closes' | 'linked' }>> {
+    if (this.reverseRelatedIndexCache) {
+      return this.reverseRelatedIndexCache;
+    }
+
+    const index = new Map<string, Array<{ providerId: string; item: DiscoveredItem; relation: 'closes' | 'linked' }>>();
+
+    for (const [providerId, items] of this.providerRegistry.getAllDiscoveredItems()) {
+      for (const item of items) {
+        if (!this.isVisibleInboxItem(providerId, item)) { continue; }
+        if (!item.relatedItems?.length) { continue; }
+
+        for (const ref of item.relatedItems) {
+          const matches = index.get(ref.externalId) ?? [];
+          matches.push({ providerId, item, relation: ref.relation });
+          index.set(ref.externalId, matches);
+        }
+      }
+    }
+
+    this.reverseRelatedIndexCache = index;
+    return index;
   }
 
   private isVisibleInboxItem(providerId: string, item: DiscoveredItem): boolean {

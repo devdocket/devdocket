@@ -137,7 +137,7 @@ describe('GitHubMyPrsProvider', () => {
     expect(items[1].canonicalId).toBe('github:pull:owner/repo#2');
   });
 
-  it('emits related issue references for PR cross references', async () => {
+  it('emits related issue references for PR closing references', async () => {
     const pr = createMockPr(101, 'Fix issue');
 
     mockFetch.mockImplementation(async (url: string) => {
@@ -160,23 +160,15 @@ describe('GitHubMyPrsProvider', () => {
             data: {
               repository: {
                 pullRequest: {
-                  timelineItems: {
+                  closingIssuesReferences: {
                     nodes: [
                       {
-                        willCloseTarget: true,
-                        source: {
-                          __typename: 'Issue',
-                          number: 1,
-                          repository: { nameWithOwner: 'owner/repo' },
-                        },
+                        number: 1,
+                        repository: { nameWithOwner: 'owner/repo' },
                       },
                       {
-                        willCloseTarget: false,
-                        source: {
-                          __typename: 'Issue',
-                          number: 2,
-                          repository: { nameWithOwner: 'owner/repo' },
-                        },
+                        number: 2,
+                        repository: { nameWithOwner: 'owner/repo' },
                       },
                     ],
                   },
@@ -197,7 +189,7 @@ describe('GitHubMyPrsProvider', () => {
     expect(items[0].state).toBe('Ready to merge');
     expect(items[0].relatedItems).toEqual([
       { externalId: 'owner/repo#1', relation: 'closes' },
-      { externalId: 'owner/repo#2', relation: 'linked' },
+      { externalId: 'owner/repo#2', relation: 'closes' },
     ]);
   });
 
