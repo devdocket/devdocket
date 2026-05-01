@@ -6,10 +6,6 @@ import { logger } from './logger';
 import { ProviderRegistry } from './providerRegistry';
 import { WorkGraph } from './workGraph';
 
-function pairKey(itemId1: string, itemId2: string): string {
-  return [itemId1, itemId2].sort((a, b) => a.localeCompare(b)).join('::');
-}
-
 export class LinkingService implements vscode.Disposable {
   private readonly disposables: vscode.Disposable[] = [];
   private knownItemIds: Set<string>;
@@ -90,7 +86,7 @@ export class LinkingService implements vscode.Disposable {
 
     const expectedKeys = new Set(expectedLinks.keys());
     for (const link of existingProviderLinks) {
-      if (expectedKeys.has(pairKey(link.itemId1, link.itemId2))) {
+      if (expectedKeys.has(ItemLinkStore.pairKey(link.itemId1, link.itemId2))) {
         continue;
       }
 
@@ -132,7 +128,7 @@ export class LinkingService implements vscode.Disposable {
                 continue;
               }
 
-              const key = pairKey(sourceItem.id, targetItem.id);
+              const key = ItemLinkStore.pairKey(sourceItem.id, targetItem.id);
               const existing = expected.get(key);
               expected.set(key, {
                 itemId1: sourceItem.id.localeCompare(targetItem.id) <= 0 ? sourceItem.id : targetItem.id,

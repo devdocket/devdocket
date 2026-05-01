@@ -319,6 +319,7 @@ export class WorkGraph {
   }
 
   private shouldPropagateLinkedState(newState: WorkItemState): boolean {
+    // Keep this list explicit so newly added enum members do not automatically propagate linked state transitions; they must be added here intentionally.
     return newState === WorkItemState.New
       || newState === WorkItemState.InProgress
       || newState === WorkItemState.Paused

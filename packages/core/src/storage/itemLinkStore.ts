@@ -47,7 +47,7 @@ export class ItemLinkStore {
     this.globalState = globalState;
   }
 
-  private static pairKey(itemId1: string, itemId2: string): string {
+  static pairKey(itemId1: string, itemId2: string): string {
     return [itemId1, itemId2].sort((a, b) => a.localeCompare(b)).join('::');
   }
 
