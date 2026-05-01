@@ -245,6 +245,8 @@ describe('registerCommands', () => {
 
     it('trims whitespace from the title', async () => {
       (vscode.window.showInputBox as Mock).mockResolvedValue('  Padded  ');
+      workGraph.createItem.mockResolvedValue(createWorkItem({ id: 'wc-trimmed', title: 'Padded' }));
+
       await invoke('devdocket.createItem');
 
       expect(workGraph.createItem).toHaveBeenCalledWith({ title: 'Padded' });

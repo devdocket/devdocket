@@ -334,7 +334,7 @@ async function handleCreateItem(
   logger.info(`Creating new work item: ${title.trim()}`);
   const createdItem = await workGraph.createItem({ title: title.trim() });
   const providerLabel = createdItem.providerId ? labelCache.get(createdItem.providerId) : undefined;
-  WorkItemEditorPanel.open(context, workGraph, providerRegistry, createdItem, providerLabel);
+  void WorkItemEditorPanel.open(context, workGraph, providerRegistry, createdItem, providerLabel);
   void vscode.window.showInformationMessage(`DevDocket: Created "${title.trim()}"`);
   void revealer?.revealInQueue(createdItem.id);
 }
