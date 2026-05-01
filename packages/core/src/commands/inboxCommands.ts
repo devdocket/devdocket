@@ -585,14 +585,14 @@ async function handleDismissAllFromInbox(
   const items = resolveBulkInboxItems(node, providerRegistry, stateStore);
   if (items.length === 0) { return; }
 
+  const expanded = expandWithCanonicalPeers(items, providerRegistry, stateStore);
   const confirm = await vscode.window.showWarningMessage(
-    formatBulkInboxMessage('Dismiss', items.length, node, providerRegistry),
+    formatBulkInboxMessage('Dismiss', expanded.length, node, providerRegistry),
     { modal: true },
     'Dismiss All',
   );
   if (confirm !== 'Dismiss All') { return; }
 
-  const expanded = expandWithCanonicalPeers(items, providerRegistry, stateStore);
   try {
     logger.info(`Batch dismissing ${expanded.length} inbox items from node ${getBulkNodePath(node, providerRegistry)}`);
     await stateStore.setStates(

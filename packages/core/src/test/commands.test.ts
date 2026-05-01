@@ -1224,6 +1224,38 @@ describe('registerCommands', () => {
       expect(vscode.window.showInformationMessage).toHaveBeenCalledWith('Dismissed 2 items');
     });
 
+    it('shows the expanded canonical peer count in bulk dismiss confirmation', async () => {
+      const providerNode: InboxProviderNode = { kind: 'provider', providerId: 'prs', label: 'GitHub' };
+      mockDiscoveredInboxItems([
+        ['prs', [
+          { externalId: 'repo#1', title: 'PR #1', canonicalId: 'github:pull:repo#1' },
+          { externalId: 'repo#2', title: 'PR #2', canonicalId: 'github:pull:repo#2' },
+        ]],
+        ['reviews', [
+          { externalId: 'repo#1', title: 'PR #1', canonicalId: 'github:pull:repo#1' },
+          { externalId: 'repo#2', title: 'PR #2', canonicalId: 'github:pull:repo#2' },
+        ]],
+      ]);
+      stateStore.getState.mockReturnValue(undefined);
+      (vscode.window.showWarningMessage as Mock).mockResolvedValueOnce('Dismiss All');
+
+      await invoke('devdocket.dismissAllFromInbox', providerNode);
+
+      expect(vscode.window.showWarningMessage).toHaveBeenNthCalledWith(
+        1,
+        'Dismiss 4 items from "GitHub"?',
+        { modal: true },
+        'Dismiss All',
+      );
+      expect(stateStore.setStates).toHaveBeenCalledWith([
+        { providerId: 'prs', externalId: 'repo#1', state: 'dismissed' },
+        { providerId: 'prs', externalId: 'repo#2', state: 'dismissed' },
+        { providerId: 'reviews', externalId: 'repo#1', state: 'dismissed' },
+        { providerId: 'reviews', externalId: 'repo#2', state: 'dismissed' },
+      ]);
+      expect(vscode.window.showInformationMessage).toHaveBeenCalledWith('Dismissed 4 items');
+    });
+
     it('dismisses all unseen group items after confirmation', async () => {
       const groupNode: InboxGroupNode = { kind: 'group', providerId: 'github', groupName: 'My Mentions', unseenCount: 2 };
       providerRegistry.getProviderLabel.mockReturnValue('GitHub');
