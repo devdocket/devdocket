@@ -125,19 +125,21 @@ describe('extension activation', () => {
     await activate(mockContext);
 
     expect(mockActivate).toHaveBeenCalled();
-    expect(mockApi.registerProvider).toHaveBeenCalledTimes(2);
+    expect(mockApi.registerProvider).toHaveBeenCalledTimes(3);
   });
 
-  it('registers two providers when organization is configured', async () => {
+  it('registers three providers when organization is configured', async () => {
     await activate(mockContext);
 
-    expect(mockApi.registerProvider).toHaveBeenCalledTimes(2);
+    expect(mockApi.registerProvider).toHaveBeenCalledTimes(3);
 
     // Verify provider objects passed
     const firstProvider = mockApi.registerProvider.mock.calls[0][0];
     const secondProvider = mockApi.registerProvider.mock.calls[1][0];
+    const thirdProvider = mockApi.registerProvider.mock.calls[2][0];
     expect(firstProvider.id).toBe('ado-work-items');
     expect(secondProvider.id).toBe('ado-pr-reviews');
+    expect(thirdProvider.id).toBe('ado-my-prs');
   });
 
   it('does not register providers when no organization is configured', async () => {

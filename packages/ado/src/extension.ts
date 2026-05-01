@@ -1,6 +1,7 @@
 import * as vscode from 'vscode';
 import { AdoWorkItemProvider } from './adoWorkItemProvider';
 import { AdoPrReviewProvider } from './adoPrReviewProvider';
+import { AdoMyPrsProvider } from './adoMyPrsProvider';
 import { AdoPipelineWatcher } from './adoPipelineWatcher';
 import { AdoPRWatcher } from './adoPRWatcher';
 import { parseAdoProjectsConfig } from './configParser';
@@ -9,8 +10,10 @@ import { initLogger, setLogLevel, logger, resolveLogLevel } from './logger';
 
 let workItemProvider: AdoWorkItemProvider | undefined;
 let prProvider: AdoPrReviewProvider | undefined;
+let myPrsProvider: AdoMyPrsProvider | undefined;
 let workItemRegistration: vscode.Disposable | undefined;
 let prRegistration: vscode.Disposable | undefined;
+let myPrsRegistration: vscode.Disposable | undefined;
 let watcherRegistration: vscode.Disposable | undefined;
 let prWatcherRegistration: vscode.Disposable | undefined;
 let orgWarningShown = false;
@@ -68,10 +71,14 @@ export async function activate(_context: vscode.ExtensionContext): Promise<void>
     workItemRegistration = undefined;
     prRegistration?.dispose();
     prRegistration = undefined;
+    myPrsRegistration?.dispose();
+    myPrsRegistration = undefined;
     workItemProvider?.dispose();
     workItemProvider = undefined;
     prProvider?.dispose();
     prProvider = undefined;
+    myPrsProvider?.dispose();
+    myPrsProvider = undefined;
 
     const config = vscode.workspace.getConfiguration('devDocketAdo');
     const projects = config.get<string[]>('projects', []);
@@ -110,12 +117,15 @@ export async function activate(_context: vscode.ExtensionContext): Promise<void>
 
     workItemProvider = new AdoWorkItemProvider(orgConfigs);
     prProvider = new AdoPrReviewProvider(orgConfigs);
+    myPrsProvider = new AdoMyPrsProvider(orgConfigs);
 
     workItemProvider.startPeriodicRefresh(intervalSeconds);
     prProvider.startPeriodicRefresh(intervalSeconds);
+    myPrsProvider.startPeriodicRefresh(intervalSeconds);
 
     workItemRegistration = api.registerProvider(workItemProvider);
     prRegistration = api.registerProvider(prProvider);
+    myPrsRegistration = api.registerProvider(myPrsProvider);
 
     // Register ADO pipeline watcher (if core supports it)
     if (typeof api.registerRunWatcher === 'function') {
@@ -129,7 +139,7 @@ export async function activate(_context: vscode.ExtensionContext): Promise<void>
       prWatcherRegistration = api.registerPRWatcher(new AdoPRWatcher());
     }
 
-    const parts = ['2 ADO providers'];
+    const parts = ['3 ADO providers'];
     if (watcherRegistration) { parts.push('1 watcher'); }
     if (prWatcherRegistration) { parts.push('1 PR watcher'); }
     logger.info(`Registered ${parts.join(' + ')}`);
@@ -155,9 +165,11 @@ export function deactivate(): void {
   logger.info('DevDocket ADO deactivating...');
   workItemRegistration?.dispose();
   prRegistration?.dispose();
+  myPrsRegistration?.dispose();
   watcherRegistration?.dispose();
   prWatcherRegistration?.dispose();
   workItemProvider?.dispose();
   prProvider?.dispose();
+  myPrsProvider?.dispose();
   logger.info('DevDocket ADO deactivated');
 }
