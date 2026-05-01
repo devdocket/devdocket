@@ -6,15 +6,25 @@ import { fileURLToPath } from 'node:url';
 import { extractLatestChangelogEntry } from './extract-changelog.mjs';
 
 const repoRoot = resolve(fileURLToPath(new URL('..', import.meta.url)));
+// NOTE: This intentionally creates release tags for every package managed by Changesets even
+// though only publish-shared.yml exists today. Non-shared tags still act as release markers;
+// add publish-<package>.yml workflows separately when those packages are ready to publish.
 const tagPrefixes = {
   shared: 'shared-v',
-  // Publish workflows for non-shared packages are expected to be added separately; see issue #409.
   core: 'core-v',
   github: 'github-v',
   ado: 'ado-v',
   'start-git-work': 'start-git-work-v',
   'ai-reviewer': 'ai-reviewer-v'
 };
+
+function getPublishWorkflowName(packageDirectory) {
+  return `publish-${packageDirectory}.yml`;
+}
+
+function hasPublishWorkflow(packageDirectory) {
+  return existsSync(resolve(repoRoot, '.github', 'workflows', getPublishWorkflowName(packageDirectory)));
+}
 
 function git(...args) {
   return execFileSync('git', args, {
@@ -68,7 +78,8 @@ const releaseCandidates = Object.entries(tagPrefixes)
 
     return {
       packageDirectory,
-      tagName: `${tagPrefix}${version}`
+      tagName: `${tagPrefix}${version}`,
+      hasPublishWorkflow: hasPublishWorkflow(packageDirectory)
     };
   })
   .filter(Boolean);
@@ -96,7 +107,12 @@ for (const releaseCandidate of releaseCandidates) {
 
   git('tag', releaseCandidate.tagName);
   newTags.push(releaseCandidate.tagName);
-  console.log(`Created tag ${releaseCandidate.tagName}`);
+
+  if (releaseCandidate.hasPublishWorkflow) {
+    console.log(`Created tag ${releaseCandidate.tagName}; ${getPublishWorkflowName(releaseCandidate.packageDirectory)} is present and can publish it.`);
+  } else {
+    console.log(`Created tag ${releaseCandidate.tagName}; no ${getPublishWorkflowName(releaseCandidate.packageDirectory)} workflow exists yet, so publishing must be added separately.`);
+  }
 }
 
 if (newTags.length === 0) {
