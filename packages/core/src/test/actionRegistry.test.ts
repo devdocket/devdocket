@@ -107,6 +107,17 @@ describe('ActionRegistry', () => {
     expect(actions).toHaveLength(0);
   });
 
+  it('skips actions from getActionsFor when canRun throws', () => {
+    const item = createWorkItem();
+    const safeAction = createMockAction('safe');
+    registry.register(createMockAction('throwing', () => {
+      throw new Error('boom');
+    }));
+    registry.register(safeAction);
+
+    expect(registry.getActionsFor(item)).toEqual([safeAction]);
+  });
+
   it('returns true from hasActionsFor when an action can run', () => {
     const item = createWorkItem({ providerId: 'github' });
     registry.register(createMockAction('github-only', (i) => i.providerId === 'github'));

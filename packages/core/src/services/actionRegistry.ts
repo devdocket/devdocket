@@ -52,7 +52,13 @@ export class ActionRegistry {
    * @returns An array of actions that can be run on the item.
    */
   getActionsFor(item: WorkItem): DevDocketAction[] {
-    const matching = this.registry.getAll().filter((a) => a.canRun(item));
+    const matching = this.registry.getAll().filter((action) => {
+      try {
+        return action.canRun(item);
+      } catch {
+        return false;
+      }
+    });
     logger.debug(`Found ${matching.length} actions for item ${item.id}`);
     return matching;
   }
