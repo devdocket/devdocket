@@ -47,6 +47,7 @@ export class WatcherService implements vscode.Disposable {
   private pollTimer: NodeJS.Timeout | undefined;
   private isPollInFlight = false;
   private consecutiveFailures = new Map<string, number>();
+  private persistedPRWatchKeys: Set<string> | undefined;
   private configSubscription: vscode.Disposable | undefined;
   
   private readonly _onDidChangeWatchedRuns = new vscode.EventEmitter<WatchedRun[]>();
@@ -83,6 +84,8 @@ export class WatcherService implements vscode.Disposable {
    */
   async loadPersistedWatches(): Promise<void> {
     const { runs: watches, prs } = await this.watchStore.loadAll();
+    this.persistedPRWatchKeys = new Set(prs.map(pr => this.getPRWatchKey(pr.identifier)));
+
     // Restore non-dismissed run watches
     const restored = watches.filter(w => !w.dismissed);
     for (const watch of restored) {
@@ -221,6 +224,7 @@ export class WatcherService implements vscode.Disposable {
     };
 
     this.prWatches.set(key, watchedPR);
+    this.persistedPRWatchKeys?.add(key);
     this.consecutiveFailures.delete(key);
     this.logger.info(`Started watching PR: ${identifier.displayName} (${identifier.providerId})`);
 
@@ -328,6 +332,18 @@ export class WatcherService implements vscode.Disposable {
    */
   getActivePRWatches(): WatchedPR[] {
     return Array.from(this.prWatches.values()).filter(pr => !pr.dismissed);
+  }
+
+  /**
+   * Check whether a PR has ever been watched, including dismissed entries loaded from persisted state on demand.
+   */
+  async isPRWatched(identifier: PRIdentifier): Promise<boolean> {
+    const key = this.getPRWatchKey(identifier);
+    if (this.prWatches.has(key)) {
+      return true;
+    }
+
+    return (await this.getPersistedPRWatchKeys()).has(key);
   }
 
   /**
@@ -737,6 +753,15 @@ export class WatcherService implements vscode.Disposable {
     return identifier;
   }
 
+  private async getPersistedPRWatchKeys(): Promise<Set<string>> {
+    if (!this.persistedPRWatchKeys) {
+      const { prs } = await this.watchStore.loadAll();
+      this.persistedPRWatchKeys = new Set(prs.map(pr => this.getPRWatchKey(pr.identifier)));
+    }
+
+    return this.persistedPRWatchKeys;
+  }
+
   private persistWatches(): void {
     this.watchStore.saveAll(this.getAllWatches(), this.getAllPRWatches()).catch(err => {
       this.logger.error(`Failed to persist watches: ${err}`);
@@ -754,5 +779,6 @@ export class WatcherService implements vscode.Disposable {
     this.watches.clear();
     this.prWatches.clear();
     this.consecutiveFailures.clear();
+    this.persistedPRWatchKeys = undefined;
   }
 }

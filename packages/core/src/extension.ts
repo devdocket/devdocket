@@ -122,6 +122,45 @@ async function migrateDiscoveredState(workGraph: WorkGraph, stateStore: Discover
   }
 }
 
+function isAutoWatchCandidate(item: { authored?: boolean; url?: string }): item is { authored: true; url: string } {
+  return item.authored === true && typeof item.url === 'string';
+}
+
+export async function autoWatchAuthoredPRs(
+  providerId: string,
+  providerRegistry: ProviderRegistry,
+  prWatcherRegistry: PRWatcherRegistry,
+  watcherService: WatcherService,
+  signal: AbortSignal,
+): Promise<void> {
+  const items = providerRegistry.getDiscoveredItems(providerId).filter(isAutoWatchCandidate);
+
+  for (const item of items) {
+    if (signal.aborted) {
+      return;
+    }
+
+    try {
+      const prWatcher = prWatcherRegistry.findWatcherForUrl(item.url);
+      if (!prWatcher) {
+        continue;
+      }
+
+      const identifier = prWatcher.parsePRUrl(item.url);
+      if (await watcherService.isPRWatched(identifier)) {
+        continue;
+      }
+
+      await watcherService.startPRWatch(identifier);
+    } catch (err) {
+      if (signal.aborted) {
+        return;
+      }
+      logger.warn(`Failed to auto-watch authored PR from provider ${providerId}`, { url: item.url }, err);
+    }
+  }
+}
+
 function createTreeViews(
   providerRegistry: ProviderRegistry,
   actionRegistry: ActionRegistry,
@@ -186,6 +225,7 @@ function wireEvents(
   stateStore: DiscoveredStateStore,
   workGraph: WorkGraph,
   watcherService: WatcherService,
+  prWatcherRegistry: PRWatcherRegistry,
   { providers, views }: ReturnType<typeof createTreeViews>,
 ): vscode.Disposable[] {
   const { inboxProvider, queueProvider, focusProvider, historyProvider } = providers;
@@ -339,8 +379,9 @@ function wireEvents(
     }
   }));
 
-  // Provider refresh handler: sync titles/descriptions and auto-complete.
-  // Per-provider guard prevents overlapping auto-complete runs; AbortController cancels in-flight checks.
+  // Provider refresh handler: sync titles/descriptions, auto-watch authored PRs, and auto-complete.
+  // Per-provider guards prevent overlapping runs; AbortController cancels in-flight checks.
+  const autoWatchControllers = new Map<string, AbortController>();
   const autoCompleteControllers = new Map<string, AbortController>();
   const autoCompleteSub = providerRegistry.onDidRefreshProvider(safeHandler('Error handling provider refresh', async (providerId) => {
     try {
@@ -355,28 +396,63 @@ function wireEvents(
       logger.error('Error syncing provider descriptions', err);
     }
 
+    const refreshTasks: Promise<void>[] = [];
+
+    const watchConfig = vscode.workspace.getConfiguration('devDocket.watches');
+    if (watchConfig.get<boolean>('autoWatchAuthoredPRs', true)) {
+      const prevAutoWatch = autoWatchControllers.get(providerId);
+      if (prevAutoWatch) {
+        prevAutoWatch.abort();
+      }
+      const autoWatchController = new AbortController();
+      autoWatchControllers.set(providerId, autoWatchController);
+      refreshTasks.push((async () => {
+        try {
+          await autoWatchAuthoredPRs(providerId, providerRegistry, prWatcherRegistry, watcherService, autoWatchController.signal);
+        } finally {
+          if (autoWatchControllers.get(providerId) === autoWatchController) {
+            autoWatchControllers.delete(providerId);
+          }
+        }
+      })());
+    }
+
     const config = vscode.workspace.getConfiguration('devDocket');
-    if (!config.get<boolean>('autoCompleteOnClose', true)) {
-      return;
+    if (config.get<boolean>('autoCompleteOnClose', true)) {
+      // Abort any in-flight check for this provider
+      const prev = autoCompleteControllers.get(providerId);
+      if (prev) {
+        prev.abort();
+      }
+      const controller = new AbortController();
+      autoCompleteControllers.set(providerId, controller);
+      refreshTasks.push((async () => {
+        try {
+          const completedTitles = await checkAutoComplete(providerId, workGraph, providerRegistry, controller.signal);
+          showAutoCompleteNotification(completedTitles);
+        } finally {
+          if (autoCompleteControllers.get(providerId) === controller) {
+            autoCompleteControllers.delete(providerId);
+          }
+        }
+      })());
     }
-    // Abort any in-flight check for this provider
-    const prev = autoCompleteControllers.get(providerId);
-    if (prev) {
-      prev.abort();
-    }
-    const controller = new AbortController();
-    autoCompleteControllers.set(providerId, controller);
-    try {
-      const completedTitles = await checkAutoComplete(providerId, workGraph, providerRegistry, controller.signal);
-      showAutoCompleteNotification(completedTitles);
-    } finally {
-      if (autoCompleteControllers.get(providerId) === controller) {
-        autoCompleteControllers.delete(providerId);
+
+    const results = await Promise.allSettled(refreshTasks);
+    for (const result of results) {
+      if (result.status === 'rejected') {
+        logger.error(`Error running provider refresh follow-up for ${providerId}`, result.reason);
       }
     }
   }));
 
-  // Abort all in-flight auto-complete checks on disposal
+  // Abort all in-flight auto-watch and auto-complete checks on disposal
+  const autoWatchCleanup = { dispose: () => {
+    for (const controller of autoWatchControllers.values()) {
+      controller.abort();
+    }
+    autoWatchControllers.clear();
+  }};
   const autoCompleteCleanup = { dispose: () => {
     for (const controller of autoCompleteControllers.values()) {
       controller.abort();
@@ -384,7 +460,19 @@ function wireEvents(
     autoCompleteControllers.clear();
   }};
 
-  return [discoveredSub, newItemsSub, providerRegSub, stateStoreSub, markSeenSub, workGraphSub, jobFailureSub, runCompleteSub, autoCompleteSub, autoCompleteCleanup];
+  return [
+    discoveredSub,
+    newItemsSub,
+    providerRegSub,
+    stateStoreSub,
+    markSeenSub,
+    workGraphSub,
+    jobFailureSub,
+    runCompleteSub,
+    autoCompleteSub,
+    autoWatchCleanup,
+    autoCompleteCleanup,
+  ];
 }
 
 /**
@@ -430,7 +518,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<DevDoc
   logger.info(`Tree view creation took ${Math.round(performance.now() - treeViewStart)}ms`);
 
   const eventWiringStart = performance.now();
-  const eventDisposables = wireEvents(pr, ss, wg, ws, treeSetup);
+  const eventDisposables = wireEvents(pr, ss, wg, ws, pwr, treeSetup);
   logger.info(`Event wiring took ${Math.round(performance.now() - eventWiringStart)}ms`);
 
   const { providers, views, disposables: viewDisposables } = treeSetup;

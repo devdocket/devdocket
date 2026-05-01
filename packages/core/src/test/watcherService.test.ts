@@ -44,6 +44,7 @@ function createIdentifier(providerId: string = 'test'): RunIdentifier {
 function createMockWatchStore(): WatchStore {
   return {
     loadAll: vi.fn().mockResolvedValue({ runs: [], prs: [] }),
+    hasPRWatch: vi.fn().mockResolvedValue(false),
     saveAll: vi.fn().mockResolvedValue(undefined),
   } as unknown as WatchStore;
 }
@@ -297,6 +298,58 @@ describe('WatcherService', () => {
         repo: 'owner/repo',
       };
     }
+
+    it('reports watched PRs even after they are dismissed', async () => {
+      const prWatcher = createMockPRWatcher();
+      prRegistry.register(prWatcher);
+      const identifier = createPRIdentifier();
+
+      await expect(service.isPRWatched(identifier)).resolves.toBe(false);
+
+      await service.startPRWatch(identifier);
+      await expect(service.isPRWatched(identifier)).resolves.toBe(true);
+
+      service.dismissPRWatch(identifier);
+      await expect(service.isPRWatched(identifier)).resolves.toBe(true);
+    });
+
+    it('reports dismissed PR watches persisted from a previous session', async () => {
+      const identifier = createPRIdentifier();
+      (watchStore.loadAll as ReturnType<typeof vi.fn>).mockResolvedValue({
+        runs: [],
+        prs: [{
+          identifier,
+          prState: 'closed',
+          childRunKeys: [],
+          watchedAt: new Date().toISOString(),
+          lastPolledAt: new Date().toISOString(),
+          dismissed: true,
+        }],
+      });
+
+      await expect(service.isPRWatched(identifier)).resolves.toBe(true);
+      expect(watchStore.loadAll).toHaveBeenCalledTimes(1);
+    });
+
+    it('caches persisted PR watch lookups across repeated checks', async () => {
+      const identifier = createPRIdentifier();
+      (watchStore.loadAll as ReturnType<typeof vi.fn>).mockResolvedValue({
+        runs: [],
+        prs: [{
+          identifier,
+          prState: 'closed',
+          childRunKeys: [],
+          watchedAt: new Date().toISOString(),
+          lastPolledAt: new Date().toISOString(),
+          dismissed: true,
+        }],
+      });
+
+      await expect(service.isPRWatched(identifier)).resolves.toBe(true);
+      await expect(service.isPRWatched(identifier)).resolves.toBe(true);
+
+      expect(watchStore.loadAll).toHaveBeenCalledTimes(1);
+    });
 
     it('starts a PR watch and fires change events', async () => {
       const prWatcher = createMockPRWatcher();
