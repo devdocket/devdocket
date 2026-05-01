@@ -50,7 +50,6 @@ export class AdoMyPrsProvider extends BaseAdoPrProvider {
 
         if (!response.ok) {
           logger.debug(`Failed to fetch PR detail for ${item.externalId}: ${response.status}`);
-          items[index] = { ...item, state: 'active' };
           return;
         }
 

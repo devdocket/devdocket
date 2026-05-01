@@ -260,12 +260,12 @@ describe('AdoMyPrsProvider', () => {
     ]);
   });
 
-  it('falls back to active when PR detail enrichment fails', async () => {
+  it('preserves the list status when PR detail enrichment returns a non-ok response', async () => {
     mockFetch
       .mockResolvedValueOnce(mockConnectionData())
       .mockResolvedValueOnce({
         ok: true,
-        json: async () => ({ value: [createMockPr(8, 'Fallback PR')] }),
+        json: async () => ({ value: [createMockPr(8, 'Fallback PR', 'MyProject', 'myrepo', { status: 'queued' })] }),
       })
       .mockResolvedValueOnce({ ok: false, status: 500 });
 
@@ -274,7 +274,7 @@ describe('AdoMyPrsProvider', () => {
     await provider.refresh();
 
     const items = listener.mock.calls[0][0];
-    expect(items[0].state).toBe('active');
+    expect(items[0].state).toBe('queued');
     expect(
       mockChannel.appendLine.mock.calls.some(
         (call: string[]) => call[0].includes('[DEBUG]') && call[0].includes('Failed to fetch PR detail'),
