@@ -92,7 +92,7 @@
           {
             "id": "monitorPipelines",
             "title": "Watch CI Pipelines and PRs",
-            "description": "Monitor GitHub Actions and Azure Pipelines runs without leaving VS Code.",
+            "description": "Monitor GitHub Actions and Azure DevOps Pipelines runs without leaving VS Code.",
             "media": {
               "markdown": "media/walkthroughs/watches.md"
             },
