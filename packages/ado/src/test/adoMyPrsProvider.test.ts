@@ -282,6 +282,36 @@ describe('AdoMyPrsProvider', () => {
     ).toBe(true);
   });
 
+  it('preserves the list status when PR detail enrichment throws', async () => {
+    mockFetch.mockImplementation(async (url: string) => {
+      if (url.includes('/connectiondata')) {
+        return mockConnectionData();
+      }
+      if (url.includes('searchCriteria.creatorId=')) {
+        return {
+          ok: true,
+          json: async () => ({ value: [createMockPr(10, 'Exploding PR', 'MyProject', 'myrepo', { status: 'queued' })] }),
+        };
+      }
+      if (url.includes('/repositories/myrepo/pullrequests/10?')) {
+        throw new Error('boom');
+      }
+      throw new Error(`Unexpected fetch call: ${url}`);
+    });
+
+    const listener = vi.fn();
+    provider.onDidDiscoverItems(listener);
+    await provider.refresh();
+
+    const items = listener.mock.calls[0][0];
+    expect(items[0].state).toBe('queued');
+    expect(
+      mockChannel.appendLine.mock.calls.some(
+        (call: string[]) => call[0].includes('[DEBUG]') && call[0].includes('Failed to enrich PR'),
+      ),
+    ).toBe(true);
+  });
+
   it('handles connection data failure gracefully', async () => {
     mockFetch.mockResolvedValueOnce({ ok: false, status: 401, text: async () => 'Unauthorized' });
 

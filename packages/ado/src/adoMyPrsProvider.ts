@@ -63,7 +63,6 @@ export class AdoMyPrsProvider extends BaseAdoPrProvider {
           throw err;
         }
         logger.debug(`Failed to enrich PR ${item.externalId}: ${String(err)}`);
-        items[index] = { ...item, state: 'active' };
       }
     }, 5);
   }
