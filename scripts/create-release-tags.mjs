@@ -110,8 +110,9 @@ if (releaseCandidates.length === 0) {
 
 git('checkout', '-B', 'main', 'origin/main');
 
-// This runs in a single CI job. If dev advances after releaseCandidates are computed,
-// the ff-only merge fails safely and the newer dev push triggers a fresh workflow run.
+// This runs in a single CI job against the refs fetched above. The ff-only merge uses the
+// fetched origin/dev snapshot for this run; if dev advances afterwards, that newer commit is
+// not included here and will be handled by a subsequent workflow run after a fresh fetch.
 try {
   git('merge', '--ff-only', 'origin/dev');
 } catch {
