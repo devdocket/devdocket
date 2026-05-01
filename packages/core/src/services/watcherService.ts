@@ -335,7 +335,7 @@ export class WatcherService implements vscode.Disposable {
   }
 
   /**
-   * Check whether a PR has ever been watched, including dismissed watches restored from persistence.
+   * Check whether a PR has ever been watched, including dismissed entries loaded from persisted state on demand.
    */
   async isPRWatched(identifier: PRIdentifier): Promise<boolean> {
     const key = this.getPRWatchKey(identifier);
