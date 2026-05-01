@@ -24,6 +24,15 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Verify tag version matches package.json
+        run: |
+          TAG_VERSION="${GITHUB_REF_NAME#core-v}"
+          PKG_VERSION=$(node -p "require('./packages/core/package.json').version")
+          if [ "$TAG_VERSION" != "$PKG_VERSION" ]; then
+            echo "Tag version ($TAG_VERSION) does not match package.json version ($PKG_VERSION)"
+            exit 1
+          fi
+
       - name: Build shared
         working-directory: packages/shared
         run: npm run build
@@ -35,15 +44,6 @@ jobs:
       - name: Test core
         working-directory: packages/core
         run: npm run test
-
-      - name: Verify tag version matches package.json
-        run: |
-          TAG_VERSION="${GITHUB_REF_NAME#core-v}"
-          PKG_VERSION=$(node -p "require('./packages/core/package.json').version")
-          if [ "$TAG_VERSION" != "$PKG_VERSION" ]; then
-            echo "Tag version ($TAG_VERSION) does not match package.json version ($PKG_VERSION)"
-            exit 1
-          fi
 
       - name: Package extension
         id: package
@@ -71,9 +71,9 @@ jobs:
           if [ -z "$NOTES" ]; then
             NOTES="* No changes to packages/core in this release"
           fi
-          printf '%s\n' "$NOTES" > release-notes.md
+          printf '%s\n' "$NOTES" > "$RUNNER_TEMP/release-notes.md"
 
       - name: Create GitHub Release
-        run: gh release create "$GITHUB_REF_NAME" "${{ steps.package.outputs.vsix_path }}" --title "$GITHUB_REF_NAME" --notes-file release-notes.md
+        run: gh release create "$GITHUB_REF_NAME" "${{ steps.package.outputs.vsix_path }}" --title "$GITHUB_REF_NAME" --notes-file "$RUNNER_TEMP/release-notes.md"
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
