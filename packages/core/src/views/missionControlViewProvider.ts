@@ -126,15 +126,9 @@ export class MissionControlViewProvider implements vscode.WebviewViewProvider {
 
     const readyToStartItems = this.workGraph
       .getItemsByState(WorkItemState.New)
-      .sort((a, b) => {
-        const urgency = this.compareUrgency(a, b, discoveredItemMap);
-        if (urgency !== 0) {
-          return urgency;
-        }
-
-        return (a.sortOrder ?? Number.MAX_SAFE_INTEGER) - (b.sortOrder ?? Number.MAX_SAFE_INTEGER)
-          || b.updatedAt - a.updatedAt;
-      })
+      .sort((a, b) => (a.sortOrder ?? Number.MAX_SAFE_INTEGER) - (b.sortOrder ?? Number.MAX_SAFE_INTEGER)
+        || this.compareUrgency(a, b, discoveredItemMap)
+        || b.updatedAt - a.updatedAt)
       .map(item => this.buildWorkItemCardData(item, 'readyToStart', discoveredItemMap));
 
     const pausedItems = this.workGraph
@@ -380,6 +374,7 @@ export class MissionControlViewProvider implements vscode.WebviewViewProvider {
         await this.handleTransitionState(message.itemId, message.targetState);
         break;
       case 'reorderItems':
+        await this.handleReorder(message.itemIds);
         break;
       case 'createItem':
         await vscode.commands.executeCommand('devdocket.createItem');
@@ -464,6 +459,61 @@ export class MissionControlViewProvider implements vscode.WebviewViewProvider {
     } catch (err) {
       logger.error('MissionControl: transition failed', err);
       void vscode.window.showErrorMessage(`Failed to transition item: ${err instanceof Error ? err.message : String(err)}`);
+    }
+  }
+
+  private async handleReorder(itemIds: string[]): Promise<void> {
+    try {
+      if (itemIds.length < 2) {
+        return;
+      }
+
+      const currentIds = this.workGraph
+        .getItemsByState(WorkItemState.New)
+        .sort((a, b) => (a.sortOrder ?? Number.MAX_SAFE_INTEGER) - (b.sortOrder ?? Number.MAX_SAFE_INTEGER)
+          || b.updatedAt - a.updatedAt)
+        .map(item => item.id);
+
+      if (currentIds.length !== itemIds.length) {
+        logger.warn('MissionControl: reorder ignored because ready-to-start items changed during drag');
+        return;
+      }
+
+      const currentIdSet = new Set(currentIds);
+      if (new Set(itemIds).size !== itemIds.length || currentIds.some(itemId => !itemIds.includes(itemId)) || itemIds.some(itemId => !currentIdSet.has(itemId))) {
+        logger.warn('MissionControl: reorder ignored because it included unknown ready-to-start item ids');
+        return;
+      }
+
+      if (itemIds.every((itemId, index) => itemId === currentIds[index])) {
+        return;
+      }
+
+      const workingIds = [...currentIds];
+      for (let index = 0; index < itemIds.length; index += 1) {
+        const desiredId = itemIds[index];
+        if (workingIds[index] === desiredId) {
+          continue;
+        }
+
+        const draggedIndex = workingIds.indexOf(desiredId);
+        if (draggedIndex === -1) {
+          logger.warn(`MissionControl: reorder ignored because item ${desiredId} was not in the ready-to-start tier`);
+          return;
+        }
+
+        if (index === workingIds.length - 1) {
+          await this.workGraph.moveToEnd(desiredId);
+        } else {
+          await this.workGraph.reorderItem(desiredId, workingIds[index]);
+        }
+
+        workingIds.splice(draggedIndex, 1);
+        workingIds.splice(index, 0, desiredId);
+      }
+    } catch (err) {
+      logger.error('MissionControl: reorder failed', err);
+      void vscode.window.showErrorMessage(`Failed to reorder items: ${err instanceof Error ? err.message : String(err)}`);
     }
   }
 
@@ -640,6 +690,11 @@ export class MissionControlViewProvider implements vscode.WebviewViewProvider {
       gap: 8px;
       margin-top: 10px;
     }
+    .tier-items.drag-active {
+      border-radius: 6px;
+      outline: 1px dashed var(--vscode-focusBorder);
+      outline-offset: 4px;
+    }
     .source-provider,
     .source-group {
       border-left: 3px solid transparent;
@@ -761,6 +816,12 @@ export class MissionControlViewProvider implements vscode.WebviewViewProvider {
       background: var(--vscode-list-inactiveSelectionBackground, rgba(127, 127, 127, 0.08));
       cursor: pointer;
     }
+    .item-card[draggable="true"] {
+      cursor: grab;
+    }
+    .item-card.dragging {
+      opacity: 0.4;
+    }
     .item-card-main {
       width: 100%;
       display: flex;
@@ -770,9 +831,14 @@ export class MissionControlViewProvider implements vscode.WebviewViewProvider {
       background: transparent;
       border: none;
       color: inherit;
-      cursor: pointer;
+      cursor: inherit;
       text-align: left;
       font: inherit;
+    }
+    .item-card.dragging,
+    .item-card.dragging .item-card-main,
+    .item-card.dragging .drag-handle {
+      cursor: grabbing;
     }
     .item-card.item-card--incoming { border-left-color: var(--tier-incoming); }
     .item-card.item-card--in-progress { border-left-color: var(--tier-in-progress); }
@@ -828,6 +894,24 @@ export class MissionControlViewProvider implements vscode.WebviewViewProvider {
       gap: 6px;
       min-width: 0;
       flex: 1;
+    }
+    .drag-handle {
+      opacity: 0;
+      cursor: grab;
+      color: var(--vscode-descriptionForeground);
+      margin-right: 4px;
+      user-select: none;
+      line-height: 1;
+    }
+    .item-card:hover .drag-handle,
+    .item-card:focus-within .drag-handle {
+      opacity: 0.6;
+    }
+    .drop-indicator {
+      height: 2px;
+      background: var(--vscode-focusBorder);
+      margin: 0 8px;
+      border-radius: 1px;
     }
     .item-title {
       font-weight: 600;

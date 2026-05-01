@@ -1,3 +1,4 @@
+import { Fragment } from 'preact';
 import { useEffect, useRef, useState } from 'preact/hooks';
 import type { TierData } from '../../shared/types';
 import { ItemCard } from './ItemCard';
@@ -8,6 +9,7 @@ interface TierSectionProps {
   onAcceptItem?: (providerId: string, externalId: string) => void;
   onDismissItem?: (providerId: string, externalId: string) => void;
   onTransitionState?: (itemId: string, targetState: string) => void;
+  onReorderItems?: (itemIds: string[]) => void;
   onAcceptAll?: () => void;
   onClearHistory?: () => void;
 }
@@ -18,6 +20,7 @@ export function TierSection({
   onAcceptItem,
   onDismissItem,
   onTransitionState,
+  onReorderItems,
   onAcceptAll,
   onClearHistory,
 }: TierSectionProps) {
@@ -25,8 +28,13 @@ export function TierSection({
   const [activeItemId, setActiveItemId] = useState<string | undefined>(() =>
     tier.items.find(item => item.isSelected)?.id ?? tier.items[0]?.id,
   );
+  const [draggedItemId, setDraggedItemId] = useState<string | undefined>();
+  const [dropIndex, setDropIndex] = useState<number | null>(null);
+  const [isDragActive, setIsDragActive] = useState(false);
   const headerButtonRef = useRef<HTMLButtonElement>(null);
   const itemRefs = useRef<Record<string, HTMLDivElement | null>>({});
+  const dragDepthRef = useRef(0);
+  const isReadyToStartTier = tier.id === 'ready-to-start';
   const toggleCollapsed = () => setCollapsed(value => !value);
   const itemCountLabel = `${tier.name}, ${tier.items.length} item${tier.items.length === 1 ? '' : 's'}`;
   const itemsId = `mission-control-tier-${tier.id}`;
@@ -90,6 +98,116 @@ export function TierSection({
     return true;
   };
 
+  const clearDropState = () => {
+    dragDepthRef.current = 0;
+    setDraggedItemId(undefined);
+    setDropIndex(null);
+    setIsDragActive(false);
+  };
+
+  const getDropIndexFromPointer = (clientY: number): number => {
+    for (let index = 0; index < tier.items.length; index += 1) {
+      const element = itemRefs.current[tier.items[index].id];
+      if (!element) {
+        continue;
+      }
+
+      const rect = element.getBoundingClientRect();
+      if (clientY < rect.top + rect.height / 2) {
+        return index;
+      }
+    }
+
+    return tier.items.length;
+  };
+
+  const updateDropIndex = (clientY: number) => {
+    setDropIndex(getDropIndexFromPointer(clientY));
+  };
+
+  const handleDragStart = (itemId: string) => {
+    if (!isReadyToStartTier) {
+      return;
+    }
+
+    dragDepthRef.current = 0;
+    setDraggedItemId(itemId);
+    setDropIndex(null);
+    setIsDragActive(true);
+  };
+
+  const handleDragEnd = () => {
+    clearDropState();
+  };
+
+  const handleDragEnter = (event: DragEvent) => {
+    if (!isReadyToStartTier || !draggedItemId) {
+      return;
+    }
+
+    dragDepthRef.current += 1;
+    setIsDragActive(true);
+    updateDropIndex(event.clientY);
+  };
+
+  const handleDragOver = (event: DragEvent) => {
+    if (!isReadyToStartTier || !draggedItemId) {
+      return;
+    }
+
+    event.preventDefault();
+    if (event.dataTransfer) {
+      event.dataTransfer.dropEffect = 'move';
+    }
+    setIsDragActive(true);
+    updateDropIndex(event.clientY);
+  };
+
+  const handleDragLeave = () => {
+    if (!isReadyToStartTier || !draggedItemId) {
+      return;
+    }
+
+    dragDepthRef.current = Math.max(0, dragDepthRef.current - 1);
+    if (dragDepthRef.current === 0) {
+      setDropIndex(null);
+      setIsDragActive(false);
+    }
+  };
+
+  const handleDrop = (event: DragEvent) => {
+    if (!isReadyToStartTier) {
+      return;
+    }
+
+    event.preventDefault();
+
+    const sourceItemId = event.dataTransfer?.getData('text/plain') || draggedItemId;
+    const nextDropIndex = getDropIndexFromPointer(event.clientY);
+    clearDropState();
+
+    if (!sourceItemId) {
+      return;
+    }
+
+    const currentIndex = tier.items.findIndex(item => item.id === sourceItemId);
+    if (currentIndex === -1) {
+      return;
+    }
+
+    const draggedItem = tier.items[currentIndex];
+    const reorderedItems = tier.items.filter(item => item.id !== sourceItemId);
+    const boundedDropIndex = Math.max(0, Math.min(reorderedItems.length, nextDropIndex > currentIndex ? nextDropIndex - 1 : nextDropIndex));
+    reorderedItems.splice(boundedDropIndex, 0, draggedItem);
+
+    const reorderedIds = reorderedItems.map(item => item.id);
+    if (reorderedIds.every((itemId, index) => itemId === tier.items[index]?.id)) {
+      return;
+    }
+
+    onReorderItems?.(reorderedIds);
+  };
+
   return (
     <section class={`tier-section tier-${tier.id}`}>
       <div class="tier-header">
@@ -147,29 +265,38 @@ export function TierSection({
       {!collapsed ? (
         <div
           id={itemsId}
-          class="tier-items"
+          class={`tier-items ${isDragActive ? 'drag-active' : ''}`.trim()}
           role="listbox"
           aria-label={itemCountLabel}
           aria-orientation="vertical"
           aria-multiselectable={false}
+          onDragEnter={isReadyToStartTier ? handleDragEnter : undefined}
+          onDragOver={isReadyToStartTier ? handleDragOver : undefined}
+          onDragLeave={isReadyToStartTier ? handleDragLeave : undefined}
+          onDrop={isReadyToStartTier ? handleDrop : undefined}
         >
-          {tier.items.map(item => (
-            <ItemCard
-              key={item.id}
-              item={item}
-              tabIndex={item.id === activeItemId ? 0 : -1}
-              itemRef={(element) => {
-                itemRefs.current[item.id] = element;
-              }}
-              onFocus={() => setActiveItemId(item.id)}
-              onMoveFocus={moveItemFocus}
-              onMoveTierFocus={focusTierHeader}
-              onClick={() => onItemClick(item.id)}
-              onAccept={onAcceptItem}
-              onDismiss={onDismissItem}
-              onTransition={onTransitionState}
-            />
+          {tier.items.map((item, index) => (
+            <Fragment key={item.id}>
+              {dropIndex === index ? <div class="drop-indicator" aria-hidden="true" /> : null}
+              <ItemCard
+                item={item}
+                tabIndex={item.id === activeItemId ? 0 : -1}
+                itemRef={(element) => {
+                  itemRefs.current[item.id] = element;
+                }}
+                onFocus={() => setActiveItemId(item.id)}
+                onMoveFocus={moveItemFocus}
+                onMoveTierFocus={focusTierHeader}
+                onClick={() => onItemClick(item.id)}
+                onAccept={onAcceptItem}
+                onDismiss={onDismissItem}
+                onTransition={onTransitionState}
+                onDragStart={isReadyToStartTier ? handleDragStart : undefined}
+                onDragEnd={isReadyToStartTier ? handleDragEnd : undefined}
+              />
+            </Fragment>
           ))}
+          {dropIndex === tier.items.length ? <div class="drop-indicator" aria-hidden="true" /> : null}
         </div>
       ) : null}
     </section>

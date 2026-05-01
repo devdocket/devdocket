@@ -13,6 +13,8 @@ interface ItemCardProps {
   onAccept?: (providerId: string, externalId: string) => void;
   onDismiss?: (providerId: string, externalId: string) => void;
   onTransition?: (itemId: string, targetState: string) => void;
+  onDragStart?: (itemId: string) => void;
+  onDragEnd?: () => void;
 }
 
 interface ItemAction {
@@ -33,10 +35,14 @@ export function ItemCard({
   onAccept,
   onDismiss,
   onTransition,
+  onDragStart,
+  onDragEnd,
 }: ItemCardProps) {
   const metaParts = [item.branchName, item.repoName].filter((value): value is string => Boolean(value));
   const actions = getItemActions(item, onAccept, onDismiss, onTransition);
+  const isDraggable = item.tierType === 'readyToStart';
   const [actionsOpen, setActionsOpen] = useState(false);
+  const [isDragging, setIsDragging] = useState(false);
   const itemElementRef = useRef<HTMLDivElement | null>(null);
   const actionButtonRefs = useRef<Record<string, HTMLButtonElement | null>>({});
 
@@ -116,12 +122,29 @@ export function ItemCard({
     closeActions();
   };
 
+  const handleDragStart = (event: DragEvent) => {
+    if (!isDraggable || !event.dataTransfer) {
+      return;
+    }
+
+    event.dataTransfer.effectAllowed = 'move';
+    event.dataTransfer.setData('text/plain', item.id);
+    setIsDragging(true);
+    onDragStart?.(item.id);
+  };
+
+  const handleDragEnd = () => {
+    setIsDragging(false);
+    onDragEnd?.();
+  };
+
   return (
     <div
       ref={setItemElement}
-      class={`item-card item-card--${getTierClassName(item.tierType)} ${item.isUrgent ? 'urgent' : ''} ${item.isSelected ? 'selected' : ''} ${actionsOpen ? 'actions-open' : ''}`.trim()}
+      class={`item-card item-card--${getTierClassName(item.tierType)} ${item.isUrgent ? 'urgent' : ''} ${item.isSelected ? 'selected' : ''} ${actionsOpen ? 'actions-open' : ''} ${isDragging ? 'dragging' : ''}`.trim()}
       role="option"
       tabIndex={tabIndex}
+      draggable={isDraggable ? true : undefined}
       aria-label={buildItemAriaLabel(item)}
       aria-selected={item.isSelected ?? false}
       aria-current={item.isSelected ? 'true' : undefined}
@@ -129,10 +152,13 @@ export function ItemCard({
       onKeyDown={handleKeyDown}
       onFocus={onFocus}
       onBlurCapture={handleBlurCapture}
+      onDragStart={handleDragStart}
+      onDragEnd={handleDragEnd}
     >
       <div class="item-card-main">
         <div class="item-line-1">
           <div class="item-title-wrap">
+            {isDraggable ? <span class="drag-handle" aria-hidden="true">⠿</span> : null}
             {item.isUnseen ? <span class="unseen-dot" aria-hidden="true">●</span> : null}
             <span class="item-title">{item.title}</span>
           </div>
