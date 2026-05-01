@@ -1,6 +1,7 @@
 import * as vscode from 'vscode';
 import { WorkItem } from '../models/workItem';
 import type { ProviderRegistry } from '../services/providerRegistry';
+import type { LinkRelation } from './linkDisplay';
 
 export type ViewLayout = 'flat' | 'tree';
 
@@ -349,6 +350,22 @@ export function isSubGroupNode(element: unknown): element is SubGroupNode {
   );
 }
 
+export interface LinkedWorkItemNode extends WorkItem {
+  linkedParentId: string;
+  linkedRelation: LinkRelation;
+  linkedNodeId: string;
+}
+
+export function isLinkedWorkItemNode(element: unknown): element is LinkedWorkItemNode {
+  return (
+    typeof element === 'object' &&
+    element !== null &&
+    typeof (element as LinkedWorkItemNode).linkedParentId === 'string' &&
+    typeof (element as LinkedWorkItemNode).linkedRelation === 'string' &&
+    typeof (element as LinkedWorkItemNode).linkedNodeId === 'string'
+  );
+}
+
 /**
  * Element type for providers that display WorkItems with optional provider grouping.
  */
@@ -377,30 +394,18 @@ export abstract class WorkItemViewProvider implements vscode.TreeDataProvider<Wo
     private readonly titleResolver?: TitleResolver,
     discoveredItemsChangeEvent?: import('vscode').Event<void>,
   ) {
-    this._layoutState = new LayoutState(defaultLayout, () => {
-      this._countsCache = undefined;
-      this._onDidChangeTreeData.fire();
-    });
+    this._layoutState = new LayoutState(defaultLayout, () => this.refresh());
     this.disposables.push(
-      workGraph.onDidChange(() => {
-        this._countsCache = undefined;
-        this._onDidChangeTreeData.fire();
-      }),
+      workGraph.onDidChange(() => this.refresh()),
     );
     if (providerChangeEvent) {
       this.disposables.push(
-        providerChangeEvent(() => {
-          this._countsCache = undefined;
-          this._onDidChangeTreeData.fire();
-        }),
+        providerChangeEvent(() => this.refresh()),
       );
     }
     if (discoveredItemsChangeEvent) {
       this.disposables.push(
-        discoveredItemsChangeEvent(() => {
-          this._countsCache = undefined;
-          this._onDidChangeTreeData.fire();
-        }),
+        discoveredItemsChangeEvent(() => this.refresh()),
       );
     }
   }
@@ -452,6 +457,15 @@ export abstract class WorkItemViewProvider implements vscode.TreeDataProvider<Wo
 
   /** Create a TreeItem for a WorkItem (not a group node). */
   protected abstract createWorkItemTreeItem(item: WorkItem): vscode.TreeItem;
+
+  /** Return child work items shown beneath a top-level work item. */
+  protected getItemChildren(_item: WorkItem): WorkItem[] {
+    return [];
+  }
+
+  protected hasItemChildren(item: WorkItem): boolean {
+    return !isLinkedWorkItemNode(item) && this.getItemChildren(item).length > 0;
+  }
 
   private ensureCountsCache(): Map<string, number> {
     if (!this._countsCache) {
@@ -512,6 +526,10 @@ export abstract class WorkItemViewProvider implements vscode.TreeDataProvider<Wo
     }
     // WorkItem — find its parent node
     const item = element as WorkItem;
+    if (isLinkedWorkItemNode(item)) {
+      return this.workGraph.getItem(item.linkedParentId);
+    }
+
     const pid = item.providerId?.trim() || undefined;
     const grp = item.group?.trim() || undefined;
     if (grp) {
@@ -522,6 +540,10 @@ export abstract class WorkItemViewProvider implements vscode.TreeDataProvider<Wo
   }
 
   getChildren(element?: WorkItemElement): WorkItemElement[] {
+    if (element && !isProviderGroupNode(element) && !isSubGroupNode(element)) {
+      return this.getItemChildren(element);
+    }
+
     return getTreeModeChildren(
       element,
       () => this.getItems(),

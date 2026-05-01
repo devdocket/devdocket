@@ -155,6 +155,25 @@ describe('SourcesTreeProvider', () => {
       expect(kinds).toContain('item');
     });
 
+    it('nests related source items under their parent item', () => {
+      registry._setItems('github-my-prs', [{
+        externalId: 'owner/repo#42',
+        title: 'PR 42',
+        relatedItems: [{ externalId: 'owner/repo#7', relation: 'linked' }],
+      }]);
+      registry._setItems('github', [{ externalId: 'owner/repo#7', title: 'Issue 7' }]);
+
+      const providerNode: SourceProviderNode = { kind: 'provider', providerId: 'github-my-prs', label: 'GitHub My PRs' };
+      const parentItems = provider.getChildren(providerNode) as SourceItemNode[];
+      expect(parentItems).toHaveLength(1);
+
+      const linkedChildren = provider.getChildren(parentItems[0]) as SourceItemNode[];
+      expect(linkedChildren).toHaveLength(1);
+      expect(linkedChildren[0].externalId).toBe('owner/repo#7');
+      expect(provider.getTreeItem(parentItems[0]).collapsibleState).toBe(TreeItemCollapsibleState.Collapsed);
+      expect(provider.getTreeItem(linkedChildren[0]).description).toBe('Linked to #42');
+    });
+
     it('should sort children alphabetically (groups and items mixed)', () => {
       registry._setItems('gh', [
         { externalId: '1', title: 'Zebra' },

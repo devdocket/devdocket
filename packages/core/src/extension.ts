@@ -173,6 +173,7 @@ function createTreeViews(
   stateStore: DiscoveredStateStore,
   readStateStore: ReadStateStore,
   workGraph: WorkGraph,
+  linkStore: ItemLinkStore,
   watcherService: WatcherService,
   watcherRegistry: WatcherRegistry,
   prWatcherRegistry: PRWatcherRegistry,
@@ -182,10 +183,10 @@ function createTreeViews(
     prWatcherRegistry.findWatcherForUrl(url) !== undefined;
 
   const inboxProvider = new InboxTreeProvider(providerRegistry, stateStore, readStateStore);
-  const queueProvider = new QueueTreeProvider(workGraph, providerRegistry, actionRegistry, isWatchable);
-  const focusProvider = new FocusTreeProvider(workGraph, providerRegistry, actionRegistry, isWatchable);
+  const queueProvider = new QueueTreeProvider(workGraph, providerRegistry, actionRegistry, isWatchable, linkStore);
+  const focusProvider = new FocusTreeProvider(workGraph, providerRegistry, actionRegistry, isWatchable, linkStore);
   const sourcesProvider = new SourcesTreeProvider(providerRegistry, stateStore);
-  const historyProvider = new HistoryTreeProvider(workGraph, providerRegistry);
+  const historyProvider = new HistoryTreeProvider(workGraph, providerRegistry, linkStore);
   const watchesProvider = new WatchesTreeProvider(watcherService);
 
   // Apply persisted layout settings
@@ -522,7 +523,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<DevDoc
   logger.info(`Store + service init took ${Math.round(performance.now() - initStart)}ms`);
 
   const treeViewStart = performance.now();
-  const treeSetup = createTreeViews(pr, ar, ss, readStateStore, wg, ws, wr, pwr);
+  const treeSetup = createTreeViews(pr, ar, ss, readStateStore, wg, linkStore, ws, wr, pwr);
   logger.info(`Tree view creation took ${Math.round(performance.now() - treeViewStart)}ms`);
 
   const eventWiringStart = performance.now();

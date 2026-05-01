@@ -2,6 +2,7 @@ import * as vscode from 'vscode';
 import { DiscoveredItem } from '../api/types';
 import { ProviderRegistry } from '../services/providerRegistry';
 import { DiscoveredStateStore, InboxState } from '../storage/discoveredStateStore';
+import { buildLinkDescription, sortLinkedNodes } from './linkDisplay';
 import { ViewLayout, LayoutState } from './viewLayout';
 import { buildProviderTooltip } from './providerTooltip';
 
@@ -28,6 +29,10 @@ export interface SourceItemNode {
   url?: string;
   group?: string;
   canonicalId?: string;
+  linkedParentProviderId?: string;
+  linkedParentExternalId?: string;
+  linkedRelation?: 'closes' | 'linked';
+  linkedNodeId?: string;
 }
 
 export class SourcesTreeProvider implements vscode.TreeDataProvider<SourcesElement> {
@@ -36,6 +41,8 @@ export class SourcesTreeProvider implements vscode.TreeDataProvider<SourcesEleme
   private readonly disposables: vscode.Disposable[] = [];
   private readonly _layoutState: LayoutState;
   private _countsCache: Map<string, number> | undefined;
+  private linkedChildrenCache = new Map<string, SourceItemNode[]>();
+  private visibleItemsByExternalIdCache: Map<string, Array<{ providerId: string; item: DiscoveredItem }>> | undefined;
 
   get layout(): ViewLayout { return this._layoutState.value; }
   set layout(value: ViewLayout) { this._layoutState.value = value; }
@@ -51,6 +58,8 @@ export class SourcesTreeProvider implements vscode.TreeDataProvider<SourcesEleme
     this.disposables.push(
       providerRegistry.onDidChangeDiscoveredItems(() => {
         this._countsCache = undefined;
+        this.linkedChildrenCache.clear();
+        this.visibleItemsByExternalIdCache = undefined;
         this._onDidChangeTreeData.fire();
       }),
       providerRegistry.onDidChangeProviderHealth(() => {
@@ -66,6 +75,8 @@ export class SourcesTreeProvider implements vscode.TreeDataProvider<SourcesEleme
 
   refresh(): void {
     this._countsCache = undefined;
+    this.linkedChildrenCache.clear();
+    this.visibleItemsByExternalIdCache = undefined;
     this._onDidChangeTreeData.fire();
   }
 
@@ -133,13 +144,47 @@ export class SourcesTreeProvider implements vscode.TreeDataProvider<SourcesEleme
             icon = 'circle-outline';
             break;
         }
-        const treeItem = new vscode.TreeItem(element.title, vscode.TreeItemCollapsibleState.None);
-        treeItem.description = this.buildItemDescription(element.providerId, element.group, state);
+        const relationDescription = this.getRelationDescription(element);
+        const treeItem = new vscode.TreeItem(
+          element.title,
+          this.hasLinkedChildren(element) ? vscode.TreeItemCollapsibleState.Collapsed : vscode.TreeItemCollapsibleState.None,
+        );
+        treeItem.id = element.linkedNodeId ?? `sources::item::${element.providerId}::${element.externalId}`;
+        treeItem.description = this.buildItemDescription(element.providerId, element.group, state, relationDescription);
         treeItem.tooltip = this.buildItemTooltip(element);
         treeItem.contextValue = element.url ? 'sourceItem.hasUrl' : 'sourceItem';
         treeItem.iconPath = new vscode.ThemeIcon(icon);
         return treeItem;
       }
+    }
+  }
+
+  getParent(element: SourcesElement): SourcesElement | undefined {
+    if (this._layoutState.value === 'flat') {
+      return undefined;
+    }
+
+    switch (element.kind) {
+      case 'provider':
+        return undefined;
+      case 'group':
+        return {
+          kind: 'provider',
+          providerId: element.providerId,
+          label: this.providerRegistry.getProviderLabel(element.providerId),
+        };
+      case 'item':
+        if (element.linkedParentProviderId && element.linkedParentExternalId) {
+          return this.getSourceItemNode(element.linkedParentProviderId, element.linkedParentExternalId);
+        }
+        if (element.group) {
+          return { kind: 'group', providerId: element.providerId, groupName: element.group };
+        }
+        return {
+          kind: 'provider',
+          providerId: element.providerId,
+          label: this.providerRegistry.getProviderLabel(element.providerId),
+        };
     }
   }
 
@@ -171,7 +216,7 @@ export class SourcesTreeProvider implements vscode.TreeDataProvider<SourcesEleme
       return this.getGroupChildren(element.providerId, element.groupName);
     }
 
-    return [];
+    return this.getLinkedChildren(element);
   }
 
   private getAllItems(): SourceItemNode[] {
@@ -224,7 +269,83 @@ export class SourcesTreeProvider implements vscode.TreeDataProvider<SourcesEleme
       .sort((a, b) => a.title.localeCompare(b.title));
   }
 
-  private toItemNode(providerId: string, item: DiscoveredItem): SourceItemNode {
+  private getLinkedChildren(parent: SourceItemNode): SourceItemNode[] {
+    if (parent.linkedParentProviderId || parent.linkedParentExternalId) {
+      return [];
+    }
+
+    const cacheKey = `${parent.providerId}::${parent.externalId}`;
+    const cachedChildren = this.linkedChildrenCache.get(cacheKey);
+    if (cachedChildren) {
+      return cachedChildren;
+    }
+
+    const sourceItem = this.findDiscoveredItem(parent.providerId, parent.externalId);
+    if (!sourceItem?.relatedItems?.length) {
+      return [];
+    }
+
+    const visibleItemsByExternalId = this.getVisibleItemsByExternalId();
+    const linkedChildren = sourceItem.relatedItems
+      .flatMap((relatedItem) => (visibleItemsByExternalId.get(relatedItem.externalId) ?? [])
+        // Sources nesting only shows linked items from other provider groups.
+        .filter(match => match.providerId !== parent.providerId)
+        .map(match => this.toItemNode(match.providerId, match.item, {
+          linkedParentProviderId: parent.providerId,
+          linkedParentExternalId: parent.externalId,
+          linkedRelation: relatedItem.relation,
+          linkedNodeId: `sources::item::${match.providerId}::${match.item.externalId}::linked::${parent.providerId}::${parent.externalId}`,
+        })))
+      .filter((item, index, items) => items.findIndex(candidate => candidate.linkedNodeId === item.linkedNodeId) === index);
+
+    const sortedChildren = sortLinkedNodes(linkedChildren as Array<SourceItemNode & { linkedRelation: 'closes' | 'linked' }>);
+    this.linkedChildrenCache.set(cacheKey, sortedChildren);
+    return sortedChildren;
+  }
+
+  private hasLinkedChildren(item: SourceItemNode): boolean {
+    return !item.linkedParentProviderId && !item.linkedParentExternalId && this.getLinkedChildren(item).length > 0;
+  }
+
+  private getRelationDescription(item: SourceItemNode): string | undefined {
+    if (!item.linkedRelation || !item.linkedParentProviderId || !item.linkedParentExternalId) {
+      return undefined;
+    }
+
+    const parent = this.findDiscoveredItem(item.linkedParentProviderId, item.linkedParentExternalId);
+    return buildLinkDescription(item.linkedRelation, parent?.externalId, parent?.title);
+  }
+
+  private findDiscoveredItem(providerId: string, externalId: string): DiscoveredItem | undefined {
+    return this.providerRegistry.getDiscoveredItems(providerId)
+      .find(item => item.externalId === externalId);
+  }
+
+  private getSourceItemNode(providerId: string, externalId: string): SourceItemNode | undefined {
+    const item = this.findDiscoveredItem(providerId, externalId);
+    return item ? this.toItemNode(providerId, item) : undefined;
+  }
+
+  private getVisibleItemsByExternalId(): Map<string, Array<{ providerId: string; item: DiscoveredItem }>> {
+    if (this.visibleItemsByExternalIdCache) {
+      return this.visibleItemsByExternalIdCache;
+    }
+
+    const visibleItemsByExternalId = new Map<string, Array<{ providerId: string; item: DiscoveredItem }>>();
+
+    for (const [providerId, items] of this.providerRegistry.getAllDiscoveredItems()) {
+      for (const item of items) {
+        const matches = visibleItemsByExternalId.get(item.externalId) ?? [];
+        matches.push({ providerId, item });
+        visibleItemsByExternalId.set(item.externalId, matches);
+      }
+    }
+
+    this.visibleItemsByExternalIdCache = visibleItemsByExternalId;
+    return visibleItemsByExternalId;
+  }
+
+  private toItemNode(providerId: string, item: DiscoveredItem, linkedItem?: Partial<SourceItemNode>): SourceItemNode {
     return {
       kind: 'item',
       providerId,
@@ -234,10 +355,16 @@ export class SourcesTreeProvider implements vscode.TreeDataProvider<SourcesEleme
       url: item.url,
       group: item.group?.trim() || undefined,
       canonicalId: item.canonicalId,
+      ...linkedItem,
     };
   }
 
-  private buildItemDescription(providerId: string, group: string | undefined, state: InboxState | undefined): string | undefined {
+  private buildItemDescription(
+    providerId: string,
+    group: string | undefined,
+    state: InboxState | undefined,
+    relationDescription?: string,
+  ): string | undefined {
     const parts: string[] = [];
     if (this._layoutState.value === 'flat') {
       const groupLabel = group?.trim();
@@ -246,6 +373,7 @@ export class SourcesTreeProvider implements vscode.TreeDataProvider<SourcesEleme
       if (label && label.length > 0) { parts.push(label); }
     }
     if (state === 'dismissed') { parts.push('dismissed'); }
+    if (relationDescription) { parts.push(relationDescription); }
     return parts.length > 0 ? parts.join(' · ') : undefined;
   }
 

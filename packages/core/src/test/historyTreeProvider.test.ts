@@ -9,9 +9,19 @@ function createMockWorkGraph(items: WorkItem[] = []) {
     getItemsByState: vi.fn((...states: WorkItemState[]) =>
       items.filter(i => states.includes(i.state)),
     ),
+    getItem: vi.fn((id: string) => items.find(item => item.id === id)),
     onDidChange: emitter.event,
     _fire: () => emitter.fire(),
     _setItems: (newItems: WorkItem[]) => { items = newItems; },
+  };
+}
+
+function createMockLinkStore(links: Array<{ itemId1: string; itemId2: string; relation: 'closes' | 'linked' }>) {
+  const emitter = new EventEmitter<void>();
+  return {
+    getLinksForItem: vi.fn((itemId: string) => links.filter(link => link.itemId1 === itemId || link.itemId2 === itemId)),
+    onDidChange: emitter.event,
+    _fire: () => emitter.fire(),
   };
 }
 
@@ -162,6 +172,20 @@ describe('HistoryTreeProvider', () => {
         WorkItemState.Done,
         WorkItemState.Archived,
       );
+    });
+
+    it('nests linked history items beneath their parent item', () => {
+      const parent = makeItem({ id: '1', title: 'Done parent', state: WorkItemState.Done, externalId: 'owner/repo#42' });
+      const child = makeItem({ id: '2', title: 'Archived child', state: WorkItemState.Archived, externalId: 'owner/repo#7' });
+      workGraph._setItems([parent, child]);
+      const linkStore = createMockLinkStore([{ itemId1: parent.id, itemId2: child.id, relation: 'linked' }]);
+      const linkedProvider = new HistoryTreeProvider(workGraph as any, undefined, linkStore as any);
+
+      const linkedChildren = linkedProvider.getChildren(parent) as WorkItem[];
+      expect(linkedChildren).toHaveLength(1);
+      expect(linkedChildren[0].id).toBe(child.id);
+      expect(linkedProvider.getTreeItem(parent).collapsibleState).toBe(TreeItemCollapsibleState.Collapsed);
+      expect(linkedProvider.getTreeItem(linkedChildren[0]).description).toBe('archived · Linked to #42');
     });
   });
 

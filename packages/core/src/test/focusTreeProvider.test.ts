@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { EventEmitter, DataTransfer, DataTransferItem, window } from 'vscode';
+import { EventEmitter, DataTransfer, DataTransferItem, TreeItemCollapsibleState, window } from 'vscode';
 import { WorkItem, WorkItemState } from '../models/workItem';
 import { ActionRegistry } from '../services/actionRegistry';
 import { FocusTreeProvider } from '../views/focusTreeProvider';
@@ -35,6 +35,15 @@ function createMockAction(id: string, canRun: (item: WorkItem) => boolean = () =
     label: `Action ${id}`,
     canRun: vi.fn(canRun),
     run: vi.fn(async () => {}),
+  };
+}
+
+function createMockLinkStore(links: Array<{ itemId1: string; itemId2: string; relation: 'closes' | 'linked' }>) {
+  const emitter = new EventEmitter<void>();
+  return {
+    getLinksForItem: vi.fn((itemId: string) => links.filter(link => link.itemId1 === itemId || link.itemId2 === itemId)),
+    onDidChange: emitter.event,
+    _fire: () => emitter.fire(),
   };
 }
 
@@ -266,6 +275,22 @@ describe('FocusTreeProvider', () => {
     it('should return empty array when no focus items exist', () => {
       workGraph.getItemsByState.mockReturnValue([]);
       expect(provider.getChildren()).toEqual([]);
+    });
+
+    it('nests linked focus items beneath their parent item', () => {
+      const parent = makeItem({ id: 'parent', title: 'Parent focus', externalId: 'owner/repo#42' });
+      const child = makeItem({ id: 'child', title: 'Child focus', externalId: 'owner/repo#7' });
+      const itemMap = new Map([[parent.id, parent], [child.id, child]]);
+      workGraph.getItemsByState.mockReturnValue([parent, child]);
+      workGraph.getItem.mockImplementation((id: string) => itemMap.get(id));
+      const linkStore = createMockLinkStore([{ itemId1: parent.id, itemId2: child.id, relation: 'closes' }]);
+      const linkedProvider = new FocusTreeProvider(workGraph as any, undefined, undefined, undefined, linkStore as any);
+
+      const linkedChildren = linkedProvider.getChildren(parent) as WorkItem[];
+      expect(linkedChildren).toHaveLength(1);
+      expect(linkedChildren[0].id).toBe(child.id);
+      expect(linkedProvider.getTreeItem(parent).collapsibleState).toBe(TreeItemCollapsibleState.Collapsed);
+      expect(linkedProvider.getTreeItem(linkedChildren[0]).description).toBe('Closes #42');
     });
   });
 

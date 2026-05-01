@@ -5,6 +5,7 @@ import { buildCanonicalHiddenSet } from '../services/canonicalDedup';
 import { DiscoveredStateStore } from '../storage/discoveredStateStore';
 import { ReadStateStore } from '../storage/readStateStore';
 import { logger } from '../services/logger';
+import { buildLinkDescription, sortLinkedNodes } from './linkDisplay';
 import { ViewLayout, LayoutState } from './viewLayout';
 import { buildProviderTooltip } from './providerTooltip';
 
@@ -31,6 +32,10 @@ export interface InboxItem {
   group?: string;
   reason?: string;
   canonicalId?: string;
+  linkedParentProviderId?: string;
+  linkedParentExternalId?: string;
+  linkedRelation?: 'closes' | 'linked';
+  linkedNodeId?: string;
 }
 
 export type InboxElement = InboxProviderNode | InboxGroupNode | InboxItem;
@@ -46,6 +51,8 @@ export class InboxTreeProvider implements vscode.TreeDataProvider<InboxElement> 
   static readonly REFRESH_DEBOUNCE_MS = 50;
   private readonly _layoutState: LayoutState;
   private cachedHiddenSet: Set<string> | undefined;
+  private linkedChildrenCache = new Map<string, InboxItem[]>();
+  private visibleItemsByExternalIdCache: Map<string, Array<{ providerId: string; item: DiscoveredItem }>> | undefined;
 
   get layout(): ViewLayout { return this._layoutState.value; }
   set layout(value: ViewLayout) { this._layoutState.value = value; }
@@ -68,6 +75,8 @@ export class InboxTreeProvider implements vscode.TreeDataProvider<InboxElement> 
       clearTimeout(this.refreshTimer);
     }
     this.cachedHiddenSet = undefined;
+    this.linkedChildrenCache.clear();
+    this.visibleItemsByExternalIdCache = undefined;
     this.refreshTimer = setTimeout(() => {
       this.refreshTimer = undefined;
       this.pruneSeenItems();
@@ -125,7 +134,12 @@ export class InboxTreeProvider implements vscode.TreeDataProvider<InboxElement> 
 
   get sessionSeenItems(): ReadonlySet<string> { return this.seenItems; }
 
-  refresh(): void { this._onDidChangeTreeData.fire(); }
+  refresh(): void {
+    this.cachedHiddenSet = undefined;
+    this.linkedChildrenCache.clear();
+    this.visibleItemsByExternalIdCache = undefined;
+    this._onDidChangeTreeData.fire();
+  }
 
   async markSeen(providerId: string, externalId: string): Promise<boolean> {
     const key = `${providerId}::${externalId}`;
@@ -249,12 +263,16 @@ export class InboxTreeProvider implements vscode.TreeDataProvider<InboxElement> 
 
     const key = `${element.providerId}::${element.externalId}`;
     const isSeen = this.isCanonicalGroupSeen(key, element.canonicalId);
+    const relationDescription = this.getRelationDescription(element);
 
-    const treeItem = new vscode.TreeItem(element.title, vscode.TreeItemCollapsibleState.None);
-    treeItem.id = `inbox::item::${element.providerId}::${element.externalId}`;
+    const treeItem = new vscode.TreeItem(
+      element.title,
+      this.hasLinkedChildren(element) ? vscode.TreeItemCollapsibleState.Collapsed : vscode.TreeItemCollapsibleState.None,
+    );
+    treeItem.id = element.linkedNodeId ?? `inbox::item::${element.providerId}::${element.externalId}`;
     treeItem.description = this._layoutState.value === 'flat'
-      ? this.buildFlatDescription(element)
-      : undefined;
+      ? this.buildFlatDescription(element, relationDescription)
+      : relationDescription;
     treeItem.tooltip = this.buildTooltip(element);
     treeItem.contextValue = element.url ? 'inboxItem.hasUrl' : 'inboxItem';
     treeItem.iconPath = new vscode.ThemeIcon(isSeen ? 'circle-outline' : 'circle-filled');
@@ -275,6 +293,10 @@ export class InboxTreeProvider implements vscode.TreeDataProvider<InboxElement> 
           label: this.providerRegistry.getProviderLabel(element.providerId),
         };
       case 'item': {
+        if (element.linkedParentProviderId && element.linkedParentExternalId) {
+          return this.getInboxItemNode(element.linkedParentProviderId, element.linkedParentExternalId);
+        }
+
         if (element.group) {
           const unseenCount = this.getGroupUnseenCount(element.providerId, element.group);
           return {
@@ -321,18 +343,15 @@ export class InboxTreeProvider implements vscode.TreeDataProvider<InboxElement> 
       return this.getGroupChildren(element.providerId, element.groupName);
     }
 
-    return [];
+    return this.getLinkedChildren(element);
   }
 
   private getAllUnseenItems(): InboxItem[] {
     const result: InboxItem[] = [];
-    const hidden = this.getCanonicalHiddenSet();
     const allItems = this.providerRegistry.getAllDiscoveredItems();
     for (const [providerId, items] of allItems) {
       for (const item of items) {
-        const state = this.stateStore.getState(providerId, item.externalId);
-        if (state !== undefined && state !== 'unseen') { continue; }
-        if (hidden.has(`${providerId}::${item.externalId}`)) { continue; }
+        if (!this.isVisibleInboxItem(providerId, item)) { continue; }
         result.push(this.toItemNode(providerId, item));
       }
     }
@@ -341,14 +360,11 @@ export class InboxTreeProvider implements vscode.TreeDataProvider<InboxElement> 
 
   private getProviderChildren(providerId: string): (InboxGroupNode | InboxItem)[] {
     const items = this.providerRegistry.getDiscoveredItems(providerId);
-    const hidden = this.getCanonicalHiddenSet();
     const groupCounts = new Map<string, number>();
     const ungrouped: typeof items = [];
 
     for (const item of items) {
-      const state = this.stateStore.getState(providerId, item.externalId);
-      if (state !== undefined && state !== 'unseen') { continue; }
-      if (hidden.has(`${providerId}::${item.externalId}`)) { continue; }
+      if (!this.isVisibleInboxItem(providerId, item)) { continue; }
 
       if (item.group?.trim()) {
         const normalizedGroup = item.group.trim();
@@ -377,19 +393,105 @@ export class InboxTreeProvider implements vscode.TreeDataProvider<InboxElement> 
 
   private getGroupChildren(providerId: string, groupName: string): InboxItem[] {
     const items = this.providerRegistry.getDiscoveredItems(providerId);
-    const hidden = this.getCanonicalHiddenSet();
     const result: InboxItem[] = [];
     for (const item of items) {
       if (item.group?.trim() !== groupName) { continue; }
-      const state = this.stateStore.getState(providerId, item.externalId);
-      if (state !== undefined && state !== 'unseen') { continue; }
-      if (hidden.has(`${providerId}::${item.externalId}`)) { continue; }
+      if (!this.isVisibleInboxItem(providerId, item)) { continue; }
       result.push(this.toItemNode(providerId, item));
     }
     return result.sort((a, b) => a.title.localeCompare(b.title));
   }
 
-  private toItemNode(providerId: string, item: DiscoveredItem): InboxItem {
+  private getLinkedChildren(parent: InboxItem): InboxItem[] {
+    if (parent.linkedParentProviderId || parent.linkedParentExternalId) {
+      return [];
+    }
+
+    const cacheKey = `${parent.providerId}::${parent.externalId}`;
+    const cachedChildren = this.linkedChildrenCache.get(cacheKey);
+    if (cachedChildren) {
+      return cachedChildren;
+    }
+
+    const discoveredItem = this.findVisibleInboxItem(parent.providerId, parent.externalId);
+    if (!discoveredItem?.relatedItems?.length) {
+      return [];
+    }
+
+    const visibleItemsByExternalId = this.getVisibleInboxItemsByExternalId();
+    const linkedChildren = discoveredItem.relatedItems
+      .flatMap((relatedItem) => (visibleItemsByExternalId.get(relatedItem.externalId) ?? [])
+        // Inbox nesting only shows linked items from other provider groups.
+        .filter(match => match.providerId !== parent.providerId)
+        .map(match => this.toItemNode(match.providerId, match.item, {
+          linkedParentProviderId: parent.providerId,
+          linkedParentExternalId: parent.externalId,
+          linkedRelation: relatedItem.relation,
+          linkedNodeId: `inbox::item::${match.providerId}::${match.item.externalId}::linked::${parent.providerId}::${parent.externalId}`,
+        })))
+      .filter((item, index, items) => items.findIndex(candidate => candidate.linkedNodeId === item.linkedNodeId) === index);
+
+    const sortedChildren = sortLinkedNodes(linkedChildren as Array<InboxItem & { linkedRelation: 'closes' | 'linked' }>);
+    this.linkedChildrenCache.set(cacheKey, sortedChildren);
+    return sortedChildren;
+  }
+
+  private hasLinkedChildren(item: InboxItem): boolean {
+    return !item.linkedParentProviderId && !item.linkedParentExternalId && this.getLinkedChildren(item).length > 0;
+  }
+
+  private getRelationDescription(item: InboxItem): string | undefined {
+    if (!item.linkedRelation || !item.linkedParentProviderId || !item.linkedParentExternalId) {
+      return undefined;
+    }
+
+    const parent = this.findVisibleInboxItem(item.linkedParentProviderId, item.linkedParentExternalId);
+    return buildLinkDescription(item.linkedRelation, parent?.externalId, parent?.title);
+  }
+
+  private findVisibleInboxItem(providerId: string, externalId: string): DiscoveredItem | undefined {
+    return this.providerRegistry.getDiscoveredItems(providerId)
+      .find(item => item.externalId === externalId && this.isVisibleInboxItem(providerId, item));
+  }
+
+  private getInboxItemNode(providerId: string, externalId: string): InboxItem | undefined {
+    const item = this.findVisibleInboxItem(providerId, externalId);
+    return item ? this.toItemNode(providerId, item) : undefined;
+  }
+
+  private getVisibleInboxItemsByExternalId(): Map<string, Array<{ providerId: string; item: DiscoveredItem }>> {
+    if (this.visibleItemsByExternalIdCache) {
+      return this.visibleItemsByExternalIdCache;
+    }
+
+    const visibleItemsByExternalId = new Map<string, Array<{ providerId: string; item: DiscoveredItem }>>();
+
+    for (const [providerId, items] of this.providerRegistry.getAllDiscoveredItems()) {
+      for (const item of items) {
+        if (!this.isVisibleInboxItem(providerId, item)) {
+          continue;
+        }
+
+        const matches = visibleItemsByExternalId.get(item.externalId) ?? [];
+        matches.push({ providerId, item });
+        visibleItemsByExternalId.set(item.externalId, matches);
+      }
+    }
+
+    this.visibleItemsByExternalIdCache = visibleItemsByExternalId;
+    return visibleItemsByExternalId;
+  }
+
+  private isVisibleInboxItem(providerId: string, item: DiscoveredItem): boolean {
+    const state = this.stateStore.getState(providerId, item.externalId);
+    if (state !== undefined && state !== 'unseen') {
+      return false;
+    }
+
+    return !this.getCanonicalHiddenSet().has(`${providerId}::${item.externalId}`);
+  }
+
+  private toItemNode(providerId: string, item: DiscoveredItem, linkedItem?: Partial<InboxItem>): InboxItem {
     return {
       kind: 'item',
       providerId,
@@ -400,6 +502,7 @@ export class InboxTreeProvider implements vscode.TreeDataProvider<InboxElement> 
       group: item.group?.trim() || undefined,
       reason: item.reason,
       canonicalId: item.canonicalId,
+      ...linkedItem,
     };
   }
 
@@ -414,34 +517,26 @@ export class InboxTreeProvider implements vscode.TreeDataProvider<InboxElement> 
   }
 
   private getGroupUnseenCount(providerId: string, groupName: string): number {
-    const items = this.providerRegistry.getDiscoveredItems(providerId);
-    const hidden = this.getCanonicalHiddenSet();
-    return items.filter((item) => {
-      if (item.group?.trim() !== groupName) { return false; }
-      const state = this.stateStore.getState(providerId, item.externalId);
-      if (state !== undefined && state !== 'unseen') { return false; }
-      return !hidden.has(`${providerId}::${item.externalId}`);
-    }).length;
+    return this.providerRegistry.getDiscoveredItems(providerId)
+      .filter(item => item.group?.trim() === groupName && this.isVisibleInboxItem(providerId, item))
+      .length;
   }
 
   private getUnseenCount(providerId: string): number {
-    const items = this.providerRegistry.getDiscoveredItems(providerId);
-    const hidden = this.getCanonicalHiddenSet();
-    return items.filter((item) => {
-      const state = this.stateStore.getState(providerId, item.externalId);
-      if (state !== undefined && state !== 'unseen') { return false; }
-      return !hidden.has(`${providerId}::${item.externalId}`);
-    }).length;
+    return this.providerRegistry.getDiscoveredItems(providerId)
+      .filter(item => this.isVisibleInboxItem(providerId, item))
+      .length;
   }
 
   private formatReason(reason: string): string {
     return reason.replace(/_/g, ' ').replace(/^./, c => c.toUpperCase());
   }
 
-  private buildFlatDescription(item: InboxItem): string | undefined {
+  private buildFlatDescription(item: InboxItem, relationDescription?: string): string | undefined {
     const parts = [
       item.group?.trim(),
       this.providerRegistry.getProviderLabel(item.providerId)?.trim(),
+      relationDescription,
     ].filter((p): p is string => p !== undefined && p.length > 0);
     return parts.length > 0 ? parts.join(' · ') : undefined;
   }

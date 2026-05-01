@@ -39,6 +39,15 @@ function createMockAction(id: string, canRun: (item: WorkItem) => boolean = () =
   };
 }
 
+function createMockLinkStore(links: Array<{ itemId1: string; itemId2: string; relation: 'closes' | 'linked' }>) {
+  const emitter = new EventEmitter<void>();
+  return {
+    getLinksForItem: vi.fn((itemId: string) => links.filter(link => link.itemId1 === itemId || link.itemId2 === itemId)),
+    onDidChange: emitter.event,
+    _fire: () => emitter.fire(),
+  };
+}
+
 const DRAG_MIME_TYPE = 'application/vnd.code.tree.devdocket.queue';
 
 describe('QueueTreeProvider', () => {
@@ -98,6 +107,19 @@ describe('QueueTreeProvider', () => {
 
       const children = provider.getChildren();
       expect(children).toHaveLength(0);
+    });
+
+    it('nests linked queue items beneath their parent item', async () => {
+      const parent = await graph.createItem({ title: 'Parent task' }, { providerId: 'github', externalId: 'owner/repo#42' });
+      const child = await graph.createItem({ title: 'Linked task' }, { providerId: 'github', externalId: 'owner/repo#7' });
+      const linkStore = createMockLinkStore([{ itemId1: parent.id, itemId2: child.id, relation: 'closes' }]);
+      const linkedProvider = new QueueTreeProvider(graph, undefined, undefined, undefined, linkStore as any);
+
+      const linkedChildren = linkedProvider.getChildren(parent) as WorkItem[];
+      expect(linkedChildren).toHaveLength(1);
+      expect(linkedChildren[0].id).toBe(child.id);
+      expect(linkedProvider.getTreeItem(parent).collapsibleState).toBe(TreeItemCollapsibleState.Collapsed);
+      expect(linkedProvider.getTreeItem(linkedChildren[0]).description).toBe('github · Closes #42');
     });
   });
 

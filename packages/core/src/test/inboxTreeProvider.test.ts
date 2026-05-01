@@ -157,6 +157,24 @@ describe('InboxTreeProvider', () => {
       expect(items).toHaveLength(1);
     });
 
+    it('nests related inbox items under their parent item', () => {
+      registry._setItems('github-my-prs', [{
+        externalId: 'owner/repo#42',
+        title: 'PR 42',
+        relatedItems: [{ externalId: 'owner/repo#7', relation: 'closes' }],
+      }]);
+      registry._setItems('github', [{ externalId: 'owner/repo#7', title: 'Issue 7' }]);
+
+      const parentItems = provider.getChildren(providerNode('github-my-prs')) as InboxItem[];
+      expect(parentItems).toHaveLength(1);
+      const linkedChildren = provider.getChildren(parentItems[0]) as InboxItem[];
+
+      expect(linkedChildren).toHaveLength(1);
+      expect(linkedChildren[0].externalId).toBe('owner/repo#7');
+      expect(provider.getTreeItem(parentItems[0]).collapsibleState).toBe(TreeItemCollapsibleState.Collapsed);
+      expect(provider.getTreeItem(linkedChildren[0]).description).toBe('Closes #42');
+    });
+
     it('should pass through group field from discovered item', () => {
       registry._setItems('gh', [{ externalId: 'issue-1', title: 'Bug fix', group: 'dotnet/runtime' }]);
 
