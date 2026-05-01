@@ -52,9 +52,13 @@ jobs:
 
       - name: Generate release notes
         run: |
-          if ! node scripts/extract-changelog.mjs packages/shared/CHANGELOG.md > release-notes.md; then
-            echo "* No changelog entry found for this release" > release-notes.md
+          error_log=release-notes-error.log
+          if ! node scripts/extract-changelog.mjs packages/shared/CHANGELOG.md > release-notes.md 2>"$error_log"; then
+            echo "Failed to extract changelog entry:" >&2
+            cat "$error_log" >&2
+            echo "* Failed to extract changelog entry; see workflow logs" > release-notes.md
           fi
+          rm -f "$error_log"
 
       - name: Create GitHub Release
         run: gh release create "$GITHUB_REF_NAME" --title "$GITHUB_REF_NAME" --notes-file release-notes.md
