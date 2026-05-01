@@ -279,17 +279,7 @@ function expandWithClosesRelatedInboxItems(
       const candidateItems = directlyRelated
         ? (discoveredItem.relatedItems ?? [])
             .filter(ref => ref.relation === 'closes')
-            .flatMap(ref => {
-              const matches: InboxItem[] = [];
-              for (const [candidateProviderId, candidateDiscoveredItems] of providerRegistry.getAllDiscoveredItems()) {
-                for (const candidateDiscoveredItem of candidateDiscoveredItems) {
-                  if (candidateDiscoveredItem.externalId === ref.externalId) {
-                    matches.push(toInboxItem(candidateProviderId, candidateDiscoveredItem));
-                  }
-                }
-              }
-              return matches;
-            })
+            .flatMap(ref => closesRelatedIndex.get(ref.externalId)?.exactMatches.map(match => match.inboxItem) ?? [])
         : [inboxItem];
 
       for (const candidate of candidateItems) {
