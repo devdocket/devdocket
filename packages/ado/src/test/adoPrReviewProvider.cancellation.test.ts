@@ -157,6 +157,33 @@ describe('AdoPrReviewProvider — cancellation (AbortSignal wiring)', () => {
       expect(listener).not.toHaveBeenCalled();
     });
 
+    it('does not log fetch errors when token fires during PR list fetch', async () => {
+      const { token, cancel } = createMockCancellationToken();
+
+      mockFetch.mockImplementation(async (url: string) => {
+        if (typeof url === 'string' && url.includes('/connectiondata')) {
+          return {
+            ok: true,
+            json: async () => ({ authenticatedUser: { id: 'user-123' } }),
+          };
+        }
+        if (typeof url === 'string' && url.includes('/pullrequests')) {
+          cancel();
+          const error = new Error('The operation was aborted.');
+          error.name = 'AbortError';
+          throw error;
+        }
+        throw new Error(`Unexpected fetch: ${String(url)}`);
+      });
+
+      await provider.refresh(token);
+
+      const prFetchErrorLogged = mockChannel.appendLine.mock.calls.some(
+        (call: string[]) => call[0].includes('[ERROR]') && call[0].includes('PR reviews from'),
+      );
+      expect(prFetchErrorLogged).toBe(false);
+    });
+
     it('logs cancellation at debug level, not error', async () => {
       const { token, cancel } = createMockCancellationToken();
 

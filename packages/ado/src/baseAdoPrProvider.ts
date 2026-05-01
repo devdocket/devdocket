@@ -176,10 +176,14 @@ export abstract class BaseAdoPrProvider extends BaseProvider {
           }
         } else {
           fetchFailures.push(target);
-          logger.error(
-            `Failed to fetch ${this.logLabel} from ${target}:`,
-            (result as PromiseRejectedResult).reason,
-          );
+          const reason = (result as PromiseRejectedResult).reason;
+          const isAbortError = reason instanceof Error && reason.name === 'AbortError';
+          if (!isAbortError && !signal?.aborted) {
+            logger.error(
+              `Failed to fetch ${this.logLabel} from ${target}:`,
+              reason,
+            );
+          }
         }
       });
 
