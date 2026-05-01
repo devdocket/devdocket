@@ -786,12 +786,12 @@
         {
           "command": "devdocket.openInBrowser",
           "when": "viewItem =~ /hasUrl/ && !listMultiSelection",
-          "group": "2_links"
+          "group": "2_links@0"
         },
         {
           "command": "devdocket.copyUrl",
           "when": "viewItem =~ /hasUrl/ && !listMultiSelection",
-          "group": "2_links"
+          "group": "2_links@1"
         },
         {
           "command": "devdocket.watchPRFromItem",
