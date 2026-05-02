@@ -944,7 +944,7 @@ export class MainViewProvider implements vscode.WebviewViewProvider {
     }
     .drag-handle {
       position: absolute;
-      left: 4px;
+      left: 2px;
       top: 50%;
       transform: translateY(-50%);
       opacity: 0;
@@ -953,12 +953,17 @@ export class MainViewProvider implements vscode.WebviewViewProvider {
       color: var(--vscode-descriptionForeground);
       user-select: none;
       line-height: 1;
+      font-size: 18px;
+      padding: 2px 4px;
+      border-radius: 4px;
+      background: var(--vscode-list-hoverBackground, rgba(127, 127, 127, 0.18));
+      box-shadow: 0 0 6px 4px var(--vscode-list-hoverBackground, rgba(127, 127, 127, 0.18));
       transition: opacity 0.15s;
     }
     .item-card:hover .drag-handle,
     .item-card:focus-within .drag-handle,
     .item-card.dragging .drag-handle {
-      opacity: 0.7;
+      opacity: 0.85;
       pointer-events: auto;
     }
     .drop-indicator {

@@ -64,7 +64,6 @@ export function EditorHeader({ item, title, onOpenUrl, onCopyText, actionButtons
         </div>
         <div class="editor-title-actions">
           <span class={`editor-status editor-status--${stateTone(item.state)}`}>{stateLabel(item.state)}</span>
-          {actionButtons}
         </div>
       </div>
       <div class="badge-row">
@@ -78,6 +77,7 @@ export function EditorHeader({ item, title, onOpenUrl, onCopyText, actionButtons
           <span key={part} class="meta-pill">{part}</span>
         ))}
       </div>
+      {actionButtons ? <div class="editor-header-actions">{actionButtons}</div> : null}
     </header>
   );
 }

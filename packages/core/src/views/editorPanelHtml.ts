@@ -262,6 +262,13 @@ export function getEditorPanelHtml({ cspSource, scriptUri, initialItem }: Editor
       align-items: center;
     }
 
+    .editor-header-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 4px;
+    }
+
     .action-bar {
       gap: 8px;
       flex-wrap: wrap;
