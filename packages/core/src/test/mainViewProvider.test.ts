@@ -166,7 +166,7 @@ function createProvider(
     workGraph as any,
     providerRegistry as any,
     stateStore as any,
-    {} as any,
+    { has: () => false, add: vi.fn().mockResolvedValue(true) } as any,
     watcherService as any,
     {} as any,
   );

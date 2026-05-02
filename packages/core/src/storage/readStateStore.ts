@@ -1,3 +1,4 @@
+import * as vscode from 'vscode';
 import type { Memento } from 'vscode';
 import { logger } from '../services/logger';
 
@@ -14,6 +15,9 @@ export class ReadStateStore {
   private readonly globalState: Memento;
   private readonly items = new Set<string>();
   private loaded = false;
+  private readonly _onDidChange = new vscode.EventEmitter<void>();
+  /** Fires whenever the set of read keys changes (add, addMany, deleteMany). */
+  readonly onDidChange = this._onDidChange.event;
 
   constructor(globalState: Memento) {
     this.globalState = globalState;
@@ -33,6 +37,7 @@ export class ReadStateStore {
     if (this.items.has(key)) { return false; }
     this.items.add(key);
     await this.persist();
+    this._onDidChange.fire();
     return true;
   }
 
@@ -49,6 +54,7 @@ export class ReadStateStore {
     }
     if (newlyAdded.length > 0) {
       await this.persist();
+      this._onDidChange.fire();
     }
     return newlyAdded;
   }
@@ -65,6 +71,7 @@ export class ReadStateStore {
     }
     if (changed) {
       await this.persist();
+      this._onDidChange.fire();
     }
   }
 
@@ -87,5 +94,9 @@ export class ReadStateStore {
       logger.debug(`Loaded read state: ${this.items.size} entries`);
     }
     this.loaded = true;
+  }
+
+  dispose(): void {
+    this._onDidChange.dispose();
   }
 }

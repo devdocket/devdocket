@@ -223,13 +223,14 @@ export class MainViewProvider implements vscode.WebviewViewProvider {
   }
 
   private buildIncomingCardData(providerId: string, discoveredItem: DiscoveredItem, existingWorkItem?: WorkItem): ItemCardData {
+    const key = getDiscoveredItemKey(providerId, discoveredItem.externalId);
     return {
-      id: existingWorkItem?.id ?? getDiscoveredItemKey(providerId, discoveredItem.externalId),
+      id: existingWorkItem?.id ?? key,
       title: discoveredItem.title,
       badges: this.buildBadges(providerId, discoveredItem, discoveredItem.url),
       repoAnnotation: discoveredItem.group ?? existingWorkItem?.group,
       tierType: 'incoming',
-      isUnseen: true,
+      isUnseen: !this.readStateStore.has(key),
       isUrgent: this.isUrgentDiscoveredItem(discoveredItem),
       providerId,
       externalId: discoveredItem.externalId,
@@ -429,6 +430,17 @@ export class MainViewProvider implements vscode.WebviewViewProvider {
         break;
       case 'switchTab':
         break;
+      case 'markSeen':
+        await this.handleMarkSeen(message.providerId, message.externalId);
+        break;
+    }
+  }
+
+  private async handleMarkSeen(providerId: string, externalId: string): Promise<void> {
+    try {
+      await this.readStateStore.add(getDiscoveredItemKey(providerId, externalId));
+    } catch (err) {
+      logger.error('DevDocket: markSeen failed', err);
     }
   }
 

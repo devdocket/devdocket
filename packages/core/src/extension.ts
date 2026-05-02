@@ -383,7 +383,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<DevDoc
   const incomingStatusBar = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 101);
   incomingStatusBar.command = 'devdocket.main.focus';
   const updateIncomingStatusBar = () => {
-    const count = getInboxUnseenCount(pr, ss);
+    const count = getInboxUnseenCount(pr, ss, new Set(readStateStore.keys()));
     if (count > 0) {
       incomingStatusBar.text = `⚡ ${count} incoming`;
       incomingStatusBar.tooltip = `Open DevDocket (${count} incoming item${count === 1 ? '' : 's'})`;
@@ -419,6 +419,8 @@ export async function activate(context: vscode.ExtensionContext): Promise<DevDoc
     ws.onDidChangePRWatches(safeHandler('mc:watchedPRs', () => mainProvider.scheduleRefresh())),
     pr.onDidChangeDiscoveredItems(safeHandler('incoming:discovered', updateIncomingStatusBar)),
     ss.onDidChange(safeHandler('incoming:stateStore', updateIncomingStatusBar)),
+    readStateStore.onDidChange(safeHandler('incoming:readState', updateIncomingStatusBar)),
+    readStateStore.onDidChange(safeHandler('mc:readState', () => mainProvider.scheduleRefresh())),
     ws.onDidChangeWatchedRuns(safeHandler('watch-panel:runs', () => watchPanelProvider.refresh())),
     ws.onDidChangePRWatches(safeHandler('watch-panel:prs', () => watchPanelProvider.refresh())),
   );

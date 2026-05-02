@@ -24,7 +24,8 @@ export type WebviewMessage =
   | { type: 'switchTab'; tab: 'myWork' | 'sources' }
   | { type: 'autosave'; data: { title?: string; notes?: string; url?: string } }
   | { type: 'copyToClipboard'; text: string }
-  | { type: 'addWatchUrl' };
+  | { type: 'addWatchUrl' }
+  | { type: 'markSeen'; providerId: string; externalId: string };
 
 export interface TierData {
   id: string;

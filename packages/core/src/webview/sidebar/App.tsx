@@ -113,7 +113,15 @@ export function App() {
                         isSelected: item.id === selectedItemId,
                       })),
                     }}
-                    onItemClick={(id) => postMessage({ type: 'openItem', itemId: id })}
+                    onItemClick={(id) => {
+                      // For incoming items, also mark them seen so the unread
+                      // indicator clears once the user opens the editor.
+                      const clicked = tier.items.find(item => item.id === id);
+                      if (clicked?.tierType === 'incoming' && clicked.providerId && clicked.externalId && clicked.isUnseen) {
+                        postMessage({ type: 'markSeen', providerId: clicked.providerId, externalId: clicked.externalId });
+                      }
+                      postMessage({ type: 'openItem', itemId: id });
+                    }}
                     onAcceptItem={(providerId, externalId) => postMessage({ type: 'acceptItem', providerId, externalId })}
                     onDismissItem={(providerId, externalId) => postMessage({ type: 'dismissItem', providerId, externalId })}
                     onTransitionState={(itemId, targetState) => postMessage({ type: 'transitionState', itemId, targetState })}
