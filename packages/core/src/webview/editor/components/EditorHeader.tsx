@@ -1,6 +1,5 @@
 import type { ComponentChildren } from 'preact';
 import { BadgePill } from '../../shared/components/BadgePill';
-import { formatRelativeTime } from '../../shared/timeUtils';
 import type { EditorItemData } from '../../shared/types';
 import { stateLabel, stateTone } from '../editorUtils';
 
@@ -14,10 +13,6 @@ interface EditorHeaderProps {
 }
 
 export function EditorHeader({ item, title, onOpenUrl, onCopyText, actionButtons }: EditorHeaderProps) {
-  const metaParts = [
-    item.isIncoming ? undefined : `Created ${formatRelativeTime(item.createdAt)}`,
-  ].filter((value): value is string => Boolean(value));
-
   const titleNode = item.url ? (
     <a
       class="editor-title editor-title--link"
@@ -73,11 +68,6 @@ export function EditorHeader({ item, title, onOpenUrl, onCopyText, actionButtons
               <BadgePill key={`${badge.type}-${badge.variant}-${badge.label}`} badge={badge} />
             ))}
             {item.providerState ? <span class="meta-badge">{item.providerState}</span> : null}
-          </div>
-          <div class="meta-row">
-            {metaParts.map(part => (
-              <span key={part} class="meta-pill">{part}</span>
-            ))}
           </div>
         </div>
         {actionButtons ? <div class="editor-header-actions">{actionButtons}</div> : null}
