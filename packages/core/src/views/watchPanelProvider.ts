@@ -104,6 +104,12 @@ export class WatchPanelProvider implements vscode.Disposable {
       case 'addWatchUrl':
         await vscode.commands.executeCommand('devdocket.watchRun');
         break;
+      case 'watchPanelReady':
+        // The webview has mounted and attached its message listener.
+        // Re-send the current snapshot so it doesn't miss the initial refresh
+        // that may have been posted before the listener was wired.
+        this.refresh();
+        break;
       default:
         break;
     }

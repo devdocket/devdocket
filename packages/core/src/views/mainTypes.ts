@@ -25,7 +25,8 @@ export type WebviewMessage =
   | { type: 'autosave'; data: { title?: string; notes?: string; url?: string } }
   | { type: 'copyToClipboard'; text: string }
   | { type: 'addWatchUrl' }
-  | { type: 'markSeen'; providerId: string; externalId: string };
+  | { type: 'markSeen'; providerId: string; externalId: string }
+  | { type: 'watchPanelReady' };
 
 export interface TierData {
   id: string;

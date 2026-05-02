@@ -17,6 +17,11 @@ export function WatchApp() {
     };
 
     window.addEventListener('message', handler);
+    // Tell the extension we're ready so it can (re)send the initial snapshot.
+    // Without this, an updateWatchPanel posted between html-load and listener-
+    // attach is lost and the body shows "No active watches" while the title
+    // still reflects the extension's count.
+    postMessage({ type: 'watchPanelReady' });
     return () => {
       window.removeEventListener('message', handler);
     };
