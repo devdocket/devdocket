@@ -138,7 +138,7 @@ export function getEditorPanelHtml({ cspSource, scriptUri, initialItem }: Editor
 
     .editor-title {
       margin: 0;
-      font-size: 26px;
+      font-size: 22px;
       line-height: 1.2;
       font-weight: 700;
       color: var(--vscode-foreground);
@@ -160,9 +160,9 @@ export function getEditorPanelHtml({ cspSource, scriptUri, initialItem }: Editor
     }
     .editor-repo-annotation {
       font-weight: 400;
-      font-size: 0.85em;
+      font-size: 0.95em;
       color: var(--vscode-descriptionForeground);
-      opacity: 0.75;
+      opacity: 0.85;
       word-break: break-all;
       margin-top: 4px;
     }
@@ -524,7 +524,7 @@ export function getEditorPanelHtml({ cspSource, scriptUri, initialItem }: Editor
       }
 
       .editor-title {
-        font-size: 22px;
+        font-size: 19px;
       }
 
       .editor-section,
