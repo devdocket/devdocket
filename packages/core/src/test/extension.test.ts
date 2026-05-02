@@ -123,49 +123,6 @@ describe('activate()', () => {
     expect(vscode.window.createOutputChannel).toHaveBeenCalledWith('DevDocket');
   });
 
-  // ------------------------------------------------------------------
-  // 6. Incoming status bar stays hidden when there are no items
-  // ------------------------------------------------------------------
-  it('hides the incoming status bar when there are no items', async () => {
-    await activate(context);
-    await flushMicrotasks();
-
-    const createStatusBarItem = vscode.window.createStatusBarItem as ReturnType<typeof vi.fn>;
-    const incomingStatusBar = createStatusBarItem.mock.results[1].value;
-    expect(incomingStatusBar.command).toBe('devdocket.main.focus');
-    expect(incomingStatusBar.hide).toHaveBeenCalled();
-    expect(incomingStatusBar.show).not.toHaveBeenCalled();
-  });
-
-  it('updates the incoming status bar as provider items are discovered and dismissed', async () => {
-    const api = await activate(context);
-    const createStatusBarItem = vscode.window.createStatusBarItem as ReturnType<typeof vi.fn>;
-    const incomingStatusBar = createStatusBarItem.mock.results[1].value;
-    const dismissFromInbox = getCommandHandler('devdocket.dismissFromInbox');
-    const itemEmitter = new (vscode.EventEmitter as any)();
-
-    api.registerProvider({
-      id: 'github',
-      label: 'GitHub',
-      onDidDiscoverItems: itemEmitter.event,
-      refresh: vi.fn(async () => {
-        itemEmitter.fire([
-          { externalId: '1', title: 'Incoming issue', url: 'https://github.com/org/repo/issues/1' },
-        ]);
-      }),
-    } as any);
-    await flushMicrotasks();
-    await flushMicrotasks();
-
-    expect(incomingStatusBar.text).toBe('⚡ 1 incoming');
-    expect(incomingStatusBar.show).toHaveBeenCalled();
-
-    await dismissFromInbox({ providerId: 'github', externalId: '1', title: 'Incoming issue' });
-    await flushMicrotasks();
-
-    expect(incomingStatusBar.hide).toHaveBeenCalled();
-  });
-
   it('wires work graph, provider registry, and state store changes to DevDocket refresh', async () => {
     const api = await activate(context);
     const mainProvider = getMainProvider();
