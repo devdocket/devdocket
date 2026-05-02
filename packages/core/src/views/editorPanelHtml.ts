@@ -117,6 +117,7 @@ export function getEditorPanelHtml({ cspSource, scriptUri, initialItem }: Editor
       font-weight: 700;
       color: var(--vscode-foreground);
       word-break: break-word;
+      display: inline;
     }
     a.editor-title--link {
       color: var(--vscode-foreground);
@@ -128,20 +129,15 @@ export function getEditorPanelHtml({ cspSource, scriptUri, initialItem }: Editor
       text-decoration: underline;
     }
     .editor-title-block {
-      display: flex;
-      flex-direction: column;
-      gap: 6px;
       flex: 1;
       min-width: 0;
     }
-    .editor-title-tools {
-      display: flex;
-      gap: 4px;
-    }
     .icon-button--inline {
-      width: 24px;
-      height: 24px;
-      font-size: 14px;
+      width: 22px;
+      height: 22px;
+      font-size: 13px;
+      vertical-align: middle;
+      margin-left: 4px;
     }
 
     .badge-pill,

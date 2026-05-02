@@ -38,28 +38,26 @@ export function EditorHeader({ item, title, onOpenUrl, onCopyText }: EditorHeade
       <div class="editor-title-row">
         <div class="editor-title-block">
           {titleNode}
-          <div class="editor-title-tools">
+          <button
+            type="button"
+            class="icon-button icon-button--inline"
+            aria-label="Copy title"
+            title="Copy title"
+            onClick={() => onCopyText(title)}
+          >
+            ⧉
+          </button>
+          {item.url ? (
             <button
               type="button"
               class="icon-button icon-button--inline"
-              aria-label="Copy title"
-              title="Copy title"
-              onClick={() => onCopyText(title)}
+              aria-label="Copy URL"
+              title="Copy URL"
+              onClick={() => onCopyText(item.url!)}
             >
-              ⧉
+              🔗
             </button>
-            {item.url ? (
-              <button
-                type="button"
-                class="icon-button icon-button--inline"
-                aria-label="Copy URL"
-                title="Copy URL"
-                onClick={() => onCopyText(item.url!)}
-              >
-                🔗
-              </button>
-            ) : null}
-          </div>
+          ) : null}
         </div>
         <div class="editor-title-actions">
           <span class={`editor-status editor-status--${stateTone(item.state)}`}>{stateLabel(item.state)}</span>
