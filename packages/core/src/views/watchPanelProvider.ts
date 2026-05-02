@@ -41,14 +41,17 @@ export class WatchPanelProvider implements vscode.Disposable {
       this.panel.onDidDispose(() => {
         this.clearPanel();
       }),
+      // Only treat "user is looking" as the panel actually being focused.
+      // Just being visible in another column doesn't mean the user noticed
+      // a newly-arrived failure.
+      this.panel.onDidChangeViewState((event) => {
+        if (event.webviewPanel.active) {
+          this.watcherService.acknowledgeAllFailures();
+        }
+      }),
     ];
 
     this.refresh();
-    // Treat opening the panel as the user acknowledging current failures so
-    // the status bar can stop using the warning color until a NEW failure
-    // arrives. Acknowledging fires onDidChangeWatchedRuns which will trigger
-    // the status bar to re-evaluate.
-    this.watcherService.acknowledgeAllFailures();
   }
 
   refresh(): void {
@@ -73,6 +76,12 @@ export class WatchPanelProvider implements vscode.Disposable {
       prWatches,
       runWatches,
     });
+
+    // Only auto-acknowledge while the user is actually focused on the panel
+    // (not merely if the panel is open in some other column).
+    if (this.panel.active) {
+      this.watcherService.acknowledgeAllFailures();
+    }
   }
 
   dispose(): void {
