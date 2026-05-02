@@ -39,7 +39,7 @@ export function ItemCard({
   onDragEnd,
 }: ItemCardProps) {
   const actions = getItemActions(item, onAccept, onDismiss, onTransition);
-  const isDraggable = item.tierType === 'readyToStart';
+  const isDraggable = item.tierType === 'readyToStart' || item.tierType === 'inProgress';
   const [actionsOpen, setActionsOpen] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
   const itemElementRef = useRef<HTMLDivElement | null>(null);

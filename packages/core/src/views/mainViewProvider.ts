@@ -120,7 +120,9 @@ export class MainViewProvider implements vscode.WebviewViewProvider {
 
     const inProgressItems = this.workGraph
       .getItemsByState(WorkItemState.InProgress)
-      .sort((a, b) => this.compareUrgencyThenUpdated(a, b, discoveredItemMap))
+      .sort((a, b) => this.compareUrgency(a, b, discoveredItemMap)
+        || (a.sortOrder ?? Number.MAX_SAFE_INTEGER) - (b.sortOrder ?? Number.MAX_SAFE_INTEGER)
+        || b.updatedAt - a.updatedAt)
       .map(item => this.buildWorkItemCardData(item, 'inProgress', discoveredItemMap));
 
     const readyToStartItems = this.workGraph
@@ -203,14 +205,6 @@ export class MainViewProvider implements vscode.WebviewViewProvider {
       return 0;
     }
     return aUrgent ? -1 : 1;
-  }
-
-  private compareUrgencyThenUpdated(a: WorkItem, b: WorkItem, discoveredItemMap: Map<string, DiscoveredItem>): number {
-    const urgency = this.compareUrgency(a, b, discoveredItemMap);
-    if (urgency !== 0) {
-      return urgency;
-    }
-    return b.updatedAt - a.updatedAt;
   }
 
   private isUrgentWorkItem(item: WorkItem, discoveredItemMap: Map<string, DiscoveredItem>): boolean {
@@ -513,20 +507,42 @@ export class MainViewProvider implements vscode.WebviewViewProvider {
         return;
       }
 
+      // Determine the state to reorder within from the dragged items themselves.
+      // All items in a reorder must belong to the same lifecycle state (cross-tier
+      // drag is not supported), so derive the state from the first known item and
+      // bail if any others disagree.
+      const firstItem = this.workGraph.getItem(itemIds[0]);
+      if (!firstItem) {
+        logger.warn('DevDocket: reorder ignored because the first item could not be found');
+        return;
+      }
+      const state = firstItem.state;
+      if (state !== WorkItemState.New && state !== WorkItemState.InProgress) {
+        logger.warn(`DevDocket: reorder ignored because state ${state} is not reorderable`);
+        return;
+      }
+      for (const id of itemIds) {
+        const item = this.workGraph.getItem(id);
+        if (!item || item.state !== state) {
+          logger.warn('DevDocket: reorder ignored because items span multiple states');
+          return;
+        }
+      }
+
       const currentIds = this.workGraph
-        .getItemsByState(WorkItemState.New)
+        .getItemsByState(state)
         .sort((a, b) => (a.sortOrder ?? Number.MAX_SAFE_INTEGER) - (b.sortOrder ?? Number.MAX_SAFE_INTEGER)
           || b.updatedAt - a.updatedAt)
         .map(item => item.id);
 
       if (currentIds.length !== itemIds.length) {
-        logger.warn('DevDocket: reorder ignored because ready-to-start items changed during drag');
+        logger.warn(`DevDocket: reorder ignored because ${state} items changed during drag`);
         return;
       }
 
       const currentIdSet = new Set(currentIds);
       if (new Set(itemIds).size !== itemIds.length || currentIds.some(itemId => !itemIds.includes(itemId)) || itemIds.some(itemId => !currentIdSet.has(itemId))) {
-        logger.warn('DevDocket: reorder ignored because it included unknown ready-to-start item ids');
+        logger.warn(`DevDocket: reorder ignored because it included unknown ${state} item ids`);
         return;
       }
 
@@ -543,7 +559,7 @@ export class MainViewProvider implements vscode.WebviewViewProvider {
 
         const draggedIndex = workingIds.indexOf(desiredId);
         if (draggedIndex === -1) {
-          logger.warn(`DevDocket: reorder ignored because item ${desiredId} was not in the ready-to-start tier`);
+          logger.warn(`DevDocket: reorder ignored because item ${desiredId} was not in the ${state} tier`);
           return;
         }
 

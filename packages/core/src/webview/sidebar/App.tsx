@@ -117,7 +117,7 @@ export function App() {
                     onAcceptItem={(providerId, externalId) => postMessage({ type: 'acceptItem', providerId, externalId })}
                     onDismissItem={(providerId, externalId) => postMessage({ type: 'dismissItem', providerId, externalId })}
                     onTransitionState={(itemId, targetState) => postMessage({ type: 'transitionState', itemId, targetState })}
-                    onReorderItems={tier.id === 'ready-to-start' ? (itemIds) => postMessage({ type: 'reorderItems', itemIds }) : undefined}
+                    onReorderItems={tier.id === 'ready-to-start' || tier.id === 'in-progress' ? (itemIds) => postMessage({ type: 'reorderItems', itemIds }) : undefined}
                     onAcceptAll={tier.id === 'incoming' ? () => postMessage({ type: 'acceptAll' }) : undefined}
                     onClearHistory={tier.id === 'done' ? () => postMessage({ type: 'clearHistory' }) : undefined}
                   />

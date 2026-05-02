@@ -34,7 +34,7 @@ export function TierSection({
   const headerButtonRef = useRef<HTMLButtonElement>(null);
   const itemRefs = useRef<Record<string, HTMLDivElement | null>>({});
   const dragDepthRef = useRef(0);
-  const isReadyToStartTier = tier.id === 'ready-to-start';
+  const isReorderableTier = tier.id === 'ready-to-start' || tier.id === 'in-progress';
   const toggleCollapsed = () => setCollapsed(value => !value);
   const itemCountLabel = `${tier.name}, ${tier.items.length} item${tier.items.length === 1 ? '' : 's'}`;
   const itemsId = `mission-control-tier-${tier.id}`;
@@ -126,7 +126,7 @@ export function TierSection({
   };
 
   const handleDragStart = (itemId: string) => {
-    if (!isReadyToStartTier) {
+    if (!isReorderableTier) {
       return;
     }
 
@@ -141,7 +141,7 @@ export function TierSection({
   };
 
   const handleDragEnter = (event: DragEvent) => {
-    if (!isReadyToStartTier || !draggedItemId) {
+    if (!isReorderableTier || !draggedItemId) {
       return;
     }
 
@@ -151,7 +151,7 @@ export function TierSection({
   };
 
   const handleDragOver = (event: DragEvent) => {
-    if (!isReadyToStartTier || !draggedItemId) {
+    if (!isReorderableTier || !draggedItemId) {
       return;
     }
 
@@ -164,7 +164,7 @@ export function TierSection({
   };
 
   const handleDragLeave = () => {
-    if (!isReadyToStartTier || !draggedItemId) {
+    if (!isReorderableTier || !draggedItemId) {
       return;
     }
 
@@ -176,7 +176,7 @@ export function TierSection({
   };
 
   const handleDrop = (event: DragEvent) => {
-    if (!isReadyToStartTier) {
+    if (!isReorderableTier) {
       return;
     }
 
@@ -270,10 +270,10 @@ export function TierSection({
           aria-label={itemCountLabel}
           aria-orientation="vertical"
           aria-multiselectable={false}
-          onDragEnter={isReadyToStartTier ? handleDragEnter : undefined}
-          onDragOver={isReadyToStartTier ? handleDragOver : undefined}
-          onDragLeave={isReadyToStartTier ? handleDragLeave : undefined}
-          onDrop={isReadyToStartTier ? handleDrop : undefined}
+          onDragEnter={isReorderableTier ? handleDragEnter : undefined}
+          onDragOver={isReorderableTier ? handleDragOver : undefined}
+          onDragLeave={isReorderableTier ? handleDragLeave : undefined}
+          onDrop={isReorderableTier ? handleDrop : undefined}
         >
           {tier.items.map((item, index) => (
             <Fragment key={item.id}>
@@ -291,8 +291,8 @@ export function TierSection({
                 onAccept={onAcceptItem}
                 onDismiss={onDismissItem}
                 onTransition={onTransitionState}
-                onDragStart={isReadyToStartTier ? handleDragStart : undefined}
-                onDragEnd={isReadyToStartTier ? handleDragEnd : undefined}
+                onDragStart={isReorderableTier ? handleDragStart : undefined}
+                onDragEnd={isReorderableTier ? handleDragEnd : undefined}
               />
             </Fragment>
           ))}
