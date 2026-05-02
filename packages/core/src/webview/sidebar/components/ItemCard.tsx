@@ -162,7 +162,6 @@ export function ItemCard({
             {item.isUnseen ? <span class="unseen-dot" aria-hidden="true">●</span> : null}
             <span class="item-title">{item.title}</span>
           </div>
-          {item.relativeTime ? <span class="item-time">{item.relativeTime}</span> : null}
         </div>
         {item.badges.length > 0 ? (
           <div class="badge-row">
@@ -209,7 +208,7 @@ function buildItemAriaLabel(item: ItemCardData): string {
     .filter(badge => badge.type === 'state')
     .map(badge => badge.label);
 
-  return [item.title, providerLabel, ...stateLabels, item.relativeTime || undefined]
+  return [item.title, providerLabel, ...stateLabels]
     .filter((value): value is string => Boolean(value))
     .join(', ');
 }

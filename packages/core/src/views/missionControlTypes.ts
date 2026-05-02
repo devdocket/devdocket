@@ -35,7 +35,6 @@ export interface TierData {
 export interface ItemCardData {
   id: string;
   title: string;
-  relativeTime: string;
   badges: BadgeData[];
   branchName?: string;
   repoName?: string;

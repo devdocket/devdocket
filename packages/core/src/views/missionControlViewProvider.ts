@@ -11,7 +11,6 @@ import { DiscoveredStateStore } from '../storage/discoveredStateStore';
 import { ReadStateStore } from '../storage/readStateStore';
 import { isSafeUrl } from '../utils/url';
 import { buildTierColorCss } from '../webview/shared/colors';
-import { formatRelativeTime } from '../webview/shared/timeUtils';
 import type {
   BadgeData,
   ItemCardData,
@@ -234,7 +233,6 @@ export class MissionControlViewProvider implements vscode.WebviewViewProvider {
     return {
       id: existingWorkItem?.id ?? getDiscoveredItemKey(providerId, discoveredItem.externalId),
       title: discoveredItem.title,
-      relativeTime: existingWorkItem ? this.formatItemTime(existingWorkItem.updatedAt) : '',
       badges: this.buildBadges(providerId, discoveredItem, discoveredItem.url),
       branchName: workContext.branchName,
       repoName: workContext.repoName,
@@ -256,7 +254,6 @@ export class MissionControlViewProvider implements vscode.WebviewViewProvider {
     return {
       id: item.id,
       title: item.title,
-      relativeTime: this.formatItemTime(item.updatedAt),
       badges: this.buildBadges(item.providerId, discoveredItem, item.url),
       branchName: workContext.branchName,
       repoName: workContext.repoName,
@@ -265,10 +262,6 @@ export class MissionControlViewProvider implements vscode.WebviewViewProvider {
       providerId: item.providerId,
       externalId: item.externalId,
     };
-  }
-
-  private formatItemTime(timestamp: number): string {
-    return formatRelativeTime(timestamp);
   }
 
   private buildBadges(providerId?: string, discoveredItem?: DiscoveredItem, itemUrl?: string): BadgeData[] {
@@ -881,7 +874,7 @@ export class MissionControlViewProvider implements vscode.WebviewViewProvider {
       display: flex;
       flex-direction: column;
       gap: 6px;
-      padding: 10px 72px 10px 12px;
+      padding: 10px 12px;
       background: transparent;
       border: none;
       color: inherit;
@@ -910,7 +903,7 @@ export class MissionControlViewProvider implements vscode.WebviewViewProvider {
     }
     .item-actions {
       position: absolute;
-      right: 8px;
+      right: 6px;
       top: 50%;
       transform: translateY(-50%);
       display: flex;
@@ -918,6 +911,11 @@ export class MissionControlViewProvider implements vscode.WebviewViewProvider {
       opacity: 0;
       pointer-events: none;
       transition: opacity 0.15s;
+      padding: 3px 5px;
+      border-radius: 5px;
+      background: var(--vscode-editorHoverWidget-background, var(--vscode-editor-background));
+      border: 1px solid var(--vscode-editorHoverWidget-border, var(--vscode-widget-border, transparent));
+      box-shadow: 0 2px 6px rgba(0, 0, 0, 0.25);
     }
     .item-card:hover .item-actions,
     .item-card.actions-open .item-actions {
@@ -925,21 +923,25 @@ export class MissionControlViewProvider implements vscode.WebviewViewProvider {
       pointer-events: auto;
     }
     .item-action-btn {
-      background: var(--vscode-button-secondaryBackground, rgba(127,127,127,0.2));
-      color: var(--vscode-button-secondaryForeground, var(--vscode-foreground));
+      background: transparent;
+      color: var(--vscode-foreground);
       border: none;
       border-radius: 3px;
       padding: 2px 6px;
       cursor: pointer;
       font-size: 12px;
+      line-height: 1;
     }
     .item-action-btn:hover {
-      background: var(--vscode-button-secondaryHoverBackground, rgba(127,127,127,0.3));
+      background: var(--vscode-toolbar-hoverBackground, rgba(127, 127, 127, 0.25));
+    }
+    .item-action-btn:focus-visible {
+      outline: 1px solid var(--vscode-focusBorder);
+      outline-offset: -1px;
     }
     .item-line-1 {
       display: flex;
       align-items: flex-start;
-      justify-content: space-between;
       gap: 8px;
     }
     .item-title-wrap {
@@ -970,10 +972,6 @@ export class MissionControlViewProvider implements vscode.WebviewViewProvider {
     .item-title {
       font-weight: 600;
       word-break: break-word;
-    }
-    .item-time {
-      flex-shrink: 0;
-      white-space: nowrap;
     }
     .unseen-dot {
       color: var(--tier-incoming);
