@@ -29,6 +29,7 @@ export function WatchApp() {
 
   const completedCount = useMemo(
     () => prWatches.filter(prWatch => prWatch.state !== 'open').length
+      + prWatches.reduce((sum, pr) => sum + pr.runs.filter(run => run.state === 'completed').length, 0)
       + runWatches.filter(runWatch => runWatch.state === 'completed').length,
     [prWatches, runWatches],
   );

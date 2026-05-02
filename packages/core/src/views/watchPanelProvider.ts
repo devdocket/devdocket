@@ -54,6 +54,7 @@ export class WatchPanelProvider implements vscode.Disposable {
     const prWatches = this.watcherService
       .getActivePRWatches()
       .map(prWatch => this.toPRWatchData(prWatch))
+      .filter(prWatch => prWatch.runs.length > 0)
       .sort((a, b) => comparePRWatches(a, b));
     const runWatches = this.watcherService
       .getActiveStandaloneWatches()
