@@ -38,18 +38,29 @@ export function WatchApp() {
             {totalCount === 0 ? 'No active watches' : `${totalCount} watch${totalCount === 1 ? '' : 'es'} tracked`}
           </div>
         </div>
-        <button
-          type="button"
-          class="link-button"
-          disabled={completedCount === 0}
-          onClick={() => postMessage({ type: 'dismissCompletedWatches' })}
-        >
-          Dismiss All Completed
-        </button>
+        <div class="watch-header-actions">
+          <button
+            type="button"
+            class="link-button"
+            onClick={() => postMessage({ type: 'addWatchUrl' })}
+          >
+            + Watch URL
+          </button>
+          <button
+            type="button"
+            class="link-button"
+            disabled={completedCount === 0}
+            onClick={() => postMessage({ type: 'dismissCompletedWatches' })}
+          >
+            Dismiss All Completed
+          </button>
+        </div>
       </header>
 
       {totalCount === 0 ? (
-        <div class="empty-state">Watch a pull request or pipeline run to track it here.</div>
+        <div class="empty-state">
+          No watches yet. Click <strong>+ Watch URL</strong> above to add a pull request or pipeline run URL.
+        </div>
       ) : (
         <div class="watch-sections">
           {prWatches.length > 0 ? (

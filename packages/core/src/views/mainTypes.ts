@@ -23,7 +23,8 @@ export type WebviewMessage =
   | { type: 'dismissWatch'; watchId: string }
   | { type: 'switchTab'; tab: 'myWork' | 'sources' }
   | { type: 'autosave'; data: { title?: string; notes?: string; url?: string } }
-  | { type: 'copyToClipboard'; text: string };
+  | { type: 'copyToClipboard'; text: string }
+  | { type: 'addWatchUrl' };
 
 export interface TierData {
   id: string;
@@ -66,8 +67,6 @@ export interface EditorItemData {
   createdAt: number;
   updatedAt: number;
   badges: BadgeData[];
-  branchName?: string;
-  repoName?: string;
   isProviderManaged: boolean;
   validTransitions: string[];
   hasActions: boolean;

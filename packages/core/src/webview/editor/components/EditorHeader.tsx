@@ -15,8 +15,6 @@ interface EditorHeaderProps {
 
 export function EditorHeader({ item, title, onOpenUrl, onCopyText, actionButtons }: EditorHeaderProps) {
   const metaParts = [
-    item.branchName ? `Branch ${item.branchName}` : undefined,
-    item.repoName ? `Repo ${item.repoName}` : undefined,
     item.group ? item.group : undefined,
     `Created ${formatRelativeTime(item.createdAt)}`,
   ].filter((value): value is string => Boolean(value));

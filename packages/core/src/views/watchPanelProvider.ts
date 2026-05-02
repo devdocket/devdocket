@@ -101,6 +101,9 @@ export class WatchPanelProvider implements vscode.Disposable {
       case 'dismissWatch':
         this.dismissWatchById(message.watchId);
         break;
+      case 'addWatchUrl':
+        await vscode.commands.executeCommand('devdocket.watchRun');
+        break;
       default:
         break;
     }
@@ -199,6 +202,12 @@ export class WatchPanelProvider implements vscode.Disposable {
       justify-content: space-between;
       align-items: center;
       gap: 12px;
+    }
+    .watch-header-actions {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+      flex-wrap: wrap;
     }
     .watch-header-copy {
       display: flex;

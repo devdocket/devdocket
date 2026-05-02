@@ -223,12 +223,11 @@ export class MainViewProvider implements vscode.WebviewViewProvider {
   }
 
   private buildIncomingCardData(providerId: string, discoveredItem: DiscoveredItem, existingWorkItem?: WorkItem): ItemCardData {
-    const workContext = existingWorkItem ? extractWorkContext(existingWorkItem) : {};
     return {
       id: existingWorkItem?.id ?? getDiscoveredItemKey(providerId, discoveredItem.externalId),
       title: discoveredItem.title,
       badges: this.buildBadges(providerId, discoveredItem, discoveredItem.url),
-      repoAnnotation: discoveredItem.group ?? existingWorkItem?.group ?? workContext.repoName,
+      repoAnnotation: discoveredItem.group ?? existingWorkItem?.group,
       tierType: 'incoming',
       isUnseen: true,
       isUrgent: this.isUrgentDiscoveredItem(discoveredItem),
@@ -243,12 +242,11 @@ export class MainViewProvider implements vscode.WebviewViewProvider {
     discoveredItemMap: Map<string, DiscoveredItem>,
   ): ItemCardData {
     const discoveredItem = this.getDiscoveredItemForWorkItem(item, discoveredItemMap);
-    const workContext = extractWorkContext(item);
     return {
       id: item.id,
       title: item.title,
       badges: this.buildBadges(item.providerId, discoveredItem, item.url),
-      repoAnnotation: item.group ?? discoveredItem?.group ?? workContext.repoName,
+      repoAnnotation: item.group ?? discoveredItem?.group,
       tierType,
       isUrgent: this.isUrgentWorkItem(item, discoveredItemMap),
       providerId: item.providerId,
@@ -1051,40 +1049,6 @@ function parseDiscoveredItemKey(value: string): { providerId: string; externalId
 
 function toDisplayLabel(value: string): string {
   return value.replace(/\b\w/g, char => char.toUpperCase());
-}
-
-function extractWorkContext(item: WorkItem): { branchName?: string; repoName?: string } {
-  const entries = item.activityLog ?? [];
-  for (let i = entries.length - 1; i >= 0; i--) {
-    const entry = entries[i];
-    if (entry.type !== 'work-started' || !entry.detail) {
-      continue;
-    }
-
-    try {
-      const parsed = JSON.parse(entry.detail) as { branchName?: unknown; repoPath?: unknown; worktreePath?: unknown };
-      const branchName = typeof parsed.branchName === 'string' && parsed.branchName.length > 0 ? parsed.branchName : undefined;
-      const repoName = extractRepoName(
-        typeof parsed.repoPath === 'string' ? parsed.repoPath : typeof parsed.worktreePath === 'string' ? parsed.worktreePath : undefined,
-      );
-      if (branchName || repoName) {
-        return { branchName, repoName };
-      }
-    } catch {
-      continue;
-    }
-  }
-
-  return {};
-}
-
-function extractRepoName(pathValue?: string): string | undefined {
-  if (!pathValue) {
-    return undefined;
-  }
-
-  const segments = pathValue.split(/[\\/]/).filter(Boolean);
-  return segments.length > 0 ? segments[segments.length - 1] : undefined;
 }
 
 function getNonce(): string {

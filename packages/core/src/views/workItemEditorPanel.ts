@@ -332,7 +332,6 @@ export class WorkItemEditorPanel {
 
   private buildEditorItemData(item: WorkItem): EditorItemData {
     const discoveredItem = this.getDiscoveredItem(item);
-    const workContext = extractWorkContext(item);
     const providerLabel = item.providerId ? this.providerLabel ?? this.providerRegistry.getProviderLabel(item.providerId) : undefined;
 
     return {
@@ -348,8 +347,6 @@ export class WorkItemEditorPanel {
       createdAt: item.createdAt,
       updatedAt: item.updatedAt,
       badges: buildBadges(item.providerId, discoveredItem),
-      branchName: workContext.branchName,
-      repoName: workContext.repoName,
       isProviderManaged: this.isProviderManaged(item),
       validTransitions: Array.from(VALID_TRANSITIONS.get(item.state) ?? []),
       hasActions: WorkItemEditorPanel.actionRegistry?.hasActionsFor(item) ?? false,
@@ -585,38 +582,4 @@ function normalizeText(value?: string): string {
 
 function toDisplayLabel(value: string): string {
   return value.replace(/\b\w/g, char => char.toUpperCase());
-}
-
-function extractWorkContext(item: WorkItem): { branchName?: string; repoName?: string } {
-  const entries = item.activityLog ?? [];
-  for (let i = entries.length - 1; i >= 0; i--) {
-    const entry = entries[i];
-    if (entry.type !== 'work-started' || !entry.detail) {
-      continue;
-    }
-
-    try {
-      const parsed = JSON.parse(entry.detail) as { branchName?: unknown; repoPath?: unknown; worktreePath?: unknown };
-      const branchName = typeof parsed.branchName === 'string' && parsed.branchName.length > 0 ? parsed.branchName : undefined;
-      const repoName = extractRepoName(
-        typeof parsed.repoPath === 'string' ? parsed.repoPath : typeof parsed.worktreePath === 'string' ? parsed.worktreePath : undefined,
-      );
-      if (branchName || repoName) {
-        return { branchName, repoName };
-      }
-    } catch {
-      continue;
-    }
-  }
-
-  return {};
-}
-
-function extractRepoName(pathValue?: string): string | undefined {
-  if (!pathValue) {
-    return undefined;
-  }
-
-  const segments = pathValue.split(/[\\/]/).filter(Boolean);
-  return segments.length > 0 ? segments[segments.length - 1] : undefined;
 }
