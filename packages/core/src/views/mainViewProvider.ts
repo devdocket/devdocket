@@ -338,14 +338,17 @@ export class MainViewProvider implements vscode.WebviewViewProvider {
     if (watchedPR.hasWarning || childRuns.some(runWatch => runWatch.hasWarning || isFailedRun(runWatch))) {
       return { label: 'CI failed', type: 'ci', variant: 'ci-fail' };
     }
+    // No CI runs detected yet — don't claim a CI status. The PR may simply
+    // have no CI configured, or runs may not have started. Showing 'CI running'
+    // here is misleading because it would stay forever for PRs without CI.
+    if (childRuns.length === 0) {
+      return undefined;
+    }
     if (childRuns.some(runWatch => runWatch.status.overallState !== 'completed')) {
       return { label: 'CI running', type: 'ci', variant: 'ci-running' };
     }
-    if (childRuns.length > 0 && childRuns.every(runWatch => runWatch.status.conclusion === 'success')) {
+    if (childRuns.every(runWatch => runWatch.status.conclusion === 'success')) {
       return { label: 'CI passed', type: 'ci', variant: 'ci-pass' };
-    }
-    if (watchedPR.prState === 'open') {
-      return { label: 'CI running', type: 'ci', variant: 'ci-running' };
     }
     return undefined;
   }
