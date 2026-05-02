@@ -159,10 +159,12 @@ export function ItemCard({
           <div class="item-title-wrap">
             {isDraggable ? <span class="drag-handle" aria-hidden="true">⠿</span> : null}
             {item.isUnseen ? <span class="unseen-dot" aria-hidden="true">●</span> : null}
-            <span class="item-title">{item.title}</span>
-            {item.repoAnnotation ? (
-              <span class="item-repo-annotation"> {item.repoAnnotation}</span>
-            ) : null}
+            <span class="item-title">
+              {item.title}
+              {item.repoAnnotation ? (
+                <span class="item-repo-annotation"> {item.repoAnnotation}</span>
+              ) : null}
+            </span>
           </div>
         </div>
         {item.badges.length > 0 ? (

@@ -978,7 +978,6 @@ export class MainViewProvider implements vscode.WebviewViewProvider {
       font-size: 0.85em;
       color: var(--vscode-descriptionForeground);
       opacity: 0.75;
-      margin-left: 4px;
       word-break: break-all;
     }
     .unseen-dot {
