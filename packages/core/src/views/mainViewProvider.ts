@@ -620,21 +620,6 @@ export class MainViewProvider implements vscode.WebviewViewProvider {
       outline: 1px solid var(--vscode-focusBorder);
       outline-offset: -1px;
     }
-    .tab-action {
-      align-self: center;
-      padding: 4px 8px;
-      background: transparent;
-      border: 1px solid transparent;
-      border-radius: 4px;
-      color: var(--vscode-descriptionForeground);
-      cursor: pointer;
-      font-size: 14px;
-      line-height: 1;
-    }
-    .tab-action:hover {
-      color: var(--vscode-foreground);
-      background: var(--vscode-toolbar-hoverBackground, rgba(127, 127, 127, 0.12));
-    }
     .tab-content {
       flex: 1;
       overflow-y: auto;

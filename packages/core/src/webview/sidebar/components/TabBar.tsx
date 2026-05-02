@@ -3,10 +3,9 @@ import { useRef } from 'preact/hooks';
 interface TabBarProps {
   activeTab: 'myWork' | 'sources';
   onTabSwitch: (tab: 'myWork' | 'sources') => void;
-  onCreateItem: () => void;
 }
 
-export function TabBar({ activeTab, onTabSwitch, onCreateItem }: TabBarProps) {
+export function TabBar({ activeTab, onTabSwitch }: TabBarProps) {
   const myWorkTabRef = useRef<HTMLButtonElement>(null);
   const sourcesTabRef = useRef<HTMLButtonElement>(null);
 
@@ -76,15 +75,6 @@ export function TabBar({ activeTab, onTabSwitch, onCreateItem }: TabBarProps) {
           Sources
         </button>
       </div>
-      <button
-        type="button"
-        class="tab-action"
-        title="Create item"
-        aria-label="Create item"
-        onClick={onCreateItem}
-      >
-        ➕
-      </button>
     </div>
   );
 }

@@ -74,7 +74,6 @@ export function App() {
       <TabBar
         activeTab={activeTab}
         onTabSwitch={handleTabSwitch}
-        onCreateItem={() => postMessage({ type: 'createItem' })}
       />
       <div class="sr-only" role="status" aria-live="polite" aria-atomic="true">
         {announcement}
