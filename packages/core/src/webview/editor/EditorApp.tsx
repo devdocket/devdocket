@@ -154,28 +154,32 @@ export function EditorApp() {
           </div>
         </section>
       )}
-      <section class="editor-section" aria-labelledby={description ? 'editor-description-heading' : undefined}>
-        {description ? (
-          <>
-            <div class="editor-section-heading" id="editor-description-heading">Description</div>
-            <div
-              class="editor-description markdown-body"
-              onClick={handleDescriptionClick}
-              dangerouslySetInnerHTML={{ __html: description }}
+      {description || !item.isIncoming ? (
+        <section class="editor-section" aria-labelledby={description ? 'editor-description-heading' : undefined}>
+          {description ? (
+            <>
+              <div class="editor-section-heading" id="editor-description-heading">Description</div>
+              <div
+                class="editor-description markdown-body"
+                onClick={handleDescriptionClick}
+                dangerouslySetInnerHTML={{ __html: description }}
+              />
+            </>
+          ) : null}
+          {item.isIncoming ? null : (
+            <EditableField
+              label="Notes"
+              value={notes}
+              multiline
+              placeholder="Add notes..."
+              onInput={value => {
+                setNotes(value);
+                setAutosaveVersion(version => version + 1);
+              }}
             />
-          </>
-        ) : null}
-        <EditableField
-          label="Notes"
-          value={notes}
-          multiline
-          placeholder="Add notes..."
-          onInput={value => {
-            setNotes(value);
-            setAutosaveVersion(version => version + 1);
-          }}
-        />
-      </section>
+          )}
+        </section>
+      ) : null}
       <RelatedItems
         items={item.relatedItems}
         onOpenItem={itemId => postMessage({ type: 'openItem', itemId })}
