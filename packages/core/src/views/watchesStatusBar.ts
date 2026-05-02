@@ -24,7 +24,11 @@ export class WatchesStatusBar implements vscode.Disposable {
   private update(): void {
     const watches = this.watcherService.getActiveWatches();
     if (watches.length === 0) {
-      this.statusBarItem.hide();
+      this.statusBarItem.text = '👁 Watches';
+      this.statusBarItem.tooltip = 'Click to open CI watch details';
+      this.statusBarItem.backgroundColor = undefined;
+      this.statusBarItem.color = undefined;
+      this.statusBarItem.show();
       return;
     }
 

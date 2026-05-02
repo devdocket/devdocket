@@ -41,19 +41,23 @@ describe('WatchesStatusBar', () => {
     expect(statusBarItem.show).toHaveBeenCalled();
   });
 
-  it('updates visibility and text when watch activity changes', () => {
+  it('updates text when watch activity changes and remains visible when empty', () => {
     const watcherService = createWatcherService([]);
     new WatchesStatusBar(watcherService as any, 'devdocket.showWatchPanel');
 
     const statusBarItem = (vscode.window.createStatusBarItem as ReturnType<typeof vi.fn>).mock.results[0].value;
     expect(statusBarItem.command).toBe('devdocket.showWatchPanel');
-    expect(statusBarItem.hide).toHaveBeenCalledTimes(1);
+    expect(statusBarItem.text).toBe('👁 Watches');
+    expect(statusBarItem.show).toHaveBeenCalledTimes(1);
+    expect(statusBarItem.hide).not.toHaveBeenCalled();
 
     watcherService.setWatches([{ status: { overallState: 'running' } }]);
     expect(statusBarItem.text).toBe('🔄 1 running · ✓ 0 passed · ✗ 0 failed');
-    expect(statusBarItem.show).toHaveBeenCalledTimes(1);
+    expect(statusBarItem.show).toHaveBeenCalledTimes(2);
 
     watcherService.setWatches([]);
-    expect(statusBarItem.hide).toHaveBeenCalledTimes(2);
+    expect(statusBarItem.text).toBe('👁 Watches');
+    expect(statusBarItem.show).toHaveBeenCalledTimes(3);
+    expect(statusBarItem.hide).not.toHaveBeenCalled();
   });
 });
