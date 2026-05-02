@@ -12,7 +12,7 @@ import { DiscoveredStateStore } from '../storage/discoveredStateStore';
 import { ReadStateStore } from '../storage/readStateStore';
 import { isSafeUrl } from '../utils/url';
 import { buildTierColorCss } from '../webview/shared/colors';
-import { buildProviderBadge, buildStateBadge, getUnrecognizedProviderState } from './badges';
+import { buildProviderBadge, buildStateBadge, buildTypeBadge, getUnrecognizedProviderState } from './badges';
 import type {
   BadgeData,
   ItemCardData,
@@ -281,6 +281,11 @@ export class MainViewProvider implements vscode.WebviewViewProvider {
     const providerBadge = buildProviderBadge(providerId);
     if (providerBadge) {
       badges.push(providerBadge);
+    }
+
+    const typeBadge = buildTypeBadge(discoveredItem);
+    if (typeBadge) {
+      badges.push(typeBadge);
     }
 
     const stateBadge = buildStateBadge(discoveredItem);
