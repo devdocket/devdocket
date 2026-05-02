@@ -158,6 +158,14 @@ export function getEditorPanelHtml({ cspSource, scriptUri, initialItem }: Editor
       flex: 1;
       min-width: 0;
     }
+    .editor-repo-annotation {
+      font-weight: 400;
+      font-size: 0.85em;
+      color: var(--vscode-descriptionForeground);
+      opacity: 0.75;
+      word-break: break-all;
+      margin-top: 4px;
+    }
     .icon-button--inline {
       width: 22px;
       height: 22px;

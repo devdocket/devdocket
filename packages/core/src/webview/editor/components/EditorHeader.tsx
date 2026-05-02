@@ -15,7 +15,6 @@ interface EditorHeaderProps {
 
 export function EditorHeader({ item, title, onOpenUrl, onCopyText, actionButtons }: EditorHeaderProps) {
   const metaParts = [
-    item.group ? item.group : undefined,
     item.isIncoming ? undefined : `Created ${formatRelativeTime(item.createdAt)}`,
   ].filter((value): value is string => Boolean(value));
 
@@ -58,6 +57,9 @@ export function EditorHeader({ item, title, onOpenUrl, onCopyText, actionButtons
             >
               🔗
             </button>
+          ) : null}
+          {item.group ? (
+            <div class="editor-repo-annotation">{item.group}</div>
           ) : null}
         </div>
         <div class="editor-title-actions">
