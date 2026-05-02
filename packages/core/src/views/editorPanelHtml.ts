@@ -110,6 +110,32 @@ export function getEditorPanelHtml({ cspSource, scriptUri, initialItem }: Editor
       color: var(--vscode-descriptionForeground);
     }
 
+    button.editor-section-heading--toggle {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      background: transparent;
+      border: none;
+      padding: 0;
+      cursor: pointer;
+      font-family: inherit;
+    }
+
+    button.editor-section-heading--toggle:hover {
+      color: var(--vscode-foreground);
+    }
+
+    .editor-section-toggle {
+      display: inline-block;
+      width: 0.8em;
+      text-align: center;
+    }
+
+    .editor-section-count {
+      font-weight: 400;
+      opacity: 0.75;
+    }
+
     .editor-title {
       margin: 0;
       font-size: 26px;
@@ -231,13 +257,14 @@ export function getEditorPanelHtml({ cspSource, scriptUri, initialItem }: Editor
       gap: 14px;
     }
 
-    .editor-section--actions {
-      padding-top: 14px;
-      padding-bottom: 14px;
+    .editor-title-actions {
+      flex-wrap: wrap;
+      align-items: center;
     }
 
     .action-bar {
       gap: 8px;
+      flex-wrap: wrap;
     }
 
     .editor-button {
@@ -405,14 +432,10 @@ export function getEditorPanelHtml({ cspSource, scriptUri, initialItem }: Editor
       gap: 10px;
     }
 
-    .related-item,
-    .activity-entry {
+    .related-item {
       border: 1px solid var(--vscode-panel-border, var(--vscode-widget-border, rgba(128, 128, 128, 0.35)));
       border-radius: 8px;
       background: var(--vscode-editorWidget-background, rgba(128, 128, 128, 0.04));
-    }
-
-    .related-item {
       width: 100%;
       padding: 12px 14px;
       text-align: left;
@@ -436,8 +459,12 @@ export function getEditorPanelHtml({ cspSource, scriptUri, initialItem }: Editor
     .activity-entry {
       justify-content: space-between;
       align-items: flex-start;
-      padding: 12px 14px;
+      padding: 6px 0;
       gap: 12px;
+    }
+
+    .activity-entry + .activity-entry {
+      border-top: 1px solid var(--vscode-panel-border, var(--vscode-widget-border, rgba(128, 128, 128, 0.18)));
     }
 
     .activity-entry-main {

@@ -117,18 +117,20 @@ export function EditorApp() {
         title={title}
         onOpenUrl={nextUrl => postMessage({ type: 'openUrl', url: nextUrl })}
         onCopyText={text => postMessage({ type: 'copyToClipboard', text })}
+        actionButtons={
+          <ActionBar
+            item={item}
+            onTransition={targetState => postMessage({ type: 'transitionState', itemId: item.id, targetState })}
+            onRunAction={() => postMessage({ type: 'runAction', itemId: item.id })}
+            onAccept={() => item.providerId && item.externalId && postMessage({ type: 'acceptItem', providerId: item.providerId, externalId: item.externalId })}
+            onDismiss={() => item.providerId && item.externalId && postMessage({ type: 'dismissItem', providerId: item.providerId, externalId: item.externalId })}
+          />
+        }
       />
-      <ActionBar
-        item={item}
-        onTransition={targetState => postMessage({ type: 'transitionState', itemId: item.id, targetState })}
-        onRunAction={() => postMessage({ type: 'runAction', itemId: item.id })}
-        onAccept={() => item.providerId && item.externalId && postMessage({ type: 'acceptItem', providerId: item.providerId, externalId: item.externalId })}
-        onDismiss={() => item.providerId && item.externalId && postMessage({ type: 'dismissItem', providerId: item.providerId, externalId: item.externalId })}
-      />
-      <section class="editor-section" aria-labelledby="editor-details-heading">
-        <div class="editor-section-heading" id="editor-details-heading">Details</div>
-        <div class="editor-fields-grid">
-          {item.isProviderManaged ? null : (
+      {item.isProviderManaged ? null : (
+        <section class="editor-section" aria-labelledby="editor-details-heading">
+          <div class="editor-section-heading" id="editor-details-heading">Details</div>
+          <div class="editor-fields-grid">
             <EditableField
               label="Title"
               value={title}
@@ -138,8 +140,6 @@ export function EditorApp() {
                 setAutosaveVersion(version => version + 1);
               }}
             />
-          )}
-          {item.isProviderManaged ? null : (
             <EditableField
               label="URL"
               value={url}
@@ -151,29 +151,29 @@ export function EditorApp() {
                 setAutosaveVersion(version => version + 1);
               }}
             />
-          )}
-          <EditableField
-            label="Notes"
-            value={notes}
-            multiline
-            placeholder="Add notes..."
-            onInput={value => {
-              setNotes(value);
-              setAutosaveVersion(version => version + 1);
-            }}
-          />
-        </div>
-      </section>
-      {description ? (
-        <section class="editor-section" aria-labelledby="editor-description-heading">
-          <div class="editor-section-heading" id="editor-description-heading">Description</div>
+          </div>
+        </section>
+      )}
+      <section class="editor-section" aria-labelledby="editor-description-heading">
+        <div class="editor-section-heading" id="editor-description-heading">Description</div>
+        {description ? (
           <div
             class="editor-description markdown-body"
             onClick={handleDescriptionClick}
             dangerouslySetInnerHTML={{ __html: description }}
           />
-        </section>
-      ) : null}
+        ) : null}
+        <EditableField
+          label="Notes"
+          value={notes}
+          multiline
+          placeholder="Add notes..."
+          onInput={value => {
+            setNotes(value);
+            setAutosaveVersion(version => version + 1);
+          }}
+        />
+      </section>
       <RelatedItems
         items={item.relatedItems}
         onOpenItem={itemId => postMessage({ type: 'openItem', itemId })}

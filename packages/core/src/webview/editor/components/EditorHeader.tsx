@@ -1,3 +1,4 @@
+import type { ComponentChildren } from 'preact';
 import { BadgePill } from '../../shared/components/BadgePill';
 import { formatRelativeTime } from '../../shared/timeUtils';
 import type { EditorItemData } from '../../shared/types';
@@ -8,9 +9,11 @@ interface EditorHeaderProps {
   title: string;
   onOpenUrl: (url: string) => void;
   onCopyText: (text: string) => void;
+  /** Action buttons rendered on the right side of the title row (state transitions, run action, etc). */
+  actionButtons?: ComponentChildren;
 }
 
-export function EditorHeader({ item, title, onOpenUrl, onCopyText }: EditorHeaderProps) {
+export function EditorHeader({ item, title, onOpenUrl, onCopyText, actionButtons }: EditorHeaderProps) {
   const metaParts = [
     item.branchName ? `Branch ${item.branchName}` : undefined,
     item.repoName ? `Repo ${item.repoName}` : undefined,
@@ -61,6 +64,7 @@ export function EditorHeader({ item, title, onOpenUrl, onCopyText }: EditorHeade
         </div>
         <div class="editor-title-actions">
           <span class={`editor-status editor-status--${stateTone(item.state)}`}>{stateLabel(item.state)}</span>
+          {actionButtons}
         </div>
       </div>
       <div class="badge-row">

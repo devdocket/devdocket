@@ -42,20 +42,18 @@ export function ActionBar({ item, onTransition, onRunAction, onAccept, onDismiss
   }
 
   return (
-    <section class="editor-section editor-section--actions" aria-label="Available actions">
-      <div class="action-bar">
-        {buttons.map(button => (
-          <button
-            key={button.key}
-            type="button"
-            class={`editor-button editor-button--${button.style}`}
-            onClick={button.onClick}
-          >
-            {button.label}
-          </button>
-        ))}
-      </div>
-    </section>
+    <div class="action-bar" role="group" aria-label="Available actions">
+      {buttons.map(button => (
+        <button
+          key={button.key}
+          type="button"
+          class={`editor-button editor-button--${button.style}`}
+          onClick={button.onClick}
+        >
+          {button.label}
+        </button>
+      ))}
+    </div>
   );
 }
 
