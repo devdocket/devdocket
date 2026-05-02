@@ -12,6 +12,7 @@ import { DiscoveredStateStore } from '../storage/discoveredStateStore';
 import { ReadStateStore } from '../storage/readStateStore';
 import { isSafeUrl } from '../utils/url';
 import { buildTierColorCss } from '../webview/shared/colors';
+import { buildProviderBadge, buildStateBadge, getUnrecognizedProviderState } from './badges';
 import type {
   BadgeData,
   ItemCardData,
@@ -246,6 +247,7 @@ export class MainViewProvider implements vscode.WebviewViewProvider {
       id: existingWorkItem?.id ?? key,
       title: discoveredItem.title,
       badges: this.buildBadges(providerId, discoveredItem, discoveredItem.url),
+      providerStateFallback: getUnrecognizedProviderState(discoveredItem),
       repoAnnotation: discoveredItem.group ?? existingWorkItem?.group,
       tierType: 'incoming',
       isUnseen: !this.readStateStore.has(key),
@@ -265,6 +267,7 @@ export class MainViewProvider implements vscode.WebviewViewProvider {
       id: item.id,
       title: item.title,
       badges: this.buildBadges(item.providerId, discoveredItem, item.url),
+      providerStateFallback: getUnrecognizedProviderState(discoveredItem),
       repoAnnotation: item.group ?? discoveredItem?.group,
       tierType,
       isUrgent: this.isUrgentWorkItem(item, discoveredItemMap),
@@ -275,12 +278,12 @@ export class MainViewProvider implements vscode.WebviewViewProvider {
 
   private buildBadges(providerId?: string, discoveredItem?: DiscoveredItem, itemUrl?: string): BadgeData[] {
     const badges: BadgeData[] = [];
-    const providerBadge = this.buildProviderBadge(providerId);
+    const providerBadge = buildProviderBadge(providerId);
     if (providerBadge) {
       badges.push(providerBadge);
     }
 
-    const stateBadge = this.buildStateBadge(discoveredItem);
+    const stateBadge = buildStateBadge(discoveredItem);
     if (stateBadge) {
       badges.push(stateBadge);
     }
@@ -291,61 +294,6 @@ export class MainViewProvider implements vscode.WebviewViewProvider {
     }
 
     return badges;
-  }
-
-  private buildProviderBadge(providerId?: string): BadgeData | undefined {
-    if (!providerId) {
-      return undefined;
-    }
-
-    const normalizedProviderId = providerId.toLowerCase();
-    if (normalizedProviderId.includes('github')) {
-      return { label: 'GitHub', type: 'provider', variant: 'github' };
-    }
-    if (normalizedProviderId.includes('ado')) {
-      return { label: 'ADO', type: 'provider', variant: 'ado' };
-    }
-
-    return { label: 'Manual', type: 'provider', variant: 'manual' };
-  }
-
-  private buildStateBadge(discoveredItem?: DiscoveredItem): BadgeData | undefined {
-    if (!discoveredItem) {
-      return undefined;
-    }
-
-    const normalizedReason = normalizeText(discoveredItem.reason);
-    if (normalizedReason === 'review requested') {
-      return { label: 'PR Review', type: 'state', variant: 'review-requested' };
-    }
-
-    const normalizedState = normalizeText(discoveredItem.state);
-    switch (normalizedState) {
-      case 'changes requested':
-        return { label: 'Changes requested', type: 'state', variant: 'changes-requested' };
-      case 'approved':
-        return { label: 'Approved', type: 'state', variant: 'approved' };
-      case 'draft':
-        return { label: 'Draft', type: 'state', variant: 'draft' };
-      case 'ready to merge':
-        return { label: 'Ready to merge', type: 'state', variant: 'ready-to-merge' };
-      case 'closed':
-      case 'merged':
-        return {
-          label: discoveredItem.state?.trim() || toDisplayLabel(normalizedState),
-          type: 'state',
-          variant: 'closed',
-        };
-      case 'active':
-      case 'open':
-        return { label: 'Issue · open', type: 'state', variant: 'open' };
-      case 'review received':
-        return { label: 'Review received', type: 'state', variant: 'open' };
-      case 'waiting on reviews':
-        return { label: 'Waiting on reviews', type: 'state', variant: 'open' };
-      default:
-        return undefined;
-    }
   }
 
   private buildCIBadge(url?: string): BadgeData | undefined {
@@ -1030,6 +978,11 @@ export class MainViewProvider implements vscode.WebviewViewProvider {
       font-weight: 600;
       line-height: 1.4;
     }
+    .badge-pill--fallback {
+      background: var(--vscode-badge-background);
+      color: var(--vscode-badge-foreground);
+      font-weight: 400;
+    }
     .empty-state, .placeholder {
       padding: 16px;
       color: var(--vscode-descriptionForeground);
@@ -1076,10 +1029,6 @@ function parseDiscoveredItemKey(value: string): { providerId: string; externalId
     providerId: value.slice(0, separatorIndex),
     externalId: value.slice(separatorIndex + 2),
   };
-}
-
-function toDisplayLabel(value: string): string {
-  return value.replace(/\b\w/g, char => char.toUpperCase());
 }
 
 function getNonce(): string {

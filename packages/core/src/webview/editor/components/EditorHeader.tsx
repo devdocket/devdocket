@@ -70,6 +70,7 @@ export function EditorHeader({ item, title, onOpenUrl, onCopyText, actionButtons
             {item.badges.map(badge => (
               <BadgePill key={`${badge.type}-${badge.variant}-${badge.label}`} badge={badge} />
             ))}
+            {item.providerState ? <span class="meta-badge">{item.providerState}</span> : null}
           </div>
           <div class="meta-row">
             {metaParts.map(part => (

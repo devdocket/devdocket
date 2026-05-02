@@ -234,7 +234,8 @@ describe('WorkItemEditorPanel', () => {
       type: 'updateEditorItem',
       item: expect.objectContaining({
         description: '<h2>Updated description</h2>\n',
-        providerState: 'closed',
+        // 'closed' is recognized by buildStateBadge → providerState fallback stays undefined
+        providerState: undefined,
         hasActions: true,
         validTransitions: expect.arrayContaining(['InProgress', 'Done', 'Archived']),
         relatedItems: [expect.objectContaining({ id: 'peer-1', title: 'Peer' })],

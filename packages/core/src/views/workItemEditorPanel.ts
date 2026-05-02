@@ -6,8 +6,9 @@ import { ProviderRegistry } from '../services/providerRegistry';
 import { VALID_TRANSITIONS, WorkGraph } from '../services/workGraph';
 import type { DiscoveredStateStore } from '../storage/discoveredStateStore';
 import { isSafeUrl } from '../utils/url';
+import { buildBadges, getUnrecognizedProviderState } from './badges';
 import { getEditorPanelHtml, renderMarkdown } from './editorPanelHtml';
-import type { BadgeData, EditorItemData } from './mainTypes';
+import type { EditorItemData } from './mainTypes';
 
 interface AutosaveData {
   title?: string;
@@ -342,7 +343,7 @@ export class WorkItemEditorPanel {
       description: item.description ? renderMarkdown(item.description) : undefined,
       state: item.state,
       providerLabel,
-      providerState: discoveredItem?.state?.trim() || undefined,
+      providerState: getUnrecognizedProviderState(discoveredItem),
       group: item.group,
       createdAt: item.createdAt,
       updatedAt: item.updatedAt,
@@ -506,80 +507,6 @@ export class WorkItemEditorPanel {
   }
 }
 
-export function buildBadges(providerId?: string, discoveredItem?: DiscoveredItem): BadgeData[] {
-  const badges: BadgeData[] = [];
-  const providerBadge = buildProviderBadge(providerId);
-  if (providerBadge) {
-    badges.push(providerBadge);
-  }
-
-  const stateBadge = buildStateBadge(discoveredItem);
-  if (stateBadge) {
-    badges.push(stateBadge);
-  }
-
-  return badges;
-}
-
-function buildProviderBadge(providerId?: string): BadgeData | undefined {
-  if (!providerId) {
-    return undefined;
-  }
-
-  const normalizedProviderId = providerId.toLowerCase();
-  if (normalizedProviderId.includes('github')) {
-    return { label: 'GitHub', type: 'provider', variant: 'github' };
-  }
-  if (normalizedProviderId.includes('ado')) {
-    return { label: 'ADO', type: 'provider', variant: 'ado' };
-  }
-
-  return { label: 'Manual', type: 'provider', variant: 'manual' };
-}
-
-function buildStateBadge(discoveredItem?: DiscoveredItem): BadgeData | undefined {
-  if (!discoveredItem) {
-    return undefined;
-  }
-
-  const normalizedReason = normalizeText(discoveredItem.reason);
-  if (normalizedReason === 'review requested') {
-    return { label: 'PR Review', type: 'state', variant: 'review-requested' };
-  }
-
-  const normalizedState = normalizeText(discoveredItem.state);
-  switch (normalizedState) {
-    case 'changes requested':
-      return { label: 'Changes requested', type: 'state', variant: 'changes-requested' };
-    case 'approved':
-      return { label: 'Approved', type: 'state', variant: 'approved' };
-    case 'draft':
-      return { label: 'Draft', type: 'state', variant: 'draft' };
-    case 'ready to merge':
-      return { label: 'Ready to merge', type: 'state', variant: 'ready-to-merge' };
-    case 'closed':
-    case 'merged':
-      return {
-        label: discoveredItem.state?.trim() || toDisplayLabel(normalizedState),
-        type: 'state',
-        variant: 'closed',
-      };
-    case 'active':
-    case 'open':
-      return { label: 'Issue', type: 'state', variant: 'open' };
-    case 'review received':
-      return { label: 'Review received', type: 'state', variant: 'open' };
-    case 'waiting on reviews':
-      return { label: 'Waiting on reviews', type: 'state', variant: 'open' };
-    default:
-      return undefined;
-  }
-}
-
-function normalizeText(value?: string): string {
-  return value?.trim().toLowerCase().replace(/[_-]+/g, ' ') ?? '';
-}
-
-function toDisplayLabel(value: string): string {
-  return value.replace(/\b\w/g, char => char.toUpperCase());
-}
+// Re-export buildBadges from the shared module for callers that import it
+// from this file (e.g. IncomingPreviewPanel).
+export { buildBadges } from './badges';
