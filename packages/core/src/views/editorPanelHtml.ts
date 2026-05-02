@@ -254,8 +254,10 @@ export function getEditorPanelHtml({ cspSource, scriptUri, initialItem }: Editor
 
     .meta-pill,
     .meta-badge {
-      background: var(--vscode-editor-inactiveSelectionBackground, rgba(128, 128, 128, 0.12));
+      background: transparent;
       color: var(--vscode-descriptionForeground);
+      border: 1px solid var(--vscode-widget-border, rgba(127, 127, 127, 0.3));
+      font-weight: 400;
     }
 
     .editor-section {

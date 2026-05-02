@@ -1016,8 +1016,9 @@ export class MainViewProvider implements vscode.WebviewViewProvider {
       line-height: 1.4;
     }
     .badge-pill--fallback {
-      background: var(--vscode-badge-background);
-      color: var(--vscode-badge-foreground);
+      background: transparent;
+      color: var(--vscode-descriptionForeground);
+      border: 1px solid var(--vscode-widget-border, rgba(127, 127, 127, 0.3));
       font-weight: 400;
     }
     .empty-state, .placeholder {
