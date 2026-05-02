@@ -46,7 +46,7 @@ function createMockWebviewView() {
   };
 
   return {
-    view: { webview } as any,
+    view: { webview, badge: undefined } as any,
     webview,
     simulateMessage: (message: unknown) => messageHandler?.(message) ?? Promise.resolve(),
     getMessages: () => webview.postMessage.mock.calls.map(([message]) => message),
@@ -166,7 +166,7 @@ function createProvider(
     workGraph as any,
     providerRegistry as any,
     stateStore as any,
-    { has: () => false, add: vi.fn().mockResolvedValue(true) } as any,
+    { has: () => false, add: vi.fn().mockResolvedValue(true), keys: () => [][Symbol.iterator]() } as any,
     watcherService as any,
     {} as any,
   );

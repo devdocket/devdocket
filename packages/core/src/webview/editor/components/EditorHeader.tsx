@@ -16,7 +16,7 @@ interface EditorHeaderProps {
 export function EditorHeader({ item, title, onOpenUrl, onCopyText, actionButtons }: EditorHeaderProps) {
   const metaParts = [
     item.group ? item.group : undefined,
-    `Created ${formatRelativeTime(item.createdAt)}`,
+    item.isIncoming ? undefined : `Created ${formatRelativeTime(item.createdAt)}`,
   ].filter((value): value is string => Boolean(value));
 
   const titleNode = item.url ? (
@@ -70,7 +70,6 @@ export function EditorHeader({ item, title, onOpenUrl, onCopyText, actionButtons
             {item.badges.map(badge => (
               <BadgePill key={`${badge.type}-${badge.variant}-${badge.label}`} badge={badge} />
             ))}
-            {item.providerState ? <span class="meta-badge">{item.providerState}</span> : null}
           </div>
           <div class="meta-row">
             {metaParts.map(part => (

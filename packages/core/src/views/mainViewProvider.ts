@@ -3,6 +3,7 @@ import type { DiscoveredItem } from '../api/types';
 import { type WorkItem, WorkItemState } from '../models/workItem';
 import { ActionRegistry } from '../services/actionRegistry';
 import { buildCanonicalHiddenSet } from '../services/canonicalDedup';
+import { getInboxUnseenCount } from '../services/inboxBadge';
 import { logger } from '../services/logger';
 import { ProviderRegistry } from '../services/providerRegistry';
 import { WatcherService, type WatchedPR, type WatchedRun } from '../services/watcherService';
@@ -84,6 +85,23 @@ export class MainViewProvider implements vscode.WebviewViewProvider {
       type: 'updateSources',
       providers: this.buildSourcesData(),
     });
+    this.updateBadge();
+  }
+
+  /** Update the activity-bar badge with the unread incoming count. */
+  private updateBadge(): void {
+    if (!this.view) {
+      return;
+    }
+    const count = getInboxUnseenCount(this.providerRegistry, this.stateStore, new Set(this.readStateStore.keys()));
+    if (count > 0) {
+      this.view.badge = {
+        value: count,
+        tooltip: `${count} unread incoming item${count === 1 ? '' : 's'}`,
+      };
+    } else {
+      this.view.badge = undefined;
+    }
   }
 
   private buildTierData(): TierData[] {
