@@ -35,10 +35,14 @@ export class WatchesStatusBar implements vscode.Disposable {
     let runningCount = 0;
     let passedCount = 0;
     let failedCount = 0;
+    let unacknowledgedFailedCount = 0;
 
     for (const watch of watches) {
       if (watch.hasWarning) {
         failedCount += 1;
+        if (!this.watcherService.isFailureAcknowledged(watch)) {
+          unacknowledgedFailedCount += 1;
+        }
         continue;
       }
       if (watch.status.overallState !== 'completed') {
@@ -50,14 +54,20 @@ export class WatchesStatusBar implements vscode.Disposable {
         continue;
       }
       failedCount += 1;
+      if (!this.watcherService.isFailureAcknowledged(watch)) {
+        unacknowledgedFailedCount += 1;
+      }
     }
 
     this.statusBarItem.text = `🔄 ${runningCount} running · ✓ ${passedCount} passed · ✗ ${failedCount} failed`;
     this.statusBarItem.tooltip = 'Click to open CI watch details';
-    this.statusBarItem.backgroundColor = failedCount > 0
+    // Only highlight the status bar with the warning color if there is at
+    // least one failed watch the user hasn't seen yet — once they open the
+    // watch panel, acknowledge clears the alert until a NEW failure arrives.
+    this.statusBarItem.backgroundColor = unacknowledgedFailedCount > 0
       ? new vscode.ThemeColor('statusBarItem.warningBackground')
       : undefined;
-    this.statusBarItem.color = failedCount > 0
+    this.statusBarItem.color = unacknowledgedFailedCount > 0
       ? new vscode.ThemeColor('statusBarItem.warningForeground')
       : undefined;
     this.statusBarItem.show();

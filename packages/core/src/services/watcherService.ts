@@ -49,6 +49,13 @@ export class WatcherService implements vscode.Disposable {
   private consecutiveFailures = new Map<string, number>();
   private persistedPRWatchKeys: Set<string> | undefined;
   private configSubscription: vscode.Disposable | undefined;
+  /**
+   * Set of run-watch keys whose failure the user has already acknowledged
+   * (e.g. by opening the watch panel). Used to suppress the warning color
+   * on the status bar once the user has been alerted to a failure.
+   * In-memory only; resets on extension reload.
+   */
+  private acknowledgedFailedRunKeys = new Set<string>();
   
   private readonly _onDidChangeWatchedRuns = new vscode.EventEmitter<WatchedRun[]>();
   readonly onDidChangeWatchedRuns = this._onDidChangeWatchedRuns.event;
@@ -325,6 +332,38 @@ export class WatcherService implements vscode.Disposable {
    */
   getActiveWatches(): WatchedRun[] {
     return Array.from(this.watches.values()).filter(w => !w.dismissed);
+  }
+
+  /**
+   * Mark every currently-failed run watch (warning or non-success completion)
+   * as acknowledged so the status bar can suppress its warning color until a
+   * NEW failure arrives. Fires onDidChangeWatchedRuns so listeners refresh.
+   */
+  acknowledgeAllFailures(): void {
+    let added = 0;
+    for (const [key, watch] of this.watches.entries()) {
+      if (!watch.dismissed && WatcherService.isFailedRun(watch) && !this.acknowledgedFailedRunKeys.has(key)) {
+        this.acknowledgedFailedRunKeys.add(key);
+        added += 1;
+      }
+    }
+    if (added > 0) {
+      this._onDidChangeWatchedRuns.fire(this.getActiveWatches());
+    }
+  }
+
+  /**
+   * Whether the user has already acknowledged this failure (e.g. by opening
+   * the watch panel while the run was in this failed state).
+   */
+  isFailureAcknowledged(watch: WatchedRun): boolean {
+    return this.acknowledgedFailedRunKeys.has(this.getWatchKey(watch.identifier));
+  }
+
+  private static isFailedRun(watch: WatchedRun): boolean {
+    if (watch.hasWarning) return true;
+    if (watch.status.overallState === 'completed' && watch.status.conclusion !== 'success') return true;
+    return false;
   }
 
   /**

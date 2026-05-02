@@ -44,6 +44,11 @@ export class WatchPanelProvider implements vscode.Disposable {
     ];
 
     this.refresh();
+    // Treat opening the panel as the user acknowledging current failures so
+    // the status bar can stop using the warning color until a NEW failure
+    // arrives. Acknowledging fires onDidChangeWatchedRuns which will trigger
+    // the status bar to re-evaluate.
+    this.watcherService.acknowledgeAllFailures();
   }
 
   refresh(): void {

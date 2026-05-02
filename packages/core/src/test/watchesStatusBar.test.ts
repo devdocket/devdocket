@@ -8,6 +8,7 @@ function createWatcherService(initialWatches: any[]) {
   let watches = initialWatches;
   return {
     getActiveWatches: vi.fn(() => watches),
+    isFailureAcknowledged: vi.fn(() => false),
     onDidChangeWatchedRuns: changeEmitter.event,
     setWatches: (nextWatches: any[]) => {
       watches = nextWatches;
