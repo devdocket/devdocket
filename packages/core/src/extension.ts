@@ -380,7 +380,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<DevDoc
 
   // Create status bar items
   const watchesStatusBar = new WatchesStatusBar(ws);
-  const incomingStatusBar = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 101);
+  const incomingStatusBar = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 100002);
   incomingStatusBar.command = 'devdocket.main.focus';
   const updateIncomingStatusBar = () => {
     const count = getInboxUnseenCount(pr, ss, new Set(readStateStore.keys()));

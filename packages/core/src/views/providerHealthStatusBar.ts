@@ -23,7 +23,7 @@ export class ProviderHealthStatusBar implements vscode.Disposable {
   private discoveredChangesSub: vscode.Disposable;
 
   constructor(private providerRegistry: ProviderRegistry) {
-    this.statusBarItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 99);
+    this.statusBarItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 100000);
     this.statusBarItem.command = 'devdocket.showProviderHealthQuickPick';
     
     // Update on provider health changes
