@@ -66,18 +66,22 @@ export function EditorHeader({ item, title, onOpenUrl, onCopyText, actionButtons
           <span class={`editor-status editor-status--${stateTone(item.state)}`}>{stateLabel(item.state)}</span>
         </div>
       </div>
-      <div class="badge-row">
-        {item.badges.map(badge => (
-          <BadgePill key={`${badge.type}-${badge.variant}-${badge.label}`} badge={badge} />
-        ))}
-        {item.providerState ? <span class="meta-badge">{item.providerState}</span> : null}
+      <div class="editor-pills-actions">
+        <div class="editor-pills-stack">
+          <div class="badge-row">
+            {item.badges.map(badge => (
+              <BadgePill key={`${badge.type}-${badge.variant}-${badge.label}`} badge={badge} />
+            ))}
+            {item.providerState ? <span class="meta-badge">{item.providerState}</span> : null}
+          </div>
+          <div class="meta-row">
+            {metaParts.map(part => (
+              <span key={part} class="meta-pill">{part}</span>
+            ))}
+          </div>
+        </div>
+        {actionButtons ? <div class="editor-header-actions">{actionButtons}</div> : null}
       </div>
-      <div class="meta-row">
-        {metaParts.map(part => (
-          <span key={part} class="meta-pill">{part}</span>
-        ))}
-      </div>
-      {actionButtons ? <div class="editor-header-actions">{actionButtons}</div> : null}
     </header>
   );
 }

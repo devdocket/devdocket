@@ -262,11 +262,27 @@ export function getEditorPanelHtml({ cspSource, scriptUri, initialItem }: Editor
       align-items: center;
     }
 
+    .editor-pills-actions {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      flex-wrap: wrap;
+    }
+
+    .editor-pills-stack {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      flex: 1;
+      min-width: 0;
+    }
+
     .editor-header-actions {
       display: flex;
       flex-wrap: wrap;
       gap: 8px;
-      margin-top: 4px;
+      justify-content: flex-end;
     }
 
     .action-bar {

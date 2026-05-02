@@ -154,14 +154,16 @@ export function EditorApp() {
           </div>
         </section>
       )}
-      <section class="editor-section" aria-labelledby="editor-description-heading">
-        <div class="editor-section-heading" id="editor-description-heading">Description</div>
+      <section class="editor-section" aria-labelledby={description ? 'editor-description-heading' : undefined}>
         {description ? (
-          <div
-            class="editor-description markdown-body"
-            onClick={handleDescriptionClick}
-            dangerouslySetInnerHTML={{ __html: description }}
-          />
+          <>
+            <div class="editor-section-heading" id="editor-description-heading">Description</div>
+            <div
+              class="editor-description markdown-body"
+              onClick={handleDescriptionClick}
+              dangerouslySetInnerHTML={{ __html: description }}
+            />
+          </>
         ) : null}
         <EditableField
           label="Notes"
