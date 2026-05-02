@@ -6,7 +6,9 @@ import { ActionRegistry } from '../services/actionRegistry';
 import { ProviderRegistry } from '../services/providerRegistry';
 import { DiscoveredStateStore, type InboxState } from '../storage/discoveredStateStore';
 import type { ProviderLabelCache } from '../storage/providerLabelCache';
+import type { ReadStateStore } from '../storage/readStateStore';
 import { WorkItemEditorPanel } from '../views/workItemEditorPanel';
+import { IncomingPreviewPanel } from '../views/incomingPreviewPanel';
 import { type InboxItem, type SourceItemNode, type SourcesElement } from './commandItemTypes';
 import { logger } from '../services/logger';
 import type { ResolvedItem } from '../api/types';
@@ -740,6 +742,7 @@ export function registerCommands(
   workGraph: WorkGraph,
   actionRegistry: ActionRegistry,
   stateStore: DiscoveredStateStore,
+  readStateStore: ReadStateStore,
   providerRegistry: ProviderRegistry,
   labelCache: ProviderLabelCache,
   watcherRegistry: WatcherRegistry,
@@ -754,6 +757,17 @@ export function registerCommands(
       wrapCommand('Failed to create item', () => handleCreateItem(context, workGraph, providerRegistry, labelCache))),
     vscode.commands.registerCommand('devdocket.createItemFromUrl',
       wrapCommand('Failed to create item from URL', () => handleCreateItemFromUrl(context, workGraph, providerRegistry, labelCache))),
+    vscode.commands.registerCommand('devdocket.previewIncomingItem',
+      wrapCommand('Failed to preview incoming item', (arg: unknown) => {
+        if (!arg || typeof arg !== 'object') {
+          throw new Error('previewIncomingItem requires { providerId, externalId }');
+        }
+        const { providerId, externalId } = arg as { providerId?: unknown; externalId?: unknown };
+        if (typeof providerId !== 'string' || typeof externalId !== 'string') {
+          throw new Error('previewIncomingItem requires string providerId and externalId');
+        }
+        IncomingPreviewPanel.open(context, providerRegistry, stateStore, readStateStore, workGraph, providerId, externalId);
+      })),
     vscode.commands.registerCommand('devdocket.acceptToFocus',
       wrapCommand('Failed to focus item', (item, selectedItems) => handleAcceptToFocus(workGraph, item, selectedItems))),
     vscode.commands.registerCommand('devdocket.archiveItem',

@@ -388,14 +388,15 @@ export class MainViewProvider implements vscode.WebviewViewProvider {
           break;
         }
 
+        // No backing WorkItem yet — this is an incoming/discovered item key.
+        // Open the editor in preview mode so the user can read details and
+        // decide whether to accept or dismiss without committing yet.
         const discoveredKey = parseDiscoveredItemKey(message.itemId);
         if (discoveredKey) {
-          const discoveredItem = this.providerRegistry
-            .getDiscoveredItems(discoveredKey.providerId)
-            .find(item => item.externalId === discoveredKey.externalId);
-          if (discoveredItem?.url && isSafeUrl(discoveredItem.url)) {
-            await vscode.env.openExternal(vscode.Uri.parse(discoveredItem.url));
-          }
+          await vscode.commands.executeCommand('devdocket.previewIncomingItem', {
+            providerId: discoveredKey.providerId,
+            externalId: discoveredKey.externalId,
+          });
         }
         break;
       }

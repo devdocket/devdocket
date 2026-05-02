@@ -506,7 +506,7 @@ export class WorkItemEditorPanel {
   }
 }
 
-function buildBadges(providerId?: string, discoveredItem?: DiscoveredItem): BadgeData[] {
+export function buildBadges(providerId?: string, discoveredItem?: DiscoveredItem): BadgeData[] {
   const badges: BadgeData[] = [];
   const providerBadge = buildProviderBadge(providerId);
   if (providerBadge) {

@@ -421,7 +421,13 @@ describe('MainViewProvider', () => {
       expect(vscode.commands.executeCommand).toHaveBeenCalledWith('devdocket.editItem', { id: 'existing-item' });
       expect(vscode.commands.executeCommand).toHaveBeenCalledWith('devdocket.createItem');
       expect(vscode.commands.executeCommand).toHaveBeenCalledWith('devdocket.runAction', { id: 'existing-item' });
-      expect(vscode.env.openExternal).toHaveBeenCalledWith(expect.objectContaining({ path: 'https://example.com/provider/1' }));
+      // Clicking an incoming item opens it in the editor (preview mode) — it
+      // does NOT auto-accept and does NOT open the browser.
+      expect(vscode.commands.executeCommand).toHaveBeenCalledWith(
+        'devdocket.previewIncomingItem',
+        { providerId: 'github', externalId: 'openable' },
+      );
+      expect(vscode.env.openExternal).not.toHaveBeenCalledWith(expect.objectContaining({ path: 'https://example.com/provider/1' }));
       expect(vscode.env.openExternal).toHaveBeenCalledWith(expect.objectContaining({ path: 'https://example.com/manual/2' }));
       expect(workGraph.createItem).toHaveBeenCalledWith(
         { title: 'Incoming item', description: 'Desc' },

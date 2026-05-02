@@ -456,7 +456,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<DevDoc
   );
 
   const commandRegStart = performance.now();
-  registerCommands(context, wg, ar, ss, pr, labelCache, wr, pwr, ws, watchPanelProvider);
+  registerCommands(context, wg, ar, ss, readStateStore, pr, labelCache, wr, pwr, ws, watchPanelProvider);
   logger.info(`Command registration took ${Math.round(performance.now() - commandRegStart)}ms`);
 
   logger.info(`DevDocket activated in ${Math.round(performance.now() - activationStart)}ms`);

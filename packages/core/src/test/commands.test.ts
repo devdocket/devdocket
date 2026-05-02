@@ -163,6 +163,7 @@ describe('registerCommands', () => {
       workGraph as any,
       actionRegistry as any,
       stateStore as any,
+      { has: () => false, add: vi.fn().mockResolvedValue(true) } as any,
       providerRegistry as any,
       labelCache as any,
       {} as WatcherRegistry,
