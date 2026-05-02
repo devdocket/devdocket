@@ -116,40 +116,42 @@ export function EditorApp() {
         item={item}
         title={title}
         onOpenUrl={nextUrl => postMessage({ type: 'openUrl', url: nextUrl })}
+        onCopyText={text => postMessage({ type: 'copyToClipboard', text })}
       />
       <ActionBar
         item={item}
         onTransition={targetState => postMessage({ type: 'transitionState', itemId: item.id, targetState })}
         onRunAction={() => postMessage({ type: 'runAction', itemId: item.id })}
-        onOpenUrl={nextUrl => postMessage({ type: 'openUrl', url: nextUrl })}
         onAccept={() => item.providerId && item.externalId && postMessage({ type: 'acceptItem', providerId: item.providerId, externalId: item.externalId })}
         onDismiss={() => item.providerId && item.externalId && postMessage({ type: 'dismissItem', providerId: item.providerId, externalId: item.externalId })}
       />
       <section class="editor-section" aria-labelledby="editor-details-heading">
         <div class="editor-section-heading" id="editor-details-heading">Details</div>
         <div class="editor-fields-grid">
-          <EditableField
-            label="Title"
-            value={title}
-            readOnly={item.isProviderManaged}
-            hint={item.isProviderManaged ? 'Title is managed by the provider' : undefined}
-            onInput={value => {
-              setTitle(value);
-              setAutosaveVersion(version => version + 1);
-            }}
-          />
-          <EditableField
-            label="URL"
-            value={url}
-            type="url"
-            placeholder="https://..."
-            readOnly={item.isProviderManaged}
-            hint={item.isProviderManaged ? 'URL is managed by the provider' : undefined}
-            onInput={value => {
-              setUrl(value);
-              setAutosaveVersion(version => version + 1);
-            }}
-          />
+          {item.isProviderManaged ? null : (
+            <EditableField
+              label="Title"
+              value={title}
+              readOnly={false}
+              onInput={value => {
+                setTitle(value);
+                setAutosaveVersion(version => version + 1);
+              }}
+            />
+          )}
+          {item.isProviderManaged ? null : (
+            <EditableField
+              label="URL"
+              value={url}
+              type="url"
+              placeholder="https://..."
+              readOnly={false}
+              onInput={value => {
+                setUrl(value);
+                setAutosaveVersion(version => version + 1);
+              }}
+            />
+          )}
           <EditableField
             label="Notes"
             value={notes}
@@ -164,7 +166,7 @@ export function EditorApp() {
       </section>
       {description ? (
         <section class="editor-section" aria-labelledby="editor-description-heading">
-          <div class="editor-section-heading" id="editor-description-heading">Provider description</div>
+          <div class="editor-section-heading" id="editor-description-heading">Description</div>
           <div
             class="editor-description markdown-body"
             onClick={handleDescriptionClick}

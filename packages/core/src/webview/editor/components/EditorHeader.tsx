@@ -7,43 +7,69 @@ interface EditorHeaderProps {
   item: EditorItemData;
   title: string;
   onOpenUrl: (url: string) => void;
+  onCopyText: (text: string) => void;
 }
 
-export function EditorHeader({ item, title, onOpenUrl }: EditorHeaderProps) {
+export function EditorHeader({ item, title, onOpenUrl, onCopyText }: EditorHeaderProps) {
   const metaParts = [
     item.branchName ? `Branch ${item.branchName}` : undefined,
     item.repoName ? `Repo ${item.repoName}` : undefined,
-    item.group ? `Group ${item.group}` : undefined,
+    item.group ? item.group : undefined,
     `Created ${formatRelativeTime(item.createdAt)}`,
   ].filter((value): value is string => Boolean(value));
+
+  const titleNode = item.url ? (
+    <a
+      class="editor-title editor-title--link"
+      href={item.url}
+      onClick={(event) => {
+        event.preventDefault();
+        onOpenUrl(item.url!);
+      }}
+    >
+      {title}
+    </a>
+  ) : (
+    <h1 class="editor-title">{title}</h1>
+  );
 
   return (
     <header class="editor-header">
       <div class="editor-title-row">
-        <div>
-          <div class="editor-eyebrow">Work item</div>
-          <h1 class="editor-title">{title}</h1>
+        <div class="editor-title-block">
+          {titleNode}
+          <div class="editor-title-tools">
+            <button
+              type="button"
+              class="icon-button icon-button--inline"
+              aria-label="Copy title"
+              title="Copy title"
+              onClick={() => onCopyText(title)}
+            >
+              ⧉
+            </button>
+            {item.url ? (
+              <button
+                type="button"
+                class="icon-button icon-button--inline"
+                aria-label="Copy URL"
+                title="Copy URL"
+                onClick={() => onCopyText(item.url!)}
+              >
+                🔗
+              </button>
+            ) : null}
+          </div>
         </div>
         <div class="editor-title-actions">
           <span class={`editor-status editor-status--${stateTone(item.state)}`}>{stateLabel(item.state)}</span>
-          {item.url ? (
-            <button
-              type="button"
-              class="icon-button"
-              aria-label="Open item in browser"
-              title="Open in browser"
-              onClick={() => onOpenUrl(item.url!)}
-            >
-              ↗
-            </button>
-          ) : null}
         </div>
       </div>
       <div class="badge-row">
         {item.badges.map(badge => (
           <BadgePill key={`${badge.type}-${badge.variant}-${badge.label}`} badge={badge} />
         ))}
-        {item.providerState ? <span class="meta-badge">Provider state · {item.providerState}</span> : null}
+        {item.providerState ? <span class="meta-badge">{item.providerState}</span> : null}
       </div>
       <div class="meta-row">
         {metaParts.map(part => (

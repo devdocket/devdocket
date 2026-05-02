@@ -22,7 +22,8 @@ export type WebviewMessage =
   | { type: 'dismissCompletedWatches' }
   | { type: 'dismissWatch'; watchId: string }
   | { type: 'switchTab'; tab: 'myWork' | 'sources' }
-  | { type: 'autosave'; data: { title?: string; notes?: string; url?: string } };
+  | { type: 'autosave'; data: { title?: string; notes?: string; url?: string } }
+  | { type: 'copyToClipboard'; text: string };
 
 export interface TierData {
   id: string;

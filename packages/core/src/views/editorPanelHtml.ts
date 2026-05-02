@@ -111,12 +111,37 @@ export function getEditorPanelHtml({ cspSource, scriptUri, initialItem }: Editor
     }
 
     .editor-title {
-      margin: 4px 0 0;
+      margin: 0;
       font-size: 26px;
       line-height: 1.2;
       font-weight: 700;
       color: var(--vscode-foreground);
       word-break: break-word;
+    }
+    a.editor-title--link {
+      color: var(--vscode-foreground);
+      text-decoration: none;
+      cursor: pointer;
+    }
+    a.editor-title--link:hover {
+      color: var(--vscode-textLink-activeForeground, var(--vscode-textLink-foreground));
+      text-decoration: underline;
+    }
+    .editor-title-block {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      flex: 1;
+      min-width: 0;
+    }
+    .editor-title-tools {
+      display: flex;
+      gap: 4px;
+    }
+    .icon-button--inline {
+      width: 24px;
+      height: 24px;
+      font-size: 14px;
     }
 
     .badge-pill,

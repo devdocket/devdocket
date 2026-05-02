@@ -5,7 +5,6 @@ interface ActionBarProps {
   item: EditorItemData;
   onTransition: (targetState: string) => void;
   onRunAction: () => void;
-  onOpenUrl: (url: string) => void;
   onAccept: () => void;
   onDismiss: () => void;
 }
@@ -17,7 +16,7 @@ interface ButtonSpec {
   onClick: () => void;
 }
 
-export function ActionBar({ item, onTransition, onRunAction, onOpenUrl, onAccept, onDismiss }: ActionBarProps) {
+export function ActionBar({ item, onTransition, onRunAction, onAccept, onDismiss }: ActionBarProps) {
   const buttons: ButtonSpec[] = [];
 
   if (item.isIncoming && item.providerId && item.externalId) {
@@ -36,10 +35,6 @@ export function ActionBar({ item, onTransition, onRunAction, onOpenUrl, onAccept
     if (item.hasActions) {
       buttons.push({ key: 'run-action', label: 'Run Action…', style: 'secondary', onClick: onRunAction });
     }
-  }
-
-  if (item.url) {
-    buttons.push({ key: 'open-url', label: 'Open in Browser', style: 'ghost', onClick: () => onOpenUrl(item.url!) });
   }
 
   if (buttons.length === 0) {

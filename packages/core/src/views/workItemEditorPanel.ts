@@ -167,6 +167,10 @@ export class WorkItemEditorPanel {
         }
         return;
       }
+      if (msg?.type === 'copyToClipboard' && typeof msg.text === 'string') {
+        void vscode.env.clipboard.writeText(msg.text);
+        return;
+      }
       if (msg?.type === 'transitionState' && typeof msg.itemId === 'string' && typeof msg.targetState === 'string') {
         void this.handleTransitionState(msg.itemId, msg.targetState);
         return;
@@ -565,7 +569,7 @@ function buildStateBadge(discoveredItem?: DiscoveredItem): BadgeData | undefined
       };
     case 'active':
     case 'open':
-      return { label: 'Issue · open', type: 'state', variant: 'open' };
+      return { label: 'Issue', type: 'state', variant: 'open' };
     case 'review received':
       return { label: 'Review received', type: 'state', variant: 'open' };
     case 'waiting on reviews':
