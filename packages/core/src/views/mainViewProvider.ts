@@ -289,7 +289,11 @@ export class MainViewProvider implements vscode.WebviewViewProvider {
     }
 
     const stateBadge = buildStateBadge(discoveredItem);
-    if (stateBadge) {
+    // The "Open" and "Closed" state pills add little signal in the sidebar:
+    // open issues/PRs already dominate the active tiers, and closed items are
+    // rare in any tier other than Done. The editor still surfaces them so the
+    // detail view shows the full upstream state.
+    if (stateBadge && stateBadge.label !== 'Open' && stateBadge.label !== 'Closed') {
       badges.push(stateBadge);
     }
 
