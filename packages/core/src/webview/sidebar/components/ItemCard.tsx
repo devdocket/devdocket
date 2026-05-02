@@ -11,6 +11,7 @@ interface ItemCardProps {
   onMoveTierFocus?: (direction: -1 | 1) => boolean;
   onClick: () => void;
   onAccept?: (providerId: string, externalId: string) => void;
+  onAcceptToFocus?: (providerId: string, externalId: string) => void;
   onDismiss?: (providerId: string, externalId: string) => void;
   onTransition?: (itemId: string, targetState: string) => void;
   onDragStart?: (itemId: string) => void;
@@ -33,12 +34,13 @@ export function ItemCard({
   onMoveTierFocus,
   onClick,
   onAccept,
+  onAcceptToFocus,
   onDismiss,
   onTransition,
   onDragStart,
   onDragEnd,
 }: ItemCardProps) {
-  const actions = getItemActions(item, onAccept, onDismiss, onTransition);
+  const actions = getItemActions(item, onAccept, onAcceptToFocus, onDismiss, onTransition);
   const isDraggable = item.tierType === 'readyToStart' || item.tierType === 'inProgress';
   const [actionsOpen, setActionsOpen] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
@@ -224,6 +226,7 @@ function buildItemAriaLabel(item: ItemCardData): string {
 function getItemActions(
   item: ItemCardData,
   onAccept?: (providerId: string, externalId: string) => void,
+  onAcceptToFocus?: (providerId: string, externalId: string) => void,
   onDismiss?: (providerId: string, externalId: string) => void,
   onTransition?: (itemId: string, targetState: string) => void,
 ): ItemAction[] {
@@ -236,8 +239,16 @@ function getItemActions(
         actions.push({
           id: 'accept',
           icon: '✓',
-          title: 'Accept',
+          title: 'Accept (move to Ready to Start)',
           onClick: () => onAccept(providerId, externalId),
+        });
+      }
+      if (providerId && externalId && onAcceptToFocus) {
+        actions.push({
+          id: 'accept-to-focus',
+          icon: '▶',
+          title: 'Start (accept and move to In Progress)',
+          onClick: () => onAcceptToFocus(providerId, externalId),
         });
       }
       if (providerId && externalId && onDismiss) {

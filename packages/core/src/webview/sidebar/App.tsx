@@ -123,6 +123,7 @@ export function App() {
                       postMessage({ type: 'openItem', itemId: id });
                     }}
                     onAcceptItem={(providerId, externalId) => postMessage({ type: 'acceptItem', providerId, externalId })}
+                    onAcceptToFocus={(providerId, externalId) => postMessage({ type: 'acceptToFocus', providerId, externalId })}
                     onDismissItem={(providerId, externalId) => postMessage({ type: 'dismissItem', providerId, externalId })}
                     onTransitionState={(itemId, targetState) => postMessage({ type: 'transitionState', itemId, targetState })}
                     onReorderItems={tier.id === 'ready-to-start' || tier.id === 'in-progress' ? (itemIds) => postMessage({ type: 'reorderItems', itemIds }) : undefined}

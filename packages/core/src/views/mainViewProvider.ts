@@ -390,6 +390,9 @@ export class MainViewProvider implements vscode.WebviewViewProvider {
       case 'acceptItem':
         await this.handleAcceptItem(message.providerId, message.externalId);
         break;
+      case 'acceptToFocus':
+        await this.handleAcceptToFocus(message.providerId, message.externalId);
+        break;
       case 'acceptAll':
         await this.handleAcceptAll();
         break;
@@ -473,6 +476,19 @@ export class MainViewProvider implements vscode.WebviewViewProvider {
       }
 
       await this.handleAcceptItem(item.providerId, item.externalId);
+    }
+  }
+
+  private async handleAcceptToFocus(providerId: string, externalId: string): Promise<void> {
+    // Delegate to the existing inbox-side command, which materializes a
+    // WorkItem and transitions it straight to InProgress (skipping the
+    // Ready to Start tier). Lets the user pull an inbox item directly into
+    // active work without opening the editor first.
+    try {
+      await vscode.commands.executeCommand('devdocket.acceptToFocusFromInbox', { providerId, externalId });
+    } catch (err) {
+      logger.error('DevDocket: acceptToFocus failed', err);
+      void vscode.window.showErrorMessage(`Failed to start item: ${err instanceof Error ? err.message : String(err)}`);
     }
   }
 
