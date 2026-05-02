@@ -235,7 +235,7 @@ export class MainViewProvider implements vscode.WebviewViewProvider {
       title: discoveredItem.title,
       badges: this.buildBadges(providerId, discoveredItem, discoveredItem.url),
       branchName: workContext.branchName,
-      repoName: workContext.repoName,
+      repoAnnotation: discoveredItem.group ?? existingWorkItem?.group ?? workContext.repoName,
       tierType: 'incoming',
       isUnseen: true,
       isUrgent: this.isUrgentDiscoveredItem(discoveredItem),
@@ -256,7 +256,7 @@ export class MainViewProvider implements vscode.WebviewViewProvider {
       title: item.title,
       badges: this.buildBadges(item.providerId, discoveredItem, item.url),
       branchName: workContext.branchName,
-      repoName: workContext.repoName,
+      repoAnnotation: item.group ?? discoveredItem?.group ?? workContext.repoName,
       tierType,
       isUrgent: this.isUrgentWorkItem(item, discoveredItemMap),
       providerId: item.providerId,
@@ -972,6 +972,14 @@ export class MainViewProvider implements vscode.WebviewViewProvider {
     .item-title {
       font-weight: 600;
       word-break: break-word;
+    }
+    .item-repo-annotation {
+      font-weight: 400;
+      font-size: 0.85em;
+      color: var(--vscode-descriptionForeground);
+      opacity: 0.75;
+      margin-left: 4px;
+      word-break: break-all;
     }
     .unseen-dot {
       color: var(--tier-incoming);
