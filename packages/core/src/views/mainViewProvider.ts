@@ -234,7 +234,6 @@ export class MainViewProvider implements vscode.WebviewViewProvider {
       id: existingWorkItem?.id ?? getDiscoveredItemKey(providerId, discoveredItem.externalId),
       title: discoveredItem.title,
       badges: this.buildBadges(providerId, discoveredItem, discoveredItem.url),
-      branchName: workContext.branchName,
       repoAnnotation: discoveredItem.group ?? existingWorkItem?.group ?? workContext.repoName,
       tierType: 'incoming',
       isUnseen: true,
@@ -255,7 +254,6 @@ export class MainViewProvider implements vscode.WebviewViewProvider {
       id: item.id,
       title: item.title,
       badges: this.buildBadges(item.providerId, discoveredItem, item.url),
-      branchName: workContext.branchName,
       repoAnnotation: item.group ?? discoveredItem?.group ?? workContext.repoName,
       tierType,
       isUrgent: this.isUrgentWorkItem(item, discoveredItemMap),
@@ -726,9 +724,7 @@ export class MainViewProvider implements vscode.WebviewViewProvider {
       outline-offset: -1px;
     }
     .tier-count,
-    .tier-toggle,
-    .item-time,
-    .item-meta {
+    .tier-toggle {
       color: var(--vscode-descriptionForeground);
     }
     .tier-items {
@@ -997,9 +993,6 @@ export class MainViewProvider implements vscode.WebviewViewProvider {
       font-size: 11px;
       font-weight: 600;
       line-height: 1.4;
-    }
-    .item-meta {
-      font-size: 11px;
     }
     .empty-state, .placeholder {
       padding: 16px;

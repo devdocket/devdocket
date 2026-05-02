@@ -36,8 +36,7 @@ export interface ItemCardData {
   id: string;
   title: string;
   badges: BadgeData[];
-  branchName?: string;
-  /** Compact repo/source label rendered inline next to the title (e.g. "owner/repo"). */
+  /** Compact repo/source label rendered as a subtle annotation below the title (e.g. "owner/repo"). */
   repoAnnotation?: string;
   tierType: 'incoming' | 'inProgress' | 'readyToStart' | 'paused' | 'done';
   isUnseen?: boolean;

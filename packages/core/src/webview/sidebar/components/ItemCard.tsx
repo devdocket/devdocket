@@ -159,14 +159,12 @@ export function ItemCard({
           <div class="item-title-wrap">
             {isDraggable ? <span class="drag-handle" aria-hidden="true">⠿</span> : null}
             {item.isUnseen ? <span class="unseen-dot" aria-hidden="true">●</span> : null}
-            <span class="item-title">
-              {item.title}
-              {item.repoAnnotation ? (
-                <span class="item-repo-annotation"> {item.repoAnnotation}</span>
-              ) : null}
-            </span>
+            <span class="item-title">{item.title}</span>
           </div>
         </div>
+        {item.repoAnnotation ? (
+          <div class="item-repo-annotation">{item.repoAnnotation}</div>
+        ) : null}
         {item.badges.length > 0 ? (
           <div class="badge-row">
             {item.badges.map(badge => (
@@ -174,7 +172,6 @@ export function ItemCard({
             ))}
           </div>
         ) : null}
-        {item.branchName ? <div class="item-meta">{item.branchName}</div> : null}
       </div>
       {actions.length > 0 ? (
         <div class="item-actions" role="group" aria-label={`${item.title} actions`}>
