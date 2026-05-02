@@ -912,12 +912,12 @@ export class MainViewProvider implements vscode.WebviewViewProvider {
       top: 50%;
       transform: translateY(-50%);
       display: flex;
-      gap: 4px;
+      gap: 6px;
       opacity: 0;
       pointer-events: none;
       transition: opacity 0.15s;
-      padding: 3px 5px;
-      border-radius: 5px;
+      padding: 4px 6px;
+      border-radius: 6px;
       background: var(--vscode-editorHoverWidget-background, var(--vscode-editor-background));
       border: 1px solid var(--vscode-editorHoverWidget-border, var(--vscode-widget-border, transparent));
       box-shadow: 0 2px 6px rgba(0, 0, 0, 0.25);
@@ -931,10 +931,10 @@ export class MainViewProvider implements vscode.WebviewViewProvider {
       background: transparent;
       color: var(--vscode-foreground);
       border: none;
-      border-radius: 3px;
-      padding: 2px 6px;
+      border-radius: 4px;
+      padding: 4px 9px;
       cursor: pointer;
-      font-size: 12px;
+      font-size: 18px;
       line-height: 1;
     }
     .item-action-btn:hover {
