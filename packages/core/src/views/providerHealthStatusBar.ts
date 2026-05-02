@@ -65,6 +65,8 @@ export class ProviderHealthStatusBar implements vscode.Disposable {
     const count = unhealthyProviders.length;
     this.statusBarItem.text = `$(warning) ${count} provider${count === 1 ? '' : 's'} unhealthy`;
     this.statusBarItem.tooltip = 'Click to view provider health details';
+    this.statusBarItem.backgroundColor = new vscode.ThemeColor('statusBarItem.warningBackground');
+    this.statusBarItem.color = new vscode.ThemeColor('statusBarItem.warningForeground');
     this.statusBarItem.show();
   }
 
