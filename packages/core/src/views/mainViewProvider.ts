@@ -927,16 +927,23 @@ export class MainViewProvider implements vscode.WebviewViewProvider {
       flex: 1;
     }
     .drag-handle {
+      position: absolute;
+      left: 4px;
+      top: 50%;
+      transform: translateY(-50%);
       opacity: 0;
+      pointer-events: none;
       cursor: grab;
       color: var(--vscode-descriptionForeground);
-      margin-right: 4px;
       user-select: none;
       line-height: 1;
+      transition: opacity 0.15s;
     }
     .item-card:hover .drag-handle,
-    .item-card:focus-within .drag-handle {
-      opacity: 0.6;
+    .item-card:focus-within .drag-handle,
+    .item-card.dragging .drag-handle {
+      opacity: 0.7;
+      pointer-events: auto;
     }
     .drop-indicator {
       height: 2px;

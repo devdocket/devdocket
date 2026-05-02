@@ -157,7 +157,6 @@ export function ItemCard({
       <div class="item-card-main">
         <div class="item-line-1">
           <div class="item-title-wrap">
-            {isDraggable ? <span class="drag-handle" aria-hidden="true">⠿</span> : null}
             {item.isUnseen ? <span class="unseen-dot" aria-hidden="true">●</span> : null}
             <span class="item-title">{item.title}</span>
           </div>
@@ -173,6 +172,7 @@ export function ItemCard({
           </div>
         ) : null}
       </div>
+      {isDraggable ? <span class="drag-handle" aria-hidden="true">⠿</span> : null}
       {actions.length > 0 ? (
         <div class="item-actions" role="group" aria-label={`${item.title} actions`}>
           {actions.map(action => (
