@@ -31,7 +31,7 @@ export function buildStateBadge(discoveredItem?: DiscoveredItem): BadgeData | un
 
   const normalizedReason = normalizeText(discoveredItem.reason);
   if (normalizedReason === 'review requested') {
-    return { label: 'PR Review', type: 'state', variant: 'review-requested' };
+    return { label: 'Review requested', type: 'state', variant: 'review-requested' };
   }
 
   const normalizedState = normalizeText(discoveredItem.state);
@@ -45,15 +45,12 @@ export function buildStateBadge(discoveredItem?: DiscoveredItem): BadgeData | un
     case 'ready to merge':
       return { label: 'Ready to merge', type: 'state', variant: 'ready-to-merge' };
     case 'closed':
+      return { label: 'Closed', type: 'state', variant: 'closed' };
     case 'merged':
-      return {
-        label: discoveredItem.state?.trim() || toDisplayLabel(normalizedState),
-        type: 'state',
-        variant: 'closed',
-      };
+      return { label: 'Merged', type: 'state', variant: 'closed' };
     case 'active':
     case 'open':
-      return { label: 'Issue', type: 'state', variant: 'open' };
+      return { label: 'Open', type: 'state', variant: 'open' };
     case 'review received':
       return { label: 'Review received', type: 'state', variant: 'open' };
     case 'waiting on reviews':
@@ -94,8 +91,4 @@ export function buildBadges(providerId?: string, discoveredItem?: DiscoveredItem
 
 function normalizeText(value?: string): string | undefined {
   return value?.trim().toLowerCase().replace(/[_-]+/g, ' ');
-}
-
-function toDisplayLabel(value: string): string {
-  return value.replace(/\b\w/g, char => char.toUpperCase());
 }

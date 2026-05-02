@@ -264,7 +264,7 @@ describe('MainViewProvider', () => {
     expect(incomingTier.items.map((item: { title: string }) => item.title)).toEqual(['Incoming keep']);
     expect(incomingTier.items[0].badges).toEqual(expect.arrayContaining([
       { label: 'GitHub', type: 'provider', variant: 'github' },
-      { label: 'PR Review', type: 'state', variant: 'review-requested' },
+      { label: 'Review requested', type: 'state', variant: 'review-requested' },
       { label: 'CI failed', type: 'ci', variant: 'ci-fail' },
     ]));
 
@@ -384,7 +384,7 @@ describe('MainViewProvider', () => {
       isAccepted: false,
       isDismissed: true,
       badges: expect.arrayContaining([
-        { label: 'PR Review', type: 'state', variant: 'review-requested' },
+        { label: 'Review requested', type: 'state', variant: 'review-requested' },
       ]),
     }));
   });
