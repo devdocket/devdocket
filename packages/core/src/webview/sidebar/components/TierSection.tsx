@@ -209,7 +209,7 @@ export function TierSection({
   };
 
   return (
-    <section class={`tier-section tier-${tier.id}`}>
+    <section class="tier-section">
       <div class="tier-header">
         <button
           type="button"

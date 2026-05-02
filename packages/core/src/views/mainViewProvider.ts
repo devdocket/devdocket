@@ -651,16 +651,10 @@ export class MainViewProvider implements vscode.WebviewViewProvider {
       gap: 12px;
     }
     .tier-section {
-      border-left: 3px solid transparent;
       border-radius: 6px;
       background: var(--vscode-editorWidget-background, var(--vscode-sideBar-background));
-      padding: 10px 12px;
+      padding: 10px 6px;
     }
-    .tier-section.tier-incoming { border-left-color: var(--tier-incoming); }
-    .tier-section.tier-in-progress { border-left-color: var(--tier-in-progress); }
-    .tier-section.tier-ready-to-start { border-left-color: var(--tier-ready); }
-    .tier-section.tier-paused { border-left-color: var(--tier-paused); }
-    .tier-section.tier-done { border-left-color: var(--tier-done); }
     .tier-header {
       display: flex;
       align-items: center;
