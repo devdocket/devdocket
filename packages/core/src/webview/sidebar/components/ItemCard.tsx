@@ -134,6 +134,10 @@ export function ItemCard({
 
   const handleDragEnd = () => {
     setIsDragging(false);
+    // Drag interactions can leave the card focused, which keeps :focus-within
+    // styles (notably the drag handle overlay) visible until the user clicks
+    // away. Drop focus explicitly so the handle hides immediately on drop.
+    itemElementRef.current?.blur();
     onDragEnd?.();
   };
 
