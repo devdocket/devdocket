@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { getEditorPanelHtml, renderMarkdown } from '../views/editorPanelHtml';
-import type { EditorItemData } from '../views/missionControlTypes';
+import type { EditorItemData } from '../views/mainTypes';
 
 function makeEditorItem(overrides: Partial<EditorItemData> = {}): EditorItemData {
   const now = Date.now();

@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import * as vscode from 'vscode';
 import { WorkItemState, type WorkItem } from '../models/workItem';
-import { MissionControlViewProvider } from '../views/missionControlViewProvider';
+import { MainViewProvider } from '../views/mainViewProvider';
 
 type MessageHandler = (message: unknown) => void | Promise<void>;
 
@@ -161,7 +161,7 @@ function createProvider(
   stateStore: ReturnType<typeof createStateStore>,
   watcherService: ReturnType<typeof createWatcherService> = createWatcherService(),
 ) {
-  return new MissionControlViewProvider(
+  return new MainViewProvider(
     vscode.Uri.file('C:\\repos\\devdocket-mission-control-454\\packages\\core'),
     workGraph as any,
     providerRegistry as any,
@@ -172,7 +172,7 @@ function createProvider(
   );
 }
 
-describe('MissionControlViewProvider', () => {
+describe('MainViewProvider', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.useRealTimers();

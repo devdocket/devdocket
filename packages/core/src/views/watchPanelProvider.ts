@@ -2,7 +2,7 @@ import * as vscode from 'vscode';
 import type { PRIdentifier, RunConclusion, RunIdentifier, RunState } from '@devdocket/shared';
 import { WatcherService, type WatchedPR, type WatchedRun } from '../services/watcherService';
 import { isSafeUrl } from '../utils/url';
-import type { PRWatchData, RunWatchData, WebviewMessage } from './missionControlTypes';
+import type { PRWatchData, RunWatchData, WebviewMessage } from './mainTypes';
 
 export class WatchPanelProvider implements vscode.Disposable {
   static readonly viewType = 'devdocket.watchPanel';

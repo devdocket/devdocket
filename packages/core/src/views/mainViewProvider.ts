@@ -19,10 +19,10 @@ import type {
   SourceProviderData,
   TierData,
   WebviewMessage,
-} from './missionControlTypes';
+} from './mainTypes';
 
-export class MissionControlViewProvider implements vscode.WebviewViewProvider {
-  public static readonly viewId = 'devdocket.missionControl';
+export class MainViewProvider implements vscode.WebviewViewProvider {
+  public static readonly viewId = 'devdocket.main';
   private static readonly REFRESH_DEBOUNCE_MS = 50;
 
   private view?: vscode.WebviewView;
@@ -64,7 +64,7 @@ export class MissionControlViewProvider implements vscode.WebviewViewProvider {
     }
     this.refreshTimer = setTimeout(() => {
       this.refresh();
-    }, MissionControlViewProvider.REFRESH_DEBOUNCE_MS);
+    }, MainViewProvider.REFRESH_DEBOUNCE_MS);
   }
 
   selectItem(itemId: string): void {
@@ -448,7 +448,7 @@ export class MissionControlViewProvider implements vscode.WebviewViewProvider {
       if (!existing) {
         const discoveredItem = this.providerRegistry.getDiscoveredItems(providerId).find(item => item.externalId === externalId);
         if (!discoveredItem) {
-          logger.warn(`MissionControl: discovered item ${providerId}/${externalId} not found for accept`);
+          logger.warn(`DevDocket: discovered item ${providerId}/${externalId} not found for accept`);
           return;
         }
         await this.workGraph.createItem(
@@ -466,7 +466,7 @@ export class MissionControlViewProvider implements vscode.WebviewViewProvider {
       }
       await this.stateStore.setState(providerId, externalId, 'accepted');
     } catch (err) {
-      logger.error('MissionControl: accept failed', err);
+      logger.error('DevDocket: accept failed', err);
       void vscode.window.showErrorMessage(`Failed to accept item: ${err instanceof Error ? err.message : String(err)}`);
     }
   }
@@ -490,7 +490,7 @@ export class MissionControlViewProvider implements vscode.WebviewViewProvider {
     try {
       await this.stateStore.setState(providerId, externalId, 'dismissed');
     } catch (err) {
-      logger.error('MissionControl: dismiss failed', err);
+      logger.error('DevDocket: dismiss failed', err);
       void vscode.window.showErrorMessage(`Failed to dismiss item: ${err instanceof Error ? err.message : String(err)}`);
     }
   }
@@ -499,12 +499,12 @@ export class MissionControlViewProvider implements vscode.WebviewViewProvider {
     try {
       const item = this.workGraph.getItem(itemId);
       if (!item) {
-        logger.warn(`MissionControl: item ${itemId} not found for transition`);
+        logger.warn(`DevDocket: item ${itemId} not found for transition`);
         return;
       }
       await this.workGraph.transitionState(itemId, targetState as WorkItemState);
     } catch (err) {
-      logger.error('MissionControl: transition failed', err);
+      logger.error('DevDocket: transition failed', err);
       void vscode.window.showErrorMessage(`Failed to transition item: ${err instanceof Error ? err.message : String(err)}`);
     }
   }
@@ -522,13 +522,13 @@ export class MissionControlViewProvider implements vscode.WebviewViewProvider {
         .map(item => item.id);
 
       if (currentIds.length !== itemIds.length) {
-        logger.warn('MissionControl: reorder ignored because ready-to-start items changed during drag');
+        logger.warn('DevDocket: reorder ignored because ready-to-start items changed during drag');
         return;
       }
 
       const currentIdSet = new Set(currentIds);
       if (new Set(itemIds).size !== itemIds.length || currentIds.some(itemId => !itemIds.includes(itemId)) || itemIds.some(itemId => !currentIdSet.has(itemId))) {
-        logger.warn('MissionControl: reorder ignored because it included unknown ready-to-start item ids');
+        logger.warn('DevDocket: reorder ignored because it included unknown ready-to-start item ids');
         return;
       }
 
@@ -545,7 +545,7 @@ export class MissionControlViewProvider implements vscode.WebviewViewProvider {
 
         const draggedIndex = workingIds.indexOf(desiredId);
         if (draggedIndex === -1) {
-          logger.warn(`MissionControl: reorder ignored because item ${desiredId} was not in the ready-to-start tier`);
+          logger.warn(`DevDocket: reorder ignored because item ${desiredId} was not in the ready-to-start tier`);
           return;
         }
 
@@ -559,7 +559,7 @@ export class MissionControlViewProvider implements vscode.WebviewViewProvider {
         workingIds.splice(index, 0, desiredId);
       }
     } catch (err) {
-      logger.error('MissionControl: reorder failed', err);
+      logger.error('DevDocket: reorder failed', err);
       void vscode.window.showErrorMessage(`Failed to reorder items: ${err instanceof Error ? err.message : String(err)}`);
     }
   }
@@ -574,7 +574,7 @@ export class MissionControlViewProvider implements vscode.WebviewViewProvider {
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'nonce-${nonce}';">
-  <title>Mission Control</title>
+  <title>DevDocket</title>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body {

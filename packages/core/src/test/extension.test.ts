@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
 import * as vscode from 'vscode';
 import { MockMemento } from 'vscode';
 import { activate, autoWatchAuthoredPRs, deactivate, logger } from '../extension';
-import { MissionControlViewProvider } from '../views/missionControlViewProvider';
+import { MainViewProvider } from '../views/mainViewProvider';
 import { WatchPanelProvider } from '../views/watchPanelProvider';
 import { WorkItemEditorPanel } from '../views/workItemEditorPanel';
 
@@ -41,9 +41,9 @@ function getCommandHandler(commandId: string): (...args: any[]) => any {
   return registration[1];
 }
 
-function getMissionControlProvider(): MissionControlViewProvider {
+function getMainProvider(): MainViewProvider {
   const registerWebviewViewProvider = vscode.window.registerWebviewViewProvider as ReturnType<typeof vi.fn>;
-  return registerWebviewViewProvider.mock.calls[0][1] as MissionControlViewProvider;
+  return registerWebviewViewProvider.mock.calls[0][1] as MainViewProvider;
 }
 
 describe('activate()', () => {
@@ -92,13 +92,13 @@ describe('activate()', () => {
   });
 
   // ------------------------------------------------------------------
-  // 3. Registers the Mission Control webview provider
+  // 3. Registers the DevDocket webview provider
   // ------------------------------------------------------------------
-  it('registers the Mission Control webview provider', async () => {
+  it('registers the DevDocket webview provider', async () => {
     await activate(context);
     expect(vscode.window.registerWebviewViewProvider).toHaveBeenCalledWith(
-      'devdocket.missionControl',
-      expect.any(MissionControlViewProvider),
+      'devdocket.main',
+      expect.any(MainViewProvider),
       expect.objectContaining({ webviewOptions: { retainContextWhenHidden: true } }),
     );
   });
@@ -132,7 +132,7 @@ describe('activate()', () => {
 
     const createStatusBarItem = vscode.window.createStatusBarItem as ReturnType<typeof vi.fn>;
     const incomingStatusBar = createStatusBarItem.mock.results[1].value;
-    expect(incomingStatusBar.command).toBe('devdocket.missionControl.focus');
+    expect(incomingStatusBar.command).toBe('devdocket.main.focus');
     expect(incomingStatusBar.hide).toHaveBeenCalled();
     expect(incomingStatusBar.show).not.toHaveBeenCalled();
   });
@@ -166,10 +166,10 @@ describe('activate()', () => {
     expect(incomingStatusBar.hide).toHaveBeenCalled();
   });
 
-  it('wires work graph, provider registry, and state store changes to Mission Control refresh', async () => {
+  it('wires work graph, provider registry, and state store changes to DevDocket refresh', async () => {
     const api = await activate(context);
-    const missionControlProvider = getMissionControlProvider();
-    const scheduleRefreshSpy = vi.spyOn(missionControlProvider, 'scheduleRefresh');
+    const mainProvider = getMainProvider();
+    const scheduleRefreshSpy = vi.spyOn(mainProvider, 'scheduleRefresh');
     vi.spyOn(WorkItemEditorPanel, 'open').mockImplementation(() => undefined);
 
     (vscode.window.showInputBox as ReturnType<typeof vi.fn>).mockResolvedValue('Created from command');

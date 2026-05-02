@@ -12,7 +12,7 @@
     "Other"
   ],
   "activationEvents": [
-    "onView:devdocket.missionControl",
+    "onView:devdocket.main",
     "onCommand:devdocket.refresh",
     "onCommand:devdocket.dismissFromSources",
     "onCommand:devdocket.deleteItem",
@@ -163,8 +163,8 @@
       "devdocket": [
         {
           "type": "webview",
-          "id": "devdocket.missionControl",
-          "name": "Mission Control"
+          "id": "devdocket.main",
+          "name": "DevDocket"
         }
       ]
     },
@@ -410,17 +410,17 @@
       "view/title": [
         {
           "command": "devdocket.createItem",
-          "when": "view == devdocket.missionControl",
+          "when": "view == devdocket.main",
           "group": "navigation"
         },
         {
           "command": "devdocket.createItemFromUrl",
-          "when": "view == devdocket.missionControl",
+          "when": "view == devdocket.main",
           "group": "navigation"
         },
         {
           "command": "devdocket.refresh",
-          "when": "view == devdocket.missionControl",
+          "when": "view == devdocket.main",
           "group": "navigation"
         }
       ],

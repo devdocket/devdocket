@@ -1,7 +1,7 @@
 import * as crypto from 'crypto';
 import { marked } from 'marked';
 import sanitizeHtml from 'sanitize-html';
-import type { EditorItemData } from './missionControlTypes';
+import type { EditorItemData } from './mainTypes';
 
 export interface EditorHtmlOptions {
   cspSource: string;

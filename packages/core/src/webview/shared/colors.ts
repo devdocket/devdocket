@@ -1,5 +1,5 @@
 /**
- * Centralized color palette for all Mission Control webviews.
+ * Centralized color palette for all DevDocket webviews.
  *
  * This file contains NO DOM dependencies — it is safe to import from both
  * the Node-side extension code and the browser-side webview code.

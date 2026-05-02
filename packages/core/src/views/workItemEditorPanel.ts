@@ -7,7 +7,7 @@ import { VALID_TRANSITIONS, WorkGraph } from '../services/workGraph';
 import type { DiscoveredStateStore } from '../storage/discoveredStateStore';
 import { isSafeUrl } from '../utils/url';
 import { getEditorPanelHtml, renderMarkdown } from './editorPanelHtml';
-import type { BadgeData, EditorItemData } from './missionControlTypes';
+import type { BadgeData, EditorItemData } from './mainTypes';
 
 interface AutosaveData {
   title?: string;

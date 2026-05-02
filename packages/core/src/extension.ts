@@ -18,7 +18,7 @@ import { WatchesStatusBar } from './views/watchesStatusBar';
 import { ProviderHealthStatusBar } from './views/providerHealthStatusBar';
 import { WatchPanelProvider } from './views/watchPanelProvider';
 import { WorkItemEditorPanel, PanelManager } from './views/workItemEditorPanel';
-import { MissionControlViewProvider } from './views/missionControlViewProvider';
+import { MainViewProvider } from './views/mainViewProvider';
 import { registerCommands } from './commands/commands';
 import { isSafeUrl } from './utils/url';
 import { initLogger, setLogLevel, logger, resolveLogLevel } from './services/logger';
@@ -185,11 +185,11 @@ function wireEvents(
     if (showNotifications && newCount > 0) {
       void vscode.window.showInformationMessage(
         `DevDocket: ${newCount} new item${newCount === 1 ? '' : 's'} in Incoming`,
-        'Open Mission Control',
+        'Open DevDocket',
       ).then(
         action => {
-          if (action === 'Open Mission Control') {
-            vscode.commands.executeCommand('devdocket.missionControl.focus').then(
+          if (action === 'Open DevDocket') {
+            vscode.commands.executeCommand('devdocket.main.focus').then(
               undefined,
               () => { /* view focus is best-effort */ },
             );
@@ -339,7 +339,7 @@ function wireEvents(
  * Activate the DevDocket extension.
  *
  * Initialises storage, loads persisted work items and discovered-item state,
- * registers the Mission Control webview, status bars, and watch panel, and
+ * registers the DevDocket webview, status bars, and watch panel, and
  * returns the public {@link DevDocketApi} for provider extensions to consume.
  *
  * @param context - The VS Code extension context provided at activation.
@@ -381,12 +381,12 @@ export async function activate(context: vscode.ExtensionContext): Promise<DevDoc
   // Create status bar items
   const watchesStatusBar = new WatchesStatusBar(ws);
   const incomingStatusBar = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 101);
-  incomingStatusBar.command = 'devdocket.missionControl.focus';
+  incomingStatusBar.command = 'devdocket.main.focus';
   const updateIncomingStatusBar = () => {
     const count = getInboxUnseenCount(pr, ss);
     if (count > 0) {
       incomingStatusBar.text = `⚡ ${count} incoming`;
-      incomingStatusBar.tooltip = `Open Mission Control (${count} incoming item${count === 1 ? '' : 's'})`;
+      incomingStatusBar.tooltip = `Open DevDocket (${count} incoming item${count === 1 ? '' : 's'})`;
       incomingStatusBar.show();
       return;
     }
@@ -396,7 +396,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<DevDoc
 
   const providerHealthStatusBar = new ProviderHealthStatusBar(pr);
 
-  const missionControlProvider = new MissionControlViewProvider(
+  const mainProvider = new MainViewProvider(
     context.extensionUri,
     wg,
     pr,
@@ -407,16 +407,16 @@ export async function activate(context: vscode.ExtensionContext): Promise<DevDoc
   );
   context.subscriptions.push(
     vscode.window.registerWebviewViewProvider(
-      MissionControlViewProvider.viewId,
-      missionControlProvider,
+      MainViewProvider.viewId,
+      mainProvider,
       { webviewOptions: { retainContextWhenHidden: true } },
     ),
-    wg.onDidChange(safeHandler('mc:workGraph', () => missionControlProvider.scheduleRefresh())),
-    pr.onDidChangeDiscoveredItems(safeHandler('mc:discovered', () => missionControlProvider.scheduleRefresh())),
-    pr.onDidChangeProviderHealth(safeHandler('mc:health', () => missionControlProvider.scheduleRefresh())),
-    ss.onDidChange(safeHandler('mc:stateStore', () => missionControlProvider.scheduleRefresh())),
-    ws.onDidChangeWatchedRuns(safeHandler('mc:watchedRuns', () => missionControlProvider.scheduleRefresh())),
-    ws.onDidChangePRWatches(safeHandler('mc:watchedPRs', () => missionControlProvider.scheduleRefresh())),
+    wg.onDidChange(safeHandler('mc:workGraph', () => mainProvider.scheduleRefresh())),
+    pr.onDidChangeDiscoveredItems(safeHandler('mc:discovered', () => mainProvider.scheduleRefresh())),
+    pr.onDidChangeProviderHealth(safeHandler('mc:health', () => mainProvider.scheduleRefresh())),
+    ss.onDidChange(safeHandler('mc:stateStore', () => mainProvider.scheduleRefresh())),
+    ws.onDidChangeWatchedRuns(safeHandler('mc:watchedRuns', () => mainProvider.scheduleRefresh())),
+    ws.onDidChangePRWatches(safeHandler('mc:watchedPRs', () => mainProvider.scheduleRefresh())),
     pr.onDidChangeDiscoveredItems(safeHandler('incoming:discovered', updateIncomingStatusBar)),
     ss.onDidChange(safeHandler('incoming:stateStore', updateIncomingStatusBar)),
     ws.onDidChangeWatchedRuns(safeHandler('watch-panel:runs', () => watchPanelProvider.refresh())),

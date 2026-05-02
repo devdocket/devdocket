@@ -11,4 +11,4 @@ export type {
   RunWatchData,
   WatchData,
   WebviewMessage,
-} from '../../views/missionControlTypes';
+} from '../../views/mainTypes';
