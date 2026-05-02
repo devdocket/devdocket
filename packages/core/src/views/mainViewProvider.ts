@@ -12,7 +12,7 @@ import { DiscoveredStateStore } from '../storage/discoveredStateStore';
 import { ReadStateStore } from '../storage/readStateStore';
 import { isSafeUrl } from '../utils/url';
 import { buildTierColorCss } from '../webview/shared/colors';
-import { buildProviderBadge, buildStateBadge, buildTypeBadge, getUnrecognizedProviderState } from './badges';
+import { buildProviderBadge, buildReasonBadge, buildStateBadge, buildTypeBadge, getUnrecognizedProviderState } from './badges';
 import type {
   BadgeData,
   ItemCardData,
@@ -243,10 +243,19 @@ export class MainViewProvider implements vscode.WebviewViewProvider {
 
   private buildIncomingCardData(providerId: string, discoveredItem: DiscoveredItem, existingWorkItem?: WorkItem): ItemCardData {
     const key = getDiscoveredItemKey(providerId, discoveredItem.externalId);
+    // Reason badges (Mentioned / Assigned / ...) explain WHY an item was
+    // surfaced. They're contextual to the inbox triage step, so we add them
+    // only to incoming cards — once accepted, the same item card is built via
+    // buildWorkItemCardData which doesn't include the reason badge.
+    const badges = this.buildBadges(providerId, discoveredItem, discoveredItem.url);
+    const reasonBadge = buildReasonBadge(discoveredItem);
+    if (reasonBadge) {
+      badges.push(reasonBadge);
+    }
     return {
       id: existingWorkItem?.id ?? key,
       title: discoveredItem.title,
-      badges: this.buildBadges(providerId, discoveredItem, discoveredItem.url),
+      badges,
       providerStateFallback: getUnrecognizedProviderState(discoveredItem),
       repoAnnotation: discoveredItem.group ?? existingWorkItem?.group,
       tierType: 'incoming',

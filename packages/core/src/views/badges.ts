@@ -92,6 +92,25 @@ export function getUnrecognizedProviderState(discoveredItem?: DiscoveredItem): s
   return trimmed;
 }
 
+/**
+ * Build a "reason" badge from {@link DiscoveredItem.reason} that explains why
+ * an item was surfaced (e.g. "mentioned"). Currently only handles values that
+ * the buildStateBadge function doesn't already cover. Intended for use only
+ * on incoming items — once a user accepts the item, this contextual signal
+ * is no longer relevant.
+ */
+export function buildReasonBadge(discoveredItem?: DiscoveredItem): BadgeData | undefined {
+  const normalizedReason = normalizeText(discoveredItem?.reason);
+  switch (normalizedReason) {
+    case 'mentioned':
+      return { label: 'Mentioned', type: 'state', variant: 'review-requested' };
+    case 'assigned':
+      return { label: 'Assigned', type: 'state', variant: 'review-requested' };
+    default:
+      return undefined;
+  }
+}
+
 /** Build provider + type + state badges in canonical order. CI badges are not handled here. */
 export function buildBadges(providerId?: string, discoveredItem?: DiscoveredItem): BadgeData[] {
   const badges: BadgeData[] = [];
