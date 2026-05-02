@@ -30,18 +30,15 @@ function getBadgeColors(badge: BadgeData): JSX.CSSProperties {
     return vscodeBadgeFallback;
   }
 
-  // Type badges (Issue / PR) appear on every item, so use a quiet treatment
-  // — transparent background with muted foreground — so they read as a
-  // category annotation rather than competing with provider/state pills.
-  if (badge.type === 'type') {
-    return {
-      backgroundColor: 'transparent',
-      color: 'var(--vscode-descriptionForeground)',
-      border: '1px solid var(--vscode-widget-border, rgba(127, 127, 127, 0.3))',
-      fontWeight: 400,
-    };
+  // Outline-only treatment: type pills (Issue / PR) and provider-supplied
+  // badges with the 'neutral' variant. Used for category labels that appear
+  // on every item — should read as a quiet annotation, not an alert.
+  if (badge.type === 'type' || (badge.type === 'provider-supplied' && badge.variant === 'neutral')) {
+    return outlineFallback;
   }
 
+  // Provider-supplied + state + ci badges all share the themed palette so
+  // the same severity reads the same way regardless of source.
   const palette = badge.type === 'ci' ? ciBadgeColors : stateBadgeColors;
   const themed = palette[badge.variant];
   if (themed) {
@@ -50,5 +47,12 @@ function getBadgeColors(badge: BadgeData): JSX.CSSProperties {
     return { backgroundColor: pair.bg, color: pair.fg };
   }
 
-  return vscodeBadgeFallback;
+  return outlineFallback;
 }
+
+const outlineFallback: JSX.CSSProperties = {
+  backgroundColor: 'transparent',
+  color: 'var(--vscode-descriptionForeground)',
+  border: '1px solid var(--vscode-widget-border, rgba(127, 127, 127, 0.3))',
+  fontWeight: 400,
+};

@@ -8,7 +8,7 @@ import { ReadStateStore } from '../storage/readStateStore';
 import { isSafeUrl } from '../utils/url';
 import { getEditorPanelHtml, renderMarkdown } from './editorPanelHtml';
 import type { EditorItemData } from './mainTypes';
-import { buildBadges, getUnrecognizedProviderState } from './badges';
+import { composeEditorBadges } from './workItemEditorPanel';
 
 /**
  * Read-only "preview" editor panel for an incoming/discovered item that does
@@ -232,11 +232,10 @@ export class IncomingPreviewPanel {
       description: discoveredItem.description ? renderMarkdown(discoveredItem.description) : undefined,
       state: 'New',
       providerLabel,
-      providerState: getUnrecognizedProviderState(discoveredItem),
       group: discoveredItem.group,
       createdAt: Date.now(),
       updatedAt: Date.now(),
-      badges: buildBadges(this.providerId, discoveredItem),
+      badges: composeEditorBadges(this.providerId, discoveredItem),
       isProviderManaged: true,
       validTransitions: [],
       hasActions: false,

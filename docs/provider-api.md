@@ -115,6 +115,7 @@ interface DiscoveredItem {
   group?: string;
   canonicalId?: string;
   itemType?: 'issue' | 'pr';
+  badges?: ProviderBadge[];
 }
 
 interface DevDocketProvider {
@@ -155,6 +156,7 @@ interface DiscoveredItem {
   group?: string;
   canonicalId?: string;
   itemType?: 'issue' | 'pr';
+  badges?: ProviderBadge[];
 }
 
 interface Disposable {
@@ -688,6 +690,29 @@ interface DiscoveredItem {
    * only the provider knows what it actually fetched.
    */
   itemType?: 'issue' | 'pr';
+
+  /**
+   * Provider-declared badges shown alongside the core's Provider / Type / CI
+   * badges. The core never infers badges from `state` or `reason` strings —
+   * if you want a pill to surface in the UI, declare it explicitly here.
+   */
+  badges?: ProviderBadge[];
+}
+
+interface ProviderBadge {
+  /** Display text. Keep short — sidebar badges compete with the title. */
+  label: string;
+  /**
+   * Severity hint that drives color/treatment:
+   *   - 'neutral' — outlined, no fill
+   *   - 'info'    — blue
+   *   - 'success' — green
+   *   - 'warning' — amber
+   *   - 'danger'  — red
+   */
+  variant: 'neutral' | 'info' | 'success' | 'warning' | 'danger';
+  /** Defaults to 'both'. */
+  show?: 'sidebar' | 'editor' | 'both';
 }
 ```
 

@@ -165,6 +165,7 @@ describe('GitHubIssueProvider', () => {
       reason: 'assigned',
       canonicalId: 'github:issue:owner/repo#10',
       itemType: 'issue',
+      badges: [{ label: 'Assigned', variant: 'warning' }],
     });
   });
 

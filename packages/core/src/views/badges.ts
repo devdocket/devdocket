@@ -1,11 +1,20 @@
-import type { DiscoveredItem } from '../api/types';
+import type { DiscoveredItem, ProviderBadge } from '../api/types';
 import type { BadgeData } from './mainTypes';
 
 /**
  * Single source of truth for translating provider/discovered-item metadata into
  * the structured badges shown in both the sidebar item cards and the editor
- * header. Centralized here so the two views never drift apart on labels,
- * variants, or recognized state strings.
+ * header. Centralized here so the two views never drift apart.
+ *
+ * The core only owns three badge categories:
+ *   1. Provider (GitHub / ADO / Manual) — derived from providerId
+ *   2. Type     (Issue / PR)            — derived from item.itemType
+ *   3. CI       (passed / failed / etc) — derived from the watcher service
+ *
+ * Everything else — state, reason, custom workflow names — is the provider's
+ * responsibility, declared via {@link DiscoveredItem.badges}. Core renders
+ * exactly what the provider gives it, no inference from raw `state`/`reason`
+ * strings.
  */
 
 export function buildProviderBadge(providerId?: string): BadgeData | undefined {
@@ -41,94 +50,38 @@ export function buildTypeBadge(discoveredItem?: DiscoveredItem): BadgeData | und
   }
 }
 
-export function buildStateBadge(discoveredItem?: DiscoveredItem): BadgeData | undefined {
-  if (!discoveredItem) {
-    return undefined;
-  }
-
-  const normalizedReason = normalizeText(discoveredItem.reason);
-  if (normalizedReason === 'review requested') {
-    return { label: 'Review requested', type: 'state', variant: 'review-requested' };
-  }
-
-  const normalizedState = normalizeText(discoveredItem.state);
-  switch (normalizedState) {
-    case 'changes requested':
-      return { label: 'Changes requested', type: 'state', variant: 'changes-requested' };
-    case 'approved':
-      return { label: 'Approved', type: 'state', variant: 'approved' };
-    case 'draft':
-      return { label: 'Draft', type: 'state', variant: 'draft' };
-    case 'ready to merge':
-      return { label: 'Ready to merge', type: 'state', variant: 'ready-to-merge' };
-    case 'closed':
-      return { label: 'Closed', type: 'state', variant: 'closed' };
-    case 'merged':
-      return { label: 'Merged', type: 'state', variant: 'closed' };
-    case 'active':
-    case 'open':
-      return { label: 'Open', type: 'state', variant: 'open' };
-    case 'review received':
-      return { label: 'Review received', type: 'state', variant: 'open' };
-    case 'waiting on reviews':
-      return { label: 'Waiting on reviews', type: 'state', variant: 'open' };
-    default:
-      return undefined;
-  }
+/**
+ * Map provider-declared {@link ProviderBadge} entries into the renderable
+ * {@link BadgeData} shape, filtered to a target view. Providers control the
+ * label and severity; core picks the actual colors via {@link variantToColorKey}.
+ */
+export function buildProviderBadges(
+  discoveredItem: DiscoveredItem | undefined,
+  view: 'sidebar' | 'editor',
+): BadgeData[] {
+  if (!discoveredItem?.badges?.length) return [];
+  return discoveredItem.badges
+    .filter(badge => (badge.show ?? 'both') === 'both' || badge.show === view)
+    .map(badge => ({
+      label: badge.label,
+      type: 'provider-supplied',
+      variant: variantToColorKey(badge.variant),
+    }));
 }
 
 /**
- * Returns the raw `discoveredItem.state` if it does NOT correspond to a
- * recognized {@link buildStateBadge} case — so callers can render a fallback
- * pill for unknown states (e.g. ADO custom workflow states like "In Code
- * Review") without duplicating the semantic state pills already rendered for
- * known states.
+ * Map a {@link ProviderBadge.variant} severity hint to the corresponding key
+ * in the existing color palette so the new "provider-supplied" badge type
+ * reuses the same theme-aware colors that previously powered semantic state
+ * badges.
  */
-export function getUnrecognizedProviderState(discoveredItem?: DiscoveredItem): string | undefined {
-  if (!discoveredItem) return undefined;
-  const trimmed = discoveredItem.state?.trim();
-  if (!trimmed) return undefined;
-  if (buildStateBadge(discoveredItem)) return undefined;
-  return trimmed;
-}
-
-/**
- * Build a "reason" badge from {@link DiscoveredItem.reason} that explains why
- * an item was surfaced (e.g. "mentioned"). Currently only handles values that
- * the buildStateBadge function doesn't already cover. Intended for use only
- * on incoming items — once a user accepts the item, this contextual signal
- * is no longer relevant.
- */
-export function buildReasonBadge(discoveredItem?: DiscoveredItem): BadgeData | undefined {
-  const normalizedReason = normalizeText(discoveredItem?.reason);
-  switch (normalizedReason) {
-    case 'mentioned':
-      return { label: 'Mentioned', type: 'state', variant: 'review-requested' };
-    case 'assigned':
-      return { label: 'Assigned', type: 'state', variant: 'review-requested' };
-    default:
-      return undefined;
+function variantToColorKey(variant: ProviderBadge['variant']): string {
+  switch (variant) {
+    case 'info':    return 'open';              // blue
+    case 'success': return 'approved';          // green
+    case 'warning': return 'review-requested';  // amber
+    case 'danger':  return 'changes-requested'; // red
+    case 'neutral':
+    default:        return 'neutral';           // outline-only (handled in BadgePill)
   }
-}
-
-/** Build provider + type + state badges in canonical order. CI badges are not handled here. */
-export function buildBadges(providerId?: string, discoveredItem?: DiscoveredItem): BadgeData[] {
-  const badges: BadgeData[] = [];
-  const providerBadge = buildProviderBadge(providerId);
-  if (providerBadge) {
-    badges.push(providerBadge);
-  }
-  const typeBadge = buildTypeBadge(discoveredItem);
-  if (typeBadge) {
-    badges.push(typeBadge);
-  }
-  const stateBadge = buildStateBadge(discoveredItem);
-  if (stateBadge) {
-    badges.push(stateBadge);
-  }
-  return badges;
-}
-
-function normalizeText(value?: string): string | undefined {
-  return value?.trim().toLowerCase().replace(/[_-]+/g, ' ');
 }

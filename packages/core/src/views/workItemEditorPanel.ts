@@ -6,9 +6,9 @@ import { ProviderRegistry } from '../services/providerRegistry';
 import { VALID_TRANSITIONS, WorkGraph } from '../services/workGraph';
 import type { DiscoveredStateStore } from '../storage/discoveredStateStore';
 import { isSafeUrl } from '../utils/url';
-import { buildBadges, getUnrecognizedProviderState } from './badges';
+import { buildProviderBadge, buildProviderBadges, buildTypeBadge } from './badges';
 import { getEditorPanelHtml, renderMarkdown } from './editorPanelHtml';
-import type { EditorItemData } from './mainTypes';
+import type { BadgeData, EditorItemData } from './mainTypes';
 
 interface AutosaveData {
   title?: string;
@@ -343,11 +343,10 @@ export class WorkItemEditorPanel {
       description: item.description ? renderMarkdown(item.description) : undefined,
       state: item.state,
       providerLabel,
-      providerState: getUnrecognizedProviderState(discoveredItem),
       group: item.group,
       createdAt: item.createdAt,
       updatedAt: item.updatedAt,
-      badges: buildBadges(item.providerId, discoveredItem),
+      badges: composeEditorBadges(item.providerId, discoveredItem),
       isProviderManaged: this.isProviderManaged(item),
       validTransitions: Array.from(VALID_TRANSITIONS.get(item.state) ?? []),
       hasActions: WorkItemEditorPanel.actionRegistry?.hasActionsFor(item) ?? false,
@@ -383,7 +382,7 @@ export class WorkItemEditorPanel {
           id: peer.id,
           title: peer.title,
           state: peer.state,
-          badges: buildBadges(providerId, candidate),
+          badges: composeEditorBadges(providerId, candidate),
         });
       }
     }
@@ -507,6 +506,17 @@ export class WorkItemEditorPanel {
   }
 }
 
-// Re-export buildBadges from the shared module for callers that import it
-// from this file (e.g. IncomingPreviewPanel).
-export { buildBadges } from './badges';
+/**
+ * Compose the badge list shown in the editor: provider, type, then the
+ * provider-supplied badges declared on the {@link DiscoveredItem}. CI badges
+ * are not added here — the editor doesn't currently surface CI status inline.
+ */
+export function composeEditorBadges(providerId?: string, discoveredItem?: DiscoveredItem): BadgeData[] {
+  const badges: BadgeData[] = [];
+  const providerBadge = buildProviderBadge(providerId);
+  if (providerBadge) badges.push(providerBadge);
+  const typeBadge = buildTypeBadge(discoveredItem);
+  if (typeBadge) badges.push(typeBadge);
+  badges.push(...buildProviderBadges(discoveredItem, 'editor'));
+  return badges;
+}

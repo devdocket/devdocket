@@ -72,6 +72,7 @@ export class GitHubPrReviewProvider extends BaseGitHubProvider {
         reason: 'review_requested',
         canonicalId: `github:pull:${repoName}#${pr.number}`,
         itemType: 'pr',
+        badges: [{ label: 'Review requested', variant: 'warning' }],
       };
       if (pr.state) { item.state = pr.state; }
       // Head SHA uses soft resurfacing (version) — resurfaces from

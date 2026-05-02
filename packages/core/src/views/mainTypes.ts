@@ -41,12 +41,6 @@ export interface ItemCardData {
   id: string;
   title: string;
   badges: BadgeData[];
-  /**
-   * Raw provider state string, populated only when {@link buildStateBadge}
-   * did not recognize the state. Rendered as a small inline pill so unknown
-   * provider states (e.g. ADO custom workflow states) still surface.
-   */
-  providerStateFallback?: string;
   /** Compact repo/source label rendered as a subtle annotation below the title (e.g. "owner/repo"). */
   repoAnnotation?: string;
   tierType: 'incoming' | 'inProgress' | 'readyToStart' | 'paused' | 'done';
@@ -59,7 +53,7 @@ export interface ItemCardData {
 
 export interface BadgeData {
   label: string;
-  type: 'provider' | 'type' | 'state' | 'ci';
+  type: 'provider' | 'type' | 'state' | 'ci' | 'provider-supplied';
   variant: string;
 }
 
@@ -71,13 +65,6 @@ export interface EditorItemData {
   description?: string;
   state: string;
   providerLabel?: string;
-  /**
-   * Raw provider state string, populated **only** when {@link buildStateBadge}
-   * did not recognize the state as a known semantic value. The editor renders
-   * it as a fallback meta-badge so unknown provider states (e.g. ADO custom
-   * workflow states like "In Code Review") still surface to the user.
-   */
-  providerState?: string;
   group?: string;
   createdAt: number;
   updatedAt: number;

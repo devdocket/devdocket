@@ -12,7 +12,7 @@ import { DiscoveredStateStore } from '../storage/discoveredStateStore';
 import { ReadStateStore } from '../storage/readStateStore';
 import { isSafeUrl } from '../utils/url';
 import { buildTierColorCss } from '../webview/shared/colors';
-import { buildProviderBadge, buildReasonBadge, buildStateBadge, buildTypeBadge, getUnrecognizedProviderState } from './badges';
+import { buildProviderBadge, buildProviderBadges, buildTypeBadge } from './badges';
 import type {
   BadgeData,
   ItemCardData,
@@ -243,20 +243,10 @@ export class MainViewProvider implements vscode.WebviewViewProvider {
 
   private buildIncomingCardData(providerId: string, discoveredItem: DiscoveredItem, existingWorkItem?: WorkItem): ItemCardData {
     const key = getDiscoveredItemKey(providerId, discoveredItem.externalId);
-    // Reason badges (Mentioned / Assigned / ...) explain WHY an item was
-    // surfaced. They're contextual to the inbox triage step, so we add them
-    // only to incoming cards — once accepted, the same item card is built via
-    // buildWorkItemCardData which doesn't include the reason badge.
-    const badges = this.buildBadges(providerId, discoveredItem, discoveredItem.url);
-    const reasonBadge = buildReasonBadge(discoveredItem);
-    if (reasonBadge) {
-      badges.push(reasonBadge);
-    }
     return {
       id: existingWorkItem?.id ?? key,
       title: discoveredItem.title,
-      badges,
-      providerStateFallback: getUnrecognizedProviderState(discoveredItem),
+      badges: this.buildBadges(providerId, discoveredItem, discoveredItem.url),
       repoAnnotation: discoveredItem.group ?? existingWorkItem?.group,
       tierType: 'incoming',
       isUnseen: !this.readStateStore.has(key),
@@ -276,7 +266,6 @@ export class MainViewProvider implements vscode.WebviewViewProvider {
       id: item.id,
       title: item.title,
       badges: this.buildBadges(item.providerId, discoveredItem, item.url),
-      providerStateFallback: getUnrecognizedProviderState(discoveredItem),
       repoAnnotation: item.group ?? discoveredItem?.group,
       tierType,
       isUrgent: this.isUrgentWorkItem(item, discoveredItemMap),
@@ -297,14 +286,7 @@ export class MainViewProvider implements vscode.WebviewViewProvider {
       badges.push(typeBadge);
     }
 
-    const stateBadge = buildStateBadge(discoveredItem);
-    // The "Open" and "Closed" state pills add little signal in the sidebar:
-    // open issues/PRs already dominate the active tiers, and closed items are
-    // rare in any tier other than Done. The editor still surfaces them so the
-    // detail view shows the full upstream state.
-    if (stateBadge && stateBadge.label !== 'Open' && stateBadge.label !== 'Closed') {
-      badges.push(stateBadge);
-    }
+    badges.push(...buildProviderBadges(discoveredItem, 'sidebar'));
 
     const ciBadge = this.buildCIBadge(discoveredItem?.url ?? itemUrl);
     if (ciBadge) {

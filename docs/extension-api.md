@@ -187,6 +187,33 @@ interface DiscoveredItem {
    * only the provider knows what it actually fetched.
    */
   itemType?: 'issue' | 'pr';
+
+  /**
+   * Optional provider-declared badges shown alongside the core's Provider /
+   * Type / CI badges. Use this to surface state-like information ("Approved",
+   * "Changes requested", "Mentioned", etc) — DevDocket never infers badges
+   * from `state` or `reason` strings.
+   *
+   * Each badge picks a severity variant; DevDocket maps it to a theme-aware
+   * color so providers don't have to.
+   */
+  badges?: ProviderBadge[];
+}
+
+interface ProviderBadge {
+  /** Display text. Keep short — sidebar badges compete with the title. */
+  label: string;
+  /**
+   * Severity hint:
+   *   - 'neutral' — outlined, no fill (category labels)
+   *   - 'info'    — blue   (informational, e.g. "Open")
+   *   - 'success' — green  (positive, e.g. "Approved")
+   *   - 'warning' — amber  (pending action, e.g. "Review requested")
+   *   - 'danger'  — red    (action needed, e.g. "Changes requested")
+   */
+  variant: 'neutral' | 'info' | 'success' | 'warning' | 'danger';
+  /** Defaults to 'both'. Use 'editor' for verbose detail badges. */
+  show?: 'sidebar' | 'editor' | 'both';
 }
 ```
 
@@ -199,6 +226,7 @@ interface DiscoveredItem {
 - Use `group` to organize items in the Sources tree. Items with the same group value are nested under a folder.
 - Use `canonicalId` when the same entity might be discovered by multiple providers (e.g., a PR found by both "My PRs" and "PR Reviews"). Items sharing a `canonicalId` are deduplicated in the Inbox — one representative is shown and accept/dismiss propagates to all. Use a consistent format like `github:pull:owner/repo#42`. Items without `canonicalId` show individually (backward compatible). The Sources view is unaffected.
 - Set `itemType` to `'issue'` or `'pr'` when your provider can classify the item kind. DevDocket surfaces this as a separate type pill so users can distinguish issues from pull requests at a glance. Items without `itemType` simply omit the pill — useful for generic / manual / heterogeneous sources where the kind isn't meaningful.
+- Use `badges` to surface state, reason, or any other custom annotation. The core deliberately doesn't interpret the `state` or `reason` strings any more — those are kept on `DiscoveredItem` for provenance/dedup purposes only. If you want a pill to show, declare it explicitly. Use `show: 'editor'` for verbose detail that would clutter the sidebar.
 
 ### Registering a Provider
 

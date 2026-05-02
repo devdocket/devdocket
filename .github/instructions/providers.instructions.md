@@ -36,6 +36,50 @@ label.
 extension — it's the provider's job to classify, since only the provider has
 authoritative knowledge of what it fetched.
 
+## Pill Conventions (`DiscoveredItem.badges`)
+
+The core extension owns three badge categories: **Provider** (GitHub/ADO/Manual),
+**Type** (Issue/PR via `itemType`), and **CI** (from the watcher service). For
+*everything else* — state, review status, the reason an item showed up in the
+inbox — the provider is responsible for declaring badges via the
+`DiscoveredItem.badges` field. The core never infers pills from the
+`state` or `reason` strings.
+
+### Variant → color mapping
+
+Pick the severity that matches the meaning. Core maps each variant to a
+theme-aware palette so providers don't pick raw colors.
+
+| Variant     | Color   | Use for                                        |
+|-------------|---------|------------------------------------------------|
+| `neutral`   | outline | Category labels (e.g. `Draft`)                 |
+| `info`      | blue    | Informational state (e.g. `Open`, `Review received`) |
+| `success`   | green   | Positive state (e.g. `Approved`, `Ready to merge`) |
+| `warning`   | amber   | Pending action (e.g. `Mentioned`, `Review requested`) |
+| `danger`    | red     | Action needed (e.g. `Changes requested`)       |
+
+### `show` filter
+
+By default a badge renders in both the sidebar and the editor. Set
+`show: 'editor'` for verbose labels that would clutter the sidebar (e.g. an
+ADO custom workflow state); set `show: 'sidebar'` for badges only useful
+during inbox triage.
+
+### Per-provider conventions
+
+| Provider | Badges emitted |
+|---|---|
+| `githubProvider` (Issues) | `[{ label: 'Assigned', variant: 'warning' }]` |
+| `githubMentionsProvider` | `[{ label: 'Mentioned', variant: 'warning' }]` |
+| `githubPrReviewProvider` | `[{ label: 'Review requested', variant: 'warning' }]` |
+| `githubMyPrsProvider` | One badge mapped from the computed PR status (`Draft` → neutral, `Changes requested` → danger, `Approved`/`Ready to merge` → success, `Review received`/`Waiting on reviews` → info). See the `statusToBadge` helper. |
+| `adoWorkItemProvider` | None. ADO work item states are too varied/team-specific to map meaningfully. |
+| `adoMyPrsProvider`, `adoPrReviewProvider` | None for now (matching the ADO Work Items convention). |
+
+When adding a new provider, default to declaring **at least** a reason badge
+(e.g. `'Mentioned'`, `'Review requested'`) so users can tell at a glance why
+the item appeared in their inbox.
+
 ## Stable External IDs
 
 Use `owner/repo#number` format for external IDs, not `html_url`. URLs are mutable (issues can transfer between repos); the parsed format is stable and provides reliable long-term identity.

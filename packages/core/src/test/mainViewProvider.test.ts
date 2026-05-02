@@ -194,19 +194,19 @@ describe('MainViewProvider', () => {
     ]);
     const providerRegistry = createProviderRegistry({
       github: [
-        { externalId: 'incoming-1', title: 'Incoming keep', reason: 'review requested', url: 'https://github.com/org/repo/pull/1', canonicalId: 'shared-incoming' },
+        { externalId: 'incoming-1', title: 'Incoming keep', reason: 'review requested', url: 'https://github.com/org/repo/pull/1', canonicalId: 'shared-incoming', badges: [{ label: 'Review requested', variant: 'warning' }] },
         { externalId: 'incoming-2', title: 'Incoming duplicate', state: 'open', url: 'https://github.com/org/repo/issues/2', canonicalId: 'shared-incoming' },
         { externalId: 'incoming-accepted', title: 'Accepted incoming', state: 'open' },
         { externalId: 'incoming-dismissed', title: 'Dismissed incoming', state: 'open' },
-        { externalId: 'ready-urgent', title: 'Urgent ready', state: 'changes requested', url: 'https://github.com/org/repo/pull/20' },
-        { externalId: 'ip-urgent-newer', title: 'Urgent newer', state: 'changes requested' },
-        { externalId: 'ip-urgent-older', title: 'Urgent older', state: 'changes requested' },
+        { externalId: 'ready-urgent', title: 'Urgent ready', state: 'changes requested', url: 'https://github.com/org/repo/pull/20', badges: [{ label: 'Changes requested', variant: 'danger' }] },
+        { externalId: 'ip-urgent-newer', title: 'Urgent newer', state: 'changes requested', badges: [{ label: 'Changes requested', variant: 'danger' }] },
+        { externalId: 'ip-urgent-older', title: 'Urgent older', state: 'changes requested', badges: [{ label: 'Changes requested', variant: 'danger' }] },
         { externalId: 'paused-old', title: 'Paused old', state: 'open' },
         { externalId: 'paused-new', title: 'Paused new', state: 'open' },
         { externalId: 'done-new', title: 'Done new', state: 'merged', url: 'https://github.com/org/repo/actions/runs/500' },
       ],
       ado: [
-        { externalId: 'ready-ordinary', title: 'Ordinary ready', state: 'approved', url: 'https://dev.azure.com/org/project/_git/repo/pullrequest/10' },
+        { externalId: 'ready-ordinary', title: 'Ordinary ready', state: 'approved', url: 'https://dev.azure.com/org/project/_git/repo/pullrequest/10', badges: [{ label: 'Approved', variant: 'success' }] },
         { externalId: 'ip-ordinary', title: 'Ordinary newest', state: 'open' },
       ],
     });
@@ -264,7 +264,7 @@ describe('MainViewProvider', () => {
     expect(incomingTier.items.map((item: { title: string }) => item.title)).toEqual(['Incoming keep']);
     expect(incomingTier.items[0].badges).toEqual(expect.arrayContaining([
       { label: 'GitHub', type: 'provider', variant: 'github' },
-      { label: 'Review requested', type: 'state', variant: 'review-requested' },
+      { label: 'Review requested', type: 'provider-supplied', variant: 'review-requested' },
       { label: 'CI failed', type: 'ci', variant: 'ci-fail' },
     ]));
 
@@ -283,11 +283,11 @@ describe('MainViewProvider', () => {
     ]);
     expect(readyTier.items.find((item: { id: string }) => item.id === 'urgent-ready').badges).toEqual(expect.arrayContaining([
       { label: 'GitHub', type: 'provider', variant: 'github' },
-      { label: 'Changes requested', type: 'state', variant: 'changes-requested' },
+      { label: 'Changes requested', type: 'provider-supplied', variant: 'changes-requested' },
     ]));
     expect(readyTier.items.find((item: { id: string }) => item.id === 'ordinary-ready').badges).toEqual(expect.arrayContaining([
       { label: 'ADO', type: 'provider', variant: 'ado' },
-      { label: 'Approved', type: 'state', variant: 'approved' },
+      { label: 'Approved', type: 'provider-supplied', variant: 'approved' },
       { label: 'CI running', type: 'ci', variant: 'ci-running' },
     ]));
     expect(readyTier.items.find((item: { id: string }) => item.id === 'manual-ready').badges).toContainEqual(
@@ -328,10 +328,10 @@ describe('MainViewProvider', () => {
           github: [
             { externalId: 'g-2', title: 'Zulu', group: 'Beta', state: 'open' },
             { externalId: 'g-1', title: 'Alpha', group: 'Alpha', state: 'open' },
-            { externalId: 'g-3', title: 'Gamma', group: 'Alpha', reason: 'review requested' },
+            { externalId: 'g-3', title: 'Gamma', group: 'Alpha', reason: 'review requested', badges: [{ label: 'Review requested', variant: 'warning' }] },
           ],
           ado: [
-            { externalId: 'a-1', title: 'ADO Item', group: 'Backlog', state: 'approved' },
+            { externalId: 'a-1', title: 'ADO Item', group: 'Backlog', state: 'approved', badges: [{ label: 'Approved', variant: 'success' }] },
           ],
         },
         { github: 'GitHub', ado: 'Azure DevOps' },
@@ -364,7 +364,7 @@ describe('MainViewProvider', () => {
           isDismissed: false,
           badges: expect.arrayContaining([
             { label: 'ADO', type: 'provider', variant: 'ado' },
-            { label: 'Approved', type: 'state', variant: 'approved' },
+            { label: 'Approved', type: 'provider-supplied', variant: 'approved' },
           ]),
         })],
       },
@@ -384,7 +384,7 @@ describe('MainViewProvider', () => {
       isAccepted: false,
       isDismissed: true,
       badges: expect.arrayContaining([
-        { label: 'Review requested', type: 'state', variant: 'review-requested' },
+        { label: 'Review requested', type: 'provider-supplied', variant: 'review-requested' },
       ]),
     }));
   });

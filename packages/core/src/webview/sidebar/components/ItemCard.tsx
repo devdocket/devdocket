@@ -170,14 +170,11 @@ export function ItemCard({
         {item.repoAnnotation ? (
           <div class="item-repo-annotation">{item.repoAnnotation}</div>
         ) : null}
-        {item.badges.length > 0 || item.providerStateFallback ? (
+        {item.badges.length > 0 ? (
           <div class="badge-row">
             {item.badges.map(badge => (
               <BadgePill key={`${badge.type}-${badge.variant}-${badge.label}`} badge={badge} />
             ))}
-            {item.providerStateFallback ? (
-              <span class="badge-pill badge-pill--fallback">{item.providerStateFallback}</span>
-            ) : null}
           </div>
         ) : null}
       </div>
