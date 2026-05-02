@@ -45,6 +45,7 @@ export class GitHubIssueProvider extends BaseGitHubProvider {
         group: repoName,
         reason: 'assigned',
         canonicalId: `github:issue:${repoName}#${issue.number}`,
+        itemType: 'issue',
         ...(issue.state ? { state: issue.state } : {}),
       };
     });

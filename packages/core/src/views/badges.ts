@@ -24,6 +24,23 @@ export function buildProviderBadge(providerId?: string): BadgeData | undefined {
   return { label: 'Manual', type: 'provider', variant: 'manual' };
 }
 
+/**
+ * Build a "type" badge (Issue / PR) from the provider-supplied
+ * {@link DiscoveredItem.itemType} value. Returns undefined for items where the
+ * provider didn't classify the type (e.g. manual items).
+ */
+export function buildTypeBadge(discoveredItem?: DiscoveredItem): BadgeData | undefined {
+  if (!discoveredItem?.itemType) return undefined;
+  switch (discoveredItem.itemType) {
+    case 'pr':
+      return { label: 'PR', type: 'type', variant: 'pr' };
+    case 'issue':
+      return { label: 'Issue', type: 'type', variant: 'issue' };
+    default:
+      return undefined;
+  }
+}
+
 export function buildStateBadge(discoveredItem?: DiscoveredItem): BadgeData | undefined {
   if (!discoveredItem) {
     return undefined;
@@ -75,12 +92,16 @@ export function getUnrecognizedProviderState(discoveredItem?: DiscoveredItem): s
   return trimmed;
 }
 
-/** Build provider + state badges in canonical order. CI badges are not handled here. */
+/** Build provider + type + state badges in canonical order. CI badges are not handled here. */
 export function buildBadges(providerId?: string, discoveredItem?: DiscoveredItem): BadgeData[] {
   const badges: BadgeData[] = [];
   const providerBadge = buildProviderBadge(providerId);
   if (providerBadge) {
     badges.push(providerBadge);
+  }
+  const typeBadge = buildTypeBadge(discoveredItem);
+  if (typeBadge) {
+    badges.push(typeBadge);
   }
   const stateBadge = buildStateBadge(discoveredItem);
   if (stateBadge) {

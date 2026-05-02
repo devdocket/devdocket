@@ -164,6 +164,7 @@ describe('GitHubIssueProvider', () => {
       group: 'owner/repo',
       reason: 'assigned',
       canonicalId: 'github:issue:owner/repo#10',
+      itemType: 'issue',
     });
   });
 

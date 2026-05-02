@@ -30,6 +30,12 @@ function getBadgeColors(badge: BadgeData): JSX.CSSProperties {
     return vscodeBadgeFallback;
   }
 
+  // Type badges (Issue / PR) use the neutral VS Code badge palette so they
+  // read as a category label rather than competing with the colored state pill.
+  if (badge.type === 'type') {
+    return vscodeBadgeFallback;
+  }
+
   const palette = badge.type === 'ci' ? ciBadgeColors : stateBadgeColors;
   const themed = palette[badge.variant];
   if (themed) {

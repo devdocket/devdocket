@@ -108,6 +108,7 @@ export class GitHubMyPrsProvider extends BaseGitHubProvider {
         reason: 'You authored this PR',
         state: status,
         canonicalId: `github:pull:${repoName}#${pr.number}`,
+        itemType: 'pr',
       });
     }
     for (const pr of filteredAssigned) {
@@ -122,6 +123,7 @@ export class GitHubMyPrsProvider extends BaseGitHubProvider {
         reason: 'You are assigned to this PR',
         state: status,
         canonicalId: `github:pull:${repoName}#${pr.number}`,
+        itemType: 'pr',
       });
     }
 

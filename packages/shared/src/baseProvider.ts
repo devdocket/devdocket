@@ -32,6 +32,12 @@ export interface DiscoveredItem {
   /** Optional upstream state from the provider (e.g. `"open"`, `"closed"`, `"Active"`). */
   state?: string;
   /**
+   * Optional classification of the item kind ("issue" or "pr"). Providers set
+   * this so the UI can render a distinct type badge without inferring from URL
+   * patterns or state strings.
+   */
+  itemType?: 'issue' | 'pr';
+  /**
    * Optional version identifier for "soft" resurfacing.
    * When a previously accepted item reappears with a different version,
    * it is resurfaced in the Inbox as unseen **unless** the linked work item

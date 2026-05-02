@@ -116,6 +116,7 @@ describe('AdoWorkItemProvider', () => {
       group: 'myorg/MyProject',
       reason: 'assigned',
       state: 'Active',
+      itemType: 'issue',
     });
     expect(items[1]).toEqual({
       externalId: 'myorg/MyProject/2',
@@ -125,6 +126,7 @@ describe('AdoWorkItemProvider', () => {
       group: 'myorg/MyProject',
       reason: 'assigned',
       state: 'Active',
+      itemType: 'issue',
     });
   });
 

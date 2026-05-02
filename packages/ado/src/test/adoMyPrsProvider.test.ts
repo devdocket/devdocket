@@ -138,6 +138,7 @@ describe('AdoMyPrsProvider', () => {
       group: 'MyProject/myrepo',
       reason: 'You authored this PR',
       state: 'Waiting on reviews',
+      itemType: 'pr',
     });
     expect(items[0]).not.toHaveProperty('resurfaceVersion');
   });

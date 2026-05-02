@@ -58,7 +58,7 @@ export interface ItemCardData {
 
 export interface BadgeData {
   label: string;
-  type: 'provider' | 'state' | 'ci';
+  type: 'provider' | 'type' | 'state' | 'ci';
   variant: string;
 }
 

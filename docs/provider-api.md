@@ -114,6 +114,7 @@ interface DiscoveredItem {
   url?: string;
   group?: string;
   canonicalId?: string;
+  itemType?: 'issue' | 'pr';
 }
 
 interface DevDocketProvider {
@@ -153,6 +154,7 @@ interface DiscoveredItem {
   url?: string;
   group?: string;
   canonicalId?: string;
+  itemType?: 'issue' | 'pr';
 }
 
 interface Disposable {
@@ -674,6 +676,18 @@ interface DiscoveredItem {
    * for the same entity (e.g., 'github:pull:owner/repo#42').
    */
   canonicalId?: string;
+
+  /**
+   * Optional classification of the item kind. DevDocket renders this as a
+   * dedicated "Issue" or "PR" pill alongside the provider, state, and CI
+   * badges. Set this when your provider knows the kind authoritatively;
+   * leave it undefined for items that don't fit either category (e.g. plain
+   * tickets from a generic source).
+   *
+   * Do NOT infer this in consumers from URL patterns or state strings —
+   * only the provider knows what it actually fetched.
+   */
+  itemType?: 'issue' | 'pr';
 }
 ```
 

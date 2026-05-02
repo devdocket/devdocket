@@ -306,6 +306,7 @@ export class AdoWorkItemProvider extends BaseProvider {
         group: `${org}/${projectName}`,
         reason: 'assigned',
         state: wi.fields['System.State'],
+        itemType: 'issue',
       };
     });
 

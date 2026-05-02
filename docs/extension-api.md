@@ -176,6 +176,17 @@ interface DiscoveredItem {
    * Use a consistent format like 'github:pull:owner/repo#42'.
    */
   canonicalId?: string;
+
+  /**
+   * Optional classification of the item kind. DevDocket renders this as a
+   * dedicated "Issue" or "PR" pill alongside the provider, state, and CI
+   * badges. Set this when your provider knows the kind authoritatively;
+   * leave it undefined for items that don't fit either category.
+   *
+   * Do NOT infer this in consumers from URL patterns or state strings —
+   * only the provider knows what it actually fetched.
+   */
+  itemType?: 'issue' | 'pr';
 }
 ```
 
@@ -187,6 +198,7 @@ interface DiscoveredItem {
 - When a user accepts an item from Inbox/Sources, DevDocket creates and persists a new `WorkItem` in `workitems.json` that includes a snapshot of the item's `title`, along with its `providerId`/`externalId`/`url` as provenance metadata.
 - Use `group` to organize items in the Sources tree. Items with the same group value are nested under a folder.
 - Use `canonicalId` when the same entity might be discovered by multiple providers (e.g., a PR found by both "My PRs" and "PR Reviews"). Items sharing a `canonicalId` are deduplicated in the Inbox — one representative is shown and accept/dismiss propagates to all. Use a consistent format like `github:pull:owner/repo#42`. Items without `canonicalId` show individually (backward compatible). The Sources view is unaffected.
+- Set `itemType` to `'issue'` or `'pr'` when your provider can classify the item kind. DevDocket surfaces this as a separate type pill so users can distinguish issues from pull requests at a glance. Items without `itemType` simply omit the pill — useful for generic / manual / heterogeneous sources where the kind isn't meaningful.
 
 ### Registering a Provider
 

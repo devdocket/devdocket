@@ -376,6 +376,7 @@ export abstract class BaseAdoPrProvider extends BaseProvider {
       description: pr.description ?? undefined,
       url: `${repoUrl}/pullrequest/${pr.pullRequestId}`,
       group: `${projectName}/${repoName}`,
+      itemType: 'pr',
     };
   }
 

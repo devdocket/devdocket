@@ -11,6 +11,31 @@ applyTo: "packages/github/**,packages/ado/**"
 
 These are different base classes — do not mix them.
 
+## Item Type Classification
+
+Set `DiscoveredItem.itemType` to `'issue'` or `'pr'` when the provider knows
+the kind of item it's surfacing. The core extension renders this as a distinct
+type pill (alongside the Provider, State, and CI badges) in both the sidebar
+and editor. The field is purely advisory — leaving it `undefined` simply
+suppresses the type pill, so manual / generic items don't get a misleading
+label.
+
+**Conventions:**
+
+- **GitHub Issues provider** (`githubProvider.ts`): always `'issue'`.
+- **GitHub PR providers** (`githubMyPrsProvider.ts`, `githubPrReviewProvider.ts`):
+  always `'pr'`.
+- **GitHub Mentions provider** (`githubMentionsProvider.ts`): inspect the
+  GitHub API response's `pull_request` field — `pr` if set, `issue` otherwise.
+- **ADO Work Items provider** (`adoWorkItemProvider.ts`): always `'issue'`
+  (work items are issue-shaped, even when their `System.WorkItemType` says
+  `Bug`/`Task`/`User Story`).
+- **ADO PR providers** (`baseAdoPrProvider.ts` and subclasses): always `'pr'`.
+
+**Do not infer** itemType from URL patterns or state strings in the core
+extension — it's the provider's job to classify, since only the provider has
+authoritative knowledge of what it fetched.
+
 ## Stable External IDs
 
 Use `owner/repo#number` format for external IDs, not `html_url`. URLs are mutable (issues can transfer between repos); the parsed format is stable and provides reliable long-term identity.
