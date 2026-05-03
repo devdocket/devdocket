@@ -233,12 +233,12 @@ export class WatcherService implements vscode.Disposable {
       }
       this.prWatches.delete(key);
     } else if (existing && !existing.dismissed) {
-      // Already actively watching ΓÇö return existing unchanged. Used by the
+      // Already actively watching — return existing unchanged. Used by the
       // auto-watch path (which checks isPRWatched first anyway); keeps the
       // public API forgiving for callers that don't pass forceRecreate.
       return existing;
     } else if (existing) {
-      // Previously dismissed ΓÇö delete and recreate fresh.
+      // Previously dismissed — delete and recreate fresh.
       this.prWatches.delete(key);
     }
 

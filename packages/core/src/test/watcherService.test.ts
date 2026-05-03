@@ -448,12 +448,12 @@ describe('WatcherService', () => {
       const childRun = service.getActiveWatches()[0];
       service.dismissWatch(childRun.identifier);
       expect(service.getActiveWatches()).toHaveLength(0);
-      // The PR is still "active" (not dismissed), but has no visible runs ΓÇö
+      // The PR is still "active" (not dismissed), but has no visible runs —
       // exactly the state that hides it from the panel filter.
       expect(service.isPRActive(identifier)).toBe(true);
       expect(service.getChildRuns(service.getPRWatchKey(identifier))).toHaveLength(0);
 
-      // Manual "Watch URL" with forceRecreate ΓÇö wipes and rebuilds.
+      // Manual "Watch URL" with forceRecreate — wipes and rebuilds.
       await service.startPRWatch(identifier, { forceRecreate: true });
       expect(service.getActiveWatches()).toHaveLength(1);
       expect(service.getChildRuns(service.getPRWatchKey(identifier))).toHaveLength(1);
