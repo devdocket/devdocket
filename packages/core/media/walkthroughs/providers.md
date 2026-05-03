@@ -1,16 +1,14 @@
 # Connect a Provider
 
-Providers automatically discover work items from external sources and surface them in the **Incoming** tier of the **DevDocket** sidebar.
+Providers automatically discover work items from external sources.
 
 ## Sample Providers
 
 ### GitHub Provider
 Discovers:
-- Issues assigned to you
-- Issues and PRs that mention you
-- Pull requests you authored or need to review
-
-Each item shows badges in the editor for upstream state (Open / Closed) and PR review status (Approved / Changes requested / etc.) so you can prioritize at a glance.
+- Issues assigned to you or mentioning you
+- Pull requests you created or need to review
+- Configurable per-repository tracking
 
 **Setup:**
 1. Install the **DevDocket GitHub** extension (if not already installed)
@@ -21,7 +19,7 @@ Each item shows badges in the editor for upstream state (Open / Closed) and PR r
 Discovers:
 - Work items assigned to you
 - Pull requests you need to review
-- Pull requests you authored
+- Pipeline runs to watch
 
 **Setup:**
 1. Install the **DevDocket ADO** extension
@@ -30,6 +28,7 @@ Discovers:
 
 ---
 
-**Tip:** Once a provider is connected, browse everything it knows about under the **Sources** tab of the DevDocket sidebar — even items that haven't surfaced in your Incoming tier yet.
+**Next steps:**
+Open the Extensions view and search for "DevDocket" to see available provider extensions!
 
 [Open Extensions](command:workbench.view.extensions)

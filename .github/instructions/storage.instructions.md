@@ -47,4 +47,4 @@ Five globalState keys hold persisted data:
 
 ## Provider Items Are References, Not Copies
 
-Items in the Incoming tier and the Sources tab are read live from the provider's in-memory data. The only persisted state is the `inboxState` enum. This keeps data fresh and avoids stale copies. Never cache or persist provider item data beyond the thin `devdocket.discovered-state` globalState entry.
+Items in Inbox and Sources are read live from the provider's in-memory data. The only persisted state is the `inboxState` enum. This keeps data fresh and avoids stale copies. Never cache or persist provider item data beyond the thin `devdocket.discovered-state` globalState entry.

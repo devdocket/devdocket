@@ -4,57 +4,53 @@ applyTo: "**/views/**"
 
 # View Conventions
 
-## Architecture
+## Tree Item Descriptions
 
-The DevDocket UI is a **single Preact-based webview view** (`devdocket.main`, registered in `packages/core/src/views/mainViewProvider.ts`) plus a separate floating webview panel for CI Watches (`devdocket.watchPanel`). There are **no** VS Code TreeView providers in the core extension — the legacy multi-tree-view layout (Inbox / Queue / Focus / History / Sources) was replaced by a unified tier-based webview as part of #454.
+Use `buildDescription()` from `viewUtils.ts` to construct tree item descriptions. It filters undefined values gracefully. Layout-aware patterns per view:
 
-When adding a new piece of UI:
+- **Inbox**: `group` in tree mode; `group · provider` in flat mode
+- **Queue**: `group` in tree mode; `group · provider` in flat mode
+- **Focus**: `group · state` in tree mode; `group · provider · state` in flat mode
+- **History**: `group · state` in tree mode; `group · provider · state` in flat mode
 
-- Prefer extending the existing tiers / tabs in `mainViewProvider.ts` rather than introducing a new top-level view.
-- The webview entry points are bundled by esbuild from `src/webview/sidebar/`, `src/webview/editor/`, and `src/webview/watchPanel/` into `webview-dist/*.js`.
+## Shared View Utilities (`viewUtils.ts`)
 
-## Tier Names (User-Facing)
+- **`buildWorkItemTooltip(item, title, options?)`** — Unified tooltip builder with configurable `showState`, `timestamp` field, `timestampLabel`, and `notesStyle`. Use instead of per-view private `buildTooltip` methods.
+- **`getWorkItemIcon(state)`** — Single icon-resolution function for all `WorkItemState` values. Use instead of per-view `getIcon` methods.
 
-The My Work tab renders five tiers in this order. Use these exact names in any user-facing text (status bar, notifications, walkthroughs, docs):
+When extracting shared view utilities, use options objects (not method overloading) to handle per-view differences.
 
-1. **Incoming** (icon `↓`) — provider items with `inboxState === 'unseen'`.
-2. **In Progress** (icon `▶`) — `WorkItemState.InProgress`.
-3. **Ready to Start** (icon `○`) — `WorkItemState.New` (the "queue" concept).
-4. **Paused** (icon `⏸`) — `WorkItemState.Paused`.
-5. **Done** (icon `✓`) — `WorkItemState.Done` and `Archived`.
+## Layout Toggle
 
-Do **not** use the legacy view names ("Inbox view", "Queue view", "Focus view", "History view") in user-facing text. Internal docs/code may still reference "inbox state" / "queue" as concepts where it's clearer.
+Each view supports flat/tree layout modes:
+
+- Two command IDs per toggle, each with its own icon
+- Context keys set on activation + config change listener
+- Use `LayoutState` class from `viewLayout.ts` for layout management
+
+## Tree Node Counts
+
+Parent nodes show `(N)` child count in their description. Unhealthy providers show "refresh failed" instead of a count.
 
 ## Provider Health Indicators
 
-In the Sources tab, providers that have failed to refresh display:
-- A warning indicator (`⚠`) next to the provider name.
-- A `health-warning` CSS class on the section so theming can color it.
+- Warning icon (`problemsWarningIcon.foreground`) when provider is unhealthy
+- Description shows "refresh failed" text
+- Tooltip always shows provider name, last refresh time (relative), and error details when unhealthy
+- Unhealthy providers with 0 items still appear in Sources tree so the warning is visible
 
-The status-bar item also reflects unhealthy providers; see `services/providerHealthStatusBar.ts`.
+## Context Value Suffixes
 
-## Badges (`packages/core/src/views/badges.ts`)
-
-Badges shown next to item titles fall into four categories:
-
-1. **Provider** (GitHub / ADO / Manual) — derived from `providerId`.
-2. **Type** (Issue / PR) — derived from `DiscoveredItem.itemType`.
-3. **CI** (passed / failed / running / etc.) — derived from the watcher service.
-4. **Provider-supplied** — declared by providers via `DiscoveredItem.badges` and rendered through `buildProviderBadges(item, view)`.
-
-Core never infers state badges from `DiscoveredItem.state` or `reason` strings — providers must declare them explicitly. See `.github/instructions/providers.instructions.md` for the badge conventions.
+Tree items append contextValue suffixes for conditional menu items:
+- `.hasPrUrl` — when item has both `url` and `isPullRequest: true`, enabling "Watch CI" menus
 
 ## PanelManager Lifecycle
 
-`WorkItemEditorPanel` and `IncomingPreviewPanel` use a `PanelManager` instantiated during `activate()` and disposed with the extension context. The static `setPanelManager()` pattern preserves the static API facade while scoping panel cache ownership to the extension lifecycle.
+`WorkItemEditorPanel` uses a `PanelManager` class instantiated during `activate()` and disposed with the extension context. The static `setPanelManager()` pattern preserves the static API facade while scoping panel cache ownership to the extension lifecycle.
 
 ## Webview Security
 
-- CSP: `default-src 'none'` — whitelist only what's needed (`style-src 'unsafe-inline'`, `script-src 'nonce-…'`).
-- Use `escapeHtml()` for text content, `escapeAttr()` for attribute values (different escape sets).
-- External links via `postMessage` + `isSafeUrl()` — never call `window.open`/anchor `href` directly from webview JS.
-- Use `appendText()` for user-controlled strings in `MarkdownString`, not `appendMarkdown()` — prevents markdown injection.
-
-## Theming
-
-Tier colors are defined in `packages/core/src/webview/shared/colors.ts` with both dark and light variants. Use `buildTierColorCss(theme)` to inject the `--tier-*` CSS custom properties at the top of any new webview that wants to use them. The CI Watches panel does this so its tier-colored cards match the sidebar.
+- CSP: `default-src 'none'` — whitelist only what's needed
+- Use `escapeHtml()` for text content, `escapeAttr()` for attribute values (different escape sets)
+- External links via `postMessage` + `isSafeUrl()` — never open URLs directly from webview
+- Use `appendText()` for user-controlled strings in `MarkdownString`, not `appendMarkdown()` — prevents markdown injection
