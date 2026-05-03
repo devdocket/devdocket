@@ -38,7 +38,7 @@
       {
         "id": "devdocket.gettingStarted",
         "title": "Get Started with DevDocket",
-        "description": "Learn how to manage your work items across Inbox, Queue, Focus, and History",
+        "description": "Learn how to manage your work items across the Incoming, Ready to Start, In Progress, and History tiers",
         "steps": [
           {
             "id": "createFirstItem",
