@@ -4,19 +4,22 @@ The **DevDocket** sidebar is your unified work hub. It has two tabs:
 
 ## My Work
 
-Your active workflow, organized into tiers. Items flow from top to bottom as you make progress.
+Your active workflow, organized into tiers. The tiers appear in this order so the most actionable work stays near the top.
 
 ### ↓ Incoming
 New items discovered by providers (GitHub issues, pull requests, ADO work items, etc.). Click an item to preview it without committing, then **Accept** to move it to **Ready to Start**, **Start** to send it directly to **In Progress**, or **Dismiss** if it's not relevant. A blue dot marks items you haven't seen yet.
 
-### ▣ Ready to Start
+### ▶ In Progress
+What you're actively working on (the **In Progress** state). Drag to reorder. Hover actions let you **✓ Complete**, **⏸ Pause**, or **✗ Dismiss**.
+
+### ○ Ready to Start
 Your personal backlog of items waiting to be picked up. Items here are in the **New** state. Drag to reorder by priority. Click the **▶ Start** action on hover to move an item into focus.
 
-### ▶ In Progress
-What you're actively working on (**In Progress** or **Paused**). Drag to reorder. Hover actions let you **✓ Complete**, **⏸ Pause**, or **▶ Resume**.
+### ⏸ Paused
+Items you've temporarily set aside. Hover **▶ Resume** to bring one back into In Progress, or **✓ Complete** if you decide it's actually done.
 
-### ✓ History
-Completed and archived items. Hover **↩ Requeue** to move something back, or use the **Clear** action in the header to clean things up.
+### ✓ Done
+Completed items. Hover **↩ Requeue** to move something back to Ready to Start, or use the **Clear** action in the header to clean things up.
 
 ## Sources
 
@@ -28,11 +31,12 @@ A floating panel that monitors GitHub Actions and Azure DevOps Pipelines runs an
 
 ---
 
-**The typical flow:**
+**The typical lifecycle of an item:**
 
 1. A provider discovers an item → appears in **Incoming**
 2. You triage it → moves to **Ready to Start** (or directly to **In Progress** with the Start action)
 3. You begin work → moves to **In Progress**
-4. You finish → moves to **History**
+4. (optional) You set it aside temporarily → moves to **Paused**
+5. You finish → moves to **Done**
 
 You can also create manual items via the **+** button — they go straight to **Ready to Start**.
