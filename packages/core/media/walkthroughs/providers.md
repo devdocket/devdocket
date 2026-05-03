@@ -8,7 +8,7 @@ Providers automatically discover work items from external sources and surface th
 Discovers:
 - Issues assigned to you
 - Issues and PRs that mention you
-- Pull requests you authored or need to review
+- Pull requests you authored, are assigned to, or have been requested to review
 
 Each item shows badges in the editor for upstream state (Open / Closed) and PR review status (Approved / Changes requested / etc.) so you can prioritize at a glance.
 
