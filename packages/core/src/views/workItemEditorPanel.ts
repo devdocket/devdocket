@@ -510,22 +510,13 @@ export class WorkItemEditorPanel {
  * Compose the badge list shown in the editor: provider, type, then the
  * provider-supplied badges declared on the {@link DiscoveredItem}. CI badges
  * are not added here — the editor doesn't currently surface CI status inline.
- *
- * `isIncoming` is true when this is rendered for the Incoming preview panel
- * (the item has not yet been accepted into the queue), so reason badges with
- * {@link ProviderBadge.incomingOnly} still apply. For a regular WorkItem
- * editor the item has already been accepted, so leave `isIncoming` at false.
  */
-export function composeEditorBadges(
-  providerId?: string,
-  discoveredItem?: DiscoveredItem,
-  isIncoming: boolean = false,
-): BadgeData[] {
+export function composeEditorBadges(providerId?: string, discoveredItem?: DiscoveredItem): BadgeData[] {
   const badges: BadgeData[] = [];
   const providerBadge = buildProviderBadge(providerId);
   if (providerBadge) badges.push(providerBadge);
   const typeBadge = buildTypeBadge(discoveredItem);
   if (typeBadge) badges.push(typeBadge);
-  badges.push(...buildProviderBadges(discoveredItem, 'editor', isIncoming));
+  badges.push(...buildProviderBadges(discoveredItem, 'editor'));
   return badges;
 }

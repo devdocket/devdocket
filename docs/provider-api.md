@@ -212,12 +212,10 @@ class JiraProvider implements DevDocketProvider {
       // Omit it for heterogeneous or generic sources.
       itemType: 'issue',
       // badges are provider-declared pills; core never infers them from
-      // state/reason strings. Use `incomingOnly: true` for "why did this
-      // surface?" reason badges that should disappear after acceptance.
-      // Use `show: 'editor'` for verbose state labels that would clutter
-      // the sidebar.
+      // state/reason strings. Use `show: 'editor'` for verbose state labels
+      // that would clutter the sidebar.
       badges: [
-        { label: 'Assigned to me', variant: 'warning', incomingOnly: true },
+        { label: 'Assigned to me', variant: 'warning' },
         { label: ticket.status, variant: 'info', show: 'editor' },
       ],
     }));
@@ -552,18 +550,16 @@ The core never infers badges from `state` or `reason` strings, so if you want a 
 
 **`show` filter:** Defaults to `'both'`. Use `show: 'editor'` for verbose state labels that would clutter the sidebar (e.g. a custom workflow state). Use `show: 'sidebar'` for the rare badge that's only useful during inbox triage.
 
-**`incomingOnly` filter:** Set `incomingOnly: true` for "why did this surface?" reason badges (e.g. `Mentioned`, `Assigned`, `Review requested`). The badge then only renders while the item is in its discovery context — the sidebar's Incoming tier and the Incoming preview panel — and disappears once the user accepts the item into the queue. Your provider keeps emitting the badge on every refresh; core decides whether to render it based on the item's lifecycle state.
-
 ```ts
 badges: [
-  // Disappears after the user accepts the item into the queue.
-  { label: 'Mentioned', variant: 'warning', incomingOnly: true },
+  // Reason badge tells the user why this item surfaced.
+  { label: 'Mentioned', variant: 'warning' },
   // Verbose upstream state that should only show in the editor.
   { label: 'In Review', variant: 'info', show: 'editor' },
 ],
 ```
 
-When adding a new provider, default to declaring **at least** one reason badge with `incomingOnly: true` plus a state badge with `show: 'editor'` so users can see *why* the item appeared during triage and what the upstream state is in the editor.
+When adding a new provider, default to declaring **at least** one reason badge (e.g. `'Mentioned'`, `'Review requested'`) plus a state badge with `show: 'editor'` so users can see *why* the item appeared and what the upstream state is in the editor.
 
 ### Use `canonicalId` for cross-provider deduplication
 
@@ -764,14 +760,6 @@ interface ProviderBadge {
   variant: 'neutral' | 'info' | 'success' | 'warning' | 'danger';
   /** Defaults to 'both'. */
   show?: 'sidebar' | 'editor' | 'both';
-  /**
-   * If true, the badge is only shown while the item is in its discovery
-   * (incoming) context — i.e. in the sidebar's Incoming tier and the
-   * Incoming preview panel. Once the user accepts the item into the queue,
-   * the badge disappears. Use for "why did this surface?" reason badges
-   * like 'Mentioned' or 'Review requested'.
-   */
-  incomingOnly?: boolean;
 }
 ```
 

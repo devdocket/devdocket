@@ -182,7 +182,7 @@ describe('GitHubPrReviewProvider', () => {
       reason: 'review_requested',
       canonicalId: 'github:pull:org/myrepo#42',
       itemType: 'pr',
-      badges: [{ label: 'Review requested', variant: 'warning', incomingOnly: true }],
+      badges: [{ label: 'Review requested', variant: 'warning' }],
     });
   });
 

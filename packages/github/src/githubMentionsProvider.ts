@@ -54,7 +54,7 @@ export class GitHubMentionsProvider extends BaseGitHubProvider {
         canonicalId: `github:${isPr ? 'pull' : 'issue'}:${repoName}#${issue.number}`,
         itemType: isPr ? 'pr' : 'issue',
         badges: [
-          { label: 'Mentioned', variant: 'warning', incomingOnly: true },
+          { label: 'Mentioned', variant: 'warning' },
           ...buildIssueStateBadge(issue.state),
         ],
         ...(issue.state ? { state: issue.state } : {}),

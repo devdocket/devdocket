@@ -246,7 +246,7 @@ export class MainViewProvider implements vscode.WebviewViewProvider {
     return {
       id: existingWorkItem?.id ?? key,
       title: discoveredItem.title,
-      badges: this.buildBadges(providerId, discoveredItem, discoveredItem.url, true),
+      badges: this.buildBadges(providerId, discoveredItem, discoveredItem.url),
       repoAnnotation: discoveredItem.group ?? existingWorkItem?.group,
       tierType: 'incoming',
       isUnseen: !this.readStateStore.has(key),
@@ -265,7 +265,7 @@ export class MainViewProvider implements vscode.WebviewViewProvider {
     return {
       id: item.id,
       title: item.title,
-      badges: this.buildBadges(item.providerId, discoveredItem, item.url, false),
+      badges: this.buildBadges(item.providerId, discoveredItem, item.url),
       repoAnnotation: item.group ?? discoveredItem?.group,
       tierType,
       isUrgent: this.isUrgentWorkItem(item, discoveredItemMap),
@@ -274,7 +274,7 @@ export class MainViewProvider implements vscode.WebviewViewProvider {
     };
   }
 
-  private buildBadges(providerId?: string, discoveredItem?: DiscoveredItem, itemUrl?: string, isIncoming: boolean = false): BadgeData[] {
+  private buildBadges(providerId?: string, discoveredItem?: DiscoveredItem, itemUrl?: string): BadgeData[] {
     const badges: BadgeData[] = [];
     const providerBadge = buildProviderBadge(providerId);
     if (providerBadge) {
@@ -286,7 +286,7 @@ export class MainViewProvider implements vscode.WebviewViewProvider {
       badges.push(typeBadge);
     }
 
-    badges.push(...buildProviderBadges(discoveredItem, 'sidebar', isIncoming));
+    badges.push(...buildProviderBadges(discoveredItem, 'sidebar'));
 
     const ciBadge = this.buildCIBadge(discoveredItem?.url ?? itemUrl);
     if (ciBadge) {

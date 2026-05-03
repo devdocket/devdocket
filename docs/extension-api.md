@@ -214,14 +214,6 @@ interface ProviderBadge {
   variant: 'neutral' | 'info' | 'success' | 'warning' | 'danger';
   /** Defaults to 'both'. Use 'editor' for verbose detail badges. */
   show?: 'sidebar' | 'editor' | 'both';
-  /**
-   * If true, the badge is only shown while the item is in its discovery
-   * (incoming) context — i.e. in the sidebar's Incoming tier and the
-   * Incoming preview panel. Once the user accepts the item into the queue,
-   * the badge disappears. Use for "why did this surface?" reason badges
-   * like 'Mentioned' or 'Review requested'.
-   */
-  incomingOnly?: boolean;
 }
 ```
 
@@ -234,7 +226,7 @@ interface ProviderBadge {
 - Use `group` to organize items in the Sources tree. Items with the same group value are nested under a folder.
 - Use `canonicalId` when the same entity might be discovered by multiple providers (e.g., a PR found by both "My PRs" and "PR Reviews"). Items sharing a `canonicalId` are deduplicated in the Inbox — one representative is shown and accept/dismiss propagates to all. Use a consistent format like `github:pull:owner/repo#42`. Items without `canonicalId` show individually (backward compatible). The Sources view is unaffected.
 - Set `itemType` to `'issue'` or `'pr'` when your provider can classify the item kind. DevDocket surfaces this as a separate type pill so users can distinguish issues from pull requests at a glance. Items without `itemType` simply omit the pill — useful for generic / manual / heterogeneous sources where the kind isn't meaningful.
-- Use `badges` to surface state, reason, or any other custom annotation. The core deliberately doesn't interpret the `state` or `reason` strings any more — those are kept on `DiscoveredItem` for provenance/dedup purposes only. If you want a pill to show, declare it explicitly. Use `show: 'editor'` for verbose detail that would clutter the sidebar, and `incomingOnly: true` for "why did this surface?" reason badges that should disappear once the user accepts the item.
+- Use `badges` to surface state, reason, or any other custom annotation. The core deliberately doesn't interpret the `state` or `reason` strings any more — those are kept on `DiscoveredItem` for provenance/dedup purposes only. If you want a pill to show, declare it explicitly. Use `show: 'editor'` for verbose detail that would clutter the sidebar.
 
 ### Registering a Provider
 
@@ -426,10 +418,9 @@ class MyTaskProvider implements DevDocketProvider {
       // Classify the kind of item for the type pill (omit for generic sources)
       itemType: 'issue',
       // Provider-declared pills — core won't infer them from state/reason.
-      // - incomingOnly: hide once the user accepts the item into the queue
-      // - show: 'editor': only render in the editor (keeps sidebar uncluttered)
+      // Use show: 'editor' to keep verbose state labels out of the sidebar.
       badges: [
-        { label: 'Assigned', variant: 'warning', incomingOnly: true },
+        { label: 'Assigned', variant: 'warning' },
         { label: task.status, variant: 'info', show: 'editor' },
       ],
     }));

@@ -47,7 +47,7 @@ export class GitHubIssueProvider extends BaseGitHubProvider {
         canonicalId: `github:issue:${repoName}#${issue.number}`,
         itemType: 'issue',
         badges: [
-          { label: 'Assigned', variant: 'warning', incomingOnly: true },
+          { label: 'Assigned', variant: 'warning' },
           ...buildIssueStateBadge(issue.state),
         ],
         ...(issue.state ? { state: issue.state } : {}),
