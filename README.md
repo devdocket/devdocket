@@ -91,7 +91,7 @@ DevDocket is a monorepo with five VS Code extensions and a shared library:
 packages/
 ├── core/              # The hub extension (UI, lifecycle, plugin API)
 ├── github/            # GitHub issues, mentions, PR reviews, my-PRs + Actions and PR watcher
-├── ado/               # Azure DevOps work items, PR reviews, my-PRs + Pipelines watcher
+├── ado/               # Azure DevOps work items, PR reviews, my-PRs + Pipelines and PR watcher
 ├── start-git-work/    # Branch + worktree action
 ├── ai-reviewer/       # AI code review action
 └── shared/            # Shared library (BaseProvider, utilities)
