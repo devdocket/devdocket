@@ -50,7 +50,7 @@ Core never infers state badges from `DiscoveredItem.state` or `reason` strings �
 
 ## Webview Security
 
-- CSP: `default-src 'none'` — whitelist only what's needed (`style-src 'unsafe-inline'`, `script-src 'nonce-…'`).
+- CSP: `default-src 'none'` — whitelist only what's needed (`style-src 'nonce-…'`, `script-src 'nonce-…'`). All three webviews (`mainViewProvider.ts`, `watchPanelProvider.ts`, `editorPanelHtml.ts`) gate inline `<style>` and `<script>` tags through a per-mount CSPRNG nonce; do **not** introduce `'unsafe-inline'` for either.
 - Use `escapeHtml()` for text content, `escapeAttr()` for attribute values (different escape sets).
 - External links via `postMessage` + `isSafeUrl()` — never call `window.open`/anchor `href` directly from webview JS.
 - Use `appendText()` for user-controlled strings in `MarkdownString`, not `appendMarkdown()` — prevents markdown injection.
