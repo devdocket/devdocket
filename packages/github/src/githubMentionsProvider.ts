@@ -4,7 +4,7 @@ import { BaseGitHubProvider } from './baseGithubProvider';
 import { logger } from './logger';
 import { parseRepoFromUrls } from './parseRepo';
 import { matchesRepoPatterns } from './repoPattern';
-import { getHeaders, getGitHubAuthHeaders, retryWithAuth, throwApiError, parseCanonicalRepo, fetchClosedGitHubItems, type GitHubIssue, type GitHubSearchResponse } from './githubApiHelpers';
+import { getHeaders, getGitHubAuthHeaders, retryWithAuth, throwApiError, parseCanonicalRepo, fetchClosedGitHubItems, buildIssueStateBadge, type GitHubIssue, type GitHubSearchResponse } from './githubApiHelpers';
 
 const MENTIONS_ACTIVATED_KEY = 'mentionsActivatedAt';
 
@@ -53,7 +53,10 @@ export class GitHubMentionsProvider extends BaseGitHubProvider {
         reason: 'mentioned',
         canonicalId: `github:${isPr ? 'pull' : 'issue'}:${repoName}#${issue.number}`,
         itemType: isPr ? 'pr' : 'issue',
-        badges: [{ label: 'Mentioned', variant: 'warning' }],
+        badges: [
+          { label: 'Mentioned', variant: 'warning' },
+          ...buildIssueStateBadge(issue.state),
+        ],
         ...(issue.state ? { state: issue.state } : {}),
       };
     });

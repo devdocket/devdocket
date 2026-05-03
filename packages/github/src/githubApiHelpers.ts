@@ -1,5 +1,5 @@
 import * as vscode from 'vscode';
-import { isValidGitHubRepo, createAbortError, runWorkerPoolSettled } from '@devdocket/shared';
+import { isValidGitHubRepo, createAbortError, runWorkerPoolSettled, type ProviderBadge } from '@devdocket/shared';
 import { logger } from './logger';
 
 export interface GitHubIssue {
@@ -14,6 +14,25 @@ export interface GitHubIssue {
 
 export interface GitHubSearchResponse {
   items: GitHubIssue[];
+}
+
+/**
+ * Builds the editor-only state badge for a GitHub issue or PR. Returns an
+ * empty array when no state is provided so the result can be spread into a
+ * badges list unconditionally. Open items render as info; everything else
+ * (closed, merged, etc.) is shown as a neutral pill.
+ */
+export function buildIssueStateBadge(state?: string): ProviderBadge[] {
+  if (!state) {
+    return [];
+  }
+  const normalized = state.toLowerCase();
+  const label = state.charAt(0).toUpperCase() + state.slice(1).toLowerCase();
+  return [{
+    label,
+    variant: normalized === 'open' ? 'info' : 'neutral',
+    show: 'editor',
+  }];
 }
 
 /**

@@ -117,6 +117,7 @@ describe('AdoWorkItemProvider', () => {
       reason: 'assigned',
       state: 'Active',
       itemType: 'issue',
+      badges: [{ label: 'Active', variant: 'info', show: 'editor' }],
     });
     expect(items[1]).toEqual({
       externalId: 'myorg/MyProject/2',
@@ -127,6 +128,7 @@ describe('AdoWorkItemProvider', () => {
       reason: 'assigned',
       state: 'Active',
       itemType: 'issue',
+      badges: [{ label: 'Active', variant: 'info', show: 'editor' }],
     });
   });
 

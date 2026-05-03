@@ -3,7 +3,7 @@ import { DiscoveredItem, combineSignals, createAbortError, safeDecodeComponent, 
 import { BaseGitHubProvider } from './baseGithubProvider';
 import { logger } from './logger';
 import { parseRepoFromUrls } from './parseRepo';
-import { getHeaders, getGitHubAuthHeaders, retryWithAuth, throwApiError, parseCanonicalRepo, fetchClosedGitHubItems, type GitHubIssue } from './githubApiHelpers';
+import { getHeaders, getGitHubAuthHeaders, retryWithAuth, throwApiError, parseCanonicalRepo, fetchClosedGitHubItems, buildIssueStateBadge, type GitHubIssue } from './githubApiHelpers';
 import { matchesRepoPatterns } from './repoPattern';
 
 /**
@@ -46,7 +46,10 @@ export class GitHubIssueProvider extends BaseGitHubProvider {
         reason: 'assigned',
         canonicalId: `github:issue:${repoName}#${issue.number}`,
         itemType: 'issue',
-        badges: [{ label: 'Assigned', variant: 'warning' }],
+        badges: [
+          { label: 'Assigned', variant: 'warning' },
+          ...buildIssueStateBadge(issue.state),
+        ],
         ...(issue.state ? { state: issue.state } : {}),
       };
     });

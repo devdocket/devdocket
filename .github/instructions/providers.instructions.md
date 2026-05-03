@@ -69,16 +69,18 @@ during inbox triage.
 
 | Provider | Badges emitted |
 |---|---|
-| `githubProvider` (Issues) | `[{ label: 'Assigned', variant: 'warning' }]` |
-| `githubMentionsProvider` | `[{ label: 'Mentioned', variant: 'warning' }]` |
-| `githubPrReviewProvider` | `[{ label: 'Review requested', variant: 'warning' }]` |
-| `githubMyPrsProvider` | One badge mapped from the computed PR status (`Draft` → neutral, `Changes requested` → danger, `Approved`/`Ready to merge` → success, `Review received`/`Waiting on reviews` → info). See the `statusToBadge` helper. |
-| `adoWorkItemProvider` | None. ADO work item states are too varied/team-specific to map meaningfully. |
-| `adoMyPrsProvider`, `adoPrReviewProvider` | None for now (matching the ADO Work Items convention). |
+| `githubProvider` (Issues) | `Assigned` (warning) + `Open`/`Closed` state badge (`show: 'editor'`) |
+| `githubMentionsProvider` | `Mentioned` (warning) + `Open`/`Closed` state badge (`show: 'editor'`) |
+| `githubPrReviewProvider` | `Review requested` (warning) + `Open`/`Closed` state badge (`show: 'editor'`) |
+| `githubMyPrsProvider` | One badge mapped from the computed PR status (`Draft` → neutral, `Changes requested` → danger, `Approved`/`Ready to merge` → success, `Review received`/`Waiting on reviews` → info), shown in both views since the status is also the state. See the `statusToBadge` helper. |
+| `adoWorkItemProvider` | State badge from `System.State` (`show: 'editor'`, `info` variant). |
+| `adoPrReviewProvider` (and other non-MyPrs subclasses of `BaseAdoPrProvider`) | State badge from `pr.status` via `buildAdoPrStateBadge` (`show: 'editor'`; `active` → info, others → neutral). |
+| `adoMyPrsProvider` | State badge from the computed vote status via `buildAdoMyPrsStateBadge` (`show: 'editor'`; `Draft` → neutral, `Approved` → success, `Rejected` → danger, `Waiting for author` → warning, others → info). |
 
 When adding a new provider, default to declaring **at least** a reason badge
-(e.g. `'Mentioned'`, `'Review requested'`) so users can tell at a glance why
-the item appeared in their inbox.
+(e.g. `'Mentioned'`, `'Review requested'`) plus a state badge with
+`show: 'editor'` so users can see the upstream state in the editor without
+cluttering the sidebar.
 
 ## Stable External IDs
 

@@ -1,5 +1,5 @@
 import { combineSignals, createAbortError, runWorkerPool, type DiscoveredItem } from '@devdocket/shared';
-import { BaseAdoPrProvider, type AdoPullRequest } from './baseAdoPrProvider';
+import { BaseAdoPrProvider, buildAdoMyPrsStateBadge, type AdoPullRequest } from './baseAdoPrProvider';
 import { logger } from './logger';
 import type { OrgConfig } from './configParser';
 
@@ -17,9 +17,11 @@ export class AdoMyPrsProvider extends BaseAdoPrProvider {
 
   protected override mapPrToItem(pr: AdoPullRequest, org: string): DiscoveredItem {
     const { resurfaceVersion: _ignored, ...item } = super.mapPrToItem(pr, org);
-    return pr.isDraft
-      ? { ...item, state: 'Draft' }
-      : item;
+    if (pr.isDraft) {
+      const badge = buildAdoMyPrsStateBadge('Draft');
+      return { ...item, state: 'Draft', ...(badge ? { badges: [badge] } : {}) };
+    }
+    return item;
   }
 
   protected override async postProcessItems(items: DiscoveredItem[], token: string, signal?: AbortSignal): Promise<void> {
@@ -52,9 +54,12 @@ export class AdoMyPrsProvider extends BaseAdoPrProvider {
         }
 
         const detail = (await response.json()) as AdoPullRequest;
+        const voteState = this.getVoteStatus(detail);
+        const badge = buildAdoMyPrsStateBadge(voteState);
         items[index] = {
           ...item,
-          state: this.getVoteStatus(detail),
+          state: voteState,
+          ...(badge ? { badges: [badge] } : {}),
         };
       } catch (err) {
         if (err instanceof Error && err.name === 'AbortError' && signal?.aborted) {

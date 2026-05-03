@@ -139,6 +139,7 @@ describe('AdoMyPrsProvider', () => {
       reason: 'You authored this PR',
       state: 'Waiting on reviews',
       itemType: 'pr',
+      badges: [{ label: 'Waiting on reviews', variant: 'info', show: 'editor' }],
     });
     expect(items[0]).not.toHaveProperty('resurfaceVersion');
   });
