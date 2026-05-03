@@ -252,10 +252,13 @@ interface DiscoveredItem {
 
   /**
    * Optional opaque version token. When present, DevDocket uses it to detect
-   * "soft" updates: if the value changes between refreshes, DevDocket may
-   * resurface the item by re-marking it `unseen` (depending on the work
-   * item's current state — items already in progress are typically not
-   * resurfaced; items in `New` may be).
+   * "soft" updates: if the value changes between refreshes, DevDocket
+   * SUPPRESSES resurfacing while the linked work item is still active
+   * (`New`, `InProgress`, or `Paused`) — the new version is silently
+   * backfilled and a `version-updated` activity entry is logged. Once the
+   * work item is no longer active (it was completed, archived, deleted,
+   * or never existed), a subsequent version change re-marks the discovered
+   * item `unseen` so it reappears in the Incoming tier.
    *
    * Use a stable, opaque value (commit SHA, ETag, updated_at timestamp).
    * See `docs/provider-discovery.md#resurfacing` for the full semantics.
@@ -263,10 +266,10 @@ interface DiscoveredItem {
   version?: string;
 
   /**
-   * Optional opaque resurface token. Behaves like `version` but always
-   * resurfaces (regardless of work item state). Use this for changes that
-   * unconditionally warrant the user's attention — e.g. a new PR review
-   * iteration that re-requests review.
+   * Optional opaque resurface token. Behaves like `version` but ALWAYS
+   * resurfaces on a value change, regardless of the work item's state.
+   * Use this for changes that unconditionally warrant the user's
+   * attention — e.g. a new PR review iteration that re-requests review.
    */
   resurfaceVersion?: string;
 }
