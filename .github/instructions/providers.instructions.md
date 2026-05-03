@@ -65,22 +65,33 @@ By default a badge renders in both the sidebar and the editor. Set
 ADO custom workflow state); set `show: 'sidebar'` for badges only useful
 during inbox triage.
 
+### `incomingOnly` filter
+
+Set `incomingOnly: true` for "why did this surface?" reason badges
+(e.g. `Mentioned`, `Assigned`, `Review requested`). The badge then shows
+only while the item is in its discovery context — the sidebar's Incoming
+tier and the Incoming preview panel — and disappears once the user accepts
+the item into the queue. The provider keeps emitting the badge on every
+refresh; core decides whether to render it based on the item's lifecycle
+state, so providers don't need to know about acceptance.
+
 ### Per-provider conventions
 
 | Provider | Badges emitted |
 |---|---|
-| `githubProvider` (Issues) | `Assigned` (warning) + `Open`/`Closed` state badge (`show: 'editor'`) |
-| `githubMentionsProvider` | `Mentioned` (warning) + `Open`/`Closed` state badge (`show: 'editor'`) |
-| `githubPrReviewProvider` | `Review requested` (warning) + `Open`/`Closed` state badge (`show: 'editor'`) |
+| `githubProvider` (Issues) | `Assigned` (warning, `incomingOnly`) + `Open`/`Closed` state badge (`show: 'editor'`) |
+| `githubMentionsProvider` | `Mentioned` (warning, `incomingOnly`) + `Open`/`Closed` state badge (`show: 'editor'`) |
+| `githubPrReviewProvider` | `Review requested` (warning, `incomingOnly`) + `Open`/`Closed` state badge (`show: 'editor'`) |
 | `githubMyPrsProvider` | One badge mapped from the computed PR status (`Draft` → neutral, `Changes requested` → danger, `Approved`/`Ready to merge` → success, `Review received`/`Waiting on reviews` → info), shown in both views since the status is also the state. See the `statusToBadge` helper. |
 | `adoWorkItemProvider` | State badge from `System.State` (`show: 'editor'`, `info` variant). |
 | `adoPrReviewProvider` (and other non-MyPrs subclasses of `BaseAdoPrProvider`) | State badge from `pr.status` via `buildAdoPrStateBadge` (`show: 'editor'`; `active` → info, others → neutral). |
 | `adoMyPrsProvider` | State badge from the computed vote status via `buildAdoMyPrsStateBadge` (`show: 'editor'`; `Draft` → neutral, `Approved` → success, `Rejected` → danger, `Waiting for author` → warning, others → info). |
 
 When adding a new provider, default to declaring **at least** a reason badge
-(e.g. `'Mentioned'`, `'Review requested'`) plus a state badge with
-`show: 'editor'` so users can see the upstream state in the editor without
-cluttering the sidebar.
+with `incomingOnly: true` (e.g. `'Mentioned'`, `'Review requested'`) plus a
+state badge with `show: 'editor'`. The reason badge tells the user *why*
+the item appeared during triage and disappears after acceptance; the state
+badge gives upstream context in the editor without cluttering the sidebar.
 
 ## Stable External IDs
 

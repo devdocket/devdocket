@@ -54,14 +54,22 @@ export function buildTypeBadge(discoveredItem?: DiscoveredItem): BadgeData | und
  * Map provider-declared {@link ProviderBadge} entries into the renderable
  * {@link BadgeData} shape, filtered to a target view. Providers control the
  * label and severity; core picks the actual colors via {@link variantToColorKey}.
+ *
+ * `isIncoming` indicates the item is being rendered in its discovery context
+ * (sidebar Incoming tier or Incoming preview panel). Badges marked
+ * {@link ProviderBadge.incomingOnly} are suppressed when `isIncoming` is
+ * false so that "reason" badges (Mentioned, Assigned, etc.) disappear once
+ * the user accepts the item into the queue.
  */
 export function buildProviderBadges(
   discoveredItem: DiscoveredItem | undefined,
   view: 'sidebar' | 'editor',
+  isIncoming: boolean = false,
 ): BadgeData[] {
   if (!discoveredItem?.badges?.length) return [];
   return discoveredItem.badges
     .filter(badge => (badge.show ?? 'both') === 'both' || badge.show === view)
+    .filter(badge => !badge.incomingOnly || isIncoming)
     .map(badge => ({
       label: badge.label,
       type: 'provider-supplied',

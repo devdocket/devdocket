@@ -73,7 +73,7 @@ export class GitHubPrReviewProvider extends BaseGitHubProvider {
         canonicalId: `github:pull:${repoName}#${pr.number}`,
         itemType: 'pr',
         badges: [
-          { label: 'Review requested', variant: 'warning' },
+          { label: 'Review requested', variant: 'warning', incomingOnly: true },
           ...buildIssueStateBadge(pr.state),
         ],
       };

@@ -97,6 +97,18 @@ export interface ProviderBadge {
    * where the badge is only useful in the inbox triage flow.
    */
   show?: 'sidebar' | 'editor' | 'both';
+  /**
+   * If true, the badge is only shown while the item is in its discovery
+   * (incoming) context — i.e. in the sidebar's Incoming tier and in the
+   * Incoming preview panel. Once the user accepts the item into the queue,
+   * the badge disappears. Use this for "why did this surface?" reason
+   * badges (e.g. `Mentioned`, `Assigned`, `Review requested`) that lose
+   * meaning once the user has triaged the item.
+   *
+   * Composes with {@link show}: a badge is rendered when both filters allow
+   * it (matching view AND, if `incomingOnly`, the item is incoming).
+   */
+  incomingOnly?: boolean;
 }
 
 /**

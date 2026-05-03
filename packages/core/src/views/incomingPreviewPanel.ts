@@ -235,7 +235,7 @@ export class IncomingPreviewPanel {
       group: discoveredItem.group,
       createdAt: Date.now(),
       updatedAt: Date.now(),
-      badges: composeEditorBadges(this.providerId, discoveredItem),
+      badges: composeEditorBadges(this.providerId, discoveredItem, true),
       isProviderManaged: true,
       validTransitions: [],
       hasActions: false,

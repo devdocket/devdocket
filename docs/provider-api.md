@@ -713,6 +713,14 @@ interface ProviderBadge {
   variant: 'neutral' | 'info' | 'success' | 'warning' | 'danger';
   /** Defaults to 'both'. */
   show?: 'sidebar' | 'editor' | 'both';
+  /**
+   * If true, the badge is only shown while the item is in its discovery
+   * (incoming) context — i.e. in the sidebar's Incoming tier and the
+   * Incoming preview panel. Once the user accepts the item into the queue,
+   * the badge disappears. Use for "why did this surface?" reason badges
+   * like 'Mentioned' or 'Review requested'.
+   */
+  incomingOnly?: boolean;
 }
 ```
 
