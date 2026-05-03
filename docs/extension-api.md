@@ -180,8 +180,35 @@ interface DiscoveredItem {
   /** Optional description shown in tooltips (can be long). */
   description?: string;
 
-  /** Optional URL for "Open in Browser" support. */
+  /**
+   * Optional URL for "Open in Browser" support.
+   *
+   * Currently must be `http(s)`; other schemes are rejected by `openExternal`.
+   */
   url?: string;
+
+  /**
+   * Optional flag indicating the current user authored this item. When
+   * `true` and the item has an `http(s)` `url`, DevDocket may auto-watch
+   * its CI pipeline (subject to the `devDocket.watches.autoWatchAuthoredPRs`
+   * setting and a per-refresh cap).
+   */
+  authored?: boolean;
+
+  /**
+   * Optional notification reason explaining why this item was surfaced
+   * (e.g. `"assigned"`, `"review_requested"`, `"mentioned"`). Provided by
+   * the provider for provenance / dedup; the core does NOT infer badges
+   * from this string. Use `badges` to surface a pill explicitly.
+   */
+  reason?: string;
+
+  /**
+   * Optional upstream state from the provider (e.g. `"open"`, `"closed"`,
+   * `"Active"`). Like `reason`, this is kept for provenance and dedup;
+   * the core does NOT infer badges from it.
+   */
+  state?: string;
 
   /**
    * Optional group name for sub-grouping in the Sources tab and as a label
