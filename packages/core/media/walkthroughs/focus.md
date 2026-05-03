@@ -1,8 +1,8 @@
-# Focus on Active Work
+# Start In Progress Work
 
 The **In Progress** tier of the DevDocket sidebar shows what you're actively working on.
 
-## Moving Items into Focus
+## Moving Items into In Progress
 
 From the **Ready to Start** tier, hover any item and click the **▶ Start** hover action — the item transitions to the **In Progress** state and moves into the In Progress tier.
 
