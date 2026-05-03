@@ -1,15 +1,17 @@
 # Provider Discovery Conditions
 
-This document explains what conditions cause work items and reviews to appear in DevDocket's Inbox and Sources views. Each provider discovers items based on specific criteria — if an item meets those criteria, it shows up automatically.
+This document explains what conditions cause work items and reviews to appear in DevDocket's **Incoming tier** and **Sources** tab. Each provider discovers items based on specific criteria — if an item meets those criteria, it shows up automatically.
 
 ## Table of Contents
 
 - [Discovery Overview](#discovery-overview)
 - [GitHub Issues](#github-issues)
+- [GitHub Mentions](#github-mentions)
 - [GitHub PR Reviews](#github-pr-reviews)
 - [GitHub My PRs](#github-my-prs)
 - [Azure DevOps Work Items](#azure-devops-work-items)
 - [Azure DevOps PR Reviews](#azure-devops-pr-reviews)
+- [Azure DevOps My PRs](#azure-devops-my-prs)
 - [Common Behavior](#common-behavior)
   - [Refresh Intervals](#refresh-intervals)
   - [Item Lifecycle (Inbox States)](#item-lifecycle-inbox-states)
@@ -20,7 +22,7 @@ This document explains what conditions cause work items and reviews to appear in
 
 ## Discovery Overview
 
-The following diagram shows how items flow from external systems into DevDocket's views:
+The following diagram shows how items flow from external systems into DevDocket's tiers:
 
 ```mermaid
 flowchart LR
@@ -31,37 +33,43 @@ flowchart LR
 
     subgraph Providers["Provider Extensions"]
         GHI["GitHub Issues<br/>Provider"]
+        GHM["GitHub Mentions<br/>Provider"]
         GHPR["GitHub PR Reviews<br/>Provider"]
         GHMY["GitHub My PRs<br/>Provider"]
         ADOWI["ADO Work Items<br/>Provider"]
         ADOPR["ADO PR Reviews<br/>Provider"]
+        ADOMY["ADO My PRs<br/>Provider"]
     end
 
     subgraph Core["DevDocket Core"]
         PR["ProviderRegistry"]
         SS["DiscoveredStateStore"]
-        subgraph Views
-            Inbox["Inbox<br/>(unseen)"]
-            Sources["Sources<br/>(all items)"]
-            Queue["Queue<br/>(accepted)"]
+        subgraph UI["Sidebar UI"]
+            Incoming["Incoming tier<br/>(unseen)"]
+            Sources["Sources tab<br/>(all items)"]
+            Ready["Ready to Start tier<br/>(accepted)"]
         end
     end
 
     GH --> GHI
+    GH --> GHM
     GH --> GHPR
     GH --> GHMY
     ADO --> ADOWI
     ADO --> ADOPR
+    ADO --> ADOMY
 
     GHI -- "DiscoveredItem[]" --> PR
+    GHM -- "DiscoveredItem[]" --> PR
     GHPR -- "DiscoveredItem[]" --> PR
     GHMY -- "DiscoveredItem[]" --> PR
     ADOWI -- "DiscoveredItem[]" --> PR
     ADOPR -- "DiscoveredItem[]" --> PR
+    ADOMY -- "DiscoveredItem[]" --> PR
 
-    PR -- "new items" --> Inbox
+    PR -- "new items" --> Incoming
     PR -- "all items" --> Sources
-    Inbox -- "user accepts" --> Queue
+    Incoming -- "user accepts" --> Ready
 ```
 
 ---
@@ -97,6 +105,36 @@ An issue appears when **all** of the following are true:
 
 ---
 
+## GitHub Mentions
+
+**Provider:** DevDocket GitHub
+**Condition:** You are **@mentioned** on an issue or pull request **created after** the first time the provider activated for your account.
+
+A mention appears when **all** of the following are true:
+
+| Condition | Details |
+|-----------|---------|
+| **Mentions you** | The issue or PR body or any of its comments contain `@your-username` |
+| **Updated after first activation** | DevDocket records a timestamp the first time the GitHub Mentions provider runs and only includes items updated after that — this avoids flooding the Incoming tier with historical mentions |
+| **Repository match** | If `devdocketGithub.repos` is configured, only mentions in those repos appear. Otherwise, all mentions across repositories you can read are included. The GitHub Search API caps each query at 100 results. |
+
+Items can be either issues or pull requests; the type pill in the UI reflects which one.
+
+### Configuration
+
+| Setting | Default | Description |
+|---------|---------|-------------|
+| `devdocketGithub.repos` | `[]` (all repos) | Same repo filter as GitHub Issues. |
+| `devdocketGithub.refreshIntervalSeconds` | `300` (5 min) | Shared with GitHub Issues. |
+
+### What does NOT cause mentions to appear
+
+- Mentions in items **created or last updated before** the provider's first activation timestamp.
+- Mentions in **private repositories** you don't have access to.
+- Notifications-style mentions on commits or other non-issue/non-PR objects.
+
+---
+
 ## GitHub PR Reviews
 
 **Provider:** DevDocket GitHub  
@@ -116,7 +154,7 @@ A PR review appears when **all** of the following are true:
 |---------|---------|-------------|
 | `devdocketGithub.repos` | `[]` (all repos) | Same repo filter as GitHub Issues. |
 | `devdocketGithub.refreshIntervalSeconds` | `300` (5 min) | Shared with GitHub Issues. |
-| `devdocketGithub.resurfaceOnNewVersion` | `true` | When enabled, a PR you've already accepted reappears in your Inbox if new commits are pushed. |
+| `devdocketGithub.resurfaceOnNewVersion` | `true` | When enabled, a PR you've already accepted reappears in the Incoming tier if new commits are pushed. |
 | `devdocketGithub.resurfaceOnReRequestedReview` | `true` | When enabled, a PR reappears if the author explicitly re-requests your review. |
 
 ### What does NOT cause PR reviews to appear
@@ -219,13 +257,43 @@ A PR review appears when **all** of the following are true:
 |---------|---------|-------------|
 | `devdocketAdo.projects` | `[]` | Same org/project filter as ADO Work Items. At least one entry is required. |
 | `devdocketAdo.refreshIntervalSeconds` | `300` (5 min) | Shared with ADO Work Items. |
-| `devdocketAdo.resurfaceOnNewVersion` | `true` | When enabled, a PR you've already accepted reappears in your Inbox if new iterations (commits) are pushed. Note: ADO does not support re-request-based resurfacing (unlike GitHub). |
+| `devdocketAdo.resurfaceOnNewVersion` | `true` | When enabled, a PR you've already accepted reappears in the Incoming tier if new iterations (commits) are pushed. Note: ADO does not support re-request-based resurfacing (unlike GitHub). |
 
 ### What does NOT cause ADO PR reviews to appear
 
-- PRs you **created** (unless also added as a reviewer)
+- PRs you **created** (those surface via [Azure DevOps My PRs](#azure-devops-my-prs) instead, unless you're also added as a reviewer)
 - PRs where you are only in a **comment thread**
 - **Completed** or **abandoned** PRs
+
+---
+
+## Azure DevOps My PRs
+
+**Provider:** DevDocket — Azure DevOps
+**Condition:** You are the **creator** of an **active** pull request.
+
+A PR appears when **all** of the following are true:
+
+| Condition | Details |
+|-----------|---------|
+| **Authored by you** | You are the creator of the PR |
+| **Active status** | The PR is not completed or abandoned |
+| **Organization/project match** | Only PRs from your configured organizations and projects appear |
+
+Each discovered PR is enriched with its current vote-derived status (Draft, Waiting on reviews, Review in progress, Approved, Waiting for author, or Rejected). The status surfaces as a state badge in the editor.
+
+### Configuration
+
+| Setting | Default | Description |
+|---------|---------|-------------|
+| `devdocketAdo.projects` | `[]` | Same org/project filter as ADO Work Items. At least one entry is required. |
+| `devdocketAdo.refreshIntervalSeconds` | `300` (5 min) | Shared with ADO Work Items. |
+
+### What does NOT cause your PRs to appear
+
+- PRs created by **other people**, even if you are a reviewer (those surface via [Azure DevOps PR Reviews](#azure-devops-pr-reviews) instead)
+- **Completed** or **abandoned** PRs
+- **Draft** PRs still appear (with `Draft` status)
 
 ---
 
@@ -241,7 +309,7 @@ All providers poll their data source periodically. The default interval is **5 m
 
 ### Item Lifecycle (Inbox States)
 
-When a provider discovers an item, it enters the **Inbox** as an unseen item. From there:
+When a provider discovers an item, it enters the **Incoming tier** as an unseen item. From there:
 
 ```mermaid
 stateDiagram-v2
@@ -252,18 +320,18 @@ stateDiagram-v2
 
     Accepted --> Unseen : Version changes (resurfacing)
 
-    note right of Unseen : Appears in Inbox
-    note right of Accepted : Creates a work item in the Queue
-    note right of Dismissed : Hidden from Inbox (never resurfaced)
+    note right of Unseen : Appears in Incoming tier
+    note right of Accepted : Creates a work item in Ready to Start
+    note right of Dismissed : Hidden from Incoming (never resurfaced)
 ```
 
-- **Unseen** — New item in your Inbox, waiting for you to triage it.
-- **Accepted** — You've accepted the item; it becomes a work item in your Queue.
-- **Dismissed** — You've dismissed the item. It will **not** reappear in the Inbox, even if the provider keeps discovering it. Dismissed items remain visible in the Sources view.
+- **Unseen** — New item in the Incoming tier, waiting for you to triage it.
+- **Accepted** — You've accepted the item; it becomes a work item in the **Ready to Start** tier (or in **In Progress** if you used the Start hover action).
+- **Dismissed** — You've dismissed the item. It will **not** reappear in the Incoming tier, even if the provider keeps discovering it. Dismissed items remain visible in the Sources tab.
 
 ### Resurfacing
 
-Some providers track **versions** of discovered items. When a version changes on an item you previously accepted, the item is moved back to **Unseen** so it reappears in your Inbox. This lets you know something has changed.
+Some providers track **versions** of discovered items. When a version changes on an item you previously accepted, the item is moved back to **Unseen** so it reappears in the Incoming tier. This lets you know something has changed.
 
 ```mermaid
 flowchart TD
@@ -276,7 +344,7 @@ flowchart TD
     G -- No --> H{Version<br/>missing in store?}
     H -- Yes --> I["Backfill version<br/>(keep Accepted)"]
     H -- No --> J["No action"]
-    G -- Yes --> K["Resurface → Unseen<br/>(reappears in Inbox)"]
+    G -- Yes --> K["Resurface → Unseen<br/>(reappears in Incoming tier)"]
 ```
 
 **GitHub PR Reviews** support two independent resurfacing signals:
@@ -303,9 +371,9 @@ flowchart TD
 1. **Not authenticated** — Ensure you're signed into GitHub or Microsoft in VS Code. DevDocket uses VS Code's built-in authentication. Background refreshes won't prompt for sign-in; trigger a manual refresh to get the auth prompt.
 2. **Wrong repository/project config** — Verify `devdocketGithub.repos` or `devdocketAdo.projects` includes the correct repositories or organizations. For GitHub, leaving `devdocketGithub.repos` empty includes all repositories. For ADO, at least one entry in `devdocketAdo.projects` is required — an empty list disables ADO discovery entirely.
 3. **Invalid format** — GitHub repo entries must be in `owner/repo` format; invalid entries are logged as warnings and skipped by the issues provider (the PR review provider will report them as fetch failures instead). ADO entries must be `org` or `org/project`; individual malformed entries are silently skipped, but if all entries are invalid the ADO providers will not activate.
-4. **Item already dismissed** — Dismissed items never reappear. Check the Sources view to see all items the provider knows about, regardless of inbox state.
+4. **Item already dismissed** — Dismissed items never reappear. Check the Sources tab to see all items the provider knows about, regardless of inbox state.
 5. **Terminal state** — ADO work items in Closed, Done, Removed, or other terminal states are excluded.
-6. **Provider unhealthy** — Check the Sources view for providers showing "refresh failed". This indicates an authentication or network issue.
+6. **Provider unhealthy** — Check the Sources tab for providers showing a `⚠` warning indicator. This indicates an authentication or network issue.
 7. **Item limit** — Each provider is limited to 10,000 discovered items per refresh. If a provider emits more than 10,000 items, only the first 10,000 are kept and a warning is logged.
 
 **Items appearing unexpectedly?**

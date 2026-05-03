@@ -1,31 +1,42 @@
 # Understanding the DevDocket Workflow
 
-DevDocket organizes your work across six core work-item views:
+The **DevDocket** sidebar is your unified work hub. It has two tabs:
 
-## 📥 Inbox
-New items discovered by providers (like GitHub issues or pull requests). Review and either **Accept** to move them to your Queue, or **Dismiss** if they're not relevant.
+## My Work
 
-## 📋 Queue
-Your personal backlog of work items waiting to be started. Items here are in the **New** state.
+Your active workflow, organized into tiers. The tiers appear in this order so the most actionable work stays near the top.
 
-## 🎯 Focus
-Active work you're currently working on. Items here are **In Progress** or **Paused**.
+### ↓ Incoming
+New items discovered by providers (GitHub issues, pull requests, ADO work items, etc.). Click an item to preview it without committing, then **Accept** to move it to **Ready to Start**, **Start** to send it directly to **In Progress**, or **Dismiss** if it's not relevant. A blue dot marks items you haven't seen yet.
 
-## 📜 History
-Completed and archived items. Items marked **Done** or **Archived** appear here.
+### ▶ In Progress
+What you're actively working on (the **In Progress** state). Drag to reorder. Hover actions let you **✓ Complete** or **⏸ Pause**.
 
-## 👁️ Watches
-Fire-and-forget monitoring of CI/CD pipeline runs from GitHub Actions and Azure DevOps Pipelines. Watch a run and get notified when it completes or fails — no need to keep checking manually.
+### ○ Ready to Start
+Your personal backlog of items waiting to be picked up. Items here are in the **New** state. Drag to reorder by priority. Click the **▶ Start** action on hover to move an item into focus.
 
-## 📚 Sources
-A browsable library of everything providers know about, grouped by provider.
+### ⏸ Paused
+Items you've temporarily set aside. Hover **▶ Resume** to bring one back into In Progress.
+
+### ✓ Done
+Completed items. Hover **↩ Requeue** to move something back to Ready to Start, or use the **Clear** action in the header to clean things up.
+
+## Sources
+
+A browsable library of everything providers know about, grouped by provider and sub-group (typically by repo). Click an item to preview it and accept it into your workflow.
+
+## CI Watches (separate panel)
+
+A floating panel that monitors GitHub Actions and Azure DevOps Pipelines runs and pull request status. Open it from the **Watches** status-bar item in the bottom bar — click the eye icon next to the watch count.
 
 ---
 
-**The typical flow:**
-1. Provider discovers an item → **Inbox**
-2. You accept it → **Queue**
-3. You start working → **Focus**
-4. You complete it → **History**
+**The typical lifecycle of an item:**
 
-You can also create manual items that start directly in the Queue!
+1. A provider discovers an item → appears in **Incoming**
+2. You triage it → moves to **Ready to Start** (or directly to **In Progress** with the Start action)
+3. You begin work → moves to **In Progress**
+4. (optional) You set it aside temporarily → moves to **Paused**
+5. You finish → moves to **Done**
+
+You can also create manual items via the **+** button — they go straight to **Ready to Start**.

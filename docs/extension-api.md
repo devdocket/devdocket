@@ -151,7 +151,7 @@ interface DiscoveredItem {
    */
   externalId: string;
 
-  /** Title displayed in the Inbox and Sources views. */
+  /** Title displayed in the Incoming tier and the Sources tab. */
   title: string;
 
   /** Optional description shown in tooltips (can be long). */
@@ -161,21 +161,60 @@ interface DiscoveredItem {
   url?: string;
 
   /**
-   * Optional group name for sub-grouping in the Sources view.
-   * Items with the same group appear under a folder node.
-   * For example, a GitHub provider might group by repository name.
+   * Optional group name for sub-grouping in the Sources tab and as a label
+   * in card annotations. Items with the same group appear under a folder
+   * node in Sources. For example, a GitHub provider might group by
+   * repository name.
    */
   group?: string;
 
   /**
    * Optional cross-provider deduplication key.
    * Items from different providers that share the same canonicalId are
-   * grouped in the Inbox (one representative shown). Accept/dismiss/read-state
-   * propagates to all items in the group.
+   * grouped in the Incoming tier (one representative shown). Accept /
+   * dismiss / read-state propagates to all items in the group.
    * Items without canonicalId always show individually (backward compatible).
    * Use a consistent format like 'github:pull:owner/repo#42'.
    */
   canonicalId?: string;
+
+  /**
+   * Optional classification of the item kind. DevDocket renders this as a
+   * dedicated "Issue" or "PR" pill alongside the provider, state, and CI
+   * badges. Set this when your provider knows the kind authoritatively;
+   * leave it undefined for items that don't fit either category.
+   *
+   * Do NOT infer this in consumers from URL patterns or state strings —
+   * only the provider knows what it actually fetched.
+   */
+  itemType?: 'issue' | 'pr';
+
+  /**
+   * Optional provider-declared badges shown alongside the core's Provider /
+   * Type / CI badges. Use this to surface state-like information ("Approved",
+   * "Changes requested", "Mentioned", etc) — DevDocket never infers badges
+   * from `state` or `reason` strings.
+   *
+   * Each badge picks a severity variant; DevDocket maps it to a theme-aware
+   * color so providers don't have to.
+   */
+  badges?: ProviderBadge[];
+}
+
+interface ProviderBadge {
+  /** Display text. Keep short — sidebar badges compete with the title. */
+  label: string;
+  /**
+   * Severity hint:
+   *   - 'neutral' — outlined, no fill (category labels)
+   *   - 'info'    — blue   (informational, e.g. "Open")
+   *   - 'success' — green  (positive, e.g. "Approved")
+   *   - 'warning' — amber  (pending action, e.g. "Review requested")
+   *   - 'danger'  — red    (action needed, e.g. "Changes requested")
+   */
+  variant: 'neutral' | 'info' | 'success' | 'warning' | 'danger';
+  /** Defaults to 'both'. Use 'editor' for verbose detail badges. */
+  show?: 'sidebar' | 'editor' | 'both';
 }
 ```
 
@@ -184,9 +223,11 @@ interface DiscoveredItem {
 - `externalId` must be unique per provider and stable across refreshes. A good pattern is `owner/repo#123`.
 - Each `onDidDiscoverItems` emission replaces the provider's entire item set. Emit all current items, not just changes.
 - `DiscoveredItem` data is not stored as a persisted record; DevDocket tracks only the inbox state (`unseen`, `accepted`, `dismissed`) for discovered items in `discovered-state.json`.
-- When a user accepts an item from Inbox/Sources, DevDocket creates and persists a new `WorkItem` in `workitems.json` that includes a snapshot of the item's `title`, along with its `providerId`/`externalId`/`url` as provenance metadata.
-- Use `group` to organize items in the Sources tree. Items with the same group value are nested under a folder.
-- Use `canonicalId` when the same entity might be discovered by multiple providers (e.g., a PR found by both "My PRs" and "PR Reviews"). Items sharing a `canonicalId` are deduplicated in the Inbox — one representative is shown and accept/dismiss propagates to all. Use a consistent format like `github:pull:owner/repo#42`. Items without `canonicalId` show individually (backward compatible). The Sources view is unaffected.
+- When a user accepts an item from the Incoming tier or Sources tab, DevDocket creates and persists a new `WorkItem` in `workitems.json` that includes a snapshot of the item's `title`, along with its `providerId`/`externalId`/`url` as provenance metadata.
+- Use `group` to organize items in the Sources tab. Items with the same group value are nested under a folder.
+- Use `canonicalId` when the same entity might be discovered by multiple providers (e.g., a PR found by both "My PRs" and "PR Reviews"). Items sharing a `canonicalId` are deduplicated in the Incoming tier — one representative is shown and accept/dismiss propagates to all. Use a consistent format like `github:pull:owner/repo#42`. Items without `canonicalId` show individually (backward compatible). The Sources tab is unaffected.
+- Set `itemType` to `'issue'` or `'pr'` when your provider can classify the item kind. DevDocket surfaces this as a separate type pill so users can distinguish issues from pull requests at a glance. Items without `itemType` simply omit the pill — useful for generic / manual / heterogeneous sources where the kind isn't meaningful.
+- Use `badges` to surface state, reason, or any other custom annotation. The core deliberately doesn't interpret the `state` or `reason` strings any more — those are kept on `DiscoveredItem` for provenance/dedup purposes only. If you want a pill to show, declare it explicitly. Use `show: 'editor'` for verbose detail that would clutter the sidebar.
 
 ### Registering a Provider
 
@@ -198,7 +239,7 @@ context.subscriptions.push(disposable);
 
 ## Actions
 
-An action is an operation that can be performed on a work item. Actions are surfaced dynamically in the **Run Action…** quick pick menu on Queue and Focus items.
+An action is an operation that can be performed on a work item. Actions are surfaced dynamically via the **Run Action…** entry in the editor and as a hover action on items in the **Ready to Start** and **In Progress** tiers.
 
 ### DevDocketAction Interface
 
@@ -249,6 +290,9 @@ interface WorkItem {
   /** Optional user-added notes. */
   notes?: string;
 
+  /** Provider-synced description (read-only mirror of the upstream description). */
+  description?: string;
+
   /** Current state in the lifecycle. */
   state: WorkItemState;
 
@@ -261,9 +305,13 @@ interface WorkItem {
   /** URL associated with the item (e.g., GitHub issue URL). */
   url?: string;
 
+  /** Optional grouping key (e.g. repository name) — shown as the repo annotation under the title. */
+  group?: string;
+
   /**
-   * Optional ordering hint used by DevDocket to sort items in the Queue view.
-   * Typically managed by DevDocket; extensions generally do not need to set this.
+   * Optional ordering hint used by DevDocket to sort items in the
+   * Ready to Start tier. Typically managed by DevDocket; extensions
+   * generally do not need to set this.
    */
   sortOrder?: number;
 
@@ -272,6 +320,13 @@ interface WorkItem {
 
   /** Timestamp (ms since epoch) when the item was last updated. */
   updatedAt: number;
+
+  /**
+   * Append-only log of significant events (state transitions, action
+   * invocations, version updates, etc.). Visible under the editor's
+   * collapsible Activity Log section.
+   */
+  activityLog?: ActivityLogEntry[];
 }
 ```
 
@@ -291,13 +346,13 @@ Items transition through these states as the user interacts with them in the UI.
 
 **State visibility in the UI:**
 
-| State | View | Description |
+| State | Tier | Description |
 |-------|------|-------------|
-| `New` | **Queue** | Freshly created or accepted items awaiting triage. |
-| `InProgress` | **Focus** | Work the user is actively doing. |
-| `Paused` | **Focus** | Work that is temporarily paused (shown alongside in-progress items). |
-| `Done` | **History** | Completed items shown in the History view. |
-| `Archived` | **History** | Archived items shown in the History view. |
+| `New` | **Ready to Start** | Freshly created or accepted items awaiting triage. |
+| `InProgress` | **In Progress** | Work the user is actively doing. |
+| `Paused` | **Paused** | Work that is temporarily paused. |
+| `Done` | **Done** | Completed items. |
+| `Archived` | **Done** | Archived items (rendered alongside Done items). |
 
 Action authors should use this mapping when implementing `canRun()` — for example, an action that only applies to active work should target `InProgress` and `Paused`.
 
@@ -325,7 +380,7 @@ After each provider refresh, DevDocket scans the WorkGraph for items linked to t
 
 2. **Fallback: disappearance detection** — For providers without `getClosedItems()`, DevDocket compares the current discovered items against the previous refresh. Items that were previously present but are now absent are assumed closed. This fallback *cannot* cover manually-imported items since the provider never discovered them.
 
-Matched items are transitioned to `Done` and a notification is shown with a "Show History" action.
+Matched items are transitioned to `Done` and a notification is shown with a "Show DevDocket" action that focuses the sidebar.
 
 ### Implementing `getClosedItems()`
 
@@ -375,13 +430,21 @@ class MyTaskProvider implements DevDocketProvider {
       description: task.summary,
       url: `https://tasks.example.com/${task.id}`,
       group: task.project,
+      // Classify the kind of item for the type pill (omit for generic sources)
+      itemType: 'issue',
+      // Provider-declared pills — core won't infer them from state/reason.
+      // Use show: 'editor' to keep verbose state labels out of the sidebar.
+      badges: [
+        { label: 'Assigned', variant: 'warning' },
+        { label: task.status, variant: 'info', show: 'editor' },
+      ],
     }));
 
     // Emit the full set of items — this replaces any previous emission
     this._onDidDiscoverItems.fire(items);
   }
 
-  private async fetchTasks(): Promise<Array<{ id: string; title: string; summary: string; project: string }>> {
+  private async fetchTasks(): Promise<Array<{ id: string; title: string; summary: string; project: string; status: string }>> {
     // Replace with your actual data fetching logic
     return [];
   }

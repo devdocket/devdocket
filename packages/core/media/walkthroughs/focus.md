@@ -1,33 +1,35 @@
 # Focus on Active Work
 
-The **Focus** view shows what you're actively working on.
+The **In Progress** tier of the DevDocket sidebar shows what you're actively working on.
 
-## Moving Items to Focus
+## Moving Items into Focus
 
-From the **Queue** view:
-1. Right-click a work item
-2. Select "Move to Focus"
-3. The item transitions to **In Progress** state
+From the **Ready to Start** tier, hover any item and click the **▶ Start** hover action — the item transitions to the **In Progress** state and moves into the In Progress tier.
 
-## Working with Focused Items
+You can also start an Incoming item directly without parking it in Ready to Start: hover an Incoming item and click the **▶ Start** action to accept and start it in one step.
 
-Once an item is in Focus, you can:
+## Working with In-Progress Items
 
-- **Pause** it temporarily (e.g., waiting for feedback)
-- **Resume** a paused item to continue work
-- **Complete** it when done (moves to History)
-- **Run Actions** on it (like creating git branches)
+Once an item is in the In Progress tier, hover it for these actions:
+
+- **⏸ Pause** — temporarily set it aside (e.g. waiting for feedback); the item moves to the **Paused** tier
+- **✓ Complete** — mark it done; the item moves to the **Done** tier
+
+Items in the **Paused** tier expose a **▶ Resume** hover action that returns them to In Progress.
+
+You can drag items within the In Progress tier (and Ready to Start tier) to reorder by importance.
 
 ## Completing Work
 
-When you finish a work item:
-1. Right-click the item in Focus
-2. Select "Complete"
-3. The item moves to **History** with state **Done**
+When you finish:
+1. Hover the item in In Progress
+2. Click **✓ Complete**
+3. The item moves to the **Done** tier
+
+Done items can be requeued (**↩ Requeue**) if work resumes, or cleared from the tier header.
 
 ---
 
-**Try it now:**
-If you created a work item earlier, find it in the Queue and move it to Focus!
+**Try it now:** open the DevDocket sidebar, find an item in **Ready to Start**, and click the **▶ Start** action.
 
-[Open Queue View](command:vscode.openView?%5B%22devdocket.queue%22%5D)
+[Open DevDocket](command:workbench.view.extension.devdocket)
