@@ -171,10 +171,10 @@ Discovers items from GitHub via these sub-providers:
 
 | Setting | Type | Default | Description |
 |---------|------|---------|-------------|
-| `devdocketGithub.repos` | `string[]` | `[]` | GitHub repositories to watch (e.g., `owner/repo`). Scopes both issue and PR discovery. Leave empty to fetch all relevant items across all repositories. |
-| `devdocketGithub.refreshIntervalSeconds` | `number` | `300` | How often to refresh GitHub data (in seconds). Minimum 60 seconds; values below 60 are clamped. |
-| `devdocketGithub.resurfaceOnNewVersion` | `boolean` | `true` | Resurface PR reviews when new commits are pushed. |
-| `devdocketGithub.resurfaceOnReRequestedReview` | `boolean` | `true` | Resurface PR reviews when review is explicitly re-requested. |
+| `devDocketGithub.filteredRepos` | `string` | `""` | Newline-separated repo patterns to **exclude** from discovery (e.g. `org/private-repo`). Supports glob patterns and `!` re-include. Leave empty to fetch all relevant items across all repositories you can read. |
+| `devDocketGithub.refreshIntervalSeconds` | `number` | `300` | How often to refresh GitHub data (in seconds). Minimum 60 seconds; values below 60 are clamped. |
+| `devDocketGithub.resurfaceOnNewVersion` | `boolean` | `true` | Resurface PR reviews when new commits are pushed. |
+| `devDocketGithub.resurfaceOnReRequestedReview` | `boolean` | `true` | Resurface PR reviews when review is explicitly re-requested. |
 
 ### Azure DevOps Provider (`devdocket-ado`)
 
@@ -188,9 +188,9 @@ Discovers items from Azure DevOps via these sub-providers:
 
 | Setting | Type | Default | Description |
 |---------|------|---------|-------------|
-| `devdocketAdo.projects` | `string[]` | `[]` | Organizations and projects to monitor. Use `<org>` to monitor an entire organization, or `<org>/<project>` for specific projects. |
-| `devdocketAdo.refreshIntervalSeconds` | `number` | `300` | How often to refresh ADO data (in seconds). Minimum 60 seconds; set to 0 or negative to disable periodic refresh. |
-| `devdocketAdo.resurfaceOnNewVersion` | `boolean` | `true` | Resurface PR reviews when new iterations are pushed. |
+| `devDocketAdo.projects` | `string[]` | `[]` | Organizations and projects to monitor. Use `<org>` to monitor an entire organization, or `<org>/<project>` for specific projects. |
+| `devDocketAdo.refreshIntervalSeconds` | `number` | `300` | How often to refresh ADO data (in seconds). Minimum 60 seconds; set to 0 or negative to disable periodic refresh. |
+| `devDocketAdo.resurfaceOnNewVersion` | `boolean` | `true` | Resurface PR reviews when new iterations are pushed. |
 
 ### AI Code Review (`devdocket-ai-reviewer`)
 
