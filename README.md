@@ -32,7 +32,7 @@ DevDocket organizes your work in a single sidebar view with two tabs:
 
 - **Sources** — everything providers know about, grouped by provider, browsable anytime.
 
-A separate floating **CI Watches** panel monitors GitHub Actions / Azure DevOps Pipeline runs and PR review/merge status. Open it from the eye icon in the status bar.
+A separate floating **CI Watches** panel monitors GitHub Actions / Azure DevOps Pipeline runs and pull request lifecycle status (open / merged / closed). Open it from the eye icon in the status bar.
 
 By default, provider-linked items are automatically marked **Done** when their issue is closed or their PR is merged externally.
 
