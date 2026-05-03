@@ -151,6 +151,8 @@ export class WatcherService implements vscode.Disposable {
     // Remove dismissed watch to allow re-watching
     if (existing) {
       this.watches.delete(key);
+      // A re-watched run should be able to alert again on the next failure.
+      this.acknowledgedFailedRunKeys.delete(key);
     }
 
     const watcher = this.watcherRegistry.get(identifier.providerId);
@@ -225,6 +227,8 @@ export class WatcherService implements vscode.Disposable {
         const childWatch = this.watches.get(childKey);
         if (childWatch && childWatch.parentPRKey === key) {
           this.watches.delete(childKey);
+          // Re-watched runs should be able to alert on their next failure.
+          this.acknowledgedFailedRunKeys.delete(childKey);
         }
       }
       this.prWatches.delete(key);
@@ -292,6 +296,9 @@ export class WatcherService implements vscode.Disposable {
     const watch = this.watches.get(key);
     if (watch) {
       watch.dismissed = true;
+      // Drop the acknowledgement so a re-watch (or recovery + re-failure)
+      // can alert again.
+      this.acknowledgedFailedRunKeys.delete(key);
       this.logger.info(`Dismissed watch: ${identifier.displayName}`);
       this._onDidChangeWatchedRuns.fire(this.getAllWatches());
       this.persistWatches();
@@ -313,6 +320,8 @@ export class WatcherService implements vscode.Disposable {
         const childWatch = this.watches.get(childKey);
         if (childWatch && childWatch.parentPRKey === key) {
           childWatch.dismissed = true;
+          // Drop the acknowledgement so a re-watch can alert again.
+          this.acknowledgedFailedRunKeys.delete(childKey);
         }
       }
       this.logger.info(`Dismissed PR watch: ${identifier.displayName}`);
@@ -367,6 +376,15 @@ export class WatcherService implements vscode.Disposable {
    * Mark every currently-failed run watch (warning or non-success completion)
    * as acknowledged so the status bar can suppress its warning color until a
    * NEW failure arrives. Fires onDidChangeWatchedRuns so listeners refresh.
+   *
+   * Acknowledgements are cleared in two places so a re-watched run can alert
+   * again: {@link dismissWatch} (drops the ack as the user discards the
+   * watch) and the dismissed-then-restarted branch of {@link startWatch}
+   * (drops the ack on the deleted key before recreating). PR-level
+   * `forceRecreate` also clears acks for owned children. Once a watch is
+   * `completed` it isn't polled anymore, so we don't try to clear acks via
+   * a polling-driven recovery path — the only realistic way for an
+   * acknowledged failure to reappear is via re-watch.
    */
   acknowledgeAllFailures(): void {
     let added = 0;

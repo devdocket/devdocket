@@ -119,6 +119,42 @@ describe('WatcherService', () => {
     });
   });
 
+  describe('failure acknowledgement', () => {
+    it('clears the acknowledgement when a watch is dismissed', async () => {
+      const watcher = createMockWatcher('test', async () => ({
+        overallState: 'completed' as const,
+        conclusion: 'failure' as const,
+        jobs: [],
+      }));
+      registry.register(watcher);
+      const identifier = createIdentifier();
+      const watch = await service.startWatch(identifier);
+
+      service.acknowledgeAllFailures();
+      expect(service.isFailureAcknowledged(watch)).toBe(true);
+
+      service.dismissWatch(identifier);
+      expect(service.isFailureAcknowledged(watch)).toBe(false);
+    });
+
+    it('clears the acknowledgement when a dismissed watch is re-watched', async () => {
+      const watcher = createMockWatcher('test', async () => ({
+        overallState: 'completed' as const,
+        conclusion: 'failure' as const,
+        jobs: [],
+      }));
+      registry.register(watcher);
+      const identifier = createIdentifier();
+      await service.startWatch(identifier);
+
+      service.acknowledgeAllFailures();
+      service.dismissWatch(identifier);
+      // dismissWatch already clears the ack; re-watching should also start fresh.
+      const second = await service.startWatch(identifier);
+      expect(service.isFailureAcknowledged(second)).toBe(false);
+    });
+  });
+
   describe('dismissAllCompleted', () => {
     it('only dismisses completed watches', async () => {
       const completedWatcher = createMockWatcher('completed', async () => ({
