@@ -210,8 +210,12 @@ export class IncomingPreviewPanel {
     if (!this.htmlInitialized) {
       this.panel.webview.html = this.getHtml(editorItem);
       this.htmlInitialized = true;
-      // Mark as seen so the unread indicator clears once the user opens the preview.
-      void this.readStateStore.add(`${this.providerId}::${this.externalId}`).catch(() => {});
+      // Mark as seen so the unread indicator clears once the user opens the
+      // preview. Persistence failures aren't user-actionable from here, but
+      // log them so a stuck unread dot is diagnosable from the output channel.
+      void this.readStateStore.add(`${this.providerId}::${this.externalId}`).catch(err => {
+        logger.warn(`DevDocket: failed to mark ${this.providerId}::${this.externalId} as seen`, err);
+      });
       return;
     }
 
