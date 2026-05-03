@@ -970,20 +970,21 @@ export class MainViewProvider implements vscode.WebviewViewProvider {
       opacity: 0;
       pointer-events: none;
       cursor: grab;
-      color: var(--vscode-descriptionForeground);
+      color: var(--vscode-foreground);
       user-select: none;
       line-height: 1;
       font-size: 18px;
-      padding: 2px 4px;
-      border-radius: 4px;
-      background: var(--vscode-list-hoverBackground, rgba(127, 127, 127, 0.18));
-      box-shadow: 0 0 6px 4px var(--vscode-list-hoverBackground, rgba(127, 127, 127, 0.18));
+      padding: 4px 6px;
+      border-radius: 6px;
+      background: var(--vscode-editorHoverWidget-background, var(--vscode-editor-background));
+      border: 1px solid var(--vscode-editorHoverWidget-border, var(--vscode-widget-border, transparent));
+      box-shadow: 0 2px 6px rgba(0, 0, 0, 0.25);
       transition: opacity 0.15s;
     }
     .item-card:hover .drag-handle,
     .item-card:focus-within .drag-handle,
     .item-card.dragging .drag-handle {
-      opacity: 0.85;
+      opacity: 1;
       pointer-events: auto;
     }
     .drop-indicator {
