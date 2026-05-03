@@ -1,6 +1,6 @@
 import type { JSX } from 'preact';
 import type { BadgeData } from '../types';
-import { getThemeKind, providerBadgeColors, stateBadgeColors, ciBadgeColors } from '../theme';
+import { isLightTheme, providerBadgeColors, stateBadgeColors, ciBadgeColors } from '../theme';
 
 interface BadgePillProps {
   badge: BadgeData;
@@ -42,8 +42,7 @@ function getBadgeColors(badge: BadgeData): JSX.CSSProperties {
   const palette = badge.type === 'ci' ? ciBadgeColors : stateBadgeColors;
   const themed = palette[badge.variant];
   if (themed) {
-    const isLight = getThemeKind() === 'light';
-    const pair = isLight ? themed.light : themed.dark;
+    const pair = isLightTheme() ? themed.light : themed.dark;
     return { backgroundColor: pair.bg, color: pair.fg };
   }
 

@@ -210,14 +210,22 @@ export function ItemCard({
 }
 
 function buildItemAriaLabel(item: ItemCardData): string {
-  const providerLabel = item.badges.find(badge => badge.type === 'provider')?.label;
-  const stateLabels = item.badges
-    .filter(badge => badge.type === 'state')
-    .map(badge => badge.label);
-
-  return [item.title, providerLabel, ...stateLabels]
-    .filter((value): value is string => Boolean(value))
-    .join(', ');
+  // aria-label fully overrides child text for screen readers, so build the
+  // announcement from every visible piece of context: the title, repo
+  // annotation, all badge labels (provider / type / CI / state /
+  // provider-supplied), unread / urgent indicators, and any selection
+  // state. Order matters — read top-to-bottom so the title is announced
+  // first and qualifiers follow.
+  const parts: (string | undefined)[] = [];
+  if (item.isUnseen) parts.push('unread');
+  if (item.isUrgent) parts.push('urgent');
+  parts.push(item.title);
+  if (item.repoAnnotation) parts.push(item.repoAnnotation);
+  for (const badge of item.badges) {
+    parts.push(badge.label);
+  }
+  if (item.isSelected) parts.push('selected');
+  return parts.filter((value): value is string => Boolean(value)).join(', ');
 }
 
 function getItemActions(
