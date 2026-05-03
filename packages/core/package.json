@@ -38,7 +38,7 @@
       {
         "id": "devdocket.gettingStarted",
         "title": "Get Started with DevDocket",
-        "description": "Learn how to manage your work items across the Incoming, Ready to Start, In Progress, and History tiers",
+        "description": "Learn how to manage your work items across the Incoming, Ready to Start, In Progress, and Done tiers",
         "steps": [
           {
             "id": "createFirstItem",
@@ -54,7 +54,7 @@
           {
             "id": "understandWorkflow",
             "title": "Understand the Workflow",
-            "description": "Learn how items flow through Inbox \u2192 Queue \u2192 Focus \u2192 History.",
+            "description": "Learn how items flow through Incoming \u2192 Ready to Start \u2192 In Progress \u2192 Paused \u2192 Done.",
             "media": {
               "markdown": "media/walkthroughs/workflow.md"
             }
@@ -73,8 +73,8 @@
           },
           {
             "id": "focusOnWork",
-            "title": "Focus on Active Work",
-            "description": "Move items to Focus and complete them when done.",
+            "title": "Start In Progress Work",
+            "description": "Move items into the In Progress tier and complete them when done.",
             "media": {
               "markdown": "media/walkthroughs/focus.md"
             },

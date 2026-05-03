@@ -93,11 +93,15 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 }
 ```
 
-### 3. Re-declare API Types
+### 3. Install `@devdocket/shared` (recommended) or re-declare types
 
-Because provider extensions are separately packaged VS Code extensions, they cannot import types from the core package directly. Re-declare the interfaces your extension needs. (First-party providers in the DevDocket monorepo use an internal shared package for this, but it is not published for external use.)
+The `@devdocket/shared` package provides the TypeScript types and the `BaseProvider` base class needed to build providers and actions with full type safety. It is published to the GitHub Packages npm registry — see [the Extension API guide](./extension-api.md#installing-devdocketshared) for the `.npmrc` setup and authentication notes.
 
-Copy the following declarations into your provider code:
+```ts
+import { BaseProvider, type DiscoveredItem } from '@devdocket/shared';
+```
+
+If you would rather avoid the GitHub Packages dependency, you can re-declare the small subset of interfaces your extension needs. Copy the following declarations into your provider code:
 
 ```ts
 interface Disposable {
@@ -117,6 +121,10 @@ interface DiscoveredItem {
   canonicalId?: string;
   itemType?: 'issue' | 'pr';
   badges?: ProviderBadge[];
+  /** Opaque "soft" version token. See provider-discovery.md#resurfacing. */
+  version?: string;
+  /** Opaque "always-resurface" token. See provider-discovery.md#resurfacing. */
+  resurfaceVersion?: string;
 }
 
 interface DevDocketProvider {
@@ -321,7 +329,7 @@ class JiraProvider implements DevDocketProvider {
 - **`externalId` must be unique per provider** — DevDocket uses the combination of `providerId + externalId` to track inbox state. Use a stable identifier like `owner/repo#123` or `PROJECT/TICKET-42`.
 - **`group` is optional** — When set, items with the same group value are nested under a folder node in the Sources tab and surfaced as a small annotation below the title on each item card.
 - **`resolveUrl()` is optional** — Implement it to let users create work items by pasting a URL (e.g. from a browser). When the user runs the "Create Item from URL" command, DevDocket asks each registered provider to resolve the URL. The first provider that returns a `ResolvedItem` wins. If your provider doesn't recognise the URL, return `undefined`.
-- **`getClosedItems()` is optional** — Implement it to enable auto-completion of work items when their linked external item is closed or merged. After each provider refresh, DevDocket collects all work items in the WorkGraph linked to your provider (including manually-imported items) and calls `getClosedItems()` with their external IDs. Return the subset that are closed, merged, or completed. Providers without this method fall back to **disappearance detection** — if a previously-discovered item is absent from the next refresh, it is assumed closed. The disappearance fallback cannot cover manually-imported items since the provider never discovered them. Auto-completion is controlled by the `devdocket.autoCompleteOnClose` setting (default: `true`).
+- **`getClosedItems()` is optional** — Implement it to enable auto-completion of work items when their linked external item is closed or merged. After each provider refresh, DevDocket collects all work items in the WorkGraph linked to your provider (including manually-imported items) and calls `getClosedItems()` with their external IDs. Return the subset that are closed, merged, or completed. Providers without this method fall back to **disappearance detection** — if a previously-discovered item is absent from the next refresh, it is assumed closed. The disappearance fallback cannot cover manually-imported items since the provider never discovered them. Auto-completion is controlled by the `devDocket.autoCompleteOnClose` setting (default: `true`).
 - **Emit the full set every time** — Each `onDidDiscoverItems` emission replaces all previously known items for that provider. Emit everything currently relevant, not just deltas.
 
 ### Periodic Refresh Pattern
@@ -384,7 +392,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 
 ## Implementing an Action
 
-An action is an operation users can perform on a work item. Actions appear dynamically in the **Run Action…** menu on items in the **Ready to Start** and **In Progress** tiers (and inside the editor for those items).
+An action is an operation users can perform on a work item. Actions appear dynamically as the **Run Action…** button in the work item editor (when the open item satisfies the action's `canRun(item)` predicate).
 
 ### Full Example
 
@@ -474,16 +482,16 @@ flowchart TD
 
 ### What gets persisted
 
-DevDocket maintains two JSON files in its global storage:
+DevDocket maintains two records in VS Code `globalState`:
 
-| File | Contents |
-|------|----------|
-| `workitems.json` | Full `WorkItem` records with state machine lifecycle |
-| `discovered-state.json` | Thin index mapping `providerId + externalId` → inbox state (`unseen`, `accepted`, `dismissed`) |
+| `globalState` key | Contents |
+|-------------------|----------|
+| `devdocket.workitems` | Full `WorkItem` records with state machine lifecycle |
+| `devdocket.discovered-state` | Thin index mapping `providerId + externalId` → inbox state (`unseen`, `accepted`, `dismissed`) |
 
-**`DiscoveredItem` fields are not persisted in `discovered-state.json`.** That file stores only inbox state keyed by `providerId + externalId`, which keeps the discovery index lightweight.
+**`DiscoveredItem` fields are not persisted in `devdocket.discovered-state`.** That key stores only inbox state keyed by `providerId + externalId`, which keeps the discovery index lightweight.
 
-When a user **accepts** an item from the Incoming tier or Sources tab, DevDocket creates a new `WorkItem` in `workitems.json` using provider-backed data (such as title and URL) along with provenance metadata (`providerId`, `externalId`). Some fields may be normalized during acceptance — for example, grouped items have the group name prefixed to the stored title.
+When a user **accepts** an item from the Incoming tier or Sources tab, DevDocket creates a new `WorkItem` (under `devdocket.workitems`) using provider-backed data (such as title and URL) along with provenance metadata (`providerId`, `externalId`). Some fields may be normalized during acceptance — for example, grouped items have the group name prefixed to the stored title.
 
 ---
 
@@ -749,6 +757,21 @@ interface DiscoveredItem {
    * if you want a pill to surface in the UI, declare it explicitly here.
    */
   badges?: ProviderBadge[];
+
+  /**
+   * Optional opaque "soft" version token. When present, DevDocket re-marks
+   * the item `unseen` on a value change — but only when the corresponding
+   * work item is still in `New`. Use a stable opaque value (commit SHA,
+   * ETag, updated_at). See `provider-discovery.md#resurfacing`.
+   */
+  version?: string;
+
+  /**
+   * Optional opaque "always-resurface" token. Behaves like `version` but
+   * resurfaces regardless of work item state. Use for changes that
+   * unconditionally warrant the user's attention.
+   */
+  resurfaceVersion?: string;
 }
 
 interface ProviderBadge {
@@ -885,4 +908,4 @@ interface Event<T> {
 - [`packages/github`](../packages/github/src/) — Production provider implementation (GitHub Issues, PR reviews)
 - [`packages/ado`](../packages/ado/src/) — Azure DevOps provider implementation (work items, PR reviews)
 - [`packages/ai-reviewer`](../packages/ai-reviewer/src/) — Action-only extension that adds AI-powered code review for GitHub PR items
-- [`packages/shared`](../packages/shared/src/) — Internal shared package used by first-party providers. Includes `BaseProvider` (an abstract base class that handles periodic refresh, concurrency guards, and disposal), `validateRefreshInterval`, URL validation, and logging utilities. This package is not published for external use; third-party authors should implement equivalent logic themselves (see the [Periodic Refresh Pattern](#periodic-refresh-pattern) section)
+- [`packages/shared`](../packages/shared/src/) — Shared package published as `@devdocket/shared` to the GitHub Packages npm registry. Includes `BaseProvider` (an abstract base class that handles periodic refresh, concurrency guards, and disposal), `validateRefreshInterval`, URL validation, and logging utilities. See [the Extension API guide](./extension-api.md#installing-devdocketshared) for installation; the [Re-declare types](#3-install-devdocketshared-recommended-or-re-declare-types) section above shows the equivalent type declarations if you prefer to avoid the dependency.

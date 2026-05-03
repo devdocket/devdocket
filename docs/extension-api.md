@@ -128,6 +128,14 @@ interface DevDocketProvider {
   refresh(token?: vscode.CancellationToken): Promise<void>;
 
   /**
+   * Optional. Called when the user invokes "Create Item from URL" with a URL
+   * your provider may recognize. Return a `ResolvedItem` if you can produce
+   * one, or `undefined` to let another provider try. The first provider that
+   * returns a non-undefined result wins.
+   */
+  resolveUrl?(url: string, signal?: AbortSignal): Promise<ResolvedItem | undefined>;
+
+  /**
    * Check which of the given external items have been closed or completed.
    * Called after each provider refresh to auto-complete linked work items,
    * including manually-imported items. Return the subset of externalIds
@@ -135,6 +143,21 @@ interface DevDocketProvider {
    * Optional — providers without this fall back to disappearance detection.
    */
   getClosedItems?(externalIds: string[], signal?: AbortSignal): Promise<string[]>;
+}
+
+interface ResolvedItem {
+  /** Title to populate the new work item with. */
+  title: string;
+  /** Free-form notes (e.g. excerpted description). */
+  notes: string;
+  /** Canonical URL the user typed (after normalization). */
+  url: string;
+  /** Provider-stable identifier (same shape as DiscoveredItem.externalId). */
+  externalId: string;
+  /** Optional grouping label. */
+  group?: string;
+  /** The provider id that resolved the URL — DevDocket fills this if omitted. */
+  providerId: string;
 }
 ```
 
@@ -199,6 +222,26 @@ interface DiscoveredItem {
    * color so providers don't have to.
    */
   badges?: ProviderBadge[];
+
+  /**
+   * Optional opaque version token. When present, DevDocket uses it to detect
+   * "soft" updates: if the value changes between refreshes, DevDocket may
+   * resurface the item by re-marking it `unseen` (depending on the work
+   * item's current state — items already in progress are typically not
+   * resurfaced; items in `New` may be).
+   *
+   * Use a stable, opaque value (commit SHA, ETag, updated_at timestamp).
+   * See `docs/provider-discovery.md#resurfacing` for the full semantics.
+   */
+  version?: string;
+
+  /**
+   * Optional opaque resurface token. Behaves like `version` but always
+   * resurfaces (regardless of work item state). Use this for changes that
+   * unconditionally warrant the user's attention — e.g. a new PR review
+   * iteration that re-requests review.
+   */
+  resurfaceVersion?: string;
 }
 
 interface ProviderBadge {
@@ -222,8 +265,8 @@ interface ProviderBadge {
 
 - `externalId` must be unique per provider and stable across refreshes. A good pattern is `owner/repo#123`.
 - Each `onDidDiscoverItems` emission replaces the provider's entire item set. Emit all current items, not just changes.
-- `DiscoveredItem` data is not stored as a persisted record; DevDocket tracks only the inbox state (`unseen`, `accepted`, `dismissed`) for discovered items in `discovered-state.json`.
-- When a user accepts an item from the Incoming tier or Sources tab, DevDocket creates and persists a new `WorkItem` in `workitems.json` that includes a snapshot of the item's `title`, along with its `providerId`/`externalId`/`url` as provenance metadata.
+- `DiscoveredItem` data is not stored as a persisted record; DevDocket tracks only the inbox state (`unseen`, `accepted`, `dismissed`) for discovered items in the `devdocket.discovered-state` `globalState` key.
+- When a user accepts an item from the Incoming tier or Sources tab, DevDocket creates and persists a new `WorkItem` (in the `devdocket.workitems` `globalState` key) that includes a snapshot of the item's `title`, along with its `providerId`/`externalId`/`url` as provenance metadata.
 - Use `group` to organize items in the Sources tab. Items with the same group value are nested under a folder.
 - Use `canonicalId` when the same entity might be discovered by multiple providers (e.g., a PR found by both "My PRs" and "PR Reviews"). Items sharing a `canonicalId` are deduplicated in the Incoming tier — one representative is shown and accept/dismiss propagates to all. Use a consistent format like `github:pull:owner/repo#42`. Items without `canonicalId` show individually (backward compatible). The Sources tab is unaffected.
 - Set `itemType` to `'issue'` or `'pr'` when your provider can classify the item kind. DevDocket surfaces this as a separate type pill so users can distinguish issues from pull requests at a glance. Items without `itemType` simply omit the pill — useful for generic / manual / heterogeneous sources where the kind isn't meaningful.
@@ -239,7 +282,7 @@ context.subscriptions.push(disposable);
 
 ## Actions
 
-An action is an operation that can be performed on a work item. Actions are surfaced dynamically via the **Run Action…** entry in the editor and as a hover action on items in the **Ready to Start** and **In Progress** tiers.
+An action is an operation that can be performed on a work item. Actions are surfaced dynamically via the **Run Action…** entry in the work item editor.
 
 ### DevDocketAction Interface
 
@@ -372,7 +415,7 @@ URLs opened via `vscode.env.openExternal` are validated to use `http:` or `https
 
 ## Auto-Completion
 
-DevDocket can automatically mark work items as **Done** when their linked external item is closed or merged. This is controlled by the `devdocket.autoCompleteOnClose` setting (default: `true`).
+DevDocket can automatically mark work items as **Done** when their linked external item is closed or merged. This is controlled by the `devDocket.autoCompleteOnClose` setting (default: `true`).
 
 After each provider refresh, DevDocket scans the WorkGraph for items linked to that provider in auto-completable states (`New`, `InProgress`, `Paused`). It then checks whether those external items are closed:
 
