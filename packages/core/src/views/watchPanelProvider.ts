@@ -1,4 +1,5 @@
 import * as vscode from 'vscode';
+import * as crypto from 'node:crypto';
 import type { PRIdentifier, RunConclusion, RunIdentifier, RunState } from '@devdocket/shared';
 import { WatcherService, type WatchedPR, type WatchedRun } from '../services/watcherService';
 import { isSafeUrl } from '../utils/url';
@@ -558,10 +559,8 @@ function toDisplayLabel(value: string): string {
 }
 
 function getNonce(): string {
-  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
-  let nonce = '';
-  for (let index = 0; index < 32; index += 1) {
-    nonce += chars.charAt(Math.floor(Math.random() * chars.length));
-  }
-  return nonce;
+  // Cryptographically random nonce (matches editorPanelHtml). Math.random
+  // is seeded per-process and predictable, which would make CSP a paper
+  // shield if any future change introduced user-controlled HTML.
+  return crypto.randomBytes(16).toString('hex');
 }

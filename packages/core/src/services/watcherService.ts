@@ -46,6 +46,15 @@ export class WatcherService implements vscode.Disposable {
   private prWatches = new Map<string, WatchedPR>();
   private pollTimer: NodeJS.Timeout | undefined;
   private isPollInFlight = false;
+  /**
+   * Set to true the moment dispose() runs. All await-resuming code paths
+   * inside the polling loops check this and bail out before mutating shared
+   * state or calling persistWatches(). Without it, a poll that was awaiting
+   * an HTTP call when the user reloaded the window could persist an empty
+   * watches list (the maps are cleared synchronously in dispose() before
+   * the in-flight poll resumes).
+   */
+  private disposed = false;
   private consecutiveFailures = new Map<string, number>();
   private persistedPRWatchKeys: Set<string> | undefined;
   private configSubscription: vscode.Disposable | undefined;
@@ -336,9 +345,11 @@ export class WatcherService implements vscode.Disposable {
    */
   dismissAllCompleted(): void {
     let dismissedCount = 0;
-    for (const watch of this.watches.values()) {
+    for (const [key, watch] of this.watches.entries()) {
       if (watch.status.overallState === 'completed' && !watch.dismissed) {
         watch.dismissed = true;
+        // Drop the ack so a re-watch can alert again. Mirrors dismissWatch.
+        this.acknowledgedFailedRunKeys.delete(key);
         dismissedCount++;
       }
     }
@@ -351,6 +362,8 @@ export class WatcherService implements vscode.Disposable {
           const childWatch = this.watches.get(childKey);
           if (childWatch && !childWatch.dismissed && childWatch.parentPRKey === key) {
             childWatch.dismissed = true;
+            // Drop the ack so a re-watch can alert again.
+            this.acknowledgedFailedRunKeys.delete(childKey);
             dismissedCount++;
           }
         }
@@ -576,8 +589,10 @@ export class WatcherService implements vscode.Disposable {
    */
   private async pollAllWatches(): Promise<void> {
     // Concurrency guard: skip if previous poll still in flight
-    if (this.isPollInFlight) {
-      this.logger.warn('Poll already in flight, skipping tick');
+    if (this.isPollInFlight || this.disposed) {
+      if (this.isPollInFlight) {
+        this.logger.warn('Poll already in flight, skipping tick');
+      }
       return;
     }
 
@@ -585,9 +600,13 @@ export class WatcherService implements vscode.Disposable {
     try {
       // Phase 1: Poll PR watches first — may add/remove child runs
       const prResult = await this.pollPRWatches();
+      // Bail if dispose() ran during phase 1 — don't fire events or persist
+      // an empty/partial state that would overwrite the on-disk record.
+      if (this.disposed) return;
 
       // Phase 2: Poll run watches (including newly added child runs)
       const runChanged = await this.pollRunWatches();
+      if (this.disposed) return;
 
       if (prResult.prChanged) {
         this._onDidChangePRWatches.fire();
@@ -639,6 +658,15 @@ export class WatcherService implements vscode.Disposable {
         }
 
         const snapshot = await prWatcher.getPRRunsSnapshot(prWatch.identifier);
+        // Bail if the watch was dismissed, replaced (forceRecreate), or the
+        // service was disposed while the snapshot fetch was in flight.
+        // Otherwise we'd mutate stale state, fire onDidCompletePR for an
+        // already-replaced PR, or leak orphan child runs whose parentPRKey
+        // points at a PR no longer in this.prWatches.
+        if (this.disposed) return { prChanged, childRunChanged };
+        if (this.prWatches.get(key) !== prWatch || prWatch.dismissed) {
+          continue;
+        }
         prWatch.lastPolledAt = new Date().toISOString();
 
         // Apply updated display name from snapshot
@@ -664,6 +692,7 @@ export class WatcherService implements vscode.Disposable {
               suppressEvents: true,
               suppressPersist: true,
             });
+            if (this.disposed) return { prChanged, childRunChanged };
             if (added) {
               childRunChanged = true;
             }
@@ -730,10 +759,19 @@ export class WatcherService implements vscode.Disposable {
         }
 
         const newStatus = await watcher.getRunStatus(watch.identifier);
-        watch.lastPolledAt = new Date().toISOString();
-        
-        // Reset failure count on success
         const key = this.getWatchKey(watch.identifier);
+        // Bail if the watch was dismissed, replaced, or the service was
+        // disposed while the status fetch was in flight. Otherwise we'd
+        // mutate a watch the user just hid and potentially fire
+        // onDidCompleteRun for it (popping a "Run completed" toast for
+        // something that's no longer in the panel).
+        if (this.disposed) return anyChanged;
+        if (this.watches.get(key) !== watch || watch.dismissed) {
+          continue;
+        }
+        watch.lastPolledAt = new Date().toISOString();
+
+        // Reset failure count on success
         this.consecutiveFailures.delete(key);
         watch.hasWarning = false;
         watch.errorMessage = undefined;
@@ -885,6 +923,7 @@ export class WatcherService implements vscode.Disposable {
   }
 
   dispose(): void {
+    this.disposed = true;
     this.configSubscription?.dispose();
     this.stopPolling();
     this._onDidChangeWatchedRuns.dispose();
@@ -895,6 +934,7 @@ export class WatcherService implements vscode.Disposable {
     this.watches.clear();
     this.prWatches.clear();
     this.consecutiveFailures.clear();
+    this.acknowledgedFailedRunKeys.clear();
     this.persistedPRWatchKeys = undefined;
   }
 }

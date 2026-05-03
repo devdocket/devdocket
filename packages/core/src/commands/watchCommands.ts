@@ -164,16 +164,28 @@ async function handleWatchPRFromItem(
   const prWatcher = prWatcherRegistry.findWatcherForUrl(safeUrl.href);
   if (prWatcher) {
     const identifier = prWatcher.parsePRUrl(safeUrl.href);
-    await watcherService.startPRWatch(identifier);
-    void vscode.window.showInformationMessage(`Now watching PR: ${identifier.displayName}`);
+    const wasActive = watcherService.isPRActive(identifier);
+    // Pass forceRecreate so this acts as an "explicit user intent" entry
+    // point (matching the manual Watch URL command). Without it, a PR
+    // that ended up invisible after all its child runs were dismissed
+    // would silently re-return the broken watch unchanged.
+    const watch = await watcherService.startPRWatch(identifier, { forceRecreate: true });
+    const message = wasActive
+      ? `Re-watching PR: ${watch.identifier.displayName}`
+      : `Now watching PR: ${watch.identifier.displayName}`;
+    void vscode.window.showInformationMessage(message);
     return;
   }
 
   const runWatcher = watcherRegistry.findWatcherForUrl(safeUrl.href);
   if (runWatcher) {
     const identifier = runWatcher.parseRunUrl(safeUrl.href);
-    await watcherService.startWatch(identifier);
-    void vscode.window.showInformationMessage(`Now watching run: ${identifier.displayName}`);
+    const wasActive = watcherService.isRunActive(identifier);
+    const watch = await watcherService.startWatch(identifier);
+    const message = wasActive
+      ? `Already watching: ${watch.identifier.displayName}`
+      : `Now watching run: ${watch.identifier.displayName}`;
+    void vscode.window.showInformationMessage(message);
     return;
   }
 

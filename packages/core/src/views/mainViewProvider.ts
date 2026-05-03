@@ -1,4 +1,5 @@
 import * as vscode from 'vscode';
+import * as crypto from 'node:crypto';
 import type { DiscoveredItem } from '../api/types';
 import { type WorkItem, WorkItemState } from '../models/workItem';
 import { ActionRegistry } from '../services/actionRegistry';
@@ -1102,10 +1103,8 @@ function parseDiscoveredItemKey(value: string): { providerId: string; externalId
 }
 
 function getNonce(): string {
-  const possible = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
-  let text = '';
-  for (let i = 0; i < 32; i++) {
-    text += possible.charAt(Math.floor(Math.random() * possible.length));
-  }
-  return text;
+  // Cryptographically random nonce (matches editorPanelHtml). Math.random
+  // is seeded per-process and predictable, which would make CSP a paper
+  // shield if any future change introduced user-controlled HTML.
+  return crypto.randomBytes(16).toString('hex');
 }

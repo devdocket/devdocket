@@ -176,6 +176,31 @@ describe('WatcherService', () => {
       expect(active).toHaveLength(1);
       expect(active[0].identifier.providerId).toBe('running');
     });
+
+    it('clears acknowledgement keys when dismissing completed runs', async () => {
+      // Regression test for the previously-missed branch: dismissAllCompleted
+      // dismissed runs but never cleared their ack keys, so a re-watch of
+      // the same identifier would be permanently silenced.
+      const watcher = createMockWatcher('test', async () => ({
+        overallState: 'completed' as const,
+        conclusion: 'failure' as const,
+        jobs: [],
+      }));
+      registry.register(watcher);
+      const identifier = createIdentifier();
+      const watch = await service.startWatch(identifier);
+
+      service.acknowledgeAllFailures();
+      expect(service.isFailureAcknowledged(watch)).toBe(true);
+
+      service.dismissAllCompleted();
+      // The watch is now dismissed; the ack key should be gone too so a
+      // re-watch can alert on its first failure.
+      expect(service.isFailureAcknowledged(watch)).toBe(false);
+
+      const second = await service.startWatch(identifier);
+      expect(service.isFailureAcknowledged(second)).toBe(false);
+    });
   });
 
   describe('polling', () => {
@@ -275,6 +300,43 @@ describe('WatcherService', () => {
       await vi.advanceTimersByTimeAsync(180000);
       const callCountAfterDismiss = (watcher.getRunStatus as ReturnType<typeof vi.fn>).mock.calls.length;
       expect(callCountAfterDismiss).toBe(callCountAfterStart);
+    });
+
+    it('does not persist after dispose() while a poll is in flight', async () => {
+      // Regression: dispose() clears this.watches synchronously, but a
+      // poll that was awaiting an HTTP call would resume after the clear,
+      // see the empty maps, and call persistWatches() with empty arrays —
+      // wiping the user's persisted watch list on next launch.
+      const pendingResolvers: ((value: any) => void)[] = [];
+      let callCount = 0;
+      const watcher = createMockWatcher('test');
+      (watcher.getRunStatus as ReturnType<typeof vi.fn>).mockImplementation(() => {
+        callCount += 1;
+        // First call (from startWatch) resolves immediately so the test
+        // can set up a watch. Subsequent calls (from polling) stall until
+        // the test resolves them explicitly.
+        if (callCount === 1) {
+          return Promise.resolve({ overallState: 'running', conclusion: undefined, jobs: [] });
+        }
+        return new Promise<any>(resolve => { pendingResolvers.push(resolve); });
+      });
+      registry.register(watcher);
+      await service.startWatch(createIdentifier());
+      // Reset the saveAll spy to ignore the post-startWatch persist.
+      (watchStore.saveAll as ReturnType<typeof vi.fn>).mockClear();
+      // Advance timers to start the poll. Don't await — the poll's await
+      // is now stalled on the second getRunStatus call.
+      void vi.advanceTimersByTimeAsync(60000);
+      // Wait for the poll to enter its await state.
+      await vi.waitFor(() => expect(pendingResolvers).toHaveLength(1));
+      // Dispose mid-flight, then resolve the in-flight poll.
+      service.dispose();
+      pendingResolvers[0]({ overallState: 'completed', conclusion: 'success', jobs: [] });
+      // Flush microtasks so the .then() chain runs.
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+      expect(watchStore.saveAll).not.toHaveBeenCalled();
     });
   });
 

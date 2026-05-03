@@ -39,6 +39,9 @@ export class WatchesStatusBar implements vscode.Disposable {
 
     for (const watch of watches) {
       if (watch.hasWarning) {
+        // hasWarning means we couldn't poll the run successfully — surface
+        // it as an alert in the status bar so the user knows something's
+        // wrong, but don't conflate it with a CI failure conclusion.
         failedCount += 1;
         if (!this.watcherService.isFailureAcknowledged(watch)) {
           unacknowledgedFailedCount += 1;
@@ -49,7 +52,15 @@ export class WatchesStatusBar implements vscode.Disposable {
         runningCount += 1;
         continue;
       }
-      if (watch.status.conclusion === 'success') {
+      const conclusion = watch.status.conclusion;
+      if (conclusion === undefined || conclusion === 'success') {
+        passedCount += 1;
+        continue;
+      }
+      // cancelled / skipped / neutral are explicit non-results, not failures.
+      // Mirrors the canonical isFailedRun in mainViewProvider.ts and the
+      // watch panel webview so the status bar agrees with the panel UI.
+      if (conclusion === 'cancelled' || conclusion === 'skipped' || conclusion === 'neutral') {
         passedCount += 1;
         continue;
       }
