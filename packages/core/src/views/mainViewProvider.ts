@@ -293,7 +293,11 @@ export class MainViewProvider implements vscode.WebviewViewProvider {
 
   private buildBadges(providerId?: string, discoveredItem?: DiscoveredItem, itemUrl?: string): BadgeData[] {
     const badges: BadgeData[] = [];
-    const providerBadge = buildProviderBadge(providerId);
+    // Pass through the provider's human-readable label so third-party
+    // providers (anything not GitHub/ADO) get a real name on the badge
+    // instead of being mislabeled as "Manual".
+    const providerLabel = providerId ? this.providerRegistry.getProviderLabel(providerId) : undefined;
+    const providerBadge = buildProviderBadge(providerId, providerLabel);
     if (providerBadge) {
       badges.push(providerBadge);
     }

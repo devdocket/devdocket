@@ -183,14 +183,14 @@ describe('MainViewProvider', () => {
     const workGraph = createMockWorkGraph([
       makeWorkItem({ id: 'urgent-ready', title: 'Urgent ready', state: WorkItemState.New, sortOrder: 20, updatedAt: 40, providerId: 'github', externalId: 'ready-urgent', url: 'https://github.com/org/repo/pull/20' }),
       makeWorkItem({ id: 'ordinary-ready', title: 'Ordinary ready', state: WorkItemState.New, sortOrder: 10, updatedAt: 60, providerId: 'ado', externalId: 'ready-ordinary', url: 'https://dev.azure.com/org/project/_git/repo/pullrequest/10' }),
-      makeWorkItem({ id: 'manual-ready', title: 'Manual ready', state: WorkItemState.New, sortOrder: 30, updatedAt: 50, providerId: 'manual' }),
+      makeWorkItem({ id: 'manual-ready', title: 'Manual ready', state: WorkItemState.New, sortOrder: 30, updatedAt: 50 }),
       makeWorkItem({ id: 'urgent-newer', title: 'Urgent newer', state: WorkItemState.InProgress, updatedAt: 200, providerId: 'github', externalId: 'ip-urgent-newer' }),
       makeWorkItem({ id: 'urgent-older', title: 'Urgent older', state: WorkItemState.InProgress, updatedAt: 100, providerId: 'github', externalId: 'ip-urgent-older' }),
       makeWorkItem({ id: 'ordinary-newest', title: 'Ordinary newest', state: WorkItemState.InProgress, updatedAt: 300, providerId: 'ado', externalId: 'ip-ordinary' }),
       makeWorkItem({ id: 'paused-old', title: 'Paused old', state: WorkItemState.Paused, updatedAt: 10, providerId: 'github', externalId: 'paused-old' }),
       makeWorkItem({ id: 'paused-new', title: 'Paused new', state: WorkItemState.Paused, updatedAt: 20, providerId: 'github', externalId: 'paused-new' }),
       makeWorkItem({ id: 'done-new', title: 'Done new', state: WorkItemState.Done, updatedAt: 500, providerId: 'github', externalId: 'done-new', url: 'https://github.com/org/repo/actions/runs/500' }),
-      makeWorkItem({ id: 'done-old', title: 'Done old', state: WorkItemState.Archived, updatedAt: 400, providerId: 'manual' }),
+      makeWorkItem({ id: 'done-old', title: 'Done old', state: WorkItemState.Archived, updatedAt: 400 }),
     ]);
     const providerRegistry = createProviderRegistry({
       github: [

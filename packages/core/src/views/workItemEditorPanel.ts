@@ -346,7 +346,7 @@ export class WorkItemEditorPanel {
       group: item.group,
       createdAt: item.createdAt,
       updatedAt: item.updatedAt,
-      badges: composeEditorBadges(item.providerId, discoveredItem),
+      badges: composeEditorBadges(item.providerId, discoveredItem, providerLabel),
       isProviderManaged: this.isProviderManaged(item),
       validTransitions: Array.from(VALID_TRANSITIONS.get(item.state) ?? []),
       hasActions: WorkItemEditorPanel.actionRegistry?.hasActionsFor(item) ?? false,
@@ -382,7 +382,7 @@ export class WorkItemEditorPanel {
           id: peer.id,
           title: peer.title,
           state: peer.state,
-          badges: composeEditorBadges(providerId, candidate),
+          badges: composeEditorBadges(providerId, candidate, this.providerRegistry.getProviderLabel(providerId)),
         });
       }
     }
@@ -511,9 +511,16 @@ export class WorkItemEditorPanel {
  * provider-supplied badges declared on the {@link DiscoveredItem}. CI badges
  * are not added here — the editor doesn't currently surface CI status inline.
  */
-export function composeEditorBadges(providerId?: string, discoveredItem?: DiscoveredItem): BadgeData[] {
+export function composeEditorBadges(
+  providerId?: string,
+  discoveredItem?: DiscoveredItem,
+  providerLabel?: string,
+): BadgeData[] {
   const badges: BadgeData[] = [];
-  const providerBadge = buildProviderBadge(providerId);
+  // providerLabel is passed through to buildProviderBadge so third-party
+  // providers get a real name on the badge instead of being mislabeled
+  // as "Manual".
+  const providerBadge = buildProviderBadge(providerId, providerLabel);
   if (providerBadge) badges.push(providerBadge);
   const typeBadge = buildTypeBadge(discoveredItem);
   if (typeBadge) badges.push(typeBadge);

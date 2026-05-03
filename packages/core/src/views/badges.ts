@@ -17,9 +17,20 @@ import type { BadgeData } from './mainTypes';
  * strings.
  */
 
-export function buildProviderBadge(providerId?: string): BadgeData | undefined {
+/**
+ * Build the provider badge for an item.
+ *
+ * - Items with no providerId are manual ("Manual").
+ * - GitHub and ADO providers get their canonical short labels and themed
+ *   colors so they're instantly recognizable.
+ * - Other (third-party) providers fall back to the human-readable label
+ *   passed in by the caller — typically `providerRegistry.getProviderLabel()`
+ *   — or the providerId itself if no label is available. This avoids
+ *   mislabeling third-party providers as "Manual".
+ */
+export function buildProviderBadge(providerId?: string, label?: string): BadgeData | undefined {
   if (!providerId) {
-    return undefined;
+    return { label: 'Manual', type: 'provider', variant: 'manual' };
   }
 
   const normalizedProviderId = providerId.toLowerCase();
@@ -30,7 +41,10 @@ export function buildProviderBadge(providerId?: string): BadgeData | undefined {
     return { label: 'ADO', type: 'provider', variant: 'ado' };
   }
 
-  return { label: 'Manual', type: 'provider', variant: 'manual' };
+  // Unknown / third-party provider — show the real label so the user
+  // can tell what surfaced this item. BadgePill's getBadgeColors falls
+  // back to the default VS Code badge style for unrecognized variants.
+  return { label: label ?? providerId, type: 'provider', variant: 'other' };
 }
 
 /**
