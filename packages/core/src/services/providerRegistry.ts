@@ -337,6 +337,15 @@ export class ProviderRegistry {
     if (this._disposed) {
       return;
     }
+    // Receiving items via onDidDiscoverItems is a "successful refresh" signal.
+    // Providers extending BaseProvider drive their own periodic refresh via
+    // setInterval, which calls doBackgroundRefresh() directly and bypasses
+    // refreshWithTimeout(), so this is the only place we learn about those
+    // background successes. Without this, a provider that went unhealthy
+    // (e.g. initial-refresh timeout) would never recover until the next
+    // user-triggered refreshAll(). updateHealth is a no-op when status is
+    // unchanged, so calling it on every emission is cheap.
+    this.updateHealth(providerId, 'healthy');
     let wasTruncated = false;
     if (items.length > ProviderRegistry.MAX_ITEMS_PER_PROVIDER) {
       logger.warn(
