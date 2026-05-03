@@ -119,6 +119,31 @@ function isAutoWatchCandidate(item: { authored?: boolean; url?: string }): item 
   return item.authored === true && typeof item.url === 'string';
 }
 
+/**
+ * Maximum number of authored PRs from a single provider that we'll auto-watch
+ * in one refresh pass. Prevents a buggy or hostile provider from creating an
+ * unbounded number of polling timers (each watch costs a network round-trip
+ * per poll interval).
+ */
+const MAX_AUTO_WATCH_PER_PROVIDER = 200;
+
+/**
+ * Strip query string and fragment from a URL before logging so that
+ * provider-controlled values (which may include API tokens deliberately
+ * planted to be exfiltrated through log capture) don't end up persisted in
+ * the Output channel verbatim. Keeps origin + path so the log still names
+ * which item failed.
+ */
+function redactUrlForLog(value: string | undefined): string | undefined {
+  if (!value) return value;
+  try {
+    const parsed = new URL(value);
+    return `${parsed.origin}${parsed.pathname}`;
+  } catch {
+    return '<unparseable>';
+  }
+}
+
 export async function autoWatchAuthoredPRs(
   providerId: string,
   providerRegistry: ProviderRegistry,
@@ -127,6 +152,7 @@ export async function autoWatchAuthoredPRs(
   signal: AbortSignal,
 ): Promise<void> {
   const items = providerRegistry.getDiscoveredItems(providerId).filter(isAutoWatchCandidate);
+  let watchedThisPass = 0;
 
   for (const item of items) {
     if (signal.aborted) {
@@ -136,6 +162,14 @@ export async function autoWatchAuthoredPRs(
     try {
       const itemUrl = item.url;
       if (!itemUrl) {
+        continue;
+      }
+
+      // Defense-in-depth: only http(s) URLs are safe to feed into PR
+      // watcher resolution. A malicious provider can claim authored:true
+      // for arbitrary strings; reject anything that wouldn't survive
+      // isSafeUrl downstream.
+      if (!isSafeUrl(itemUrl)) {
         continue;
       }
 
@@ -149,12 +183,20 @@ export async function autoWatchAuthoredPRs(
         continue;
       }
 
+      if (watchedThisPass >= MAX_AUTO_WATCH_PER_PROVIDER) {
+        logger.warn(
+          `Auto-watch cap reached for provider ${providerId} (limit ${MAX_AUTO_WATCH_PER_PROVIDER}); skipping remaining authored PRs to bound polling cost`,
+        );
+        return;
+      }
+
       await watcherService.startPRWatch(identifier);
+      watchedThisPass++;
     } catch (err) {
       if (signal.aborted) {
         return;
       }
-      logger.warn(`Failed to auto-watch authored PR from provider ${providerId}`, { url: item.url }, err);
+      logger.warn(`Failed to auto-watch authored PR from provider ${providerId}`, { url: redactUrlForLog(item.url) }, err);
     }
   }
 }

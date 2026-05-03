@@ -266,6 +266,75 @@ describe('activate()', () => {
     expect(watcherService.startPRWatch).toHaveBeenCalledWith(identifier);
   });
 
+  it('refuses to auto-watch authored items whose url is not http(s)', async () => {
+    // Defense-in-depth: a malicious provider can claim authored:true with
+    // any URL string. Reject anything that wouldn't survive isSafeUrl.
+    const providerRegistry = {
+      getDiscoveredItems: vi.fn().mockReturnValue([
+        { externalId: 'a', title: 'js', url: 'javascript:alert(1)', authored: true },
+        { externalId: 'b', title: 'data', url: 'data:text/html,<script>alert(1)</script>', authored: true },
+        { externalId: 'c', title: 'file', url: 'file:///etc/passwd', authored: true },
+        { externalId: 'd', title: 'good', url: 'https://github.com/owner/repo/pull/42', authored: true },
+      ]),
+    } as any;
+    const goodIdentifier = { providerId: 'github-prs', prId: '42', displayName: 'PR #42', url: 'https://github.com/owner/repo/pull/42', repo: 'owner/repo' };
+    const prWatcher = { parsePRUrl: vi.fn().mockReturnValue(goodIdentifier) };
+    const prWatcherRegistry = {
+      findWatcherForUrl: vi.fn((url: string) => url.startsWith('https://') ? prWatcher : undefined),
+    } as any;
+    const watcherService = {
+      isPRWatched: vi.fn().mockResolvedValue(false),
+      startPRWatch: vi.fn().mockResolvedValue(undefined),
+    } as any;
+
+    await autoWatchAuthoredPRs(
+      'github-my-prs',
+      providerRegistry,
+      prWatcherRegistry,
+      watcherService,
+      new AbortController().signal,
+    );
+
+    // Only the https URL should reach findWatcherForUrl; the malicious
+    // schemes are short-circuited before any provider-specific parsing.
+    expect(prWatcherRegistry.findWatcherForUrl).toHaveBeenCalledTimes(1);
+    expect(prWatcherRegistry.findWatcherForUrl).toHaveBeenCalledWith('https://github.com/owner/repo/pull/42');
+    expect(watcherService.startPRWatch).toHaveBeenCalledTimes(1);
+    expect(watcherService.startPRWatch).toHaveBeenCalledWith(goodIdentifier);
+  });
+
+  it('caps the number of authored PRs auto-watched per provider per pass', async () => {
+    // Hostile/buggy provider could otherwise spawn an unbounded number of
+    // polling timers (one per authored item). The cap keeps polling cost
+    // bounded and surfaces a warning so the issue is observable.
+    const items = Array.from({ length: 250 }, (_, i) => ({
+      externalId: `owner/repo#${i}`,
+      title: `PR ${i}`,
+      url: `https://github.com/owner/repo/pull/${i}`,
+      authored: true,
+    }));
+    const providerRegistry = { getDiscoveredItems: vi.fn().mockReturnValue(items) } as any;
+    const prWatcher = {
+      parsePRUrl: vi.fn((url: string) => ({ providerId: 'github-prs', prId: url, displayName: url, url, repo: 'owner/repo' })),
+    };
+    const prWatcherRegistry = { findWatcherForUrl: vi.fn(() => prWatcher) } as any;
+    const watcherService = {
+      isPRWatched: vi.fn().mockResolvedValue(false),
+      startPRWatch: vi.fn().mockResolvedValue(undefined),
+    } as any;
+
+    await autoWatchAuthoredPRs(
+      'github-my-prs',
+      providerRegistry,
+      prWatcherRegistry,
+      watcherService,
+      new AbortController().signal,
+    );
+
+    // Cap is 200 per provider per refresh pass.
+    expect(watcherService.startPRWatch).toHaveBeenCalledTimes(200);
+  });
+
   it('runs auto-watch and auto-complete in parallel after provider refresh', async () => {
     const globalState = context.globalState as InstanceType<typeof MockMemento>;
     const now = Date.now();

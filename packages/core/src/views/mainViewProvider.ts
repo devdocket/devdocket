@@ -459,11 +459,19 @@ export class MainViewProvider implements vscode.WebviewViewProvider {
       case 'runAction':
         await vscode.commands.executeCommand('devdocket.runAction', { id: message.itemId });
         break;
-      case 'openUrl':
-        if (isSafeUrl(message.url)) {
-          await vscode.env.openExternal(vscode.Uri.parse(message.url));
+      case 'openUrl': {
+        // Use the canonical href returned by isSafeUrl, not the raw
+        // message.url. WHATWG URL and vscode.Uri.parse are different
+        // parsers and could disagree on edge-case strings (embedded
+        // NULs, unusual percent-encoding, IDN). All other openExternal
+        // call sites in the codebase route through safeUrl.href; keep
+        // that contract consistent here too.
+        const safe = isSafeUrl(message.url);
+        if (safe) {
+          await vscode.env.openExternal(vscode.Uri.parse(safe.href));
         }
         break;
+      }
       case 'switchTab':
         break;
       case 'markSeen':

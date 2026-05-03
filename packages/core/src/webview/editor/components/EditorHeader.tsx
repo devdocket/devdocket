@@ -2,6 +2,7 @@ import type { ComponentChildren } from 'preact';
 import { BadgePill } from '../../shared/components/BadgePill';
 import type { EditorItemData } from '../../shared/types';
 import { stateLabel, stateTone } from '../editorUtils';
+import { isSafeUrl } from '../../../utils/url';
 
 interface EditorHeaderProps {
   item: EditorItemData;
@@ -17,13 +18,22 @@ export function EditorHeader({ item, title, onOpenUrl, onCopyText, actionButtons
   // heading regardless of whether the item has a URL. When url is set,
   // the heading wraps an anchor so it's still keyboard-activatable and
   // styled as a link.
-  const titleContent = item.url ? (
+  //
+  // Defense-in-depth: validate item.url with isSafeUrl before binding
+  // it to href. The onClick handler routes through postMessage which
+  // re-validates extension-side, but middle-click / right-click /
+  // "Copy link" use the raw href and bypass that handler. A malicious
+  // provider that supplies a `javascript:` URL would otherwise expose
+  // the user to a vector that the webview CSP only mitigates rather
+  // than blocks. Fall back to plain text (no anchor) when invalid.
+  const safeUrl = item.url ? isSafeUrl(item.url) : null;
+  const titleContent = safeUrl ? (
     <a
       class="editor-title-link"
-      href={item.url}
+      href={safeUrl.href}
       onClick={(event) => {
         event.preventDefault();
-        onOpenUrl(item.url!);
+        onOpenUrl(safeUrl.href);
       }}
     >
       {title}
