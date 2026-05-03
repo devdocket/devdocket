@@ -78,7 +78,7 @@ A read-only variant of the editor used when you click an Incoming item or an una
 
 ## CI Watches Panel
 
-A floating webview that monitors GitHub Actions / Azure DevOps Pipeline runs and pull request review/merge status. Open it from the **eye icon** in the status bar — the icon shows the current watch count and turns amber when a watched run fails.
+A floating webview that monitors GitHub Actions / Azure DevOps Pipeline runs and pull request lifecycle status (open / merged / closed). Open it from the **eye icon** in the status bar — the icon shows the current watch count and turns amber when a watched run fails.
 
 ### Two sections
 
