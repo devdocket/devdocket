@@ -18,15 +18,21 @@ Developers constantly context-switch between tools. Issues live in GitHub, tasks
 
 ## Workflow
 
-DevDocket organizes work across five views in the sidebar:
+DevDocket organizes your work in a single sidebar view with two tabs:
 
-| View | Purpose |
-|------|---------|
-| **Inbox** | Newly discovered items from providers. Accept to keep, or dismiss. |
-| **Queue** | Your curated backlog — accepted items and manual tasks. |
-| **Focus** | What you're actively working on. Pause or complete items here. |
-| **History** | Completed and archived items — your work record. |
-| **Sources** | Everything providers know about, browsable anytime. |
+- **My Work** — your active workflow, organized into tiers (in render order):
+
+  | Tier | Purpose |
+  |------|---------|
+  | **↓ Incoming** | Newly discovered items from providers. Click to preview, then **Accept** or **Dismiss**. |
+  | **▶ In Progress** | What you're actively working on. Pause, resume, or complete from hover actions. |
+  | **○ Ready to Start** | Your curated backlog — accepted items and manual tasks. |
+  | **⏸ Paused** | Items temporarily set aside. Resume to bring them back into In Progress. |
+  | **✓ Done** | Completed items — your work record. |
+
+- **Sources** — everything providers know about, grouped by provider, browsable anytime.
+
+A separate floating **CI Watches** panel monitors GitHub Actions / Azure DevOps Pipeline runs and PR review/merge status. Open it from the eye icon in the status bar.
 
 By default, provider-linked items are automatically marked **Done** when their issue is closed or their PR is merged externally.
 

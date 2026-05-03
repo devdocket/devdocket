@@ -151,7 +151,7 @@ interface DiscoveredItem {
    */
   externalId: string;
 
-  /** Title displayed in the Inbox and Sources views. */
+  /** Title displayed in the Incoming tier and the Sources tab. */
   title: string;
 
   /** Optional description shown in tooltips (can be long). */
@@ -161,17 +161,18 @@ interface DiscoveredItem {
   url?: string;
 
   /**
-   * Optional group name for sub-grouping in the Sources view.
-   * Items with the same group appear under a folder node.
-   * For example, a GitHub provider might group by repository name.
+   * Optional group name for sub-grouping in the Sources tab and as a label
+   * in card annotations. Items with the same group appear under a folder
+   * node in Sources. For example, a GitHub provider might group by
+   * repository name.
    */
   group?: string;
 
   /**
    * Optional cross-provider deduplication key.
    * Items from different providers that share the same canonicalId are
-   * grouped in the Inbox (one representative shown). Accept/dismiss/read-state
-   * propagates to all items in the group.
+   * grouped in the Incoming tier (one representative shown). Accept /
+   * dismiss / read-state propagates to all items in the group.
    * Items without canonicalId always show individually (backward compatible).
    * Use a consistent format like 'github:pull:owner/repo#42'.
    */
@@ -222,9 +223,9 @@ interface ProviderBadge {
 - `externalId` must be unique per provider and stable across refreshes. A good pattern is `owner/repo#123`.
 - Each `onDidDiscoverItems` emission replaces the provider's entire item set. Emit all current items, not just changes.
 - `DiscoveredItem` data is not stored as a persisted record; DevDocket tracks only the inbox state (`unseen`, `accepted`, `dismissed`) for discovered items in `discovered-state.json`.
-- When a user accepts an item from Inbox/Sources, DevDocket creates and persists a new `WorkItem` in `workitems.json` that includes a snapshot of the item's `title`, along with its `providerId`/`externalId`/`url` as provenance metadata.
-- Use `group` to organize items in the Sources tree. Items with the same group value are nested under a folder.
-- Use `canonicalId` when the same entity might be discovered by multiple providers (e.g., a PR found by both "My PRs" and "PR Reviews"). Items sharing a `canonicalId` are deduplicated in the Inbox — one representative is shown and accept/dismiss propagates to all. Use a consistent format like `github:pull:owner/repo#42`. Items without `canonicalId` show individually (backward compatible). The Sources view is unaffected.
+- When a user accepts an item from the Incoming tier or Sources tab, DevDocket creates and persists a new `WorkItem` in `workitems.json` that includes a snapshot of the item's `title`, along with its `providerId`/`externalId`/`url` as provenance metadata.
+- Use `group` to organize items in the Sources tab. Items with the same group value are nested under a folder.
+- Use `canonicalId` when the same entity might be discovered by multiple providers (e.g., a PR found by both "My PRs" and "PR Reviews"). Items sharing a `canonicalId` are deduplicated in the Incoming tier — one representative is shown and accept/dismiss propagates to all. Use a consistent format like `github:pull:owner/repo#42`. Items without `canonicalId` show individually (backward compatible). The Sources tab is unaffected.
 - Set `itemType` to `'issue'` or `'pr'` when your provider can classify the item kind. DevDocket surfaces this as a separate type pill so users can distinguish issues from pull requests at a glance. Items without `itemType` simply omit the pill — useful for generic / manual / heterogeneous sources where the kind isn't meaningful.
 - Use `badges` to surface state, reason, or any other custom annotation. The core deliberately doesn't interpret the `state` or `reason` strings any more — those are kept on `DiscoveredItem` for provenance/dedup purposes only. If you want a pill to show, declare it explicitly. Use `show: 'editor'` for verbose detail that would clutter the sidebar.
 
@@ -238,7 +239,7 @@ context.subscriptions.push(disposable);
 
 ## Actions
 
-An action is an operation that can be performed on a work item. Actions are surfaced dynamically in the **Run Action…** quick pick menu on Queue and Focus items.
+An action is an operation that can be performed on a work item. Actions are surfaced dynamically via the **Run Action…** entry in the editor and as a hover action on items in the **Ready to Start** and **In Progress** tiers.
 
 ### DevDocketAction Interface
 
@@ -302,8 +303,9 @@ interface WorkItem {
   url?: string;
 
   /**
-   * Optional ordering hint used by DevDocket to sort items in the Queue view.
-   * Typically managed by DevDocket; extensions generally do not need to set this.
+   * Optional ordering hint used by DevDocket to sort items in the
+   * Ready to Start tier. Typically managed by DevDocket; extensions
+   * generally do not need to set this.
    */
   sortOrder?: number;
 
@@ -331,13 +333,13 @@ Items transition through these states as the user interacts with them in the UI.
 
 **State visibility in the UI:**
 
-| State | View | Description |
+| State | Tier | Description |
 |-------|------|-------------|
-| `New` | **Queue** | Freshly created or accepted items awaiting triage. |
-| `InProgress` | **Focus** | Work the user is actively doing. |
-| `Paused` | **Focus** | Work that is temporarily paused (shown alongside in-progress items). |
-| `Done` | **History** | Completed items shown in the History view. |
-| `Archived` | **History** | Archived items shown in the History view. |
+| `New` | **Ready to Start** | Freshly created or accepted items awaiting triage. |
+| `InProgress` | **In Progress** | Work the user is actively doing. |
+| `Paused` | **Paused** | Work that is temporarily paused. |
+| `Done` | **Done** | Completed items. |
+| `Archived` | **Done** | Archived items (rendered alongside Done items). |
 
 Action authors should use this mapping when implementing `canRun()` — for example, an action that only applies to active work should target `InProgress` and `Paused`.
 
@@ -365,7 +367,7 @@ After each provider refresh, DevDocket scans the WorkGraph for items linked to t
 
 2. **Fallback: disappearance detection** — For providers without `getClosedItems()`, DevDocket compares the current discovered items against the previous refresh. Items that were previously present but are now absent are assumed closed. This fallback *cannot* cover manually-imported items since the provider never discovered them.
 
-Matched items are transitioned to `Done` and a notification is shown with a "Show History" action.
+Matched items are transitioned to `Done` and a notification is shown with a "Show DevDocket" action that focuses the sidebar.
 
 ### Implementing `getClosedItems()`
 

@@ -41,4 +41,4 @@ After 3 consecutive poll failures on a watched run, set `hasWarning: true` and s
 
 ## Canonical ID Deduplication
 
-`buildCanonicalHiddenSet()` in `canonicalDedup.ts` handles inbox dedup: for unseen items sharing a `canonicalId`, keep the alphabetically-first `providerId::externalId` and hide the rest. Used by `InboxTreeProvider` and inbox badge.
+`buildCanonicalHiddenSet()` in `canonicalDedup.ts` handles inbox dedup: for unseen items sharing a `canonicalId`, keep the alphabetically-first `providerId::externalId` and hide the rest. Used by `MainViewProvider` (Incoming tier rendering), `inboxBadge` (activity-bar unread count), and `inboxCommands` (Accept All).

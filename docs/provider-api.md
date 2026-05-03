@@ -18,19 +18,20 @@ This guide walks through the API surface and shows how to build a provider exten
 
 ## Overview
 
-DevDocket organizes work items through a lifecycle of views:
+DevDocket organizes work items through a lifecycle, surfaced as tiers in the **My Work** tab of the DevDocket sidebar plus a separate **Sources** tab:
 
-| View | Purpose |
+| Tier | Purpose |
 |------|---------|
-| **Inbox** | Newly discovered provider items the user hasn't seen yet |
-| **Queue** | The user's curated backlog of accepted items |
-| **Focus** | Items the user is actively working on |
-| **History** | Completed and archived items |
-| **Sources** | A browsable library of everything providers know about |
+| **Incoming** | Newly discovered provider items the user hasn't triaged yet |
+| **In Progress** | Items the user is actively working on |
+| **Ready to Start** | The user's curated backlog of accepted items |
+| **Paused** | Items the user has temporarily set aside |
+| **Done** | Completed and archived items |
+| **Sources** (separate tab) | A browsable library of everything providers know about |
 
-**Providers** feed items into this system by emitting `DiscoveredItem` arrays. For discovery views such as **Inbox** and **Sources**, item data is read live from the provider. When a user accepts an item, DevDocket stores a snapshot of it as a `WorkItem`, and **Queue**, **Focus**, and **History** render that persisted data instead of always reading live from the provider.
+**Providers** feed items into this system by emitting `DiscoveredItem` arrays. For discovery surfaces (the **Incoming** tier and the **Sources** tab), item data is read live from the provider. When a user accepts an item, DevDocket stores a snapshot of it as a `WorkItem`, and the **In Progress / Ready to Start / Paused / Done** tiers render that persisted data instead of always reading live from the provider.
 
-**Actions** extend what users can do with work items. The context menu exposes a single `Run Action…` command, and the available actions shown in that quick pick are filtered per-item via a `canRun()` predicate.
+**Actions** extend what users can do with work items. The editor's `Run Action…` button exposes the available actions for the current item, filtered via a `canRun()` predicate.
 
 ---
 
@@ -206,7 +207,8 @@ class JiraProvider implements DevDocketProvider {
       title: `${ticket.key}: ${ticket.summary}`,
       description: ticket.description?.slice(0, 200),
       url: `https://jira.example.com/browse/${ticket.key}`,
-      // group organizes items under folders in the Inbox and Sources views
+      // group organizes items under folders in the Sources tab
+      // and shows as the repo annotation under each item card
       group: ticket.project,
       // itemType drives the Issue/PR pill rendered by core in both views.
       // Omit it for heterogeneous or generic sources.
@@ -317,7 +319,7 @@ class JiraProvider implements DevDocketProvider {
 - **EventEmitter pattern** — Use `vscode.EventEmitter<DiscoveredItem[]>` to create the event. Expose its `.event` property as the readonly `onDidDiscoverItems`.
 - **`refresh()` is called by DevDocket** — It is invoked automatically when the provider is registered for initial discovery. It must be safe to call multiple times. DevDocket passes a `CancellationToken` and enforces a refresh timeout; providers should check `token.isCancellationRequested` before and during long-running operations.
 - **`externalId` must be unique per provider** — DevDocket uses the combination of `providerId + externalId` to track inbox state. Use a stable identifier like `owner/repo#123` or `PROJECT/TICKET-42`.
-- **`group` is optional** — When set, items with the same group value are nested under a folder node in the Inbox and Sources views.
+- **`group` is optional** — When set, items with the same group value are nested under a folder node in the Sources tab and surfaced as a small annotation below the title on each item card.
 - **`resolveUrl()` is optional** — Implement it to let users create work items by pasting a URL (e.g. from a browser). When the user runs the "Create Item from URL" command, DevDocket asks each registered provider to resolve the URL. The first provider that returns a `ResolvedItem` wins. If your provider doesn't recognise the URL, return `undefined`.
 - **`getClosedItems()` is optional** — Implement it to enable auto-completion of work items when their linked external item is closed or merged. After each provider refresh, DevDocket collects all work items in the WorkGraph linked to your provider (including manually-imported items) and calls `getClosedItems()` with their external IDs. Return the subset that are closed, merged, or completed. Providers without this method fall back to **disappearance detection** — if a previously-discovered item is absent from the next refresh, it is assumed closed. The disappearance fallback cannot cover manually-imported items since the provider never discovered them. Auto-completion is controlled by the `devdocket.autoCompleteOnClose` setting (default: `true`).
 - **Emit the full set every time** — Each `onDidDiscoverItems` emission replaces all previously known items for that provider. Emit everything currently relevant, not just deltas.
@@ -382,7 +384,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 
 ## Implementing an Action
 
-An action is an operation users can perform on a work item. Actions appear dynamically in the **Run Action…** quick pick menu on Queue and Focus items.
+An action is an operation users can perform on a work item. Actions appear dynamically in the **Run Action…** menu on items in the **Ready to Start** and **In Progress** tiers (and inside the editor for those items).
 
 ### Full Example
 
@@ -460,12 +462,14 @@ Understanding how items move through DevDocket helps you build effective provide
 
 ```mermaid
 flowchart TD
-    P["Provider emits DiscoveredItem[]"] --> Inbox["Inbox\n(unseen)"]
-    Inbox -- accept --> Queue["Queue\n(New)"]
-    Inbox -- dismiss --> Dismissed["dismissed\n(Sources only)"]
-    User["User creates item directly"] -- manual add --> Queue
-    Queue -- start --> Focus["Focus\n(InProgress, Paused)"]
-    Focus -- complete --> History["History\n(Done, Archived)"]
+    P["Provider emits DiscoveredItem[]"] --> Incoming["Incoming\n(unseen)"]
+    Incoming -- accept --> Ready["Ready to Start\n(New)"]
+    Incoming -- dismiss --> Dismissed["dismissed\n(Sources only)"]
+    User["User creates item directly"] -- manual add --> Ready
+    Ready -- start --> InProgress["In Progress\n(InProgress)"]
+    InProgress -- pause --> Paused["Paused\n(Paused)"]
+    Paused -- resume --> InProgress
+    InProgress -- complete --> Done["Done\n(Done, Archived)"]
 ```
 
 ### What gets persisted
@@ -479,7 +483,7 @@ DevDocket maintains two JSON files in its global storage:
 
 **`DiscoveredItem` fields are not persisted in `discovered-state.json`.** That file stores only inbox state keyed by `providerId + externalId`, which keeps the discovery index lightweight.
 
-When a user **accepts** an item from Inbox or Sources, DevDocket creates a new `WorkItem` in `workitems.json` using provider-backed data (such as title and URL) along with provenance metadata (`providerId`, `externalId`). Some fields may be normalized during acceptance — for example, grouped items have the group name prefixed to the stored title.
+When a user **accepts** an item from the Incoming tier or Sources tab, DevDocket creates a new `WorkItem` in `workitems.json` using provider-backed data (such as title and URL) along with provenance metadata (`providerId`, `externalId`). Some fields may be normalized during acceptance — for example, grouped items have the group name prefixed to the stored title.
 
 ---
 
@@ -503,7 +507,7 @@ Good patterns: `owner/repo#123`, `PROJECT-42`, `ticket/12345`
 
 ### Don't store provider item data
 
-DevDocket reads `DiscoveredItem` data live from the provider. There is no need to persist item details on your side — just emit the current set on each refresh. This ensures discovery views such as Inbox and Sources show the latest provider data, while accepted items in Queue, Focus, and History continue to display their persisted `WorkItem` snapshots.
+DevDocket reads `DiscoveredItem` data live from the provider. There is no need to persist item details on your side — just emit the current set on each refresh. This ensures discovery surfaces (the Incoming tier and the Sources tab) show the latest provider data, while accepted items in the Ready to Start / In Progress / Paused / Done tiers continue to display their persisted `WorkItem` snapshots.
 
 ### Dispose subscriptions properly
 
@@ -522,7 +526,7 @@ Each `onDidDiscoverItems` emission **replaces** the provider's entire known item
 
 ### Use `group` for organization
 
-Set the `group` field on `DiscoveredItem` to organize items under folder nodes in the Inbox and Sources views. For example, a GitHub provider groups issues by repository name.
+Set the `group` field on `DiscoveredItem` to organize items under folder nodes in the Sources tab and to display as a sub-annotation under each item card. For example, a GitHub provider groups issues by repository name.
 
 ### Classify items with `itemType`
 
@@ -563,13 +567,13 @@ When adding a new provider, default to declaring **at least** one reason badge (
 
 ### Use `canonicalId` for cross-provider deduplication
 
-When the same underlying entity (e.g., a pull request) might be discovered by multiple providers, set `canonicalId` to a shared identifier so DevDocket can deduplicate them in the Inbox.
+When the same underlying entity (e.g., a pull request) might be discovered by multiple providers, set `canonicalId` to a shared identifier so DevDocket can deduplicate them in the Incoming tier.
 
 **How it works:**
-- Items from different providers that share the same `canonicalId` are grouped in the Inbox, and only one representative item is shown.
+- Items from different providers that share the same `canonicalId` are grouped in the Incoming tier, and only one representative item is shown.
 - When the user accepts, dismisses, or reads an item, the action propagates to all items in the group.
 - Items without `canonicalId` always show individually — existing providers are unaffected.
-- The Sources view is not affected by `canonicalId` — it continues to show items per provider.
+- The Sources tab is not affected by `canonicalId` — it continues to show items per provider.
 
 **Format convention:** Use a consistent, deterministic format so that independent providers generate the same `canonicalId` for the same entity. The recommended pattern is `<platform>:<entity-type>:<identifier>`:
 
@@ -579,7 +583,7 @@ When the same underlying entity (e.g., a pull request) might be discovered by mu
 | GitHub Issue | `github:issue:octocat/hello-world#7` |
 | ADO PR | `ado:pull:myorg/myproject/myrepo#123` |
 
-**When to use it:** If your provider discovers items that another provider might also discover, set `canonicalId`. For example, a "My PRs" provider and a "PR Reviews" provider may both discover the same pull request — giving both items the same `canonicalId` ensures the user sees it only once in their Inbox.
+**When to use it:** If your provider discovers items that another provider might also discover, set `canonicalId`. For example, a "My PRs" provider and a "PR Reviews" provider may both discover the same pull request — giving both items the same `canonicalId` ensures the user sees it only once in their Incoming tier.
 
 ---
 
@@ -699,7 +703,7 @@ interface DiscoveredItem {
    */
   externalId: string;
 
-  /** Title displayed in the Inbox and Sources views. */
+  /** Title displayed in the Incoming tier and the Sources tab. */
   title: string;
 
   /** Optional description shown in tooltips. */
@@ -709,15 +713,16 @@ interface DiscoveredItem {
   url?: string;
 
   /**
-   * Optional group name for sub-grouping in the Inbox and Sources views.
-   * Items with the same group appear under a folder node.
+   * Optional group name for sub-grouping in the Sources tab.
+   * Items with the same group appear under a folder node, and the group
+   * value is also rendered as a small annotation under each item card.
    */
   group?: string;
 
   /**
    * Optional cross-provider deduplication key.
    * When set, items from different providers that share the same canonicalId
-   * are grouped in the Inbox view and only one representative is shown.
+   * are grouped in the Incoming tier and only one representative is shown.
    * Accept/dismiss/read-state actions propagate to all items in the group.
    * Items without canonicalId always show individually (backward compatible).
    *
@@ -815,7 +820,7 @@ interface WorkItem {
   /** URL associated with the item. */
   url?: string;
 
-  /** Ordering hint for the Queue view. Managed by DevDocket. */
+  /** Ordering hint for the Ready to Start tier. Managed by DevDocket. */
   sortOrder?: number;
 
   /** Timestamp (ms since epoch) when the item was created. */
@@ -830,11 +835,11 @@ interface WorkItem {
 
 ```ts
 enum WorkItemState {
-  New = 'New',         // Queue — freshly created or accepted
-  InProgress = 'InProgress', // Focus — active work
-  Paused = 'Paused',         // Focus — temporarily on hold
-  Done = 'Done',             // History — completed
-  Archived = 'Archived',     // History — archived
+  New = 'New',               // Ready to Start tier — freshly created or accepted
+  InProgress = 'InProgress', // In Progress tier — active work
+  Paused = 'Paused',         // Paused tier — temporarily on hold
+  Done = 'Done',             // Done tier — completed
+  Archived = 'Archived',     // Done tier — archived (rendered alongside Done)
 }
 ```
 

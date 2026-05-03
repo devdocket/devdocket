@@ -34,7 +34,7 @@ DevDocket is a VS Code extension that acts as a **hub** for managing work items 
 ### Data flow
 
 ```
-Providers (GitHub, future)          User (manual)
+Providers (GitHub, ADO, …)         User (manual)
         │                                │
         ▼                                ▼
   ProviderRegistry ──▶ Inbox ──▶ Queue ──▶ Focus ──▶ History
@@ -45,13 +45,23 @@ Providers (GitHub, future)          User (manual)
   (browsable library)
 ```
 
-### Five views
+These are the conceptual lifecycle stages tracked internally as `WorkItemState` and `InboxState`. The UI renders them as tiers in a single webview-based sidebar (see below) — there are no separate VS Code tree views per stage.
 
-1. **Inbox** — Newly discovered provider items (state: `unseen`). Accept → Queue or Dismiss.
-2. **Queue** — User's curated backlog. Manual items land here directly.
-3. **Focus** — Active work (`InProgress`, `Paused`).
-4. **History** — Completed and archived items (`Done`, `Archived`).
-5. **Sources** — Everything providers know about, grouped by provider → sub-group. Always browsable.
+### Sidebar UI (single webview view: `devdocket.main`)
+
+The main UI is a Preact-based webview view ID-ed `devdocket.main` with two tabs:
+
+1. **My Work** — five tiers in this render order:
+   1. **↓ Incoming** — newly discovered provider items with `inboxState === 'unseen'`.
+   2. **▶ In Progress** — work items in `WorkItemState.InProgress`.
+   3. **○ Ready to Start** — work items in `WorkItemState.New` (the "queue" concept).
+   4. **⏸ Paused** — work items in `WorkItemState.Paused`.
+   5. **✓ Done** — work items in `WorkItemState.Done` or `Archived`.
+2. **Sources** — everything providers know about, grouped by provider → sub-group. Always browsable.
+
+Plus a floating **CI Watches** panel (separate `devdocket.watchPanel` webview) for monitoring GitHub Actions / ADO Pipelines runs and PR status.
+
+User-facing terminology: **never** use the legacy view names ("Inbox view", "Queue view", "Focus view", "History view") in user-facing strings, walkthroughs, or docs. Use tier names ("Incoming tier", "Ready to Start tier", etc.) or "the DevDocket sidebar" for the whole. Internal docs/code may still refer to "inbox state" / "queue" as concepts where that's clearer.
 
 ### Two data stores (both JSON files in `globalStorageUri`)
 
