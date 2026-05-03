@@ -76,7 +76,7 @@ DevDocket is extensible with two types of plugins:
 
 | Extension | Type | What It Does |
 |-----------|------|--------------|
-| DevDocket GitHub | Provider + Watcher | Discovers GitHub issues, mentions, PR review requests, and authored PRs; watches GitHub Actions runs and PR status |
+| DevDocket GitHub | Provider + Watcher | Discovers GitHub issues, mentions, PR review requests, and pull requests you authored or are assigned to; watches GitHub Actions runs and PR status |
 | DevDocket — Azure DevOps | Provider + Watcher | Discovers Azure DevOps work items, PR review requests, and authored PRs; watches ADO Pipelines and PR status |
 | DevDocket Start Git Work | Action | Creates a feature branch and a sibling git worktree for a work item, optionally running follow-up commands |
 | DevDocket — AI Actions | Action | AI-powered code review against a PR diff plus a `@walkthrough` chat participant for guided codebase tours |
