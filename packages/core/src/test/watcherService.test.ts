@@ -381,6 +381,48 @@ describe('WatcherService', () => {
       expect(service.isPRActive(createPRIdentifier())).toBe(true);
     });
 
+    it('re-syncs child runs (un-dismissing) when called for an already-active PR', async () => {
+      // Reproduces the user-visible bug where a PR ends up invisible in the
+      // watch panel because all its child runs were dismissed: the polling
+      // loop won't re-add them (they're still in childRunKeys), so the
+      // panel filter (runs.length > 0) hides the PR forever. A manual
+      // "Watch URL" should restore visibility by un-dismissing any runs the
+      // upstream still reports.
+      const runWatcher = createMockWatcher('github-actions');
+      registry.register(runWatcher);
+
+      const prWatcher = createMockPRWatcher('test-pr', async () => ({
+        prState: 'open',
+        runs: [{
+          providerId: 'github-actions',
+          runId: 'run-1',
+          displayName: 'CI Build',
+          url: 'https://example.com/run/1',
+          repo: 'owner/repo',
+        }],
+      }));
+      prRegistry.register(prWatcher);
+
+      const identifier = createPRIdentifier();
+      const initialWatch = await service.startPRWatch(identifier);
+      expect(service.getActiveWatches()).toHaveLength(1);
+
+      // Simulate the user dismissing the child run via the watch panel.
+      const childRun = service.getActiveWatches()[0];
+      service.dismissWatch(childRun.identifier);
+      expect(service.getActiveWatches()).toHaveLength(0);
+      // The PR is still "active" (not dismissed), but has no visible runs ΓÇö
+      // exactly the state that hides it from the panel filter.
+      expect(service.isPRActive(identifier)).toBe(true);
+      expect(service.getChildRuns(service.getPRWatchKey(identifier))).toHaveLength(0);
+
+      // Manual "Watch URL" again ΓÇö idempotent path should re-sync child runs.
+      const second = await service.startPRWatch(identifier);
+      expect(second).toBe(initialWatch);
+      expect(service.getActiveWatches()).toHaveLength(1);
+      expect(service.getChildRuns(service.getPRWatchKey(identifier))).toHaveLength(1);
+    });
+
     it('throws if no PR watcher registered for provider', async () => {
       await expect(service.startPRWatch(createPRIdentifier('unknown'))).rejects.toThrow('No PR watcher registered');
     });
