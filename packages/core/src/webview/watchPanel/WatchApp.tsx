@@ -311,7 +311,14 @@ function getRunTierClass(runWatch: RunWatchData): string {
 }
 
 function isFailedRun(runWatch: RunWatchData): boolean {
-  return runWatch.state === 'completed' && runWatch.conclusion !== undefined && runWatch.conclusion !== 'success';
+  if (runWatch.state !== 'completed') return false;
+  const conclusion = runWatch.conclusion;
+  if (conclusion === undefined || conclusion === 'success') return false;
+  // cancelled / skipped / neutral are explicit non-results, not failures.
+  // Mirrors the canonical definition in mainViewProvider.ts so the watch
+  // panel webview and the sidebar agree on what counts as a failed run.
+  if (conclusion === 'cancelled' || conclusion === 'skipped' || conclusion === 'neutral') return false;
+  return true;
 }
 
 function toConclusionLabel(conclusion?: string): string {

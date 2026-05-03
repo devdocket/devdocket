@@ -408,9 +408,17 @@ export class WatcherService implements vscode.Disposable {
   }
 
   private static isFailedRun(watch: WatchedRun): boolean {
+    // hasWarning means we couldn't poll successfully — surface it as a
+    // 'failure' for ack-tracking purposes so the user can suppress the
+    // status-bar warning. cancelled / skipped / neutral conclusions are
+    // explicit non-results (not failures), matching the canonical
+    // definition in mainViewProvider.ts and the watch panel webview.
     if (watch.hasWarning) return true;
-    if (watch.status.overallState === 'completed' && watch.status.conclusion !== 'success') return true;
-    return false;
+    if (watch.status.overallState !== 'completed') return false;
+    const conclusion = watch.status.conclusion;
+    if (conclusion === undefined || conclusion === 'success') return false;
+    if (conclusion === 'cancelled' || conclusion === 'skipped' || conclusion === 'neutral') return false;
+    return true;
   }
 
   /**

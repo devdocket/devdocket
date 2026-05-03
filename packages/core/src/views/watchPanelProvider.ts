@@ -197,9 +197,9 @@ export class WatchPanelProvider implements vscode.Disposable {
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'nonce-${nonce}';">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'nonce-${nonce}'; script-src 'nonce-${nonce}';">
   <title>CI Watches</title>
-  <style>
+  <style nonce="${nonce}">
     * { box-sizing: border-box; }
     body {
       margin: 0;
@@ -539,7 +539,14 @@ function getRunPriority(runWatch: RunWatchData): number {
 }
 
 function isFailedRun(runWatch: RunWatchData): boolean {
-  return runWatch.state === 'completed' && runWatch.conclusion !== undefined && runWatch.conclusion !== 'success';
+  if (runWatch.state !== 'completed') return false;
+  const conclusion = runWatch.conclusion;
+  if (conclusion === undefined || conclusion === 'success') return false;
+  // cancelled / skipped / neutral are explicit non-results, not failures.
+  // Mirrors the canonical definition in mainViewProvider.ts so the watch
+  // panel and the sidebar agree on what counts as a failed run.
+  if (conclusion === 'cancelled' || conclusion === 'skipped' || conclusion === 'neutral') return false;
+  return true;
 }
 
 function truncate(value: string, maxLength = 140): string {
