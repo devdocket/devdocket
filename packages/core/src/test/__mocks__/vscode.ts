@@ -89,6 +89,7 @@ const window = {
     };
   }),
   createWebviewPanel: vi.fn(),
+  registerWebviewViewProvider: vi.fn(() => ({ dispose: vi.fn() })),
   createOutputChannel: vi.fn(() => ({
     appendLine: vi.fn(),
     append: vi.fn(),
@@ -117,7 +118,13 @@ const env = {
 const Uri = {
   parse: vi.fn((s: string) => {
     const m = s.match(/^(\w+):/);
-    return { toString: () => s, scheme: m ? m[1] : '' };
+    return { toString: () => s, scheme: m ? m[1] : '', path: s, fsPath: s };
+  }),
+  file: vi.fn((s: string) => ({ toString: () => s, scheme: 'file', path: s, fsPath: s })),
+  joinPath: vi.fn((base: { path?: string; fsPath?: string; toString?: () => string }, ...paths: string[]) => {
+    const root = base.fsPath ?? base.path ?? base.toString?.() ?? '';
+    const joined = [root, ...paths].join('\\').replace(/\\+/g, '\\');
+    return { toString: () => joined, scheme: 'file', path: joined, fsPath: joined };
   }),
 };
 
@@ -213,7 +220,9 @@ const StatusBarAlignment = {
 class MockStatusBarItem {
   text = '';
   tooltip: string | undefined;
-  command: string | undefined;
+  command: string | { command: string; title: string } | undefined;
+  color: any;
+  backgroundColor: any;
   show = vi.fn();
   hide = vi.fn();
   dispose = vi.fn();

@@ -2,7 +2,9 @@ import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
 import * as vscode from 'vscode';
 import { MockMemento } from 'vscode';
 import { activate, autoWatchAuthoredPRs, deactivate, logger } from '../extension';
-import { _resetViewLayoutStore } from '../views/viewLayout';
+import { MainViewProvider } from '../views/mainViewProvider';
+import { WatchPanelProvider } from '../views/watchPanelProvider';
+import { WorkItemEditorPanel } from '../views/workItemEditorPanel';
 
 // Stub fs so migration never touches disk
 vi.mock('fs/promises', () => ({
@@ -30,6 +32,20 @@ async function flushMicrotasks(): Promise<void> {
   await Promise.resolve();
 }
 
+function getCommandHandler(commandId: string): (...args: any[]) => any {
+  const registerCommand = vscode.commands.registerCommand as ReturnType<typeof vi.fn>;
+  const registration = registerCommand.mock.calls.find((call: any[]) => call[0] === commandId);
+  if (!registration) {
+    throw new Error(`Command not registered: ${commandId}`);
+  }
+  return registration[1];
+}
+
+function getMainProvider(): MainViewProvider {
+  const registerWebviewViewProvider = vscode.window.registerWebviewViewProvider as ReturnType<typeof vi.fn>;
+  return registerWebviewViewProvider.mock.calls[0][1] as MainViewProvider;
+}
+
 describe('activate()', () => {
   let context: vscode.ExtensionContext;
 
@@ -39,7 +55,6 @@ describe('activate()', () => {
   });
 
   afterEach(() => {
-    _resetViewLayoutStore();
     // Dispose everything activate pushed into subscriptions.
     // Surface disposal errors so cleanup bugs are caught.
     const errors: unknown[] = [];
@@ -77,17 +92,15 @@ describe('activate()', () => {
   });
 
   // ------------------------------------------------------------------
-  // 3. Creates tree views for all five panels
+  // 3. Registers the DevDocket webview provider
   // ------------------------------------------------------------------
-  it('creates tree views for inbox, queue, focus, sources, and history', async () => {
+  it('registers the DevDocket webview provider', async () => {
     await activate(context);
-    const createTreeView = vscode.window.createTreeView as ReturnType<typeof vi.fn>;
-    const viewIds = createTreeView.mock.calls.map((c: any[]) => c[0]);
-    expect(viewIds).toContain('devdocket.inbox');
-    expect(viewIds).toContain('devdocket.queue');
-    expect(viewIds).toContain('devdocket.focus');
-    expect(viewIds).toContain('devdocket.sources');
-    expect(viewIds).toContain('devdocket.history');
+    expect(vscode.window.registerWebviewViewProvider).toHaveBeenCalledWith(
+      'devdocket.main',
+      expect.any(MainViewProvider),
+      expect.objectContaining({ webviewOptions: { retainContextWhenHidden: true } }),
+    );
   });
 
   // ------------------------------------------------------------------
@@ -110,22 +123,47 @@ describe('activate()', () => {
     expect(vscode.window.createOutputChannel).toHaveBeenCalledWith('DevDocket');
   });
 
-  // ------------------------------------------------------------------
-  // 6. Badge is undefined when there are no providers or items
-  // ------------------------------------------------------------------
-  it('initialises inbox badge to undefined when there are no items', async () => {
-    await activate(context);
-    await flushMicrotasks();
+  it('wires work graph, provider registry, and state store changes to DevDocket refresh', async () => {
+    const api = await activate(context);
+    const mainProvider = getMainProvider();
+    const scheduleRefreshSpy = vi.spyOn(mainProvider, 'scheduleRefresh');
+    vi.spyOn(WorkItemEditorPanel, 'open').mockImplementation(() => undefined);
 
-    const createTreeView = vscode.window.createTreeView as ReturnType<typeof vi.fn>;
-    const inboxCall = createTreeView.mock.calls.find((c: any[]) => c[0] === 'devdocket.inbox');
-    expect(inboxCall).toBeDefined();
-    // The mock createTreeView returns an object with a badge property
-    const inboxView = createTreeView.mock.results[
-      createTreeView.mock.calls.indexOf(inboxCall!)
-    ].value;
-    // With no providers / items, badge should be undefined (no count)
-    expect(inboxView.badge).toBeUndefined();
+    (vscode.window.showInputBox as ReturnType<typeof vi.fn>).mockResolvedValue('Created from command');
+    await getCommandHandler('devdocket.createItem')();
+    await flushMicrotasks();
+    expect(scheduleRefreshSpy).toHaveBeenCalled();
+
+    scheduleRefreshSpy.mockClear();
+    const itemEmitter = new (vscode.EventEmitter as any)();
+    api.registerProvider({
+      id: 'provider-refresh',
+      label: 'Provider Refresh',
+      onDidDiscoverItems: itemEmitter.event,
+      refresh: vi.fn(async () => {
+        itemEmitter.fire([{ externalId: '2', title: 'Provider item', url: 'https://example.com/item/2' }]);
+      }),
+    } as any);
+    await flushMicrotasks();
+    await flushMicrotasks();
+    expect(scheduleRefreshSpy).toHaveBeenCalled();
+
+    scheduleRefreshSpy.mockClear();
+    await getCommandHandler('devdocket.dismissFromInbox')({ providerId: 'provider-refresh', externalId: '2', title: 'Provider item' });
+    await flushMicrotasks();
+    expect(scheduleRefreshSpy).toHaveBeenCalled();
+  });
+
+  it('creates a watch panel provider and opens it through the registered command', async () => {
+    await activate(context);
+
+    const watchPanelProvider = context.subscriptions.find(subscription => subscription instanceof WatchPanelProvider);
+    expect(watchPanelProvider).toBeInstanceOf(WatchPanelProvider);
+
+    const openSpy = vi.spyOn(watchPanelProvider as WatchPanelProvider, 'open').mockImplementation(() => undefined);
+    await getCommandHandler('devdocket.showWatchesQuickPick')();
+
+    expect(openSpy).toHaveBeenCalled();
   });
 
   // ------------------------------------------------------------------
@@ -176,49 +214,6 @@ describe('activate()', () => {
   // 9. Event coalescing: synchronous events during provider registration
   //    are coalesced into a single UI update via queueMicrotask
   // ------------------------------------------------------------------
-  it('coalesces synchronous events during provider registration', async () => {
-    const api = await activate(context);
-    await flushMicrotasks();
-
-    const createTreeView = vscode.window.createTreeView as ReturnType<typeof vi.fn>;
-    const inboxIdx = createTreeView.mock.calls.findIndex((c: any[]) => c[0] === 'devdocket.inbox');
-    expect(inboxIdx).toBeGreaterThanOrEqual(0);
-    const inboxView = createTreeView.mock.results[inboxIdx].value;
-
-    // Track how many times `message` is written
-    let messageSetCount = 0;
-    let currentMessage: string | undefined = inboxView.message;
-    Object.defineProperty(inboxView, 'message', {
-      get: () => currentMessage,
-      set: (v: string | undefined) => { currentMessage = v; messageSetCount++; },
-      configurable: true,
-    });
-
-    // register() fires onDidRegisterProvider AND onDidChangeDiscoveredItems
-    // synchronously — two scheduleUiUpdate calls in the same synchronous block.
-    // The coalescing flag should prevent the second queueMicrotask.
-    const itemEmitter = new (vscode.EventEmitter as any)();
-    const provider = {
-      id: 'coalesce-test',
-      label: 'Coalesce',
-      onDidDiscoverItems: itemEmitter.event,
-      refresh: vi.fn().mockResolvedValue(undefined),
-    };
-    api.registerProvider(provider as any);
-
-    // Before microtasks run, no message should have been set yet
-    // because scheduleUiUpdate defers via queueMicrotask.
-    expect(messageSetCount).toBe(0);
-
-    await flushMicrotasks();
-
-    // After flushing, the coalesced callback ran. Even though register()
-    // fired 2 events synchronously, the first queueMicrotask should
-    // coalesce them. provider.refresh() also fires another event later.
-    // Total message writes should be strictly less than the raw event count (≥2).
-    expect(messageSetCount).toBeGreaterThan(0);
-    expect(messageSetCount).toBeLessThanOrEqual(2);
-  });
 
   // ------------------------------------------------------------------
   // 10. Auto-watch: authored PRs are watched on provider refresh
@@ -269,6 +264,75 @@ describe('activate()', () => {
     expect(prWatcher.parsePRUrl).toHaveBeenCalledWith('https://github.com/owner/repo/pull/42');
     expect(watcherService.isPRWatched).toHaveBeenCalledWith(identifier);
     expect(watcherService.startPRWatch).toHaveBeenCalledWith(identifier);
+  });
+
+  it('refuses to auto-watch authored items whose url is not http(s)', async () => {
+    // Defense-in-depth: a malicious provider can claim authored:true with
+    // any URL string. Reject anything that wouldn't survive isSafeUrl.
+    const providerRegistry = {
+      getDiscoveredItems: vi.fn().mockReturnValue([
+        { externalId: 'a', title: 'js', url: 'javascript:alert(1)', authored: true },
+        { externalId: 'b', title: 'data', url: 'data:text/html,<script>alert(1)</script>', authored: true },
+        { externalId: 'c', title: 'file', url: 'file:///etc/passwd', authored: true },
+        { externalId: 'd', title: 'good', url: 'https://github.com/owner/repo/pull/42', authored: true },
+      ]),
+    } as any;
+    const goodIdentifier = { providerId: 'github-prs', prId: '42', displayName: 'PR #42', url: 'https://github.com/owner/repo/pull/42', repo: 'owner/repo' };
+    const prWatcher = { parsePRUrl: vi.fn().mockReturnValue(goodIdentifier) };
+    const prWatcherRegistry = {
+      findWatcherForUrl: vi.fn((url: string) => url.startsWith('https://') ? prWatcher : undefined),
+    } as any;
+    const watcherService = {
+      isPRWatched: vi.fn().mockResolvedValue(false),
+      startPRWatch: vi.fn().mockResolvedValue(undefined),
+    } as any;
+
+    await autoWatchAuthoredPRs(
+      'github-my-prs',
+      providerRegistry,
+      prWatcherRegistry,
+      watcherService,
+      new AbortController().signal,
+    );
+
+    // Only the https URL should reach findWatcherForUrl; the malicious
+    // schemes are short-circuited before any provider-specific parsing.
+    expect(prWatcherRegistry.findWatcherForUrl).toHaveBeenCalledTimes(1);
+    expect(prWatcherRegistry.findWatcherForUrl).toHaveBeenCalledWith('https://github.com/owner/repo/pull/42');
+    expect(watcherService.startPRWatch).toHaveBeenCalledTimes(1);
+    expect(watcherService.startPRWatch).toHaveBeenCalledWith(goodIdentifier);
+  });
+
+  it('caps the number of authored PRs auto-watched per provider per pass', async () => {
+    // Hostile/buggy provider could otherwise spawn an unbounded number of
+    // polling timers (one per authored item). The cap keeps polling cost
+    // bounded and surfaces a warning so the issue is observable.
+    const items = Array.from({ length: 250 }, (_, i) => ({
+      externalId: `owner/repo#${i}`,
+      title: `PR ${i}`,
+      url: `https://github.com/owner/repo/pull/${i}`,
+      authored: true,
+    }));
+    const providerRegistry = { getDiscoveredItems: vi.fn().mockReturnValue(items) } as any;
+    const prWatcher = {
+      parsePRUrl: vi.fn((url: string) => ({ providerId: 'github-prs', prId: url, displayName: url, url, repo: 'owner/repo' })),
+    };
+    const prWatcherRegistry = { findWatcherForUrl: vi.fn(() => prWatcher) } as any;
+    const watcherService = {
+      isPRWatched: vi.fn().mockResolvedValue(false),
+      startPRWatch: vi.fn().mockResolvedValue(undefined),
+    } as any;
+
+    await autoWatchAuthoredPRs(
+      'github-my-prs',
+      providerRegistry,
+      prWatcherRegistry,
+      watcherService,
+      new AbortController().signal,
+    );
+
+    // Cap is 200 per provider per refresh pass.
+    expect(watcherService.startPRWatch).toHaveBeenCalledTimes(200);
   });
 
   it('runs auto-watch and auto-complete in parallel after provider refresh', async () => {
@@ -487,27 +551,6 @@ describe('activate()', () => {
   // ------------------------------------------------------------------
   // 14. Sets view messages for empty state
   // ------------------------------------------------------------------
-  it('sets initial view messages for empty views', async () => {
-    await activate(context);
-    await flushMicrotasks();
-
-    const createTreeView = vscode.window.createTreeView as ReturnType<typeof vi.fn>;
-
-    const queueIdx = createTreeView.mock.calls.findIndex((c: any[]) => c[0] === 'devdocket.queue');
-    expect(queueIdx).toBeGreaterThanOrEqual(0);
-    const queueView = createTreeView.mock.results[queueIdx].value;
-    expect(queueView.message).toBe('No items in queue');
-
-    const focusIdx = createTreeView.mock.calls.findIndex((c: any[]) => c[0] === 'devdocket.focus');
-    expect(focusIdx).toBeGreaterThanOrEqual(0);
-    const focusView = createTreeView.mock.results[focusIdx].value;
-    expect(focusView.message).toBe('No active work');
-
-    const historyIdx = createTreeView.mock.calls.findIndex((c: any[]) => c[0] === 'devdocket.history');
-    expect(historyIdx).toBeGreaterThanOrEqual(0);
-    const historyView = createTreeView.mock.results[historyIdx].value;
-    expect(historyView.message).toBe('No history items');
-  });
 
   // ------------------------------------------------------------------
   // 15. Error handling: safeHandler catches sync throw in event callback
@@ -543,65 +586,6 @@ describe('activate()', () => {
   // 16. Error handling: microtask catches view setter errors and
   //     continues processing subsequent UI updates
   // ------------------------------------------------------------------
-  it('catches view setter errors in microtask and continues processing UI updates', async () => {
-    const api = await activate(context);
-    await flushMicrotasks();
-
-    const createTreeView = vscode.window.createTreeView as ReturnType<typeof vi.fn>;
-    const sourcesIdx = createTreeView.mock.calls.findIndex((c: any[]) => c[0] === 'devdocket.sources');
-    const sourcesView = createTreeView.mock.results[sourcesIdx].value;
-
-    // Make the sources view message setter throw to trigger the inner catch
-    // inside the microtask's updateViewMessages() path.
-    const errorSpy = vi.spyOn(logger, 'error');
-    Object.defineProperty(sourcesView, 'message', {
-      get: () => undefined,
-      set: () => { throw new Error('Simulated view message error'); },
-      configurable: true,
-    });
-
-    const itemEmitter = new (vscode.EventEmitter as any)();
-    const provider = {
-      id: 'err-finally',
-      label: 'ErrFinally',
-      onDidDiscoverItems: itemEmitter.event,
-      refresh: vi.fn().mockResolvedValue(undefined),
-    };
-    api.registerProvider(provider as any);
-    await flushMicrotasks();
-
-    // Verify the error was caught and logged inside the microtask
-    expect(errorSpy).toHaveBeenCalledWith(
-      'Error updating view messages',
-      expect.any(Error),
-    );
-
-    // Remove the throwing setter so next update succeeds
-    Object.defineProperty(sourcesView, 'message', {
-      value: undefined,
-      writable: true,
-      configurable: true,
-    });
-
-    // The coalescing flag should have been reset (by the finally block),
-    // so a subsequent event should still trigger a UI update.
-    const inboxIdx = createTreeView.mock.calls.findIndex((c: any[]) => c[0] === 'devdocket.inbox');
-    const inboxView = createTreeView.mock.results[inboxIdx].value;
-
-    let messageSetCount = 0;
-    let currentMessage: string | undefined = inboxView.message;
-    Object.defineProperty(inboxView, 'message', {
-      get: () => currentMessage,
-      set: (v: string | undefined) => { currentMessage = v; messageSetCount++; },
-      configurable: true,
-    });
-
-    itemEmitter.fire([]);
-    await flushMicrotasks();
-    expect(messageSetCount).toBeGreaterThan(0);
-
-    errorSpy.mockRestore();
-  });
 
   // ------------------------------------------------------------------
   // 17. Error handling: safeHandler catches sync throws via promise chain
@@ -654,65 +638,14 @@ describe('activate()', () => {
   // ------------------------------------------------------------------
   // 18. Sets context keys for all five view layouts on activation
   // ------------------------------------------------------------------
-  it('sets layout context keys for all five views on activation', async () => {
-    await activate(context);
-
-    const executeCommand = vscode.commands.executeCommand as ReturnType<typeof vi.fn>;
-    const setContextCalls = executeCommand.mock.calls.filter(
-      (c: any[]) => c[0] === 'setContext' && typeof c[1] === 'string' && c[1].endsWith('Layout'),
-    );
-
-    const contextKeys = setContextCalls.map((c: any[]) => c[1]);
-    expect(contextKeys).toContain('devdocket.inboxLayout');
-    expect(contextKeys).toContain('devdocket.queueLayout');
-    expect(contextKeys).toContain('devdocket.focusLayout');
-    expect(contextKeys).toContain('devdocket.historyLayout');
-    expect(contextKeys).toContain('devdocket.sourcesLayout');
-  });
 
   // ------------------------------------------------------------------
   // 18b. Context key values match view defaults on activation
   // ------------------------------------------------------------------
-  it('sets correct default values for layout context keys', async () => {
-    await activate(context);
-
-    const executeCommand = vscode.commands.executeCommand as ReturnType<typeof vi.fn>;
-    const setContextCalls = executeCommand.mock.calls.filter(
-      (c: any[]) => c[0] === 'setContext' && typeof c[1] === 'string' && c[1].endsWith('Layout'),
-    );
-
-    const contextMap = Object.fromEntries(setContextCalls.map((c: any[]) => [c[1], c[2]]));
-    expect(contextMap['devdocket.inboxLayout']).toBe('tree');
-    expect(contextMap['devdocket.queueLayout']).toBe('flat');
-    expect(contextMap['devdocket.focusLayout']).toBe('flat');
-    expect(contextMap['devdocket.historyLayout']).toBe('flat');
-    expect(contextMap['devdocket.sourcesLayout']).toBe('tree');
-  });
 
   // ------------------------------------------------------------------
   // 19. Layout change updates provider layouts and context keys
   // ------------------------------------------------------------------
-  it('updates provider layouts and context keys on layout toggle', async () => {
-    await activate(context);
-    await flushMicrotasks();
-
-    const executeCommand = vscode.commands.executeCommand as ReturnType<typeof vi.fn>;
-    executeCommand.mockClear();
-
-    // Import the functions to trigger a layout change
-    const { toggleViewLayout } = await import('../views/viewLayout');
-
-    // Toggle focus from default 'flat' → 'tree'
-    await toggleViewLayout('focus');
-    await flushMicrotasks();
-
-    // setContext should have been called for the toggled view
-    const setContextCalls = executeCommand.mock.calls.filter(
-      (c: any[]) => c[0] === 'setContext' && typeof c[1] === 'string' && c[1].endsWith('Layout'),
-    );
-    const contextMap = Object.fromEntries(setContextCalls.map((c: any[]) => [c[1], c[2]]));
-    expect(contextMap['devdocket.focusLayout']).toBe('tree');
-  });
 });
 
 describe('deactivate()', () => {

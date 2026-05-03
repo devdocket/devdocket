@@ -153,6 +153,7 @@ describe('AdoPrReviewProvider', () => {
       url: 'https://dev.azure.com/myorg/MyProject/_git/myrepo/pullrequest/101',
       group: 'MyProject/myrepo',
       reason: 'review_requested',
+      itemType: 'pr',
     });
   });
 

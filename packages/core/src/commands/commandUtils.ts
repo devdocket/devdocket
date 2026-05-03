@@ -3,7 +3,6 @@ import { WorkItemState } from '../models/workItem';
 import { WorkGraph } from '../services/workGraph';
 import { DiscoveredStateStore, type InboxState } from '../storage/discoveredStateStore';
 import { logger } from '../services/logger';
-import type { ViewRevealer } from '../services/viewRevealer';
 
 /**
  * Resolves item IDs from VS Code multi-select args for WorkItem-based views.
@@ -74,11 +73,9 @@ export async function batchTransition(
   ids: string[],
   targetState: WorkItemState,
   successMessage: (count: number) => string,
-  revealer?: ViewRevealer,
 ): Promise<void> {
   if (ids.length === 1) {
     await workGraph.transitionState(ids[0], targetState);
-    void revealer?.revealByState(ids[0]);
     return;
   }
   const failedIds: string[] = [];
@@ -127,7 +124,7 @@ export async function batchAcceptItems<T extends AcceptableItem>(
   for (const item of items) {
     const existing = workGraph.findItemByProvenance(item.providerId, item.externalId);
     if (existing) {
-      // Re-open items in terminal states so resurfaced items return to Queue
+      // Re-open items in terminal states so resurfaced items return to Ready to Start
       if (existing.state === WorkItemState.Done || existing.state === WorkItemState.Archived) {
         const originalState = existing.state;
         try {
@@ -179,8 +176,8 @@ export async function batchAcceptItems<T extends AcceptableItem>(
   const total = stateUpdates.length;
   if (total > 0) {
     const msg = failed > 0
-      ? `Accepted ${total} of ${total + failed} items to Queue`
-      : `Accepted ${total} item${total === 1 ? '' : 's'} to Queue`;
+      ? `Accepted ${total} of ${total + failed} items to Ready to Start`
+      : `Accepted ${total} item${total === 1 ? '' : 's'} to Ready to Start`;
     void vscode.window.showInformationMessage(msg);
   }
   if (failed > 0) {

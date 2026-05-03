@@ -2,9 +2,8 @@ import * as vscode from 'vscode';
 import { WorkItemState } from '../models/workItem';
 import { WorkGraph } from '../services/workGraph';
 import { DiscoveredStateStore } from '../storage/discoveredStateStore';
-import { type SourceItemNode, type SourcesElement } from '../views/sourcesTreeProvider';
+import { type SourceItemNode, type SourcesElement } from './commandItemTypes';
 import { logger } from '../services/logger';
-import type { ViewRevealer } from '../services/viewRevealer';
 import {
   wrapCommand,
   handleCommandError,
@@ -34,7 +33,6 @@ async function acceptSingleSourceItem(
   workGraph: WorkGraph,
   stateStore: DiscoveredStateStore,
   item: SourceItemNode,
-  revealer?: ViewRevealer,
 ): Promise<void> {
   logger.info(`Accepting sources item: ${item.externalId}`);
   const existing = workGraph.findItemByProvenance(item.providerId, item.externalId);
@@ -57,7 +55,6 @@ async function acceptSingleSourceItem(
         handleCommandError('Failed to update state for re-opened item', err);
         return;
       }
-      void revealer?.revealInQueue(existing.id);
       return;
     }
     try {
@@ -97,7 +94,6 @@ async function acceptSingleSourceItem(
     handleCommandError('Failed to update state after accepting item', err);
     return;
   }
-  void revealer?.revealInQueue(createdItem.id);
 }
 
 async function handleAcceptFromSources(
@@ -105,13 +101,12 @@ async function handleAcceptFromSources(
   stateStore: DiscoveredStateStore,
   item?: SourcesElement,
   selectedItems?: SourcesElement[],
-  revealer?: ViewRevealer,
 ): Promise<void> {
   const items = resolveSourceItems(item, selectedItems);
   if (items.length === 0) { return; }
 
   if (items.length === 1) {
-    await acceptSingleSourceItem(workGraph, stateStore, items[0], revealer);
+    await acceptSingleSourceItem(workGraph, stateStore, items[0]);
     return;
   }
 
@@ -151,11 +146,10 @@ export function registerSourcesCommands(
   context: vscode.ExtensionContext,
   workGraph: WorkGraph,
   stateStore: DiscoveredStateStore,
-  revealer?: ViewRevealer,
 ): void {
   context.subscriptions.push(
     vscode.commands.registerCommand('devdocket.acceptFromSources',
-      wrapCommand('Failed to accept from sources', (item?: SourcesElement, selectedItems?: SourcesElement[]) => handleAcceptFromSources(workGraph, stateStore, item, selectedItems, revealer))),
+      wrapCommand('Failed to accept from sources', (item?: SourcesElement, selectedItems?: SourcesElement[]) => handleAcceptFromSources(workGraph, stateStore, item, selectedItems))),
     vscode.commands.registerCommand('devdocket.dismissFromSources',
       wrapCommand('Failed to dismiss from sources', (item?: SourcesElement, selectedItems?: SourcesElement[]) => handleDismissFromSources(stateStore, item, selectedItems))),
   );

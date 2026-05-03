@@ -101,7 +101,8 @@ export async function checkAutoComplete(
 }
 
 /**
- * Show a notification summarising auto-completed items with a "Show History" action.
+ * Show a notification summarising auto-completed items with a "Show DevDocket"
+ * action that focuses the DevDocket sidebar (where the Done tier is rendered).
  */
 export function showAutoCompleteNotification(completedTitles: string[]): void {
   if (completedTitles.length === 0) {
@@ -110,10 +111,10 @@ export function showAutoCompleteNotification(completedTitles: string[]): void {
   const message = completedTitles.length === 1
     ? `Item completed: ${completedTitles[0]} was closed/merged externally`
     : `${completedTitles.length} items completed — closed/merged externally`;
-  void vscode.window.showInformationMessage(`DevDocket: ${message}`, 'Show History').then(
+  void vscode.window.showInformationMessage(`DevDocket: ${message}`, 'Show DevDocket').then(
     action => {
-      if (action === 'Show History') {
-        vscode.commands.executeCommand('devdocket.history.focus').then(
+      if (action === 'Show DevDocket') {
+        vscode.commands.executeCommand('devdocket.main.focus').then(
           undefined,
           () => { /* view focus is best-effort */ },
         );

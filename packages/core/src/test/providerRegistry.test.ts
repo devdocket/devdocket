@@ -149,7 +149,7 @@ describe('ProviderRegistry', () => {
     expect(items[1].title).toBe('Feature');
   });
 
-  it('replaces discovered items on re-discovery', () => {
+  it('replaces discovered items on re-discovery', async () => {
     const provider = createMockProvider('gh');
     registry.register(provider);
 
@@ -162,6 +162,11 @@ describe('ProviderRegistry', () => {
     provider.fireItems([
       { externalId: 'issue-1', title: 'Updated title', description: 'Updated desc' },
     ]);
+
+    // Per-provider serialization: the second emission is queued behind the
+    // first one's awaits, so we have to drain microtasks before the updated
+    // items become visible.
+    await vi.waitFor(() => expect(registry.getDiscoveredItems('gh')[0]?.title).toBe('Updated title'));
 
     const items = registry.getDiscoveredItems('gh');
     expect(items).toHaveLength(1);
@@ -1425,6 +1430,33 @@ describe('ProviderRegistry', () => {
       // lastRefreshTime is preserved from the last healthy refresh
       expect(health.lastRefreshTime).toEqual(healthyTime);
     });
+
+    it('recovers to healthy when a background refresh emits items after going unhealthy', async () => {
+      // Providers extending BaseProvider drive periodic refresh via their own
+      // setInterval, calling doBackgroundRefresh() directly. Those background
+      // refreshes bypass refreshWithTimeout(), so receiving onDidDiscoverItems
+      // is the only signal the registry has that a refresh succeeded.
+      const provider = createMockProvider('recovers');
+      vi.mocked(provider.refresh).mockRejectedValueOnce(new Error('initial fail'));
+      registry.register(provider);
+      await nextTick();
+
+      expect(registry.getProviderHealth('recovers').status).toBe('unhealthy');
+
+      const listener = vi.fn();
+      registry.onDidChangeProviderHealth(listener);
+
+      // Simulate a successful background refresh: provider emits items via
+      // its own setInterval timer, without going through refreshWithTimeout.
+      provider.fireItems([{ externalId: 'item-1', title: 'Recovered' }]);
+      await nextTick();
+
+      const health = registry.getProviderHealth('recovers');
+      expect(health.status).toBe('healthy');
+      expect(health.lastError).toBeUndefined();
+      expect(health.lastRefreshTime).toBeInstanceOf(Date);
+      expect(listener).toHaveBeenCalledWith('recovers');
+    });
   });
 
   describe('soft version resurfacing with work item state', () => {
@@ -1757,6 +1789,42 @@ describe('ProviderRegistry', () => {
       expect(listener).not.toHaveBeenCalled();
 
       reg.dispose();
+    });
+
+    it('serializes back-to-back onDidDiscoverItems emissions per provider', async () => {
+      // Regression test: two rapid emissions used to interleave their async
+      // bodies, mixing up the previous-snapshot bookkeeping. Since we now
+      // queue per-provider, the second emission's handleDiscoveredItems
+      // can't start until the first one's awaits have all settled, so the
+      // final state must reflect ONLY the second emission's items.
+      const pendingResolvers: Array<() => void> = [];
+      stateStore.setStates = vi.fn(() => new Promise<void>(resolve => {
+        pendingResolvers.push(resolve);
+      }));
+
+      const provider = createMockProvider('gh');
+      registry.register(provider);
+
+      // First emission: synchronous prefix runs immediately.
+      provider.fireItems([{ externalId: 'a', title: 'A' }]);
+      expect(registry.getDiscoveredItems('gh').map(i => i.externalId)).toEqual(['a']);
+      expect(pendingResolvers).toHaveLength(1);
+
+      // Second emission while the first's setStates is still in-flight.
+      provider.fireItems([{ externalId: 'b', title: 'B' }]);
+      // Synchronous portion of the second emission must NOT have run yet —
+      // it's queued behind the unresolved first invocation, so the second
+      // setStates hasn't been called yet either.
+      expect(registry.getDiscoveredItems('gh').map(i => i.externalId)).toEqual(['a']);
+      expect(pendingResolvers).toHaveLength(1);
+
+      // Resolve the first's setStates so the queue can drain.
+      pendingResolvers[0]();
+      await vi.waitFor(() => expect(registry.getDiscoveredItems('gh').map(i => i.externalId)).toEqual(['b']));
+
+      // Drain the second one's setStates so the test doesn't leak a pending promise.
+      await vi.waitFor(() => expect(pendingResolvers).toHaveLength(2));
+      pendingResolvers[1]();
     });
   });
 
