@@ -208,7 +208,7 @@ Registers a **Start Git Work** action available on **In Progress** GitHub and AD
 ```jsonc
 // settings.json (user-level only — workspace settings are not supported)
 {
-  "devdocketStartGitWork.commands": [
+  "devDocketStartGitWork.commands": [
     { "command": "code.cmd", "args": ["{path}"] },
     { "command": "wt", "args": ["-d", "{path}"] }
   ]
