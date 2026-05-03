@@ -145,12 +145,17 @@ export function getEditorPanelHtml({ cspSource, scriptUri, initialItem }: Editor
       word-break: break-word;
       display: inline;
     }
-    a.editor-title--link {
-      color: var(--vscode-foreground);
+    /*
+     * When the heading wraps an anchor (item has a URL) the anchor
+     * inherits the heading's font but takes its own link colors so it
+     * still reads as a clickable title.
+     */
+    .editor-title-link {
+      color: inherit;
       text-decoration: none;
       cursor: pointer;
     }
-    a.editor-title--link:hover {
+    .editor-title-link:hover {
       color: var(--vscode-textLink-activeForeground, var(--vscode-textLink-foreground));
       text-decoration: underline;
     }

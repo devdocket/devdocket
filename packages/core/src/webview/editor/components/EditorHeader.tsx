@@ -13,9 +13,13 @@ interface EditorHeaderProps {
 }
 
 export function EditorHeader({ item, title, onOpenUrl, onCopyText, actionButtons }: EditorHeaderProps) {
-  const titleNode = item.url ? (
+  // Always render the title inside an <h1> so the page has a primary
+  // heading regardless of whether the item has a URL. When url is set,
+  // the heading wraps an anchor so it's still keyboard-activatable and
+  // styled as a link.
+  const titleContent = item.url ? (
     <a
-      class="editor-title editor-title--link"
+      class="editor-title-link"
       href={item.url}
       onClick={(event) => {
         event.preventDefault();
@@ -25,7 +29,10 @@ export function EditorHeader({ item, title, onOpenUrl, onCopyText, actionButtons
       {title}
     </a>
   ) : (
-    <h1 class="editor-title">{title}</h1>
+    title
+  );
+  const titleNode = (
+    <h1 class="editor-title">{titleContent}</h1>
   );
 
   return (
