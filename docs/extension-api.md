@@ -290,6 +290,9 @@ interface WorkItem {
   /** Optional user-added notes. */
   notes?: string;
 
+  /** Provider-synced description (read-only mirror of the upstream description). */
+  description?: string;
+
   /** Current state in the lifecycle. */
   state: WorkItemState;
 
@@ -301,6 +304,9 @@ interface WorkItem {
 
   /** URL associated with the item (e.g., GitHub issue URL). */
   url?: string;
+
+  /** Optional grouping key (e.g. repository name) — shown as the repo annotation under the title. */
+  group?: string;
 
   /**
    * Optional ordering hint used by DevDocket to sort items in the
@@ -314,6 +320,13 @@ interface WorkItem {
 
   /** Timestamp (ms since epoch) when the item was last updated. */
   updatedAt: number;
+
+  /**
+   * Append-only log of significant events (state transitions, action
+   * invocations, version updates, etc.). Visible under the editor's
+   * collapsible Activity Log section.
+   */
+  activityLog?: ActivityLogEntry[];
 }
 ```
 

@@ -10,13 +10,13 @@ Your active workflow, organized into tiers. The tiers appear in this order so th
 New items discovered by providers (GitHub issues, pull requests, ADO work items, etc.). Click an item to preview it without committing, then **Accept** to move it to **Ready to Start**, **Start** to send it directly to **In Progress**, or **Dismiss** if it's not relevant. A blue dot marks items you haven't seen yet.
 
 ### ▶ In Progress
-What you're actively working on (the **In Progress** state). Drag to reorder. Hover actions let you **✓ Complete**, **⏸ Pause**, or **✗ Dismiss**.
+What you're actively working on (the **In Progress** state). Drag to reorder. Hover actions let you **✓ Complete** or **⏸ Pause**.
 
 ### ○ Ready to Start
 Your personal backlog of items waiting to be picked up. Items here are in the **New** state. Drag to reorder by priority. Click the **▶ Start** action on hover to move an item into focus.
 
 ### ⏸ Paused
-Items you've temporarily set aside. Hover **▶ Resume** to bring one back into In Progress, or **✓ Complete** if you decide it's actually done.
+Items you've temporarily set aside. Hover **▶ Resume** to bring one back into In Progress.
 
 ### ✓ Done
 Completed items. Hover **↩ Requeue** to move something back to Ready to Start, or use the **Clear** action in the header to clean things up.

@@ -13,11 +13,11 @@ You can also start an Incoming item directly without parking it in Ready to Star
 Once an item is in the In Progress tier, hover it for these actions:
 
 - **⏸ Pause** — temporarily set it aside (e.g. waiting for feedback); the item moves to the **Paused** tier
-- **▶ Resume** — continue a paused item from the Paused tier
 - **✓ Complete** — mark it done; the item moves to the **Done** tier
-- **✗ Dismiss** — drop it back to Incoming if you change your mind
 
-You can drag items within the In Progress tier to reorder by importance.
+Items in the **Paused** tier expose a **▶ Resume** hover action that returns them to In Progress.
+
+You can drag items within the In Progress tier (and Ready to Start tier) to reorder by importance.
 
 ## Completing Work
 

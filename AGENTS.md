@@ -27,9 +27,11 @@ cd packages/core && npm run watch
 DevDocket is a VS Code extension that acts as a **hub** for managing work items from multiple sources. It's a monorepo with the following extensions:
 
 - **`packages/core`** — The DevDocket extension. Owns the UI, work item lifecycle, and plugin API.
-- **`packages/github`** — A provider extension that discovers GitHub issues and PR reviews.
-- **`packages/ado`** — A provider extension that discovers Azure DevOps work items and PR reviews.
+- **`packages/github`** — A provider extension that discovers GitHub issues, mentions, PR reviews, and authored PRs, plus a GitHub Actions and PR watcher.
+- **`packages/ado`** — A provider extension that discovers Azure DevOps work items, PR reviews, and authored PRs, plus an ADO Pipelines and PR watcher.
 - **`packages/start-git-work`** — An action extension that creates git branches and worktrees for work items from GitHub and ADO providers.
+- **`packages/ai-reviewer`** — An action extension that runs AI-powered code review against the diff of a GitHub PR work item, plus an `@walkthrough` chat participant for guided codebase tours.
+- **`packages/shared`** — Shared library (BaseProvider, type definitions, signal/concurrency utilities) consumed by all extensions and published to GitHub Packages as `@devdocket/shared`.
 
 ### Data flow
 

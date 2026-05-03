@@ -25,7 +25,7 @@ DevDocket organizes your work in a single sidebar view with two tabs:
   | Tier | Purpose |
   |------|---------|
   | **↓ Incoming** | Newly discovered items from providers. Click to preview, then **Accept** or **Dismiss**. |
-  | **▶ In Progress** | What you're actively working on. Pause, resume, or complete from hover actions. |
+  | **▶ In Progress** | What you're actively working on. Pause or complete from hover actions. |
   | **○ Ready to Start** | Your curated backlog — accepted items and manual tasks. |
   | **⏸ Paused** | Items temporarily set aside. Resume to bring them back into In Progress. |
   | **✓ Done** | Completed items — your work record. |
@@ -76,10 +76,10 @@ DevDocket is extensible with two types of plugins:
 
 | Extension | Type | What It Does |
 |-----------|------|--------------|
-| DevDocket GitHub | Provider | Discovers GitHub issues and PR review requests |
-| DevDocket — Azure DevOps | Provider | Discovers Azure DevOps work items and PR review requests |
-| DevDocket Start Git Work | Action | Creates a branch and worktree for a work item |
-| DevDocket — AI Actions | Action | AI-powered actions such as analyzing diffs and posting review comments |
+| DevDocket GitHub | Provider + Watcher | Discovers GitHub issues, mentions, PR review requests, and authored PRs; watches GitHub Actions runs and PR status |
+| DevDocket — Azure DevOps | Provider + Watcher | Discovers Azure DevOps work items, PR review requests, and authored PRs; watches ADO Pipelines and PR status |
+| DevDocket Start Git Work | Action | Creates a feature branch and a sibling git worktree for a work item, optionally running follow-up commands |
+| DevDocket — AI Actions | Action | AI-powered code review against a PR diff plus a `@walkthrough` chat participant for guided codebase tours |
 
 To build your own provider or action, see the [Extension API documentation](docs/extension-api.md).
 
@@ -90,8 +90,8 @@ DevDocket is a monorepo with five VS Code extensions and a shared library:
 ```
 packages/
 ├── core/              # The hub extension (UI, lifecycle, plugin API)
-├── github/            # GitHub issues and PR review provider
-├── ado/               # Azure DevOps work items and PR review provider
+├── github/            # GitHub issues, mentions, PR reviews, my-PRs + Actions watcher
+├── ado/               # Azure DevOps work items, PR reviews, my-PRs + Pipelines watcher
 ├── start-git-work/    # Branch + worktree action
 ├── ai-reviewer/       # AI code review action
 └── shared/            # Shared library (BaseProvider, utilities)

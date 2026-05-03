@@ -32,9 +32,9 @@ Each tier exposes a small floating action overlay on hover. Available actions pe
 | Tier | Hover actions |
 |------|---------------|
 | Incoming | **✓ Accept**, **▶ Start** (accept + go to In Progress), **✗ Dismiss** |
-| In Progress | **✓ Complete**, **⏸ Pause**, **✗ Dismiss** |
-| Ready to Start | **▶ Start**, **✗ Dismiss** |
-| Paused | **▶ Resume**, **✓ Complete** |
+| In Progress | **✓ Complete**, **⏸ Pause** |
+| Ready to Start | **▶ Start** |
+| Paused | **▶ Resume** |
 | Done | **↩ Requeue** |
 
 The drag handle (left side of the card) appears on hover for tiers that support reordering: Ready to Start and In Progress. Drag a card up or down to change its priority within that tier.
@@ -42,7 +42,7 @@ The drag handle (left side of the card) appears on hover for tiers that support 
 #### Tier header actions
 
 - **Incoming** has an **Accept All** button.
-- **Done** has a **Clear** button (clears items older than `devdocket.historyClearDays`).
+- **Done** has a **Clear** button (clears items older than `devDocket.historyClearDays`).
 - All tiers can be collapsed by clicking the chevron on the right.
 
 #### Item card content
@@ -148,7 +148,7 @@ DevDocket can automatically mark work items as **Done** when their linked extern
 ```jsonc
 // settings.json
 {
-  "devdocket.autoCompleteOnClose": true  // default: true
+  "devDocket.autoCompleteOnClose": true  // default: true
 }
 ```
 
@@ -224,12 +224,13 @@ Use `{path}` in args as a placeholder for the worktree path. Commands run in seq
 
 | Setting | Type | Default | Description |
 |---------|------|---------|-------------|
-| `devdocket.logLevel` | `string` | `"info"` | Log level for the DevDocket output channel. Valid values: `debug`, `info`, `warn`, `error`. |
-| `devdocket.showInboxNotifications` | `boolean` | `true` | Show a notification when new items arrive in the Incoming tier. |
-| `devdocket.autoCompleteOnClose` | `boolean` | `true` | Automatically mark work items as Done when their linked external item is closed, merged, or otherwise completed by the provider. |
-| `devdocket.historyClearDays` | `integer` | `30` | Age threshold in days for the **Clear** action on the Done tier. Items in Done whose last modification is older than this many days are removed. Minimum: 1. |
+| `devDocket.logLevel` | `string` | `"info"` | Log level for the DevDocket output channel. Valid values: `debug`, `info`, `warn`, `error`. |
+| `devDocket.showInboxNotifications` | `boolean` | `true` | Show a notification when new items arrive in the Incoming tier. |
+| `devDocket.autoCompleteOnClose` | `boolean` | `true` | Automatically mark work items as Done when their linked external item is closed, merged, or otherwise completed by the provider. |
+| `devDocket.historyClearDays` | `integer` | `30` | Age threshold in days for the **Clear** action on the Done tier. Items in Done whose last modification is older than this many days are removed. Minimum: 1. |
 | `devDocket.watches.autoWatchAuthoredPRs` | `boolean` | `true` | Automatically watch GitHub PRs you authored as the GitHub provider discovers them. |
 | `devDocket.watches.pollingIntervalSeconds` | `number` | `60` | How often the watcher polls active CI runs and PRs. Minimum 15 seconds. |
+| `devDocket.watches.notifyOnJobFailure` | `boolean` | `true` | Show a notification when an individual job fails while the pipeline run is still in progress. |
 
 ## Keyboard Shortcuts
 
