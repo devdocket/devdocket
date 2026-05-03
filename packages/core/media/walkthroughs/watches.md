@@ -10,18 +10,9 @@ The panel groups watches into:
 - **PR Watches** — pull requests being monitored, with each PR's CI runs flattened beneath it
 - **Run Watches** — standalone pipeline runs you've added directly
 
-## Add a Watch from a Work Item
+## Add a Watch
 
-If you have a provider-linked PR item in **Ready to Start** or **In Progress**:
-1. Right-click the item
-2. Select **Watch CI**
-3. DevDocket starts monitoring the related pipeline runs and the PR's review/merge status
-
-GitHub PRs you authored can also be auto-watched — see the `devDocket.watches.autoWatchAuthoredPRs` setting.
-
-## Add a Watch Manually
-
-From inside the **CI Watches** panel, click **+ Watch URL** in the top-right to paste a pipeline run URL or a pull request URL.
+From inside the **CI Watches** panel, click **+ Watch URL** in the top-right and paste either a pipeline run URL or a pull request URL. DevDocket figures out which kind it is and starts monitoring.
 
 You can also use the Command Palette:
 
@@ -29,6 +20,10 @@ You can also use the Command Palette:
 
 [Watch a Pull Request](command:devdocket.watchPR)
 
+## Auto-Watching Authored PRs
+
+GitHub PRs you authored can be auto-watched as soon as the GitHub provider discovers them. Toggle the `devDocket.watches.autoWatchAuthoredPRs` setting to control this behavior.
+
 ## Dismissing Watches
 
-Hover any watch card and click the **✗** button to dismiss a single watch, or use **Dismiss Completed** in the panel header to clear all merged / closed PRs and finished runs in one click.
+Hover any watch card in the panel and click the **✗** button to dismiss a single watch, or use **Dismiss Completed** in the panel header to clear all merged / closed PRs and finished runs in one click.
