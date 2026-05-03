@@ -199,7 +199,7 @@ Registers an **AI Code Review** action that can be run on any work item whose UR
 
 | Setting | Type | Default | Description |
 |---------|------|---------|-------------|
-| `devdocketAiReview.customPromptPath` | `string` | `""` | Path to a custom code review prompt file. Replaces the built-in review instructions. The PR diff is always appended automatically. Supports absolute paths and workspace-relative paths. |
+| `devDocketAiReview.customPromptPath` | `string` | `""` | Path to a custom code review prompt file. Replaces the built-in review instructions. The PR diff is always appended automatically. Supports absolute paths and workspace-relative paths. |
 
 ### Start Git Work (`devdocket-start-git-work`)
 
