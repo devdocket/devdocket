@@ -170,15 +170,15 @@ A PR review appears when **all** of the following are true:
 ## GitHub My PRs
 
 **Provider:** DevDocket GitHub  
-**Condition:** You are the **author** of an **open** pull request.
+**Condition:** You are the **author** *or* an **assignee** of an **open** pull request.
 
 A PR appears when **all** of the following are true:
 
 | Condition | Details |
 |-----------|---------|
-| **Authored by you** | You created the pull request |
+| **You are the author or an assignee** | The provider runs two GitHub Search queries — `author:@me` and `assignee:@me` — and unions the results, deduplicating by PR. So PRs you opened, PRs assigned to you (without authoring them), and PRs you both authored and are assigned to all surface. |
 | **Open state** | The PR is not closed or merged |
-| **Repository match** | If `devDocketGithub.filteredRepos` is configured, the patterns listed there are **excluded**. With no patterns set, your authored PRs across all repositories are included. Each query (global or per-repo) is limited to 100 results due to GitHub Search API limits. |
+| **Repository match** | If `devDocketGithub.filteredRepos` is configured, the patterns listed there are **excluded**. With no patterns set, your authored or assigned PRs across all repositories are included. Each query (global or per-repo) is limited to 100 results due to GitHub Search API limits. |
 
 Each discovered PR is enriched with its current status: Draft, Waiting on reviews, Review received, Changes requested, Approved, Ready to merge, or Open (fallback when detailed status cannot be determined).
 
@@ -191,8 +191,7 @@ Each discovered PR is enriched with its current status: Draft, Waiting on review
 
 ### What does NOT cause your PRs to appear
 
-- PRs where you are a **reviewer** but not the author
-- PRs you are **assigned** to but did not author
+- PRs where you are a **reviewer** but neither author nor assignee (those surface via [GitHub PR Reviews](#github-pr-reviews) instead)
 - **Closed** or **merged** PRs
 - **Draft** PRs still appear (with "Draft" status)
 
