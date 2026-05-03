@@ -60,6 +60,14 @@ export class ProviderRegistry {
   private readonly healthStatus = new Map<string, ProviderHealthStatus>();
   private readonly _loadingProviders = new Set<string>();
   private readonly _pendingRefreshes = new Map<string, { cts: vscode.CancellationTokenSource; timeoutId: ReturnType<typeof setTimeout> }>();
+  /**
+   * Per-provider serialization queue for handleDiscoveredItems. A provider that
+   * fires onDidDiscoverItems twice in rapid succession would otherwise have two
+   * async handlers interleave their reads/writes against the state store and
+   * the discoveredItems map. Chaining each new invocation onto the previous
+   * one's promise guarantees ordered, atomic processing per provider.
+   */
+  private readonly _handleQueues = new Map<string, Promise<void>>();
   private _disposed = false;
 
   /** Whether any provider is currently performing its initial refresh. */
@@ -106,7 +114,30 @@ export class ProviderRegistry {
     logger.info(`Registered provider: ${provider.id} (${provider.label})`);
 
     const sub = provider.onDidDiscoverItems((items) => {
-      void this.handleDiscoveredItems(provider.id, items).catch(err => logger.error('handleDiscoveredItems failed', err));
+      // Serialize per-provider so two emissions in rapid succession don't
+      // interleave their reads of stateStore / writes to discoveredItems.
+      // When nothing is in flight we invoke synchronously so the handler's
+      // sync prefix (setting discoveredItems, queueing setStates) runs
+      // before the listener returns — preserving the contract that callers
+      // can observe the updated discovered-items map immediately after a
+      // synchronous fire-and-forget event emission.
+      const tail = this._handleQueues.get(provider.id);
+      const startNext = (): Promise<void> =>
+        this.handleDiscoveredItems(provider.id, items)
+          .catch(err => logger.error('handleDiscoveredItems failed', err));
+      const next = tail
+        ? tail.catch(() => undefined).then(startNext)
+        : startNext();
+      const tracked = next.finally(() => {
+        // Drop our queue slot if we're still the tail. Skipping this is
+        // safe (it just means a stale resolved promise hangs around until
+        // the next emission replaces it) but cleaning up keeps the map
+        // bounded for providers that only ever emit once.
+        if (this._handleQueues.get(provider.id) === tracked) {
+          this._handleQueues.delete(provider.id);
+        }
+      });
+      this._handleQueues.set(provider.id, tracked);
     });
     this.subscriptions.set(provider.id, sub);
 
@@ -131,6 +162,7 @@ export class ProviderRegistry {
       this.lastRefreshTruncated.delete(provider.id);
       this.healthStatus.delete(provider.id);
       this._loadingProviders.delete(provider.id);
+      this._handleQueues.delete(provider.id);
       if (!this._disposed) {
         this._onDidChangeDiscoveredItems.fire();
       }
@@ -493,6 +525,7 @@ export class ProviderRegistry {
       // CTS is disposed in refreshWithTimeout's finally block
     }
     this._pendingRefreshes.clear();
+    this._handleQueues.clear();
     for (const sub of this.subscriptions.values()) {
       sub.dispose();
     }

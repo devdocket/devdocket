@@ -103,9 +103,12 @@ export class WatchPanelProvider implements vscode.Disposable {
 
   private async handleMessage(message: WebviewMessage): Promise<void> {
     switch (message.type) {
-      case 'dismissCompletedWatches':
-        this.watcherService.dismissAllCompleted();
+      case 'dismissCompletedWatches': {
+        // Route through the shared command so the confirmation prompt and
+        // logging stay in one place.
+        await vscode.commands.executeCommand('devdocket.dismissAllCompletedWatches');
         break;
+      }
       case 'openWatchUrl': {
         const safeUrl = isSafeUrl(message.url);
         if (!safeUrl) {

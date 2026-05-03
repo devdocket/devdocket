@@ -431,6 +431,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<DevDoc
     providerHealthStatusBar,
     { dispose: () => wg.dispose() },
     { dispose: () => ss.dispose() },
+    { dispose: () => readStateStore.dispose() },
     { dispose: () => ws.dispose() },
     { dispose: () => wr.dispose() },
     { dispose: () => pwr.dispose() },

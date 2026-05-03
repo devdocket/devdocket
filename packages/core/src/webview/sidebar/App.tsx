@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'preact/hooks';
 import type { ExtensionMessage, SourceProviderData, TierData } from '../shared/types';
 import { postMessage } from '../shared/messaging';
+import { useThemeChangeCounter } from '../shared/theme';
 import { SourcesView } from './components/SourcesView';
 import { TabBar } from './components/TabBar';
 import { TierSection } from './components/TierSection';
@@ -13,6 +14,8 @@ export function App() {
   const [announcement, setAnnouncement] = useState('');
   const previousTiersRef = useRef<TierData[] | undefined>(undefined);
   const announcementFrameRef = useRef<number | undefined>(undefined);
+  // Re-render on VS Code theme changes so badge / tier colors update live.
+  useThemeChangeCounter();
 
   const announce = (message?: string) => {
     if (!message) {
@@ -120,13 +123,26 @@ export function App() {
                       if (clicked?.tierType === 'incoming' && clicked.providerId && clicked.externalId && clicked.isUnseen) {
                         postMessage({ type: 'markSeen', providerId: clicked.providerId, externalId: clicked.externalId });
                       }
-                      postMessage({ type: 'openItem', itemId: id });
+                      // Pass providerId/externalId along when known so the
+                      // extension can route to the preview panel without
+                      // re-parsing the legacy `${providerId}::${externalId}`
+                      // cache key (which can split incorrectly if either
+                      // side contains '::').
+                      postMessage({
+                        type: 'openItem',
+                        itemId: id,
+                        ...(clicked?.providerId ? { providerId: clicked.providerId } : {}),
+                        ...(clicked?.externalId ? { externalId: clicked.externalId } : {}),
+                      });
                     }}
                     onAcceptItem={(providerId, externalId) => postMessage({ type: 'acceptItem', providerId, externalId })}
                     onAcceptToFocus={(providerId, externalId) => postMessage({ type: 'acceptToFocus', providerId, externalId })}
                     onDismissItem={(providerId, externalId) => postMessage({ type: 'dismissItem', providerId, externalId })}
                     onTransitionState={(itemId, targetState) => postMessage({ type: 'transitionState', itemId, targetState })}
                     onReorderItems={tier.id === 'ready-to-start' || tier.id === 'in-progress' ? (itemIds) => postMessage({ type: 'reorderItems', itemIds }) : undefined}
+                    onCrossTierDrop={tier.id === 'ready-to-start' || tier.id === 'in-progress'
+                      ? (itemId) => postMessage({ type: 'crossTierDrop', itemId, targetTier: tier.id })
+                      : undefined}
                     onAcceptAll={tier.id === 'incoming' ? () => postMessage({ type: 'acceptAll' }) : undefined}
                     onClearHistory={tier.id === 'done' ? () => postMessage({ type: 'clearHistory' }) : undefined}
                   />

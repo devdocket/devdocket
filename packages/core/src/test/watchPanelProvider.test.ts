@@ -185,7 +185,9 @@ describe('WatchPanelProvider', () => {
     await mockPanel.simulateMessage({ type: 'dismissWatch', watchId: 'pr:github-pr:owner/repo:42' });
     await mockPanel.simulateMessage({ type: 'dismissWatch', watchId: 'run:github-actions:owner/repo:99' });
 
-    expect(watcherService.dismissAllCompleted).toHaveBeenCalled();
+    // dismissCompletedWatches now routes through the shared command so the
+    // confirmation prompt and logging stay in one place.
+    expect(vscode.commands.executeCommand).toHaveBeenCalledWith('devdocket.dismissAllCompletedWatches');
     expect(env.openExternal).toHaveBeenCalledTimes(1);
     expect(env.openExternal).toHaveBeenCalledWith(
       expect.objectContaining({ path: 'https://github.com/owner/repo/actions/runs/99' }),

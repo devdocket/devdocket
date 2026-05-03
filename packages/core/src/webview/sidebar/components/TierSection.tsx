@@ -11,6 +11,13 @@ interface TierSectionProps {
   onDismissItem?: (providerId: string, externalId: string) => void;
   onTransitionState?: (itemId: string, targetState: string) => void;
   onReorderItems?: (itemIds: string[]) => void;
+  /**
+   * Fired when a card from another reorderable tier is dropped onto this
+   * tier. The receiving extension converts this into a state transition
+   * (e.g. dropping a Ready item on the In Progress tier transitions it to
+   * `InProgress`). Only set for tiers that accept cross-tier drops.
+   */
+  onCrossTierDrop?: (itemId: string) => void;
   onAcceptAll?: () => void;
   onClearHistory?: () => void;
 }
@@ -23,6 +30,7 @@ export function TierSection({
   onDismissItem,
   onTransitionState,
   onReorderItems,
+  onCrossTierDrop,
   onAcceptAll,
   onClearHistory,
 }: TierSectionProps) {
@@ -194,6 +202,10 @@ export function TierSection({
 
     const currentIndex = tier.items.findIndex(item => item.id === sourceItemId);
     if (currentIndex === -1) {
+      // Cross-tier drop: the source card lives in another reorderable tier
+      // (typically the other half of Ready ↔ In Progress). Hand off to the
+      // App-level handler which posts a transition message to the extension.
+      onCrossTierDrop?.(sourceItemId);
       return;
     }
 
@@ -208,6 +220,34 @@ export function TierSection({
     }
 
     onReorderItems?.(reorderedIds);
+  };
+
+  /**
+   * Move the focused item up or down within the tier via keyboard. Mirrors
+   * the same reorder protocol used by the drag-and-drop handler so the
+   * extension only ever receives a single canonical ordering message.
+   */
+  const moveItemByKeyboard = (itemId: string, direction: -1 | 1) => {
+    if (!isReorderableTier) {
+      return;
+    }
+
+    const currentIndex = tier.items.findIndex(item => item.id === itemId);
+    if (currentIndex === -1) {
+      return;
+    }
+
+    const nextIndex = currentIndex + direction;
+    if (nextIndex < 0 || nextIndex >= tier.items.length) {
+      return;
+    }
+
+    const reorderedItems = tier.items.slice();
+    const [moved] = reorderedItems.splice(currentIndex, 1);
+    reorderedItems.splice(nextIndex, 0, moved);
+    onReorderItems?.(reorderedItems.map(item => item.id));
+    setActiveItemId(moved.id);
+    focusItem(moved.id);
   };
 
   return (
@@ -296,6 +336,7 @@ export function TierSection({
                 onTransition={onTransitionState}
                 onDragStart={isReorderableTier ? handleDragStart : undefined}
                 onDragEnd={isReorderableTier ? handleDragEnd : undefined}
+                onMoveItem={isReorderableTier ? moveItemByKeyboard : undefined}
               />
             </Fragment>
           ))}

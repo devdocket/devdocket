@@ -166,10 +166,18 @@ export class IncomingPreviewPanel {
 
       await this.stateStore.setState(this.providerId, this.externalId, 'accepted');
 
-      if (existing) {
-        await vscode.commands.executeCommand('devdocket.editItem', { id: existing.id });
+      if (!existing) {
+        // createItem succeeded above (no throw) but findItemByProvenance still
+        // returns nothing — almost certainly a concurrent dispose() of the work
+        // graph. Surface this so the user knows the click did something even
+        // though no editor opened.
+        logger.warn(`IncomingPreview: WorkItem missing after accept (${this.providerId}/${this.externalId})`);
+        void vscode.window.showErrorMessage('Item was accepted but the editor could not be opened. Try selecting it from DevDocket.');
+        this.dispose();
+        return;
       }
 
+      await vscode.commands.executeCommand('devdocket.editItem', { id: existing.id });
       this.dispose();
     } catch (err) {
       logger.error('IncomingPreview: accept failed', err);

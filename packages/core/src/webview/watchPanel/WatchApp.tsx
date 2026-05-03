@@ -2,10 +2,13 @@ import { useEffect, useMemo, useState } from 'preact/hooks';
 import type { BadgeData, ExtensionMessage, PRWatchData, RunWatchData } from '../shared/types';
 import { postMessage } from '../shared/messaging';
 import { BadgePill } from '../shared/components/BadgePill';
+import { useThemeChangeCounter } from '../shared/theme';
 
 export function WatchApp() {
   const [prWatches, setPrWatches] = useState<PRWatchData[]>([]);
   const [runWatches, setRunWatches] = useState<RunWatchData[]>([]);
+  // Re-render badges when the user switches VS Code theme.
+  useThemeChangeCounter();
 
   useEffect(() => {
     const handler = (event: MessageEvent<ExtensionMessage>) => {

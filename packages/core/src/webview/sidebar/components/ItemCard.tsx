@@ -16,6 +16,12 @@ interface ItemCardProps {
   onTransition?: (itemId: string, targetState: string) => void;
   onDragStart?: (itemId: string) => void;
   onDragEnd?: () => void;
+  /**
+   * Reorder this card within its tier in response to keyboard input
+   * (Alt + Arrow Up/Down). Only set for cards inside reorderable tiers
+   * (Ready to Start / In Progress).
+   */
+  onMoveItem?: (itemId: string, direction: -1 | 1) => void;
 }
 
 interface ItemAction {
@@ -39,6 +45,7 @@ export function ItemCard({
   onTransition,
   onDragStart,
   onDragEnd,
+  onMoveItem,
 }: ItemCardProps) {
   const actions = getItemActions(item, onAccept, onAcceptToFocus, onDismiss, onTransition);
   const isDraggable = item.tierType === 'readyToStart' || item.tierType === 'inProgress';
@@ -64,6 +71,12 @@ export function ItemCard({
   };
 
   const handleKeyDown = (event: KeyboardEvent) => {
+    // Alt + Arrow reorders the card within its tier (a11y alternative to drag-and-drop).
+    if (event.altKey && (event.key === 'ArrowUp' || event.key === 'ArrowDown') && isDraggable && onMoveItem) {
+      event.preventDefault();
+      onMoveItem(item.id, event.key === 'ArrowDown' ? 1 : -1);
+      return;
+    }
     switch (event.key) {
       case 'ArrowDown':
         event.preventDefault();

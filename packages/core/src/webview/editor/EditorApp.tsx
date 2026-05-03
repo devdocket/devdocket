@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'preact/hooks';
 import { postMessage } from '../shared/messaging';
 import type { EditorItemData, ExtensionMessage } from '../shared/types';
+import { useThemeChangeCounter } from '../shared/theme';
 import { ActivityLog } from './components/ActivityLog';
 import { ActionBar } from './components/ActionBar';
 import { EditableField } from './components/EditableField';
@@ -20,6 +21,8 @@ export function EditorApp() {
   const [notes, setNotes] = useState(bootstrapItem?.notes ?? '');
   const [url, setUrl] = useState(bootstrapItem?.url ?? '');
   const [autosaveVersion, setAutosaveVersion] = useState(0);
+  // Re-render badges when the user switches VS Code theme.
+  useThemeChangeCounter();
 
   const itemRef = useRef(item);
   const titleRef = useRef(title);

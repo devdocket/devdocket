@@ -65,6 +65,13 @@ export class WatcherService implements vscode.Disposable {
    * In-memory only; resets on extension reload.
    */
   private acknowledgedFailedRunKeys = new Set<string>();
+  /**
+   * Tracks whether the most recent persistWatches() attempt failed. Toggled
+   * on/off by {@link persistWatches} so that consecutive failures only show
+   * the user one toast. The next successful save resets this so a future
+   * regression can re-alert the user.
+   */
+  private persistFailureNotified = false;
   
   private readonly _onDidChangeWatchedRuns = new vscode.EventEmitter<WatchedRun[]>();
   readonly onDidChangeWatchedRuns = this._onDidChangeWatchedRuns.event;
@@ -342,8 +349,10 @@ export class WatcherService implements vscode.Disposable {
 
   /**
    * Dismiss all completed watches.
+   *
+   * @returns The number of watches (runs + PRs + child runs of dismissed PRs) marked dismissed.
    */
-  dismissAllCompleted(): void {
+  dismissAllCompleted(): number {
     let dismissedCount = 0;
     for (const [key, watch] of this.watches.entries()) {
       if (watch.status.overallState === 'completed' && !watch.dismissed) {
@@ -376,6 +385,23 @@ export class WatcherService implements vscode.Disposable {
       this._onDidChangeWatchedRuns.fire(this.getAllWatches());
       this.persistWatches();
     }
+    return dismissedCount;
+  }
+
+  /**
+   * Count how many active watches would be dismissed by {@link dismissAllCompleted}.
+   * Used by callers that want to show a confirmation prompt with a meaningful
+   * count before invoking the destructive operation.
+   */
+  countCompletedActiveWatches(): number {
+    let count = 0;
+    for (const watch of this.watches.values()) {
+      if (!watch.dismissed && watch.status.overallState === 'completed') count++;
+    }
+    for (const prWatch of this.prWatches.values()) {
+      if (!prWatch.dismissed && (prWatch.prState === 'merged' || prWatch.prState === 'closed')) count++;
+    }
+    return count;
   }
 
   /**
@@ -917,9 +943,25 @@ export class WatcherService implements vscode.Disposable {
   }
 
   private persistWatches(): void {
-    this.watchStore.saveAll(this.getAllWatches(), this.getAllPRWatches()).catch(err => {
-      this.logger.error(`Failed to persist watches: ${err}`);
-    });
+    this.watchStore.saveAll(this.getAllWatches(), this.getAllPRWatches()).then(
+      () => {
+        if (this.persistFailureNotified) {
+          this.persistFailureNotified = false;
+          this.logger.info('Watch persistence recovered.');
+        }
+      },
+      err => {
+        this.logger.error(`Failed to persist watches: ${err}`);
+        // Throttle: only escalate once per failure streak. The flag clears
+        // on the next successful save so a future regression re-alerts.
+        if (!this.persistFailureNotified) {
+          this.persistFailureNotified = true;
+          void vscode.window.showWarningMessage(
+            'DevDocket could not save watch state. Watches may be lost when the window reloads.',
+          );
+        }
+      },
+    );
   }
 
   dispose(): void {

@@ -8,7 +8,7 @@ export type ExtensionMessage =
   | { type: 'updateTitle'; title: string };
 
 export type WebviewMessage =
-  | { type: 'openItem'; itemId: string }
+  | { type: 'openItem'; itemId: string; providerId?: string; externalId?: string }
   | { type: 'openSourceItem'; providerId: string; externalId: string }
   | { type: 'acceptItem'; providerId: string; externalId: string }
   | { type: 'acceptToFocus'; providerId: string; externalId: string }
@@ -28,6 +28,7 @@ export type WebviewMessage =
   | { type: 'copyToClipboard'; text: string }
   | { type: 'addWatchUrl' }
   | { type: 'markSeen'; providerId: string; externalId: string }
+  | { type: 'crossTierDrop'; itemId: string; targetTier: string }
   | { type: 'watchPanelReady' };
 
 export interface TierData {

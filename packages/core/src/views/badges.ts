@@ -34,10 +34,14 @@ export function buildProviderBadge(providerId?: string, label?: string): BadgeDa
   }
 
   const normalizedProviderId = providerId.toLowerCase();
-  if (normalizedProviderId.includes('github')) {
+  // Match either the bare provider id or one of its sub-provider ids (e.g.
+  // 'github', 'github-pr-reviews', 'github-mentions'). Substring matching
+  // would mis-classify third-party providers like 'my-github-mirror' or
+  // 'azure-shadow' as the canonical GitHub / ADO providers.
+  if (normalizedProviderId === 'github' || normalizedProviderId.startsWith('github-')) {
     return { label: 'GitHub', type: 'provider', variant: 'github' };
   }
-  if (normalizedProviderId.includes('ado')) {
+  if (normalizedProviderId === 'ado' || normalizedProviderId.startsWith('ado-')) {
     return { label: 'ADO', type: 'provider', variant: 'ado' };
   }
 

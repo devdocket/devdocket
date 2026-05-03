@@ -390,11 +390,25 @@ export class MainViewProvider implements vscode.WebviewViewProvider {
         // No backing WorkItem yet — this is an incoming/discovered item key.
         // Open the editor in preview mode so the user can read details and
         // decide whether to accept or dismiss without committing yet.
-        const discoveredKey = parseDiscoveredItemKey(message.itemId);
-        if (discoveredKey) {
+        //
+        // Prefer the explicit providerId/externalId from the message (the
+        // webview always sends them for incoming cards). Fall back to parsing
+        // the legacy `${providerId}::${externalId}` cache key only if those
+        // aren't present, since '::' could appear inside a provider id and
+        // would mis-split here.
+        let providerId: string | undefined = message.providerId;
+        let externalId: string | undefined = message.externalId;
+        if (!providerId || !externalId) {
+          const discoveredKey = parseDiscoveredItemKey(message.itemId);
+          if (discoveredKey) {
+            providerId = discoveredKey.providerId;
+            externalId = discoveredKey.externalId;
+          }
+        }
+        if (providerId && externalId) {
           await vscode.commands.executeCommand('devdocket.previewIncomingItem', {
-            providerId: discoveredKey.providerId,
-            externalId: discoveredKey.externalId,
+            providerId,
+            externalId,
           });
         }
         break;
@@ -432,6 +446,9 @@ export class MainViewProvider implements vscode.WebviewViewProvider {
         break;
       case 'reorderItems':
         await this.handleReorder(message.itemIds);
+        break;
+      case 'crossTierDrop':
+        await this.handleCrossTierDrop(message.itemId, message.targetTier);
         break;
       case 'createItem':
         await vscode.commands.executeCommand('devdocket.createItem');
@@ -541,6 +558,33 @@ export class MainViewProvider implements vscode.WebviewViewProvider {
       logger.error('DevDocket: transition failed', err);
       void vscode.window.showErrorMessage(`Failed to transition item: ${err instanceof Error ? err.message : String(err)}`);
     }
+  }
+
+  /**
+   * Handle a card dragged from one reorderable tier into another (Ready ↔ In
+   * Progress). The webview only fires this for those two tiers, but we still
+   * validate the source state and target tier here as a defensive guard.
+   */
+  private async handleCrossTierDrop(itemId: string, targetTier: string): Promise<void> {
+    const targetState = targetTier === 'in-progress'
+      ? WorkItemState.InProgress
+      : targetTier === 'ready-to-start'
+        ? WorkItemState.New
+        : undefined;
+    if (!targetState) {
+      logger.warn(`DevDocket: crossTierDrop ignored — unsupported target tier ${targetTier}`);
+      return;
+    }
+    const item = this.workGraph.getItem(itemId);
+    if (!item) {
+      logger.warn(`DevDocket: crossTierDrop ignored — item ${itemId} not found`);
+      return;
+    }
+    if (item.state === targetState) {
+      // Same-state cross-tier drop is a no-op (handleReorder owns reorder).
+      return;
+    }
+    await this.handleTransitionState(itemId, targetState);
   }
 
   private async handleReorder(itemIds: string[]): Promise<void> {

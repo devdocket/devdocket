@@ -1,4 +1,6 @@
 // Re-export color constants so existing imports from theme.ts continue to work.
+import { useEffect, useState } from 'preact/hooks';
+
 export {
   tierColors,
   providerBadgeColors,
@@ -30,4 +32,24 @@ export function getThemeKind(): ThemeKind {
 export function isLightTheme(): boolean {
   const kind = getThemeKind();
   return kind === 'light' || kind === 'high-contrast-light';
+}
+
+/**
+ * Watches the VS Code body classList for theme changes and triggers a
+ * re-render of the calling component on every change. The returned counter
+ * value is unused — calling this hook is the opt-in. Use it once at the
+ * top of each webview entry-point so descendant components that consult
+ * {@link isLightTheme} or {@link getThemeKind} re-render when the user
+ * switches color themes.
+ */
+export function useThemeChangeCounter(): number {
+  const [counter, setCounter] = useState(0);
+  useEffect(() => {
+    const observer = new MutationObserver(() => {
+      setCounter(value => value + 1);
+    });
+    observer.observe(document.body, { attributes: true, attributeFilter: ['class'] });
+    return () => observer.disconnect();
+  }, []);
+  return counter;
 }

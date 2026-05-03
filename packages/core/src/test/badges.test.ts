@@ -8,16 +8,26 @@ describe('buildProviderBadge', () => {
     expect(buildProviderBadge(undefined)).toEqual({ label: 'Manual', type: 'provider', variant: 'manual' });
   });
 
-  it('recognizes any providerId containing "github" as GitHub', () => {
+  it('recognizes any providerId beginning with "github" as GitHub', () => {
     expect(buildProviderBadge('github')).toEqual({ label: 'GitHub', type: 'provider', variant: 'github' });
     expect(buildProviderBadge('github-pr-reviews')).toEqual({ label: 'GitHub', type: 'provider', variant: 'github' });
     expect(buildProviderBadge('github-mentions')).toEqual({ label: 'GitHub', type: 'provider', variant: 'github' });
   });
 
-  it('recognizes any providerId containing "ado" as ADO', () => {
+  it('recognizes any providerId beginning with "ado" as ADO', () => {
     expect(buildProviderBadge('ado')).toEqual({ label: 'ADO', type: 'provider', variant: 'ado' });
     expect(buildProviderBadge('ado-work-items')).toEqual({ label: 'ADO', type: 'provider', variant: 'ado' });
     expect(buildProviderBadge('ado-my-prs')).toEqual({ label: 'ADO', type: 'provider', variant: 'ado' });
+  });
+
+  it('does not mis-classify third-party providers whose ids merely contain "github" or "ado"', () => {
+    // Substring matching used to mis-label these; prefix matching avoids that.
+    expect(buildProviderBadge('my-github-mirror', 'My GitHub Mirror'))
+      .toEqual({ label: 'My GitHub Mirror', type: 'provider', variant: 'other' });
+    expect(buildProviderBadge('shadow-ado', 'Shadow ADO'))
+      .toEqual({ label: 'Shadow ADO', type: 'provider', variant: 'other' });
+    expect(buildProviderBadge('avocado', 'Avocado'))
+      .toEqual({ label: 'Avocado', type: 'provider', variant: 'other' });
   });
 
   it('uses the provided label for unknown third-party providers (not "Manual")', () => {

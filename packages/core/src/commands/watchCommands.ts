@@ -223,6 +223,20 @@ async function handleDismissWatch(arg: unknown, watcherService: WatcherService):
 
 async function handleDismissAllCompletedWatches(watcherService: WatcherService): Promise<void> {
   try {
+    const count = watcherService.countCompletedActiveWatches();
+    if (count === 0) {
+      void vscode.window.showInformationMessage('No completed watches to dismiss.');
+      return;
+    }
+    const noun = count === 1 ? 'watch' : 'watches';
+    const confirm = await vscode.window.showWarningMessage(
+      `Dismiss ${count} completed ${noun}? They will be removed from the Watches view.`,
+      { modal: true },
+      'Dismiss',
+    );
+    if (confirm !== 'Dismiss') {
+      return;
+    }
     watcherService.dismissAllCompleted();
   } catch (err: unknown) {
     handleCommandError('Failed to dismiss all completed watches', err);
