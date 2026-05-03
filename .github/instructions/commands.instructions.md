@@ -39,7 +39,14 @@ Domain-specific type guards (e.g., `isInboxItem`, `isSourceItem`) stay in their 
 
 ## Menu Placement
 
-The new sidebar is a webview, so the legacy `view/item/context` menu definitions in `package.json` no longer drive any UI surface. Hover actions are wired up directly in the Preact component tree (`src/webview/sidebar/components/ItemCard.tsx`). Keep `package.json` menu definitions only for command-palette visibility (`commandPalette` group, with `when: false` for commands that should be hidden from the palette).
+The new sidebar is a webview, so the legacy `view/item/context` menu definitions for the per-tier `Inbox` / `Queue` / `Focus` / `History` tree views no longer drive any UI surface. Hover actions on cards inside the sidebar are wired up directly in the Preact component tree (`src/webview/sidebar/components/ItemCard.tsx`).
+
+`package.json` `contributes.menus` entries are still in active use for:
+
+- **`view/title`** — the create / refresh buttons that appear in the DevDocket sidebar header (`when: view == devdocket.main`). These are real UI affordances; do not remove them.
+- **`commandPalette`** — palette visibility for everything `devdocket.*`, including the `when: false` entries that hide internal commands (`devdocket.addActivity`, `devdocket.watchPRFromItem`, `devdocket.copyUrl`) from the palette.
+
+Only the per-item context-menu entries (`view/item/context` group) are dead now that the legacy tree views are gone.
 
 ## Command Naming
 
