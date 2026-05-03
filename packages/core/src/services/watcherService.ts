@@ -217,9 +217,10 @@ export class WatcherService implements vscode.Disposable {
     const existing = this.prWatches.get(key);
 
     if (options?.forceRecreate && existing) {
-      // Wipe owned child runs so the fresh snapshot starts clean.
-      // Standalone watches that happen to be linked are left intact (they
-      // belong to the user, not the PR), but unlinked from this PR.
+      // Wipe owned child runs so the fresh snapshot starts clean. Children
+      // are 'owned' when their parentPRKey matches this PR's key — a
+      // standalone watch the user added directly that happens to point at
+      // the same run does not have parentPRKey set, so we leave it alone.
       for (const childKey of existing.childRunKeys) {
         const childWatch = this.watches.get(childKey);
         if (childWatch && childWatch.parentPRKey === key) {

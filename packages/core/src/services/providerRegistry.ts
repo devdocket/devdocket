@@ -345,6 +345,14 @@ export class ProviderRegistry {
     // (e.g. initial-refresh timeout) would never recover until the next
     // user-triggered refreshAll(). updateHealth is a no-op when status is
     // unchanged, so calling it on every emission is cheap.
+    //
+    // Ordering with refreshWithTimeout: VS Code EventEmitter.fire is
+    // synchronous, so a provider that fires items mid-refresh and then
+    // throws will see "healthy" set first (here) followed by "unhealthy"
+    // set in refreshWithTimeout's .catch(). Net state is correctly
+    // unhealthy. The only way an error could be masked is if the provider
+    // catches its own errors and only logs them — exactly the anti-pattern
+    // that providers.instructions.md warns against.
     this.updateHealth(providerId, 'healthy');
     let wasTruncated = false;
     if (items.length > ProviderRegistry.MAX_ITEMS_PER_PROVIDER) {

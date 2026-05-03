@@ -29,6 +29,7 @@ export class MainViewProvider implements vscode.WebviewViewProvider {
 
   private view?: vscode.WebviewView;
   private refreshTimer?: ReturnType<typeof setTimeout>;
+  private disposed = false;
 
   constructor(
     private readonly extensionUri: vscode.Uri,
@@ -39,6 +40,18 @@ export class MainViewProvider implements vscode.WebviewViewProvider {
     private readonly watcherService: WatcherService,
     private readonly actionRegistry: ActionRegistry,
   ) {}
+
+  /**
+   * Cancel any pending debounced refresh and stop accepting new ones. The
+   * webview view itself is owned by VS Code and is disposed independently.
+   */
+  dispose(): void {
+    this.disposed = true;
+    if (this.refreshTimer) {
+      clearTimeout(this.refreshTimer);
+      this.refreshTimer = undefined;
+    }
+  }
 
   resolveWebviewView(
     webviewView: vscode.WebviewView,
@@ -61,10 +74,14 @@ export class MainViewProvider implements vscode.WebviewViewProvider {
   }
 
   scheduleRefresh(): void {
+    if (this.disposed) {
+      return;
+    }
     if (this.refreshTimer) {
       clearTimeout(this.refreshTimer);
     }
     this.refreshTimer = setTimeout(() => {
+      this.refreshTimer = undefined;
       this.refresh();
     }, MainViewProvider.REFRESH_DEBOUNCE_MS);
   }

@@ -425,6 +425,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<DevDoc
   context.subscriptions.push(
     panelManager,
     ...eventDisposables,
+    mainProvider,
     watchPanelProvider,
     watchesStatusBar,
     providerHealthStatusBar,

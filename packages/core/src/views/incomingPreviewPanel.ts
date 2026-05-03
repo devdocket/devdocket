@@ -75,7 +75,9 @@ export class IncomingPreviewPanel {
 
     const preview = new IncomingPreviewPanel(panel, providerRegistry, stateStore, readStateStore, workGraph, providerId, externalId, context.extensionUri);
     IncomingPreviewPanel.openPanels.set(key, preview);
-    context.subscriptions.push({ dispose: () => preview.dispose() });
+    // Panel cleanup is wired in the constructor via panel.onDidDispose →
+    // this.dispose(). Pushing onto context.subscriptions would leak a
+    // closure per open (panels self-dispose long before the extension does).
   }
 
   private constructor(
