@@ -108,15 +108,15 @@ An issue appears when **all** of the following are true:
 ## GitHub Mentions
 
 **Provider:** DevDocket GitHub
-**Condition:** You are **@mentioned** on an issue or pull request **created after** the first time the provider activated for your account.
+**Condition:** You are **@mentioned** on an issue or pull request **updated after** the first time the provider activated for your account.
 
 A mention appears when **all** of the following are true:
 
 | Condition | Details |
 |-----------|---------|
 | **Mentions you** | The issue or PR body or any of its comments contain `@your-username` |
-| **Updated after first activation** | DevDocket records a timestamp the first time the GitHub Mentions provider runs and only includes items updated after that — this avoids flooding the Incoming tier with historical mentions |
-| **Repository match** | If `devdocketGithub.repos` is configured, only mentions in those repos appear. Otherwise, all mentions across repositories you can read are included. The GitHub Search API caps each query at 100 results. |
+| **Updated after first activation** | DevDocket records a timestamp the first time the GitHub Mentions provider runs and queries `mentions:@me updated:>{timestamp}`, so any item updated after that timestamp surfaces — including older threads that have been re-touched (new comment, edit, label change, etc.) |
+| **Repository match** | If `devDocketGithub.filteredRepos` is configured, the patterns listed there are **excluded** (with `!`-prefixed entries re-including matches). With no patterns set, all mentions across repositories you can read are included. The GitHub Search API caps each query at 100 results. |
 
 Items can be either issues or pull requests; the type pill in the UI reflects which one.
 
@@ -129,7 +129,7 @@ Items can be either issues or pull requests; the type pill in the UI reflects wh
 
 ### What does NOT cause mentions to appear
 
-- Mentions in items **created or last updated before** the provider's first activation timestamp.
+- Mentions in items **last updated before** the provider's first activation timestamp (the `updated:>` filter in the search query is the only time gate; original creation date does not matter).
 - Mentions in **private repositories** you don't have access to.
 - Notifications-style mentions on commits or other non-issue/non-PR objects.
 
