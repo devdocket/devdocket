@@ -87,8 +87,8 @@ export function App() {
           >
             <SourcesView
               providers={sources}
-              onAcceptItem={(providerId, externalId) =>
-                postMessage({ type: 'acceptItem', providerId, externalId })
+              onOpenItem={(providerId, externalId) =>
+                postMessage({ type: 'openSourceItem', providerId, externalId })
               }
             />
           </div>

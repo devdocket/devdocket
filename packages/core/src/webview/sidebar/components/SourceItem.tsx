@@ -3,10 +3,13 @@ import { BadgePill } from './BadgePill';
 
 interface SourceItemProps {
   item: SourceItemData;
-  onAccept: () => void;
+  onOpen: () => void;
 }
 
-export function SourceItem({ item, onAccept }: SourceItemProps) {
+export function SourceItem({ item, onOpen }: SourceItemProps) {
+  // Click always opens the item: the editor for accepted items, the
+  // read-only preview panel for unaccepted/dismissed items. Accept and
+  // dismiss decisions happen inside the panel rather than on this row.
   const statusLabel = item.isAccepted ? '✓' : item.isDismissed ? 'dismissed' : undefined;
   const statusClass = item.isAccepted ? 'accepted-mark' : item.isDismissed ? 'dismissed-label' : undefined;
 
@@ -14,8 +17,7 @@ export function SourceItem({ item, onAccept }: SourceItemProps) {
     <button
       type="button"
       class={`source-item ${item.isAccepted ? 'accepted' : ''} ${item.isDismissed ? 'dismissed' : ''}`.trim()}
-      onClick={item.isAccepted ? undefined : onAccept}
-      disabled={item.isAccepted}
+      onClick={onOpen}
       aria-label={buildSourceItemAriaLabel(item)}
     >
       <div class="source-item-line">

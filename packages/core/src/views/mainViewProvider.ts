@@ -377,6 +377,22 @@ export class MainViewProvider implements vscode.WebviewViewProvider {
         }
         break;
       }
+      case 'openSourceItem': {
+        // Sources tab clicks: if the item has already been accepted into the
+        // queue, open the regular WorkItem editor; otherwise open the
+        // read-only preview panel so the user can decide whether to accept
+        // or dismiss without committing.
+        const existing = this.workGraph.findItemByProvenance(message.providerId, message.externalId);
+        if (existing) {
+          await vscode.commands.executeCommand('devdocket.editItem', { id: existing.id });
+        } else {
+          await vscode.commands.executeCommand('devdocket.previewIncomingItem', {
+            providerId: message.providerId,
+            externalId: message.externalId,
+          });
+        }
+        break;
+      }
       case 'acceptItem':
         await this.handleAcceptItem(message.providerId, message.externalId);
         break;

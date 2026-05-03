@@ -4,10 +4,10 @@ import { SourceItem } from './SourceItem';
 
 interface SourcesViewProps {
   providers: SourceProviderData[];
-  onAcceptItem: (providerId: string, externalId: string) => void;
+  onOpenItem: (providerId: string, externalId: string) => void;
 }
 
-export function SourcesView({ providers, onAcceptItem }: SourcesViewProps) {
+export function SourcesView({ providers, onOpenItem }: SourcesViewProps) {
   if (providers.length === 0) {
     return <div class="empty-state">No sources yet</div>;
   }
@@ -19,7 +19,7 @@ export function SourcesView({ providers, onAcceptItem }: SourcesViewProps) {
           <ProviderSection
             key={provider.providerId}
             provider={provider}
-            onAcceptItem={onAcceptItem}
+            onOpenItem={onOpenItem}
           />
         ))}
       </div>
@@ -29,10 +29,10 @@ export function SourcesView({ providers, onAcceptItem }: SourcesViewProps) {
 
 interface ProviderSectionProps {
   provider: SourceProviderData;
-  onAcceptItem: (providerId: string, externalId: string) => void;
+  onOpenItem: (providerId: string, externalId: string) => void;
 }
 
-function ProviderSection({ provider, onAcceptItem }: ProviderSectionProps) {
+function ProviderSection({ provider, onOpenItem }: ProviderSectionProps) {
   const [collapsed, setCollapsed] = useState(false);
   const itemCount = provider.groups.reduce((total, group) => total + group.items.length, 0);
 
@@ -67,7 +67,7 @@ function ProviderSection({ provider, onAcceptItem }: ProviderSectionProps) {
                 key={`${provider.providerId}-${group.name}`}
                 providerId={provider.providerId}
                 group={group}
-                onAcceptItem={onAcceptItem}
+                onOpenItem={onOpenItem}
               />
             ))
           )}
@@ -80,10 +80,10 @@ function ProviderSection({ provider, onAcceptItem }: ProviderSectionProps) {
 interface GroupSectionProps {
   providerId: string;
   group: SourceGroupData;
-  onAcceptItem: (providerId: string, externalId: string) => void;
+  onOpenItem: (providerId: string, externalId: string) => void;
 }
 
-function GroupSection({ providerId, group, onAcceptItem }: GroupSectionProps) {
+function GroupSection({ providerId, group, onOpenItem }: GroupSectionProps) {
   const [collapsed, setCollapsed] = useState(false);
   const itemCountLabel = `${group.name}, ${group.items.length} item${group.items.length === 1 ? '' : 's'}`;
 
@@ -107,7 +107,7 @@ function GroupSection({ providerId, group, onAcceptItem }: GroupSectionProps) {
             <SourceItem
               key={`${item.providerId}-${item.externalId}`}
               item={item}
-              onAccept={() => onAcceptItem(providerId, item.externalId)}
+              onOpen={() => onOpenItem(providerId, item.externalId)}
             />
           ))}
         </div>
