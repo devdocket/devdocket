@@ -86,12 +86,15 @@ describe('WatcherService', () => {
       expect(changeSpy).toHaveBeenCalledTimes(1);
     });
 
-    it('throws if already watching the same run', async () => {
+    it('is idempotent when already watching the same run (returns existing)', async () => {
       const watcher = createMockWatcher('test');
       registry.register(watcher);
       const identifier = createIdentifier();
-      await service.startWatch(identifier);
-      await expect(service.startWatch(identifier)).rejects.toThrow('Already watching');
+      const first = await service.startWatch(identifier);
+      const second = await service.startWatch(identifier);
+      expect(second).toBe(first);
+      // The active-state helper should also report true throughout.
+      expect(service.isRunActive(identifier)).toBe(true);
     });
 
     it('throws if no watcher registered for provider', async () => {
@@ -368,12 +371,14 @@ describe('WatcherService', () => {
       expect(changeSpy).toHaveBeenCalled();
     });
 
-    it('throws if already watching the same PR', async () => {
+    it('is idempotent when already watching the same PR (returns existing)', async () => {
       const prWatcher = createMockPRWatcher();
       prRegistry.register(prWatcher);
 
-      await service.startPRWatch(createPRIdentifier());
-      await expect(service.startPRWatch(createPRIdentifier())).rejects.toThrow('Already watching PR');
+      const first = await service.startPRWatch(createPRIdentifier());
+      const second = await service.startPRWatch(createPRIdentifier());
+      expect(second).toBe(first);
+      expect(service.isPRActive(createPRIdentifier())).toBe(true);
     });
 
     it('throws if no PR watcher registered for provider', async () => {

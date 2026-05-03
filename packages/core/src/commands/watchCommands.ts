@@ -38,8 +38,12 @@ async function handleWatchRun(watcherRegistry: WatcherRegistry, prWatcherRegistr
   if (prWatcher) {
     try {
       const identifier = prWatcher.parsePRUrl(trimmedUrl);
-      await watcherService.startPRWatch(identifier);
-      void vscode.window.showInformationMessage(`Now watching PR: ${identifier.displayName}`);
+      const wasActive = watcherService.isPRActive(identifier);
+      const watch = await watcherService.startPRWatch(identifier);
+      const message = wasActive
+        ? `Already watching PR: ${watch.identifier.displayName}`
+        : `Now watching PR: ${watch.identifier.displayName}`;
+      void vscode.window.showInformationMessage(message);
     } catch (err: unknown) {
       handleCommandError('Failed to watch PR', err);
     }
@@ -54,9 +58,12 @@ async function handleWatchRun(watcherRegistry: WatcherRegistry, prWatcherRegistr
     }
 
     const identifier = watcher.parseRunUrl(trimmedUrl);
-    await watcherService.startWatch(identifier);
-    
-    void vscode.window.showInformationMessage(`Now watching: ${identifier.displayName}`);
+    const wasActive = watcherService.isRunActive(identifier);
+    const watch = await watcherService.startWatch(identifier);
+    const message = wasActive
+      ? `Already watching: ${watch.identifier.displayName}`
+      : `Now watching: ${watch.identifier.displayName}`;
+    void vscode.window.showInformationMessage(message);
   } catch (err: unknown) {
     handleCommandError('Failed to watch pipeline run', err);
   }
@@ -96,8 +103,12 @@ async function handleWatchPR(prWatcherRegistry: PRWatcherRegistry, watcherServic
     }
 
     const identifier = prWatcher.parsePRUrl(trimmedUrl);
-    await watcherService.startPRWatch(identifier);
-    void vscode.window.showInformationMessage(`Now watching PR: ${identifier.displayName}`);
+    const wasActive = watcherService.isPRActive(identifier);
+    const watch = await watcherService.startPRWatch(identifier);
+    const message = wasActive
+      ? `Already watching PR: ${watch.identifier.displayName}`
+      : `Now watching PR: ${watch.identifier.displayName}`;
+    void vscode.window.showInformationMessage(message);
   } catch (err: unknown) {
     handleCommandError('Failed to watch PR', err);
   }

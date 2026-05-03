@@ -126,11 +126,12 @@ export class WatcherService implements vscode.Disposable {
   }
 
   /**
-   * Start watching a pipeline run.
+   * Start watching a pipeline run. Idempotent: if the run is already being
+   * actively watched, returns the existing watch unchanged. If it was
+   * previously dismissed, un-dismisses and refreshes its status.
    * @param identifier - Run identifier from parseRunUrl
    * @param parentPRKey - Optional key of the parent PR watch
-   * @returns The newly watched run
-   * @throws If run is already being watched or watcher not found
+   * @returns The watched run (existing or newly created)
    */
   async startWatch(
     identifier: RunIdentifier,
@@ -140,12 +141,12 @@ export class WatcherService implements vscode.Disposable {
     const key = this.getWatchKey(identifier);
     const existing = this.watches.get(key);
     if (existing && !existing.dismissed) {
-      // If being re-added by a PR watcher, keep existing ownership unchanged
-      // to avoid converting a standalone watch into a PR-owned watch.
-      if (parentPRKey) {
-        return existing;
-      }
-      throw new Error(`Already watching run: ${existing.identifier.displayName}`);
+      // Already actively watching — return existing watch unchanged. This
+      // makes the "Watch URL" command idempotent so users don't see a hostile
+      // error when they re-add a URL that's already being watched. The PR
+      // re-add path also lands here, where we keep ownership unchanged to
+      // avoid converting a standalone watch into a PR-owned watch.
+      return existing;
     }
     // Remove dismissed watch to allow re-watching
     if (existing) {
@@ -194,16 +195,21 @@ export class WatcherService implements vscode.Disposable {
   }
 
   /**
-   * Start watching a pull request.
+   * Start watching a pull request. Idempotent: if the PR is already being
+   * actively watched, returns the existing watch unchanged. If it was
+   * previously dismissed, un-dismisses and refreshes its snapshot.
    * @param identifier - PR identifier from parsePRUrl
-   * @returns The newly watched PR
-   * @throws If PR is already being watched
+   * @returns The watched PR (existing or newly created)
    */
   async startPRWatch(identifier: PRIdentifier): Promise<WatchedPR> {
     const key = this.getPRWatchKey(identifier);
     const existing = this.prWatches.get(key);
     if (existing && !existing.dismissed) {
-      throw new Error(`Already watching PR: ${existing.identifier.displayName}`);
+      // Already actively watching — return existing unchanged. This makes
+      // the "Watch URL" command idempotent so users don't see a hostile
+      // error when they re-add a PR URL that's already being watched
+      // (including invisibly auto-watched PRs that have no CI runs yet).
+      return existing;
     }
     if (existing) {
       this.prWatches.delete(key);
@@ -371,6 +377,28 @@ export class WatcherService implements vscode.Disposable {
    */
   getActivePRWatches(): WatchedPR[] {
     return Array.from(this.prWatches.values()).filter(pr => !pr.dismissed);
+  }
+
+  /**
+   * Check whether a PR is currently being actively watched (in memory and
+   * not dismissed). In contrast with {@link isPRWatched}, this excludes
+   * dismissed entries — useful for distinguishing "already actively watching"
+   * from "previously watched and dismissed" in user-facing flows.
+   */
+  isPRActive(identifier: PRIdentifier): boolean {
+    const key = this.getPRWatchKey(identifier);
+    const existing = this.prWatches.get(key);
+    return existing !== undefined && !existing.dismissed;
+  }
+
+  /**
+   * Check whether a run is currently being actively watched (in memory and
+   * not dismissed).
+   */
+  isRunActive(identifier: RunIdentifier): boolean {
+    const key = this.getWatchKey(identifier);
+    const existing = this.watches.get(key);
+    return existing !== undefined && !existing.dismissed;
   }
 
   /**
