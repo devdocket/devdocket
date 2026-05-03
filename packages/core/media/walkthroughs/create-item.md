@@ -11,4 +11,4 @@ Click the button below to create your first work item:
 
 [Create Work Item](command:devdocket.createItem)
 
-Your new item will appear under **Ready to Start** in the **DevDocket** sidebar (under the **My Work** tab), ready to be moved into focus when you start working on it. Click the item title to open the editor and add notes, edit the title, or run actions.
+Your new item will appear under **Ready to Start** in the **DevDocket** sidebar (under the **My Work** tab), ready to be moved into **In Progress** when you start working on it. Click the item title to open the editor and add notes, edit the title, or run actions.
