@@ -318,9 +318,16 @@ export class MainViewProvider implements vscode.WebviewViewProvider {
     return undefined;
   }
 
-  private getRunCIBadge(watchedRun: WatchedRun): BadgeData {
-    if (watchedRun.hasWarning || isFailedRun(watchedRun)) {
+  private getRunCIBadge(watchedRun: WatchedRun): BadgeData | undefined {
+    // hasWarning means we couldn't poll the run successfully — that's a
+    // watcher health concern, not a CI failure. Don't surface it on the
+    // sidebar item; the watch panel still shows the warning where it's
+    // actionable.
+    if (isFailedRun(watchedRun)) {
       return { label: 'CI failed', type: 'ci', variant: 'ci-fail' };
+    }
+    if (watchedRun.hasWarning) {
+      return undefined;
     }
     if (watchedRun.status.overallState !== 'completed') {
       return { label: 'CI running', type: 'ci', variant: 'ci-running' };
@@ -330,14 +337,15 @@ export class MainViewProvider implements vscode.WebviewViewProvider {
 
   private getPRCIBadge(watchedPR: WatchedPR): BadgeData | undefined {
     const childRuns = this.watcherService.getChildRuns(this.watcherService.getPRWatchKey(watchedPR.identifier));
-    if (watchedPR.hasWarning || childRuns.some(runWatch => runWatch.hasWarning || isFailedRun(runWatch))) {
-      return { label: 'CI failed', type: 'ci', variant: 'ci-fail' };
-    }
-    // No CI runs detected yet — don't claim a CI status. The PR may simply
-    // have no CI configured, or runs may not have started. Showing 'CI running'
-    // here is misleading because it would stay forever for PRs without CI.
+    // No CI runs detected — don't surface a CI status. The PR may simply
+    // have no CI configured; runs may not have started yet; or the watcher
+    // is having trouble polling (watchedPR.hasWarning) — none of those
+    // mean "the CI failed".
     if (childRuns.length === 0) {
       return undefined;
+    }
+    if (childRuns.some(isFailedRun)) {
+      return { label: 'CI failed', type: 'ci', variant: 'ci-fail' };
     }
     if (childRuns.some(runWatch => runWatch.status.overallState !== 'completed')) {
       return { label: 'CI running', type: 'ci', variant: 'ci-running' };
@@ -1030,9 +1038,13 @@ function getDiscoveredItemKey(providerId: string, externalId: string): string {
 }
 
 function isFailedRun(runWatch: WatchedRun): boolean {
-  return runWatch.status.overallState === 'completed'
-    && runWatch.status.conclusion !== undefined
-    && runWatch.status.conclusion !== 'success';
+  if (runWatch.status.overallState !== 'completed') return false;
+  const conclusion = runWatch.status.conclusion;
+  if (conclusion === undefined || conclusion === 'success') return false;
+  // Cancelled / skipped / neutral runs aren't failures from a CI-health
+  // standpoint — they're explicit non-results. Don't paint them red.
+  if (conclusion === 'cancelled' || conclusion === 'skipped' || conclusion === 'neutral') return false;
+  return true;
 }
 
 function normalizeText(value?: string): string {
