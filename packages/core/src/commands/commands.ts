@@ -753,6 +753,14 @@ export function registerCommands(
   context.subscriptions.push(
     vscode.commands.registerCommand('devdocket.refresh',
       wrapCommand('Failed to refresh', () => handleRefresh(providerRegistry))),
+    vscode.commands.registerCommand('devdocket.openWalkthrough',
+      wrapCommand('Failed to open walkthrough', () =>
+        vscode.commands.executeCommand(
+          'workbench.action.openWalkthrough',
+          'mthalman.devdocket#devdocket.gettingStarted',
+          false,
+        ),
+      )),
     vscode.commands.registerCommand('devdocket.createItem',
       wrapCommand('Failed to create item', () => handleCreateItem(context, workGraph, providerRegistry, labelCache))),
     vscode.commands.registerCommand('devdocket.createItemFromUrl',

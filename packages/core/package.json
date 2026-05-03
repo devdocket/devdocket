@@ -404,6 +404,11 @@
         "command": "devdocket.showWatchesQuickPick",
         "title": "Show Watches",
         "category": "DevDocket"
+      },
+      {
+        "command": "devdocket.openWalkthrough",
+        "title": "Open Walkthrough",
+        "category": "DevDocket"
       }
     ],
     "menus": {
