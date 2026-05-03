@@ -423,13 +423,22 @@ class MyTaskProvider implements DevDocketProvider {
       description: task.summary,
       url: `https://tasks.example.com/${task.id}`,
       group: task.project,
+      // Classify the kind of item for the type pill (omit for generic sources)
+      itemType: 'issue',
+      // Provider-declared pills — core won't infer them from state/reason.
+      // - incomingOnly: hide once the user accepts the item into the queue
+      // - show: 'editor': only render in the editor (keeps sidebar uncluttered)
+      badges: [
+        { label: 'Assigned', variant: 'warning', incomingOnly: true },
+        { label: task.status, variant: 'info', show: 'editor' },
+      ],
     }));
 
     // Emit the full set of items — this replaces any previous emission
     this._onDidDiscoverItems.fire(items);
   }
 
-  private async fetchTasks(): Promise<Array<{ id: string; title: string; summary: string; project: string }>> {
+  private async fetchTasks(): Promise<Array<{ id: string; title: string; summary: string; project: string; status: string }>> {
     // Replace with your actual data fetching logic
     return [];
   }

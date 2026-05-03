@@ -208,6 +208,18 @@ class JiraProvider implements DevDocketProvider {
       url: `https://jira.example.com/browse/${ticket.key}`,
       // group organizes items under folders in the Inbox and Sources views
       group: ticket.project,
+      // itemType drives the Issue/PR pill rendered by core in both views.
+      // Omit it for heterogeneous or generic sources.
+      itemType: 'issue',
+      // badges are provider-declared pills; core never infers them from
+      // state/reason strings. Use `incomingOnly: true` for "why did this
+      // surface?" reason badges that should disappear after acceptance.
+      // Use `show: 'editor'` for verbose state labels that would clutter
+      // the sidebar.
+      badges: [
+        { label: 'Assigned to me', variant: 'warning', incomingOnly: true },
+        { label: ticket.status, variant: 'info', show: 'editor' },
+      ],
     }));
 
     // Each emission replaces the provider's entire item set
@@ -513,6 +525,45 @@ Each `onDidDiscoverItems` emission **replaces** the provider's entire known item
 ### Use `group` for organization
 
 Set the `group` field on `DiscoveredItem` to organize items under folder nodes in the Inbox and Sources views. For example, a GitHub provider groups issues by repository name.
+
+### Classify items with `itemType`
+
+Set `itemType` to `'issue'` or `'pr'` when your provider knows the kind of item it's surfacing. DevDocket renders this as a dedicated Issue/PR pill alongside the provider, state, and CI badges.
+
+- **Do** set `itemType` from authoritative provider data (e.g. an API field, the URL pattern of the source, or a dedicated endpoint).
+- **Don't** make consumers of `DiscoveredItem` infer the kind from URLs or state strings — only the provider has authoritative knowledge of what it actually fetched.
+- **Leave `itemType` undefined** for generic / heterogeneous sources where the kind isn't meaningful (e.g. a "starred items" feed). The pill simply won't render.
+
+### Declare badges explicitly
+
+DevDocket itself owns three badge categories: **Provider** (GitHub / ADO / Manual), **Type** (Issue / PR via `itemType`), and **CI** (from the watcher service). For everything else — state, review status, the reason an item showed up in the inbox — declare badges via `DiscoveredItem.badges`.
+
+The core never infers badges from `state` or `reason` strings, so if you want a pill in the UI you must declare it explicitly.
+
+**Variant → meaning:**
+
+| Variant | Use for |
+|---|---|
+| `neutral` | Category labels (e.g. `Draft`) — outlined, no fill |
+| `info` | Informational state (e.g. `Open`, `Review received`) — blue |
+| `success` | Positive state (e.g. `Approved`, `Ready to merge`) — green |
+| `warning` | Pending action (e.g. `Mentioned`, `Review requested`) — amber |
+| `danger` | Action needed (e.g. `Changes requested`, `Rejected`) — red |
+
+**`show` filter:** Defaults to `'both'`. Use `show: 'editor'` for verbose state labels that would clutter the sidebar (e.g. a custom workflow state). Use `show: 'sidebar'` for the rare badge that's only useful during inbox triage.
+
+**`incomingOnly` filter:** Set `incomingOnly: true` for "why did this surface?" reason badges (e.g. `Mentioned`, `Assigned`, `Review requested`). The badge then only renders while the item is in its discovery context — the sidebar's Incoming tier and the Incoming preview panel — and disappears once the user accepts the item into the queue. Your provider keeps emitting the badge on every refresh; core decides whether to render it based on the item's lifecycle state.
+
+```ts
+badges: [
+  // Disappears after the user accepts the item into the queue.
+  { label: 'Mentioned', variant: 'warning', incomingOnly: true },
+  // Verbose upstream state that should only show in the editor.
+  { label: 'In Review', variant: 'info', show: 'editor' },
+],
+```
+
+When adding a new provider, default to declaring **at least** one reason badge with `incomingOnly: true` plus a state badge with `show: 'editor'` so users can see *why* the item appeared during triage and what the upstream state is in the editor.
 
 ### Use `canonicalId` for cross-provider deduplication
 
