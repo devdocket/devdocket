@@ -1677,7 +1677,7 @@ describe('registerCommands', () => {
       await invoke('devdocket.acceptToFocusFromInbox', makeInboxItem());
 
       expect(vscode.window.showInformationMessage).toHaveBeenCalledWith(
-        'DevDocket: Item is already in In Progress',
+        'DevDocket: Item is already In Progress',
       );
       expect(workGraph.transitionState).not.toHaveBeenCalled();
       expect(stateStore.setState).toHaveBeenCalledWith('github', 'ext-1', 'accepted');
@@ -1690,7 +1690,7 @@ describe('registerCommands', () => {
       await invoke('devdocket.acceptToFocusFromInbox', makeInboxItem());
 
       expect(vscode.window.showInformationMessage).toHaveBeenCalledWith(
-        'DevDocket: Item is already in In Progress',
+        'DevDocket: Item is already In Progress',
       );
       expect(workGraph.transitionState).not.toHaveBeenCalled();
       expect(stateStore.setState).toHaveBeenCalledWith('github', 'ext-1', 'accepted');
@@ -2050,7 +2050,7 @@ describe('registerCommands', () => {
       expect(workGraph.transitionState).toHaveBeenCalledWith('wc-2', WorkItemState.InProgress);
       expect(workGraph.transitionState).toHaveBeenCalledWith('wc-3', WorkItemState.InProgress);
       expect(vscode.window.showInformationMessage).toHaveBeenCalledWith(
-        'Accepted 2 items to In Progress; 1 item already in In Progress or cannot be moved',
+        'Accepted 2 items to In Progress; 1 item already In Progress or cannot be moved',
       );
     });
   });

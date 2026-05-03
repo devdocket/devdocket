@@ -777,7 +777,7 @@ export function registerCommands(
         IncomingPreviewPanel.open(context, providerRegistry, stateStore, readStateStore, workGraph, providerId, externalId);
       })),
     vscode.commands.registerCommand('devdocket.acceptToFocus',
-      wrapCommand('Failed to In Progress item', (item, selectedItems) => handleAcceptToFocus(workGraph, item, selectedItems))),
+      wrapCommand('Failed to move item to In Progress', (item, selectedItems) => handleAcceptToFocus(workGraph, item, selectedItems))),
     vscode.commands.registerCommand('devdocket.archiveItem',
       wrapCommand('Failed to archive item', (item, selectedItems) => handleArchiveItem(workGraph, item, selectedItems))),
     vscode.commands.registerCommand('devdocket.completeItem',

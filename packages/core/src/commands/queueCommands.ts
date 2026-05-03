@@ -86,7 +86,7 @@ export function registerQueueCommands(
     vscode.commands.registerCommand('devdocket.createItem',
       wrapCommand('Failed to create item', () => handleCreateItem(workGraph))),
     vscode.commands.registerCommand('devdocket.acceptToFocus',
-      wrapCommand('Failed to In Progress item', (item, selectedItems) => handleAcceptToFocus(workGraph, item, selectedItems))),
+      wrapCommand('Failed to move item to In Progress', (item, selectedItems) => handleAcceptToFocus(workGraph, item, selectedItems))),
     vscode.commands.registerCommand('devdocket.moveUp',
       wrapCommand('Failed to move item up', (item) => handleMoveUp(workGraph, item))),
     vscode.commands.registerCommand('devdocket.moveDown',

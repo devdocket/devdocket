@@ -271,7 +271,7 @@ async function acceptToFocusSingleInboxItem(
         handleCommandError('Failed to update state for existing focus item', err);
         return;
       }
-      void vscode.window.showInformationMessage('DevDocket: Item is already in In Progress');
+      void vscode.window.showInformationMessage('DevDocket: Item is already In Progress');
       await propagateStateToCanonicalPeers(item, providerRegistry, stateStore, 'accepted');
       return;
     }
@@ -358,7 +358,7 @@ async function batchAcceptToFocusItems(
     const existing = workGraph.findItemByProvenance(item.providerId, item.externalId);
     if (existing) {
       if (existing.state === WorkItemState.InProgress || existing.state === WorkItemState.Paused) {
-        logger.info(`Skipping "${item.title}" — already in In Progress`);
+        logger.info(`Skipping "${item.title}" — already In Progress`);
         stateUpdates.push({ providerId: item.providerId, externalId: item.externalId, state: 'accepted' });
         acceptedItems.push(item);
         skipped++;
@@ -437,7 +437,7 @@ async function batchAcceptToFocusItems(
       parts.push(`Accepted ${succeeded} item${succeeded === 1 ? '' : 's'} to In Progress`);
     }
     if (skipped > 0) {
-      parts.push(`${skipped} item${skipped === 1 ? '' : 's'} already in In Progress or cannot be moved`);
+      parts.push(`${skipped} item${skipped === 1 ? '' : 's'} already In Progress or cannot be moved`);
     }
     const msg = (failed > 0 || transitionFailed > 0)
       ? `${parts.join('; ')} (${failed + transitionFailed} failed)`
