@@ -108,14 +108,14 @@ An issue appears when **all** of the following are true:
 ## GitHub Mentions
 
 **Provider:** DevDocket GitHub
-**Condition:** You are **@mentioned** on an issue or pull request **updated after** the first time the provider activated for your account.
+**Condition:** You are **@mentioned** on an issue or pull request **updated after** the first time the GitHub Mentions provider activated in this VS Code installation.
 
 A mention appears when **all** of the following are true:
 
 | Condition | Details |
 |-----------|---------|
 | **Mentions you** | The issue or PR body or any of its comments contain `@your-username` |
-| **Updated after first activation** | DevDocket records a timestamp the first time the GitHub Mentions provider runs and queries `mentions:@me updated:>{timestamp}`, so any item updated after that timestamp surfaces — including older threads that have been re-touched (new comment, edit, label change, etc.) |
+| **Updated after first activation** | DevDocket records a single timestamp (the `mentionsActivatedAt` globalState key) the first time the GitHub Mentions provider runs, and queries `mentions:@me updated:>{timestamp}` thereafter. The watermark is **per VS Code installation**, not per GitHub account — switching to a different signed-in GitHub account will reuse the same timestamp instead of starting a fresh window. |
 | **Repository match** | If `devDocketGithub.filteredRepos` is configured, the patterns listed there are **excluded** (with `!`-prefixed entries re-including matches). With no patterns set, all mentions across repositories you can read are included. The GitHub Search API caps each query at 100 results. |
 
 Items can be either issues or pull requests; the type pill in the UI reflects which one.
