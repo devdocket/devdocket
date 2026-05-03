@@ -156,7 +156,7 @@ interface ResolvedItem {
   externalId: string;
   /** Optional grouping label. */
   group?: string;
-  /** The provider id that resolved the URL — DevDocket fills this if omitted. */
+  /** The provider id that resolved the URL — required. Set this to your provider's id (`this.id`) so DevDocket records correct provenance. */
   providerId: string;
 }
 ```
