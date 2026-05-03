@@ -381,13 +381,14 @@ describe('WatcherService', () => {
       expect(service.isPRActive(createPRIdentifier())).toBe(true);
     });
 
-    it('re-syncs child runs (un-dismissing) when called for an already-active PR', async () => {
+    it('re-creates child runs when called with forceRecreate for an active PR', async () => {
       // Reproduces the user-visible bug where a PR ends up invisible in the
-      // watch panel because all its child runs were dismissed: the polling
-      // loop won't re-add them (they're still in childRunKeys), so the
-      // panel filter (runs.length > 0) hides the PR forever. A manual
-      // "Watch URL" should restore visibility by un-dismissing any runs the
-      // upstream still reports.
+      // watch panel because all its child runs were dismissed: the runs are
+      // dismissed=true but stay in childRunKeys, so the polling loop's
+      // 'already a child?' check skips re-adding them. The panel filter
+      // (runs.length > 0) then hides the parent. The manual "Watch URL"
+      // command passes forceRecreate so it can recover by wiping the old
+      // owned children and starting fresh.
       const runWatcher = createMockWatcher('github-actions');
       registry.register(runWatcher);
 
@@ -404,7 +405,7 @@ describe('WatcherService', () => {
       prRegistry.register(prWatcher);
 
       const identifier = createPRIdentifier();
-      const initialWatch = await service.startPRWatch(identifier);
+      await service.startPRWatch(identifier);
       expect(service.getActiveWatches()).toHaveLength(1);
 
       // Simulate the user dismissing the child run via the watch panel.
@@ -416,9 +417,8 @@ describe('WatcherService', () => {
       expect(service.isPRActive(identifier)).toBe(true);
       expect(service.getChildRuns(service.getPRWatchKey(identifier))).toHaveLength(0);
 
-      // Manual "Watch URL" again ΓÇö idempotent path should re-sync child runs.
-      const second = await service.startPRWatch(identifier);
-      expect(second).toBe(initialWatch);
+      // Manual "Watch URL" with forceRecreate ΓÇö wipes and rebuilds.
+      await service.startPRWatch(identifier, { forceRecreate: true });
       expect(service.getActiveWatches()).toHaveLength(1);
       expect(service.getChildRuns(service.getPRWatchKey(identifier))).toHaveLength(1);
     });

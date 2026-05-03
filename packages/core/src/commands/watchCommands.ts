@@ -39,9 +39,9 @@ async function handleWatchRun(watcherRegistry: WatcherRegistry, prWatcherRegistr
     try {
       const identifier = prWatcher.parsePRUrl(trimmedUrl);
       const wasActive = watcherService.isPRActive(identifier);
-      const watch = await watcherService.startPRWatch(identifier);
+      const watch = await watcherService.startPRWatch(identifier, { forceRecreate: true });
       const message = wasActive
-        ? `Already watching PR: ${watch.identifier.displayName}`
+        ? `Re-watching PR: ${watch.identifier.displayName}`
         : `Now watching PR: ${watch.identifier.displayName}`;
       void vscode.window.showInformationMessage(message);
     } catch (err: unknown) {
@@ -104,9 +104,9 @@ async function handleWatchPR(prWatcherRegistry: PRWatcherRegistry, watcherServic
 
     const identifier = prWatcher.parsePRUrl(trimmedUrl);
     const wasActive = watcherService.isPRActive(identifier);
-    const watch = await watcherService.startPRWatch(identifier);
+    const watch = await watcherService.startPRWatch(identifier, { forceRecreate: true });
     const message = wasActive
-      ? `Already watching PR: ${watch.identifier.displayName}`
+      ? `Re-watching PR: ${watch.identifier.displayName}`
       : `Now watching PR: ${watch.identifier.displayName}`;
     void vscode.window.showInformationMessage(message);
   } catch (err: unknown) {

@@ -195,27 +195,45 @@ export class WatcherService implements vscode.Disposable {
   }
 
   /**
-   * Start watching a pull request. Idempotent: if the PR is already being
-   * actively watched, returns the existing watch unchanged but re-syncs its
-   * child runs from a fresh snapshot so that any previously-dismissed runs
-   * the upstream still considers active are made visible again. (Without
-   * the re-sync, a user who dismissed all of a PR's child runs ends up with
-   * an invisible PR ΓÇö the panel filter hides PRs with no visible runs and
-   * polling never re-adds dismissed children.) If the PR was previously
-   * dismissed, un-dismisses and refreshes its snapshot from scratch.
+   * Start watching a pull request. By default idempotent: if the PR is
+   * already being actively watched, returns the existing watch unchanged.
+   * If it was previously dismissed, un-dismisses and refreshes its snapshot
+   * from scratch.
+   *
+   * Pass `{ forceRecreate: true }` to wipe any existing watch (and its
+   * owned child runs) and recreate from scratch. This is the right choice
+   * for explicit user intent (e.g. the manual "Watch URL" command) because
+   * the previously-active state may have stale or invisible child runs that
+   * the user can't recover any other way.
+   *
    * @param identifier - PR identifier from parsePRUrl
    * @returns The watched PR (existing or newly created)
    */
-  async startPRWatch(identifier: PRIdentifier): Promise<WatchedPR> {
+  async startPRWatch(
+    identifier: PRIdentifier,
+    options?: { forceRecreate?: boolean },
+  ): Promise<WatchedPR> {
     const key = this.getPRWatchKey(identifier);
     const existing = this.prWatches.get(key);
-    if (existing && !existing.dismissed) {
-      // Already actively watching ΓÇö return existing unchanged, but re-sync
-      // child runs so dismissed-but-still-upstream runs become visible again.
-      await this.resyncPRChildRuns(key, existing);
+
+    if (options?.forceRecreate && existing) {
+      // Wipe owned child runs so the fresh snapshot starts clean.
+      // Standalone watches that happen to be linked are left intact (they
+      // belong to the user, not the PR), but unlinked from this PR.
+      for (const childKey of existing.childRunKeys) {
+        const childWatch = this.watches.get(childKey);
+        if (childWatch && childWatch.parentPRKey === key) {
+          this.watches.delete(childKey);
+        }
+      }
+      this.prWatches.delete(key);
+    } else if (existing && !existing.dismissed) {
+      // Already actively watching ΓÇö return existing unchanged. Used by the
+      // auto-watch path (which checks isPRWatched first anyway); keeps the
+      // public API forgiving for callers that don't pass forceRecreate.
       return existing;
-    }
-    if (existing) {
+    } else if (existing) {
+      // Previously dismissed ΓÇö delete and recreate fresh.
       this.prWatches.delete(key);
     }
 
@@ -785,63 +803,6 @@ export class WatcherService implements vscode.Disposable {
     } catch (err) {
       this.logger.warn(`Failed to add child run ${runIdentifier.displayName} for PR ${prWatch.identifier.displayName}: ${err}`);
       return false;
-    }
-  }
-
-  /**
-   * Re-sync a PR watch's child runs from a fresh upstream snapshot. Used by
-   * the manual "Watch URL" idempotent path: any runs the upstream still
-   * reports but which we have locally as dismissed are un-dismissed, and
-   * any runs not yet linked are added. This restores a PR to visibility in
-   * the watch panel after the user has dismissed all of its runs (the
-   * polling cycle alone won't recover, since dismissed children remain in
-   * childRunKeys and are skipped on subsequent polls).
-   */
-  private async resyncPRChildRuns(prKey: string, prWatch: WatchedPR): Promise<void> {
-    const prWatcher = this.prWatcherRegistry.get(prWatch.identifier.providerId);
-    if (!prWatcher) {
-      return;
-    }
-
-    let snapshot;
-    try {
-      snapshot = await prWatcher.getPRRunsSnapshot(prWatch.identifier);
-    } catch (err) {
-      this.logger.warn(`Failed to re-sync PR child runs for ${prWatch.identifier.displayName}: ${err}`);
-      return;
-    }
-
-    let changed = false;
-    for (const runId of snapshot.runs) {
-      const resolved = this.resolveRunIdentifier(runId);
-      const runKey = this.getWatchKey(resolved);
-      const existingRun = this.watches.get(runKey);
-
-      if (existingRun?.dismissed) {
-        // Un-dismiss in place so the existing status / display name are
-        // preserved; the next poll will refresh its status anyway.
-        existingRun.dismissed = false;
-        changed = true;
-      }
-
-      if (!prWatch.childRunKeys.includes(runKey)) {
-        const added = await this.addChildRun(prKey, prWatch, resolved, {
-          suppressEvents: true,
-          suppressPersist: true,
-        });
-        if (added) {
-          changed = true;
-        }
-      }
-    }
-
-    if (changed) {
-      this._onDidChangePRWatches.fire();
-      this._onDidChangeWatchedRuns.fire(this.getAllWatches());
-      this.persistWatches();
-      // Resume polling in case it was idle (e.g. all runs were completed
-      // and dismissed, so the polling guard considered nothing pollable).
-      this.ensurePollingActive();
     }
   }
 
