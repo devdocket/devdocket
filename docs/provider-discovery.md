@@ -86,14 +86,14 @@ An issue appears when **all** of the following are true:
 | **Assigned to you** | You are listed as an assignee on the issue |
 | **Open state** | The issue is not closed |
 | **Not a pull request** | Only issues appear here, not PRs |
-| **Repository match** | If `devdocketGithub.repos` is configured, only issues from those repos appear. Otherwise, assigned issues across all repositories are included. Each query (global or per-repo) is limited to 1,000 items due to pagination limits. |
+| **Repository match** | If `devDocketGithub.filteredRepos` is configured, the patterns listed there are **excluded** (with `!`-prefixed entries re-including matches). With no patterns set, assigned issues across all repositories are included. Each query (global or per-repo) is limited to 1,000 items due to pagination limits. |
 
 ### Configuration
 
 | Setting | Default | Description |
 |---------|---------|-------------|
-| `devdocketGithub.repos` | `[]` (all repos) | List of repositories to watch, in `owner/repo` format. Leave empty to include all repositories where you have assigned issues. |
-| `devdocketGithub.refreshIntervalSeconds` | `300` (5 min) | How often to poll for changes. Minimum 60 seconds. |
+| `devDocketGithub.filteredRepos` | `""` (no exclusions) | Newline-separated repo patterns to **exclude** from discovery. Supports glob and `!` re-include syntax. Leave empty to fetch issues across all repositories where you have assignments. |
+| `devDocketGithub.refreshIntervalSeconds` | `300` (5 min) | How often to poll for changes. Minimum 60 seconds. |
 
 ### What does NOT cause issues to appear
 
@@ -146,16 +146,16 @@ A PR review appears when **all** of the following are true:
 |-----------|---------|
 | **Review requested from you** | You are explicitly listed as a requested reviewer |
 | **Open state** | The PR is not closed or merged |
-| **Repository match** | If `devdocketGithub.repos` is configured, only PRs from those repos appear. Otherwise, review requests across all repositories are included. Each query (global or per-repo) is limited to 100 results due to GitHub Search API limits. |
+| **Repository match** | If `devDocketGithub.filteredRepos` is configured, the patterns listed there are **excluded**. With no patterns set, review requests across all repositories are included. Each query (global or per-repo) is limited to 100 results due to GitHub Search API limits. |
 
 ### Configuration
 
 | Setting | Default | Description |
 |---------|---------|-------------|
-| `devdocketGithub.repos` | `[]` (all repos) | Same repo filter as GitHub Issues. |
-| `devdocketGithub.refreshIntervalSeconds` | `300` (5 min) | Shared with GitHub Issues. |
-| `devdocketGithub.resurfaceOnNewVersion` | `true` | When enabled, a PR you've already accepted reappears in the Incoming tier if new commits are pushed. |
-| `devdocketGithub.resurfaceOnReRequestedReview` | `true` | When enabled, a PR reappears if the author explicitly re-requests your review. |
+| `devDocketGithub.filteredRepos` | `""` (no exclusions) | Same exclude-pattern filter as GitHub Issues. |
+| `devDocketGithub.refreshIntervalSeconds` | `300` (5 min) | Shared with GitHub Issues. |
+| `devDocketGithub.resurfaceOnNewVersion` | `true` | When enabled, a PR you've already accepted reappears in the Incoming tier if new commits are pushed. |
+| `devDocketGithub.resurfaceOnReRequestedReview` | `true` | When enabled, a PR reappears if the author explicitly re-requests your review. |
 
 ### What does NOT cause PR reviews to appear
 
@@ -178,7 +178,7 @@ A PR appears when **all** of the following are true:
 |-----------|---------|
 | **Authored by you** | You created the pull request |
 | **Open state** | The PR is not closed or merged |
-| **Repository match** | If `devdocketGithub.repos` is configured, only PRs from those repos appear. Otherwise, your authored PRs across all repositories are included. Each query (global or per-repo) is limited to 100 results due to GitHub Search API limits. |
+| **Repository match** | If `devDocketGithub.filteredRepos` is configured, the patterns listed there are **excluded**. With no patterns set, your authored PRs across all repositories are included. Each query (global or per-repo) is limited to 100 results due to GitHub Search API limits. |
 
 Each discovered PR is enriched with its current status: Draft, Waiting on reviews, Review received, Changes requested, Approved, Ready to merge, or Open (fallback when detailed status cannot be determined).
 
@@ -186,8 +186,8 @@ Each discovered PR is enriched with its current status: Draft, Waiting on review
 
 | Setting | Default | Description |
 |---------|---------|-------------|
-| `devdocketGithub.repos` | `[]` (all repos) | Same repo filter as GitHub Issues. |
-| `devdocketGithub.refreshIntervalSeconds` | `300` (5 min) | Shared with GitHub Issues. |
+| `devDocketGithub.filteredRepos` | `""` (no exclusions) | Same exclude-pattern filter as GitHub Issues. |
+| `devDocketGithub.refreshIntervalSeconds` | `300` (5 min) | Shared with GitHub Issues. |
 
 ### What does NOT cause your PRs to appear
 
@@ -351,8 +351,8 @@ flowchart TD
 
 | Signal | Tracked via | Setting |
 |--------|-------------|---------|
-| New commits pushed to the PR | HEAD commit SHA | `devdocketGithub.resurfaceOnNewVersion` |
-| Review explicitly re-requested | Timeline event timestamp | `devdocketGithub.resurfaceOnReRequestedReview` |
+| New commits pushed to the PR | HEAD commit SHA | `devDocketGithub.resurfaceOnNewVersion` |
+| Review explicitly re-requested | Timeline event timestamp | `devDocketGithub.resurfaceOnReRequestedReview` |
 
 > **Note:** Re-request detection is best-effort. Only the first page of PR timeline events (up to 100) is checked, so on PRs with extensive activity the latest re-request event may be missed.
 
@@ -360,7 +360,7 @@ flowchart TD
 
 | Signal | Tracked via | Setting |
 |--------|-------------|---------|
-| New iterations pushed to the PR | Last merge source commit ID | `devdocketAdo.resurfaceOnNewVersion` |
+| New iterations pushed to the PR | Last merge source commit ID | `devDocketAdo.resurfaceOnNewVersion` |
 
 **Dismissed items are never resurfaced.** Only accepted items can be resurfaced by version changes.
 
@@ -369,8 +369,8 @@ flowchart TD
 **Items not appearing?** Check these common causes:
 
 1. **Not authenticated** — Ensure you're signed into GitHub or Microsoft in VS Code. DevDocket uses VS Code's built-in authentication. Background refreshes won't prompt for sign-in; trigger a manual refresh to get the auth prompt.
-2. **Wrong repository/project config** — Verify `devdocketGithub.repos` or `devdocketAdo.projects` includes the correct repositories or organizations. For GitHub, leaving `devdocketGithub.repos` empty includes all repositories. For ADO, at least one entry in `devdocketAdo.projects` is required — an empty list disables ADO discovery entirely.
-3. **Invalid format** — GitHub repo entries must be in `owner/repo` format; invalid entries are logged as warnings and skipped by the issues provider (the PR review provider will report them as fetch failures instead). ADO entries must be `org` or `org/project`; individual malformed entries are silently skipped, but if all entries are invalid the ADO providers will not activate.
+2. **Wrong repository/project config** — For GitHub, the `devDocketGithub.filteredRepos` setting **excludes** the patterns you list (so leaving it empty includes everything you have access to). For ADO, at least one entry in `devDocketAdo.projects` is required — an empty list disables ADO discovery entirely.
+3. **Invalid format** — GitHub `filteredRepos` patterns are matched as globs against `owner/repo`; entries that fail to parse are logged as warnings and skipped. ADO entries must be `org` or `org/project`; individual malformed entries are silently skipped, but if all entries are invalid the ADO providers will not activate.
 4. **Item already dismissed** — Dismissed items never reappear. Check the Sources tab to see all items the provider knows about, regardless of inbox state.
 5. **Terminal state** — ADO work items in Closed, Done, Removed, or other terminal states are excluded.
 6. **Provider unhealthy** — Check the Sources tab for providers showing a `⚠` warning indicator. This indicates an authentication or network issue.
@@ -379,4 +379,4 @@ flowchart TD
 **Items appearing unexpectedly?**
 
 1. **Resurfacing** — An accepted PR review may reappear if new commits were pushed or a review was re-requested. Disable this via the `resurfaceOnNewVersion` or `resurfaceOnReRequestedReview` settings.
-2. **Multiple repositories** — If `devdocketGithub.repos` is empty, issues from all repositories you're assigned to will appear. Configure the setting to limit scope.
+2. **Repository scope** — `devDocketGithub.filteredRepos` is an **exclude** list, so leaving it empty includes every repository you can read. Add repository patterns to scope discovery down.
