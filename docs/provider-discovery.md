@@ -124,8 +124,8 @@ Items can be either issues or pull requests; the type pill in the UI reflects wh
 
 | Setting | Default | Description |
 |---------|---------|-------------|
-| `devdocketGithub.repos` | `[]` (all repos) | Same repo filter as GitHub Issues. |
-| `devdocketGithub.refreshIntervalSeconds` | `300` (5 min) | Shared with GitHub Issues. |
+| `devDocketGithub.filteredRepos` | `""` (no exclusions) | Same exclude-pattern filter as GitHub Issues. |
+| `devDocketGithub.refreshIntervalSeconds` | `300` (5 min) | Shared with GitHub Issues. |
 
 ### What does NOT cause mentions to appear
 
@@ -226,15 +226,15 @@ This means items are correctly filtered regardless of your process template. For
 
 | Setting | Default | Description |
 |---------|---------|-------------|
-| `devdocketAdo.projects` | `[]` | Organizations and projects to monitor. Each entry is `<org>` (entire organization) or `<org>/<project>` (specific project). At least one entry is required for the ADO providers to discover items. |
-| `devdocketAdo.refreshIntervalSeconds` | `300` (5 min) | How often to poll for changes. Minimum 60 seconds. Set to 0 or a negative value to disable. |
+| `devDocketAdo.projects` | `[]` | Organizations and projects to monitor. Each entry is `<org>` (entire organization) or `<org>/<project>` (specific project). At least one entry is required for the ADO providers to discover items. |
+| `devDocketAdo.refreshIntervalSeconds` | `300` (5 min) | How often to poll for changes. Minimum 60 seconds. Set to 0 or a negative value to disable. |
 
 ### What does NOT cause work items to appear
 
 - Work items you **created** (unless also assigned to you)
 - Work items where you are in the **activity** or **discussion** but not assigned
 - Work items in **Closed**, **Done**, **Removed**, or other terminal states
-- Work items from organizations/projects not listed in `devdocketAdo.projects`
+- Work items from organizations/projects not listed in `devDocketAdo.projects`
 
 ---
 
@@ -255,9 +255,9 @@ A PR review appears when **all** of the following are true:
 
 | Setting | Default | Description |
 |---------|---------|-------------|
-| `devdocketAdo.projects` | `[]` | Same org/project filter as ADO Work Items. At least one entry is required. |
-| `devdocketAdo.refreshIntervalSeconds` | `300` (5 min) | Shared with ADO Work Items. |
-| `devdocketAdo.resurfaceOnNewVersion` | `true` | When enabled, a PR you've already accepted reappears in the Incoming tier if new iterations (commits) are pushed. Note: ADO does not support re-request-based resurfacing (unlike GitHub). |
+| `devDocketAdo.projects` | `[]` | Same org/project filter as ADO Work Items. At least one entry is required. |
+| `devDocketAdo.refreshIntervalSeconds` | `300` (5 min) | Shared with ADO Work Items. |
+| `devDocketAdo.resurfaceOnNewVersion` | `true` | When enabled, a PR you've already accepted reappears in the Incoming tier if new iterations (commits) are pushed. Note: ADO does not support re-request-based resurfacing (unlike GitHub). |
 
 ### What does NOT cause ADO PR reviews to appear
 
@@ -286,8 +286,8 @@ Each discovered PR is enriched with its current vote-derived status (Draft, Wait
 
 | Setting | Default | Description |
 |---------|---------|-------------|
-| `devdocketAdo.projects` | `[]` | Same org/project filter as ADO Work Items. At least one entry is required. |
-| `devdocketAdo.refreshIntervalSeconds` | `300` (5 min) | Shared with ADO Work Items. |
+| `devDocketAdo.projects` | `[]` | Same org/project filter as ADO Work Items. At least one entry is required. |
+| `devDocketAdo.refreshIntervalSeconds` | `300` (5 min) | Shared with ADO Work Items. |
 
 ### What does NOT cause your PRs to appear
 
