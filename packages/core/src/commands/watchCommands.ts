@@ -2,7 +2,7 @@ import * as vscode from 'vscode';
 import { WatcherService, type WatchedRun, type WatchedPR } from '../services/watcherService';
 import { WatcherRegistry } from '../services/watcherRegistry';
 import { PRWatcherRegistry } from '../services/prWatcherRegistry';
-import { showWatchesQuickPick } from '../views/watchesStatusBar';
+import type { WatchPanelProvider } from '../views/watchPanelProvider';
 import { isSafeUrl } from '../utils/url';
 import { wrapCommand, handleCommandError } from './commandUtils';
 
@@ -38,8 +38,12 @@ async function handleWatchRun(watcherRegistry: WatcherRegistry, prWatcherRegistr
   if (prWatcher) {
     try {
       const identifier = prWatcher.parsePRUrl(trimmedUrl);
-      await watcherService.startPRWatch(identifier);
-      void vscode.window.showInformationMessage(`Now watching PR: ${identifier.displayName}`);
+      const wasActive = watcherService.isPRActive(identifier);
+      const watch = await watcherService.startPRWatch(identifier, { forceRecreate: true });
+      const message = wasActive
+        ? `Re-watching PR: ${watch.identifier.displayName}`
+        : `Now watching PR: ${watch.identifier.displayName}`;
+      void vscode.window.showInformationMessage(message);
     } catch (err: unknown) {
       handleCommandError('Failed to watch PR', err);
     }
@@ -54,9 +58,12 @@ async function handleWatchRun(watcherRegistry: WatcherRegistry, prWatcherRegistr
     }
 
     const identifier = watcher.parseRunUrl(trimmedUrl);
-    await watcherService.startWatch(identifier);
-    
-    void vscode.window.showInformationMessage(`Now watching: ${identifier.displayName}`);
+    const wasActive = watcherService.isRunActive(identifier);
+    const watch = await watcherService.startWatch(identifier);
+    const message = wasActive
+      ? `Already watching: ${watch.identifier.displayName}`
+      : `Now watching: ${watch.identifier.displayName}`;
+    void vscode.window.showInformationMessage(message);
   } catch (err: unknown) {
     handleCommandError('Failed to watch pipeline run', err);
   }
@@ -96,8 +103,12 @@ async function handleWatchPR(prWatcherRegistry: PRWatcherRegistry, watcherServic
     }
 
     const identifier = prWatcher.parsePRUrl(trimmedUrl);
-    await watcherService.startPRWatch(identifier);
-    void vscode.window.showInformationMessage(`Now watching PR: ${identifier.displayName}`);
+    const wasActive = watcherService.isPRActive(identifier);
+    const watch = await watcherService.startPRWatch(identifier, { forceRecreate: true });
+    const message = wasActive
+      ? `Re-watching PR: ${watch.identifier.displayName}`
+      : `Now watching PR: ${watch.identifier.displayName}`;
+    void vscode.window.showInformationMessage(message);
   } catch (err: unknown) {
     handleCommandError('Failed to watch PR', err);
   }
@@ -153,16 +164,28 @@ async function handleWatchPRFromItem(
   const prWatcher = prWatcherRegistry.findWatcherForUrl(safeUrl.href);
   if (prWatcher) {
     const identifier = prWatcher.parsePRUrl(safeUrl.href);
-    await watcherService.startPRWatch(identifier);
-    void vscode.window.showInformationMessage(`Now watching PR: ${identifier.displayName}`);
+    const wasActive = watcherService.isPRActive(identifier);
+    // Pass forceRecreate so this acts as an "explicit user intent" entry
+    // point (matching the manual Watch URL command). Without it, a PR
+    // that ended up invisible after all its child runs were dismissed
+    // would silently re-return the broken watch unchanged.
+    const watch = await watcherService.startPRWatch(identifier, { forceRecreate: true });
+    const message = wasActive
+      ? `Re-watching PR: ${watch.identifier.displayName}`
+      : `Now watching PR: ${watch.identifier.displayName}`;
+    void vscode.window.showInformationMessage(message);
     return;
   }
 
   const runWatcher = watcherRegistry.findWatcherForUrl(safeUrl.href);
   if (runWatcher) {
     const identifier = runWatcher.parseRunUrl(safeUrl.href);
-    await watcherService.startWatch(identifier);
-    void vscode.window.showInformationMessage(`Now watching run: ${identifier.displayName}`);
+    const wasActive = watcherService.isRunActive(identifier);
+    const watch = await watcherService.startWatch(identifier);
+    const message = wasActive
+      ? `Already watching: ${watch.identifier.displayName}`
+      : `Now watching run: ${watch.identifier.displayName}`;
+    void vscode.window.showInformationMessage(message);
     return;
   }
 
@@ -200,6 +223,20 @@ async function handleDismissWatch(arg: unknown, watcherService: WatcherService):
 
 async function handleDismissAllCompletedWatches(watcherService: WatcherService): Promise<void> {
   try {
+    const count = watcherService.countCompletedActiveWatches();
+    if (count === 0) {
+      void vscode.window.showInformationMessage('No completed watches to dismiss.');
+      return;
+    }
+    const noun = count === 1 ? 'watch' : 'watches';
+    const confirm = await vscode.window.showWarningMessage(
+      `Dismiss ${count} completed ${noun}? They will be removed from the Watches view.`,
+      { modal: true },
+      'Dismiss',
+    );
+    if (confirm !== 'Dismiss') {
+      return;
+    }
     watcherService.dismissAllCompleted();
   } catch (err: unknown) {
     handleCommandError('Failed to dismiss all completed watches', err);
@@ -247,6 +284,7 @@ export function registerWatchCommands(
   watcherRegistry: WatcherRegistry,
   prWatcherRegistry: PRWatcherRegistry,
   watcherService: WatcherService,
+  watchPanelProvider: WatchPanelProvider,
 ): void {
   context.subscriptions.push(
     vscode.commands.registerCommand('devdocket.watchRun',
@@ -262,6 +300,6 @@ export function registerWatchCommands(
     vscode.commands.registerCommand('devdocket.openWatchUrl',
       wrapCommand('Failed to open watch URL', (arg: unknown) => handleOpenWatchUrl(arg))),
     vscode.commands.registerCommand('devdocket.showWatchesQuickPick',
-      wrapCommand('Failed to show watches quick pick', () => showWatchesQuickPick(watcherService))),
+      wrapCommand('Failed to show watch panel', () => watchPanelProvider.open())),
   );
 }

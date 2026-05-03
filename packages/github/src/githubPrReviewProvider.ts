@@ -3,7 +3,7 @@ import { DiscoveredItem, combineSignals, createAbortError, runWorkerPool, safeDe
 import { BaseGitHubProvider } from './baseGithubProvider';
 import { logger } from './logger';
 import { parseRepoFromUrls } from './parseRepo';
-import { getHeaders, getGitHubAuthHeaders, retryWithAuth, throwApiError, parseCanonicalRepo, fetchClosedGitHubItems, type GitHubIssue, type GitHubSearchResponse } from './githubApiHelpers';
+import { getHeaders, getGitHubAuthHeaders, retryWithAuth, throwApiError, parseCanonicalRepo, fetchClosedGitHubItems, buildIssueStateBadge, type GitHubIssue, type GitHubSearchResponse } from './githubApiHelpers';
 import { matchesRepoPatterns } from './repoPattern';
 
 interface TimelineEvent {
@@ -71,6 +71,11 @@ export class GitHubPrReviewProvider extends BaseGitHubProvider {
         group: repoName,
         reason: 'review_requested',
         canonicalId: `github:pull:${repoName}#${pr.number}`,
+        itemType: 'pr',
+        badges: [
+          { label: 'Review requested', variant: 'warning' },
+          ...buildIssueStateBadge(pr.state),
+        ],
       };
       if (pr.state) { item.state = pr.state; }
       // Head SHA uses soft resurfacing (version) — resurfaces from

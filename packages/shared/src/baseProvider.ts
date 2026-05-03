@@ -32,6 +32,21 @@ export interface DiscoveredItem {
   /** Optional upstream state from the provider (e.g. `"open"`, `"closed"`, `"Active"`). */
   state?: string;
   /**
+   * Optional classification of the item kind ("issue" or "pr"). Providers set
+   * this so the UI can render a distinct type badge without inferring from URL
+   * patterns or state strings.
+   */
+  itemType?: 'issue' | 'pr';
+  /**
+   * Optional provider-declared badges to render alongside the core-managed
+   * Provider / Type / CI badges. Use these to surface state-like information
+   * (e.g. "Approved", "Changes requested", "Mentioned") in a way the core
+   * extension does not have to know about. The core never infers badges from
+   * the {@link state} or {@link reason} strings — only what's listed here is
+   * rendered.
+   */
+  badges?: ProviderBadge[];
+  /**
    * Optional version identifier for "soft" resurfacing.
    * When a previously accepted item reappears with a different version,
    * it is resurfaced in the Inbox as unseen **unless** the linked work item
@@ -54,6 +69,34 @@ export interface DiscoveredItem {
    * Items without `canonicalId` always show individually (backward compatible).
    */
   canonicalId?: string;
+}
+
+/**
+ * A badge rendered alongside the core-managed Provider / Type / CI badges.
+ * Providers declare these explicitly — the core extension never infers badges
+ * from {@link DiscoveredItem.state} or {@link DiscoveredItem.reason}.
+ */
+export interface ProviderBadge {
+  /** Display text. Keep short — sidebar badges compete with the title. */
+  label: string;
+  /**
+   * Severity hint that drives the badge's color and visual treatment. The core
+   * maps each variant to a theme-aware palette so providers don't have to
+   * pick raw colors.
+   *
+   * - `neutral` — outlined, no fill. Use for category labels.
+   * - `info`    — blue. Use for informational state (e.g. "Open").
+   * - `success` — green. Use for positive state (e.g. "Approved").
+   * - `warning` — amber. Use for pending action (e.g. "Review requested").
+   * - `danger`  — red. Use for action needed (e.g. "Changes requested").
+   */
+  variant: 'neutral' | 'info' | 'success' | 'warning' | 'danger';
+  /**
+   * Where to render. Defaults to `'both'`. Use `'editor'` for verbose detail
+   * badges that would clutter the sidebar; use `'sidebar'` for the rare case
+   * where the badge is only useful in the inbox triage flow.
+   */
+  show?: 'sidebar' | 'editor' | 'both';
 }
 
 /**

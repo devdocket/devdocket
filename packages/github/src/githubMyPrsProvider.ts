@@ -1,10 +1,23 @@
 import * as vscode from 'vscode';
-import { DiscoveredItem, combineSignals, createAbortError, runWorkerPool } from '@devdocket/shared';
+import { DiscoveredItem, ProviderBadge, combineSignals, createAbortError, runWorkerPool } from '@devdocket/shared';
 import { BaseGitHubProvider } from './baseGithubProvider';
 import { logger } from './logger';
 import { parseRepoFromUrls } from './parseRepo';
 import { getGitHubAuthHeaders, type GitHubIssue, type GitHubSearchResponse } from './githubApiHelpers';
 import { matchesRepoPatterns } from './repoPattern';
+
+/** Map a PR status string from {@link GitHubMyPrsProvider.determinePrStatus} to its UI badge. */
+function statusToBadge(status: string): ProviderBadge | undefined {
+  switch (status) {
+    case 'Draft':                return { label: 'Draft', variant: 'neutral' };
+    case 'Changes requested':    return { label: 'Changes requested', variant: 'danger' };
+    case 'Approved':             return { label: 'Approved', variant: 'success' };
+    case 'Ready to merge':       return { label: 'Ready to merge', variant: 'success' };
+    case 'Review received':      return { label: 'Review received', variant: 'info' };
+    case 'Waiting on reviews':   return { label: 'Waiting on reviews', variant: 'info' };
+    default:                     return undefined;
+  }
+}
 
 export interface PrDetail {
   draft?: boolean;
@@ -98,6 +111,7 @@ export class GitHubMyPrsProvider extends BaseGitHubProvider {
     for (const pr of filteredAuthored) {
       const repoName = repoNameMap.get(pr.html_url)!;
       const status = statusMap.get(pr.html_url) ?? 'Open';
+      const statusBadge = statusToBadge(status);
       items.push({
         externalId: `${repoName}#${pr.number}`,
         title: `#${pr.number}: ${pr.title}`,
@@ -108,11 +122,14 @@ export class GitHubMyPrsProvider extends BaseGitHubProvider {
         reason: 'You authored this PR',
         state: status,
         canonicalId: `github:pull:${repoName}#${pr.number}`,
+        itemType: 'pr',
+        ...(statusBadge ? { badges: [statusBadge] } : {}),
       });
     }
     for (const pr of filteredAssigned) {
       const repoName = repoNameMap.get(pr.html_url)!;
       const status = statusMap.get(pr.html_url) ?? 'Open';
+      const statusBadge = statusToBadge(status);
       items.push({
         externalId: `${repoName}#${pr.number}`,
         title: `#${pr.number}: ${pr.title}`,
@@ -122,6 +139,8 @@ export class GitHubMyPrsProvider extends BaseGitHubProvider {
         reason: 'You are assigned to this PR',
         state: status,
         canonicalId: `github:pull:${repoName}#${pr.number}`,
+        itemType: 'pr',
+        ...(statusBadge ? { badges: [statusBadge] } : {}),
       });
     }
 

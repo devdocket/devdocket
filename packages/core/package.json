@@ -12,17 +12,12 @@
     "Other"
   ],
   "activationEvents": [
-    "onView:devdocket.inbox",
-    "onView:devdocket.queue",
-    "onView:devdocket.focus",
-    "onView:devdocket.sources",
-    "onView:devdocket.history",
+    "onView:devdocket.main",
     "onCommand:devdocket.refresh",
     "onCommand:devdocket.dismissFromSources",
     "onCommand:devdocket.deleteItem",
     "onCommand:devdocket.createItemFromUrl",
     "onCommand:devdocket.clearHistory",
-    "onView:devdocket.watches",
     "onCommand:devdocket.watchRun",
     "onCommand:devdocket.watchPR",
     "onCommand:devdocket.watchPRFromItem",
@@ -43,7 +38,7 @@
       {
         "id": "devdocket.gettingStarted",
         "title": "Get Started with DevDocket",
-        "description": "Learn how to manage your work items across Inbox, Queue, Focus, and History",
+        "description": "Learn how to manage your work items across the Incoming, Ready to Start, In Progress, and History tiers",
         "steps": [
           {
             "id": "createFirstItem",
@@ -59,7 +54,7 @@
           {
             "id": "understandWorkflow",
             "title": "Understand the Workflow",
-            "description": "Learn how items flow through Inbox → Queue → Focus → History.",
+            "description": "Learn how items flow through Inbox \u2192 Queue \u2192 Focus \u2192 History.",
             "media": {
               "markdown": "media/walkthroughs/workflow.md"
             }
@@ -167,57 +162,12 @@
     "views": {
       "devdocket": [
         {
-          "id": "devdocket.inbox",
-          "name": "Inbox"
-        },
-        {
-          "id": "devdocket.queue",
-          "name": "Queue"
-        },
-        {
-          "id": "devdocket.focus",
-          "name": "Focus"
-        },
-        {
-          "id": "devdocket.watches",
-          "name": "Watches"
-        },
-        {
-          "id": "devdocket.history",
-          "name": "History"
-        },
-        {
-          "id": "devdocket.sources",
-          "name": "Sources"
+          "type": "webview",
+          "id": "devdocket.main",
+          "name": "DevDocket"
         }
       ]
     },
-    "viewsWelcome": [
-      {
-        "view": "devdocket.inbox",
-        "contents": "No new items.\nProviders will discover items automatically."
-      },
-      {
-        "view": "devdocket.queue",
-        "contents": "No items in your queue.\nAccept items from Inbox or create one manually.\n[Create Work Item](command:devdocket.createItem)\n[Create from URL](command:devdocket.createItemFromUrl)"
-      },
-      {
-        "view": "devdocket.focus",
-        "contents": "No active work.\nMove items from Queue to start working on them."
-      },
-      {
-        "view": "devdocket.history",
-        "contents": "Completed and archived items will appear here."
-      },
-      {
-        "view": "devdocket.sources",
-        "contents": "Discovered items from all providers will appear here."
-      },
-      {
-        "view": "devdocket.watches",
-        "contents": "No watches yet.\nWatches notify you when a GitHub Actions workflow run or an Azure DevOps pipeline run completes or fails, or when a PR is merged — right inside VS Code.\n[Watch Pipeline Run](command:devdocket.watchRun)\n[Watch Pull Request](command:devdocket.watchPR)"
-      }
-    ],
     "commands": [
       {
         "command": "devdocket.createItem",
@@ -281,7 +231,7 @@
       },
       {
         "command": "devdocket.runAction",
-        "title": "Run Action…",
+        "title": "Run Action\u2026",
         "category": "DevDocket",
         "icon": "$(play)"
       },
@@ -375,108 +325,6 @@
         "icon": "$(arrow-right)"
       },
       {
-        "command": "devdocket.switchInboxToTree",
-        "title": "Switch Inbox to Tree Layout",
-        "category": "DevDocket",
-        "icon": "$(list-tree)"
-      },
-      {
-        "command": "devdocket.switchInboxToFlat",
-        "title": "Switch Inbox to Flat Layout",
-        "category": "DevDocket",
-        "icon": "$(list-flat)"
-      },
-      {
-        "command": "devdocket.switchQueueToTree",
-        "title": "Switch Queue to Tree Layout",
-        "category": "DevDocket",
-        "icon": "$(list-tree)"
-      },
-      {
-        "command": "devdocket.switchQueueToFlat",
-        "title": "Switch Queue to Flat Layout",
-        "category": "DevDocket",
-        "icon": "$(list-flat)"
-      },
-      {
-        "command": "devdocket.switchFocusToTree",
-        "title": "Switch Focus to Tree Layout",
-        "category": "DevDocket",
-        "icon": "$(list-tree)"
-      },
-      {
-        "command": "devdocket.switchFocusToFlat",
-        "title": "Switch Focus to Flat Layout",
-        "category": "DevDocket",
-        "icon": "$(list-flat)"
-      },
-      {
-        "command": "devdocket.switchHistoryToTree",
-        "title": "Switch History to Tree Layout",
-        "category": "DevDocket",
-        "icon": "$(list-tree)"
-      },
-      {
-        "command": "devdocket.switchHistoryToFlat",
-        "title": "Switch History to Flat Layout",
-        "category": "DevDocket",
-        "icon": "$(list-flat)"
-      },
-      {
-        "command": "devdocket.switchSourcesToTree",
-        "title": "Switch Sources to Tree Layout",
-        "category": "DevDocket",
-        "icon": "$(list-tree)"
-      },
-      {
-        "command": "devdocket.switchSourcesToFlat",
-        "title": "Switch Sources to Flat Layout",
-        "category": "DevDocket",
-        "icon": "$(list-flat)"
-      },
-      {
-        "command": "devdocket.toggleInboxLayout",
-        "title": "Toggle Inbox Layout",
-        "category": "DevDocket"
-      },
-      {
-        "command": "devdocket.toggleQueueLayout",
-        "title": "Toggle Queue Layout",
-        "category": "DevDocket"
-      },
-      {
-        "command": "devdocket.toggleFocusLayout",
-        "title": "Toggle Focus Layout",
-        "category": "DevDocket"
-      },
-      {
-        "command": "devdocket.toggleHistoryLayout",
-        "title": "Toggle History Layout",
-        "category": "DevDocket"
-      },
-      {
-        "command": "devdocket.toggleSourcesLayout",
-        "title": "Toggle Sources Layout",
-        "category": "DevDocket"
-      },
-      {
-        "command": "devdocket.switchWatchesToTree",
-        "title": "Switch Watches to Tree Layout",
-        "category": "DevDocket",
-        "icon": "$(list-tree)"
-      },
-      {
-        "command": "devdocket.switchWatchesToFlat",
-        "title": "Switch Watches to Flat Layout",
-        "category": "DevDocket",
-        "icon": "$(list-flat)"
-      },
-      {
-        "command": "devdocket.toggleWatchesLayout",
-        "title": "Toggle Watches Layout",
-        "category": "DevDocket"
-      },
-      {
         "command": "devdocket.dismissFromSources",
         "title": "Dismiss",
         "category": "DevDocket",
@@ -556,174 +404,32 @@
         "command": "devdocket.showWatchesQuickPick",
         "title": "Show Watches",
         "category": "DevDocket"
+      },
+      {
+        "command": "devdocket.openWalkthrough",
+        "title": "Open Walkthrough",
+        "category": "DevDocket"
       }
     ],
     "menus": {
       "view/title": [
         {
           "command": "devdocket.createItem",
-          "when": "view == devdocket.queue",
+          "when": "view == devdocket.main",
           "group": "navigation"
         },
         {
           "command": "devdocket.createItemFromUrl",
-          "when": "view == devdocket.queue",
-          "group": "navigation"
-        },
-        {
-          "command": "devdocket.switchInboxToTree",
-          "when": "view == devdocket.inbox && devdocket.inboxLayout == flat",
-          "group": "navigation"
-        },
-        {
-          "command": "devdocket.switchInboxToFlat",
-          "when": "view == devdocket.inbox && devdocket.inboxLayout == tree",
-          "group": "navigation"
-        },
-        {
-          "command": "devdocket.switchQueueToTree",
-          "when": "view == devdocket.queue && devdocket.queueLayout == flat",
-          "group": "navigation"
-        },
-        {
-          "command": "devdocket.switchQueueToFlat",
-          "when": "view == devdocket.queue && devdocket.queueLayout == tree",
-          "group": "navigation"
-        },
-        {
-          "command": "devdocket.switchFocusToTree",
-          "when": "view == devdocket.focus && devdocket.focusLayout == flat",
-          "group": "navigation"
-        },
-        {
-          "command": "devdocket.switchFocusToFlat",
-          "when": "view == devdocket.focus && devdocket.focusLayout == tree",
-          "group": "navigation"
-        },
-        {
-          "command": "devdocket.switchHistoryToTree",
-          "when": "view == devdocket.history && devdocket.historyLayout == flat",
-          "group": "navigation"
-        },
-        {
-          "command": "devdocket.switchHistoryToFlat",
-          "when": "view == devdocket.history && devdocket.historyLayout == tree",
-          "group": "navigation"
-        },
-        {
-          "command": "devdocket.clearHistory",
-          "when": "view == devdocket.history",
-          "group": "navigation"
-        },
-        {
-          "command": "devdocket.switchSourcesToTree",
-          "when": "view == devdocket.sources && devdocket.sourcesLayout == flat",
-          "group": "navigation"
-        },
-        {
-          "command": "devdocket.switchSourcesToFlat",
-          "when": "view == devdocket.sources && devdocket.sourcesLayout == tree",
-          "group": "navigation"
-        },
-        {
-          "command": "devdocket.switchWatchesToTree",
-          "when": "view == devdocket.watches && devdocket.watchesLayout == flat",
-          "group": "navigation"
-        },
-        {
-          "command": "devdocket.switchWatchesToFlat",
-          "when": "view == devdocket.watches && devdocket.watchesLayout == tree",
+          "when": "view == devdocket.main",
           "group": "navigation"
         },
         {
           "command": "devdocket.refresh",
-          "when": "view == devdocket.inbox || view == devdocket.sources",
-          "group": "navigation"
-        },
-        {
-          "command": "devdocket.watchRun",
-          "when": "view == devdocket.watches",
-          "group": "navigation"
-        },
-        {
-          "command": "devdocket.dismissAllCompletedWatches",
-          "when": "view == devdocket.watches",
+          "when": "view == devdocket.main",
           "group": "navigation"
         }
       ],
       "commandPalette": [
-        {
-          "command": "devdocket.switchInboxToTree",
-          "when": "devdocket.inboxLayout == flat"
-        },
-        {
-          "command": "devdocket.switchInboxToFlat",
-          "when": "devdocket.inboxLayout == tree"
-        },
-        {
-          "command": "devdocket.switchQueueToTree",
-          "when": "devdocket.queueLayout == flat"
-        },
-        {
-          "command": "devdocket.switchQueueToFlat",
-          "when": "devdocket.queueLayout == tree"
-        },
-        {
-          "command": "devdocket.switchFocusToTree",
-          "when": "devdocket.focusLayout == flat"
-        },
-        {
-          "command": "devdocket.switchFocusToFlat",
-          "when": "devdocket.focusLayout == tree"
-        },
-        {
-          "command": "devdocket.switchHistoryToTree",
-          "when": "devdocket.historyLayout == flat"
-        },
-        {
-          "command": "devdocket.switchHistoryToFlat",
-          "when": "devdocket.historyLayout == tree"
-        },
-        {
-          "command": "devdocket.switchSourcesToTree",
-          "when": "devdocket.sourcesLayout == flat"
-        },
-        {
-          "command": "devdocket.switchSourcesToFlat",
-          "when": "devdocket.sourcesLayout == tree"
-        },
-        {
-          "command": "devdocket.switchWatchesToTree",
-          "when": "devdocket.watchesLayout == flat"
-        },
-        {
-          "command": "devdocket.switchWatchesToFlat",
-          "when": "devdocket.watchesLayout == tree"
-        },
-        {
-          "command": "devdocket.toggleInboxLayout",
-          "when": "false"
-        },
-        {
-          "command": "devdocket.toggleQueueLayout",
-          "when": "false"
-        },
-        {
-          "command": "devdocket.toggleFocusLayout",
-          "when": "false"
-        },
-        {
-          "command": "devdocket.toggleHistoryLayout",
-          "when": "false"
-        },
-        {
-          "command": "devdocket.toggleSourcesLayout",
-          "when": "false"
-        },
-        {
-          "command": "devdocket.toggleWatchesLayout",
-          "when": "false"
-        },
         {
           "command": "devdocket.addActivity",
           "when": "false"
@@ -735,203 +441,6 @@
         {
           "command": "devdocket.copyUrl",
           "when": "false"
-        }
-      ],
-      "view/item/context": [
-        {
-          "command": "devdocket.acceptToFocus",
-          "when": "view == devdocket.queue && viewItem =~ /^queueItem/",
-          "group": "inline"
-        },
-        {
-          "command": "devdocket.archiveItem",
-          "when": "view == devdocket.queue && viewItem =~ /^queueItem/",
-          "group": "1_actions"
-        },
-        {
-          "command": "devdocket.deleteItem",
-          "when": "view == devdocket.queue && viewItem =~ /^queueItem/",
-          "group": "1_actions"
-        },
-        {
-          "command": "devdocket.completeItem",
-          "when": "view == devdocket.focus && viewItem =~ /^(active|paused)/",
-          "group": "inline"
-        },
-        {
-          "command": "devdocket.archiveItem",
-          "when": "view == devdocket.focus && viewItem =~ /^(active|paused)/",
-          "group": "1_actions"
-        },
-        {
-          "command": "devdocket.pauseItem",
-          "when": "view == devdocket.focus && viewItem =~ /^active/",
-          "group": "1_actions"
-        },
-        {
-          "command": "devdocket.resumeItem",
-          "when": "view == devdocket.focus && viewItem =~ /^paused/",
-          "group": "1_actions"
-        },
-        {
-          "command": "devdocket.moveToQueue",
-          "when": "view == devdocket.focus && viewItem =~ /^(active|paused)/",
-          "group": "1_actions"
-        },
-        {
-          "command": "devdocket.moveToTop",
-          "when": "view == devdocket.queue && viewItem =~ /^queueItem/ && !listMultiSelection",
-          "group": "3_reorder@0"
-        },
-        {
-          "command": "devdocket.moveUp",
-          "when": "view == devdocket.queue && viewItem =~ /^queueItem/ && !listMultiSelection",
-          "group": "3_reorder@1"
-        },
-        {
-          "command": "devdocket.moveDown",
-          "when": "view == devdocket.queue && viewItem =~ /^queueItem/ && !listMultiSelection",
-          "group": "3_reorder@2"
-        },
-        {
-          "command": "devdocket.moveToBottom",
-          "when": "view == devdocket.queue && viewItem =~ /^queueItem/ && !listMultiSelection",
-          "group": "3_reorder@3"
-        },
-        {
-          "command": "devdocket.focusMoveToTop",
-          "when": "view == devdocket.focus && viewItem =~ /^(active|paused)/ && !listMultiSelection",
-          "group": "3_reorder@0"
-        },
-        {
-          "command": "devdocket.focusMoveUp",
-          "when": "view == devdocket.focus && viewItem =~ /^(active|paused)/ && !listMultiSelection",
-          "group": "3_reorder@1"
-        },
-        {
-          "command": "devdocket.focusMoveDown",
-          "when": "view == devdocket.focus && viewItem =~ /^(active|paused)/ && !listMultiSelection",
-          "group": "3_reorder@2"
-        },
-        {
-          "command": "devdocket.focusMoveToBottom",
-          "when": "view == devdocket.focus && viewItem =~ /^(active|paused)/ && !listMultiSelection",
-          "group": "3_reorder@3"
-        },
-        {
-          "command": "devdocket.openInBrowser",
-          "when": "viewItem =~ /hasUrl/ && !listMultiSelection",
-          "group": "2_links@0"
-        },
-        {
-          "command": "devdocket.copyUrl",
-          "when": "viewItem =~ /hasUrl/ && !listMultiSelection",
-          "group": "2_links@1"
-        },
-        {
-          "command": "devdocket.watchPRFromItem",
-          "when": "view == devdocket.focus && viewItem =~ /watchable/ && !listMultiSelection",
-          "group": "2_links@2"
-        },
-        {
-          "command": "devdocket.watchPRFromItem",
-          "when": "view == devdocket.queue && viewItem =~ /watchable/ && !listMultiSelection",
-          "group": "2_links@2"
-        },
-        {
-          "command": "devdocket.runAction",
-          "when": "((view == devdocket.queue && viewItem =~ /^queueItem/) || (view == devdocket.focus && viewItem =~ /^(active|paused)/)) && viewItem =~ /\\.hasActions/ && !listMultiSelection",
-          "group": "0_actions"
-        },
-        {
-          "command": "devdocket.acceptFromInbox",
-          "when": "view == devdocket.inbox && viewItem =~ /inboxItem/",
-          "group": "inline"
-        },
-        {
-          "command": "devdocket.acceptFromInbox",
-          "when": "view == devdocket.inbox && viewItem =~ /inboxItem/",
-          "group": "1_actions"
-        },
-        {
-          "command": "devdocket.dismissFromInbox",
-          "when": "view == devdocket.inbox && viewItem =~ /inboxItem/",
-          "group": "inline"
-        },
-        {
-          "command": "devdocket.dismissFromInbox",
-          "when": "view == devdocket.inbox && viewItem =~ /inboxItem/",
-          "group": "1_actions"
-        },
-        {
-          "command": "devdocket.acceptToFocusFromInbox",
-          "when": "view == devdocket.inbox && viewItem =~ /inboxItem/",
-          "group": "1_actions"
-        },
-        {
-          "command": "devdocket.acceptAllFromInbox",
-          "when": "view == devdocket.inbox && viewItem =~ /inboxProvider|inboxGroup/",
-          "group": "inline"
-        },
-        {
-          "command": "devdocket.dismissAllFromInbox",
-          "when": "view == devdocket.inbox && viewItem =~ /inboxProvider|inboxGroup/",
-          "group": "inline"
-        },
-        {
-          "command": "devdocket.acceptAllFromInbox",
-          "when": "view == devdocket.inbox && viewItem =~ /inboxProvider|inboxGroup/",
-          "group": "1_actions"
-        },
-        {
-          "command": "devdocket.acceptAllToFocusFromInbox",
-          "when": "view == devdocket.inbox && viewItem =~ /inboxProvider|inboxGroup/",
-          "group": "1_actions"
-        },
-        {
-          "command": "devdocket.dismissAllFromInbox",
-          "when": "view == devdocket.inbox && viewItem =~ /inboxProvider|inboxGroup/",
-          "group": "1_actions"
-        },
-        {
-          "command": "devdocket.acceptFromSources",
-          "when": "view == devdocket.sources && viewItem =~ /sourceItem/",
-          "group": "inline"
-        },
-        {
-          "command": "devdocket.dismissFromSources",
-          "when": "view == devdocket.sources && viewItem =~ /sourceItem/",
-          "group": "inline"
-        },
-        {
-          "command": "devdocket.dismissFromSources",
-          "when": "view == devdocket.sources && viewItem =~ /sourceItem/",
-          "group": "1_actions"
-        },
-        {
-          "command": "devdocket.moveToQueue",
-          "when": "view == devdocket.history && viewItem =~ /^historyItem/",
-          "group": "1_actions"
-        },
-        {
-          "command": "devdocket.archiveItem",
-          "when": "view == devdocket.history && viewItem =~ /historyItem\\.done/",
-          "group": "1_actions"
-        },
-        {
-          "command": "devdocket.deleteItem",
-          "when": "view == devdocket.history && viewItem =~ /^historyItem/",
-          "group": "1_actions"
-        },
-        {
-          "command": "devdocket.dismissWatch",
-          "when": "view == devdocket.watches && viewItem =~ /^watchedRun|^watchedPR/",
-          "group": "inline"
-        },
-        {
-          "command": "devdocket.openWatchUrl",
-          "when": "view == devdocket.watches && viewItem =~ /^watchedRun|^watchedPR/",
-          "group": "1_actions"
         }
       ]
     },
@@ -975,8 +484,8 @@
   },
   "scripts": {
     "vscode:prepublish": "npm run build:prod",
-    "build": "esbuild src/extension.ts --bundle --outfile=dist/extension.js --external:vscode --format=cjs --platform=node --sourcemap",
-    "build:prod": "esbuild src/extension.ts --bundle --outfile=dist/extension.js --external:vscode --format=cjs --platform=node --minify --sourcemap",
+    "build": "esbuild src/extension.ts --bundle --outfile=dist/extension.js --external:vscode --format=cjs --platform=node --sourcemap && esbuild src/webview/sidebar/index.tsx --bundle --outfile=webview-dist/sidebar.js --format=esm --platform=browser --jsx=automatic --jsx-import-source=preact --sourcemap && esbuild src/webview/editor/index.tsx --bundle --outfile=webview-dist/editor.js --format=esm --platform=browser --jsx=automatic --jsx-import-source=preact --sourcemap && esbuild src/webview/watchPanel/index.tsx --bundle --outfile=webview-dist/watchPanel.js --format=esm --platform=browser --jsx=automatic --jsx-import-source=preact --sourcemap",
+    "build:prod": "esbuild src/extension.ts --bundle --outfile=dist/extension.js --external:vscode --format=cjs --platform=node --minify --sourcemap && esbuild src/webview/sidebar/index.tsx --bundle --outfile=webview-dist/sidebar.js --format=esm --platform=browser --jsx=automatic --jsx-import-source=preact --minify --sourcemap && esbuild src/webview/editor/index.tsx --bundle --outfile=webview-dist/editor.js --format=esm --platform=browser --jsx=automatic --jsx-import-source=preact --minify --sourcemap && esbuild src/webview/watchPanel/index.tsx --bundle --outfile=webview-dist/watchPanel.js --format=esm --platform=browser --jsx=automatic --jsx-import-source=preact --minify --sourcemap",
     "watch": "esbuild src/extension.ts --bundle --outfile=dist/extension.js --external:vscode --format=cjs --platform=node --sourcemap --watch",
     "lint": "eslint src",
     "test": "vitest run",
@@ -985,6 +494,7 @@
   "dependencies": {
     "@devdocket/shared": "*",
     "marked": "^18.0.2",
+    "preact": "^10.29.1",
     "sanitize-html": "^2.17.3",
     "timeago.js": "^4.0.2"
   },

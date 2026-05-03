@@ -23,7 +23,7 @@ export class ProviderHealthStatusBar implements vscode.Disposable {
   private discoveredChangesSub: vscode.Disposable;
 
   constructor(private providerRegistry: ProviderRegistry) {
-    this.statusBarItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 99);
+    this.statusBarItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 100000);
     this.statusBarItem.command = 'devdocket.showProviderHealthQuickPick';
     
     // Update on provider health changes
@@ -65,6 +65,8 @@ export class ProviderHealthStatusBar implements vscode.Disposable {
     const count = unhealthyProviders.length;
     this.statusBarItem.text = `$(warning) ${count} provider${count === 1 ? '' : 's'} unhealthy`;
     this.statusBarItem.tooltip = 'Click to view provider health details';
+    this.statusBarItem.backgroundColor = new vscode.ThemeColor('statusBarItem.warningBackground');
+    this.statusBarItem.color = new vscode.ThemeColor('statusBarItem.warningForeground');
     this.statusBarItem.show();
   }
 
@@ -112,7 +114,7 @@ export async function showProviderHealthQuickPick(providerRegistry: ProviderRegi
                  health.status === 'healthy' ? '$(pass)' :
                  '$(circle-outline)';
     
-    let description = health.status;
+    let description: string = health.status;
     if (health.lastError) {
       description = `${health.status} — ${sanitizeError(health.lastError)}`;
     }

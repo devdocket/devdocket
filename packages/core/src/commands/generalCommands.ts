@@ -8,7 +8,6 @@ import { WorkItemEditorPanel } from '../views/workItemEditorPanel';
 import { showProviderHealthQuickPick } from '../views/providerHealthStatusBar';
 import { logger } from '../services/logger';
 import type { ResolvedItem } from '../api/types';
-import type { ViewRevealer } from '../services/viewRevealer';
 import { isSafeUrl } from '../utils/url';
 import { wrapCommand } from './commandUtils';
 
@@ -17,7 +16,6 @@ async function handleCreateItemFromUrl(
   workGraph: WorkGraph,
   providerRegistry: ProviderRegistry,
   labelCache: ProviderLabelCache,
-  revealer?: ViewRevealer,
 ): Promise<void> {
   const url = await vscode.window.showInputBox({
     prompt: 'Enter a URL to create a work item from',
@@ -68,7 +66,6 @@ async function handleCreateItemFromUrl(
   const providerLabel = createdItem.providerId ? labelCache.get(createdItem.providerId) : undefined;
   WorkItemEditorPanel.open(context, workGraph, providerRegistry, createdItem, providerLabel);
   void vscode.window.showInformationMessage(`DevDocket: Created "${details.title}"`);
-  void revealer?.revealInQueue(createdItem.id);
 }
 
 function handleEditItem(
@@ -162,13 +159,12 @@ export function registerGeneralCommands(
   actionRegistry: ActionRegistry,
   providerRegistry: ProviderRegistry,
   labelCache: ProviderLabelCache,
-  revealer?: ViewRevealer,
 ): void {
   context.subscriptions.push(
     vscode.commands.registerCommand('devdocket.refresh',
       wrapCommand('Failed to refresh', () => handleRefresh(providerRegistry))),
     vscode.commands.registerCommand('devdocket.createItemFromUrl',
-      wrapCommand('Failed to create item from URL', () => handleCreateItemFromUrl(context, workGraph, providerRegistry, labelCache, revealer))),
+      wrapCommand('Failed to create item from URL', () => handleCreateItemFromUrl(context, workGraph, providerRegistry, labelCache))),
     vscode.commands.registerCommand('devdocket.editItem',
       wrapCommand('Failed to open editor', (item) => handleEditItem(context, workGraph, providerRegistry, labelCache, item))),
     vscode.commands.registerCommand('devdocket.openInBrowser',

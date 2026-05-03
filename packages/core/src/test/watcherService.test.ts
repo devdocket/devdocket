@@ -86,12 +86,15 @@ describe('WatcherService', () => {
       expect(changeSpy).toHaveBeenCalledTimes(1);
     });
 
-    it('throws if already watching the same run', async () => {
+    it('is idempotent when already watching the same run (returns existing)', async () => {
       const watcher = createMockWatcher('test');
       registry.register(watcher);
       const identifier = createIdentifier();
-      await service.startWatch(identifier);
-      await expect(service.startWatch(identifier)).rejects.toThrow('Already watching');
+      const first = await service.startWatch(identifier);
+      const second = await service.startWatch(identifier);
+      expect(second).toBe(first);
+      // The active-state helper should also report true throughout.
+      expect(service.isRunActive(identifier)).toBe(true);
     });
 
     it('throws if no watcher registered for provider', async () => {
@@ -116,6 +119,42 @@ describe('WatcherService', () => {
     });
   });
 
+  describe('failure acknowledgement', () => {
+    it('clears the acknowledgement when a watch is dismissed', async () => {
+      const watcher = createMockWatcher('test', async () => ({
+        overallState: 'completed' as const,
+        conclusion: 'failure' as const,
+        jobs: [],
+      }));
+      registry.register(watcher);
+      const identifier = createIdentifier();
+      const watch = await service.startWatch(identifier);
+
+      service.acknowledgeAllFailures();
+      expect(service.isFailureAcknowledged(watch)).toBe(true);
+
+      service.dismissWatch(identifier);
+      expect(service.isFailureAcknowledged(watch)).toBe(false);
+    });
+
+    it('clears the acknowledgement when a dismissed watch is re-watched', async () => {
+      const watcher = createMockWatcher('test', async () => ({
+        overallState: 'completed' as const,
+        conclusion: 'failure' as const,
+        jobs: [],
+      }));
+      registry.register(watcher);
+      const identifier = createIdentifier();
+      await service.startWatch(identifier);
+
+      service.acknowledgeAllFailures();
+      service.dismissWatch(identifier);
+      // dismissWatch already clears the ack; re-watching should also start fresh.
+      const second = await service.startWatch(identifier);
+      expect(service.isFailureAcknowledged(second)).toBe(false);
+    });
+  });
+
   describe('dismissAllCompleted', () => {
     it('only dismisses completed watches', async () => {
       const completedWatcher = createMockWatcher('completed', async () => ({
@@ -136,6 +175,31 @@ describe('WatcherService', () => {
       const active = service.getActiveWatches();
       expect(active).toHaveLength(1);
       expect(active[0].identifier.providerId).toBe('running');
+    });
+
+    it('clears acknowledgement keys when dismissing completed runs', async () => {
+      // Regression test for the previously-missed branch: dismissAllCompleted
+      // dismissed runs but never cleared their ack keys, so a re-watch of
+      // the same identifier would be permanently silenced.
+      const watcher = createMockWatcher('test', async () => ({
+        overallState: 'completed' as const,
+        conclusion: 'failure' as const,
+        jobs: [],
+      }));
+      registry.register(watcher);
+      const identifier = createIdentifier();
+      const watch = await service.startWatch(identifier);
+
+      service.acknowledgeAllFailures();
+      expect(service.isFailureAcknowledged(watch)).toBe(true);
+
+      service.dismissAllCompleted();
+      // The watch is now dismissed; the ack key should be gone too so a
+      // re-watch can alert on its first failure.
+      expect(service.isFailureAcknowledged(watch)).toBe(false);
+
+      const second = await service.startWatch(identifier);
+      expect(service.isFailureAcknowledged(second)).toBe(false);
     });
   });
 
@@ -236,6 +300,43 @@ describe('WatcherService', () => {
       await vi.advanceTimersByTimeAsync(180000);
       const callCountAfterDismiss = (watcher.getRunStatus as ReturnType<typeof vi.fn>).mock.calls.length;
       expect(callCountAfterDismiss).toBe(callCountAfterStart);
+    });
+
+    it('does not persist after dispose() while a poll is in flight', async () => {
+      // Regression: dispose() clears this.watches synchronously, but a
+      // poll that was awaiting an HTTP call would resume after the clear,
+      // see the empty maps, and call persistWatches() with empty arrays —
+      // wiping the user's persisted watch list on next launch.
+      const pendingResolvers: ((value: any) => void)[] = [];
+      let callCount = 0;
+      const watcher = createMockWatcher('test');
+      (watcher.getRunStatus as ReturnType<typeof vi.fn>).mockImplementation(() => {
+        callCount += 1;
+        // First call (from startWatch) resolves immediately so the test
+        // can set up a watch. Subsequent calls (from polling) stall until
+        // the test resolves them explicitly.
+        if (callCount === 1) {
+          return Promise.resolve({ overallState: 'running', conclusion: undefined, jobs: [] });
+        }
+        return new Promise<any>(resolve => { pendingResolvers.push(resolve); });
+      });
+      registry.register(watcher);
+      await service.startWatch(createIdentifier());
+      // Reset the saveAll spy to ignore the post-startWatch persist.
+      (watchStore.saveAll as ReturnType<typeof vi.fn>).mockClear();
+      // Advance timers to start the poll. Don't await — the poll's await
+      // is now stalled on the second getRunStatus call.
+      void vi.advanceTimersByTimeAsync(60000);
+      // Wait for the poll to enter its await state.
+      await vi.waitFor(() => expect(pendingResolvers).toHaveLength(1));
+      // Dispose mid-flight, then resolve the in-flight poll.
+      service.dispose();
+      pendingResolvers[0]({ overallState: 'completed', conclusion: 'success', jobs: [] });
+      // Flush microtasks so the .then() chain runs.
+      await Promise.resolve();
+      await Promise.resolve();
+      await Promise.resolve();
+      expect(watchStore.saveAll).not.toHaveBeenCalled();
     });
   });
 
@@ -368,12 +469,56 @@ describe('WatcherService', () => {
       expect(changeSpy).toHaveBeenCalled();
     });
 
-    it('throws if already watching the same PR', async () => {
+    it('is idempotent when already watching the same PR (returns existing)', async () => {
       const prWatcher = createMockPRWatcher();
       prRegistry.register(prWatcher);
 
-      await service.startPRWatch(createPRIdentifier());
-      await expect(service.startPRWatch(createPRIdentifier())).rejects.toThrow('Already watching PR');
+      const first = await service.startPRWatch(createPRIdentifier());
+      const second = await service.startPRWatch(createPRIdentifier());
+      expect(second).toBe(first);
+      expect(service.isPRActive(createPRIdentifier())).toBe(true);
+    });
+
+    it('re-creates child runs when called with forceRecreate for an active PR', async () => {
+      // Reproduces the user-visible bug where a PR ends up invisible in the
+      // watch panel because all its child runs were dismissed: the runs are
+      // dismissed=true but stay in childRunKeys, so the polling loop's
+      // 'already a child?' check skips re-adding them. The panel filter
+      // (runs.length > 0) then hides the parent. The manual "Watch URL"
+      // command passes forceRecreate so it can recover by wiping the old
+      // owned children and starting fresh.
+      const runWatcher = createMockWatcher('github-actions');
+      registry.register(runWatcher);
+
+      const prWatcher = createMockPRWatcher('test-pr', async () => ({
+        prState: 'open',
+        runs: [{
+          providerId: 'github-actions',
+          runId: 'run-1',
+          displayName: 'CI Build',
+          url: 'https://example.com/run/1',
+          repo: 'owner/repo',
+        }],
+      }));
+      prRegistry.register(prWatcher);
+
+      const identifier = createPRIdentifier();
+      await service.startPRWatch(identifier);
+      expect(service.getActiveWatches()).toHaveLength(1);
+
+      // Simulate the user dismissing the child run via the watch panel.
+      const childRun = service.getActiveWatches()[0];
+      service.dismissWatch(childRun.identifier);
+      expect(service.getActiveWatches()).toHaveLength(0);
+      // The PR is still "active" (not dismissed), but has no visible runs —
+      // exactly the state that hides it from the panel filter.
+      expect(service.isPRActive(identifier)).toBe(true);
+      expect(service.getChildRuns(service.getPRWatchKey(identifier))).toHaveLength(0);
+
+      // Manual "Watch URL" with forceRecreate — wipes and rebuilds.
+      await service.startPRWatch(identifier, { forceRecreate: true });
+      expect(service.getActiveWatches()).toHaveLength(1);
+      expect(service.getChildRuns(service.getPRWatchKey(identifier))).toHaveLength(1);
     });
 
     it('throws if no PR watcher registered for provider', async () => {

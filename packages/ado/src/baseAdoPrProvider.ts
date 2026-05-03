@@ -2,6 +2,7 @@ import * as vscode from 'vscode';
 import {
   BaseProvider,
   DiscoveredItem,
+  type ProviderBadge,
   isValidUrlSegment,
   combineSignals,
   createAbortError,
@@ -227,11 +228,13 @@ export abstract class BaseAdoPrProvider extends BaseProvider {
 
   protected mapPrToItem(pr: AdoPullRequest, org: string): DiscoveredItem {
     const resurfaceVersion = this.getResurfaceVersion(pr);
+    const stateBadge = buildAdoPrStateBadge(pr.status);
     return {
       ...this.createBaseItem(pr, org),
       reason: this.itemReason,
       ...(pr.status ? { state: pr.status } : {}),
       ...(resurfaceVersion ? { resurfaceVersion } : {}),
+      ...(stateBadge ? { badges: [stateBadge] } : {}),
     };
   }
 
@@ -376,6 +379,7 @@ export abstract class BaseAdoPrProvider extends BaseProvider {
       description: pr.description ?? undefined,
       url: `${repoUrl}/pullrequest/${pr.pullRequestId}`,
       group: `${projectName}/${repoName}`,
+      itemType: 'pr',
     };
   }
 
@@ -477,4 +481,47 @@ export abstract class BaseAdoPrProvider extends BaseProvider {
       failed: false,
     };
   }
+}
+
+/**
+ * Builds the editor-only state badge for an ADO pull request based on its
+ * raw status (e.g., 'active', 'completed', 'abandoned'). Returns undefined
+ * when status is missing so the caller can spread or skip it. Active PRs
+ * render as info; everything else is shown as a neutral pill.
+ */
+export function buildAdoPrStateBadge(status?: string): ProviderBadge | undefined {
+  if (!status) {
+    return undefined;
+  }
+  const normalized = status.toLowerCase();
+  const label = status.charAt(0).toUpperCase() + status.slice(1).toLowerCase();
+  return {
+    label,
+    variant: normalized === 'active' ? 'info' : 'neutral',
+    show: 'editor',
+  };
+}
+
+/**
+ * Builds the editor-only state badge for an ADO PR's vote-based status as
+ * surfaced by {@link AdoMyPrsProvider}. Maps each derived status to a
+ * sensible severity so reviewers can spot Rejected / Waiting for author
+ * states at a glance in the editor.
+ */
+export function buildAdoMyPrsStateBadge(state?: string): ProviderBadge | undefined {
+  if (!state) {
+    return undefined;
+  }
+  const variant: ProviderBadge['variant'] = (() => {
+    switch (state) {
+      case 'Approved': return 'success';
+      case 'Rejected': return 'danger';
+      case 'Waiting for author': return 'warning';
+      case 'Draft': return 'neutral';
+      case 'Waiting on reviews':
+      case 'Review in progress':
+      default: return 'info';
+    }
+  })();
+  return { label: state, variant, show: 'editor' };
 }

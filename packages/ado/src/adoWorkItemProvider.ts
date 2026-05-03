@@ -1,5 +1,5 @@
 import * as vscode from 'vscode';
-import { BaseProvider, DiscoveredItem, isValidUrlSegment, combineSignals, safeDecodeComponent, type ResolvedItem } from '@devdocket/shared';
+import { BaseProvider, DiscoveredItem, type ProviderBadge, isValidUrlSegment, combineSignals, safeDecodeComponent, type ResolvedItem } from '@devdocket/shared';
 import { logger } from './logger';
 import { OrgConfig } from './configParser';
 import { getAdoHeaders, retryAdoWithAuth, throwAdoApiError, ADO_AUTH_SCOPE } from './adoAuth';
@@ -298,6 +298,8 @@ export class AdoWorkItemProvider extends BaseProvider {
     const items: DiscoveredItem[] = activeWorkItems.map((wi) => {
       const projectName = wi.fields['System.TeamProject'];
       const wiType = wi.fields['System.WorkItemType'];
+      const state = wi.fields['System.State'];
+      const stateBadge: ProviderBadge[] = state ? [{ label: state, variant: 'info', show: 'editor' }] : [];
       return {
         externalId: `${org}/${projectName}/${wi.id}`,
         title: `${wiType} ${wi.id}: ${wi.fields['System.Title']}`,
@@ -305,7 +307,9 @@ export class AdoWorkItemProvider extends BaseProvider {
         url: wi._links.html.href,
         group: `${org}/${projectName}`,
         reason: 'assigned',
-        state: wi.fields['System.State'],
+        state,
+        itemType: 'issue',
+        ...(stateBadge.length > 0 ? { badges: stateBadge } : {}),
       };
     });
 

@@ -9,9 +9,8 @@ import {
   type InboxElement,
   type InboxProviderNode,
   type InboxGroupNode,
-} from '../views/inboxTreeProvider';
+} from './commandItemTypes';
 import { logger } from '../services/logger';
-import type { ViewRevealer } from '../services/viewRevealer';
 import {
   wrapCommand,
   handleCommandError,
@@ -177,7 +176,7 @@ function formatBulkInboxMessage(
   count: number,
   node: InboxProviderNode | InboxGroupNode,
   providerRegistry: ProviderRegistry,
-  destination?: 'Queue' | 'Focus',
+  destination?: 'Ready to Start' | 'In Progress',
 ): string {
   const suffix = destination ? ` to ${destination}` : '';
   return `${verb} ${count} item${count === 1 ? '' : 's'} from "${getBulkNodePath(node, providerRegistry)}"${suffix}?`;
@@ -188,12 +187,11 @@ async function acceptSingleInboxItem(
   stateStore: DiscoveredStateStore,
   providerRegistry: ProviderRegistry,
   item: InboxItem,
-  revealer?: ViewRevealer,
 ): Promise<void> {
   logger.info(`Accepting inbox item: ${item.externalId} from ${item.providerId}`);
   const existing = workGraph.findItemByProvenance(item.providerId, item.externalId);
   if (existing) {
-    // Re-open items in terminal states so resurfaced items return to Queue
+    // Re-open items in terminal states so resurfaced items return to Ready to Start
     if (existing.state === WorkItemState.Done || existing.state === WorkItemState.Archived) {
       const originalState = existing.state;
       try {
@@ -212,7 +210,6 @@ async function acceptSingleInboxItem(
         return;
       }
       await propagateStateToCanonicalPeers(item, providerRegistry, stateStore, 'accepted');
-      void revealer?.revealInQueue(existing.id);
       return;
     }
     void vscode.window.showInformationMessage(
@@ -255,7 +252,6 @@ async function acceptSingleInboxItem(
     return;
   }
   await propagateStateToCanonicalPeers(item, providerRegistry, stateStore, 'accepted');
-  void revealer?.revealInQueue(createdItem.id);
 }
 
 async function acceptToFocusSingleInboxItem(
@@ -263,9 +259,8 @@ async function acceptToFocusSingleInboxItem(
   stateStore: DiscoveredStateStore,
   providerRegistry: ProviderRegistry,
   item: InboxItem,
-  revealer?: ViewRevealer,
 ): Promise<void> {
-  logger.info(`Accepting inbox item to Focus: ${item.externalId} from ${item.providerId}`);
+  logger.info(`Accepting inbox item to In Progress: ${item.externalId} from ${item.providerId}`);
   let workItemId: string;
   const existing = workGraph.findItemByProvenance(item.providerId, item.externalId);
   if (existing) {
@@ -276,7 +271,7 @@ async function acceptToFocusSingleInboxItem(
         handleCommandError('Failed to update state for existing focus item', err);
         return;
       }
-      void vscode.window.showInformationMessage('DevDocket: Item is already in Focus');
+      void vscode.window.showInformationMessage('DevDocket: Item is already In Progress');
       await propagateStateToCanonicalPeers(item, providerRegistry, stateStore, 'accepted');
       return;
     }
@@ -321,7 +316,7 @@ async function acceptToFocusSingleInboxItem(
         },
       );
     } catch (err: unknown) {
-      handleCommandError('Failed to accept inbox item to Focus', err);
+      handleCommandError('Failed to accept inbox item to In Progress', err);
       return;
     }
     try {
@@ -340,11 +335,10 @@ async function acceptToFocusSingleInboxItem(
   try {
     await workGraph.transitionState(workItemId, WorkItemState.InProgress);
   } catch (err: unknown) {
-    handleCommandError('Failed to move item to Focus', err);
+    handleCommandError('Failed to move item to In Progress', err);
     return;
   }
   await propagateStateToCanonicalPeers(item, providerRegistry, stateStore, 'accepted');
-  void revealer?.revealInFocus(workItemId);
 }
 
 async function batchAcceptToFocusItems(
@@ -364,7 +358,7 @@ async function batchAcceptToFocusItems(
     const existing = workGraph.findItemByProvenance(item.providerId, item.externalId);
     if (existing) {
       if (existing.state === WorkItemState.InProgress || existing.state === WorkItemState.Paused) {
-        logger.info(`Skipping "${item.title}" — already in Focus`);
+        logger.info(`Skipping "${item.title}" — already In Progress`);
         stateUpdates.push({ providerId: item.providerId, externalId: item.externalId, state: 'accepted' });
         acceptedItems.push(item);
         skipped++;
@@ -403,7 +397,7 @@ async function batchAcceptToFocusItems(
       acceptedItems.push(item);
     } catch (err: unknown) {
       failed++;
-      logger.error(`Failed to accept inbox item to Focus "${item.title}"`, err);
+      logger.error(`Failed to accept inbox item to In Progress "${item.title}"`, err);
     }
   }
 
@@ -432,7 +426,7 @@ async function batchAcceptToFocusItems(
       await workGraph.transitionState(id, WorkItemState.InProgress);
     } catch (err: unknown) {
       transitionFailed++;
-      logger.error(`Failed to transition item ${id} to Focus`, err);
+      logger.error(`Failed to transition item ${id} to In Progress`, err);
     }
   }
 
@@ -440,10 +434,10 @@ async function batchAcceptToFocusItems(
   if (succeeded > 0 || skipped > 0) {
     const parts: string[] = [];
     if (succeeded > 0) {
-      parts.push(`Accepted ${succeeded} item${succeeded === 1 ? '' : 's'} to Focus`);
+      parts.push(`Accepted ${succeeded} item${succeeded === 1 ? '' : 's'} to In Progress`);
     }
     if (skipped > 0) {
-      parts.push(`${skipped} item${skipped === 1 ? '' : 's'} already in Focus or cannot be moved`);
+      parts.push(`${skipped} item${skipped === 1 ? '' : 's'} already In Progress or cannot be moved`);
     }
     const msg = (failed > 0 || transitionFailed > 0)
       ? `${parts.join('; ')} (${failed + transitionFailed} failed)`
@@ -465,13 +459,12 @@ async function handleAcceptFromInbox(
   providerRegistry: ProviderRegistry,
   item?: InboxElement,
   selectedItems?: InboxElement[],
-  revealer?: ViewRevealer,
 ): Promise<void> {
   const items = resolveInboxItems(item, selectedItems);
   if (items.length === 0) { return; }
 
   if (items.length === 1) {
-    await acceptSingleInboxItem(workGraph, stateStore, providerRegistry, items[0], revealer);
+    await acceptSingleInboxItem(workGraph, stateStore, providerRegistry, items[0]);
     return;
   }
 
@@ -485,13 +478,12 @@ async function handleAcceptToFocusFromInbox(
   providerRegistry: ProviderRegistry,
   item?: InboxElement,
   selectedItems?: InboxElement[],
-  revealer?: ViewRevealer,
 ): Promise<void> {
   const items = resolveInboxItems(item, selectedItems);
   if (items.length === 0) { return; }
 
   if (items.length === 1) {
-    await acceptToFocusSingleInboxItem(workGraph, stateStore, providerRegistry, items[0], revealer);
+    await acceptToFocusSingleInboxItem(workGraph, stateStore, providerRegistry, items[0]);
     return;
   }
 
@@ -543,11 +535,11 @@ async function handleAcceptAllFromInbox(
   if (items.length === 0) { return; }
 
   const confirm = await vscode.window.showInformationMessage(
-    formatBulkInboxMessage('Accept', items.length, node, providerRegistry, 'Queue'),
+    formatBulkInboxMessage('Accept', items.length, node, providerRegistry, 'Ready to Start'),
     { modal: true },
-    'Accept All to Queue',
+    'Accept All to Ready to Start',
   );
-  if (confirm !== 'Accept All to Queue') { return; }
+  if (confirm !== 'Accept All to Ready to Start') { return; }
 
   const acceptedItems = await batchAcceptItems(workGraph, stateStore, items, 'inbox item');
   await propagateStateToCanonicalPeersBatch(acceptedItems, providerRegistry, stateStore, 'accepted');
@@ -565,11 +557,11 @@ async function handleAcceptAllToFocusFromInbox(
   if (items.length === 0) { return; }
 
   const confirm = await vscode.window.showInformationMessage(
-    formatBulkInboxMessage('Accept', items.length, node, providerRegistry, 'Focus'),
+    formatBulkInboxMessage('Accept', items.length, node, providerRegistry, 'In Progress'),
     { modal: true },
-    'Accept All to Focus',
+    'Accept All to In Progress',
   );
-  if (confirm !== 'Accept All to Focus') { return; }
+  if (confirm !== 'Accept All to In Progress') { return; }
 
   const acceptedItems = await batchAcceptToFocusItems(workGraph, stateStore, items);
   await propagateStateToCanonicalPeersBatch(acceptedItems, providerRegistry, stateStore, 'accepted');
@@ -609,19 +601,18 @@ export function registerInboxCommands(
   workGraph: WorkGraph,
   stateStore: DiscoveredStateStore,
   providerRegistry: ProviderRegistry,
-  revealer?: ViewRevealer,
 ): void {
   context.subscriptions.push(
     vscode.commands.registerCommand('devdocket.acceptFromInbox',
-      wrapCommand('Failed to accept from inbox', (item?: InboxElement, selectedItems?: InboxElement[]) => handleAcceptFromInbox(workGraph, stateStore, providerRegistry, item, selectedItems, revealer))),
+      wrapCommand('Failed to accept from inbox', (item?: InboxElement, selectedItems?: InboxElement[]) => handleAcceptFromInbox(workGraph, stateStore, providerRegistry, item, selectedItems))),
     vscode.commands.registerCommand('devdocket.acceptToFocusFromInbox',
-      wrapCommand('Failed to accept to focus from inbox', (item?: InboxElement, selectedItems?: InboxElement[]) => handleAcceptToFocusFromInbox(workGraph, stateStore, providerRegistry, item, selectedItems, revealer))),
+      wrapCommand('Failed to accept to In Progress from inbox', (item?: InboxElement, selectedItems?: InboxElement[]) => handleAcceptToFocusFromInbox(workGraph, stateStore, providerRegistry, item, selectedItems))),
     vscode.commands.registerCommand('devdocket.dismissFromInbox',
       wrapCommand('Failed to dismiss from inbox', (item?: InboxElement, selectedItems?: InboxElement[]) => handleDismissFromInbox(stateStore, providerRegistry, item, selectedItems))),
     vscode.commands.registerCommand('devdocket.acceptAllFromInbox',
       wrapCommand('Failed to accept all from inbox', (item?: InboxElement) => handleAcceptAllFromInbox(workGraph, stateStore, providerRegistry, item))),
     vscode.commands.registerCommand('devdocket.acceptAllToFocusFromInbox',
-      wrapCommand('Failed to accept all to focus from inbox', (item?: InboxElement) => handleAcceptAllToFocusFromInbox(workGraph, stateStore, providerRegistry, item))),
+      wrapCommand('Failed to accept all to In Progress from inbox', (item?: InboxElement) => handleAcceptAllToFocusFromInbox(workGraph, stateStore, providerRegistry, item))),
     vscode.commands.registerCommand('devdocket.dismissAllFromInbox',
       wrapCommand('Failed to dismiss all from inbox', (item?: InboxElement) => handleDismissAllFromInbox(stateStore, providerRegistry, item))),
   );
