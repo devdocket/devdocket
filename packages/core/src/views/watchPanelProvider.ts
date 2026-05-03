@@ -2,6 +2,7 @@ import * as vscode from 'vscode';
 import type { PRIdentifier, RunConclusion, RunIdentifier, RunState } from '@devdocket/shared';
 import { WatcherService, type WatchedPR, type WatchedRun } from '../services/watcherService';
 import { isSafeUrl } from '../utils/url';
+import { buildTierColorCss } from '../webview/shared/colors';
 import type { PRWatchData, RunWatchData, WebviewMessage } from './mainTypes';
 
 export class WatchPanelProvider implements vscode.Disposable {
@@ -213,138 +214,139 @@ export class WatchPanelProvider implements vscode.Disposable {
       min-height: 100vh;
     }
     .watch-panel {
-      padding: 16px;
+      padding: 12px 8px;
       display: flex;
       flex-direction: column;
-      gap: 16px;
+      gap: 12px;
     }
     .watch-header {
       display: flex;
-      justify-content: space-between;
+      justify-content: flex-end;
       align-items: center;
-      gap: 12px;
-    }
-    .watch-header-actions {
-      display: flex;
       gap: 8px;
-      align-items: center;
-      flex-wrap: wrap;
+      padding: 0 4px;
     }
-    .watch-header-copy {
+    .tiers {
       display: flex;
       flex-direction: column;
-      gap: 2px;
+      gap: 12px;
     }
-    .watch-title {
-      font-size: 16px;
-      font-weight: 600;
+    .tier-section {
+      border-radius: 6px;
+      background: var(--vscode-editorWidget-background, var(--vscode-sideBar-background));
+      padding: 10px 6px;
     }
-    .watch-subtitle {
-      color: var(--vscode-descriptionForeground);
-      font-size: 12px;
+    .tier-header {
+      display: flex;
+      align-items: center;
+      gap: 6px;
     }
-    .link-button,
-    .icon-button {
-      border: none;
+    .tier-header-main,
+    .tier-toggle-button,
+    .tier-header-action {
       background: transparent;
-      color: var(--vscode-textLink-foreground, var(--vscode-focusBorder));
+      border: none;
+      color: inherit;
       cursor: pointer;
-      font: inherit;
       padding: 0;
+      font: inherit;
     }
-    .link-button[disabled] {
+    .tier-header-main {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      min-width: 0;
+      flex: 1;
+      text-align: left;
+    }
+    .tier-header-action {
+      color: var(--vscode-textLink-foreground, var(--vscode-foreground));
+    }
+    .tier-header-action:hover:not([disabled]) {
+      text-decoration: underline;
+    }
+    .tier-header-action[disabled] {
       cursor: default;
       opacity: 0.55;
       pointer-events: none;
     }
-    .icon-button {
+    .tier-toggle-button {
+      display: inline-flex;
+      align-items: center;
+    }
+    .tier-header-main:focus-visible,
+    .tier-toggle-button:focus-visible,
+    .tier-header-action:focus-visible {
+      outline: 1px solid var(--vscode-focusBorder);
+      outline-offset: 2px;
+    }
+    .tier-count,
+    .tier-toggle {
       color: var(--vscode-descriptionForeground);
-      padding: 2px 6px;
-      border-radius: 4px;
-      font-size: 11px;
-      line-height: 1.4;
     }
-    .icon-button:hover,
-    .icon-button:focus-visible,
-    .link-button:hover,
-    .link-button:focus-visible {
-      background: var(--vscode-toolbar-hoverBackground, rgba(127, 127, 127, 0.12));
-      outline: none;
-    }
-    .watch-sections {
-      display: flex;
-      flex-direction: column;
-      gap: 18px;
-    }
-    .watch-section {
+    .tier-items {
       display: flex;
       flex-direction: column;
       gap: 8px;
+      margin-top: 10px;
     }
-    .watch-section-title {
-      font-size: 12px;
-      font-weight: 600;
-      color: var(--vscode-descriptionForeground);
-      text-transform: uppercase;
-      letter-spacing: 0.08em;
-    }
-    .watch-list {
+    .item-card {
+      position: relative;
       display: flex;
-      flex-direction: column;
-      gap: 8px;
-    }
-    .watch-card {
-      background: var(--vscode-editorWidget-background, var(--vscode-sideBar-background));
-      border: 1px solid var(--vscode-widget-border, transparent);
-      border-radius: 8px;
-      overflow: hidden;
-    }
-    .watch-row {
-      display: flex;
-      align-items: flex-start;
-      gap: 12px;
-      padding: 12px;
-    }
-    .watch-row.clickable {
+      align-items: stretch;
+      gap: 10px;
+      padding: 8px 10px 8px 12px;
+      border-radius: 6px;
+      background: var(--vscode-editor-background);
+      border-left: 3px solid transparent;
       cursor: pointer;
     }
-    .watch-row.clickable:hover,
-    .watch-row.clickable:focus-visible {
-      background: var(--vscode-list-hoverBackground, rgba(127, 127, 127, 0.08));
-      outline: none;
+    .item-card:focus-visible {
+      outline: 1px solid var(--vscode-focusBorder);
+      outline-offset: -1px;
     }
-    .watch-row-main {
-      min-width: 0;
+    .item-card:hover {
+      background: var(--vscode-list-hoverBackground, rgba(127, 127, 127, 0.12));
+    }
+    .item-card-main {
       flex: 1;
+      min-width: 0;
       display: flex;
       flex-direction: column;
       gap: 4px;
     }
-    .watch-row-top {
+    .item-card.item-card--incoming { border-left-color: var(--tier-incoming); }
+    .item-card.item-card--in-progress { border-left-color: var(--tier-in-progress); }
+    .item-card.item-card--ready-to-start { border-left-color: var(--tier-ready); }
+    .item-card.item-card--paused { border-left-color: var(--tier-paused); }
+    .item-card.item-card--done { border-left-color: var(--tier-done); }
+    .item-card.item-card--urgent { border-left-color: var(--tier-urgent); }
+    .item-line-1 {
       display: flex;
-      align-items: center;
+      align-items: flex-start;
       gap: 8px;
-      min-width: 0;
     }
-    .watch-row-icon {
-      flex-shrink: 0;
-      width: 16px;
-      text-align: center;
-    }
-    .watch-row-title {
+    .item-title-wrap {
+      display: flex;
+      align-items: flex-start;
+      gap: 6px;
       min-width: 0;
-      overflow: hidden;
-      text-overflow: ellipsis;
-      white-space: nowrap;
+      flex: 1;
+    }
+    .item-title {
       font-weight: 600;
+      word-break: break-word;
     }
-    .watch-row-meta,
-    .watch-row-preview,
-    .watch-empty {
-      font-size: 12px;
+    .item-repo-annotation {
+      font-weight: 400;
+      font-size: 0.85em;
       color: var(--vscode-descriptionForeground);
+      opacity: 0.75;
+      word-break: break-all;
     }
     .watch-row-preview {
+      font-size: 12px;
+      color: var(--vscode-descriptionForeground);
       white-space: nowrap;
       overflow: hidden;
       text-overflow: ellipsis;
@@ -352,27 +354,55 @@ export class WatchPanelProvider implements vscode.Disposable {
     .watch-row-preview.warning {
       color: var(--vscode-testing-iconFailed, var(--vscode-errorForeground));
     }
-    .watch-row-actions {
+    .badge-row {
       display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      margin-top: 2px;
       align-items: center;
-      gap: 8px;
-      flex-shrink: 0;
     }
     .watch-time {
       font-size: 11px;
       color: var(--vscode-descriptionForeground);
       white-space: nowrap;
     }
-    .watch-children {
+    .item-actions {
+      position: absolute;
+      right: 6px;
+      top: 50%;
+      transform: translateY(-50%);
       display: flex;
-      flex-direction: column;
-      gap: 1px;
-      border-top: 1px solid var(--vscode-widget-border, transparent);
-      background: var(--vscode-editorWidget-background, var(--vscode-sideBar-background));
-      padding-left: 20px;
+      gap: 6px;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.15s;
+      padding: 4px 6px;
+      border-radius: 6px;
+      background: var(--vscode-editorHoverWidget-background, var(--vscode-editor-background));
+      border: 1px solid var(--vscode-editorHoverWidget-border, var(--vscode-widget-border, transparent));
+      box-shadow: 0 2px 6px rgba(0, 0, 0, 0.25);
     }
-    .watch-child-row {
-      border-left: 2px solid var(--vscode-widget-border, transparent);
+    .item-card:hover .item-actions,
+    .item-card:focus-within .item-actions {
+      opacity: 1;
+      pointer-events: auto;
+    }
+    .item-action-btn {
+      background: transparent;
+      color: var(--vscode-foreground);
+      border: none;
+      border-radius: 4px;
+      padding: 4px 9px;
+      cursor: pointer;
+      font-size: 18px;
+      line-height: 1;
+    }
+    .item-action-btn:hover {
+      background: var(--vscode-toolbar-hoverBackground, rgba(127, 127, 127, 0.25));
+    }
+    .item-action-btn:focus-visible {
+      outline: 1px solid var(--vscode-focusBorder);
+      outline-offset: -1px;
     }
     .badge-pill {
       display: inline-flex;
@@ -390,6 +420,12 @@ export class WatchPanelProvider implements vscode.Disposable {
       border-radius: 8px;
       color: var(--vscode-descriptionForeground);
       text-align: center;
+    }
+    :root {
+      ${buildTierColorCss('dark')}
+    }
+    body.vscode-light {
+      ${buildTierColorCss('light')}
     }
   </style>
 </head>

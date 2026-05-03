@@ -35,32 +35,46 @@ export function WatchApp() {
   );
   const totalCount = prWatches.length + runWatches.length;
 
+  // Flatten PR watches with their child runs into a single ordered list so
+  // each row is a top-level item-card (matching the sidebar tier rendering).
+  // Children stay adjacent to their parent so the visual grouping is preserved
+  // by ordering rather than nesting.
+  const prSectionItems = useMemo(() => {
+    const items: Array<
+      | { kind: 'pr'; pr: PRWatchData }
+      | { kind: 'run'; run: RunWatchData; parentTitle: string }
+    > = [];
+    for (const pr of prWatches) {
+      items.push({ kind: 'pr', pr });
+      for (const run of pr.runs) {
+        items.push({ kind: 'run', run, parentTitle: pr.title });
+      }
+    }
+    return items;
+  }, [prWatches]);
+
   return (
     <div class="watch-panel">
       <header class="watch-header">
-        <div class="watch-header-copy">
-          <div class="watch-title">CI Watches</div>
-          <div class="watch-subtitle">
-            {totalCount === 0 ? 'No active watches' : `${totalCount} watch${totalCount === 1 ? '' : 'es'} tracked`}
-          </div>
-        </div>
-        <div class="watch-header-actions">
-          <button
-            type="button"
-            class="link-button"
-            onClick={() => postMessage({ type: 'addWatchUrl' })}
-          >
-            + Watch URL
-          </button>
-          <button
-            type="button"
-            class="link-button"
-            disabled={completedCount === 0}
-            onClick={() => postMessage({ type: 'dismissCompletedWatches' })}
-          >
-            Dismiss All Completed
-          </button>
-        </div>
+        <button
+          type="button"
+          class="tier-header-action"
+          title="Watch a URL"
+          aria-label="Watch a URL"
+          onClick={() => postMessage({ type: 'addWatchUrl' })}
+        >
+          + Watch URL
+        </button>
+        <button
+          type="button"
+          class="tier-header-action"
+          disabled={completedCount === 0}
+          title="Dismiss all completed watches"
+          aria-label="Dismiss all completed watches"
+          onClick={() => postMessage({ type: 'dismissCompletedWatches' })}
+        >
+          Dismiss Completed
+        </button>
       </header>
 
       {totalCount === 0 ? (
@@ -68,72 +82,60 @@ export function WatchApp() {
           No watches yet. Click <strong>+ Watch URL</strong> above to add a pull request or pipeline run URL.
         </div>
       ) : (
-        <div class="watch-sections">
+        <div class="tiers">
           {prWatches.length > 0 ? (
-            <section class="watch-section">
-              <div class="watch-section-title">PR Watches</div>
-              <div class="watch-list">
-                {prWatches.map(prWatch => (
-                  <article key={prWatch.id} class="watch-card">
-                    <WatchRow
-                      title={prWatch.title}
-                      icon="🔀"
-                      meta={prWatch.repo}
-                      preview={prWatch.errorMessage}
-                      previewIsWarning={prWatch.hasWarning}
-                      badge={getPRBadge(prWatch)}
-                      elapsedTime={undefined}
-                      url={prWatch.url}
-                      watchId={prWatch.id}
+            <CollapsibleSection icon="🔀" name="PR Watches" count={prWatches.length}>
+              {prSectionItems.map(entry => {
+                if (entry.kind === 'pr') {
+                  return (
+                    <WatchCard
+                      key={`pr-${entry.pr.id}`}
+                      title={entry.pr.title}
+                      meta={entry.pr.repo}
+                      preview={entry.pr.errorMessage}
+                      previewIsWarning={entry.pr.hasWarning}
+                      badge={getPRBadge(entry.pr)}
+                      tierClass={getPRTierClass(entry.pr)}
+                      url={entry.pr.url}
+                      watchId={entry.pr.id}
                     />
-                    {prWatch.runs.length > 0 ? (
-                      <div class="watch-children">
-                        {prWatch.runs.map(runWatch => (
-                          <WatchRow
-                            key={runWatch.id}
-                            title={runWatch.name}
-                            icon={getRunIcon(runWatch)}
-                            meta={runWatch.repo}
-                            preview={runWatch.failurePreview}
-                            previewIsWarning={runWatch.hasWarning || isFailedRun(runWatch)}
-                            badge={getRunBadge(runWatch)}
-                            elapsedTime={runWatch.elapsedTime}
-                            url={runWatch.url}
-                            watchId={runWatch.id}
-                            nested={true}
-                          />
-                        ))}
-                      </div>
-                    ) : (
-                      <div class="watch-row watch-empty">No CI runs detected yet.</div>
-                    )}
-                  </article>
-                ))}
-              </div>
-            </section>
+                  );
+                }
+                return (
+                  <WatchCard
+                    key={`run-${entry.run.id}`}
+                    title={entry.run.name}
+                    meta={`${entry.run.repo} · run on ${entry.parentTitle}`}
+                    preview={entry.run.failurePreview}
+                    previewIsWarning={entry.run.hasWarning || isFailedRun(entry.run)}
+                    badge={getRunBadge(entry.run)}
+                    tierClass={getRunTierClass(entry.run)}
+                    elapsedTime={entry.run.elapsedTime}
+                    url={entry.run.url}
+                    watchId={entry.run.id}
+                  />
+                );
+              })}
+            </CollapsibleSection>
           ) : null}
 
           {runWatches.length > 0 ? (
-            <section class="watch-section">
-              <div class="watch-section-title">Standalone Run Watches</div>
-              <div class="watch-list">
-                {runWatches.map(runWatch => (
-                  <article key={runWatch.id} class="watch-card">
-                    <WatchRow
-                      title={runWatch.name}
-                      icon={getRunIcon(runWatch)}
-                      meta={runWatch.repo}
-                      preview={runWatch.failurePreview}
-                      previewIsWarning={runWatch.hasWarning || isFailedRun(runWatch)}
-                      badge={getRunBadge(runWatch)}
-                      elapsedTime={runWatch.elapsedTime}
-                      url={runWatch.url}
-                      watchId={runWatch.id}
-                    />
-                  </article>
-                ))}
-              </div>
-            </section>
+            <CollapsibleSection icon="⚙" name="Run Watches" count={runWatches.length}>
+              {runWatches.map(runWatch => (
+                <WatchCard
+                  key={`standalone-${runWatch.id}`}
+                  title={runWatch.name}
+                  meta={runWatch.repo}
+                  preview={runWatch.failurePreview}
+                  previewIsWarning={runWatch.hasWarning || isFailedRun(runWatch)}
+                  badge={getRunBadge(runWatch)}
+                  tierClass={getRunTierClass(runWatch)}
+                  elapsedTime={runWatch.elapsedTime}
+                  url={runWatch.url}
+                  watchId={runWatch.id}
+                />
+              ))}
+            </CollapsibleSection>
           ) : null}
         </div>
       )}
@@ -141,42 +143,73 @@ export function WatchApp() {
   );
 }
 
-interface WatchRowProps {
-  title: string;
+interface CollapsibleSectionProps {
   icon: string;
+  name: string;
+  count: number;
+  children: preact.ComponentChildren;
+}
+
+function CollapsibleSection({ icon, name, count, children }: CollapsibleSectionProps) {
+  const [collapsed, setCollapsed] = useState(false);
+  const toggle = () => setCollapsed(value => !value);
+  return (
+    <section class="tier-section">
+      <div class="tier-header">
+        <button
+          type="button"
+          class="tier-header-main"
+          onClick={toggle}
+          aria-expanded={!collapsed}
+        >
+          <span aria-hidden="true">{icon}</span>
+          <span>{name}</span>
+          <span class="tier-count">({count})</span>
+        </button>
+        <button
+          type="button"
+          class="tier-toggle-button"
+          onClick={toggle}
+          aria-label={`${collapsed ? 'Expand' : 'Collapse'} ${name}`}
+          tabIndex={-1}
+        >
+          <span class="tier-toggle" aria-hidden="true">{collapsed ? '▸' : '▾'}</span>
+        </button>
+      </div>
+      {!collapsed ? <div class="tier-items">{children}</div> : null}
+    </section>
+  );
+}
+
+interface WatchCardProps {
+  title: string;
   meta: string;
   preview?: string;
   previewIsWarning?: boolean;
   badge: BadgeData;
+  tierClass: string;
   elapsedTime?: string;
   url?: string;
   watchId: string;
-  nested?: boolean;
 }
 
-function WatchRow({
+function WatchCard({
   title,
-  icon,
   meta,
   preview,
   previewIsWarning,
   badge,
+  tierClass,
   elapsedTime,
   url,
   watchId,
-  nested,
-}: WatchRowProps) {
+}: WatchCardProps) {
   const clickable = Boolean(url);
-  const className = ['watch-row', clickable ? 'clickable' : '', nested ? 'watch-child-row' : '']
-    .filter(Boolean)
-    .join(' ');
-
   const openWatch = () => {
     if (url) {
       postMessage({ type: 'openWatchUrl', url });
     }
   };
-
   const handleKeyDown = (event: KeyboardEvent) => {
     if (!clickable) {
       return;
@@ -189,40 +222,40 @@ function WatchRow({
 
   return (
     <div
-      class={className}
+      class={`item-card item-card--${tierClass}`}
       role={clickable ? 'button' : undefined}
-      tabIndex={clickable ? 0 : undefined}
-      onClick={() => openWatch()}
+      tabIndex={clickable ? 0 : -1}
+      onClick={openWatch}
       onKeyDown={handleKeyDown}
     >
-      <div class="watch-row-main">
-        <div class="watch-row-top">
-          <span class="watch-row-icon" aria-hidden="true">{icon}</span>
-          <span class="watch-row-title">{title}</span>
+      <div class="item-card-main">
+        <div class="item-line-1">
+          <div class="item-title-wrap">
+            <span class="item-title">{title}</span>
+          </div>
         </div>
-        <div class="watch-row-meta">{meta}</div>
+        <div class="item-repo-annotation">{meta}</div>
         {preview ? (
           <div class={`watch-row-preview ${previewIsWarning ? 'warning' : ''}`.trim()}>{preview}</div>
         ) : null}
+        <div class="badge-row">
+          <BadgePill badge={badge} />
+          {elapsedTime ? <span class="watch-time">{elapsedTime}</span> : null}
+        </div>
       </div>
-
-      <div class="watch-row-actions">
-        {elapsedTime ? <span class="watch-time">{elapsedTime}</span> : null}
-        <BadgePill badge={badge} />
+      <div class="item-actions" role="group" aria-label={`${title} actions`}>
         <button
           type="button"
-          class="icon-button"
-          aria-label={`Dismiss ${title}`}
+          class="item-action-btn"
           title="Dismiss watch"
-          onKeyDown={(event) => {
-            event.stopPropagation();
-          }}
+          aria-label={`Dismiss ${title}`}
+          onKeyDown={(event) => event.stopPropagation()}
           onClick={(event) => {
             event.stopPropagation();
             postMessage({ type: 'dismissWatch', watchId });
           }}
         >
-          Dismiss
+          ✗
         </button>
       </div>
     </div>
@@ -253,23 +286,28 @@ function getRunBadge(runWatch: RunWatchData): BadgeData {
   return { label: toConclusionLabel(runWatch.conclusion), type: 'ci', variant: 'ci-fail' };
 }
 
-function getRunIcon(runWatch: RunWatchData): string {
+function getPRTierClass(prWatch: PRWatchData): string {
+  switch (prWatch.state) {
+    case 'merged': return 'in-progress';
+    case 'closed': return 'done';
+    default:       return 'incoming';
+  }
+}
+
+function getRunTierClass(runWatch: RunWatchData): string {
   if (runWatch.hasWarning) {
-    return '⚠';
+    return 'paused';
   }
-  if (runWatch.state === 'queued') {
-    return '⏳';
-  }
-  if (runWatch.state === 'in_progress') {
-    return '🔄';
+  if (runWatch.state !== 'completed') {
+    return 'incoming';
   }
   if (runWatch.conclusion === 'success') {
-    return '✓';
+    return 'in-progress';
   }
-  if (runWatch.conclusion === 'cancelled' || runWatch.conclusion === 'skipped') {
-    return '⊘';
+  if (runWatch.conclusion === 'cancelled' || runWatch.conclusion === 'skipped' || runWatch.conclusion === 'neutral') {
+    return 'done';
   }
-  return '✗';
+  return 'urgent';
 }
 
 function isFailedRun(runWatch: RunWatchData): boolean {
