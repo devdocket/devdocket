@@ -228,7 +228,7 @@ async function batchAcceptItems(
   for (const item of items) {
     const existing = workGraph.findItemByProvenance(item.providerId, item.externalId);
     if (existing) {
-      // Re-open items in terminal states so resurfaced items return to Queue
+      // Re-open items in terminal states so resurfaced items return to Ready to Start
       if (existing.state === WorkItemState.Done || existing.state === WorkItemState.Archived) {
         const originalState = existing.state;
         try {
@@ -278,8 +278,8 @@ async function batchAcceptItems(
   const total = stateUpdates.length;
   if (total > 0) {
     const msg = failed > 0
-      ? `Accepted ${total} of ${total + failed} items to Queue`
-      : `Accepted ${total} item${total === 1 ? '' : 's'} to Queue`;
+      ? `Accepted ${total} of ${total + failed} items to Ready to Start`
+      : `Accepted ${total} item${total === 1 ? '' : 's'} to Ready to Start`;
     void vscode.window.showInformationMessage(msg);
   }
   if (failed > 0) {
@@ -373,7 +373,7 @@ async function handleAcceptToFocus(workGraph: WorkGraph, item?: { id?: string },
   const ids = resolveItemIds(item, selectedItems);
   if (ids.length === 0) { return; }
   await batchTransition(workGraph, ids, WorkItemState.InProgress,
-    (n) => `Moved ${n} item${n === 1 ? '' : 's'} to Focus`);
+    (n) => `Moved ${n} item${n === 1 ? '' : 's'} to In Progress`);
 }
 
 async function handleArchiveItem(workGraph: WorkGraph, item?: { id?: string }, selectedItems?: { id?: string }[]): Promise<void> {
@@ -408,7 +408,7 @@ async function handleMoveToQueue(workGraph: WorkGraph, item?: { id?: string }, s
   const ids = resolveItemIds(item, selectedItems);
   if (ids.length === 0) { return; }
   await batchTransition(workGraph, ids, WorkItemState.New,
-    (n) => `Moved ${n} item${n === 1 ? '' : 's'} to Queue`);
+    (n) => `Moved ${n} item${n === 1 ? '' : 's'} to Ready to Start`);
 }
 
 function handleEditItem(
@@ -637,7 +637,7 @@ async function acceptSingleSourceItem(
   logger.info(`Accepting sources item: ${item.externalId}`);
   const existing = workGraph.findItemByProvenance(item.providerId, item.externalId);
   if (existing) {
-    // Re-open items in terminal states so resurfaced items return to Queue
+    // Re-open items in terminal states so resurfaced items return to Ready to Start
     if (existing.state === WorkItemState.Done || existing.state === WorkItemState.Archived) {
       const originalState = existing.state;
       try {
@@ -777,7 +777,7 @@ export function registerCommands(
         IncomingPreviewPanel.open(context, providerRegistry, stateStore, readStateStore, workGraph, providerId, externalId);
       })),
     vscode.commands.registerCommand('devdocket.acceptToFocus',
-      wrapCommand('Failed to focus item', (item, selectedItems) => handleAcceptToFocus(workGraph, item, selectedItems))),
+      wrapCommand('Failed to In Progress item', (item, selectedItems) => handleAcceptToFocus(workGraph, item, selectedItems))),
     vscode.commands.registerCommand('devdocket.archiveItem',
       wrapCommand('Failed to archive item', (item, selectedItems) => handleArchiveItem(workGraph, item, selectedItems))),
     vscode.commands.registerCommand('devdocket.completeItem',
@@ -807,7 +807,7 @@ export function registerCommands(
     vscode.commands.registerCommand('devdocket.focusMoveDown',
       wrapCommand('Failed to move focus item down', (item) => handleFocusMoveDown(workGraph, item))),
     vscode.commands.registerCommand('devdocket.moveToQueue',
-      wrapCommand('Failed to move item to queue', (item, selectedItems) => handleMoveToQueue(workGraph, item, selectedItems))),
+      wrapCommand('Failed to move item to Ready to Start', (item, selectedItems) => handleMoveToQueue(workGraph, item, selectedItems))),
     vscode.commands.registerCommand('devdocket.acceptFromSources',
       wrapCommand('Failed to accept from sources', (item: SourcesElement, selectedItems?: SourcesElement[]) => handleAcceptFromSources(workGraph, stateStore, providerRegistry, item, selectedItems))),
     vscode.commands.registerCommand('devdocket.dismissFromSources',

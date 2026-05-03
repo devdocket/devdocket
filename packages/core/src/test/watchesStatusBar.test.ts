@@ -34,7 +34,7 @@ describe('WatchesStatusBar', () => {
     new WatchesStatusBar(watcherService as any);
 
     const statusBarItem = (window.createStatusBarItem as ReturnType<typeof vi.fn>).mock.results[0].value;
-    expect(statusBarItem.text).toBe('🔄 2 running · ✓ 1 passed · ✗ 2 failed');
+    expect(statusBarItem.text).toBe('🔄 2 active · ✓ 1 passed · ✗ 2 failed');
     expect(statusBarItem.command).toBe('devdocket.showWatchesQuickPick');
     expect(statusBarItem.tooltip).toBe('Click to open CI watch details');
     expect(statusBarItem.backgroundColor).toEqual(new ThemeColor('statusBarItem.warningBackground'));
@@ -53,7 +53,7 @@ describe('WatchesStatusBar', () => {
     expect(statusBarItem.hide).not.toHaveBeenCalled();
 
     watcherService.setWatches([{ status: { overallState: 'running' } }]);
-    expect(statusBarItem.text).toBe('🔄 1 running · ✓ 0 passed · ✗ 0 failed');
+    expect(statusBarItem.text).toBe('🔄 1 active · ✓ 0 passed · ✗ 0 failed');
     expect(statusBarItem.show).toHaveBeenCalledTimes(2);
 
     watcherService.setWatches([]);

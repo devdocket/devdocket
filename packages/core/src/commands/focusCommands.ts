@@ -28,23 +28,23 @@ async function handleMoveToQueue(workGraph: WorkGraph, item?: { id?: string }, s
   const ids = resolveItemIds(item, selectedItems);
   if (ids.length === 0) { return; }
   await batchTransition(workGraph, ids, WorkItemState.New,
-    (n) => `Moved ${n} item${n === 1 ? '' : 's'} to Queue`);
+    (n) => `Moved ${n} item${n === 1 ? '' : 's'} to Ready to Start`);
 }
 
 async function handleFocusMoveUp(workGraph: WorkGraph, item?: { id?: string }): Promise<void> {
-  await requireItemToMove('Focus', item, id => workGraph.moveItem(id, 'up'));
+  await requireItemToMove('the In Progress tier', item, id => workGraph.moveItem(id, 'up'));
 }
 
 async function handleFocusMoveDown(workGraph: WorkGraph, item?: { id?: string }): Promise<void> {
-  await requireItemToMove('Focus', item, id => workGraph.moveItem(id, 'down'));
+  await requireItemToMove('the In Progress tier', item, id => workGraph.moveItem(id, 'down'));
 }
 
 async function handleFocusMoveToTop(workGraph: WorkGraph, item?: { id?: string }): Promise<void> {
-  await requireItemToMove('Focus', item, id => workGraph.moveToTop(id));
+  await requireItemToMove('the In Progress tier', item, id => workGraph.moveToTop(id));
 }
 
 async function handleFocusMoveToBottom(workGraph: WorkGraph, item?: { id?: string }): Promise<void> {
-  await requireItemToMove('Focus', item, id => workGraph.moveToBottom(id));
+  await requireItemToMove('the In Progress tier', item, id => workGraph.moveToBottom(id));
 }
 
 export function registerFocusCommands(
@@ -59,7 +59,7 @@ export function registerFocusCommands(
     vscode.commands.registerCommand('devdocket.resumeItem',
       wrapCommand('Failed to resume item', (item, selectedItems) => handleResumeItem(workGraph, item, selectedItems))),
     vscode.commands.registerCommand('devdocket.moveToQueue',
-      wrapCommand('Failed to move item to queue', (item, selectedItems) => handleMoveToQueue(workGraph, item, selectedItems))),
+      wrapCommand('Failed to move item to Ready to Start', (item, selectedItems) => handleMoveToQueue(workGraph, item, selectedItems))),
     vscode.commands.registerCommand('devdocket.focusMoveUp',
       wrapCommand('Failed to move focus item up', (item) => handleFocusMoveUp(workGraph, item))),
     vscode.commands.registerCommand('devdocket.focusMoveDown',

@@ -862,7 +862,7 @@ describe('registerCommands', () => {
       expect(stateStore.setState).toHaveBeenCalledWith('github', 'ext-1', 'accepted');
     });
 
-    it('re-opens Done item back to Queue when accepting resurfaced item', async () => {
+    it('re-opens Done item back to Ready to Start when accepting resurfaced item', async () => {
       const existing = createWorkItem({ id: 'wc-done', title: 'Done Item', state: WorkItemState.Done });
       workGraph.findItemByProvenance.mockReturnValue(existing);
 
@@ -873,7 +873,7 @@ describe('registerCommands', () => {
       expect(workGraph.createItem).not.toHaveBeenCalled();
     });
 
-    it('re-opens Archived item back to Queue when accepting resurfaced item', async () => {
+    it('re-opens Archived item back to Ready to Start when accepting resurfaced item', async () => {
       const existing = createWorkItem({ id: 'wc-arch', title: 'Archived Item', state: WorkItemState.Archived });
       workGraph.findItemByProvenance.mockReturnValue(existing);
 
@@ -1010,7 +1010,7 @@ describe('registerCommands', () => {
         { providerId: 'github', externalId: 'ext-2', state: 'accepted' },
       ]);
       expect(vscode.window.showInformationMessage).toHaveBeenCalledWith(
-        'Accepted 2 items to Queue',
+        'Accepted 2 items to Ready to Start',
       );
     });
 
@@ -1066,7 +1066,7 @@ describe('registerCommands', () => {
         { providerId: 'github', externalId: 'ext-2', state: 'accepted' },
       ]);
       expect(vscode.window.showInformationMessage).toHaveBeenCalledWith(
-        'Accepted 2 items to Queue',
+        'Accepted 2 items to Ready to Start',
       );
     });
 
@@ -1117,7 +1117,7 @@ describe('registerCommands', () => {
         'DevDocket: Failed to accept 1 item(s); see Output for details',
       );
       expect(vscode.window.showInformationMessage).toHaveBeenCalledWith(
-        'Accepted 2 of 3 items to Queue',
+        'Accepted 2 of 3 items to Ready to Start',
       );
     });
 
@@ -1376,7 +1376,7 @@ describe('registerCommands', () => {
       ]);
     });
 
-    it('accepts all provider items to Queue after confirmation', async () => {
+    it('accepts all provider items to Ready to Start after confirmation', async () => {
       const providerNode: InboxProviderNode = { kind: 'provider', providerId: 'github', label: 'GitHub' };
       mockDiscoveredInboxItems([['github', [
         { externalId: 'ext-1', title: 'Issue 1' },
@@ -1387,15 +1387,15 @@ describe('registerCommands', () => {
       workGraph.createItem
         .mockResolvedValueOnce(createWorkItem({ id: 'wc-1' }))
         .mockResolvedValueOnce(createWorkItem({ id: 'wc-2' }));
-      (vscode.window.showInformationMessage as Mock).mockResolvedValueOnce('Accept All to Queue');
+      (vscode.window.showInformationMessage as Mock).mockResolvedValueOnce('Accept All to Ready to Start');
 
       await invoke('devdocket.acceptAllFromInbox', providerNode);
 
       expect(vscode.window.showInformationMessage).toHaveBeenNthCalledWith(
         1,
-        'Accept 2 items from "GitHub" to Queue?',
+        'Accept 2 items from "GitHub" to Ready to Start?',
         { modal: true },
-        'Accept All to Queue',
+        'Accept All to Ready to Start',
       );
       expect(stateStore.setStates).toHaveBeenCalledWith([
         { providerId: 'github', externalId: 'ext-1', state: 'accepted' },
@@ -1403,7 +1403,7 @@ describe('registerCommands', () => {
       ]);
     });
 
-    it('accepts all group items to Queue after confirmation', async () => {
+    it('accepts all group items to Ready to Start after confirmation', async () => {
       const groupNode: InboxGroupNode = { kind: 'group', providerId: 'github', groupName: 'My Mentions', unseenCount: 2 };
       providerRegistry.getProviderLabel.mockReturnValue('GitHub');
       mockDiscoveredInboxItems([['github', [
@@ -1416,15 +1416,15 @@ describe('registerCommands', () => {
       workGraph.createItem
         .mockResolvedValueOnce(createWorkItem({ id: 'wc-1' }))
         .mockResolvedValueOnce(createWorkItem({ id: 'wc-2' }));
-      (vscode.window.showInformationMessage as Mock).mockResolvedValueOnce('Accept All to Queue');
+      (vscode.window.showInformationMessage as Mock).mockResolvedValueOnce('Accept All to Ready to Start');
 
       await invoke('devdocket.acceptAllFromInbox', groupNode);
 
       expect(vscode.window.showInformationMessage).toHaveBeenNthCalledWith(
         1,
-        'Accept 2 items from "GitHub > My Mentions" to Queue?',
+        'Accept 2 items from "GitHub > My Mentions" to Ready to Start?',
         { modal: true },
-        'Accept All to Queue',
+        'Accept All to Ready to Start',
       );
       expect(stateStore.setStates).toHaveBeenCalledWith([
         { providerId: 'github', externalId: 'ext-1', state: 'accepted' },
@@ -1432,7 +1432,7 @@ describe('registerCommands', () => {
       ]);
     });
 
-    it('accepts all provider items to Focus after confirmation', async () => {
+    it('accepts all provider items to In Progress after confirmation', async () => {
       const providerNode: InboxProviderNode = { kind: 'provider', providerId: 'github', label: 'GitHub' };
       mockDiscoveredInboxItems([['github', [
         { externalId: 'ext-1', title: 'Issue 1' },
@@ -1443,21 +1443,21 @@ describe('registerCommands', () => {
       workGraph.createItem
         .mockResolvedValueOnce(createWorkItem({ id: 'wc-1' }))
         .mockResolvedValueOnce(createWorkItem({ id: 'wc-2' }));
-      (vscode.window.showInformationMessage as Mock).mockResolvedValueOnce('Accept All to Focus');
+      (vscode.window.showInformationMessage as Mock).mockResolvedValueOnce('Accept All to In Progress');
 
       await invoke('devdocket.acceptAllToFocusFromInbox', providerNode);
 
       expect(vscode.window.showInformationMessage).toHaveBeenNthCalledWith(
         1,
-        'Accept 2 items from "GitHub" to Focus?',
+        'Accept 2 items from "GitHub" to In Progress?',
         { modal: true },
-        'Accept All to Focus',
+        'Accept All to In Progress',
       );
       expect(workGraph.transitionState).toHaveBeenCalledWith('wc-1', WorkItemState.InProgress);
       expect(workGraph.transitionState).toHaveBeenCalledWith('wc-2', WorkItemState.InProgress);
     });
 
-    it('accepts all group items to Focus after confirmation', async () => {
+    it('accepts all group items to In Progress after confirmation', async () => {
       const groupNode: InboxGroupNode = { kind: 'group', providerId: 'github', groupName: 'My Mentions', unseenCount: 2 };
       providerRegistry.getProviderLabel.mockReturnValue('GitHub');
       mockDiscoveredInboxItems([['github', [
@@ -1470,15 +1470,15 @@ describe('registerCommands', () => {
       workGraph.createItem
         .mockResolvedValueOnce(createWorkItem({ id: 'wc-1' }))
         .mockResolvedValueOnce(createWorkItem({ id: 'wc-2' }));
-      (vscode.window.showInformationMessage as Mock).mockResolvedValueOnce('Accept All to Focus');
+      (vscode.window.showInformationMessage as Mock).mockResolvedValueOnce('Accept All to In Progress');
 
       await invoke('devdocket.acceptAllToFocusFromInbox', groupNode);
 
       expect(vscode.window.showInformationMessage).toHaveBeenNthCalledWith(
         1,
-        'Accept 2 items from "GitHub > My Mentions" to Focus?',
+        'Accept 2 items from "GitHub > My Mentions" to In Progress?',
         { modal: true },
-        'Accept All to Focus',
+        'Accept All to In Progress',
       );
       expect(workGraph.transitionState).toHaveBeenCalledWith('wc-1', WorkItemState.InProgress);
       expect(workGraph.transitionState).toHaveBeenCalledWith('wc-2', WorkItemState.InProgress);
@@ -1533,7 +1533,7 @@ describe('registerCommands', () => {
       workGraph.createItem
         .mockResolvedValueOnce(createWorkItem({ id: 'wc-1' }))
         .mockResolvedValueOnce(createWorkItem({ id: 'wc-2' }));
-      (vscode.window.showInformationMessage as Mock).mockResolvedValueOnce('Accept All to Queue');
+      (vscode.window.showInformationMessage as Mock).mockResolvedValueOnce('Accept All to Ready to Start');
 
       await invoke('devdocket.acceptAllFromInbox', providerNode);
 
@@ -1549,7 +1549,7 @@ describe('registerCommands', () => {
       ]);
     });
 
-    it('accepts canonical-hidden peers to Focus with a single propagation batch', async () => {
+    it('accepts canonical-hidden peers to In Progress with a single propagation batch', async () => {
       const providerNode: InboxProviderNode = { kind: 'provider', providerId: 'prs', label: 'GitHub' };
       mockDiscoveredInboxItems([
         ['prs', [
@@ -1566,7 +1566,7 @@ describe('registerCommands', () => {
       workGraph.createItem
         .mockResolvedValueOnce(createWorkItem({ id: 'wc-1' }))
         .mockResolvedValueOnce(createWorkItem({ id: 'wc-2' }));
-      (vscode.window.showInformationMessage as Mock).mockResolvedValueOnce('Accept All to Focus');
+      (vscode.window.showInformationMessage as Mock).mockResolvedValueOnce('Accept All to In Progress');
 
       await invoke('devdocket.acceptAllToFocusFromInbox', providerNode);
 
@@ -1596,7 +1596,7 @@ describe('registerCommands', () => {
       expect(workGraph.transitionState).toHaveBeenCalledWith('wc-1', WorkItemState.InProgress);
       expect(workGraph.transitionState).toHaveBeenCalledWith('wc-2', WorkItemState.InProgress);
       expect(workGraph.transitionState).toHaveBeenCalledWith('wc-3', WorkItemState.InProgress);
-      expect(vscode.window.showInformationMessage).toHaveBeenCalledWith('Moved 3 items to Focus');
+      expect(vscode.window.showInformationMessage).toHaveBeenCalledWith('Moved 3 items to In Progress');
     });
 
     it('uses single-item path when one item selected', async () => {
@@ -1624,7 +1624,7 @@ describe('registerCommands', () => {
       expect(vscode.window.showErrorMessage).toHaveBeenCalledWith(
         'DevDocket: Failed to transition 1 item(s); see Output for details',
       );
-      expect(vscode.window.showInformationMessage).toHaveBeenCalledWith('Moved 2 items to Focus');
+      expect(vscode.window.showInformationMessage).toHaveBeenCalledWith('Moved 2 items to In Progress');
     });
 
     it('does nothing when no items have ids', async () => {
@@ -1677,7 +1677,7 @@ describe('registerCommands', () => {
       await invoke('devdocket.acceptToFocusFromInbox', makeInboxItem());
 
       expect(vscode.window.showInformationMessage).toHaveBeenCalledWith(
-        'DevDocket: Item is already in Focus',
+        'DevDocket: Item is already in In Progress',
       );
       expect(workGraph.transitionState).not.toHaveBeenCalled();
       expect(stateStore.setState).toHaveBeenCalledWith('github', 'ext-1', 'accepted');
@@ -1690,13 +1690,13 @@ describe('registerCommands', () => {
       await invoke('devdocket.acceptToFocusFromInbox', makeInboxItem());
 
       expect(vscode.window.showInformationMessage).toHaveBeenCalledWith(
-        'DevDocket: Item is already in Focus',
+        'DevDocket: Item is already in In Progress',
       );
       expect(workGraph.transitionState).not.toHaveBeenCalled();
       expect(stateStore.setState).toHaveBeenCalledWith('github', 'ext-1', 'accepted');
     });
 
-    it('re-opens Done item and transitions to Focus', async () => {
+    it('re-opens Done item and transitions to In Progress', async () => {
       const existing = createWorkItem({ id: 'wc-done', state: WorkItemState.Done });
       workGraph.findItemByProvenance.mockReturnValue(existing);
 
@@ -1707,7 +1707,7 @@ describe('registerCommands', () => {
       expect(stateStore.setState).toHaveBeenCalledWith('github', 'ext-1', 'accepted');
     });
 
-    it('re-opens Archived item and transitions to Focus', async () => {
+    it('re-opens Archived item and transitions to In Progress', async () => {
       const existing = createWorkItem({ id: 'wc-arch', state: WorkItemState.Archived });
       workGraph.findItemByProvenance.mockReturnValue(existing);
 
@@ -1738,7 +1738,7 @@ describe('registerCommands', () => {
       expect(stateStore.setState).not.toHaveBeenCalled();
       expect(workGraph.transitionState).not.toHaveBeenCalled();
       expect(vscode.window.showErrorMessage).toHaveBeenCalledWith(
-        'DevDocket: Failed to accept inbox item to Focus — disk full',
+        'DevDocket: Failed to accept inbox item to In Progress — disk full',
       );
     });
 
@@ -1786,7 +1786,7 @@ describe('registerCommands', () => {
 
       expect(stateStore.setState).toHaveBeenCalledWith('github', 'ext-1', 'accepted');
       expect(vscode.window.showErrorMessage).toHaveBeenCalledWith(
-        'DevDocket: Failed to move item to Focus — bad transition',
+        'DevDocket: Failed to move item to In Progress — bad transition',
       );
     });
 
@@ -1799,7 +1799,7 @@ describe('registerCommands', () => {
 
       expect(stateStore.setState).toHaveBeenCalledWith('github', 'ext-1', 'accepted');
       expect(vscode.window.showErrorMessage).toHaveBeenCalledWith(
-        'DevDocket: Failed to move item to Focus — transition error',
+        'DevDocket: Failed to move item to In Progress — transition error',
       );
     });
 
@@ -1881,7 +1881,7 @@ describe('registerCommands', () => {
       expect(workGraph.transitionState).toHaveBeenCalledWith('wc-1', WorkItemState.InProgress);
       expect(workGraph.transitionState).toHaveBeenCalledWith('wc-2', WorkItemState.InProgress);
       expect(vscode.window.showInformationMessage).toHaveBeenCalledWith(
-        'Accepted 2 items to Focus',
+        'Accepted 2 items to In Progress',
       );
     });
 
@@ -1942,7 +1942,7 @@ describe('registerCommands', () => {
       ]);
       expect(workGraph.transitionState).toHaveBeenCalledTimes(2);
       expect(logger.error).toHaveBeenCalledWith(
-        'Failed to accept inbox item to Focus "Issue 2"',
+        'Failed to accept inbox item to In Progress "Issue 2"',
         expect.any(Error),
       );
       expect(vscode.window.showErrorMessage).toHaveBeenCalledWith(
@@ -1950,7 +1950,7 @@ describe('registerCommands', () => {
       );
     });
 
-    it('propagates canonical peers only for items accepted to Focus successfully', async () => {
+    it('propagates canonical peers only for items accepted to In Progress successfully', async () => {
       const items = [
         makeInboxItem({ providerId: 'prs', externalId: 'repo#1', title: 'Issue 1', canonicalId: 'github:pull:repo#1' }),
         makeInboxItem({ providerId: 'prs', externalId: 'repo#2', title: 'Issue 2', canonicalId: 'github:pull:repo#2' }),
@@ -2023,7 +2023,7 @@ describe('registerCommands', () => {
 
       expect(workGraph.transitionState).toHaveBeenCalledTimes(3);
       expect(vscode.window.showInformationMessage).toHaveBeenCalledWith(
-        'Accepted 2 items to Focus (1 failed)',
+        'Accepted 2 items to In Progress (1 failed)',
       );
       expect(vscode.window.showErrorMessage).toHaveBeenCalledWith(
         'DevDocket: Failed to process 1 item(s); see Output for details',
@@ -2050,7 +2050,7 @@ describe('registerCommands', () => {
       expect(workGraph.transitionState).toHaveBeenCalledWith('wc-2', WorkItemState.InProgress);
       expect(workGraph.transitionState).toHaveBeenCalledWith('wc-3', WorkItemState.InProgress);
       expect(vscode.window.showInformationMessage).toHaveBeenCalledWith(
-        'Accepted 2 items to Focus; 1 item already in Focus or cannot be moved',
+        'Accepted 2 items to In Progress; 1 item already in In Progress or cannot be moved',
       );
     });
   });
@@ -2136,7 +2136,7 @@ describe('registerCommands', () => {
   });
 
   describe('batch moveToQueue (multi-select)', () => {
-    it('moves multiple items to Queue', async () => {
+    it('moves multiple items to Ready to Start', async () => {
       const items = [{ id: 'wc-1' }, { id: 'wc-2' }, { id: 'wc-3' }];
       await invoke('devdocket.moveToQueue', items[0], items);
 
@@ -2144,7 +2144,7 @@ describe('registerCommands', () => {
       expect(workGraph.transitionState).toHaveBeenCalledWith('wc-1', WorkItemState.New);
       expect(workGraph.transitionState).toHaveBeenCalledWith('wc-2', WorkItemState.New);
       expect(workGraph.transitionState).toHaveBeenCalledWith('wc-3', WorkItemState.New);
-      expect(vscode.window.showInformationMessage).toHaveBeenCalledWith('Moved 3 items to Queue');
+      expect(vscode.window.showInformationMessage).toHaveBeenCalledWith('Moved 3 items to Ready to Start');
     });
 
     it('uses single-item path when one item selected', async () => {
@@ -2172,7 +2172,7 @@ describe('registerCommands', () => {
       expect(vscode.window.showErrorMessage).toHaveBeenCalledWith(
         'DevDocket: Failed to transition 1 item(s); see Output for details',
       );
-      expect(vscode.window.showInformationMessage).toHaveBeenCalledWith('Moved 2 items to Queue');
+      expect(vscode.window.showInformationMessage).toHaveBeenCalledWith('Moved 2 items to Ready to Start');
     });
 
     it('does nothing when no items have ids', async () => {
@@ -2283,7 +2283,7 @@ describe('registerCommands', () => {
         { providerId: 'github', externalId: 'ext-1', state: 'accepted' },
         { providerId: 'github', externalId: 'ext-2', state: 'accepted' },
       ]);
-      expect(vscode.window.showInformationMessage).toHaveBeenCalledWith('Accepted 2 items to Queue');
+      expect(vscode.window.showInformationMessage).toHaveBeenCalledWith('Accepted 2 items to Ready to Start');
     });
 
     it('skips already-accepted items in batch', async () => {
@@ -2352,7 +2352,7 @@ describe('registerCommands', () => {
         'DevDocket: Failed to accept 1 item(s); see Output for details',
       );
       expect(vscode.window.showInformationMessage).toHaveBeenCalledWith(
-        'Accepted 2 of 3 items to Queue',
+        'Accepted 2 of 3 items to Ready to Start',
       );
     });
 
@@ -2499,7 +2499,7 @@ describe('registerCommands', () => {
       );
     });
 
-    it('re-opens Done item back to Queue when accepting from sources', async () => {
+    it('re-opens Done item back to Ready to Start when accepting from sources', async () => {
       const existing = createWorkItem({ id: 'wc-done', title: 'Done Item', state: WorkItemState.Done });
       workGraph.findItemByProvenance.mockReturnValue(existing);
 
@@ -2510,7 +2510,7 @@ describe('registerCommands', () => {
       expect(workGraph.createItem).not.toHaveBeenCalled();
     });
 
-    it('re-opens Archived item back to Queue when accepting from sources', async () => {
+    it('re-opens Archived item back to Ready to Start when accepting from sources', async () => {
       const existing = createWorkItem({ id: 'wc-arch', title: 'Archived Item', state: WorkItemState.Archived });
       workGraph.findItemByProvenance.mockReturnValue(existing);
 

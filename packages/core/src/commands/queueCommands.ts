@@ -23,23 +23,23 @@ async function handleAcceptToFocus(workGraph: WorkGraph, item?: { id?: string },
   const ids = resolveItemIds(item, selectedItems);
   if (ids.length === 0) { return; }
   await batchTransition(workGraph, ids, WorkItemState.InProgress,
-    (n) => `Moved ${n} item${n === 1 ? '' : 's'} to Focus`);
+    (n) => `Moved ${n} item${n === 1 ? '' : 's'} to In Progress`);
 }
 
 async function handleMoveUp(workGraph: WorkGraph, item?: { id?: string }): Promise<void> {
-  await requireItemToMove('the Queue', item, id => workGraph.moveItem(id, 'up'));
+  await requireItemToMove('the Ready to Start tier', item, id => workGraph.moveItem(id, 'up'));
 }
 
 async function handleMoveDown(workGraph: WorkGraph, item?: { id?: string }): Promise<void> {
-  await requireItemToMove('the Queue', item, id => workGraph.moveItem(id, 'down'));
+  await requireItemToMove('the Ready to Start tier', item, id => workGraph.moveItem(id, 'down'));
 }
 
 async function handleMoveToTop(workGraph: WorkGraph, item?: { id?: string }): Promise<void> {
-  await requireItemToMove('the Queue', item, id => workGraph.moveToTop(id));
+  await requireItemToMove('the Ready to Start tier', item, id => workGraph.moveToTop(id));
 }
 
 async function handleMoveToBottom(workGraph: WorkGraph, item?: { id?: string }): Promise<void> {
-  await requireItemToMove('the Queue', item, id => workGraph.moveToBottom(id));
+  await requireItemToMove('the Ready to Start tier', item, id => workGraph.moveToBottom(id));
 }
 
 async function handleDeleteItem(workGraph: WorkGraph, item?: { id?: string }, selectedItems?: { id?: string }[]): Promise<void> {
@@ -86,7 +86,7 @@ export function registerQueueCommands(
     vscode.commands.registerCommand('devdocket.createItem',
       wrapCommand('Failed to create item', () => handleCreateItem(workGraph))),
     vscode.commands.registerCommand('devdocket.acceptToFocus',
-      wrapCommand('Failed to focus item', (item, selectedItems) => handleAcceptToFocus(workGraph, item, selectedItems))),
+      wrapCommand('Failed to In Progress item', (item, selectedItems) => handleAcceptToFocus(workGraph, item, selectedItems))),
     vscode.commands.registerCommand('devdocket.moveUp',
       wrapCommand('Failed to move item up', (item) => handleMoveUp(workGraph, item))),
     vscode.commands.registerCommand('devdocket.moveDown',

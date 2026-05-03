@@ -59,7 +59,7 @@ export class WatchesStatusBar implements vscode.Disposable {
       }
     }
 
-    this.statusBarItem.text = `🔄 ${runningCount} running · ✓ ${passedCount} passed · ✗ ${failedCount} failed`;
+    this.statusBarItem.text = `🔄 ${runningCount} active · ✓ ${passedCount} passed · ✗ ${failedCount} failed`;
     this.statusBarItem.tooltip = 'Click to open CI watch details';
     // Only highlight the status bar with the warning color if there is at
     // least one failed watch the user hasn't seen yet — once they open the
