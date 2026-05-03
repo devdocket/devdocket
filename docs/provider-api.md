@@ -788,10 +788,15 @@ interface DiscoveredItem {
   badges?: ProviderBadge[];
 
   /**
-   * Optional opaque "soft" version token. When present, DevDocket re-marks
-   * the item `unseen` on a value change — but only when the corresponding
-   * work item is still in `New`. Use a stable opaque value (commit SHA,
-   * ETag, updated_at). See `provider-discovery.md#resurfacing`.
+   * Optional opaque "soft" version token. When present, DevDocket
+   * SUPPRESSES resurfacing while the linked work item is still active
+   * (`New`, `InProgress`, or `Paused`) — the new version is silently
+   * backfilled and a `version-updated` activity entry is logged. Once the
+   * work item is no longer active (Done, Archived, deleted, or never
+   * created), a subsequent value change re-marks the discovered item
+   * `unseen` so it reappears in the Incoming tier. Use a stable opaque
+   * value (commit SHA, ETag, updated_at). See
+   * `provider-discovery.md#resurfacing`.
    */
   version?: string;
 
