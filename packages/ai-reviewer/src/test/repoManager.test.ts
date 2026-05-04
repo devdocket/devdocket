@@ -110,13 +110,13 @@ describe('RepoManager', () => {
 
     it('redacts query strings and fragments from parse-failing URLs', async () => {
       await expect(manager.ensureWorktree('https://exa mple.com/not-pr?token=secret#frag')).rejects.toThrow(
-        'Invalid PR URL: https://exa mple.com/not-pr',
+        'Invalid PR URL: (URL unavailable)',
       );
     });
 
     it('redacts userinfo from parse-failing URLs', async () => {
       await expect(manager.ensureWorktree('https://user:password@exa mple.com/not-pr?token=secret')).rejects.toThrow(
-        'Invalid PR URL: https://exa mple.com/not-pr',
+        'Invalid PR URL: (URL unavailable)',
       );
     });
 
