@@ -547,6 +547,57 @@ describe('GitHubMentionsProvider', () => {
     expect(incrementalCommentsUrl.searchParams.get('direction')).toBe('desc');
   });
 
+  it('stops incremental comment scans after finding the newest mention', async () => {
+    mockFetch
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          items: [{
+            ...createMockIssue(10, 'Bug report', 'org/repo'),
+            comments_url: 'https://api.github.com/repos/org/repo/issues/10/comments',
+          }],
+        }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ login: 'testuser' }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ([
+          { id: 100, body: 'Initial ping @testuser', created_at: '2024-02-01T00:00:00Z' },
+        ]),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          items: [{
+            ...createMockIssue(10, 'Bug report', 'org/repo'),
+            comments_url: 'https://api.github.com/repos/org/repo/issues/10/comments',
+          }],
+        }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => [
+          { id: 200, body: 'New ping @testuser', created_at: '2024-02-03T00:00:00Z' },
+          ...Array.from({ length: 99 }, (_, i) => ({
+            id: 201 + i,
+            body: 'older non-mention update',
+            created_at: '2024-02-02T00:00:00Z',
+          })),
+        ],
+      });
+
+    const listener = vi.fn();
+    provider.onDidDiscoverItems(listener);
+    await provider.refresh();
+    await provider.refresh();
+
+    expect(mockFetch).toHaveBeenCalledTimes(5);
+    expect(listener.mock.calls[1][0][0].resurfaceVersion).toBe('comment:200:2024-02-03T00:00:00Z');
+  });
+
   it('preserves cached comment versions when the search refresh fails', async () => {
     const issue = {
       ...createMockIssue(10, 'Bug report', 'org/repo'),

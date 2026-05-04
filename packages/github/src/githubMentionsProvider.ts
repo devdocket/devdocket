@@ -344,6 +344,9 @@ export class GitHubMentionsProvider extends BaseGitHubProvider {
         }
       }
 
+      if (since && latestMention) {
+        break;
+      }
       if (pageCount) {
         if (page === 1) {
           break;
