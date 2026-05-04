@@ -292,7 +292,7 @@ export class WalkthroughParticipant {
       this.log.warn(`Reached max iterations (${maxIterations})`);
     }
     if (!streamedAnyText && !token.isCancellationRequested) {
-      response.markdown('⚠️ The model completed tool calls but did not produce walkthrough text. Please try again.');
+      response.markdown('⚠️ The model did not produce walkthrough text. Please try again.');
     }
     this.log.info(`handleRequest complete — final phase: ${phase}, total iterations: ${iterations}`);
     return { metadata: { phase } };
