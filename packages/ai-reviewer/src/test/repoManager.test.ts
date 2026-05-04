@@ -397,5 +397,13 @@ describe('RepoManager', () => {
       const deletedPaths = vi.mocked(workspace.fs.delete).mock.calls.map(call => (call[0] as { fsPath: string }).fsPath.replace(/\\/g, '/'));
       expect(deletedPaths).toContain('/mock/storage/repos/ado-org-project-repo');
     });
+
+    it('includes the ADO repo directory fallback after reload when no worktrees are cached', async () => {
+      await manager.removeRepo('org/project', 'repo');
+
+      const deletedPaths = vi.mocked(workspace.fs.delete).mock.calls.map(call => (call[0] as { fsPath: string }).fsPath.replace(/\\/g, '/'));
+      expect(deletedPaths).toContain('/mock/storage/repos/org-project-repo');
+      expect(deletedPaths).toContain('/mock/storage/repos/ado-org-project-repo');
+    });
   });
 });

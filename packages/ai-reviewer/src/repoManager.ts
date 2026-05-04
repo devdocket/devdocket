@@ -354,7 +354,10 @@ export class RepoManager {
     }
 
     if (repoBases.size === 0) {
-      repoBases.add(path.join(this.storageUri.fsPath, 'repos', `${org}-${repo}`));
+      repoBases.add(path.join(this.storageUri.fsPath, 'repos', sanitizePathSegment(`${org}-${repo}`)));
+      if (org.includes('/')) {
+        repoBases.add(path.join(this.storageUri.fsPath, 'repos', sanitizePathSegment(`ado-${org}-${repo}`)));
+      }
     }
 
     for (const repoBase of repoBases) {
