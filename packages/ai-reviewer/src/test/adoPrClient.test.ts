@@ -101,7 +101,7 @@ describe('AdoPrClient', () => {
     });
 
     expect(fetchMock).toHaveBeenCalledWith(
-      'https://dev.azure.com/my%20org/My%20Project/_apis/git/repositories/my%20repo/pullRequests/42/threads?api-version=7.1-preview.1',
+      'https://dev.azure.com/my%20org/My%20Project/_apis/git/repositories/my%20repo/pullrequests/42/threads?api-version=7.1-preview.1',
       expect.objectContaining({
         method: 'POST',
         headers: expect.objectContaining({

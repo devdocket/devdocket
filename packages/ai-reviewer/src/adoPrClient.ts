@@ -188,7 +188,7 @@ export class AdoPrClient {
   }
 
   private threadsApiUrl(parts: AdoPrUrlParts): string {
-    return `${this.repoApiBase(parts)}/pullRequests/${encodeURIComponent(parts.prId)}/threads?api-version=${ADO_THREADS_API_VERSION}`;
+    return `${this.repoApiBase(parts)}/pullrequests/${encodeURIComponent(parts.prId)}/threads?api-version=${ADO_THREADS_API_VERSION}`;
   }
 
   private repoApiBase(parts: AdoPrUrlParts): string {
