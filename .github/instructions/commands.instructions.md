@@ -15,16 +15,15 @@ Commands are split into domain-specific modules, each exporting a single `regist
 | Module | Scope |
 |--------|-------|
 | `inboxCommands.ts` | Incoming-tier accept/dismiss operations (provider items in `inboxState === 'unseen'`) |
-| `queueCommands.ts` | Ready-to-Start tier reorder/transition operations |
 | `focusCommands.ts` | In Progress / Paused tier pause/resume/complete operations |
-| `historyCommands.ts` | Done tier cleanup operations |
 | `generalCommands.ts` | Item creation, general operations |
+| `historyCommands.ts` | Done tier cleanup operations |
 | `sourcesCommands.ts` | Sources tab operations |
 | `watchCommands.ts` | CI watch management |
 
 The orchestrator `commands.ts` calls each domain registrar, passing only the dependencies that module needs.
 
-> The module names use the legacy concept names (Inbox / Queue / Focus / History) because those still describe the underlying state-machine stages. The user-facing tier names are different — see `.github/instructions/views.instructions.md`.
+> Some module names use legacy concept names (Inbox / Focus / History) because those still describe the underlying state-machine stages. The user-facing tier names are different — see `.github/instructions/views.instructions.md`.
 
 ## Shared Utilities (`commandUtils.ts`)
 
@@ -50,4 +49,4 @@ Only the per-item context-menu entries (`view/item/context` group) are dead now 
 
 ## Command Naming
 
-All commands use the `devdocket.` prefix. Queue and Focus have separate command IDs for the same logical operation (e.g., `devdocket.moveToTop` vs `devdocket.focusMoveToTop`) because they target items in different state-machine stages.
+All commands use the `devdocket.` prefix. Ready-to-Start and Focus commands may have separate command IDs for the same logical operation (e.g., `devdocket.moveToTop` vs `devdocket.focusMoveToTop`) because they target items in different state-machine stages.
