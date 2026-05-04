@@ -142,8 +142,8 @@ describe('GitHubMentionsProvider', () => {
 
     const commentsFetchUrl = new URL(mockFetch.mock.calls[2][0] as string);
     expect(commentsFetchUrl.searchParams.get('per_page')).toBe('100');
-    expect(commentsFetchUrl.searchParams.get('sort')).toBe('created');
-    expect(commentsFetchUrl.searchParams.get('direction')).toBe('desc');
+    expect(commentsFetchUrl.searchParams.get('sort')).toBeNull();
+    expect(commentsFetchUrl.searchParams.get('direction')).toBeNull();
   });
 
   it('finds a mention on a later comments page', async () => {
@@ -189,6 +189,111 @@ describe('GitHubMentionsProvider', () => {
     expect(secondPageUrl.searchParams.get('page')).toBe('2');
   });
 
+  it('continues scanning backward after a partial last page', async () => {
+    mockFetch
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          items: [{
+            ...createMockIssue(10, 'Bug report', 'org/repo'),
+            comments: 250,
+            comments_url: 'https://api.github.com/repos/org/repo/issues/10/comments',
+          }],
+        }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ login: 'testuser' }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => Array.from({ length: 50 }, (_, i) => ({
+          id: 300 + i,
+          body: 'newer non-mention comment',
+          created_at: '2024-03-01T00:00:00Z',
+        })),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => [
+          { id: 200, body: 'Middle-page ping @testuser', created_at: '2024-02-01T00:00:00Z' },
+          ...Array.from({ length: 99 }, (_, i) => ({
+            id: 201 + i,
+            body: 'middle-page non-mention comment',
+            created_at: '2024-02-01T00:00:00Z',
+          })),
+        ],
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => Array.from({ length: 100 }, (_, i) => ({
+          id: 100 + i,
+          body: 'old non-mention comment',
+          created_at: '2024-01-01T00:00:00Z',
+        })),
+      });
+
+    const listener = vi.fn();
+    provider.onDidDiscoverItems(listener);
+    await provider.refresh();
+
+    const items = listener.mock.calls[0][0];
+    expect(items[0].resurfaceVersion).toBe('comment:200:2024-02-01T00:00:00Z');
+
+    const lastPageUrl = new URL(mockFetch.mock.calls[2][0] as string);
+    const previousPageUrl = new URL(mockFetch.mock.calls[3][0] as string);
+    expect(lastPageUrl.searchParams.get('page')).toBe('3');
+    expect(previousPageUrl.searchParams.get('page')).toBe('2');
+  });
+
+  it('continues scanning backward after an empty stale last page', async () => {
+    mockFetch
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          items: [{
+            ...createMockIssue(10, 'Bug report', 'org/repo'),
+            comments: 250,
+            comments_url: 'https://api.github.com/repos/org/repo/issues/10/comments',
+          }],
+        }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ login: 'testuser' }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => [],
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => [
+          { id: 200, body: 'Middle-page ping @testuser', created_at: '2024-02-01T00:00:00Z' },
+        ],
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => Array.from({ length: 100 }, (_, i) => ({
+          id: 100 + i,
+          body: 'old non-mention comment',
+          created_at: '2024-01-01T00:00:00Z',
+        })),
+      });
+
+    const listener = vi.fn();
+    provider.onDidDiscoverItems(listener);
+    await provider.refresh();
+
+    const items = listener.mock.calls[0][0];
+    expect(items[0].resurfaceVersion).toBe('comment:200:2024-02-01T00:00:00Z');
+
+    const staleLastPageUrl = new URL(mockFetch.mock.calls[2][0] as string);
+    const previousPageUrl = new URL(mockFetch.mock.calls[3][0] as string);
+    expect(staleLastPageUrl.searchParams.get('page')).toBe('3');
+    expect(previousPageUrl.searchParams.get('page')).toBe('2');
+  });
+
   it('changes resurfaceVersion when a later comment mentions the current user', async () => {
     mockFetch
       .mockResolvedValueOnce({
@@ -207,8 +312,8 @@ describe('GitHubMentionsProvider', () => {
       .mockResolvedValueOnce({
         ok: true,
         json: async () => ([
-          { id: 102, body: 'New ping @testuser', created_at: '2024-02-03T00:00:00Z' },
           { id: 100, body: 'Initial ping @testuser', created_at: '2024-02-01T00:00:00Z' },
+          { id: 102, body: 'New ping @testuser', created_at: '2024-02-03T00:00:00Z' },
         ]),
       });
 
@@ -328,6 +433,93 @@ describe('GitHubMentionsProvider', () => {
 
     expect(mockFetch).toHaveBeenCalledTimes(4);
     expect(listener.mock.calls[1][0][0].resurfaceVersion).toBe('comment:100:2024-02-01T00:00:00Z');
+  });
+
+  it('refetches comments when issue updated_at is absent', async () => {
+    mockFetch
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          items: [{
+            ...createMockIssue(10, 'Bug report', 'org/repo'),
+            comments_url: 'https://api.github.com/repos/org/repo/issues/10/comments',
+          }],
+        }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ login: 'testuser' }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ([
+          { id: 100, body: 'Initial ping @testuser', created_at: '2024-02-01T00:00:00Z' },
+        ]),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          items: [{
+            ...createMockIssue(10, 'Bug report', 'org/repo'),
+            comments_url: 'https://api.github.com/repos/org/repo/issues/10/comments',
+          }],
+        }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ([
+          { id: 102, body: 'New ping @testuser', created_at: '2024-02-03T00:00:00Z' },
+        ]),
+      });
+
+    const listener = vi.fn();
+    provider.onDidDiscoverItems(listener);
+    await provider.refresh();
+    await provider.refresh();
+
+    expect(mockFetch).toHaveBeenCalledTimes(5);
+    expect(listener.mock.calls[1][0][0].resurfaceVersion).toBe('comment:102:2024-02-03T00:00:00Z');
+  });
+
+  it('preserves cached comment versions when the search refresh fails', async () => {
+    const issue = {
+      ...createMockIssue(10, 'Bug report', 'org/repo'),
+      comments_url: 'https://api.github.com/repos/org/repo/issues/10/comments',
+      updated_at: '2024-02-02T00:00:00Z',
+    };
+
+    mockFetch
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ items: [issue] }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ login: 'testuser' }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ([
+          { id: 100, body: 'Initial ping @testuser', created_at: '2024-02-01T00:00:00Z' },
+        ]),
+      })
+      .mockResolvedValueOnce({
+        ok: false,
+        status: 500,
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ items: [issue] }),
+      });
+
+    const listener = vi.fn();
+    provider.onDidDiscoverItems(listener);
+    await provider.refresh();
+    await provider.refresh();
+    await provider.refresh();
+
+    expect(mockFetch).toHaveBeenCalledTimes(5);
+    expect(listener.mock.calls[2][0][0].resurfaceVersion).toBe('comment:100:2024-02-01T00:00:00Z');
   });
 
   it('does not derive resurfaceVersion from comments that do not mention the current user', async () => {

@@ -8,7 +8,7 @@ import { getHeaders, getGitHubAuthHeaders, retryWithAuth, throwApiError, parseCa
 
 const MENTIONS_ACTIVATED_KEY = 'mentionsActivatedAt';
 const COMMENT_FETCH_CONCURRENCY = 3;
-const COMMENT_PAGE_LIMIT = 5;
+const COMMENT_PAGE_LIMIT = 10;
 
 interface GitHubIssueComment {
   id: number;
@@ -31,7 +31,7 @@ export class GitHubMentionsProvider extends BaseGitHubProvider {
 
   private readonly _context: vscode.ExtensionContext;
   private readonly mentionCommentCache = new Map<string, { issueUpdatedAt?: string; resurfaceVersion?: string }>();
-  private cachedLogin?: string;
+  private cachedLogin?: { accessToken: string; login: string };
 
   constructor(context: vscode.ExtensionContext) {
     super();
@@ -52,6 +52,11 @@ export class GitHubMentionsProvider extends BaseGitHubProvider {
     const filtered = patterns.length > 0
       ? itemsWithRepo.filter(({ repoName }) => matchesRepoPatterns(repoName, patterns))
       : itemsWithRepo;
+
+    const activeExternalIds = new Set(filtered.map(({ issue, repoName }) => `${repoName}#${issue.number}`));
+    if (failures.length === 0) {
+      this.pruneMentionCommentCache(activeExternalIds);
+    }
 
     const shouldComputeMentionVersions = filtered.some(({ issue }) => issue.comments_url || issue.body || issue.title);
     const currentLogin = shouldComputeMentionVersions ? await this.getCurrentLogin(accessToken, signal) : undefined;
@@ -174,8 +179,8 @@ export class GitHubMentionsProvider extends BaseGitHubProvider {
   }
 
   private async getCurrentLogin(token: string, signal?: AbortSignal): Promise<string | undefined> {
-    if (this.cachedLogin) {
-      return this.cachedLogin;
+    if (this.cachedLogin?.accessToken === token) {
+      return this.cachedLogin.login;
     }
 
     try {
@@ -187,7 +192,7 @@ export class GitHubMentionsProvider extends BaseGitHubProvider {
         const data = await response.json() as { login?: unknown };
         const login = typeof data.login === 'string' ? data.login.trim() : undefined;
         if (login && GitHubMentionsProvider.isValidGitHubLogin(login)) {
-          this.cachedLogin = login;
+          this.cachedLogin = { accessToken: token, login };
           return login;
         }
       } else {
@@ -202,13 +207,22 @@ export class GitHubMentionsProvider extends BaseGitHubProvider {
       const session = await vscode.authentication.getSession('github', ['repo'], { createIfNone: false });
       const label = session?.account?.label?.trim();
       if (label && GitHubMentionsProvider.isValidGitHubLogin(label)) {
-        this.cachedLogin = label;
+        this.cachedLogin = { accessToken: token, login: label };
         return label;
       }
+      logger.warn('Could not determine GitHub login for mention comment filtering');
       return undefined;
     } catch (err) {
-      logger.debug('Could not determine fallback GitHub login for mention comment filtering', err);
+      logger.warn('Could not determine fallback GitHub login for mention comment filtering', err);
       return undefined;
+    }
+  }
+
+  private pruneMentionCommentCache(activeExternalIds: Set<string>): void {
+    for (const externalId of this.mentionCommentCache.keys()) {
+      if (!activeExternalIds.has(externalId)) {
+        this.mentionCommentCache.delete(externalId);
+      }
     }
   }
 
@@ -252,32 +266,46 @@ export class GitHubMentionsProvider extends BaseGitHubProvider {
   ): Promise<string | undefined> {
     const bodyMentionVersion = GitHubMentionsProvider.getIssueBodyMentionVersion(issue, currentLogin);
     const cached = this.mentionCommentCache.get(externalId);
-    if (cached && cached.issueUpdatedAt === issue.updated_at) {
+    if (cached && issue.updated_at && cached.issueUpdatedAt === issue.updated_at) {
       return cached.resurfaceVersion ?? bodyMentionVersion;
     }
 
-    const commentVersion = await this.fetchLatestMentionCommentVersion(issue, token, currentLogin, signal);
+    const previousCommentVersion = cached?.resurfaceVersion;
+    const commentVersion = await this.fetchLatestMentionCommentVersion(issue, token, currentLogin, previousCommentVersion, signal);
+    const resurfaceVersion = commentVersion ?? previousCommentVersion;
     this.mentionCommentCache.set(externalId, {
       issueUpdatedAt: issue.updated_at,
-      resurfaceVersion: commentVersion,
+      resurfaceVersion,
     });
-    return commentVersion ?? bodyMentionVersion;
+    return resurfaceVersion ?? bodyMentionVersion;
   }
 
   private async fetchLatestMentionCommentVersion(
     issue: GitHubIssue,
     token: string,
     currentLogin: string,
+    previousCommentVersion?: string,
     signal?: AbortSignal,
   ): Promise<string | undefined> {
     if (!issue.comments_url) {
       return undefined;
     }
 
-    for (let page = 1; page <= COMMENT_PAGE_LIMIT; page++) {
+    const since = GitHubMentionsProvider.getCommentVersionTimestamp(previousCommentVersion);
+    const pageCount = since ? undefined : GitHubMentionsProvider.getCommentPageCount(issue.comments);
+    let latestMention: { id: number; createdAt: string; time: number } | undefined;
+    let lastPageWasFull = false;
+    let scannedPages = 0;
+
+    for (let index = 0; index < COMMENT_PAGE_LIMIT; index++) {
+      const page = pageCount ? pageCount - index : index + 1;
+      if (page < 1) {
+        break;
+      }
+
       let response: Response;
       try {
-        response = await fetch(GitHubMentionsProvider.withCommentQuery(issue.comments_url, page), {
+        response = await fetch(GitHubMentionsProvider.withCommentQuery(issue.comments_url, page, since), {
           headers: getGitHubAuthHeaders(token),
           signal: combineSignals(signal, 30_000),
         });
@@ -292,23 +320,46 @@ export class GitHubMentionsProvider extends BaseGitHubProvider {
         return undefined;
       }
 
+      scannedPages++;
       const comments = await response.json() as GitHubIssueComment[];
+      lastPageWasFull = comments.length >= 100;
       for (const comment of comments) {
         if (!GitHubMentionsProvider.mentionsUser(comment.body, currentLogin)) {
           continue;
         }
-        if (!comment.created_at || Number.isNaN(Date.parse(comment.created_at))) {
+        if (!comment.created_at) {
           continue;
         }
-        return `comment:${comment.id}:${comment.created_at}`;
+        const time = Date.parse(comment.created_at);
+        if (Number.isNaN(time)) {
+          continue;
+        }
+        if (!latestMention || time > latestMention.time) {
+          latestMention = { id: comment.id, createdAt: comment.created_at, time };
+        }
       }
 
-      if (comments.length < 100) {
+      if (pageCount) {
+        if (page === 1) {
+          break;
+        }
+        if (comments.length === 0) {
+          continue;
+        }
+      } else if (comments.length === 0 || comments.length < 100) {
         break;
       }
     }
 
-    return undefined;
+    const moreForwardPages = !pageCount && lastPageWasFull;
+    const moreBackwardPages = pageCount !== undefined && pageCount > scannedPages;
+    if (scannedPages === COMMENT_PAGE_LIMIT && (moreForwardPages || moreBackwardPages)) {
+      logger.warn(`Comment scan capped at ${COMMENT_PAGE_LIMIT} pages for ${issue.html_url}`);
+    }
+
+    return latestMention
+      ? `comment:${latestMention.id}:${latestMention.createdAt}`
+      : undefined;
   }
 
   private static getIssueBodyMentionVersion(issue: GitHubIssue, login: string): string | undefined {
@@ -316,6 +367,18 @@ export class GitHubMentionsProvider extends BaseGitHubProvider {
       return undefined;
     }
     return `issue:${issue.number}`;
+  }
+
+  private static getCommentVersionTimestamp(version: string | undefined): string | undefined {
+    const match = version?.match(/^comment:\d+:(.+)$/);
+    return match?.[1];
+  }
+
+  private static getCommentPageCount(commentCount: number | undefined): number | undefined {
+    if (commentCount === undefined || !Number.isFinite(commentCount) || commentCount <= 0) {
+      return undefined;
+    }
+    return Math.ceil(commentCount / 100);
   }
 
   private static mentionsUser(body: string | null | undefined, login: string): boolean {
@@ -330,17 +393,19 @@ export class GitHubMentionsProvider extends BaseGitHubProvider {
     return /^[A-Za-z0-9](?:[A-Za-z0-9-]{0,37}[A-Za-z0-9])?$/.test(login);
   }
 
-  private static withCommentQuery(url: string, page: number): string {
+  private static withCommentQuery(url: string, page: number, since?: string): string {
     try {
       const parsed = new URL(url);
       parsed.searchParams.set('per_page', '100');
-      parsed.searchParams.set('sort', 'created');
-      parsed.searchParams.set('direction', 'desc');
       parsed.searchParams.set('page', String(page));
+      if (since) {
+        parsed.searchParams.set('since', since);
+      }
       return parsed.toString();
     } catch {
       const separator = url.includes('?') ? '&' : '?';
-      return `${url}${separator}per_page=100&sort=created&direction=desc&page=${page}`;
+      const sinceQuery = since ? `&since=${encodeURIComponent(since)}` : '';
+      return `${url}${separator}per_page=100&page=${page}${sinceQuery}`;
     }
   }
 
