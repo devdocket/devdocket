@@ -310,7 +310,7 @@ export class GitHubMentionsProvider extends BaseGitHubProvider {
 
       let response: Response;
       try {
-        response = await fetch(GitHubMentionsProvider.withCommentQuery(issue.comments_url, page, since), {
+        response = await fetch(GitHubMentionsProvider.withCommentQuery(issue.comments_url, page, since, !!since), {
           headers: getGitHubAuthHeaders(token),
           signal: combineSignals(signal, 30_000),
         });
@@ -398,7 +398,7 @@ export class GitHubMentionsProvider extends BaseGitHubProvider {
     return /^[A-Za-z0-9](?:[A-Za-z0-9-]{0,37}[A-Za-z0-9])?$/.test(login);
   }
 
-  private static withCommentQuery(url: string, page: number, since?: string): string {
+  private static withCommentQuery(url: string, page: number, since?: string, newestFirst = false): string {
     try {
       const parsed = new URL(url);
       parsed.searchParams.set('per_page', '100');
@@ -406,11 +406,16 @@ export class GitHubMentionsProvider extends BaseGitHubProvider {
       if (since) {
         parsed.searchParams.set('since', since);
       }
+      if (newestFirst) {
+        parsed.searchParams.set('sort', 'created');
+        parsed.searchParams.set('direction', 'desc');
+      }
       return parsed.toString();
     } catch {
       const separator = url.includes('?') ? '&' : '?';
       const sinceQuery = since ? `&since=${encodeURIComponent(since)}` : '';
-      return `${url}${separator}per_page=100&page=${page}${sinceQuery}`;
+      const orderQuery = newestFirst ? '&sort=created&direction=desc' : '';
+      return `${url}${separator}per_page=100&page=${page}${sinceQuery}${orderQuery}`;
     }
   }
 

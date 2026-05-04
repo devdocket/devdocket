@@ -540,6 +540,11 @@ describe('GitHubMentionsProvider', () => {
 
     expect(mockFetch).toHaveBeenCalledTimes(5);
     expect(listener.mock.calls[1][0][0].resurfaceVersion).toBe('comment:102:2024-02-03T00:00:00Z');
+
+    const incrementalCommentsUrl = new URL(mockFetch.mock.calls[4][0] as string);
+    expect(incrementalCommentsUrl.searchParams.get('since')).toBe('2024-02-01T00:00:00Z');
+    expect(incrementalCommentsUrl.searchParams.get('sort')).toBe('created');
+    expect(incrementalCommentsUrl.searchParams.get('direction')).toBe('desc');
   });
 
   it('preserves cached comment versions when the search refresh fails', async () => {
