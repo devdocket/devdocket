@@ -186,9 +186,11 @@ export class WalkthroughParticipant {
     // Tool-use loop
     const loopMessages = [...messages];
     const maxIterations = 20;
+    const maxPhaseOnlyRetries = 1;
     let iterations = 0;
     let phase = context.history.length === 0 ? 'summary' : 'walkthrough';
     let streamedAnyText = false;
+    let phaseOnlyNoTextIterations = 0;
     this.log.info(`Starting tool-use loop — initial phase: ${phase}, maxIterations: ${maxIterations}`);
 
     while (!token.isCancellationRequested && iterations < maxIterations) {
@@ -278,8 +280,15 @@ export class WalkthroughParticipant {
         }
       }
 
-      const hasOnlyPhaseSignal = !hasToolCalls && toolResults.length > 0;
-      if (!hasToolCalls && !(hasOnlyPhaseSignal && !streamedTextThisIteration)) {
+      const phaseSignalWithoutText = !hasToolCalls && toolResults.length > 0 && !streamedTextThisIteration;
+      if (phaseSignalWithoutText) {
+        phaseOnlyNoTextIterations++;
+      } else {
+        phaseOnlyNoTextIterations = 0;
+      }
+      const shouldRetryForPhaseSignal = phaseSignalWithoutText && phaseOnlyNoTextIterations <= maxPhaseOnlyRetries;
+
+      if (!hasToolCalls && !shouldRetryForPhaseSignal) {
         this.log.info(`No tool calls requiring another model request in iteration ${iterations} — exiting loop`);
         break;
       }
