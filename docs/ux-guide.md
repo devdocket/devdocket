@@ -180,7 +180,7 @@ Discovers items from GitHub via these sub-providers:
 Discovers items from Azure DevOps via these sub-providers:
 
 - **ADO Work Items** — Finds work items assigned to you, with their `System.State` shown as a badge in the editor.
-- **ADO PR Reviews** — Finds pull requests where you've been requested as a reviewer.
+- **ADO PR Reviews** — Finds pull requests where you've been requested as a direct reviewer or through an Azure DevOps group/team reviewer assignment.
 - **ADO My PRs** — Finds pull requests you authored, with vote-derived status badges in the editor (Approved, Rejected, Waiting for author, etc.).
 
 **Configuration:**

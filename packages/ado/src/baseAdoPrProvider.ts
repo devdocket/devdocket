@@ -133,6 +133,7 @@ export abstract class BaseAdoPrProvider extends BaseProvider {
     const allItems: DiscoveredItem[] = [];
     const identityFailures: string[] = [];
     const fetchFailures: string[] = [];
+    const groupMembershipFailures: string[] = [];
 
     for (const orgConfig of this.orgConfigs) {
       if (!isValidUrlSegment(orgConfig.org)) {
@@ -162,49 +163,51 @@ export abstract class BaseAdoPrProvider extends BaseProvider {
       }
 
       const projectList = validProjects.length > 0 ? validProjects : [''];
-      const results = await Promise.allSettled(
-        projectList.map(project => this.fetchPrsForProject(accessToken, orgConfig.org, project, userId, signal)),
-      );
+      const directFetch = await this.fetchPrsForProjects(accessToken, orgConfig.org, projectList, userId, signal);
+      allItems.push(...directFetch.items);
+      fetchFailures.push(...directFetch.failedTargets);
 
-      results.forEach((result, index) => {
-        const project = projectList[index];
-        const target = project ? `${orgConfig.org}/${project}` : orgConfig.org;
-
-        if (result.status === 'fulfilled') {
-          const { items, failed } = result.value;
-          allItems.push(...items);
-          if (failed) {
-            fetchFailures.push(target);
-          }
-        } else {
-          fetchFailures.push(target);
-          const reason = (result as PromiseRejectedResult).reason;
-          const isAbortError = reason instanceof Error && (reason.name === 'AbortError' || reason.name === 'TimeoutError');
-          if (!isAbortError && !signal?.aborted) {
-            logger.error(
-              `Failed to fetch ${this.logLabel} from ${target}:`,
-              reason,
-            );
-          }
+      let additionalSearchCriteriaValues: string[] = [];
+      try {
+        additionalSearchCriteriaValues = await this.getAdditionalSearchCriteriaValues(
+          accessToken,
+          orgConfig.org,
+          userId,
+          sessionAccountId,
+          signal,
+        );
+      } catch (err) {
+        if (err instanceof Error && (err.name === 'AbortError' || err.name === 'TimeoutError') && signal?.aborted) {
+          throw createAbortError();
         }
-      });
+        groupMembershipFailures.push(orgConfig.org);
+        logger.warn(`Failed to determine additional ADO ${this.logLabel} identities for org ${orgConfig.org}`);
+        logger.debug(`Additional ADO ${this.logLabel} identity lookup failed for org ${orgConfig.org}: ${String(err)}`);
+      }
 
-      const abortedResult = results.find(
-        (result): result is PromiseRejectedResult =>
-          result.status === 'rejected' && result.reason instanceof Error && result.reason.name === 'AbortError',
-      );
-      if (signal?.aborted) {
-        if (abortedResult) {
-          throw abortedResult.reason;
-        }
-        throw createAbortError();
+      const uniqueAdditionalValues = [...new Set(additionalSearchCriteriaValues)].filter(value => value !== userId);
+      const additionalFetches: Array<{ items: DiscoveredItem[]; failedTargets: string[] }> = [];
+      await runWorkerPool(uniqueAdditionalValues, async searchCriteriaValue => {
+        const additionalFetch = await this.fetchPrsForProjects(
+          accessToken,
+          orgConfig.org,
+          projectList,
+          searchCriteriaValue,
+          signal,
+        );
+        additionalFetches.push(additionalFetch);
+      }, 5);
+      for (const additionalFetch of additionalFetches) {
+        allItems.push(...additionalFetch.items);
+        fetchFailures.push(...additionalFetch.failedTargets);
       }
     }
 
-    await this.postProcessItems(allItems, accessToken, signal);
+    const dedupedItems = this.dedupeItems(allItems);
+    await this.postProcessItems(dedupedItems, accessToken, signal);
 
-    this._onDidDiscoverItems.fire(allItems);
-    logger.info(`Discovered ${allItems.length} ADO ${this.logLabel}`);
+    this._onDidDiscoverItems.fire(dedupedItems);
+    logger.info(`Discovered ${dedupedItems.length} ADO ${this.logLabel}`);
 
     const messages: string[] = [];
     if (identityFailures.length > 0) {
@@ -215,6 +218,13 @@ export abstract class BaseAdoPrProvider extends BaseProvider {
         fetchFailures.length === 1
           ? `failed to fetch from ${fetchFailures[0]}`
           : `failed to fetch from ${fetchFailures.length} sources`,
+      );
+    }
+    if (groupMembershipFailures.length > 0) {
+      messages.push(
+        groupMembershipFailures.length === 1
+          ? `group reviewer lookup failed for ${groupMembershipFailures[0]}`
+          : `group reviewer lookup failed for ${groupMembershipFailures.length} orgs`,
       );
     }
     if (messages.length > 0) {
@@ -238,7 +248,26 @@ export abstract class BaseAdoPrProvider extends BaseProvider {
     };
   }
 
-  protected async postProcessItems(_items: DiscoveredItem[], _token: string, _signal?: AbortSignal): Promise<void> {}
+  protected async postProcessItems(items: DiscoveredItem[], token: string, signal?: AbortSignal): Promise<void> {
+    void items;
+    void token;
+    void signal;
+  }
+
+  protected async getAdditionalSearchCriteriaValues(
+    token: string,
+    org: string,
+    userId: string,
+    sessionAccountId: string,
+    signal?: AbortSignal,
+  ): Promise<string[]> {
+    void token;
+    void org;
+    void userId;
+    void sessionAccountId;
+    void signal;
+    return [];
+  }
 
   protected parsePrExternalId(externalId: string): ParsedPrExternalId | undefined {
     const parts = externalId.split('/');
@@ -443,16 +472,76 @@ export abstract class BaseAdoPrProvider extends BaseProvider {
     return data.authenticatedUser.id;
   }
 
+  private async fetchPrsForProjects(
+    token: string,
+    org: string,
+    projectList: string[],
+    searchCriteriaValue: string,
+    signal?: AbortSignal,
+  ): Promise<{ items: DiscoveredItem[]; failedTargets: string[] }> {
+    const items: DiscoveredItem[] = [];
+    const failedTargets: string[] = [];
+    const results = await Promise.allSettled(
+      projectList.map(project => this.fetchPrsForProject(token, org, project, searchCriteriaValue, signal)),
+    );
+
+    results.forEach((result, index) => {
+      const project = projectList[index];
+      const target = project ? `${org}/${project}` : org;
+
+      if (result.status === 'fulfilled') {
+        items.push(...result.value.items);
+        if (result.value.failed) {
+          failedTargets.push(target);
+        }
+      } else {
+        failedTargets.push(target);
+        const reason = result.reason;
+        const isAbortError = reason instanceof Error && (reason.name === 'AbortError' || reason.name === 'TimeoutError');
+        if (!isAbortError && !signal?.aborted) {
+          logger.error(
+            `Failed to fetch ${this.logLabel} from ${target}:`,
+            reason,
+          );
+        }
+      }
+    });
+
+    const abortedResult = results.find(
+      (result): result is PromiseRejectedResult =>
+        result.status === 'rejected' && result.reason instanceof Error && result.reason.name === 'AbortError',
+    );
+    if (signal?.aborted) {
+      if (abortedResult) {
+        throw abortedResult.reason;
+      }
+      throw createAbortError();
+    }
+
+    return { items, failedTargets };
+  }
+
+  private dedupeItems(items: DiscoveredItem[]): DiscoveredItem[] {
+    // Direct-reviewer fetches run first, so direct assignments win over duplicate group hits.
+    const deduped = new Map<string, DiscoveredItem>();
+    for (const item of items) {
+      if (!deduped.has(item.externalId)) {
+        deduped.set(item.externalId, item);
+      }
+    }
+    return [...deduped.values()];
+  }
+
   private async fetchPrsForProject(
     token: string,
     org: string,
     project: string,
-    userId: string,
+    searchCriteriaValue: string,
     signal?: AbortSignal,
   ): Promise<{ items: DiscoveredItem[]; failed: boolean }> {
     logger.debug(`Fetching PRs for project: ${project || org}`);
     const projectPath = project ? `/${encodeURIComponent(project)}` : '';
-    const url = `https://dev.azure.com/${encodeURIComponent(org)}${projectPath}/_apis/git/pullrequests?searchCriteria.${this.searchCriteriaParam}=${encodeURIComponent(userId)}&searchCriteria.status=active&api-version=7.1`;
+    const url = `https://dev.azure.com/${encodeURIComponent(org)}${projectPath}/_apis/git/pullrequests?searchCriteria.${this.searchCriteriaParam}=${encodeURIComponent(searchCriteriaValue)}&searchCriteria.status=active&api-version=7.1`;
 
     const response = await fetch(url, {
       headers: {

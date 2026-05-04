@@ -16,7 +16,8 @@ export class AdoMyPrsProvider extends BaseAdoPrProvider {
   }
 
   protected override mapPrToItem(pr: AdoPullRequest, org: string): DiscoveredItem {
-    const { resurfaceVersion: _ignored, ...item } = super.mapPrToItem(pr, org);
+    const item = super.mapPrToItem(pr, org);
+    delete item.resurfaceVersion;
     if (pr.isDraft) {
       const badge = buildAdoMyPrsStateBadge('Draft');
       return { ...item, state: 'Draft', ...(badge ? { badges: [badge] } : {}) };

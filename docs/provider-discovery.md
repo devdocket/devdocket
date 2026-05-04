@@ -246,7 +246,7 @@ A PR review appears when **all** of the following are true:
 
 | Condition | Details |
 |-----------|---------|
-| **You are a reviewer** | You are listed as a reviewer on the PR (required, optional, or any reviewer role) |
+| **You are a reviewer** | You are listed directly as a reviewer, or one of your Azure DevOps groups/teams is listed as a reviewer |
 | **Active status** | The PR is not completed, abandoned, or in any other non-active state |
 | **Organization/project match** | Only PRs from your configured organizations and projects appear |
 
@@ -257,6 +257,8 @@ A PR review appears when **all** of the following are true:
 | `devDocketAdo.projects` | `[]` | Same org/project filter as ADO Work Items. At least one entry is required. |
 | `devDocketAdo.refreshIntervalSeconds` | `300` (5 min) | Shared with ADO Work Items. |
 | `devDocketAdo.resurfaceOnNewVersion` | `true` | When enabled, a PR you've already accepted reappears in the Incoming tier if new iterations (commits) are pushed. Note: ADO does not support re-request-based resurfacing (unlike GitHub). |
+
+Group reviewer detection uses the Azure DevOps Graph APIs to resolve your group/team memberships. No DevDocket setting is required, but the signed-in account must have permission to read Graph/Identity membership data for the organization; if that lookup fails, direct reviewer assignments still work.
 
 ### What does NOT cause ADO PR reviews to appear
 
