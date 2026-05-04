@@ -298,6 +298,7 @@ export class GitHubMentionsProvider extends BaseGitHubProvider {
 
     const since = GitHubMentionsProvider.getCommentVersionTimestamp(previousCommentVersion);
     const pageCount = since ? undefined : GitHubMentionsProvider.getCommentPageCount(issue.comments);
+    const newestFirst = !!since || pageCount === undefined;
     let latestMention: { id: number; createdAt: string; time: number } | undefined;
     let lastPageWasFull = false;
     let scannedPages = 0;
@@ -310,7 +311,7 @@ export class GitHubMentionsProvider extends BaseGitHubProvider {
 
       let response: Response;
       try {
-        response = await fetch(GitHubMentionsProvider.withCommentQuery(issue.comments_url, page, since, !!since), {
+        response = await fetch(GitHubMentionsProvider.withCommentQuery(issue.comments_url, page, since, newestFirst), {
           headers: getGitHubAuthHeaders(token),
           signal: combineSignals(signal, 30_000),
         });
@@ -344,7 +345,7 @@ export class GitHubMentionsProvider extends BaseGitHubProvider {
         }
       }
 
-      if (latestMention && (since || pageCount)) {
+      if (latestMention && (newestFirst || pageCount)) {
         break;
       }
       if (pageCount) {

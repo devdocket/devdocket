@@ -117,6 +117,7 @@ describe('GitHubMentionsProvider', () => {
         json: async () => ({
           items: [{
             ...createMockIssue(10, 'Bug report', 'org/repo'),
+            comments: 2,
             comments_url: 'https://api.github.com/repos/org/repo/issues/10/comments',
           }],
         }),
@@ -144,6 +145,45 @@ describe('GitHubMentionsProvider', () => {
     expect(commentsFetchUrl.searchParams.get('per_page')).toBe('100');
     expect(commentsFetchUrl.searchParams.get('sort')).toBeNull();
     expect(commentsFetchUrl.searchParams.get('direction')).toBeNull();
+  });
+
+  it('uses newest-first initial scans when the comment count is unavailable', async () => {
+    mockFetch
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          items: [{
+            ...createMockIssue(10, 'Bug report', 'org/repo'),
+            comments_url: 'https://api.github.com/repos/org/repo/issues/10/comments',
+          }],
+        }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ login: 'testuser' }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => [
+          { id: 200, body: 'Newest visible ping @testuser', created_at: '2024-03-01T00:00:00Z' },
+          ...Array.from({ length: 99 }, (_, i) => ({
+            id: 201 + i,
+            body: 'older non-mention comment',
+            created_at: '2024-02-01T00:00:00Z',
+          })),
+        ],
+      });
+
+    const listener = vi.fn();
+    provider.onDidDiscoverItems(listener);
+    await provider.refresh();
+
+    expect(mockFetch).toHaveBeenCalledTimes(3);
+    expect(listener.mock.calls[0][0][0].resurfaceVersion).toBe('comment:200:2024-03-01T00:00:00Z');
+
+    const commentsFetchUrl = new URL(mockFetch.mock.calls[2][0] as string);
+    expect(commentsFetchUrl.searchParams.get('sort')).toBe('created');
+    expect(commentsFetchUrl.searchParams.get('direction')).toBe('desc');
   });
 
   it('finds a mention on a later comments page', async () => {
