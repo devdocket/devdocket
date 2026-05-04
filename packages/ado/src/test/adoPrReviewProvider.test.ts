@@ -424,10 +424,12 @@ describe('AdoPrReviewProvider', () => {
       .mockResolvedValueOnce({
         ok: true,
         json: async () => ({ value: [] }),
-      });
+      })
+      .mockResolvedValueOnce(mockGraphDescriptor())
+      .mockResolvedValueOnce(mockMemberships([]));
 
     await provider.refresh();
-    expect(mockFetch).toHaveBeenCalledTimes(3);
+    expect(mockFetch).toHaveBeenCalledTimes(4);
 
     mockFetch.mockClear();
 
@@ -448,11 +450,13 @@ describe('AdoPrReviewProvider', () => {
       .mockResolvedValueOnce({
         ok: true,
         json: async () => ({ value: [] }),
-      });
+      })
+      .mockResolvedValueOnce(mockGraphDescriptor())
+      .mockResolvedValueOnce(mockMemberships([]));
 
     await provider.refresh();
-    // Connection data, PR list, and group membership cache attempt
-    expect(mockFetch).toHaveBeenCalledTimes(3);
+    // Connection data, PR list, descriptor, and memberships after account change
+    expect(mockFetch).toHaveBeenCalledTimes(4);
     expect(mockFetch).toHaveBeenCalledWith(
       expect.stringContaining('connectiondata'),
       expect.any(Object),
