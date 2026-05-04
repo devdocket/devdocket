@@ -189,6 +189,42 @@ describe('GitHubMentionsProvider', () => {
     expect(secondPageUrl.searchParams.get('page')).toBe('2');
   });
 
+  it('stops initial backward scans after finding the newest mention', async () => {
+    mockFetch
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          items: [{
+            ...createMockIssue(10, 'Bug report', 'org/repo'),
+            comments: 250,
+            comments_url: 'https://api.github.com/repos/org/repo/issues/10/comments',
+          }],
+        }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ login: 'testuser' }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => [
+          { id: 300, body: 'Newest-page ping @testuser', created_at: '2024-03-01T00:00:00Z' },
+          ...Array.from({ length: 49 }, (_, i) => ({
+            id: 301 + i,
+            body: 'newer non-mention comment',
+            created_at: '2024-03-01T00:00:00Z',
+          })),
+        ],
+      });
+
+    const listener = vi.fn();
+    provider.onDidDiscoverItems(listener);
+    await provider.refresh();
+
+    expect(mockFetch).toHaveBeenCalledTimes(3);
+    expect(listener.mock.calls[0][0][0].resurfaceVersion).toBe('comment:300:2024-03-01T00:00:00Z');
+  });
+
   it('continues scanning backward after a partial last page', async () => {
     mockFetch
       .mockResolvedValueOnce({

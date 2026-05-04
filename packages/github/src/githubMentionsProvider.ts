@@ -344,7 +344,7 @@ export class GitHubMentionsProvider extends BaseGitHubProvider {
         }
       }
 
-      if (since && latestMention) {
+      if (latestMention && (since || pageCount)) {
         break;
       }
       if (pageCount) {
@@ -361,7 +361,7 @@ export class GitHubMentionsProvider extends BaseGitHubProvider {
 
     const moreForwardPages = !pageCount && lastPageWasFull;
     const moreBackwardPages = pageCount !== undefined && pageCount > scannedPages;
-    if (scannedPages === COMMENT_PAGE_LIMIT && (moreForwardPages || moreBackwardPages)) {
+    if (!latestMention && scannedPages === COMMENT_PAGE_LIMIT && (moreForwardPages || moreBackwardPages)) {
       logger.warn(`Comment scan capped at ${COMMENT_PAGE_LIMIT} pages for ${issue.html_url}`);
     }
 
