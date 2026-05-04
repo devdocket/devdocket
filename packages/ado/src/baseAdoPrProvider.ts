@@ -250,24 +250,11 @@ export abstract class BaseAdoPrProvider extends BaseProvider {
     };
   }
 
-  protected async postProcessItems(items: DiscoveredItem[], token: string, signal?: AbortSignal): Promise<void> {
-    void items;
-    void token;
-    void signal;
-  }
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  protected async postProcessItems(_items: DiscoveredItem[], _token: string, _signal?: AbortSignal): Promise<void> {}
 
-  protected async getAdditionalSearchCriteriaValues(
-    token: string,
-    org: string,
-    userId: string,
-    sessionAccountId: string,
-    signal?: AbortSignal,
-  ): Promise<string[]> {
-    void token;
-    void org;
-    void userId;
-    void sessionAccountId;
-    void signal;
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  protected async getAdditionalSearchCriteriaValues(_token: string, _org: string, _userId: string, _sessionAccountId: string, _signal?: AbortSignal): Promise<string[]> {
     return [];
   }
 
