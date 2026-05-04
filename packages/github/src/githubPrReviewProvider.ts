@@ -89,7 +89,7 @@ export class GitHubPrReviewProvider extends BaseGitHubProvider {
       return item;
     });
 
-    this._onDidDiscoverItems.fire(items);
+    this.publishDiscoveredItems(items);
 
     if (failed) {
       const message = 'Failed to fetch PR review requests';

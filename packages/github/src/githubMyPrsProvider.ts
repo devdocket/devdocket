@@ -144,7 +144,7 @@ export class GitHubMyPrsProvider extends BaseGitHubProvider {
       });
     }
 
-    this._onDidDiscoverItems.fire(items);
+    this.publishDiscoveredItems(items);
 
     const failures = [...new Set([...authoredResult.failures, ...assignedResult.failures])];
     if (failures.length > 0) {
