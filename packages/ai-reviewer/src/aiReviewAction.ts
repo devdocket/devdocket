@@ -110,7 +110,7 @@ export class AiReviewAction extends BasePrAction {
 
     if (adoParts && adoDiffWasSynthetic) {
       vscode.window.showWarningMessage(
-        'AI Code Review: Azure DevOps returned only change metadata and a full local git diff could not be prepared, so a useful AI review cannot be generated.',
+        'AI Code Review: Azure DevOps did not return complete patch content for every changed file, and a full local git diff could not be prepared, so a useful AI review cannot be generated.',
       );
       return;
     }
