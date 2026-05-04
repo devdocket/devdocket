@@ -10,6 +10,7 @@ export interface GitHubIssue {
   html_url: string;
   repository_url: string;
   comments_url?: string;
+  updated_at?: string;
   pull_request?: { url: string };
 }
 

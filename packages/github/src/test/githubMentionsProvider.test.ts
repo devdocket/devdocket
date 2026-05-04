@@ -257,6 +257,79 @@ describe('GitHubMentionsProvider', () => {
     expect(items[0].resurfaceVersion).toBe('comment:100:2024-02-01T00:00:00Z');
   });
 
+  it('uses issue body mention as a stable baseline when comments do not mention the current user', async () => {
+    mockFetch
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          items: [{
+            ...createMockIssue(10, 'Bug report', 'org/repo'),
+            body: 'Original body ping @testuser',
+            comments_url: 'https://api.github.com/repos/org/repo/issues/10/comments',
+          }],
+        }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ login: 'testuser' }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ([
+          { id: 101, body: 'Follow-up without a mention', created_at: '2024-02-02T00:00:00Z' },
+        ]),
+      });
+
+    const listener = vi.fn();
+    provider.onDidDiscoverItems(listener);
+    await provider.refresh();
+
+    const items = listener.mock.calls[0][0];
+    expect(items[0].resurfaceVersion).toBe('issue:10');
+  });
+
+  it('reuses cached resurfaceVersion when the issue has not changed', async () => {
+    mockFetch
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          items: [{
+            ...createMockIssue(10, 'Bug report', 'org/repo'),
+            comments_url: 'https://api.github.com/repos/org/repo/issues/10/comments',
+            updated_at: '2024-02-02T00:00:00Z',
+          }],
+        }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ login: 'testuser' }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ([
+          { id: 100, body: 'Initial ping @testuser', created_at: '2024-02-01T00:00:00Z' },
+        ]),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          items: [{
+            ...createMockIssue(10, 'Bug report', 'org/repo'),
+            comments_url: 'https://api.github.com/repos/org/repo/issues/10/comments',
+            updated_at: '2024-02-02T00:00:00Z',
+          }],
+        }),
+      });
+
+    const listener = vi.fn();
+    provider.onDidDiscoverItems(listener);
+    await provider.refresh();
+    await provider.refresh();
+
+    expect(mockFetch).toHaveBeenCalledTimes(4);
+    expect(listener.mock.calls[1][0][0].resurfaceVersion).toBe('comment:100:2024-02-01T00:00:00Z');
+  });
+
   it('does not derive resurfaceVersion from comments that do not mention the current user', async () => {
     mockFetch
       .mockResolvedValueOnce({
@@ -264,6 +337,7 @@ describe('GitHubMentionsProvider', () => {
         json: async () => ({
           items: [{
             ...createMockIssue(10, 'Bug report', 'org/repo'),
+            body: 'No mention here',
             comments_url: 'https://api.github.com/repos/org/repo/issues/10/comments',
           }],
         }),

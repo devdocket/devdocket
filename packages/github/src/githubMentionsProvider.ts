@@ -30,6 +30,8 @@ export class GitHubMentionsProvider extends BaseGitHubProvider {
   readonly label = 'GitHub Mentions';
 
   private readonly _context: vscode.ExtensionContext;
+  private readonly mentionCommentCache = new Map<string, { issueUpdatedAt?: string; resurfaceVersion?: string }>();
+  private cachedLogin?: string;
 
   constructor(context: vscode.ExtensionContext) {
     super();
@@ -51,8 +53,8 @@ export class GitHubMentionsProvider extends BaseGitHubProvider {
       ? itemsWithRepo.filter(({ repoName }) => matchesRepoPatterns(repoName, patterns))
       : itemsWithRepo;
 
-    const shouldInspectComments = filtered.some(({ issue }) => !!issue.comments_url);
-    const currentLogin = shouldInspectComments ? await this.getCurrentLogin(accessToken, signal) : undefined;
+    const shouldComputeMentionVersions = filtered.some(({ issue }) => issue.comments_url || issue.body || issue.title);
+    const currentLogin = shouldComputeMentionVersions ? await this.getCurrentLogin(accessToken, signal) : undefined;
     // Search results are updated by any comment; only mentioning comments should trigger resurfacing.
     const resurfaceVersions = currentLogin
       ? await this.fetchMentionResurfaceVersions(filtered, accessToken, currentLogin, signal)
@@ -172,6 +174,10 @@ export class GitHubMentionsProvider extends BaseGitHubProvider {
   }
 
   private async getCurrentLogin(token: string, signal?: AbortSignal): Promise<string | undefined> {
+    if (this.cachedLogin) {
+      return this.cachedLogin;
+    }
+
     try {
       const response = await fetch('https://api.github.com/user', {
         headers: getGitHubAuthHeaders(token),
@@ -181,6 +187,7 @@ export class GitHubMentionsProvider extends BaseGitHubProvider {
         const data = await response.json() as { login?: unknown };
         const login = typeof data.login === 'string' ? data.login.trim() : undefined;
         if (login && GitHubMentionsProvider.isValidGitHubLogin(login)) {
+          this.cachedLogin = login;
           return login;
         }
       } else {
@@ -194,7 +201,11 @@ export class GitHubMentionsProvider extends BaseGitHubProvider {
     try {
       const session = await vscode.authentication.getSession('github', ['repo'], { createIfNone: false });
       const label = session?.account?.label?.trim();
-      return label && GitHubMentionsProvider.isValidGitHubLogin(label) ? label : undefined;
+      if (label && GitHubMentionsProvider.isValidGitHubLogin(label)) {
+        this.cachedLogin = label;
+        return label;
+      }
+      return undefined;
     } catch (err) {
       logger.debug('Could not determine fallback GitHub login for mention comment filtering', err);
       return undefined;
@@ -209,10 +220,13 @@ export class GitHubMentionsProvider extends BaseGitHubProvider {
   ): Promise<Map<string, string>> {
     const results = await runWorkerPoolSettled(
       items,
-      async ({ issue, repoName }) => ({
-        externalId: `${repoName}#${issue.number}`,
-        resurfaceVersion: await this.fetchLatestMentionCommentVersion(issue, token, currentLogin, signal),
-      }),
+      async ({ issue, repoName }) => {
+        const externalId = `${repoName}#${issue.number}`;
+        return {
+          externalId,
+          resurfaceVersion: await this.getMentionResurfaceVersion(issue, externalId, token, currentLogin, signal),
+        };
+      },
       COMMENT_FETCH_CONCURRENCY,
     );
 
@@ -227,6 +241,27 @@ export class GitHubMentionsProvider extends BaseGitHubProvider {
       }
     }
     return versions;
+  }
+
+  private async getMentionResurfaceVersion(
+    issue: GitHubIssue,
+    externalId: string,
+    token: string,
+    currentLogin: string,
+    signal?: AbortSignal,
+  ): Promise<string | undefined> {
+    const bodyMentionVersion = GitHubMentionsProvider.getIssueBodyMentionVersion(issue, currentLogin);
+    const cached = this.mentionCommentCache.get(externalId);
+    if (cached && cached.issueUpdatedAt === issue.updated_at) {
+      return cached.resurfaceVersion ?? bodyMentionVersion;
+    }
+
+    const commentVersion = await this.fetchLatestMentionCommentVersion(issue, token, currentLogin, signal);
+    this.mentionCommentCache.set(externalId, {
+      issueUpdatedAt: issue.updated_at,
+      resurfaceVersion: commentVersion,
+    });
+    return commentVersion ?? bodyMentionVersion;
   }
 
   private async fetchLatestMentionCommentVersion(
@@ -274,6 +309,13 @@ export class GitHubMentionsProvider extends BaseGitHubProvider {
     }
 
     return undefined;
+  }
+
+  private static getIssueBodyMentionVersion(issue: GitHubIssue, login: string): string | undefined {
+    if (!GitHubMentionsProvider.mentionsUser(`${issue.title}\n${issue.body ?? ''}`, login)) {
+      return undefined;
+    }
+    return `issue:${issue.number}`;
   }
 
   private static mentionsUser(body: string | null | undefined, login: string): boolean {
