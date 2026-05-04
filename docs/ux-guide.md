@@ -193,7 +193,7 @@ Discovers items from Azure DevOps via these sub-providers:
 
 ### AI Code Review (`devdocket-ai-reviewer`)
 
-Registers an **AI Code Review** action that can be run on any work item whose URL points to a GitHub pull request. When triggered via **Run Action…** from the work item editor, it fetches the PR diff and sends it to a VS Code language model for review.
+Registers **AI Code Review** and **AI Walkthrough** actions that can be run on any work item whose URL points to a GitHub or Azure DevOps pull request. When triggered via **Run Action…** from the work item editor, AI Code Review fetches the PR diff and sends it to a VS Code language model for review; AI Walkthrough prepares a local worktree and opens the `@walkthrough` chat participant.
 
 **Configuration:**
 

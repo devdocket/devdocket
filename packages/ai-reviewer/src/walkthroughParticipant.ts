@@ -3,6 +3,8 @@ import { RepoManager, type WorktreeInfo } from './repoManager';
 import { buildWalkthroughPrompt } from './walkthroughPrompt';
 import { truncateToolContent } from './toolUtils';
 
+const PR_URL_PATTERN = /https?:\/\/(?:github\.com\/[^/\s]+\/[^/\s]+\/pull\/\d+|dev\.azure\.com\/[^/\s]+\/[^/\s]+\/_git\/[^/\s]+\/pullrequest\/\d+)/;
+
 export class WalkthroughParticipant {
   private sessions = new Map<string, WorktreeInfo>();
 
@@ -74,8 +76,9 @@ export class WalkthroughParticipant {
     if (!prUrl) {
       this.log.warn('No PR URL found in prompt or history');
       response.markdown(
-        'Please provide a GitHub PR URL to walk through. For example:\n\n' +
-        '> Walk me through this PR: https://github.com/owner/repo/pull/42',
+        'Please provide a GitHub or Azure DevOps PR URL to walk through. For example:\n\n' +
+        '> Walk me through this PR: https://github.com/owner/repo/pull/42\n\n' +
+        '> Walk me through this PR: https://dev.azure.com/org/project/_git/repo/pullrequest/42',
       );
       return { metadata: { phase: 'no-url' } };
     }
@@ -155,7 +158,11 @@ export class WalkthroughParticipant {
 
     // Gather devdocket tools + the phase-signaling tool
     const registeredTools = vscode.lm.tools
-      .filter((t: vscode.LanguageModelToolInformation) => t.name.startsWith('devdocket-') && t.inputSchema);
+      .filter((t: vscode.LanguageModelToolInformation) =>
+        t.name.startsWith('devdocket-')
+        && t.inputSchema
+        && !(info.provider === 'ado' && t.name === 'devdocket-diffAnchor'),
+      );
     this.log.info(`Found ${registeredTools.length} devdocket-* LM tools: ${registeredTools.map(t => t.name).join(', ')}`);
 
     const tools = [
@@ -293,17 +300,13 @@ export class WalkthroughParticipant {
     context: vscode.ChatContext,
   ): string | undefined {
     // Try current prompt first
-    const urlMatch = prompt.match(
-      /https?:\/\/github\.com\/[^/]+\/[^/]+\/pull\/\d+/,
-    );
+    const urlMatch = prompt.match(PR_URL_PATTERN);
     if (urlMatch) return urlMatch[0];
 
     // Check previous turns in history
     for (const turn of context.history) {
       if (turn instanceof vscode.ChatRequestTurn) {
-        const historyMatch = turn.prompt.match(
-          /https?:\/\/github\.com\/[^/]+\/[^/]+\/pull\/\d+/,
-        );
+        const historyMatch = turn.prompt.match(PR_URL_PATTERN);
         if (historyMatch) return historyMatch[0];
       }
     }

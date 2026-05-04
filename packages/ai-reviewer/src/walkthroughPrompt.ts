@@ -8,7 +8,12 @@ export function buildWalkthroughPrompt(info: {
   prNumber: string;
   headRef: string;
   baseRef: string;
+  prUrl?: string;
+  provider?: 'github' | 'ado';
 }): string {
+  const prUrl = sanitizePromptUrl(info.prUrl ?? `https://github.com/${info.org}/${info.repo}/pull/${info.prNumber}`);
+  const navigableLinks = buildNavigableLinksSection(info, prUrl);
+
   return `# Interactive PR Walkthrough
 
 Guide a conversational, interactive walkthrough of pull request #${info.prNumber} in ${info.org}/${info.repo}. Act as a knowledgeable colleague sitting next to the reader, explaining what's happening in the code, why it's happening, and how the pieces fit together. The goal is understanding, not evaluation — help the reader build a clear mental model of the changes.
@@ -22,7 +27,7 @@ The reader controls the pace. **Present one file (or group) at a time. After eac
 - **PR number:** ${info.prNumber}
 - **Head ref:** ${info.headRef}
 - **Base ref:** ${info.baseRef}
-- **PR URL:** https://github.com/${info.org}/${info.repo}/pull/${info.prNumber}
+- **PR URL:** ${prUrl}
 
 ## Available Tools
 
@@ -35,20 +40,13 @@ You have access to tools for exploring the PR's code. Use them proactively:
 - **devdocket-searchCode** — Search the codebase with git grep. Pass \`worktreePath: "${info.worktreePath}"\`, \`pattern\`, and optionally \`fileGlob\`.
 - **devdocket-gitLog** — Get recent commit history. Pass \`worktreePath: "${info.worktreePath}"\` and optionally \`filePath\` and \`maxCount\`.
 - **devdocket-signalPhase** — **Call this at the end of every response** to signal the current walkthrough phase. Pass \`phase: "summary"\` after presenting the opening overview, \`phase: "walkthrough"\` during the file-by-file presentation, \`phase: "lastFile"\` when presenting the **last file** in the reading order (so the UI omits the "Next file" button), or \`phase: "wrapup"\` after the final wrap-up. This controls which follow-up action buttons the user sees.
-- **devdocket-diffAnchor** — Compute the SHA-256 anchor hash for a file path, for use in PR diff URLs. Pass \`filePath\` (the relative path as shown in the diff). Returns the hex digest to use in the \`#diff-{hash}\` fragment.
+${info.provider === 'ado' ? '' : '- **devdocket-diffAnchor** — Compute the SHA-256 anchor hash for a file path, for use in GitHub PR diff URLs. Pass `filePath` (the relative path as shown in the diff). Returns the hex digest to use in the `#diff-{hash}` fragment.\n'}
 
 **Important:** Before presenting each file, use devdocket-readFile to read the full source file — not just the diff hunks. Use devdocket-searchCode to find callers of modified functions to understand the impact of changes. Use devdocket-getFileDiff for per-file diffs.
 
 **Critical — file paths:** When calling tools with file paths, always use the exact paths from the diff output (the paths shown after \`a/\` and \`b/\` in diff headers like \`diff --git a/path/to/file b/path/to/file\`). Never infer or construct paths from project names, namespaces, or directory listings.
 
-## Navigable Links
-
-When referencing files and code lines, use navigable links so the reader can jump directly to the code:
-
-- **PR diff view (changed files):** \`https://github.com/${info.org}/${info.repo}/pull/${info.prNumber}/files#diff-{hash}R{line}\` — use **devdocket-diffAnchor** to compute the \`{hash}\` from the file path. **Never try to compute SHA-256 yourself** — always call the tool. Append \`R{line}\` for right-side (new file) line numbers.
-- **Blob view (unchanged files):** \`https://github.com/${info.org}/${info.repo}/blob/${info.headRef}/{filePath}#L{line}\`
-
-All file and line references should be navigable links.
+${navigableLinks}
 
 ## Workflow
 
@@ -139,4 +137,43 @@ For PRs with many files (>20):
 - Offer to focus on the most important or complex areas first
 - Ask the reader what they most want to understand — let their curiosity guide the depth
 `;
+}
+
+function sanitizePromptUrl(url: string): string {
+  try {
+    const parsed = new URL(url);
+    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+      return '(URL unavailable)';
+    }
+    parsed.search = '';
+    parsed.hash = '';
+    return parsed.href.replace(/[\r\n`]/g, '');
+  } catch {
+    return '(URL unavailable)';
+  }
+}
+
+function buildNavigableLinksSection(
+  info: { org: string; repo: string; prNumber: string; headRef: string; provider?: 'github' | 'ado' },
+  prUrl: string,
+): string {
+  if (info.provider === 'ado') {
+    return `## Navigable Links
+
+When referencing files and code lines, include the Azure DevOps PR URL and exact file paths so the reader can jump through the PR's Files view:
+
+- **PR files view:** \`${prUrl}\`
+- **File references:** Use exact paths from the diff and include right-side line numbers where available, e.g. \`src/example.ts:42\`.
+
+Do not use GitHub \`#diff-...\` anchors for Azure DevOps PRs.`;
+  }
+
+  return `## Navigable Links
+
+When referencing files and code lines, use navigable links so the reader can jump directly to the code:
+
+- **PR diff view (changed files):** \`https://github.com/${info.org}/${info.repo}/pull/${info.prNumber}/files#diff-{hash}R{line}\` — use **devdocket-diffAnchor** to compute the \`{hash}\` from the file path. **Never try to compute SHA-256 yourself** — always call the tool. Append \`R{line}\` for right-side (new file) line numbers.
+- **Blob view (unchanged files):** \`https://github.com/${info.org}/${info.repo}/blob/${info.headRef}/{filePath}#L{line}\`
+
+All file and line references should be navigable links.`;
 }

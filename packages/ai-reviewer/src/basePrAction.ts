@@ -1,6 +1,7 @@
 import * as vscode from 'vscode';
 import type { WorkItem, DevDocketAction } from './types';
-import { parsePrUrl } from './prUrl';
+import { parseAdoPrUrl, parsePullRequestUrl, parsePrUrl } from './prUrl';
+import { AdoPrClient } from './adoPrClient';
 import { confirmAiUsage } from './confirmAiUsage';
 import { fenceDiff } from './diffFence';
 
@@ -58,7 +59,7 @@ export abstract class BasePrAction implements DevDocketAction {
   }
 
   isPrUrl(url: string): boolean {
-    return this.parseGitHubPrUrl(url) !== undefined;
+    return parsePullRequestUrl(url) !== undefined;
   }
 
   /** Parse a GitHub PR URL, returning repo and PR number or undefined. */
@@ -87,10 +88,16 @@ export abstract class BasePrAction implements DevDocketAction {
 
   async fetchDiff(url: string): Promise<string | undefined> {
     try {
-      const parsed = this.parseGitHubPrUrl(url);
-      if (parsed) {
-        return await this.fetchGitHubDiff(parsed.repo, parsed.prNumber);
+      const github = this.parseGitHubPrUrl(url);
+      if (github) {
+        return await this.fetchGitHubDiff(github.repo, github.prNumber);
       }
+
+      const ado = parseAdoPrUrl(url);
+      if (ado) {
+        return await new AdoPrClient().fetchDiff(ado);
+      }
+
       return undefined;
     } catch (err) {
       console.error(`${this.progressTitle}: failed to fetch diff:`, err);

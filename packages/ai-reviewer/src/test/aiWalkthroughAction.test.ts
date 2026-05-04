@@ -38,12 +38,14 @@ describe('AiWalkthroughAction', () => {
 
     it('inherits canRun from BasePrAction', () => {
       expect(action.canRun(createWorkItem({ url: 'https://github.com/o/r/pull/1' }))).toBe(true);
+      expect(action.canRun(createWorkItem({ url: 'https://dev.azure.com/o/p/_git/r/pullrequest/1' }))).toBe(true);
       expect(action.canRun(createWorkItem({ url: 'https://github.com/o/r/issues/1' }))).toBe(false);
       expect(action.canRun(createWorkItem({ url: undefined }))).toBe(false);
     });
 
     it('inherits isPrUrl from BasePrAction', () => {
       expect(action.isPrUrl('https://github.com/owner/repo/pull/42')).toBe(true);
+      expect(action.isPrUrl('https://dev.azure.com/org/project/_git/repo/pullrequest/42')).toBe(true);
       expect(action.isPrUrl('https://github.com/owner/repo/issues/42')).toBe(false);
     });
   });

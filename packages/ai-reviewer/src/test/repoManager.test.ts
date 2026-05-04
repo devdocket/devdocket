@@ -37,6 +37,11 @@ describe('parsePrUrl', () => {
     expect(result).toEqual({ org: 'owner', repo: 'repo', prNumber: '42' });
   });
 
+  it('parses a PR URL with trailing GitHub view segments', () => {
+    const result = parsePrUrl('https://github.com/owner/repo/pull/42/files');
+    expect(result).toEqual({ org: 'owner', repo: 'repo', prNumber: '42' });
+  });
+
   it('returns undefined for non-PR URLs', () => {
     expect(parsePrUrl('https://github.com/owner/repo/issues/42')).toBeUndefined();
   });
@@ -94,7 +99,7 @@ describe('RepoManager', () => {
 
   describe('ensureWorktree', () => {
     it('throws for invalid PR URLs', async () => {
-      await expect(manager.ensureWorktree('not-a-url')).rejects.toThrow('Invalid GitHub PR URL');
+      await expect(manager.ensureWorktree('not-a-url')).rejects.toThrow('Invalid PR URL');
     });
 
     it('calls git clone for a fresh repo', async () => {
@@ -295,6 +300,43 @@ describe('RepoManager', () => {
       expect(lookup?.prNumber).toBe('42');
       expect(lookup).toBe(info);
     });
+
+    it('creates an ADO worktree using Microsoft auth and PR refs', async () => {
+      vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+        ok: true,
+        json: vi.fn().mockResolvedValue({
+          sourceRefName: 'refs/heads/feature/add-api',
+          targetRefName: 'refs/heads/main',
+          repository: {
+            remoteUrl: 'https://dev.azure.com/org/project/_git/repo',
+          },
+        }),
+      }));
+
+      const url = 'https://dev.azure.com/org/project/_git/repo/pullrequest/42';
+      const info = await manager.ensureWorktree(url);
+
+      expect(authentication.getSession).toHaveBeenCalledWith(
+        'microsoft',
+        ['499b84ac-1321-427f-aa17-267ca6975798/.default'],
+        { createIfNone: true },
+      );
+      expect(info.provider).toBe('ado');
+      expect(info.prUrl).toBe(url);
+      expect(info.baseRef).toBe('refs/devdocket/ado/pr-42-base');
+      expect(info.headRef).toBe('refs/devdocket/ado/pr-42-head');
+
+      const calls = vi.mocked(execFile).mock.calls;
+      const authCalls = calls.filter(c => {
+        const opts = c[2] as { env?: Record<string, string> } | undefined;
+        return opts?.env?.GIT_CONFIG_VALUE_0 === 'Authorization: Bearer mock-token';
+      });
+      expect(authCalls.length).toBeGreaterThanOrEqual(3);
+      const cloneCall = calls.find(c => c[1]?.includes('clone'));
+      expect(cloneCall?.[1]).toContain('https://dev.azure.com/org/project/_git/repo');
+      expect(calls.some(c => c[1]?.some((arg: string) => arg.includes('+refs/heads/feature/add-api:refs/devdocket/ado/pr-42-head')))).toBe(true);
+      expect(calls.some(c => c[1]?.some((arg: string) => arg.includes('+refs/heads/main:refs/devdocket/ado/pr-42-base')))).toBe(true);
+    });
   });
 
   describe('getWorktreeInfo', () => {
@@ -334,6 +376,26 @@ describe('RepoManager', () => {
       await manager.removeRepo('owner', 'repo');
 
       expect(workspace.fs.delete).toHaveBeenCalled();
+    });
+
+    it('deletes the actual ADO repo directory for cached ADO worktrees', async () => {
+      vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+        ok: true,
+        json: vi.fn().mockResolvedValue({
+          sourceRefName: 'refs/heads/feature/add-api',
+          targetRefName: 'refs/heads/main',
+          repository: {
+            remoteUrl: 'https://dev.azure.com/org/project/_git/repo',
+          },
+        }),
+      }));
+      await manager.ensureWorktree('https://dev.azure.com/org/project/_git/repo/pullrequest/42');
+      vi.mocked(workspace.fs.delete).mockClear();
+
+      await manager.removeRepo('org/project', 'repo');
+
+      const deletedPaths = vi.mocked(workspace.fs.delete).mock.calls.map(call => (call[0] as { fsPath: string }).fsPath.replace(/\\/g, '/'));
+      expect(deletedPaths).toContain('/mock/storage/repos/ado-org-project-repo');
     });
   });
 });
