@@ -213,11 +213,12 @@ export abstract class BaseAdoPrProvider extends BaseProvider {
     if (identityFailures.length > 0) {
       messages.push(`user identity failed for ${identityFailures.join(', ')}`);
     }
-    if (fetchFailures.length > 0) {
+    const uniqueFetchFailures = [...new Set(fetchFailures)];
+    if (uniqueFetchFailures.length > 0) {
       messages.push(
-        fetchFailures.length === 1
-          ? `failed to fetch from ${fetchFailures[0]}`
-          : `failed to fetch from ${fetchFailures.length} sources`,
+        uniqueFetchFailures.length === 1
+          ? `failed to fetch from ${uniqueFetchFailures[0]}`
+          : `failed to fetch from ${uniqueFetchFailures.length} sources`,
       );
     }
     if (groupMembershipFailures.length > 0) {
