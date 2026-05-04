@@ -92,10 +92,12 @@ function sanitizeUrlForLog(url: string): string {
     parsed.hash = '';
     parsed.username = '';
     parsed.password = '';
-    return parsed.href.replace(/[\r\n`]/g, '');
+    return parsed.href.replace(/[\x00-\x1f\x7f`]/g, '');
   } catch {
-    const [redacted] = url.split(/[?#]/, 1);
-    return redacted.replace(/[\r\n`]/g, '');
+    const [redacted] = url.split(/[?#;]/, 1);
+    return redacted
+      .replace(/^([a-z][a-z0-9+.-]*:\/\/)[^/@\s]*@/i, '$1')
+      .replace(/[\x00-\x1f\x7f`]/g, '');
   }
 }
 
