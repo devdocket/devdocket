@@ -30,6 +30,7 @@ export class AdoPrReviewProvider extends BaseAdoPrProvider {
   protected readonly searchCriteriaParam = 'reviewerId' as const;
   protected readonly itemReason = 'review_requested';
   protected readonly logLabel = 'PR reviews';
+  protected override readonly additionalSearchCriteriaFailureLabel = 'group reviewer lookup';
 
   private readonly cachedGroupReviewerIds = new Map<string, GroupReviewerCacheEntry>();
   private cachedMembershipSessionAccountId: string | undefined;

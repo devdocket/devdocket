@@ -55,6 +55,7 @@ export abstract class BaseAdoPrProvider extends BaseProvider {
   protected abstract readonly searchCriteriaParam: SearchCriteriaParam;
   protected abstract readonly itemReason: string;
   protected abstract readonly logLabel: string;
+  protected readonly additionalSearchCriteriaFailureLabel = 'additional identity lookup';
 
   private readonly cachedUserIds = new Map<string, string>();
   private cachedSessionAccountId: string | undefined;
@@ -224,8 +225,8 @@ export abstract class BaseAdoPrProvider extends BaseProvider {
     if (groupMembershipFailures.length > 0) {
       messages.push(
         groupMembershipFailures.length === 1
-          ? `group reviewer lookup failed for ${groupMembershipFailures[0]}`
-          : `group reviewer lookup failed for ${groupMembershipFailures.length} orgs`,
+          ? `${this.additionalSearchCriteriaFailureLabel} failed for ${groupMembershipFailures[0]}`
+          : `${this.additionalSearchCriteriaFailureLabel} failed for ${groupMembershipFailures.length} orgs`,
       );
     }
     if (messages.length > 0) {
