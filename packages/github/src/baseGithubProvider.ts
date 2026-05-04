@@ -1,7 +1,7 @@
 import * as vscode from 'vscode';
 import { BaseProvider, DiscoveredItem } from '@devdocket/shared';
 import { logger } from './logger';
-import { parseRepoPatterns, type RepoPattern } from './repoPattern';
+import { matchesRepoPatterns, parseRepoPatterns, type RepoPattern } from './repoPattern';
 
 /**
  * Base class for GitHub providers that handles the common authentication
@@ -99,6 +99,25 @@ export abstract class BaseGitHubProvider extends BaseProvider {
   ): Promise<void>;
 
   /**
+   * Publish GitHub items after applying repository filters at the provider boundary.
+   */
+  protected publishDiscoveredItems(items: DiscoveredItem[], patterns: RepoPattern[] = this.getConfiguredPatterns()): void {
+    this._onDidDiscoverItems.fire(this.applyConfiguredRepoFilter(items, patterns));
+  }
+
+  /**
+   * Apply the `devDocketGithub.filteredRepos` setting to discovered items.
+   */
+  protected applyConfiguredRepoFilter<T extends Pick<DiscoveredItem, 'externalId' | 'group'>>(items: T[], patterns: RepoPattern[] = this.getConfiguredPatterns()): T[] {
+    if (patterns.length === 0) { return items; }
+
+    return items.filter(item => {
+      const repoName = this.getRepoName(item);
+      return repoName ? matchesRepoPatterns(repoName, patterns) : true;
+    });
+  }
+
+  /**
    * Read the `devDocketGithub.filteredRepos` setting and parse it into repo patterns.
    */
   protected getConfiguredPatterns(): RepoPattern[] {
@@ -106,6 +125,19 @@ export abstract class BaseGitHubProvider extends BaseProvider {
     const value = config.get<string>('filteredRepos', '');
     if (!value || typeof value !== 'string') { return []; }
     return parseRepoPatterns(value);
+  }
+
+  private getRepoName(item: Pick<DiscoveredItem, 'externalId' | 'group'>): string | undefined {
+    const group = item.group?.trim();
+    if (group) { return group; }
+
+    const hashIndex = item.externalId.indexOf('#');
+    if (hashIndex > 0) {
+      const repoName = item.externalId.slice(0, hashIndex).trim();
+      if (repoName.includes('/')) { return repoName; }
+    }
+
+    return undefined;
   }
 
   /**

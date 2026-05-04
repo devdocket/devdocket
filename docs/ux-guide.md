@@ -170,7 +170,7 @@ Discovers items from GitHub via these sub-providers:
 
 | Setting | Type | Default | Description |
 |---------|------|---------|-------------|
-| `devDocketGithub.filteredRepos` | `string` | `""` | Newline-separated repo patterns to **exclude** from discovery (e.g. `org/private-repo`). Supports glob patterns and `!` re-include. Leave empty to fetch all relevant items across all repositories you can read. |
+| `devDocketGithub.filteredRepos` | `string` | `""` | Newline-separated repo patterns to **exclude** from discovery in both the Incoming tier and Sources tab (e.g. `org/private-repo`). Supports glob patterns and `!` re-include. Leave empty to fetch all relevant items across all repositories you can read. |
 | `devDocketGithub.refreshIntervalSeconds` | `number` | `300` | How often to refresh GitHub data (in seconds). Minimum 60 seconds; values below 60 are clamped. |
 | `devDocketGithub.resurfaceOnNewVersion` | `boolean` | `true` | Resurface PR reviews when new commits are pushed. |
 | `devDocketGithub.resurfaceOnReRequestedReview` | `boolean` | `true` | Resurface PR reviews when review is explicitly re-requested. |

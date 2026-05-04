@@ -54,7 +54,7 @@ export class GitHubIssueProvider extends BaseGitHubProvider {
     });
 
     logger.info(`Discovered ${items.length} GitHub issues`);
-    this._onDidDiscoverItems.fire(items);
+    this.publishDiscoveredItems(items, patterns);
 
     if (failed) {
       this.warnOnFetchFailure('Failed to fetch assigned issues', isUserTriggered);
