@@ -40,7 +40,7 @@ You have access to tools for exploring the PR's code. Use them proactively:
 - **devdocket-searchCode** — Search the codebase with git grep. Pass \`worktreePath: "${info.worktreePath}"\`, \`pattern\`, and optionally \`fileGlob\`.
 - **devdocket-gitLog** — Get recent commit history. Pass \`worktreePath: "${info.worktreePath}"\` and optionally \`filePath\` and \`maxCount\`.
 - **devdocket-signalPhase** — **Call this at the end of every response** to signal the current walkthrough phase. Pass \`phase: "summary"\` after presenting the opening overview, \`phase: "walkthrough"\` during the file-by-file presentation, \`phase: "lastFile"\` when presenting the **last file** in the reading order (so the UI omits the "Next file" button), or \`phase: "wrapup"\` after the final wrap-up. This controls which follow-up action buttons the user sees.
-${info.provider === 'ado' ? '' : '- **devdocket-diffAnchor** — Compute the SHA-256 anchor hash for a file path, for use in GitHub PR diff URLs. Pass `filePath` (the relative path as shown in the diff). Returns the hex digest to use in the `#diff-{hash}` fragment.\n'}
+${info.provider === 'ado' ? '' : '- **devdocket-diffAnchor** — Compute the SHA-256 anchor hash for a file path, for use in GitHub PR diff URLs. Pass \`filePath\` (the relative path as shown in the diff). Returns the hex digest to use in the \`#diff-{hash}\` fragment.\n'}
 
 **Important:** Before presenting each file, use devdocket-readFile to read the full source file — not just the diff hunks. Use devdocket-searchCode to find callers of modified functions to understand the impact of changes. Use devdocket-getFileDiff for per-file diffs.
 
