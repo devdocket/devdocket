@@ -188,6 +188,7 @@ export class WalkthroughParticipant {
     const maxIterations = 20;
     let iterations = 0;
     let phase = context.history.length === 0 ? 'summary' : 'walkthrough';
+    let streamedAnyText = false;
     this.log.info(`Starting tool-use loop — initial phase: ${phase}, maxIterations: ${maxIterations}`);
 
     while (!token.isCancellationRequested && iterations < maxIterations) {
@@ -205,17 +206,22 @@ export class WalkthroughParticipant {
       }
 
       let hasToolCalls = false;
+      let streamedTextThisIteration = false;
       const assistantParts: (vscode.LanguageModelTextPart | vscode.LanguageModelToolCallPart)[] = [];
       const toolResults: Array<{ callId: string; content: (vscode.LanguageModelTextPart | vscode.LanguageModelToolResultPart)[] }> = [];
 
       for await (const part of chatResponse.stream) {
         if (part instanceof vscode.LanguageModelTextPart) {
           response.markdown(part.value);
+          if (part.value.trim().length > 0) {
+            streamedTextThisIteration = true;
+            streamedAnyText = true;
+          }
           assistantParts.push(part);
         } else if (part instanceof vscode.LanguageModelToolCallPart) {
           assistantParts.push(part);
 
-          // Handle phase signal locally — not a real tool call, don't trigger another loop
+          // Handle phase signals locally; only loop again for them if no text was streamed.
           if (part.name === 'devdocket-signalPhase') {
             const input = part.input as { phase?: string };
             this.log.debug(`Phase signal: ${input.phase}`);
@@ -272,8 +278,9 @@ export class WalkthroughParticipant {
         }
       }
 
-      if (!hasToolCalls) {
-        this.log.info(`No tool calls in iteration ${iterations} — exiting loop`);
+      const hasOnlyPhaseSignal = !hasToolCalls && toolResults.length > 0;
+      if (!hasToolCalls && !(hasOnlyPhaseSignal && !streamedTextThisIteration)) {
+        this.log.info(`No tool calls requiring another model request in iteration ${iterations} — exiting loop`);
         break;
       }
     }
@@ -283,6 +290,9 @@ export class WalkthroughParticipant {
     }
     if (iterations >= maxIterations) {
       this.log.warn(`Reached max iterations (${maxIterations})`);
+    }
+    if (!streamedAnyText && !token.isCancellationRequested) {
+      response.markdown('⚠️ The model completed tool calls but did not produce walkthrough text. Please try again.');
     }
     this.log.info(`handleRequest complete — final phase: ${phase}, total iterations: ${iterations}`);
     return { metadata: { phase } };
