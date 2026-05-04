@@ -1,4 +1,5 @@
 import * as vscode from 'vscode';
+import { Lexer, type Token, type Tokens } from 'marked';
 import { DiscoveredItem, combineSignals, runWorkerPoolSettled, safeDecodeComponent, type ResolvedItem } from '@devdocket/shared';
 import { BaseGitHubProvider } from './baseGithubProvider';
 import { logger } from './logger';
@@ -9,12 +10,20 @@ import { getHeaders, getGitHubAuthHeaders, retryWithAuth, throwApiError, parseCa
 const MENTIONS_ACTIVATED_KEY = 'mentionsActivatedAt';
 const COMMENT_FETCH_CONCURRENCY = 3;
 const COMMENT_PAGE_LIMIT = 10;
+const TEAM_MENTION_CACHE_TTL_MS = 30 * 60 * 1000;
 
 interface GitHubIssueComment {
   id: number;
   body?: string | null;
   updated_at?: string;
   created_at?: string;
+}
+
+interface GitHubTeamMembership {
+  slug?: unknown;
+  organization?: {
+    login?: unknown;
+  } | null;
 }
 
 /**
@@ -29,14 +38,21 @@ export class GitHubMentionsProvider extends BaseGitHubProvider {
   readonly id = 'github-mentions';
   readonly label = 'GitHub Mentions';
 
+  private static readonly AUTH_SCOPES = ['repo', 'read:org'];
+
   private readonly _context: vscode.ExtensionContext;
   private readonly mentionCommentCache = new Map<string, { issueUpdatedAt?: string; resurfaceVersion?: string }>();
   private mentionCommentCacheLogin?: string;
   private cachedLogin?: { accessToken: string; login: string };
+  private teamMentionCache?: { accessToken: string; login: string; expiresAtMs: number; teams: Set<string> };
 
   constructor(context: vscode.ExtensionContext) {
     super();
     this._context = context;
+  }
+
+  protected override getAuthenticationScopes(): string[] {
+    return GitHubMentionsProvider.AUTH_SCOPES;
   }
 
   protected async fetchAndPublish(accessToken: string, isUserTriggered: boolean, signal?: AbortSignal): Promise<void> {
@@ -60,13 +76,18 @@ export class GitHubMentionsProvider extends BaseGitHubProvider {
     }
 
     const currentLogin = filtered.length > 0 ? await this.getCurrentLogin(accessToken, signal) : undefined;
-    if (currentLogin && this.mentionCommentCacheLogin !== currentLogin) {
-      this.mentionCommentCache.clear();
-      this.mentionCommentCacheLogin = currentLogin;
+    let teamMentions = new Set<string>();
+    if (currentLogin) {
+      if (this.mentionCommentCacheLogin !== currentLogin) {
+        this.mentionCommentCache.clear();
+        this.teamMentionCache = undefined;
+        this.mentionCommentCacheLogin = currentLogin;
+      }
+      teamMentions = await this.getCurrentUserTeamMentions(accessToken, currentLogin, signal);
     }
     // Search results are updated by any comment; only mentioning comments should trigger resurfacing.
     const resurfaceVersions = currentLogin
-      ? await this.fetchMentionResurfaceVersions(filtered, accessToken, currentLogin, signal)
+      ? await this.fetchMentionResurfaceVersions(filtered, accessToken, currentLogin, teamMentions, signal)
       : new Map<string, string>();
 
     const items: DiscoveredItem[] = filtered.map(({ issue, repoName }) => {
@@ -208,7 +229,7 @@ export class GitHubMentionsProvider extends BaseGitHubProvider {
     }
 
     try {
-      const session = await vscode.authentication.getSession('github', ['repo'], { createIfNone: false });
+      const session = await vscode.authentication.getSession('github', GitHubMentionsProvider.AUTH_SCOPES, { createIfNone: false });
       const label = session?.account?.label?.trim();
       if (label && GitHubMentionsProvider.isValidGitHubLogin(label)) {
         this.cachedLogin = { accessToken: token, login: label };
@@ -219,6 +240,71 @@ export class GitHubMentionsProvider extends BaseGitHubProvider {
     } catch (err) {
       logger.warn('Could not determine fallback GitHub login for mention comment filtering', err);
       return undefined;
+    }
+  }
+
+  private async getCurrentUserTeamMentions(token: string, login: string, signal?: AbortSignal): Promise<Set<string>> {
+    const now = Date.now();
+    const cached = this.teamMentionCache;
+    if (cached && cached.accessToken === token && cached.login === login && cached.expiresAtMs > now) {
+      return cached.teams;
+    }
+
+    const teams = await this.fetchCurrentUserTeamMentions(token, signal);
+    this.teamMentionCache = {
+      accessToken: token,
+      login,
+      expiresAtMs: now + TEAM_MENTION_CACHE_TTL_MS,
+      teams,
+    };
+    return teams;
+  }
+
+  private async fetchCurrentUserTeamMentions(token: string, signal?: AbortSignal): Promise<Set<string>> {
+    const teams = new Set<string>();
+
+    for (let page = 1; ; page++) {
+      let response: Response | undefined;
+      try {
+        response = await fetch(`https://api.github.com/user/teams?per_page=100&page=${page}`, {
+          headers: getGitHubAuthHeaders(token),
+          signal: combineSignals(signal, 30_000),
+        });
+      } catch (err: unknown) {
+        if (err instanceof Error && err.name === 'AbortError' && signal?.aborted) { throw err; }
+        logger.warn('Could not fetch GitHub team memberships for mention filtering', err);
+        return new Set<string>();
+      }
+
+      if (!response?.ok) {
+        logger.warn(`Could not fetch GitHub team memberships for mention filtering: ${response?.status ?? 'no response'}`);
+        return new Set<string>();
+      }
+
+      let data: GitHubTeamMembership[];
+      try {
+        data = await response.json() as GitHubTeamMembership[];
+      } catch (err) {
+        logger.warn('Could not parse GitHub team memberships for mention filtering', err);
+        return new Set<string>();
+      }
+      if (!Array.isArray(data)) {
+        logger.warn('Could not parse GitHub team memberships for mention filtering');
+        return new Set<string>();
+      }
+
+      for (const team of data) {
+        const orgLogin = typeof team.organization?.login === 'string' ? team.organization.login.trim() : '';
+        const teamSlug = typeof team.slug === 'string' ? team.slug.trim() : '';
+        if (!GitHubMentionsProvider.isValidGitHubLogin(orgLogin) || !GitHubMentionsProvider.isValidTeamSlug(teamSlug)) {
+          continue;
+        }
+        teams.add(GitHubMentionsProvider.normalizeTeamMention(orgLogin, teamSlug));
+      }
+
+      if (data.length < 100) {
+        return teams;
+      }
     }
   }
 
@@ -234,6 +320,7 @@ export class GitHubMentionsProvider extends BaseGitHubProvider {
     items: Array<{ issue: GitHubIssue; repoName: string }>,
     token: string,
     currentLogin: string,
+    teamMentions: Set<string>,
     signal?: AbortSignal,
   ): Promise<Map<string, string>> {
     const results = await runWorkerPoolSettled(
@@ -242,7 +329,7 @@ export class GitHubMentionsProvider extends BaseGitHubProvider {
         const externalId = `${repoName}#${issue.number}`;
         return {
           externalId,
-          resurfaceVersion: await this.getMentionResurfaceVersion(issue, externalId, token, currentLogin, signal),
+          resurfaceVersion: await this.getMentionResurfaceVersion(issue, externalId, token, currentLogin, teamMentions, signal),
         };
       },
       COMMENT_FETCH_CONCURRENCY,
@@ -266,16 +353,17 @@ export class GitHubMentionsProvider extends BaseGitHubProvider {
     externalId: string,
     token: string,
     currentLogin: string,
+    teamMentions: Set<string>,
     signal?: AbortSignal,
   ): Promise<string | undefined> {
-    const bodyMentionVersion = GitHubMentionsProvider.getIssueBodyMentionVersion(issue, currentLogin);
+    const bodyMentionVersion = GitHubMentionsProvider.getIssueBodyMentionVersion(issue, currentLogin, teamMentions);
     const cached = this.mentionCommentCache.get(externalId);
     if (cached && issue.updated_at && cached.issueUpdatedAt === issue.updated_at) {
       return cached.resurfaceVersion ?? bodyMentionVersion;
     }
 
     const previousCommentVersion = cached?.resurfaceVersion;
-    const commentVersion = await this.fetchLatestMentionCommentVersion(issue, token, currentLogin, previousCommentVersion, signal);
+    const commentVersion = await this.fetchLatestMentionCommentVersion(issue, token, currentLogin, teamMentions, previousCommentVersion, signal);
     const resurfaceVersion = commentVersion ?? previousCommentVersion;
     this.mentionCommentCache.set(externalId, {
       issueUpdatedAt: issue.updated_at,
@@ -288,6 +376,7 @@ export class GitHubMentionsProvider extends BaseGitHubProvider {
     issue: GitHubIssue,
     token: string,
     currentLogin: string,
+    teamMentions: Set<string>,
     previousCommentVersion?: string,
     signal?: AbortSignal,
   ): Promise<string | undefined> {
@@ -329,7 +418,7 @@ export class GitHubMentionsProvider extends BaseGitHubProvider {
       const comments = await response.json() as GitHubIssueComment[];
       lastPageWasFull = comments.length >= 100;
       for (const comment of comments) {
-        if (!GitHubMentionsProvider.mentionsUser(comment.body, currentLogin)) {
+        if (!GitHubMentionsProvider.mentionsUser(comment.body, currentLogin, teamMentions)) {
           continue;
         }
         if (!comment.created_at) {
@@ -370,8 +459,8 @@ export class GitHubMentionsProvider extends BaseGitHubProvider {
       : undefined;
   }
 
-  private static getIssueBodyMentionVersion(issue: GitHubIssue, login: string): string | undefined {
-    if (!GitHubMentionsProvider.mentionsUser(`${issue.title}\n${issue.body ?? ''}`, login)) {
+  private static getIssueBodyMentionVersion(issue: GitHubIssue, login: string, teamMentions: Set<string>): string | undefined {
+    if (!GitHubMentionsProvider.mentionsUser(`${issue.title}\n${issue.body ?? ''}`, login, teamMentions)) {
       return undefined;
     }
     return `issue:${issue.number}`;
@@ -389,16 +478,116 @@ export class GitHubMentionsProvider extends BaseGitHubProvider {
     return Math.ceil(commentCount / 100);
   }
 
-  private static mentionsUser(body: string | null | undefined, login: string): boolean {
+  private static mentionsUser(body: string | null | undefined, login: string, teamMentions: Set<string>): boolean {
     if (!body) {
       return false;
     }
-    const escapedLogin = login.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    return new RegExp(`(^|[^A-Za-z0-9_-])@${escapedLogin}(?![A-Za-z0-9_-])`, 'i').test(body);
+
+    let tokens: Token[];
+    try {
+      tokens = Lexer.lex(body);
+    } catch (err) {
+      logger.debug('Could not parse GitHub markdown for mention filtering', err);
+      return false;
+    }
+
+    for (const text of GitHubMentionsProvider.markdownTextSegments(tokens)) {
+      if (GitHubMentionsProvider.textMentionsUser(text, login, teamMentions)) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  private static *markdownTextSegments(tokens: readonly Token[]): Generator<string> {
+    for (const token of tokens) {
+      yield* GitHubMentionsProvider.tokenTextSegments(token);
+    }
+  }
+
+  private static *tokenTextSegments(token: Token): Generator<string> {
+    switch (token.type) {
+      case 'code':
+      case 'codespan':
+      case 'def':
+      case 'html':
+      case 'image':
+        return;
+      case 'escape':
+        return;
+      case 'link':
+        if (GitHubMentionsProvider.isAutolinkToken(token)) {
+          return;
+        }
+        yield* GitHubMentionsProvider.markdownTextSegments(token.tokens);
+        return;
+      case 'text':
+        if (token.tokens?.length) {
+          yield* GitHubMentionsProvider.markdownTextSegments(token.tokens);
+        } else {
+          yield token.text;
+        }
+        return;
+      case 'list':
+        for (const item of token.items) {
+          yield* GitHubMentionsProvider.tokenTextSegments(item);
+        }
+        return;
+      case 'table':
+        for (const cell of token.header) {
+          yield* GitHubMentionsProvider.markdownTextSegments(cell.tokens);
+        }
+        for (const row of token.rows) {
+          for (const cell of row) {
+            yield* GitHubMentionsProvider.markdownTextSegments(cell.tokens);
+          }
+        }
+        return;
+      default: {
+        const nested = (token as Tokens.Generic).tokens;
+        if (nested?.length) {
+          yield* GitHubMentionsProvider.markdownTextSegments(nested);
+        }
+      }
+    }
+  }
+
+  private static isAutolinkToken(token: Tokens.Link): boolean {
+    return token.raw === token.href || token.raw === `<${token.href}>`;
+  }
+
+  private static readonly MENTION_PATTERN = /(^|[^A-Za-z0-9_])@([A-Za-z0-9][A-Za-z0-9-]{0,38})(?:\/([A-Za-z0-9](?:[A-Za-z0-9-]{0,253}[A-Za-z0-9])?))?(?![A-Za-z0-9-/])/gi;
+
+  private static textMentionsUser(text: string, login: string, teamMentions: Set<string>): boolean {
+    const normalizedLogin = login.toLowerCase();
+    GitHubMentionsProvider.MENTION_PATTERN.lastIndex = 0;
+    let match: RegExpExecArray | null;
+    while ((match = GitHubMentionsProvider.MENTION_PATTERN.exec(text)) !== null) {
+      const [, , userOrOrg, teamSlug] = match;
+      if (teamSlug) {
+        if (teamMentions.has(GitHubMentionsProvider.normalizeTeamMention(userOrOrg, teamSlug))) {
+          return true;
+        }
+        continue;
+      }
+
+      if (GitHubMentionsProvider.isValidGitHubLogin(userOrOrg) && userOrOrg.toLowerCase() === normalizedLogin) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  private static normalizeTeamMention(orgLogin: string, teamSlug: string): string {
+    return `${orgLogin.toLowerCase()}/${teamSlug.toLowerCase()}`;
   }
 
   private static isValidGitHubLogin(login: string): boolean {
-    return /^[A-Za-z0-9](?:[A-Za-z0-9-]{0,37}[A-Za-z0-9])?$/.test(login);
+    return /^(?!.*--)[A-Za-z0-9](?:[A-Za-z0-9-]{0,37}[A-Za-z0-9])?$/.test(login);
+  }
+
+  private static isValidTeamSlug(slug: string): boolean {
+    return /^[A-Za-z0-9](?:[A-Za-z0-9-]{0,253}[A-Za-z0-9])?$/.test(slug);
   }
 
   private static withCommentQuery(url: string, page: number, since?: string, newestFirst = false): string {

@@ -67,12 +67,56 @@ describe('GitHubMentionsProvider', () => {
 
   afterEach(() => {
     provider.dispose();
+    vi.useRealTimers();
     vi.unstubAllGlobals();
   });
+
+  async function refreshWithSingleComment(commentBody: string, teams: unknown[] = [], login = 'testuser') {
+    mockFetch
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          items: [{
+            ...createMockIssue(10, 'Bug report', 'org/repo'),
+            comments_url: 'https://api.github.com/repos/org/repo/issues/10/comments',
+          }],
+        }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ login }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => teams,
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ([
+          { id: 900, body: commentBody, created_at: '2024-04-01T00:00:00Z' },
+        ]),
+      });
+
+    const listener = vi.fn();
+    provider.onDidDiscoverItems(listener);
+    await provider.refresh();
+    return listener.mock.calls[0][0][0];
+  }
 
   it('has correct id and label', () => {
     expect(provider.id).toBe('github-mentions');
     expect(provider.label).toBe('GitHub Mentions');
+  });
+
+  it('requests read:org scope for team mention detection', async () => {
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({ items: [] }),
+    });
+
+    await provider.refresh();
+
+    expect(authentication.getSession).toHaveBeenCalledWith('github', ['repo', 'read:org'], { createIfNone: true });
   });
 
   it('discovers mentioned issues and PRs', async () => {
@@ -128,6 +172,10 @@ describe('GitHubMentionsProvider', () => {
       })
       .mockResolvedValueOnce({
         ok: true,
+        json: async () => [],
+      })
+      .mockResolvedValueOnce({
+        ok: true,
         json: async () => ([
           { id: 100, body: 'Initial ping @testuser', created_at: '2024-02-01T00:00:00Z', updated_at: '2024-02-05T00:00:00Z' },
           { id: 101, body: 'Follow-up without a mention', created_at: '2024-02-02T00:00:00Z' },
@@ -141,7 +189,7 @@ describe('GitHubMentionsProvider', () => {
     const items = listener.mock.calls[0][0];
     expect(items[0].resurfaceVersion).toBe('comment:100:2024-02-01T00:00:00Z');
 
-    const commentsFetchUrl = new URL(mockFetch.mock.calls[2][0] as string);
+    const commentsFetchUrl = new URL(mockFetch.mock.calls[3][0] as string);
     expect(commentsFetchUrl.searchParams.get('per_page')).toBe('100');
     expect(commentsFetchUrl.searchParams.get('sort')).toBeNull();
     expect(commentsFetchUrl.searchParams.get('direction')).toBeNull();
@@ -164,6 +212,10 @@ describe('GitHubMentionsProvider', () => {
       })
       .mockResolvedValueOnce({
         ok: true,
+        json: async () => [],
+      })
+      .mockResolvedValueOnce({
+        ok: true,
         json: async () => [
           { id: 200, body: 'Newest visible ping @testuser', created_at: '2024-03-01T00:00:00Z' },
           ...Array.from({ length: 99 }, (_, i) => ({
@@ -178,10 +230,10 @@ describe('GitHubMentionsProvider', () => {
     provider.onDidDiscoverItems(listener);
     await provider.refresh();
 
-    expect(mockFetch).toHaveBeenCalledTimes(3);
+    expect(mockFetch).toHaveBeenCalledTimes(4);
     expect(listener.mock.calls[0][0][0].resurfaceVersion).toBe('comment:200:2024-03-01T00:00:00Z');
 
-    const commentsFetchUrl = new URL(mockFetch.mock.calls[2][0] as string);
+    const commentsFetchUrl = new URL(mockFetch.mock.calls[3][0] as string);
     expect(commentsFetchUrl.searchParams.get('sort')).toBe('created');
     expect(commentsFetchUrl.searchParams.get('direction')).toBe('desc');
   });
@@ -200,6 +252,10 @@ describe('GitHubMentionsProvider', () => {
       .mockResolvedValueOnce({
         ok: true,
         json: async () => ({ login: 'testuser' }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => [],
       })
       .mockResolvedValueOnce({
         ok: true,
@@ -223,8 +279,8 @@ describe('GitHubMentionsProvider', () => {
     const items = listener.mock.calls[0][0];
     expect(items[0].resurfaceVersion).toBe('comment:100:2024-02-01T00:00:00Z');
 
-    const firstPageUrl = new URL(mockFetch.mock.calls[2][0] as string);
-    const secondPageUrl = new URL(mockFetch.mock.calls[3][0] as string);
+    const firstPageUrl = new URL(mockFetch.mock.calls[3][0] as string);
+    const secondPageUrl = new URL(mockFetch.mock.calls[4][0] as string);
     expect(firstPageUrl.searchParams.get('page')).toBe('1');
     expect(secondPageUrl.searchParams.get('page')).toBe('2');
   });
@@ -247,6 +303,10 @@ describe('GitHubMentionsProvider', () => {
       })
       .mockResolvedValueOnce({
         ok: true,
+        json: async () => [],
+      })
+      .mockResolvedValueOnce({
+        ok: true,
         json: async () => [
           { id: 300, body: 'Newest-page ping @testuser', created_at: '2024-03-01T00:00:00Z' },
           ...Array.from({ length: 49 }, (_, i) => ({
@@ -261,7 +321,7 @@ describe('GitHubMentionsProvider', () => {
     provider.onDidDiscoverItems(listener);
     await provider.refresh();
 
-    expect(mockFetch).toHaveBeenCalledTimes(3);
+    expect(mockFetch).toHaveBeenCalledTimes(4);
     expect(listener.mock.calls[0][0][0].resurfaceVersion).toBe('comment:300:2024-03-01T00:00:00Z');
   });
 
@@ -280,6 +340,10 @@ describe('GitHubMentionsProvider', () => {
       .mockResolvedValueOnce({
         ok: true,
         json: async () => ({ login: 'testuser' }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => [],
       })
       .mockResolvedValueOnce({
         ok: true,
@@ -316,8 +380,8 @@ describe('GitHubMentionsProvider', () => {
     const items = listener.mock.calls[0][0];
     expect(items[0].resurfaceVersion).toBe('comment:200:2024-02-01T00:00:00Z');
 
-    const lastPageUrl = new URL(mockFetch.mock.calls[2][0] as string);
-    const previousPageUrl = new URL(mockFetch.mock.calls[3][0] as string);
+    const lastPageUrl = new URL(mockFetch.mock.calls[3][0] as string);
+    const previousPageUrl = new URL(mockFetch.mock.calls[4][0] as string);
     expect(lastPageUrl.searchParams.get('page')).toBe('3');
     expect(previousPageUrl.searchParams.get('page')).toBe('2');
   });
@@ -337,6 +401,10 @@ describe('GitHubMentionsProvider', () => {
       .mockResolvedValueOnce({
         ok: true,
         json: async () => ({ login: 'testuser' }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => [],
       })
       .mockResolvedValueOnce({
         ok: true,
@@ -364,8 +432,8 @@ describe('GitHubMentionsProvider', () => {
     const items = listener.mock.calls[0][0];
     expect(items[0].resurfaceVersion).toBe('comment:200:2024-02-01T00:00:00Z');
 
-    const staleLastPageUrl = new URL(mockFetch.mock.calls[2][0] as string);
-    const previousPageUrl = new URL(mockFetch.mock.calls[3][0] as string);
+    const staleLastPageUrl = new URL(mockFetch.mock.calls[3][0] as string);
+    const previousPageUrl = new URL(mockFetch.mock.calls[4][0] as string);
     expect(staleLastPageUrl.searchParams.get('page')).toBe('3');
     expect(previousPageUrl.searchParams.get('page')).toBe('2');
   });
@@ -384,6 +452,10 @@ describe('GitHubMentionsProvider', () => {
       .mockResolvedValueOnce({
         ok: true,
         json: async () => ({ login: 'testuser' }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => [],
       })
       .mockResolvedValueOnce({
         ok: true,
@@ -422,6 +494,10 @@ describe('GitHubMentionsProvider', () => {
       .mockResolvedValueOnce({
         ok: true,
         json: async () => ({ login: 'testuser' }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => [],
       })
       .mockResolvedValueOnce({
         ok: true,
@@ -470,6 +546,10 @@ describe('GitHubMentionsProvider', () => {
       })
       .mockResolvedValueOnce({
         ok: true,
+        json: async () => [],
+      })
+      .mockResolvedValueOnce({
+        ok: true,
         json: async () => ([
           { id: 100, body: 'Initial ping @alice', created_at: '2024-02-01T00:00:00Z' },
         ]),
@@ -484,6 +564,10 @@ describe('GitHubMentionsProvider', () => {
       })
       .mockResolvedValueOnce({
         ok: true,
+        json: async () => [],
+      })
+      .mockResolvedValueOnce({
+        ok: true,
         json: async () => ([
           { id: 101, body: 'New ping @bob', created_at: '2024-02-03T00:00:00Z' },
         ]),
@@ -494,7 +578,7 @@ describe('GitHubMentionsProvider', () => {
     await provider.refresh();
     await provider.refresh();
 
-    expect(mockFetch).toHaveBeenCalledTimes(6);
+    expect(mockFetch).toHaveBeenCalledTimes(8);
     expect(listener.mock.calls[0][0][0].resurfaceVersion).toBe('comment:100:2024-02-01T00:00:00Z');
     expect(listener.mock.calls[1][0][0].resurfaceVersion).toBe('comment:101:2024-02-03T00:00:00Z');
   });
@@ -521,7 +605,7 @@ describe('GitHubMentionsProvider', () => {
     provider.onDidDiscoverItems(listener);
     await provider.refresh();
 
-    expect(mockFetch).toHaveBeenCalledTimes(2);
+    expect(mockFetch).toHaveBeenCalledTimes(3);
     expect(listener.mock.calls[0][0][0].resurfaceVersion).toBe('issue:10');
   });
 
@@ -540,6 +624,10 @@ describe('GitHubMentionsProvider', () => {
       .mockResolvedValueOnce({
         ok: true,
         json: async () => ({ login: 'testuser' }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => [],
       })
       .mockResolvedValueOnce({
         ok: true,
@@ -574,6 +662,10 @@ describe('GitHubMentionsProvider', () => {
       })
       .mockResolvedValueOnce({
         ok: true,
+        json: async () => [],
+      })
+      .mockResolvedValueOnce({
+        ok: true,
         json: async () => ([
           { id: 100, body: 'Initial ping @testuser', created_at: '2024-02-01T00:00:00Z' },
         ]),
@@ -594,7 +686,7 @@ describe('GitHubMentionsProvider', () => {
     await provider.refresh();
     await provider.refresh();
 
-    expect(mockFetch).toHaveBeenCalledTimes(4);
+    expect(mockFetch).toHaveBeenCalledTimes(5);
     expect(listener.mock.calls[1][0][0].resurfaceVersion).toBe('comment:100:2024-02-01T00:00:00Z');
   });
 
@@ -612,6 +704,10 @@ describe('GitHubMentionsProvider', () => {
       .mockResolvedValueOnce({
         ok: true,
         json: async () => ({ login: 'testuser' }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => [],
       })
       .mockResolvedValueOnce({
         ok: true,
@@ -640,10 +736,10 @@ describe('GitHubMentionsProvider', () => {
     await provider.refresh();
     await provider.refresh();
 
-    expect(mockFetch).toHaveBeenCalledTimes(5);
+    expect(mockFetch).toHaveBeenCalledTimes(6);
     expect(listener.mock.calls[1][0][0].resurfaceVersion).toBe('comment:102:2024-02-03T00:00:00Z');
 
-    const incrementalCommentsUrl = new URL(mockFetch.mock.calls[4][0] as string);
+    const incrementalCommentsUrl = new URL(mockFetch.mock.calls[5][0] as string);
     expect(incrementalCommentsUrl.searchParams.get('since')).toBe('2024-02-01T00:00:00Z');
     expect(incrementalCommentsUrl.searchParams.get('sort')).toBe('created');
     expect(incrementalCommentsUrl.searchParams.get('direction')).toBe('desc');
@@ -663,6 +759,10 @@ describe('GitHubMentionsProvider', () => {
       .mockResolvedValueOnce({
         ok: true,
         json: async () => ({ login: 'testuser' }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => [],
       })
       .mockResolvedValueOnce({
         ok: true,
@@ -696,7 +796,7 @@ describe('GitHubMentionsProvider', () => {
     await provider.refresh();
     await provider.refresh();
 
-    expect(mockFetch).toHaveBeenCalledTimes(5);
+    expect(mockFetch).toHaveBeenCalledTimes(6);
     expect(listener.mock.calls[1][0][0].resurfaceVersion).toBe('comment:200:2024-02-03T00:00:00Z');
   });
 
@@ -715,6 +815,10 @@ describe('GitHubMentionsProvider', () => {
       .mockResolvedValueOnce({
         ok: true,
         json: async () => ({ login: 'testuser' }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => [],
       })
       .mockResolvedValueOnce({
         ok: true,
@@ -737,7 +841,7 @@ describe('GitHubMentionsProvider', () => {
     await provider.refresh();
     await provider.refresh();
 
-    expect(mockFetch).toHaveBeenCalledTimes(5);
+    expect(mockFetch).toHaveBeenCalledTimes(6);
     expect(listener.mock.calls[2][0][0].resurfaceVersion).toBe('comment:100:2024-02-01T00:00:00Z');
   });
 
@@ -759,6 +863,10 @@ describe('GitHubMentionsProvider', () => {
       })
       .mockResolvedValueOnce({
         ok: true,
+        json: async () => [],
+      })
+      .mockResolvedValueOnce({
+        ok: true,
         json: async () => ([
           { id: 101, body: 'Follow-up without a mention', created_at: '2024-02-02T00:00:00Z' },
         ]),
@@ -770,6 +878,173 @@ describe('GitHubMentionsProvider', () => {
 
     const items = listener.mock.calls[0][0];
     expect(items[0].resurfaceVersion).toBeUndefined();
+  });
+
+  it('counts a mention in plain prose', async () => {
+    const item = await refreshWithSingleComment('Please take a look, @testuser.');
+
+    expect(item.resurfaceVersion).toBe('comment:900:2024-04-01T00:00:00Z');
+  });
+
+  it('ignores a mention inside inline code', async () => {
+    const item = await refreshWithSingleComment('This example `@testuser` should not resurface.');
+
+    expect(item.resurfaceVersion).toBeUndefined();
+  });
+
+  it('ignores a mention inside a fenced code block', async () => {
+    const item = await refreshWithSingleComment('```ts\n@testuser\n```');
+
+    expect(item.resurfaceVersion).toBeUndefined();
+  });
+
+  it('counts a mention inside a blockquote', async () => {
+    const item = await refreshWithSingleComment('> Please take a look, @testuser.');
+
+    expect(item.resurfaceVersion).toBe('comment:900:2024-04-01T00:00:00Z');
+  });
+
+  it('counts mentions in link text but not link URLs or autolink targets', async () => {
+    mockFetch
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          items: [{
+            ...createMockIssue(10, 'Bug report', 'org/repo'),
+            comments_url: 'https://api.github.com/repos/org/repo/issues/10/comments',
+          }],
+        }),
+      })
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ login: 'testuser' }) })
+      .mockResolvedValueOnce({ ok: true, json: async () => [] })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ([
+          { id: 901, body: 'Display text [@testuser](https://example.com/profile)', created_at: '2024-04-01T00:00:00Z' },
+          { id: 902, body: 'URL target [profile](https://example.com/@testuser)', created_at: '2024-04-02T00:00:00Z' },
+          { id: 903, body: 'Autolink https://example.com/@testuser', created_at: '2024-04-03T00:00:00Z' },
+        ]),
+      });
+
+    const listener = vi.fn();
+    provider.onDidDiscoverItems(listener);
+    await provider.refresh();
+
+    expect(listener.mock.calls[0][0][0].resurfaceVersion).toBe('comment:901:2024-04-01T00:00:00Z');
+  });
+
+  it('counts a team mention when the current user belongs to that team', async () => {
+    const item = await refreshWithSingleComment('Please review, @org/platform.', [
+      { slug: 'platform', organization: { login: 'org' } },
+    ]);
+
+    expect(item.resurfaceVersion).toBe('comment:900:2024-04-01T00:00:00Z');
+  });
+
+  it('ignores a team mention when the current user is not on that team', async () => {
+    const item = await refreshWithSingleComment('Please review, @org/platform.', [
+      { slug: 'other-team', organization: { login: 'org' } },
+    ]);
+
+    expect(item.resurfaceVersion).toBeUndefined();
+  });
+
+  it('caches team memberships across comment scans and refreshes them after the TTL', async () => {
+    const nowSpy = vi.spyOn(Date, 'now').mockReturnValue(1_000);
+    const issueOne = {
+      ...createMockIssue(10, 'First', 'org/repo'),
+      comments_url: 'https://api.github.com/repos/org/repo/issues/10/comments',
+    };
+    const issueTwo = {
+      ...createMockIssue(11, 'Second', 'org/repo'),
+      comments_url: 'https://api.github.com/repos/org/repo/issues/11/comments',
+    };
+    mockFetch
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ items: [issueOne, issueTwo] }) })
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ login: 'testuser' }) })
+      .mockResolvedValueOnce({ ok: true, json: async () => [{ slug: 'platform', organization: { login: 'org' } }] })
+      .mockResolvedValueOnce({ ok: true, json: async () => [{ id: 901, body: '@org/platform', created_at: '2024-04-01T00:00:00Z' }] })
+      .mockResolvedValueOnce({ ok: true, json: async () => [{ id: 902, body: '@org/platform', created_at: '2024-04-02T00:00:00Z' }] })
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ items: [issueOne, issueTwo] }) })
+      .mockResolvedValueOnce({ ok: true, json: async () => [{ slug: 'platform', organization: { login: 'org' } }] })
+      .mockResolvedValueOnce({ ok: true, json: async () => [{ id: 903, body: '@org/platform', created_at: '2024-04-03T00:00:00Z' }] })
+      .mockResolvedValueOnce({ ok: true, json: async () => [{ id: 904, body: '@org/platform', created_at: '2024-04-04T00:00:00Z' }] });
+
+    const listener = vi.fn();
+    provider.onDidDiscoverItems(listener);
+    await provider.refresh();
+    expect(mockFetch.mock.calls.filter(call => String(call[0]).includes('/user/teams'))).toHaveLength(1);
+
+    nowSpy.mockReturnValue(1_000 + 30 * 60 * 1000 + 1);
+    await provider.refresh();
+
+    expect(mockFetch.mock.calls.filter(call => String(call[0]).includes('/user/teams'))).toHaveLength(2);
+    expect(listener.mock.calls[0][0].map((item: any) => item.resurfaceVersion)).toEqual([
+      'comment:901:2024-04-01T00:00:00Z',
+      'comment:902:2024-04-02T00:00:00Z',
+    ]);
+    expect(listener.mock.calls[1][0].map((item: any) => item.resurfaceVersion)).toEqual([
+      'comment:903:2024-04-03T00:00:00Z',
+      'comment:904:2024-04-04T00:00:00Z',
+    ]);
+    nowSpy.mockRestore();
+  });
+
+  it('ignores team mentions after a team API failure but still counts user mentions', async () => {
+    mockFetch
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          items: [{
+            ...createMockIssue(10, 'Bug report', 'org/repo'),
+            comments_url: 'https://api.github.com/repos/org/repo/issues/10/comments',
+          }],
+        }),
+      })
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ login: 'testuser' }) })
+      .mockResolvedValueOnce({ ok: false, status: 404 })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ([
+          { id: 901, body: '@testuser', created_at: '2024-04-01T00:00:00Z' },
+          { id: 902, body: '@org/platform', created_at: '2024-04-02T00:00:00Z' },
+        ]),
+      });
+
+    const listener = vi.fn();
+    provider.onDidDiscoverItems(listener);
+    await provider.refresh();
+
+    expect(listener.mock.calls[0][0][0].resurfaceVersion).toBe('comment:901:2024-04-01T00:00:00Z');
+  });
+
+  it('clears the team cache when the authenticated login changes', async () => {
+    vi.mocked(authentication.getSession)
+      .mockResolvedValueOnce({ accessToken: 'alice-token', id: 'session-1', scopes: ['repo', 'read:org'], account: { id: '1', label: 'alice' } } as any)
+      .mockResolvedValueOnce({ accessToken: 'bob-token', id: 'session-2', scopes: ['repo', 'read:org'], account: { id: '2', label: 'bob' } } as any);
+
+    const issue = {
+      ...createMockIssue(10, 'Bug report', 'org/repo'),
+      body: 'Please review, @org/platform.',
+      comments: 0,
+      comments_url: 'https://api.github.com/repos/org/repo/issues/10/comments',
+    };
+    mockFetch
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ items: [issue] }) })
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ login: 'alice' }) })
+      .mockResolvedValueOnce({ ok: true, json: async () => [{ slug: 'platform', organization: { login: 'org' } }] })
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ items: [issue] }) })
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ login: 'bob' }) })
+      .mockResolvedValueOnce({ ok: true, json: async () => [] });
+
+    const listener = vi.fn();
+    provider.onDidDiscoverItems(listener);
+    await provider.refresh();
+    await provider.refresh();
+
+    expect(mockFetch.mock.calls.filter(call => String(call[0]).includes('/user/teams'))).toHaveLength(2);
+    expect(listener.mock.calls[0][0][0].resurfaceVersion).toBe('issue:10');
+    expect(listener.mock.calls[1][0][0].resurfaceVersion).toBeUndefined();
   });
 
   it('sets canonicalId with github:issue prefix for issues', async () => {

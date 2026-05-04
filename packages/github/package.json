@@ -57,7 +57,8 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@devdocket/shared": "*"
+    "@devdocket/shared": "*",
+    "marked": "^18.0.2"
   },
   "devDependencies": {
     "@types/node": "^20.11.0",
