@@ -1,5 +1,5 @@
 import * as vscode from 'vscode';
-import { DiscoveredItem, combineSignals, safeDecodeComponent, type ResolvedItem } from '@devdocket/shared';
+import { DiscoveredItem, combineSignals, runWorkerPoolSettled, safeDecodeComponent, type ResolvedItem } from '@devdocket/shared';
 import { BaseGitHubProvider } from './baseGithubProvider';
 import { logger } from './logger';
 import { parseRepoFromUrls } from './parseRepo';
@@ -7,6 +7,14 @@ import { matchesRepoPatterns } from './repoPattern';
 import { getHeaders, getGitHubAuthHeaders, retryWithAuth, throwApiError, parseCanonicalRepo, fetchClosedGitHubItems, buildIssueStateBadge, type GitHubIssue, type GitHubSearchResponse } from './githubApiHelpers';
 
 const MENTIONS_ACTIVATED_KEY = 'mentionsActivatedAt';
+const COMMENT_FETCH_CONCURRENCY = 3;
+
+interface GitHubIssueComment {
+  id: number;
+  body?: string | null;
+  updated_at?: string;
+  created_at?: string;
+}
 
 /**
  * DevDocket provider that discovers GitHub issues and pull requests
@@ -42,10 +50,19 @@ export class GitHubMentionsProvider extends BaseGitHubProvider {
       ? itemsWithRepo.filter(({ repoName }) => matchesRepoPatterns(repoName, patterns))
       : itemsWithRepo;
 
+    const shouldInspectComments = filtered.some(({ issue }) => !!issue.comments_url);
+    const currentLogin = shouldInspectComments ? await this.getCurrentLogin(accessToken, signal) : undefined;
+    // Search results are updated by any comment; only mentioning comments should trigger resurfacing.
+    const resurfaceVersions = currentLogin
+      ? await this.fetchMentionResurfaceVersions(filtered, accessToken, currentLogin, signal)
+      : new Map<string, string>();
+
     const items: DiscoveredItem[] = filtered.map(({ issue, repoName }) => {
       const isPr = !!issue.pull_request;
+      const externalId = `${repoName}#${issue.number}`;
+      const resurfaceVersion = resurfaceVersions.get(externalId);
       return {
-        externalId: `${repoName}#${issue.number}`,
+        externalId,
         title: `#${issue.number}: ${issue.title}`,
         description: issue.body ?? undefined,
         url: issue.html_url,
@@ -58,6 +75,7 @@ export class GitHubMentionsProvider extends BaseGitHubProvider {
           ...buildIssueStateBadge(issue.state),
         ],
         ...(issue.state ? { state: issue.state } : {}),
+        ...(resurfaceVersion ? { resurfaceVersion } : {}),
       };
     });
 
@@ -150,6 +168,140 @@ export class GitHubMentionsProvider extends BaseGitHubProvider {
     }
     await this._context.globalState.update(MENTIONS_ACTIVATED_KEY, now);
     return now;
+  }
+
+  private async getCurrentLogin(token: string, signal?: AbortSignal): Promise<string | undefined> {
+    try {
+      const response = await fetch('https://api.github.com/user', {
+        headers: getGitHubAuthHeaders(token),
+        signal: combineSignals(signal, 30_000),
+      });
+      if (response.ok) {
+        const data = await response.json() as { login?: unknown };
+        const login = typeof data.login === 'string' ? data.login.trim() : undefined;
+        if (login && GitHubMentionsProvider.isValidGitHubLogin(login)) {
+          return login;
+        }
+      } else {
+        logger.debug(`Failed to fetch GitHub user login: ${response.status}`);
+      }
+    } catch (err: unknown) {
+      if (err instanceof Error && err.name === 'AbortError' && signal?.aborted) { throw err; }
+      logger.debug('Could not fetch GitHub user login for mention comment filtering', err);
+    }
+
+    try {
+      const session = await vscode.authentication.getSession('github', ['repo'], { createIfNone: false });
+      const label = session?.account?.label?.trim();
+      return label && GitHubMentionsProvider.isValidGitHubLogin(label) ? label : undefined;
+    } catch (err) {
+      logger.debug('Could not determine fallback GitHub login for mention comment filtering', err);
+      return undefined;
+    }
+  }
+
+  private async fetchMentionResurfaceVersions(
+    items: Array<{ issue: GitHubIssue; repoName: string }>,
+    token: string,
+    currentLogin: string,
+    signal?: AbortSignal,
+  ): Promise<Map<string, string>> {
+    const results = await runWorkerPoolSettled(
+      items,
+      async ({ issue, repoName }) => ({
+        externalId: `${repoName}#${issue.number}`,
+        resurfaceVersion: await this.fetchLatestMentionCommentVersion(issue, token, currentLogin, signal),
+      }),
+      COMMENT_FETCH_CONCURRENCY,
+    );
+
+    const versions = new Map<string, string>();
+    for (const result of results) {
+      if (result.status === 'rejected') {
+        logger.debug('Failed to inspect GitHub mention comments', result.reason);
+        continue;
+      }
+      if (result.value.resurfaceVersion) {
+        versions.set(result.value.externalId, result.value.resurfaceVersion);
+      }
+    }
+    return versions;
+  }
+
+  private async fetchLatestMentionCommentVersion(
+    issue: GitHubIssue,
+    token: string,
+    currentLogin: string,
+    signal?: AbortSignal,
+  ): Promise<string | undefined> {
+    if (!issue.comments_url) {
+      return undefined;
+    }
+
+    let response: Response;
+    try {
+      response = await fetch(GitHubMentionsProvider.withPerPage(issue.comments_url), {
+        headers: getGitHubAuthHeaders(token),
+        signal: combineSignals(signal, 30_000),
+      });
+    } catch (err: unknown) {
+      if (err instanceof Error && err.name === 'AbortError' && signal?.aborted) { throw err; }
+      logger.debug(`Failed to fetch comments for mention ${issue.html_url}`, err);
+      return undefined;
+    }
+
+    if (!response.ok) {
+      logger.debug(`Failed to fetch comments for mention ${issue.html_url}: ${response.status}`);
+      return undefined;
+    }
+
+    const comments = await response.json() as GitHubIssueComment[];
+    let latestMention: { id: number; timestamp: string; time: number } | undefined;
+    for (const comment of comments) {
+      if (!GitHubMentionsProvider.mentionsUser(comment.body, currentLogin)) {
+        continue;
+      }
+      const timestamp = comment.updated_at ?? comment.created_at;
+      if (!timestamp) {
+        continue;
+      }
+      const time = Date.parse(timestamp);
+      if (Number.isNaN(time)) {
+        continue;
+      }
+      if (!latestMention || time > latestMention.time) {
+        latestMention = { id: comment.id, timestamp, time };
+      }
+    }
+
+    return latestMention
+      ? `comment:${latestMention.id}:${latestMention.timestamp}`
+      : undefined;
+  }
+
+  private static mentionsUser(body: string | null | undefined, login: string): boolean {
+    if (!body) {
+      return false;
+    }
+    const escapedLogin = login.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    return new RegExp(`(^|[^A-Za-z0-9_-])@${escapedLogin}(?![A-Za-z0-9_-])`, 'i').test(body);
+  }
+
+  private static isValidGitHubLogin(login: string): boolean {
+    return /^[A-Za-z0-9](?:[A-Za-z0-9-]{0,37}[A-Za-z0-9])?$/.test(login);
+  }
+
+  private static withPerPage(url: string): string {
+    try {
+      const parsed = new URL(url);
+      parsed.searchParams.set('per_page', '100');
+      parsed.searchParams.set('sort', 'updated');
+      parsed.searchParams.set('direction', 'desc');
+      return parsed.toString();
+    } catch {
+      const separator = url.includes('?') ? '&' : '?';
+      return `${url}${separator}per_page=100&sort=updated&direction=desc`;
+    }
   }
 
   private async fetchAllMentions(

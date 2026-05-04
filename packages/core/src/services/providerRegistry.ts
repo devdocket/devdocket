@@ -417,17 +417,18 @@ export class ProviderRegistry {
         if (item.version !== undefined) { update.version = item.version; }
         if (item.resurfaceVersion !== undefined) { update.resurfaceVersion = item.resurfaceVersion; }
         newUnseenUpdates.push(update);
-      } else if (existing === 'accepted') {
+      } else if (existing === 'accepted' || existing === 'dismissed') {
         let versionTriggered = false;
         let resurfaceVersionTriggered = false;
-        let needsBackfill = false;
+        let needsAcceptedBackfill = false;
+        let needsDismissedResurfaceVersionBackfill = false;
 
-        if (item.version !== undefined) {
+        if (existing === 'accepted' && item.version !== undefined) {
           const storedVersion = this.stateStore.getVersion(providerId, item.externalId);
           if (storedVersion !== undefined && storedVersion !== item.version) {
             versionTriggered = true;
           } else if (storedVersion === undefined) {
-            needsBackfill = true;
+            needsAcceptedBackfill = true;
           }
         }
 
@@ -436,14 +437,18 @@ export class ProviderRegistry {
           if (storedRV !== undefined && storedRV !== item.resurfaceVersion) {
             resurfaceVersionTriggered = true;
           } else if (storedRV === undefined) {
-            needsBackfill = true;
+            if (existing === 'accepted') {
+              needsAcceptedBackfill = true;
+            } else {
+              needsDismissedResurfaceVersionBackfill = true;
+            }
           }
         }
 
         // resurfaceVersion always resurfaces (hard); version checks work item state (soft)
         let shouldResurface = resurfaceVersionTriggered;
         let suppressedVersionChange = false;
-        if (versionTriggered && !shouldResurface) {
+        if (existing === 'accepted' && versionTriggered && !shouldResurface) {
           const wiState = this.getWorkItemState?.(providerId, item.externalId);
           if (wiState === WorkItemState.New || wiState === WorkItemState.InProgress || wiState === WorkItemState.Paused) {
             // Suppress: backfill version instead of resurfacing
@@ -458,7 +463,7 @@ export class ProviderRegistry {
           if (item.version !== undefined) { update.version = item.version; }
           if (item.resurfaceVersion !== undefined) { update.resurfaceVersion = item.resurfaceVersion; }
           newUnseenUpdates.push(update);
-        } else if (suppressedVersionChange || needsBackfill) {
+        } else if (existing === 'accepted' && (suppressedVersionChange || needsAcceptedBackfill)) {
           const update: typeof versionBackfills[number] = { providerId, externalId: item.externalId, state: 'accepted' };
           if (item.version !== undefined) { update.version = item.version; }
           if (item.resurfaceVersion !== undefined) { update.resurfaceVersion = item.resurfaceVersion; }
@@ -466,6 +471,13 @@ export class ProviderRegistry {
           if (suppressedVersionChange) {
             activityEntries.push({ providerId, externalId: item.externalId });
           }
+        } else if (needsDismissedResurfaceVersionBackfill) {
+          versionBackfills.push({
+            providerId,
+            externalId: item.externalId,
+            state: 'dismissed',
+            resurfaceVersion: item.resurfaceVersion,
+          });
         }
       } else if (existing === 'unseen') {
         if (item.version !== undefined || item.resurfaceVersion !== undefined) {

@@ -56,7 +56,7 @@ export interface DiscoveredItem {
   version?: string;
   /**
    * Optional secondary version for "hard" resurfacing.
-   * When a previously accepted item reappears with a different
+   * When a previously accepted or dismissed item reappears with a different
    * resurfaceVersion, it is **always** resurfaced in the Inbox as unseen,
    * regardless of the linked work item's state.
    */
