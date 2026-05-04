@@ -1,3 +1,6 @@
+import { isValidUrlSegment } from '@devdocket/shared';
+import { logger } from './logger';
+
 /**
  * Describes a single ADO organization and which projects to monitor within it.
  * An empty `projects` array means monitor the entire organization.
@@ -64,4 +67,36 @@ export function parseAdoProjectsConfig(
     org,
     projects: config.wholeOrg ? [] : config.projects,
   }));
+}
+
+/**
+ * Returns the effective project list for an org config after validating
+ * individual project name segments.
+ *
+ * - Projects that fail URL-segment validation are skipped with a warning.
+ * - Returns `null` when projects were explicitly configured but every one
+ *   is invalid — the caller should skip this org entirely.
+ * - Returns `['']` when no projects are configured (whole-org monitoring).
+ * - Returns the filtered valid project list otherwise.
+ *
+ * @param orgConfig - The org configuration to validate.
+ * @param logLabel  - A short label used in the "skipping …" log message,
+ *                    e.g. `'fetch'` or `'PR fetch'`.
+ */
+export function resolveProjectList(orgConfig: OrgConfig, logLabel: string): string[] | null {
+  const validProjects: string[] = [];
+  for (const project of orgConfig.projects) {
+    if (project === '' || isValidUrlSegment(project)) {
+      validProjects.push(project);
+    } else {
+      logger.warn('Skipping invalid ADO project name', project);
+    }
+  }
+
+  if (orgConfig.projects.length > 0 && validProjects.length === 0) {
+    logger.warn(`All configured ADO projects are invalid for org ${orgConfig.org} — skipping ${logLabel}`);
+    return null;
+  }
+
+  return validProjects.length > 0 ? validProjects : [''];
 }

@@ -68,11 +68,7 @@ export class GitHubMentionsProvider extends BaseGitHubProvider {
       const message = failures.length === 1
         ? `Failed to fetch mentions from ${failures[0]}`
         : `Failed to fetch mentions from ${failures.length} repositories`;
-      if (isUserTriggered) {
-        void vscode.window.showWarningMessage(`DevDocket GitHub: ${message}`);
-      } else {
-        logger.warn(message);
-      }
+      this.warnOnFetchFailure(message, isUserTriggered);
     }
   }
 
