@@ -85,6 +85,19 @@ function sanitizePathSegment(segment: string): string {
   return segment.replace(/[^a-zA-Z0-9._-]+/g, '-').replace(/^-+|-+$/g, '') || 'repo';
 }
 
+function sanitizeUrlForLog(url: string): string {
+  try {
+    const parsed = new URL(url);
+    parsed.search = '';
+    parsed.hash = '';
+    parsed.username = '';
+    parsed.password = '';
+    return parsed.href.replace(/[\r\n`]/g, '');
+  } catch {
+    return url.replace(/[\r\n`]/g, '');
+  }
+}
+
 function isValidCloneUrl(url: unknown): url is string {
   if (typeof url !== 'string' || url.length === 0 || UNSAFE_URL_CHARS.test(url)) {
     return false;
@@ -110,7 +123,8 @@ export class RepoManager {
 
   /** Clone repo if needed, create worktree if needed, fetch + checkout PR branch. */
   async ensureWorktree(prUrl: string): Promise<WorktreeInfo> {
-    this.log.debug(`ensureWorktree called — prUrl: ${prUrl}`);
+    const logPrUrl = sanitizeUrlForLog(prUrl);
+    this.log.debug(`ensureWorktree called — prUrl: ${logPrUrl}`);
     const github = parsePrUrl(prUrl);
     if (github) {
       return this.ensureGitHubWorktree(prUrl, github.org, github.repo, github.prNumber);
@@ -121,8 +135,8 @@ export class RepoManager {
       return this.ensureAdoWorktree(prUrl, ado.org, ado.project, ado.repo, ado.prId);
     }
 
-    this.log.error(`Invalid PR URL: ${prUrl}`);
-    throw new Error(`Invalid PR URL: ${prUrl}`);
+    this.log.error(`Invalid PR URL: ${logPrUrl}`);
+    throw new Error(`Invalid PR URL: ${logPrUrl}`);
   }
 
   private async ensureGitHubWorktree(prUrl: string, org: string, repo: string, prNumber: string): Promise<WorktreeInfo> {
@@ -317,7 +331,7 @@ export class RepoManager {
 
   /** Remove a single worktree. */
   async removeWorktree(prUrl: string): Promise<void> {
-    this.log.debug(`removeWorktree called — prUrl: ${prUrl}`);
+    this.log.debug(`removeWorktree called — prUrl: ${sanitizeUrlForLog(prUrl)}`);
     const key = this.keyForPrUrl(prUrl);
     if (!key) return;
 

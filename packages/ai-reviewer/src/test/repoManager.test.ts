@@ -102,6 +102,21 @@ describe('RepoManager', () => {
       await expect(manager.ensureWorktree('not-a-url')).rejects.toThrow('Invalid PR URL');
     });
 
+    it('does not include query strings or fragments in invalid URL errors', async () => {
+      await expect(manager.ensureWorktree('https://example.com/not-pr?token=secret#frag')).rejects.toThrow(
+        'Invalid PR URL: https://example.com/not-pr',
+      );
+    });
+
+    it('does not log query strings or fragments from PR URLs', async () => {
+      await manager.ensureWorktree('https://github.com/owner/repo/pull/42?token=secret#frag');
+
+      const debugMessages = vi.mocked(mockLogOutputChannel.debug).mock.calls.map(call => String(call[0]));
+      expect(debugMessages.some(message => message.includes('https://github.com/owner/repo/pull/42'))).toBe(true);
+      expect(debugMessages.join('\n')).not.toContain('secret');
+      expect(debugMessages.join('\n')).not.toContain('frag');
+    });
+
     it('calls git clone for a fresh repo', async () => {
       const item = 'https://github.com/owner/repo/pull/42';
       await manager.ensureWorktree(item);
