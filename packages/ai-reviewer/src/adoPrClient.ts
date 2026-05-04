@@ -120,7 +120,8 @@ export class AdoPrClient {
       return { diff: body, synthetic: false };
     }
 
-    return { diff: renderAdoDiffSummary(parts, details, parsed), synthetic: true };
+    const synthetic = !hasRenderableInlineDiff(parsed);
+    return { diff: renderAdoDiffSummary(parts, details, parsed, synthetic), synthetic };
   }
 
   async postThread(parts: AdoPrUrlParts, comment: AdoThreadCommentInput): Promise<void> {
@@ -213,15 +214,18 @@ function renderAdoDiffSummary(
   parts: AdoPrUrlParts,
   details: AdoPullRequestDetails,
   response: AdoCommitDiffResponse,
+  synthetic: boolean,
 ): string {
   const changes = response.changes ?? [];
   const header = [
     `# Azure DevOps PR ${parts.org}/${parts.project}/${parts.repo}#${parts.prId}`,
     `# Source: ${details.sourceRefName ?? details.lastMergeSourceCommit?.commitId ?? 'unknown'}`,
     `# Target: ${details.targetRefName ?? details.lastMergeTargetCommit?.commitId ?? 'unknown'}`,
-    `# Note: ${ADO_SYNTHETIC_DIFF_NOTICE}`,
-    '',
   ];
+  if (synthetic) {
+    header.push(`# Note: ${ADO_SYNTHETIC_DIFF_NOTICE}`);
+  }
+  header.push('');
 
   if (changes.length === 0) {
     return `${header.join('\n')}(no diff)`;
@@ -239,12 +243,22 @@ function renderChange(change: AdoCommitDiffChange): string {
   const path = rawPath.replace(/^\/+/, '');
   const changeType = change.changeType ?? 'edit';
   const inlineDiff = change.diff ?? change.patch;
-  if (inlineDiff) {
-    return inlineDiff.trimEnd() + '\n';
-  }
-
   const isAdd = changeType.toLowerCase().includes('add');
   const isDelete = changeType.toLowerCase().includes('delete');
+  if (inlineDiff?.trim()) {
+    const trimmed = inlineDiff.trimEnd();
+    if (trimmed.trimStart().startsWith('diff --git')) {
+      return `${trimmed}\n`;
+    }
+    return [
+      `diff --git a/${path} b/${path}`,
+      isAdd ? '--- /dev/null' : `--- a/${path}`,
+      isDelete ? '+++ /dev/null' : `+++ b/${path}`,
+      trimmed,
+      '',
+    ].join('\n');
+  }
+
   return [
     `diff --git a/${path} b/${path}`,
     isAdd ? '--- /dev/null' : `--- a/${path}`,
@@ -253,6 +267,10 @@ function renderChange(change: AdoCommitDiffChange): string {
     `# ${normalizeAdoFilePath(path)}`,
     '',
   ].join('\n');
+}
+
+function hasRenderableInlineDiff(response: AdoCommitDiffResponse): boolean {
+  return (response.changes ?? []).some(change => Boolean((change.diff ?? change.patch)?.trim()));
 }
 
 function parseJson<T>(text: string): T | undefined {

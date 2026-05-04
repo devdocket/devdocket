@@ -90,6 +90,33 @@ describe('AdoPrClient', () => {
     expect(result).toEqual({ diff: unified, synthetic: false });
   });
 
+  it('treats ADO JSON responses with inline patches as usable diffs', async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(response({
+        sourceRefName: 'refs/heads/feature',
+        targetRefName: 'refs/heads/main',
+        lastMergeSourceCommit: { commitId: 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa' },
+        lastMergeTargetCommit: { commitId: 'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb' },
+      }))
+      .mockResolvedValueOnce(response({
+        changes: [
+          {
+            changeType: 'edit',
+            item: { path: '/src/app.ts' },
+            patch: '@@ -1 +1 @@\n-old\n+new',
+          },
+        ],
+      }));
+
+    const client = new AdoPrClient(fetchMock as never, session);
+    const result = await client.fetchDiffResult(parts);
+
+    expect(result?.synthetic).toBe(false);
+    expect(result?.diff).toContain('diff --git a/src/app.ts b/src/app.ts');
+    expect(result?.diff).toContain('@@ -1 +1 @@');
+    expect(result?.diff).not.toContain('Azure DevOps returned change metadata');
+  });
+
   it('posts a line-level ADO review thread with right-side context', async () => {
     const fetchMock = vi.fn().mockResolvedValue(response({ id: 123 }));
     const client = new AdoPrClient(fetchMock as never, session);
