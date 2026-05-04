@@ -31,6 +31,7 @@ export class GitHubMentionsProvider extends BaseGitHubProvider {
 
   private readonly _context: vscode.ExtensionContext;
   private readonly mentionCommentCache = new Map<string, { issueUpdatedAt?: string; resurfaceVersion?: string }>();
+  private mentionCommentCacheLogin?: string;
   private cachedLogin?: { accessToken: string; login: string };
 
   constructor(context: vscode.ExtensionContext) {
@@ -60,6 +61,10 @@ export class GitHubMentionsProvider extends BaseGitHubProvider {
 
     const shouldComputeMentionVersions = filtered.some(({ issue }) => issue.comments_url || issue.body || issue.title);
     const currentLogin = shouldComputeMentionVersions ? await this.getCurrentLogin(accessToken, signal) : undefined;
+    if (currentLogin && this.mentionCommentCacheLogin !== currentLogin) {
+      this.mentionCommentCache.clear();
+      this.mentionCommentCacheLogin = currentLogin;
+    }
     // Search results are updated by any comment; only mentioning comments should trigger resurfacing.
     const resurfaceVersions = currentLogin
       ? await this.fetchMentionResurfaceVersions(filtered, accessToken, currentLogin, signal)

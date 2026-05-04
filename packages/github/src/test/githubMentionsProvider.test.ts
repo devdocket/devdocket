@@ -362,6 +362,67 @@ describe('GitHubMentionsProvider', () => {
     expect(items[0].resurfaceVersion).toBe('comment:100:2024-02-01T00:00:00Z');
   });
 
+  it('clears cached comment versions when the authenticated login changes', async () => {
+    vi.mocked(authentication.getSession)
+      .mockResolvedValueOnce({
+        accessToken: 'alice-token',
+        id: 'session-1',
+        scopes: ['repo'],
+        account: { id: '1', label: 'alice' },
+      } as any)
+      .mockResolvedValueOnce({
+        accessToken: 'bob-token',
+        id: 'session-2',
+        scopes: ['repo'],
+        account: { id: '2', label: 'bob' },
+      } as any);
+
+    const issue = {
+      ...createMockIssue(10, 'Bug report', 'org/repo'),
+      comments_url: 'https://api.github.com/repos/org/repo/issues/10/comments',
+      updated_at: '2024-02-02T00:00:00Z',
+    };
+
+    mockFetch
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ items: [issue] }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ login: 'alice' }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ([
+          { id: 100, body: 'Initial ping @alice', created_at: '2024-02-01T00:00:00Z' },
+        ]),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ items: [issue] }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ login: 'bob' }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ([
+          { id: 101, body: 'New ping @bob', created_at: '2024-02-03T00:00:00Z' },
+        ]),
+      });
+
+    const listener = vi.fn();
+    provider.onDidDiscoverItems(listener);
+    await provider.refresh();
+    await provider.refresh();
+
+    expect(mockFetch).toHaveBeenCalledTimes(6);
+    expect(listener.mock.calls[0][0][0].resurfaceVersion).toBe('comment:100:2024-02-01T00:00:00Z');
+    expect(listener.mock.calls[1][0][0].resurfaceVersion).toBe('comment:101:2024-02-03T00:00:00Z');
+  });
+
   it('uses issue body mention as a stable baseline when comments do not mention the current user', async () => {
     mockFetch
       .mockResolvedValueOnce({
