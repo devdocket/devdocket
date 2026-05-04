@@ -1,7 +1,7 @@
 import * as vscode from 'vscode';
 import * as path from 'path';
 import { parseAdoPrUrl, parsePrUrl } from './prUrl';
-import { ADO_AUTH_SCOPE, AdoPrClient, type AdoPullRequestDetails } from './adoPrClient';
+import { ADO_AUTH_SCOPE, AdoPrClient } from './adoPrClient';
 import { gitExec } from './tools/gitUtils';
 import { validWorktreePaths } from './tools/worktreeRegistry';
 import { isValidRef } from './tools/refValidation';
@@ -251,8 +251,8 @@ export class RepoManager {
 
     const sourceRef = details.sourceRefName;
     const targetRef = details.targetRefName;
-    if (!isValidRef(sourceRef) || !isValidRef(targetRef)) {
-      throw new Error('Azure DevOps PR metadata contained invalid source or target refs');
+    if (!sourceRef || !targetRef || !isValidRef(sourceRef) || !isValidRef(targetRef)) {
+      throw new Error('Azure DevOps PR metadata contained missing or invalid source or target refs');
     }
 
     const cloneUrl = `https://dev.azure.com/${encodeURIComponent(org)}/${encodeURIComponent(project)}/_git/${encodeURIComponent(repo)}`;
