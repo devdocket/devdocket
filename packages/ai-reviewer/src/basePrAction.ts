@@ -17,6 +17,8 @@ export function sanitizePrUrl(url: string): string {
     if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
       return '(URL unavailable)';
     }
+    parsed.search = '';
+    parsed.hash = '';
     // Strip newlines, carriage returns, and backticks that could break prompt structure
     return parsed.href.replace(/[\r\n`]/g, '');
   } catch {
