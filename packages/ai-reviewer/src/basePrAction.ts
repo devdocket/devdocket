@@ -19,6 +19,8 @@ export function sanitizePrUrl(url: string): string {
     }
     parsed.search = '';
     parsed.hash = '';
+    parsed.username = '';
+    parsed.password = '';
     // Strip newlines, carriage returns, and backticks that could break prompt structure
     return parsed.href.replace(/[\r\n`]/g, '');
   } catch {

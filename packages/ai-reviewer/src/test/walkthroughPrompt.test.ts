@@ -36,6 +36,22 @@ describe('buildWalkthroughPrompt', () => {
     expect(prompt).not.toContain('```');
   });
 
+  it('strips userinfo from PR URLs', () => {
+    const prompt = buildWalkthroughPrompt({
+      worktreePath: '/mock/worktree',
+      org: 'owner',
+      repo: 'repo',
+      prNumber: '42',
+      headRef: 'pr-42',
+      baseRef: 'origin/main',
+      prUrl: 'https://user:secret@github.com/owner/repo/pull/42',
+      provider: 'github',
+    });
+
+    expect(prompt).toContain('https://github.com/owner/repo/pull/42');
+    expect(prompt).not.toContain('user:secret');
+  });
+
   it('omits GitHub diffAnchor instructions for Azure DevOps PRs', () => {
     const prompt = buildWalkthroughPrompt({
       worktreePath: '/mock/worktree',

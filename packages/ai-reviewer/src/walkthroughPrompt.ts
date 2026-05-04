@@ -147,6 +147,8 @@ function sanitizePromptUrl(url: string): string {
     }
     parsed.search = '';
     parsed.hash = '';
+    parsed.username = '';
+    parsed.password = '';
     return parsed.href.replace(/[\r\n`]/g, '');
   } catch {
     return '(URL unavailable)';
