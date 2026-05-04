@@ -235,6 +235,32 @@ describe('AdoPrReviewProvider', () => {
     );
   });
 
+  it('uses successfully resolved group reviewers when another group storage key lookup fails', async () => {
+    mockFetch
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ authenticatedUser: { id: 'user-uuid-123' } }),
+      })
+      .mockResolvedValueOnce(mockPrList([]))
+      .mockResolvedValueOnce(mockGraphDescriptor())
+      .mockResolvedValueOnce(mockMemberships(['vssgp.group-a', 'vssgp.group-b']))
+      .mockResolvedValueOnce(mockStorageKey('group-a-uuid'))
+      .mockResolvedValueOnce({ ok: false, status: 500 })
+      .mockResolvedValueOnce(mockPrList([createMockPr(203, 'Partial group review')]));
+
+    const listener = vi.fn();
+    provider.onDidDiscoverItems(listener);
+    await provider.refresh();
+
+    const items = listener.mock.calls[0][0];
+    expect(items).toHaveLength(1);
+    expect(items[0].externalId).toBe('myorg/MyProject/myrepo/203');
+    expect(mockFetch).toHaveBeenCalledWith(
+      'https://dev.azure.com/myorg/MyProject/_apis/git/pullrequests?searchCriteria.reviewerId=group-a-uuid&searchCriteria.status=active&api-version=7.1',
+      expect.any(Object),
+    );
+  });
+
   it('deduplicates PRs returned for both direct and group reviewers', async () => {
     const pr = createMockPr(303, 'Direct and group review');
     mockFetch

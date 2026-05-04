@@ -1,6 +1,7 @@
 import { combineSignals, runWorkerPool } from '@devdocket/shared';
 import { BaseAdoPrProvider } from './baseAdoPrProvider';
 import { OrgConfig } from './configParser';
+import { logger } from './logger';
 
 const GROUP_REVIEWER_CACHE_TTL_MS = 30 * 60 * 1000;
 
@@ -11,6 +12,11 @@ type GraphStorageKeyResponse = { value?: string };
 type GroupReviewerCacheEntry = {
   expiresAt: number;
   reviewerIds: string[];
+};
+
+type GroupReviewerResolution = {
+  reviewerIds: string[];
+  incomplete: boolean;
 };
 
 /**
@@ -51,11 +57,13 @@ export class AdoPrReviewProvider extends BaseAdoPrProvider {
       return cached.reviewerIds;
     }
 
-    const reviewerIds = await this.resolveGroupReviewerIds(token, org, userId, signal);
-    this.cachedGroupReviewerIds.set(cacheKey, {
-      reviewerIds,
-      expiresAt: now + GROUP_REVIEWER_CACHE_TTL_MS,
-    });
+    const { reviewerIds, incomplete } = await this.resolveGroupReviewerIds(token, org, userId, signal);
+    if (!incomplete) {
+      this.cachedGroupReviewerIds.set(cacheKey, {
+        reviewerIds,
+        expiresAt: now + GROUP_REVIEWER_CACHE_TTL_MS,
+      });
+    }
     return reviewerIds;
   }
 
@@ -64,25 +72,34 @@ export class AdoPrReviewProvider extends BaseAdoPrProvider {
     org: string,
     userId: string,
     signal?: AbortSignal,
-  ): Promise<string[]> {
+  ): Promise<GroupReviewerResolution> {
     const userDescriptor = await this.fetchUserDescriptor(token, org, userId, signal);
     if (!userDescriptor) {
-      return [];
+      return { reviewerIds: [], incomplete: false };
     }
 
     const groupDescriptors = await this.fetchUpMembershipDescriptors(token, org, userDescriptor, signal);
     if (groupDescriptors.length === 0) {
-      return [];
+      return { reviewerIds: [], incomplete: false };
     }
 
+    let incomplete = false;
     const groupIds: string[] = [];
     await runWorkerPool(groupDescriptors, async descriptor => {
-      const groupId = await this.fetchStorageKey(token, org, descriptor, signal);
-      if (groupId && groupId !== userId) {
-        groupIds.push(groupId);
+      try {
+        const groupId = await this.fetchStorageKey(token, org, descriptor, signal);
+        if (groupId && groupId !== userId) {
+          groupIds.push(groupId);
+        }
+      } catch (err) {
+        if (err instanceof Error && (err.name === 'AbortError' || err.name === 'TimeoutError') && signal?.aborted) {
+          throw err;
+        }
+        incomplete = true;
+        logger.debug(`Failed to resolve ADO group storage key for org ${org}: ${String(err)}`);
       }
     }, 5);
-    return [...new Set(groupIds)];
+    return { reviewerIds: [...new Set(groupIds)], incomplete };
   }
 
   private async fetchUserDescriptor(
