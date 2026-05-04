@@ -120,7 +120,7 @@ export class AdoPrClient {
       return { diff: body, synthetic: false };
     }
 
-    const synthetic = !hasRenderableInlineDiff(parsed);
+    const synthetic = !hasOnlyRenderableInlineDiff(parsed);
     return { diff: renderAdoDiffSummary(parts, details, parsed, synthetic), synthetic };
   }
 
@@ -269,8 +269,9 @@ function renderChange(change: AdoCommitDiffChange): string {
   ].join('\n');
 }
 
-function hasRenderableInlineDiff(response: AdoCommitDiffResponse): boolean {
-  return (response.changes ?? []).some(change => Boolean((change.diff ?? change.patch)?.trim()));
+function hasOnlyRenderableInlineDiff(response: AdoCommitDiffResponse): boolean {
+  const fileChanges = (response.changes ?? []).filter(change => !change.item?.isFolder);
+  return fileChanges.length > 0 && fileChanges.every(change => Boolean((change.diff ?? change.patch)?.trim()));
 }
 
 function parseJson<T>(text: string): T | undefined {

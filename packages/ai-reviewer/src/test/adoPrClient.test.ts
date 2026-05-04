@@ -117,6 +117,33 @@ describe('AdoPrClient', () => {
     expect(result?.diff).not.toContain('Azure DevOps returned change metadata');
   });
 
+  it('marks mixed inline and metadata-only JSON responses as synthetic', async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(response({
+        sourceRefName: 'refs/heads/feature',
+        targetRefName: 'refs/heads/main',
+        lastMergeSourceCommit: { commitId: 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa' },
+        lastMergeTargetCommit: { commitId: 'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb' },
+      }))
+      .mockResolvedValueOnce(response({
+        changes: [
+          {
+            changeType: 'edit',
+            item: { path: '/src/app.ts' },
+            patch: '@@ -1 +1 @@\n-old\n+new',
+          },
+          { changeType: 'edit', item: { path: '/src/metadata-only.ts' } },
+        ],
+      }));
+
+    const client = new AdoPrClient(fetchMock as never, session);
+    const result = await client.fetchDiffResult(parts);
+
+    expect(result?.synthetic).toBe(true);
+    expect(result?.diff).toContain('Azure DevOps returned change metadata');
+    expect(result?.diff).toContain('@@ Azure DevOps change: edit @@');
+  });
+
   it('posts a line-level ADO review thread with right-side context', async () => {
     const fetchMock = vi.fn().mockResolvedValue(response({ id: 123 }));
     const client = new AdoPrClient(fetchMock as never, session);
