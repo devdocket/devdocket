@@ -94,7 +94,8 @@ function sanitizeUrlForLog(url: string): string {
     parsed.password = '';
     return parsed.href.replace(/[\r\n`]/g, '');
   } catch {
-    return url.replace(/[\r\n`]/g, '');
+    const [redacted] = url.split(/[?#]/, 1);
+    return redacted.replace(/[\r\n`]/g, '');
   }
 }
 

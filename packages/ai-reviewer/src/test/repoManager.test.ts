@@ -108,6 +108,12 @@ describe('RepoManager', () => {
       );
     });
 
+    it('redacts query strings and fragments from parse-failing URLs', async () => {
+      await expect(manager.ensureWorktree('https://exa mple.com/not-pr?token=secret#frag')).rejects.toThrow(
+        'Invalid PR URL: https://exa mple.com/not-pr',
+      );
+    });
+
     it('does not log query strings or fragments from PR URLs', async () => {
       await manager.ensureWorktree('https://github.com/owner/repo/pull/42?token=secret#frag');
 
