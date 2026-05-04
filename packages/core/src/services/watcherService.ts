@@ -311,11 +311,16 @@ export class WatcherService implements vscode.Disposable {
     const key = this.getWatchKey(identifier);
     const watch = this.watches.get(key);
     if (watch) {
+      const affectedPRKeys = this.getPRKeysForRun(key, watch);
       watch.dismissed = true;
       // Drop the acknowledgement so a re-watch (or recovery + re-failure)
       // can alert again.
       this.acknowledgedFailedRunKeys.delete(key);
+      const dismissedPRCount = this.dismissChildlessPRWatches(affectedPRKeys);
       this.logger.info(`Dismissed watch: ${identifier.displayName}`);
+      if (dismissedPRCount > 0) {
+        this._onDidChangePRWatches.fire();
+      }
       this._onDidChangeWatchedRuns.fire(this.getAllWatches());
       this.persistWatches();
     }
@@ -354,14 +359,20 @@ export class WatcherService implements vscode.Disposable {
    */
   dismissAllCompleted(): number {
     let dismissedCount = 0;
+    const affectedPRKeys = new Set<string>();
+
     for (const [key, watch] of this.watches.entries()) {
       if (watch.status.overallState === 'completed' && !watch.dismissed) {
+        for (const prKey of this.getPRKeysForRun(key, watch)) {
+          affectedPRKeys.add(prKey);
+        }
         watch.dismissed = true;
         // Drop the ack so a re-watch can alert again. Mirrors dismissWatch.
         this.acknowledgedFailedRunKeys.delete(key);
         dismissedCount++;
       }
     }
+
     for (const prWatch of this.prWatches.values()) {
       if ((prWatch.prState === 'merged' || prWatch.prState === 'closed') && !prWatch.dismissed) {
         const key = this.getPRWatchKey(prWatch.identifier);
@@ -379,6 +390,9 @@ export class WatcherService implements vscode.Disposable {
         dismissedCount++;
       }
     }
+
+    dismissedCount += this.dismissChildlessPRWatches(affectedPRKeys);
+
     if (dismissedCount > 0) {
       this.logger.info(`Dismissed ${dismissedCount} completed watch(es)`);
       this._onDidChangePRWatches.fire();
@@ -395,12 +409,49 @@ export class WatcherService implements vscode.Disposable {
    */
   countCompletedActiveWatches(): number {
     let count = 0;
-    for (const watch of this.watches.values()) {
-      if (!watch.dismissed && watch.status.overallState === 'completed') count++;
+    const dismissedRunKeys = new Set<string>();
+    const dismissedPRKeys = new Set<string>();
+    const affectedPRKeys = new Set<string>();
+
+    for (const [key, watch] of this.watches.entries()) {
+      if (!watch.dismissed && watch.status.overallState === 'completed') {
+        dismissedRunKeys.add(key);
+        for (const prKey of this.getPRKeysForRun(key, watch)) {
+          affectedPRKeys.add(prKey);
+        }
+        count++;
+      }
     }
-    for (const prWatch of this.prWatches.values()) {
-      if (!prWatch.dismissed && (prWatch.prState === 'merged' || prWatch.prState === 'closed')) count++;
+
+    for (const [prKey, prWatch] of this.prWatches.entries()) {
+      if (!prWatch.dismissed && (prWatch.prState === 'merged' || prWatch.prState === 'closed')) {
+        dismissedPRKeys.add(prKey);
+        count++;
+        for (const childKey of prWatch.childRunKeys) {
+          const childWatch = this.watches.get(childKey);
+          if (
+            childWatch
+            && !childWatch.dismissed
+            && childWatch.parentPRKey === prKey
+            && !dismissedRunKeys.has(childKey)
+          ) {
+            dismissedRunKeys.add(childKey);
+            count++;
+          }
+        }
+      }
     }
+
+    // Every affected PR was reached from an active completed child run, so the
+    // observed-child guard is already satisfied for this simulated cascade.
+    for (const prKey of affectedPRKeys) {
+      if (dismissedPRKeys.has(prKey)) continue;
+      const activeChildKeys = this.getActiveChildRunKeys(prKey);
+      if (activeChildKeys.length > 0 && activeChildKeys.every(childKey => dismissedRunKeys.has(childKey))) {
+        count++;
+      }
+    }
+
     return count;
   }
 
@@ -524,21 +575,72 @@ export class WatcherService implements vscode.Disposable {
    */
   getChildRuns(prKey: string): WatchedRun[] {
     const childRuns = new Map<string, WatchedRun>();
+    for (const childRunKey of this.getActiveChildRunKeys(prKey)) {
+      const watch = this.watches.get(childRunKey);
+      if (watch) {
+        childRuns.set(childRunKey, watch);
+      }
+    }
+    return Array.from(childRuns.values());
+  }
+
+  private getActiveChildRunKeys(prKey: string): string[] {
+    const childRuns = new Set<string>();
     // Include runs tracked via childRunKeys (covers linked standalone watches)
     const prWatch = this.prWatches.get(prKey);
     for (const childRunKey of prWatch?.childRunKeys ?? []) {
       const watch = this.watches.get(childRunKey);
       if (watch && !watch.dismissed) {
-        childRuns.set(childRunKey, watch);
+        childRuns.add(childRunKey);
       }
     }
     // Also include any runs explicitly parented by this PR
     for (const [watchKey, watch] of this.watches.entries()) {
       if (!watch.dismissed && watch.parentPRKey === prKey) {
-        childRuns.set(watchKey, watch);
+        childRuns.add(watchKey);
       }
     }
     return Array.from(childRuns.values());
+  }
+
+  private getPRKeysForRun(runKey: string, watch: WatchedRun): Set<string> {
+    const prKeys = new Set<string>();
+    if (watch.parentPRKey) {
+      prKeys.add(watch.parentPRKey);
+    }
+    for (const [prKey, prWatch] of this.prWatches.entries()) {
+      if (!prWatch.dismissed && prWatch.childRunKeys.includes(runKey)) {
+        prKeys.add(prKey);
+      }
+    }
+    return prKeys;
+  }
+
+  private dismissChildlessPRWatches(prKeys: Iterable<string>, options?: { assumeObserved?: boolean }): number {
+    let dismissedCount = 0;
+    for (const prKey of prKeys) {
+      const prWatch = this.prWatches.get(prKey);
+      if (!prWatch || prWatch.dismissed) continue;
+      if (!options?.assumeObserved && !this.hasObservedChildRun(prKey, prWatch)) continue;
+      if (this.getActiveChildRunKeys(prKey).length > 0) continue;
+
+      prWatch.dismissed = true;
+      dismissedCount++;
+      this.logger.info(`Dismissed childless PR watch: ${prWatch.identifier.displayName}`);
+    }
+    return dismissedCount;
+  }
+
+  private hasObservedChildRun(prKey: string, prWatch: WatchedPR): boolean {
+    if (prWatch.childRunKeys.length > 0) {
+      return true;
+    }
+    for (const watch of this.watches.values()) {
+      if (watch.parentPRKey === prKey) {
+        return true;
+      }
+    }
+    return false;
   }
 
   /**
@@ -726,6 +828,7 @@ export class WatcherService implements vscode.Disposable {
         }
 
         // Remove orphaned child runs (only dismiss runs owned by this PR)
+        const hadObservedChildren = currentRunKeys.size > 0 || this.hasObservedChildRun(key, prWatch);
         for (const childKey of currentRunKeys) {
           if (!newRunKeys.has(childKey)) {
             const childWatch = this.watches.get(childKey);
@@ -735,6 +838,13 @@ export class WatcherService implements vscode.Disposable {
             }
             prWatch.childRunKeys = prWatch.childRunKeys.filter(k => k !== childKey);
           }
+        }
+        if (
+          hadObservedChildren
+          && this.getActiveChildRunKeys(key).length === 0
+          && this.dismissChildlessPRWatches([key], { assumeObserved: true }) > 0
+        ) {
+          prChanged = true;
         }
 
         // Check PR state transitions
