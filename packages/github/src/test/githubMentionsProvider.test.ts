@@ -499,6 +499,32 @@ describe('GitHubMentionsProvider', () => {
     expect(listener.mock.calls[1][0][0].resurfaceVersion).toBe('comment:101:2024-02-03T00:00:00Z');
   });
 
+  it('skips comment fetching when the issue has no comments', async () => {
+    mockFetch
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          items: [{
+            ...createMockIssue(10, 'Bug report', 'org/repo'),
+            body: 'Original body ping @testuser',
+            comments: 0,
+            comments_url: 'https://api.github.com/repos/org/repo/issues/10/comments',
+          }],
+        }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ login: 'testuser' }),
+      });
+
+    const listener = vi.fn();
+    provider.onDidDiscoverItems(listener);
+    await provider.refresh();
+
+    expect(mockFetch).toHaveBeenCalledTimes(2);
+    expect(listener.mock.calls[0][0][0].resurfaceVersion).toBe('issue:10');
+  });
+
   it('uses issue body mention as a stable baseline when comments do not mention the current user', async () => {
     mockFetch
       .mockResolvedValueOnce({

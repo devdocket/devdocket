@@ -291,7 +291,7 @@ export class GitHubMentionsProvider extends BaseGitHubProvider {
     previousCommentVersion?: string,
     signal?: AbortSignal,
   ): Promise<string | undefined> {
-    if (!issue.comments_url) {
+    if (!issue.comments_url || issue.comments === 0) {
       return undefined;
     }
 
