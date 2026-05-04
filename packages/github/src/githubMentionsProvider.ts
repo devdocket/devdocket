@@ -26,6 +26,10 @@ interface GitHubTeamMembership {
   } | null;
 }
 
+type TeamMentionFetchResult =
+  | { ok: true; teams: Set<string> }
+  | { ok: false; teams: Set<string> };
+
 /**
  * DevDocket provider that discovers GitHub issues and pull requests
  * where the current user is @mentioned.
@@ -250,17 +254,19 @@ export class GitHubMentionsProvider extends BaseGitHubProvider {
       return cached.teams;
     }
 
-    const teams = await this.fetchCurrentUserTeamMentions(token, signal);
-    this.teamMentionCache = {
-      accessToken: token,
-      login,
-      expiresAtMs: now + TEAM_MENTION_CACHE_TTL_MS,
-      teams,
-    };
-    return teams;
+    const result = await this.fetchCurrentUserTeamMentions(token, signal);
+    if (result.ok) {
+      this.teamMentionCache = {
+        accessToken: token,
+        login,
+        expiresAtMs: now + TEAM_MENTION_CACHE_TTL_MS,
+        teams: result.teams,
+      };
+    }
+    return result.teams;
   }
 
-  private async fetchCurrentUserTeamMentions(token: string, signal?: AbortSignal): Promise<Set<string>> {
+  private async fetchCurrentUserTeamMentions(token: string, signal?: AbortSignal): Promise<TeamMentionFetchResult> {
     const teams = new Set<string>();
 
     for (let page = 1; ; page++) {
@@ -273,12 +279,12 @@ export class GitHubMentionsProvider extends BaseGitHubProvider {
       } catch (err: unknown) {
         if (err instanceof Error && err.name === 'AbortError' && signal?.aborted) { throw err; }
         logger.warn('Could not fetch GitHub team memberships for mention filtering', err);
-        return new Set<string>();
+        return { ok: false, teams };
       }
 
       if (!response?.ok) {
         logger.warn(`Could not fetch GitHub team memberships for mention filtering: ${response?.status ?? 'no response'}`);
-        return new Set<string>();
+        return { ok: false, teams };
       }
 
       let data: GitHubTeamMembership[];
@@ -286,11 +292,11 @@ export class GitHubMentionsProvider extends BaseGitHubProvider {
         data = await response.json() as GitHubTeamMembership[];
       } catch (err) {
         logger.warn('Could not parse GitHub team memberships for mention filtering', err);
-        return new Set<string>();
+        return { ok: false, teams };
       }
       if (!Array.isArray(data)) {
         logger.warn('Could not parse GitHub team memberships for mention filtering');
-        return new Set<string>();
+        return { ok: false, teams };
       }
 
       for (const team of data) {
@@ -303,7 +309,7 @@ export class GitHubMentionsProvider extends BaseGitHubProvider {
       }
 
       if (data.length < 100) {
-        return teams;
+        return { ok: true, teams };
       }
     }
   }

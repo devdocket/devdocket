@@ -23,28 +23,28 @@
       {
         "title": "DevDocket GitHub",
         "properties": {
-        "devDocketGithub.filteredRepos": {
-          "type": "string",
-          "default": "",
-          "editPresentation": "multilineText",
-          "description": "Filter out repositories from DevDocket results. Uses gitignore-style patterns, one per line. Matching repositories are excluded; unmatched repositories are shown.\n\nExamples:\nmyorg/old-*        # filter out repos starting with old-\nmyorg/*            # filter out all repos in myorg\n!myorg/important   # except keep this one\n\nSupports wildcards (*), negation (!), and comments (#).\nLeave empty to show all repositories."
-        },
-        "devDocketGithub.refreshIntervalSeconds": {
-          "type": "number",
-          "default": 300,
-          "description": "How often to refresh GitHub issues (in seconds). Minimum 60 seconds. Values below 60 are clamped."
-        },
-        "devDocketGithub.resurfaceOnNewVersion": {
-          "type": "boolean",
-          "default": true,
-          "description": "Resurface PR reviews when new commits are pushed."
-        },
-        "devDocketGithub.resurfaceOnReRequestedReview": {
-          "type": "boolean",
-          "default": true,
-          "description": "Resurface PR reviews when review is explicitly re-requested."
+          "devDocketGithub.filteredRepos": {
+            "type": "string",
+            "default": "",
+            "editPresentation": "multilineText",
+            "description": "Filter out repositories from DevDocket results. Uses gitignore-style patterns, one per line. Matching repositories are excluded; unmatched repositories are shown.\n\nExamples:\nmyorg/old-*        # filter out repos starting with old-\nmyorg/*            # filter out all repos in myorg\n!myorg/important   # except keep this one\n\nSupports wildcards (*), negation (!), and comments (#).\nLeave empty to show all repositories."
+          },
+          "devDocketGithub.refreshIntervalSeconds": {
+            "type": "number",
+            "default": 300,
+            "description": "How often to refresh GitHub issues (in seconds). Minimum 60 seconds. Values below 60 are clamped."
+          },
+          "devDocketGithub.resurfaceOnNewVersion": {
+            "type": "boolean",
+            "default": true,
+            "description": "Resurface PR reviews when new commits are pushed."
+          },
+          "devDocketGithub.resurfaceOnReRequestedReview": {
+            "type": "boolean",
+            "default": true,
+            "description": "Resurface PR reviews when review is explicitly re-requested."
+          }
         }
-      }
       }
     ]
   },
@@ -58,7 +58,7 @@
   },
   "dependencies": {
     "@devdocket/shared": "*",
-    "marked": "^18.0.2"
+    "marked": "^14.1.4"
   },
   "devDependencies": {
     "@types/node": "^20.11.0",

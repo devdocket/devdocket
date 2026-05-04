@@ -1018,6 +1018,30 @@ describe('GitHubMentionsProvider', () => {
     expect(listener.mock.calls[0][0][0].resurfaceVersion).toBe('comment:901:2024-04-01T00:00:00Z');
   });
 
+  it('retries team lookup after a team API failure instead of caching the empty result', async () => {
+    const issue = {
+      ...createMockIssue(10, 'Bug report', 'org/repo'),
+      body: 'Please review, @org/platform.',
+      comments: 0,
+      comments_url: 'https://api.github.com/repos/org/repo/issues/10/comments',
+    };
+    mockFetch
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ items: [issue] }) })
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ login: 'testuser' }) })
+      .mockResolvedValueOnce({ ok: false, status: 500 })
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ items: [issue] }) })
+      .mockResolvedValueOnce({ ok: true, json: async () => [{ slug: 'platform', organization: { login: 'org' } }] });
+
+    const listener = vi.fn();
+    provider.onDidDiscoverItems(listener);
+    await provider.refresh();
+    await provider.refresh();
+
+    expect(mockFetch.mock.calls.filter(call => String(call[0]).includes('/user/teams'))).toHaveLength(2);
+    expect(listener.mock.calls[0][0][0].resurfaceVersion).toBeUndefined();
+    expect(listener.mock.calls[1][0][0].resurfaceVersion).toBe('issue:10');
+  });
+
   it('clears the team cache when the authenticated login changes', async () => {
     vi.mocked(authentication.getSession)
       .mockResolvedValueOnce({ accessToken: 'alice-token', id: 'session-1', scopes: ['repo', 'read:org'], account: { id: '1', label: 'alice' } } as any)
