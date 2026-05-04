@@ -16,6 +16,7 @@ describe('buildWalkthroughPrompt', () => {
 
     expect(prompt).toContain('Pass `filePath`');
     expect(prompt).toContain('`#diff-{hash}`');
+    expect(prompt).not.toContain('https://github.com/owner/repo/blob/pr-42');
     expect(prompt).not.toContain('\\`filePath\\`');
   });
 

@@ -154,7 +154,7 @@ function sanitizePromptUrl(url: string): string {
 }
 
 function buildNavigableLinksSection(
-  info: { org: string; repo: string; prNumber: string; headRef: string; provider?: 'github' | 'ado' },
+  info: { org: string; repo: string; prNumber: string; provider?: 'github' | 'ado' },
   prUrl: string,
 ): string {
   if (info.provider === 'ado') {
@@ -173,7 +173,7 @@ Do not use GitHub \`#diff-...\` anchors for Azure DevOps PRs.`;
 When referencing files and code lines, use navigable links so the reader can jump directly to the code:
 
 - **PR diff view (changed files):** \`https://github.com/${info.org}/${info.repo}/pull/${info.prNumber}/files#diff-{hash}R{line}\` — use **devdocket-diffAnchor** to compute the \`{hash}\` from the file path. **Never try to compute SHA-256 yourself** — always call the tool. Append \`R{line}\` for right-side (new file) line numbers.
-- **Blob view (unchanged files):** \`https://github.com/${info.org}/${info.repo}/blob/${info.headRef}/{filePath}#L{line}\`
+- For unchanged files or context outside the diff, cite the relative file path and line number without inventing a GitHub blob URL.
 
-All file and line references should be navigable links.`;
+All changed-file references should be navigable links.`;
 }
