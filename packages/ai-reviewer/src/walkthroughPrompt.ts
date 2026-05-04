@@ -1,6 +1,8 @@
 // Interactive PR walkthrough prompt for use with the @walkthrough chat participant.
 // Adapted from the superpowers pull-request-walkthrough command for VS Code chat with LM tools.
 
+import { sanitizePrUrl } from './promptSanitization';
+
 export function buildWalkthroughPrompt(info: {
   worktreePath: string;
   org: string;
@@ -11,7 +13,7 @@ export function buildWalkthroughPrompt(info: {
   prUrl?: string;
   provider?: 'github' | 'ado';
 }): string {
-  const prUrl = sanitizePromptUrl(info.prUrl ?? `https://github.com/${info.org}/${info.repo}/pull/${info.prNumber}`);
+  const prUrl = sanitizePrUrl(info.prUrl ?? `https://github.com/${info.org}/${info.repo}/pull/${info.prNumber}`);
   const navigableLinks = buildNavigableLinksSection(info, prUrl);
 
   return `# Interactive PR Walkthrough
@@ -137,22 +139,6 @@ For PRs with many files (>20):
 - Offer to focus on the most important or complex areas first
 - Ask the reader what they most want to understand — let their curiosity guide the depth
 `;
-}
-
-function sanitizePromptUrl(url: string): string {
-  try {
-    const parsed = new URL(url);
-    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
-      return '(URL unavailable)';
-    }
-    parsed.search = '';
-    parsed.hash = '';
-    parsed.username = '';
-    parsed.password = '';
-    return parsed.href.replace(/[\r\n`]/g, '');
-  } catch {
-    return '(URL unavailable)';
-  }
 }
 
 function buildNavigableLinksSection(

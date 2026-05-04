@@ -50,6 +50,7 @@ describe('buildWalkthroughPrompt', () => {
 
     expect(prompt).toContain('https://github.com/owner/repo/pull/42');
     expect(prompt).not.toContain('user:secret');
+    expect(prompt).not.toContain('secret');
   });
 
   it('omits GitHub diffAnchor instructions for Azure DevOps PRs', () => {

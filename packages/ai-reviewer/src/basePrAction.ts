@@ -4,29 +4,9 @@ import { parseAdoPrUrl, parsePullRequestUrl, parsePrUrl } from './prUrl';
 import { AdoPrClient } from './adoPrClient';
 import { confirmAiUsage } from './confirmAiUsage';
 import { fenceDiff } from './diffFence';
+import { sanitizePrUrl } from './promptSanitization';
 
-/**
- * Sanitize a URL before interpolating it into an LLM prompt.
- * Ensures the URL uses http(s) and strips characters that could
- * break prompt structure (newlines, backticks). Does not validate
- * that the URL points to a supported PR provider — use parsePullRequestUrl for that.
- */
-export function sanitizePrUrl(url: string): string {
-  try {
-    const parsed = new URL(url);
-    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
-      return '(URL unavailable)';
-    }
-    parsed.search = '';
-    parsed.hash = '';
-    parsed.username = '';
-    parsed.password = '';
-    // Strip newlines, carriage returns, and backticks that could break prompt structure
-    return parsed.href.replace(/[\r\n`]/g, '');
-  } catch {
-    return '(URL unavailable)';
-  }
-}
+export { sanitizePrUrl };
 
 /**
  * Base class for PR-based AI actions (code review, walkthrough, etc.).
