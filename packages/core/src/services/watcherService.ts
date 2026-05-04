@@ -845,6 +845,7 @@ export class WatcherService implements vscode.Disposable {
           && this.dismissChildlessPRWatches([key], { assumeObserved: true }) > 0
         ) {
           prChanged = true;
+          continue;
         }
 
         // Check PR state transitions
