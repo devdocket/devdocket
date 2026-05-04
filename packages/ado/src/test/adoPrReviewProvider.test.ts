@@ -382,7 +382,7 @@ describe('AdoPrReviewProvider', () => {
   });
 
   it('caches user ID after first successful fetch', async () => {
-    // First refresh: connection data + PR list + group membership cache attempt
+    // First refresh: connection data + PR list + empty group memberships
     mockFetch
       .mockResolvedValueOnce({
         ok: true,
@@ -391,22 +391,23 @@ describe('AdoPrReviewProvider', () => {
       .mockResolvedValueOnce({
         ok: true,
         json: async () => ({ value: [] }),
-      });
+      })
+      .mockResolvedValueOnce(mockGraphDescriptor())
+      .mockResolvedValueOnce(mockMemberships([]));
 
     await provider.refresh();
-    expect(mockFetch).toHaveBeenCalledTimes(3);
+    expect(mockFetch).toHaveBeenCalledTimes(4);
 
     mockFetch.mockClear();
 
-    // Second refresh: should skip connection data call
+    // Second refresh: should skip connection data and use cached empty group memberships
     mockFetch.mockResolvedValueOnce({
       ok: true,
       json: async () => ({ value: [] }),
     });
 
     await provider.refresh();
-    // PR list plus graph lookup attempt, but no connection data
-    expect(mockFetch).toHaveBeenCalledTimes(2);
+    expect(mockFetch).toHaveBeenCalledTimes(1);
     expect(mockFetch).toHaveBeenCalledWith(
       expect.stringContaining('pullrequests'),
       expect.any(Object),
