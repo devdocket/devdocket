@@ -360,10 +360,11 @@ export class WatcherService implements vscode.Disposable {
   dismissAllCompleted(): number {
     let dismissedCount = 0;
     const affectedPRKeys = new Set<string>();
+    const runToPRKeys = this.buildActiveChildRunIndex();
 
     for (const [key, watch] of this.watches.entries()) {
       if (watch.status.overallState === 'completed' && !watch.dismissed) {
-        for (const prKey of this.getPRKeysForRun(key, watch)) {
+        for (const prKey of this.getPRKeysForRun(key, watch, runToPRKeys)) {
           affectedPRKeys.add(prKey);
         }
         watch.dismissed = true;
@@ -412,11 +413,12 @@ export class WatcherService implements vscode.Disposable {
     const dismissedRunKeys = new Set<string>();
     const dismissedPRKeys = new Set<string>();
     const affectedPRKeys = new Set<string>();
+    const runToPRKeys = this.buildActiveChildRunIndex();
 
     for (const [key, watch] of this.watches.entries()) {
       if (!watch.dismissed && watch.status.overallState === 'completed') {
         dismissedRunKeys.add(key);
-        for (const prKey of this.getPRKeysForRun(key, watch)) {
+        for (const prKey of this.getPRKeysForRun(key, watch, runToPRKeys)) {
           affectedPRKeys.add(prKey);
         }
         count++;
@@ -603,17 +605,32 @@ export class WatcherService implements vscode.Disposable {
     return Array.from(childRuns.values());
   }
 
-  private getPRKeysForRun(runKey: string, watch: WatchedRun): Set<string> {
+  private getPRKeysForRun(
+    runKey: string,
+    watch: WatchedRun,
+    runToPRKeys = this.buildActiveChildRunIndex(),
+  ): Set<string> {
     const prKeys = new Set<string>();
     if (watch.parentPRKey) {
       prKeys.add(watch.parentPRKey);
     }
-    for (const [prKey, prWatch] of this.prWatches.entries()) {
-      if (!prWatch.dismissed && prWatch.childRunKeys.includes(runKey)) {
-        prKeys.add(prKey);
-      }
+    for (const prKey of runToPRKeys.get(runKey) ?? []) {
+      prKeys.add(prKey);
     }
     return prKeys;
+  }
+
+  private buildActiveChildRunIndex(): Map<string, Set<string>> {
+    const runToPRKeys = new Map<string, Set<string>>();
+    for (const [prKey, prWatch] of this.prWatches.entries()) {
+      if (prWatch.dismissed) continue;
+      for (const childKey of prWatch.childRunKeys) {
+        const prKeys = runToPRKeys.get(childKey) ?? new Set<string>();
+        prKeys.add(prKey);
+        runToPRKeys.set(childKey, prKeys);
+      }
+    }
+    return runToPRKeys;
   }
 
   private dismissChildlessPRWatches(prKeys: Iterable<string>, options?: { assumeObserved?: boolean }): number {
