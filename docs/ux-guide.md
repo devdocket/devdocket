@@ -10,13 +10,13 @@ DevDocket adds a single view to its activity-bar container — a Preact-based we
 
 Your active workflow, organized into five tiers in this render order:
 
-| Tier | What's in it | Underlying state |
-|------|--------------|------------------|
-| **↓ Incoming** | Newly discovered provider items you haven't triaged. | `inboxState === 'unseen'` |
-| **▶ In Progress** | What you're actively working on. | `WorkItemState.InProgress` |
-| **○ Ready to Start** | Your curated backlog of accepted items + manual tasks. | `WorkItemState.New` |
-| **⏸ Paused** | Items you've temporarily set aside. | `WorkItemState.Paused` |
-| **✓ Done** | Completed and archived items. | `WorkItemState.Done` / `Archived` |
+| Tier | What's in it |
+|------|--------------|
+| **↓ Incoming** | Newly discovered provider items you haven't triaged. |
+| **▶ In Progress** | What you're actively working on. |
+| **○ Ready to Start** | Your curated backlog of accepted items + manual tasks. |
+| **⏸ Paused** | Items you've temporarily set aside. |
+| **✓ Done** | Completed and archived items. |
 
 Tiers with no items are hidden. The Done tier collapses by default.
 
