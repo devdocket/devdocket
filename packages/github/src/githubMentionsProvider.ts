@@ -59,8 +59,7 @@ export class GitHubMentionsProvider extends BaseGitHubProvider {
       this.pruneMentionCommentCache(activeExternalIds);
     }
 
-    const shouldComputeMentionVersions = filtered.some(({ issue }) => issue.comments_url || issue.body || issue.title);
-    const currentLogin = shouldComputeMentionVersions ? await this.getCurrentLogin(accessToken, signal) : undefined;
+    const currentLogin = filtered.length > 0 ? await this.getCurrentLogin(accessToken, signal) : undefined;
     if (currentLogin && this.mentionCommentCacheLogin !== currentLogin) {
       this.mentionCommentCache.clear();
       this.mentionCommentCacheLogin = currentLogin;
