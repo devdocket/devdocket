@@ -145,13 +145,15 @@ describe('AdoPrReviewProvider', () => {
         json: async () => ({
           value: [createMockPr(101, 'Fix bug')],
         }),
-      });
+      })
+      .mockResolvedValueOnce(mockGraphDescriptor())
+      .mockResolvedValueOnce(mockMemberships([]));
 
     const listener = vi.fn();
     provider.onDidDiscoverItems(listener);
     await provider.refresh();
 
-    expect(mockFetch).toHaveBeenCalledTimes(3);
+    expect(mockFetch).toHaveBeenCalledTimes(4);
 
     // First call: connection data to get user ID
     expect(mockFetch).toHaveBeenCalledWith(
@@ -736,21 +738,23 @@ describe('AdoPrReviewProvider', () => {
     provider.dispose();
     provider = new AdoPrReviewProvider([{ org: 'myorg', projects: ['ValidProject', '../bad', 'AlsoValid'] }]);
 
-    // Connection data + 2 valid project PR fetches + group membership cache attempt
+    // Connection data + 2 valid project PR fetches + empty group memberships
     mockFetch
       .mockResolvedValueOnce({
         ok: true,
         json: async () => ({ authenticatedUser: { id: 'user-123' } }),
       })
       .mockResolvedValueOnce({ ok: true, json: async () => ({ value: [] }) })
-      .mockResolvedValueOnce({ ok: true, json: async () => ({ value: [] }) });
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ value: [] }) })
+      .mockResolvedValueOnce(mockGraphDescriptor())
+      .mockResolvedValueOnce(mockMemberships([]));
 
     const listener = vi.fn();
     provider.onDidDiscoverItems(listener);
     await provider.refresh();
 
-    // 1 connection data + 2 valid project fetches + 1 group membership cache attempt = 4
-    expect(mockFetch).toHaveBeenCalledTimes(4);
+    // 1 connection data + 2 valid project fetches + descriptor + memberships = 5
+    expect(mockFetch).toHaveBeenCalledTimes(5);
   });
 
   it('fires empty items when all configured projects are invalid', async () => {
