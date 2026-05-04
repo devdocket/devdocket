@@ -92,12 +92,7 @@ export class GitHubPrReviewProvider extends BaseGitHubProvider {
     this.publishDiscoveredItems(items, patterns);
 
     if (failed) {
-      const message = 'Failed to fetch PR review requests';
-      if (isUserTriggered) {
-        vscode.window.showWarningMessage(`DevDocket GitHub: ${message}`);
-      } else {
-        logger.warn(message);
-      }
+      this.warnOnFetchFailure('Failed to fetch PR review requests', isUserTriggered);
     }
   }
 

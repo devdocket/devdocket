@@ -140,4 +140,18 @@ export abstract class BaseGitHubProvider extends BaseProvider {
     return undefined;
   }
 
+  /**
+   * Logs a fetch-failure warning and, when the refresh was user-triggered,
+   * also surfaces it as a VS Code notification. All GitHub provider fetch
+   * failures should go through this helper so the message format stays
+   * consistent.
+   */
+  protected warnOnFetchFailure(message: string, isUserTriggered: boolean): void {
+    if (isUserTriggered) {
+      void vscode.window.showWarningMessage(`DevDocket GitHub: ${message}`);
+    } else {
+      logger.warn(message);
+    }
+  }
+
 }

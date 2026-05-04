@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { parseAdoProjectsConfig, type OrgConfig } from '../configParser';
+import { parseAdoProjectsConfig, resolveProjectList, type OrgConfig } from '../configParser';
 
 describe('parseAdoProjectsConfig', () => {
   describe('parsing', () => {
@@ -101,5 +101,32 @@ describe('parseAdoProjectsConfig', () => {
         { org: 'org', projects: ['Proj'] },
       ] satisfies OrgConfig[]);
     });
+  });
+});
+
+describe('resolveProjectList', () => {
+  it('returns whole-org sentinel when projects list is empty', () => {
+    const result = resolveProjectList({ org: 'myorg', projects: [] }, 'fetch');
+    expect(result).toEqual(['']);
+  });
+
+  it('returns valid projects when all are valid', () => {
+    const result = resolveProjectList({ org: 'myorg', projects: ['Proj1', 'Proj2'] }, 'fetch');
+    expect(result).toEqual(['Proj1', 'Proj2']);
+  });
+
+  it('filters out invalid project names and returns remaining valid ones', () => {
+    const result = resolveProjectList({ org: 'myorg', projects: ['ValidProject', '../bad', 'AlsoValid'] }, 'fetch');
+    expect(result).toEqual(['ValidProject', 'AlsoValid']);
+  });
+
+  it('returns null when all explicitly configured projects are invalid', () => {
+    const result = resolveProjectList({ org: 'myorg', projects: ['../bad', '?evil'] }, 'fetch');
+    expect(result).toBeNull();
+  });
+
+  it('treats empty-string project as valid (whole-org sentinel in project list)', () => {
+    const result = resolveProjectList({ org: 'myorg', projects: ['', 'ValidProject'] }, 'fetch');
+    expect(result).toEqual(['', 'ValidProject']);
   });
 });
