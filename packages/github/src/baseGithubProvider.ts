@@ -101,15 +101,14 @@ export abstract class BaseGitHubProvider extends BaseProvider {
   /**
    * Publish GitHub items after applying repository filters at the provider boundary.
    */
-  protected publishDiscoveredItems(items: DiscoveredItem[]): void {
-    this._onDidDiscoverItems.fire(this.applyConfiguredRepoFilter(items));
+  protected publishDiscoveredItems(items: DiscoveredItem[], patterns: RepoPattern[] = this.getConfiguredPatterns()): void {
+    this._onDidDiscoverItems.fire(this.applyConfiguredRepoFilter(items, patterns));
   }
 
   /**
    * Apply the `devDocketGithub.filteredRepos` setting to discovered items.
    */
-  protected applyConfiguredRepoFilter<T extends Pick<DiscoveredItem, 'externalId' | 'group'>>(items: T[]): T[] {
-    const patterns = this.getConfiguredPatterns();
+  protected applyConfiguredRepoFilter<T extends Pick<DiscoveredItem, 'externalId' | 'group'>>(items: T[], patterns: RepoPattern[] = this.getConfiguredPatterns()): T[] {
     if (patterns.length === 0) { return items; }
 
     return items.filter(item => {
