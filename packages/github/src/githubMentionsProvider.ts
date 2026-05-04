@@ -8,6 +8,7 @@ import { getHeaders, getGitHubAuthHeaders, retryWithAuth, throwApiError, parseCa
 
 const MENTIONS_ACTIVATED_KEY = 'mentionsActivatedAt';
 const COMMENT_FETCH_CONCURRENCY = 3;
+const COMMENT_PAGE_LIMIT = 5;
 
 interface GitHubIssueComment {
   id: number;
@@ -238,45 +239,41 @@ export class GitHubMentionsProvider extends BaseGitHubProvider {
       return undefined;
     }
 
-    let response: Response;
-    try {
-      response = await fetch(GitHubMentionsProvider.withPerPage(issue.comments_url), {
-        headers: getGitHubAuthHeaders(token),
-        signal: combineSignals(signal, 30_000),
-      });
-    } catch (err: unknown) {
-      if (err instanceof Error && err.name === 'AbortError' && signal?.aborted) { throw err; }
-      logger.debug(`Failed to fetch comments for mention ${issue.html_url}`, err);
-      return undefined;
+    for (let page = 1; page <= COMMENT_PAGE_LIMIT; page++) {
+      let response: Response;
+      try {
+        response = await fetch(GitHubMentionsProvider.withCommentQuery(issue.comments_url, page), {
+          headers: getGitHubAuthHeaders(token),
+          signal: combineSignals(signal, 30_000),
+        });
+      } catch (err: unknown) {
+        if (err instanceof Error && err.name === 'AbortError' && signal?.aborted) { throw err; }
+        logger.debug(`Failed to fetch comments for mention ${issue.html_url}`, err);
+        return undefined;
+      }
+
+      if (!response.ok) {
+        logger.debug(`Failed to fetch comments for mention ${issue.html_url}: ${response.status}`);
+        return undefined;
+      }
+
+      const comments = await response.json() as GitHubIssueComment[];
+      for (const comment of comments) {
+        if (!GitHubMentionsProvider.mentionsUser(comment.body, currentLogin)) {
+          continue;
+        }
+        if (!comment.created_at || Number.isNaN(Date.parse(comment.created_at))) {
+          continue;
+        }
+        return `comment:${comment.id}:${comment.created_at}`;
+      }
+
+      if (comments.length < 100) {
+        break;
+      }
     }
 
-    if (!response.ok) {
-      logger.debug(`Failed to fetch comments for mention ${issue.html_url}: ${response.status}`);
-      return undefined;
-    }
-
-    const comments = await response.json() as GitHubIssueComment[];
-    let latestMention: { id: number; timestamp: string; time: number } | undefined;
-    for (const comment of comments) {
-      if (!GitHubMentionsProvider.mentionsUser(comment.body, currentLogin)) {
-        continue;
-      }
-      const timestamp = comment.updated_at ?? comment.created_at;
-      if (!timestamp) {
-        continue;
-      }
-      const time = Date.parse(timestamp);
-      if (Number.isNaN(time)) {
-        continue;
-      }
-      if (!latestMention || time > latestMention.time) {
-        latestMention = { id: comment.id, timestamp, time };
-      }
-    }
-
-    return latestMention
-      ? `comment:${latestMention.id}:${latestMention.timestamp}`
-      : undefined;
+    return undefined;
   }
 
   private static mentionsUser(body: string | null | undefined, login: string): boolean {
@@ -291,16 +288,17 @@ export class GitHubMentionsProvider extends BaseGitHubProvider {
     return /^[A-Za-z0-9](?:[A-Za-z0-9-]{0,37}[A-Za-z0-9])?$/.test(login);
   }
 
-  private static withPerPage(url: string): string {
+  private static withCommentQuery(url: string, page: number): string {
     try {
       const parsed = new URL(url);
       parsed.searchParams.set('per_page', '100');
-      parsed.searchParams.set('sort', 'updated');
+      parsed.searchParams.set('sort', 'created');
       parsed.searchParams.set('direction', 'desc');
+      parsed.searchParams.set('page', String(page));
       return parsed.toString();
     } catch {
       const separator = url.includes('?') ? '&' : '?';
-      return `${url}${separator}per_page=100&sort=updated&direction=desc`;
+      return `${url}${separator}per_page=100&sort=created&direction=desc&page=${page}`;
     }
   }
 

@@ -128,8 +128,8 @@ describe('GitHubMentionsProvider', () => {
       .mockResolvedValueOnce({
         ok: true,
         json: async () => ([
-          { id: 100, body: 'Initial ping @testuser', updated_at: '2024-02-01T00:00:00Z' },
-          { id: 101, body: 'Follow-up without a mention', updated_at: '2024-02-02T00:00:00Z' },
+          { id: 100, body: 'Initial ping @testuser', created_at: '2024-02-01T00:00:00Z', updated_at: '2024-02-05T00:00:00Z' },
+          { id: 101, body: 'Follow-up without a mention', created_at: '2024-02-02T00:00:00Z' },
         ]),
       });
 
@@ -142,8 +142,51 @@ describe('GitHubMentionsProvider', () => {
 
     const commentsFetchUrl = new URL(mockFetch.mock.calls[2][0] as string);
     expect(commentsFetchUrl.searchParams.get('per_page')).toBe('100');
-    expect(commentsFetchUrl.searchParams.get('sort')).toBe('updated');
+    expect(commentsFetchUrl.searchParams.get('sort')).toBe('created');
     expect(commentsFetchUrl.searchParams.get('direction')).toBe('desc');
+  });
+
+  it('finds a mention on a later comments page', async () => {
+    mockFetch
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          items: [{
+            ...createMockIssue(10, 'Bug report', 'org/repo'),
+            comments_url: 'https://api.github.com/repos/org/repo/issues/10/comments',
+          }],
+        }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ login: 'testuser' }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => Array.from({ length: 100 }, (_, i) => ({
+          id: 200 + i,
+          body: 'non-mention update',
+          created_at: `2024-03-${String(30 - Math.floor(i / 4)).padStart(2, '0')}T00:00:00Z`,
+        })),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ([
+          { id: 100, body: 'Older ping @testuser', created_at: '2024-02-01T00:00:00Z' },
+        ]),
+      });
+
+    const listener = vi.fn();
+    provider.onDidDiscoverItems(listener);
+    await provider.refresh();
+
+    const items = listener.mock.calls[0][0];
+    expect(items[0].resurfaceVersion).toBe('comment:100:2024-02-01T00:00:00Z');
+
+    const firstPageUrl = new URL(mockFetch.mock.calls[2][0] as string);
+    const secondPageUrl = new URL(mockFetch.mock.calls[3][0] as string);
+    expect(firstPageUrl.searchParams.get('page')).toBe('1');
+    expect(secondPageUrl.searchParams.get('page')).toBe('2');
   });
 
   it('changes resurfaceVersion when a later comment mentions the current user', async () => {
@@ -164,8 +207,8 @@ describe('GitHubMentionsProvider', () => {
       .mockResolvedValueOnce({
         ok: true,
         json: async () => ([
-          { id: 100, body: 'Initial ping @testuser', updated_at: '2024-02-01T00:00:00Z' },
-          { id: 102, body: 'New ping @testuser', updated_at: '2024-02-03T00:00:00Z' },
+          { id: 102, body: 'New ping @testuser', created_at: '2024-02-03T00:00:00Z' },
+          { id: 100, body: 'Initial ping @testuser', created_at: '2024-02-01T00:00:00Z' },
         ]),
       });
 
@@ -202,7 +245,7 @@ describe('GitHubMentionsProvider', () => {
       .mockResolvedValueOnce({
         ok: true,
         json: async () => ([
-          { id: 100, body: 'Initial ping @testuser', updated_at: '2024-02-01T00:00:00Z' },
+          { id: 100, body: 'Initial ping @testuser', created_at: '2024-02-01T00:00:00Z' },
         ]),
       });
 
@@ -232,7 +275,7 @@ describe('GitHubMentionsProvider', () => {
       .mockResolvedValueOnce({
         ok: true,
         json: async () => ([
-          { id: 101, body: 'Follow-up without a mention', updated_at: '2024-02-02T00:00:00Z' },
+          { id: 101, body: 'Follow-up without a mention', created_at: '2024-02-02T00:00:00Z' },
         ]),
       });
 
