@@ -134,7 +134,7 @@ export abstract class BaseAdoPrProvider extends BaseProvider {
     const allItems: DiscoveredItem[] = [];
     const identityFailures: string[] = [];
     const fetchFailures: string[] = [];
-    const groupMembershipFailures: string[] = [];
+    const additionalIdentityLookupFailures: string[] = [];
 
     for (const orgConfig of this.orgConfigs) {
       if (!isValidUrlSegment(orgConfig.org)) {
@@ -181,7 +181,7 @@ export abstract class BaseAdoPrProvider extends BaseProvider {
         if (err instanceof Error && (err.name === 'AbortError' || err.name === 'TimeoutError') && signal?.aborted) {
           throw createAbortError();
         }
-        groupMembershipFailures.push(orgConfig.org);
+        additionalIdentityLookupFailures.push(orgConfig.org);
         logger.warn(`Failed to determine additional ADO ${this.logLabel} identities for org ${orgConfig.org}`);
         logger.debug(`Additional ADO ${this.logLabel} identity lookup failed for org ${orgConfig.org}: ${String(err)}`);
       }
@@ -222,11 +222,11 @@ export abstract class BaseAdoPrProvider extends BaseProvider {
           : `failed to fetch from ${uniqueFetchFailures.length} sources`,
       );
     }
-    if (groupMembershipFailures.length > 0) {
+    if (additionalIdentityLookupFailures.length > 0) {
       messages.push(
-        groupMembershipFailures.length === 1
-          ? `${this.additionalSearchCriteriaFailureLabel} failed for ${groupMembershipFailures[0]}`
-          : `${this.additionalSearchCriteriaFailureLabel} failed for ${groupMembershipFailures.length} orgs`,
+        additionalIdentityLookupFailures.length === 1
+          ? `${this.additionalSearchCriteriaFailureLabel} failed for ${additionalIdentityLookupFailures[0]}`
+          : `${this.additionalSearchCriteriaFailureLabel} failed for ${additionalIdentityLookupFailures.length} orgs`,
       );
     }
     if (messages.length > 0) {
