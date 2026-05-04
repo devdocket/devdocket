@@ -18,15 +18,21 @@ Developers constantly context-switch between tools. Issues live in GitHub, tasks
 
 ## Workflow
 
-DevDocket organizes work across five views in the sidebar:
+DevDocket organizes your work in a single sidebar view with two tabs:
 
-| View | Purpose |
-|------|---------|
-| **Inbox** | Newly discovered items from providers. Accept to keep, or dismiss. |
-| **Queue** | Your curated backlog — accepted items and manual tasks. |
-| **Focus** | What you're actively working on. Pause or complete items here. |
-| **History** | Completed and archived items — your work record. |
-| **Sources** | Everything providers know about, browsable anytime. |
+- **My Work** — your active workflow, organized into tiers (in render order):
+
+  | Tier | Purpose |
+  |------|---------|
+  | **↓ Incoming** | Newly discovered items from providers. Click to preview, then **Accept** or **Dismiss**. |
+  | **▶ In Progress** | What you're actively working on. Pause or complete from hover actions. |
+  | **○ Ready to Start** | Your curated backlog — accepted items and manual tasks. |
+  | **⏸ Paused** | Items temporarily set aside. Resume to bring them back into In Progress. |
+  | **✓ Done** | Completed items — your work record. |
+
+- **Sources** — everything providers know about, grouped by provider, browsable anytime.
+
+A separate floating **CI Watches** panel monitors GitHub Actions / Azure DevOps Pipeline runs and pull request lifecycle status (open / merged / closed). Open it from the eye icon in the status bar.
 
 By default, provider-linked items are automatically marked **Done** when their issue is closed or their PR is merged externally.
 
@@ -70,10 +76,10 @@ DevDocket is extensible with two types of plugins:
 
 | Extension | Type | What It Does |
 |-----------|------|--------------|
-| DevDocket GitHub | Provider | Discovers GitHub issues and PR review requests |
-| DevDocket — Azure DevOps | Provider | Discovers Azure DevOps work items and PR review requests |
-| DevDocket Start Git Work | Action | Creates a branch and worktree for a work item |
-| DevDocket — AI Actions | Action | AI-powered actions such as analyzing diffs and posting review comments |
+| DevDocket GitHub | Provider + Watcher | Discovers GitHub issues, mentions, PR review requests, and pull requests you authored or are assigned to; watches GitHub Actions runs and PR status |
+| DevDocket — Azure DevOps | Provider + Watcher | Discovers Azure DevOps work items, PR review requests, and authored PRs; watches ADO Pipelines and PR status |
+| DevDocket Start Git Work | Action | Creates a feature branch and a sibling git worktree for a work item, optionally running follow-up commands |
+| DevDocket — AI Actions | Action | AI-powered code review against a PR diff plus a `@walkthrough` chat participant for guided codebase tours |
 
 To build your own provider or action, see the [Extension API documentation](docs/extension-api.md).
 
@@ -84,8 +90,8 @@ DevDocket is a monorepo with five VS Code extensions and a shared library:
 ```
 packages/
 ├── core/              # The hub extension (UI, lifecycle, plugin API)
-├── github/            # GitHub issues and PR review provider
-├── ado/               # Azure DevOps work items and PR review provider
+├── github/            # GitHub issues, mentions, PR reviews, my-PRs + Actions and PR watcher
+├── ado/               # Azure DevOps work items, PR reviews, my-PRs + Pipelines and PR watcher
 ├── start-git-work/    # Branch + worktree action
 ├── ai-reviewer/       # AI code review action
 └── shared/            # Shared library (BaseProvider, utilities)

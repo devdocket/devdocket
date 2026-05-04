@@ -27,36 +27,50 @@ cd packages/core && npm run watch
 DevDocket is a VS Code extension that acts as a **hub** for managing work items from multiple sources. It's a monorepo with the following extensions:
 
 - **`packages/core`** — The DevDocket extension. Owns the UI, work item lifecycle, and plugin API.
-- **`packages/github`** — A provider extension that discovers GitHub issues and PR reviews.
-- **`packages/ado`** — A provider extension that discovers Azure DevOps work items and PR reviews.
+- **`packages/github`** — A provider extension that discovers GitHub issues, mentions, PR reviews, and pull requests you authored or are assigned to, plus a GitHub Actions and PR watcher.
+- **`packages/ado`** — A provider extension that discovers Azure DevOps work items, PR reviews, and authored PRs, plus an ADO Pipelines and PR watcher.
 - **`packages/start-git-work`** — An action extension that creates git branches and worktrees for work items from GitHub and ADO providers.
+- **`packages/ai-reviewer`** — An action extension that runs AI-powered code review against the diff of a GitHub PR work item, plus an `@walkthrough` chat participant for guided codebase tours.
+- **`packages/shared`** — Shared library (BaseProvider, type definitions, signal/concurrency utilities) consumed by all extensions and published to GitHub Packages as `@devdocket/shared`.
 
 ### Data flow
 
 ```
-Providers (GitHub, future)          User (manual)
+Providers (GitHub, ADO, …)         User (manual)
         │                                │
         ▼                                ▼
-  ProviderRegistry ──▶ Inbox ──▶ Queue ──▶ Focus ──▶ History
-  (live references)    (unseen)  (accepted) (in progress) (done/archived)
+  ProviderRegistry ──▶ Incoming ──▶ Ready to Start ──▶ In Progress ──▶ Done
+  (live references)    (unseen)     (accepted/New)      (InProgress)     (Done/Archived)
         │
         ▼
      Sources
   (browsable library)
 ```
 
-### Five views
+These are the conceptual lifecycle stages tracked internally as `WorkItemState` and `InboxState`. The UI renders them as tiers in a single webview-based sidebar (see below) — there are no separate VS Code tree views per stage.
 
-1. **Inbox** — Newly discovered provider items (state: `unseen`). Accept → Queue or Dismiss.
-2. **Queue** — User's curated backlog. Manual items land here directly.
-3. **Focus** — Active work (`InProgress`, `Paused`).
-4. **History** — Completed and archived items (`Done`, `Archived`).
-5. **Sources** — Everything providers know about, grouped by provider → sub-group. Always browsable.
+### Sidebar UI (single webview view: `devdocket.main`)
 
-### Two data stores (both JSON files in `globalStorageUri`)
+The main UI is a Preact-based webview view ID-ed `devdocket.main` with two tabs:
 
-- **`workitems.json`** — Persisted WorkItems with state machine lifecycle (`New` → `InProgress` → `Done` → `Archived`).
-- **`discovered-state.json`** — Thin index mapping `providerId + externalId` → `InboxState` (`unseen` | `accepted` | `dismissed`). Provider item data (title, description, url) is **not persisted** — always read live from the provider.
+1. **My Work** — five tiers in this render order:
+   1. **↓ Incoming** — newly discovered provider items with `inboxState === 'unseen'`.
+   2. **▶ In Progress** — work items in `WorkItemState.InProgress`.
+   3. **○ Ready to Start** — work items in `WorkItemState.New` (the "queue" concept).
+   4. **⏸ Paused** — work items in `WorkItemState.Paused`.
+   5. **✓ Done** — work items in `WorkItemState.Done` or `Archived`.
+2. **Sources** — everything providers know about, grouped by provider → sub-group. Always browsable.
+
+Plus a floating **CI Watches** panel (separate `devdocket.watchPanel` webview) for monitoring GitHub Actions / ADO Pipelines runs and PR status.
+
+User-facing terminology: **never** use the legacy view names ("Inbox view", "Queue view", "Focus view", "History view") in user-facing strings, walkthroughs, or docs. Use tier names ("Incoming tier", "Ready to Start tier", etc.) or "the DevDocket sidebar" for the whole. Internal docs/code may still refer to "inbox state" / "queue" as concepts where that's clearer.
+
+### Two persisted stores (both backed by VS Code `globalState`)
+
+- **`devdocket.workitems`** — Persisted `WorkItem` records with state machine lifecycle (`New` → `InProgress` → `Done` → `Archived`).
+- **`devdocket.discovered-state`** — Thin index mapping `providerId + externalId` → `InboxState` (`unseen` | `accepted` | `dismissed`). Provider item data (title, description, url) is **not persisted** — always read live from the provider.
+
+See `.github/instructions/storage.instructions.md` for the full storage contract (including the read-state, provider-labels, and watches keys).
 
 ### Extension API
 
@@ -66,10 +80,12 @@ The core extension returns `DevDocketApi` from `activate()`. Provider extensions
 interface DevDocketApi {
   registerProvider(provider: DevDocketProvider): Disposable;
   registerAction(action: DevDocketAction): Disposable;
+  // (plus optional registerRunWatcher, registerPRWatcher, addActivity,
+  //  and onDidTransitionState — see docs/extension-api.md for the full surface)
 }
 ```
 
-Providers emit `DiscoveredItem[]` via events. Actions declare `canRun(item)` and are surfaced dynamically in context menus.
+Providers emit `DiscoveredItem[]` via events. Actions declare `canRun(item)` and are surfaced dynamically via the editor's **Run Action…** button.
 
 ## Key Conventions
 
@@ -100,9 +116,9 @@ Never use `git checkout` or `git switch` to move the main working tree off `dev`
 
 When resolving merge conflicts or syncing with `dev`, use `git merge origin/dev` instead of `git rebase`. This preserves commit history and avoids force-push issues.
 
-### Storage writes are serialized
+### Storage writes rely on `Memento.update` atomicity
 
-Both `JsonTaskStore` and `DiscoveredStateStore` use a `writeQueue` (promise chain) to prevent concurrent writes from corrupting JSON files. Always follow this pattern for any new store.
+Stores like `JsonTaskStore` and `DiscoveredStateStore` write through `globalState.update(...)`, which VS Code treats as atomic from the extension's perspective. There is **no** write-queue or file-level locking. See `.github/instructions/storage.instructions.md` for the full convention.
 
 ### vscode module is mocked for tests
 
@@ -110,7 +126,7 @@ Tests run outside VS Code via vitest. The `vscode` import is aliased to `src/tes
 
 ### Provider items are references, not copies
 
-Items in Inbox and Sources are read live from the provider's in-memory data. The only persisted state is the `inboxState` enum. This keeps data fresh and avoids stale copies.
+Items in the Incoming tier and Sources tab are read live from the provider's in-memory data. The only persisted state is the `inboxState` enum. This keeps data fresh and avoids stale copies.
 
 ### Posting text to GitHub (backtick safety)
 
