@@ -66,14 +66,29 @@ describe('AdoPrClient', () => {
       .mockResolvedValueOnce(response({ changes: [] }));
 
     const client = new AdoPrClient(fetchMock as never, session);
-    await client.fetchDiff(parts);
+    const diff = await client.fetchDiff(parts);
 
+    expect(diff).toBe('');
     const diffUrl = String(fetchMock.mock.calls[1][0]);
     expect(diffUrl).toContain('baseVersion=main');
     expect(diffUrl).toContain('baseVersionType=branch');
     expect(diffUrl).toContain('targetVersion=feature%2Fadd-api');
     expect(diffUrl).toContain('targetVersionType=branch');
     expect(diffUrl).not.toContain('refs%2Fheads');
+  });
+
+  it('returns an empty diff for folder-only ADO responses', async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(response({
+        sourceRefName: 'refs/heads/feature',
+        targetRefName: 'refs/heads/main',
+      }))
+      .mockResolvedValueOnce(response({ changes: [{ item: { path: '/src', isFolder: true } }] }));
+
+    const client = new AdoPrClient(fetchMock as never, session);
+    const result = await client.fetchDiffResult(parts);
+
+    expect(result).toEqual({ diff: '', synthetic: false });
   });
 
   it('returns unified diff text when ADO returns a patch body', async () => {

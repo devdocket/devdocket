@@ -120,6 +120,9 @@ export class AdoPrClient {
       return { diff: body, synthetic: false };
     }
 
+    if (!hasAdoFileChanges(parsed)) {
+      return { diff: '', synthetic: false };
+    }
     const synthetic = !hasOnlyRenderableInlineDiff(parsed);
     return { diff: renderAdoDiffSummary(parts, details, parsed, synthetic), synthetic };
   }
@@ -267,6 +270,10 @@ function renderChange(change: AdoCommitDiffChange): string {
     `# ${normalizeAdoFilePath(path)}`,
     '',
   ].join('\n');
+}
+
+function hasAdoFileChanges(response: AdoCommitDiffResponse): boolean {
+  return (response.changes ?? []).some(change => !change.item?.isFolder);
 }
 
 function hasOnlyRenderableInlineDiff(response: AdoCommitDiffResponse): boolean {
