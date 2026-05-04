@@ -112,7 +112,7 @@ describe('RepoManager', () => {
       await manager.ensureWorktree('https://github.com/owner/repo/pull/42?token=secret#frag');
 
       const debugMessages = vi.mocked(mockLogOutputChannel.debug).mock.calls.map(call => String(call[0]));
-      expect(debugMessages.some(message => message.includes('https://github.com/owner/repo/pull/42'))).toBe(true);
+      expect(debugMessages).toContain('ensureWorktree called — prUrl: https://github.com/owner/repo/pull/42');
       expect(debugMessages.join('\n')).not.toContain('secret');
       expect(debugMessages.join('\n')).not.toContain('frag');
     });
