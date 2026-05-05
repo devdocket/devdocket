@@ -447,13 +447,14 @@ describe('RepoManager', () => {
     });
 
     it('creates a worktree', async () => {
-      await manager.ensureWorktree('https://github.com/owner/repo/pull/42');
+      const info = await manager.ensureWorktree('https://github.com/owner/repo/pull/42');
 
       const calls = vi.mocked(execFile).mock.calls;
       const worktreeCall = calls.find(c =>
         c[1]?.includes('worktree') && c[1]?.includes('add'),
       );
       expect(worktreeCall).toBeDefined();
+      expect(info.headRef).toBe('HEAD');
     });
 
     it('removes and re-clones an existing clone directory that is not a valid git repo', async () => {
@@ -543,7 +544,7 @@ describe('RepoManager', () => {
       const worktreePath = '/mock/storage/repos/owner-repo/worktrees/pr-42';
       mockExistingDirectories([clonePath, worktreePath]);
 
-      await manager.ensureWorktree('https://github.com/owner/repo/pull/42');
+      const info = await manager.ensureWorktree('https://github.com/owner/repo/pull/42');
 
       const calls = vi.mocked(execFile).mock.calls;
       const resetCall = calls.find(c => c[1]?.includes('reset') && c[1]?.includes('--hard'));
@@ -551,6 +552,7 @@ describe('RepoManager', () => {
       expect(normalizePath((resetCall?.[2] as { cwd: string }).cwd)).toBe(worktreePath);
       const worktreeAddCall = calls.find(c => c[1]?.includes('worktree') && c[1]?.includes('add'));
       expect(worktreeAddCall).toBeUndefined();
+      expect(info.headRef).toBe('HEAD');
       expect(workspace.fs.delete).not.toHaveBeenCalled();
     });
 

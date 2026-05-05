@@ -251,6 +251,7 @@ export class RepoManager {
     const prMeta = await this.fetchPrMetadata(org, repo, prNumber, session.accessToken);
     const baseRef = prMeta.baseRef;
     const headRef = `pr-${prNumber}`;
+    const diffHeadRef = 'HEAD';
 
     if (!isValidRef(baseRef)) {
       const safeBaseRef = JSON.stringify(baseRef);
@@ -319,7 +320,7 @@ export class RepoManager {
       org,
       repo,
       prNumber,
-      headRef,
+      headRef: diffHeadRef,
       baseRef: `origin/${baseRef}`,
       prUrl,
       provider: 'github',
