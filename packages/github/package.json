@@ -58,7 +58,7 @@
   },
   "dependencies": {
     "@devdocket/shared": "*",
-    "marked": "^14.1.4"
+    "marked": "^18.0.2"
   },
   "devDependencies": {
     "@types/node": "^20.11.0",

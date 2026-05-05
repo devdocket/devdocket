@@ -521,12 +521,14 @@ export class GitHubMentionsProvider extends BaseGitHubProvider {
         return;
       case 'escape':
         return;
-      case 'link':
-        if (GitHubMentionsProvider.isAutolinkToken(token)) {
+      case 'link': {
+        const linkToken = GitHubMentionsProvider.asLinkToken(token);
+        if (!linkToken || GitHubMentionsProvider.isAutolinkToken(linkToken)) {
           return;
         }
-        yield* GitHubMentionsProvider.markdownTextSegments(token.tokens);
+        yield* GitHubMentionsProvider.markdownTextSegments(linkToken.tokens);
         return;
+      }
       case 'text':
         if (token.tokens?.length) {
           yield* GitHubMentionsProvider.markdownTextSegments(token.tokens);
@@ -556,6 +558,14 @@ export class GitHubMentionsProvider extends BaseGitHubProvider {
         }
       }
     }
+  }
+
+  private static asLinkToken(token: Token): Tokens.Link | undefined {
+    const candidate = token as Partial<Tokens.Link>;
+    if (typeof candidate.href !== 'string' || !Array.isArray(candidate.tokens)) {
+      return undefined;
+    }
+    return candidate as Tokens.Link;
   }
 
   private static isAutolinkToken(token: Tokens.Link): boolean {
