@@ -6,10 +6,12 @@ const { resetGitVersionCheck } = __testing;
 
 // Mock child_process
 vi.mock('child_process', () => ({
-  execFile: vi.fn((_cmd: string, args: string[], _opts: unknown, cb: Function) => {
+  execFile: vi.fn((_cmd: string, args: string[], opts: unknown, cb: Function) => {
     // Return valid version for `git --no-pager version` calls
     if (args?.includes('version')) {
       cb(null, 'git version 2.45.0.windows.1', '');
+    } else if (args?.includes('rev-parse') && args.includes('--show-toplevel')) {
+      cb(null, (opts as { cwd?: string } | undefined)?.cwd ?? '', '');
     } else {
       cb(null, '', '');
     }
@@ -71,11 +73,12 @@ function mockGitDirectoryValidationFailure(
         cb(null, 'git version 2.45.0.windows.1', '');
       } else if (
         args?.includes('rev-parse')
-        && args.includes('--resolve-git-dir')
-        && args.some(arg => normalizePath(arg) === `${normalizePath(invalidPath)}/.git`)
+        && args.includes('--git-dir')
         && cwd === normalizePath(invalidPath)
       ) {
         cb(Object.assign(new Error('git failed'), { code }), '', stderr);
+      } else if (args?.includes('rev-parse') && args.includes('--show-toplevel')) {
+        cb(null, cwd, '');
       } else {
         cb(null, '', '');
       }
@@ -98,11 +101,13 @@ function mockAdoPrDetails(): void {
 
 function failGitCommand(match: (args: string[]) => boolean, stderr: string): void {
   vi.mocked(execFile).mockImplementation(
-    (_cmd: string, args: string[], _opts: unknown, cb: Function) => {
+    (_cmd: string, args: string[], opts: unknown, cb: Function) => {
       if (args?.includes('version')) {
         cb(null, 'git version 2.45.0.windows.1', '');
       } else if (match(args)) {
         cb(Object.assign(new Error('git failed'), { code: 1 }), '', stderr);
+      } else if (args?.includes('rev-parse') && args.includes('--show-toplevel')) {
+        cb(null, (opts as { cwd?: string } | undefined)?.cwd ?? '', '');
       } else {
         cb(null, '', '');
       }
@@ -167,9 +172,11 @@ describe('RepoManager', () => {
 
     // Restore default execFile mock (returns version for `git version`, empty otherwise)
     vi.mocked(execFile).mockImplementation(
-      (_cmd: string, args: string[], _opts: unknown, cb: Function) => {
+      (_cmd: string, args: string[], opts: unknown, cb: Function) => {
         if ((args as string[])?.includes('version')) {
           cb(null, 'git version 2.45.0.windows.1', '');
+        } else if (args?.includes('rev-parse') && args.includes('--show-toplevel')) {
+          cb(null, (opts as { cwd?: string } | undefined)?.cwd ?? '', '');
         } else {
           cb(null, '', '');
         }
@@ -381,6 +388,20 @@ describe('RepoManager', () => {
       expect(message).toContain('Filename too long');
     });
 
+    it('includes the clone path when configuring Git long path support fails', async () => {
+      setProcessPlatform('win32');
+      failGitCommand(
+        args => args.includes('config') && args.includes('core.longpaths'),
+        'could not lock config file',
+      );
+
+      const message = await rejectedMessage(manager.ensureWorktree('https://github.com/owner/repo/pull/42'));
+
+      expect(message).toContain('Failed to configure Git long path support');
+      expect(message).toContain('(repo: /mock/storage/repos/owner-repo/clone)');
+      expect(message).toContain('could not lock config file');
+    });
+
     it('includes the clone path when fetching a PR head fails', async () => {
       failGitCommand(
         args => args.includes('fetch') && args.some(arg => arg.includes('pull/42/head')),
@@ -472,17 +493,58 @@ describe('RepoManager', () => {
       expect(cloneCall).toBeDefined();
     });
 
+    it('removes and re-clones when git validation exits 128 with localized output', async () => {
+      const clonePath = '/mock/storage/repos/owner-repo/clone';
+      mockExistingDirectories([clonePath]);
+      mockGitDirectoryValidationFailure(clonePath, 'fatal: Kein Git-Repository');
+
+      await manager.ensureWorktree('https://github.com/owner/repo/pull/42');
+
+      const deletedPaths = vi.mocked(workspace.fs.delete).mock.calls.map(
+        call => normalizePath((call[0] as { fsPath: string }).fsPath),
+      );
+      expect(deletedPaths).toContain(clonePath);
+      expect(vi.mocked(execFile).mock.calls.find(c => c[1]?.includes('clone'))).toBeDefined();
+    });
+
     it('does not remove a clone directory when git validation fails unexpectedly', async () => {
       const clonePath = '/mock/storage/repos/owner-repo/clone';
       mockExistingDirectories([clonePath]);
-      mockGitDirectoryValidationFailure(clonePath, 'fatal: permission denied');
+      mockGitDirectoryValidationFailure(clonePath, 'fatal: permission denied', 1);
 
-      await expect(manager.ensureWorktree('https://github.com/owner/repo/pull/42'))
-        .rejects.toThrow('git rev-parse failed: fatal: permission denied');
+      const message = await rejectedMessage(manager.ensureWorktree('https://github.com/owner/repo/pull/42'));
 
+      expect(message).toContain('Failed to validate repository directory');
+      expect(message).toContain('(repo: /mock/storage/repos/owner-repo/clone)');
+      expect(message).toContain('git rev-parse failed: fatal: permission denied');
       expect(workspace.fs.delete).not.toHaveBeenCalled();
       const cloneCall = vi.mocked(execFile).mock.calls.find(c => c[1]?.includes('clone'));
       expect(cloneCall).toBeUndefined();
+    });
+
+    it('removes a clone directory when validation resolves to a parent git root', async () => {
+      const clonePath = '/mock/storage/repos/owner-repo/clone';
+      mockExistingDirectories([clonePath]);
+      vi.mocked(execFile).mockImplementation(
+        (_cmd: string, args: string[], opts: unknown, cb: Function) => {
+          const cwd = normalizePath((opts as { cwd?: string } | undefined)?.cwd ?? '');
+          if (args?.includes('version')) {
+            cb(null, 'git version 2.45.0.windows.1', '');
+          } else if (args?.includes('rev-parse') && args.includes('--show-toplevel') && cwd === clonePath) {
+            cb(null, '/mock/storage', '');
+          } else {
+            cb(null, '', '');
+          }
+        },
+      );
+
+      await manager.ensureWorktree('https://github.com/owner/repo/pull/42');
+
+      const deletedPaths = vi.mocked(workspace.fs.delete).mock.calls.map(
+        call => normalizePath((call[0] as { fsPath: string }).fsPath),
+      );
+      expect(deletedPaths).toContain(clonePath);
+      expect(vi.mocked(execFile).mock.calls.find(c => c[1]?.includes('clone'))).toBeDefined();
     });
 
     it('reuses an existing clone directory that is a valid git repo', async () => {
@@ -494,10 +556,10 @@ describe('RepoManager', () => {
       const calls = vi.mocked(execFile).mock.calls;
       const revParseCall = calls.find(c => c[1]?.includes('rev-parse'));
       expect(normalizePath((revParseCall?.[2] as { cwd: string }).cwd)).toBe(clonePath);
-      expect(revParseCall?.[1]).toContain('--resolve-git-dir');
-      expect(revParseCall?.[1]?.some(arg => normalizePath(arg) === `${clonePath}/.git`)).toBe(true);
+      expect(revParseCall?.[1]).toContain('--git-dir');
       const cloneCall = calls.find(c => c[1]?.includes('clone'));
       expect(cloneCall).toBeUndefined();
+      expect(calls.find(c => c[1]?.includes('worktree') && c[1]?.includes('prune'))).toBeDefined();
       expect(workspace.fs.delete).not.toHaveBeenCalled();
     });
 
@@ -515,6 +577,23 @@ describe('RepoManager', () => {
       expect(deletedPaths).toContain(clonePath);
       const cloneCall = vi.mocked(execFile).mock.calls.find(c => c[1]?.includes('clone'));
       expect(cloneCall).toBeDefined();
+    });
+
+    it('reuses an existing ADO clone directory that is a valid git repo', async () => {
+      const clonePath = '/mock/storage/repos/ado-org-project-repo/clone';
+      mockAdoPrDetails();
+      mockExistingDirectories([clonePath]);
+
+      await manager.ensureWorktree('https://dev.azure.com/org/project/_git/repo/pullrequest/42');
+
+      const calls = vi.mocked(execFile).mock.calls;
+      const revParseCall = calls.find(c => c[1]?.includes('rev-parse'));
+      expect(normalizePath((revParseCall?.[2] as { cwd: string }).cwd)).toBe(clonePath);
+      expect(revParseCall?.[1]).toContain('--git-dir');
+      const cloneCall = calls.find(c => c[1]?.includes('clone'));
+      expect(cloneCall).toBeUndefined();
+      expect(calls.find(c => c[1]?.includes('worktree') && c[1]?.includes('prune'))).toBeDefined();
+      expect(workspace.fs.delete).not.toHaveBeenCalled();
     });
 
     it('removes and recreates an existing worktree directory that is not a valid git worktree', async () => {
@@ -553,6 +632,24 @@ describe('RepoManager', () => {
       const worktreeAddCall = calls.find(c => c[1]?.includes('worktree') && c[1]?.includes('add'));
       expect(worktreeAddCall).toBeUndefined();
       expect(info.headRef).toBe('HEAD');
+      expect(workspace.fs.delete).not.toHaveBeenCalled();
+    });
+
+    it('updates an existing ADO worktree directory that is a valid git worktree', async () => {
+      const clonePath = '/mock/storage/repos/ado-org-project-repo/clone';
+      const worktreePath = '/mock/storage/repos/ado-org-project-repo/worktrees/pr-42';
+      mockAdoPrDetails();
+      mockExistingDirectories([clonePath, worktreePath]);
+
+      const info = await manager.ensureWorktree('https://dev.azure.com/org/project/_git/repo/pullrequest/42');
+
+      const calls = vi.mocked(execFile).mock.calls;
+      const resetCall = calls.find(c => c[1]?.includes('reset') && c[1]?.includes('--hard'));
+      expect(resetCall).toBeDefined();
+      expect(normalizePath((resetCall?.[2] as { cwd: string }).cwd)).toBe(worktreePath);
+      const worktreeAddCall = calls.find(c => c[1]?.includes('worktree') && c[1]?.includes('add'));
+      expect(worktreeAddCall).toBeUndefined();
+      expect(info.provider).toBe('ado');
       expect(workspace.fs.delete).not.toHaveBeenCalled();
     });
 

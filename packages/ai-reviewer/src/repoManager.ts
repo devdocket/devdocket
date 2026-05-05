@@ -124,19 +124,23 @@ function underlyingErrorMessage(err: unknown): string {
   return err instanceof Error ? err.message : String(err);
 }
 
+function pathContextError(operation: string, label: string, targetPath: string, err: unknown): Error {
+  const message = `${operation} (${label}: ${targetPath}): ${underlyingErrorMessage(err)}`;
+  if (err instanceof GitExecError) {
+    const wrapped = new GitExecError(message, err.exitCode);
+    (wrapped as Error & { cause?: unknown }).cause = err;
+    return wrapped;
+  }
+  const wrapped = new Error(message);
+  (wrapped as Error & { cause?: unknown }).cause = err;
+  return wrapped;
+}
+
 async function withPathContext<T>(operation: string, label: string, targetPath: string, work: Promise<T>): Promise<T> {
   try {
     return await work;
   } catch (err) {
-    const message = `${operation} (${label}: ${targetPath}): ${underlyingErrorMessage(err)}`;
-    if (err instanceof GitExecError) {
-      const wrapped = new GitExecError(message, err.exitCode);
-      (wrapped as Error & { cause?: unknown }).cause = err;
-      throw wrapped;
-    }
-    const wrapped = new Error(message);
-    (wrapped as Error & { cause?: unknown }).cause = err;
-    throw wrapped;
+    throw pathContextError(operation, label, targetPath, err);
   }
 }
 
@@ -163,14 +167,17 @@ async function deleteDirectoryNoTrash(dirPath: string): Promise<void> {
 }
 
 function isInvalidGitDirectoryError(err: unknown): boolean {
-  if (!(err instanceof GitExecError) || err.exitCode !== 128) {
-    return false;
-  }
-  const message = err.message.toLowerCase();
-  return message.includes('not a git repository')
-    || message.includes('not a gitdir')
-    || message.includes('invalid gitfile format')
-    || message.includes('unable to read git file');
+  // `rev-parse` reports many repository-shape failures as exit 128, and the
+  // stderr text may be localized. Prefer recovery over leaving a partial dir wedged.
+  return err instanceof GitExecError && err.exitCode === 128;
+}
+
+function sameResolvedPath(left: string, right: string): boolean {
+  const resolvedLeft = path.resolve(left);
+  const resolvedRight = path.resolve(right);
+  return process.platform === 'win32'
+    ? resolvedLeft.toLowerCase() === resolvedRight.toLowerCase()
+    : resolvedLeft === resolvedRight;
 }
 
 export class RepoManager {
@@ -303,6 +310,9 @@ export class RepoManager {
     this.log.info('Base branch fetched');
 
     if (!worktreeExists) {
+      if (cloneExists) {
+        await this.pruneWorktreeMetadata(clonePath);
+      }
       this.log.info('Creating worktree');
       this.log.debug(`Worktree destination: ${worktreePath}, ref: ${headRef}`);
       await withPathContext(
@@ -423,6 +433,9 @@ export class RepoManager {
         gitExec(['reset', '--hard', headRef], worktreePath),
       );
     } else {
+      if (cloneExists) {
+        await this.pruneWorktreeMetadata(clonePath);
+      }
       this.log.info('Creating ADO worktree');
       await withPathContext(
         'Failed to create ADO worktree',
@@ -550,34 +563,37 @@ export class RepoManager {
 
     const label = kind === 'worktree' ? 'worktree' : 'repo';
     try {
-      await gitExec(['rev-parse', '--resolve-git-dir', path.join(dirPath, '.git')], dirPath);
-      return true;
+      await gitExec(['rev-parse', '--git-dir'], dirPath);
+      const topLevel = (await gitExec(['rev-parse', '--show-toplevel'], dirPath)).trim();
+      if (sameResolvedPath(topLevel, dirPath)) {
+        return true;
+      }
     } catch (err) {
       if (!isInvalidGitDirectoryError(err)) {
-        return await withPathContext(
-          `Failed to validate ${kind} directory`,
-          label,
-          dirPath,
-          Promise.reject(err),
-        );
+        throw pathContextError(`Failed to validate ${kind} directory`, label, dirPath, err);
       }
-      this.log.warn(`Found invalid/partial ${kind} dir at ${dirPath}; removing and recreating.`);
-      await withPathContext(
-        `Failed to remove invalid ${kind} directory`,
-        label,
-        dirPath,
-        deleteDirectoryNoTrash(dirPath),
-      );
-      if (kind === 'worktree' && clonePath) {
-        await withPathContext(
-          'Failed to prune invalid worktree metadata',
-          'repo',
-          clonePath,
-          gitExec(['worktree', 'prune'], clonePath),
-        );
-      }
-      return false;
     }
+
+    this.log.warn(`Found invalid/partial ${kind} dir at ${dirPath}; removing and recreating.`);
+    await withPathContext(
+      `Failed to remove invalid ${kind} directory`,
+      label,
+      dirPath,
+      deleteDirectoryNoTrash(dirPath),
+    );
+    if (kind === 'worktree' && clonePath) {
+      await this.pruneWorktreeMetadata(clonePath, 'Failed to prune invalid worktree metadata');
+    }
+    return false;
+  }
+
+  private async pruneWorktreeMetadata(clonePath: string, operation = 'Failed to prune worktree metadata'): Promise<void> {
+    await withPathContext(
+      operation,
+      'repo',
+      clonePath,
+      gitExec(['worktree', 'prune'], clonePath),
+    );
   }
 
   private async fetchPrMetadata(
