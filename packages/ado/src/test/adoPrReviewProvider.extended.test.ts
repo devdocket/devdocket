@@ -57,10 +57,11 @@ describe('AdoPrReviewProvider — extended', () => {
         .mockResolvedValueOnce({
           ok: true,
           json: async () => ({ value: [] }),
-        });
+        })
+        .mockResolvedValueOnce({ ok: false, status: 403 });
 
       await provider.refresh();
-      expect(mockFetch).toHaveBeenCalledTimes(2);
+      expect(mockFetch).toHaveBeenCalledTimes(3);
       mockFetch.mockReset();
 
       // Switch account to force cache miss, then network error on connection data
@@ -81,11 +82,12 @@ describe('AdoPrReviewProvider — extended', () => {
         .mockResolvedValueOnce({
           ok: true,
           json: async () => ({ value: [] }),
-        });
+        })
+        .mockResolvedValueOnce({ ok: false, status: 403 });
 
       await provider.refresh();
-      // connection data + PR list = 2 calls (cache was cleared by error)
-      expect(mockFetch).toHaveBeenCalledTimes(2);
+      // connection data + PR list + group membership cache attempt (cache was cleared by error)
+      expect(mockFetch).toHaveBeenCalledTimes(3);
     });
 
     it('clears cached user ID on non-ok response', async () => {
@@ -295,7 +297,7 @@ describe('AdoPrReviewProvider — extended', () => {
       }).mockResolvedValueOnce({
         ok: true,
         json: async () => ({ value: [] }),
-      });
+      }).mockResolvedValueOnce({ ok: false, status: 403 });
 
       const first = provider.refresh();
       const second = provider.refresh();
@@ -305,7 +307,7 @@ describe('AdoPrReviewProvider — extended', () => {
       await second;
 
       // Only one set of fetch calls
-      expect(mockFetch).toHaveBeenCalledTimes(2); // connection data + PR list
+      expect(mockFetch).toHaveBeenCalledTimes(3); // connection data + PR list + group membership cache attempt
     });
   });
 
