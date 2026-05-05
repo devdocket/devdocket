@@ -1,4 +1,3 @@
-import * as vscode from 'vscode';
 import { DiscoveredItem, ProviderBadge, combineSignals, createAbortError, runWorkerPool } from '@devdocket/shared';
 import { BaseGitHubProvider } from './baseGithubProvider';
 import { logger } from './logger';
@@ -144,16 +143,11 @@ export class GitHubMyPrsProvider extends BaseGitHubProvider {
       });
     }
 
-    this._onDidDiscoverItems.fire(items);
+    this.publishDiscoveredItems(items, patterns);
 
     const failures = [...new Set([...authoredResult.failures, ...assignedResult.failures])];
     if (failures.length > 0) {
-      const message = 'Failed to fetch PRs';
-      if (isUserTriggered) {
-        void vscode.window.showWarningMessage(`DevDocket GitHub: ${message}`);
-      } else {
-        logger.warn(message);
-      }
+      this.warnOnFetchFailure('Failed to fetch PRs', isUserTriggered);
     }
   }
 

@@ -86,7 +86,7 @@ An issue appears when **all** of the following are true:
 | **Assigned to you** | You are listed as an assignee on the issue |
 | **Open state** | The issue is not closed |
 | **Not a pull request** | Only issues appear here, not PRs |
-| **Repository match** | If `devDocketGithub.filteredRepos` is configured, the patterns listed there are **excluded** (with `!`-prefixed entries re-including matches). With no patterns set, assigned issues across all repositories are included. Each query (global or per-repo) is limited to 1,000 items due to pagination limits. |
+| **Repository match** | If `devDocketGithub.filteredRepos` is configured, the patterns listed there are **excluded** from both the Incoming tier and the Sources tab (with `!`-prefixed entries re-including matches). With no patterns set, assigned issues across all repositories are included. Each query (global or per-repo) is limited to 1,000 items due to pagination limits. |
 
 ### Configuration
 
@@ -372,7 +372,7 @@ flowchart TD
 1. **Not authenticated** — Ensure you're signed into GitHub or Microsoft in VS Code. DevDocket uses VS Code's built-in authentication. Background refreshes won't prompt for sign-in; trigger a manual refresh to get the auth prompt.
 2. **Wrong repository/project config** — For GitHub, the `devDocketGithub.filteredRepos` setting **excludes** the patterns you list (so leaving it empty includes everything you have access to). For ADO, at least one entry in `devDocketAdo.projects` is required — an empty list disables ADO discovery entirely.
 3. **Invalid format** — GitHub `filteredRepos` patterns are matched as globs against `owner/repo`; entries that fail to parse are logged as warnings and skipped. ADO entries must be `org` or `org/project`; individual malformed entries are silently skipped, but if all entries are invalid the ADO providers will not activate.
-4. **Item already dismissed** — Dismissed items never reappear. Check the Sources tab to see all items the provider knows about, regardless of inbox state.
+4. **Item already dismissed** — Dismissed items never reappear. Check the Sources tab to see all items the provider knows about (except repositories excluded by `devDocketGithub.filteredRepos`), regardless of inbox state.
 5. **Terminal state** — ADO work items in Closed, Done, Removed, or other terminal states are excluded.
 6. **Provider unhealthy** — Check the Sources tab for providers showing a `⚠` warning indicator. This indicates an authentication or network issue.
 7. **Item limit** — Each provider is limited to 10,000 discovered items per refresh. If a provider emits more than 10,000 items, only the first 10,000 are kept and a warning is logged.

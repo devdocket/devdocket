@@ -1,4 +1,3 @@
-import * as vscode from 'vscode';
 import { DiscoveredItem, combineSignals, createAbortError, safeDecodeComponent, type ResolvedItem } from '@devdocket/shared';
 import { BaseGitHubProvider } from './baseGithubProvider';
 import { logger } from './logger';
@@ -55,15 +54,10 @@ export class GitHubIssueProvider extends BaseGitHubProvider {
     });
 
     logger.info(`Discovered ${items.length} GitHub issues`);
-    this._onDidDiscoverItems.fire(items);
+    this.publishDiscoveredItems(items, patterns);
 
     if (failed) {
-      const message = 'Failed to fetch assigned issues';
-      if (isUserTriggered) {
-        void vscode.window.showWarningMessage(`DevDocket GitHub: ${message}`);
-      } else {
-        logger.warn(message);
-      }
+      this.warnOnFetchFailure('Failed to fetch assigned issues', isUserTriggered);
     }
   }
 

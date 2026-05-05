@@ -11,7 +11,7 @@ import {
   type ResolvedItem,
 } from '@devdocket/shared';
 import { logger } from './logger';
-import { OrgConfig } from './configParser';
+import { OrgConfig, resolveProjectList } from './configParser';
 import { getAdoHeaders, retryAdoWithAuth, throwAdoApiError, ADO_AUTH_SCOPE } from './adoAuth';
 
 export interface AdoPullRequest {
@@ -149,21 +149,9 @@ export abstract class BaseAdoPrProvider extends BaseProvider {
         continue;
       }
 
-      const validProjects: string[] = [];
-      for (const project of orgConfig.projects) {
-        if (project === '' || isValidUrlSegment(project)) {
-          validProjects.push(project);
-        } else {
-          logger.warn('Skipping invalid ADO project name', project);
-        }
-      }
+      const projectList = resolveProjectList(orgConfig, 'PR fetch');
+      if (projectList === null) { continue; }
 
-      if (orgConfig.projects.length > 0 && validProjects.length === 0) {
-        logger.warn(`All configured ADO projects are invalid for org ${orgConfig.org} — skipping PR fetch`);
-        continue;
-      }
-
-      const projectList = validProjects.length > 0 ? validProjects : [''];
       const directFetch = await this.fetchPrsForProjects(accessToken, orgConfig.org, projectList, userId, signal);
       allItems.push(...directFetch.items);
       fetchFailures.push(...directFetch.failedTargets);

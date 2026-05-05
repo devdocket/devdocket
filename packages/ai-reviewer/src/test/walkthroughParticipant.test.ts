@@ -248,6 +248,91 @@ describe('WalkthroughParticipant', () => {
       expect(response.markdown).toHaveBeenCalledWith('File contents analyzed.');
     });
 
+    it('continues when a model emits only signalPhase before walkthrough text', async () => {
+      const mockModel = {
+        sendRequest: vi.fn()
+          .mockResolvedValueOnce({
+            stream: (async function* () {
+              yield new LanguageModelTextPart('\n');
+              yield new LanguageModelToolCallPart('phase-1', 'devdocket-signalPhase', { phase: 'summary' });
+            })(),
+          })
+          .mockResolvedValueOnce({
+            stream: (async function* () {
+              yield new LanguageModelTextPart('Summary after phase acknowledgement.');
+            })(),
+          }),
+      };
+
+      participant.register();
+      const handler = vi.mocked(chat.createChatParticipant).mock.calls[0][1];
+
+      const request = createMockRequest('Walk me through https://github.com/owner/repo/pull/42', mockModel);
+      const context = createMockContext();
+      const response = createMockResponse();
+      const token = { isCancellationRequested: false };
+
+      const result = await handler(request, context, response, token);
+
+      expect(lm.invokeTool).not.toHaveBeenCalled();
+      expect(mockModel.sendRequest).toHaveBeenCalledTimes(2);
+      expect(response.markdown).toHaveBeenCalledWith('Summary after phase acknowledgement.');
+      expect((result as { metadata?: Record<string, unknown> }).metadata?.phase).toBe('summary');
+    });
+
+    it('stops retrying after repeated phase-only responses without walkthrough text', async () => {
+      const mockModel = {
+        sendRequest: vi.fn().mockImplementation(() => ({
+          stream: (async function* () {
+            yield new LanguageModelTextPart('\n');
+            yield new LanguageModelToolCallPart('phase-1', 'devdocket-signalPhase', { phase: 'summary' });
+          })(),
+        })),
+      };
+
+      participant.register();
+      const handler = vi.mocked(chat.createChatParticipant).mock.calls[0][1];
+
+      const request = createMockRequest('Walk me through https://github.com/owner/repo/pull/42', mockModel);
+      const context = createMockContext();
+      const response = createMockResponse();
+      const token = { isCancellationRequested: false };
+
+      await handler(request, context, response, token);
+
+      expect(lm.invokeTool).not.toHaveBeenCalled();
+      expect(mockModel.sendRequest).toHaveBeenCalledTimes(2);
+      expect(response.markdown).toHaveBeenCalledWith(
+        '⚠️ The model did not produce walkthrough text. Please try again.',
+      );
+    });
+
+    it('warns when the model finishes without visible walkthrough text', async () => {
+      const mockModel = {
+        sendRequest: vi.fn().mockResolvedValue({
+          stream: (async function* () {
+            yield new LanguageModelTextPart('\n  \t');
+          })(),
+        }),
+      };
+
+      participant.register();
+      const handler = vi.mocked(chat.createChatParticipant).mock.calls[0][1];
+
+      const request = createMockRequest('Walk me through https://github.com/owner/repo/pull/42', mockModel);
+      const context = createMockContext();
+      const response = createMockResponse();
+      const token = { isCancellationRequested: false };
+
+      await handler(request, context, response, token);
+
+      expect(mockModel.sendRequest).toHaveBeenCalledTimes(1);
+      expect(response.markdown).toHaveBeenCalledWith('\n  \t');
+      expect(response.markdown).toHaveBeenCalledWith(
+        '⚠️ The model did not produce walkthrough text. Please try again.',
+      );
+    });
+
     it('signalPhase with lastFile updates ChatResult metadata', async () => {
       const mockModel = {
         sendRequest: vi.fn().mockResolvedValue({

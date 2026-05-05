@@ -479,14 +479,7 @@ describe('WatcherService', () => {
       expect(service.isPRActive(createPRIdentifier())).toBe(true);
     });
 
-    it('re-creates child runs when called with forceRecreate for an active PR', async () => {
-      // Reproduces the user-visible bug where a PR ends up invisible in the
-      // watch panel because all its child runs were dismissed: the runs are
-      // dismissed=true but stay in childRunKeys, so the polling loop's
-      // 'already a child?' check skips re-adding them. The panel filter
-      // (runs.length > 0) then hides the parent. The manual "Watch URL"
-      // command passes forceRecreate so it can recover by wiping the old
-      // owned children and starting fresh.
+    it('re-creates child runs when called with forceRecreate for a dismissed childless PR', async () => {
       const runWatcher = createMockWatcher('github-actions');
       registry.register(runWatcher);
 
@@ -506,13 +499,10 @@ describe('WatcherService', () => {
       await service.startPRWatch(identifier);
       expect(service.getActiveWatches()).toHaveLength(1);
 
-      // Simulate the user dismissing the child run via the watch panel.
       const childRun = service.getActiveWatches()[0];
       service.dismissWatch(childRun.identifier);
       expect(service.getActiveWatches()).toHaveLength(0);
-      // The PR is still "active" (not dismissed), but has no visible runs —
-      // exactly the state that hides it from the panel filter.
-      expect(service.isPRActive(identifier)).toBe(true);
+      expect(service.isPRActive(identifier)).toBe(false);
       expect(service.getChildRuns(service.getPRWatchKey(identifier))).toHaveLength(0);
 
       // Manual "Watch URL" with forceRecreate — wipes and rebuilds.
@@ -546,6 +536,141 @@ describe('WatcherService', () => {
       expect(result.childRunKeys).toHaveLength(1);
       expect(service.getActiveWatches()).toHaveLength(1);
       expect(service.getActiveWatches()[0].parentPRKey).toBeDefined();
+    });
+
+    it('dismisses a PR watch when its last visible child run is dismissed', async () => {
+      const runWatcher = createMockWatcher('github-actions');
+      registry.register(runWatcher);
+
+      const prWatcher = createMockPRWatcher('test-pr', async () => ({
+        prState: 'open',
+        runs: [
+          {
+            providerId: 'github-actions',
+            runId: 'run-1',
+            displayName: 'CI Build 1',
+            url: 'https://example.com/run/1',
+            repo: 'owner/repo',
+          },
+          {
+            providerId: 'github-actions',
+            runId: 'run-2',
+            displayName: 'CI Build 2',
+            url: 'https://example.com/run/2',
+            repo: 'owner/repo',
+          },
+        ],
+      }));
+      prRegistry.register(prWatcher);
+
+      const identifier = createPRIdentifier();
+      await service.startPRWatch(identifier);
+      const [firstChild, secondChild] = service.getActiveWatches();
+      const prChangeSpy = vi.fn();
+      service.onDidChangePRWatches(prChangeSpy);
+
+      service.dismissWatch(firstChild.identifier);
+      expect(prChangeSpy).not.toHaveBeenCalled();
+      expect(service.isPRActive(identifier)).toBe(true);
+      expect(service.getChildRuns(service.getPRWatchKey(identifier))).toHaveLength(1);
+
+      service.dismissWatch(secondChild.identifier);
+      expect(prChangeSpy).toHaveBeenCalledTimes(1);
+      expect(service.isPRActive(identifier)).toBe(false);
+      expect(service.getChildRuns(service.getPRWatchKey(identifier))).toHaveLength(0);
+    });
+
+    it('dismissAllCompleted cascades to an open PR when all visible child runs are dismissed', async () => {
+      const runWatcher = createMockWatcher('github-actions', async () => ({
+        overallState: 'completed' as const,
+        conclusion: 'success' as const,
+        jobs: [],
+      }));
+      registry.register(runWatcher);
+
+      const prWatcher = createMockPRWatcher('test-pr', async () => ({
+        prState: 'open',
+        runs: [
+          {
+            providerId: 'github-actions',
+            runId: 'run-1',
+            displayName: 'CI Build 1',
+            url: 'https://example.com/run/1',
+            repo: 'owner/repo',
+          },
+          {
+            providerId: 'github-actions',
+            runId: 'run-2',
+            displayName: 'CI Build 2',
+            url: 'https://example.com/run/2',
+            repo: 'owner/repo',
+          },
+        ],
+      }));
+      prRegistry.register(prWatcher);
+
+      const identifier = createPRIdentifier();
+      await service.startPRWatch(identifier);
+
+      expect(service.countCompletedActiveWatches()).toBe(3);
+      expect(service.dismissAllCompleted()).toBe(3);
+      expect(service.getActiveWatches()).toHaveLength(0);
+      expect(service.isPRActive(identifier)).toBe(false);
+    });
+
+    it('does not dismiss a PR watch that has never observed a child run', async () => {
+      const completedWatcher = createMockWatcher('completed', async () => ({
+        overallState: 'completed' as const,
+        conclusion: 'success' as const,
+        jobs: [],
+      }));
+      registry.register(completedWatcher);
+
+      const prWatcher = createMockPRWatcher('test-pr', async () => ({
+        prState: 'open',
+        runs: [],
+      }));
+      prRegistry.register(prWatcher);
+
+      const identifier = createPRIdentifier();
+      await service.startPRWatch(identifier);
+      await service.startWatch(createIdentifier('completed'));
+
+      expect(service.dismissAllCompleted()).toBe(1);
+      expect(service.isPRActive(identifier)).toBe(true);
+    });
+
+    it('dismisses a PR watch when polling removes its last observed child run', async () => {
+      const runWatcher = createMockWatcher('github-actions');
+      registry.register(runWatcher);
+
+      let callCount = 0;
+      const prWatcher = createMockPRWatcher('test-pr', async () => {
+        callCount++;
+        if (callCount === 1) {
+          return {
+            prState: 'open',
+            runs: [{
+              providerId: 'github-actions',
+              runId: 'run-1',
+              displayName: 'CI Build',
+              url: 'https://example.com/run/1',
+              repo: 'owner/repo',
+            }],
+          };
+        }
+        return { prState: 'open', runs: [] };
+      });
+      prRegistry.register(prWatcher);
+
+      const identifier = createPRIdentifier();
+      await service.startPRWatch(identifier);
+      expect(service.getActiveWatches()).toHaveLength(1);
+
+      await vi.advanceTimersByTimeAsync(60000);
+
+      expect(service.getActiveWatches()).toHaveLength(0);
+      expect(service.isPRActive(identifier)).toBe(false);
     });
 
     it('dismisses PR watch and its child runs', async () => {

@@ -62,17 +62,13 @@ export class GitHubMentionsProvider extends BaseGitHubProvider {
     });
 
     logger.info(`Discovered ${items.length} mentioned items`);
-    this._onDidDiscoverItems.fire(items);
+    this.publishDiscoveredItems(items, patterns);
 
     if (failures.length > 0) {
       const message = failures.length === 1
         ? `Failed to fetch mentions from ${failures[0]}`
         : `Failed to fetch mentions from ${failures.length} repositories`;
-      if (isUserTriggered) {
-        void vscode.window.showWarningMessage(`DevDocket GitHub: ${message}`);
-      } else {
-        logger.warn(message);
-      }
+      this.warnOnFetchFailure(message, isUserTriggered);
     }
   }
 
