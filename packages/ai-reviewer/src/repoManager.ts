@@ -2,7 +2,7 @@ import * as vscode from 'vscode';
 import * as path from 'path';
 import { parseAdoPrUrl, parsePrUrl } from './prUrl';
 import { ADO_AUTH_SCOPE, AdoPrClient } from './adoPrClient';
-import { gitExec } from './tools/gitUtils';
+import { GitExecError, gitExec } from './tools/gitUtils';
 import { validWorktreePaths } from './tools/worktreeRegistry';
 import { isValidRef } from './tools/refValidation';
 
@@ -119,9 +119,34 @@ function cloneArgs(args: string[]): string[] {
     : args;
 }
 
+function underlyingErrorMessage(err: unknown): string {
+  return err instanceof Error ? err.message : String(err);
+}
+
+async function withPathContext<T>(operation: string, label: string, targetPath: string, work: Promise<T>): Promise<T> {
+  try {
+    return await work;
+  } catch (err) {
+    const message = `${operation} (${label}: ${targetPath}): ${underlyingErrorMessage(err)}`;
+    if (err instanceof GitExecError) {
+      const wrapped = new GitExecError(message, err.exitCode);
+      (wrapped as Error & { cause?: unknown }).cause = err;
+      throw wrapped;
+    }
+    const wrapped = new Error(message);
+    (wrapped as Error & { cause?: unknown }).cause = err;
+    throw wrapped;
+  }
+}
+
 async function configureLongPaths(clonePath: string): Promise<void> {
   if (process.platform === 'win32') {
-    await gitExec(['config', '--local', 'core.longpaths', 'true'], clonePath);
+    await withPathContext(
+      'Failed to configure Git long path support',
+      'repo',
+      clonePath,
+      gitExec(['config', '--local', 'core.longpaths', 'true'], clonePath),
+    );
   }
 }
 
@@ -177,12 +202,23 @@ export class RepoManager {
     if (!cloneExists) {
       this.log.info('Cloning repository');
       this.log.debug(`Clone destination: ${clonePath}`);
-      await vscode.workspace.fs.createDirectory(vscode.Uri.file(path.dirname(clonePath)));
-      await gitAuth(
-        cloneArgs(['clone', '--no-checkout', cloneUrl, clonePath]),
-        path.dirname(clonePath),
-        session.accessToken,
-        300_000,
+      const cloneParent = path.dirname(clonePath);
+      await withPathContext(
+        'Failed to create repository directory',
+        'directory',
+        cloneParent,
+        vscode.workspace.fs.createDirectory(vscode.Uri.file(cloneParent)),
+      );
+      await withPathContext(
+        'Failed to clone repository',
+        'repo',
+        clonePath,
+        gitAuth(
+          cloneArgs(['clone', '--no-checkout', cloneUrl, clonePath]),
+          cloneParent,
+          session.accessToken,
+          300_000,
+        ),
       );
       this.log.info('Clone complete');
     }
@@ -204,28 +240,53 @@ export class RepoManager {
     this.log.debug(`Worktree directory exists: ${worktreeExists}`);
     if (worktreeExists) {
       this.log.info('Updating existing worktree — fetching PR head');
-      await gitAuth(['fetch', 'origin', `pull/${prNumber}/head`], worktreePath, session.accessToken, 300_000);
-      await gitExec(['reset', '--hard', 'FETCH_HEAD'], worktreePath);
+      await withPathContext(
+        'Failed to fetch PR head',
+        'worktree',
+        worktreePath,
+        gitAuth(['fetch', 'origin', `pull/${prNumber}/head`], worktreePath, session.accessToken, 300_000),
+      );
+      await withPathContext(
+        'Failed to reset worktree',
+        'worktree',
+        worktreePath,
+        gitExec(['reset', '--hard', 'FETCH_HEAD'], worktreePath),
+      );
       this.log.info('Worktree updated');
     } else {
       this.log.info('Creating new worktree — fetching PR head');
-      await gitAuth(['fetch', 'origin', `pull/${prNumber}/head:${headRef}`], clonePath, session.accessToken, 300_000);
+      await withPathContext(
+        'Failed to fetch PR head',
+        'repo',
+        clonePath,
+        gitAuth(['fetch', 'origin', `pull/${prNumber}/head:${headRef}`], clonePath, session.accessToken, 300_000),
+      );
       this.log.info('PR head fetched');
     }
 
     this.log.info(`Fetching base branch: ${baseRef}`);
-    await gitAuth(
-      ['fetch', 'origin', `refs/heads/${baseRef}:refs/remotes/origin/${baseRef}`],
+    await withPathContext(
+      'Failed to fetch base branch',
+      'repo',
       clonePath,
-      session.accessToken,
-      300_000,
+      gitAuth(
+        ['fetch', 'origin', `refs/heads/${baseRef}:refs/remotes/origin/${baseRef}`],
+        clonePath,
+        session.accessToken,
+        300_000,
+      ),
     );
     this.log.info('Base branch fetched');
 
     if (!worktreeExists) {
       this.log.info('Creating worktree');
       this.log.debug(`Worktree destination: ${worktreePath}, ref: ${headRef}`);
-      await gitExec(['worktree', 'add', worktreePath, headRef], clonePath);
+      await withPathContext(
+        'Failed to create worktree',
+        'worktree',
+        worktreePath,
+        gitExec(['worktree', 'add', worktreePath, headRef], clonePath),
+      );
       this.log.info('Worktree created');
     }
 
@@ -290,12 +351,23 @@ export class RepoManager {
     const cloneExists = await this.directoryExists(clonePath);
     if (!cloneExists) {
       this.log.info('Cloning Azure Repos repository');
-      await vscode.workspace.fs.createDirectory(vscode.Uri.file(path.dirname(clonePath)));
-      await gitAdoAuth(
-        cloneArgs(['clone', '--no-checkout', cloneUrl, clonePath]),
-        path.dirname(clonePath),
-        session.accessToken,
-        300_000,
+      const cloneParent = path.dirname(clonePath);
+      await withPathContext(
+        'Failed to create repository directory',
+        'directory',
+        cloneParent,
+        vscode.workspace.fs.createDirectory(vscode.Uri.file(cloneParent)),
+      );
+      await withPathContext(
+        'Failed to clone Azure Repos repository',
+        'repo',
+        clonePath,
+        gitAdoAuth(
+          cloneArgs(['clone', '--no-checkout', cloneUrl, clonePath]),
+          cloneParent,
+          session.accessToken,
+          300_000,
+        ),
       );
       this.log.info('ADO clone complete');
     }
@@ -304,16 +376,36 @@ export class RepoManager {
     const headRef = `refs/devdocket/ado/pr-${prNumber}-head`;
     const baseRef = `refs/devdocket/ado/pr-${prNumber}-base`;
     // Force-update DevDocket-owned refs so force-pushed PR branches are reflected accurately.
-    await gitAdoAuth(['fetch', 'origin', `+${sourceRef}:${headRef}`], clonePath, session.accessToken, 300_000);
-    await gitAdoAuth(['fetch', 'origin', `+${targetRef}:${baseRef}`], clonePath, session.accessToken, 300_000);
+    await withPathContext(
+      'Failed to fetch ADO source ref',
+      'repo',
+      clonePath,
+      gitAdoAuth(['fetch', 'origin', `+${sourceRef}:${headRef}`], clonePath, session.accessToken, 300_000),
+    );
+    await withPathContext(
+      'Failed to fetch ADO target ref',
+      'repo',
+      clonePath,
+      gitAdoAuth(['fetch', 'origin', `+${targetRef}:${baseRef}`], clonePath, session.accessToken, 300_000),
+    );
 
     const worktreeExists = await this.directoryExists(worktreePath);
     if (worktreeExists) {
       this.log.info('Updating existing ADO worktree');
-      await gitExec(['reset', '--hard', headRef], worktreePath);
+      await withPathContext(
+        'Failed to reset ADO worktree',
+        'worktree',
+        worktreePath,
+        gitExec(['reset', '--hard', headRef], worktreePath),
+      );
     } else {
       this.log.info('Creating ADO worktree');
-      await gitExec(['worktree', 'add', '--detach', worktreePath, headRef], clonePath);
+      await withPathContext(
+        'Failed to create ADO worktree',
+        'worktree',
+        worktreePath,
+        gitExec(['worktree', 'add', '--detach', worktreePath, headRef], clonePath),
+      );
     }
 
     const info: WorktreeInfo = {

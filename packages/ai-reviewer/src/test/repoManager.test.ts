@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { authentication, workspace, mockLogOutputChannel } from 'vscode';
 import { RepoManager, parsePrUrl, __testing } from '../repoManager';
+import { GitExecError } from '../tools/gitUtils';
 const { resetGitVersionCheck } = __testing;
 
 // Mock child_process
@@ -58,6 +59,29 @@ function mockAdoPrDetails(): void {
       },
     }),
   }));
+}
+
+function failGitCommand(match: (args: string[]) => boolean, stderr: string): void {
+  vi.mocked(execFile).mockImplementation(
+    (_cmd: string, args: string[], _opts: unknown, cb: Function) => {
+      if (args?.includes('version')) {
+        cb(null, 'git version 2.45.0.windows.1', '');
+      } else if (match(args)) {
+        cb(Object.assign(new Error('git failed'), { code: 1 }), '', stderr);
+      } else {
+        cb(null, '', '');
+      }
+    },
+  );
+}
+
+async function rejectedMessage(promise: Promise<unknown>): Promise<string> {
+  try {
+    await promise;
+  } catch (err) {
+    return normalizePath(err instanceof Error ? err.message : String(err));
+  }
+  throw new Error('Expected promise to reject');
 }
 
 describe('parsePrUrl', () => {
@@ -276,6 +300,76 @@ describe('RepoManager', () => {
       await manager.ensureWorktree('https://github.com/owner/repo/pull/42');
 
       expect(getLongpathsConfigCalls()).toHaveLength(0);
+    });
+
+    it('includes the clone path when cloning fails', async () => {
+      failGitCommand(args => args.includes('clone'), 'Filename too long');
+
+      const message = await rejectedMessage(manager.ensureWorktree('https://github.com/owner/repo/pull/42'));
+
+      expect(message).toContain('Failed to clone repository');
+      expect(message).toContain('(repo: /mock/storage/repos/owner-repo/clone)');
+      expect(message).toContain('Filename too long');
+    });
+
+    it('preserves git exit codes when adding clone failure path context', async () => {
+      failGitCommand(args => args.includes('clone'), 'Filename too long');
+
+      await expect(manager.ensureWorktree('https://github.com/owner/repo/pull/42')).rejects.toMatchObject({
+        name: 'GitExecError',
+        exitCode: 1,
+      } satisfies Partial<GitExecError>);
+    });
+
+    it('includes the clone path when an ADO clone fails', async () => {
+      mockAdoPrDetails();
+      failGitCommand(args => args.includes('clone'), 'Filename too long');
+
+      const message = await rejectedMessage(manager.ensureWorktree('https://dev.azure.com/org/project/_git/repo/pullrequest/42'));
+
+      expect(message).toContain('Failed to clone Azure Repos repository');
+      expect(message).toContain('(repo: /mock/storage/repos/ado-org-project-repo/clone)');
+      expect(message).toContain('Filename too long');
+    });
+
+    it('includes the ADO worktree path when creating an ADO worktree fails', async () => {
+      mockAdoPrDetails();
+      failGitCommand(
+        args => args.includes('worktree') && args.includes('add'),
+        'Filename too long',
+      );
+
+      const message = await rejectedMessage(manager.ensureWorktree('https://dev.azure.com/org/project/_git/repo/pullrequest/42'));
+
+      expect(message).toContain('Failed to create ADO worktree');
+      expect(message).toContain('(worktree: /mock/storage/repos/ado-org-project-repo/worktrees/pr-42)');
+      expect(message).toContain('Filename too long');
+    });
+
+    it('includes the clone path when fetching a PR head fails', async () => {
+      failGitCommand(
+        args => args.includes('fetch') && args.some(arg => arg.includes('pull/42/head')),
+        'unable to update local ref',
+      );
+
+      const message = await rejectedMessage(manager.ensureWorktree('https://github.com/owner/repo/pull/42'));
+
+      expect(message).toContain('Failed to fetch PR head');
+      expect(message).toContain('(repo: /mock/storage/repos/owner-repo/clone)');
+      expect(message).toContain('unable to update local ref');
+    });
+
+    it('includes the worktree path when creating a worktree fails', async () => {
+      failGitCommand(
+        args => args.includes('worktree') && args.includes('add'),
+        'Filename too long',
+      );
+
+      const message = await rejectedMessage(manager.ensureWorktree('https://github.com/owner/repo/pull/42'));
+
+      expect(message).toContain('Failed to create worktree');
+      expect(message).toContain('(worktree: /mock/storage/repos/owner-repo/worktrees/pr-42)');
+      expect(message).toContain('Filename too long');
     });
 
     it('passes auth via env vars, not CLI args', async () => {
