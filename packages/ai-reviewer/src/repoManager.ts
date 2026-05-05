@@ -1,5 +1,6 @@
 import * as vscode from 'vscode';
 import * as path from 'path';
+import * as fs from 'fs/promises';
 import { parseAdoPrUrl, parsePrUrl } from './prUrl';
 import { ADO_AUTH_SCOPE, AdoPrClient } from './adoPrClient';
 import { GitExecError, gitExec } from './tools/gitUtils';
@@ -150,6 +151,17 @@ async function configureLongPaths(clonePath: string): Promise<void> {
   }
 }
 
+async function deleteDirectoryNoTrash(dirPath: string): Promise<void> {
+  try {
+    await vscode.workspace.fs.delete(vscode.Uri.file(dirPath), { recursive: true, useTrash: false });
+  } catch (err) {
+    if (process.platform !== 'win32') {
+      throw err;
+    }
+    await fs.rm(dirPath, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 });
+  }
+}
+
 export class RepoManager {
   private worktrees = new Map<string, WorktreeInfo>();
 
@@ -197,8 +209,8 @@ export class RepoManager {
     this.log.debug(`GitHub auth obtained — account: ${session.account?.label ?? 'unknown'}`);
 
     const cloneUrl = `https://github.com/${org}/${repo}.git`;
-    const cloneExists = await this.directoryExists(clonePath);
-    this.log.debug(`Clone directory exists: ${cloneExists}`);
+    const cloneExists = await this.ensureValidGitDirectory(clonePath, 'repository');
+    this.log.debug(`Clone directory exists and is valid: ${cloneExists}`);
     if (!cloneExists) {
       this.log.info('Cloning repository');
       this.log.debug(`Clone destination: ${clonePath}`);
@@ -236,8 +248,8 @@ export class RepoManager {
     }
     this.log.info(`PR metadata — baseRef: ${baseRef}, headSha: ${prMeta.headSha}, local headRef: ${headRef}`);
 
-    const worktreeExists = await this.directoryExists(worktreePath);
-    this.log.debug(`Worktree directory exists: ${worktreeExists}`);
+    const worktreeExists = await this.ensureValidGitDirectory(worktreePath, 'worktree', clonePath);
+    this.log.debug(`Worktree directory exists and is valid: ${worktreeExists}`);
     if (worktreeExists) {
       this.log.info('Updating existing worktree — fetching PR head');
       await withPathContext(
@@ -348,7 +360,7 @@ export class RepoManager {
       throw new Error('Azure DevOps repository clone URL is invalid');
     }
 
-    const cloneExists = await this.directoryExists(clonePath);
+    const cloneExists = await this.ensureValidGitDirectory(clonePath, 'repository');
     if (!cloneExists) {
       this.log.info('Cloning Azure Repos repository');
       const cloneParent = path.dirname(clonePath);
@@ -389,7 +401,7 @@ export class RepoManager {
       gitAdoAuth(['fetch', 'origin', `+${targetRef}:${baseRef}`], clonePath, session.accessToken, 300_000),
     );
 
-    const worktreeExists = await this.directoryExists(worktreePath);
+    const worktreeExists = await this.ensureValidGitDirectory(worktreePath, 'worktree', clonePath);
     if (worktreeExists) {
       this.log.info('Updating existing ADO worktree');
       await withPathContext(
@@ -513,6 +525,39 @@ export class RepoManager {
 
   private adoKey(org: string, project: string, repo: string, prNumber: string): string {
     return `ado:${org}/${project}/${repo}#${prNumber}`;
+  }
+
+  private async ensureValidGitDirectory(
+    dirPath: string,
+    kind: 'repository' | 'worktree',
+    clonePath?: string,
+  ): Promise<boolean> {
+    if (!await this.directoryExists(dirPath)) {
+      return false;
+    }
+
+    try {
+      await gitExec(['rev-parse', '--resolve-git-dir', path.join(dirPath, '.git')], dirPath);
+      return true;
+    } catch {
+      const label = kind === 'worktree' ? 'worktree' : 'repo';
+      this.log.warn(`Found invalid/partial ${kind} dir at ${dirPath}; removing and recreating.`);
+      await withPathContext(
+        `Failed to remove invalid ${kind} directory`,
+        label,
+        dirPath,
+        deleteDirectoryNoTrash(dirPath),
+      );
+      if (kind === 'worktree' && clonePath) {
+        await withPathContext(
+          'Failed to prune invalid worktree metadata',
+          'repo',
+          clonePath,
+          gitExec(['worktree', 'prune'], clonePath),
+        );
+      }
+      return false;
+    }
   }
 
   private async fetchPrMetadata(
