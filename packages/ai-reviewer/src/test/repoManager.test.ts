@@ -17,8 +17,20 @@ vi.mock('child_process', () => ({
 
 import { execFile } from 'child_process';
 
+const originalProcessPlatform = process.platform;
+
+function setProcessPlatform(platform: NodeJS.Platform): void {
+  Object.defineProperty(process, 'platform', { value: platform, configurable: true });
+}
+
 function createRepoManager(): RepoManager {
   return new RepoManager({ fsPath: '/mock/storage' } as never, mockLogOutputChannel as never);
+}
+
+function getCloneArgs(): string[] {
+  const cloneCall = vi.mocked(execFile).mock.calls.find(c => c[1]?.includes('clone'));
+  expect(cloneCall).toBeDefined();
+  return cloneCall![1] as string[];
 }
 
 describe('parsePrUrl', () => {
@@ -60,6 +72,7 @@ describe('RepoManager', () => {
 
   afterEach(() => {
     vi.unstubAllGlobals();
+    setProcessPlatform(originalProcessPlatform);
   });
 
   beforeEach(() => {
@@ -133,10 +146,50 @@ describe('RepoManager', () => {
       const item = 'https://github.com/owner/repo/pull/42';
       await manager.ensureWorktree(item);
 
-      const calls = vi.mocked(execFile).mock.calls;
-      const cloneCall = calls.find(c => c[1]?.includes('clone'));
-      expect(cloneCall).toBeDefined();
-      expect(cloneCall![1]).toContain('--no-checkout');
+      const cloneArgs = getCloneArgs();
+      expect(cloneArgs).toContain('--no-checkout');
+    });
+
+    it('passes core.longpaths config to fresh GitHub clones on Windows', async () => {
+      setProcessPlatform('win32');
+
+      await manager.ensureWorktree('https://github.com/owner/repo/pull/42');
+
+      const args = getCloneArgs();
+      const configIndex = args.indexOf('-c');
+      expect(configIndex).toBeGreaterThanOrEqual(0);
+      expect(args[configIndex + 1]).toBe('core.longpaths=true');
+      expect(configIndex).toBeLessThan(args.indexOf('clone'));
+    });
+
+    it('does not pass core.longpaths config to fresh GitHub clones on non-Windows', async () => {
+      setProcessPlatform('linux');
+
+      await manager.ensureWorktree('https://github.com/owner/repo/pull/42');
+
+      expect(getCloneArgs()).not.toContain('core.longpaths=true');
+    });
+
+    it('passes core.longpaths config to fresh ADO clones on Windows', async () => {
+      setProcessPlatform('win32');
+      vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+        ok: true,
+        json: vi.fn().mockResolvedValue({
+          sourceRefName: 'refs/heads/feature/add-api',
+          targetRefName: 'refs/heads/main',
+          repository: {
+            remoteUrl: 'https://dev.azure.com/org/project/_git/repo',
+          },
+        }),
+      }));
+
+      await manager.ensureWorktree('https://dev.azure.com/org/project/_git/repo/pullrequest/42');
+
+      const args = getCloneArgs();
+      const configIndex = args.indexOf('-c');
+      expect(configIndex).toBeGreaterThanOrEqual(0);
+      expect(args[configIndex + 1]).toBe('core.longpaths=true');
+      expect(configIndex).toBeLessThan(args.indexOf('clone'));
     });
 
     it('passes auth via env vars, not CLI args', async () => {

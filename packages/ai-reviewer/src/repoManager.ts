@@ -113,6 +113,12 @@ function isValidCloneUrl(url: unknown): url is string {
   return false;
 }
 
+function cloneArgs(args: string[]): string[] {
+  return process.platform === 'win32'
+    ? ['-c', 'core.longpaths=true', ...args]
+    : args;
+}
+
 export class RepoManager {
   private worktrees = new Map<string, WorktreeInfo>();
 
@@ -167,7 +173,7 @@ export class RepoManager {
       this.log.debug(`Clone destination: ${clonePath}`);
       await vscode.workspace.fs.createDirectory(vscode.Uri.file(path.dirname(clonePath)));
       await gitAuth(
-        ['clone', '--no-checkout', cloneUrl, clonePath],
+        cloneArgs(['clone', '--no-checkout', cloneUrl, clonePath]),
         path.dirname(clonePath),
         session.accessToken,
         300_000,
@@ -279,7 +285,7 @@ export class RepoManager {
       this.log.info('Cloning Azure Repos repository');
       await vscode.workspace.fs.createDirectory(vscode.Uri.file(path.dirname(clonePath)));
       await gitAdoAuth(
-        ['clone', '--no-checkout', cloneUrl, clonePath],
+        cloneArgs(['clone', '--no-checkout', cloneUrl, clonePath]),
         path.dirname(clonePath),
         session.accessToken,
         300_000,
