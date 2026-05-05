@@ -880,6 +880,61 @@ describe('GitHubMentionsProvider', () => {
     expect(items[0].resurfaceVersion).toBeUndefined();
   });
 
+  it('uses a capped comment-scan sentinel until a newer mention is found', async () => {
+    const commentsUrl = 'https://api.github.com/repos/org/repo/issues/10/comments';
+    const initialIssue = {
+      ...createMockIssue(10, 'Bug report', 'org/repo'),
+      body: 'No mention here',
+      comments: 1100,
+      comments_url: commentsUrl,
+      updated_at: '2024-04-01T00:00:00Z',
+    };
+    const updatedIssue = {
+      ...initialIssue,
+      comments: 1101,
+      updated_at: '2024-04-02T00:00:00Z',
+    };
+
+    mockFetch
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ items: [initialIssue] }) })
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ login: 'testuser' }) })
+      .mockResolvedValueOnce({ ok: true, json: async () => [] });
+    for (let page = 0; page < 10; page++) {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => Array.from({ length: 100 }, (_, i) => ({
+          id: 1000 + (page * 100) + i,
+          body: 'non-mention update',
+          created_at: '2024-04-01T00:00:00Z',
+        })),
+      });
+    }
+    mockFetch
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ items: [updatedIssue] }) })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ([
+          { id: 2200, body: 'New ping @testuser', created_at: '2024-04-02T00:00:00Z' },
+        ]),
+      });
+
+    const listener = vi.fn();
+    provider.onDidDiscoverItems(listener);
+    await provider.refresh();
+    await provider.refresh();
+
+    expect(listener.mock.calls[0][0][0].resurfaceVersion).toBe('comments-capped:10');
+    expect(listener.mock.calls[1][0][0].resurfaceVersion).toBe('comment:2200:2024-04-02T00:00:00Z');
+
+    const firstCappedPageUrl = new URL(mockFetch.mock.calls[3][0] as string);
+    const firstUpdatedPageUrl = new URL(mockFetch.mock.calls[14][0] as string);
+    expect(firstCappedPageUrl.searchParams.get('page')).toBe('11');
+    expect(firstUpdatedPageUrl.searchParams.get('page')).toBe('1');
+    expect(firstUpdatedPageUrl.searchParams.get('since')).toBe('2024-04-01T00:00:00Z');
+    expect(firstUpdatedPageUrl.searchParams.get('sort')).toBe('created');
+    expect(firstUpdatedPageUrl.searchParams.get('direction')).toBe('desc');
+  });
+
   it('counts a mention in plain prose', async () => {
     const item = await refreshWithSingleComment('Please take a look, @testuser.');
 

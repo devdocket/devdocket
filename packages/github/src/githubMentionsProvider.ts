@@ -30,6 +30,12 @@ type TeamMentionFetchResult =
   | { ok: true; teams: Set<string> }
   | { ok: false; teams: Set<string> };
 
+type MentionCommentFetchResult = {
+  resurfaceVersion?: string;
+  latestScannedAt?: string;
+  scanCapped: boolean;
+};
+
 /**
  * DevDocket provider that discovers GitHub issues and pull requests
  * where the current user is @mentioned.
@@ -45,7 +51,7 @@ export class GitHubMentionsProvider extends BaseGitHubProvider {
   private static readonly AUTH_SCOPES = ['repo', 'read:org'];
 
   private readonly _context: vscode.ExtensionContext;
-  private readonly mentionCommentCache = new Map<string, { issueUpdatedAt?: string; resurfaceVersion?: string }>();
+  private readonly mentionCommentCache = new Map<string, { issueUpdatedAt?: string; resurfaceVersion?: string; commentScanSince?: string }>();
   private mentionCommentCacheLogin?: string;
   private cachedLogin?: { accessToken: string; login: string };
   private teamMentionCache?: { accessToken: string; login: string; expiresAtMs: number; teams: Set<string> };
@@ -368,14 +374,22 @@ export class GitHubMentionsProvider extends BaseGitHubProvider {
       return cached.resurfaceVersion ?? bodyMentionVersion;
     }
 
-    const previousCommentVersion = cached?.resurfaceVersion;
-    const commentVersion = await this.fetchLatestMentionCommentVersion(issue, token, currentLogin, teamMentions, previousCommentVersion, signal);
-    const resurfaceVersion = commentVersion ?? previousCommentVersion;
+    const previousResurfaceVersion = cached?.resurfaceVersion;
+    const previousCommentSince = cached?.commentScanSince ?? GitHubMentionsProvider.getCommentVersionTimestamp(previousResurfaceVersion);
+    const commentResult = await this.fetchLatestMentionCommentVersion(issue, token, currentLogin, teamMentions, previousCommentSince, signal);
+    const resurfaceVersion = commentResult.resurfaceVersion
+      ?? previousResurfaceVersion
+      ?? bodyMentionVersion
+      ?? (commentResult.scanCapped ? GitHubMentionsProvider.getCappedCommentScanVersion(issue) : undefined);
+    const commentScanSince = commentResult.latestScannedAt
+      ?? GitHubMentionsProvider.getCommentVersionTimestamp(resurfaceVersion)
+      ?? previousCommentSince;
     this.mentionCommentCache.set(externalId, {
       issueUpdatedAt: issue.updated_at,
       resurfaceVersion,
+      commentScanSince,
     });
-    return resurfaceVersion ?? bodyMentionVersion;
+    return resurfaceVersion;
   }
 
   private async fetchLatestMentionCommentVersion(
@@ -383,17 +397,18 @@ export class GitHubMentionsProvider extends BaseGitHubProvider {
     token: string,
     currentLogin: string,
     teamMentions: Set<string>,
-    previousCommentVersion?: string,
+    previousCommentSince?: string,
     signal?: AbortSignal,
-  ): Promise<string | undefined> {
+  ): Promise<MentionCommentFetchResult> {
     if (!issue.comments_url || issue.comments === 0) {
-      return undefined;
+      return { scanCapped: false };
     }
 
-    const since = GitHubMentionsProvider.getCommentVersionTimestamp(previousCommentVersion);
+    const since = previousCommentSince;
     const pageCount = since ? undefined : GitHubMentionsProvider.getCommentPageCount(issue.comments);
     const newestFirst = !!since || pageCount === undefined;
     let latestMention: { id: number; createdAt: string; time: number } | undefined;
+    let latestScannedComment: { createdAt: string; time: number } | undefined;
     let lastPageWasFull = false;
     let scannedPages = 0;
 
@@ -412,30 +427,31 @@ export class GitHubMentionsProvider extends BaseGitHubProvider {
       } catch (err: unknown) {
         if (err instanceof Error && err.name === 'AbortError' && signal?.aborted) { throw err; }
         logger.debug(`Failed to fetch comments for mention ${issue.html_url}`, err);
-        return undefined;
+        return { scanCapped: false };
       }
 
       if (!response.ok) {
         logger.debug(`Failed to fetch comments for mention ${issue.html_url}: ${response.status}`);
-        return undefined;
+        return { scanCapped: false };
       }
 
       scannedPages++;
       const comments = await response.json() as GitHubIssueComment[];
       lastPageWasFull = comments.length >= 100;
       for (const comment of comments) {
+        const createdAt = comment.created_at;
+        const time = createdAt ? Date.parse(createdAt) : Number.NaN;
+        if (createdAt && !Number.isNaN(time) && (!latestScannedComment || time > latestScannedComment.time)) {
+          latestScannedComment = { createdAt, time };
+        }
         if (!GitHubMentionsProvider.mentionsUser(comment.body, currentLogin, teamMentions)) {
           continue;
         }
-        if (!comment.created_at) {
-          continue;
-        }
-        const time = Date.parse(comment.created_at);
-        if (Number.isNaN(time)) {
+        if (!createdAt || Number.isNaN(time)) {
           continue;
         }
         if (!latestMention || time > latestMention.time) {
-          latestMention = { id: comment.id, createdAt: comment.created_at, time };
+          latestMention = { id: comment.id, createdAt, time };
         }
       }
 
@@ -456,13 +472,20 @@ export class GitHubMentionsProvider extends BaseGitHubProvider {
 
     const moreForwardPages = !pageCount && lastPageWasFull;
     const moreBackwardPages = pageCount !== undefined && pageCount > scannedPages;
-    if (!latestMention && scannedPages === COMMENT_PAGE_LIMIT && (moreForwardPages || moreBackwardPages)) {
+    const scanCapped = !latestMention && scannedPages === COMMENT_PAGE_LIMIT && (moreForwardPages || moreBackwardPages);
+    if (scanCapped) {
       logger.warn(`Comment scan capped at ${COMMENT_PAGE_LIMIT} pages for ${issue.html_url}`);
     }
 
-    return latestMention
-      ? `comment:${latestMention.id}:${latestMention.createdAt}`
-      : undefined;
+    return {
+      resurfaceVersion: latestMention ? `comment:${latestMention.id}:${latestMention.createdAt}` : undefined,
+      latestScannedAt: latestScannedComment?.createdAt,
+      scanCapped,
+    };
+  }
+
+  private static getCappedCommentScanVersion(issue: GitHubIssue): string {
+    return `comments-capped:${issue.number}`;
   }
 
   private static getIssueBodyMentionVersion(issue: GitHubIssue, login: string, teamMentions: Set<string>): string | undefined {
