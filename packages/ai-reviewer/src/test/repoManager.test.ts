@@ -33,6 +33,33 @@ function getCloneArgs(): string[] {
   return cloneCall![1] as string[];
 }
 
+function getLongpathsConfigCalls() {
+  return vi.mocked(execFile).mock.calls.filter(c => {
+    const args = c[1] as string[] | undefined;
+    return args?.includes('config')
+      && args.includes('--local')
+      && args.includes('core.longpaths')
+      && args.includes('true');
+  });
+}
+
+function normalizePath(value: string): string {
+  return value.replace(/\\/g, '/');
+}
+
+function mockAdoPrDetails(): void {
+  vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+    ok: true,
+    json: vi.fn().mockResolvedValue({
+      sourceRefName: 'refs/heads/feature/add-api',
+      targetRefName: 'refs/heads/main',
+      repository: {
+        remoteUrl: 'https://dev.azure.com/org/project/_git/repo',
+      },
+    }),
+  }));
+}
+
 describe('parsePrUrl', () => {
   it('parses a valid GitHub PR URL', () => {
     const result = parsePrUrl('https://github.com/owner/repo/pull/42');
@@ -172,16 +199,7 @@ describe('RepoManager', () => {
 
     it('passes core.longpaths config to fresh ADO clones on Windows', async () => {
       setProcessPlatform('win32');
-      vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
-        ok: true,
-        json: vi.fn().mockResolvedValue({
-          sourceRefName: 'refs/heads/feature/add-api',
-          targetRefName: 'refs/heads/main',
-          repository: {
-            remoteUrl: 'https://dev.azure.com/org/project/_git/repo',
-          },
-        }),
-      }));
+      mockAdoPrDetails();
 
       await manager.ensureWorktree('https://dev.azure.com/org/project/_git/repo/pullrequest/42');
 
@@ -190,6 +208,74 @@ describe('RepoManager', () => {
       expect(configIndex).toBeGreaterThanOrEqual(0);
       expect(args[configIndex + 1]).toBe('core.longpaths=true');
       expect(configIndex).toBeLessThan(args.indexOf('clone'));
+    });
+
+    it('persists core.longpaths to a fresh GitHub clone local config on Windows', async () => {
+      setProcessPlatform('win32');
+
+      await manager.ensureWorktree('https://github.com/owner/repo/pull/42');
+
+      const configCalls = getLongpathsConfigCalls();
+      expect(configCalls).toHaveLength(1);
+      expect(normalizePath((configCalls[0][2] as { cwd: string }).cwd)).toBe('/mock/storage/repos/owner-repo/clone');
+    });
+
+    it('repairs core.longpaths local config for an existing GitHub clone on Windows', async () => {
+      setProcessPlatform('win32');
+      let statCallCount = 0;
+      vi.mocked(workspace.fs.stat).mockImplementation(async () => {
+        statCallCount++;
+        if (statCallCount === 1) {
+          return { type: 2 } as never;
+        }
+        throw new Error('not found');
+      });
+
+      await manager.ensureWorktree('https://github.com/owner/repo/pull/42');
+
+      expect(vi.mocked(execFile).mock.calls.find(c => c[1]?.includes('clone'))).toBeUndefined();
+      const configCalls = getLongpathsConfigCalls();
+      expect(configCalls).toHaveLength(1);
+      expect(normalizePath((configCalls[0][2] as { cwd: string }).cwd)).toBe('/mock/storage/repos/owner-repo/clone');
+    });
+
+    it('persists core.longpaths to a fresh ADO clone local config on Windows', async () => {
+      setProcessPlatform('win32');
+      mockAdoPrDetails();
+
+      await manager.ensureWorktree('https://dev.azure.com/org/project/_git/repo/pullrequest/42');
+
+      const configCalls = getLongpathsConfigCalls();
+      expect(configCalls).toHaveLength(1);
+      expect(normalizePath((configCalls[0][2] as { cwd: string }).cwd)).toBe('/mock/storage/repos/ado-org-project-repo/clone');
+    });
+
+    it('repairs core.longpaths local config for an existing ADO clone on Windows', async () => {
+      setProcessPlatform('win32');
+      mockAdoPrDetails();
+      let statCallCount = 0;
+      vi.mocked(workspace.fs.stat).mockImplementation(async () => {
+        statCallCount++;
+        if (statCallCount === 1) {
+          return { type: 2 } as never;
+        }
+        throw new Error('not found');
+      });
+
+      await manager.ensureWorktree('https://dev.azure.com/org/project/_git/repo/pullrequest/42');
+
+      expect(vi.mocked(execFile).mock.calls.find(c => c[1]?.includes('clone'))).toBeUndefined();
+      const configCalls = getLongpathsConfigCalls();
+      expect(configCalls).toHaveLength(1);
+      expect(normalizePath((configCalls[0][2] as { cwd: string }).cwd)).toBe('/mock/storage/repos/ado-org-project-repo/clone');
+    });
+
+    it('does not persist core.longpaths local config on non-Windows', async () => {
+      setProcessPlatform('linux');
+
+      await manager.ensureWorktree('https://github.com/owner/repo/pull/42');
+
+      expect(getLongpathsConfigCalls()).toHaveLength(0);
     });
 
     it('passes auth via env vars, not CLI args', async () => {
@@ -382,16 +468,7 @@ describe('RepoManager', () => {
     });
 
     it('creates an ADO worktree using Microsoft auth and PR refs', async () => {
-      vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
-        ok: true,
-        json: vi.fn().mockResolvedValue({
-          sourceRefName: 'refs/heads/feature/add-api',
-          targetRefName: 'refs/heads/main',
-          repository: {
-            remoteUrl: 'https://dev.azure.com/org/project/_git/repo',
-          },
-        }),
-      }));
+      mockAdoPrDetails();
 
       const url = 'https://dev.azure.com/org/project/_git/repo/pullrequest/42';
       const info = await manager.ensureWorktree(url);
@@ -459,16 +536,7 @@ describe('RepoManager', () => {
     });
 
     it('deletes the actual ADO repo directory for cached ADO worktrees', async () => {
-      vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
-        ok: true,
-        json: vi.fn().mockResolvedValue({
-          sourceRefName: 'refs/heads/feature/add-api',
-          targetRefName: 'refs/heads/main',
-          repository: {
-            remoteUrl: 'https://dev.azure.com/org/project/_git/repo',
-          },
-        }),
-      }));
+      mockAdoPrDetails();
       await manager.ensureWorktree('https://dev.azure.com/org/project/_git/repo/pullrequest/42');
       vi.mocked(workspace.fs.delete).mockClear();
 

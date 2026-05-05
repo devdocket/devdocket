@@ -119,6 +119,12 @@ function cloneArgs(args: string[]): string[] {
     : args;
 }
 
+async function configureLongPaths(clonePath: string): Promise<void> {
+  if (process.platform === 'win32') {
+    await gitExec(['config', '--local', 'core.longpaths', 'true'], clonePath);
+  }
+}
+
 export class RepoManager {
   private worktrees = new Map<string, WorktreeInfo>();
 
@@ -180,6 +186,7 @@ export class RepoManager {
       );
       this.log.info('Clone complete');
     }
+    await configureLongPaths(clonePath);
 
     this.log.info('Fetching PR metadata from GitHub API');
     const prMeta = await this.fetchPrMetadata(org, repo, prNumber, session.accessToken);
@@ -292,6 +299,7 @@ export class RepoManager {
       );
       this.log.info('ADO clone complete');
     }
+    await configureLongPaths(clonePath);
 
     const headRef = `refs/devdocket/ado/pr-${prNumber}-head`;
     const baseRef = `refs/devdocket/ado/pr-${prNumber}-base`;
