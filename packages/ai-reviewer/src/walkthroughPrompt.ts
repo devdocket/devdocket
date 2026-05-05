@@ -13,7 +13,10 @@ export function buildWalkthroughPrompt(info: {
   prUrl?: string;
   provider?: 'github' | 'ado';
 }): string {
-  const prUrl = sanitizePrUrl(info.prUrl ?? `https://github.com/${info.org}/${info.repo}/pull/${info.prNumber}`);
+  const fallbackPrUrl = info.provider === 'ado'
+    ? '(URL unavailable)'
+    : `https://github.com/${info.org}/${info.repo}/pull/${info.prNumber}`;
+  const prUrl = sanitizePrUrl(info.prUrl ?? fallbackPrUrl);
   const navigableLinks = buildNavigableLinksSection(info, prUrl);
 
   return `# Interactive PR Walkthrough

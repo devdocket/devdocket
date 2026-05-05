@@ -162,6 +162,17 @@ async function deleteDirectoryNoTrash(dirPath: string): Promise<void> {
   }
 }
 
+function isInvalidGitDirectoryError(err: unknown): boolean {
+  if (!(err instanceof GitExecError) || err.exitCode !== 128) {
+    return false;
+  }
+  const message = err.message.toLowerCase();
+  return message.includes('not a git repository')
+    || message.includes('not a gitdir')
+    || message.includes('invalid gitfile format')
+    || message.includes('unable to read git file');
+}
+
 export class RepoManager {
   private worktrees = new Map<string, WorktreeInfo>();
 
@@ -536,11 +547,19 @@ export class RepoManager {
       return false;
     }
 
+    const label = kind === 'worktree' ? 'worktree' : 'repo';
     try {
       await gitExec(['rev-parse', '--resolve-git-dir', path.join(dirPath, '.git')], dirPath);
       return true;
-    } catch {
-      const label = kind === 'worktree' ? 'worktree' : 'repo';
+    } catch (err) {
+      if (!isInvalidGitDirectoryError(err)) {
+        return await withPathContext(
+          `Failed to validate ${kind} directory`,
+          label,
+          dirPath,
+          Promise.reject(err),
+        );
+      }
       this.log.warn(`Found invalid/partial ${kind} dir at ${dirPath}; removing and recreating.`);
       await withPathContext(
         `Failed to remove invalid ${kind} directory`,

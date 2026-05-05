@@ -59,7 +59,11 @@ function mockExistingDirectories(paths: string[]): void {
   });
 }
 
-function mockInvalidGitDirectory(invalidPath: string): void {
+function mockGitDirectoryValidationFailure(
+  invalidPath: string,
+  stderr = 'fatal: not a git repository',
+  code = 128,
+): void {
   vi.mocked(execFile).mockImplementation(
     (_cmd: string, args: string[], opts: unknown, cb: Function) => {
       const cwd = normalizePath((opts as { cwd?: string } | undefined)?.cwd ?? '');
@@ -71,7 +75,7 @@ function mockInvalidGitDirectory(invalidPath: string): void {
         && args.some(arg => normalizePath(arg) === `${normalizePath(invalidPath)}/.git`)
         && cwd === normalizePath(invalidPath)
       ) {
-        cb(Object.assign(new Error('git failed'), { code: 128 }), '', 'fatal: not a git repository');
+        cb(Object.assign(new Error('git failed'), { code }), '', stderr);
       } else {
         cb(null, '', '');
       }
@@ -455,14 +459,29 @@ describe('RepoManager', () => {
     it('removes and re-clones an existing clone directory that is not a valid git repo', async () => {
       const clonePath = '/mock/storage/repos/owner-repo/clone';
       mockExistingDirectories([clonePath]);
-      mockInvalidGitDirectory(clonePath);
+      mockGitDirectoryValidationFailure(clonePath);
 
       await manager.ensureWorktree('https://github.com/owner/repo/pull/42');
 
-      const deletedPaths = vi.mocked(workspace.fs.delete).mock.calls.map(call => normalizePath((call[0] as { fsPath: string }).fsPath));
+      const deletedPaths = vi.mocked(workspace.fs.delete).mock.calls.map(
+        call => normalizePath((call[0] as { fsPath: string }).fsPath),
+      );
       expect(deletedPaths).toContain(clonePath);
       const cloneCall = vi.mocked(execFile).mock.calls.find(c => c[1]?.includes('clone'));
       expect(cloneCall).toBeDefined();
+    });
+
+    it('does not remove a clone directory when git validation fails unexpectedly', async () => {
+      const clonePath = '/mock/storage/repos/owner-repo/clone';
+      mockExistingDirectories([clonePath]);
+      mockGitDirectoryValidationFailure(clonePath, 'fatal: permission denied');
+
+      await expect(manager.ensureWorktree('https://github.com/owner/repo/pull/42'))
+        .rejects.toThrow('git rev-parse failed: fatal: permission denied');
+
+      expect(workspace.fs.delete).not.toHaveBeenCalled();
+      const cloneCall = vi.mocked(execFile).mock.calls.find(c => c[1]?.includes('clone'));
+      expect(cloneCall).toBeUndefined();
     });
 
     it('reuses an existing clone directory that is a valid git repo', async () => {
@@ -485,7 +504,7 @@ describe('RepoManager', () => {
       const clonePath = '/mock/storage/repos/ado-org-project-repo/clone';
       mockAdoPrDetails();
       mockExistingDirectories([clonePath]);
-      mockInvalidGitDirectory(clonePath);
+      mockGitDirectoryValidationFailure(clonePath);
 
       await manager.ensureWorktree('https://dev.azure.com/org/project/_git/repo/pullrequest/42');
 
@@ -501,7 +520,7 @@ describe('RepoManager', () => {
       const clonePath = '/mock/storage/repos/owner-repo/clone';
       const worktreePath = '/mock/storage/repos/owner-repo/worktrees/pr-42';
       mockExistingDirectories([clonePath, worktreePath]);
-      mockInvalidGitDirectory(worktreePath);
+      mockGitDirectoryValidationFailure(worktreePath);
 
       await manager.ensureWorktree('https://github.com/owner/repo/pull/42');
 
@@ -540,7 +559,7 @@ describe('RepoManager', () => {
       const worktreePath = '/mock/storage/repos/ado-org-project-repo/worktrees/pr-42';
       mockAdoPrDetails();
       mockExistingDirectories([clonePath, worktreePath]);
-      mockInvalidGitDirectory(worktreePath);
+      mockGitDirectoryValidationFailure(worktreePath);
 
       await manager.ensureWorktree('https://dev.azure.com/org/project/_git/repo/pullrequest/42');
 

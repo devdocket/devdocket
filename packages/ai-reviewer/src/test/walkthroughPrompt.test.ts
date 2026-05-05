@@ -69,4 +69,19 @@ describe('buildWalkthroughPrompt', () => {
     expect(prompt).toContain('https://dev.azure.com/org/project/_git/repo/pullrequest/42');
     expect(prompt).not.toContain('devdocket-diffAnchor');
   });
+
+  it('does not invent GitHub URLs for Azure DevOps PRs without a URL', () => {
+    const prompt = buildWalkthroughPrompt({
+      worktreePath: '/mock/worktree',
+      org: 'org/project',
+      repo: 'repo',
+      prNumber: '42',
+      headRef: 'refs/devdocket/ado/pr-42-head',
+      baseRef: 'refs/devdocket/ado/pr-42-base',
+      provider: 'ado',
+    });
+
+    expect(prompt).toContain('**PR URL:** (URL unavailable)');
+    expect(prompt).not.toContain('https://github.com/org/project/repo/pull/42');
+  });
 });
