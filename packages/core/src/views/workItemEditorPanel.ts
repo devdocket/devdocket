@@ -8,6 +8,7 @@ import { VALID_TRANSITIONS, WorkGraph } from '../services/workGraph';
 import type { DiscoveredStateStore } from '../storage/discoveredStateStore';
 import { isSafeUrl } from '../utils/url';
 import { buildProviderBadge, buildProviderBadges, buildTypeBadge } from './badges';
+import { parseDiscoveredItemKey } from './discoveredItemKey';
 import { getEditorPanelHtml, renderMarkdown } from './editorPanelHtml';
 import type { BadgeData, EditorItemData } from './mainTypes';
 
@@ -486,18 +487,6 @@ export class WorkItemEditorPanel {
       void vscode.window.showErrorMessage(`Failed to dismiss item: ${message}`);
     }
   }
-}
-
-function parseDiscoveredItemKey(value: string): { providerId: string; externalId: string } | undefined {
-  const separatorIndex = value.indexOf('::');
-  if (separatorIndex <= 0) {
-    return undefined;
-  }
-
-  return {
-    providerId: value.slice(0, separatorIndex),
-    externalId: value.slice(separatorIndex + 2),
-  };
 }
 
 /**

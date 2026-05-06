@@ -15,6 +15,7 @@ import { ReadStateStore } from '../storage/readStateStore';
 import { isSafeUrl } from '../utils/url';
 import { buildTierColorCss } from '../webview/shared/colors';
 import { buildProviderBadge, buildProviderBadges, buildTypeBadge } from './badges';
+import { getDiscoveredItemKey, parseDiscoveredItemKey } from './discoveredItemKey';
 import type {
   BadgeData,
   ItemCardData,
@@ -1158,10 +1159,6 @@ export class MainViewProvider implements vscode.WebviewViewProvider {
   }
 }
 
-function getDiscoveredItemKey(providerId: string, externalId: string): string {
-  return `${providerId}::${externalId}`;
-}
-
 function isFailedRun(runWatch: WatchedRun): boolean {
   if (runWatch.status.overallState !== 'completed') return false;
   const conclusion = runWatch.status.conclusion;
@@ -1174,18 +1171,6 @@ function isFailedRun(runWatch: WatchedRun): boolean {
 
 function normalizeText(value?: string): string {
   return value?.trim().toLowerCase().replace(/[_-]+/g, ' ').replace(/\s+/g, ' ') ?? '';
-}
-
-function parseDiscoveredItemKey(value: string): { providerId: string; externalId: string } | undefined {
-  const separatorIndex = value.indexOf('::');
-  if (separatorIndex <= 0) {
-    return undefined;
-  }
-
-  return {
-    providerId: value.slice(0, separatorIndex),
-    externalId: value.slice(separatorIndex + 2),
-  };
 }
 
 function getNonce(): string {
