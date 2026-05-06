@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { DiscoveredItem } from '../api/types';
 import { WorkItemState, type WorkItem } from '../models/workItem';
-import { resolveRelatedItemsFor } from '../services/relatedItems';
+import { buildRelatedItemsIndex, resolveRelatedItemsFor } from '../services/relatedItems';
 
 function makeWorkItem(overrides: Partial<WorkItem> = {}): WorkItem {
   const now = Date.now();
@@ -172,5 +172,23 @@ describe('resolveRelatedItemsFor', () => {
     ]));
 
     expect(resolveRelatedItemsFor(issue, registry, makeWorkGraph([issue]))).toEqual([]);
+  });
+
+  it('builds an indexed related-item lookup for each discovered item', () => {
+    const issue = makeWorkItem({ id: 'issue-1', providerId: 'github-issues', externalId: 'owner/repo#2' });
+    const pr = makeWorkItem({ id: 'pr-1', providerId: 'github-my-prs', externalId: 'owner/repo#10' });
+    const registry = makeRegistry(new Map([
+      ['github-issues', [{ externalId: 'owner/repo#2', title: 'Issue', itemType: 'issue' }]],
+      ['github-my-prs', [{ externalId: 'owner/repo#10', title: 'PR', itemType: 'pr', relatedItems: [{ externalId: 'owner/repo#2', itemType: 'issue', relation: 'closes' }] }]],
+    ]));
+
+    const index = buildRelatedItemsIndex(registry, makeWorkGraph([issue, pr]));
+
+    expect(index.get('github-my-prs::owner/repo#10')).toEqual([
+      { targetItemId: 'issue-1', targetKind: 'workItem', label: 'Closes owner/repo#2', relation: 'closes', itemType: 'issue' },
+    ]);
+    expect(index.get('github-issues::owner/repo#2')).toEqual([
+      { targetItemId: 'pr-1', targetKind: 'workItem', label: 'Closes owner/repo#10', relation: 'closes', itemType: 'pr' },
+    ]);
   });
 });

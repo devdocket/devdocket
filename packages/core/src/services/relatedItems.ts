@@ -12,8 +12,16 @@ export interface ResolvedRelatedItem {
   itemType: RelatedItemRef['itemType'];
 }
 
+export type RelatedItemsIndex = Map<string, ResolvedRelatedItem[]>;
+
 interface ResolvedRelatedItemWithSort extends ResolvedRelatedItem {
   externalId: string;
+}
+
+interface DiscoveredMatch {
+  providerId: string;
+  externalId: string;
+  itemType: RelatedItemRef['itemType'];
 }
 
 type ResolvableItem = Pick<WorkItem, 'providerId' | 'externalId'> & { itemType?: RelatedItemRef['itemType'] };
@@ -28,18 +36,49 @@ export function resolveRelatedItemsFor(
   }
 
   const discoveredItems = registry.getAllDiscoveredItems();
-  const currentDiscovered = findDiscoveredItem(discoveredItems, item.providerId, item.externalId);
-  const currentItemType = item.itemType ?? currentDiscovered?.itemType;
-  if (currentItemType !== 'issue' && currentItemType !== 'pr') {
-    return [];
+  const indexed = buildRelatedItemsIndexForDiscovered(discoveredItems, workGraph).get(
+    getRelatedItemsIndexKey(item.providerId, item.externalId),
+  );
+  if (indexed) {
+    return indexed;
   }
 
-  const resolved = new Map<string, ResolvedRelatedItemWithSort>();
+  const currentDiscovered = findDiscoveredItem(discoveredItems, item.providerId, item.externalId);
+  const currentItemType = item.itemType ?? currentDiscovered?.itemType;
+  if (!currentDiscovered && isRelatedItemType(currentItemType)) {
+    return resolveReverseRefsForUndiscovered(item.providerId, item.externalId, currentItemType, discoveredItems, workGraph);
+  }
+  return [];
+}
 
-  for (const ref of currentDiscovered?.relatedItems ?? []) {
-    const target = resolveRef(ref, discoveredItems, workGraph);
-    if (target) {
-      upsertResolved(resolved, target);
+export function buildRelatedItemsIndex(
+  registry: ProviderRegistry,
+  workGraph: WorkGraph,
+  discoveredItems: Map<string, DiscoveredItem[]> = registry.getAllDiscoveredItems(),
+): RelatedItemsIndex {
+  return buildRelatedItemsIndexForDiscovered(discoveredItems, workGraph);
+}
+
+function buildRelatedItemsIndexForDiscovered(
+  discoveredItems: Map<string, DiscoveredItem[]>,
+  workGraph: WorkGraph,
+): RelatedItemsIndex {
+  const discoveredByRef = buildDiscoveredByRef(discoveredItems);
+  const workingIndex = new Map<string, Map<string, ResolvedRelatedItemWithSort>>();
+
+  for (const [providerId, items] of discoveredItems) {
+    for (const item of items) {
+      if (!isRelatedItemType(item.itemType)) {
+        continue;
+      }
+
+      const resolved = getOrCreateResolvedSet(workingIndex, providerId, item.externalId);
+      for (const ref of item.relatedItems ?? []) {
+        const target = resolveRef(ref, discoveredByRef, workGraph);
+        if (target) {
+          upsertResolved(resolved, target);
+        }
+      }
     }
   }
 
@@ -48,17 +87,57 @@ export function resolveRelatedItemsFor(
       if (candidate.itemType !== 'pr' || !candidate.relatedItems?.length) {
         continue;
       }
-      if (providerId === item.providerId && candidate.externalId === item.externalId) {
+
+      for (const ref of candidate.relatedItems) {
+        const target = resolveDiscoveredTarget(providerId, candidate.externalId, candidate.itemType, ref.relation, workGraph);
+        if (!target) {
+          continue;
+        }
+
+        for (const match of discoveredByRef.get(getRefKey(ref.itemType, ref.externalId)) ?? []) {
+          if (match.providerId === providerId && match.externalId === candidate.externalId) {
+            continue;
+          }
+          upsertResolved(getOrCreateResolvedSet(workingIndex, match.providerId, match.externalId), target);
+        }
+      }
+    }
+  }
+
+  const publicIndex: RelatedItemsIndex = new Map();
+  for (const [key, resolved] of workingIndex) {
+    const relatedItems = toPublicResolvedItems(resolved);
+    if (relatedItems.length > 0) {
+      publicIndex.set(key, relatedItems);
+    }
+  }
+  return publicIndex;
+}
+
+function resolveReverseRefsForUndiscovered(
+  providerId: string,
+  externalId: string,
+  itemType: RelatedItemRef['itemType'],
+  discoveredItems: Map<string, DiscoveredItem[]>,
+  workGraph: WorkGraph,
+): ResolvedRelatedItem[] {
+  const resolved = new Map<string, ResolvedRelatedItemWithSort>();
+  for (const [candidateProviderId, items] of discoveredItems) {
+    for (const candidate of items) {
+      if (candidate.itemType !== 'pr' || !candidate.relatedItems?.length) {
+        continue;
+      }
+      if (candidateProviderId === providerId && candidate.externalId === externalId) {
         continue;
       }
 
       for (const ref of candidate.relatedItems) {
-        if (ref.externalId !== item.externalId || ref.itemType !== currentItemType) {
+        if (ref.externalId !== externalId || ref.itemType !== itemType) {
           continue;
         }
 
         const target = resolveDiscoveredTarget(
-          providerId,
+          candidateProviderId,
           candidate.externalId,
           candidate.itemType,
           ref.relation,
@@ -70,10 +149,38 @@ export function resolveRelatedItemsFor(
       }
     }
   }
+  return toPublicResolvedItems(resolved);
+}
 
-  return Array.from(resolved.values())
-    .sort(compareResolvedItems)
-    .map(({ externalId: _externalId, ...publicItem }) => publicItem);
+function buildDiscoveredByRef(discoveredItems: Map<string, DiscoveredItem[]>): Map<string, DiscoveredMatch[]> {
+  const discoveredByRef = new Map<string, DiscoveredMatch[]>();
+  for (const [providerId, items] of discoveredItems) {
+    for (const item of items) {
+      if (!isRelatedItemType(item.itemType)) {
+        continue;
+      }
+      const key = getRefKey(item.itemType, item.externalId);
+      const matches = discoveredByRef.get(key) ?? [];
+      matches.push({ providerId, externalId: item.externalId, itemType: item.itemType });
+      discoveredByRef.set(key, matches);
+    }
+  }
+  return discoveredByRef;
+}
+
+function getOrCreateResolvedSet(
+  index: Map<string, Map<string, ResolvedRelatedItemWithSort>>,
+  providerId: string,
+  externalId: string,
+): Map<string, ResolvedRelatedItemWithSort> {
+  const key = getRelatedItemsIndexKey(providerId, externalId);
+  const existing = index.get(key);
+  if (existing) {
+    return existing;
+  }
+  const resolved = new Map<string, ResolvedRelatedItemWithSort>();
+  index.set(key, resolved);
+  return resolved;
 }
 
 function findDiscoveredItem(
@@ -86,17 +193,12 @@ function findDiscoveredItem(
 
 function resolveRef(
   ref: RelatedItemRef,
-  discoveredItems: Map<string, DiscoveredItem[]>,
+  discoveredByRef: Map<string, DiscoveredMatch[]>,
   workGraph: WorkGraph,
 ): ResolvedRelatedItemWithSort | undefined {
   let fallback: ResolvedRelatedItemWithSort | undefined;
-  for (const [providerId, items] of discoveredItems) {
-    const match = items.find(candidate => candidate.externalId === ref.externalId && candidate.itemType === ref.itemType);
-    if (!match) {
-      continue;
-    }
-
-    const target = resolveDiscoveredTarget(providerId, match.externalId, ref.itemType, ref.relation, workGraph);
+  for (const match of discoveredByRef.get(getRefKey(ref.itemType, ref.externalId)) ?? []) {
+    const target = resolveDiscoveredTarget(match.providerId, match.externalId, match.itemType, ref.relation, workGraph);
     if (!target) {
       continue;
     }
@@ -115,7 +217,7 @@ function resolveDiscoveredTarget(
   relation: RelatedItemRef['relation'],
   workGraph: WorkGraph,
 ): ResolvedRelatedItemWithSort | undefined {
-  if (itemType !== 'issue' && itemType !== 'pr') {
+  if (!isRelatedItemType(itemType)) {
     return undefined;
   }
 
@@ -151,6 +253,12 @@ function isPreferredResolvedItem(
   return existing.relation === 'linked' && candidate.relation === 'closes';
 }
 
+function toPublicResolvedItems(resolved: Map<string, ResolvedRelatedItemWithSort>): ResolvedRelatedItem[] {
+  return Array.from(resolved.values())
+    .sort(compareResolvedItems)
+    .map(({ externalId: _externalId, ...publicItem }) => publicItem);
+}
+
 function compareResolvedItems(left: ResolvedRelatedItemWithSort, right: ResolvedRelatedItemWithSort): number {
   const relationOrder = relationRank(left.relation) - relationRank(right.relation);
   if (relationOrder !== 0) {
@@ -167,6 +275,18 @@ function compareResolvedItems(left: ResolvedRelatedItemWithSort, right: Resolved
 
 function relationRank(relation: RelatedItemRef['relation']): number {
   return relation === 'closes' ? 0 : 1;
+}
+
+function getRelatedItemsIndexKey(providerId: string, externalId: string): string {
+  return `${providerId}::${externalId}`;
+}
+
+function getRefKey(itemType: RelatedItemRef['itemType'], externalId: string): string {
+  return `${itemType}\0${externalId}`;
+}
+
+function isRelatedItemType(itemType: RelatedItemRef['itemType'] | undefined): itemType is RelatedItemRef['itemType'] {
+  return itemType === 'issue' || itemType === 'pr';
 }
 
 function parseExternalId(externalId: string): { owner: string; repo: string; number: number } {
