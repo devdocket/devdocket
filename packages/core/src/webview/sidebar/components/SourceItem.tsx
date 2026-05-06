@@ -23,7 +23,7 @@ export function SourceItem({ item, onOpen }: SourceItemProps) {
       <div class="source-item-line">
         <div class="source-item-title-wrap">
           <span class="source-item-title">{item.title}</span>
-          {item.hasRelatedItems ? <span class="related-indicator" aria-label="has related items">🔗</span> : null}
+          {item.hasRelatedItems ? <span class="related-indicator" aria-hidden="true">🔗</span> : null}
         </div>
         {statusLabel ? <span class={`source-item-status ${statusClass}`.trim()}>{statusLabel}</span> : null}
       </div>
