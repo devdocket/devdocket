@@ -120,13 +120,18 @@ function GroupSection({ providerId, group, onOpenItem, forceExpanded, totalCount
   const isCollapsed = forceExpanded ? false : collapsed;
   const countLabel = totalCount === undefined ? `(${group.items.length})` : `(${group.items.length} of ${totalCount})`;
   const itemCountLabel = `${group.name}, ${group.items.length} item${group.items.length === 1 ? '' : 's'}`;
+  const toggleCollapsed = () => {
+    if (!forceExpanded) {
+      setCollapsed(value => !value);
+    }
+  };
 
   return (
     <section class="source-group" role="group" aria-label={itemCountLabel}>
       <button
         type="button"
         class="source-group-header"
-        onClick={() => setCollapsed(value => !value)}
+        onClick={toggleCollapsed}
         aria-expanded={!isCollapsed}
       >
         <span class="source-group-title"><HighlightedText text={group.name} query={query} /></span>
