@@ -79,5 +79,3 @@ Each issue body should include:
 At the end, report the count of issues created. Print a final machine-readable line exactly like this, replacing `<count>` with an integer from 0 to 8:
 
 `WEEKLY_UX_REVIEW_ISSUES_CREATED=<count>`
-
-Also append a one-line human-readable summary to `$GITHUB_STEP_SUMMARY` if the available tool permissions allow it.
