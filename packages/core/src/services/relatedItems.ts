@@ -30,15 +30,19 @@ export function resolveRelatedItemsFor(
   item: ResolvableItem,
   registry: ProviderRegistry,
   workGraph: WorkGraph,
+  relatedItemsIndex?: RelatedItemsIndex,
 ): ResolvedRelatedItem[] {
   if (!item.providerId || !item.externalId) {
     return [];
   }
 
+  const indexKey = getRelatedItemsIndexKey(item.providerId, item.externalId);
+  if (relatedItemsIndex) {
+    return relatedItemsIndex.get(indexKey) ?? [];
+  }
+
   const discoveredItems = registry.getAllDiscoveredItems();
-  const indexed = buildRelatedItemsIndexForDiscovered(discoveredItems, workGraph).get(
-    getRelatedItemsIndexKey(item.providerId, item.externalId),
-  );
+  const indexed = buildRelatedItemsIndexForDiscovered(discoveredItems, workGraph).get(indexKey);
   if (indexed) {
     return indexed;
   }

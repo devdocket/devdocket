@@ -191,4 +191,21 @@ describe('resolveRelatedItemsFor', () => {
       { targetItemId: 'pr-1', targetKind: 'workItem', label: 'Closes owner/repo#10', relation: 'closes', itemType: 'pr' },
     ]);
   });
+
+  it('uses a precomputed index without rebuilding from the registry', () => {
+    const issue = makeWorkItem({ id: 'issue-1', providerId: 'github-issues', externalId: 'owner/repo#2' });
+    const pr = makeWorkItem({ id: 'pr-1', providerId: 'github-my-prs', externalId: 'owner/repo#10' });
+    const registry = makeRegistry(new Map([
+      ['github-issues', [{ externalId: 'owner/repo#2', title: 'Issue', itemType: 'issue' }]],
+      ['github-my-prs', [{ externalId: 'owner/repo#10', title: 'PR', itemType: 'pr', relatedItems: [{ externalId: 'owner/repo#2', itemType: 'issue', relation: 'closes' }] }]],
+    ]));
+    const workGraph = makeWorkGraph([issue, pr]);
+    const index = buildRelatedItemsIndex(registry, workGraph);
+    registry.getAllDiscoveredItems.mockClear();
+
+    expect(resolveRelatedItemsFor(pr, registry, workGraph, index)).toEqual([
+      { targetItemId: 'issue-1', targetKind: 'workItem', label: 'Closes owner/repo#2', relation: 'closes', itemType: 'issue' },
+    ]);
+    expect(registry.getAllDiscoveredItems).not.toHaveBeenCalled();
+  });
 });

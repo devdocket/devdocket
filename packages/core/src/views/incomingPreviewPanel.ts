@@ -2,7 +2,7 @@ import * as vscode from 'vscode';
 import type { DiscoveredItem } from '../api/types';
 import { logger } from '../services/logger';
 import { ProviderRegistry } from '../services/providerRegistry';
-import { resolveRelatedItemsFor } from '../services/relatedItems';
+import { buildRelatedItemsIndex, resolveRelatedItemsFor, type RelatedItemsIndex } from '../services/relatedItems';
 import { WorkGraph } from '../services/workGraph';
 import { DiscoveredStateStore } from '../storage/discoveredStateStore';
 import { ReadStateStore } from '../storage/readStateStore';
@@ -232,7 +232,8 @@ export class IncomingPreviewPanel {
       return;
     }
 
-    const editorItem = this.buildEditorItemData(discoveredItem);
+    const relatedItemsIndex = buildRelatedItemsIndex(this.providerRegistry, this.workGraph);
+    const editorItem = this.buildEditorItemData(discoveredItem, relatedItemsIndex);
     this.panel.title = `Preview: ${discoveredItem.title}`;
 
     if (!this.htmlInitialized) {
@@ -257,7 +258,7 @@ export class IncomingPreviewPanel {
       .find(item => item.externalId === this.externalId);
   }
 
-  private buildEditorItemData(discoveredItem: DiscoveredItem): EditorItemData {
+  private buildEditorItemData(discoveredItem: DiscoveredItem, relatedItemsIndex: RelatedItemsIndex): EditorItemData {
     const providerLabel = this.providerRegistry.getProviderLabel(this.providerId);
     return {
       id: getDiscoveredItemKey(this.providerId, this.externalId),
@@ -279,6 +280,7 @@ export class IncomingPreviewPanel {
         { providerId: this.providerId, externalId: this.externalId, itemType: discoveredItem.itemType },
         this.providerRegistry,
         this.workGraph,
+        relatedItemsIndex,
       ),
       isIncoming: true,
       providerId: this.providerId,

@@ -3,7 +3,7 @@ import type { DiscoveredItem } from '../api/types';
 import { WorkItem, WorkItemInput, WorkItemState } from '../models/workItem';
 import { ActionRegistry } from '../services/actionRegistry';
 import { ProviderRegistry } from '../services/providerRegistry';
-import { resolveRelatedItemsFor } from '../services/relatedItems';
+import { buildRelatedItemsIndex, resolveRelatedItemsFor, type RelatedItemsIndex } from '../services/relatedItems';
 import { VALID_TRANSITIONS, WorkGraph } from '../services/workGraph';
 import type { DiscoveredStateStore } from '../storage/discoveredStateStore';
 import { isSafeUrl } from '../utils/url';
@@ -314,7 +314,8 @@ export class WorkItemEditorPanel {
       return;
     }
 
-    const editorItem = this.buildEditorItemData(item);
+    const relatedItemsIndex = buildRelatedItemsIndex(this.providerRegistry, this.workGraph);
+    const editorItem = this.buildEditorItemData(item, relatedItemsIndex);
     this.lastDisplayedTitle = item.title;
     this.lastDisplayedUrl = item.url;
     this.lastDisplayedDescription = item.description;
@@ -333,7 +334,7 @@ export class WorkItemEditorPanel {
     void this.panel.webview.postMessage({ type: 'updateEditorItem', item: editorItem });
   }
 
-  private buildEditorItemData(item: WorkItem): EditorItemData {
+  private buildEditorItemData(item: WorkItem, relatedItemsIndex: RelatedItemsIndex): EditorItemData {
     const discoveredItem = this.getDiscoveredItem(item);
     const providerLabel = item.providerId ? this.providerLabel ?? this.providerRegistry.getProviderLabel(item.providerId) : undefined;
 
@@ -353,7 +354,7 @@ export class WorkItemEditorPanel {
       validTransitions: Array.from(VALID_TRANSITIONS.get(item.state) ?? []),
       hasActions: WorkItemEditorPanel.actionRegistry?.hasActionsFor(item) ?? false,
       activityLog: item.activityLog ?? [],
-      relatedItems: resolveRelatedItemsFor(item, this.providerRegistry, this.workGraph),
+      relatedItems: resolveRelatedItemsFor(item, this.providerRegistry, this.workGraph, relatedItemsIndex),
       isIncoming: false,
       providerId: item.providerId,
       externalId: item.externalId,
