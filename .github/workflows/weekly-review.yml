@@ -52,6 +52,7 @@ jobs:
             --allow-tool='shell(gh:*)' \
             --allow-tool='shell(git:*)' \
             --allow-tool=read \
+            --allow-tool=write \
             --no-ask-user | tee weekly-review.log
 
       - name: Summary
