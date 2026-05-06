@@ -6,7 +6,7 @@ import { AdoPipelineWatcher } from './adoPipelineWatcher';
 import { AdoPRWatcher } from './adoPRWatcher';
 import { parseAdoProjectsConfig } from './configParser';
 import { validateRefreshInterval } from '@devdocket/shared';
-import { initLogger, setLogLevel, logger, resolveLogLevel } from './logger';
+import { logger, setLogger } from './logger';
 
 let workItemProvider: AdoWorkItemProvider | undefined;
 let prProvider: AdoPrReviewProvider | undefined;
@@ -19,28 +19,11 @@ let prWatcherRegistration: vscode.Disposable | undefined;
 let orgWarningShown = false;
 
 export async function activate(_context: vscode.ExtensionContext): Promise<void> {
-  const outputChannel = vscode.window.createOutputChannel('DevDocket ADO');
-  _context.subscriptions.push(outputChannel);
+  const log = vscode.window.createOutputChannel('DevDocket ADO', { log: true });
+  _context.subscriptions.push(log);
+  setLogger(log);
 
-  const logLevelConfig = vscode.workspace.getConfiguration('devDocket').get<string>('logLevel', 'info');
-  initLogger(outputChannel, resolveLogLevel(logLevelConfig));
-  if (!['debug', 'info', 'warn', 'error'].includes(logLevelConfig)) {
-    logger.warn(`Invalid log level '${logLevelConfig}', falling back to 'info'. Valid values: debug, info, warn, error`);
-  }
-
-  _context.subscriptions.push(
-    vscode.workspace.onDidChangeConfiguration(e => {
-      if (e.affectsConfiguration('devDocket.logLevel')) {
-        const newLevel = vscode.workspace.getConfiguration('devDocket').get<string>('logLevel', 'info');
-        setLogLevel(resolveLogLevel(newLevel));
-        if (!['debug', 'info', 'warn', 'error'].includes(newLevel)) {
-          logger.warn(`Invalid log level '${newLevel}', falling back to 'info'. Valid values: debug, info, warn, error`);
-        }
-      }
-    }),
-  );
-
-  logger.info('DevDocket ADO activating...');
+  log.info('DevDocket ADO activating...');
 
   const coreExtension = vscode.extensions.getExtension('mthalman.devdocket');
   if (!coreExtension) {

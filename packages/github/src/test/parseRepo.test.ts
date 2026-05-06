@@ -1,13 +1,13 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { parseRepoFromUrls } from '../parseRepo';
-import { initLogger, LogLevel } from '../logger';
+import { setLogger } from '../logger';
 
 describe('parseRepoFromUrls', () => {
-  let mockChannel: { appendLine: ReturnType<typeof vi.fn> };
+  let mockChannel: any;
 
   beforeEach(() => {
-    mockChannel = { appendLine: vi.fn() };
-    initLogger(mockChannel as any, LogLevel.Debug);
+    mockChannel = { info: vi.fn(), debug: vi.fn(), warn: vi.fn(), error: vi.fn(), appendLine: vi.fn() };
+    setLogger(mockChannel);
   });
 
   it('extracts owner/repo from valid github.com html_url', () => {
@@ -67,9 +67,9 @@ describe('parseRepoFromUrls', () => {
       'https://evil.com/issues/1',
       'https://evil.com/repos/a/b',
     );
-    const logged = mockChannel.appendLine.mock.calls.some(
-      (call: string[]) => call[0].includes('[WARN]') && call[0].includes('Could not parse repo'),
-    );
+    const logged = mockChannel.warn.mock.calls.some(
+      (call: unknown[]) => String(call[0]).includes('Could not parse repo'),
+      );
     expect(logged).toBe(true);
   });
 

@@ -91,6 +91,11 @@ const window = {
   createWebviewPanel: vi.fn(),
   registerWebviewViewProvider: vi.fn(() => ({ dispose: vi.fn() })),
   createOutputChannel: vi.fn(() => ({
+    info: vi.fn(),
+    debug: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
+    trace: vi.fn(),
     appendLine: vi.fn(),
     append: vi.fn(),
     clear: vi.fn(),
@@ -99,6 +104,8 @@ const window = {
     dispose: vi.fn(),
     name: 'DevDocket',
     replace: vi.fn(),
+    logLevel: 2,
+    onDidChangeLogLevel: vi.fn(),
   })),
   createStatusBarItem: vi.fn((alignment?: number, priority?: number) => new MockStatusBarItem()),
 };

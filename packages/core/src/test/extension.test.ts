@@ -82,13 +82,10 @@ describe('activate()', () => {
   // ------------------------------------------------------------------
   // 2. Registers expected disposables via specific API call counts
   // ------------------------------------------------------------------
-  it('registers the expected configuration listener and output channel', async () => {
+  it('creates the DevDocket LogOutputChannel', async () => {
     await activate(context);
 
-    const onDidChangeConfiguration = vscode.workspace.onDidChangeConfiguration as ReturnType<typeof vi.fn>;
-    expect(onDidChangeConfiguration).toHaveBeenCalled();
-
-    expect(vscode.window.createOutputChannel).toHaveBeenCalled();
+    expect(vscode.window.createOutputChannel).toHaveBeenCalledWith('DevDocket', { log: true });
   });
 
   // ------------------------------------------------------------------
@@ -120,7 +117,7 @@ describe('activate()', () => {
   // ------------------------------------------------------------------
   it('creates an output channel named DevDocket', async () => {
     await activate(context);
-    expect(vscode.window.createOutputChannel).toHaveBeenCalledWith('DevDocket');
+    expect(vscode.window.createOutputChannel).toHaveBeenCalledWith('DevDocket', { log: true });
   });
 
   it('wires work graph, provider registry, and state store changes to DevDocket refresh', async () => {
@@ -541,111 +538,15 @@ describe('activate()', () => {
   });
 
   // ------------------------------------------------------------------
-  // 13. Log level configuration is read on activation
+  // 13. Activation logging uses LogOutputChannel
   // ------------------------------------------------------------------
-  it('reads devDocket.logLevel configuration', async () => {
+  it('logs activation through the LogOutputChannel', async () => {
     await activate(context);
-    expect(vscode.workspace.getConfiguration).toHaveBeenCalledWith('devDocket');
+
+    const createOutputChannel = vscode.window.createOutputChannel as ReturnType<typeof vi.fn>;
+    const log = createOutputChannel.mock.results[0].value;
+    expect(log.info).toHaveBeenCalledWith('DevDocket activating...');
   });
-
-  // ------------------------------------------------------------------
-  // 14. Sets view messages for empty state
-  // ------------------------------------------------------------------
-
-  // ------------------------------------------------------------------
-  // 15. Error handling: safeHandler catches sync throw in event callback
-  // ------------------------------------------------------------------
-  it('logs error and continues when a safeHandler-wrapped callback throws', async () => {
-    await activate(context);
-    await flushMicrotasks();
-
-    const errorSpy = vi.spyOn(logger, 'error');
-
-    // The onDidChangeConfiguration listener is wrapped with safeHandler.
-    // Force its inner code to throw by making getConfiguration throw.
-    const onDidChangeCfg = vscode.workspace.onDidChangeConfiguration as ReturnType<typeof vi.fn>;
-    const configListener = onDidChangeCfg.mock.calls[0][0];
-
-    (vscode.workspace.getConfiguration as ReturnType<typeof vi.fn>)
-      .mockImplementationOnce(() => { throw new Error('Config read failure'); });
-
-    // Call the safeHandler-wrapped listener — should not throw
-    configListener({ affectsConfiguration: () => true });
-    await flushMicrotasks();
-
-    // Verify the error was logged via safeHandler's catch
-    expect(errorSpy).toHaveBeenCalledWith(
-      'Error handling configuration change',
-      expect.any(Error),
-    );
-
-    errorSpy.mockRestore();
-  });
-
-  // ------------------------------------------------------------------
-  // 16. Error handling: microtask catches view setter errors and
-  //     continues processing subsequent UI updates
-  // ------------------------------------------------------------------
-
-  // ------------------------------------------------------------------
-  // 17. Error handling: safeHandler catches sync throws via promise chain
-  // ------------------------------------------------------------------
-  it('catches sync throws via promise chain without unhandled rejections', async () => {
-    const api = await activate(context);
-    await flushMicrotasks();
-
-    const errorSpy = vi.spyOn(logger, 'error');
-    const onUnhandledRejection = vi.fn();
-    process.on('unhandledRejection', onUnhandledRejection);
-
-    try {
-      // The onDidChangeConfiguration listener is wrapped with safeHandler
-      // which runs callbacks via Promise.resolve().then().catch(). A sync
-      // throw inside .then() becomes a rejected promise caught by .catch().
-      const onDidChangeCfg = vscode.workspace.onDidChangeConfiguration as ReturnType<typeof vi.fn>;
-      const configListener = onDidChangeCfg.mock.calls[0][0];
-
-      // Make the wrapped function throw synchronously — safeHandler's
-      // promise chain converts this to a caught rejection.
-      (vscode.workspace.getConfiguration as ReturnType<typeof vi.fn>)
-        .mockImplementationOnce(() => { throw new Error('Config failure'); });
-
-      configListener({ affectsConfiguration: () => true });
-      await flushMicrotasks();
-
-      // Error should have been caught by safeHandler, not surfaced as unhandled
-      expect(errorSpy).toHaveBeenCalledWith(
-        'Error handling configuration change',
-        expect.any(Error),
-      );
-      expect(onUnhandledRejection).not.toHaveBeenCalled();
-
-      // Extension should still be functional — register a provider
-      const provider = {
-        id: 'err-async-ok',
-        label: 'ErrAsyncOk',
-        onDidDiscoverItems: new (vscode.EventEmitter as any)().event,
-        refresh: vi.fn().mockResolvedValue(undefined),
-      };
-      expect(() => api.registerProvider(provider as any)).not.toThrow();
-      await flushMicrotasks();
-    } finally {
-      process.off('unhandledRejection', onUnhandledRejection);
-      errorSpy.mockRestore();
-    }
-  });
-
-  // ------------------------------------------------------------------
-  // 18. Sets context keys for all five view layouts on activation
-  // ------------------------------------------------------------------
-
-  // ------------------------------------------------------------------
-  // 18b. Context key values match view defaults on activation
-  // ------------------------------------------------------------------
-
-  // ------------------------------------------------------------------
-  // 19. Layout change updates provider layouts and context keys
-  // ------------------------------------------------------------------
 });
 
 describe('deactivate()', () => {

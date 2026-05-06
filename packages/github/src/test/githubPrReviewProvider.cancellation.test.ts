@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
 import { authentication, workspace } from 'vscode';
 import { GitHubPrReviewProvider } from '../githubPrReviewProvider';
-import { initLogger, LogLevel } from '../logger';
+import { setLogger } from '../logger';
 
 const mockFetch = vi.fn();
 
@@ -41,15 +41,15 @@ function createMockPr(number: number, title: string, repo = 'owner/repo') {
 
 describe('GitHubPrReviewProvider — cancellation (AbortSignal wiring)', () => {
   let provider: GitHubPrReviewProvider;
-  let mockChannel: { appendLine: ReturnType<typeof vi.fn> };
+  let mockChannel: any;
 
   beforeEach(() => {
     vi.clearAllMocks();
     vi.stubGlobal('fetch', mockFetch);
     provider = new GitHubPrReviewProvider();
 
-    mockChannel = { appendLine: vi.fn() };
-    initLogger(mockChannel as any, LogLevel.Debug);
+    mockChannel = { info: vi.fn(), debug: vi.fn(), warn: vi.fn(), error: vi.fn(), appendLine: vi.fn() };
+    setLogger(mockChannel);
 
     // Disable resurfacing features to avoid extra API calls
     vi.mocked(workspace.getConfiguration).mockReturnValue({
@@ -193,13 +193,13 @@ describe('GitHubPrReviewProvider — cancellation (AbortSignal wiring)', () => {
 
       await provider.refresh(token);
 
-      const debugLogged = mockChannel.appendLine.mock.calls.some(
-        (call: string[]) => call[0].includes('[DEBUG]') && call[0].includes('fetch aborted'),
+      const debugLogged = mockChannel.debug.mock.calls.some(
+        (call: unknown[]) => String(call[0]).includes('fetch aborted'),
       );
       expect(debugLogged).toBe(true);
 
-      const errorLogged = mockChannel.appendLine.mock.calls.some(
-        (call: string[]) => call[0].includes('[ERROR]') && call[0].includes('Failed to fetch'),
+      const errorLogged = mockChannel.error.mock.calls.some(
+        (call: unknown[]) => String(call[0]).includes('Failed to fetch'),
       );
       expect(errorLogged).toBe(false);
     });

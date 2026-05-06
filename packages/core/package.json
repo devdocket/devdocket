@@ -104,17 +104,6 @@
       {
         "title": "DevDocket",
         "properties": {
-          "devDocket.logLevel": {
-            "type": "string",
-            "enum": [
-              "debug",
-              "info",
-              "warn",
-              "error"
-            ],
-            "default": "info",
-            "description": "Log level for DevDocket output channel"
-          },
           "devDocket.showInboxNotifications": {
             "type": "boolean",
             "default": true,

@@ -15,8 +15,12 @@ describe('extension activation', () => {
     mockFetch.mockReset();
     vi.stubGlobal('fetch', mockFetch);
 
-    // Add createOutputChannel to window mock (not in default vscode mock)
     (window as any).createOutputChannel = vi.fn(() => ({
+      info: vi.fn(),
+      debug: vi.fn(),
+      warn: vi.fn(),
+      error: vi.fn(),
+      trace: vi.fn(),
       appendLine: vi.fn(),
       dispose: vi.fn(),
     }));
@@ -51,7 +55,6 @@ describe('extension activation', () => {
           }),
         } as any;
       }
-      // devdocket config for log level
       return {
         get: vi.fn((_key: string, defaultValue?: any) => defaultValue),
       } as any;
@@ -167,7 +170,7 @@ describe('extension activation', () => {
   it('creates an output channel', async () => {
     await activate(mockContext);
 
-    // Output channel is pushed to subscriptions (first subscription)
+    expect(window.createOutputChannel).toHaveBeenCalledWith('DevDocket ADO', { log: true });
     expect(disposables.length).toBeGreaterThan(0);
   });
 

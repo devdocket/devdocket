@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
 import { authentication } from 'vscode';
 import { AdoPrReviewProvider } from '../adoPrReviewProvider';
-import { initLogger, LogLevel } from '../logger';
+import { setLogger } from '../logger';
 
 const mockFetch = vi.fn();
 
@@ -30,15 +30,15 @@ function createMockCancellationToken() {
 
 describe('AdoPrReviewProvider — cancellation (AbortSignal wiring)', () => {
   let provider: AdoPrReviewProvider;
-  let mockChannel: { appendLine: ReturnType<typeof vi.fn> };
+  let mockChannel: any;
 
   beforeEach(() => {
     vi.clearAllMocks();
     vi.stubGlobal('fetch', mockFetch);
     provider = new AdoPrReviewProvider([{ org: 'myorg', projects: ['MyProject'] }]);
 
-    mockChannel = { appendLine: vi.fn() };
-    initLogger(mockChannel as any, LogLevel.Debug);
+    mockChannel = { info: vi.fn(), debug: vi.fn(), warn: vi.fn(), error: vi.fn(), appendLine: vi.fn() };
+    setLogger(mockChannel);
 
     vi.mocked(authentication.getSession).mockResolvedValue({
       accessToken: 'test-token',
@@ -178,8 +178,8 @@ describe('AdoPrReviewProvider — cancellation (AbortSignal wiring)', () => {
 
       await provider.refresh(token);
 
-      const prFetchErrorLogged = mockChannel.appendLine.mock.calls.some(
-        (call: string[]) => call[0].includes('[ERROR]') && call[0].includes('PR reviews from'),
+      const prFetchErrorLogged = mockChannel.error.mock.calls.some(
+        (call: unknown[]) => String(call[0]).includes('PR reviews from'),
       );
       expect(prFetchErrorLogged).toBe(false);
     });
@@ -199,13 +199,13 @@ describe('AdoPrReviewProvider — cancellation (AbortSignal wiring)', () => {
 
       await provider.refresh(token);
 
-      const debugLogged = mockChannel.appendLine.mock.calls.some(
-        (call: string[]) => call[0].includes('[DEBUG]') && call[0].includes('aborted'),
+      const debugLogged = mockChannel.debug.mock.calls.some(
+        (call: unknown[]) => String(call[0]).includes('aborted'),
       );
       expect(debugLogged).toBe(true);
 
-      const errorLogged = mockChannel.appendLine.mock.calls.some(
-        (call: string[]) => call[0].includes('[ERROR]') && call[0].includes('Failed to fetch'),
+      const errorLogged = mockChannel.error.mock.calls.some(
+        (call: unknown[]) => String(call[0]).includes('Failed to fetch'),
       );
       expect(errorLogged).toBe(false);
     });
