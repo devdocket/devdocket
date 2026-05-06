@@ -7,6 +7,7 @@ import { buildCanonicalHiddenSet } from '../services/canonicalDedup';
 import { getInboxUnseenCount } from '../services/inboxBadge';
 import { logger } from '../services/logger';
 import { ProviderRegistry } from '../services/providerRegistry';
+import { resolveRelatedItemsFor } from '../services/relatedItems';
 import { WatcherService, type WatchedPR, type WatchedRun } from '../services/watcherService';
 import { WorkGraph } from '../services/workGraph';
 import { DiscoveredStateStore } from '../storage/discoveredStateStore';
@@ -202,6 +203,11 @@ export class MainViewProvider implements vscode.WebviewViewProvider {
             providerId,
             title: item.title,
             badges: this.buildBadges(providerId, item, item.url),
+            hasRelatedItems: resolveRelatedItemsFor(
+              { providerId, externalId: item.externalId, itemType: item.itemType },
+              this.providerRegistry,
+              this.workGraph,
+            ).length > 0,
             isAccepted: state === 'accepted',
             isDismissed: state === 'dismissed',
           });
@@ -269,6 +275,11 @@ export class MainViewProvider implements vscode.WebviewViewProvider {
       tierType: 'incoming',
       isUnseen: !this.readStateStore.has(key),
       isUrgent: this.isUrgentDiscoveredItem(discoveredItem),
+      hasRelatedItems: resolveRelatedItemsFor(
+        { providerId, externalId: discoveredItem.externalId, itemType: discoveredItem.itemType },
+        this.providerRegistry,
+        this.workGraph,
+      ).length > 0,
       providerId,
       externalId: discoveredItem.externalId,
     };
@@ -287,6 +298,7 @@ export class MainViewProvider implements vscode.WebviewViewProvider {
       repoAnnotation: item.group ?? discoveredItem?.group,
       tierType,
       isUrgent: this.isUrgentWorkItem(item, discoveredItemMap),
+      hasRelatedItems: resolveRelatedItemsFor(item, this.providerRegistry, this.workGraph).length > 0,
       providerId: item.providerId,
       externalId: item.externalId,
     };
@@ -1081,6 +1093,11 @@ export class MainViewProvider implements vscode.WebviewViewProvider {
     .unseen-dot {
       color: var(--tier-incoming);
       line-height: 1.2;
+    }
+    .related-indicator {
+      color: var(--vscode-descriptionForeground);
+      line-height: 1.2;
+      flex-shrink: 0;
     }
     .badge-row {
       display: flex;

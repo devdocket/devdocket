@@ -1,5 +1,6 @@
 import * as vscode from 'vscode';
-import { BaseProvider, DiscoveredItem } from '@devdocket/shared';
+import { BaseProvider, DiscoveredItem, createAbortError, runWorkerPool, type RelatedItemRef } from '@devdocket/shared';
+import { fetchPrCrossReferences } from './githubGraphql';
 import { logger } from './logger';
 import { matchesRepoPatterns, parseRepoPatterns, type RepoPattern } from './repoPattern';
 
@@ -101,6 +102,42 @@ export abstract class BaseGitHubProvider extends BaseProvider {
     isUserTriggered: boolean,
     signal?: AbortSignal
   ): Promise<void>;
+
+  /**
+   * Fetch GitHub issue/PR references for PRs. Individual PR failures are logged
+   * and omitted so supplemental relationship data never blocks refresh.
+   */
+  protected async fetchRelatedItemsForPRs(
+    prs: Array<{ externalId: string; repoOwner: string; repoName: string; number: number }>,
+    accessToken: string,
+    signal?: AbortSignal,
+  ): Promise<Map<string, RelatedItemRef[]>> {
+    const result = new Map<string, RelatedItemRef[]>();
+    if (prs.length === 0) {
+      return result;
+    }
+
+    await runWorkerPool(prs, async (pr) => {
+      if (signal?.aborted) {
+        throw createAbortError();
+      }
+      try {
+        const relatedItems = await fetchPrCrossReferences(
+          accessToken,
+          { owner: pr.repoOwner, name: pr.repoName, number: pr.number },
+          signal,
+        );
+        if (relatedItems.length > 0) {
+          result.set(pr.externalId, relatedItems);
+        }
+      } catch (error) {
+        if (error instanceof Error && error.name === 'AbortError' && signal?.aborted) { throw error; }
+        logger.debug(`Failed to fetch related items for PR ${pr.externalId}: ${String(error)}`);
+      }
+    }, 3);
+
+    return result;
+  }
 
   /**
    * Publish GitHub items after applying repository filters at the provider boundary.

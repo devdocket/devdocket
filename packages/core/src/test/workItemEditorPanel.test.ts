@@ -203,29 +203,29 @@ describe('WorkItemEditorPanel', () => {
       id: 'item-1',
       title: 'Primary',
       description: '## Updated description',
-      providerId: 'github',
-      externalId: '42',
+      providerId: 'github-my-prs',
+      externalId: 'owner/repo#42',
       state: WorkItemState.New,
     });
-    const peer = makeItem({ id: 'peer-1', title: 'Peer', providerId: 'ado', externalId: '99', state: WorkItemState.InProgress });
-    const workGraph = createMockWorkGraph(item, { 'ado::99': peer });
+    const peer = makeItem({ id: 'peer-1', title: 'Peer', providerId: 'github-issues', externalId: 'owner/repo#99', state: WorkItemState.InProgress });
+    const workGraph = createMockWorkGraph(item, { 'github-issues::owner/repo#99': peer });
     const providerRegistry = createMockProviderRegistry({
-      github: [{ externalId: '42', title: 'Primary', state: 'open', canonicalId: 'shared:1' }],
-      ado: [{ externalId: '99', title: 'Peer', state: 'active', canonicalId: 'shared:1' }],
+      'github-my-prs': [{ externalId: 'owner/repo#42', title: 'Primary', state: 'open', itemType: 'pr', relatedItems: [{ externalId: 'owner/repo#99', itemType: 'issue', relation: 'closes' }] }],
+      'github-issues': [{ externalId: 'owner/repo#99', title: 'Peer', state: 'active', itemType: 'issue' }],
     });
     const actionRegistry = createMockActionRegistry();
     actionRegistry.hasActionsFor.mockReturnValue(true);
     const { mock } = openPanel(item, workGraph, providerRegistry, actionRegistry);
 
     providerRegistry.getDiscoveredItems.mockImplementation((providerId: string) => {
-      if (providerId === 'github') {
-        return [{ externalId: '42', title: 'Primary', state: 'closed', canonicalId: 'shared:1' }];
+      if (providerId === 'github-my-prs') {
+        return [{ externalId: 'owner/repo#42', title: 'Primary', state: 'closed', itemType: 'pr', relatedItems: [{ externalId: 'owner/repo#99', itemType: 'issue', relation: 'closes' }] }];
       }
-      return [{ externalId: '99', title: 'Peer', state: 'active', canonicalId: 'shared:1' }];
+      return [{ externalId: 'owner/repo#99', title: 'Peer', state: 'active', itemType: 'issue' }];
     });
     providerRegistry.getAllDiscoveredItems.mockImplementation(() => new Map([
-      ['github', [{ externalId: '42', title: 'Primary', state: 'closed', canonicalId: 'shared:1' }]],
-      ['ado', [{ externalId: '99', title: 'Peer', state: 'active', canonicalId: 'shared:1' }]],
+      ['github-my-prs', [{ externalId: 'owner/repo#42', title: 'Primary', state: 'closed', itemType: 'pr', relatedItems: [{ externalId: 'owner/repo#99', itemType: 'issue', relation: 'closes' }] }]],
+      ['github-issues', [{ externalId: 'owner/repo#99', title: 'Peer', state: 'active', itemType: 'issue' }]],
     ]));
 
     providerRegistry._fireDiscoveredItemsChange();
@@ -236,7 +236,7 @@ describe('WorkItemEditorPanel', () => {
         description: '<h2>Updated description</h2>\n',
         hasActions: true,
         validTransitions: expect.arrayContaining(['InProgress', 'Done', 'Archived']),
-        relatedItems: [expect.objectContaining({ id: 'peer-1', title: 'Peer' })],
+        relatedItems: [expect.objectContaining({ targetItemId: 'peer-1', label: 'Closes owner/repo#99' })],
       }),
     }));
   });
@@ -330,6 +330,19 @@ describe('WorkItemEditorPanel', () => {
     expect(workGraph.transitionState).toHaveBeenCalledWith(item.id, WorkItemState.Done);
     expect(vscode.commands.executeCommand).toHaveBeenNthCalledWith(1, 'devdocket.runAction', { id: item.id });
     expect(vscode.commands.executeCommand).toHaveBeenNthCalledWith(2, 'devdocket.editItem', { id: item.id });
+  });
+
+  it('opens related Sources items from the editor', async () => {
+    const item = makeItem({ state: WorkItemState.New });
+    const workGraph = createMockWorkGraph(item);
+    const { mock } = openPanel(item, workGraph);
+
+    await mock.simulateMessage({ type: 'openItem', itemId: 'github-issues::owner/repo#99' });
+
+    expect(vscode.commands.executeCommand).toHaveBeenCalledWith('devdocket.previewIncomingItem', {
+      providerId: 'github-issues',
+      externalId: 'owner/repo#99',
+    });
   });
 
   it('accepts and dismisses provider items through the shared state store', async () => {

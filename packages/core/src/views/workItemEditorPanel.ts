@@ -3,6 +3,7 @@ import type { DiscoveredItem } from '../api/types';
 import { WorkItem, WorkItemInput, WorkItemState } from '../models/workItem';
 import { ActionRegistry } from '../services/actionRegistry';
 import { ProviderRegistry } from '../services/providerRegistry';
+import { resolveRelatedItemsFor } from '../services/relatedItems';
 import { VALID_TRANSITIONS, WorkGraph } from '../services/workGraph';
 import type { DiscoveredStateStore } from '../storage/discoveredStateStore';
 import { isSafeUrl } from '../utils/url';
@@ -158,7 +159,7 @@ export class WorkItemEditorPanel {
 
     this.messageSubscription = this.panel.webview.onDidReceiveMessage((msg) => {
       if (msg?.type === 'openItem' && typeof msg.itemId === 'string') {
-        void vscode.commands.executeCommand('devdocket.editItem', { id: msg.itemId });
+        void this.handleOpenItem(msg.itemId);
         return;
       }
       if (msg?.type === 'openUrl' && typeof msg.url === 'string') {
@@ -351,43 +352,24 @@ export class WorkItemEditorPanel {
       validTransitions: Array.from(VALID_TRANSITIONS.get(item.state) ?? []),
       hasActions: WorkItemEditorPanel.actionRegistry?.hasActionsFor(item) ?? false,
       activityLog: item.activityLog ?? [],
-      relatedItems: this.buildRelatedItems(item, discoveredItem),
+      relatedItems: resolveRelatedItemsFor(item, this.providerRegistry, this.workGraph),
       isIncoming: false,
       providerId: item.providerId,
       externalId: item.externalId,
     };
   }
 
-  private buildRelatedItems(item: WorkItem, discoveredItem?: DiscoveredItem): EditorItemData['relatedItems'] {
-    if (!discoveredItem?.canonicalId) {
-      return [];
+  private async handleOpenItem(itemId: string): Promise<void> {
+    const workItem = this.workGraph.getItem(itemId);
+    if (workItem) {
+      await vscode.commands.executeCommand('devdocket.editItem', { id: itemId });
+      return;
     }
 
-    const relatedItems = new Map<string, EditorItemData['relatedItems'][number]>();
-    for (const [providerId, items] of this.providerRegistry.getAllDiscoveredItems()) {
-      for (const candidate of items) {
-        if (candidate.canonicalId !== discoveredItem.canonicalId) {
-          continue;
-        }
-        if (providerId === item.providerId && candidate.externalId === item.externalId) {
-          continue;
-        }
-
-        const peer = this.workGraph.findItemByProvenance(providerId, candidate.externalId);
-        if (!peer || peer.id === item.id) {
-          continue;
-        }
-
-        relatedItems.set(peer.id, {
-          id: peer.id,
-          title: peer.title,
-          state: peer.state,
-          badges: composeEditorBadges(providerId, candidate, this.providerRegistry.getProviderLabel(providerId)),
-        });
-      }
+    const discoveredKey = parseDiscoveredItemKey(itemId);
+    if (discoveredKey) {
+      await vscode.commands.executeCommand('devdocket.previewIncomingItem', discoveredKey);
     }
-
-    return Array.from(relatedItems.values()).sort((left, right) => left.title.localeCompare(right.title));
   }
 
   private getDiscoveredItem(item: WorkItem): DiscoveredItem | undefined {
@@ -504,6 +486,18 @@ export class WorkItemEditorPanel {
       void vscode.window.showErrorMessage(`Failed to dismiss item: ${message}`);
     }
   }
+}
+
+function parseDiscoveredItemKey(value: string): { providerId: string; externalId: string } | undefined {
+  const separatorIndex = value.indexOf('::');
+  if (separatorIndex <= 0) {
+    return undefined;
+  }
+
+  return {
+    providerId: value.slice(0, separatorIndex),
+    externalId: value.slice(separatorIndex + 2),
+  };
 }
 
 /**

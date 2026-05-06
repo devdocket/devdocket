@@ -2,6 +2,7 @@ import * as vscode from 'vscode';
 import type { DiscoveredItem } from '../api/types';
 import { logger } from '../services/logger';
 import { ProviderRegistry } from '../services/providerRegistry';
+import { resolveRelatedItemsFor } from '../services/relatedItems';
 import { WorkGraph } from '../services/workGraph';
 import { DiscoveredStateStore } from '../storage/discoveredStateStore';
 import { ReadStateStore } from '../storage/readStateStore';
@@ -114,7 +115,7 @@ export class IncomingPreviewPanel {
 
   private async handleMessage(msg: unknown): Promise<void> {
     if (!msg || typeof msg !== 'object') return;
-    const message = msg as { type?: string; url?: string; text?: string; providerId?: string; externalId?: string };
+    const message = msg as { type?: string; url?: string; text?: string; itemId?: string; providerId?: string; externalId?: string };
 
     switch (message.type) {
       case 'openUrl':
@@ -136,9 +137,27 @@ export class IncomingPreviewPanel {
       case 'dismissItem':
         await this.dismiss();
         break;
-      // Autosave, transitions, runAction, openItem are no-ops in preview mode.
+      case 'openItem':
+        if (typeof message.itemId === 'string') {
+          await this.openRelatedItem(message.itemId);
+        }
+        break;
+      // Autosave, transitions, and runAction are no-ops in preview mode.
       default:
         break;
+    }
+  }
+
+  private async openRelatedItem(itemId: string): Promise<void> {
+    const workItem = this.workGraph.getItem(itemId);
+    if (workItem) {
+      await vscode.commands.executeCommand('devdocket.editItem', { id: itemId });
+      return;
+    }
+
+    const discoveredKey = parseDiscoveredItemKey(itemId);
+    if (discoveredKey) {
+      await vscode.commands.executeCommand('devdocket.previewIncomingItem', discoveredKey);
     }
   }
 
@@ -254,7 +273,11 @@ export class IncomingPreviewPanel {
       validTransitions: [],
       hasActions: false,
       activityLog: [],
-      relatedItems: [],
+      relatedItems: resolveRelatedItemsFor(
+        { providerId: this.providerId, externalId: this.externalId, itemType: discoveredItem.itemType },
+        this.providerRegistry,
+        this.workGraph,
+      ),
       isIncoming: true,
       providerId: this.providerId,
       externalId: this.externalId,
@@ -286,4 +309,16 @@ export class IncomingPreviewPanel {
     this.subscriptions.length = 0;
     try { this.panel.dispose(); } catch { /* ignore */ }
   }
+}
+
+function parseDiscoveredItemKey(value: string): { providerId: string; externalId: string } | undefined {
+  const separatorIndex = value.indexOf('::');
+  if (separatorIndex <= 0) {
+    return undefined;
+  }
+
+  return {
+    providerId: value.slice(0, separatorIndex),
+    externalId: value.slice(separatorIndex + 2),
+  };
 }

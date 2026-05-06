@@ -1,0 +1,148 @@
+import { describe, expect, it, vi } from 'vitest';
+import type { DiscoveredItem } from '../api/types';
+import { WorkItemState, type WorkItem } from '../models/workItem';
+import { resolveRelatedItemsFor } from '../services/relatedItems';
+
+function makeWorkItem(overrides: Partial<WorkItem> = {}): WorkItem {
+  const now = Date.now();
+  return {
+    id: 'item-1',
+    title: 'Item',
+    state: WorkItemState.New,
+    createdAt: now,
+    updatedAt: now,
+    activityLog: [],
+    ...overrides,
+  };
+}
+
+function makeRegistry(discovered: Map<string, DiscoveredItem[]>) {
+  return {
+    getAllDiscoveredItems: vi.fn(() => discovered),
+  } as any;
+}
+
+function makeWorkGraph(items: WorkItem[] = []) {
+  return {
+    findItemByProvenance: vi.fn((providerId: string, externalId: string) => items.find(
+      item => item.providerId === providerId && item.externalId === externalId,
+    )),
+  } as any;
+}
+
+describe('resolveRelatedItemsFor', () => {
+  it('resolves forward refs to matching work items', () => {
+    const pr = makeWorkItem({ id: 'pr-1', providerId: 'github-my-prs', externalId: 'owner/repo#10' });
+    const issue = makeWorkItem({ id: 'issue-1', providerId: 'github-issues', externalId: 'owner/repo#2' });
+    const registry = makeRegistry(new Map([
+      ['github-my-prs', [{ externalId: 'owner/repo#10', title: 'PR', itemType: 'pr', relatedItems: [{ externalId: 'owner/repo#2', itemType: 'issue', relation: 'closes' }] }]],
+      ['github-issues', [{ externalId: 'owner/repo#2', title: 'Issue', itemType: 'issue' }]],
+    ]));
+
+    expect(resolveRelatedItemsFor(pr, registry, makeWorkGraph([pr, issue]))).toEqual([
+      { targetItemId: 'issue-1', targetKind: 'workItem', label: 'Closes owner/repo#2', relation: 'closes', itemType: 'issue' },
+    ]);
+  });
+
+  it('resolves reverse refs from issues back to PRs', () => {
+    const issue = makeWorkItem({ id: 'issue-1', providerId: 'github-issues', externalId: 'owner/repo#2' });
+    const pr = makeWorkItem({ id: 'pr-1', providerId: 'github-my-prs', externalId: 'owner/repo#10' });
+    const registry = makeRegistry(new Map([
+      ['github-issues', [{ externalId: 'owner/repo#2', title: 'Issue', itemType: 'issue' }]],
+      ['github-my-prs', [{ externalId: 'owner/repo#10', title: 'PR', itemType: 'pr', relatedItems: [{ externalId: 'owner/repo#2', itemType: 'issue', relation: 'linked' }] }]],
+    ]));
+
+    expect(resolveRelatedItemsFor(issue, registry, makeWorkGraph([issue, pr]))).toEqual([
+      { targetItemId: 'pr-1', targetKind: 'workItem', label: 'Linked to owner/repo#10', relation: 'linked', itemType: 'pr' },
+    ]);
+  });
+
+  it('falls back to Sources when the discovered target has no WorkItem', () => {
+    const pr = makeWorkItem({ id: 'pr-1', providerId: 'github-my-prs', externalId: 'owner/repo#10' });
+    const registry = makeRegistry(new Map([
+      ['github-my-prs', [{ externalId: 'owner/repo#10', title: 'PR', itemType: 'pr', relatedItems: [{ externalId: 'owner/repo#2', itemType: 'issue', relation: 'closes' }] }]],
+      ['github-issues', [{ externalId: 'owner/repo#2', title: 'Issue', itemType: 'issue' }]],
+    ]));
+
+    expect(resolveRelatedItemsFor(pr, registry, makeWorkGraph([pr]))).toEqual([
+      { targetItemId: 'github-issues::owner/repo#2', targetKind: 'sources', label: 'Closes owner/repo#2', relation: 'closes', itemType: 'issue' },
+    ]);
+  });
+
+  it('drops strict misses when no provider has discovered the other side', () => {
+    const pr = makeWorkItem({ id: 'pr-1', providerId: 'github-my-prs', externalId: 'owner/repo#10' });
+    const registry = makeRegistry(new Map([
+      ['github-my-prs', [{ externalId: 'owner/repo#10', title: 'PR', itemType: 'pr', relatedItems: [{ externalId: 'owner/repo#404', itemType: 'issue', relation: 'closes' }] }]],
+    ]));
+
+    expect(resolveRelatedItemsFor(pr, registry, makeWorkGraph([pr]))).toEqual([]);
+  });
+
+  it('sorts closes before linked and sorts owner/repo numbers numerically', () => {
+    const pr = makeWorkItem({ id: 'pr-1', providerId: 'github-my-prs', externalId: 'owner/repo#100' });
+    const registry = makeRegistry(new Map([
+      ['github-my-prs', [{
+        externalId: 'owner/repo#100',
+        title: 'PR',
+        itemType: 'pr',
+        relatedItems: [
+          { externalId: 'owner/repo#10', itemType: 'issue', relation: 'linked' },
+          { externalId: 'owner/repo#2', itemType: 'issue', relation: 'linked' },
+          { externalId: 'alpha/repo#3', itemType: 'issue', relation: 'closes' },
+          { externalId: 'owner/repo#1', itemType: 'issue', relation: 'closes' },
+        ],
+      }]],
+      ['github-issues', [
+        { externalId: 'owner/repo#10', title: 'Issue 10', itemType: 'issue' },
+        { externalId: 'owner/repo#2', title: 'Issue 2', itemType: 'issue' },
+        { externalId: 'alpha/repo#3', title: 'Issue 3', itemType: 'issue' },
+        { externalId: 'owner/repo#1', title: 'Issue 1', itemType: 'issue' },
+      ]],
+    ]));
+
+    expect(resolveRelatedItemsFor(pr, registry, makeWorkGraph([pr])).map(item => item.label)).toEqual([
+      'Closes alpha/repo#3',
+      'Closes owner/repo#1',
+      'Linked to owner/repo#2',
+      'Linked to owner/repo#10',
+    ]);
+  });
+
+  it('is live and does not cache removed refs', () => {
+    const pr = makeWorkItem({ id: 'pr-1', providerId: 'github-my-prs', externalId: 'owner/repo#10' });
+    const prDiscovered: DiscoveredItem = { externalId: 'owner/repo#10', title: 'PR', itemType: 'pr', relatedItems: [{ externalId: 'owner/repo#2', itemType: 'issue', relation: 'closes' }] };
+    const discovered = new Map<string, DiscoveredItem[]>([
+      ['github-my-prs', [prDiscovered]],
+      ['github-issues', [{ externalId: 'owner/repo#2', title: 'Issue', itemType: 'issue' }]],
+    ]);
+    const registry = makeRegistry(discovered);
+
+    expect(resolveRelatedItemsFor(pr, registry, makeWorkGraph([pr]))).toHaveLength(1);
+    prDiscovered.relatedItems = [];
+    expect(resolveRelatedItemsFor(pr, registry, makeWorkGraph([pr]))).toEqual([]);
+  });
+
+  it('resolves mixed issue providers by itemType and externalId', () => {
+    const issueMention = makeWorkItem({ id: 'mention-issue', providerId: 'github-mentions', externalId: 'owner/repo#2' });
+    const pr = makeWorkItem({ id: 'pr-1', providerId: 'github-my-prs', externalId: 'owner/repo#10' });
+    const registry = makeRegistry(new Map([
+      ['github-mentions', [{ externalId: 'owner/repo#2', title: 'Mentioned issue', itemType: 'issue' }]],
+      ['github-issues', [{ externalId: 'owner/repo#2', title: 'Assigned issue', itemType: 'issue' }]],
+      ['github-my-prs', [{ externalId: 'owner/repo#10', title: 'PR', itemType: 'pr', relatedItems: [{ externalId: 'owner/repo#2', itemType: 'issue', relation: 'closes' }] }]],
+    ]));
+
+    expect(resolveRelatedItemsFor(issueMention, registry, makeWorkGraph([issueMention, pr]))).toEqual([
+      { targetItemId: 'pr-1', targetKind: 'workItem', label: 'Closes owner/repo#10', relation: 'closes', itemType: 'pr' },
+    ]);
+  });
+
+  it('does not match refs with the same externalId but a different itemType', () => {
+    const issue = makeWorkItem({ id: 'issue-1', providerId: 'github-issues', externalId: 'owner/repo#5' });
+    const registry = makeRegistry(new Map([
+      ['github-issues', [{ externalId: 'owner/repo#5', title: 'Issue', itemType: 'issue' }]],
+      ['github-my-prs', [{ externalId: 'owner/repo#10', title: 'PR', itemType: 'pr', relatedItems: [{ externalId: 'owner/repo#5', itemType: 'pr', relation: 'closes' }] }]],
+    ]));
+
+    expect(resolveRelatedItemsFor(issue, registry, makeWorkGraph([issue]))).toEqual([]);
+  });
+});

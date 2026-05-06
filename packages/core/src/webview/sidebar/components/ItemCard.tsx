@@ -178,6 +178,7 @@ export function ItemCard({
           <div class="item-title-wrap">
             {item.isUnseen ? <span class="unseen-dot" aria-hidden="true">●</span> : null}
             <span class="item-title">{item.title}</span>
+            {item.hasRelatedItems ? <span class="related-indicator" aria-label="has related items">🔗</span> : null}
           </div>
         </div>
         {item.repoAnnotation ? (
@@ -237,6 +238,7 @@ function buildItemAriaLabel(item: ItemCardData): string {
   for (const badge of item.badges) {
     parts.push(badge.label);
   }
+  if (item.hasRelatedItems) parts.push('has related items');
   if (item.isSelected) parts.push('selected');
   return parts.filter((value): value is string => Boolean(value)).join(', ');
 }

@@ -1,5 +1,5 @@
 import * as vscode from 'vscode';
-import { DiscoveredItem, combineSignals, createAbortError, runWorkerPool, safeDecodeComponent, type ResolvedItem } from '@devdocket/shared';
+import { DiscoveredItem, combineSignals, createAbortError, runWorkerPool, safeDecodeComponent, type RelatedItemRef, type ResolvedItem } from '@devdocket/shared';
 import { BaseGitHubProvider } from './baseGithubProvider';
 import { logger } from './logger';
 import { parseRepoFromUrls } from './parseRepo';
@@ -61,10 +61,25 @@ export class GitHubPrReviewProvider extends BaseGitHubProvider {
       }
     }
 
+    const relatedItemsMap = filteredPrs.length > 0
+      ? await this.fetchRelatedItemsForPRs(filteredPrs.map(pr => {
+        const repoName = repoNameMap.get(pr.html_url)!;
+        const [repoOwner, repoNameOnly] = repoName.split('/');
+        return {
+          externalId: `${repoName}#${pr.number}`,
+          repoOwner,
+          repoName: repoNameOnly,
+          number: pr.number,
+        };
+      }).filter(pr => pr.repoOwner && pr.repoName), accessToken, signal)
+      : new Map<string, RelatedItemRef[]>();
+
     const items: DiscoveredItem[] = filteredPrs.map((pr) => {
       const repoName = repoNameMap.get(pr.html_url)!;
+      const externalId = `${repoName}#${pr.number}`;
+      const relatedItems = relatedItemsMap.get(externalId);
       const item: DiscoveredItem = {
-        externalId: `${repoName}#${pr.number}`,
+        externalId,
         title: `#${pr.number}: ${pr.title}`,
         description: pr.body ?? undefined,
         url: pr.html_url,
@@ -72,6 +87,7 @@ export class GitHubPrReviewProvider extends BaseGitHubProvider {
         reason: 'review_requested',
         canonicalId: `github:pull:${repoName}#${pr.number}`,
         itemType: 'pr',
+        ...(relatedItems ? { relatedItems } : {}),
         badges: [
           { label: 'Review requested', variant: 'warning' },
           ...buildIssueStateBadge(pr.state),

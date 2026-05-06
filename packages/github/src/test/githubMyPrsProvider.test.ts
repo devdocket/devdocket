@@ -50,6 +50,7 @@ describe('GitHubMyPrsProvider', () => {
     vi.resetAllMocks();
     vi.stubGlobal('fetch', mockFetch);
     provider = new GitHubMyPrsProvider();
+    vi.spyOn(provider as any, 'fetchRelatedItemsForPRs').mockResolvedValue(new Map());
 
     mockChannel = { appendLine: vi.fn() };
     initLogger(mockChannel as any, LogLevel.Debug);
@@ -135,6 +136,48 @@ describe('GitHubMyPrsProvider', () => {
     expect(items[1].reason).toBe('You authored this PR');
     expect(items[1].authored).toBe(true);
     expect(items[1].canonicalId).toBe('github:pull:owner/repo#2');
+  });
+
+  it('attaches relatedItems from PR enrichment before publishing', async () => {
+    vi.mocked(workspace.getConfiguration).mockReturnValue({
+      get: vi.fn((key: string, defaultValue?: any) => {
+        if (key === 'filteredRepos') { return 'unrelated/repo'; }
+        return defaultValue;
+      }),
+    } as any);
+    const pr = createMockPr(1, 'Fix linked issue');
+    vi.mocked((provider as any).fetchRelatedItemsForPRs).mockResolvedValue(new Map([
+      ['owner/repo#1', [{ externalId: 'other/repo#99', itemType: 'issue', relation: 'closes' }]],
+    ]));
+
+    mockFetch.mockImplementation(async (url: string) => {
+      if (url.includes('search/issues') && url.includes('author:@me')) {
+        return mockSearchResponse([pr]);
+      }
+      if (url.includes('search/issues') && url.includes('assignee:@me')) {
+        return mockSearchResponse([]);
+      }
+      if (url.endsWith('/pulls/1')) {
+        return mockPrDetailResponse({ draft: false });
+      }
+      if (url.endsWith('/pulls/1/reviews')) {
+        return mockReviewsResponse([]);
+      }
+      return mockFailedResponse(404);
+    });
+
+    const listener = vi.fn();
+    provider.onDidDiscoverItems(listener);
+    await provider.refresh();
+
+    expect((provider as any).fetchRelatedItemsForPRs).toHaveBeenCalledWith([
+      { externalId: 'owner/repo#1', repoOwner: 'owner', repoName: 'repo', number: 1 },
+    ], 'test-token', expect.any(AbortSignal));
+    expect(listener).toHaveBeenCalledTimes(1);
+    expect(listener.mock.calls[0][0][0]).toEqual(expect.objectContaining({
+      externalId: 'owner/repo#1',
+      relatedItems: [{ externalId: 'other/repo#99', itemType: 'issue', relation: 'closes' }],
+    }));
   });
 
   it('uses global search and filters when repos configured', async () => {

@@ -11,6 +11,22 @@ export interface Event<T> {
 }
 
 /**
+ * A reference from one DiscoveredItem to another, supplied by the provider.
+ * Used by the core to render navigable "Related" links.
+ *
+ * Resolution is live (no persistence): when provider data no longer contains
+ * the reference, the affordance disappears on the next render.
+ */
+export interface RelatedItemRef {
+  /** Provider-scoped identifier of the related item, e.g. "owner/repo#123". */
+  externalId: string;
+  /** Whether the relationship is a closing reference or a plain mention. */
+  relation: 'closes' | 'linked';
+  /** What kind of item the reference points to. */
+  itemType: 'issue' | 'pr';
+}
+
+/**
  * An item discovered by a provider.
  * Provider data is kept in memory and read live — only the inbox state is persisted.
  */
@@ -37,6 +53,8 @@ export interface DiscoveredItem {
    * patterns or state strings.
    */
   itemType?: 'issue' | 'pr';
+  /** Optional refs to other discovered items (e.g. issues a PR closes/mentions). */
+  relatedItems?: RelatedItemRef[];
   /**
    * Optional provider-declared badges to render alongside the core-managed
    * Provider / Type / CI badges. Use these to surface state-like information
