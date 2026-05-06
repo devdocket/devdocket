@@ -39,6 +39,7 @@ describe('WalkthroughParticipant', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    lm.tools = [];
     mockRepoManager = createMockRepoManager();
     participant = new WalkthroughParticipant(mockRepoManager, mockLogOutputChannel as never);
   });
@@ -73,11 +74,11 @@ describe('WalkthroughParticipant', () => {
       await handler(request, context, response, token);
 
       expect(response.markdown).toHaveBeenCalledWith(
-        expect.stringContaining('Please provide a GitHub PR URL'),
+        expect.stringContaining('Please provide a GitHub or Azure DevOps PR URL'),
       );
     });
 
-    it('calls repoManager.ensureWorktree for PR URL in prompt', async () => {
+    it('calls repoManager.ensureWorktree for GitHub PR URL in prompt', async () => {
       participant.register();
       const handler = vi.mocked(chat.createChatParticipant).mock.calls[0][1];
 
@@ -90,6 +91,22 @@ describe('WalkthroughParticipant', () => {
 
       expect(mockRepoManager.ensureWorktree).toHaveBeenCalledWith(
         'https://github.com/owner/repo/pull/42',
+      );
+    });
+
+    it('calls repoManager.ensureWorktree for Azure DevOps PR URL in prompt', async () => {
+      participant.register();
+      const handler = vi.mocked(chat.createChatParticipant).mock.calls[0][1];
+
+      const request = createMockRequest('Walk me through this PR: https://dev.azure.com/org/project/_git/repo/pullrequest/42');
+      const context = createMockContext();
+      const response = createMockResponse();
+      const token = { isCancellationRequested: false };
+
+      await handler(request, context, response, token);
+
+      expect(mockRepoManager.ensureWorktree).toHaveBeenCalledWith(
+        'https://dev.azure.com/org/project/_git/repo/pullrequest/42',
       );
     });
 
@@ -208,6 +225,45 @@ describe('WalkthroughParticipant', () => {
       expect(response.progress).toHaveBeenCalledWith(
         expect.stringContaining('worktree'),
       );
+    });
+
+    it('does not pass GitHub diff-anchor tool to the model for Azure DevOps PRs', async () => {
+      lm.tools = [
+        { name: 'devdocket-readFile', description: 'Read', inputSchema: { type: 'object' } },
+        { name: 'devdocket-diffAnchor', description: 'Anchor', inputSchema: { type: 'object' } },
+      ];
+      const mockModel = {
+        sendRequest: vi.fn().mockResolvedValue({
+          stream: (async function* () {
+            yield new LanguageModelTextPart('ADO walkthrough.');
+          })(),
+        }),
+      };
+      vi.mocked(mockRepoManager.ensureWorktree).mockResolvedValue({
+        worktreePath: '/mock/worktrees/pr-42',
+        clonePath: '/mock/repos/ado-org-project-repo/clone',
+        org: 'org/project',
+        repo: 'repo',
+        prNumber: '42',
+        headRef: 'refs/devdocket/ado/pr-42-head',
+        baseRef: 'refs/devdocket/ado/pr-42-base',
+        prUrl: 'https://dev.azure.com/org/project/_git/repo/pullrequest/42',
+        provider: 'ado',
+      });
+
+      participant.register();
+      const handler = vi.mocked(chat.createChatParticipant).mock.calls[0][1];
+
+      const request = createMockRequest('Walk me through https://dev.azure.com/org/project/_git/repo/pullrequest/42', mockModel);
+      const context = createMockContext();
+      const response = createMockResponse();
+      const token = { isCancellationRequested: false };
+
+      await handler(request, context, response, token);
+
+      const tools = mockModel.sendRequest.mock.calls[0][1].tools as Array<{ name: string }>;
+      expect(tools.some(tool => tool.name === 'devdocket-readFile')).toBe(true);
+      expect(tools.some(tool => tool.name === 'devdocket-diffAnchor')).toBe(false);
     });
 
     it('invokes real tools via lm.invokeTool and continues the loop', async () => {

@@ -1,14 +1,17 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { authentication, workspace, mockLogOutputChannel } from 'vscode';
 import { RepoManager, parsePrUrl, __testing } from '../repoManager';
+import { GitExecError } from '../tools/gitUtils';
 const { resetGitVersionCheck } = __testing;
 
 // Mock child_process
 vi.mock('child_process', () => ({
-  execFile: vi.fn((_cmd: string, args: string[], _opts: unknown, cb: Function) => {
+  execFile: vi.fn((_cmd: string, args: string[], opts: unknown, cb: Function) => {
     // Return valid version for `git --no-pager version` calls
     if (args?.includes('version')) {
       cb(null, 'git version 2.45.0.windows.1', '');
+    } else if (args?.includes('rev-parse') && args.includes('--show-toplevel')) {
+      cb(null, (opts as { cwd?: string } | undefined)?.cwd ?? '', '');
     } else {
       cb(null, '', '');
     }
@@ -17,8 +20,108 @@ vi.mock('child_process', () => ({
 
 import { execFile } from 'child_process';
 
+const originalProcessPlatform = process.platform;
+
+function setProcessPlatform(platform: NodeJS.Platform): void {
+  Object.defineProperty(process, 'platform', { value: platform, configurable: true });
+}
+
 function createRepoManager(): RepoManager {
   return new RepoManager({ fsPath: '/mock/storage' } as never, mockLogOutputChannel as never);
+}
+
+function getCloneArgs(): string[] {
+  const cloneCall = vi.mocked(execFile).mock.calls.find(c => c[1]?.includes('clone'));
+  expect(cloneCall).toBeDefined();
+  return cloneCall![1] as string[];
+}
+
+function getLongpathsConfigCalls() {
+  return vi.mocked(execFile).mock.calls.filter(c => {
+    const args = c[1] as string[] | undefined;
+    return args?.includes('config')
+      && args.includes('--local')
+      && args.includes('core.longpaths')
+      && args.includes('true');
+  });
+}
+
+function normalizePath(value: string): string {
+  return value.replace(/\\/g, '/');
+}
+
+function mockExistingDirectories(paths: string[]): void {
+  const existingPaths = new Set(paths.map(normalizePath));
+  vi.mocked(workspace.fs.stat).mockImplementation(async uri => {
+    const fsPath = normalizePath((uri as { fsPath: string }).fsPath);
+    if (existingPaths.has(fsPath)) {
+      return { type: 2 } as never;
+    }
+    throw new Error('not found');
+  });
+}
+
+function mockGitDirectoryValidationFailure(
+  invalidPath: string,
+  stderr = 'fatal: not a git repository',
+  code = 128,
+): void {
+  vi.mocked(execFile).mockImplementation(
+    (_cmd: string, args: string[], opts: unknown, cb: Function) => {
+      const cwd = normalizePath((opts as { cwd?: string } | undefined)?.cwd ?? '');
+      if (args?.includes('version')) {
+        cb(null, 'git version 2.45.0.windows.1', '');
+      } else if (
+        args?.includes('rev-parse')
+        && args.includes('--git-dir')
+        && cwd === normalizePath(invalidPath)
+      ) {
+        cb(Object.assign(new Error('git failed'), { code }), '', stderr);
+      } else if (args?.includes('rev-parse') && args.includes('--show-toplevel')) {
+        cb(null, cwd, '');
+      } else {
+        cb(null, '', '');
+      }
+    },
+  );
+}
+
+function mockAdoPrDetails(): void {
+  vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+    ok: true,
+    json: vi.fn().mockResolvedValue({
+      sourceRefName: 'refs/heads/feature/add-api',
+      targetRefName: 'refs/heads/main',
+      repository: {
+        remoteUrl: 'https://dev.azure.com/org/project/_git/repo',
+      },
+    }),
+  }));
+}
+
+function failGitCommand(match: (args: string[]) => boolean, stderr: string): void {
+  vi.mocked(execFile).mockImplementation(
+    (_cmd: string, args: string[], opts: unknown, cb: Function) => {
+      if (args?.includes('version')) {
+        cb(null, 'git version 2.45.0.windows.1', '');
+      } else if (match(args)) {
+        cb(Object.assign(new Error('git failed'), { code: 1 }), '', stderr);
+      } else if (args?.includes('rev-parse') && args.includes('--show-toplevel')) {
+        cb(null, (opts as { cwd?: string } | undefined)?.cwd ?? '', '');
+      } else {
+        cb(null, '', '');
+      }
+    },
+  );
+}
+
+async function rejectedMessage(promise: Promise<unknown>): Promise<string> {
+  try {
+    await promise;
+  } catch (err) {
+    return normalizePath(err instanceof Error ? err.message : String(err));
+  }
+  throw new Error('Expected promise to reject');
 }
 
 describe('parsePrUrl', () => {
@@ -34,6 +137,11 @@ describe('parsePrUrl', () => {
 
   it('parses a PR URL with fragment', () => {
     const result = parsePrUrl('https://github.com/owner/repo/pull/42#discussion_r123');
+    expect(result).toEqual({ org: 'owner', repo: 'repo', prNumber: '42' });
+  });
+
+  it('parses a PR URL with trailing GitHub view segments', () => {
+    const result = parsePrUrl('https://github.com/owner/repo/pull/42/files');
     expect(result).toEqual({ org: 'owner', repo: 'repo', prNumber: '42' });
   });
 
@@ -55,6 +163,7 @@ describe('RepoManager', () => {
 
   afterEach(() => {
     vi.unstubAllGlobals();
+    setProcessPlatform(originalProcessPlatform);
   });
 
   beforeEach(() => {
@@ -63,9 +172,11 @@ describe('RepoManager', () => {
 
     // Restore default execFile mock (returns version for `git version`, empty otherwise)
     vi.mocked(execFile).mockImplementation(
-      (_cmd: string, args: string[], _opts: unknown, cb: Function) => {
+      (_cmd: string, args: string[], opts: unknown, cb: Function) => {
         if ((args as string[])?.includes('version')) {
           cb(null, 'git version 2.45.0.windows.1', '');
+        } else if (args?.includes('rev-parse') && args.includes('--show-toplevel')) {
+          cb(null, (opts as { cwd?: string } | undefined)?.cwd ?? '', '');
         } else {
           cb(null, '', '');
         }
@@ -94,17 +205,227 @@ describe('RepoManager', () => {
 
   describe('ensureWorktree', () => {
     it('throws for invalid PR URLs', async () => {
-      await expect(manager.ensureWorktree('not-a-url')).rejects.toThrow('Invalid GitHub PR URL');
+      await expect(manager.ensureWorktree('not-a-url')).rejects.toThrow('Invalid PR URL');
+    });
+
+    it('does not include query strings or fragments in invalid URL errors', async () => {
+      await expect(manager.ensureWorktree('https://example.com/not-pr?token=secret#frag')).rejects.toThrow(
+        'Invalid PR URL: https://example.com/not-pr',
+      );
+    });
+
+    it('redacts query strings and fragments from parse-failing URLs', async () => {
+      await expect(manager.ensureWorktree('https://exa mple.com/not-pr?token=secret#frag')).rejects.toThrow(
+        'Invalid PR URL: (URL unavailable)',
+      );
+    });
+
+    it('redacts userinfo from parse-failing URLs', async () => {
+      await expect(manager.ensureWorktree('https://user:password@exa mple.com/not-pr?token=secret')).rejects.toThrow(
+        'Invalid PR URL: (URL unavailable)',
+      );
+    });
+
+    it('does not log query strings or fragments from PR URLs', async () => {
+      await manager.ensureWorktree('https://github.com/owner/repo/pull/42?token=secret#frag');
+
+      const debugMessages = vi.mocked(mockLogOutputChannel.debug).mock.calls.map(call => String(call[0]));
+      expect(debugMessages).toContain('ensureWorktree called — prUrl: https://github.com/owner/repo/pull/42');
+      expect(debugMessages.join('\n')).not.toContain('secret');
+      expect(debugMessages.join('\n')).not.toContain('frag');
     });
 
     it('calls git clone for a fresh repo', async () => {
       const item = 'https://github.com/owner/repo/pull/42';
       await manager.ensureWorktree(item);
 
-      const calls = vi.mocked(execFile).mock.calls;
-      const cloneCall = calls.find(c => c[1]?.includes('clone'));
-      expect(cloneCall).toBeDefined();
-      expect(cloneCall![1]).toContain('--no-checkout');
+      const cloneArgs = getCloneArgs();
+      expect(cloneArgs).toContain('--no-checkout');
+    });
+
+    it('passes core.longpaths config to fresh GitHub clones on Windows', async () => {
+      setProcessPlatform('win32');
+
+      await manager.ensureWorktree('https://github.com/owner/repo/pull/42');
+
+      const args = getCloneArgs();
+      const configIndex = args.indexOf('-c');
+      expect(configIndex).toBeGreaterThanOrEqual(0);
+      expect(args[configIndex + 1]).toBe('core.longpaths=true');
+      expect(configIndex).toBeLessThan(args.indexOf('clone'));
+    });
+
+    it('does not pass core.longpaths config to fresh GitHub clones on non-Windows', async () => {
+      setProcessPlatform('linux');
+
+      await manager.ensureWorktree('https://github.com/owner/repo/pull/42');
+
+      expect(getCloneArgs()).not.toContain('core.longpaths=true');
+    });
+
+    it('passes core.longpaths config to fresh ADO clones on Windows', async () => {
+      setProcessPlatform('win32');
+      mockAdoPrDetails();
+
+      await manager.ensureWorktree('https://dev.azure.com/org/project/_git/repo/pullrequest/42');
+
+      const args = getCloneArgs();
+      const configIndex = args.indexOf('-c');
+      expect(configIndex).toBeGreaterThanOrEqual(0);
+      expect(args[configIndex + 1]).toBe('core.longpaths=true');
+      expect(configIndex).toBeLessThan(args.indexOf('clone'));
+    });
+
+    it('persists core.longpaths to a fresh GitHub clone local config on Windows', async () => {
+      setProcessPlatform('win32');
+
+      await manager.ensureWorktree('https://github.com/owner/repo/pull/42');
+
+      const configCalls = getLongpathsConfigCalls();
+      expect(configCalls).toHaveLength(1);
+      expect(normalizePath((configCalls[0][2] as { cwd: string }).cwd)).toBe('/mock/storage/repos/owner-repo/clone');
+    });
+
+    it('repairs core.longpaths local config for an existing GitHub clone on Windows', async () => {
+      setProcessPlatform('win32');
+      let statCallCount = 0;
+      vi.mocked(workspace.fs.stat).mockImplementation(async () => {
+        statCallCount++;
+        if (statCallCount === 1) {
+          return { type: 2 } as never;
+        }
+        throw new Error('not found');
+      });
+
+      await manager.ensureWorktree('https://github.com/owner/repo/pull/42');
+
+      expect(vi.mocked(execFile).mock.calls.find(c => c[1]?.includes('clone'))).toBeUndefined();
+      const configCalls = getLongpathsConfigCalls();
+      expect(configCalls).toHaveLength(1);
+      expect(normalizePath((configCalls[0][2] as { cwd: string }).cwd)).toBe('/mock/storage/repos/owner-repo/clone');
+    });
+
+    it('persists core.longpaths to a fresh ADO clone local config on Windows', async () => {
+      setProcessPlatform('win32');
+      mockAdoPrDetails();
+
+      await manager.ensureWorktree('https://dev.azure.com/org/project/_git/repo/pullrequest/42');
+
+      const configCalls = getLongpathsConfigCalls();
+      expect(configCalls).toHaveLength(1);
+      expect(normalizePath((configCalls[0][2] as { cwd: string }).cwd)).toBe('/mock/storage/repos/ado-org-project-repo/clone');
+    });
+
+    it('repairs core.longpaths local config for an existing ADO clone on Windows', async () => {
+      setProcessPlatform('win32');
+      mockAdoPrDetails();
+      let statCallCount = 0;
+      vi.mocked(workspace.fs.stat).mockImplementation(async () => {
+        statCallCount++;
+        if (statCallCount === 1) {
+          return { type: 2 } as never;
+        }
+        throw new Error('not found');
+      });
+
+      await manager.ensureWorktree('https://dev.azure.com/org/project/_git/repo/pullrequest/42');
+
+      expect(vi.mocked(execFile).mock.calls.find(c => c[1]?.includes('clone'))).toBeUndefined();
+      const configCalls = getLongpathsConfigCalls();
+      expect(configCalls).toHaveLength(1);
+      expect(normalizePath((configCalls[0][2] as { cwd: string }).cwd)).toBe('/mock/storage/repos/ado-org-project-repo/clone');
+    });
+
+    it('does not persist core.longpaths local config on non-Windows', async () => {
+      setProcessPlatform('linux');
+
+      await manager.ensureWorktree('https://github.com/owner/repo/pull/42');
+
+      expect(getLongpathsConfigCalls()).toHaveLength(0);
+    });
+
+    it('includes the clone path when cloning fails', async () => {
+      failGitCommand(args => args.includes('clone'), 'Filename too long');
+
+      const message = await rejectedMessage(manager.ensureWorktree('https://github.com/owner/repo/pull/42'));
+
+      expect(message).toContain('Failed to clone repository');
+      expect(message).toContain('(repo: /mock/storage/repos/owner-repo/clone)');
+      expect(message).toContain('Filename too long');
+    });
+
+    it('preserves git exit codes when adding clone failure path context', async () => {
+      failGitCommand(args => args.includes('clone'), 'Filename too long');
+
+      await expect(manager.ensureWorktree('https://github.com/owner/repo/pull/42')).rejects.toMatchObject({
+        name: 'GitExecError',
+        exitCode: 1,
+      } satisfies Partial<GitExecError>);
+    });
+
+    it('includes the clone path when an ADO clone fails', async () => {
+      mockAdoPrDetails();
+      failGitCommand(args => args.includes('clone'), 'Filename too long');
+
+      const message = await rejectedMessage(manager.ensureWorktree('https://dev.azure.com/org/project/_git/repo/pullrequest/42'));
+
+      expect(message).toContain('Failed to clone Azure Repos repository');
+      expect(message).toContain('(repo: /mock/storage/repos/ado-org-project-repo/clone)');
+      expect(message).toContain('Filename too long');
+    });
+
+    it('includes the ADO worktree path when creating an ADO worktree fails', async () => {
+      mockAdoPrDetails();
+      failGitCommand(
+        args => args.includes('worktree') && args.includes('add'),
+        'Filename too long',
+      );
+
+      const message = await rejectedMessage(manager.ensureWorktree('https://dev.azure.com/org/project/_git/repo/pullrequest/42'));
+
+      expect(message).toContain('Failed to create ADO worktree');
+      expect(message).toContain('(worktree: /mock/storage/repos/ado-org-project-repo/worktrees/pr-42)');
+      expect(message).toContain('Filename too long');
+    });
+
+    it('includes the clone path when configuring Git long path support fails', async () => {
+      setProcessPlatform('win32');
+      failGitCommand(
+        args => args.includes('config') && args.includes('core.longpaths'),
+        'could not lock config file',
+      );
+
+      const message = await rejectedMessage(manager.ensureWorktree('https://github.com/owner/repo/pull/42'));
+
+      expect(message).toContain('Failed to configure Git long path support');
+      expect(message).toContain('(repo: /mock/storage/repos/owner-repo/clone)');
+      expect(message).toContain('could not lock config file');
+    });
+
+    it('includes the clone path when fetching a PR head fails', async () => {
+      failGitCommand(
+        args => args.includes('fetch') && args.some(arg => arg.includes('pull/42/head')),
+        'unable to update local ref',
+      );
+
+      const message = await rejectedMessage(manager.ensureWorktree('https://github.com/owner/repo/pull/42'));
+
+      expect(message).toContain('Failed to fetch PR head');
+      expect(message).toContain('(repo: /mock/storage/repos/owner-repo/clone)');
+      expect(message).toContain('unable to update local ref');
+    });
+
+    it('includes the worktree path when creating a worktree fails', async () => {
+      failGitCommand(
+        args => args.includes('worktree') && args.includes('add'),
+        'Filename too long',
+      );
+
+      const message = await rejectedMessage(manager.ensureWorktree('https://github.com/owner/repo/pull/42'));
+
+      expect(message).toContain('Failed to create worktree');
+      expect(message).toContain('(worktree: /mock/storage/repos/owner-repo/worktrees/pr-42)');
+      expect(message).toContain('Filename too long');
     });
 
     it('passes auth via env vars, not CLI args', async () => {
@@ -147,33 +468,212 @@ describe('RepoManager', () => {
     });
 
     it('creates a worktree', async () => {
-      await manager.ensureWorktree('https://github.com/owner/repo/pull/42');
+      const info = await manager.ensureWorktree('https://github.com/owner/repo/pull/42');
 
       const calls = vi.mocked(execFile).mock.calls;
       const worktreeCall = calls.find(c =>
         c[1]?.includes('worktree') && c[1]?.includes('add'),
       );
       expect(worktreeCall).toBeDefined();
+      expect(info.headRef).toBe('HEAD');
     });
 
-    it('reuses existing clone (stat returns success for clone dir)', async () => {
-      // Make stat succeed for clone dir only (first call)
-      let statCallCount = 0;
-      vi.mocked(workspace.fs.stat).mockImplementation(async () => {
-        statCallCount++;
-        if (statCallCount === 1) {
-          // Clone dir exists
-          return { type: 2 } as never;
-        }
-        // Worktree dir does not exist
-        throw new Error('not found');
-      });
+    it('removes and re-clones an existing clone directory that is not a valid git repo', async () => {
+      const clonePath = '/mock/storage/repos/owner-repo/clone';
+      mockExistingDirectories([clonePath]);
+      mockGitDirectoryValidationFailure(clonePath);
+
+      await manager.ensureWorktree('https://github.com/owner/repo/pull/42');
+
+      const deletedPaths = vi.mocked(workspace.fs.delete).mock.calls.map(
+        call => normalizePath((call[0] as { fsPath: string }).fsPath),
+      );
+      expect(deletedPaths).toContain(clonePath);
+      const cloneCall = vi.mocked(execFile).mock.calls.find(c => c[1]?.includes('clone'));
+      expect(cloneCall).toBeDefined();
+    });
+
+    it('removes and re-clones when git validation exits 128 with localized output', async () => {
+      const clonePath = '/mock/storage/repos/owner-repo/clone';
+      mockExistingDirectories([clonePath]);
+      mockGitDirectoryValidationFailure(clonePath, 'fatal: Kein Git-Repository');
+
+      await manager.ensureWorktree('https://github.com/owner/repo/pull/42');
+
+      const deletedPaths = vi.mocked(workspace.fs.delete).mock.calls.map(
+        call => normalizePath((call[0] as { fsPath: string }).fsPath),
+      );
+      expect(deletedPaths).toContain(clonePath);
+      expect(vi.mocked(execFile).mock.calls.find(c => c[1]?.includes('clone'))).toBeDefined();
+    });
+
+    it('does not remove a clone directory when git validation fails unexpectedly', async () => {
+      const clonePath = '/mock/storage/repos/owner-repo/clone';
+      mockExistingDirectories([clonePath]);
+      mockGitDirectoryValidationFailure(clonePath, 'fatal: permission denied', 1);
+
+      const message = await rejectedMessage(manager.ensureWorktree('https://github.com/owner/repo/pull/42'));
+
+      expect(message).toContain('Failed to validate repository directory');
+      expect(message).toContain('(repo: /mock/storage/repos/owner-repo/clone)');
+      expect(message).toContain('git rev-parse failed: fatal: permission denied');
+      expect(workspace.fs.delete).not.toHaveBeenCalled();
+      const cloneCall = vi.mocked(execFile).mock.calls.find(c => c[1]?.includes('clone'));
+      expect(cloneCall).toBeUndefined();
+    });
+
+    it('removes a clone directory when validation resolves to a parent git root', async () => {
+      const clonePath = '/mock/storage/repos/owner-repo/clone';
+      mockExistingDirectories([clonePath]);
+      vi.mocked(execFile).mockImplementation(
+        (_cmd: string, args: string[], opts: unknown, cb: Function) => {
+          const cwd = normalizePath((opts as { cwd?: string } | undefined)?.cwd ?? '');
+          if (args?.includes('version')) {
+            cb(null, 'git version 2.45.0.windows.1', '');
+          } else if (args?.includes('rev-parse') && args.includes('--show-toplevel') && cwd === clonePath) {
+            cb(null, '/mock/storage', '');
+          } else {
+            cb(null, '', '');
+          }
+        },
+      );
+
+      await manager.ensureWorktree('https://github.com/owner/repo/pull/42');
+
+      const deletedPaths = vi.mocked(workspace.fs.delete).mock.calls.map(
+        call => normalizePath((call[0] as { fsPath: string }).fsPath),
+      );
+      expect(deletedPaths).toContain(clonePath);
+      expect(vi.mocked(execFile).mock.calls.find(c => c[1]?.includes('clone'))).toBeDefined();
+    });
+
+    it('reuses an existing clone directory that is a valid git repo', async () => {
+      const clonePath = '/mock/storage/repos/owner-repo/clone';
+      mockExistingDirectories([clonePath]);
 
       await manager.ensureWorktree('https://github.com/owner/repo/pull/42');
 
       const calls = vi.mocked(execFile).mock.calls;
+      const revParseCall = calls.find(c => c[1]?.includes('rev-parse'));
+      expect(normalizePath((revParseCall?.[2] as { cwd: string }).cwd)).toBe(clonePath);
+      expect(revParseCall?.[1]).toContain('--git-dir');
       const cloneCall = calls.find(c => c[1]?.includes('clone'));
-      expect(cloneCall).toBeUndefined(); // Should not clone again
+      expect(cloneCall).toBeUndefined();
+      expect(calls.find(c => c[1]?.includes('worktree') && c[1]?.includes('prune'))).toBeDefined();
+      expect(workspace.fs.delete).not.toHaveBeenCalled();
+    });
+
+    it('removes and re-clones an existing ADO clone directory that is not a valid git repo', async () => {
+      const clonePath = '/mock/storage/repos/ado-org-project-repo/clone';
+      mockAdoPrDetails();
+      mockExistingDirectories([clonePath]);
+      mockGitDirectoryValidationFailure(clonePath);
+
+      await manager.ensureWorktree('https://dev.azure.com/org/project/_git/repo/pullrequest/42');
+
+      const deletedPaths = vi.mocked(workspace.fs.delete).mock.calls.map(
+        call => normalizePath((call[0] as { fsPath: string }).fsPath),
+      );
+      expect(deletedPaths).toContain(clonePath);
+      const cloneCall = vi.mocked(execFile).mock.calls.find(c => c[1]?.includes('clone'));
+      expect(cloneCall).toBeDefined();
+    });
+
+    it('reuses an existing ADO clone directory that is a valid git repo', async () => {
+      const clonePath = '/mock/storage/repos/ado-org-project-repo/clone';
+      mockAdoPrDetails();
+      mockExistingDirectories([clonePath]);
+
+      await manager.ensureWorktree('https://dev.azure.com/org/project/_git/repo/pullrequest/42');
+
+      const calls = vi.mocked(execFile).mock.calls;
+      const revParseCall = calls.find(c => c[1]?.includes('rev-parse'));
+      expect(normalizePath((revParseCall?.[2] as { cwd: string }).cwd)).toBe(clonePath);
+      expect(revParseCall?.[1]).toContain('--git-dir');
+      const cloneCall = calls.find(c => c[1]?.includes('clone'));
+      expect(cloneCall).toBeUndefined();
+      expect(calls.find(c => c[1]?.includes('worktree') && c[1]?.includes('prune'))).toBeDefined();
+      expect(workspace.fs.delete).not.toHaveBeenCalled();
+    });
+
+    it('removes and recreates an existing worktree directory that is not a valid git worktree', async () => {
+      const clonePath = '/mock/storage/repos/owner-repo/clone';
+      const worktreePath = '/mock/storage/repos/owner-repo/worktrees/pr-42';
+      mockExistingDirectories([clonePath, worktreePath]);
+      mockGitDirectoryValidationFailure(worktreePath);
+
+      await manager.ensureWorktree('https://github.com/owner/repo/pull/42');
+
+      const deletedPaths = vi.mocked(workspace.fs.delete).mock.calls.map(
+        call => normalizePath((call[0] as { fsPath: string }).fsPath),
+      );
+      expect(deletedPaths).toContain(worktreePath);
+      const calls = vi.mocked(execFile).mock.calls;
+      const pruneCallIndex = calls.findIndex(c => c[1]?.includes('worktree') && c[1]?.includes('prune'));
+      expect(pruneCallIndex).toBeGreaterThanOrEqual(0);
+      expect(normalizePath((calls[pruneCallIndex][2] as { cwd: string }).cwd)).toBe(clonePath);
+      const worktreeAddCallIndex = calls.findIndex(c => c[1]?.includes('worktree') && c[1]?.includes('add'));
+      expect(worktreeAddCallIndex).toBeGreaterThan(pruneCallIndex);
+      const resetCall = calls.find(c => c[1]?.includes('reset'));
+      expect(resetCall).toBeUndefined();
+    });
+
+    it('updates an existing worktree directory that is a valid git worktree', async () => {
+      const clonePath = '/mock/storage/repos/owner-repo/clone';
+      const worktreePath = '/mock/storage/repos/owner-repo/worktrees/pr-42';
+      mockExistingDirectories([clonePath, worktreePath]);
+
+      const info = await manager.ensureWorktree('https://github.com/owner/repo/pull/42');
+
+      const calls = vi.mocked(execFile).mock.calls;
+      const resetCall = calls.find(c => c[1]?.includes('reset') && c[1]?.includes('--hard'));
+      expect(resetCall).toBeDefined();
+      expect(normalizePath((resetCall?.[2] as { cwd: string }).cwd)).toBe(worktreePath);
+      const worktreeAddCall = calls.find(c => c[1]?.includes('worktree') && c[1]?.includes('add'));
+      expect(worktreeAddCall).toBeUndefined();
+      expect(info.headRef).toBe('HEAD');
+      expect(workspace.fs.delete).not.toHaveBeenCalled();
+    });
+
+    it('updates an existing ADO worktree directory that is a valid git worktree', async () => {
+      const clonePath = '/mock/storage/repos/ado-org-project-repo/clone';
+      const worktreePath = '/mock/storage/repos/ado-org-project-repo/worktrees/pr-42';
+      mockAdoPrDetails();
+      mockExistingDirectories([clonePath, worktreePath]);
+
+      const info = await manager.ensureWorktree('https://dev.azure.com/org/project/_git/repo/pullrequest/42');
+
+      const calls = vi.mocked(execFile).mock.calls;
+      const resetCall = calls.find(c => c[1]?.includes('reset') && c[1]?.includes('--hard'));
+      expect(resetCall).toBeDefined();
+      expect(normalizePath((resetCall?.[2] as { cwd: string }).cwd)).toBe(worktreePath);
+      const worktreeAddCall = calls.find(c => c[1]?.includes('worktree') && c[1]?.includes('add'));
+      expect(worktreeAddCall).toBeUndefined();
+      expect(info.provider).toBe('ado');
+      expect(workspace.fs.delete).not.toHaveBeenCalled();
+    });
+
+    it('removes and recreates an existing ADO worktree directory that is not a valid git worktree', async () => {
+      const clonePath = '/mock/storage/repos/ado-org-project-repo/clone';
+      const worktreePath = '/mock/storage/repos/ado-org-project-repo/worktrees/pr-42';
+      mockAdoPrDetails();
+      mockExistingDirectories([clonePath, worktreePath]);
+      mockGitDirectoryValidationFailure(worktreePath);
+
+      await manager.ensureWorktree('https://dev.azure.com/org/project/_git/repo/pullrequest/42');
+
+      const deletedPaths = vi.mocked(workspace.fs.delete).mock.calls.map(
+        call => normalizePath((call[0] as { fsPath: string }).fsPath),
+      );
+      expect(deletedPaths).toContain(worktreePath);
+      const calls = vi.mocked(execFile).mock.calls;
+      const pruneCallIndex = calls.findIndex(c => c[1]?.includes('worktree') && c[1]?.includes('prune'));
+      expect(pruneCallIndex).toBeGreaterThanOrEqual(0);
+      expect(normalizePath((calls[pruneCallIndex][2] as { cwd: string }).cwd)).toBe(clonePath);
+      const worktreeAddCallIndex = calls.findIndex(c => c[1]?.includes('worktree') && c[1]?.includes('add'));
+      expect(worktreeAddCallIndex).toBeGreaterThan(pruneCallIndex);
+      const resetCall = calls.find(c => c[1]?.includes('reset'));
+      expect(resetCall).toBeUndefined();
     });
 
     it('calls GitHub API for PR metadata', async () => {
@@ -295,6 +795,34 @@ describe('RepoManager', () => {
       expect(lookup?.prNumber).toBe('42');
       expect(lookup).toBe(info);
     });
+
+    it('creates an ADO worktree using Microsoft auth and PR refs', async () => {
+      mockAdoPrDetails();
+
+      const url = 'https://dev.azure.com/org/project/_git/repo/pullrequest/42';
+      const info = await manager.ensureWorktree(url);
+
+      expect(authentication.getSession).toHaveBeenCalledWith(
+        'microsoft',
+        ['499b84ac-1321-427f-aa17-267ca6975798/.default'],
+        { createIfNone: true },
+      );
+      expect(info.provider).toBe('ado');
+      expect(info.prUrl).toBe(url);
+      expect(info.baseRef).toBe('refs/devdocket/ado/pr-42-base');
+      expect(info.headRef).toBe('refs/devdocket/ado/pr-42-head');
+
+      const calls = vi.mocked(execFile).mock.calls;
+      const authCalls = calls.filter(c => {
+        const opts = c[2] as { env?: Record<string, string> } | undefined;
+        return opts?.env?.GIT_CONFIG_VALUE_0 === 'Authorization: Bearer mock-token';
+      });
+      expect(authCalls.length).toBeGreaterThanOrEqual(3);
+      const cloneCall = calls.find(c => c[1]?.includes('clone'));
+      expect(cloneCall?.[1]).toContain('https://dev.azure.com/org/project/_git/repo');
+      expect(calls.some(c => c[1]?.some((arg: string) => arg.includes('+refs/heads/feature/add-api:refs/devdocket/ado/pr-42-head')))).toBe(true);
+      expect(calls.some(c => c[1]?.some((arg: string) => arg.includes('+refs/heads/main:refs/devdocket/ado/pr-42-base')))).toBe(true);
+    });
   });
 
   describe('getWorktreeInfo', () => {
@@ -334,6 +862,25 @@ describe('RepoManager', () => {
       await manager.removeRepo('owner', 'repo');
 
       expect(workspace.fs.delete).toHaveBeenCalled();
+    });
+
+    it('deletes the actual ADO repo directory for cached ADO worktrees', async () => {
+      mockAdoPrDetails();
+      await manager.ensureWorktree('https://dev.azure.com/org/project/_git/repo/pullrequest/42');
+      vi.mocked(workspace.fs.delete).mockClear();
+
+      await manager.removeRepo('org/project', 'repo');
+
+      const deletedPaths = vi.mocked(workspace.fs.delete).mock.calls.map(call => (call[0] as { fsPath: string }).fsPath.replace(/\\/g, '/'));
+      expect(deletedPaths).toContain('/mock/storage/repos/ado-org-project-repo');
+    });
+
+    it('includes the ADO repo directory fallback after reload when no worktrees are cached', async () => {
+      await manager.removeRepo('org/project', 'repo');
+
+      const deletedPaths = vi.mocked(workspace.fs.delete).mock.calls.map(call => (call[0] as { fsPath: string }).fsPath.replace(/\\/g, '/'));
+      expect(deletedPaths).toContain('/mock/storage/repos/org-project-repo');
+      expect(deletedPaths).toContain('/mock/storage/repos/ado-org-project-repo');
     });
   });
 });

@@ -4,6 +4,8 @@ import { DEFAULT_REVIEW_PROMPT } from './defaultPrompt';
 import { fenceDiff } from './diffFence';
 import { truncateToolContent } from './toolUtils';
 import { gitExec } from './tools/gitUtils';
+import { AdoPrClient } from './adoPrClient';
+import { parseAdoPrUrl } from './prUrl';
 import type { RepoManager, WorktreeInfo } from './repoManager';
 import type { WorkItem } from './types';
 
@@ -47,8 +49,29 @@ export class AiReviewAction extends BasePrAction {
     token: vscode.CancellationToken,
   ): Promise<void> {
     progress.report({ message: 'Fetching PR diff...' });
-    const diff = await this.fetchDiff(item.url!);
-    if (!diff || token.isCancellationRequested) return;
+    const adoParts = parseAdoPrUrl(item.url!);
+    let adoDiffWasSynthetic = false;
+    let diff: string | undefined;
+    if (adoParts) {
+      try {
+        const adoDiff = await new AdoPrClient().fetchDiffResult(adoParts);
+        diff = adoDiff?.diff;
+        adoDiffWasSynthetic = adoDiff?.synthetic ?? false;
+      } catch (err) {
+        console.error(`${this.progressTitle}: failed to fetch diff:`, err);
+        vscode.window.showWarningMessage(`${this.progressTitle}: Failed to fetch PR diff`);
+        return;
+      }
+    } else {
+      diff = await this.fetchDiff(item.url!);
+    }
+    if (diff === undefined) {
+      if (adoParts) {
+        vscode.window.showWarningMessage('AI Code Review: Azure DevOps authentication is required to fetch the PR diff.');
+      }
+      return;
+    }
+    if (token.isCancellationRequested) return;
 
     // Check model availability before expensive worktree preparation
     const models = await vscode.lm.selectChatModels();
@@ -70,6 +93,33 @@ export class AiReviewAction extends BasePrAction {
       this.log.warn(`Worktree preparation failed (continuing with diff only): ${msg}`);
     }
 
+    if (worktreeInfo && adoParts) {
+      progress.report({ message: 'Preparing Azure DevOps diff...' });
+      try {
+        const gitDiff = await gitExec(
+          ['diff', '--no-color', `${worktreeInfo.baseRef}...${worktreeInfo.headRef}`],
+          worktreeInfo.worktreePath,
+        );
+        diff = gitDiff;
+        adoDiffWasSynthetic = false;
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        this.log.warn(`Failed to build ADO git diff (using API diff fallback): ${msg}`);
+      }
+    }
+
+    if (adoParts && adoDiffWasSynthetic) {
+      vscode.window.showWarningMessage(
+        'AI Code Review: Azure DevOps did not return complete patch content for every changed file, and a full local git diff could not be prepared, so a useful AI review cannot be generated.',
+      );
+      return;
+    }
+
+    if (adoParts && diff.length === 0) {
+      vscode.window.showInformationMessage('AI Code Review: No Azure DevOps PR changes were detected.');
+      return;
+    }
+
     if (token.isCancellationRequested) return;
 
     progress.report({ message: 'Analyzing changes...' });
@@ -87,6 +137,42 @@ export class AiReviewAction extends BasePrAction {
       language: 'markdown',
     });
     await vscode.window.showTextDocument(doc, { preview: false });
+
+    if (adoParts && !token.isCancellationRequested) {
+      await this.offerPostAdoReviewSummary(adoParts, result);
+    }
+  }
+
+  private formatAdoReviewComment(result: string): string {
+    const maxLength = 60_000;
+    if (result.length <= maxLength) {
+      return result;
+    }
+    const footer = '\n\n> Review truncated for Azure DevOps comment length. The full review remains open in the editor.';
+    return `${result.slice(0, maxLength - footer.length)}${footer}`;
+  }
+
+  private async offerPostAdoReviewSummary(
+    adoParts: NonNullable<ReturnType<typeof parseAdoPrUrl>>,
+    result: string,
+  ): Promise<void> {
+    const choice = await vscode.window.showInformationMessage(
+      'AI Code Review: Post this review summary as an Azure DevOps PR comment?',
+      { modal: true },
+      'Post Comment',
+    );
+    if (choice !== 'Post Comment') {
+      return;
+    }
+
+    try {
+      await new AdoPrClient().postThread(adoParts, { content: this.formatAdoReviewComment(result) });
+      vscode.window.showInformationMessage('AI Code Review: Posted review summary to Azure DevOps.');
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      this.log.error(`Failed to post ADO review summary: ${msg}`);
+      vscode.window.showWarningMessage(`AI Code Review: Failed to post Azure DevOps comment — ${msg}`);
+    }
   }
 
   /**

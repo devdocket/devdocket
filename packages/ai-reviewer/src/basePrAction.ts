@@ -1,27 +1,12 @@
 import * as vscode from 'vscode';
 import type { WorkItem, DevDocketAction } from './types';
-import { parsePrUrl } from './prUrl';
+import { parseAdoPrUrl, parsePullRequestUrl, parsePrUrl } from './prUrl';
+import { AdoPrClient } from './adoPrClient';
 import { confirmAiUsage } from './confirmAiUsage';
 import { fenceDiff } from './diffFence';
+import { sanitizePrUrl } from './promptSanitization';
 
-/**
- * Sanitize a URL before interpolating it into an LLM prompt.
- * Ensures the URL uses http(s) and strips characters that could
- * break prompt structure (newlines, backticks). Does not validate
- * that the URL points to a GitHub PR — use parsePrUrl for that.
- */
-export function sanitizePrUrl(url: string): string {
-  try {
-    const parsed = new URL(url);
-    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
-      return '(URL unavailable)';
-    }
-    // Strip newlines, carriage returns, and backticks that could break prompt structure
-    return parsed.href.replace(/[\r\n`]/g, '');
-  } catch {
-    return '(URL unavailable)';
-  }
-}
+export { sanitizePrUrl };
 
 /**
  * Base class for PR-based AI actions (code review, walkthrough, etc.).
@@ -58,7 +43,7 @@ export abstract class BasePrAction implements DevDocketAction {
   }
 
   isPrUrl(url: string): boolean {
-    return this.parseGitHubPrUrl(url) !== undefined;
+    return parsePullRequestUrl(url) !== undefined;
   }
 
   /** Parse a GitHub PR URL, returning repo and PR number or undefined. */
@@ -87,10 +72,16 @@ export abstract class BasePrAction implements DevDocketAction {
 
   async fetchDiff(url: string): Promise<string | undefined> {
     try {
-      const parsed = this.parseGitHubPrUrl(url);
-      if (parsed) {
-        return await this.fetchGitHubDiff(parsed.repo, parsed.prNumber);
+      const github = this.parseGitHubPrUrl(url);
+      if (github) {
+        return await this.fetchGitHubDiff(github.repo, github.prNumber);
       }
+
+      const ado = parseAdoPrUrl(url);
+      if (ado) {
+        return await new AdoPrClient().fetchDiff(ado);
+      }
+
       return undefined;
     } catch (err) {
       console.error(`${this.progressTitle}: failed to fetch diff:`, err);
