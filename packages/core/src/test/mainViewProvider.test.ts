@@ -439,6 +439,26 @@ describe('MainViewProvider', () => {
     });
   });
 
+  it('handles onboarding command messages through the webview message switch', async () => {
+    vi.useFakeTimers();
+    const provider = createProvider(
+      createMockWorkGraph(),
+      createProviderRegistry({}),
+      createStateStore(),
+    );
+    const mockView = createMockWebviewView();
+
+    provider.resolveWebviewView(mockView.view, {} as any, {} as any);
+    await vi.advanceTimersByTimeAsync(50);
+    vi.clearAllMocks();
+
+    await mockView.simulateMessage({ type: 'createItem' });
+    await mockView.simulateMessage({ type: 'openWalkthrough' });
+
+    expect(vscode.commands.executeCommand).toHaveBeenCalledWith('devdocket.createItem');
+    expect(vscode.commands.executeCommand).toHaveBeenCalledWith('devdocket.openWalkthrough');
+  });
+
   it('handles reorderItems messages through the webview message switch', async () => {
     vi.useFakeTimers();
     const workGraph = createMockWorkGraph([
