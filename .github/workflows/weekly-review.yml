@@ -1,5 +1,10 @@
 name: Weekly Review
 
+# Authentication: this workflow runs GitHub Copilot CLI in programmatic mode.
+# Configure the shared COPILOT_CLI_PAT repository secret with a licensed Copilot
+# user's PAT that can make Copilot requests and create issues. Rotate that one
+# secret when the service identity changes; both COPILOT_GITHUB_TOKEN and GH_TOKEN
+# are sourced from it so Copilot CLI and gh authenticate as the same identity.
 on:
   # Run every Monday at 9:00 AM UTC
   schedule:
@@ -13,61 +18,45 @@ concurrency:
   cancel-in-progress: true
 
 permissions:
-  issues: write
   contents: read
+  issues: write
 
 jobs:
   expert-review:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-
-      - name: Build issue body
-        id: build-body
-        uses: actions/github-script@v7
+      - name: Checkout
+        uses: actions/checkout@v4
         with:
-          script: |
-            const dateStr = new Date().toISOString().slice(0, 10);
+          fetch-depth: 0
 
-            const body = [
-              '### 🔍 Automated Weekly Code Review',
-              '',
-              'This issue tracks the weekly automated expert review of the codebase.',
-              '',
-              '**Review Scope:**',
-              '- Implementation patterns and architectural decisions',
-              '- Resource lifecycle and API correctness',
-              '- Product decisions and UX model',
-              '- VS Code extension best practices',
-              '',
-              '**Instructions for the Copilot coding agent (`copilot-swe-agent[bot]`):**',
-              '',
-              "First, review the latest VS Code extension API documentation (https://code.visualstudio.com/api) to understand the full set of platform capabilities available. Then, act as a senior VS Code extension developer reviewing this codebase for the first time. Identify concrete areas where you disagree with the implementation approach or product decisions — not style nits, but structural decisions that create real maintenance burden, correctness risks, or violate VS Code extension best practices. Before reporting a finding, check the GitHub issue tracker (open and closed) to see if it's already been filed. Skip anything already tracked. For each finding: name the pattern/decision, point to specific files, explain the concrete downside, describe what you'd do instead. Focus areas: implementation (resource lifecycle, API correctness, storage, code organization, platform API usage) and product (feature set, complexity, workflows, missing capabilities, UX model vs VS Code conventions). Skip linting-level concerns, naming preferences, and anything working fine.",
-              '',
-              '**Note:** Issue de-duplication and per-finding issue creation are handled entirely by the agent — the workflow only creates this tracking issue and assigns it.'
-            ].join('\n');
+      - name: Set up Node.js environment
+        uses: actions/setup-node@v4
 
-            core.setOutput('body', body);
-            core.setOutput('title', `Weekly Expert Codebase Review — ${dateStr}`);
+      - name: Install Copilot CLI
+        run: npm install -g @github/copilot
 
-      - name: Create issue and assign Copilot agent
-        id: create-issue
-        uses: ./.github/actions/create-copilot-issue
-        with:
-          issue-title: ${{ steps.build-body.outputs.title }}
-          issue-body: ${{ steps.build-body.outputs.body }}
-          issue-labels: 'weekly-review,go:needs-research'
-          dedup-labels: 'weekly-review'
-          dedup-title: ${{ steps.build-body.outputs.title }}
-          custom-instructions: |
-            Read AGENTS.md for project architecture and conventions, and .squad/team.md for team context. Focus on creating separate issues for each novel finding. Before creating an issue, search both open and closed issues to avoid duplicates.
-          copilot-assign-token: ${{ secrets.COPILOT_ASSIGN_TOKEN }}
-          github-token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Run weekly review
+        env:
+          # Shared PAT for both Copilot CLI and gh. Rotate COPILOT_CLI_PAT instead
+          # of configuring workflow-specific tokens.
+          COPILOT_GITHUB_TOKEN: ${{ secrets.COPILOT_CLI_PAT }}
+          GH_TOKEN: ${{ secrets.COPILOT_CLI_PAT }}
+        run: |
+          set -o pipefail
+          copilot -p "$(cat .github/prompts/weekly-review.md)" \
+            --model claude-opus-4.7 \
+            --allow-tool='shell(gh:*)' \
+            --allow-tool='shell(git:*)' \
+            --allow-tool=read \
+            --no-ask-user | tee weekly-review.log
 
       - name: Summary
+        if: always()
         run: |
-          if [ "${{ steps.create-issue.outputs.created }}" = "false" ]; then
-            echo "ℹ️ Weekly code review tracking issue #${{ steps.create-issue.outputs.issue-number }} already existed and was reused"
+          count="$(grep -Eo 'WEEKLY_REVIEW_ISSUES_CREATED=[0-8]' weekly-review.log 2>/dev/null | tail -n 1 | cut -d= -f2 || true)"
+          if [ -z "$count" ]; then
+            echo "⚠️ Weekly review completed, but no issue-count marker was found." >> "$GITHUB_STEP_SUMMARY"
           else
-            echo "✅ Weekly code review tracking issue #${{ steps.create-issue.outputs.issue-number }} created and assigned to copilot-swe-agent[bot]"
+            echo "Weekly review issues created: $count" >> "$GITHUB_STEP_SUMMARY"
           fi
