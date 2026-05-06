@@ -21,6 +21,10 @@ export abstract class BaseGitHubProvider extends BaseProvider {
     };
   }
 
+  protected getAuthenticationScopes(): string[] {
+    return ['repo'];
+  }
+
   async refresh(token?: vscode.CancellationToken): Promise<void> {
     if (this._isRefreshing) {
       return;
@@ -36,13 +40,13 @@ export abstract class BaseGitHubProvider extends BaseProvider {
 
       let session: vscode.AuthenticationSession | undefined;
       try {
-        session = await vscode.authentication.getSession('github', ['repo'], {
+        session = await vscode.authentication.getSession('github', this.getAuthenticationScopes(), {
           createIfNone: true,
         });
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
         logger.error('GitHub authentication failed', err);
-        vscode.window.showWarningMessage(`DevDocket GitHub: Authentication failed — ${message}`);
+        void vscode.window.showWarningMessage(`DevDocket GitHub: Authentication failed — ${message}`);
         return;
       }
 
@@ -69,7 +73,7 @@ export abstract class BaseGitHubProvider extends BaseProvider {
   protected async doBackgroundRefresh(): Promise<void> {
     let session: vscode.AuthenticationSession | undefined;
     try {
-      session = await vscode.authentication.getSession('github', ['repo'], {
+      session = await vscode.authentication.getSession('github', this.getAuthenticationScopes(), {
         createIfNone: false,
       });
     } catch (err) {

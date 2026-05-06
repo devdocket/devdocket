@@ -40,6 +40,8 @@ For detailed view behavior, keyboard shortcuts, and configuration options, see t
 
 ## Installation
 
+DevDocket's core, provider, and git-worktree extensions require VS Code 1.92.0 or later. The AI reviewer extension requires VS Code 1.96.0 or later.
+
 DevDocket is not yet available on the VS Code Marketplace. To run it, build from source:
 
 1. **Clone the repository:**

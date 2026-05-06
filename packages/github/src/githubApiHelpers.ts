@@ -9,6 +9,9 @@ export interface GitHubIssue {
   state?: string;
   html_url: string;
   repository_url: string;
+  comments_url?: string;
+  comments?: number;
+  updated_at?: string;
   pull_request?: { url: string };
 }
 
