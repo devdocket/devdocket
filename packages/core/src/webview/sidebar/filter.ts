@@ -1,12 +1,7 @@
 import type { SourceProviderData, TierData } from '../shared/types';
 
 export function matchesQuery(text: string, query: string): boolean {
-  const normalizedQuery = normalizeQuery(query);
-  if (!normalizedQuery) {
-    return true;
-  }
-
-  return text.toLowerCase().includes(normalizedQuery);
+  return matchesNormalizedQuery(text, normalizeQuery(query));
 }
 
 export function filterTiers(tiers: TierData[], query: string): { tiers: TierData[]; totalCounts: Map<string, number> } {
@@ -26,7 +21,8 @@ export function filterTiers(tiers: TierData[], query: string): { tiers: TierData
       .map(tier => ({
         ...tier,
         items: tier.items.filter(item =>
-          matchesQuery(item.title, normalizedQuery) || (item.repoAnnotation ? matchesQuery(item.repoAnnotation, normalizedQuery) : false),
+          matchesNormalizedQuery(item.title, normalizedQuery)
+          || (item.repoAnnotation ? matchesNormalizedQuery(item.repoAnnotation, normalizedQuery) : false),
         ),
       }))
       .filter(tier => tier.items.length > 0),
@@ -58,9 +54,9 @@ export function filterProviders(
         ...provider,
         groups: provider.groups
           .map(group => {
-            const items = matchesQuery(group.name, normalizedQuery)
+            const items = matchesNormalizedQuery(group.name, normalizedQuery)
               ? group.items
-              : group.items.filter(item => matchesQuery(item.title, normalizedQuery));
+              : group.items.filter(item => matchesNormalizedQuery(item.title, normalizedQuery));
 
             return { ...group, items };
           })
@@ -102,6 +98,14 @@ export function splitOnMatches(text: string, query: string): Array<{ text: strin
 
 export function getGroupTotalCountKey(providerId: string, groupName: string): string {
   return `${providerId}\u0000${groupName}`;
+}
+
+function matchesNormalizedQuery(text: string, normalizedQuery: string): boolean {
+  if (!normalizedQuery) {
+    return true;
+  }
+
+  return text.toLowerCase().includes(normalizedQuery);
 }
 
 function normalizeQuery(query: string): string {
