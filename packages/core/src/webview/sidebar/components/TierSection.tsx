@@ -57,7 +57,11 @@ export function TierSection({
   const isReorderableTier = !disableDragReorder && (tier.id === 'ready-to-start' || tier.id === 'in-progress');
   const isCollapsed = forceExpanded ? false : collapsed;
   const countLabel = totalCount === undefined ? `(${tier.items.length})` : `(${tier.items.length} of ${totalCount})`;
-  const toggleCollapsed = () => setCollapsed(value => !value);
+  const toggleCollapsed = () => {
+    if (!forceExpanded) {
+      setCollapsed(value => !value);
+    }
+  };
   const itemCountLabel = `${tier.name}, ${tier.items.length} item${tier.items.length === 1 ? '' : 's'}`;
   const itemsId = `mission-control-tier-${tier.id}`;
 
