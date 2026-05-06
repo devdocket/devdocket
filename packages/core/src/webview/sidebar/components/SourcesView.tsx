@@ -1,5 +1,6 @@
 import { useState } from 'preact/hooks';
 import type { SourceGroupData, SourceProviderData } from '../../shared/types';
+import { OnboardingEmptyState } from './OnboardingEmptyState';
 import { SourceItem } from './SourceItem';
 
 interface SourcesViewProps {
@@ -10,7 +11,14 @@ interface SourcesViewProps {
 
 export function SourcesView({ providers, onOpenItem, onShowProviderHealth }: SourcesViewProps) {
   if (providers.length === 0) {
-    return <div class="empty-state">No sources yet</div>;
+    return (
+      <div class="sources-tab">
+        <OnboardingEmptyState
+          titleId="sources-empty-state-title"
+          description="Create a work item manually, or install a provider extension to populate Sources with GitHub issues, Azure DevOps tasks, PR reviews, and more."
+        />
+      </div>
+    );
   }
 
   return (
