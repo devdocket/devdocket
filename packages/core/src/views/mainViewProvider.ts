@@ -429,6 +429,9 @@ export class MainViewProvider implements vscode.WebviewViewProvider {
         }
         break;
       }
+      case 'showProviderHealth':
+        await vscode.commands.executeCommand('devdocket.showProviderHealthQuickPick');
+        break;
       case 'acceptItem':
         await this.handleAcceptItem(message.providerId, message.externalId);
         break;
@@ -840,10 +843,16 @@ export class MainViewProvider implements vscode.WebviewViewProvider {
     .source-provider.unhealthy {
       border-left-color: var(--vscode-problemsWarningIcon-foreground, var(--vscode-editorWarning-foreground));
     }
-    .source-provider-header,
-    .source-group-header {
+    .source-provider-header {
       width: 100%;
       display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .source-group-header,
+    .source-provider-toggle-button,
+    .health-warning-button {
+      display: inline-flex;
       align-items: center;
       gap: 6px;
       background: transparent;
@@ -853,6 +862,12 @@ export class MainViewProvider implements vscode.WebviewViewProvider {
       padding: 0;
       text-align: left;
       font: inherit;
+    }
+    .source-group-header {
+      width: 100%;
+    }
+    .source-provider-title-button {
+      min-width: 0;
     }
     .source-provider-title,
     .source-group-title {
@@ -935,6 +950,14 @@ export class MainViewProvider implements vscode.WebviewViewProvider {
     .source-empty {
       color: var(--vscode-descriptionForeground);
       font-style: italic;
+    }
+    .health-warning-button {
+      line-height: inherit;
+    }
+    .health-warning-button:focus-visible {
+      outline: 1px solid var(--vscode-focusBorder);
+      outline-offset: 2px;
+      border-radius: 2px;
     }
     .health-warning {
       color: var(--vscode-problemsWarningIcon-foreground, var(--vscode-editorWarning-foreground));

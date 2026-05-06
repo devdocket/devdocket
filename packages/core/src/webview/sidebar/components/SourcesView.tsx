@@ -5,9 +5,10 @@ import { SourceItem } from './SourceItem';
 interface SourcesViewProps {
   providers: SourceProviderData[];
   onOpenItem: (providerId: string, externalId: string) => void;
+  onShowProviderHealth: (providerId: string) => void;
 }
 
-export function SourcesView({ providers, onOpenItem }: SourcesViewProps) {
+export function SourcesView({ providers, onOpenItem, onShowProviderHealth }: SourcesViewProps) {
   if (providers.length === 0) {
     return <div class="empty-state">No sources yet</div>;
   }
@@ -20,6 +21,7 @@ export function SourcesView({ providers, onOpenItem }: SourcesViewProps) {
             key={provider.providerId}
             provider={provider}
             onOpenItem={onOpenItem}
+            onShowProviderHealth={onShowProviderHealth}
           />
         ))}
       </div>
@@ -30,9 +32,10 @@ export function SourcesView({ providers, onOpenItem }: SourcesViewProps) {
 interface ProviderSectionProps {
   provider: SourceProviderData;
   onOpenItem: (providerId: string, externalId: string) => void;
+  onShowProviderHealth: (providerId: string) => void;
 }
 
-function ProviderSection({ provider, onOpenItem }: ProviderSectionProps) {
+function ProviderSection({ provider, onOpenItem, onShowProviderHealth }: ProviderSectionProps) {
   const [collapsed, setCollapsed] = useState(false);
   const itemCount = provider.groups.reduce((total, group) => total + group.items.length, 0);
 
@@ -42,21 +45,38 @@ function ProviderSection({ provider, onOpenItem }: ProviderSectionProps) {
       role="group"
       aria-label={provider.label}
     >
-      <button
-        type="button"
-        class="source-provider-header"
-        onClick={() => setCollapsed(value => !value)}
-        aria-expanded={!collapsed}
-      >
+      <div class="source-provider-header">
         <span class="source-provider-title">
-          <span>{provider.label}</span>
-          {!provider.isHealthy ? <span class="health-warning" aria-label="Provider unhealthy">⚠</span> : null}
+          <button
+            type="button"
+            class="source-provider-toggle-button source-provider-title-button"
+            onClick={() => setCollapsed(value => !value)}
+            aria-expanded={!collapsed}
+          >
+            <span>{provider.label}</span>
+          </button>
+          {!provider.isHealthy ? (
+            <button
+              type="button"
+              class="health-warning health-warning-button"
+              onClick={() => onShowProviderHealth(provider.providerId)}
+              aria-label={`Provider ${provider.label} unhealthy — click for details`}
+            >
+              ⚠
+            </button>
+          ) : null}
         </span>
-        <span class="source-provider-meta">
+        <button
+          type="button"
+          class="source-provider-toggle-button source-provider-meta"
+          onClick={() => setCollapsed(value => !value)}
+          aria-expanded={!collapsed}
+          aria-label={`${collapsed ? 'Expand' : 'Collapse'} ${provider.label} source items`}
+        >
           <span>({itemCount})</span>
           <span class="source-provider-toggle" aria-hidden="true">{collapsed ? '▸' : '▾'}</span>
-        </span>
-      </button>
+        </button>
+      </div>
       {!collapsed ? (
         <div class="source-provider-groups">
           {provider.groups.length === 0 ? (

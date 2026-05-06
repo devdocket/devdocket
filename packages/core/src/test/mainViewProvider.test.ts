@@ -439,6 +439,20 @@ describe('MainViewProvider', () => {
     });
   });
 
+  it('handles provider health messages through the webview message switch', async () => {
+    vi.useFakeTimers();
+    const provider = createProvider(createMockWorkGraph(), createProviderRegistry({}), createStateStore());
+    const mockView = createMockWebviewView();
+
+    provider.resolveWebviewView(mockView.view, {} as any, {} as any);
+    await vi.advanceTimersByTimeAsync(50);
+    vi.clearAllMocks();
+
+    await mockView.simulateMessage({ type: 'showProviderHealth', providerId: 'github-issues' });
+
+    expect(vscode.commands.executeCommand).toHaveBeenCalledWith('devdocket.showProviderHealthQuickPick');
+  });
+
   it('handles reorderItems messages through the webview message switch', async () => {
     vi.useFakeTimers();
     const workGraph = createMockWorkGraph([

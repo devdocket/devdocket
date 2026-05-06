@@ -10,6 +10,7 @@ export type ExtensionMessage =
 export type WebviewMessage =
   | { type: 'openItem'; itemId: string; providerId?: string; externalId?: string }
   | { type: 'openSourceItem'; providerId: string; externalId: string }
+  | { type: 'showProviderHealth'; providerId: string }
   | { type: 'acceptItem'; providerId: string; externalId: string }
   | { type: 'acceptToFocus'; providerId: string; externalId: string }
   | { type: 'acceptAll' }
