@@ -17,6 +17,7 @@ export type WebviewMessage =
   | { type: 'transitionState'; itemId: string; targetState: string }
   | { type: 'reorderItems'; itemIds: string[] }
   | { type: 'createItem' }
+  | { type: 'openWalkthrough' }
   | { type: 'clearHistory' }
   | { type: 'runAction'; itemId: string }
   | { type: 'openUrl'; url: string }
