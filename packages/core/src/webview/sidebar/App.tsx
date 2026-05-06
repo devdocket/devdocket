@@ -131,6 +131,10 @@ export function App() {
   const clearQuery = (tab: SidebarTab) => {
     setQueries(current => ({ ...current, [tab]: '' }));
     setAppliedQueries(current => ({ ...current, [tab]: '' }));
+    if (announcementFrameRef.current !== undefined) {
+      cancelAnimationFrame(announcementFrameRef.current);
+      announcementFrameRef.current = undefined;
+    }
     setAnnouncement('');
   };
 
