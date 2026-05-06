@@ -307,6 +307,16 @@ describe('WorkItemEditorPanel', () => {
     expect(workGraph.updateItem).toHaveBeenCalledWith('item-1', { notes: 'Draft note' });
   });
 
+  it('handles a single title-link URL message exactly once', async () => {
+    const item = makeItem({ url: 'https://example.com/item/1' });
+    const { mock } = openPanel(item);
+
+    await mock.simulateMessage({ type: 'openUrl', url: 'https://example.com/item/1' });
+
+    expect(vscode.env.openExternal).toHaveBeenCalledTimes(1);
+    expect(vscode.Uri.parse).toHaveBeenCalledWith('https://example.com/item/1');
+  });
+
   it('opens safe external URLs and ignores unsafe ones', async () => {
     const item = makeItem();
     const { mock } = openPanel(item);
