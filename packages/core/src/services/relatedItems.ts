@@ -134,11 +134,21 @@ function upsertResolved(
   resolved: Map<string, ResolvedRelatedItemWithSort>,
   item: ResolvedRelatedItemWithSort,
 ): void {
-  const key = `${item.targetKind}\0${item.targetItemId}`;
+  const key = `${item.itemType}\0${item.externalId}`;
   const existing = resolved.get(key);
-  if (!existing || (existing.relation === 'linked' && item.relation === 'closes')) {
+  if (!existing || isPreferredResolvedItem(item, existing)) {
     resolved.set(key, item);
   }
+}
+
+function isPreferredResolvedItem(
+  candidate: ResolvedRelatedItemWithSort,
+  existing: ResolvedRelatedItemWithSort,
+): boolean {
+  if (candidate.targetKind !== existing.targetKind) {
+    return candidate.targetKind === 'workItem';
+  }
+  return existing.relation === 'linked' && candidate.relation === 'closes';
 }
 
 function compareResolvedItems(left: ResolvedRelatedItemWithSort, right: ResolvedRelatedItemWithSort): number {

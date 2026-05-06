@@ -150,6 +150,20 @@ describe('resolveRelatedItemsFor', () => {
     ]);
   });
 
+  it('dedupes duplicate related items by type and externalId and prefers WorkItems', () => {
+    const issue = makeWorkItem({ id: 'issue-1', providerId: 'github-issues', externalId: 'owner/repo#2' });
+    const acceptedPr = makeWorkItem({ id: 'accepted-pr', providerId: 'github-my-prs', externalId: 'owner/repo#10' });
+    const registry = makeRegistry(new Map([
+      ['github-issues', [{ externalId: 'owner/repo#2', title: 'Issue', itemType: 'issue' }]],
+      ['github-pr-review', [{ externalId: 'owner/repo#10', title: 'Review PR', itemType: 'pr', relatedItems: [{ externalId: 'owner/repo#2', itemType: 'issue', relation: 'linked' }] }]],
+      ['github-my-prs', [{ externalId: 'owner/repo#10', title: 'My PR', itemType: 'pr', relatedItems: [{ externalId: 'owner/repo#2', itemType: 'issue', relation: 'linked' }] }]],
+    ]));
+
+    expect(resolveRelatedItemsFor(issue, registry, makeWorkGraph([issue, acceptedPr]))).toEqual([
+      { targetItemId: 'accepted-pr', targetKind: 'workItem', label: 'Linked to owner/repo#10', relation: 'linked', itemType: 'pr' },
+    ]);
+  });
+
   it('does not match refs with the same externalId but a different itemType', () => {
     const issue = makeWorkItem({ id: 'issue-1', providerId: 'github-issues', externalId: 'owner/repo#5' });
     const registry = makeRegistry(new Map([
