@@ -3,6 +3,7 @@ import * as vscode from 'vscode';
 import { MockMemento } from 'vscode';
 import { activate, autoWatchAuthoredPRs, deactivate, logger } from '../extension';
 import { ReadStateStore } from '../storage/readStateStore';
+import { ProviderRegistry } from '../services/providerRegistry';
 import { MainViewProvider } from '../views/mainViewProvider';
 import { WatchPanelProvider } from '../views/watchPanelProvider';
 import { WorkItemEditorPanel } from '../views/workItemEditorPanel';
@@ -249,6 +250,95 @@ describe('activate()', () => {
       ]);
     } finally {
       pruneSpy.mockRestore();
+    }
+  });
+
+  it('scopes prune to the provider that emitted the refresh signal', async () => {
+    const globalState = context.globalState as InstanceType<typeof MockMemento>;
+    await globalState.update('devdocket.migrated', true);
+    const pruneSpy = vi.spyOn(ReadStateStore.prototype, 'prune');
+
+    try {
+      const api = await activate(context);
+      const otherEmitter = new (vscode.EventEmitter as any)();
+      const refreshedEmitter = new (vscode.EventEmitter as any)();
+      const otherItem = { externalId: 'other-active', title: 'Other Active' };
+      const refreshedItem = { externalId: 'refreshed-active', title: 'Refreshed Active' };
+
+      api.registerProvider({
+        id: 'other-provider',
+        label: 'Other Provider',
+        onDidDiscoverItems: otherEmitter.event,
+        refresh: vi.fn(async () => {
+          otherEmitter.fire([otherItem]);
+        }),
+      } as any);
+
+      await vi.waitFor(() => expect(pruneSpy).toHaveBeenCalled());
+      pruneSpy.mockClear();
+
+      api.registerProvider({
+        id: 'refreshed-provider',
+        label: 'Refreshed Provider',
+        onDidDiscoverItems: refreshedEmitter.event,
+        refresh: vi.fn(async () => {
+          refreshedEmitter.fire([refreshedItem]);
+        }),
+      } as any);
+
+      await vi.waitFor(() => expect(pruneSpy).toHaveBeenCalled());
+
+      const active = pruneSpy.mock.calls.at(-1)?.[0] as Map<string, unknown[]>;
+      expect([...active.keys()]).toEqual(['refreshed-provider']);
+      expect(active.get('refreshed-provider')).toEqual([refreshedItem]);
+      expect(active.has('other-provider')).toBe(false);
+    } finally {
+      pruneSpy.mockRestore();
+    }
+  });
+
+  it('skips prune after a truncated provider refresh', async () => {
+    const globalState = context.globalState as InstanceType<typeof MockMemento>;
+    await globalState.update('devdocket.migrated', true);
+    await globalState.update('devdocket.discovered-state', [
+      { providerId: 'truncated-provider', externalId: 'stale', inboxState: 'accepted' },
+    ]);
+    await globalState.update('devdocket.read-state', ['truncated-provider::stale']);
+    const originalMaxItems = ProviderRegistry.MAX_ITEMS_PER_PROVIDER;
+    const pruneSpy = vi.spyOn(ReadStateStore.prototype, 'prune');
+
+    try {
+      Object.defineProperty(ProviderRegistry, 'MAX_ITEMS_PER_PROVIDER', { value: 2, configurable: true });
+
+      const api = await activate(context);
+      const itemEmitter = new (vscode.EventEmitter as any)();
+
+      api.registerProvider({
+        id: 'truncated-provider',
+        label: 'Truncated Provider',
+        onDidDiscoverItems: itemEmitter.event,
+        refresh: vi.fn(async () => {
+          itemEmitter.fire([
+            { externalId: 'one', title: 'One' },
+            { externalId: 'two', title: 'Two' },
+            { externalId: 'three', title: 'Three' },
+          ]);
+        }),
+      } as any);
+
+      await vi.waitFor(() => {
+        const records = globalState.get<Array<{ providerId: string; externalId: string }>>('devdocket.discovered-state') ?? [];
+        expect(records.some(record => record.providerId === 'truncated-provider' && record.externalId === 'one')).toBe(true);
+      });
+      await flushMicrotasks();
+
+      expect(pruneSpy).not.toHaveBeenCalled();
+      expect(globalState.get<string[]>('devdocket.read-state')).toEqual(['truncated-provider::stale']);
+      const discoveredRecords = globalState.get<Array<{ providerId: string; externalId: string }>>('devdocket.discovered-state') ?? [];
+      expect(discoveredRecords.some(record => record.providerId === 'truncated-provider' && record.externalId === 'stale')).toBe(true);
+    } finally {
+      pruneSpy.mockRestore();
+      Object.defineProperty(ProviderRegistry, 'MAX_ITEMS_PER_PROVIDER', { value: originalMaxItems, configurable: true });
     }
   });
 
