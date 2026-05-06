@@ -89,14 +89,23 @@ function resolveRef(
   discoveredItems: Map<string, DiscoveredItem[]>,
   workGraph: WorkGraph,
 ): ResolvedRelatedItemWithSort | undefined {
+  let fallback: ResolvedRelatedItemWithSort | undefined;
   for (const [providerId, items] of discoveredItems) {
     const match = items.find(candidate => candidate.externalId === ref.externalId && candidate.itemType === ref.itemType);
     if (!match) {
       continue;
     }
-    return resolveDiscoveredTarget(providerId, match.externalId, ref.itemType, ref.relation, workGraph);
+
+    const target = resolveDiscoveredTarget(providerId, match.externalId, ref.itemType, ref.relation, workGraph);
+    if (!target) {
+      continue;
+    }
+    if (target.targetKind === 'workItem') {
+      return target;
+    }
+    fallback ??= target;
   }
-  return undefined;
+  return fallback;
 }
 
 function resolveDiscoveredTarget(

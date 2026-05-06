@@ -69,6 +69,20 @@ describe('resolveRelatedItemsFor', () => {
     ]);
   });
 
+  it('prefers a discovered target that maps to a WorkItem over an earlier Sources match', () => {
+    const pr = makeWorkItem({ id: 'pr-1', providerId: 'github-my-prs', externalId: 'owner/repo#10' });
+    const issue = makeWorkItem({ id: 'issue-1', providerId: 'github-issues', externalId: 'owner/repo#2' });
+    const registry = makeRegistry(new Map([
+      ['github-my-prs', [{ externalId: 'owner/repo#10', title: 'PR', itemType: 'pr', relatedItems: [{ externalId: 'owner/repo#2', itemType: 'issue', relation: 'closes' }] }]],
+      ['github-mentions', [{ externalId: 'owner/repo#2', title: 'Mentioned issue', itemType: 'issue' }]],
+      ['github-issues', [{ externalId: 'owner/repo#2', title: 'Assigned issue', itemType: 'issue' }]],
+    ]));
+
+    expect(resolveRelatedItemsFor(pr, registry, makeWorkGraph([pr, issue]))).toEqual([
+      { targetItemId: 'issue-1', targetKind: 'workItem', label: 'Closes owner/repo#2', relation: 'closes', itemType: 'issue' },
+    ]);
+  });
+
   it('drops strict misses when no provider has discovered the other side', () => {
     const pr = makeWorkItem({ id: 'pr-1', providerId: 'github-my-prs', externalId: 'owner/repo#10' });
     const registry = makeRegistry(new Map([
