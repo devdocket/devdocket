@@ -104,6 +104,7 @@ export interface AcceptableItem {
   externalId: string;
   title: string;
   description?: string;
+  itemType?: 'issue' | 'pr';
   url?: string;
   group?: string;
 }
