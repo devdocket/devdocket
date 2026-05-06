@@ -178,7 +178,7 @@ export function ItemCard({
           <div class="item-title-wrap">
             {item.isUnseen ? <span class="unseen-dot" aria-hidden="true">●</span> : null}
             <span class="item-title">{item.title}</span>
-            {item.hasRelatedItems ? <span class="related-indicator" aria-label="has related items">🔗</span> : null}
+            {item.hasRelatedItems ? <span class="related-indicator" aria-hidden="true">🔗</span> : null}
           </div>
         </div>
         {item.repoAnnotation ? (
