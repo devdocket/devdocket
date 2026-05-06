@@ -56,6 +56,11 @@ function ProviderSection({ provider, onOpenItem, forceExpanded, totalCount, tota
   const itemCount = provider.groups.reduce((total, group) => total + group.items.length, 0);
   const isCollapsed = forceExpanded ? false : collapsed;
   const countLabel = totalCount === undefined ? `(${itemCount})` : `(${itemCount} of ${totalCount})`;
+  const toggleCollapsed = () => {
+    if (!forceExpanded) {
+      setCollapsed(value => !value);
+    }
+  };
 
   return (
     <section
@@ -66,7 +71,7 @@ function ProviderSection({ provider, onOpenItem, forceExpanded, totalCount, tota
       <button
         type="button"
         class="source-provider-header"
-        onClick={() => setCollapsed(value => !value)}
+        onClick={toggleCollapsed}
         aria-expanded={!isCollapsed}
       >
         <span class="source-provider-title">
