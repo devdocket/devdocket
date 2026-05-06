@@ -37,12 +37,13 @@ export function resolveRelatedItemsFor(
   }
 
   const indexKey = getRelatedItemsIndexKey(item.providerId, item.externalId);
-  if (relatedItemsIndex) {
-    return relatedItemsIndex.get(indexKey) ?? [];
+  const precomputed = relatedItemsIndex?.get(indexKey);
+  if (precomputed) {
+    return precomputed;
   }
 
   const discoveredItems = registry.getAllDiscoveredItems();
-  const indexed = buildRelatedItemsIndexForDiscovered(discoveredItems, workGraph).get(indexKey);
+  const indexed = relatedItemsIndex ? undefined : buildRelatedItemsIndexForDiscovered(discoveredItems, workGraph).get(indexKey);
   if (indexed) {
     return indexed;
   }

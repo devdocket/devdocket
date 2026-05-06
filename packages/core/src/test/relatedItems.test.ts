@@ -208,4 +208,18 @@ describe('resolveRelatedItemsFor', () => {
     ]);
     expect(registry.getAllDiscoveredItems).not.toHaveBeenCalled();
   });
+
+  it('falls back to persisted itemType for reverse refs when an indexed WorkItem is no longer discovered', () => {
+    const issue = makeWorkItem({ id: 'issue-1', providerId: 'github-issues', externalId: 'owner/repo#2', itemType: 'issue' });
+    const pr = makeWorkItem({ id: 'pr-1', providerId: 'github-my-prs', externalId: 'owner/repo#10' });
+    const registry = makeRegistry(new Map([
+      ['github-my-prs', [{ externalId: 'owner/repo#10', title: 'PR', itemType: 'pr', relatedItems: [{ externalId: 'owner/repo#2', itemType: 'issue', relation: 'closes' }] }]],
+    ]));
+    const workGraph = makeWorkGraph([issue, pr]);
+    const index = buildRelatedItemsIndex(registry, workGraph);
+
+    expect(resolveRelatedItemsFor(issue, registry, workGraph, index)).toEqual([
+      { targetItemId: 'pr-1', targetKind: 'workItem', label: 'Closes owner/repo#10', relation: 'closes', itemType: 'pr' },
+    ]);
+  });
 });

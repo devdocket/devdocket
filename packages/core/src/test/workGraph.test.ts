@@ -366,6 +366,16 @@ describe('WorkGraph', () => {
       expect(found!.id).toBe(item.id);
     });
 
+    it('persists provider item type from provenance', async () => {
+      const item = await graph.createItem(
+        { title: 'Indexed issue' },
+        { providerId: 'github', externalId: '42', itemType: 'issue' },
+      );
+
+      expect(item.itemType).toBe('issue');
+      expect(store.save).toHaveBeenCalledWith(expect.objectContaining({ id: item.id, itemType: 'issue' }));
+    });
+
     it('returns undefined for unknown provenance', () => {
       const found = graph.findItemByProvenance('github', 'missing');
       expect(found).toBeUndefined();

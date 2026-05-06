@@ -535,6 +535,7 @@ export class MainViewProvider implements vscode.WebviewViewProvider {
           {
             providerId,
             externalId,
+            itemType: discoveredItem.itemType,
             url: discoveredItem.url,
             ...(discoveredItem.group ? { group: discoveredItem.group } : {}),
           },

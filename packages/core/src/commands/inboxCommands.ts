@@ -232,6 +232,7 @@ async function acceptSingleInboxItem(
       {
         providerId: item.providerId,
         externalId: item.externalId,
+        itemType: item.itemType,
         url: item.url,
         ...(group ? { group } : {}),
       },

@@ -463,6 +463,7 @@ export class WorkItemEditorPanel {
           {
             providerId,
             externalId,
+            itemType: discoveredItem.itemType,
             url: discoveredItem.url,
             ...(discoveredItem.group ? { group: discoveredItem.group } : {}),
           },
