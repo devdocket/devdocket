@@ -8,8 +8,8 @@ Act as a senior VS Code extension developer reviewing this codebase for the firs
 
 ## Required context
 
-1. Read the latest VS Code extension API documentation before evaluating the codebase: <https://code.visualstudio.com/api>.
-2. Read the VS Code extension API reference for exact platform behavior: <https://code.visualstudio.com/api/references/vscode-api>.
+1. Use your built-in knowledge of the VS Code extension API documentation when evaluating the codebase; treat <https://code.visualstudio.com/api> as a reference link only.
+2. Use your built-in knowledge of the VS Code extension API reference for platform behavior; treat <https://code.visualstudio.com/api/references/vscode-api> as a reference link only.
 3. If `AGENTS.md` exists, read it for project architecture, conventions, and GitHub posting safety rules.
 4. If `.squad/team.md` exists, read it for team context.
 5. Inspect the repository enough to understand the core extension, provider extensions, action extensions, shared API surface, and persisted storage model.

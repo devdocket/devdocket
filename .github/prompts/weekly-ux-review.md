@@ -8,8 +8,8 @@ Act as a senior UX designer who specializes in developer tools and VS Code exten
 
 ## Required context
 
-1. Read the latest VS Code UX Guidelines before evaluating the product: <https://code.visualstudio.com/api/ux-guidelines/overview>.
-2. Read the VS Code extension API documentation for platform context: <https://code.visualstudio.com/api>.
+1. Use your built-in knowledge of the VS Code UX Guidelines when evaluating the product; treat <https://code.visualstudio.com/api/ux-guidelines/overview> as a reference link only.
+2. Use your built-in knowledge of the VS Code extension API documentation for platform context; treat <https://code.visualstudio.com/api> as a reference link only.
 3. Inspect the repository enough to understand the extension's main workflows, UI model, commands, views, and provider/action architecture.
 
 ## Review scope
