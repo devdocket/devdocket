@@ -102,16 +102,16 @@ function findCanonicalPeers(
   item: CanonicalItem,
   providerRegistry: ProviderRegistry,
   stateStore: DiscoveredStateStore,
-): Array<{ providerId: string; externalId: string }> {
+): Array<{ providerId: string; externalId: string; itemType?: 'issue' | 'pr' }> {
   if (!item.canonicalId) { return []; }
-  const peers: Array<{ providerId: string; externalId: string }> = [];
+  const peers: Array<{ providerId: string; externalId: string; itemType?: 'issue' | 'pr' }> = [];
   for (const [providerId, items] of providerRegistry.getAllDiscoveredItems()) {
     for (const discovered of items) {
       if (discovered.canonicalId !== item.canonicalId) { continue; }
       if (providerId === item.providerId && discovered.externalId === item.externalId) { continue; }
       const state = stateStore.getState(providerId, discovered.externalId);
       if (state !== undefined && state !== 'unseen') { continue; }
-      peers.push({ providerId, externalId: discovered.externalId });
+      peers.push({ providerId, externalId: discovered.externalId, itemType: discovered.itemType });
     }
   }
   return peers;
@@ -155,6 +155,7 @@ function expandWithCanonicalPeers(
           providerId: peer.providerId,
           externalId: peer.externalId,
           title: item.title,
+          itemType: peer.itemType ?? item.itemType,
           url: item.url,
           group: item.group,
         });
