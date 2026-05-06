@@ -446,6 +446,18 @@ export async function activate(context: vscode.ExtensionContext): Promise<DevDoc
     ws.onDidChangeWatchedRuns(safeHandler('mc:watchedRuns', () => mainProvider.scheduleRefresh())),
     ws.onDidChangePRWatches(safeHandler('mc:watchedPRs', () => mainProvider.scheduleRefresh())),
     readStateStore.onDidChange(safeHandler('mc:readState', () => mainProvider.scheduleRefresh())),
+    pr.onDidRefreshProvider(safeHandler('mc:prune', async () => {
+      const active = pr.getAllDiscoveredItems();
+      try {
+        const ssPruned = await ss.prune(active);
+        const rsPruned = await readStateStore.prune(active);
+        if (ssPruned > 0 || rsPruned > 0) {
+          logger.debug(`Pruned ${ssPruned} discovered-state and ${rsPruned} read-state records`);
+        }
+      } catch (err) {
+        logger.error('DevDocket: prune failed', err);
+      }
+    })),
     ws.onDidChangeWatchedRuns(safeHandler('watch-panel:runs', () => watchPanelProvider.refresh())),
     ws.onDidChangePRWatches(safeHandler('watch-panel:prs', () => watchPanelProvider.refresh())),
   );

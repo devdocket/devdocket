@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
 import * as vscode from 'vscode';
 import { MockMemento } from 'vscode';
 import { activate, autoWatchAuthoredPRs, deactivate, logger } from '../extension';
+import { ReadStateStore } from '../storage/readStateStore';
 import { MainViewProvider } from '../views/mainViewProvider';
 import { WatchPanelProvider } from '../views/watchPanelProvider';
 import { WorkItemEditorPanel } from '../views/workItemEditorPanel';
@@ -164,6 +165,91 @@ describe('activate()', () => {
     await getCommandHandler('devdocket.showWatchesQuickPick')();
 
     expect(openSpy).toHaveBeenCalled();
+  });
+
+  it('prunes stale read-state and discovered-state records after non-empty provider refresh', async () => {
+    const globalState = context.globalState as InstanceType<typeof MockMemento>;
+    await globalState.update('devdocket.migrated', true);
+    await globalState.update('devdocket.discovered-state', [
+      { providerId: 'prune-provider', externalId: 'keep', inboxState: 'accepted' },
+      { providerId: 'prune-provider', externalId: 'stale', inboxState: 'dismissed' },
+      { providerId: 'other-provider', externalId: 'stale', inboxState: 'accepted' },
+    ]);
+    await globalState.update('devdocket.read-state', [
+      'prune-provider::keep',
+      'prune-provider::stale',
+      'other-provider::stale',
+    ]);
+    const pruneSpy = vi.spyOn(ReadStateStore.prototype, 'prune');
+
+    try {
+      const api = await activate(context);
+      const itemEmitter = new (vscode.EventEmitter as any)();
+      const activeItem = { externalId: 'keep', title: 'Keep' };
+
+      api.registerProvider({
+        id: 'prune-provider',
+        label: 'Prune Provider',
+        onDidDiscoverItems: itemEmitter.event,
+        refresh: vi.fn(async () => {
+          itemEmitter.fire([activeItem]);
+        }),
+      } as any);
+
+      await vi.waitFor(() => {
+        expect(pruneSpy).toHaveBeenCalled();
+        expect(globalState.get<string[]>('devdocket.read-state')).toEqual([
+          'prune-provider::keep',
+          'other-provider::stale',
+        ]);
+      });
+
+      const active = pruneSpy.mock.calls.at(-1)?.[0] as Map<string, unknown[]>;
+      expect(active.get('prune-provider')).toEqual([activeItem]);
+
+      const discoveredRecords = globalState.get<Array<{ providerId: string; externalId: string }>>('devdocket.discovered-state') ?? [];
+      expect(discoveredRecords.map(record => `${record.providerId}::${record.externalId}`).sort()).toEqual([
+        'other-provider::stale',
+        'prune-provider::keep',
+      ]);
+    } finally {
+      pruneSpy.mockRestore();
+    }
+  });
+
+  it('leaves read-state and discovered-state records untouched after empty provider refresh', async () => {
+    const globalState = context.globalState as InstanceType<typeof MockMemento>;
+    await globalState.update('devdocket.migrated', true);
+    await globalState.update('devdocket.discovered-state', [
+      { providerId: 'empty-provider', externalId: 'stale', inboxState: 'accepted' },
+    ]);
+    await globalState.update('devdocket.read-state', ['empty-provider::stale']);
+    const pruneSpy = vi.spyOn(ReadStateStore.prototype, 'prune');
+
+    try {
+      const api = await activate(context);
+      const itemEmitter = new (vscode.EventEmitter as any)();
+
+      api.registerProvider({
+        id: 'empty-provider',
+        label: 'Empty Provider',
+        onDidDiscoverItems: itemEmitter.event,
+        refresh: vi.fn(async () => {
+          itemEmitter.fire([]);
+        }),
+      } as any);
+
+      await vi.waitFor(() => expect(pruneSpy).toHaveBeenCalled());
+
+      const active = pruneSpy.mock.calls.at(-1)?.[0] as Map<string, unknown[]>;
+      expect(active.get('empty-provider')).toEqual([]);
+      expect(globalState.get<string[]>('devdocket.read-state')).toEqual(['empty-provider::stale']);
+      expect(globalState.get<Array<{ providerId: string; externalId: string }>>('devdocket.discovered-state')).toEqual([
+        { providerId: 'empty-provider', externalId: 'stale', inboxState: 'accepted' },
+      ]);
+    } finally {
+      pruneSpy.mockRestore();
+    }
   });
 
   // ------------------------------------------------------------------
