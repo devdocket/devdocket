@@ -49,7 +49,6 @@ jobs:
           copilot -p "$(cat .github/prompts/weekly-ux-review.md)" \
             --model claude-opus-4.7 \
             --allow-tool='shell(gh:*)' \
-            --allow-tool='shell(git:*)' \
             --allow-tool=read \
             --allow-tool=write \
             --no-ask-user | tee weekly-ux-review.log
