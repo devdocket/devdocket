@@ -57,9 +57,9 @@ File one issue per novel finding, with the label `weekly-ux-review`. Cap this ru
 
 Follow the repository's backtick-safety convention when posting text to GitHub:
 
-1. Use the allowlisted file-write tool to write the full issue body to a temporary body file before calling `gh`; do not build the body with shell heredocs, `echo`, Python, or inline shell strings.
-2. Pass that file with `--body-file`.
-3. Reuse or overwrite the body file as needed; do not require deletion when no cleanup tool is available.
+1. The workflow exposes `ISSUE_BODY_DIR` as an environment variable pointing to a pre-created writable directory (under the runner's temp area). Use the allowlisted `write` tool to create body files INSIDE that directory — do NOT shell out to `mkdir`, `touch`, `echo`, heredocs, Python, or other shell tools (the `shell` tool is locked down to `gh issue:*` and any other shell command will be denied).
+2. Name each body file something like `<n>-<slug>.md` inside `$ISSUE_BODY_DIR` (e.g., `${ISSUE_BODY_DIR}/1-onboarding-friction.md`). Reuse or overwrite the same file as needed; no cleanup is required.
+3. Pass that file path to `gh` via `--body-file`.
 4. Never pass Markdown containing backticks through `--body`, `--fill`, inline shell arguments, Python strings, or PowerShell strings.
 
 Use a command shape like:

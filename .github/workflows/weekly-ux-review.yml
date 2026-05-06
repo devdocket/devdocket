@@ -44,8 +44,13 @@ jobs:
           # of configuring workflow-specific tokens.
           COPILOT_GITHUB_TOKEN: ${{ secrets.COPILOT_CLI_PAT }}
           GH_TOKEN: ${{ secrets.COPILOT_CLI_PAT }}
+          # Pre-created writable directory for Copilot's temporary issue body
+          # files. Copilot's shell tool is locked down to `gh issue:*` only, so
+          # it cannot run `mkdir`; we provision the dir here and pass it in.
+          ISSUE_BODY_DIR: ${{ runner.temp }}/copilot-issue-bodies
         run: |
           set -o pipefail
+          mkdir -p "$ISSUE_BODY_DIR"
           copilot -p "$(cat .github/prompts/weekly-ux-review.md)" \
             --model claude-opus-4.7 \
             --allow-tool='shell(gh issue:*)' \
