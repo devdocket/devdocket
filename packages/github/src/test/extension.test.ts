@@ -2,10 +2,9 @@ import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
 import { workspace, extensions, window } from 'vscode';
 import { activate, deactivate } from '../extension';
 
-// Stub fetch globally to prevent real network calls from provider.refresh()
 const mockFetch = vi.fn();
 
-describe('extension activation', () => {
+describe('GitHub extension activation', () => {
   let mockContext: any;
   let mockApi: any;
   let disposables: any[];
@@ -28,10 +27,15 @@ describe('extension activation', () => {
     mockFetch.mockReset();
     vi.stubGlobal('fetch', mockFetch);
 
-    // Add createOutputChannel to window mock (not in default vscode mock)
     (window as any).createOutputChannel = vi.fn(() => ({
       appendLine: vi.fn(),
+      append: vi.fn(),
+      clear: vi.fn(),
+      show: vi.fn(),
+      hide: vi.fn(),
       dispose: vi.fn(),
+      name: 'DevDocket GitHub',
+      replace: vi.fn(),
     }));
 
     disposables = [];
@@ -54,26 +58,21 @@ describe('extension activation', () => {
       registerPRWatcher: vi.fn(() => prWatcherDisposable),
     };
 
-    // Default: core extension found and active with valid API
     vi.mocked(extensions.getExtension).mockReturnValue({
       isActive: true,
       exports: mockApi,
       activate: vi.fn(),
     } as any);
 
-    // Default: organization configured
     vi.mocked(workspace.getConfiguration).mockImplementation((section?: string) => {
-      if (section === 'devDocketAdo') {
+      if (section === 'devDocketGithub') {
         return {
           get: vi.fn((key: string, defaultValue?: any) => {
-            if (key === 'organization') return 'myorg';
-            if (key === 'projects') return ['ProjectA'];
             if (key === 'refreshIntervalSeconds') return 0;
             return defaultValue;
           }),
         } as any;
       }
-      // devdocket config for log level
       return {
         get: vi.fn((_key: string, defaultValue?: any) => defaultValue),
       } as any;
@@ -120,18 +119,6 @@ describe('extension activation', () => {
     expect(mockApi.registerProvider).not.toHaveBeenCalled();
   });
 
-  it('returns when core extension API is null', async () => {
-    vi.mocked(extensions.getExtension).mockReturnValue({
-      isActive: true,
-      exports: null,
-      activate: vi.fn(),
-    } as any);
-
-    await activate(mockContext);
-
-    expect(mockApi.registerProvider).not.toHaveBeenCalled();
-  });
-
   it('activates core extension when not yet active', async () => {
     const mockActivate = vi.fn().mockResolvedValue(mockApi);
     vi.mocked(extensions.getExtension).mockReturnValue({
@@ -143,43 +130,35 @@ describe('extension activation', () => {
     await activate(mockContext);
 
     expect(mockActivate).toHaveBeenCalled();
-    expect(mockApi.registerProvider).toHaveBeenCalledTimes(3);
+    expect(mockApi.registerProvider).toHaveBeenCalledTimes(4);
   });
 
-  it('registers three providers when organization is configured', async () => {
+  it('pushes provider, registration, and watcher disposables onto subscriptions', async () => {
     await activate(mockContext);
 
-    expect(mockApi.registerProvider).toHaveBeenCalledTimes(3);
-
-    // Verify provider objects passed
-    const firstProvider = mockApi.registerProvider.mock.calls[0][0];
-    const secondProvider = mockApi.registerProvider.mock.calls[1][0];
-    const thirdProvider = mockApi.registerProvider.mock.calls[2][0];
-    expect(firstProvider.id).toBe('ado-work-items');
-    expect(secondProvider.id).toBe('ado-pr-reviews');
-    expect(thirdProvider.id).toBe('ado-my-prs');
-  });
-
-  it('pushes static watcher registrations and configurable lifecycle owner onto subscriptions', async () => {
-    await activate(mockContext);
-
-    expect(mockApi.registerProvider).toHaveBeenCalledTimes(3);
+    const providerIds = mockApi.registerProvider.mock.calls.map(([provider]: any[]) => provider.id);
+    expect(providerIds).toEqual([
+      'github',
+      'github-pr-reviews',
+      'github-my-prs',
+      'github-mentions',
+    ]);
     expect(mockApi.registerRunWatcher).toHaveBeenCalledTimes(1);
     expect(mockApi.registerPRWatcher).toHaveBeenCalledTimes(1);
+
+    const subscribedProviderIds = disposables
+      .filter(disposable => providerIds.includes(disposable?.id))
+      .map(disposable => disposable.id);
+    expect(subscribedProviderIds).toEqual(providerIds);
+    for (const registration of providerRegistrationDisposables) {
+      expect(disposables).toContain(registration);
+    }
     expect(disposables).toContain(runWatcherDisposable);
     expect(disposables).toContain(prWatcherDisposable);
-    expect(disposables).toHaveLength(6);
-
-    const lifecycleOwner = disposables.find(disposable =>
-      disposable !== runWatcherDisposable &&
-      disposable !== prWatcherDisposable &&
-      disposable?.dispose &&
-      !('appendLine' in disposable),
-    );
-    expect(lifecycleOwner).toBeDefined();
+    expect(disposables).toHaveLength(12);
   });
 
-  it('disposes configurable providers and registrations on shutdown', async () => {
+  it('lets context subscriptions dispose providers, registrations, and watchers', async () => {
     await activate(mockContext);
 
     const providers = mockApi.registerProvider.mock.calls.map(([provider]: any[]) => provider);
@@ -197,67 +176,7 @@ describe('extension activation', () => {
     expect(prWatcherDisposable.dispose).toHaveBeenCalledTimes(1);
   });
 
-  it('disposes and replaces configurable providers when ADO configuration changes', async () => {
-    await activate(mockContext);
-
-    const firstRegistrations = [...providerRegistrationDisposables];
-    const firstProviders = mockApi.registerProvider.mock.calls.map(([provider]: any[]) => provider);
-    const firstProviderDisposeSpies = firstProviders.map((provider: any) => vi.spyOn(provider, 'dispose'));
-
-    for (const [listener] of vi.mocked(workspace.onDidChangeConfiguration).mock.calls) {
-      listener({
-        affectsConfiguration: (key: string) => key === 'devDocketAdo.projects',
-      });
-    }
-
-    expect(mockApi.registerProvider).toHaveBeenCalledTimes(6);
-    for (const registration of firstRegistrations) {
-      expect(registration.dispose).toHaveBeenCalledTimes(1);
-    }
-    for (const providerDisposeSpy of firstProviderDisposeSpies) {
-      expect(providerDisposeSpy).toHaveBeenCalledTimes(1);
-    }
-    expect(mockApi.registerRunWatcher).toHaveBeenCalledTimes(1);
-    expect(mockApi.registerPRWatcher).toHaveBeenCalledTimes(1);
-  });
-
-  it('does not register providers when no organization is configured', async () => {
-    vi.mocked(workspace.getConfiguration).mockImplementation((section?: string) => {
-      if (section === 'devDocketAdo') {
-        return {
-          get: vi.fn((key: string, defaultValue?: any) => {
-            if (key === 'organization') return '';
-            if (key === 'projects') return [];
-            if (key === 'refreshIntervalSeconds') return 0;
-            return defaultValue;
-          }),
-        } as any;
-      }
-      return {
-        get: vi.fn((_key: string, defaultValue?: any) => defaultValue),
-      } as any;
-    });
-
-    await activate(mockContext);
-
-    expect(mockApi.registerProvider).not.toHaveBeenCalled();
-  });
-
-  it('creates an output channel', async () => {
-    await activate(mockContext);
-
-    // Output channel is pushed to subscriptions (first subscription)
-    expect(disposables.length).toBeGreaterThan(0);
-  });
-
-  it('registers configuration change listener', async () => {
-    await activate(mockContext);
-
-    expect(workspace.onDidChangeConfiguration).toHaveBeenCalled();
-  });
-
   it('deactivate is a no-op', () => {
-    // Just ensure it doesn't throw
     expect(() => deactivate()).not.toThrow();
   });
 });
