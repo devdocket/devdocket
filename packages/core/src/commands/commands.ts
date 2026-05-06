@@ -209,6 +209,7 @@ interface AcceptableItem {
   externalId: string;
   title: string;
   description?: string;
+  itemType?: 'issue' | 'pr';
   url?: string;
   group?: string;
 }
@@ -677,6 +678,7 @@ async function acceptSingleSourceItem(
       {
         providerId: item.providerId,
         externalId: item.externalId,
+        itemType: item.itemType,
         url: item.url,
         ...(group ? { group } : {}),
       },

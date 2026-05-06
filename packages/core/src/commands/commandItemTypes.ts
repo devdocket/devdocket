@@ -30,6 +30,7 @@ export interface SourceItemNode {
   externalId: string;
   title: string;
   description?: string;
+  itemType?: 'issue' | 'pr';
   url?: string;
   group?: string;
 }
