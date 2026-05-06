@@ -473,14 +473,121 @@ describe('MainViewProvider', () => {
       );
       expect(vscode.env.openExternal).not.toHaveBeenCalledWith(expect.objectContaining({ path: 'https://example.com/provider/1' }));
       expect(vscode.env.openExternal).toHaveBeenCalledWith(expect.objectContaining({ path: 'https://example.com/manual/2' }));
-      expect(workGraph.createItem).toHaveBeenCalledWith(
-        { title: 'Incoming item', description: 'Desc' },
-        { providerId: 'github', externalId: 'incoming-99', url: 'https://example.com/incoming/99', group: 'repo' },
+      expect(vscode.commands.executeCommand).toHaveBeenCalledWith(
+        'devdocket.acceptFromInbox',
+        {
+          kind: 'item',
+          providerId: 'github',
+          externalId: 'incoming-99',
+          title: 'Incoming item',
+          description: 'Desc',
+          url: 'https://example.com/incoming/99',
+          group: 'repo',
+        },
       );
-      expect(stateStore.setState).toHaveBeenCalledWith('github', 'incoming-99', 'accepted');
       expect(stateStore.setState).toHaveBeenCalledWith('github', 'incoming-99', 'dismissed');
       expect(workGraph.transitionState).toHaveBeenCalledWith('existing-item', WorkItemState.Done);
     });
+  });
+
+  it('routes incoming accept messages through the accept-from-inbox command', async () => {
+    vi.useFakeTimers();
+    const workGraph = createMockWorkGraph();
+    const providerRegistry = createProviderRegistry({
+      github: [
+        {
+          externalId: 'incoming-accept',
+          title: 'Incoming accept',
+          description: 'Acceptance details',
+          url: 'https://example.com/incoming/accept',
+          group: 'repo',
+          canonicalId: 'canonical-accept',
+        },
+      ],
+    });
+    const provider = createProvider(workGraph, providerRegistry, createStateStore());
+    const mockView = createMockWebviewView();
+
+    provider.resolveWebviewView(mockView.view, {} as any, {} as any);
+    await vi.advanceTimersByTimeAsync(50);
+    vi.clearAllMocks();
+
+    await mockView.simulateMessage({ type: 'acceptItem', providerId: 'github', externalId: 'incoming-accept' });
+
+    expect(vscode.commands.executeCommand).toHaveBeenCalledWith(
+      'devdocket.acceptFromInbox',
+      {
+        kind: 'item',
+        providerId: 'github',
+        externalId: 'incoming-accept',
+        title: 'Incoming accept',
+        description: 'Acceptance details',
+        url: 'https://example.com/incoming/accept',
+        group: 'repo',
+        canonicalId: 'canonical-accept',
+      },
+    );
+    expect(workGraph.createItem).not.toHaveBeenCalled();
+  });
+
+  it('routes incoming acceptToFocus messages through the accept-to-focus-from-inbox command', async () => {
+    vi.useFakeTimers();
+    const workGraph = createMockWorkGraph();
+    const providerRegistry = createProviderRegistry({
+      github: [
+        {
+          externalId: 'incoming-start',
+          title: 'Incoming start',
+          description: 'Start details',
+          url: 'https://example.com/incoming/start',
+          group: 'repo',
+          canonicalId: 'canonical-start',
+        },
+      ],
+    });
+    const provider = createProvider(workGraph, providerRegistry, createStateStore());
+    const mockView = createMockWebviewView();
+
+    provider.resolveWebviewView(mockView.view, {} as any, {} as any);
+    await vi.advanceTimersByTimeAsync(50);
+    vi.clearAllMocks();
+
+    await mockView.simulateMessage({ type: 'acceptToFocus', providerId: 'github', externalId: 'incoming-start' });
+
+    expect(vscode.commands.executeCommand).toHaveBeenCalledWith(
+      'devdocket.acceptToFocusFromInbox',
+      {
+        kind: 'item',
+        providerId: 'github',
+        externalId: 'incoming-start',
+        title: 'Incoming start',
+        description: 'Start details',
+        url: 'https://example.com/incoming/start',
+        group: 'repo',
+        canonicalId: 'canonical-start',
+      },
+    );
+    expect(workGraph.createItem).not.toHaveBeenCalled();
+  });
+
+  it('handles onboarding command messages through the webview message switch', async () => {
+    vi.useFakeTimers();
+    const provider = createProvider(
+      createMockWorkGraph(),
+      createProviderRegistry({}),
+      createStateStore(),
+    );
+    const mockView = createMockWebviewView();
+
+    provider.resolveWebviewView(mockView.view, {} as any, {} as any);
+    await vi.advanceTimersByTimeAsync(50);
+    vi.clearAllMocks();
+
+    await mockView.simulateMessage({ type: 'createItem' });
+    await mockView.simulateMessage({ type: 'openWalkthrough' });
+
+    expect(vscode.commands.executeCommand).toHaveBeenCalledWith('devdocket.createItem');
+    expect(vscode.commands.executeCommand).toHaveBeenCalledWith('devdocket.openWalkthrough');
   });
 
   it('handles reorderItems messages through the webview message switch', async () => {

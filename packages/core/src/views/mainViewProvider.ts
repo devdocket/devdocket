@@ -483,6 +483,9 @@ export class MainViewProvider implements vscode.WebviewViewProvider {
       case 'createItem':
         await vscode.commands.executeCommand('devdocket.createItem');
         break;
+      case 'openWalkthrough':
+        await vscode.commands.executeCommand('devdocket.openWalkthrough');
+        break;
       case 'clearHistory':
         await vscode.commands.executeCommand('devdocket.clearHistory');
         break;
@@ -520,28 +523,23 @@ export class MainViewProvider implements vscode.WebviewViewProvider {
 
   private async handleAcceptItem(providerId: string, externalId: string): Promise<void> {
     try {
-      const existing = this.workGraph.findItemByProvenance(providerId, externalId);
-      if (!existing) {
-        const discoveredItem = this.providerRegistry.getDiscoveredItems(providerId).find(item => item.externalId === externalId);
-        if (!discoveredItem) {
-          logger.warn(`DevDocket: discovered item ${providerId}/${externalId} not found for accept`);
-          return;
-        }
-        await this.workGraph.createItem(
-          {
-            title: discoveredItem.title,
-            description: discoveredItem.description,
-          },
-          {
-            providerId,
-            externalId,
-            itemType: discoveredItem.itemType,
-            url: discoveredItem.url,
-            ...(discoveredItem.group ? { group: discoveredItem.group } : {}),
-          },
-        );
+      const discoveredItem = this.providerRegistry.getDiscoveredItems(providerId).find(item => item.externalId === externalId);
+      if (!discoveredItem) {
+        logger.warn(`DevDocket: discovered item ${providerId}/${externalId} not found for accept`);
+        return;
       }
-      await this.stateStore.setState(providerId, externalId, 'accepted');
+
+      await vscode.commands.executeCommand('devdocket.acceptFromInbox', {
+        kind: 'item',
+        providerId,
+        externalId,
+        title: discoveredItem.title,
+        description: discoveredItem.description,
+        url: discoveredItem.url,
+        ...(discoveredItem.itemType ? { itemType: discoveredItem.itemType } : {}),
+        ...(discoveredItem.group ? { group: discoveredItem.group } : {}),
+        ...(discoveredItem.canonicalId ? { canonicalId: discoveredItem.canonicalId } : {}),
+      });
     } catch (err) {
       logger.error('DevDocket: accept failed', err);
       void vscode.window.showErrorMessage(`Failed to accept item: ${err instanceof Error ? err.message : String(err)}`);
@@ -569,7 +567,23 @@ export class MainViewProvider implements vscode.WebviewViewProvider {
     // Ready to Start tier). Lets the user pull an inbox item directly into
     // active work without opening the editor first.
     try {
-      await vscode.commands.executeCommand('devdocket.acceptToFocusFromInbox', { providerId, externalId });
+      const discoveredItem = this.providerRegistry.getDiscoveredItems(providerId).find(item => item.externalId === externalId);
+      if (!discoveredItem) {
+        logger.warn(`DevDocket: discovered item ${providerId}/${externalId} not found for acceptToFocus`);
+        return;
+      }
+
+      await vscode.commands.executeCommand('devdocket.acceptToFocusFromInbox', {
+        kind: 'item',
+        providerId,
+        externalId,
+        title: discoveredItem.title,
+        description: discoveredItem.description,
+        url: discoveredItem.url,
+        ...(discoveredItem.itemType ? { itemType: discoveredItem.itemType } : {}),
+        ...(discoveredItem.group ? { group: discoveredItem.group } : {}),
+        ...(discoveredItem.canonicalId ? { canonicalId: discoveredItem.canonicalId } : {}),
+      });
     } catch (err) {
       logger.error('DevDocket: acceptToFocus failed', err);
       void vscode.window.showErrorMessage(`Failed to start item: ${err instanceof Error ? err.message : String(err)}`);
@@ -835,7 +849,8 @@ export class MainViewProvider implements vscode.WebviewViewProvider {
     .source-provider-header:focus-visible,
     .source-group-header:focus-visible,
     .source-item:focus-visible,
-    .item-action-btn:focus-visible {
+    .item-action-btn:focus-visible,
+    .onboarding-empty-state-button:focus-visible {
       outline: 1px solid var(--vscode-focusBorder);
       outline-offset: 2px;
     }
@@ -966,6 +981,52 @@ export class MainViewProvider implements vscode.WebviewViewProvider {
     .source-empty {
       color: var(--vscode-descriptionForeground);
       font-style: italic;
+    }
+    .onboarding-empty-state {
+      max-width: 360px;
+      margin: 32px auto;
+      padding: 24px 16px;
+      text-align: center;
+      color: var(--vscode-foreground);
+      border: 1px solid var(--vscode-widget-border, rgba(127, 127, 127, 0.24));
+      border-radius: 8px;
+      background: var(--vscode-editorWidget-background, var(--vscode-sideBar-background));
+    }
+    .onboarding-empty-state-title {
+      margin: 0 0 8px;
+      font-size: 14px;
+      font-weight: 600;
+    }
+    .onboarding-empty-state-description {
+      margin: 0;
+      color: var(--vscode-descriptionForeground);
+      line-height: 1.45;
+    }
+    .onboarding-empty-state-actions {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: center;
+      gap: 8px;
+      margin-top: 16px;
+    }
+    .onboarding-empty-state-button {
+      border: 1px solid var(--vscode-button-border, transparent);
+      border-radius: 2px;
+      padding: 4px 10px;
+      background: var(--vscode-button-background);
+      color: var(--vscode-button-foreground);
+      cursor: pointer;
+      font: inherit;
+    }
+    .onboarding-empty-state-button:hover {
+      background: var(--vscode-button-hoverBackground);
+    }
+    .onboarding-empty-state-button-secondary {
+      background: var(--vscode-button-secondaryBackground, transparent);
+      color: var(--vscode-button-secondaryForeground, var(--vscode-foreground));
+    }
+    .onboarding-empty-state-button-secondary:hover {
+      background: var(--vscode-button-secondaryHoverBackground, var(--vscode-toolbar-hoverBackground));
     }
     .health-warning {
       color: var(--vscode-problemsWarningIcon-foreground, var(--vscode-editorWarning-foreground));

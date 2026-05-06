@@ -30,7 +30,6 @@ export class WatchPanelProvider implements vscode.Disposable {
       vscode.ViewColumn.Beside,
       {
         enableScripts: true,
-        retainContextWhenHidden: true,
         localResourceRoots: [vscode.Uri.joinPath(this.extensionUri, 'webview-dist')],
       },
     );

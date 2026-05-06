@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'preact/hooks';
 import type { ExtensionMessage, SourceProviderData, TierData } from '../shared/types';
 import { postMessage } from '../shared/messaging';
 import { useThemeChangeCounter } from '../shared/theme';
+import { OnboardingEmptyState } from './components/OnboardingEmptyState';
 import { SourcesView } from './components/SourcesView';
 import { TabBar } from './components/TabBar';
 import { TierSection } from './components/TierSection';
@@ -10,6 +11,7 @@ export function App() {
   const [activeTab, setActiveTab] = useState<'myWork' | 'sources'>('myWork');
   const [tiers, setTiers] = useState<TierData[]>([]);
   const [sources, setSources] = useState<SourceProviderData[]>([]);
+  const [hasReceivedItems, setHasReceivedItems] = useState(false);
   const [selectedItemId, setSelectedItemId] = useState<string | null>(null);
   const [announcement, setAnnouncement] = useState('');
   const previousTiersRef = useRef<TierData[] | undefined>(undefined);
@@ -44,6 +46,7 @@ export function App() {
             announce(buildLiveAnnouncement(previousTiers, nextTiers));
           }
           previousTiersRef.current = nextTiers;
+          setHasReceivedItems(true);
           setTiers(nextTiers);
           break;
         }
@@ -103,7 +106,13 @@ export function App() {
             aria-labelledby="mission-control-tab-my-work"
           >
             {tiers.length === 0 ? (
-              <div class="empty-state">No items yet</div>
+              hasReceivedItems ? (
+                <EmptyMyWork />
+              ) : (
+                <div class="empty-state">No items yet</div>
+              )
+            ) : tiers.every(tier => tier.items.length === 0) ? (
+              <EmptyMyWork />
             ) : (
               <div class="tiers">
                 {tiers.map(tier => (
@@ -153,6 +162,15 @@ export function App() {
         )}
       </div>
     </div>
+  );
+}
+
+function EmptyMyWork() {
+  return (
+    <OnboardingEmptyState
+      titleId="my-work-empty-state-title"
+      description="Create a work item manually, or install a provider extension to automatically discover GitHub issues, Azure DevOps tasks, PR reviews, and more."
+    />
   );
 }
 
