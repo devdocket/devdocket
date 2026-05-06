@@ -263,9 +263,11 @@ interface ItemLocation {
 }
 
 function NoMatches({ query, onClear }: { query: string; onClear: () => void }) {
+  const displayQuery = query.trim();
+
   return (
     <div class="empty-state">
-      No matches for {query}.{' '}
+      No matches for {displayQuery}.{' '}
       <button type="button" class="empty-state-link" onClick={onClear}>Clear filter.</button>
     </div>
   );
@@ -278,10 +280,12 @@ function announceNoResults(
   announce: (message?: string) => void,
   lastNoResultsAnnouncementRef: { current: TabQueries },
 ): void {
-  if (query.trim() && visibleCount === 0) {
-    if (lastNoResultsAnnouncementRef.current[tab] !== query) {
-      announce(`No results for ${query}`);
-      lastNoResultsAnnouncementRef.current = { ...lastNoResultsAnnouncementRef.current, [tab]: query };
+  const displayQuery = query.trim();
+
+  if (displayQuery && visibleCount === 0) {
+    if (lastNoResultsAnnouncementRef.current[tab] !== displayQuery) {
+      announce(`No results for ${displayQuery}`);
+      lastNoResultsAnnouncementRef.current = { ...lastNoResultsAnnouncementRef.current, [tab]: displayQuery };
     }
     return;
   }
