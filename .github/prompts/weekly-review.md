@@ -61,7 +61,7 @@ Follow the repository's backtick-safety convention when posting text to GitHub:
 
 1. Use the allowlisted file-write tool to write the full issue body to a temporary body file before calling `gh`; do not build the body with shell heredocs, `echo`, Python, or inline shell strings.
 2. Pass that file with `--body-file`.
-3. Delete the body file after the issue is created.
+3. Reuse or overwrite the body file as needed; do not require deletion when no cleanup tool is available.
 4. Never pass Markdown containing backticks through `--body`, `--fill`, inline shell arguments, Python strings, or PowerShell strings.
 
 Use a command shape like:
