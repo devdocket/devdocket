@@ -493,27 +493,22 @@ export class MainViewProvider implements vscode.WebviewViewProvider {
 
   private async handleAcceptItem(providerId: string, externalId: string): Promise<void> {
     try {
-      const existing = this.workGraph.findItemByProvenance(providerId, externalId);
-      if (!existing) {
-        const discoveredItem = this.providerRegistry.getDiscoveredItems(providerId).find(item => item.externalId === externalId);
-        if (!discoveredItem) {
-          logger.warn(`DevDocket: discovered item ${providerId}/${externalId} not found for accept`);
-          return;
-        }
-        await this.workGraph.createItem(
-          {
-            title: discoveredItem.title,
-            description: discoveredItem.description,
-          },
-          {
-            providerId,
-            externalId,
-            url: discoveredItem.url,
-            ...(discoveredItem.group ? { group: discoveredItem.group } : {}),
-          },
-        );
+      const discoveredItem = this.providerRegistry.getDiscoveredItems(providerId).find(item => item.externalId === externalId);
+      if (!discoveredItem) {
+        logger.warn(`DevDocket: discovered item ${providerId}/${externalId} not found for accept`);
+        return;
       }
-      await this.stateStore.setState(providerId, externalId, 'accepted');
+
+      await vscode.commands.executeCommand('devdocket.acceptFromInbox', {
+        kind: 'item',
+        providerId,
+        externalId,
+        title: discoveredItem.title,
+        description: discoveredItem.description,
+        url: discoveredItem.url,
+        ...(discoveredItem.group ? { group: discoveredItem.group } : {}),
+        ...(discoveredItem.canonicalId ? { canonicalId: discoveredItem.canonicalId } : {}),
+      });
     } catch (err) {
       logger.error('DevDocket: accept failed', err);
       void vscode.window.showErrorMessage(`Failed to accept item: ${err instanceof Error ? err.message : String(err)}`);
@@ -541,7 +536,22 @@ export class MainViewProvider implements vscode.WebviewViewProvider {
     // Ready to Start tier). Lets the user pull an inbox item directly into
     // active work without opening the editor first.
     try {
-      await vscode.commands.executeCommand('devdocket.acceptToFocusFromInbox', { providerId, externalId });
+      const discoveredItem = this.providerRegistry.getDiscoveredItems(providerId).find(item => item.externalId === externalId);
+      if (!discoveredItem) {
+        logger.warn(`DevDocket: discovered item ${providerId}/${externalId} not found for acceptToFocus`);
+        return;
+      }
+
+      await vscode.commands.executeCommand('devdocket.acceptToFocusFromInbox', {
+        kind: 'item',
+        providerId,
+        externalId,
+        title: discoveredItem.title,
+        description: discoveredItem.description,
+        url: discoveredItem.url,
+        ...(discoveredItem.group ? { group: discoveredItem.group } : {}),
+        ...(discoveredItem.canonicalId ? { canonicalId: discoveredItem.canonicalId } : {}),
+      });
     } catch (err) {
       logger.error('DevDocket: acceptToFocus failed', err);
       void vscode.window.showErrorMessage(`Failed to start item: ${err instanceof Error ? err.message : String(err)}`);
