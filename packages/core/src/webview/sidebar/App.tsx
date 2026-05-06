@@ -34,14 +34,11 @@ export function App() {
   const sourcesQuery = appliedQueries.sources;
   const isMyWorkFilterActive = myWorkQuery.trim() !== '';
   const isSourcesFilterActive = sourcesQuery.trim() !== '';
+  myWorkFilterActiveRef.current = isMyWorkFilterActive;
   const filteredTiers = useMemo(() => filterTiers(tiers, myWorkQuery), [tiers, myWorkQuery]);
   const filteredSources = useMemo(() => filterProviders(sources, sourcesQuery), [sources, sourcesQuery]);
   const myWorkVisibleCount = getTierItemCount(filteredTiers.tiers);
   const sourcesVisibleCount = getProviderItemCount(filteredSources.providers);
-
-  useEffect(() => {
-    myWorkFilterActiveRef.current = isMyWorkFilterActive;
-  }, [isMyWorkFilterActive]);
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
