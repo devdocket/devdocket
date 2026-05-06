@@ -20,6 +20,11 @@ interface TierSectionProps {
   onCrossTierDrop?: (itemId: string) => void;
   onAcceptAll?: () => void;
   onClearHistory?: () => void;
+  disableDragReorder?: boolean;
+  isFilterActive?: boolean;
+  forceExpanded?: boolean;
+  totalCount?: number;
+  query?: string;
 }
 
 export function TierSection({
@@ -33,6 +38,11 @@ export function TierSection({
   onCrossTierDrop,
   onAcceptAll,
   onClearHistory,
+  disableDragReorder = false,
+  isFilterActive = false,
+  forceExpanded = false,
+  totalCount,
+  query,
 }: TierSectionProps) {
   const [collapsed, setCollapsed] = useState(tier.collapsed);
   const [activeItemId, setActiveItemId] = useState<string | undefined>(() =>
@@ -44,7 +54,9 @@ export function TierSection({
   const headerButtonRef = useRef<HTMLButtonElement>(null);
   const itemRefs = useRef<Record<string, HTMLDivElement | null>>({});
   const dragDepthRef = useRef(0);
-  const isReorderableTier = tier.id === 'ready-to-start' || tier.id === 'in-progress';
+  const isReorderableTier = !disableDragReorder && (tier.id === 'ready-to-start' || tier.id === 'in-progress');
+  const isCollapsed = forceExpanded ? false : collapsed;
+  const countLabel = totalCount === undefined ? `(${tier.items.length})` : `(${tier.items.length} of ${totalCount})`;
   const toggleCollapsed = () => setCollapsed(value => !value);
   const itemCountLabel = `${tier.name}, ${tier.items.length} item${tier.items.length === 1 ? '' : 's'}`;
   const itemsId = `mission-control-tier-${tier.id}`;
@@ -114,6 +126,12 @@ export function TierSection({
     setDropIndex(null);
     setIsDragActive(false);
   };
+
+  useEffect(() => {
+    if (!isReorderableTier) {
+      clearDropState();
+    }
+  }, [isReorderableTier]);
 
   const getDropIndexFromPointer = (clientY: number): number => {
     for (let index = 0; index < tier.items.length; index += 1) {
@@ -259,22 +277,25 @@ export function TierSection({
           class="tier-header-main"
           data-tier-header="true"
           onClick={toggleCollapsed}
-          aria-expanded={!collapsed}
-          aria-controls={!collapsed ? itemsId : undefined}
+          aria-expanded={!isCollapsed}
+          aria-controls={!isCollapsed ? itemsId : undefined}
         >
           <span aria-hidden="true">{tier.icon}</span>
           <span>{tier.name}</span>
-          <span class="tier-count">({tier.items.length})</span>
+          <span class="tier-count">{countLabel}</span>
         </button>
         {tier.id === 'incoming' && onAcceptAll ? (
           <button
             type="button"
             class="tier-header-action"
-            title="Accept all"
+            title={isFilterActive ? 'Clear filter to use Accept All' : 'Accept all'}
             aria-label="Accept all incoming items"
+            disabled={isFilterActive}
             onClick={(event) => {
               event.stopPropagation();
-              onAcceptAll();
+              if (!isFilterActive) {
+                onAcceptAll();
+              }
             }}
           >
             Accept All
@@ -284,11 +305,14 @@ export function TierSection({
           <button
             type="button"
             class="tier-header-action"
-            title="Clear history"
+            title={isFilterActive ? 'Clear filter to clear history' : 'Clear history'}
             aria-label="Clear completed items"
+            disabled={isFilterActive}
             onClick={(event) => {
               event.stopPropagation();
-              onClearHistory();
+              if (!isFilterActive) {
+                onClearHistory();
+              }
             }}
           >
             Clear
@@ -298,13 +322,13 @@ export function TierSection({
           type="button"
           class="tier-toggle-button"
           onClick={toggleCollapsed}
-          aria-label={`${collapsed ? 'Expand' : 'Collapse'} ${tier.name}`}
+          aria-label={`${isCollapsed ? 'Expand' : 'Collapse'} ${tier.name}`}
           tabIndex={-1}
         >
-          <span class="tier-toggle" aria-hidden="true">{collapsed ? '▸' : '▾'}</span>
+          <span class="tier-toggle" aria-hidden="true">{isCollapsed ? '▸' : '▾'}</span>
         </button>
       </div>
-      {!collapsed ? (
+      {!isCollapsed ? (
         <div
           id={itemsId}
           class={`tier-items ${isDragActive ? 'drag-active' : ''}`.trim()}
@@ -319,9 +343,11 @@ export function TierSection({
         >
           {tier.items.map((item, index) => (
             <Fragment key={item.id}>
-              {dropIndex === index ? <div class="drop-indicator" aria-hidden="true" /> : null}
+              {isReorderableTier && dropIndex === index ? <div class="drop-indicator" aria-hidden="true" /> : null}
               <ItemCard
                 item={item}
+                query={query}
+                disableDragReorder={disableDragReorder}
                 tabIndex={item.id === activeItemId ? 0 : -1}
                 itemRef={(element) => {
                   itemRefs.current[item.id] = element;
@@ -340,7 +366,7 @@ export function TierSection({
               />
             </Fragment>
           ))}
-          {dropIndex === tier.items.length ? <div class="drop-indicator" aria-hidden="true" /> : null}
+          {isReorderableTier && dropIndex === tier.items.length ? <div class="drop-indicator" aria-hidden="true" /> : null}
         </div>
       ) : null}
     </section>

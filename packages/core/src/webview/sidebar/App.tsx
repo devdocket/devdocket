@@ -1,21 +1,65 @@
-import { useEffect, useRef, useState } from 'preact/hooks';
+import { useEffect, useMemo, useRef, useState } from 'preact/hooks';
 import type { ExtensionMessage, SourceProviderData, TierData } from '../shared/types';
 import { postMessage } from '../shared/messaging';
 import { useThemeChangeCounter } from '../shared/theme';
+import { SearchBox } from './components/SearchBox';
 import { SourcesView } from './components/SourcesView';
 import { TabBar } from './components/TabBar';
 import { TierSection } from './components/TierSection';
+import { filterProviders, filterTiers } from './filter';
+
+type SidebarTab = 'myWork' | 'sources';
+type TabQueries = Record<SidebarTab, string>;
+
+const emptyQueries: TabQueries = { myWork: '', sources: '' };
 
 export function App() {
-  const [activeTab, setActiveTab] = useState<'myWork' | 'sources'>('myWork');
+  const [activeTab, setActiveTab] = useState<SidebarTab>('myWork');
   const [tiers, setTiers] = useState<TierData[]>([]);
   const [sources, setSources] = useState<SourceProviderData[]>([]);
   const [selectedItemId, setSelectedItemId] = useState<string | null>(null);
+  const [queries, setQueries] = useState<TabQueries>(emptyQueries);
+  const [appliedQueries, setAppliedQueries] = useState<TabQueries>(emptyQueries);
   const [announcement, setAnnouncement] = useState('');
   const previousTiersRef = useRef<TierData[] | undefined>(undefined);
   const announcementFrameRef = useRef<number | undefined>(undefined);
+  const myWorkFilterActiveRef = useRef(false);
+  const lastNoResultsAnnouncementRef = useRef<TabQueries>(emptyQueries);
   // Re-render on VS Code theme changes so badge / tier colors update live.
   useThemeChangeCounter();
+
+  const myWorkQuery = appliedQueries.myWork;
+  const sourcesQuery = appliedQueries.sources;
+  const isMyWorkFilterActive = myWorkQuery.trim() !== '';
+  const isSourcesFilterActive = sourcesQuery.trim() !== '';
+  const filteredTiers = useMemo(() => filterTiers(tiers, myWorkQuery), [tiers, myWorkQuery]);
+  const filteredSources = useMemo(() => filterProviders(sources, sourcesQuery), [sources, sourcesQuery]);
+  const myWorkVisibleCount = getTierItemCount(filteredTiers.tiers);
+  const sourcesVisibleCount = getProviderItemCount(filteredSources.providers);
+
+  useEffect(() => {
+    myWorkFilterActiveRef.current = isMyWorkFilterActive;
+  }, [isMyWorkFilterActive]);
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      setAppliedQueries(current => {
+        let changed = false;
+        const next: TabQueries = { ...current };
+
+        for (const tab of ['myWork', 'sources'] as const) {
+          if (current[tab] !== queries[tab]) {
+            next[tab] = queries[tab];
+            changed = true;
+          }
+        }
+
+        return changed ? next : current;
+      });
+    }, 150);
+
+    return () => window.clearTimeout(timer);
+  }, [queries]);
 
   const announce = (message?: string) => {
     if (!message) {
@@ -34,13 +78,21 @@ export function App() {
   };
 
   useEffect(() => {
+    announceNoResults('myWork', myWorkQuery, myWorkVisibleCount, announce, lastNoResultsAnnouncementRef);
+  }, [myWorkQuery, myWorkVisibleCount]);
+
+  useEffect(() => {
+    announceNoResults('sources', sourcesQuery, sourcesVisibleCount, announce, lastNoResultsAnnouncementRef);
+  }, [sourcesQuery, sourcesVisibleCount]);
+
+  useEffect(() => {
     const handler = (event: MessageEvent<ExtensionMessage>) => {
       const msg = event.data;
       switch (msg.type) {
         case 'updateItems': {
           const nextTiers = msg.tiers;
           const previousTiers = previousTiersRef.current;
-          if (previousTiers) {
+          if (previousTiers && !myWorkFilterActiveRef.current) {
             announce(buildLiveAnnouncement(previousTiers, nextTiers));
           }
           previousTiersRef.current = nextTiers;
@@ -67,9 +119,19 @@ export function App() {
     };
   }, []);
 
-  const handleTabSwitch = (tab: 'myWork' | 'sources') => {
+  const handleTabSwitch = (tab: SidebarTab) => {
     setActiveTab(tab);
     postMessage({ type: 'switchTab', tab });
+  };
+
+  const handleQueryChange = (tab: SidebarTab, query: string) => {
+    setQueries(current => ({ ...current, [tab]: query }));
+  };
+
+  const clearQuery = (tab: SidebarTab) => {
+    setQueries(current => ({ ...current, [tab]: '' }));
+    setAppliedQueries(current => ({ ...current, [tab]: '' }));
+    setAnnouncement('');
   };
 
   return (
@@ -84,16 +146,30 @@ export function App() {
       <div class="tab-content">
         {activeTab === 'sources' ? (
           <div
+            class="sources-tab"
             role="tabpanel"
             id="mission-control-panel-sources"
             aria-labelledby="mission-control-tab-sources"
           >
-            <SourcesView
-              providers={sources}
-              onOpenItem={(providerId, externalId) =>
-                postMessage({ type: 'openSourceItem', providerId, externalId })
-              }
+            <SearchBox
+              label="Search Sources"
+              query={queries.sources}
+              onChange={(query) => handleQueryChange('sources', query)}
+              onClear={() => clearQuery('sources')}
             />
+            {isSourcesFilterActive && sourcesVisibleCount === 0 ? (
+              <NoMatches query={sourcesQuery} onClear={() => clearQuery('sources')} />
+            ) : (
+              <SourcesView
+                providers={filteredSources.providers}
+                forceExpanded={isSourcesFilterActive}
+                totalCounts={isSourcesFilterActive ? filteredSources.totalCounts : undefined}
+                query={isSourcesFilterActive ? sourcesQuery : undefined}
+                onOpenItem={(providerId, externalId) =>
+                  postMessage({ type: 'openSourceItem', providerId, externalId })
+                }
+              />
+            )}
           </div>
         ) : (
           <div
@@ -102,11 +178,19 @@ export function App() {
             id="mission-control-panel-my-work"
             aria-labelledby="mission-control-tab-my-work"
           >
-            {tiers.length === 0 ? (
+            <SearchBox
+              label="Search My Work"
+              query={queries.myWork}
+              onChange={(query) => handleQueryChange('myWork', query)}
+              onClear={() => clearQuery('myWork')}
+            />
+            {isMyWorkFilterActive && myWorkVisibleCount === 0 ? (
+              <NoMatches query={myWorkQuery} onClear={() => clearQuery('myWork')} />
+            ) : filteredTiers.tiers.length === 0 ? (
               <div class="empty-state">No items yet</div>
             ) : (
               <div class="tiers">
-                {tiers.map(tier => (
+                {filteredTiers.tiers.map(tier => (
                   <TierSection
                     key={tier.id}
                     tier={{
@@ -116,6 +200,11 @@ export function App() {
                         isSelected: item.id === selectedItemId,
                       })),
                     }}
+                    forceExpanded={isMyWorkFilterActive}
+                    totalCount={isMyWorkFilterActive ? filteredTiers.totalCounts.get(tier.id) : undefined}
+                    query={isMyWorkFilterActive ? myWorkQuery : undefined}
+                    disableDragReorder={isMyWorkFilterActive}
+                    isFilterActive={isMyWorkFilterActive}
                     onItemClick={(id) => {
                       // For incoming items, also mark them seen so the unread
                       // indicator clears once the user opens the editor.
@@ -160,6 +249,46 @@ interface ItemLocation {
   title: string;
   tierId: string;
   tierName: string;
+}
+
+function NoMatches({ query, onClear }: { query: string; onClear: () => void }) {
+  return (
+    <div class="empty-state">
+      No matches for {query}.{' '}
+      <button type="button" class="empty-state-link" onClick={onClear}>Clear filter.</button>
+    </div>
+  );
+}
+
+function announceNoResults(
+  tab: SidebarTab,
+  query: string,
+  visibleCount: number,
+  announce: (message?: string) => void,
+  lastNoResultsAnnouncementRef: { current: TabQueries },
+): void {
+  if (query.trim() && visibleCount === 0) {
+    if (lastNoResultsAnnouncementRef.current[tab] !== query) {
+      announce(`No results for ${query}`);
+      lastNoResultsAnnouncementRef.current = { ...lastNoResultsAnnouncementRef.current, [tab]: query };
+    }
+    return;
+  }
+
+  if (lastNoResultsAnnouncementRef.current[tab]) {
+    lastNoResultsAnnouncementRef.current = { ...lastNoResultsAnnouncementRef.current, [tab]: '' };
+  }
+}
+
+function getTierItemCount(tiers: TierData[]): number {
+  return tiers.reduce((total, tier) => total + tier.items.length, 0);
+}
+
+function getProviderItemCount(providers: SourceProviderData[]): number {
+  return providers.reduce(
+    (providerTotal, provider) => providerTotal + provider.groups.reduce((groupTotal, group) => groupTotal + group.items.length, 0),
+    0,
+  );
 }
 
 function buildLiveAnnouncement(previousTiers: TierData[], nextTiers: TierData[]): string | undefined {
