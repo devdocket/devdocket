@@ -486,6 +486,46 @@ describe('MainViewProvider', () => {
     expect(workGraph.createItem).not.toHaveBeenCalled();
   });
 
+  it('routes incoming acceptToFocus messages through the accept-to-focus-from-inbox command', async () => {
+    vi.useFakeTimers();
+    const workGraph = createMockWorkGraph();
+    const providerRegistry = createProviderRegistry({
+      github: [
+        {
+          externalId: 'incoming-start',
+          title: 'Incoming start',
+          description: 'Start details',
+          url: 'https://example.com/incoming/start',
+          group: 'repo',
+          canonicalId: 'canonical-start',
+        },
+      ],
+    });
+    const provider = createProvider(workGraph, providerRegistry, createStateStore());
+    const mockView = createMockWebviewView();
+
+    provider.resolveWebviewView(mockView.view, {} as any, {} as any);
+    await vi.advanceTimersByTimeAsync(50);
+    vi.clearAllMocks();
+
+    await mockView.simulateMessage({ type: 'acceptToFocus', providerId: 'github', externalId: 'incoming-start' });
+
+    expect(vscode.commands.executeCommand).toHaveBeenCalledWith(
+      'devdocket.acceptToFocusFromInbox',
+      {
+        kind: 'item',
+        providerId: 'github',
+        externalId: 'incoming-start',
+        title: 'Incoming start',
+        description: 'Start details',
+        url: 'https://example.com/incoming/start',
+        group: 'repo',
+        canonicalId: 'canonical-start',
+      },
+    );
+    expect(workGraph.createItem).not.toHaveBeenCalled();
+  });
+
   it('handles onboarding command messages through the webview message switch', async () => {
     vi.useFakeTimers();
     const provider = createProvider(
