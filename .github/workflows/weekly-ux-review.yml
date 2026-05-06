@@ -36,7 +36,7 @@ jobs:
           cache: 'npm'
 
       - name: Install Copilot CLI
-        run: npm install -g @github/copilot
+        run: npm install -g @github/copilot@1.0.42
 
       - name: Run weekly UX review
         env:
