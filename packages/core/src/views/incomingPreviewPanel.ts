@@ -7,6 +7,7 @@ import { WorkGraph } from '../services/workGraph';
 import { DiscoveredStateStore } from '../storage/discoveredStateStore';
 import { ReadStateStore } from '../storage/readStateStore';
 import { isSafeUrl } from '../utils/url';
+import { getDiscoveredItemKey, parseDiscoveredItemKey } from './discoveredItemKey';
 import { getEditorPanelHtml, renderMarkdown } from './editorPanelHtml';
 import type { EditorItemData } from './mainTypes';
 import { composeEditorBadges } from './workItemEditorPanel';
@@ -240,8 +241,9 @@ export class IncomingPreviewPanel {
       // Mark as seen so the unread indicator clears once the user opens the
       // preview. Persistence failures aren't user-actionable from here, but
       // log them so a stuck unread dot is diagnosable from the output channel.
-      void this.readStateStore.add(`${this.providerId}::${this.externalId}`).catch(err => {
-        logger.warn(`DevDocket: failed to mark ${this.providerId}::${this.externalId} as seen`, err);
+      const discoveredKey = getDiscoveredItemKey(this.providerId, this.externalId);
+      void this.readStateStore.add(discoveredKey).catch(err => {
+        logger.warn(`DevDocket: failed to mark ${discoveredKey} as seen`, err);
       });
       return;
     }
@@ -258,7 +260,7 @@ export class IncomingPreviewPanel {
   private buildEditorItemData(discoveredItem: DiscoveredItem): EditorItemData {
     const providerLabel = this.providerRegistry.getProviderLabel(this.providerId);
     return {
-      id: `${this.providerId}::${this.externalId}`,
+      id: getDiscoveredItemKey(this.providerId, this.externalId),
       title: discoveredItem.title,
       notes: undefined,
       url: discoveredItem.url,
@@ -296,7 +298,7 @@ export class IncomingPreviewPanel {
   }
 
   private static cacheKey(providerId: string, externalId: string): string {
-    return `${providerId}::${externalId}`;
+    return getDiscoveredItemKey(providerId, externalId);
   }
 
   dispose(): void {
@@ -311,14 +313,3 @@ export class IncomingPreviewPanel {
   }
 }
 
-function parseDiscoveredItemKey(value: string): { providerId: string; externalId: string } | undefined {
-  const separatorIndex = value.indexOf('::');
-  if (separatorIndex <= 0) {
-    return undefined;
-  }
-
-  return {
-    providerId: value.slice(0, separatorIndex),
-    externalId: value.slice(separatorIndex + 2),
-  };
-}
