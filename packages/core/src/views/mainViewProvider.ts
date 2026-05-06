@@ -805,6 +805,7 @@ export class MainViewProvider implements vscode.WebviewViewProvider {
     .tier-toggle-button:focus-visible,
     .tier-header-action:focus-visible,
     .source-provider-header:focus-visible,
+    .source-provider-toggle-button:focus-visible,
     .source-group-header:focus-visible,
     .source-item:focus-visible,
     .item-action-btn:focus-visible {
