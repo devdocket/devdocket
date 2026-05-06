@@ -16,12 +16,10 @@ interface SourcesViewProps {
 export function SourcesView({ providers, onOpenItem, forceExpanded = false, totalCounts, query }: SourcesViewProps) {
   if (providers.length === 0) {
     return (
-      <div class="sources-tab">
-        <OnboardingEmptyState
-          titleId="sources-empty-state-title"
-          description="Create a work item manually, or install a provider extension to populate Sources with GitHub issues, Azure DevOps tasks, PR reviews, and more."
-        />
-      </div>
+      <OnboardingEmptyState
+        titleId="sources-empty-state-title"
+        description="Create a work item manually, or install a provider extension to populate Sources with GitHub issues, Azure DevOps tasks, PR reviews, and more."
+      />
     );
   }
 
