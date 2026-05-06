@@ -453,6 +453,9 @@ export class MainViewProvider implements vscode.WebviewViewProvider {
       case 'createItem':
         await vscode.commands.executeCommand('devdocket.createItem');
         break;
+      case 'openWalkthrough':
+        await vscode.commands.executeCommand('devdocket.openWalkthrough');
+        break;
       case 'clearHistory':
         await vscode.commands.executeCommand('devdocket.clearHistory');
         break;
@@ -862,7 +865,8 @@ export class MainViewProvider implements vscode.WebviewViewProvider {
     .source-provider-header:focus-visible,
     .source-group-header:focus-visible,
     .source-item:focus-visible,
-    .item-action-btn:focus-visible {
+    .item-action-btn:focus-visible,
+    .onboarding-empty-state-button:focus-visible {
       outline: 1px solid var(--vscode-focusBorder);
       outline-offset: 2px;
     }
@@ -993,6 +997,52 @@ export class MainViewProvider implements vscode.WebviewViewProvider {
     .source-empty {
       color: var(--vscode-descriptionForeground);
       font-style: italic;
+    }
+    .onboarding-empty-state {
+      max-width: 360px;
+      margin: 32px auto;
+      padding: 24px 16px;
+      text-align: center;
+      color: var(--vscode-foreground);
+      border: 1px solid var(--vscode-widget-border, rgba(127, 127, 127, 0.24));
+      border-radius: 8px;
+      background: var(--vscode-editorWidget-background, var(--vscode-sideBar-background));
+    }
+    .onboarding-empty-state-title {
+      margin: 0 0 8px;
+      font-size: 14px;
+      font-weight: 600;
+    }
+    .onboarding-empty-state-description {
+      margin: 0;
+      color: var(--vscode-descriptionForeground);
+      line-height: 1.45;
+    }
+    .onboarding-empty-state-actions {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: center;
+      gap: 8px;
+      margin-top: 16px;
+    }
+    .onboarding-empty-state-button {
+      border: 1px solid var(--vscode-button-border, transparent);
+      border-radius: 2px;
+      padding: 4px 10px;
+      background: var(--vscode-button-background);
+      color: var(--vscode-button-foreground);
+      cursor: pointer;
+      font: inherit;
+    }
+    .onboarding-empty-state-button:hover {
+      background: var(--vscode-button-hoverBackground);
+    }
+    .onboarding-empty-state-button-secondary {
+      background: var(--vscode-button-secondaryBackground, transparent);
+      color: var(--vscode-button-secondaryForeground, var(--vscode-foreground));
+    }
+    .onboarding-empty-state-button-secondary:hover {
+      background: var(--vscode-button-secondaryHoverBackground, var(--vscode-toolbar-hoverBackground));
     }
     .health-warning {
       color: var(--vscode-problemsWarningIcon-foreground, var(--vscode-editorWarning-foreground));

@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'preact/hooks';
 import type { ExtensionMessage, SourceProviderData, TierData } from '../shared/types';
 import { postMessage } from '../shared/messaging';
 import { useThemeChangeCounter } from '../shared/theme';
+import { OnboardingEmptyState } from './components/OnboardingEmptyState';
 import { SearchBox } from './components/SearchBox';
 import { SourcesView } from './components/SourcesView';
 import { TabBar } from './components/TabBar';
@@ -17,6 +18,7 @@ export function App() {
   const [activeTab, setActiveTab] = useState<SidebarTab>('myWork');
   const [tiers, setTiers] = useState<TierData[]>([]);
   const [sources, setSources] = useState<SourceProviderData[]>([]);
+  const [hasReceivedItems, setHasReceivedItems] = useState(false);
   const [selectedItemId, setSelectedItemId] = useState<string | null>(null);
   const [queries, setQueries] = useState<TabQueries>(emptyQueries);
   const [appliedQueries, setAppliedQueries] = useState<TabQueries>(emptyQueries);
@@ -96,6 +98,7 @@ export function App() {
             announce(buildLiveAnnouncement(previousTiers, nextTiers));
           }
           previousTiersRef.current = nextTiers;
+          setHasReceivedItems(true);
           setTiers(nextTiers);
           break;
         }
@@ -186,8 +189,10 @@ export function App() {
             />
             {isMyWorkFilterActive && myWorkVisibleCount === 0 ? (
               <NoMatches query={myWorkQuery} onClear={() => clearQuery('myWork')} />
-            ) : filteredTiers.tiers.length === 0 ? (
+            ) : !isMyWorkFilterActive && !hasReceivedItems ? (
               <div class="empty-state">No items yet</div>
+            ) : !isMyWorkFilterActive && tiers.every(tier => tier.items.length === 0) ? (
+              <EmptyMyWork />
             ) : (
               <div class="tiers">
                 {filteredTiers.tiers.map(tier => (
@@ -242,6 +247,15 @@ export function App() {
         )}
       </div>
     </div>
+  );
+}
+
+function EmptyMyWork() {
+  return (
+    <OnboardingEmptyState
+      titleId="my-work-empty-state-title"
+      description="Create a work item manually, or install a provider extension to automatically discover GitHub issues, Azure DevOps tasks, PR reviews, and more."
+    />
   );
 }
 

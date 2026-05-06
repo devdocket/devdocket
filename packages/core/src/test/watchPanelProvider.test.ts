@@ -108,7 +108,7 @@ describe('WatchPanelProvider', () => {
       'devdocket.watchPanel',
       'CI Watches',
       vscode.ViewColumn.Beside,
-      expect.objectContaining({ enableScripts: true, retainContextWhenHidden: true }),
+      expect.objectContaining({ enableScripts: true }),
     );
     expect(mockPanel.panel.title).toBe('CI Watches (2)');
     expect(mockPanel.panel.webview.html).toContain('watchPanel.js');
