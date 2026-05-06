@@ -7,11 +7,11 @@ interface HighlightedTextProps {
 }
 
 export function HighlightedText({ text, query = '' }: HighlightedTextProps) {
-  const segments = splitOnMatches(text, query);
-
   if (!query.trim()) {
     return <>{text}</>;
   }
+
+  const segments = splitOnMatches(text, query);
 
   return (
     <>
