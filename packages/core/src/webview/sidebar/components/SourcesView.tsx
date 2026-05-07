@@ -77,7 +77,7 @@ function ProviderSection({ provider, onOpenItem, onShowProviderHealth, forceExpa
             onClick={toggleCollapsed}
             aria-expanded={!isCollapsed}
           >
-            <HighlightedText text={provider.label} query={query} />
+            <span>{provider.label}</span>
           </button>
           {!provider.isHealthy ? (
             <button
