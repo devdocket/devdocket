@@ -2,7 +2,16 @@ import { describe, expect, it, vi } from 'vitest';
 import type { DiscoveredItem } from '../api/types';
 import { WorkItemState, type WorkItem } from '../models/workItem';
 import { buildRelatedItemsIndex, resolveRelatedItemsFor } from '../services/relatedItems';
-import { initLogger } from '../services/logger';
+import { logger } from '../services/logger';
+
+vi.mock('../services/logger', () => ({
+  logger: {
+    debug: vi.fn(),
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
+  },
+}));
 
 function makeWorkItem(overrides: Partial<WorkItem> = {}): WorkItem {
   const now = Date.now();
@@ -233,8 +242,7 @@ describe('resolveRelatedItemsFor', () => {
   });
 
   it('logs strict misses when related refs are not discovered locally', () => {
-    const channel = { appendLine: vi.fn() };
-    initLogger(channel as any, 0);
+    vi.mocked(logger.debug).mockClear();
     const pr = makeWorkItem({ id: 'pr-1', providerId: 'github-my-prs', externalId: 'owner/repo#10' });
     const registry = makeRegistry(new Map([
       ['github-my-prs', [{ externalId: 'owner/repo#10', title: 'PR', itemType: 'pr', relatedItems: [{ externalId: 'owner/repo#404', itemType: 'issue', relation: 'closes' }] }]],
@@ -242,6 +250,6 @@ describe('resolveRelatedItemsFor', () => {
 
     buildRelatedItemsIndex(registry, makeWorkGraph([pr]));
 
-    expect(channel.appendLine).toHaveBeenCalledWith(expect.stringContaining('[DEBUG] Resolved 0 / 1 related-item refs (1 dropped because target not in DevDocket)'));
+    expect(logger.debug).toHaveBeenCalledWith('Resolved 0 / 1 related-item refs (1 dropped because target not in DevDocket)');
   });
 });

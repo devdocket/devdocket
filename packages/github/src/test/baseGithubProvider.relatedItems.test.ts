@@ -2,7 +2,16 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { DiscoveredItem, RelatedItemRef } from '@devdocket/shared';
 import { BaseGitHubProvider } from '../baseGithubProvider';
 import { mapPrCrossReferencesToRelatedItems } from '../githubGraphql';
-import { initLogger } from '../logger';
+import { logger } from '../logger';
+
+vi.mock('../logger', () => ({
+  logger: {
+    debug: vi.fn(),
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
+  },
+}));
 
 const mockFetch = vi.fn();
 
@@ -116,14 +125,11 @@ describe('GitHub related item mapping', () => {
 
 describe('BaseGitHubProvider related item fetching', () => {
   let provider: TestGitHubProvider;
-  let mockChannel: { appendLine: ReturnType<typeof vi.fn> };
 
   beforeEach(() => {
     vi.resetAllMocks();
     vi.stubGlobal('fetch', mockFetch);
     provider = new TestGitHubProvider();
-    mockChannel = { appendLine: vi.fn() };
-    initLogger(mockChannel as any, 0);
   });
 
   afterEach(() => {
@@ -166,9 +172,9 @@ describe('BaseGitHubProvider related item fetching', () => {
 
     expect(result.has('owner/repo#1')).toBe(true);
     expect(result.has('owner/repo#2')).toBe(false);
-    expect(mockChannel.appendLine.mock.calls.some(call => call[0].includes('[WARN]') && call[0].includes('Failed to fetch related items for PR owner/repo#2'))).toBe(true);
-    expect(mockChannel.appendLine.mock.calls.some(call => call[0].includes('[DEBUG]') && call[0].includes('Failed to fetch related items for PR owner/repo#2'))).toBe(false);
-    expect(mockChannel.appendLine.mock.calls.some(call => call[0].includes('[INFO] Found related items for 1/2 PRs (1 failures)'))).toBe(true);
+    expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining('Failed to fetch related items for PR owner/repo#2'));
+    expect(logger.debug).not.toHaveBeenCalledWith(expect.stringContaining('Failed to fetch related items for PR owner/repo#2'));
+    expect(logger.info).toHaveBeenCalledWith('Found related items for 1/2 PRs (1 failures)');
   });
 
   it('keeps empty successful batches out of info logs', async () => {
@@ -179,8 +185,8 @@ describe('BaseGitHubProvider related item fetching', () => {
     ], 'token');
 
     expect(result.size).toBe(0);
-    expect(mockChannel.appendLine.mock.calls.some(call => call[0].includes('[INFO] Found related items for 0/1 PRs (0 failures)'))).toBe(false);
-    expect(mockChannel.appendLine.mock.calls.some(call => call[0].includes('[DEBUG] Found related items for 0/1 PRs (0 failures)'))).toBe(true);
+    expect(logger.info).not.toHaveBeenCalledWith('Found related items for 0/1 PRs (0 failures)');
+    expect(logger.debug).toHaveBeenCalledWith('Found related items for 0/1 PRs (0 failures)');
   });
 
   it('propagates cancellation as AbortError', async () => {
