@@ -174,7 +174,7 @@ export function App() {
   };
 
   const renderSearchToggle = (tab: SidebarTab, visible: boolean) => {
-    const hasQuery = queries[tab] !== '' || appliedQueries[tab] !== '';
+    const hasQuery = queries[tab].trim() !== '' || appliedQueries[tab].trim() !== '';
     const label = visible ? (hasQuery ? 'Hide search and clear filter' : 'Hide search') : 'Show search';
 
     return (
