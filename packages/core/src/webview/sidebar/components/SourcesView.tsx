@@ -77,7 +77,7 @@ function ProviderSection({ provider, onOpenItem, onShowProviderHealth, forceExpa
             class="source-provider-toggle-button source-provider-title-button"
             onClick={toggleCollapsed}
             aria-expanded={!isCollapsed}
-            disabled={forceExpanded}
+            aria-disabled={forceExpanded}
             title={collapseTitle}
           >
             <span>{provider.label}</span>
@@ -99,7 +99,7 @@ function ProviderSection({ provider, onOpenItem, onShowProviderHealth, forceExpa
           onClick={toggleCollapsed}
           aria-expanded={!isCollapsed}
           aria-label={`${isCollapsed ? 'Expand' : 'Collapse'} ${provider.label} source items`}
-          disabled={forceExpanded}
+          aria-disabled={forceExpanded}
           title={collapseTitle}
         >
           <span>{countLabel}</span>
