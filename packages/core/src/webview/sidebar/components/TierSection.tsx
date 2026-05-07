@@ -57,6 +57,7 @@ export function TierSection({
   const isReorderableTier = !disableDragReorder && (tier.id === 'ready-to-start' || tier.id === 'in-progress');
   const isCollapsed = forceExpanded ? false : collapsed;
   const countLabel = totalCount === undefined ? `(${tier.items.length})` : `(${tier.items.length} of ${totalCount})`;
+  const collapseTitle = forceExpanded ? 'Clear filter to collapse' : undefined;
   const toggleCollapsed = () => {
     if (!forceExpanded) {
       setCollapsed(value => !value);
@@ -283,6 +284,8 @@ export function TierSection({
           onClick={toggleCollapsed}
           aria-expanded={!isCollapsed}
           aria-controls={!isCollapsed ? itemsId : undefined}
+          aria-disabled={forceExpanded}
+          title={collapseTitle}
         >
           <span aria-hidden="true">{tier.icon}</span>
           <span>{tier.name}</span>
@@ -327,6 +330,8 @@ export function TierSection({
           class="tier-toggle-button"
           onClick={toggleCollapsed}
           aria-label={`${isCollapsed ? 'Expand' : 'Collapse'} ${tier.name}`}
+          aria-disabled={forceExpanded}
+          title={collapseTitle}
           tabIndex={-1}
         >
           <span class="tier-toggle" aria-hidden="true">{isCollapsed ? '▸' : '▾'}</span>

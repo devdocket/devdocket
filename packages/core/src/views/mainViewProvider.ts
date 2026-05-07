@@ -885,6 +885,10 @@ export class MainViewProvider implements vscode.WebviewViewProvider {
       display: inline-flex;
       align-items: center;
     }
+    .tier-header-main[aria-disabled="true"],
+    .tier-toggle-button[aria-disabled="true"] {
+      cursor: default;
+    }
     .tier-header-main:focus-visible,
     .tier-toggle-button:focus-visible,
     .tier-header-action:focus-visible,
