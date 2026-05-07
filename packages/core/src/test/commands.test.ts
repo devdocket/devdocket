@@ -170,6 +170,7 @@ describe('registerCommands', () => {
       {} as PRWatcherRegistry,
       {} as WatcherService,
       watchPanelProvider as any,
+      vi.fn(),
     );
   });
 
