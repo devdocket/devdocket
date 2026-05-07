@@ -174,7 +174,8 @@ export function App() {
   };
 
   const renderSearchToggle = (tab: SidebarTab, visible: boolean) => {
-    const label = visible ? 'Hide search' : 'Show search';
+    const hasQuery = queries[tab] !== '' || appliedQueries[tab] !== '';
+    const label = visible ? (hasQuery ? 'Hide search and clear filter' : 'Hide search') : 'Show search';
 
     return (
       <button
