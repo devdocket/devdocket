@@ -77,12 +77,16 @@ export function App() {
   };
 
   useEffect(() => {
-    announceNoResults('myWork', myWorkQuery, myWorkVisibleCount, announce, lastNoResultsAnnouncementRef);
-  }, [myWorkQuery, myWorkVisibleCount]);
+    if (activeTab === 'myWork') {
+      announceNoResults('myWork', myWorkQuery, myWorkVisibleCount, announce, lastNoResultsAnnouncementRef);
+    }
+  }, [activeTab, myWorkQuery, myWorkVisibleCount]);
 
   useEffect(() => {
-    announceNoResults('sources', sourcesQuery, sourcesVisibleCount, announce, lastNoResultsAnnouncementRef);
-  }, [sourcesQuery, sourcesVisibleCount]);
+    if (activeTab === 'sources') {
+      announceNoResults('sources', sourcesQuery, sourcesVisibleCount, announce, lastNoResultsAnnouncementRef);
+    }
+  }, [activeTab, sourcesQuery, sourcesVisibleCount]);
 
   useEffect(() => {
     const handler = (event: MessageEvent<ExtensionMessage>) => {
