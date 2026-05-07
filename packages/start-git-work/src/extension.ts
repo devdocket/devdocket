@@ -2,7 +2,7 @@ import * as vscode from 'vscode';
 import { StartWorkAction } from './startWorkAction';
 import { promptGitCleanup } from './gitCleanup';
 import { initLogger, setLogLevel, logger, resolveLogLevel } from './logger';
-import type { StateTransitionEvent, ActivityType } from '@devdocket/shared';
+import type { StateTransitionEvent, ActivityType, DevDocketApi } from '@devdocket/shared';
 
 export async function activate(context: vscode.ExtensionContext): Promise<void> {
   const outputChannel = vscode.window.createOutputChannel('DevDocket Start Git Work');
@@ -34,15 +34,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     return;
   }
 
-  let api;
-  try {
-    api = coreExtension.isActive ? coreExtension.exports : await coreExtension.activate();
-  } catch (err: unknown) {
-    const message = err instanceof Error ? err.message : String(err);
-    logger.error(`Failed to activate core extension — ${message}`);
-    void vscode.window.showErrorMessage(`DevDocket Start Git Work: Failed to activate core extension — ${message}`);
-    return;
-  }
+  const api = coreExtension.exports as DevDocketApi;
 
   if (!api || typeof api.registerAction !== 'function') {
     logger.error('Core extension API not available');

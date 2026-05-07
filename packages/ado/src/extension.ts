@@ -5,22 +5,12 @@ import { AdoMyPrsProvider } from './adoMyPrsProvider';
 import { AdoPipelineWatcher } from './adoPipelineWatcher';
 import { AdoPRWatcher } from './adoPRWatcher';
 import { parseAdoProjectsConfig } from './configParser';
-import { validateRefreshInterval } from '@devdocket/shared';
+import { validateRefreshInterval, type DevDocketApi } from '@devdocket/shared';
 import { initLogger, setLogLevel, logger, resolveLogLevel } from './logger';
 
-let workItemProvider: AdoWorkItemProvider | undefined;
-let prProvider: AdoPrReviewProvider | undefined;
-let myPrsProvider: AdoMyPrsProvider | undefined;
-let workItemRegistration: vscode.Disposable | undefined;
-let prRegistration: vscode.Disposable | undefined;
-let myPrsRegistration: vscode.Disposable | undefined;
-let watcherRegistration: vscode.Disposable | undefined;
-let prWatcherRegistration: vscode.Disposable | undefined;
-let orgWarningShown = false;
-
-export async function activate(_context: vscode.ExtensionContext): Promise<void> {
+export async function activate(context: vscode.ExtensionContext): Promise<void> {
   const outputChannel = vscode.window.createOutputChannel('DevDocket ADO');
-  _context.subscriptions.push(outputChannel);
+  context.subscriptions.push(outputChannel);
 
   const logLevelConfig = vscode.workspace.getConfiguration('devDocket').get<string>('logLevel', 'info');
   initLogger(outputChannel, resolveLogLevel(logLevelConfig));
@@ -28,7 +18,7 @@ export async function activate(_context: vscode.ExtensionContext): Promise<void>
     logger.warn(`Invalid log level '${logLevelConfig}', falling back to 'info'. Valid values: debug, info, warn, error`);
   }
 
-  _context.subscriptions.push(
+  context.subscriptions.push(
     vscode.workspace.onDidChangeConfiguration(e => {
       if (e.affectsConfiguration('devDocket.logLevel')) {
         const newLevel = vscode.workspace.getConfiguration('devDocket').get<string>('logLevel', 'info');
@@ -48,37 +38,37 @@ export async function activate(_context: vscode.ExtensionContext): Promise<void>
     return;
   }
 
-  let api;
-  try {
-    api = coreExtension.isActive
-      ? coreExtension.exports
-      : await coreExtension.activate();
-  } catch (err: unknown) {
-    const message = err instanceof Error ? err.message : String(err);
-    logger.error(`Failed to activate core extension — ${message}`);
-    void vscode.window.showErrorMessage(`DevDocket ADO: Failed to activate core extension — ${message}`);
-    return;
-  }
+  const api = coreExtension.exports as DevDocketApi;
 
   if (!api || typeof api.registerProvider !== 'function') {
     logger.error('Core extension API not available');
     return;
   }
 
-  const configureProviders= () => {
-    // Dispose existing providers and registrations before reconfiguring
-    workItemRegistration?.dispose();
-    workItemRegistration = undefined;
-    prRegistration?.dispose();
-    prRegistration = undefined;
-    myPrsRegistration?.dispose();
-    myPrsRegistration = undefined;
-    workItemProvider?.dispose();
-    workItemProvider = undefined;
-    prProvider?.dispose();
-    prProvider = undefined;
-    myPrsProvider?.dispose();
-    myPrsProvider = undefined;
+  let orgWarningShown = false;
+  let configurableDisposables: vscode.Disposable[] = [];
+  const disposeConfigurableDisposables = () => {
+    const disposablesToDispose = configurableDisposables;
+    configurableDisposables = [];
+    for (const disposable of disposablesToDispose) {
+      disposable.dispose();
+    }
+  };
+
+  let watcherRegistered = false;
+  if (typeof api.registerRunWatcher === 'function') {
+    context.subscriptions.push(api.registerRunWatcher(new AdoPipelineWatcher()));
+    watcherRegistered = true;
+  }
+
+  let prWatcherRegistered = false;
+  if (typeof api.registerPRWatcher === 'function') {
+    context.subscriptions.push(api.registerPRWatcher(new AdoPRWatcher()));
+    prWatcherRegistered = true;
+  }
+
+  const configureProviders = () => {
+    disposeConfigurableDisposables();
 
     const config = vscode.workspace.getConfiguration('devDocketAdo');
     const projects = config.get<string[]>('projects', []);
@@ -115,39 +105,35 @@ export async function activate(_context: vscode.ExtensionContext): Promise<void>
       config.get<number>('refreshIntervalSeconds', 300), logger,
     );
 
-    workItemProvider = new AdoWorkItemProvider(orgConfigs);
-    prProvider = new AdoPrReviewProvider(orgConfigs);
-    myPrsProvider = new AdoMyPrsProvider(orgConfigs);
+    const workItemProvider = new AdoWorkItemProvider(orgConfigs);
+    const prProvider = new AdoPrReviewProvider(orgConfigs);
+    const myPrsProvider = new AdoMyPrsProvider(orgConfigs);
 
     workItemProvider.startPeriodicRefresh(intervalSeconds);
     prProvider.startPeriodicRefresh(intervalSeconds);
     myPrsProvider.startPeriodicRefresh(intervalSeconds);
 
-    workItemRegistration = api.registerProvider(workItemProvider);
-    prRegistration = api.registerProvider(prProvider);
-    myPrsRegistration = api.registerProvider(myPrsProvider);
-
-    // Register ADO pipeline watcher (if core supports it)
-    if (typeof api.registerRunWatcher === 'function') {
-      watcherRegistration?.dispose();
-      watcherRegistration = api.registerRunWatcher(new AdoPipelineWatcher());
-    }
-
-    // Register ADO PR watcher (if core supports it)
-    if (typeof api.registerPRWatcher === 'function') {
-      prWatcherRegistration?.dispose();
-      prWatcherRegistration = api.registerPRWatcher(new AdoPRWatcher());
-    }
+    const nextDisposables: vscode.Disposable[] = [
+      api.registerProvider(workItemProvider),
+      api.registerProvider(prProvider),
+      api.registerProvider(myPrsProvider),
+      workItemProvider,
+      prProvider,
+      myPrsProvider,
+    ];
+    configurableDisposables = nextDisposables;
 
     const parts = ['3 ADO providers'];
-    if (watcherRegistration) { parts.push('1 watcher'); }
-    if (prWatcherRegistration) { parts.push('1 PR watcher'); }
+    if (watcherRegistered) { parts.push('1 watcher'); }
+    if (prWatcherRegistered) { parts.push('1 PR watcher'); }
     logger.info(`Registered ${parts.join(' + ')}`);
   };
 
+  context.subscriptions.push({ dispose: disposeConfigurableDisposables });
+
   configureProviders();
 
-  _context.subscriptions.push(
+  context.subscriptions.push(
     vscode.workspace.onDidChangeConfiguration(e => {
       if (
         e.affectsConfiguration('devDocketAdo.projects') ||
@@ -162,14 +148,5 @@ export async function activate(_context: vscode.ExtensionContext): Promise<void>
 }
 
 export function deactivate(): void {
-  logger.info('DevDocket ADO deactivating...');
-  workItemRegistration?.dispose();
-  prRegistration?.dispose();
-  myPrsRegistration?.dispose();
-  watcherRegistration?.dispose();
-  prWatcherRegistration?.dispose();
-  workItemProvider?.dispose();
-  prProvider?.dispose();
-  myPrsProvider?.dispose();
-  logger.info('DevDocket ADO deactivated');
+  // Resources disposed via subscriptions
 }

@@ -429,6 +429,9 @@ export class MainViewProvider implements vscode.WebviewViewProvider {
         }
         break;
       }
+      case 'showProviderHealth':
+        await vscode.commands.executeCommand('devdocket.showProviderHealthQuickPick');
+        break;
       case 'acceptItem':
         await this.handleAcceptItem(message.providerId, message.externalId);
         break;
@@ -493,27 +496,22 @@ export class MainViewProvider implements vscode.WebviewViewProvider {
 
   private async handleAcceptItem(providerId: string, externalId: string): Promise<void> {
     try {
-      const existing = this.workGraph.findItemByProvenance(providerId, externalId);
-      if (!existing) {
-        const discoveredItem = this.providerRegistry.getDiscoveredItems(providerId).find(item => item.externalId === externalId);
-        if (!discoveredItem) {
-          logger.warn(`DevDocket: discovered item ${providerId}/${externalId} not found for accept`);
-          return;
-        }
-        await this.workGraph.createItem(
-          {
-            title: discoveredItem.title,
-            description: discoveredItem.description,
-          },
-          {
-            providerId,
-            externalId,
-            url: discoveredItem.url,
-            ...(discoveredItem.group ? { group: discoveredItem.group } : {}),
-          },
-        );
+      const discoveredItem = this.providerRegistry.getDiscoveredItems(providerId).find(item => item.externalId === externalId);
+      if (!discoveredItem) {
+        logger.warn(`DevDocket: discovered item ${providerId}/${externalId} not found for accept`);
+        return;
       }
-      await this.stateStore.setState(providerId, externalId, 'accepted');
+
+      await vscode.commands.executeCommand('devdocket.acceptFromInbox', {
+        kind: 'item',
+        providerId,
+        externalId,
+        title: discoveredItem.title,
+        description: discoveredItem.description,
+        url: discoveredItem.url,
+        ...(discoveredItem.group ? { group: discoveredItem.group } : {}),
+        ...(discoveredItem.canonicalId ? { canonicalId: discoveredItem.canonicalId } : {}),
+      });
     } catch (err) {
       logger.error('DevDocket: accept failed', err);
       void vscode.window.showErrorMessage(`Failed to accept item: ${err instanceof Error ? err.message : String(err)}`);
@@ -541,7 +539,22 @@ export class MainViewProvider implements vscode.WebviewViewProvider {
     // Ready to Start tier). Lets the user pull an inbox item directly into
     // active work without opening the editor first.
     try {
-      await vscode.commands.executeCommand('devdocket.acceptToFocusFromInbox', { providerId, externalId });
+      const discoveredItem = this.providerRegistry.getDiscoveredItems(providerId).find(item => item.externalId === externalId);
+      if (!discoveredItem) {
+        logger.warn(`DevDocket: discovered item ${providerId}/${externalId} not found for acceptToFocus`);
+        return;
+      }
+
+      await vscode.commands.executeCommand('devdocket.acceptToFocusFromInbox', {
+        kind: 'item',
+        providerId,
+        externalId,
+        title: discoveredItem.title,
+        description: discoveredItem.description,
+        url: discoveredItem.url,
+        ...(discoveredItem.group ? { group: discoveredItem.group } : {}),
+        ...(discoveredItem.canonicalId ? { canonicalId: discoveredItem.canonicalId } : {}),
+      });
     } catch (err) {
       logger.error('DevDocket: acceptToFocus failed', err);
       void vscode.window.showErrorMessage(`Failed to start item: ${err instanceof Error ? err.message : String(err)}`);
@@ -871,7 +884,7 @@ export class MainViewProvider implements vscode.WebviewViewProvider {
     .tier-header-main:focus-visible,
     .tier-toggle-button:focus-visible,
     .tier-header-action:focus-visible,
-    .source-provider-header:focus-visible,
+    .source-provider-toggle-button:focus-visible,
     .source-group-header:focus-visible,
     .source-item:focus-visible,
     .item-action-btn:focus-visible,
@@ -911,10 +924,16 @@ export class MainViewProvider implements vscode.WebviewViewProvider {
     .source-provider.unhealthy {
       border-left-color: var(--vscode-problemsWarningIcon-foreground, var(--vscode-editorWarning-foreground));
     }
-    .source-provider-header,
-    .source-group-header {
+    .source-provider-header {
       width: 100%;
       display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .source-group-header,
+    .source-provider-toggle-button,
+    .health-warning-button {
+      display: inline-flex;
       align-items: center;
       gap: 6px;
       background: transparent;
@@ -924,6 +943,12 @@ export class MainViewProvider implements vscode.WebviewViewProvider {
       padding: 0;
       text-align: left;
       font: inherit;
+    }
+    .source-group-header {
+      width: 100%;
+    }
+    .source-provider-title-button {
+      min-width: 0;
     }
     .source-provider-title,
     .source-group-title {
@@ -1006,6 +1031,14 @@ export class MainViewProvider implements vscode.WebviewViewProvider {
     .source-empty {
       color: var(--vscode-descriptionForeground);
       font-style: italic;
+    }
+    .health-warning-button {
+      line-height: inherit;
+    }
+    .health-warning-button:focus-visible {
+      outline: 1px solid var(--vscode-focusBorder);
+      outline-offset: 2px;
+      border-radius: 2px;
     }
     .onboarding-empty-state {
       max-width: 360px;

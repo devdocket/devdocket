@@ -184,6 +184,9 @@ export function App() {
                 onOpenItem={(providerId, externalId) =>
                   postMessage({ type: 'openSourceItem', providerId, externalId })
                 }
+                onShowProviderHealth={(providerId) =>
+                  postMessage({ type: 'showProviderHealth', providerId })
+                }
               />
             )}
           </div>

@@ -21,18 +21,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     return;
   }
 
-  let api: DevDocketApi | undefined;
-  try {
-    api = coreExtension.isActive
-      ? coreExtension.exports
-      : await coreExtension.activate();
-  } catch (err: unknown) {
-    const message = err instanceof Error ? err.message : String(err);
-    log.error(`Failed to activate core extension: ${message}`);
-    console.error(`DevDocket AI Reviewer: Failed to activate core extension — ${message}`);
-    vscode.window.showErrorMessage(`DevDocket AI Reviewer: Failed to activate core extension — ${message}`);
-    return;
-  }
+  const api = coreExtension.exports as DevDocketApi;
 
   if (!api || typeof api.registerAction !== 'function') {
     const msg = 'DevDocket AI Reviewer: core extension API not available';

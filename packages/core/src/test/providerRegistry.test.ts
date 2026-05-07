@@ -1473,9 +1473,20 @@ describe('ProviderRegistry', () => {
     });
   });
 
-  describe('soft version resurfacing with work item state', () => {
-    it('suppresses version resurfacing when work item is InProgress', async () => {
-      const getWorkItemState = vi.fn().mockReturnValue(WorkItemState.InProgress);
+  describe('resurfacing with work item state', () => {
+    const activeWorkItemStates = [
+      WorkItemState.New,
+      WorkItemState.InProgress,
+      WorkItemState.Paused,
+    ];
+    const completedOrMissingWorkItemStates = [
+      WorkItemState.Done,
+      WorkItemState.Archived,
+      undefined,
+    ];
+
+    it.each(activeWorkItemStates)('suppresses accepted version resurfacing when work item is %s', async (workItemState) => {
+      const getWorkItemState = vi.fn().mockReturnValue(workItemState);
       const addActivityFn = vi.fn().mockResolvedValue(undefined);
       const reg = new ProviderRegistry(stateStore, undefined, getWorkItemState, addActivityFn);
       const provider = createMockProvider('gh');
@@ -1492,182 +1503,158 @@ describe('ProviderRegistry', () => {
       ]);
 
       await vi.waitFor(() => expect(stateStore.setStates).toHaveBeenCalled());
-      // Should backfill version, not resurface
       expect(stateStore.setStates).toHaveBeenCalledWith([
         { providerId: 'gh', externalId: 'pr-1', state: 'accepted', version: 'sha-new' },
       ]);
+      expect(stateStore.getVersion('gh', 'pr-1')).toBe('sha-new');
       expect(listener).not.toHaveBeenCalled();
-      expect(getWorkItemState).toHaveBeenCalledWith('gh', 'pr-1');
-      // Activity log should be called
-      await vi.waitFor(() => expect(addActivityFn).toHaveBeenCalledWith('gh', 'pr-1', 'version-updated'));
-
-      reg.dispose();
-    });
-
-    it('suppresses version resurfacing when work item is Paused', async () => {
-      const getWorkItemState = vi.fn().mockReturnValue(WorkItemState.Paused);
-      const addActivityFn = vi.fn().mockResolvedValue(undefined);
-      const reg = new ProviderRegistry(stateStore, undefined, getWorkItemState, addActivityFn);
-      const provider = createMockProvider('gh');
-      reg.register(provider);
-
-      stateStore._set('gh', 'pr-1', 'accepted');
-      stateStore._setVersion('gh', 'pr-1', 'sha-old');
-
-      provider.fireItems([
-        { externalId: 'pr-1', title: 'PR 1', version: 'sha-new' },
-      ]);
-
-      await vi.waitFor(() => expect(stateStore.setStates).toHaveBeenCalled());
-      expect(stateStore.setStates).toHaveBeenCalledWith([
-        { providerId: 'gh', externalId: 'pr-1', state: 'accepted', version: 'sha-new' },
-      ]);
-
-      reg.dispose();
-    });
-
-    it('suppresses version resurfacing when work item is New', async () => {
-      const getWorkItemState = vi.fn().mockReturnValue(WorkItemState.New);
-      const addActivityFn = vi.fn().mockResolvedValue(undefined);
-      const reg = new ProviderRegistry(stateStore, undefined, getWorkItemState, addActivityFn);
-      const provider = createMockProvider('gh');
-      reg.register(provider);
-
-      stateStore._set('gh', 'pr-1', 'accepted');
-      stateStore._setVersion('gh', 'pr-1', 'sha-old');
-
-      provider.fireItems([
-        { externalId: 'pr-1', title: 'PR 1', version: 'sha-new' },
-      ]);
-
-      await vi.waitFor(() => expect(stateStore.setStates).toHaveBeenCalled());
-      expect(stateStore.setStates).toHaveBeenCalledWith([
-        { providerId: 'gh', externalId: 'pr-1', state: 'accepted', version: 'sha-new' },
-      ]);
-
-      reg.dispose();
-    });
-
-    it('resurfaces when version changes and work item is Done', async () => {
-      const getWorkItemState = vi.fn().mockReturnValue(WorkItemState.Done);
-      const reg = new ProviderRegistry(stateStore, undefined, getWorkItemState);
-      const provider = createMockProvider('gh');
-      reg.register(provider);
-
-      stateStore._set('gh', 'pr-1', 'accepted');
-      stateStore._setVersion('gh', 'pr-1', 'sha-old');
-
-      const listener = vi.fn();
-      reg.onDidAddNewUnseenItems(listener);
-
-      provider.fireItems([
-        { externalId: 'pr-1', title: 'PR 1', version: 'sha-new' },
-      ]);
-
-      await vi.waitFor(() => expect(stateStore.setStates).toHaveBeenCalled());
-      expect(stateStore.setStates).toHaveBeenCalledWith([
-        { providerId: 'gh', externalId: 'pr-1', state: 'unseen', version: 'sha-new' },
-      ]);
-      await vi.waitFor(() => expect(listener).toHaveBeenCalledWith(1));
-
-      reg.dispose();
-    });
-
-    it('resurfaces when version changes and work item is Archived', async () => {
-      const getWorkItemState = vi.fn().mockReturnValue(WorkItemState.Archived);
-      const reg = new ProviderRegistry(stateStore, undefined, getWorkItemState);
-      const provider = createMockProvider('gh');
-      reg.register(provider);
-
-      stateStore._set('gh', 'pr-1', 'accepted');
-      stateStore._setVersion('gh', 'pr-1', 'sha-old');
-
-      provider.fireItems([
-        { externalId: 'pr-1', title: 'PR 1', version: 'sha-new' },
-      ]);
-
-      await vi.waitFor(() => expect(stateStore.setStates).toHaveBeenCalled());
-      expect(stateStore.setStates).toHaveBeenCalledWith([
-        { providerId: 'gh', externalId: 'pr-1', state: 'unseen', version: 'sha-new' },
-      ]);
-
-      reg.dispose();
-    });
-
-    it('resurfaces when version changes and no work item exists', async () => {
-      const getWorkItemState = vi.fn().mockReturnValue(undefined);
-      const reg = new ProviderRegistry(stateStore, undefined, getWorkItemState);
-      const provider = createMockProvider('gh');
-      reg.register(provider);
-
-      stateStore._set('gh', 'pr-1', 'accepted');
-      stateStore._setVersion('gh', 'pr-1', 'sha-old');
-
-      provider.fireItems([
-        { externalId: 'pr-1', title: 'PR 1', version: 'sha-new' },
-      ]);
-
-      await vi.waitFor(() => expect(stateStore.setStates).toHaveBeenCalled());
-      expect(stateStore.setStates).toHaveBeenCalledWith([
-        { providerId: 'gh', externalId: 'pr-1', state: 'unseen', version: 'sha-new' },
-      ]);
-
-      reg.dispose();
-    });
-
-    it('resurfaceVersion always resurfaces even when work item is InProgress', async () => {
-      const getWorkItemState = vi.fn().mockReturnValue(WorkItemState.InProgress);
-      const reg = new ProviderRegistry(stateStore, undefined, getWorkItemState);
-      const provider = createMockProvider('gh');
-      reg.register(provider);
-
-      stateStore._set('gh', 'pr-1', 'accepted');
-      stateStore._setResurfaceVersion('gh', 'pr-1', 'rr-old');
-
-      const listener = vi.fn();
-      reg.onDidAddNewUnseenItems(listener);
-
-      provider.fireItems([
-        { externalId: 'pr-1', title: 'PR 1', resurfaceVersion: 'rr-new' },
-      ]);
-
-      await vi.waitFor(() => expect(stateStore.setStates).toHaveBeenCalled());
-      expect(stateStore.setStates).toHaveBeenCalledWith([
-        { providerId: 'gh', externalId: 'pr-1', state: 'unseen', resurfaceVersion: 'rr-new' },
-      ]);
-      await vi.waitFor(() => expect(listener).toHaveBeenCalledWith(1));
-
-      reg.dispose();
-    });
-
-    it('resurfaceVersion overrides suppressed version change', async () => {
-      const getWorkItemState = vi.fn().mockReturnValue(WorkItemState.InProgress);
-      const addActivityFn = vi.fn().mockResolvedValue(undefined);
-      const reg = new ProviderRegistry(stateStore, undefined, getWorkItemState, addActivityFn);
-      const provider = createMockProvider('gh');
-      reg.register(provider);
-
-      stateStore._set('gh', 'pr-1', 'accepted');
-      stateStore._setVersion('gh', 'pr-1', 'sha-old');
-      stateStore._setResurfaceVersion('gh', 'pr-1', 'rr-old');
-
-      provider.fireItems([
-        { externalId: 'pr-1', title: 'PR 1', version: 'sha-new', resurfaceVersion: 'rr-new' },
-      ]);
-
-      await vi.waitFor(() => expect(stateStore.setStates).toHaveBeenCalled());
-      // resurfaceVersion change should trigger full resurface
-      expect(stateStore.setStates).toHaveBeenCalledWith([
-        { providerId: 'gh', externalId: 'pr-1', state: 'unseen', version: 'sha-new', resurfaceVersion: 'rr-new' },
-      ]);
-      // No activity logged — item resurfaced, not suppressed
       expect(addActivityFn).not.toHaveBeenCalled();
+      expect(getWorkItemState).toHaveBeenCalledWith('gh', 'pr-1');
 
       reg.dispose();
     });
 
-    it('still works without getWorkItemState callback (backward compatible)', async () => {
-      // No callback provided — behaves as before (version change resurfaces)
+    it.each(completedOrMissingWorkItemStates)('resurfaces accepted item on version change when work item is %s', async (workItemState) => {
+      const getWorkItemState = vi.fn().mockReturnValue(workItemState);
+      const reg = new ProviderRegistry(stateStore, undefined, getWorkItemState);
+      const provider = createMockProvider('gh');
+      reg.register(provider);
+
+      stateStore._set('gh', 'pr-1', 'accepted');
+      stateStore._setVersion('gh', 'pr-1', 'sha-old');
+
+      const listener = vi.fn();
+      reg.onDidAddNewUnseenItems(listener);
+
+      provider.fireItems([
+        { externalId: 'pr-1', title: 'PR 1', version: 'sha-new' },
+      ]);
+
+      await vi.waitFor(() => expect(stateStore.setStates).toHaveBeenCalled());
+      expect(stateStore.setStates).toHaveBeenCalledWith([
+        { providerId: 'gh', externalId: 'pr-1', state: 'unseen', version: 'sha-new' },
+      ]);
+      await vi.waitFor(() => expect(listener).toHaveBeenCalledWith(1));
+      expect(getWorkItemState).toHaveBeenCalledWith('gh', 'pr-1');
+
+      reg.dispose();
+    });
+
+    it.each(activeWorkItemStates)('suppresses accepted resurfaceVersion resurfacing when work item is %s', async (workItemState) => {
+      const getWorkItemState = vi.fn().mockReturnValue(workItemState);
+      const addActivityFn = vi.fn().mockResolvedValue(undefined);
+      const reg = new ProviderRegistry(stateStore, undefined, getWorkItemState, addActivityFn);
+      const provider = createMockProvider('gh');
+      reg.register(provider);
+
+      stateStore._set('gh', 'pr-1', 'accepted');
+      stateStore._setVersion('gh', 'pr-1', 'sha-same');
+      stateStore._setResurfaceVersion('gh', 'pr-1', 'rr-old');
+
+      const listener = vi.fn();
+      reg.onDidAddNewUnseenItems(listener);
+
+      provider.fireItems([
+        { externalId: 'pr-1', title: 'PR 1', version: 'sha-same', resurfaceVersion: 'rr-new' },
+      ]);
+
+      await vi.waitFor(() => expect(stateStore.setStates).toHaveBeenCalled());
+      expect(stateStore.setStates).toHaveBeenCalledWith([
+        { providerId: 'gh', externalId: 'pr-1', state: 'accepted', version: 'sha-same', resurfaceVersion: 'rr-new' },
+      ]);
+      expect(stateStore.getResurfaceVersion('gh', 'pr-1')).toBe('rr-new');
+      expect(listener).not.toHaveBeenCalled();
+      expect(addActivityFn).not.toHaveBeenCalled();
+      expect(getWorkItemState).toHaveBeenCalledWith('gh', 'pr-1');
+
+      reg.dispose();
+    });
+
+    it.each(completedOrMissingWorkItemStates)('resurfaces accepted item on resurfaceVersion change when work item is %s', async (workItemState) => {
+      const getWorkItemState = vi.fn().mockReturnValue(workItemState);
+      const reg = new ProviderRegistry(stateStore, undefined, getWorkItemState);
+      const provider = createMockProvider('gh');
+      reg.register(provider);
+
+      stateStore._set('gh', 'pr-1', 'accepted');
+      stateStore._setVersion('gh', 'pr-1', 'sha-same');
+      stateStore._setResurfaceVersion('gh', 'pr-1', 'rr-old');
+
+      const listener = vi.fn();
+      reg.onDidAddNewUnseenItems(listener);
+
+      provider.fireItems([
+        { externalId: 'pr-1', title: 'PR 1', version: 'sha-same', resurfaceVersion: 'rr-new' },
+      ]);
+
+      await vi.waitFor(() => expect(stateStore.setStates).toHaveBeenCalled());
+      expect(stateStore.setStates).toHaveBeenCalledWith([
+        { providerId: 'gh', externalId: 'pr-1', state: 'unseen', version: 'sha-same', resurfaceVersion: 'rr-new' },
+      ]);
+      await vi.waitFor(() => expect(listener).toHaveBeenCalledWith(1));
+      expect(getWorkItemState).toHaveBeenCalledWith('gh', 'pr-1');
+
+      reg.dispose();
+    });
+
+    it.each(activeWorkItemStates)('suppresses dismissed resurfaceVersion resurfacing when work item is %s', async (workItemState) => {
+      const getWorkItemState = vi.fn().mockReturnValue(workItemState);
+      const addActivityFn = vi.fn().mockResolvedValue(undefined);
+      const reg = new ProviderRegistry(stateStore, undefined, getWorkItemState, addActivityFn);
+      const provider = createMockProvider('gh');
+      reg.register(provider);
+
+      stateStore._set('gh', 'pr-1', 'dismissed');
+      stateStore._setVersion('gh', 'pr-1', 'sha-same');
+      stateStore._setResurfaceVersion('gh', 'pr-1', 'rr-old');
+
+      const listener = vi.fn();
+      reg.onDidAddNewUnseenItems(listener);
+
+      provider.fireItems([
+        { externalId: 'pr-1', title: 'PR 1', version: 'sha-same', resurfaceVersion: 'rr-new' },
+      ]);
+
+      await vi.waitFor(() => expect(stateStore.setStates).toHaveBeenCalled());
+      expect(stateStore.setStates).toHaveBeenCalledWith([
+        { providerId: 'gh', externalId: 'pr-1', state: 'dismissed', resurfaceVersion: 'rr-new' },
+      ]);
+      expect(stateStore.getResurfaceVersion('gh', 'pr-1')).toBe('rr-new');
+      expect(listener).not.toHaveBeenCalled();
+      expect(addActivityFn).not.toHaveBeenCalled();
+      expect(getWorkItemState).toHaveBeenCalledWith('gh', 'pr-1');
+
+      reg.dispose();
+    });
+
+    it.each(completedOrMissingWorkItemStates)('resurfaces dismissed item on resurfaceVersion change when work item is %s', async (workItemState) => {
+      const getWorkItemState = vi.fn().mockReturnValue(workItemState);
+      const reg = new ProviderRegistry(stateStore, undefined, getWorkItemState);
+      const provider = createMockProvider('gh');
+      reg.register(provider);
+
+      stateStore._set('gh', 'pr-1', 'dismissed');
+      stateStore._setVersion('gh', 'pr-1', 'sha-same');
+      stateStore._setResurfaceVersion('gh', 'pr-1', 'rr-old');
+
+      const listener = vi.fn();
+      reg.onDidAddNewUnseenItems(listener);
+
+      provider.fireItems([
+        { externalId: 'pr-1', title: 'PR 1', version: 'sha-same', resurfaceVersion: 'rr-new' },
+      ]);
+
+      await vi.waitFor(() => expect(stateStore.setStates).toHaveBeenCalled());
+      expect(stateStore.setStates).toHaveBeenCalledWith([
+        { providerId: 'gh', externalId: 'pr-1', state: 'unseen', version: 'sha-same', resurfaceVersion: 'rr-new' },
+      ]);
+      await vi.waitFor(() => expect(listener).toHaveBeenCalledWith(1));
+      expect(getWorkItemState).toHaveBeenCalledWith('gh', 'pr-1');
+
+      reg.dispose();
+    });
+
+    it('still resurfaces accepted version changes without getWorkItemState callback', async () => {
       const reg = new ProviderRegistry(stateStore);
       const provider = createMockProvider('gh');
       reg.register(provider);
@@ -1686,31 +1673,7 @@ describe('ProviderRegistry', () => {
 
       reg.dispose();
     });
-
-    it('logs activity error gracefully without breaking flow', async () => {
-      const getWorkItemState = vi.fn().mockReturnValue(WorkItemState.InProgress);
-      const addActivityFn = vi.fn().mockRejectedValue(new Error('activity fail'));
-      const reg = new ProviderRegistry(stateStore, undefined, getWorkItemState, addActivityFn);
-      const provider = createMockProvider('gh');
-      reg.register(provider);
-
-      stateStore._set('gh', 'pr-1', 'accepted');
-      stateStore._setVersion('gh', 'pr-1', 'sha-old');
-
-      provider.fireItems([
-        { externalId: 'pr-1', title: 'PR 1', version: 'sha-new' },
-      ]);
-
-      await vi.waitFor(() => expect(stateStore.setStates).toHaveBeenCalled());
-      // Should still backfill version even though activity fails
-      expect(stateStore.setStates).toHaveBeenCalledWith([
-        { providerId: 'gh', externalId: 'pr-1', state: 'accepted', version: 'sha-new' },
-      ]);
-
-      reg.dispose();
-    });
   });
-
   describe('accepted items without version fields', () => {
     it('does not resurface accepted item re-emitted with no version or resurfaceVersion', async () => {
       const getWorkItemState = vi.fn().mockReturnValue(WorkItemState.Done);
