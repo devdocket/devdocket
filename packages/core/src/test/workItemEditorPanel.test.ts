@@ -350,6 +350,24 @@ describe('WorkItemEditorPanel', () => {
     });
   });
 
+  it('ignores malformed explicit provenance fields from related Sources messages', async () => {
+    const item = makeItem({ state: WorkItemState.New });
+    const workGraph = createMockWorkGraph(item);
+    const { mock } = openPanel(item, workGraph);
+
+    await mock.simulateMessage({
+      type: 'openItem',
+      itemId: 'github-issues::owner/repo#99',
+      providerId: 123,
+      externalId: { value: 'owner/repo#99' },
+    });
+
+    expect(vscode.commands.executeCommand).toHaveBeenCalledWith('devdocket.previewIncomingItem', {
+      providerId: 'github-issues',
+      externalId: 'owner/repo#99',
+    });
+  });
+
   it('accepts and dismisses provider items through the shared state store', async () => {
     const item = makeItem({ providerId: 'github', externalId: '42' });
     const workGraph = createMockWorkGraph(item);

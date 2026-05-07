@@ -149,14 +149,14 @@ export class IncomingPreviewPanel {
     }
   }
 
-  private async openRelatedItem(itemId: string, providerId?: string, externalId?: string): Promise<void> {
+  private async openRelatedItem(itemId: string, providerId?: unknown, externalId?: unknown): Promise<void> {
     const workItem = this.workGraph.getItem(itemId);
     if (workItem) {
       await vscode.commands.executeCommand('devdocket.editItem', { id: itemId });
       return;
     }
 
-    const discoveredKey = providerId && externalId
+    const discoveredKey = typeof providerId === 'string' && typeof externalId === 'string'
       ? { providerId, externalId }
       : parseDiscoveredItemKey(itemId);
     if (discoveredKey) {
