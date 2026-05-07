@@ -32,6 +32,7 @@ export type WebviewMessage =
   | { type: 'addWatchUrl' }
   | { type: 'markSeen'; providerId: string; externalId: string }
   | { type: 'crossTierDrop'; itemId: string; targetTier: string }
+  | { type: 'requestToggleSearch' }
   | { type: 'watchPanelReady' };
 
 export interface TierData {

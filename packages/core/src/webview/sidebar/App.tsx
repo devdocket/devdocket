@@ -140,8 +140,20 @@ export function App() {
 
     window.addEventListener('message', handler);
 
+    const keydownHandler = (event: KeyboardEvent) => {
+      const isFindShortcut = (event.ctrlKey || event.metaKey) && !event.altKey && !event.shiftKey && (event.key === 'f' || event.key === 'F');
+      if (!isFindShortcut) {
+        return;
+      }
+      event.preventDefault();
+      event.stopPropagation();
+      postMessage({ type: 'requestToggleSearch' });
+    };
+    window.addEventListener('keydown', keydownHandler);
+
     return () => {
       window.removeEventListener('message', handler);
+      window.removeEventListener('keydown', keydownHandler);
       if (announcementFrameRef.current !== undefined) {
         cancelAnimationFrame(announcementFrameRef.current);
       }

@@ -484,6 +484,9 @@ export class MainViewProvider implements vscode.WebviewViewProvider {
       }
       case 'switchTab':
         break;
+      case 'requestToggleSearch':
+        this.toggleSearch();
+        break;
       case 'markSeen':
         await this.handleMarkSeen(message.providerId, message.externalId);
         break;
