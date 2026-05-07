@@ -270,13 +270,14 @@ function resolveDiscoveredTarget(
   }
 
   const workItem = workGraph.findItemByProvenance(providerId, externalId);
+  const targetTitle = workItem?.title ?? fallbackTitle ?? externalId;
   return {
     targetItemId: workItem?.id ?? getSourcesTargetId(providerId, externalId),
-    targetTitle: workItem?.title ?? fallbackTitle ?? externalId,
+    targetTitle,
     targetExternalId: externalId,
     targetKind: workItem ? 'workItem' : 'sources',
     ...(!workItem ? { targetProviderId: providerId } : {}),
-    label: getRelatedItemLabel(relation, externalId, direction),
+    label: getRelatedItemLabel(relation, targetTitle, direction),
     relation,
     itemType,
     externalId,
@@ -289,13 +290,13 @@ function getSourcesTargetId(providerId: string, externalId: string): string {
 
 function getRelatedItemLabel(
   relation: RelatedItemRef['relation'],
-  externalId: string,
+  title: string,
   direction: 'forward' | 'reverse',
 ): string {
   if (relation === 'linked') {
-    return `Linked to ${externalId}`;
+    return `Linked to ${title}`;
   }
-  return direction === 'reverse' ? `Closed by ${externalId}` : `Closes ${externalId}`;
+  return direction === 'reverse' ? `Closed by ${title}` : `Closes ${title}`;
 }
 
 function upsertResolved(

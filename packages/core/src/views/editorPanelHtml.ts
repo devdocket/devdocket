@@ -485,9 +485,6 @@ export function getEditorPanelHtml({ cspSource, scriptUri, initialItem }: Editor
       padding: 10px 12px;
       text-align: left;
       color: inherit;
-      display: flex;
-      flex-direction: column;
-      gap: 2px;
     }
 
     .related-item:hover {
@@ -497,12 +494,6 @@ export function getEditorPanelHtml({ cspSource, scriptUri, initialItem }: Editor
     .related-item-title {
       font-weight: 600;
       line-height: 1.35;
-    }
-
-    .related-item-meta {
-      color: var(--vscode-descriptionForeground);
-      font-size: 12px;
-      line-height: 1.3;
     }
 
     .badge-row--compact {

@@ -44,10 +44,8 @@ function renderGroup(
           type="button"
           class="related-item"
           onClick={() => onOpenItem(item)}
-          aria-label={`${item.label}: ${item.targetTitle}`}
         >
-          <span class="related-item-title">{item.targetTitle}</span>
-          <span class="related-item-meta">{item.label}</span>
+          <span class="related-item-title">{item.label}</span>
         </button>
       ))}
     </div>

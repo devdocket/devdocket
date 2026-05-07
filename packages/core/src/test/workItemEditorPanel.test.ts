@@ -237,7 +237,7 @@ describe('WorkItemEditorPanel', () => {
         description: '<h2>Updated description</h2>\n',
         hasActions: true,
         validTransitions: expect.arrayContaining(['InProgress', 'Done', 'Archived']),
-        relatedItems: [expect.objectContaining({ targetItemId: 'peer-1', label: 'Closes owner/repo#99' })],
+        relatedItems: [expect.objectContaining({ targetItemId: 'peer-1', label: 'Closes Peer' })],
       }),
     }));
   });
