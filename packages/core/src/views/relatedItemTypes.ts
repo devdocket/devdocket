@@ -1,7 +1,7 @@
 import type { RelatedItemRef } from '../api/types';
 
 export interface ResolvedRelatedItem {
-  /** The work item id, or `${providerId}::${externalId}` for Sources entries. */
+  /** The WorkItem id, or an opaque Sources id; use targetProviderId/targetExternalId for Sources routing. */
   targetItemId: string;
   label: string;
   targetKind: 'workItem' | 'sources';
