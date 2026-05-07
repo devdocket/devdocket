@@ -45,18 +45,19 @@ function prNode(number: number, repo = 'owner/repo') {
 }
 
 function graphQlResponse(nodes: unknown[]) {
+  return graphQlBatchResponse({ repo0: nodes });
+}
+
+function graphQlBatchResponse(entries: Record<string, unknown[]>) {
   return {
     ok: true,
     status: 200,
     statusText: 'OK',
     json: async () => ({
-      data: {
-        repository: {
-          pullRequest: {
-            timelineItems: { nodes },
-          },
-        },
-      },
+      data: Object.fromEntries(Object.entries(entries).map(([alias, nodes]) => [
+        alias,
+        { pullRequest: { timelineItems: { nodes } } },
+      ])),
     }),
   };
 }
@@ -137,44 +138,51 @@ describe('BaseGitHubProvider related item fetching', () => {
     vi.unstubAllGlobals();
   });
 
-  it('fetches related items for each PR and preserves cross-repo refs', async () => {
-    mockFetch.mockResolvedValue(graphQlResponse([
-      { __typename: 'CrossReferencedEvent', willCloseTarget: true, source: issueNode(42, 'other/repo') },
-    ]));
+  it('fetches related items for multiple PRs in one request and preserves cross-repo refs', async () => {
+    mockFetch.mockResolvedValue(graphQlBatchResponse({
+      repo0: [{ __typename: 'CrossReferencedEvent', willCloseTarget: true, source: issueNode(42, 'other/repo') }],
+      repo1: [{ __typename: 'ConnectedEvent', subject: issueNode(7, 'owner/repo') }],
+    }));
 
     const result = await provider.fetchRelatedForTest([
       { externalId: 'owner/repo#5', repoOwner: 'owner', repoName: 'repo', number: 5 },
+      { externalId: 'owner/repo#6', repoOwner: 'owner', repoName: 'repo', number: 6 },
     ], 'token');
 
+    expect(mockFetch).toHaveBeenCalledTimes(1);
     expect(mockFetch).toHaveBeenCalledWith('https://api.github.com/graphql', expect.objectContaining({
       method: 'POST',
       headers: expect.objectContaining({ Authorization: 'Bearer token' }),
     }));
-    expect(JSON.parse(mockFetch.mock.calls[0][1].body).variables).toEqual({ owner: 'owner', name: 'repo', number: 5 });
+    expect(JSON.parse(mockFetch.mock.calls[0][1].body).variables).toEqual({
+      owner0: 'owner',
+      name0: 'repo',
+      number0: 5,
+      owner1: 'owner',
+      name1: 'repo',
+      number1: 6,
+    });
     expect(result.get('owner/repo#5')).toEqual([
       { externalId: 'other/repo#42', relation: 'closes', itemType: 'issue' },
     ]);
+    expect(result.get('owner/repo#6')).toEqual([
+      { externalId: 'owner/repo#7', relation: 'closes', itemType: 'issue' },
+    ]);
   });
 
-  it('collapses per-PR failures to no relatedItems and logs the failure summary', async () => {
-    mockFetch.mockImplementation(async (_url: string, options: { body?: string }) => {
-      const variables = JSON.parse(options.body ?? '{}').variables;
-      if (variables.number === 1) {
-        return graphQlResponse([{ __typename: 'ConnectedEvent', subject: issueNode(2) }]);
-      }
-      return { ok: false, status: 500, statusText: 'Internal Server Error', json: async () => ({}) };
-    });
+  it('collapses batch failures to no relatedItems and logs the failure summary', async () => {
+    mockFetch.mockResolvedValue({ ok: false, status: 500, statusText: 'Internal Server Error', json: async () => ({}) });
 
     const result = await provider.fetchRelatedForTest([
       { externalId: 'owner/repo#1', repoOwner: 'owner', repoName: 'repo', number: 1 },
       { externalId: 'owner/repo#2', repoOwner: 'owner', repoName: 'repo', number: 2 },
     ], 'token');
 
-    expect(result.has('owner/repo#1')).toBe(true);
-    expect(result.has('owner/repo#2')).toBe(false);
+    expect(result.size).toBe(0);
+    expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining('Failed to fetch related items for PR owner/repo#1'));
     expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining('Failed to fetch related items for PR owner/repo#2'));
     expect(logger.debug).not.toHaveBeenCalledWith(expect.stringContaining('Failed to fetch related items for PR owner/repo#2'));
-    expect(logger.info).toHaveBeenCalledWith('Found related items for 1/2 PRs (1 failures)');
+    expect(logger.info).toHaveBeenCalledWith('Found related items for 0/2 PRs (2 failures)');
   });
 
   it('keeps empty successful batches out of info logs', async () => {

@@ -1,8 +1,10 @@
 import * as vscode from 'vscode';
 import { BaseProvider, DiscoveredItem, createAbortError, runWorkerPool, type RelatedItemRef } from '@devdocket/shared';
-import { fetchPrCrossReferences } from './githubGraphql';
+import { fetchPrCrossReferencesBatch } from './githubGraphql';
 import { logger } from './logger';
 import { matchesRepoPatterns, parseRepoPatterns, type RepoPattern } from './repoPattern';
+
+const RELATED_ITEMS_BATCH_SIZE = 10;
 
 /**
  * Base class for GitHub providers that handles the common authentication
@@ -118,25 +120,30 @@ export abstract class BaseGitHubProvider extends BaseProvider {
     }
 
     let failureCount = 0;
-    await runWorkerPool(prs, async (pr) => {
+    await runWorkerPool(chunkArray(prs, RELATED_ITEMS_BATCH_SIZE), async (batch) => {
       if (signal?.aborted) {
         throw createAbortError();
       }
       try {
-        const relatedItems = await fetchPrCrossReferences(
+        const relatedItemsByPr = await fetchPrCrossReferencesBatch(
           accessToken,
-          { owner: pr.repoOwner, name: pr.repoName, number: pr.number },
+          batch.map(pr => ({ owner: pr.repoOwner, name: pr.repoName, number: pr.number })),
           signal,
         );
-        if (relatedItems.length > 0) {
-          result.set(pr.externalId, relatedItems);
-        }
+        batch.forEach((pr, index) => {
+          const relatedItems = relatedItemsByPr[index] ?? [];
+          if (relatedItems.length > 0) {
+            result.set(pr.externalId, relatedItems);
+          }
+        });
       } catch (error) {
         if (error instanceof Error && error.name === 'AbortError' && signal?.aborted) { throw error; }
-        failureCount++;
-        logger.warn(`Failed to fetch related items for PR ${pr.externalId}: ${String(error)}`);
+        failureCount += batch.length;
+        for (const pr of batch) {
+          logger.warn(`Failed to fetch related items for PR ${pr.externalId}: ${String(error)}`);
+        }
       }
-    }, 3);
+    }, 2);
 
     const summary = `Found related items for ${result.size}/${prs.length} PRs (${failureCount} failures)`;
     if (failureCount > 0 || result.size > 0) {
@@ -203,4 +210,12 @@ export abstract class BaseGitHubProvider extends BaseProvider {
     }
   }
 
+}
+
+function chunkArray<T>(items: T[], size: number): T[][] {
+  const chunks: T[][] = [];
+  for (let index = 0; index < items.length; index += size) {
+    chunks.push(items.slice(index, index + size));
+  }
+  return chunks;
 }

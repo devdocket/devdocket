@@ -7,37 +7,40 @@ export interface PrCrossReferencesInput {
   number: number;
 }
 
+const PR_CROSS_REFERENCES_TIMELINE_SELECTION = `
+timelineItems(itemTypes: [CROSS_REFERENCED_EVENT, CONNECTED_EVENT, DISCONNECTED_EVENT], first: 100) {
+  nodes {
+    __typename
+    ... on CrossReferencedEvent {
+      willCloseTarget
+      source {
+        __typename
+        ... on Issue       { number repository { nameWithOwner } }
+        ... on PullRequest { number repository { nameWithOwner } }
+      }
+    }
+    ... on ConnectedEvent {
+      subject {
+        __typename
+        ... on Issue       { number repository { nameWithOwner } }
+        ... on PullRequest { number repository { nameWithOwner } }
+      }
+    }
+    ... on DisconnectedEvent {
+      subject {
+        __typename
+        ... on Issue       { number repository { nameWithOwner } }
+        ... on PullRequest { number repository { nameWithOwner } }
+      }
+    }
+  }
+}`;
+
 export const PR_CROSS_REFERENCES_QUERY = `
 query PrCrossReferences($owner: String!, $name: String!, $number: Int!) {
   repository(owner: $owner, name: $name) {
     pullRequest(number: $number) {
-      timelineItems(itemTypes: [CROSS_REFERENCED_EVENT, CONNECTED_EVENT, DISCONNECTED_EVENT], first: 100) {
-        nodes {
-          __typename
-          ... on CrossReferencedEvent {
-            willCloseTarget
-            source {
-              __typename
-              ... on Issue       { number repository { nameWithOwner } }
-              ... on PullRequest { number repository { nameWithOwner } }
-            }
-          }
-          ... on ConnectedEvent {
-            subject {
-              __typename
-              ... on Issue       { number repository { nameWithOwner } }
-              ... on PullRequest { number repository { nameWithOwner } }
-            }
-          }
-          ... on DisconnectedEvent {
-            subject {
-              __typename
-              ... on Issue       { number repository { nameWithOwner } }
-              ... on PullRequest { number repository { nameWithOwner } }
-            }
-          }
-        }
-      }
+      ${PR_CROSS_REFERENCES_TIMELINE_SELECTION}
     }
   }
 }`;
@@ -47,16 +50,26 @@ export async function fetchPrCrossReferences(
   input: PrCrossReferencesInput,
   signal?: AbortSignal,
 ): Promise<RelatedItemRef[]> {
+  const [relatedItems] = await fetchPrCrossReferencesBatch(token, [input], signal);
+  return relatedItems ?? [];
+}
+
+export async function fetchPrCrossReferencesBatch(
+  token: string,
+  inputs: PrCrossReferencesInput[],
+  signal?: AbortSignal,
+): Promise<RelatedItemRef[][]> {
+  if (inputs.length === 0) {
+    return [];
+  }
+
   const response = await fetch('https://api.github.com/graphql', {
     method: 'POST',
     headers: {
       ...getGitHubAuthHeaders(token),
       'Content-Type': 'application/json',
     },
-    body: JSON.stringify({
-      query: PR_CROSS_REFERENCES_QUERY,
-      variables: input,
-    }),
+    body: JSON.stringify(buildPrCrossReferencesBatchRequest(inputs)),
     signal: combineSignals(signal, 30_000),
   });
 
@@ -65,7 +78,7 @@ export async function fetchPrCrossReferences(
   }
 
   const payload = await response.json() as {
-    data?: { repository?: { pullRequest?: { timelineItems?: { nodes?: unknown[] } | null } | null } | null };
+    data?: Record<string, { pullRequest?: { timelineItems?: { nodes?: unknown[] } | null } | null } | null>;
     errors?: Array<{ message?: string }>;
   };
 
@@ -74,7 +87,40 @@ export async function fetchPrCrossReferences(
     throw new Error(`GitHub GraphQL request failed: ${message}`);
   }
 
-  return mapPrCrossReferencesToRelatedItems(payload.data?.repository?.pullRequest?.timelineItems?.nodes);
+  return inputs.map((_input, index) => mapPrCrossReferencesToRelatedItems(
+    payload.data?.[getPrCrossReferencesRepositoryAlias(index)]?.pullRequest?.timelineItems?.nodes,
+  ));
+}
+
+function buildPrCrossReferencesBatchRequest(inputs: PrCrossReferencesInput[]): { query: string; variables: Record<string, string | number> } {
+  const variableDefinitions: string[] = [];
+  const repositorySelections: string[] = [];
+  const variables: Record<string, string | number> = {};
+
+  inputs.forEach((input, index) => {
+    const ownerVariable = `owner${index}`;
+    const nameVariable = `name${index}`;
+    const numberVariable = `number${index}`;
+    variableDefinitions.push(`$${ownerVariable}: String!`, `$${nameVariable}: String!`, `$${numberVariable}: Int!`);
+    repositorySelections.push(`
+  ${getPrCrossReferencesRepositoryAlias(index)}: repository(owner: $${ownerVariable}, name: $${nameVariable}) {
+    pullRequest(number: $${numberVariable}) {
+      ${PR_CROSS_REFERENCES_TIMELINE_SELECTION}
+    }
+  }`);
+    variables[ownerVariable] = input.owner;
+    variables[nameVariable] = input.name;
+    variables[numberVariable] = input.number;
+  });
+
+  return {
+    query: `query PrCrossReferencesBatch(${variableDefinitions.join(', ')}) {${repositorySelections.join('')}\n}`,
+    variables,
+  };
+}
+
+function getPrCrossReferencesRepositoryAlias(index: number): string {
+  return `repo${index}`;
 }
 
 export function mapPrCrossReferencesToRelatedItems(nodes: unknown): RelatedItemRef[] {
