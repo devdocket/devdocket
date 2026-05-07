@@ -7,35 +7,27 @@ import { isSafeUrl } from '../../../utils/url';
 interface EditorHeaderProps {
   item: EditorItemData;
   title: string;
-  onOpenUrl: (url: string) => void;
   onCopyText: (text: string) => void;
   /** Action buttons rendered on the right side of the title row (state transitions, run action, etc). */
   actionButtons?: ComponentChildren;
 }
 
-export function EditorHeader({ item, title, onOpenUrl, onCopyText, actionButtons }: EditorHeaderProps) {
+export function EditorHeader({ item, title, onCopyText, actionButtons }: EditorHeaderProps) {
   // Always render the title inside an <h1> so the page has a primary
   // heading regardless of whether the item has a URL. When url is set,
   // the heading wraps an anchor so it's still keyboard-activatable and
   // styled as a link.
   //
   // Defense-in-depth: validate item.url with isSafeUrl before binding
-  // it to href. The onClick handler routes through postMessage which
-  // re-validates extension-side, but middle-click / right-click /
+  // it to href. The delegated click handler routes through postMessage
+  // which re-validates extension-side, but middle-click / right-click /
   // "Copy link" use the raw href and bypass that handler. A malicious
   // provider that supplies a `javascript:` URL would otherwise expose
   // the user to a vector that the webview CSP only mitigates rather
   // than blocks. Fall back to plain text (no anchor) when invalid.
   const safeUrl = item.url ? isSafeUrl(item.url) : null;
   const titleContent = safeUrl ? (
-    <a
-      class="editor-title-link"
-      href={safeUrl.href}
-      onClick={(event) => {
-        event.preventDefault();
-        onOpenUrl(safeUrl.href);
-      }}
-    >
+    <a class="editor-title-link" href={safeUrl.href}>
       {title}
     </a>
   ) : (

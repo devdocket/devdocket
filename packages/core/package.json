@@ -36,7 +36,7 @@
           {
             "id": "understandWorkflow",
             "title": "Understand the Workflow",
-            "description": "Learn how items flow through Incoming \u2192 Ready to Start \u2192 In Progress \u2192 Paused \u2192 Done.",
+            "description": "Learn how items flow through Incoming → Ready to Start → In Progress → Paused → Done.",
             "media": {
               "markdown": "media/walkthroughs/workflow.md"
             }
@@ -202,7 +202,7 @@
       },
       {
         "command": "devdocket.runAction",
-        "title": "Run Action\u2026",
+        "title": "Run Action…",
         "category": "DevDocket",
         "icon": "$(play)"
       },
@@ -477,6 +477,7 @@
     "@typescript-eslint/parser": "^7.0.0",
     "esbuild": "^0.25.0",
     "eslint": "^8.56.0",
+    "jsdom": "^24.1.3",
     "typescript": "^5.3.0",
     "vitest": "^1.2.0"
   }
