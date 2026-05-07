@@ -36,7 +36,7 @@
           {
             "id": "understandWorkflow",
             "title": "Understand the Workflow",
-            "description": "Learn how items flow through Incoming \u2192 Ready to Start \u2192 In Progress \u2192 Paused \u2192 Done.",
+            "description": "Learn how items flow through Incoming → Ready to Start → In Progress → Paused → Done.",
             "media": {
               "markdown": "media/walkthroughs/workflow.md"
             }
@@ -86,17 +86,6 @@
       {
         "title": "DevDocket",
         "properties": {
-          "devDocket.logLevel": {
-            "type": "string",
-            "enum": [
-              "debug",
-              "info",
-              "warn",
-              "error"
-            ],
-            "default": "info",
-            "description": "Log level for DevDocket output channel"
-          },
           "devDocket.showInboxNotifications": {
             "type": "boolean",
             "default": true,
@@ -213,7 +202,7 @@
       },
       {
         "command": "devdocket.runAction",
-        "title": "Run Action\u2026",
+        "title": "Run Action…",
         "category": "DevDocket",
         "icon": "$(play)"
       },
@@ -391,24 +380,35 @@
         "command": "devdocket.openWalkthrough",
         "title": "Open Walkthrough",
         "category": "DevDocket"
+      },
+      {
+        "command": "devdocket.toggleSearch",
+        "title": "Toggle Search",
+        "category": "DevDocket",
+        "icon": "$(search)"
       }
     ],
     "menus": {
       "view/title": [
         {
+          "command": "devdocket.toggleSearch",
+          "when": "view == devdocket.main",
+          "group": "navigation@1"
+        },
+        {
           "command": "devdocket.createItem",
           "when": "view == devdocket.main",
-          "group": "navigation"
+          "group": "navigation@2"
         },
         {
           "command": "devdocket.createItemFromUrl",
           "when": "view == devdocket.main",
-          "group": "navigation"
+          "group": "navigation@3"
         },
         {
           "command": "devdocket.refresh",
           "when": "view == devdocket.main",
-          "group": "navigation"
+          "group": "navigation@4"
         }
       ],
       "commandPalette": [
@@ -427,6 +427,12 @@
       ]
     },
     "keybindings": [
+      {
+        "command": "devdocket.toggleSearch",
+        "key": "ctrl+f",
+        "mac": "cmd+f",
+        "when": "focusedView == devdocket.main"
+      },
       {
         "command": "devdocket.createItem",
         "key": "ctrl+alt+d n",
@@ -488,6 +494,7 @@
     "@typescript-eslint/parser": "^7.0.0",
     "esbuild": "^0.25.0",
     "eslint": "^8.56.0",
+    "jsdom": "^24.1.3",
     "typescript": "^5.3.0",
     "vitest": "^1.2.0"
   }

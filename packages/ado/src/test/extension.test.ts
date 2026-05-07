@@ -9,19 +9,39 @@ describe('extension activation', () => {
   let mockContext: any;
   let mockApi: any;
   let disposables: any[];
+  let providerRegistrationDisposables: any[];
+  let runWatcherDisposable: any;
+  let prWatcherDisposable: any;
+
+  const disposeContextSubscriptions = () => {
+    const currentDisposables = disposables;
+    disposables = [];
+    for (const disposable of currentDisposables) {
+      if (disposable && typeof disposable.dispose === 'function') {
+        disposable.dispose();
+      }
+    }
+  };
 
   beforeEach(() => {
     vi.clearAllMocks();
     mockFetch.mockReset();
     vi.stubGlobal('fetch', mockFetch);
 
-    // Add createOutputChannel to window mock (not in default vscode mock)
     (window as any).createOutputChannel = vi.fn(() => ({
+      info: vi.fn(),
+      debug: vi.fn(),
+      warn: vi.fn(),
+      error: vi.fn(),
+      trace: vi.fn(),
       appendLine: vi.fn(),
       dispose: vi.fn(),
     }));
 
     disposables = [];
+    providerRegistrationDisposables = [];
+    runWatcherDisposable = { dispose: vi.fn() };
+    prWatcherDisposable = { dispose: vi.fn() };
     mockContext = {
       subscriptions: {
         push: (...items: any[]) => disposables.push(...items),
@@ -29,7 +49,13 @@ describe('extension activation', () => {
     };
 
     mockApi = {
-      registerProvider: vi.fn(() => ({ dispose: vi.fn() })),
+      registerProvider: vi.fn((provider: any) => {
+        const registration = { registrationFor: provider.id, dispose: vi.fn() };
+        providerRegistrationDisposables.push(registration);
+        return registration;
+      }),
+      registerRunWatcher: vi.fn(() => runWatcherDisposable),
+      registerPRWatcher: vi.fn(() => prWatcherDisposable),
     };
 
     // Default: core extension found and active with valid API
@@ -51,7 +77,6 @@ describe('extension activation', () => {
           }),
         } as any;
       }
-      // devdocket config for log level
       return {
         get: vi.fn((_key: string, defaultValue?: any) => defaultValue),
       } as any;
@@ -59,11 +84,7 @@ describe('extension activation', () => {
   });
 
   afterEach(() => {
-    for (const d of disposables) {
-      if (d && typeof d.dispose === 'function') {
-        d.dispose();
-      }
-    }
+    disposeContextSubscriptions();
     vi.unstubAllGlobals();
   });
 
@@ -75,19 +96,18 @@ describe('extension activation', () => {
     expect(mockApi.registerProvider).not.toHaveBeenCalled();
   });
 
-  it('shows error and returns when core extension fails to activate', async () => {
+  it('reads the core extension exports directly without invoking activate', async () => {
+    const mockActivate = vi.fn();
     vi.mocked(extensions.getExtension).mockReturnValue({
       isActive: false,
-      exports: undefined,
-      activate: vi.fn().mockRejectedValue(new Error('Activation failed')),
+      exports: mockApi,
+      activate: mockActivate,
     } as any);
 
     await activate(mockContext);
 
-    expect(window.showErrorMessage).toHaveBeenCalledWith(
-      expect.stringContaining('Failed to activate core extension'),
-    );
-    expect(mockApi.registerProvider).not.toHaveBeenCalled();
+    expect(mockActivate).not.toHaveBeenCalled();
+    expect(mockApi.registerProvider).toHaveBeenCalledTimes(3);
   });
 
   it('returns when core extension API is missing registerProvider', async () => {
@@ -114,20 +134,6 @@ describe('extension activation', () => {
     expect(mockApi.registerProvider).not.toHaveBeenCalled();
   });
 
-  it('activates core extension when not yet active', async () => {
-    const mockActivate = vi.fn().mockResolvedValue(mockApi);
-    vi.mocked(extensions.getExtension).mockReturnValue({
-      isActive: false,
-      exports: undefined,
-      activate: mockActivate,
-    } as any);
-
-    await activate(mockContext);
-
-    expect(mockActivate).toHaveBeenCalled();
-    expect(mockApi.registerProvider).toHaveBeenCalledTimes(3);
-  });
-
   it('registers three providers when organization is configured', async () => {
     await activate(mockContext);
 
@@ -140,6 +146,67 @@ describe('extension activation', () => {
     expect(firstProvider.id).toBe('ado-work-items');
     expect(secondProvider.id).toBe('ado-pr-reviews');
     expect(thirdProvider.id).toBe('ado-my-prs');
+  });
+
+  it('pushes static watcher registrations and configurable lifecycle owner onto subscriptions', async () => {
+    await activate(mockContext);
+
+    expect(mockApi.registerProvider).toHaveBeenCalledTimes(3);
+    expect(mockApi.registerRunWatcher).toHaveBeenCalledTimes(1);
+    expect(mockApi.registerPRWatcher).toHaveBeenCalledTimes(1);
+    expect(disposables).toContain(runWatcherDisposable);
+    expect(disposables).toContain(prWatcherDisposable);
+    expect(disposables).toHaveLength(5);
+
+    const lifecycleOwner = disposables.find(disposable =>
+      disposable !== runWatcherDisposable &&
+      disposable !== prWatcherDisposable &&
+      disposable?.dispose &&
+      !('appendLine' in disposable),
+    );
+    expect(lifecycleOwner).toBeDefined();
+  });
+
+  it('disposes configurable providers and registrations on shutdown', async () => {
+    await activate(mockContext);
+
+    const providers = mockApi.registerProvider.mock.calls.map(([provider]: any[]) => provider);
+    const providerDisposeSpies = providers.map((provider: any) => vi.spyOn(provider, 'dispose'));
+
+    disposeContextSubscriptions();
+
+    for (const registration of providerRegistrationDisposables) {
+      expect(registration.dispose).toHaveBeenCalledTimes(1);
+    }
+    for (const providerDisposeSpy of providerDisposeSpies) {
+      expect(providerDisposeSpy).toHaveBeenCalledTimes(1);
+    }
+    expect(runWatcherDisposable.dispose).toHaveBeenCalledTimes(1);
+    expect(prWatcherDisposable.dispose).toHaveBeenCalledTimes(1);
+  });
+
+  it('disposes and replaces configurable providers when ADO configuration changes', async () => {
+    await activate(mockContext);
+
+    const firstRegistrations = [...providerRegistrationDisposables];
+    const firstProviders = mockApi.registerProvider.mock.calls.map(([provider]: any[]) => provider);
+    const firstProviderDisposeSpies = firstProviders.map((provider: any) => vi.spyOn(provider, 'dispose'));
+
+    for (const [listener] of vi.mocked(workspace.onDidChangeConfiguration).mock.calls) {
+      listener({
+        affectsConfiguration: (key: string) => key === 'devDocketAdo.projects',
+      });
+    }
+
+    expect(mockApi.registerProvider).toHaveBeenCalledTimes(6);
+    for (const registration of firstRegistrations) {
+      expect(registration.dispose).toHaveBeenCalledTimes(1);
+    }
+    for (const providerDisposeSpy of firstProviderDisposeSpies) {
+      expect(providerDisposeSpy).toHaveBeenCalledTimes(1);
+    }
+    expect(mockApi.registerRunWatcher).toHaveBeenCalledTimes(1);
+    expect(mockApi.registerPRWatcher).toHaveBeenCalledTimes(1);
   });
 
   it('does not register providers when no organization is configured', async () => {
@@ -167,7 +234,7 @@ describe('extension activation', () => {
   it('creates an output channel', async () => {
     await activate(mockContext);
 
-    // Output channel is pushed to subscriptions (first subscription)
+    expect(window.createOutputChannel).toHaveBeenCalledWith('DevDocket ADO', { log: true });
     expect(disposables.length).toBeGreaterThan(0);
   });
 

@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
 import { authentication, window, workspace } from 'vscode';
 import { GitHubPrReviewProvider } from '../githubPrReviewProvider';
-import { initLogger, LogLevel } from '../logger';
+import { setLogger } from '../logger';
 
 const mockFetch = vi.fn();
 
@@ -25,7 +25,7 @@ function createMockPrWithApi(number: number, title: string, repo = 'owner/repo')
 describe('GitHubPrReviewProvider', () => {
   let provider: GitHubPrReviewProvider;
 
-  let mockChannel: { appendLine: ReturnType<typeof vi.fn> };
+  let mockChannel: any;
 
   beforeEach(() => {
     vi.clearAllMocks();
@@ -33,8 +33,8 @@ describe('GitHubPrReviewProvider', () => {
     provider = new GitHubPrReviewProvider();
     vi.spyOn(provider as any, 'fetchRelatedItemsForPRs').mockResolvedValue(new Map());
 
-    mockChannel = { appendLine: vi.fn() };
-    initLogger(mockChannel as any, LogLevel.Debug);
+    mockChannel = { info: vi.fn(), debug: vi.fn(), warn: vi.fn(), error: vi.fn(), appendLine: vi.fn() };
+    setLogger(mockChannel);
 
     // Disable resurfacing features by default so existing tests aren't affected
     // by extra API calls. Tests for resurfacing override this.
@@ -92,9 +92,9 @@ describe('GitHubPrReviewProvider', () => {
     expect(listener).not.toHaveBeenCalled();
     expect(mockFetch).not.toHaveBeenCalled();
 
-    const logged = mockChannel.appendLine.mock.calls.some(
-      (call: string[]) => call[0].includes('[ERROR]') && call[0].includes('GitHub authentication failed'),
-    );
+    const logged = mockChannel.error.mock.calls.some(
+      (call: unknown[]) => String(call[0]).includes('GitHub authentication failed'),
+      );
     expect(logged).toBe(true);
   });
 
@@ -109,9 +109,9 @@ describe('GitHubPrReviewProvider', () => {
     expect(window.showWarningMessage).not.toHaveBeenCalled();
     expect(mockFetch).not.toHaveBeenCalled();
 
-    const logged = mockChannel.appendLine.mock.calls.some(
-      (call: string[]) => call[0].includes('[WARN]') && call[0].includes('background refresh'),
-    );
+    const logged = mockChannel.warn.mock.calls.some(
+      (call: unknown[]) => String(call[0]).includes('background refresh'),
+      );
     expect(logged).toBe(true);
   });
 
@@ -120,9 +120,9 @@ describe('GitHubPrReviewProvider', () => {
 
     await provider.refresh();
 
-    const logged = mockChannel.appendLine.mock.calls.some(
-      (call: string[]) => call[0].includes('User cancelled GitHub authentication'),
-    );
+    const logged = mockChannel.info.mock.calls.some(
+      (call: unknown[]) => String(call[0]).includes('User cancelled GitHub authentication'),
+      );
     expect(logged).toBe(true);
   });
 
@@ -132,9 +132,9 @@ describe('GitHubPrReviewProvider', () => {
     const refreshBg = (provider as any).refreshInBackground.bind(provider);
     await refreshBg();
 
-    const logged = mockChannel.appendLine.mock.calls.some(
-      (call: string[]) => call[0].includes('No GitHub session available'),
-    );
+    const logged = mockChannel.debug.mock.calls.some(
+      (call: unknown[]) => String(call[0]).includes('No GitHub session available'),
+      );
     expect(logged).toBe(true);
   });
 
@@ -303,10 +303,7 @@ describe('GitHubPrReviewProvider', () => {
     await refreshBg();
 
     expect(window.showWarningMessage).not.toHaveBeenCalled();
-    const logged = mockChannel.appendLine.mock.calls.some(
-      (call: string[]) => call[0].includes('[WARN]'),
-    );
-    expect(logged).toBe(true);
+    expect(mockChannel.warn).toHaveBeenCalled();
   });
 
   it('handles fetch error gracefully', async () => {
@@ -318,10 +315,7 @@ describe('GitHubPrReviewProvider', () => {
     await expect(provider.refresh()).resolves.toBeUndefined();
     expect(listener).not.toHaveBeenCalled();
 
-    const logged = mockChannel.appendLine.mock.calls.some(
-      (call: string[]) => call[0].includes('[ERROR]'),
-    );
-    expect(logged).toBe(true);
+    expect(mockChannel.error).toHaveBeenCalled();
   });
 
   it('fires empty items array when search returns no results', async () => {

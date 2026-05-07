@@ -94,7 +94,10 @@ export function EditorApp() {
 
   const description = useMemo(() => item?.description ?? '', [item?.description]);
 
-  const handleDescriptionClick = (event: MouseEvent) => {
+  // This is the single click path for editor anchors. Capture-phase handling
+  // plus stopPropagation prevents VS Code's webview anchor interception from
+  // also firing for the same click.
+  const handleEditorClick = (event: MouseEvent) => {
     if (!(event.target instanceof Element)) {
       return;
     }
@@ -106,6 +109,7 @@ export function EditorApp() {
     }
 
     event.preventDefault();
+    event.stopPropagation();
     postMessage({ type: 'openUrl', url: href });
   };
 
@@ -114,11 +118,10 @@ export function EditorApp() {
   }
 
   return (
-    <div class="editor-app">
+    <div class="editor-app" onClickCapture={handleEditorClick}>
       <EditorHeader
         item={item}
         title={title}
-        onOpenUrl={nextUrl => postMessage({ type: 'openUrl', url: nextUrl })}
         onCopyText={text => postMessage({ type: 'copyToClipboard', text })}
         actionButtons={
           <ActionBar
@@ -164,7 +167,6 @@ export function EditorApp() {
               <div class="editor-section-heading" id="editor-description-heading">Description</div>
               <div
                 class="editor-description markdown-body"
-                onClick={handleDescriptionClick}
                 dangerouslySetInnerHTML={{ __html: description }}
               />
             </>

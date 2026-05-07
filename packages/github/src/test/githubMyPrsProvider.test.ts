@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
 import { authentication, workspace } from 'vscode';
 import { GitHubMyPrsProvider, type PrDetail, type PrReview } from '../githubMyPrsProvider';
-import { initLogger, LogLevel } from '../logger';
+import { setLogger } from '../logger';
 
 const mockFetch = vi.fn();
 
@@ -44,7 +44,7 @@ function mockFailedResponse(status = 500) {
 
 describe('GitHubMyPrsProvider', () => {
   let provider: GitHubMyPrsProvider;
-  let mockChannel: { appendLine: ReturnType<typeof vi.fn> };
+  let mockChannel: any;
 
   beforeEach(() => {
     vi.resetAllMocks();
@@ -52,8 +52,8 @@ describe('GitHubMyPrsProvider', () => {
     provider = new GitHubMyPrsProvider();
     vi.spyOn(provider as any, 'fetchRelatedItemsForPRs').mockResolvedValue(new Map());
 
-    mockChannel = { appendLine: vi.fn() };
-    initLogger(mockChannel as any, LogLevel.Debug);
+    mockChannel = { info: vi.fn(), debug: vi.fn(), warn: vi.fn(), error: vi.fn(), appendLine: vi.fn() };
+    setLogger(mockChannel);
 
     vi.mocked(workspace.getConfiguration).mockReturnValue({
       get: vi.fn((_key: string, defaultValue?: any) => defaultValue),

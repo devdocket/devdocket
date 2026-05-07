@@ -1,32 +1,15 @@
 import * as vscode from 'vscode';
 import { StartWorkAction } from './startWorkAction';
 import { promptGitCleanup } from './gitCleanup';
-import { initLogger, setLogLevel, logger, resolveLogLevel } from './logger';
-import type { StateTransitionEvent, ActivityType } from '@devdocket/shared';
+import { logger, setLogger } from './logger';
+import type { StateTransitionEvent, ActivityType, DevDocketApi } from '@devdocket/shared';
 
 export async function activate(context: vscode.ExtensionContext): Promise<void> {
-  const outputChannel = vscode.window.createOutputChannel('DevDocket Start Git Work');
-  context.subscriptions.push(outputChannel);
+  const log = vscode.window.createOutputChannel('DevDocket Start Git Work', { log: true });
+  context.subscriptions.push(log);
+  setLogger(log);
 
-  const logLevelConfig = vscode.workspace.getConfiguration('devDocket').get<string>('logLevel', 'info');
-  initLogger(outputChannel, resolveLogLevel(logLevelConfig));
-  if (!['debug', 'info', 'warn', 'error'].includes(logLevelConfig)) {
-    logger.warn(`Invalid log level '${logLevelConfig}', falling back to 'info'. Valid values: debug, info, warn, error`);
-  }
-
-  context.subscriptions.push(
-    vscode.workspace.onDidChangeConfiguration(e => {
-      if (e.affectsConfiguration('devDocket.logLevel')) {
-        const newLevel = vscode.workspace.getConfiguration('devDocket').get<string>('logLevel', 'info');
-        setLogLevel(resolveLogLevel(newLevel));
-        if (!['debug', 'info', 'warn', 'error'].includes(newLevel)) {
-          logger.warn(`Invalid log level '${newLevel}', falling back to 'info'. Valid values: debug, info, warn, error`);
-        }
-      }
-    }),
-  );
-
-  logger.info('DevDocket Start Git Work activating...');
+  log.info('DevDocket Start Git Work activating...');
 
   const coreExtension = vscode.extensions.getExtension('mthalman.devdocket');
   if (!coreExtension) {
@@ -34,15 +17,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     return;
   }
 
-  let api;
-  try {
-    api = coreExtension.isActive ? coreExtension.exports : await coreExtension.activate();
-  } catch (err: unknown) {
-    const message = err instanceof Error ? err.message : String(err);
-    logger.error(`Failed to activate core extension — ${message}`);
-    void vscode.window.showErrorMessage(`DevDocket Start Git Work: Failed to activate core extension — ${message}`);
-    return;
-  }
+  const api = coreExtension.exports as DevDocketApi;
 
   if (!api || typeof api.registerAction !== 'function') {
     logger.error('Core extension API not available');

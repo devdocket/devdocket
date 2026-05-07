@@ -2,6 +2,8 @@ import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
 import * as vscode from 'vscode';
 import { MockMemento } from 'vscode';
 import { activate, autoWatchAuthoredPRs, deactivate, logger } from '../extension';
+import { ReadStateStore } from '../storage/readStateStore';
+import { ProviderRegistry } from '../services/providerRegistry';
 import { MainViewProvider } from '../views/mainViewProvider';
 import { WatchPanelProvider } from '../views/watchPanelProvider';
 import { WorkItemEditorPanel } from '../views/workItemEditorPanel';
@@ -82,13 +84,10 @@ describe('activate()', () => {
   // ------------------------------------------------------------------
   // 2. Registers expected disposables via specific API call counts
   // ------------------------------------------------------------------
-  it('registers the expected configuration listener and output channel', async () => {
+  it('creates the DevDocket LogOutputChannel', async () => {
     await activate(context);
 
-    const onDidChangeConfiguration = vscode.workspace.onDidChangeConfiguration as ReturnType<typeof vi.fn>;
-    expect(onDidChangeConfiguration).toHaveBeenCalled();
-
-    expect(vscode.window.createOutputChannel).toHaveBeenCalled();
+    expect(vscode.window.createOutputChannel).toHaveBeenCalledWith('DevDocket', { log: true });
   });
 
   // ------------------------------------------------------------------
@@ -120,7 +119,7 @@ describe('activate()', () => {
   // ------------------------------------------------------------------
   it('creates an output channel named DevDocket', async () => {
     await activate(context);
-    expect(vscode.window.createOutputChannel).toHaveBeenCalledWith('DevDocket');
+    expect(vscode.window.createOutputChannel).toHaveBeenCalledWith('DevDocket', { log: true });
   });
 
   it('wires work graph, provider registry, and state store changes to DevDocket refresh', async () => {
@@ -164,6 +163,180 @@ describe('activate()', () => {
     await getCommandHandler('devdocket.showWatchesQuickPick')();
 
     expect(openSpy).toHaveBeenCalled();
+  });
+
+  it('prunes stale read-state and discovered-state records after non-empty provider refresh', async () => {
+    const globalState = context.globalState as InstanceType<typeof MockMemento>;
+    await globalState.update('devdocket.migrated', true);
+    await globalState.update('devdocket.discovered-state', [
+      { providerId: 'prune-provider', externalId: 'keep', inboxState: 'accepted' },
+      { providerId: 'prune-provider', externalId: 'stale', inboxState: 'dismissed' },
+      { providerId: 'other-provider', externalId: 'stale', inboxState: 'accepted' },
+    ]);
+    await globalState.update('devdocket.read-state', [
+      'prune-provider::keep',
+      'prune-provider::stale',
+      'other-provider::stale',
+    ]);
+    const pruneSpy = vi.spyOn(ReadStateStore.prototype, 'prune');
+
+    try {
+      const api = await activate(context);
+      const itemEmitter = new (vscode.EventEmitter as any)();
+      const activeItem = { externalId: 'keep', title: 'Keep' };
+
+      api.registerProvider({
+        id: 'prune-provider',
+        label: 'Prune Provider',
+        onDidDiscoverItems: itemEmitter.event,
+        refresh: vi.fn(async () => {
+          itemEmitter.fire([activeItem]);
+        }),
+      } as any);
+
+      await vi.waitFor(() => {
+        expect(pruneSpy).toHaveBeenCalled();
+        expect(globalState.get<string[]>('devdocket.read-state')).toEqual([
+          'prune-provider::keep',
+          'other-provider::stale',
+        ]);
+      });
+
+      const active = pruneSpy.mock.calls.at(-1)?.[0] as Map<string, unknown[]>;
+      expect(active.get('prune-provider')).toEqual([activeItem]);
+
+      const discoveredRecords = globalState.get<Array<{ providerId: string; externalId: string }>>('devdocket.discovered-state') ?? [];
+      expect(discoveredRecords.map(record => `${record.providerId}::${record.externalId}`).sort()).toEqual([
+        'other-provider::stale',
+        'prune-provider::keep',
+      ]);
+    } finally {
+      pruneSpy.mockRestore();
+    }
+  });
+
+  it('leaves read-state and discovered-state records untouched after empty provider refresh', async () => {
+    const globalState = context.globalState as InstanceType<typeof MockMemento>;
+    await globalState.update('devdocket.migrated', true);
+    await globalState.update('devdocket.discovered-state', [
+      { providerId: 'empty-provider', externalId: 'stale', inboxState: 'accepted' },
+    ]);
+    await globalState.update('devdocket.read-state', ['empty-provider::stale']);
+    const pruneSpy = vi.spyOn(ReadStateStore.prototype, 'prune');
+
+    try {
+      const api = await activate(context);
+      const itemEmitter = new (vscode.EventEmitter as any)();
+
+      api.registerProvider({
+        id: 'empty-provider',
+        label: 'Empty Provider',
+        onDidDiscoverItems: itemEmitter.event,
+        refresh: vi.fn(async () => {
+          itemEmitter.fire([]);
+        }),
+      } as any);
+
+      await vi.waitFor(() => expect(pruneSpy).toHaveBeenCalled());
+
+      const active = pruneSpy.mock.calls.at(-1)?.[0] as Map<string, unknown[]>;
+      expect(active.get('empty-provider')).toEqual([]);
+      expect(globalState.get<string[]>('devdocket.read-state')).toEqual(['empty-provider::stale']);
+      expect(globalState.get<Array<{ providerId: string; externalId: string }>>('devdocket.discovered-state')).toEqual([
+        { providerId: 'empty-provider', externalId: 'stale', inboxState: 'accepted' },
+      ]);
+    } finally {
+      pruneSpy.mockRestore();
+    }
+  });
+
+  it('scopes prune to the provider that emitted the refresh signal', async () => {
+    const globalState = context.globalState as InstanceType<typeof MockMemento>;
+    await globalState.update('devdocket.migrated', true);
+    const pruneSpy = vi.spyOn(ReadStateStore.prototype, 'prune');
+
+    try {
+      const api = await activate(context);
+      const otherEmitter = new (vscode.EventEmitter as any)();
+      const refreshedEmitter = new (vscode.EventEmitter as any)();
+      const otherItem = { externalId: 'other-active', title: 'Other Active' };
+      const refreshedItem = { externalId: 'refreshed-active', title: 'Refreshed Active' };
+
+      api.registerProvider({
+        id: 'other-provider',
+        label: 'Other Provider',
+        onDidDiscoverItems: otherEmitter.event,
+        refresh: vi.fn(async () => {
+          otherEmitter.fire([otherItem]);
+        }),
+      } as any);
+
+      await vi.waitFor(() => expect(pruneSpy).toHaveBeenCalled());
+      pruneSpy.mockClear();
+
+      api.registerProvider({
+        id: 'refreshed-provider',
+        label: 'Refreshed Provider',
+        onDidDiscoverItems: refreshedEmitter.event,
+        refresh: vi.fn(async () => {
+          refreshedEmitter.fire([refreshedItem]);
+        }),
+      } as any);
+
+      await vi.waitFor(() => expect(pruneSpy).toHaveBeenCalled());
+
+      const active = pruneSpy.mock.calls.at(-1)?.[0] as Map<string, unknown[]>;
+      expect([...active.keys()]).toEqual(['refreshed-provider']);
+      expect(active.get('refreshed-provider')).toEqual([refreshedItem]);
+      expect(active.has('other-provider')).toBe(false);
+    } finally {
+      pruneSpy.mockRestore();
+    }
+  });
+
+  it('skips prune after a truncated provider refresh', async () => {
+    const globalState = context.globalState as InstanceType<typeof MockMemento>;
+    await globalState.update('devdocket.migrated', true);
+    await globalState.update('devdocket.discovered-state', [
+      { providerId: 'truncated-provider', externalId: 'stale', inboxState: 'accepted' },
+    ]);
+    await globalState.update('devdocket.read-state', ['truncated-provider::stale']);
+    const originalMaxItems = ProviderRegistry.MAX_ITEMS_PER_PROVIDER;
+    const pruneSpy = vi.spyOn(ReadStateStore.prototype, 'prune');
+
+    try {
+      Object.defineProperty(ProviderRegistry, 'MAX_ITEMS_PER_PROVIDER', { value: 2, configurable: true });
+
+      const api = await activate(context);
+      const itemEmitter = new (vscode.EventEmitter as any)();
+
+      api.registerProvider({
+        id: 'truncated-provider',
+        label: 'Truncated Provider',
+        onDidDiscoverItems: itemEmitter.event,
+        refresh: vi.fn(async () => {
+          itemEmitter.fire([
+            { externalId: 'one', title: 'One' },
+            { externalId: 'two', title: 'Two' },
+            { externalId: 'three', title: 'Three' },
+          ]);
+        }),
+      } as any);
+
+      await vi.waitFor(() => {
+        const records = globalState.get<Array<{ providerId: string; externalId: string }>>('devdocket.discovered-state') ?? [];
+        expect(records.some(record => record.providerId === 'truncated-provider' && record.externalId === 'one')).toBe(true);
+      });
+      await flushMicrotasks();
+
+      expect(pruneSpy).not.toHaveBeenCalled();
+      expect(globalState.get<string[]>('devdocket.read-state')).toEqual(['truncated-provider::stale']);
+      const discoveredRecords = globalState.get<Array<{ providerId: string; externalId: string }>>('devdocket.discovered-state') ?? [];
+      expect(discoveredRecords.some(record => record.providerId === 'truncated-provider' && record.externalId === 'stale')).toBe(true);
+    } finally {
+      pruneSpy.mockRestore();
+      Object.defineProperty(ProviderRegistry, 'MAX_ITEMS_PER_PROVIDER', { value: originalMaxItems, configurable: true });
+    }
   });
 
   // ------------------------------------------------------------------
@@ -541,111 +714,15 @@ describe('activate()', () => {
   });
 
   // ------------------------------------------------------------------
-  // 13. Log level configuration is read on activation
+  // 13. Activation logging uses LogOutputChannel
   // ------------------------------------------------------------------
-  it('reads devDocket.logLevel configuration', async () => {
+  it('logs activation through the LogOutputChannel', async () => {
     await activate(context);
-    expect(vscode.workspace.getConfiguration).toHaveBeenCalledWith('devDocket');
+
+    const createOutputChannel = vscode.window.createOutputChannel as ReturnType<typeof vi.fn>;
+    const log = createOutputChannel.mock.results[0].value;
+    expect(log.info).toHaveBeenCalledWith('DevDocket activating...');
   });
-
-  // ------------------------------------------------------------------
-  // 14. Sets view messages for empty state
-  // ------------------------------------------------------------------
-
-  // ------------------------------------------------------------------
-  // 15. Error handling: safeHandler catches sync throw in event callback
-  // ------------------------------------------------------------------
-  it('logs error and continues when a safeHandler-wrapped callback throws', async () => {
-    await activate(context);
-    await flushMicrotasks();
-
-    const errorSpy = vi.spyOn(logger, 'error');
-
-    // The onDidChangeConfiguration listener is wrapped with safeHandler.
-    // Force its inner code to throw by making getConfiguration throw.
-    const onDidChangeCfg = vscode.workspace.onDidChangeConfiguration as ReturnType<typeof vi.fn>;
-    const configListener = onDidChangeCfg.mock.calls[0][0];
-
-    (vscode.workspace.getConfiguration as ReturnType<typeof vi.fn>)
-      .mockImplementationOnce(() => { throw new Error('Config read failure'); });
-
-    // Call the safeHandler-wrapped listener — should not throw
-    configListener({ affectsConfiguration: () => true });
-    await flushMicrotasks();
-
-    // Verify the error was logged via safeHandler's catch
-    expect(errorSpy).toHaveBeenCalledWith(
-      'Error handling configuration change',
-      expect.any(Error),
-    );
-
-    errorSpy.mockRestore();
-  });
-
-  // ------------------------------------------------------------------
-  // 16. Error handling: microtask catches view setter errors and
-  //     continues processing subsequent UI updates
-  // ------------------------------------------------------------------
-
-  // ------------------------------------------------------------------
-  // 17. Error handling: safeHandler catches sync throws via promise chain
-  // ------------------------------------------------------------------
-  it('catches sync throws via promise chain without unhandled rejections', async () => {
-    const api = await activate(context);
-    await flushMicrotasks();
-
-    const errorSpy = vi.spyOn(logger, 'error');
-    const onUnhandledRejection = vi.fn();
-    process.on('unhandledRejection', onUnhandledRejection);
-
-    try {
-      // The onDidChangeConfiguration listener is wrapped with safeHandler
-      // which runs callbacks via Promise.resolve().then().catch(). A sync
-      // throw inside .then() becomes a rejected promise caught by .catch().
-      const onDidChangeCfg = vscode.workspace.onDidChangeConfiguration as ReturnType<typeof vi.fn>;
-      const configListener = onDidChangeCfg.mock.calls[0][0];
-
-      // Make the wrapped function throw synchronously — safeHandler's
-      // promise chain converts this to a caught rejection.
-      (vscode.workspace.getConfiguration as ReturnType<typeof vi.fn>)
-        .mockImplementationOnce(() => { throw new Error('Config failure'); });
-
-      configListener({ affectsConfiguration: () => true });
-      await flushMicrotasks();
-
-      // Error should have been caught by safeHandler, not surfaced as unhandled
-      expect(errorSpy).toHaveBeenCalledWith(
-        'Error handling configuration change',
-        expect.any(Error),
-      );
-      expect(onUnhandledRejection).not.toHaveBeenCalled();
-
-      // Extension should still be functional — register a provider
-      const provider = {
-        id: 'err-async-ok',
-        label: 'ErrAsyncOk',
-        onDidDiscoverItems: new (vscode.EventEmitter as any)().event,
-        refresh: vi.fn().mockResolvedValue(undefined),
-      };
-      expect(() => api.registerProvider(provider as any)).not.toThrow();
-      await flushMicrotasks();
-    } finally {
-      process.off('unhandledRejection', onUnhandledRejection);
-      errorSpy.mockRestore();
-    }
-  });
-
-  // ------------------------------------------------------------------
-  // 18. Sets context keys for all five view layouts on activation
-  // ------------------------------------------------------------------
-
-  // ------------------------------------------------------------------
-  // 18b. Context key values match view defaults on activation
-  // ------------------------------------------------------------------
-
-  // ------------------------------------------------------------------
-  // 19. Layout change updates provider layouts and context keys
-  // ------------------------------------------------------------------
 });
 
 describe('deactivate()', () => {

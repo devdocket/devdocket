@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
 import { authentication, workspace } from 'vscode';
 import { GitHubMentionsProvider } from '../githubMentionsProvider';
-import { initLogger, LogLevel } from '../logger';
+import { setLogger } from '../logger';
 
 const mockFetch = vi.fn();
 
@@ -41,7 +41,7 @@ function createMockContext(globalStateData: Record<string, unknown> = {}): any {
 describe('GitHubMentionsProvider', () => {
   let provider: GitHubMentionsProvider;
   let mockContext: ReturnType<typeof createMockContext>;
-  let mockChannel: { appendLine: ReturnType<typeof vi.fn> };
+  let mockChannel: any;
 
   beforeEach(() => {
     vi.resetAllMocks();
@@ -49,8 +49,8 @@ describe('GitHubMentionsProvider', () => {
     mockContext = createMockContext();
     provider = new GitHubMentionsProvider(mockContext);
 
-    mockChannel = { appendLine: vi.fn() };
-    initLogger(mockChannel as any, LogLevel.Debug);
+    mockChannel = { info: vi.fn(), debug: vi.fn(), warn: vi.fn(), error: vi.fn(), appendLine: vi.fn() };
+    setLogger(mockChannel);
 
     // Default: workspace config returns defaults (no repos configured)
     vi.mocked(workspace.getConfiguration).mockReturnValue({

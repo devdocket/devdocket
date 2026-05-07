@@ -35,11 +35,9 @@ Provider refreshes are separate — they happen on a periodic schedule or via ex
 
 ## Version-Based Resurfacing
 
-`DiscoveredItem.version` enables **soft resurfacing**: when an `accepted` item's stored version differs from the incoming version, state resets to `unseen`. Suppressed for items in `New`/`InProgress`/`Paused` states.
+`DiscoveredItem.version` enables resurfacing for `accepted` items: when the stored version differs from the incoming version, state resets to `unseen` only if no linked work item exists or the linked work item is `Done`/`Archived`. For linked work items in `New`/`InProgress`/`Paused`, update the stored version silently and keep the inbox state unchanged.
 
-`DiscoveredItem.resurfaceVersion` enables **hard resurfacing**: always resurfaces regardless of WorkItem state.
-
-Dismissed items are never resurfaced by either mechanism.
+`DiscoveredItem.resurfaceVersion` enables resurfacing for `accepted` and `dismissed` items with the same lifecycle gate: resurface only when no linked work item exists or the linked work item is `Done`/`Archived`; otherwise silently update the stored resurface version.
 
 ## 3-Strike Failure Handling
 

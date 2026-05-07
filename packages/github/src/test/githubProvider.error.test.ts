@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
 import { authentication, workspace, window } from 'vscode';
 import { GitHubIssueProvider } from '../githubProvider';
-import { initLogger, LogLevel } from '../logger';
+import { setLogger } from '../logger';
 
 const mockFetch = vi.fn();
 const noLinkHeaders = { get: () => null };
@@ -27,15 +27,15 @@ function configureRepos(repos: string[]) {
 
 describe('GitHubIssueProvider — error handling', () => {
   let provider: GitHubIssueProvider;
-  let mockChannel: { appendLine: ReturnType<typeof vi.fn> };
+  let mockChannel: any;
 
   beforeEach(() => {
     vi.clearAllMocks();
     vi.stubGlobal('fetch', mockFetch);
     provider = new GitHubIssueProvider();
 
-    mockChannel = { appendLine: vi.fn() };
-    initLogger(mockChannel as any, LogLevel.Debug);
+    mockChannel = { info: vi.fn(), debug: vi.fn(), warn: vi.fn(), error: vi.fn(), appendLine: vi.fn() };
+    setLogger(mockChannel);
 
     vi.mocked(authentication.getSession).mockResolvedValue({
       accessToken: 'test-token',
@@ -186,10 +186,7 @@ describe('GitHubIssueProvider — error handling', () => {
       await refreshBg();
 
       expect(window.showWarningMessage).not.toHaveBeenCalled();
-      const logged = mockChannel.appendLine.mock.calls.some(
-        (call: string[]) => call[0].includes('[WARN]'),
-      );
-      expect(logged).toBe(true);
+      expect(mockChannel.warn).toHaveBeenCalled();
     });
   });
 

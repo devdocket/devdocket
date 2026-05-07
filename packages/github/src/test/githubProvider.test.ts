@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
 import { authentication, workspace, window } from 'vscode';
 import { GitHubIssueProvider } from '../githubProvider';
-import { initLogger, LogLevel } from '../logger';
+import { setLogger } from '../logger';
 
 // Mock global fetch
 const mockFetch = vi.fn();
@@ -18,15 +18,15 @@ function createMockIssue(number: number, title: string, repo = 'owner/repo') {
 
 describe('GitHubIssueProvider', () => {
   let provider: GitHubIssueProvider;
-  let mockChannel: { appendLine: ReturnType<typeof vi.fn> };
+  let mockChannel: any;
 
   beforeEach(() => {
     vi.clearAllMocks();
     vi.stubGlobal('fetch', mockFetch);
     provider = new GitHubIssueProvider();
 
-    mockChannel = { appendLine: vi.fn() };
-    initLogger(mockChannel as any, LogLevel.Debug);
+    mockChannel = { info: vi.fn(), debug: vi.fn(), warn: vi.fn(), error: vi.fn(), appendLine: vi.fn() };
+    setLogger(mockChannel);
 
     // Default: auth session returns a token
     vi.mocked(authentication.getSession).mockResolvedValue({
@@ -265,9 +265,9 @@ describe('GitHubIssueProvider', () => {
     expect(listener).not.toHaveBeenCalled();
     expect(mockFetch).not.toHaveBeenCalled();
 
-    const logged = mockChannel.appendLine.mock.calls.some(
-      (call: string[]) => call[0].includes('[ERROR]') && call[0].includes('GitHub authentication failed'),
-    );
+    const logged = mockChannel.error.mock.calls.some(
+      (call: unknown[]) => String(call[0]).includes('GitHub authentication failed'),
+      );
     expect(logged).toBe(true);
   });
 
@@ -282,9 +282,9 @@ describe('GitHubIssueProvider', () => {
     expect(window.showWarningMessage).not.toHaveBeenCalled();
     expect(mockFetch).not.toHaveBeenCalled();
 
-    const logged = mockChannel.appendLine.mock.calls.some(
-      (call: string[]) => call[0].includes('[WARN]') && call[0].includes('background refresh'),
-    );
+    const logged = mockChannel.warn.mock.calls.some(
+      (call: unknown[]) => String(call[0]).includes('background refresh'),
+      );
     expect(logged).toBe(true);
   });
 
@@ -293,9 +293,9 @@ describe('GitHubIssueProvider', () => {
 
     await provider.refresh();
 
-    const logged = mockChannel.appendLine.mock.calls.some(
-      (call: string[]) => call[0].includes('User cancelled GitHub authentication'),
-    );
+    const logged = mockChannel.info.mock.calls.some(
+      (call: unknown[]) => String(call[0]).includes('User cancelled GitHub authentication'),
+      );
     expect(logged).toBe(true);
   });
 
@@ -305,9 +305,9 @@ describe('GitHubIssueProvider', () => {
     const refreshBg = (provider as any).refreshInBackground.bind(provider);
     await refreshBg();
 
-    const logged = mockChannel.appendLine.mock.calls.some(
-      (call: string[]) => call[0].includes('No GitHub session available'),
-    );
+    const logged = mockChannel.debug.mock.calls.some(
+      (call: unknown[]) => String(call[0]).includes('No GitHub session available'),
+      );
     expect(logged).toBe(true);
   });
 

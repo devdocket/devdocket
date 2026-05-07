@@ -752,10 +752,13 @@ export function registerCommands(
   prWatcherRegistry: PRWatcherRegistry,
   watcherService: WatcherService,
   watchPanelProvider: WatchPanelProvider,
+  toggleMainSearch: () => void,
 ): void {
   context.subscriptions.push(
     vscode.commands.registerCommand('devdocket.refresh',
       wrapCommand('Failed to refresh', () => handleRefresh(providerRegistry))),
+    vscode.commands.registerCommand('devdocket.toggleSearch',
+      wrapCommand('Failed to toggle search', () => toggleMainSearch())),
     vscode.commands.registerCommand('devdocket.openWalkthrough',
       wrapCommand('Failed to open walkthrough', () =>
         vscode.commands.executeCommand(

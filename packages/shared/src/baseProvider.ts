@@ -65,18 +65,19 @@ export interface DiscoveredItem {
    */
   badges?: ProviderBadge[];
   /**
-   * Optional version identifier for "soft" resurfacing.
+   * Optional version identifier for accepted-item resurfacing.
    * When a previously accepted item reappears with a different version,
-   * it is resurfaced in the Inbox as unseen **unless** the linked work item
-   * is currently in Queue or Focus (New, InProgress, Paused), in which case
-   * the version is silently updated and a `version-updated` activity is logged.
+   * it is resurfaced in Incoming as unseen only if no linked work item exists
+   * or the linked work item is Done/Archived. For linked work items in
+   * New/InProgress/Paused, the version is silently updated.
    */
   version?: string;
   /**
-   * Optional secondary version for "hard" resurfacing.
+   * Optional secondary version for accepted and dismissed item resurfacing.
    * After the core records an item's first seen resurfaceVersion, later
-   * changes for previously accepted or dismissed items always resurface the
-   * item in the Inbox as unseen, regardless of linked work item state.
+   * changes resurface the item in Incoming as unseen only if no linked work
+   * item exists or the linked work item is Done/Archived. For linked work
+   * items in New/InProgress/Paused, the resurfaceVersion is silently updated.
    */
   resurfaceVersion?: string;
   /**

@@ -9,7 +9,7 @@
  * - `work-started` — a branch and/or worktree was created for this item.
  * - `cleanup` — git branch and/or worktree was cleaned up.
  * - `cleanup-dismissed` — user declined cleanup prompt for this item.
- * - `version-updated` — a provider version change was suppressed because the item is in Queue or Focus.
+ * - `version-updated` — legacy activity for a suppressed provider version change; retained for older logs.
  */
 export type ActivityType = 'created' | 'state-changed' | 'updated' | 'action-executed' | 'auto-completed' | 'work-started' | 'cleanup' | 'cleanup-dismissed' | 'version-updated';
 

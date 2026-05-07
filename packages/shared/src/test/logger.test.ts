@@ -1,6 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { initLogger, setLogLevel, logger, LogLevel, serializeArg } from '../services/logger';
-import { createLoggerService } from '@devdocket/shared';
+import { createLoggerService, LogLevel, serializeArg } from '../logger';
 
 function createMockChannel() {
   return {
@@ -15,12 +14,17 @@ function createMockChannel() {
   };
 }
 
-describe('logger', () => {
+describe('shared logger service', () => {
   let channel: ReturnType<typeof createMockChannel>;
+  let logger: ReturnType<typeof createLoggerService>['logger'];
+  let setLogLevel: ReturnType<typeof createLoggerService>['setLogLevel'];
 
   beforeEach(() => {
     channel = createMockChannel();
-    initLogger(channel as any, LogLevel.Debug);
+    const service = createLoggerService();
+    logger = service.logger;
+    setLogLevel = service.setLogLevel;
+    service.initLogger(channel as any, LogLevel.Debug);
   });
 
   it('should write info messages to the output channel', () => {
