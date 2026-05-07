@@ -1,5 +1,5 @@
 import * as React from 'preact';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { EditorItemData } from '../views/mainTypes';
 
 function collectText(node: unknown): string[] {
@@ -19,6 +19,10 @@ function collectText(node: unknown): string[] {
 }
 
 describe('RelatedItems', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
   it('uses neutral group headings for mixed related item directions', async () => {
     const items: EditorItemData['relatedItems'] = [
       { targetItemId: 'pr-1', targetKind: 'workItem', label: 'Closed by owner/repo#10', relation: 'closes', itemType: 'pr' },
