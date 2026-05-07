@@ -847,12 +847,14 @@ export class MainViewProvider implements vscode.WebviewViewProvider {
     .tier-header-action:hover {
       text-decoration: underline;
     }
-    .tier-header-action:disabled {
+    .tier-header-action:disabled,
+    .tier-header-action[aria-disabled="true"] {
       color: var(--vscode-disabledForeground, var(--vscode-descriptionForeground));
       cursor: default;
       opacity: 0.65;
     }
-    .tier-header-action:disabled:hover {
+    .tier-header-action:disabled:hover,
+    .tier-header-action[aria-disabled="true"]:hover {
       text-decoration: none;
     }
     .tier-toggle-button {

@@ -294,7 +294,7 @@ export function TierSection({
             class="tier-header-action"
             title={isFilterActive ? 'Clear filter to use Accept All' : 'Accept all'}
             aria-label="Accept all incoming items"
-            disabled={isFilterActive}
+            aria-disabled={isFilterActive}
             onClick={(event) => {
               event.stopPropagation();
               if (!isFilterActive) {
