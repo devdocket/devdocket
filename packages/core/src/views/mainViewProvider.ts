@@ -547,7 +547,9 @@ export class MainViewProvider implements vscode.WebviewViewProvider {
   }
 
   private async handleAcceptAll(): Promise<void> {
-    const incomingTier = this.buildTierData().find(tier => tier.id === 'incoming');
+    const allDiscoveredItems = this.providerRegistry.getAllDiscoveredItems();
+    const relatedItemsIndex = buildRelatedItemsIndex(this.providerRegistry, this.workGraph, allDiscoveredItems);
+    const incomingTier = this.buildTierData(allDiscoveredItems, relatedItemsIndex).find(tier => tier.id === 'incoming');
     if (!incomingTier) {
       return;
     }
