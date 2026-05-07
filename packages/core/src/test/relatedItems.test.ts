@@ -34,6 +34,7 @@ function makeRegistry(discovered: Map<string, DiscoveredItem[]>) {
 
 function makeWorkGraph(items: WorkItem[] = []) {
   return {
+    getAll: vi.fn(() => items),
     findItemByProvenance: vi.fn((providerId: string, externalId: string) => items.find(
       item => item.providerId === providerId && item.externalId === externalId,
     )),
@@ -282,7 +283,7 @@ describe('resolveRelatedItemsFor', () => {
     expect(registry.getAllDiscoveredItems).not.toHaveBeenCalled();
   });
 
-  it('falls back to persisted itemType for reverse refs when an indexed WorkItem is no longer discovered', () => {
+  it('falls back to persisted WorkItems when a related target is no longer discovered', () => {
     const issue = makeWorkItem({ id: 'issue-1', providerId: 'github-issues', externalId: 'owner/repo#2', itemType: 'issue' });
     const pr = makeWorkItem({ id: 'pr-1', providerId: 'github-my-prs', externalId: 'owner/repo#10' });
     const registry = makeRegistry(new Map([
@@ -291,6 +292,9 @@ describe('resolveRelatedItemsFor', () => {
     const workGraph = makeWorkGraph([issue, pr]);
     const index = buildRelatedItemsIndex(registry, workGraph);
 
+    expect(resolveRelatedItemsFor(pr, registry, workGraph, index)).toEqual([
+      { targetItemId: 'issue-1', targetKind: 'workItem', label: 'Closes owner/repo#2', relation: 'closes', itemType: 'issue' },
+    ]);
     expect(resolveRelatedItemsFor(issue, registry, workGraph, index)).toEqual([
       { targetItemId: 'pr-1', targetKind: 'workItem', label: 'Closed by owner/repo#10', relation: 'closes', itemType: 'pr' },
     ]);

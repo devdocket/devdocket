@@ -61,7 +61,7 @@ function buildRelatedItemsIndexForDiscovered(
   discoveredItems: Map<string, DiscoveredItem[]>,
   workGraph: WorkGraph,
 ): RelatedItemsIndex {
-  const discoveredByRef = buildDiscoveredByRef(discoveredItems);
+  const discoveredByRef = buildDiscoveredByRef(discoveredItems, workGraph);
   const workingIndex = new Map<string, Map<string, ResolvedRelatedItemWithSort>>();
   let totalRefCount = 0;
   let resolvedRefCount = 0;
@@ -163,19 +163,39 @@ function resolveReverseRefsForUndiscovered(
   return toPublicResolvedItems(resolved);
 }
 
-function buildDiscoveredByRef(discoveredItems: Map<string, DiscoveredItem[]>): Map<string, DiscoveredMatch[]> {
+function buildDiscoveredByRef(discoveredItems: Map<string, DiscoveredItem[]>, workGraph: WorkGraph): Map<string, DiscoveredMatch[]> {
   const discoveredByRef = new Map<string, DiscoveredMatch[]>();
+  const discoveredProvenance = new Set<string>();
   for (const [providerId, items] of discoveredItems) {
     for (const item of items) {
-      if (isRelatedItemType(item.itemType)) {
-        addDiscoveredMatch(discoveredByRef, item.itemType, providerId, item.externalId);
-      } else {
-        addDiscoveredMatch(discoveredByRef, 'issue', providerId, item.externalId);
-        addDiscoveredMatch(discoveredByRef, 'pr', providerId, item.externalId);
-      }
+      discoveredProvenance.add(getProvenanceKey(providerId, item.externalId));
+      addPotentialTargetMatch(discoveredByRef, item.itemType, providerId, item.externalId);
+    }
+  }
+  for (const item of workGraph.getAll()) {
+    if (item.providerId && item.externalId && !discoveredProvenance.has(getProvenanceKey(item.providerId, item.externalId))) {
+      addPotentialTargetMatch(discoveredByRef, item.itemType, item.providerId, item.externalId);
     }
   }
   return discoveredByRef;
+}
+
+function getProvenanceKey(providerId: string, externalId: string): string {
+  return `${providerId}\0${externalId}`;
+}
+
+function addPotentialTargetMatch(
+  discoveredByRef: Map<string, DiscoveredMatch[]>,
+  itemType: RelatedItemRef['itemType'] | undefined,
+  providerId: string,
+  externalId: string,
+): void {
+  if (isRelatedItemType(itemType)) {
+    addDiscoveredMatch(discoveredByRef, itemType, providerId, externalId);
+  } else {
+    addDiscoveredMatch(discoveredByRef, 'issue', providerId, externalId);
+    addDiscoveredMatch(discoveredByRef, 'pr', providerId, externalId);
+  }
 }
 
 function addDiscoveredMatch(
