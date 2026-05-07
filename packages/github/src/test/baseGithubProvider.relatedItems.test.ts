@@ -1,7 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { DiscoveredItem, RelatedItemRef } from '@devdocket/shared';
 import { BaseGitHubProvider } from '../baseGithubProvider';
-import { mapPrCrossReferencesToRelatedItems } from '../githubGraphql';
+import {
+  mapClosingIssuesReferencesToRelatedItems,
+  mapPrCrossReferencesToRelatedItems,
+} from '../githubGraphql';
 import { logger } from '../logger';
 
 vi.mock('../logger', () => ({
@@ -125,6 +128,105 @@ describe('GitHub related item mapping', () => {
       { __typename: 'CrossReferencedEvent', willCloseTarget: true, source: { __typename: 'Issue', number: '2', repository: { nameWithOwner: 'owner/repo' } } },
       { __typename: 'ConnectedEvent', subject: { __typename: 'Milestone', number: 1, repository: { nameWithOwner: 'owner/repo' } } },
     ])).toEqual([]);
+  });
+
+  it('maps closingIssuesReferences nodes as closes-relation issue refs', () => {
+    expect(mapClosingIssuesReferencesToRelatedItems([
+      { number: 486, repository: { nameWithOwner: 'devdocket/devdocket' } },
+      { number: 12, repository: { nameWithOwner: 'other/repo' } },
+    ])).toEqual([
+      { externalId: 'devdocket/devdocket#486', relation: 'closes', itemType: 'issue' },
+      { externalId: 'other/repo#12', relation: 'closes', itemType: 'issue' },
+    ]);
+  });
+
+  it('returns empty for closingIssuesReferences malformed payloads', () => {
+    expect(mapClosingIssuesReferencesToRelatedItems(undefined)).toEqual([]);
+    expect(mapClosingIssuesReferencesToRelatedItems(null)).toEqual([]);
+    expect(mapClosingIssuesReferencesToRelatedItems([
+      null,
+      { number: 'x', repository: { nameWithOwner: 'a/b' } },
+      { number: 1, repository: { nameWithOwner: 42 } },
+      { number: 1 },
+    ])).toEqual([]);
+  });
+});
+
+describe('BaseGitHubProvider closingIssuesReferences integration', () => {
+  let provider: TestGitHubProvider;
+
+  beforeEach(() => {
+    vi.resetAllMocks();
+    vi.stubGlobal('fetch', mockFetch);
+    provider = new TestGitHubProvider();
+  });
+
+  afterEach(() => {
+    provider.dispose();
+    vi.unstubAllGlobals();
+  });
+
+  it('extracts closingIssuesReferences from the PR even when the PR timeline is empty', async () => {
+    mockFetch.mockResolvedValue({
+      ok: true,
+      status: 200,
+      statusText: 'OK',
+      json: async () => ({
+        data: {
+          repo0: {
+            pullRequest: {
+              closingIssuesReferences: {
+                nodes: [{ number: 486, repository: { nameWithOwner: 'devdocket/devdocket' } }],
+              },
+              timelineItems: { nodes: [] },
+            },
+          },
+        },
+      }),
+    });
+
+    const result = await provider.fetchRelatedForTest(
+      [{ externalId: 'devdocket/devdocket#500', repoOwner: 'devdocket', repoName: 'devdocket', number: 500 }],
+      'token',
+    );
+    expect(result.get('devdocket/devdocket#500')).toEqual([
+      { externalId: 'devdocket/devdocket#486', relation: 'closes', itemType: 'issue' },
+    ]);
+  });
+
+  it('merges closingIssuesReferences with timeline cross-references and dedupes', async () => {
+    mockFetch.mockResolvedValue({
+      ok: true,
+      status: 200,
+      statusText: 'OK',
+      json: async () => ({
+        data: {
+          repo0: {
+            pullRequest: {
+              closingIssuesReferences: {
+                nodes: [{ number: 486, repository: { nameWithOwner: 'devdocket/devdocket' } }],
+              },
+              timelineItems: {
+                nodes: [
+                  { __typename: 'CrossReferencedEvent', willCloseTarget: false, source: { __typename: 'Issue', number: 486, repository: { nameWithOwner: 'devdocket/devdocket' } } },
+                  { __typename: 'CrossReferencedEvent', willCloseTarget: false, source: { __typename: 'PullRequest', number: 700, repository: { nameWithOwner: 'devdocket/devdocket' } } },
+                ],
+              },
+            },
+          },
+        },
+      }),
+    });
+
+    const result = await provider.fetchRelatedForTest(
+      [{ externalId: 'devdocket/devdocket#500', repoOwner: 'devdocket', repoName: 'devdocket', number: 500 }],
+      'token',
+    );
+    const refs = result.get('devdocket/devdocket#500') ?? [];
+    expect(refs).toContainEqual({ externalId: 'devdocket/devdocket#486', relation: 'closes', itemType: 'issue' });
+    expect(refs).toContainEqual({ externalId: 'devdocket/devdocket#700', relation: 'linked', itemType: 'pr' });
+    // Dedupe: closing-references "closes" wins over timeline "linked" for the same issue
+    expect(refs.filter(r => r.externalId === 'devdocket/devdocket#486')).toHaveLength(1);
   });
 });
 

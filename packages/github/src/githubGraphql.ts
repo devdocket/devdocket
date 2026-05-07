@@ -13,6 +13,12 @@ export interface PrCrossReferencesBatchResult {
 }
 
 const PR_CROSS_REFERENCES_TIMELINE_SELECTION = `
+closingIssuesReferences(first: 50) {
+  nodes {
+    number
+    repository { nameWithOwner }
+  }
+}
 timelineItems(itemTypes: [CROSS_REFERENCED_EVENT, CONNECTED_EVENT, DISCONNECTED_EVENT], first: 100) {
   nodes {
     __typename
@@ -86,7 +92,12 @@ export async function fetchPrCrossReferencesBatch(
   }
 
   const payload = await response.json() as {
-    data?: Record<string, { pullRequest?: { timelineItems?: { nodes?: unknown[] } | null } | null } | null>;
+    data?: Record<string, {
+      pullRequest?: {
+        closingIssuesReferences?: { nodes?: unknown[] } | null;
+        timelineItems?: { nodes?: unknown[] } | null;
+      } | null;
+    } | null>;
     errors?: Array<{ message?: string; path?: unknown[] }>;
   };
 
@@ -110,9 +121,48 @@ export async function fetchPrCrossReferencesBatch(
       return { relatedItems: [], error: `GitHub GraphQL request failed: ${aliasError}` };
     }
     return {
-      relatedItems: mapPrCrossReferencesToRelatedItems(repository?.pullRequest?.timelineItems?.nodes),
+      relatedItems: combineClosingAndTimelineRefs(
+        repository?.pullRequest?.closingIssuesReferences?.nodes,
+        repository?.pullRequest?.timelineItems?.nodes,
+      ),
     };
   });
+}
+
+function combineClosingAndTimelineRefs(
+  closingNodes: unknown,
+  timelineNodes: unknown,
+): RelatedItemRef[] {
+  const merged = new Map<string, RelatedItemRef>();
+  for (const ref of mapClosingIssuesReferencesToRelatedItems(closingNodes)) {
+    upsertRelatedItem(merged, ref);
+  }
+  for (const ref of mapPrCrossReferencesToRelatedItems(timelineNodes)) {
+    upsertRelatedItem(merged, ref);
+  }
+  return Array.from(merged.values());
+}
+
+export function mapClosingIssuesReferencesToRelatedItems(nodes: unknown): RelatedItemRef[] {
+  if (!Array.isArray(nodes)) {
+    return [];
+  }
+  const refs: RelatedItemRef[] = [];
+  for (const node of nodes) {
+    if (!node || typeof node !== 'object') {
+      continue;
+    }
+    const value = node as { number?: unknown; repository?: { nameWithOwner?: unknown } | null };
+    if (typeof value.number !== 'number' || !value.repository || typeof value.repository.nameWithOwner !== 'string') {
+      continue;
+    }
+    refs.push({
+      externalId: `${value.repository.nameWithOwner}#${value.number}`,
+      relation: 'closes',
+      itemType: 'issue',
+    });
+  }
+  return refs;
 }
 
 function formatGraphQLErrors(errors: Array<{ message?: string }>): string {
