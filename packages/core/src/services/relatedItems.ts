@@ -305,7 +305,7 @@ function relationRank(relation: RelatedItemRef['relation']): number {
   return relation === 'closes' ? 0 : 1;
 }
 
-function getRelatedItemsIndexKey(providerId: string, externalId: string): string {
+export function getRelatedItemsIndexKey(providerId: string, externalId: string): string {
   return JSON.stringify([providerId, externalId]);
 }
 

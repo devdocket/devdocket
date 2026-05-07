@@ -7,7 +7,7 @@ import { buildCanonicalHiddenSet } from '../services/canonicalDedup';
 import { getInboxUnseenCount } from '../services/inboxBadge';
 import { logger } from '../services/logger';
 import { ProviderRegistry } from '../services/providerRegistry';
-import { buildRelatedItemsIndex, type RelatedItemsIndex } from '../services/relatedItems';
+import { buildRelatedItemsIndex, getRelatedItemsIndexKey, type RelatedItemsIndex } from '../services/relatedItems';
 import { WatcherService, type WatchedPR, type WatchedRun } from '../services/watcherService';
 import { WorkGraph } from '../services/workGraph';
 import { DiscoveredStateStore } from '../storage/discoveredStateStore';
@@ -319,7 +319,7 @@ export class MainViewProvider implements vscode.WebviewViewProvider {
     externalId: string,
     relatedItemsIndex: RelatedItemsIndex,
   ): boolean {
-    return (relatedItemsIndex.get(getDiscoveredItemKey(providerId, externalId))?.length ?? 0) > 0;
+    return (relatedItemsIndex.get(getRelatedItemsIndexKey(providerId, externalId))?.length ?? 0) > 0;
   }
 
   private buildBadges(providerId?: string, discoveredItem?: DiscoveredItem, itemUrl?: string): BadgeData[] {
