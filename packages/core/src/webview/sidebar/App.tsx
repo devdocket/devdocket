@@ -124,6 +124,17 @@ export function App() {
           break;
         case 'updateWatches':
           break;
+        case 'toggleSearch': {
+          const tab = activeTabRef.current;
+          const currentlyVisible = isSearchBoxEffectivelyVisible(
+            tab,
+            searchBoxVisibleRef.current,
+            queriesRef.current,
+            appliedQueriesRef.current,
+          );
+          toggleSearchBox(tab, currentlyVisible);
+          break;
+        }
       }
     };
 
@@ -173,23 +184,14 @@ export function App() {
     showSearchBox(tab);
   };
 
-  const renderSearchToggle = (tab: SidebarTab, visible: boolean) => {
-    const hasQuery = queries[tab].trim() !== '' || appliedQueries[tab].trim() !== '';
-    const label = visible ? (hasQuery ? 'Hide search and clear filter' : 'Hide search') : 'Show search';
-
-    return (
-      <button
-        type="button"
-        class={`search-toggle ${visible ? 'expanded' : ''}`.trim()}
-        aria-label={label}
-        title={label}
-        aria-expanded={visible}
-        onClick={() => toggleSearchBox(tab, visible)}
-      >
-        ⋯
-      </button>
-    );
-  };
+  const activeTabRef = useRef(activeTab);
+  activeTabRef.current = activeTab;
+  const searchBoxVisibleRef = useRef(searchBoxVisible);
+  searchBoxVisibleRef.current = searchBoxVisible;
+  const queriesRef = useRef(queries);
+  queriesRef.current = queries;
+  const appliedQueriesRef = useRef(appliedQueries);
+  appliedQueriesRef.current = appliedQueries;
 
   return (
     <div class="mission-control">
@@ -208,9 +210,6 @@ export function App() {
             id="mission-control-panel-sources"
             aria-labelledby="mission-control-tab-sources"
           >
-            <div class="tab-header">
-              {renderSearchToggle('sources', sourcesSearchBoxVisible)}
-            </div>
             {sourcesSearchBoxVisible ? (
               <SearchBox
                 label="Search Sources"
@@ -244,9 +243,6 @@ export function App() {
             id="mission-control-panel-my-work"
             aria-labelledby="mission-control-tab-my-work"
           >
-            <div class="tab-header">
-              {renderSearchToggle('myWork', myWorkSearchBoxVisible)}
-            </div>
             {myWorkSearchBoxVisible ? (
               <SearchBox
                 label="Search My Work"

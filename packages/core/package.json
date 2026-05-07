@@ -391,24 +391,35 @@
         "command": "devdocket.openWalkthrough",
         "title": "Open Walkthrough",
         "category": "DevDocket"
+      },
+      {
+        "command": "devdocket.toggleSearch",
+        "title": "Toggle Search",
+        "category": "DevDocket",
+        "icon": "$(search)"
       }
     ],
     "menus": {
       "view/title": [
         {
+          "command": "devdocket.toggleSearch",
+          "when": "view == devdocket.main",
+          "group": "navigation@1"
+        },
+        {
           "command": "devdocket.createItem",
           "when": "view == devdocket.main",
-          "group": "navigation"
+          "group": "navigation@2"
         },
         {
           "command": "devdocket.createItemFromUrl",
           "when": "view == devdocket.main",
-          "group": "navigation"
+          "group": "navigation@3"
         },
         {
           "command": "devdocket.refresh",
           "when": "view == devdocket.main",
-          "group": "navigation"
+          "group": "navigation@4"
         }
       ],
       "commandPalette": [

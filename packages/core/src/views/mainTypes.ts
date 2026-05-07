@@ -2,6 +2,7 @@ export type ExtensionMessage =
   | { type: 'updateItems'; tiers: TierData[] }
   | { type: 'updateSources'; providers: SourceProviderData[] }
   | { type: 'selectItem'; itemId: string }
+  | { type: 'toggleSearch' }
   | { type: 'updateWatches'; watches: WatchData[] }
   | { type: 'updateWatchPanel'; prWatches: PRWatchData[]; runWatches: RunWatchData[] }
   | { type: 'updateEditorItem'; item: EditorItemData }

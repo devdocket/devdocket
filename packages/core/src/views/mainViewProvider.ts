@@ -91,6 +91,10 @@ export class MainViewProvider implements vscode.WebviewViewProvider {
     void this.view?.webview.postMessage({ type: 'selectItem', itemId });
   }
 
+  toggleSearch(): void {
+    void this.view?.webview.postMessage({ type: 'toggleSearch' });
+  }
+
   private refresh(): void {
     if (!this.view) {
       return;
@@ -768,48 +772,7 @@ export class MainViewProvider implements vscode.WebviewViewProvider {
     }
     .my-work-tab,
     .sources-tab {
-      position: relative;
       padding: 0 12px 12px;
-    }
-    .tab-header {
-      position: absolute;
-      top: 4px;
-      right: 12px;
-      z-index: 2;
-      display: flex;
-      justify-content: flex-end;
-      align-items: center;
-      pointer-events: none;
-    }
-    .tab-header > * {
-      pointer-events: auto;
-    }
-    .search-toggle {
-      width: 20px;
-      height: 20px;
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      border: none;
-      border-radius: 4px;
-      background: transparent;
-      color: var(--vscode-icon-foreground);
-      cursor: pointer;
-      padding: 0;
-      font: inherit;
-      line-height: 1;
-      opacity: 0.75;
-    }
-    .search-toggle:hover {
-      background: var(--vscode-toolbar-hoverBackground, rgba(127, 127, 127, 0.25));
-      opacity: 1;
-    }
-    .search-toggle.expanded {
-      background: var(--vscode-toolbar-activeBackground, var(--vscode-toolbar-hoverBackground, rgba(127, 127, 127, 0.35)));
-      opacity: 1;
-    }
-    .search-toggle.expanded:hover {
-      background: var(--vscode-toolbar-hoverBackground, rgba(127, 127, 127, 0.45));
     }
     .search-box {
       position: sticky;
@@ -925,7 +888,6 @@ export class MainViewProvider implements vscode.WebviewViewProvider {
     .tier-header-main:focus-visible,
     .tier-toggle-button:focus-visible,
     .tier-header-action:focus-visible,
-    .search-toggle:focus-visible,
     .source-provider-toggle-button:focus-visible,
     .source-group-header:focus-visible,
     .source-item:focus-visible,
