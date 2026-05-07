@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { DiscoveredItem, RelatedItemRef } from '@devdocket/shared';
 import { BaseGitHubProvider } from '../baseGithubProvider';
 import { mapPrCrossReferencesToRelatedItems } from '../githubGraphql';
-import { initLogger, LogLevel } from '../logger';
+import { initLogger } from '../logger';
 
 const mockFetch = vi.fn();
 
@@ -123,7 +123,7 @@ describe('BaseGitHubProvider related item fetching', () => {
     vi.stubGlobal('fetch', mockFetch);
     provider = new TestGitHubProvider();
     mockChannel = { appendLine: vi.fn() };
-    initLogger(mockChannel as any, LogLevel.Debug);
+    initLogger(mockChannel as any, 0);
   });
 
   afterEach(() => {
