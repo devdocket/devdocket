@@ -150,7 +150,7 @@ describe('BaseGitHubProvider related item fetching', () => {
     ]);
   });
 
-  it('collapses per-PR failures to no relatedItems and logs the failure', async () => {
+  it('collapses per-PR failures to no relatedItems and logs the failure summary', async () => {
     mockFetch.mockImplementation(async (_url: string, options: { body?: string }) => {
       const variables = JSON.parse(options.body ?? '{}').variables;
       if (variables.number === 1) {
@@ -166,7 +166,9 @@ describe('BaseGitHubProvider related item fetching', () => {
 
     expect(result.has('owner/repo#1')).toBe(true);
     expect(result.has('owner/repo#2')).toBe(false);
-    expect(mockChannel.appendLine.mock.calls.some(call => call[0].includes('Failed to fetch related items for PR owner/repo#2'))).toBe(true);
+    expect(mockChannel.appendLine.mock.calls.some(call => call[0].includes('[WARN]') && call[0].includes('Failed to fetch related items for PR owner/repo#2'))).toBe(true);
+    expect(mockChannel.appendLine.mock.calls.some(call => call[0].includes('[DEBUG]') && call[0].includes('Failed to fetch related items for PR owner/repo#2'))).toBe(false);
+    expect(mockChannel.appendLine.mock.calls.some(call => call[0].includes('[INFO] Fetched related items for 1/2 PRs (1 failures)'))).toBe(true);
   });
 
   it('propagates cancellation as AbortError', async () => {

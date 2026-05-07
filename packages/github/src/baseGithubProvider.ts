@@ -117,6 +117,7 @@ export abstract class BaseGitHubProvider extends BaseProvider {
       return result;
     }
 
+    let failureCount = 0;
     await runWorkerPool(prs, async (pr) => {
       if (signal?.aborted) {
         throw createAbortError();
@@ -132,10 +133,12 @@ export abstract class BaseGitHubProvider extends BaseProvider {
         }
       } catch (error) {
         if (error instanceof Error && error.name === 'AbortError' && signal?.aborted) { throw error; }
-        logger.debug(`Failed to fetch related items for PR ${pr.externalId}: ${String(error)}`);
+        failureCount++;
+        logger.warn(`Failed to fetch related items for PR ${pr.externalId}: ${String(error)}`);
       }
     }, 3);
 
+    logger.info(`Fetched related items for ${result.size}/${prs.length} PRs (${failureCount} failures)`);
     return result;
   }
 
