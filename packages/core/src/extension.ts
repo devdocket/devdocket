@@ -21,7 +21,7 @@ import { WorkItemEditorPanel, PanelManager } from './views/workItemEditorPanel';
 import { MainViewProvider } from './views/mainViewProvider';
 import { registerCommands } from './commands/commands';
 import { isSafeUrl } from './utils/url';
-import { initLogger, setLogLevel, logger, resolveLogLevel } from './services/logger';
+import { logger, setLogger } from './services/logger';
 import { syncProviderTitles } from './services/titleSync';
 import { syncProviderDescriptions } from './services/descriptionSync';
 import { performance } from 'perf_hooks';
@@ -41,27 +41,11 @@ function safeHandler<T extends unknown[]>(label: string, fn: (...args: T) => voi
 }
 
 
-function initializeLogging(context: vscode.ExtensionContext): void {
-  const outputChannel = vscode.window.createOutputChannel('DevDocket');
-  context.subscriptions.push(outputChannel);
-
-  const logLevelConfig = vscode.workspace.getConfiguration('devDocket').get<string>('logLevel', 'info');
-  initLogger(outputChannel, resolveLogLevel(logLevelConfig));
-  if (!['debug', 'info', 'warn', 'error'].includes(logLevelConfig)) {
-    logger.warn(`Invalid log level '${logLevelConfig}', falling back to 'info'. Valid values: debug, info, warn, error`);
-  }
-
-  context.subscriptions.push(
-    vscode.workspace.onDidChangeConfiguration(safeHandler('Error handling configuration change', (e) => {
-      if (e.affectsConfiguration('devDocket.logLevel')) {
-        const newLevel = vscode.workspace.getConfiguration('devDocket').get<string>('logLevel', 'info');
-        setLogLevel(resolveLogLevel(newLevel));
-        if (!['debug', 'info', 'warn', 'error'].includes(newLevel)) {
-          logger.warn(`Invalid log level '${newLevel}', falling back to 'info'. Valid values: debug, info, warn, error`);
-        }
-      }
-    })),
-  );
+function initializeLogging(context: vscode.ExtensionContext): vscode.LogOutputChannel {
+  const log = vscode.window.createOutputChannel('DevDocket', { log: true });
+  context.subscriptions.push(log);
+  setLogger(log);
+  return log;
 }
 
 async function loadStores(globalState: vscode.Memento): Promise<{ workGraph: WorkGraph; stateStore: DiscoveredStateStore; readStateStore: ReadStateStore; labelCache: ProviderLabelCache }> {
@@ -388,8 +372,8 @@ function wireEvents(
  */
 export async function activate(context: vscode.ExtensionContext): Promise<DevDocketApi> {
   const activationStart = performance.now();
-  initializeLogging(context);
-  logger.info('DevDocket activating...');
+  const log = initializeLogging(context);
+  log.info('DevDocket activating...');
 
   const initStart = performance.now();
   const storagePath = context.globalStorageUri.fsPath;

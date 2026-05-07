@@ -54,6 +54,11 @@ const window = {
   registerTreeDataProvider: vi.fn(() => ({ dispose: vi.fn() })),
   createWebviewPanel: vi.fn(),
   createOutputChannel: vi.fn(() => ({
+    info: vi.fn(),
+    debug: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
+    trace: vi.fn(),
     appendLine: vi.fn(),
     append: vi.fn(),
     clear: vi.fn(),
@@ -62,6 +67,8 @@ const window = {
     dispose: vi.fn(),
     name: 'DevDocket Start Git Work',
     replace: vi.fn(),
+    logLevel: 2,
+    onDidChangeLogLevel: vi.fn(),
   })),
 };
 

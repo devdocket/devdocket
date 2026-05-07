@@ -223,7 +223,6 @@ Use `{path}` in args as a placeholder for the worktree path. Commands run in seq
 
 | Setting | Type | Default | Description |
 |---------|------|---------|-------------|
-| `devDocket.logLevel` | `string` | `"info"` | Log level for the DevDocket output channel. Valid values: `debug`, `info`, `warn`, `error`. |
 | `devDocket.showInboxNotifications` | `boolean` | `true` | Show a notification when new items arrive in the Incoming tier. |
 | `devDocket.autoCompleteOnClose` | `boolean` | `true` | Automatically mark work items as Done when their linked external item is closed, merged, or otherwise completed by the provider. |
 | `devDocket.historyClearDays` | `integer` | `30` | Age threshold in days for the **Clear** action on the Done tier. Items in Done whose last modification is older than this many days are removed. Minimum: 1. |

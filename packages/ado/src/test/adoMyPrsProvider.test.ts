@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
 import { authentication, window } from 'vscode';
 import { AdoMyPrsProvider } from '../adoMyPrsProvider';
-import { initLogger, LogLevel } from '../logger';
+import { setLogger } from '../logger';
 
 const mockFetch = vi.fn();
 
@@ -64,7 +64,7 @@ function createMockCancellationToken() {
 
 describe('AdoMyPrsProvider', () => {
   let provider: AdoMyPrsProvider;
-  let mockChannel: { appendLine: ReturnType<typeof vi.fn> };
+  let mockChannel: any;
 
   beforeEach(() => {
     vi.clearAllMocks();
@@ -73,8 +73,8 @@ describe('AdoMyPrsProvider', () => {
     provider = new AdoMyPrsProvider([{ org: 'myorg', projects: ['MyProject'] }]);
     mockAuthSession();
 
-    mockChannel = { appendLine: vi.fn() };
-    initLogger(mockChannel as any, LogLevel.Debug);
+    mockChannel = { info: vi.fn(), debug: vi.fn(), warn: vi.fn(), error: vi.fn(), appendLine: vi.fn() };
+    setLogger(mockChannel);
   });
 
   afterEach(() => {
@@ -208,8 +208,8 @@ describe('AdoMyPrsProvider', () => {
       'DevDocket ADO: My PRs errors: failed to fetch from myorg/ProjectB',
     );
     expect(
-      mockChannel.appendLine.mock.calls.some(
-        (call: string[]) => call[0].includes('[ERROR]') && call[0].includes('Failed to fetch My PRs from myorg/ProjectB'),
+      mockChannel.error.mock.calls.some(
+        (call: unknown[]) => String(call[0]).includes('Failed to fetch My PRs from myorg/ProjectB'),
       ),
     ).toBe(false);
   });
@@ -283,8 +283,8 @@ describe('AdoMyPrsProvider', () => {
     const items = listener.mock.calls[0][0];
     expect(items[0].state).toBe('queued');
     expect(
-      mockChannel.appendLine.mock.calls.some(
-        (call: string[]) => call[0].includes('[DEBUG]') && call[0].includes('Failed to fetch PR detail'),
+      mockChannel.debug.mock.calls.some(
+        (call: unknown[]) => String(call[0]).includes('Failed to fetch PR detail'),
       ),
     ).toBe(true);
   });
@@ -313,8 +313,8 @@ describe('AdoMyPrsProvider', () => {
     const items = listener.mock.calls[0][0];
     expect(items[0].state).toBe('queued');
     expect(
-      mockChannel.appendLine.mock.calls.some(
-        (call: string[]) => call[0].includes('[DEBUG]') && call[0].includes('Failed to enrich PR'),
+      mockChannel.debug.mock.calls.some(
+        (call: unknown[]) => String(call[0]).includes('Failed to enrich PR'),
       ),
     ).toBe(true);
   });

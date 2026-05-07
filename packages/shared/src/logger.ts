@@ -82,6 +82,7 @@ export function resolveLogLevel(level: string | undefined): LogLevel {
   return (level !== undefined ? logLevelMap[level] : undefined) ?? LogLevel.Info;
 }
 
+// TODO(#471): Keep this compatibility logger for external @devdocket/shared consumers until a future major version can remove it.
 /**
  * Creates a new {@link LoggerService} that starts unconfigured.
  * Call {@link LoggerService.initLogger} to attach an output sink before emitting messages.

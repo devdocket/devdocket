@@ -6,31 +6,14 @@ import { GitHubPRWatcher } from './githubPRWatcher';
 import { GitHubMyPrsProvider } from './githubMyPrsProvider';
 import { GitHubMentionsProvider } from './githubMentionsProvider';
 import { validateRefreshInterval, type DevDocketApi } from '@devdocket/shared';
-import { initLogger, setLogLevel, logger, resolveLogLevel } from './logger';
+import { logger, setLogger } from './logger';
 
 export async function activate(context: vscode.ExtensionContext): Promise<void> {
-  const outputChannel = vscode.window.createOutputChannel('DevDocket GitHub');
-  context.subscriptions.push(outputChannel);
+  const log = vscode.window.createOutputChannel('DevDocket GitHub', { log: true });
+  context.subscriptions.push(log);
+  setLogger(log);
 
-  const logLevelConfig = vscode.workspace.getConfiguration('devDocket').get<string>('logLevel', 'info');
-  initLogger(outputChannel, resolveLogLevel(logLevelConfig));
-  if (!['debug', 'info', 'warn', 'error'].includes(logLevelConfig)) {
-    logger.warn(`Invalid log level '${logLevelConfig}', falling back to 'info'. Valid values: debug, info, warn, error`);
-  }
-
-  context.subscriptions.push(
-    vscode.workspace.onDidChangeConfiguration(e => {
-      if (e.affectsConfiguration('devDocket.logLevel')) {
-        const newLevel = vscode.workspace.getConfiguration('devDocket').get<string>('logLevel', 'info');
-        setLogLevel(resolveLogLevel(newLevel));
-        if (!['debug', 'info', 'warn', 'error'].includes(newLevel)) {
-          logger.warn(`Invalid log level '${newLevel}', falling back to 'info'. Valid values: debug, info, warn, error`);
-        }
-      }
-    }),
-  );
-
-  logger.info('DevDocket GitHub activating...');
+  log.info('DevDocket GitHub activating...');
 
   // Acquire the DevDocket API from the core extension
   const coreExtension = vscode.extensions.getExtension('mthalman.devdocket');

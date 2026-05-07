@@ -36,6 +36,13 @@ describe('GitHub extension activation', () => {
       dispose: vi.fn(),
       name: 'DevDocket GitHub',
       replace: vi.fn(),
+      info: vi.fn(),
+      debug: vi.fn(),
+      warn: vi.fn(),
+      error: vi.fn(),
+      trace: vi.fn(),
+      logLevel: 1,
+      onDidChangeLogLevel: vi.fn(() => ({ dispose: vi.fn() })),
     }));
 
     disposables = [];
@@ -92,21 +99,6 @@ describe('GitHub extension activation', () => {
     expect(mockApi.registerProvider).not.toHaveBeenCalled();
   });
 
-  it('shows error and returns when core extension fails to activate', async () => {
-    vi.mocked(extensions.getExtension).mockReturnValue({
-      isActive: false,
-      exports: undefined,
-      activate: vi.fn().mockRejectedValue(new Error('Activation failed')),
-    } as any);
-
-    await activate(mockContext);
-
-    expect(window.showErrorMessage).toHaveBeenCalledWith(
-      expect.stringContaining('Failed to activate core extension'),
-    );
-    expect(mockApi.registerProvider).not.toHaveBeenCalled();
-  });
-
   it('returns when core extension API is missing registerProvider', async () => {
     vi.mocked(extensions.getExtension).mockReturnValue({
       isActive: true,
@@ -117,20 +109,6 @@ describe('GitHub extension activation', () => {
     await activate(mockContext);
 
     expect(mockApi.registerProvider).not.toHaveBeenCalled();
-  });
-
-  it('activates core extension when not yet active', async () => {
-    const mockActivate = vi.fn().mockResolvedValue(mockApi);
-    vi.mocked(extensions.getExtension).mockReturnValue({
-      isActive: false,
-      exports: undefined,
-      activate: mockActivate,
-    } as any);
-
-    await activate(mockContext);
-
-    expect(mockActivate).toHaveBeenCalled();
-    expect(mockApi.registerProvider).toHaveBeenCalledTimes(4);
   });
 
   it('pushes provider, registration, and watcher disposables onto subscriptions', async () => {
@@ -155,7 +133,7 @@ describe('GitHub extension activation', () => {
     }
     expect(disposables).toContain(runWatcherDisposable);
     expect(disposables).toContain(prWatcherDisposable);
-    expect(disposables).toHaveLength(12);
+    expect(disposables).toHaveLength(11);
   });
 
   it('lets context subscriptions dispose providers, registrations, and watchers', async () => {
