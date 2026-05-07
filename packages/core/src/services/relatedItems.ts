@@ -236,6 +236,7 @@ function resolveDiscoveredTarget(
   return {
     targetItemId: workItem?.id ?? `${providerId}::${externalId}`,
     targetKind: workItem ? 'workItem' : 'sources',
+    ...(!workItem ? { targetProviderId: providerId, targetExternalId: externalId } : {}),
     label: getRelatedItemLabel(relation, externalId, direction),
     relation,
     itemType,

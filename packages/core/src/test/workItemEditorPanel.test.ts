@@ -332,16 +332,21 @@ describe('WorkItemEditorPanel', () => {
     expect(vscode.commands.executeCommand).toHaveBeenNthCalledWith(2, 'devdocket.editItem', { id: item.id });
   });
 
-  it('opens related Sources items from the editor', async () => {
+  it('opens related Sources items from the editor using explicit provenance fields', async () => {
     const item = makeItem({ state: WorkItemState.New });
     const workGraph = createMockWorkGraph(item);
     const { mock } = openPanel(item, workGraph);
 
-    await mock.simulateMessage({ type: 'openItem', itemId: 'github-issues::owner/repo#99' });
+    await mock.simulateMessage({
+      type: 'openItem',
+      itemId: 'provider::with-delimiter::external::with-delimiter',
+      providerId: 'provider::with-delimiter',
+      externalId: 'external::with-delimiter',
+    });
 
     expect(vscode.commands.executeCommand).toHaveBeenCalledWith('devdocket.previewIncomingItem', {
-      providerId: 'github-issues',
-      externalId: 'owner/repo#99',
+      providerId: 'provider::with-delimiter',
+      externalId: 'external::with-delimiter',
     });
   });
 

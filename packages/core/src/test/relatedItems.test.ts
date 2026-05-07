@@ -66,7 +66,15 @@ describe('resolveRelatedItemsFor', () => {
     ]));
 
     expect(resolveRelatedItemsFor(pr, registry, makeWorkGraph([pr]))).toEqual([
-      { targetItemId: 'github-issues::owner/repo#2', targetKind: 'sources', label: 'Closes owner/repo#2', relation: 'closes', itemType: 'issue' },
+      {
+        targetItemId: 'github-issues::owner/repo#2',
+        targetKind: 'sources',
+        targetProviderId: 'github-issues',
+        targetExternalId: 'owner/repo#2',
+        label: 'Closes owner/repo#2',
+        relation: 'closes',
+        itemType: 'issue',
+      },
     ]);
   });
 

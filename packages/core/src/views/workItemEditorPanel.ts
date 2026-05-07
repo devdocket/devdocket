@@ -160,7 +160,7 @@ export class WorkItemEditorPanel {
 
     this.messageSubscription = this.panel.webview.onDidReceiveMessage((msg) => {
       if (msg?.type === 'openItem' && typeof msg.itemId === 'string') {
-        void this.handleOpenItem(msg.itemId);
+        void this.handleOpenItem(msg.itemId, msg.providerId, msg.externalId);
         return;
       }
       if (msg?.type === 'openUrl' && typeof msg.url === 'string') {
@@ -361,14 +361,16 @@ export class WorkItemEditorPanel {
     };
   }
 
-  private async handleOpenItem(itemId: string): Promise<void> {
+  private async handleOpenItem(itemId: string, providerId?: string, externalId?: string): Promise<void> {
     const workItem = this.workGraph.getItem(itemId);
     if (workItem) {
       await vscode.commands.executeCommand('devdocket.editItem', { id: itemId });
       return;
     }
 
-    const discoveredKey = parseDiscoveredItemKey(itemId);
+    const discoveredKey = providerId && externalId
+      ? { providerId, externalId }
+      : parseDiscoveredItemKey(itemId);
     if (discoveredKey) {
       await vscode.commands.executeCommand('devdocket.previewIncomingItem', discoveredKey);
     }

@@ -5,6 +5,8 @@ export interface ResolvedRelatedItem {
   targetItemId: string;
   label: string;
   targetKind: 'workItem' | 'sources';
+  targetProviderId?: string;
+  targetExternalId?: string;
   relation: RelatedItemRef['relation'];
   itemType: RelatedItemRef['itemType'];
 }

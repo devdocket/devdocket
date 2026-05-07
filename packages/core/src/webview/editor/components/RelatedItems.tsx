@@ -2,7 +2,7 @@ import type { EditorItemData } from '../../shared/types';
 
 interface RelatedItemsProps {
   items: EditorItemData['relatedItems'];
-  onOpenItem: (itemId: string) => void;
+  onOpenItem: (item: EditorItemData['relatedItems'][number]) => void;
 }
 
 export function RelatedItems({ items, onOpenItem }: RelatedItemsProps) {
@@ -29,7 +29,7 @@ function renderGroup(
   label: string,
   items: EditorItemData['relatedItems'],
   showHeading: boolean,
-  onOpenItem: (itemId: string) => void,
+  onOpenItem: (item: EditorItemData['relatedItems'][number]) => void,
 ) {
   if (items.length === 0) {
     return null;
@@ -43,7 +43,7 @@ function renderGroup(
           key={`${item.targetKind}-${item.targetItemId}`}
           type="button"
           class="related-item"
-          onClick={() => onOpenItem(item.targetItemId)}
+          onClick={() => onOpenItem(item)}
         >
           <span class="related-item-title">{item.label}</span>
         </button>

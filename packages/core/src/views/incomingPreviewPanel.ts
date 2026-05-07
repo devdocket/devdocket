@@ -140,7 +140,7 @@ export class IncomingPreviewPanel {
         break;
       case 'openItem':
         if (typeof message.itemId === 'string') {
-          await this.openRelatedItem(message.itemId);
+          await this.openRelatedItem(message.itemId, message.providerId, message.externalId);
         }
         break;
       // Autosave, transitions, and runAction are no-ops in preview mode.
@@ -149,14 +149,16 @@ export class IncomingPreviewPanel {
     }
   }
 
-  private async openRelatedItem(itemId: string): Promise<void> {
+  private async openRelatedItem(itemId: string, providerId?: string, externalId?: string): Promise<void> {
     const workItem = this.workGraph.getItem(itemId);
     if (workItem) {
       await vscode.commands.executeCommand('devdocket.editItem', { id: itemId });
       return;
     }
 
-    const discoveredKey = parseDiscoveredItemKey(itemId);
+    const discoveredKey = providerId && externalId
+      ? { providerId, externalId }
+      : parseDiscoveredItemKey(itemId);
     if (discoveredKey) {
       await vscode.commands.executeCommand('devdocket.previewIncomingItem', discoveredKey);
     }
