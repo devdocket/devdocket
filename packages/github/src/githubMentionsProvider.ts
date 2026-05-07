@@ -1,6 +1,6 @@
 import * as vscode from 'vscode';
 import { Lexer, type Token, type Tokens } from 'marked';
-import { DiscoveredItem, combineSignals, runWorkerPoolSettled, safeDecodeComponent, type ResolvedItem } from '@devdocket/shared';
+import { DiscoveredItem, combineSignals, runWorkerPoolSettled, safeDecodeComponent, type RelatedItemRef, type ResolvedItem } from '@devdocket/shared';
 import { BaseGitHubProvider } from './baseGithubProvider';
 import { logger } from './logger';
 import { parseRepoFromUrls } from './parseRepo';
@@ -35,6 +35,8 @@ type MentionCommentFetchResult = {
   latestScannedAt?: string;
   scanCapped: boolean;
 };
+
+type RelatedPrQuery = { externalId: string; repoOwner: string; repoName: string; number: number };
 
 /**
  * DevDocket provider that discovers GitHub issues and pull requests
@@ -99,11 +101,24 @@ export class GitHubMentionsProvider extends BaseGitHubProvider {
     const resurfaceVersions = currentLogin
       ? await this.fetchMentionResurfaceVersions(filtered, accessToken, currentLogin, teamMentions, signal)
       : new Map<string, string>();
+    const prsForGraphQL: RelatedPrQuery[] = filtered.flatMap(({ issue, repoName }) => {
+      if (!issue.pull_request) {
+        return [];
+      }
+      const [repoOwner, repoNameOnly] = repoName.split('/');
+      return repoOwner && repoNameOnly
+        ? [{ externalId: `${repoName}#${issue.number}`, repoOwner, repoName: repoNameOnly, number: issue.number }]
+        : [];
+    });
+    const relatedItemsMap = prsForGraphQL.length > 0
+      ? await this.fetchRelatedItemsForPRs(prsForGraphQL, accessToken, signal)
+      : new Map<string, RelatedItemRef[]>();
 
     const items: DiscoveredItem[] = filtered.map(({ issue, repoName }) => {
       const isPr = !!issue.pull_request;
       const externalId = `${repoName}#${issue.number}`;
       const resurfaceVersion = resurfaceVersions.get(externalId);
+      const relatedItems = relatedItemsMap.get(externalId);
       return {
         externalId,
         title: `#${issue.number}: ${issue.title}`,
@@ -119,6 +134,7 @@ export class GitHubMentionsProvider extends BaseGitHubProvider {
         ],
         ...(issue.state ? { state: issue.state } : {}),
         ...(resurfaceVersion ? { resurfaceVersion } : {}),
+        ...(relatedItems ? { relatedItems } : {}),
       };
     });
 

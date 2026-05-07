@@ -154,6 +154,47 @@ describe('GitHubMentionsProvider', () => {
     }));
   });
 
+  it('fetches and attaches related items for mentioned PRs only', async () => {
+    const relatedItems = [{ externalId: 'other/repo#99', itemType: 'issue' as const, relation: 'closes' as const }];
+    vi.spyOn(provider as any, 'fetchRelatedItemsForPRs').mockResolvedValue(new Map([
+      ['org/repo#20', relatedItems],
+    ]));
+    mockFetch
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          items: [
+            createMockIssue(10, 'Bug report', 'org/repo'),
+            createMockPr(20, 'Fix it', 'org/repo'),
+            createMockPr(30, 'Needs review', 'other/project'),
+          ],
+        }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ login: 'testuser' }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => [],
+      });
+
+    const listener = vi.fn();
+    provider.onDidDiscoverItems(listener);
+    await provider.refresh();
+
+    expect((provider as any).fetchRelatedItemsForPRs).toHaveBeenCalledWith([
+      { externalId: 'org/repo#20', repoOwner: 'org', repoName: 'repo', number: 20 },
+      { externalId: 'other/project#30', repoOwner: 'other', repoName: 'project', number: 30 },
+    ], 'test-token', expect.any(AbortSignal));
+    const items = listener.mock.calls[0][0];
+    expect(items.find((item: any) => item.externalId === 'org/repo#10')?.relatedItems).toBeUndefined();
+    expect(items.find((item: any) => item.externalId === 'org/repo#20')).toEqual(expect.objectContaining({
+      relatedItems,
+    }));
+    expect(items.find((item: any) => item.externalId === 'other/project#30')?.relatedItems).toBeUndefined();
+  });
+
   it('sets resurfaceVersion from the latest comment that mentions the current user', async () => {
     mockFetch
       .mockResolvedValueOnce({
