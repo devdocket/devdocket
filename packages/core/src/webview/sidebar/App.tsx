@@ -140,6 +140,13 @@ export function App() {
 
     window.addEventListener('message', handler);
 
+    // Required: VS Code's keybinding service does NOT see keystrokes that
+    // happen inside a sidebar webview view's iframe (registerWebviewViewProvider).
+    // The package.json `devdocket.toggleSearch` keybinding only fires when focus
+    // is on non-webview chrome, which is the rare case. To make Ctrl+F (Cmd+F)
+    // actually work when the user is interacting with the sidebar, we must
+    // intercept the keystroke here and forward it to the host as a message.
+    // Both paths coexist by design — they cover disjoint focus contexts.
     const keydownHandler = (event: KeyboardEvent) => {
       const isFindShortcut = (event.ctrlKey || event.metaKey) && !event.altKey && !event.shiftKey && (event.key === 'f' || event.key === 'F');
       if (!isFindShortcut) {
