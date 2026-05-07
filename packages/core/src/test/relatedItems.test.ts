@@ -154,6 +154,19 @@ describe('resolveRelatedItemsFor', () => {
     expect(resolveRelatedItemsFor(pr, registry, makeWorkGraph([pr]))).toEqual([]);
   });
 
+  it('indexes forward refs from discovered source items without itemType', () => {
+    const source = makeWorkItem({ id: 'source-1', providerId: 'custom-provider', externalId: 'source-with-refs' });
+    const issue = makeWorkItem({ id: 'issue-1', providerId: 'github-issues', externalId: 'owner/repo#2' });
+    const registry = makeRegistry(new Map([
+      ['custom-provider', [{ externalId: 'source-with-refs', title: 'Source', relatedItems: [{ externalId: 'owner/repo#2', itemType: 'issue', relation: 'linked' }] }]],
+      ['github-issues', [{ externalId: 'owner/repo#2', title: 'Issue', itemType: 'issue' }]],
+    ]));
+
+    expect(resolveRelatedItemsFor(source, registry, makeWorkGraph([source, issue]))).toEqual([
+      { targetItemId: 'issue-1', targetKind: 'workItem', label: 'Linked to owner/repo#2', relation: 'linked', itemType: 'issue' },
+    ]);
+  });
+
   it('resolves mixed issue providers by itemType and externalId', () => {
     const issueMention = makeWorkItem({ id: 'mention-issue', providerId: 'github-mentions', externalId: 'owner/repo#2' });
     const pr = makeWorkItem({ id: 'pr-1', providerId: 'github-my-prs', externalId: 'owner/repo#10' });

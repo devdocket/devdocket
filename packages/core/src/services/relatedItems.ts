@@ -69,12 +69,13 @@ function buildRelatedItemsIndexForDiscovered(
 
   for (const [providerId, items] of discoveredItems) {
     for (const item of items) {
-      if (!isRelatedItemType(item.itemType)) {
+      const relatedItems = item.relatedItems ?? [];
+      if (relatedItems.length === 0) {
         continue;
       }
 
       const resolved = getOrCreateResolvedSet(workingIndex, providerId, item.externalId);
-      for (const ref of item.relatedItems ?? []) {
+      for (const ref of relatedItems) {
         totalRefCount++;
         const target = resolveRef(ref, discoveredByRef, workGraph);
         if (target) {
