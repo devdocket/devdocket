@@ -12,25 +12,7 @@
     "Other"
   ],
   "activationEvents": [
-    "onView:devdocket.main",
-    "onCommand:devdocket.refresh",
-    "onCommand:devdocket.dismissFromSources",
-    "onCommand:devdocket.deleteItem",
-    "onCommand:devdocket.createItemFromUrl",
-    "onCommand:devdocket.clearHistory",
-    "onCommand:devdocket.watchRun",
-    "onCommand:devdocket.watchPR",
-    "onCommand:devdocket.watchPRFromItem",
-    "onCommand:devdocket.dismissWatch",
-    "onCommand:devdocket.dismissAllCompletedWatches",
-    "onCommand:devdocket.openWatchUrl",
-    "onCommand:devdocket.showWatchesQuickPick",
-    "onCommand:devdocket.showProviderHealthQuickPick",
-    "onCommand:devdocket.addActivity",
-    "onCommand:devdocket.createItem",
-    "onCommand:devdocket.acceptToFocus",
-    "onCommand:devdocket.acceptToFocusFromInbox",
-    "onCommand:devdocket.completeItem"
+    "onView:devdocket.main"
   ],
   "main": "./dist/extension.js",
   "contributes": {
