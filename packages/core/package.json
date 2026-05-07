@@ -442,7 +442,7 @@
         "command": "devdocket.toggleSearch",
         "key": "ctrl+f",
         "mac": "cmd+f",
-        "when": "focusedView == devdocket.main"
+        "when": "focusedView == devdocket.main || webviewId == 'devdocket.main'"
       },
       {
         "command": "devdocket.createItem",
