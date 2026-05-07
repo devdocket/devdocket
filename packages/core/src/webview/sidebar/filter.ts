@@ -73,24 +73,32 @@ export function splitOnMatches(text: string, query: string): Array<{ text: strin
     return [{ text, isMatch: false }];
   }
 
-  const lowerText = text.toLowerCase();
+  const { lowerText, originalRanges } = buildLowercaseIndex(text);
   const segments: Array<{ text: string; isMatch: boolean }> = [];
-  let searchIndex = 0;
+  let lowerSearchIndex = 0;
+  let originalSearchIndex = 0;
 
-  while (searchIndex < text.length) {
-    const matchIndex = lowerText.indexOf(normalizedQuery, searchIndex);
+  while (originalSearchIndex < text.length) {
+    const matchIndex = lowerText.indexOf(normalizedQuery, lowerSearchIndex);
     if (matchIndex === -1) {
-      segments.push({ text: text.slice(searchIndex), isMatch: false });
+      segments.push({ text: text.slice(originalSearchIndex), isMatch: false });
       break;
     }
 
-    if (matchIndex > searchIndex) {
-      segments.push({ text: text.slice(searchIndex, matchIndex), isMatch: false });
+    const matchStart = originalRanges[matchIndex].start;
+    const matchEnd = originalRanges[matchIndex + normalizedQuery.length - 1].end;
+
+    if (matchStart > originalSearchIndex) {
+      segments.push({ text: text.slice(originalSearchIndex, matchStart), isMatch: false });
     }
 
-    const matchEnd = matchIndex + normalizedQuery.length;
-    segments.push({ text: text.slice(matchIndex, matchEnd), isMatch: true });
-    searchIndex = matchEnd;
+    segments.push({ text: text.slice(matchStart, matchEnd), isMatch: true });
+    originalSearchIndex = matchEnd;
+
+    lowerSearchIndex = matchIndex + normalizedQuery.length;
+    while (lowerSearchIndex < originalRanges.length && originalRanges[lowerSearchIndex].start < matchEnd) {
+      lowerSearchIndex += 1;
+    }
   }
 
   return segments.length > 0 ? segments : [{ text, isMatch: false }];
@@ -106,6 +114,26 @@ function matchesNormalizedQuery(text: string, normalizedQuery: string): boolean 
   }
 
   return text.toLowerCase().includes(normalizedQuery);
+}
+
+function buildLowercaseIndex(text: string): { lowerText: string; originalRanges: Array<{ start: number; end: number }> } {
+  let lowerText = '';
+  const originalRanges: Array<{ start: number; end: number }> = [];
+  let originalIndex = 0;
+
+  for (const character of text) {
+    const originalEnd = originalIndex + character.length;
+    const lowerCharacter = character.toLowerCase();
+
+    lowerText += lowerCharacter;
+    for (let i = 0; i < lowerCharacter.length; i++) {
+      originalRanges.push({ start: originalIndex, end: originalEnd });
+    }
+
+    originalIndex = originalEnd;
+  }
+
+  return { lowerText, originalRanges };
 }
 
 function normalizeQuery(query: string): string {

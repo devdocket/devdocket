@@ -170,4 +170,18 @@ describe('splitOnMatches', () => {
       { text: 'résumé', isMatch: true },
     ]);
   });
+
+  it('keeps original slice positions when lowercase expansion shifts match indexes', () => {
+    expect(splitOnMatches('İSTANBUL issue', 'issue')).toEqual([
+      { text: 'İSTANBUL ', isMatch: false },
+      { text: 'issue', isMatch: true },
+    ]);
+  });
+
+  it('highlights original text for matches inside lowercase-expanded characters', () => {
+    expect(splitOnMatches('İssue', 'i')).toEqual([
+      { text: 'İ', isMatch: true },
+      { text: 'ssue', isMatch: false },
+    ]);
+  });
 });
