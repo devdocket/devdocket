@@ -768,22 +768,29 @@ export class MainViewProvider implements vscode.WebviewViewProvider {
     }
     .my-work-tab,
     .sources-tab {
+      position: relative;
       padding: 0 12px 12px;
     }
     .tab-header {
+      position: absolute;
+      top: 4px;
+      right: 12px;
+      z-index: 2;
       display: flex;
       justify-content: flex-end;
       align-items: center;
-      padding: 8px 0;
-      background: var(--vscode-sideBar-background, var(--vscode-editor-background));
+      pointer-events: none;
+    }
+    .tab-header > * {
+      pointer-events: auto;
     }
     .search-toggle {
-      width: 24px;
-      height: 24px;
+      width: 20px;
+      height: 20px;
       display: inline-flex;
       align-items: center;
       justify-content: center;
-      border: 1px solid transparent;
+      border: none;
       border-radius: 4px;
       background: transparent;
       color: var(--vscode-icon-foreground);
@@ -791,16 +798,18 @@ export class MainViewProvider implements vscode.WebviewViewProvider {
       padding: 0;
       font: inherit;
       line-height: 1;
+      opacity: 0.75;
     }
     .search-toggle:hover {
       background: var(--vscode-toolbar-hoverBackground, rgba(127, 127, 127, 0.25));
+      opacity: 1;
     }
     .search-toggle.expanded {
-      background: var(--vscode-button-background);
-      color: var(--vscode-button-foreground);
+      background: var(--vscode-toolbar-activeBackground, var(--vscode-toolbar-hoverBackground, rgba(127, 127, 127, 0.35)));
+      opacity: 1;
     }
     .search-toggle.expanded:hover {
-      background: var(--vscode-button-hoverBackground, var(--vscode-button-background));
+      background: var(--vscode-toolbar-hoverBackground, rgba(127, 127, 127, 0.45));
     }
     .search-box {
       position: sticky;
