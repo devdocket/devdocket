@@ -131,7 +131,13 @@ export abstract class BaseGitHubProvider extends BaseProvider {
           signal,
         );
         batch.forEach((pr, index) => {
-          const relatedItems = relatedItemsByPr[index] ?? [];
+          const batchResult = relatedItemsByPr[index];
+          if (batchResult?.error) {
+            failureCount++;
+            logger.warn(`Failed to fetch related items for PR ${pr.externalId}: ${batchResult.error}`);
+            return;
+          }
+          const relatedItems = batchResult?.relatedItems ?? [];
           if (relatedItems.length > 0) {
             result.set(pr.externalId, relatedItems);
           }

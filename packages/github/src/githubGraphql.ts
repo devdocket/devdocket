@@ -7,6 +7,11 @@ export interface PrCrossReferencesInput {
   number: number;
 }
 
+export interface PrCrossReferencesBatchResult {
+  relatedItems: RelatedItemRef[];
+  error?: string;
+}
+
 const PR_CROSS_REFERENCES_TIMELINE_SELECTION = `
 timelineItems(itemTypes: [CROSS_REFERENCED_EVENT, CONNECTED_EVENT, DISCONNECTED_EVENT], first: 100) {
   nodes {
@@ -50,15 +55,18 @@ export async function fetchPrCrossReferences(
   input: PrCrossReferencesInput,
   signal?: AbortSignal,
 ): Promise<RelatedItemRef[]> {
-  const [relatedItems] = await fetchPrCrossReferencesBatch(token, [input], signal);
-  return relatedItems ?? [];
+  const [result] = await fetchPrCrossReferencesBatch(token, [input], signal);
+  if (result?.error) {
+    throw new Error(result.error);
+  }
+  return result?.relatedItems ?? [];
 }
 
 export async function fetchPrCrossReferencesBatch(
   token: string,
   inputs: PrCrossReferencesInput[],
   signal?: AbortSignal,
-): Promise<RelatedItemRef[][]> {
+): Promise<PrCrossReferencesBatchResult[]> {
   if (inputs.length === 0) {
     return [];
   }
@@ -79,17 +87,36 @@ export async function fetchPrCrossReferencesBatch(
 
   const payload = await response.json() as {
     data?: Record<string, { pullRequest?: { timelineItems?: { nodes?: unknown[] } | null } | null } | null>;
-    errors?: Array<{ message?: string }>;
+    errors?: Array<{ message?: string; path?: unknown[] }>;
   };
 
-  if (payload.errors?.length) {
-    const message = payload.errors.map(error => error.message).filter(Boolean).join('; ') || 'Unknown GraphQL error';
-    throw new Error(`GitHub GraphQL request failed: ${message}`);
+  if (payload.errors?.length && !payload.data) {
+    throw new Error(`GitHub GraphQL request failed: ${formatGraphQLErrors(payload.errors)}`);
   }
 
-  return inputs.map((_input, index) => mapPrCrossReferencesToRelatedItems(
-    payload.data?.[getPrCrossReferencesRepositoryAlias(index)]?.pullRequest?.timelineItems?.nodes,
-  ));
+  const errorsByAlias = new Map<string, string>();
+  for (const error of payload.errors ?? []) {
+    const alias = Array.isArray(error.path) && typeof error.path[0] === 'string' ? error.path[0] : undefined;
+    if (alias) {
+      errorsByAlias.set(alias, error.message || 'Unknown GraphQL error');
+    }
+  }
+
+  return inputs.map((_input, index) => {
+    const alias = getPrCrossReferencesRepositoryAlias(index);
+    const repository = payload.data?.[alias];
+    const aliasError = errorsByAlias.get(alias);
+    if (aliasError) {
+      return { relatedItems: [], error: `GitHub GraphQL request failed: ${aliasError}` };
+    }
+    return {
+      relatedItems: mapPrCrossReferencesToRelatedItems(repository?.pullRequest?.timelineItems?.nodes),
+    };
+  });
+}
+
+function formatGraphQLErrors(errors: Array<{ message?: string }>): string {
+  return errors.map(error => error.message).filter(Boolean).join('; ') || 'Unknown GraphQL error';
 }
 
 function buildPrCrossReferencesBatchRequest(inputs: PrCrossReferencesInput[]): { query: string; variables: Record<string, string | number> } {

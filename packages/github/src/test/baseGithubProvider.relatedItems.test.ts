@@ -48,7 +48,10 @@ function graphQlResponse(nodes: unknown[]) {
   return graphQlBatchResponse({ repo0: nodes });
 }
 
-function graphQlBatchResponse(entries: Record<string, unknown[]>) {
+function graphQlBatchResponse(
+  entries: Record<string, unknown[] | null>,
+  errors?: Array<{ message: string; path?: unknown[] }>,
+) {
   return {
     ok: true,
     status: 200,
@@ -56,8 +59,9 @@ function graphQlBatchResponse(entries: Record<string, unknown[]>) {
     json: async () => ({
       data: Object.fromEntries(Object.entries(entries).map(([alias, nodes]) => [
         alias,
-        { pullRequest: { timelineItems: { nodes } } },
+        nodes === null ? null : { pullRequest: { timelineItems: { nodes } } },
       ])),
+      errors,
     }),
   };
 }
@@ -170,7 +174,25 @@ describe('BaseGitHubProvider related item fetching', () => {
     ]);
   });
 
-  it('collapses batch failures to no relatedItems and logs the failure summary', async () => {
+  it('keeps successful aliases when a batched GraphQL response has partial errors', async () => {
+    mockFetch.mockResolvedValue(graphQlBatchResponse({
+      repo0: [{ __typename: 'ConnectedEvent', subject: issueNode(2) }],
+      repo1: null,
+    }, [{ message: 'Could not resolve to a Repository', path: ['repo1'] }]));
+
+    const result = await provider.fetchRelatedForTest([
+      { externalId: 'owner/repo#1', repoOwner: 'owner', repoName: 'repo', number: 1 },
+      { externalId: 'owner/repo#2', repoOwner: 'owner', repoName: 'repo', number: 2 },
+    ], 'token');
+
+    expect(result.get('owner/repo#1')).toEqual([{ externalId: 'owner/repo#2', relation: 'closes', itemType: 'issue' }]);
+    expect(result.has('owner/repo#2')).toBe(false);
+    expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining('Failed to fetch related items for PR owner/repo#2'));
+    expect(logger.warn).not.toHaveBeenCalledWith(expect.stringContaining('Failed to fetch related items for PR owner/repo#1'));
+    expect(logger.info).toHaveBeenCalledWith('Found related items for 1/2 PRs (1 failures)');
+  });
+
+  it('collapses full batch failures to no relatedItems and logs the failure summary', async () => {
     mockFetch.mockResolvedValue({ ok: false, status: 500, statusText: 'Internal Server Error', json: async () => ({}) });
 
     const result = await provider.fetchRelatedForTest([
