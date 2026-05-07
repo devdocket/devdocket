@@ -183,7 +183,6 @@ export function App() {
         aria-label={label}
         title={label}
         aria-expanded={visible}
-        aria-pressed={visible}
         onClick={() => toggleSearchBox(tab, visible)}
       >
         ⋯
