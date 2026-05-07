@@ -199,14 +199,39 @@ describe('resolveRelatedItemsFor', () => {
       ['github-issues', [{ externalId: 'owner/repo#2', title: 'Issue', itemType: 'issue' }]],
       ['github-my-prs', [{ externalId: 'owner/repo#10', title: 'PR', itemType: 'pr', relatedItems: [{ externalId: 'owner/repo#2', itemType: 'issue', relation: 'closes' }] }]],
     ]));
+    const workGraph = makeWorkGraph([issue, pr]);
 
-    const index = buildRelatedItemsIndex(registry, makeWorkGraph([issue, pr]));
+    const index = buildRelatedItemsIndex(registry, workGraph);
 
-    expect(index.get('github-my-prs::owner/repo#10')).toEqual([
+    expect(resolveRelatedItemsFor(pr, registry, workGraph, index)).toEqual([
       { targetItemId: 'issue-1', targetKind: 'workItem', label: 'Closes owner/repo#2', relation: 'closes', itemType: 'issue' },
     ]);
-    expect(index.get('github-issues::owner/repo#2')).toEqual([
+    expect(resolveRelatedItemsFor(issue, registry, workGraph, index)).toEqual([
       { targetItemId: 'pr-1', targetKind: 'workItem', label: 'Closed by owner/repo#10', relation: 'closes', itemType: 'pr' },
+    ]);
+  });
+
+  it('keeps indexed related-item lookups distinct when provenance contains separators', () => {
+    const firstPr = makeWorkItem({ id: 'first-pr', providerId: 'github::mentions', externalId: 'owner/repo#10' });
+    const secondPr = makeWorkItem({ id: 'second-pr', providerId: 'github', externalId: 'mentions::owner/repo#10' });
+    const firstIssue = makeWorkItem({ id: 'first-issue', providerId: 'github-issues', externalId: 'owner/repo#1' });
+    const secondIssue = makeWorkItem({ id: 'second-issue', providerId: 'github-issues', externalId: 'owner/repo#2' });
+    const registry = makeRegistry(new Map([
+      ['github::mentions', [{ externalId: 'owner/repo#10', title: 'First PR', itemType: 'pr', relatedItems: [{ externalId: 'owner/repo#1', itemType: 'issue', relation: 'closes' }] }]],
+      ['github', [{ externalId: 'mentions::owner/repo#10', title: 'Second PR', itemType: 'pr', relatedItems: [{ externalId: 'owner/repo#2', itemType: 'issue', relation: 'closes' }] }]],
+      ['github-issues', [
+        { externalId: 'owner/repo#1', title: 'First issue', itemType: 'issue' },
+        { externalId: 'owner/repo#2', title: 'Second issue', itemType: 'issue' },
+      ]],
+    ]));
+    const workGraph = makeWorkGraph([firstPr, secondPr, firstIssue, secondIssue]);
+    const index = buildRelatedItemsIndex(registry, workGraph);
+
+    expect(resolveRelatedItemsFor(firstPr, registry, workGraph, index)).toEqual([
+      { targetItemId: 'first-issue', targetKind: 'workItem', label: 'Closes owner/repo#1', relation: 'closes', itemType: 'issue' },
+    ]);
+    expect(resolveRelatedItemsFor(secondPr, registry, workGraph, index)).toEqual([
+      { targetItemId: 'second-issue', targetKind: 'workItem', label: 'Closes owner/repo#2', relation: 'closes', itemType: 'issue' },
     ]);
   });
 

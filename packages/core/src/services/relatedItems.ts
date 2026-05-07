@@ -305,7 +305,7 @@ function relationRank(relation: RelatedItemRef['relation']): number {
 }
 
 function getRelatedItemsIndexKey(providerId: string, externalId: string): string {
-  return `${providerId}::${externalId}`;
+  return JSON.stringify([providerId, externalId]);
 }
 
 function getRefKey(itemType: RelatedItemRef['itemType'], externalId: string): string {
