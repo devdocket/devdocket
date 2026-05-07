@@ -216,6 +216,7 @@ export function App() {
                 query={queries.sources}
                 onChange={(query) => handleQueryChange('sources', query)}
                 onClear={() => clearQuery('sources')}
+                onClose={() => clearAndHideSearchBox('sources')}
                 autoFocus
               />
             ) : null}
@@ -249,6 +250,7 @@ export function App() {
                 query={queries.myWork}
                 onChange={(query) => handleQueryChange('myWork', query)}
                 onClear={() => clearQuery('myWork')}
+                onClose={() => clearAndHideSearchBox('myWork')}
                 autoFocus
               />
             ) : null}

@@ -439,6 +439,12 @@
     },
     "keybindings": [
       {
+        "command": "devdocket.toggleSearch",
+        "key": "ctrl+f",
+        "mac": "cmd+f",
+        "when": "focusedView == devdocket.main"
+      },
+      {
         "command": "devdocket.createItem",
         "key": "ctrl+alt+d n",
         "when": "focusedView =~ /devdocket/"
