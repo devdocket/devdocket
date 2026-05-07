@@ -15,6 +15,7 @@ interface DiscoveredMatch {
   providerId: string;
   externalId: string;
   itemType: RelatedItemRef['itemType'];
+  title?: string;
 }
 
 type ResolvableItem = Pick<WorkItem, 'providerId' | 'externalId'> & { itemType?: RelatedItemRef['itemType'] };
@@ -95,7 +96,7 @@ function buildRelatedItemsIndexForDiscovered(
       }
 
       for (const ref of candidate.relatedItems) {
-        const target = resolveDiscoveredTarget(providerId, candidate.externalId, candidate.itemType, ref.relation, workGraph, 'reverse');
+        const target = resolveDiscoveredTarget(providerId, candidate.externalId, candidate.itemType, ref.relation, workGraph, 'reverse', candidate.title);
         if (!target) {
           continue;
         }
@@ -153,6 +154,7 @@ function resolveReverseRefsForUndiscovered(
           ref.relation,
           workGraph,
           'reverse',
+          candidate.title,
         );
         if (target) {
           upsertResolved(resolved, target);
@@ -169,12 +171,12 @@ function buildDiscoveredByRef(discoveredItems: Map<string, DiscoveredItem[]>, wo
   for (const [providerId, items] of discoveredItems) {
     for (const item of items) {
       discoveredProvenance.add(getProvenanceKey(providerId, item.externalId));
-      addPotentialTargetMatch(discoveredByRef, item.itemType, providerId, item.externalId);
+      addPotentialTargetMatch(discoveredByRef, item.itemType, providerId, item.externalId, item.title);
     }
   }
   for (const item of workGraph.getAll()) {
     if (item.providerId && item.externalId && !discoveredProvenance.has(getProvenanceKey(item.providerId, item.externalId))) {
-      addPotentialTargetMatch(discoveredByRef, item.itemType, item.providerId, item.externalId);
+      addPotentialTargetMatch(discoveredByRef, item.itemType, item.providerId, item.externalId, item.title);
     }
   }
   return discoveredByRef;
@@ -189,12 +191,13 @@ function addPotentialTargetMatch(
   itemType: RelatedItemRef['itemType'] | undefined,
   providerId: string,
   externalId: string,
+  title?: string,
 ): void {
   if (isRelatedItemType(itemType)) {
-    addDiscoveredMatch(discoveredByRef, itemType, providerId, externalId);
+    addDiscoveredMatch(discoveredByRef, itemType, providerId, externalId, title);
   } else {
-    addDiscoveredMatch(discoveredByRef, 'issue', providerId, externalId);
-    addDiscoveredMatch(discoveredByRef, 'pr', providerId, externalId);
+    addDiscoveredMatch(discoveredByRef, 'issue', providerId, externalId, title);
+    addDiscoveredMatch(discoveredByRef, 'pr', providerId, externalId, title);
   }
 }
 
@@ -203,10 +206,11 @@ function addDiscoveredMatch(
   itemType: RelatedItemRef['itemType'],
   providerId: string,
   externalId: string,
+  title?: string,
 ): void {
   const key = getRefKey(itemType, externalId);
   const matches = discoveredByRef.get(key) ?? [];
-  matches.push({ providerId, externalId, itemType });
+  matches.push({ providerId, externalId, itemType, title });
   discoveredByRef.set(key, matches);
 }
 
@@ -240,7 +244,7 @@ function resolveRef(
 ): ResolvedRelatedItemWithSort | undefined {
   let fallback: ResolvedRelatedItemWithSort | undefined;
   for (const match of discoveredByRef.get(getRefKey(ref.itemType, ref.externalId)) ?? []) {
-    const target = resolveDiscoveredTarget(match.providerId, match.externalId, match.itemType, ref.relation, workGraph);
+    const target = resolveDiscoveredTarget(match.providerId, match.externalId, match.itemType, ref.relation, workGraph, 'forward', match.title);
     if (!target) {
       continue;
     }
@@ -259,6 +263,7 @@ function resolveDiscoveredTarget(
   relation: RelatedItemRef['relation'],
   workGraph: WorkGraph,
   direction: 'forward' | 'reverse' = 'forward',
+  fallbackTitle?: string,
 ): ResolvedRelatedItemWithSort | undefined {
   if (!isRelatedItemType(itemType)) {
     return undefined;
@@ -267,8 +272,10 @@ function resolveDiscoveredTarget(
   const workItem = workGraph.findItemByProvenance(providerId, externalId);
   return {
     targetItemId: workItem?.id ?? getSourcesTargetId(providerId, externalId),
+    targetTitle: workItem?.title ?? fallbackTitle ?? externalId,
+    targetExternalId: externalId,
     targetKind: workItem ? 'workItem' : 'sources',
-    ...(!workItem ? { targetProviderId: providerId, targetExternalId: externalId } : {}),
+    ...(!workItem ? { targetProviderId: providerId } : {}),
     label: getRelatedItemLabel(relation, externalId, direction),
     relation,
     itemType,
