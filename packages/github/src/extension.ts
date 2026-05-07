@@ -5,7 +5,7 @@ import { GitHubActionsWatcher } from './githubActionsWatcher';
 import { GitHubPRWatcher } from './githubPRWatcher';
 import { GitHubMyPrsProvider } from './githubMyPrsProvider';
 import { GitHubMentionsProvider } from './githubMentionsProvider';
-import { validateRefreshInterval } from '@devdocket/shared';
+import { validateRefreshInterval, type DevDocketApi } from '@devdocket/shared';
 import { initLogger, setLogLevel, logger, resolveLogLevel } from './logger';
 
 let issueProvider: GitHubIssueProvider | undefined;
@@ -50,17 +50,7 @@ export async function activate(_context: vscode.ExtensionContext): Promise<void>
     return;
   }
 
-  let api;
-  try {
-    api = coreExtension.isActive
-      ? coreExtension.exports
-      : await coreExtension.activate();
-  } catch (err: unknown) {
-    const message = err instanceof Error ? err.message : String(err);
-    logger.error(`Failed to activate core extension — ${message}`);
-    void vscode.window.showErrorMessage(`DevDocket GitHub: Failed to activate core extension — ${message}`);
-    return;
-  }
+  const api = coreExtension.exports as DevDocketApi;
 
   if (!api || typeof api.registerProvider !== 'function') {
     logger.error('Core extension API not available');

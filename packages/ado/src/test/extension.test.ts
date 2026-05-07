@@ -75,19 +75,18 @@ describe('extension activation', () => {
     expect(mockApi.registerProvider).not.toHaveBeenCalled();
   });
 
-  it('shows error and returns when core extension fails to activate', async () => {
+  it('reads the core extension exports directly without invoking activate', async () => {
+    const mockActivate = vi.fn();
     vi.mocked(extensions.getExtension).mockReturnValue({
       isActive: false,
-      exports: undefined,
-      activate: vi.fn().mockRejectedValue(new Error('Activation failed')),
+      exports: mockApi,
+      activate: mockActivate,
     } as any);
 
     await activate(mockContext);
 
-    expect(window.showErrorMessage).toHaveBeenCalledWith(
-      expect.stringContaining('Failed to activate core extension'),
-    );
-    expect(mockApi.registerProvider).not.toHaveBeenCalled();
+    expect(mockActivate).not.toHaveBeenCalled();
+    expect(mockApi.registerProvider).toHaveBeenCalledTimes(3);
   });
 
   it('returns when core extension API is missing registerProvider', async () => {
@@ -112,20 +111,6 @@ describe('extension activation', () => {
     await activate(mockContext);
 
     expect(mockApi.registerProvider).not.toHaveBeenCalled();
-  });
-
-  it('activates core extension when not yet active', async () => {
-    const mockActivate = vi.fn().mockResolvedValue(mockApi);
-    vi.mocked(extensions.getExtension).mockReturnValue({
-      isActive: false,
-      exports: undefined,
-      activate: mockActivate,
-    } as any);
-
-    await activate(mockContext);
-
-    expect(mockActivate).toHaveBeenCalled();
-    expect(mockApi.registerProvider).toHaveBeenCalledTimes(3);
   });
 
   it('registers three providers when organization is configured', async () => {
