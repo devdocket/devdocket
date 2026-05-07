@@ -230,8 +230,6 @@ Use `{path}` in args as a placeholder for the worktree path. Commands run in seq
 | `devDocket.watches.pollingIntervalSeconds` | `number` | `60` | How often the watcher polls active CI runs and PRs. Minimum 15 seconds. |
 | `devDocket.watches.notifyOnJobFailure` | `boolean` | `true` | Show a notification when an individual job fails while the pipeline run is still in progress. |
 
-DevDocket output channels use VS Code's native log-level controls; change verbosity from the Output panel or the **Developer: Set Log Level...** command.
-
 ## Keyboard Shortcuts
 
 DevDocket provides chorded keyboard shortcuts using the **Ctrl+Alt+D** prefix. All shortcuts are scoped to the DevDocket sidebar — they only activate when the sidebar has focus.
