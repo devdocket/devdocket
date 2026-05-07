@@ -167,16 +167,27 @@ function buildDiscoveredByRef(discoveredItems: Map<string, DiscoveredItem[]>): M
   const discoveredByRef = new Map<string, DiscoveredMatch[]>();
   for (const [providerId, items] of discoveredItems) {
     for (const item of items) {
-      if (!isRelatedItemType(item.itemType)) {
-        continue;
+      if (isRelatedItemType(item.itemType)) {
+        addDiscoveredMatch(discoveredByRef, item.itemType, providerId, item.externalId);
+      } else {
+        addDiscoveredMatch(discoveredByRef, 'issue', providerId, item.externalId);
+        addDiscoveredMatch(discoveredByRef, 'pr', providerId, item.externalId);
       }
-      const key = getRefKey(item.itemType, item.externalId);
-      const matches = discoveredByRef.get(key) ?? [];
-      matches.push({ providerId, externalId: item.externalId, itemType: item.itemType });
-      discoveredByRef.set(key, matches);
     }
   }
   return discoveredByRef;
+}
+
+function addDiscoveredMatch(
+  discoveredByRef: Map<string, DiscoveredMatch[]>,
+  itemType: RelatedItemRef['itemType'],
+  providerId: string,
+  externalId: string,
+): void {
+  const key = getRefKey(itemType, externalId);
+  const matches = discoveredByRef.get(key) ?? [];
+  matches.push({ providerId, externalId, itemType });
+  discoveredByRef.set(key, matches);
 }
 
 function getOrCreateResolvedSet(
