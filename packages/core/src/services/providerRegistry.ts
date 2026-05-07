@@ -16,6 +16,10 @@ export interface ProviderHealthStatus {
   lastError?: string;
 }
 
+function isActiveWorkItemState(state: WorkItemState | undefined): boolean {
+  return state === WorkItemState.New || state === WorkItemState.InProgress || state === WorkItemState.Paused;
+}
+
 /**
  * Central registry for {@link DevDocketProvider} instances.
  *
@@ -84,7 +88,8 @@ export class ProviderRegistry {
     private readonly stateStore: DiscoveredStateStore,
     private readonly labelCache?: ProviderLabelCache,
     private readonly getWorkItemState?: (providerId: string, externalId: string) => WorkItemState | undefined,
-    private readonly addActivity?: (providerId: string, externalId: string, type: ActivityType, detail?: string) => Promise<void>,
+    // Kept for constructor compatibility; suppressed version bumps no longer log activity.
+    _addActivity?: (providerId: string, externalId: string, type: ActivityType, detail?: string) => Promise<void>,
   ) {}
 
   /**
@@ -408,7 +413,6 @@ export class ProviderRegistry {
 
     const newUnseenUpdates: Array<{ providerId: string; externalId: string; state: 'unseen'; version?: string; resurfaceVersion?: string }> = [];
     const versionBackfills: Array<{ providerId: string; externalId: string; state: InboxState; version?: string; resurfaceVersion?: string }> = [];
-    const activityEntries: Array<{ providerId: string; externalId: string }> = [];
 
     for (const item of items) {
       const existing = this.stateStore.getState(providerId, item.externalId);
@@ -445,32 +449,27 @@ export class ProviderRegistry {
           }
         }
 
-        // resurfaceVersion always resurfaces (hard); version checks work item state (soft)
-        let shouldResurface = resurfaceVersionTriggered;
-        let suppressedVersionChange = false;
-        if (existing === 'accepted' && versionTriggered && !shouldResurface) {
-          const wiState = this.getWorkItemState?.(providerId, item.externalId);
-          if (wiState === WorkItemState.New || wiState === WorkItemState.InProgress || wiState === WorkItemState.Paused) {
-            // Suppress: backfill version instead of resurfacing
-            suppressedVersionChange = true;
-          } else {
-            shouldResurface = true;
-          }
-        }
+        const hasTrigger = versionTriggered || resurfaceVersionTriggered;
+        const suppressForActiveWorkItem = hasTrigger && isActiveWorkItemState(this.getWorkItemState?.(providerId, item.externalId));
+        const shouldResurface = hasTrigger && !suppressForActiveWorkItem;
 
         if (shouldResurface) {
           const update: typeof newUnseenUpdates[number] = { providerId, externalId: item.externalId, state: 'unseen' };
           if (item.version !== undefined) { update.version = item.version; }
           if (item.resurfaceVersion !== undefined) { update.resurfaceVersion = item.resurfaceVersion; }
           newUnseenUpdates.push(update);
-        } else if (existing === 'accepted' && (suppressedVersionChange || needsAcceptedBackfill)) {
+        } else if (existing === 'accepted' && (suppressForActiveWorkItem || needsAcceptedBackfill)) {
           const update: typeof versionBackfills[number] = { providerId, externalId: item.externalId, state: 'accepted' };
           if (item.version !== undefined) { update.version = item.version; }
           if (item.resurfaceVersion !== undefined) { update.resurfaceVersion = item.resurfaceVersion; }
           versionBackfills.push(update);
-          if (suppressedVersionChange) {
-            activityEntries.push({ providerId, externalId: item.externalId });
-          }
+        } else if (existing === 'dismissed' && suppressForActiveWorkItem) {
+          versionBackfills.push({
+            providerId,
+            externalId: item.externalId,
+            state: 'dismissed',
+            resurfaceVersion: item.resurfaceVersion,
+          });
         } else if (needsDismissedResurfaceVersionBackfill) {
           versionBackfills.push({
             providerId,
@@ -501,20 +500,6 @@ export class ProviderRegistry {
         await this.stateStore.setStates(allUpdates);
         if (!this._disposed && newUnseenUpdates.length > 0) {
           this._onDidAddNewUnseenItems.fire(newUnseenUpdates.length);
-        }
-
-        // Log activity only after state was successfully persisted
-        if (!this._disposed && this.addActivity && activityEntries.length > 0) {
-          const results = await Promise.allSettled(
-            activityEntries.map(entry =>
-              this.addActivity!(entry.providerId, entry.externalId, 'version-updated'),
-            ),
-          );
-          for (const result of results) {
-            if (result.status === 'rejected') {
-              logger.error('Failed to log version-updated activity', result.reason);
-            }
-          }
         }
       } catch (err) {
         logger.error('Failed to persist discovered states', err);
