@@ -171,6 +171,18 @@ describe('BaseGitHubProvider related item fetching', () => {
     expect(mockChannel.appendLine.mock.calls.some(call => call[0].includes('[INFO] Fetched related items for 1/2 PRs (1 failures)'))).toBe(true);
   });
 
+  it('keeps empty successful batches out of info logs', async () => {
+    mockFetch.mockResolvedValue(graphQlResponse([]));
+
+    const result = await provider.fetchRelatedForTest([
+      { externalId: 'owner/repo#1', repoOwner: 'owner', repoName: 'repo', number: 1 },
+    ], 'token');
+
+    expect(result.size).toBe(0);
+    expect(mockChannel.appendLine.mock.calls.some(call => call[0].includes('[INFO] Fetched related items for 0/1 PRs (0 failures)'))).toBe(false);
+    expect(mockChannel.appendLine.mock.calls.some(call => call[0].includes('[DEBUG] Fetched related items for 0/1 PRs (0 failures)'))).toBe(true);
+  });
+
   it('propagates cancellation as AbortError', async () => {
     const controller = new AbortController();
     controller.abort();
