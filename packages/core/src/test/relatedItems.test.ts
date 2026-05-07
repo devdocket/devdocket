@@ -67,7 +67,7 @@ describe('resolveRelatedItemsFor', () => {
 
     expect(resolveRelatedItemsFor(pr, registry, makeWorkGraph([pr]))).toEqual([
       {
-        targetItemId: 'github-issues::owner/repo#2',
+        targetItemId: 'sources:["github-issues","owner/repo#2"]',
         targetKind: 'sources',
         targetProviderId: 'github-issues',
         targetExternalId: 'owner/repo#2',

@@ -234,7 +234,7 @@ function resolveDiscoveredTarget(
 
   const workItem = workGraph.findItemByProvenance(providerId, externalId);
   return {
-    targetItemId: workItem?.id ?? `${providerId}::${externalId}`,
+    targetItemId: workItem?.id ?? getSourcesTargetId(providerId, externalId),
     targetKind: workItem ? 'workItem' : 'sources',
     ...(!workItem ? { targetProviderId: providerId, targetExternalId: externalId } : {}),
     label: getRelatedItemLabel(relation, externalId, direction),
@@ -242,6 +242,10 @@ function resolveDiscoveredTarget(
     itemType,
     externalId,
   };
+}
+
+function getSourcesTargetId(providerId: string, externalId: string): string {
+  return `sources:${JSON.stringify([providerId, externalId])}`;
 }
 
 function getRelatedItemLabel(
