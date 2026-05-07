@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import type { DiscoveredItem } from '../api/types';
 import { WorkItemState, type WorkItem } from '../models/workItem';
 import { buildRelatedItemsIndex, resolveRelatedItemsFor } from '../services/relatedItems';
+import { initLogger, LogLevel } from '../services/logger';
 
 function makeWorkItem(overrides: Partial<WorkItem> = {}): WorkItem {
   const now = Date.now();
@@ -221,5 +222,18 @@ describe('resolveRelatedItemsFor', () => {
     expect(resolveRelatedItemsFor(issue, registry, workGraph, index)).toEqual([
       { targetItemId: 'pr-1', targetKind: 'workItem', label: 'Closes owner/repo#10', relation: 'closes', itemType: 'pr' },
     ]);
+  });
+
+  it('logs strict misses when related refs are not discovered locally', () => {
+    const channel = { appendLine: vi.fn() };
+    initLogger(channel as any, LogLevel.Debug);
+    const pr = makeWorkItem({ id: 'pr-1', providerId: 'github-my-prs', externalId: 'owner/repo#10' });
+    const registry = makeRegistry(new Map([
+      ['github-my-prs', [{ externalId: 'owner/repo#10', title: 'PR', itemType: 'pr', relatedItems: [{ externalId: 'owner/repo#404', itemType: 'issue', relation: 'closes' }] }]],
+    ]));
+
+    buildRelatedItemsIndex(registry, makeWorkGraph([pr]));
+
+    expect(channel.appendLine).toHaveBeenCalledWith(expect.stringContaining('[DEBUG] Resolved 0 / 1 related-item refs (1 dropped because target not in DevDocket)'));
   });
 });

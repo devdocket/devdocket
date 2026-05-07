@@ -2,6 +2,7 @@ import type { DiscoveredItem, RelatedItemRef } from '../api/types';
 import type { WorkItem } from '../models/workItem';
 import type { ProviderRegistry } from './providerRegistry';
 import type { WorkGraph } from './workGraph';
+import { logger } from './logger';
 
 export interface ResolvedRelatedItem {
   /** The work item id, or `${providerId}::${externalId}` for Sources entries. */
@@ -70,6 +71,9 @@ function buildRelatedItemsIndexForDiscovered(
 ): RelatedItemsIndex {
   const discoveredByRef = buildDiscoveredByRef(discoveredItems);
   const workingIndex = new Map<string, Map<string, ResolvedRelatedItemWithSort>>();
+  let totalRefCount = 0;
+  let resolvedRefCount = 0;
+  let droppedRefCount = 0;
 
   for (const [providerId, items] of discoveredItems) {
     for (const item of items) {
@@ -79,9 +83,13 @@ function buildRelatedItemsIndexForDiscovered(
 
       const resolved = getOrCreateResolvedSet(workingIndex, providerId, item.externalId);
       for (const ref of item.relatedItems ?? []) {
+        totalRefCount++;
         const target = resolveRef(ref, discoveredByRef, workGraph);
         if (target) {
+          resolvedRefCount++;
           upsertResolved(resolved, target);
+        } else {
+          droppedRefCount++;
         }
       }
     }
@@ -107,6 +115,10 @@ function buildRelatedItemsIndexForDiscovered(
         }
       }
     }
+  }
+
+  if (totalRefCount > 0) {
+    logger.debug(`Resolved ${resolvedRefCount} / ${totalRefCount} related-item refs (${droppedRefCount} dropped because target not in DevDocket)`);
   }
 
   const publicIndex: RelatedItemsIndex = new Map();
