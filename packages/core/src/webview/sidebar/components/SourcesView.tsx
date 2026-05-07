@@ -68,7 +68,7 @@ function ProviderSection({ provider, onOpenItem, onShowProviderHealth }: Provide
               type="button"
               class="health-warning health-warning-button"
               onClick={() => onShowProviderHealth(provider.providerId)}
-              aria-label={`Provider ${provider.label} unhealthy — click for details`}
+              aria-label={`Provider ${provider.label} unhealthy — show details`}
             >
               ⚠
             </button>
