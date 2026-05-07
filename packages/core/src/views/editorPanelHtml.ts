@@ -464,10 +464,17 @@ export function getEditorPanelHtml({ cspSource, scriptUri, initialItem }: Editor
     }
 
     .related-items,
+    .related-item-group,
     .activity-log {
       display: flex;
       flex-direction: column;
       gap: 10px;
+    }
+
+    .related-item-group-heading {
+      color: var(--vscode-descriptionForeground);
+      font-size: 12px;
+      font-weight: 700;
     }
 
     .related-item {
@@ -475,7 +482,7 @@ export function getEditorPanelHtml({ cspSource, scriptUri, initialItem }: Editor
       border-radius: 8px;
       background: var(--vscode-editorWidget-background, rgba(128, 128, 128, 0.04));
       width: 100%;
-      padding: 12px 14px;
+      padding: 10px 12px;
       text-align: left;
       color: inherit;
     }

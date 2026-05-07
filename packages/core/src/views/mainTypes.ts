@@ -1,3 +1,5 @@
+import type { ResolvedRelatedItem } from './relatedItemTypes';
+
 export type ExtensionMessage =
   | { type: 'updateItems'; tiers: TierData[] }
   | { type: 'updateSources'; providers: SourceProviderData[] }
@@ -53,6 +55,7 @@ export interface ItemCardData {
   isUnseen?: boolean;
   isUrgent?: boolean;
   isSelected?: boolean;
+  hasRelatedItems?: boolean;
   providerId?: string;
   externalId?: string;
 }
@@ -79,7 +82,7 @@ export interface EditorItemData {
   validTransitions: string[];
   hasActions: boolean;
   activityLog: Array<{ timestamp: number; type: string; detail?: string }>;
-  relatedItems: Array<{ id: string; title: string; state: string; badges: BadgeData[] }>;
+  relatedItems: ResolvedRelatedItem[];
   isIncoming?: boolean;
   providerId?: string;
   externalId?: string;
@@ -102,6 +105,7 @@ export interface SourceItemData {
   providerId: string;
   title: string;
   badges: BadgeData[];
+  hasRelatedItems?: boolean;
   isAccepted: boolean;
   isDismissed: boolean;
 }

@@ -91,6 +91,8 @@ export interface WorkItem {
   providerId?: string;
   /** Provider-scoped identifier used to correlate with the provider's discovered item. */
   externalId?: string;
+  /** Provider-declared kind of external item, retained for relation lookups after the item leaves provider discovery. */
+  itemType?: 'issue' | 'pr';
   /** URL to the item in its source system (e.g. GitHub issue page). */
   url?: string;
   /** Optional grouping key (e.g. repository name) shown as the repo annotation under the title and used to nest items in the Sources tab. */

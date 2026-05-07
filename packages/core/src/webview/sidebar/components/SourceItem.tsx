@@ -25,6 +25,7 @@ export function SourceItem({ item, onOpen, query }: SourceItemProps) {
       <div class="source-item-line">
         <div class="source-item-title-wrap">
           <span class="source-item-title"><HighlightedText text={item.title} query={query} /></span>
+          {item.hasRelatedItems ? <span class="related-indicator" aria-hidden="true">🔗</span> : null}
         </div>
         {statusLabel ? <span class={`source-item-status ${statusClass}`.trim()}>{statusLabel}</span> : null}
       </div>
@@ -42,6 +43,7 @@ export function SourceItem({ item, onOpen, query }: SourceItemProps) {
 function buildSourceItemAriaLabel(item: SourceItemData): string {
   const status = item.isAccepted ? 'accepted' : item.isDismissed ? 'dismissed' : 'available';
   const badgeLabels = item.badges.map(badge => badge.label);
+  const related = item.hasRelatedItems ? 'has related items' : undefined;
 
-  return [item.title, status, ...badgeLabels].join(', ');
+  return [item.title, status, related, ...badgeLabels].filter((value): value is string => Boolean(value)).join(', ');
 }

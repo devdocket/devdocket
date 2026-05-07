@@ -1,7 +1,10 @@
 import * as vscode from 'vscode';
-import { BaseProvider, DiscoveredItem } from '@devdocket/shared';
+import { BaseProvider, DiscoveredItem, createAbortError, runWorkerPool, type RelatedItemRef } from '@devdocket/shared';
+import { fetchPrCrossReferencesBatch } from './githubGraphql';
 import { logger } from './logger';
 import { matchesRepoPatterns, parseRepoPatterns, type RepoPattern } from './repoPattern';
+
+const RELATED_ITEMS_BATCH_SIZE = 10;
 
 /**
  * Base class for GitHub providers that handles the common authentication
@@ -103,6 +106,61 @@ export abstract class BaseGitHubProvider extends BaseProvider {
   ): Promise<void>;
 
   /**
+   * Fetch GitHub issue/PR references for PRs. Individual PR failures are logged
+   * and omitted so supplemental relationship data never blocks refresh.
+   */
+  protected async fetchRelatedItemsForPRs(
+    prs: Array<{ externalId: string; repoOwner: string; repoName: string; number: number }>,
+    accessToken: string,
+    signal?: AbortSignal,
+  ): Promise<Map<string, RelatedItemRef[]>> {
+    const result = new Map<string, RelatedItemRef[]>();
+    if (prs.length === 0) {
+      return result;
+    }
+
+    let failureCount = 0;
+    await runWorkerPool(chunkArray(prs, RELATED_ITEMS_BATCH_SIZE), async (batch) => {
+      if (signal?.aborted) {
+        throw createAbortError();
+      }
+      try {
+        const relatedItemsByPr = await fetchPrCrossReferencesBatch(
+          accessToken,
+          batch.map(pr => ({ owner: pr.repoOwner, name: pr.repoName, number: pr.number })),
+          signal,
+        );
+        batch.forEach((pr, index) => {
+          const batchResult = relatedItemsByPr[index];
+          if (batchResult?.error) {
+            failureCount++;
+            logger.warn(`Failed to fetch related items for PR ${pr.externalId}: ${batchResult.error}`);
+            return;
+          }
+          const relatedItems = batchResult?.relatedItems ?? [];
+          if (relatedItems.length > 0) {
+            result.set(pr.externalId, relatedItems);
+          }
+        });
+      } catch (error) {
+        if (error instanceof Error && error.name === 'AbortError' && signal?.aborted) { throw error; }
+        failureCount += batch.length;
+        for (const pr of batch) {
+          logger.warn(`Failed to fetch related items for PR ${pr.externalId}: ${String(error)}`);
+        }
+      }
+    }, 2);
+
+    const summary = `Found related items for ${result.size}/${prs.length} PRs (${failureCount} failures)`;
+    if (failureCount > 0 || result.size > 0) {
+      logger.info(summary);
+    } else {
+      logger.debug(summary);
+    }
+    return result;
+  }
+
+  /**
    * Publish GitHub items after applying repository filters at the provider boundary.
    */
   protected publishDiscoveredItems(items: DiscoveredItem[], patterns: RepoPattern[] = this.getConfiguredPatterns()): void {
@@ -158,4 +216,12 @@ export abstract class BaseGitHubProvider extends BaseProvider {
     }
   }
 
+}
+
+function chunkArray<T>(items: T[], size: number): T[][] {
+  const chunks: T[][] = [];
+  for (let index = 0; index < items.length; index += size) {
+    chunks.push(items.slice(index, index + size));
+  }
+  return chunks;
 }

@@ -48,14 +48,15 @@ describe('getEditorPanelHtml', () => {
         validTransitions: ['InProgress', 'Done'],
         hasActions: true,
         activityLog: [{ timestamp: 123, type: 'work-started', detail: '{"branchName":"feature/test"}' }],
-        relatedItems: [{ id: 'peer-1', title: 'Peer item', state: 'Paused', badges: [{ label: 'GitHub', type: 'provider', variant: 'github' }] }],
+        relatedItems: [{ targetItemId: 'peer-1', targetKind: 'workItem', label: 'Closes owner/repo#2', relation: 'closes', itemType: 'issue' }],
       }),
     });
 
     expect(html).toContain('"validTransitions":["InProgress","Done"]');
     expect(html).toContain('"hasActions":true');
     expect(html).toContain('"activityLog":[{"timestamp":123,"type":"work-started"');
-    expect(html).toContain('"relatedItems":[{"id":"peer-1","title":"Peer item"');
+    expect(html).toContain('"relatedItems":[{"targetItemId":"peer-1"');
+    expect(html).toContain('"label":"Closes owner/repo#2"');
   });
 
   it('escapes bootstrap data before embedding it in the HTML shell', () => {

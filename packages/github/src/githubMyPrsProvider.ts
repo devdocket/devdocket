@@ -1,4 +1,4 @@
-import { DiscoveredItem, ProviderBadge, combineSignals, createAbortError, runWorkerPool } from '@devdocket/shared';
+import { DiscoveredItem, ProviderBadge, combineSignals, createAbortError, runWorkerPool, type RelatedItemRef } from '@devdocket/shared';
 import { BaseGitHubProvider } from './baseGithubProvider';
 import { logger } from './logger';
 import { parseRepoFromUrls } from './parseRepo';
@@ -105,14 +105,28 @@ export class GitHubMyPrsProvider extends BaseGitHubProvider {
     const statusMap = allPrs.length > 0
       ? await this.fetchPrStatuses(accessToken, allPrs, signal)
       : new Map<string, string>();
+    const relatedItemsMap = allPrs.length > 0
+      ? await this.fetchRelatedItemsForPRs(allPrs.map(pr => {
+        const repoName = repoNameMap.get(pr.html_url)!;
+        const [repoOwner, repoNameOnly] = repoName.split('/');
+        return {
+          externalId: `${repoName}#${pr.number}`,
+          repoOwner,
+          repoName: repoNameOnly,
+          number: pr.number,
+        };
+      }).filter(pr => pr.repoOwner && pr.repoName), accessToken, signal)
+      : new Map<string, RelatedItemRef[]>();
 
     const items: DiscoveredItem[] = [];
     for (const pr of filteredAuthored) {
       const repoName = repoNameMap.get(pr.html_url)!;
+      const externalId = `${repoName}#${pr.number}`;
       const status = statusMap.get(pr.html_url) ?? 'Open';
       const statusBadge = statusToBadge(status);
+      const relatedItems = relatedItemsMap.get(externalId);
       items.push({
-        externalId: `${repoName}#${pr.number}`,
+        externalId,
         title: `#${pr.number}: ${pr.title}`,
         description: pr.body ?? undefined,
         url: pr.html_url,
@@ -122,15 +136,18 @@ export class GitHubMyPrsProvider extends BaseGitHubProvider {
         state: status,
         canonicalId: `github:pull:${repoName}#${pr.number}`,
         itemType: 'pr',
+        ...(relatedItems ? { relatedItems } : {}),
         ...(statusBadge ? { badges: [statusBadge] } : {}),
       });
     }
     for (const pr of filteredAssigned) {
       const repoName = repoNameMap.get(pr.html_url)!;
+      const externalId = `${repoName}#${pr.number}`;
       const status = statusMap.get(pr.html_url) ?? 'Open';
       const statusBadge = statusToBadge(status);
+      const relatedItems = relatedItemsMap.get(externalId);
       items.push({
-        externalId: `${repoName}#${pr.number}`,
+        externalId,
         title: `#${pr.number}: ${pr.title}`,
         description: pr.body ?? undefined,
         url: pr.html_url,
@@ -139,6 +156,7 @@ export class GitHubMyPrsProvider extends BaseGitHubProvider {
         state: status,
         canonicalId: `github:pull:${repoName}#${pr.number}`,
         itemType: 'pr',
+        ...(relatedItems ? { relatedItems } : {}),
         ...(statusBadge ? { badges: [statusBadge] } : {}),
       });
     }

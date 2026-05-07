@@ -60,6 +60,7 @@ describe('GitHubMyPrsProvider — cancellation (AbortSignal wiring)', () => {
     vi.clearAllMocks();
     vi.stubGlobal('fetch', mockFetch);
     provider = new GitHubMyPrsProvider();
+    vi.spyOn(provider as any, 'fetchRelatedItemsForPRs').mockResolvedValue(new Map());
 
     mockChannel = { info: vi.fn(), debug: vi.fn(), warn: vi.fn(), error: vi.fn(), appendLine: vi.fn() };
     setLogger(mockChannel);

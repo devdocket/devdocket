@@ -170,7 +170,7 @@ export class WorkGraph {
   /** Create a new work item, optionally linking it to a provider-discovered source. */
   async createItem(
     input: WorkItemInput,
-    provenance?: { providerId: string; externalId: string; url?: string; group?: string },
+    provenance?: { providerId: string; externalId: string; itemType?: WorkItem['itemType']; url?: string; group?: string },
   ): Promise<WorkItem> {
     const sortOrder = this.nextSortOrder(WorkItemState.New);
     const now = Date.now();
@@ -183,6 +183,7 @@ export class WorkGraph {
       state: WorkItemState.New,
       providerId: provenance?.providerId,
       externalId: provenance?.externalId,
+      itemType: provenance?.itemType,
       url: isSafeUrl(provenance?.url?.trim() ?? '')?.href ?? isSafeUrl(input.url?.trim() ?? '')?.href,
       group: provenance?.group,
       sortOrder,

@@ -187,7 +187,12 @@ export function EditorApp() {
       ) : null}
       <RelatedItems
         items={item.relatedItems}
-        onOpenItem={itemId => postMessage({ type: 'openItem', itemId })}
+        onOpenItem={relatedItem => postMessage({
+          type: 'openItem',
+          itemId: relatedItem.targetItemId,
+          providerId: relatedItem.targetProviderId,
+          externalId: relatedItem.targetExternalId,
+        })}
       />
       <ActivityLog entries={item.activityLog} />
     </div>

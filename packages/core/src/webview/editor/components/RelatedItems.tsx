@@ -1,10 +1,8 @@
-import { BadgePill } from '../../shared/components/BadgePill';
 import type { EditorItemData } from '../../shared/types';
-import { stateLabel, stateTone } from '../editorUtils';
 
 interface RelatedItemsProps {
   items: EditorItemData['relatedItems'];
-  onOpenItem: (itemId: string) => void;
+  onOpenItem: (item: EditorItemData['relatedItems'][number]) => void;
 }
 
 export function RelatedItems({ items, onOpenItem }: RelatedItemsProps) {
@@ -12,31 +10,44 @@ export function RelatedItems({ items, onOpenItem }: RelatedItemsProps) {
     return null;
   }
 
+  const closes = items.filter(item => item.relation === 'closes');
+  const linked = items.filter(item => item.relation === 'linked');
+  const showGroupHeadings = closes.length > 0 && linked.length > 0;
+
   return (
     <section class="editor-section" aria-labelledby="editor-related-heading">
-      <div class="editor-section-heading" id="editor-related-heading">Related items</div>
+      <div class="editor-section-heading" id="editor-related-heading">Related</div>
       <div class="related-items">
-        {items.map(item => (
-          <button
-            key={item.id}
-            type="button"
-            class="related-item"
-            onClick={() => onOpenItem(item.id)}
-          >
-            <div class="related-item-header">
-              <span class="related-item-title">{item.title}</span>
-              <span class={`editor-status editor-status--${stateTone(item.state)}`}>{stateLabel(item.state)}</span>
-            </div>
-            {item.badges.length > 0 ? (
-              <div class="badge-row badge-row--compact">
-                {item.badges.map(badge => (
-                  <BadgePill key={`${item.id}-${badge.type}-${badge.variant}-${badge.label}`} badge={badge} />
-                ))}
-              </div>
-            ) : null}
-          </button>
-        ))}
+        {renderGroup('Closing refs', closes, showGroupHeadings, onOpenItem)}
+        {renderGroup('Links', linked, showGroupHeadings, onOpenItem)}
       </div>
     </section>
+  );
+}
+
+function renderGroup(
+  label: string,
+  items: EditorItemData['relatedItems'],
+  showHeading: boolean,
+  onOpenItem: (item: EditorItemData['relatedItems'][number]) => void,
+) {
+  if (items.length === 0) {
+    return null;
+  }
+
+  return (
+    <div class="related-item-group">
+      {showHeading ? <div class="related-item-group-heading">{label}</div> : null}
+      {items.map(item => (
+        <button
+          key={`${item.targetKind}-${item.targetItemId}`}
+          type="button"
+          class="related-item"
+          onClick={() => onOpenItem(item)}
+        >
+          <span class="related-item-title">{item.label}</span>
+        </button>
+      ))}
+    </div>
   );
 }

@@ -14,6 +14,9 @@ type TestDiscoveredItem = {
   url?: string;
   group?: string;
   canonicalId?: string;
+  itemType?: 'issue' | 'pr';
+  relatedItems?: Array<{ externalId: string; relation: 'closes' | 'linked'; itemType: 'issue' | 'pr' }>;
+  badges?: Array<{ label: string; variant: 'neutral' | 'info' | 'success' | 'warning' | 'danger'; show?: 'sidebar' | 'editor' | 'both' }>;
 };
 
 function makeWorkItem(overrides: Partial<WorkItem> = {}): WorkItem {
@@ -77,6 +80,7 @@ function createMockWorkGraph(initialItems: WorkItem[] = []) {
   };
 
   return {
+    getAll: vi.fn(() => Array.from(items.values())),
     getItemsByState: vi.fn((...states: WorkItemState[]) => Array.from(items.values()).filter(item => states.includes(item.state))),
     getItem: vi.fn((id: string) => items.get(id)),
     findItemByProvenance: vi.fn((providerId: string, externalId: string) => Array.from(items.values()).find(
@@ -387,6 +391,46 @@ describe('MainViewProvider', () => {
         { label: 'Review requested', type: 'provider-supplied', variant: 'review-requested' },
       ]),
     }));
+  });
+
+  it('marks sidebar and source rows that have resolved related items', async () => {
+    vi.useFakeTimers();
+    const workGraph = createMockWorkGraph([
+      makeWorkItem({ id: 'pr-item', title: 'PR', state: WorkItemState.New, providerId: 'github-my-prs', externalId: 'owner/repo#10' }),
+      makeWorkItem({ id: 'issue-item', title: 'Issue', state: WorkItemState.InProgress, providerId: 'github-issues', externalId: 'owner/repo#2' }),
+      makeWorkItem({ id: 'manual', title: 'Manual', state: WorkItemState.New }),
+    ]);
+    const providerRegistry = createProviderRegistry({
+      'github-my-prs': [{
+        externalId: 'owner/repo#10',
+        title: 'PR',
+        itemType: 'pr',
+        relatedItems: [{ externalId: 'owner/repo#2', itemType: 'issue', relation: 'closes' }],
+      }],
+    });
+    const stateStore = createStateStore({
+      'github-my-prs::owner/repo#10': 'accepted',
+      'github-issues::owner/repo#2': 'accepted',
+    });
+    const provider = createProvider(workGraph, providerRegistry, stateStore);
+    const mockView = createMockWebviewView();
+
+    provider.resolveWebviewView(mockView.view, {} as any, {} as any);
+    await vi.advanceTimersByTimeAsync(50);
+
+    const updateItems = findPostedMessage(mockView, 'updateItems');
+    const readyTier = updateItems.tiers.find((tier: { id: string }) => tier.id === 'ready-to-start');
+    const inProgressTier = updateItems.tiers.find((tier: { id: string }) => tier.id === 'in-progress');
+    expect(readyTier.items.find((item: { id: string }) => item.id === 'pr-item').hasRelatedItems).toBe(true);
+    expect(readyTier.items.find((item: { id: string }) => item.id === 'manual').hasRelatedItems).toBe(false);
+    expect(inProgressTier.items.find((item: { id: string }) => item.id === 'issue-item').hasRelatedItems).toBe(true);
+
+    const updateSources = findPostedMessage(mockView, 'updateSources');
+    const sourcePr = updateSources.providers
+      .flatMap((providerData: any) => providerData.groups)
+      .flatMap((group: any) => group.items)
+      .find((item: { externalId: string }) => item.externalId === 'owner/repo#10');
+    expect(sourcePr.hasRelatedItems).toBe(true);
   });
 
   it('handles webview messages for opening, accepting, dismissing, transitioning, creating, acting, and opening URLs', async () => {

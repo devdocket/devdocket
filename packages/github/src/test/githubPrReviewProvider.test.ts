@@ -31,6 +31,7 @@ describe('GitHubPrReviewProvider', () => {
     vi.clearAllMocks();
     vi.stubGlobal('fetch', mockFetch);
     provider = new GitHubPrReviewProvider();
+    vi.spyOn(provider as any, 'fetchRelatedItemsForPRs').mockResolvedValue(new Map());
 
     mockChannel = { info: vi.fn(), debug: vi.fn(), warn: vi.fn(), error: vi.fn(), appendLine: vi.fn() };
     setLogger(mockChannel);
@@ -184,6 +185,37 @@ describe('GitHubPrReviewProvider', () => {
       itemType: 'pr',
       badges: [{ label: 'Review requested', variant: 'warning' }],
     });
+  });
+
+  it('attaches relatedItems from PR enrichment before publishing', async () => {
+    vi.mocked(workspace.getConfiguration).mockReturnValue({
+      get: vi.fn((key: string, defaultValue?: any) => {
+        if (key === 'filteredRepos') { return 'unrelated/repo'; }
+        if (key === 'resurfaceOnNewVersion' || key === 'resurfaceOnReRequestedReview') { return false; }
+        return defaultValue;
+      }),
+    } as any);
+    vi.mocked((provider as any).fetchRelatedItemsForPRs).mockResolvedValue(new Map([
+      ['org/myrepo#42', [{ externalId: 'other/repo#7', itemType: 'issue', relation: 'linked' }]],
+    ]));
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({
+        items: [createMockPr(42, 'Add feature', 'org/myrepo')],
+      }),
+    });
+
+    const listener = vi.fn();
+    provider.onDidDiscoverItems(listener);
+    await provider.refresh();
+
+    expect((provider as any).fetchRelatedItemsForPRs).toHaveBeenCalledWith([
+      { externalId: 'org/myrepo#42', repoOwner: 'org', repoName: 'myrepo', number: 42 },
+    ], 'test-token', expect.any(AbortSignal));
+    expect(listener.mock.calls[0][0][0]).toEqual(expect.objectContaining({
+      externalId: 'org/myrepo#42',
+      relatedItems: [{ externalId: 'other/repo#7', itemType: 'issue', relation: 'linked' }],
+    }));
   });
 
   it('maps multiple PRs from different repos correctly', async () => {
