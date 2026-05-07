@@ -57,6 +57,7 @@ function ProviderSection({ provider, onOpenItem, onShowProviderHealth, forceExpa
   const itemCount = provider.groups.reduce((total, group) => total + group.items.length, 0);
   const isCollapsed = forceExpanded ? false : collapsed;
   const countLabel = totalCount === undefined ? `(${itemCount})` : `(${itemCount} of ${totalCount})`;
+  const collapseTitle = forceExpanded ? 'Clear filter to collapse' : undefined;
   const toggleCollapsed = () => {
     if (!forceExpanded) {
       setCollapsed(value => !value);
@@ -76,6 +77,8 @@ function ProviderSection({ provider, onOpenItem, onShowProviderHealth, forceExpa
             class="source-provider-toggle-button source-provider-title-button"
             onClick={toggleCollapsed}
             aria-expanded={!isCollapsed}
+            disabled={forceExpanded}
+            title={collapseTitle}
           >
             <span>{provider.label}</span>
           </button>
@@ -96,6 +99,8 @@ function ProviderSection({ provider, onOpenItem, onShowProviderHealth, forceExpa
           onClick={toggleCollapsed}
           aria-expanded={!isCollapsed}
           aria-label={`${isCollapsed ? 'Expand' : 'Collapse'} ${provider.label} source items`}
+          disabled={forceExpanded}
+          title={collapseTitle}
         >
           <span>{countLabel}</span>
           <span class="source-provider-toggle" aria-hidden="true">{isCollapsed ? '▸' : '▾'}</span>
