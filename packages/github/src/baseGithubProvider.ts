@@ -138,7 +138,7 @@ export abstract class BaseGitHubProvider extends BaseProvider {
       }
     }, 3);
 
-    const summary = `Fetched related items for ${result.size}/${prs.length} PRs (${failureCount} failures)`;
+    const summary = `Found related items for ${result.size}/${prs.length} PRs (${failureCount} failures)`;
     if (failureCount > 0 || result.size > 0) {
       logger.info(summary);
     } else {

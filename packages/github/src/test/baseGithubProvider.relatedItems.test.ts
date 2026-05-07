@@ -168,7 +168,7 @@ describe('BaseGitHubProvider related item fetching', () => {
     expect(result.has('owner/repo#2')).toBe(false);
     expect(mockChannel.appendLine.mock.calls.some(call => call[0].includes('[WARN]') && call[0].includes('Failed to fetch related items for PR owner/repo#2'))).toBe(true);
     expect(mockChannel.appendLine.mock.calls.some(call => call[0].includes('[DEBUG]') && call[0].includes('Failed to fetch related items for PR owner/repo#2'))).toBe(false);
-    expect(mockChannel.appendLine.mock.calls.some(call => call[0].includes('[INFO] Fetched related items for 1/2 PRs (1 failures)'))).toBe(true);
+    expect(mockChannel.appendLine.mock.calls.some(call => call[0].includes('[INFO] Found related items for 1/2 PRs (1 failures)'))).toBe(true);
   });
 
   it('keeps empty successful batches out of info logs', async () => {
@@ -179,8 +179,8 @@ describe('BaseGitHubProvider related item fetching', () => {
     ], 'token');
 
     expect(result.size).toBe(0);
-    expect(mockChannel.appendLine.mock.calls.some(call => call[0].includes('[INFO] Fetched related items for 0/1 PRs (0 failures)'))).toBe(false);
-    expect(mockChannel.appendLine.mock.calls.some(call => call[0].includes('[DEBUG] Fetched related items for 0/1 PRs (0 failures)'))).toBe(true);
+    expect(mockChannel.appendLine.mock.calls.some(call => call[0].includes('[INFO] Found related items for 0/1 PRs (0 failures)'))).toBe(false);
+    expect(mockChannel.appendLine.mock.calls.some(call => call[0].includes('[DEBUG] Found related items for 0/1 PRs (0 failures)'))).toBe(true);
   });
 
   it('propagates cancellation as AbortError', async () => {
