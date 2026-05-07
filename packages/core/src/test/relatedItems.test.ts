@@ -147,7 +147,7 @@ describe('resolveRelatedItemsFor', () => {
     ]));
 
     expect(resolveRelatedItemsFor(issueMention, registry, makeWorkGraph([issueMention, pr]))).toEqual([
-      { targetItemId: 'pr-1', targetKind: 'workItem', label: 'Closes owner/repo#10', relation: 'closes', itemType: 'pr' },
+      { targetItemId: 'pr-1', targetKind: 'workItem', label: 'Closed by owner/repo#10', relation: 'closes', itemType: 'pr' },
     ]);
   });
 
@@ -189,7 +189,7 @@ describe('resolveRelatedItemsFor', () => {
       { targetItemId: 'issue-1', targetKind: 'workItem', label: 'Closes owner/repo#2', relation: 'closes', itemType: 'issue' },
     ]);
     expect(index.get('github-issues::owner/repo#2')).toEqual([
-      { targetItemId: 'pr-1', targetKind: 'workItem', label: 'Closes owner/repo#10', relation: 'closes', itemType: 'pr' },
+      { targetItemId: 'pr-1', targetKind: 'workItem', label: 'Closed by owner/repo#10', relation: 'closes', itemType: 'pr' },
     ]);
   });
 
@@ -220,7 +220,7 @@ describe('resolveRelatedItemsFor', () => {
     const index = buildRelatedItemsIndex(registry, workGraph);
 
     expect(resolveRelatedItemsFor(issue, registry, workGraph, index)).toEqual([
-      { targetItemId: 'pr-1', targetKind: 'workItem', label: 'Closes owner/repo#10', relation: 'closes', itemType: 'pr' },
+      { targetItemId: 'pr-1', targetKind: 'workItem', label: 'Closed by owner/repo#10', relation: 'closes', itemType: 'pr' },
     ]);
   });
 

@@ -94,7 +94,7 @@ function buildRelatedItemsIndexForDiscovered(
       }
 
       for (const ref of candidate.relatedItems) {
-        const target = resolveDiscoveredTarget(providerId, candidate.externalId, candidate.itemType, ref.relation, workGraph);
+        const target = resolveDiscoveredTarget(providerId, candidate.externalId, candidate.itemType, ref.relation, workGraph, 'reverse');
         if (!target) {
           continue;
         }
@@ -151,6 +151,7 @@ function resolveReverseRefsForUndiscovered(
           candidate.itemType,
           ref.relation,
           workGraph,
+          'reverse',
         );
         if (target) {
           upsertResolved(resolved, target);
@@ -225,6 +226,7 @@ function resolveDiscoveredTarget(
   itemType: RelatedItemRef['itemType'] | undefined,
   relation: RelatedItemRef['relation'],
   workGraph: WorkGraph,
+  direction: 'forward' | 'reverse' = 'forward',
 ): ResolvedRelatedItemWithSort | undefined {
   if (!isRelatedItemType(itemType)) {
     return undefined;
@@ -234,11 +236,22 @@ function resolveDiscoveredTarget(
   return {
     targetItemId: workItem?.id ?? `${providerId}::${externalId}`,
     targetKind: workItem ? 'workItem' : 'sources',
-    label: relation === 'closes' ? `Closes ${externalId}` : `Linked to ${externalId}`,
+    label: getRelatedItemLabel(relation, externalId, direction),
     relation,
     itemType,
     externalId,
   };
+}
+
+function getRelatedItemLabel(
+  relation: RelatedItemRef['relation'],
+  externalId: string,
+  direction: 'forward' | 'reverse',
+): string {
+  if (relation === 'linked') {
+    return `Linked to ${externalId}`;
+  }
+  return direction === 'reverse' ? `Closed by ${externalId}` : `Closes ${externalId}`;
 }
 
 function upsertResolved(
