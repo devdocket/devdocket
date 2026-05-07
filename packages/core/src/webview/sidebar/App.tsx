@@ -35,10 +35,18 @@ export function App() {
   const isMyWorkFilterActive = myWorkQuery.trim() !== '';
   const isSourcesFilterActive = sourcesQuery.trim() !== '';
   myWorkFilterActiveRef.current = isMyWorkFilterActive;
-  const filteredTiers = useMemo(() => filterTiers(tiers, myWorkQuery), [tiers, myWorkQuery]);
-  const filteredSources = useMemo(() => filterProviders(sources, sourcesQuery), [sources, sourcesQuery]);
-  const myWorkVisibleCount = getTierItemCount(filteredTiers.tiers);
-  const sourcesVisibleCount = getProviderItemCount(filteredSources.providers);
+  const filteredTiers = useMemo(
+    () => (isMyWorkFilterActive ? filterTiers(tiers, myWorkQuery) : undefined),
+    [isMyWorkFilterActive, tiers, myWorkQuery],
+  );
+  const filteredSources = useMemo(
+    () => (isSourcesFilterActive ? filterProviders(sources, sourcesQuery) : undefined),
+    [isSourcesFilterActive, sources, sourcesQuery],
+  );
+  const visibleTiers = filteredTiers?.tiers ?? tiers;
+  const visibleSources = filteredSources?.providers ?? sources;
+  const myWorkVisibleCount = getTierItemCount(visibleTiers);
+  const sourcesVisibleCount = getProviderItemCount(visibleSources);
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
@@ -169,9 +177,9 @@ export function App() {
               <NoMatches query={sourcesQuery} onClear={() => clearQuery('sources')} />
             ) : (
               <SourcesView
-                providers={filteredSources.providers}
+                providers={visibleSources}
                 forceExpanded={isSourcesFilterActive}
-                totalCounts={isSourcesFilterActive ? filteredSources.totalCounts : undefined}
+                totalCounts={filteredSources?.totalCounts}
                 query={isSourcesFilterActive ? sourcesQuery : undefined}
                 onOpenItem={(providerId, externalId) =>
                   postMessage({ type: 'openSourceItem', providerId, externalId })
@@ -200,7 +208,7 @@ export function App() {
               <EmptyMyWork />
             ) : (
               <div class="tiers">
-                {filteredTiers.tiers.map(tier => (
+                {visibleTiers.map(tier => (
                   <TierSection
                     key={tier.id}
                     tier={{
@@ -211,7 +219,7 @@ export function App() {
                       })),
                     }}
                     forceExpanded={isMyWorkFilterActive}
-                    totalCount={isMyWorkFilterActive ? filteredTiers.totalCounts.get(tier.id) : undefined}
+                    totalCount={filteredTiers?.totalCounts.get(tier.id)}
                     query={isMyWorkFilterActive ? myWorkQuery : undefined}
                     disableDragReorder={isMyWorkFilterActive}
                     isFilterActive={isMyWorkFilterActive}
