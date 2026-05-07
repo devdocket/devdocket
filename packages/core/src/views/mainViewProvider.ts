@@ -784,6 +784,13 @@ export class MainViewProvider implements vscode.WebviewViewProvider {
       outline: 1px solid var(--vscode-focusBorder);
       outline-offset: -1px;
     }
+    .search-box input::-webkit-search-cancel-button,
+    .search-box input::-webkit-search-decoration,
+    .search-box input::-webkit-search-results-button,
+    .search-box input::-webkit-search-results-decoration {
+      -webkit-appearance: none;
+      appearance: none;
+    }
     .search-box-clear {
       position: absolute;
       right: 4px;
