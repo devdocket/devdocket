@@ -157,7 +157,7 @@ function GroupSection({ providerId, group, onOpenItem, forceExpanded, totalCount
         class="source-group-header"
         onClick={toggleCollapsed}
         aria-expanded={!isCollapsed}
-        disabled={forceExpanded}
+        aria-disabled={forceExpanded}
         title={collapseTitle}
       >
         <span class="source-group-title"><HighlightedText text={group.name} query={query} /></span>

@@ -958,7 +958,8 @@ export class MainViewProvider implements vscode.WebviewViewProvider {
     .source-provider-title-button {
       min-width: 0;
     }
-    .source-provider-toggle-button[aria-disabled="true"] {
+    .source-provider-toggle-button[aria-disabled="true"],
+    .source-group-header[aria-disabled="true"] {
       cursor: default;
     }
     .source-provider-title,
