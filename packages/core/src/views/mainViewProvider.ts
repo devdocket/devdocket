@@ -775,7 +775,7 @@ export class MainViewProvider implements vscode.WebviewViewProvider {
     }
     .my-work-tab,
     .sources-tab {
-      padding: 0 12px 12px;
+      padding: 12px;
     }
     .search-box {
       position: sticky;
