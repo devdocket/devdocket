@@ -216,12 +216,12 @@ export function App() {
                 label="Search Sources"
                 query={queries.sources}
                 onChange={(query) => handleQueryChange('sources', query)}
-                onClear={() => clearAndHideSearchBox('sources')}
+                onClear={() => clearQuery('sources')}
                 autoFocus
               />
             ) : null}
             {isSourcesFilterActive && sourcesVisibleCount === 0 ? (
-              <NoMatches query={sourcesQuery} onClear={() => clearAndHideSearchBox('sources')} />
+              <NoMatches query={sourcesQuery} onClear={() => clearQuery('sources')} />
             ) : (
               <SourcesView
                 providers={visibleSources}
@@ -252,12 +252,12 @@ export function App() {
                 label="Search My Work"
                 query={queries.myWork}
                 onChange={(query) => handleQueryChange('myWork', query)}
-                onClear={() => clearAndHideSearchBox('myWork')}
+                onClear={() => clearQuery('myWork')}
                 autoFocus
               />
             ) : null}
             {isMyWorkFilterActive && myWorkVisibleCount === 0 ? (
-              <NoMatches query={myWorkQuery} onClear={() => clearAndHideSearchBox('myWork')} />
+              <NoMatches query={myWorkQuery} onClear={() => clearQuery('myWork')} />
             ) : !isMyWorkFilterActive && !hasReceivedItems ? (
               <div class="empty-state">No items yet</div>
             ) : !isMyWorkFilterActive && tiers.every(tier => tier.items.length === 0) ? (
