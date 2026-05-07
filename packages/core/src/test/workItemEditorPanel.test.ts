@@ -307,7 +307,7 @@ describe('WorkItemEditorPanel', () => {
     expect(workGraph.updateItem).toHaveBeenCalledWith('item-1', { notes: 'Draft note' });
   });
 
-  it('handles a single title-link URL message exactly once', async () => {
+  it('opens a URL exactly once when the host receives a single openUrl message', async () => {
     const item = makeItem({ url: 'https://example.com/item/1' });
     const { mock } = openPanel(item);
 
