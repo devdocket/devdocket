@@ -64,6 +64,7 @@ function createMockWorkGraph(primaryItem?: WorkItem, relatedByProvenance: Record
   }
 
   return {
+    getAll: vi.fn(() => Array.from(items.values())),
     getItem: vi.fn((id: string) => items.get(id)),
     updateItem: vi.fn(async (id: string, patch: Record<string, unknown>) => {
       const current = items.get(id);
