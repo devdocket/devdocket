@@ -8,11 +8,13 @@ import { SourcesView } from './components/SourcesView';
 import { TabBar } from './components/TabBar';
 import { TierSection } from './components/TierSection';
 import { filterProviders, filterTiers } from './filter';
-
-type SidebarTab = 'myWork' | 'sources';
-type TabQueries = Record<SidebarTab, string>;
-
-const emptyQueries: TabQueries = { myWork: '', sources: '' };
+import {
+  emptyQueries,
+  hiddenSearchBoxes,
+  isSearchBoxEffectivelyVisible,
+  type SidebarTab,
+  type TabQueries,
+} from './searchVisibility';
 
 export function App() {
   const [activeTab, setActiveTab] = useState<SidebarTab>('myWork');
@@ -22,6 +24,7 @@ export function App() {
   const [selectedItemId, setSelectedItemId] = useState<string | null>(null);
   const [queries, setQueries] = useState<TabQueries>(emptyQueries);
   const [appliedQueries, setAppliedQueries] = useState<TabQueries>(emptyQueries);
+  const [searchBoxVisible, setSearchBoxVisible] = useState(hiddenSearchBoxes);
   const [announcement, setAnnouncement] = useState('');
   const previousTiersRef = useRef<TierData[] | undefined>(undefined);
   const announcementFrameRef = useRef<number | undefined>(undefined);
@@ -47,6 +50,8 @@ export function App() {
   const visibleSources = filteredSources?.providers ?? sources;
   const myWorkVisibleCount = getTierItemCount(visibleTiers);
   const sourcesVisibleCount = getProviderItemCount(visibleSources);
+  const myWorkSearchBoxVisible = isSearchBoxEffectivelyVisible('myWork', searchBoxVisible, queries, appliedQueries);
+  const sourcesSearchBoxVisible = isSearchBoxEffectivelyVisible('sources', searchBoxVisible, queries, appliedQueries);
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
@@ -150,6 +155,42 @@ export function App() {
     setAnnouncement('');
   };
 
+  const showSearchBox = (tab: SidebarTab) => {
+    setSearchBoxVisible(current => ({ ...current, [tab]: true }));
+  };
+
+  const clearAndHideSearchBox = (tab: SidebarTab) => {
+    clearQuery(tab);
+    setSearchBoxVisible(current => ({ ...current, [tab]: false }));
+  };
+
+  const toggleSearchBox = (tab: SidebarTab, visible: boolean) => {
+    if (visible) {
+      clearAndHideSearchBox(tab);
+      return;
+    }
+
+    showSearchBox(tab);
+  };
+
+  const renderSearchToggle = (tab: SidebarTab, visible: boolean) => {
+    const label = visible ? 'Hide search' : 'Show search';
+
+    return (
+      <button
+        type="button"
+        class={`search-toggle ${visible ? 'expanded' : ''}`.trim()}
+        aria-label={label}
+        title={label}
+        aria-expanded={visible}
+        aria-pressed={visible}
+        onClick={() => toggleSearchBox(tab, visible)}
+      >
+        ⋯
+      </button>
+    );
+  };
+
   return (
     <div class="mission-control">
       <TabBar
@@ -167,14 +208,20 @@ export function App() {
             id="mission-control-panel-sources"
             aria-labelledby="mission-control-tab-sources"
           >
-            <SearchBox
-              label="Search Sources"
-              query={queries.sources}
-              onChange={(query) => handleQueryChange('sources', query)}
-              onClear={() => clearQuery('sources')}
-            />
+            <div class="tab-header">
+              {renderSearchToggle('sources', sourcesSearchBoxVisible)}
+            </div>
+            {sourcesSearchBoxVisible ? (
+              <SearchBox
+                label="Search Sources"
+                query={queries.sources}
+                onChange={(query) => handleQueryChange('sources', query)}
+                onClear={() => clearAndHideSearchBox('sources')}
+                autoFocus
+              />
+            ) : null}
             {isSourcesFilterActive && sourcesVisibleCount === 0 ? (
-              <NoMatches query={sourcesQuery} onClear={() => clearQuery('sources')} />
+              <NoMatches query={sourcesQuery} onClear={() => clearAndHideSearchBox('sources')} />
             ) : (
               <SourcesView
                 providers={visibleSources}
@@ -197,14 +244,20 @@ export function App() {
             id="mission-control-panel-my-work"
             aria-labelledby="mission-control-tab-my-work"
           >
-            <SearchBox
-              label="Search My Work"
-              query={queries.myWork}
-              onChange={(query) => handleQueryChange('myWork', query)}
-              onClear={() => clearQuery('myWork')}
-            />
+            <div class="tab-header">
+              {renderSearchToggle('myWork', myWorkSearchBoxVisible)}
+            </div>
+            {myWorkSearchBoxVisible ? (
+              <SearchBox
+                label="Search My Work"
+                query={queries.myWork}
+                onChange={(query) => handleQueryChange('myWork', query)}
+                onClear={() => clearAndHideSearchBox('myWork')}
+                autoFocus
+              />
+            ) : null}
             {isMyWorkFilterActive && myWorkVisibleCount === 0 ? (
-              <NoMatches query={myWorkQuery} onClear={() => clearQuery('myWork')} />
+              <NoMatches query={myWorkQuery} onClear={() => clearAndHideSearchBox('myWork')} />
             ) : !isMyWorkFilterActive && !hasReceivedItems ? (
               <div class="empty-state">No items yet</div>
             ) : !isMyWorkFilterActive && tiers.every(tier => tier.items.length === 0) ? (

@@ -770,6 +770,38 @@ export class MainViewProvider implements vscode.WebviewViewProvider {
     .sources-tab {
       padding: 0 12px 12px;
     }
+    .tab-header {
+      display: flex;
+      justify-content: flex-end;
+      align-items: center;
+      padding: 8px 0;
+      background: var(--vscode-sideBar-background, var(--vscode-editor-background));
+    }
+    .search-toggle {
+      width: 24px;
+      height: 24px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      border: 1px solid transparent;
+      border-radius: 4px;
+      background: transparent;
+      color: var(--vscode-icon-foreground);
+      cursor: pointer;
+      padding: 0;
+      font: inherit;
+      line-height: 1;
+    }
+    .search-toggle:hover {
+      background: var(--vscode-toolbar-hoverBackground, rgba(127, 127, 127, 0.25));
+    }
+    .search-toggle.expanded {
+      background: var(--vscode-button-background);
+      color: var(--vscode-button-foreground);
+    }
+    .search-toggle.expanded:hover {
+      background: var(--vscode-button-hoverBackground, var(--vscode-button-background));
+    }
     .search-box {
       position: sticky;
       top: 0;
@@ -884,6 +916,7 @@ export class MainViewProvider implements vscode.WebviewViewProvider {
     .tier-header-main:focus-visible,
     .tier-toggle-button:focus-visible,
     .tier-header-action:focus-visible,
+    .search-toggle:focus-visible,
     .source-provider-toggle-button:focus-visible,
     .source-group-header:focus-visible,
     .source-item:focus-visible,

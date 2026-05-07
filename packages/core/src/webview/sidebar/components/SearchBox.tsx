@@ -1,17 +1,28 @@
+import { useEffect, useRef } from 'preact/hooks';
+
 interface SearchBoxProps {
   label: string;
   query: string;
   onChange: (query: string) => void;
   onClear: () => void;
+  autoFocus?: boolean;
 }
 
-export function SearchBox({ label, query, onChange, onClear }: SearchBoxProps) {
+export function SearchBox({ label, query, onChange, onClear, autoFocus = false }: SearchBoxProps) {
   const clearLabel = `Clear ${label}`;
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (autoFocus) {
+      inputRef.current?.focus();
+    }
+  }, [autoFocus]);
 
   return (
     <div class="search-box">
       <div class="search-box-input-wrap">
         <input
+          ref={inputRef}
           type="search"
           value={query}
           aria-label={label}
@@ -23,11 +34,7 @@ export function SearchBox({ label, query, onChange, onClear }: SearchBoxProps) {
             }
 
             event.preventDefault();
-            if (query.length > 0) {
-              onClear();
-            } else {
-              (event.currentTarget as HTMLInputElement).blur();
-            }
+            onClear();
           }}
         />
         {query.length > 0 ? (

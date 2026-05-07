@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { SourceProviderData, TierData } from '../views/mainTypes';
 import { filterProviders, filterTiers, getGroupTotalCountKey, matchesQuery, splitOnMatches } from '../webview/sidebar/filter';
+import { hiddenSearchBoxes, isSearchBoxEffectivelyVisible, type TabQueries } from '../webview/sidebar/searchVisibility';
 
 const badge = { label: 'GitHub', type: 'provider' as const, variant: 'github' };
 
@@ -123,6 +124,23 @@ describe('filterProviders', () => {
     expect(result.totalCounts.get('github')).toBe(3);
     expect(result.totalCounts.get(getGroupTotalCountKey('github', 'devdocket/devdocket'))).toBe(2);
     expect(result.totalCounts.get(getGroupTotalCountKey('github', 'owner/tools'))).toBe(1);
+  });
+});
+
+describe('isSearchBoxEffectivelyVisible', () => {
+  const empty: TabQueries = { myWork: '', sources: '' };
+
+  it('stays hidden when the toggle is collapsed and queries are empty', () => {
+    expect(isSearchBoxEffectivelyVisible('myWork', hiddenSearchBoxes, empty, empty)).toBe(false);
+  });
+
+  it('shows when the tab toggle is expanded', () => {
+    expect(isSearchBoxEffectivelyVisible('sources', { ...hiddenSearchBoxes, sources: true }, empty, empty)).toBe(true);
+  });
+
+  it('auto-shows when a pending or applied query is non-empty', () => {
+    expect(isSearchBoxEffectivelyVisible('myWork', hiddenSearchBoxes, { ...empty, myWork: 'review' }, empty)).toBe(true);
+    expect(isSearchBoxEffectivelyVisible('sources', hiddenSearchBoxes, empty, { ...empty, sources: 'pipeline' })).toBe(true);
   });
 });
 
