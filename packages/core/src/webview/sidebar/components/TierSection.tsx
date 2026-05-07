@@ -311,7 +311,7 @@ export function TierSection({
             class="tier-header-action"
             title={isFilterActive ? 'Clear filter to clear history' : 'Clear history'}
             aria-label="Clear completed items"
-            disabled={isFilterActive}
+            aria-disabled={isFilterActive}
             onClick={(event) => {
               event.stopPropagation();
               if (!isFilterActive) {
