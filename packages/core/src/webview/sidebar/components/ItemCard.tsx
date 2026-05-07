@@ -1,6 +1,7 @@
 import { useRef, useState } from 'preact/hooks';
 import type { ItemCardData } from '../../shared/types';
 import { BadgePill } from './BadgePill';
+import { HighlightedText } from './HighlightedText';
 
 interface ItemCardProps {
   item: ItemCardData;
@@ -22,6 +23,8 @@ interface ItemCardProps {
    * (Ready to Start / In Progress).
    */
   onMoveItem?: (itemId: string, direction: -1 | 1) => void;
+  disableDragReorder?: boolean;
+  query?: string;
 }
 
 interface ItemAction {
@@ -46,9 +49,11 @@ export function ItemCard({
   onDragStart,
   onDragEnd,
   onMoveItem,
+  disableDragReorder = false,
+  query,
 }: ItemCardProps) {
   const actions = getItemActions(item, onAccept, onAcceptToFocus, onDismiss, onTransition);
-  const isDraggable = item.tierType === 'readyToStart' || item.tierType === 'inProgress';
+  const isDraggable = !disableDragReorder && (item.tierType === 'readyToStart' || item.tierType === 'inProgress');
   const [actionsOpen, setActionsOpen] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
   const itemElementRef = useRef<HTMLDivElement | null>(null);
@@ -162,7 +167,7 @@ export function ItemCard({
       class={`item-card item-card--${getTierClassName(item.tierType)} ${item.isUrgent ? 'urgent' : ''} ${item.isSelected ? 'selected' : ''} ${actionsOpen ? 'actions-open' : ''} ${isDragging ? 'dragging' : ''}`.trim()}
       role="option"
       tabIndex={tabIndex}
-      draggable={isDraggable ? true : undefined}
+      draggable={isDraggable}
       aria-label={buildItemAriaLabel(item)}
       aria-selected={item.isSelected ?? false}
       aria-current={item.isSelected ? 'true' : undefined}
@@ -177,11 +182,11 @@ export function ItemCard({
         <div class="item-line-1">
           <div class="item-title-wrap">
             {item.isUnseen ? <span class="unseen-dot" aria-hidden="true">●</span> : null}
-            <span class="item-title">{item.title}</span>
+            <span class="item-title"><HighlightedText text={item.title} query={query} /></span>
           </div>
         </div>
         {item.repoAnnotation ? (
-          <div class="item-repo-annotation">{item.repoAnnotation}</div>
+          <div class="item-repo-annotation"><HighlightedText text={item.repoAnnotation} query={query} /></div>
         ) : null}
         {item.badges.length > 0 ? (
           <div class="badge-row">

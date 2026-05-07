@@ -2,6 +2,7 @@ export type ExtensionMessage =
   | { type: 'updateItems'; tiers: TierData[] }
   | { type: 'updateSources'; providers: SourceProviderData[] }
   | { type: 'selectItem'; itemId: string }
+  | { type: 'toggleSearch' }
   | { type: 'updateWatches'; watches: WatchData[] }
   | { type: 'updateWatchPanel'; prWatches: PRWatchData[]; runWatches: RunWatchData[] }
   | { type: 'updateEditorItem'; item: EditorItemData }
@@ -31,6 +32,7 @@ export type WebviewMessage =
   | { type: 'addWatchUrl' }
   | { type: 'markSeen'; providerId: string; externalId: string }
   | { type: 'crossTierDrop'; itemId: string; targetTier: string }
+  | { type: 'requestToggleSearch' }
   | { type: 'watchPanelReady' };
 
 export interface TierData {

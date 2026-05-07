@@ -1,5 +1,7 @@
 import { useState } from 'preact/hooks';
 import type { SourceGroupData, SourceProviderData } from '../../shared/types';
+import { getGroupTotalCountKey } from '../filter';
+import { HighlightedText } from './HighlightedText';
 import { OnboardingEmptyState } from './OnboardingEmptyState';
 import { SourceItem } from './SourceItem';
 
@@ -7,32 +9,35 @@ interface SourcesViewProps {
   providers: SourceProviderData[];
   onOpenItem: (providerId: string, externalId: string) => void;
   onShowProviderHealth: (providerId: string) => void;
+  forceExpanded?: boolean;
+  totalCounts?: Map<string, number>;
+  query?: string;
 }
 
-export function SourcesView({ providers, onOpenItem, onShowProviderHealth }: SourcesViewProps) {
+export function SourcesView({ providers, onOpenItem, onShowProviderHealth, forceExpanded = false, totalCounts, query }: SourcesViewProps) {
   if (providers.length === 0) {
     return (
-      <div class="sources-tab">
-        <OnboardingEmptyState
-          titleId="sources-empty-state-title"
-          description="Create a work item manually, or install a provider extension to populate Sources with GitHub issues, Azure DevOps tasks, PR reviews, and more."
-        />
-      </div>
+      <OnboardingEmptyState
+        titleId="sources-empty-state-title"
+        description="Create a work item manually, or install a provider extension to populate Sources with GitHub issues, Azure DevOps tasks, PR reviews, and more."
+      />
     );
   }
 
   return (
-    <div class="sources-tab">
-      <div class="sources-list">
-        {providers.map(provider => (
-          <ProviderSection
-            key={provider.providerId}
-            provider={provider}
-            onOpenItem={onOpenItem}
-            onShowProviderHealth={onShowProviderHealth}
-          />
-        ))}
-      </div>
+    <div class="sources-list">
+      {providers.map(provider => (
+        <ProviderSection
+          key={provider.providerId}
+          provider={provider}
+          onOpenItem={onOpenItem}
+          onShowProviderHealth={onShowProviderHealth}
+          forceExpanded={forceExpanded}
+          totalCount={totalCounts?.get(provider.providerId)}
+          totalCounts={totalCounts}
+          query={query}
+        />
+      ))}
     </div>
   );
 }
@@ -41,11 +46,23 @@ interface ProviderSectionProps {
   provider: SourceProviderData;
   onOpenItem: (providerId: string, externalId: string) => void;
   onShowProviderHealth: (providerId: string) => void;
+  forceExpanded: boolean;
+  totalCount?: number;
+  totalCounts?: Map<string, number>;
+  query?: string;
 }
 
-function ProviderSection({ provider, onOpenItem, onShowProviderHealth }: ProviderSectionProps) {
+function ProviderSection({ provider, onOpenItem, onShowProviderHealth, forceExpanded, totalCount, totalCounts, query }: ProviderSectionProps) {
   const [collapsed, setCollapsed] = useState(false);
   const itemCount = provider.groups.reduce((total, group) => total + group.items.length, 0);
+  const isCollapsed = forceExpanded ? false : collapsed;
+  const countLabel = totalCount === undefined ? `(${itemCount})` : `(${itemCount} of ${totalCount})`;
+  const collapseTitle = forceExpanded ? 'Clear filter to collapse' : undefined;
+  const toggleCollapsed = () => {
+    if (!forceExpanded) {
+      setCollapsed(value => !value);
+    }
+  };
 
   return (
     <section
@@ -58,8 +75,10 @@ function ProviderSection({ provider, onOpenItem, onShowProviderHealth }: Provide
           <button
             type="button"
             class="source-provider-toggle-button source-provider-title-button"
-            onClick={() => setCollapsed(value => !value)}
-            aria-expanded={!collapsed}
+            onClick={toggleCollapsed}
+            aria-expanded={!isCollapsed}
+            aria-disabled={forceExpanded}
+            title={collapseTitle}
           >
             <span>{provider.label}</span>
           </button>
@@ -77,15 +96,17 @@ function ProviderSection({ provider, onOpenItem, onShowProviderHealth }: Provide
         <button
           type="button"
           class="source-provider-toggle-button source-provider-meta"
-          onClick={() => setCollapsed(value => !value)}
-          aria-expanded={!collapsed}
-          aria-label={`${collapsed ? 'Expand' : 'Collapse'} ${provider.label} source items`}
+          onClick={toggleCollapsed}
+          aria-expanded={!isCollapsed}
+          aria-label={`${isCollapsed ? 'Expand' : 'Collapse'} ${provider.label} source items`}
+          aria-disabled={forceExpanded}
+          title={collapseTitle}
         >
-          <span>({itemCount})</span>
-          <span class="source-provider-toggle" aria-hidden="true">{collapsed ? '▸' : '▾'}</span>
+          <span>{countLabel}</span>
+          <span class="source-provider-toggle" aria-hidden="true">{isCollapsed ? '▸' : '▾'}</span>
         </button>
       </div>
-      {!collapsed ? (
+      {!isCollapsed ? (
         <div class="source-provider-groups">
           {provider.groups.length === 0 ? (
             <div class="source-empty">No items found</div>
@@ -96,6 +117,9 @@ function ProviderSection({ provider, onOpenItem, onShowProviderHealth }: Provide
                 providerId={provider.providerId}
                 group={group}
                 onOpenItem={onOpenItem}
+                forceExpanded={forceExpanded}
+                totalCount={totalCounts?.get(getGroupTotalCountKey(provider.providerId, group.name))}
+                query={query}
               />
             ))
           )}
@@ -109,32 +133,46 @@ interface GroupSectionProps {
   providerId: string;
   group: SourceGroupData;
   onOpenItem: (providerId: string, externalId: string) => void;
+  forceExpanded: boolean;
+  totalCount?: number;
+  query?: string;
 }
 
-function GroupSection({ providerId, group, onOpenItem }: GroupSectionProps) {
+function GroupSection({ providerId, group, onOpenItem, forceExpanded, totalCount, query }: GroupSectionProps) {
   const [collapsed, setCollapsed] = useState(false);
+  const isCollapsed = forceExpanded ? false : collapsed;
+  const countLabel = totalCount === undefined ? `(${group.items.length})` : `(${group.items.length} of ${totalCount})`;
   const itemCountLabel = `${group.name}, ${group.items.length} item${group.items.length === 1 ? '' : 's'}`;
+  const collapseTitle = forceExpanded ? 'Clear filter to collapse' : undefined;
+  const toggleCollapsed = () => {
+    if (!forceExpanded) {
+      setCollapsed(value => !value);
+    }
+  };
 
   return (
     <section class="source-group" role="group" aria-label={itemCountLabel}>
       <button
         type="button"
         class="source-group-header"
-        onClick={() => setCollapsed(value => !value)}
-        aria-expanded={!collapsed}
+        onClick={toggleCollapsed}
+        aria-expanded={!isCollapsed}
+        aria-disabled={forceExpanded}
+        title={collapseTitle}
       >
-        <span class="source-group-title">{group.name}</span>
+        <span class="source-group-title"><HighlightedText text={group.name} query={query} /></span>
         <span class="source-group-meta">
-          <span>({group.items.length})</span>
-          <span class="source-group-toggle" aria-hidden="true">{collapsed ? '▸' : '▾'}</span>
+          <span>{countLabel}</span>
+          <span class="source-group-toggle" aria-hidden="true">{isCollapsed ? '▸' : '▾'}</span>
         </span>
       </button>
-      {!collapsed ? (
+      {!isCollapsed ? (
         <div class="source-group-items">
           {group.items.map(item => (
             <SourceItem
               key={`${item.providerId}-${item.externalId}`}
               item={item}
+              query={query}
               onOpen={() => onOpenItem(providerId, item.externalId)}
             />
           ))}

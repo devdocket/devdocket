@@ -1,12 +1,14 @@
 import type { SourceItemData } from '../../shared/types';
 import { BadgePill } from './BadgePill';
+import { HighlightedText } from './HighlightedText';
 
 interface SourceItemProps {
   item: SourceItemData;
   onOpen: () => void;
+  query?: string;
 }
 
-export function SourceItem({ item, onOpen }: SourceItemProps) {
+export function SourceItem({ item, onOpen, query }: SourceItemProps) {
   // Click always opens the item: the editor for accepted items, the
   // read-only preview panel for unaccepted/dismissed items. Accept and
   // dismiss decisions happen inside the panel rather than on this row.
@@ -22,7 +24,7 @@ export function SourceItem({ item, onOpen }: SourceItemProps) {
     >
       <div class="source-item-line">
         <div class="source-item-title-wrap">
-          <span class="source-item-title">{item.title}</span>
+          <span class="source-item-title"><HighlightedText text={item.title} query={query} /></span>
         </div>
         {statusLabel ? <span class={`source-item-status ${statusClass}`.trim()}>{statusLabel}</span> : null}
       </div>

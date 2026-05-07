@@ -91,6 +91,10 @@ export class MainViewProvider implements vscode.WebviewViewProvider {
     void this.view?.webview.postMessage({ type: 'selectItem', itemId });
   }
 
+  toggleSearch(): void {
+    void this.view?.webview.postMessage({ type: 'toggleSearch' });
+  }
+
   private refresh(): void {
     if (!this.view) {
       return;
@@ -480,6 +484,9 @@ export class MainViewProvider implements vscode.WebviewViewProvider {
       }
       case 'switchTab':
         break;
+      case 'requestToggleSearch':
+        this.toggleSearch();
+        break;
       case 'markSeen':
         await this.handleMarkSeen(message.providerId, message.externalId);
         break;
@@ -770,6 +777,63 @@ export class MainViewProvider implements vscode.WebviewViewProvider {
     .sources-tab {
       padding: 12px;
     }
+    .search-box {
+      position: sticky;
+      top: 0;
+      z-index: 1;
+      padding: 8px 0;
+      background: var(--vscode-sideBar-background, var(--vscode-editor-background));
+      border-bottom: 1px solid var(--vscode-sideBarSectionHeader-border, transparent);
+    }
+    .search-box-input-wrap {
+      position: relative;
+      display: flex;
+      align-items: center;
+    }
+    .search-box input {
+      width: 100%;
+      min-width: 0;
+      background: var(--vscode-input-background);
+      color: var(--vscode-input-foreground);
+      border: 1px solid var(--vscode-input-border, transparent);
+      border-radius: 2px;
+      padding: 4px 28px 4px 6px;
+      font: inherit;
+    }
+    .search-box input:focus {
+      outline: 1px solid var(--vscode-focusBorder);
+      outline-offset: -1px;
+    }
+    .search-box input::-webkit-search-cancel-button,
+    .search-box input::-webkit-search-decoration,
+    .search-box input::-webkit-search-results-button,
+    .search-box input::-webkit-search-results-decoration {
+      -webkit-appearance: none;
+      appearance: none;
+    }
+    .search-box-clear {
+      position: absolute;
+      right: 4px;
+      background: transparent;
+      color: var(--vscode-icon-foreground);
+      border: none;
+      cursor: pointer;
+      padding: 2px 6px;
+      font: inherit;
+      line-height: 1;
+    }
+    .search-box-clear:hover {
+      background: var(--vscode-toolbar-hoverBackground, rgba(127, 127, 127, 0.25));
+    }
+    .search-box-clear:focus-visible {
+      outline: 1px solid var(--vscode-focusBorder);
+      outline-offset: -1px;
+    }
+    mark {
+      background: var(--vscode-editor-findMatchHighlightBackground);
+      color: inherit;
+      border-radius: 2px;
+    }
     .tiers,
     .sources-list {
       display: flex;
@@ -810,9 +874,23 @@ export class MainViewProvider implements vscode.WebviewViewProvider {
     .tier-header-action:hover {
       text-decoration: underline;
     }
+    .tier-header-action:disabled,
+    .tier-header-action[aria-disabled="true"] {
+      color: var(--vscode-disabledForeground, var(--vscode-descriptionForeground));
+      cursor: default;
+      opacity: 0.65;
+    }
+    .tier-header-action:disabled:hover,
+    .tier-header-action[aria-disabled="true"]:hover {
+      text-decoration: none;
+    }
     .tier-toggle-button {
       display: inline-flex;
       align-items: center;
+    }
+    .tier-header-main[aria-disabled="true"],
+    .tier-toggle-button[aria-disabled="true"] {
+      cursor: default;
     }
     .tier-header-main:focus-visible,
     .tier-toggle-button:focus-visible,
@@ -882,6 +960,10 @@ export class MainViewProvider implements vscode.WebviewViewProvider {
     }
     .source-provider-title-button {
       min-width: 0;
+    }
+    .source-provider-toggle-button[aria-disabled="true"],
+    .source-group-header[aria-disabled="true"] {
+      cursor: default;
     }
     .source-provider-title,
     .source-group-title {
@@ -1190,6 +1272,22 @@ export class MainViewProvider implements vscode.WebviewViewProvider {
       color: var(--vscode-descriptionForeground);
       text-align: center;
       font-style: italic;
+    }
+    .empty-state-link {
+      background: transparent;
+      border: none;
+      color: var(--vscode-textLink-foreground, var(--vscode-foreground));
+      cursor: pointer;
+      font: inherit;
+      font-style: inherit;
+      padding: 0;
+    }
+    .empty-state-link:hover {
+      text-decoration: underline;
+    }
+    .empty-state-link:focus-visible {
+      outline: 1px solid var(--vscode-focusBorder);
+      outline-offset: 2px;
     }
     :root {
       ${buildTierColorCss('dark')}
