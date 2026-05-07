@@ -143,6 +143,7 @@ function GroupSection({ providerId, group, onOpenItem, forceExpanded, totalCount
   const isCollapsed = forceExpanded ? false : collapsed;
   const countLabel = totalCount === undefined ? `(${group.items.length})` : `(${group.items.length} of ${totalCount})`;
   const itemCountLabel = `${group.name}, ${group.items.length} item${group.items.length === 1 ? '' : 's'}`;
+  const collapseTitle = forceExpanded ? 'Clear filter to collapse' : undefined;
   const toggleCollapsed = () => {
     if (!forceExpanded) {
       setCollapsed(value => !value);
@@ -156,6 +157,8 @@ function GroupSection({ providerId, group, onOpenItem, forceExpanded, totalCount
         class="source-group-header"
         onClick={toggleCollapsed}
         aria-expanded={!isCollapsed}
+        disabled={forceExpanded}
+        title={collapseTitle}
       >
         <span class="source-group-title"><HighlightedText text={group.name} query={query} /></span>
         <span class="source-group-meta">
