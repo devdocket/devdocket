@@ -34,7 +34,11 @@ export function SearchBox({ label, query, onChange, onClear, autoFocus = false }
             }
 
             event.preventDefault();
-            onClear();
+            if (query.trim().length > 0) {
+              onClear();
+            } else {
+              (event.currentTarget as HTMLInputElement).blur();
+            }
           }}
         />
         {query.length > 0 ? (
