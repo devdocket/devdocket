@@ -1,17 +1,9 @@
 import type { DiscoveredItem, RelatedItemRef } from '../api/types';
 import type { WorkItem } from '../models/workItem';
+import type { ResolvedRelatedItem } from '../views/relatedItemTypes';
 import type { ProviderRegistry } from './providerRegistry';
 import type { WorkGraph } from './workGraph';
 import { logger } from './logger';
-
-export interface ResolvedRelatedItem {
-  /** The work item id, or `${providerId}::${externalId}` for Sources entries. */
-  targetItemId: string;
-  label: string;
-  targetKind: 'workItem' | 'sources';
-  relation: RelatedItemRef['relation'];
-  itemType: RelatedItemRef['itemType'];
-}
 
 export type RelatedItemsIndex = Map<string, ResolvedRelatedItem[]>;
 

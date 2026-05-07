@@ -1,4 +1,4 @@
-import type { ResolvedRelatedItem } from '../services/relatedItems';
+import type { ResolvedRelatedItem } from './relatedItemTypes';
 
 export type ExtensionMessage =
   | { type: 'updateItems'; tiers: TierData[] }
