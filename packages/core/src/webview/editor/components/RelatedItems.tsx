@@ -18,8 +18,8 @@ export function RelatedItems({ items, onOpenItem }: RelatedItemsProps) {
     <section class="editor-section" aria-labelledby="editor-related-heading">
       <div class="editor-section-heading" id="editor-related-heading">Related</div>
       <div class="related-items">
-        {renderGroup('Closes', closes, showGroupHeadings, onOpenItem)}
-        {renderGroup('Linked', linked, showGroupHeadings, onOpenItem)}
+        {renderGroup('Closing refs', closes, showGroupHeadings, onOpenItem)}
+        {renderGroup('Links', linked, showGroupHeadings, onOpenItem)}
       </div>
     </section>
   );
