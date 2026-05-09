@@ -14,7 +14,6 @@ export interface RunWatchControl {
   startWatch(identifier: RunIdentifier, parentPRKey?: string): Promise<WatchStartResult>;
   getWatchKey(identifier: RunIdentifier): string;
   getWatch(runKey: string): WatchedRun | undefined;
-  getAllWatches(): WatchedRun[];
   entries(): IterableIterator<[string, WatchedRun]>;
   deleteOwnedWatch(runKey: string, parentPRKey: string): void;
   dismissOwnedChildRun(runKey: string, parentPRKey: string, options?: { clearAcknowledgement?: boolean }): boolean;
@@ -450,7 +449,7 @@ export class PRWatchPool implements vscode.Disposable {
     if (prWatch.childRunKeys.length > 0) {
       return true;
     }
-    for (const watch of this.runControl.getAllWatches()) {
+    for (const [, watch] of this.runControl.entries()) {
       if (watch.parentPRKey === prKey) {
         return true;
       }
