@@ -46,6 +46,11 @@ interface ParsedExternalId {
 type GitHost = 'github' | 'ado';
 type WorkItemKind = 'issue' | 'pr';
 
+interface Routing {
+  host: GitHost;
+  kind: WorkItemKind;
+}
+
 function detectGitHost(url: unknown): GitHost | undefined {
   if (typeof url !== 'string' || url.length === 0) {
     return undefined;
@@ -80,6 +85,31 @@ function getWorkItemKind(item: Readonly<WorkItem>): WorkItemKind | undefined {
     return 'issue';
   }
   return undefined;
+}
+
+function isExternalIdValidForRouting(
+  externalId: string | undefined,
+  parsed: ParsedExternalId,
+  routing: Routing,
+): boolean {
+  if (!externalId) {
+    return false;
+  }
+
+  const repoKeySegments = parsed.repoKey.split('/');
+  if (repoKeySegments.some(segment => segment.length === 0)) {
+    return false;
+  }
+
+  if (routing.host === 'github') {
+    return repoKeySegments.length === 2 && /^[^/#]+\/[^/#]+#\d+$/.test(externalId);
+  }
+
+  if (routing.kind === 'pr') {
+    return repoKeySegments.length === 3 && /^[^/#]+\/[^/#]+\/[^/#]+\/\d+$/.test(externalId);
+  }
+
+  return repoKeySegments.length === 2 && /^[^/#]+\/[^/#]+\/\d+$/.test(externalId);
 }
 
 type WorkMode = 'checkout' | 'worktree';
@@ -132,9 +162,15 @@ export class StartWorkAction implements DevDocketAction {
   }
 
   canRun(item: Readonly<WorkItem>): boolean {
-    return item.state === WorkItemState.InProgress
-      && this.getRouting(item) !== undefined
-      && this.parseExternalId(item.externalId) !== undefined;
+    if (item.state !== WorkItemState.InProgress) {
+      return false;
+    }
+
+    const routing = this.getRouting(item);
+    const parsed = this.parseExternalId(item.externalId);
+    return routing !== undefined
+      && parsed !== undefined
+      && isExternalIdValidForRouting(item.externalId, parsed, routing);
   }
 
   async run(item: Readonly<WorkItem>): Promise<void> {
@@ -145,7 +181,7 @@ export class StartWorkAction implements DevDocketAction {
     }
 
     const routing = this.getRouting(item);
-    if (!routing) {
+    if (!routing || !isExternalIdValidForRouting(item.externalId, parsed, routing)) {
       void vscode.window.showErrorMessage('DevDocket: This work item is not supported by Start Git Work.');
       return;
     }
@@ -162,7 +198,7 @@ export class StartWorkAction implements DevDocketAction {
     }
   }
 
-  private getRouting(item: Readonly<WorkItem>): { host: GitHost; kind: WorkItemKind } | undefined {
+  private getRouting(item: Readonly<WorkItem>): Routing | undefined {
     const host = detectGitHost(item.url);
     const kind = getWorkItemKind(item);
     if (!host || !kind) {
