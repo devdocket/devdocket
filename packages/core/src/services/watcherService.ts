@@ -19,6 +19,8 @@ export interface WatchedRun {
   errorMessage?: string;
   /** Key of the parent PR watch, if this run is a child of a PR watch */
   parentPRKey?: string;
+  /** Suppress completion/failure events for the next successful status fetch */
+  suppressNextStatusEvents?: boolean;
 }
 
 /**
@@ -951,6 +953,12 @@ export class WatcherService implements vscode.Disposable {
         }
         watch.lastPolledAt = new Date().toISOString();
 
+        const suppressStatusEvents = watch.suppressNextStatusEvents === true;
+        if (suppressStatusEvents) {
+          delete watch.suppressNextStatusEvents;
+          anyChanged = true;
+        }
+
         // Reset failure count on success
         this.consecutiveFailures.delete(key);
         watch.hasWarning = false;
@@ -979,7 +987,7 @@ export class WatcherService implements vscode.Disposable {
         }
 
         // Detect job failures (while run is still in progress)
-        if (newStatus.overallState !== 'completed') {
+        if (!suppressStatusEvents && newStatus.overallState !== 'completed') {
           for (const newJob of newStatus.jobs) {
             if (newJob.state === 'completed' && newJob.conclusion === 'failure') {
               const oldJob = newJob.id
@@ -993,7 +1001,7 @@ export class WatcherService implements vscode.Disposable {
         }
 
         // Check if run just completed
-        if (oldStatus.overallState !== 'completed' && newStatus.overallState === 'completed') {
+        if (!suppressStatusEvents && oldStatus.overallState !== 'completed' && newStatus.overallState === 'completed') {
           this._onDidCompleteRun.fire(watch);
         }
 
@@ -1052,6 +1060,7 @@ export class WatcherService implements vscode.Disposable {
           lastPolledAt: now,
           dismissed: false,
           parentPRKey: prKey,
+          suppressNextStatusEvents: true,
         });
         this.consecutiveFailures.delete(runKey);
         // Match startWatch's dismissed-then-restarted behavior so re-watched

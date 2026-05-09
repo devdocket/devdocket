@@ -563,6 +563,84 @@ describe('WatcherService', () => {
       expect(runWatcher.getRunStatus).not.toHaveBeenCalled();
     });
 
+    it('suppresses completion and failure events for the first deferred child run status fetch', async () => {
+      const runWatcher: DevDocketRunWatcher = {
+        id: 'github-actions',
+        label: 'GitHub Actions',
+        canWatch: vi.fn().mockReturnValue(true),
+        parseRunUrl: vi.fn(),
+        getRunStatus: vi.fn(async (identifier: RunIdentifier) => {
+          if (identifier.runId === 'completed-run') {
+            return { overallState: 'completed' as const, conclusion: 'success' as const, jobs: [] };
+          }
+          return {
+            overallState: 'running' as const,
+            conclusion: undefined,
+            jobs: [{ name: 'build', state: 'completed' as const, conclusion: 'failure' as const }],
+          };
+        }),
+      };
+      registry.register(runWatcher);
+
+      const prWatcher = createMockPRWatcher('test-pr', async () => ({
+        prState: 'open',
+        runs: [
+          {
+            providerId: 'github-actions',
+            runId: 'completed-run',
+            displayName: 'Completed Run',
+            url: 'https://example.com/run/completed',
+            repo: 'owner/repo',
+          },
+          {
+            providerId: 'github-actions',
+            runId: 'failing-run',
+            displayName: 'Failing Run',
+            url: 'https://example.com/run/failing',
+            repo: 'owner/repo',
+          },
+        ],
+      }));
+      prRegistry.register(prWatcher);
+      const completeSpy = vi.fn();
+      const failureSpy = vi.fn();
+      service.onDidCompleteRun(completeSpy);
+      service.onDidDetectJobFailure(failureSpy);
+
+      await service.startPRWatch(createPRIdentifier(), { deferChildRunStatus: true });
+      expect(service.getActiveWatches().every(w => w.suppressNextStatusEvents)).toBe(true);
+
+      await vi.advanceTimersByTimeAsync(60000);
+
+      expect(completeSpy).not.toHaveBeenCalled();
+      expect(failureSpy).not.toHaveBeenCalled();
+      expect(service.getActiveWatches().every(w => w.suppressNextStatusEvents === undefined)).toBe(true);
+      expect(service.getActiveWatches().map(w => w.status.overallState).sort()).toEqual(['completed', 'running']);
+
+      (runWatcher.getRunStatus as ReturnType<typeof vi.fn>).mockImplementation(async (identifier: RunIdentifier) => {
+        if (identifier.runId === 'completed-run') {
+          return { overallState: 'completed' as const, conclusion: 'success' as const, jobs: [] };
+        }
+        return {
+          overallState: 'running' as const,
+          conclusion: undefined,
+          jobs: [
+            { name: 'build', state: 'completed' as const, conclusion: 'failure' as const },
+            { name: 'test', state: 'completed' as const, conclusion: 'failure' as const },
+          ],
+        };
+      });
+
+      await vi.advanceTimersByTimeAsync(60000);
+
+      expect(failureSpy).toHaveBeenCalledTimes(1);
+      expect(failureSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          job: expect.objectContaining({ name: 'test', conclusion: 'failure' }),
+        }),
+      );
+    });
+
     it('clears failure acknowledgement when deferred child registration replaces a dismissed run', async () => {
       const runWatcher = createMockWatcher('github-actions');
       registry.register(runWatcher);
