@@ -71,6 +71,7 @@ export interface BadgeData {
 export interface EditorCIWatchData {
   state: 'open' | 'merged' | 'closed';
   runs: Array<{
+    id: string;
     name: string;
     state: 'queued' | 'in_progress' | 'completed';
     conclusion?: RunConclusion;

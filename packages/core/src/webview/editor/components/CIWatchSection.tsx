@@ -29,7 +29,7 @@ export function CIWatchSection({ ciWatch, onOpenWatches }: CIWatchSectionProps) 
       </div>
       <div class="ci-watch-run-summary" aria-label="Watched runs">
         {visibleRuns.length > 0 ? visibleRuns.map(run => (
-          <span class={`ci-watch-chip ci-watch-chip--${getRunVariant(run)}`} key={`${run.name}-${run.state}-${run.conclusion ?? ''}`}>
+          <span class={`ci-watch-chip ci-watch-chip--${getRunVariant(run)}`} key={run.id}>
             <span aria-hidden="true">{getRunIcon(run)}</span>
             <span>{run.name} ({getRunLabel(run)})</span>
           </span>

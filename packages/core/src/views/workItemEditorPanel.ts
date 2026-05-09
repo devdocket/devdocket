@@ -458,6 +458,7 @@ export class WorkItemEditorPanel {
     return {
       state: context.watch.prState,
       runs: context.runs.map(run => ({
+        id: getRunWatchKey(run.identifier),
         name: run.identifier.displayName,
         state: toEditorRunState(run.status.overallState),
         ...(run.status.conclusion ? { conclusion: run.status.conclusion } : {}),

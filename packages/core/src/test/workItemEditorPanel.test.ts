@@ -352,9 +352,9 @@ describe('WorkItemEditorPanel', () => {
     expect(bootstrap.ciWatch).toEqual({
       state: 'open',
       runs: [
-        { name: 'build', state: 'in_progress' },
-        { name: 'test', state: 'completed', conclusion: 'success' },
-        { name: 'deploy', state: 'completed', conclusion: 'failure' },
+        { id: 'github-actions:owner/repo:run-1', name: 'build', state: 'in_progress' },
+        { id: 'github-actions:owner/repo:run-2', name: 'test', state: 'completed', conclusion: 'success' },
+        { id: 'github-actions:owner/repo:run-3', name: 'deploy', state: 'completed', conclusion: 'failure' },
       ],
       totalActive: 1,
       totalFailing: 1,
@@ -407,7 +407,7 @@ describe('WorkItemEditorPanel', () => {
       type: 'updateEditorItem',
       item: expect.objectContaining({
         ciWatch: expect.objectContaining({
-          runs: [{ name: 'build', state: 'completed', conclusion: 'failure' }],
+          runs: [{ id: 'github-actions:owner/repo:run-1', name: 'build', state: 'completed', conclusion: 'failure' }],
           totalActive: 0,
           totalFailing: 1,
         }),
