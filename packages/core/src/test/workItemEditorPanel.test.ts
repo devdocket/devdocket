@@ -194,7 +194,7 @@ function createMockWatcherService(initialWatch?: any, initialRuns: any[] = []) {
     _setWatch: (nextWatch: any) => { watch = nextWatch; },
     _setRuns: (nextRuns: any[]) => { runs = [...nextRuns]; },
     _firePRWatchesChange: () => prEmitter.fire(),
-    _fireWatchedRunsChange: () => runEmitter.fire(runs),
+    _fireWatchedRunsChange: (changedRuns = runs) => runEmitter.fire(changedRuns),
   };
 }
 
@@ -434,6 +434,39 @@ describe('WorkItemEditorPanel', () => {
         }),
       }),
     }));
+  });
+
+  it('ignores PR watch changes when the current PR watch state is unchanged', () => {
+    const item = makeItem({ providerId: 'github-my-prs', externalId: 'owner/repo#42', itemType: 'pr' });
+    const watcherService = createMockWatcherService(makeWatchedPR(), [makeWatchedRun()]);
+    const { mock } = openPanel(item, createMockWorkGraph(item), createMockProviderRegistry(), createMockActionRegistry(), createMockStateStore(), watcherService);
+    vi.mocked(mock.panel.webview.postMessage).mockClear();
+
+    watcherService._firePRWatchesChange();
+
+    expect(mock.panel.webview.postMessage).not.toHaveBeenCalled();
+  });
+
+  it('ignores watched run changes that do not affect the current PR watch', () => {
+    const item = makeItem({ providerId: 'github-my-prs', externalId: 'owner/repo#42', itemType: 'pr' });
+    const watcherService = createMockWatcherService(makeWatchedPR(), [makeWatchedRun()]);
+    const { mock } = openPanel(item, createMockWorkGraph(item), createMockProviderRegistry(), createMockActionRegistry(), createMockStateStore(), watcherService);
+    vi.mocked(mock.panel.webview.postMessage).mockClear();
+
+    watcherService._fireWatchedRunsChange([
+      makeWatchedRun({
+        identifier: {
+          providerId: 'github-actions',
+          runId: 'run-99',
+          displayName: 'unrelated',
+          repo: 'owner/other-repo',
+          url: 'https://example.com/run/99',
+        },
+        parentPRKey: 'pr:github-pr-watcher:owner/other-repo:99',
+      }),
+    ]);
+
+    expect(mock.panel.webview.postMessage).not.toHaveBeenCalled();
   });
 
   it('opens the CI Watches panel from editor messages', async () => {

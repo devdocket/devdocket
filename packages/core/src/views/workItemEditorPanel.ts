@@ -19,6 +19,12 @@ interface AutosaveData {
   url?: string;
 }
 
+interface EditorCIWatchContext {
+  watch: WatchedPR;
+  watchKey: string;
+  runs: WatchedRun[];
+}
+
 /**
  * Manages the lifecycle of open WorkItemEditorPanels.
  * Created during extension activation and disposed with the extension context,
@@ -76,6 +82,8 @@ export class WorkItemEditorPanel {
   private lastDisplayedState: WorkItemState | undefined;
   private lastDisplayedGroup: string | undefined;
   private lastManagedState: boolean | undefined;
+  private lastDisplayedCIWatchSignature: string | undefined;
+  private lastDisplayedCIWatchRunKeys = new Set<string>();
 
   /**
    * Replace the active panel manager. Called during `activate()` to scope
@@ -166,7 +174,7 @@ export class WorkItemEditorPanel {
     if (watcherService) {
       this.watcherSubscriptions.push(
         watcherService.onDidChangePRWatches(() => this.refreshForPRWatchChange()),
-        watcherService.onDidChangeWatchedRuns(() => this.refreshForWatchedRunsChange()),
+        watcherService.onDidChangeWatchedRuns(runs => this.refreshForWatchedRunsChange(runs)),
       );
     }
 
@@ -249,14 +257,33 @@ export class WorkItemEditorPanel {
   private refreshForPRWatchChange(): void {
     if (this.disposed) { return; }
     const item = this.workGraph.getItem(this.itemId);
-    if (isPRWorkItem(item)) {
+    if (!isPRWorkItem(item)) { return; }
+
+    if (this.buildCIWatchSignature(item) !== this.lastDisplayedCIWatchSignature) {
       this.update();
     }
   }
 
-  private refreshForWatchedRunsChange(): void {
+  private refreshForWatchedRunsChange(changedRuns: WatchedRun[]): void {
     if (this.disposed) { return; }
-    if (this.findWatchForCurrentItem()) {
+    const item = this.workGraph.getItem(this.itemId);
+    if (!isPRWorkItem(item)) { return; }
+
+    const context = this.getCIWatchContext(item);
+    const currentRunKeys = new Set(context?.runs.map(run => getRunWatchKey(run.identifier)) ?? []);
+    const changedRunTouchesCurrentWatch = changedRuns.some(run => {
+      const runKey = getRunWatchKey(run.identifier);
+      return run.parentPRKey === context?.watchKey
+        || context?.watch.childRunKeys.includes(runKey) === true
+        || this.lastDisplayedCIWatchRunKeys.has(runKey)
+        || currentRunKeys.has(runKey);
+    });
+    const childRunSetChanged = !setsEqual(currentRunKeys, this.lastDisplayedCIWatchRunKeys);
+    if (!changedRunTouchesCurrentWatch && !childRunSetChanged) {
+      return;
+    }
+
+    if (this.buildCIWatchSignature(item, context) !== this.lastDisplayedCIWatchSignature) {
       this.update();
     }
   }
@@ -342,12 +369,15 @@ export class WorkItemEditorPanel {
     const item = this.workGraph.getItem(this.itemId);
     if (!item) {
       this.htmlInitialized = false;
+      this.lastDisplayedCIWatchSignature = undefined;
+      this.lastDisplayedCIWatchRunKeys.clear();
       this.panel.webview.html = '<html><body><p>Item not found.</p></body></html>';
       return;
     }
 
     const relatedItemsIndex = buildRelatedItemsIndex(this.providerRegistry, this.workGraph);
     const editorItem = this.buildEditorItemData(item, relatedItemsIndex);
+    this.rememberDisplayedCIWatchState(item);
     this.lastDisplayedTitle = item.title;
     this.lastDisplayedUrl = item.url;
     this.lastDisplayedDescription = item.description;
@@ -420,49 +450,68 @@ export class WorkItemEditorPanel {
   }
 
   private buildCIWatchData(item: WorkItem): EditorItemData['ciWatch'] {
-    if (!isPRWorkItem(item)) {
+    const context = this.getCIWatchContext(item);
+    if (!context) {
       return undefined;
     }
 
-    const watch = this.findWatchForItem(item);
-    if (!watch) {
-      return undefined;
-    }
-
-    const runs = this.getWatchChildRuns(watch);
     return {
-      state: watch.prState,
-      runs: runs.map(run => ({
+      state: context.watch.prState,
+      runs: context.runs.map(run => ({
         name: run.identifier.displayName,
         state: toEditorRunState(run.status.overallState),
         ...(run.status.conclusion ? { conclusion: run.status.conclusion } : {}),
         ...(run.hasWarning ? { hasWarning: true } : {}),
       })),
-      totalActive: runs.filter(run => run.status.overallState !== 'completed' && !run.dismissed).length,
-      totalFailing: runs.filter(isFailingOrWarningRun).length,
+      totalActive: context.runs.filter(run => run.status.overallState !== 'completed' && !run.dismissed).length,
+      totalFailing: context.runs.filter(isFailingOrWarningRun).length,
     };
   }
 
-  private findWatchForCurrentItem(): WatchedPR | undefined {
-    const item = this.workGraph.getItem(this.itemId);
-    return item ? this.findWatchForItem(item) : undefined;
-  }
+  private getCIWatchContext(item: WorkItem): EditorCIWatchContext | undefined {
+    if (!isPRWorkItem(item)) {
+      return undefined;
+    }
 
-  private findWatchForItem(item: WorkItem): WatchedPR | undefined {
     const watcherService = WorkItemEditorPanel.watcherService;
     const external = item.externalId ? parsePRExternalId(item.externalId) : undefined;
     if (!watcherService || !external) {
       return undefined;
     }
-    return watcherService.findPRWatchByExternalId(external.repo, external.prId);
+
+    const watch = watcherService.findPRWatchByExternalId(external.repo, external.prId);
+    if (!watch) {
+      return undefined;
+    }
+
+    const watchKey = watcherService.getPRWatchKey(watch.identifier);
+    return {
+      watch,
+      watchKey,
+      runs: watcherService.getChildRuns(watchKey),
+    };
   }
 
-  private getWatchChildRuns(watch: WatchedPR): WatchedRun[] {
-    const watcherService = WorkItemEditorPanel.watcherService;
-    if (!watcherService) {
-      return [];
+  private rememberDisplayedCIWatchState(item: WorkItem): void {
+    const context = this.getCIWatchContext(item);
+    this.lastDisplayedCIWatchSignature = this.buildCIWatchSignature(item, context);
+    this.lastDisplayedCIWatchRunKeys = new Set(context?.runs.map(run => getRunWatchKey(run.identifier)) ?? []);
+  }
+
+  private buildCIWatchSignature(item: WorkItem, context = this.getCIWatchContext(item)): string | undefined {
+    if (!context) {
+      return undefined;
     }
-    return watcherService.getChildRuns(watcherService.getPRWatchKey(watch.identifier));
+
+    const runSignatures = context.runs
+      .map(run => [
+        getRunWatchKey(run.identifier),
+        run.status.overallState,
+        run.status.conclusion ?? '',
+        run.hasWarning ? 'warning' : '',
+      ].join(':'))
+      .sort();
+    return [context.watchKey, context.watch.prState, ...runSignatures].join('|');
   }
 
   private getHtml(item: EditorItemData): string {
@@ -592,6 +641,24 @@ function parsePRExternalId(externalId: string): { repo: string; prId: string } |
     repo: externalId.slice(0, separatorIndex),
     prId: externalId.slice(separatorIndex + 1),
   };
+}
+
+function getRunWatchKey(identifier: WatchedRun['identifier']): string {
+  return identifier.repo
+    ? `${identifier.providerId}:${identifier.repo}:${identifier.runId}`
+    : `${identifier.providerId}:${identifier.runId}`;
+}
+
+function setsEqual(left: Set<string>, right: Set<string>): boolean {
+  if (left.size !== right.size) {
+    return false;
+  }
+  for (const value of left) {
+    if (!right.has(value)) {
+      return false;
+    }
+  }
+  return true;
 }
 
 function toEditorRunState(state: WatchedRun['status']['overallState']): NonNullable<EditorItemData['ciWatch']>['runs'][number]['state'] {
