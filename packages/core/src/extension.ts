@@ -423,13 +423,13 @@ export async function activate(context: vscode.ExtensionContext): Promise<DevDoc
       mainProvider,
       { webviewOptions: { retainContextWhenHidden: true } },
     ),
-    wg.onDidChange(safeHandler('mc:workGraph', () => mainProvider.scheduleRefresh())),
-    pr.onDidChangeDiscoveredItems(safeHandler('mc:discovered', () => mainProvider.scheduleRefresh())),
-    pr.onDidChangeProviderHealth(safeHandler('mc:health', () => mainProvider.scheduleRefresh())),
-    ss.onDidChange(safeHandler('mc:stateStore', () => mainProvider.scheduleRefresh())),
-    ws.onDidChangeWatchedRuns(safeHandler('mc:watchedRuns', () => mainProvider.scheduleRefresh())),
-    ws.onDidChangePRWatches(safeHandler('mc:watchedPRs', () => mainProvider.scheduleRefresh())),
-    readStateStore.onDidChange(safeHandler('mc:readState', () => mainProvider.scheduleRefresh())),
+    wg.onDidChange(safeHandler('mc:workGraph', () => mainProvider.scheduleRefresh('workGraph'))),
+    pr.onDidChangeDiscoveredItems(safeHandler('mc:discovered', () => mainProvider.scheduleRefresh('discovered'))),
+    pr.onDidChangeProviderHealth(safeHandler('mc:health', () => mainProvider.scheduleRefresh('health'))),
+    ss.onDidChange(safeHandler('mc:stateStore', () => mainProvider.scheduleRefresh('state'))),
+    ws.onDidChangeWatchedRuns(safeHandler('mc:watchedRuns', () => mainProvider.scheduleRefresh('watchedRuns'))),
+    ws.onDidChangePRWatches(safeHandler('mc:watchedPRs', () => mainProvider.scheduleRefresh('watchedPRs'))),
+    readStateStore.onDidChange(safeHandler('mc:readState', () => mainProvider.scheduleRefresh('readState'))),
     pr.onDidRefreshProvider(safeHandler('mc:prune', async (providerId) => {
       if (pr.wasLastRefreshTruncated(providerId)) {
         logger.debug(`Skipping prune for provider ${providerId} because the latest refresh was truncated`);
