@@ -582,6 +582,56 @@ describe('WatcherService', () => {
       expect(logger.debug).not.toHaveBeenCalledWith(expect.stringContaining('Skipping child run with no registered watcher'));
     });
 
+    it('clears skipped unregistered child run cache when a PR watch is dismissed', async () => {
+      const prWatcher = createMockPRWatcher('test-pr', async () => ({
+        prState: 'open',
+        runs: [{
+          providerId: 'github-advanced-security',
+          runId: 'codeql-1',
+          displayName: 'CodeQL',
+          url: 'https://github.com/owner/repo/security/code-scanning',
+          repo: 'owner/repo',
+        }],
+      }));
+      prRegistry.register(prWatcher);
+
+      const identifier = createPRIdentifier();
+      await service.startPRWatch(identifier);
+      const skipCache = (service as any).skippedUnregisteredChildRuns as Set<string>;
+      expect(skipCache.size).toBe(1);
+
+      service.dismissPRWatch(identifier);
+      expect(skipCache.size).toBe(0);
+
+      (logger.debug as ReturnType<typeof vi.fn>).mockClear();
+      await service.startPRWatch(identifier);
+
+      expect(logger.debug).toHaveBeenCalledWith(expect.stringContaining('Skipping child run with no registered watcher'));
+      expect(skipCache.size).toBe(1);
+    });
+
+    it('clears skipped unregistered child run cache on dispose', async () => {
+      const prWatcher = createMockPRWatcher('test-pr', async () => ({
+        prState: 'open',
+        runs: [{
+          providerId: 'github-advanced-security',
+          runId: 'codeql-1',
+          displayName: 'CodeQL',
+          url: 'https://github.com/owner/repo/security/code-scanning',
+          repo: 'owner/repo',
+        }],
+      }));
+      prRegistry.register(prWatcher);
+
+      await service.startPRWatch(createPRIdentifier());
+      const skipCache = (service as any).skippedUnregisteredChildRuns as Set<string>;
+      expect(skipCache.size).toBe(1);
+
+      service.dispose();
+
+      expect(skipCache.size).toBe(0);
+    });
+
     it('dismisses a PR watch when its last visible child run is dismissed', async () => {
       const runWatcher = createMockWatcher('github-actions');
       registry.register(runWatcher);

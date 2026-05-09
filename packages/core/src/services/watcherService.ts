@@ -250,6 +250,7 @@ export class WatcherService implements vscode.Disposable {
         }
       }
       this.prWatches.delete(key);
+      this.forgetSkippedUnregisteredChildRuns(key);
     } else if (existing && !existing.dismissed) {
       // Already actively watching — return existing unchanged. Used by the
       // auto-watch path (which checks isPRWatched first anyway); keeps the
@@ -258,6 +259,7 @@ export class WatcherService implements vscode.Disposable {
     } else if (existing) {
       // Previously dismissed — delete and recreate fresh.
       this.prWatches.delete(key);
+      this.forgetSkippedUnregisteredChildRuns(key);
     }
 
     const prWatcher = this.prWatcherRegistry.get(identifier.providerId);
@@ -350,6 +352,7 @@ export class WatcherService implements vscode.Disposable {
           this.acknowledgedFailedRunKeys.delete(childKey);
         }
       }
+      this.forgetSkippedUnregisteredChildRuns(key);
       this.logger.info(`Dismissed PR watch: ${identifier.displayName}`);
       this._onDidChangePRWatches.fire();
       this._onDidChangeWatchedRuns.fire(this.getAllWatches());
@@ -393,6 +396,7 @@ export class WatcherService implements vscode.Disposable {
             dismissedCount++;
           }
         }
+        this.forgetSkippedUnregisteredChildRuns(key);
         dismissedCount++;
       }
     }
@@ -647,6 +651,7 @@ export class WatcherService implements vscode.Disposable {
       if (this.getActiveChildRunKeys(prKey).length > 0) continue;
 
       prWatch.dismissed = true;
+      this.forgetSkippedUnregisteredChildRuns(prKey);
       dismissedCount++;
       this.logger.info(`Dismissed childless PR watch: ${prWatch.identifier.displayName}`);
     }
@@ -1057,6 +1062,15 @@ export class WatcherService implements vscode.Disposable {
     this.logger.debug(`Skipping child run with no registered watcher: ${runIdentifier.providerId}/${runIdentifier.runId}`);
   }
 
+  private forgetSkippedUnregisteredChildRuns(prKey: string): void {
+    const prefix = `${prKey}::`;
+    for (const skipKey of this.skippedUnregisteredChildRuns) {
+      if (skipKey.startsWith(prefix)) {
+        this.skippedUnregisteredChildRuns.delete(skipKey);
+      }
+    }
+  }
+
   private isNoWatcherRegisteredError(err: unknown): boolean {
     const message = err instanceof Error ? err.message : String(err);
     return message.includes('No watcher registered for provider:');
@@ -1142,6 +1156,7 @@ export class WatcherService implements vscode.Disposable {
     this.prWatches.clear();
     this.consecutiveFailures.clear();
     this.acknowledgedFailedRunKeys.clear();
+    this.skippedUnregisteredChildRuns.clear();
     this.persistedPRWatchKeys = undefined;
   }
 }
