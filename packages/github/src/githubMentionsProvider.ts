@@ -5,7 +5,7 @@ import { BaseGitHubProvider } from './baseGithubProvider';
 import { logger } from './logger';
 import { parseRepoFromUrls } from './parseRepo';
 import { matchesRepoPatterns } from './repoPattern';
-import { getHeaders, getGitHubAuthHeaders, retryWithAuth, throwApiError, parseCanonicalRepo, fetchClosedGitHubItems, buildIssueStateBadge, isMergedGitHubPr, type GitHubIssue, type GitHubSearchResponse } from './githubApiHelpers';
+import { getHeaders, getGitHubAuthHeaders, retryWithAuth, throwApiError, parseCanonicalRepo, fetchClosedGitHubItems, buildIssueStateBadge, filterMergedGitHubPrs, type GitHubIssue, type GitHubSearchResponse } from './githubApiHelpers';
 
 const MENTIONS_ACTIVATED_KEY = 'mentionsActivatedAt';
 const COMMENT_FETCH_CONCURRENCY = 3;
@@ -73,12 +73,11 @@ export class GitHubMentionsProvider extends BaseGitHubProvider {
     const patterns = this.getConfiguredPatterns();
     const { results, failures } = await this.fetchAllMentions(accessToken, activatedAt, signal);
 
-    const itemsWithRepo = results
-      .filter(issue => !isMergedGitHubPr(issue))
-      .map((issue) => ({
-        issue,
-        repoName: parseRepoFromUrls(issue.html_url, issue.repository_url),
-      }));
+    const activeResults = await filterMergedGitHubPrs(accessToken, results, signal);
+    const itemsWithRepo = activeResults.map((issue) => ({
+      issue,
+      repoName: parseRepoFromUrls(issue.html_url, issue.repository_url),
+    }));
 
     const filtered = patterns.length > 0
       ? itemsWithRepo.filter(({ repoName }) => matchesRepoPatterns(repoName, patterns))
