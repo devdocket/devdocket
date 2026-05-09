@@ -86,6 +86,10 @@ export class RunWatchPool implements vscode.Disposable {
       parentPRKey,
     };
 
+    if (this.isDisposed()) {
+      return { watch: watchedRun, changed: false };
+    }
+
     this.watches.set(key, watchedRun);
     this.consecutiveFailures.delete(key);
     this.logger.info(`Started watching: ${identifier.displayName} (${identifier.providerId})`);
