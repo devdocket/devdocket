@@ -493,6 +493,66 @@ describe('activate()', () => {
     }
   });
 
+  it('deduplicates authored PR auto-watch starts across concurrent provider refreshes', async () => {
+    const sharedSeenPRKeys = new Set<string>();
+    const providerRegistry = {
+      getDiscoveredItems: vi.fn((providerId: string) => [{
+        externalId: `${providerId}:owner/repo#42`,
+        title: '#42: Authored PR',
+        url: 'https://github.com/owner/repo/pull/42',
+        authored: true,
+      }]),
+    } as any;
+    const identifier = {
+      providerId: 'github-prs',
+      prId: '42',
+      displayName: 'PR #42',
+      url: 'https://github.com/owner/repo/pull/42',
+      repo: 'owner/repo',
+    };
+    const prWatcher = {
+      parsePRUrl: vi.fn().mockReturnValue(identifier),
+    };
+    const prWatcherRegistry = {
+      findWatcherForUrl: vi.fn().mockReturnValue(prWatcher),
+    } as any;
+    let resolveWatch: (() => void) | undefined;
+    const watcherService = {
+      isPRWatched: vi.fn().mockResolvedValue(false),
+      startPRWatch: vi.fn().mockImplementation(() => new Promise<void>((resolve) => {
+        resolveWatch = resolve;
+      })),
+    } as any;
+    const signal = new AbortController().signal;
+
+    const firstAutoWatch = autoWatchAuthoredPRs(
+      'provider-a',
+      providerRegistry,
+      prWatcherRegistry,
+      watcherService,
+      signal,
+      { seenPRKeys: sharedSeenPRKeys },
+    );
+
+    await vi.waitFor(() => {
+      expect(watcherService.startPRWatch).toHaveBeenCalledTimes(1);
+    });
+
+    await autoWatchAuthoredPRs(
+      'provider-b',
+      providerRegistry,
+      prWatcherRegistry,
+      watcherService,
+      signal,
+      { seenPRKeys: sharedSeenPRKeys },
+    );
+
+    expect(watcherService.startPRWatch).toHaveBeenCalledTimes(1);
+    resolveWatch?.();
+    await firstAutoWatch;
+    expect(sharedSeenPRKeys.size).toBe(0);
+  });
+
   it('refuses to auto-watch authored items whose url is not http(s)', async () => {
     // Defense-in-depth: a malicious provider can claim authored:true with
     // any URL string. Reject anything that wouldn't survive isSafeUrl.

@@ -148,6 +148,7 @@ async function yieldToExtensionHost(): Promise<void> {
 
 interface AutoWatchAuthoredPROptions {
   capNotifiedProviders?: Set<string>;
+  seenPRKeys?: Set<string>;
 }
 
 export async function autoWatchAuthoredPRs(
@@ -159,90 +160,109 @@ export async function autoWatchAuthoredPRs(
   options: AutoWatchAuthoredPROptions = {},
 ): Promise<void> {
   const capNotifiedProviders = options.capNotifiedProviders ?? autoWatchCapNotifiedProviders;
+  const sharedSeenPRKeys = options.seenPRKeys;
   const items = providerRegistry.getDiscoveredItems(providerId).filter(isAutoWatchCandidate);
-  const seenPRKeys = new Set<string>();
+  const localSeenPRKeys = new Set<string>();
+  const reservedPRKeys = new Set<string>();
   const candidates: Array<{ identifier: PRIdentifier; sourceUrl: string }> = [];
+  let skippedCount = 0;
 
-  for (const item of items) {
-    if (signal.aborted) {
-      return;
-    }
-
-    try {
-      const itemUrl = item.url;
-      if (!itemUrl) {
-        continue;
-      }
-
-      // Defense-in-depth: only http(s) URLs are safe to feed into PR
-      // watcher resolution. A malicious provider can claim authored:true
-      // for arbitrary strings; reject anything that wouldn't survive
-      // isSafeUrl downstream.
-      if (!isSafeUrl(itemUrl)) {
-        continue;
-      }
-
-      const prWatcher = prWatcherRegistry.findWatcherForUrl(itemUrl);
-      if (!prWatcher) {
-        continue;
-      }
-
-      const identifier = prWatcher.parsePRUrl(itemUrl);
-      const prKey = getAutoWatchPRKey(identifier);
-      if (seenPRKeys.has(prKey)) {
-        continue;
-      }
-      seenPRKeys.add(prKey);
-
-      if (await watcherService.isPRWatched(identifier)) {
-        continue;
-      }
-
-      candidates.push({ identifier, sourceUrl: itemUrl });
-    } catch (err) {
+  try {
+    for (const item of items) {
       if (signal.aborted) {
         return;
       }
-      logger.warn(`Failed to auto-watch authored PR from provider ${providerId}`, { url: redactUrlForLog(item.url) }, err);
-    }
-  }
 
-  const candidatesToWatch = candidates.slice(0, MAX_AUTO_WATCH_PER_PROVIDER);
-  if (candidates.length > MAX_AUTO_WATCH_PER_PROVIDER) {
-    const skippedCount = candidates.length - MAX_AUTO_WATCH_PER_PROVIDER;
-    const message = `DevDocket: Auto-watching the first ${MAX_AUTO_WATCH_PER_PROVIDER} authored PRs from ${providerId}; skipping ${skippedCount} more to keep refresh responsive.`;
-    logger.warn(
-      `Auto-watch cap reached for provider ${providerId} (limit ${MAX_AUTO_WATCH_PER_PROVIDER}); skipping ${skippedCount} authored PRs to bound polling cost`,
-    );
-    if (!capNotifiedProviders.has(providerId)) {
-      capNotifiedProviders.add(providerId);
-      void vscode.window.showInformationMessage(message).then(
-        undefined,
-        () => { /* notification is best-effort */ },
+      try {
+        const itemUrl = item.url;
+        if (!itemUrl) {
+          continue;
+        }
+
+        // Defense-in-depth: only http(s) URLs are safe to feed into PR
+        // watcher resolution. A malicious provider can claim authored:true
+        // for arbitrary strings; reject anything that wouldn't survive
+        // isSafeUrl downstream.
+        if (!isSafeUrl(itemUrl)) {
+          continue;
+        }
+
+        const prWatcher = prWatcherRegistry.findWatcherForUrl(itemUrl);
+        if (!prWatcher) {
+          continue;
+        }
+
+        const identifier = prWatcher.parsePRUrl(itemUrl);
+        const prKey = getAutoWatchPRKey(identifier);
+        if (localSeenPRKeys.has(prKey) || sharedSeenPRKeys?.has(prKey)) {
+          continue;
+        }
+        localSeenPRKeys.add(prKey);
+
+        if (await watcherService.isPRWatched(identifier)) {
+          continue;
+        }
+
+        if (sharedSeenPRKeys?.has(prKey)) {
+          continue;
+        }
+
+        if (candidates.length >= MAX_AUTO_WATCH_PER_PROVIDER) {
+          skippedCount++;
+          continue;
+        }
+
+        sharedSeenPRKeys?.add(prKey);
+        reservedPRKeys.add(prKey);
+        candidates.push({ identifier, sourceUrl: itemUrl });
+      } catch (err) {
+        if (signal.aborted) {
+          return;
+        }
+        logger.warn(`Failed to auto-watch authored PR from provider ${providerId}`, { url: redactUrlForLog(item.url) }, err);
+      }
+    }
+
+    const candidatesToWatch = candidates;
+    if (skippedCount > 0) {
+      const message = `DevDocket: Auto-watching the first ${MAX_AUTO_WATCH_PER_PROVIDER} authored PRs from ${providerId}; skipping ${skippedCount} more to keep refresh responsive.`;
+      logger.warn(
+        `Auto-watch cap reached for provider ${providerId} (limit ${MAX_AUTO_WATCH_PER_PROVIDER}); skipping ${skippedCount} authored PRs to bound polling cost`,
       );
+      if (!capNotifiedProviders.has(providerId)) {
+        capNotifiedProviders.add(providerId);
+        void vscode.window.showInformationMessage(message).then(
+          undefined,
+          () => { /* notification is best-effort */ },
+        );
+      }
     }
-  }
 
-  let completedCount = 0;
-  await runWorkerPool(candidatesToWatch, async ({ identifier, sourceUrl }) => {
-    if (signal.aborted) {
-      return;
-    }
-
-    try {
-      await watcherService.startPRWatch(identifier, { deferChildRunStatus: true });
-    } catch (err) {
+    let completedCount = 0;
+    await runWorkerPool(candidatesToWatch, async ({ identifier, sourceUrl }) => {
       if (signal.aborted) {
         return;
       }
-      logger.warn(`Failed to auto-watch authored PR from provider ${providerId}`, { url: redactUrlForLog(sourceUrl) }, err);
-    } finally {
-      completedCount++;
-      if (completedCount % AUTO_WATCH_YIELD_EVERY === 0) {
-        await yieldToExtensionHost();
+
+      try {
+        await watcherService.startPRWatch(identifier, { deferChildRunStatus: true });
+      } catch (err) {
+        if (signal.aborted) {
+          return;
+        }
+        logger.warn(`Failed to auto-watch authored PR from provider ${providerId}`, { url: redactUrlForLog(sourceUrl) }, err);
+      } finally {
+        completedCount++;
+        if (completedCount % AUTO_WATCH_YIELD_EVERY === 0) {
+          await yieldToExtensionHost();
+        }
       }
+    }, AUTO_WATCH_CONCURRENCY);
+  } finally {
+    for (const prKey of reservedPRKeys) {
+      sharedSeenPRKeys?.delete(prKey);
     }
-  }, AUTO_WATCH_CONCURRENCY);
+  }
 }
 
 function wireEvents(
@@ -333,6 +353,7 @@ function wireEvents(
   }));
 
   const autoWatchControllers = new Map<string, AbortController>();
+  const autoWatchSeenPRKeys = new Set<string>();
   const autoCompleteControllers = new Map<string, AbortController>();
   const autoCompleteSub = providerRegistry.onDidRefreshProvider(safeHandler('Error handling provider refresh', async (providerId) => {
     try {
@@ -359,7 +380,7 @@ function wireEvents(
       autoWatchControllers.set(providerId, autoWatchController);
       refreshTasks.push((async () => {
         try {
-          await autoWatchAuthoredPRs(providerId, providerRegistry, prWatcherRegistry, watcherService, autoWatchController.signal);
+          await autoWatchAuthoredPRs(providerId, providerRegistry, prWatcherRegistry, watcherService, autoWatchController.signal, { seenPRKeys: autoWatchSeenPRKeys });
         } finally {
           if (autoWatchControllers.get(providerId) === autoWatchController) {
             autoWatchControllers.delete(providerId);
