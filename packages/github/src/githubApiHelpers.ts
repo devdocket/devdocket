@@ -62,16 +62,22 @@ export async function filterMergedGitHubPrs(
         if (signal?.aborted) {
           throw createAbortError();
         }
-        const response = await fetch(item.pull_request!.url, {
-          headers: getGitHubAuthHeaders(token),
-          signal: combineSignals(signal, 30_000),
-        });
-        if (!response.ok) {
-          logger.debug(`Failed to fetch PR merge details for ${item.html_url}: ${response.status}`);
+        try {
+          const response = await fetch(item.pull_request!.url, {
+            headers: getGitHubAuthHeaders(token),
+            signal: combineSignals(signal, 30_000),
+          });
+          if (!response.ok) {
+            logger.debug(`Failed to fetch PR merge details for ${item.html_url}: ${response.status}`);
+            return { htmlUrl: item.html_url, merged: false };
+          }
+          const detail = await response.json() as GitHubPrMergeFields;
+          return { htmlUrl: item.html_url, merged: isMergedGitHubPr(detail) };
+        } catch (error) {
+          if (error instanceof Error && error.name === 'AbortError' && signal?.aborted) { throw error; }
+          logger.debug(`Failed to fetch PR merge details for ${item.html_url}: ${String(error)}`);
           return { htmlUrl: item.html_url, merged: false };
         }
-        const detail = await response.json() as GitHubPrMergeFields;
-        return { htmlUrl: item.html_url, merged: isMergedGitHubPr(detail) };
       },
       3,
     );
