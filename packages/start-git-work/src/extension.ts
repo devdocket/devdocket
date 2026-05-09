@@ -49,5 +49,5 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 }
 
 export function deactivate(): void {
-  logger.info('DevDocket Start Git Work deactivated');
+  // Resources disposed via subscriptions
 }
