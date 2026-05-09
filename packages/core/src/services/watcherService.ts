@@ -147,7 +147,7 @@ export class WatcherService implements vscode.Disposable {
     options?: { suppressEvents?: boolean; suppressPersist?: boolean },
   ): Promise<WatchedRun> {
     const result = await this.runPool.startWatch(identifier, parentPRKey);
-    if (!result.changed) {
+    if (!result.changed || this.disposed) {
       return result.watch;
     }
 
@@ -181,7 +181,7 @@ export class WatcherService implements vscode.Disposable {
     options?: { forceRecreate?: boolean },
   ): Promise<WatchedPR> {
     const result = await this.prPool.startPRWatch(identifier, options);
-    if (!result.changed) {
+    if (!result.changed || this.disposed) {
       return result.watch;
     }
 
@@ -382,6 +382,9 @@ export class WatcherService implements vscode.Disposable {
    * Start or restart the polling timer.
    */
   private ensurePollingActive(): void {
+    if (this.disposed) {
+      return;
+    }
     if (this.pollTimer) {
       return; // Already active
     }
