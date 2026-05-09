@@ -22,10 +22,8 @@ export function resolveItemIds(item?: { id?: string }, selectedItems?: { id?: st
   return [];
 }
 
-/** Builds a work-item title, optionally prefixed with the provider group. */
 export function formatItemTitle(item: { group?: string; title: string }): string {
-  const trimmedGroup = item.group?.trim();
-  return trimmedGroup ? `${trimmedGroup} ${item.title}` : item.title;
+  return item.title;
 }
 
 /** Log the error and show a user-facing message. */
