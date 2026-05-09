@@ -98,6 +98,10 @@ export class PRWatchPool implements vscode.Disposable {
       dismissed: false,
     };
 
+    if (this.isDisposed()) {
+      return { watch: watchedPR, changed: false };
+    }
+
     this.prWatches.set(key, watchedPR);
     this.rememberPRWatchKey(key);
     this.consecutiveFailures.delete(key);
@@ -106,6 +110,18 @@ export class PRWatchPool implements vscode.Disposable {
     for (const runId of snapshot.runs) {
       const resolved = this.runControl.resolveRunIdentifier(runId);
       await this.addChildRun(key, watchedPR, resolved);
+      if (this.isDisposed()) {
+        for (const childKey of watchedPR.childRunKeys) {
+          this.runControl.deleteOwnedWatch(childKey, key);
+        }
+        if (this.prWatches.get(key) === watchedPR) {
+          this.prWatches.delete(key);
+        }
+        return { watch: watchedPR, changed: false };
+      }
+      if (this.prWatches.get(key) !== watchedPR || watchedPR.dismissed) {
+        return { watch: watchedPR, changed: false };
+      }
     }
 
     if (snapshot.prState === 'open') {
