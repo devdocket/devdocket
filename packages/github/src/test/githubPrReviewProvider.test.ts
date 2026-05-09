@@ -161,7 +161,7 @@ describe('GitHubPrReviewProvider', () => {
   });
 
   it('excludes merged PRs by fetching details for closed search results before publishing', async () => {
-    const openPr = { ...createMockPr(42, 'Add feature', 'org/myrepo'), state: 'open' };
+    const openPr = { ...createMockPrWithApi(42, 'Add feature', 'org/myrepo'), state: 'open' };
     const mergedPr = {
       ...createMockPrWithApi(43, 'Already merged', 'org/myrepo'),
       state: 'closed',
