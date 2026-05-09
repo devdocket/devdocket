@@ -154,23 +154,30 @@ describe('GitHubMentionsProvider', () => {
     }));
   });
 
-  it('excludes merged PRs from mentioned search results before publishing', async () => {
+  it('excludes merged PRs by fetching details for closed mentioned search results before publishing', async () => {
     const mergedPr = {
       ...createMockPr(20, 'Already merged', 'org/repo'),
       state: 'closed',
-      pull_request: { url: 'https://api.github.com/repos/org/repo/pulls/20', merged_at: '2025-01-01T00:00:00Z' },
     };
     const closedIssue = { ...createMockIssue(30, 'Closed issue', 'org/repo'), state: 'closed' };
 
-    mockFetch.mockResolvedValueOnce({
-      ok: true,
-      json: async () => ({
-        items: [
-          createMockPr(10, 'Open PR', 'org/repo'),
-          mergedPr,
-          closedIssue,
-        ],
-      }),
+    mockFetch.mockImplementation(async (url: string) => {
+      if (url.includes('search/issues')) {
+        return {
+          ok: true,
+          json: async () => ({
+            items: [
+              createMockPr(10, 'Open PR', 'org/repo'),
+              mergedPr,
+              closedIssue,
+            ],
+          }),
+        };
+      }
+      if (url.endsWith('/pulls/20')) {
+        return { ok: true, json: async () => ({ state: 'closed', merged: true, merged_at: '2025-01-01T00:00:00Z' }) };
+      }
+      return { ok: false, status: 404, statusText: 'Not Found' };
     });
 
     const listener = vi.fn();
