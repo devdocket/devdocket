@@ -3,7 +3,7 @@ import { DiscoveredItem, combineSignals, createAbortError, runWorkerPool, safeDe
 import { BaseGitHubProvider } from './baseGithubProvider';
 import { logger } from './logger';
 import { parseRepoFromUrls } from './parseRepo';
-import { getHeaders, getGitHubAuthHeaders, retryWithAuth, throwApiError, parseCanonicalRepo, fetchClosedGitHubItems, buildIssueStateBadge, isMergedGitHubPr, type GitHubIssue, type GitHubSearchResponse } from './githubApiHelpers';
+import { getHeaders, getGitHubAuthHeaders, retryWithAuth, throwApiError, parseCanonicalRepo, fetchClosedGitHubItems, buildIssueStateBadge, filterMergedGitHubPrs, type GitHubIssue, type GitHubSearchResponse } from './githubApiHelpers';
 import { matchesRepoPatterns } from './repoPattern';
 
 interface TimelineEvent {
@@ -30,7 +30,7 @@ export class GitHubPrReviewProvider extends BaseGitHubProvider {
     const patterns = this.getConfiguredPatterns();
 
     const { prs, failed } = await this.fetchAllPrReviews(accessToken, signal);
-    const activePrs = prs.filter(pr => !isMergedGitHubPr(pr));
+    const activePrs = await filterMergedGitHubPrs(accessToken, prs, signal);
 
     // Parse repo name once per PR
     const repoNameMap = new Map(activePrs.map(pr =>

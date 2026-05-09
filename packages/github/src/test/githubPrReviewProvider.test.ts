@@ -160,22 +160,31 @@ describe('GitHubPrReviewProvider', () => {
     );
   });
 
-  it('excludes merged PRs from search results before publishing', async () => {
+  it('excludes merged PRs by fetching details for closed search results before publishing', async () => {
     const openPr = { ...createMockPr(42, 'Add feature', 'org/myrepo'), state: 'open' };
     const mergedPr = {
       ...createMockPrWithApi(43, 'Already merged', 'org/myrepo'),
       state: 'closed',
-      pull_request: { url: 'https://api.github.com/repos/org/myrepo/pulls/43', merged_at: '2025-01-01T00:00:00Z' },
     };
     const closedUnmergedPr = {
       ...createMockPrWithApi(44, 'Closed without merge', 'org/myrepo'),
       state: 'closed',
-      merged: false,
     };
 
-    mockFetch.mockResolvedValueOnce({
-      ok: true,
-      json: async () => ({ items: [openPr, mergedPr, closedUnmergedPr] }),
+    mockFetch.mockImplementation(async (url: string) => {
+      if (url.includes('search/issues')) {
+        return {
+          ok: true,
+          json: async () => ({ items: [openPr, mergedPr, closedUnmergedPr] }),
+        };
+      }
+      if (url.endsWith('/pulls/43')) {
+        return { ok: true, json: async () => ({ state: 'closed', merged: true, merged_at: '2025-01-01T00:00:00Z' }) };
+      }
+      if (url.endsWith('/pulls/44')) {
+        return { ok: true, json: async () => ({ state: 'closed', merged: false, merged_at: null }) };
+      }
+      return { ok: false, status: 404, statusText: 'Not Found' };
     });
 
     const listener = vi.fn();
