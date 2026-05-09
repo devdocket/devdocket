@@ -15,13 +15,19 @@ export class WatchPanelProvider implements vscode.Disposable {
 
   private panel?: vscode.WebviewPanel;
   private panelDisposables: vscode.Disposable[] = [];
+  private readonly refreshDisposables: vscode.Disposable[];
 
   constructor(
     private readonly extensionUri: vscode.Uri,
     private readonly watcherService: WatcherService,
     private readonly workGraph: WorkGraph,
     private readonly providerRegistry: ProviderRegistry,
-  ) {}
+  ) {
+    this.refreshDisposables = [
+      this.workGraph.onDidChange(() => this.refresh()),
+      this.providerRegistry.onDidChangeDiscoveredItems(() => this.refresh()),
+    ];
+  }
 
   open(): void {
     if (this.panel) {
@@ -100,6 +106,9 @@ export class WatchPanelProvider implements vscode.Disposable {
       this.panel.dispose();
     }
     this.clearPanel();
+    for (const disposable of this.refreshDisposables.splice(0)) {
+      disposable.dispose();
+    }
   }
 
   private clearPanel(): void {

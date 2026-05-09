@@ -38,15 +38,21 @@ function createMockWebviewPanel() {
 }
 
 function createMockWorkGraph(items: any[] = []) {
+  const changeEmitter = new vscode.EventEmitter<void>();
   return {
     getAll: vi.fn(() => items),
     getItem: vi.fn((id: string) => items.find(item => item.id === id)),
+    onDidChange: changeEmitter.event,
+    fireDidChange: () => changeEmitter.fire(),
   };
 }
 
 function createMockProviderRegistry(discoveredItems = new Map<string, any[]>()) {
+  const discoveredItemsEmitter = new vscode.EventEmitter<void>();
   return {
     getAllDiscoveredItems: vi.fn(() => discoveredItems),
+    onDidChangeDiscoveredItems: discoveredItemsEmitter.event,
+    fireDidChangeDiscoveredItems: () => discoveredItemsEmitter.fire(),
   };
 }
 
@@ -287,6 +293,39 @@ describe('WatchPanelProvider', () => {
     expect(prWatch).not.toHaveProperty('linkedItemId');
     expect(prWatch).not.toHaveProperty('linkedSourceProviderId');
     expect(prWatch).not.toHaveProperty('linkedSourceExternalId');
+  });
+
+  it('refreshes linked PR targets when work items or discovered items change', () => {
+    const mockPanel = createMockWebviewPanel();
+    vi.mocked(window.createWebviewPanel).mockReturnValue(mockPanel.panel as any);
+    const watcherService = createWatcherService([createPRWatch()]);
+    const workItems: any[] = [];
+    const discoveredItems = new Map<string, any[]>();
+    const workGraph = createMockWorkGraph(workItems);
+    const providerRegistry = createMockProviderRegistry(discoveredItems);
+
+    const provider = new WatchPanelProvider(
+      vscode.Uri.file('C:\\repo') as any,
+      watcherService as any,
+      workGraph as any,
+      providerRegistry as any,
+    );
+    provider.open();
+
+    expect(getUpdateWatchPanelMessage(mockPanel).prWatches[0]).not.toHaveProperty('linkedItemId');
+
+    discoveredItems.set('github-pr-reviews', [{ externalId: 'owner/repo#42', title: 'Review PR', itemType: 'pr' }]);
+    providerRegistry.fireDidChangeDiscoveredItems();
+    expect(getUpdateWatchPanelMessage(mockPanel).prWatches[0]).toEqual(expect.objectContaining({
+      linkedSourceProviderId: 'github-pr-reviews',
+      linkedSourceExternalId: 'owner/repo#42',
+    }));
+
+    workItems.push({ id: 'work-42', providerId: 'github-my-prs', externalId: 'owner/repo#42', itemType: 'pr' });
+    workGraph.fireDidChange();
+    expect(getUpdateWatchPanelMessage(mockPanel).prWatches[0]).toEqual(expect.objectContaining({
+      linkedItemId: 'work-42',
+    }));
   });
 
   it('resolves PR links across PR-emitting provider IDs instead of the watcher provider ID', () => {
