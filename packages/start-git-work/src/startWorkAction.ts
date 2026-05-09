@@ -75,14 +75,44 @@ function detectGitHost(url: unknown): GitHost | undefined {
   return undefined;
 }
 
-/** Treats missing itemType as issue-shaped for compatibility with older/generic items. */
-function getWorkItemKind(item: Readonly<WorkItem>): WorkItemKind | undefined {
+function inferWorkItemKindFromUrl(url: unknown, host: GitHost): WorkItemKind | undefined {
+  if (typeof url !== 'string' || url.length === 0) {
+    return undefined;
+  }
+
+  try {
+    const parsed = new URL(url);
+    const segments = parsed.pathname.toLowerCase().split('/').filter(Boolean);
+    if (host === 'github') {
+      if (segments[2] === 'pull') {
+        return 'pr';
+      }
+      if (segments[2] === 'issues') {
+        return 'issue';
+      }
+    }
+
+    if (segments.includes('pullrequest')) {
+      return 'pr';
+    }
+    if (segments.includes('_workitems') && segments.includes('edit')) {
+      return 'issue';
+    }
+  } catch {
+    return undefined;
+  }
+
+  return undefined;
+}
+
+/** Infers missing itemType from known URL shapes before falling back to issue-shaped compatibility. */
+function getWorkItemKind(item: Readonly<WorkItem>, host: GitHost): WorkItemKind | undefined {
   const itemType: unknown = item.itemType;
   if (itemType === 'pr' || itemType === 'issue') {
     return itemType;
   }
   if (itemType === undefined) {
-    return 'issue';
+    return inferWorkItemKindFromUrl(item.url, host) ?? 'issue';
   }
   return undefined;
 }
@@ -200,8 +230,12 @@ export class StartWorkAction implements DevDocketAction {
 
   private getRouting(item: Readonly<WorkItem>): Routing | undefined {
     const host = detectGitHost(item.url);
-    const kind = getWorkItemKind(item);
-    if (!host || !kind) {
+    if (!host) {
+      return undefined;
+    }
+
+    const kind = getWorkItemKind(item, host);
+    if (!kind) {
       return undefined;
     }
     return { host, kind };
