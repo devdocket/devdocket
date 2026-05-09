@@ -11,11 +11,7 @@ type WatcherLogger = {
 };
 
 export interface RunWatchControl {
-  startWatch(
-    identifier: RunIdentifier,
-    parentPRKey?: string,
-    options?: { suppressEvents?: boolean; suppressPersist?: boolean },
-  ): Promise<WatchStartResult>;
+  startWatch(identifier: RunIdentifier, parentPRKey?: string): Promise<WatchStartResult>;
   getWatchKey(identifier: RunIdentifier): string;
   getWatch(runKey: string): WatchedRun | undefined;
   getAllWatches(): WatchedRun[];
@@ -313,7 +309,7 @@ export class PRWatchPool implements vscode.Disposable {
         return false;
       }
 
-      await this.runControl.startWatch(runIdentifier, prKey, options);
+      await this.runControl.startWatch(runIdentifier, prKey);
       if (!prWatch.childRunKeys.includes(runKey)) {
         prWatch.childRunKeys.push(runKey);
         return true;

@@ -146,7 +146,7 @@ export class WatcherService implements vscode.Disposable {
     parentPRKey?: string,
     options?: { suppressEvents?: boolean; suppressPersist?: boolean },
   ): Promise<WatchedRun> {
-    const result = await this.runPool.startWatch(identifier, parentPRKey, options);
+    const result = await this.runPool.startWatch(identifier, parentPRKey);
     if (!result.changed) {
       return result.watch;
     }

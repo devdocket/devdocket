@@ -54,11 +54,7 @@ export class RunWatchPool implements vscode.Disposable {
     return restored.length;
   }
 
-  async startWatch(
-    identifier: RunIdentifier,
-    parentPRKey?: string,
-    _options?: { suppressEvents?: boolean; suppressPersist?: boolean },
-  ): Promise<WatchStartResult> {
+  async startWatch(identifier: RunIdentifier, parentPRKey?: string): Promise<WatchStartResult> {
     const key = this.getWatchKey(identifier);
     const existing = this.watches.get(key);
     if (existing && !existing.dismissed) {
