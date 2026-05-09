@@ -243,9 +243,49 @@ describe('StartWorkAction', () => {
       expect(action.canRun(item)).toBe(true);
     });
 
+    it('infers PR behavior from GitHub pull URLs when itemType is missing', () => {
+      const item = createWorkItem({
+        providerId: 'third-party-prs',
+        itemType: undefined,
+        externalId: 'owner/repo#321',
+        url: 'https://github.com/owner/repo/pull/321',
+      });
+      expect(action.canRun(item)).toBe(true);
+    });
+
+    it('infers PR behavior from ADO pull request URLs when itemType is missing', () => {
+      const item = createWorkItem({
+        providerId: 'third-party-prs',
+        itemType: undefined,
+        externalId: 'org/project/repo/101',
+        url: 'https://dev.azure.com/org/project/_git/repo/pullrequest/101',
+      });
+      expect(action.canRun(item)).toBe(true);
+    });
+
     it('falls back to issue behavior when itemType is missing and URL is supported', () => {
       const item = createWorkItem({ itemType: undefined });
       expect(action.canRun(item)).toBe(true);
+    });
+
+    it('returns false when a GitHub URL has an ADO PR externalId format', () => {
+      const item = createWorkItem({
+        providerId: 'third-party-prs',
+        itemType: 'pr',
+        externalId: 'org/project/repo/101',
+        url: 'https://github.com/owner/repo/pull/101',
+      });
+      expect(action.canRun(item)).toBe(false);
+    });
+
+    it('returns false when an ADO PR URL has a GitHub externalId format', () => {
+      const item = createWorkItem({
+        providerId: 'third-party-prs',
+        itemType: 'pr',
+        externalId: 'owner/repo#101',
+        url: 'https://dev.azure.com/org/project/_git/repo/pullrequest/101',
+      });
+      expect(action.canRun(item)).toBe(false);
     });
 
     it('returns false for items without a URL', () => {
