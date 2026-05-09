@@ -421,7 +421,6 @@ export async function activate(context: vscode.ExtensionContext): Promise<DevDoc
     vscode.window.registerWebviewViewProvider(
       MainViewProvider.viewId,
       mainProvider,
-      { webviewOptions: { retainContextWhenHidden: true } },
     ),
     wg.onDidChange(safeHandler('mc:workGraph', () => mainProvider.scheduleRefresh())),
     pr.onDidChangeDiscoveredItems(safeHandler('mc:discovered', () => mainProvider.scheduleRefresh())),

@@ -95,11 +95,15 @@ describe('activate()', () => {
   // ------------------------------------------------------------------
   it('registers the DevDocket webview provider', async () => {
     await activate(context);
+
     expect(vscode.window.registerWebviewViewProvider).toHaveBeenCalledWith(
       'devdocket.main',
       expect.any(MainViewProvider),
-      expect.objectContaining({ webviewOptions: { retainContextWhenHidden: true } }),
     );
+    const call = (vscode.window.registerWebviewViewProvider as ReturnType<typeof vi.fn>).mock.calls.find(
+      ([viewId]) => viewId === 'devdocket.main',
+    );
+    expect(call?.[2]).toBeUndefined();
   });
 
   // ------------------------------------------------------------------
