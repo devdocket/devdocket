@@ -5,6 +5,7 @@ import { ActionRegistry } from '../services/actionRegistry';
 import { ProviderRegistry } from '../services/providerRegistry';
 import { buildRelatedItemsIndex, resolveRelatedItemsFor, type RelatedItemsIndex } from '../services/relatedItems';
 import { VALID_TRANSITIONS, WorkGraph } from '../services/workGraph';
+import type { WatcherService, WatchedPR, WatchedRun } from '../services/watcherService';
 import type { DiscoveredStateStore } from '../storage/discoveredStateStore';
 import { isSafeUrl } from '../utils/url';
 import { buildProviderBadge, buildProviderBadges, buildTypeBadge } from './badges';
@@ -49,6 +50,7 @@ export class WorkItemEditorPanel {
   private static panelManager = new PanelManager();
   private static actionRegistry?: ActionRegistry;
   private static stateStore?: DiscoveredStateStore;
+  private static watcherService?: WatcherService;
 
   private readonly panel: vscode.WebviewPanel;
   private readonly workGraph: WorkGraph;
@@ -66,6 +68,7 @@ export class WorkItemEditorPanel {
   private readonly providerRegSub: vscode.Disposable;
   private readonly providerChangeSub: vscode.Disposable;
   private readonly actionRegistrySub?: vscode.Disposable;
+  private readonly watcherSubscriptions: vscode.Disposable[] = [];
   private lastDisplayedTitle: string | undefined;
   private lastDisplayedUrl: string | undefined;
   private lastDisplayedDescription: string | undefined;
@@ -82,9 +85,10 @@ export class WorkItemEditorPanel {
     WorkItemEditorPanel.panelManager = manager;
   }
 
-  static setDependencies(actionRegistry?: ActionRegistry, stateStore?: DiscoveredStateStore): void {
+  static setDependencies(actionRegistry?: ActionRegistry, stateStore?: DiscoveredStateStore, watcherService?: WatcherService): void {
     WorkItemEditorPanel.actionRegistry = actionRegistry;
     WorkItemEditorPanel.stateStore = stateStore;
+    WorkItemEditorPanel.watcherService = watcherService;
   }
 
   static open(
@@ -158,6 +162,14 @@ export class WorkItemEditorPanel {
       this.update();
     });
 
+    const watcherService = WorkItemEditorPanel.watcherService;
+    if (watcherService) {
+      this.watcherSubscriptions.push(
+        watcherService.onDidChangePRWatches(() => this.refreshForPRWatchChange()),
+        watcherService.onDidChangeWatchedRuns(() => this.refreshForWatchedRunsChange()),
+      );
+    }
+
     this.messageSubscription = this.panel.webview.onDidReceiveMessage((msg) => {
       if (msg?.type === 'openItem' && typeof msg.itemId === 'string') {
         void this.handleOpenItem(msg.itemId, msg.providerId, msg.externalId);
@@ -180,6 +192,10 @@ export class WorkItemEditorPanel {
       }
       if (msg?.type === 'runAction' && typeof msg.itemId === 'string') {
         void vscode.commands.executeCommand('devdocket.runAction', { id: msg.itemId });
+        return;
+      }
+      if (msg?.type === 'openWatches') {
+        void vscode.commands.executeCommand('devdocket.showWatchesQuickPick');
         return;
       }
       if (msg?.type === 'acceptItem' && typeof msg.providerId === 'string' && typeof msg.externalId === 'string') {
@@ -221,12 +237,28 @@ export class WorkItemEditorPanel {
         this.providerRegSub.dispose();
         this.providerChangeSub.dispose();
         this.actionRegistrySub?.dispose();
+        this.disposeWatcherSubscriptions();
       }
     });
   }
 
   private isProviderManaged(item: WorkItem): boolean {
     return !!(item.providerId && this.providerRegistry.getProvider(item.providerId));
+  }
+
+  private refreshForPRWatchChange(): void {
+    if (this.disposed) { return; }
+    const item = this.workGraph.getItem(this.itemId);
+    if (isPRWorkItem(item)) {
+      this.update();
+    }
+  }
+
+  private refreshForWatchedRunsChange(): void {
+    if (this.disposed) { return; }
+    if (this.findWatchForCurrentItem()) {
+      this.update();
+    }
   }
 
   /**
@@ -355,6 +387,7 @@ export class WorkItemEditorPanel {
       hasActions: WorkItemEditorPanel.actionRegistry?.hasActionsFor(item) ?? false,
       activityLog: item.activityLog ?? [],
       relatedItems: resolveRelatedItemsFor(item, this.providerRegistry, this.workGraph, relatedItemsIndex),
+      ciWatch: this.buildCIWatchData(item),
       isIncoming: false,
       providerId: item.providerId,
       externalId: item.externalId,
@@ -386,6 +419,52 @@ export class WorkItemEditorPanel {
       .find(discovered => discovered.externalId === item.externalId);
   }
 
+  private buildCIWatchData(item: WorkItem): EditorItemData['ciWatch'] {
+    if (!isPRWorkItem(item)) {
+      return undefined;
+    }
+
+    const watch = this.findWatchForItem(item);
+    if (!watch) {
+      return undefined;
+    }
+
+    const runs = this.getWatchChildRuns(watch);
+    return {
+      state: watch.prState,
+      runs: runs.map(run => ({
+        name: run.identifier.displayName,
+        state: toEditorRunState(run.status.overallState),
+        ...(run.status.conclusion ? { conclusion: run.status.conclusion } : {}),
+        ...(run.hasWarning ? { hasWarning: true } : {}),
+      })),
+      totalActive: runs.filter(run => run.status.overallState !== 'completed' && !run.dismissed).length,
+      totalFailing: runs.filter(isFailingOrWarningRun).length,
+    };
+  }
+
+  private findWatchForCurrentItem(): WatchedPR | undefined {
+    const item = this.workGraph.getItem(this.itemId);
+    return item ? this.findWatchForItem(item) : undefined;
+  }
+
+  private findWatchForItem(item: WorkItem): WatchedPR | undefined {
+    const watcherService = WorkItemEditorPanel.watcherService;
+    const external = item.externalId ? parsePRExternalId(item.externalId) : undefined;
+    if (!watcherService || !external) {
+      return undefined;
+    }
+    return watcherService.findPRWatchByExternalId(external.repo, external.prId);
+  }
+
+  private getWatchChildRuns(watch: WatchedPR): WatchedRun[] {
+    const watcherService = WorkItemEditorPanel.watcherService;
+    if (!watcherService) {
+      return [];
+    }
+    return watcherService.getChildRuns(watcherService.getPRWatchKey(watch.identifier));
+  }
+
   private getHtml(item: EditorItemData): string {
     const scriptUri = this.panel.webview.asWebviewUri(
       vscode.Uri.joinPath(this.extensionUri, 'webview-dist', 'editor.js'),
@@ -412,7 +491,14 @@ export class WorkItemEditorPanel {
       this.providerRegSub.dispose();
       this.providerChangeSub.dispose();
       this.actionRegistrySub?.dispose();
+      this.disposeWatcherSubscriptions();
       this.panel.dispose();
+    }
+  }
+
+  private disposeWatcherSubscriptions(): void {
+    while (this.watcherSubscriptions.length > 0) {
+      this.watcherSubscriptions.pop()?.dispose();
     }
   }
 
@@ -493,10 +579,38 @@ export class WorkItemEditorPanel {
   }
 }
 
+function isPRWorkItem(item: WorkItem | undefined): item is WorkItem & { itemType: 'pr' } {
+  return item?.itemType === 'pr';
+}
+
+function parsePRExternalId(externalId: string): { repo: string; prId: string } | undefined {
+  const separatorIndex = externalId.lastIndexOf('#');
+  if (separatorIndex <= 0 || separatorIndex === externalId.length - 1) {
+    return undefined;
+  }
+  return {
+    repo: externalId.slice(0, separatorIndex),
+    prId: externalId.slice(separatorIndex + 1),
+  };
+}
+
+function toEditorRunState(state: WatchedRun['status']['overallState']): NonNullable<EditorItemData['ciWatch']>['runs'][number]['state'] {
+  return state === 'running' ? 'in_progress' : state;
+}
+
+function isFailingOrWarningRun(run: WatchedRun): boolean {
+  if (run.hasWarning) return true;
+  if (run.status.overallState !== 'completed') return false;
+  const conclusion = run.status.conclusion;
+  if (conclusion === undefined || conclusion === 'success') return false;
+  return conclusion !== 'cancelled' && conclusion !== 'skipped' && conclusion !== 'neutral';
+}
+
 /**
  * Compose the badge list shown in the editor: provider, type, then the
  * provider-supplied badges declared on the {@link DiscoveredItem}. CI badges
- * are not added here — the editor doesn't currently surface CI status inline.
+ * are not added here — the editor surfaces active watch details in its
+ * dedicated CI Watch section instead.
  */
 export function composeEditorBadges(
   providerId?: string,
