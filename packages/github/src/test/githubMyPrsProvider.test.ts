@@ -88,17 +88,15 @@ describe('GitHubMyPrsProvider', () => {
     expect(mockFetch).not.toHaveBeenCalled();
   });
 
-  it('excludes merged PRs from authored and assigned search results', async () => {
+  it('excludes merged PRs by fetching details for closed authored and assigned search results', async () => {
     const openPr = createMockPr(1, 'Open PR');
     const mergedAuthoredPr = {
       ...createMockPr(2, 'Merged authored PR'),
       state: 'closed',
-      pull_request: { url: 'https://api.github.com/repos/owner/repo/pulls/2', merged_at: '2025-01-01T00:00:00Z' },
     };
     const mergedAssignedPr = {
       ...createMockPr(3, 'Merged assigned PR', 'other/repo'),
       state: 'closed',
-      pull_request: { url: 'https://api.github.com/repos/other/repo/pulls/3', merged_at: '2025-01-02T00:00:00Z' },
     };
 
     mockFetch.mockImplementation(async (url: string) => {
@@ -113,6 +111,12 @@ describe('GitHubMyPrsProvider', () => {
       }
       if (url.endsWith('/pulls/1/reviews')) {
         return mockReviewsResponse([]);
+      }
+      if (url.endsWith('/pulls/2')) {
+        return mockPrDetailResponse({ state: 'closed', merged: true, merged_at: '2025-01-01T00:00:00Z' });
+      }
+      if (url.endsWith('/pulls/3')) {
+        return mockPrDetailResponse({ state: 'closed', merged: true, merged_at: '2025-01-02T00:00:00Z' });
       }
       return mockFailedResponse(404);
     });

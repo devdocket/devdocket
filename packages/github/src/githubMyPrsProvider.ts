@@ -2,7 +2,7 @@ import { DiscoveredItem, ProviderBadge, combineSignals, createAbortError, runWor
 import { BaseGitHubProvider } from './baseGithubProvider';
 import { logger } from './logger';
 import { parseRepoFromUrls } from './parseRepo';
-import { getGitHubAuthHeaders, isMergedGitHubPr, type GitHubIssue, type GitHubSearchResponse } from './githubApiHelpers';
+import { getGitHubAuthHeaders, filterMergedGitHubPrs, type GitHubIssue, type GitHubPrMergeFields, type GitHubSearchResponse } from './githubApiHelpers';
 import { matchesRepoPatterns } from './repoPattern';
 
 /** Map a PR status string from {@link GitHubMyPrsProvider.determinePrStatus} to its UI badge. */
@@ -18,7 +18,7 @@ function statusToBadge(status: string): ProviderBadge | undefined {
   }
 }
 
-export interface PrDetail {
+export interface PrDetail extends GitHubPrMergeFields {
   draft?: boolean;
   head?: { sha?: string };
   mergeable_state?: string;
@@ -79,8 +79,10 @@ export class GitHubMyPrsProvider extends BaseGitHubProvider {
       logger.error('Failed to fetch assigned PRs', err);
     }
 
-    const authoredPrs = authoredResult.prs.filter(pr => !isMergedGitHubPr(pr));
-    const assignedPrs = assignedResult.prs.filter(pr => !isMergedGitHubPr(pr));
+    const [authoredPrs, assignedPrs] = await Promise.all([
+      filterMergedGitHubPrs(accessToken, authoredResult.prs, signal),
+      filterMergedGitHubPrs(accessToken, assignedResult.prs, signal),
+    ]);
 
     // Filter out self-authored PRs from assigned results to avoid duplicates
     const authoredUrls = new Set(authoredPrs.map(pr => pr.html_url));
