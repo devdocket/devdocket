@@ -1,5 +1,5 @@
 import * as vscode from 'vscode';
-import type { DiscoveredItem } from '../api/types';
+import type { ProviderItem } from '../api/types';
 import { logger } from '../services/logger';
 import { ProviderRegistry } from '../services/providerRegistry';
 import { buildRelatedItemsIndex, resolveRelatedItemsFor, type RelatedItemsIndex } from '../services/relatedItems';
@@ -255,13 +255,13 @@ export class IncomingPreviewPanel {
     void this.panel.webview.postMessage({ type: 'updateEditorItem', item: editorItem });
   }
 
-  private findDiscoveredItem(): DiscoveredItem | undefined {
+  private findDiscoveredItem(): ProviderItem | undefined {
     return this.providerRegistry
       .getDiscoveredItems(this.providerId)
       .find(item => item.externalId === this.externalId);
   }
 
-  private buildEditorItemData(discoveredItem: DiscoveredItem, relatedItemsIndex: RelatedItemsIndex): EditorItemData {
+  private buildEditorItemData(discoveredItem: ProviderItem, relatedItemsIndex: RelatedItemsIndex): EditorItemData {
     const providerLabel = this.providerRegistry.getProviderLabel(this.providerId);
     return {
       id: getDiscoveredItemKey(this.providerId, this.externalId),

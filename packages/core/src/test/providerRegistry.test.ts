@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { EventEmitter } from 'vscode';
-import { DevDocketProvider, DiscoveredItem } from '../api/types';
+import { DevDocketProvider, ProviderItem } from '../api/types';
 import { WorkGraph } from '../services/workGraph';
 import { ProviderRegistry } from '../services/providerRegistry';
 import { logger } from '../services/logger';
@@ -64,8 +64,8 @@ function createMockStateStore() {
   };
 }
 
-function createMockProvider(id: string): DevDocketProvider & { fireItems: (items: DiscoveredItem[]) => void } {
-  const emitter = new EventEmitter<DiscoveredItem[]>();
+function createMockProvider(id: string): DevDocketProvider & { fireItems: (items: ProviderItem[]) => void } {
+  const emitter = new EventEmitter<ProviderItem[]>();
   return {
     id,
     label: `Provider ${id}`,
@@ -436,8 +436,8 @@ describe('ProviderRegistry', () => {
         resolveRefresh = resolve;
         rejectRefresh = reject;
       });
-      const emitter = new EventEmitter<DiscoveredItem[]>();
-      const provider: DevDocketProvider & { fireItems: (items: DiscoveredItem[]) => void } = {
+      const emitter = new EventEmitter<ProviderItem[]>();
+      const provider: DevDocketProvider & { fireItems: (items: ProviderItem[]) => void } = {
         id,
         label: `Provider ${id}`,
         onDidDiscoverItems: emitter.event,
@@ -821,7 +821,7 @@ describe('ProviderRegistry', () => {
   });
 
   describe('item cap (MAX_ITEMS_PER_PROVIDER)', () => {
-    function makeItems(count: number): DiscoveredItem[] {
+    function makeItems(count: number): ProviderItem[] {
       return Array.from({ length: count }, (_, i) => ({
         externalId: `item-${i}`,
         title: `Item ${i}`,
@@ -1314,8 +1314,8 @@ describe('ProviderRegistry', () => {
         resolveRefresh = resolve;
         rejectRefresh = reject;
       });
-      const emitter = new EventEmitter<DiscoveredItem[]>();
-      const provider: DevDocketProvider & { fireItems: (items: DiscoveredItem[]) => void } = {
+      const emitter = new EventEmitter<ProviderItem[]>();
+      const provider: DevDocketProvider & { fireItems: (items: ProviderItem[]) => void } = {
         id,
         label: `Provider ${id}`,
         onDidDiscoverItems: emitter.event,
@@ -1360,7 +1360,7 @@ describe('ProviderRegistry', () => {
       vi.useFakeTimers();
       try {
         const neverResolve = new Promise<void>(() => {});
-        const emitter = new EventEmitter<DiscoveredItem[]>();
+        const emitter = new EventEmitter<ProviderItem[]>();
         const provider: DevDocketProvider = {
           id: 'slow',
           label: 'Slow Provider',

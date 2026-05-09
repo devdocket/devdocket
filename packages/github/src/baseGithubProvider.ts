@@ -1,5 +1,5 @@
 import * as vscode from 'vscode';
-import { BaseProvider, DiscoveredItem, createAbortError, runWorkerPool, type RelatedItemRef } from '@devdocket/shared';
+import { BaseProvider, ProviderItem, createAbortError, runWorkerPool, type RelatedItemRef } from '@devdocket/shared';
 import { fetchPrCrossReferencesBatch } from './githubGraphql';
 import { logger } from './logger';
 import { matchesRepoPatterns, parseRepoPatterns, type RepoPattern } from './repoPattern';
@@ -18,7 +18,7 @@ export abstract class BaseGitHubProvider extends BaseProvider {
   abstract readonly label: string;
 
   constructor() {
-    super(new vscode.EventEmitter<DiscoveredItem[]>());
+    super(new vscode.EventEmitter<ProviderItem[]>());
     this.onBackgroundRefreshError = (error) => {
       logger.error(`${this.label} refresh failed`, error);
     };
@@ -163,14 +163,14 @@ export abstract class BaseGitHubProvider extends BaseProvider {
   /**
    * Publish GitHub items after applying repository filters at the provider boundary.
    */
-  protected publishDiscoveredItems(items: DiscoveredItem[], patterns: RepoPattern[] = this.getConfiguredPatterns()): void {
+  protected publishDiscoveredItems(items: ProviderItem[], patterns: RepoPattern[] = this.getConfiguredPatterns()): void {
     this._onDidDiscoverItems.fire(this.applyConfiguredRepoFilter(items, patterns));
   }
 
   /**
    * Apply the `devDocketGithub.filteredRepos` setting to discovered items.
    */
-  protected applyConfiguredRepoFilter<T extends Pick<DiscoveredItem, 'externalId' | 'group'>>(items: T[], patterns: RepoPattern[] = this.getConfiguredPatterns()): T[] {
+  protected applyConfiguredRepoFilter<T extends Pick<ProviderItem, 'externalId' | 'group'>>(items: T[], patterns: RepoPattern[] = this.getConfiguredPatterns()): T[] {
     if (patterns.length === 0) { return items; }
 
     return items.filter(item => {
@@ -189,7 +189,7 @@ export abstract class BaseGitHubProvider extends BaseProvider {
     return parseRepoPatterns(value);
   }
 
-  private getRepoName(item: Pick<DiscoveredItem, 'externalId' | 'group'>): string | undefined {
+  private getRepoName(item: Pick<ProviderItem, 'externalId' | 'group'>): string | undefined {
     const group = item.group?.trim();
     if (group) { return group; }
 

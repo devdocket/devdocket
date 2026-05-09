@@ -1,6 +1,6 @@
 import * as vscode from 'vscode';
 import type { Memento } from 'vscode';
-import type { DiscoveredItem } from '../api/types';
+import type { ProviderItem } from '../api/types';
 import { logger } from '../services/logger';
 import {
   validateObject,
@@ -179,7 +179,7 @@ export class DiscoveredStateStore {
    *
    * @returns The number of records removed.
    */
-  async prune(activeItems: Map<string, DiscoveredItem[]>): Promise<number> {
+  async prune(activeItems: Map<string, ProviderItem[]>): Promise<number> {
     if (!this.loaded) { await this.load(); }
 
     // Build a set of active composite keys and collect provider IDs that

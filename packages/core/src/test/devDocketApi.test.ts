@@ -1,5 +1,5 @@
 import { DevDocketApiImpl } from '../api/devDocketApi';
-import { DevDocketProvider, DevDocketAction, DiscoveredItem } from '../api/types';
+import { DevDocketProvider, DevDocketAction, ProviderItem } from '../api/types';
 import { ProviderRegistry } from '../services/providerRegistry';
 import { ActionRegistry } from '../services/actionRegistry';
 import { WatcherRegistry } from '../services/watcherRegistry';
@@ -32,7 +32,7 @@ function createMockStateStore() {
 }
 
 function createMockProvider(id: string): DevDocketProvider {
-  const emitter = new vscode.EventEmitter<DiscoveredItem[]>();
+  const emitter = new vscode.EventEmitter<ProviderItem[]>();
   return {
     id,
     label: `Provider ${id}`,

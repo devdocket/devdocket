@@ -1,5 +1,5 @@
 import * as vscode from 'vscode';
-import { BaseProvider, DiscoveredItem, type ProviderBadge, isValidUrlSegment, combineSignals, safeDecodeComponent, type ResolvedItem } from '@devdocket/shared';
+import { BaseProvider, ProviderItem, type ProviderBadge, isValidUrlSegment, combineSignals, safeDecodeComponent, type ResolvedItem } from '@devdocket/shared';
 import { logger } from './logger';
 import { OrgConfig, resolveProjectList } from './configParser';
 import { getAdoHeaders, retryAdoWithAuth, throwAdoApiError, ADO_AUTH_SCOPE } from './adoAuth';
@@ -57,7 +57,7 @@ export class AdoWorkItemProvider extends BaseProvider {
   constructor(
     private readonly orgConfigs: OrgConfig[],
   ) {
-    super(new vscode.EventEmitter<DiscoveredItem[]>());
+    super(new vscode.EventEmitter<ProviderItem[]>());
   }
 
   /**
@@ -122,7 +122,7 @@ export class AdoWorkItemProvider extends BaseProvider {
   }
 
   private async fetchAndPublishWorkItems(accessToken: string, isUserTriggered: boolean, signal?: AbortSignal): Promise<void> {
-    const allItems: DiscoveredItem[] = [];
+    const allItems: ProviderItem[] = [];
     const failures: string[] = [];
 
     for (const orgConfig of this.orgConfigs) {
@@ -191,7 +191,7 @@ export class AdoWorkItemProvider extends BaseProvider {
     org: string,
     project: string,
     signal?: AbortSignal,
-  ): Promise<{ items: DiscoveredItem[]; failed: boolean }> {
+  ): Promise<{ items: ProviderItem[]; failed: boolean }> {
     logger.debug(`Fetching work items for project: ${project || org}`);
     const projectPath = project ? `/${encodeURIComponent(project)}` : '';
     const wiqlUrl = `https://dev.azure.com/${encodeURIComponent(org)}${projectPath}/_apis/wit/wiql?api-version=7.1`;
@@ -282,7 +282,7 @@ export class AdoWorkItemProvider extends BaseProvider {
     // Filter out items in terminal state categories
     const activeWorkItems = await this.filterActiveItems(token, org, allWorkItems, signal);
 
-    const items: DiscoveredItem[] = activeWorkItems.map((wi) => {
+    const items: ProviderItem[] = activeWorkItems.map((wi) => {
       const projectName = wi.fields['System.TeamProject'];
       const wiType = wi.fields['System.WorkItemType'];
       const state = wi.fields['System.State'];

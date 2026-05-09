@@ -1,4 +1,4 @@
-import { DiscoveredItem } from '../api/types';
+import { ProviderItem } from '../api/types';
 
 /**
  * Builds a set of `providerId::externalId` keys that should be hidden due to
@@ -7,7 +7,7 @@ import { DiscoveredItem } from '../api/types';
  * the rest are hidden.
  */
 export function buildCanonicalHiddenSet(
-  allItems: Iterable<[string, readonly DiscoveredItem[]]>,
+  allItems: Iterable<[string, readonly ProviderItem[]]>,
   getState: (providerId: string, externalId: string) => string | undefined,
 ): Set<string> {
   const hidden = new Set<string>();

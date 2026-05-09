@@ -1,6 +1,6 @@
 import * as vscode from 'vscode';
 import * as crypto from 'node:crypto';
-import type { DiscoveredItem } from '../api/types';
+import type { ProviderItem } from '../api/types';
 import { type WorkItem, WorkItemState } from '../models/workItem';
 import { ActionRegistry } from '../services/actionRegistry';
 import { buildCanonicalHiddenSet } from '../services/canonicalDedup';
@@ -133,7 +133,7 @@ export class MainViewProvider implements vscode.WebviewViewProvider {
   }
 
   private buildTierData(
-    allDiscoveredItems: Map<string, DiscoveredItem[]>,
+    allDiscoveredItems: Map<string, ProviderItem[]>,
     relatedItemsIndex: RelatedItemsIndex,
   ): TierData[] {
     const hiddenCanonicalKeys = buildCanonicalHiddenSet(
@@ -201,7 +201,7 @@ export class MainViewProvider implements vscode.WebviewViewProvider {
   }
 
   private buildSourcesData(
-    allDiscoveredItems: Map<string, DiscoveredItem[]>,
+    allDiscoveredItems: Map<string, ProviderItem[]>,
     relatedItemsIndex: RelatedItemsIndex,
   ): SourceProviderData[] {
     return Array.from(allDiscoveredItems)
@@ -241,8 +241,8 @@ export class MainViewProvider implements vscode.WebviewViewProvider {
       .sort((a, b) => a.label.localeCompare(b.label));
   }
 
-  private buildDiscoveredItemMap(allDiscoveredItems: Iterable<[string, readonly DiscoveredItem[]]>): Map<string, DiscoveredItem> {
-    const discoveredItemMap = new Map<string, DiscoveredItem>();
+  private buildDiscoveredItemMap(allDiscoveredItems: Iterable<[string, readonly ProviderItem[]]>): Map<string, ProviderItem> {
+    const discoveredItemMap = new Map<string, ProviderItem>();
     for (const [providerId, items] of allDiscoveredItems) {
       for (const item of items) {
         discoveredItemMap.set(getDiscoveredItemKey(providerId, item.externalId), item);
@@ -251,7 +251,7 @@ export class MainViewProvider implements vscode.WebviewViewProvider {
     return discoveredItemMap;
   }
 
-  private compareUrgency(a: WorkItem, b: WorkItem, discoveredItemMap: Map<string, DiscoveredItem>): number {
+  private compareUrgency(a: WorkItem, b: WorkItem, discoveredItemMap: Map<string, ProviderItem>): number {
     const aUrgent = this.isUrgentWorkItem(a, discoveredItemMap);
     const bUrgent = this.isUrgentWorkItem(b, discoveredItemMap);
     if (aUrgent === bUrgent) {
@@ -260,15 +260,15 @@ export class MainViewProvider implements vscode.WebviewViewProvider {
     return aUrgent ? -1 : 1;
   }
 
-  private isUrgentWorkItem(item: WorkItem, discoveredItemMap: Map<string, DiscoveredItem>): boolean {
+  private isUrgentWorkItem(item: WorkItem, discoveredItemMap: Map<string, ProviderItem>): boolean {
     return this.isUrgentDiscoveredItem(this.getDiscoveredItemForWorkItem(item, discoveredItemMap));
   }
 
-  private isUrgentDiscoveredItem(discoveredItem?: DiscoveredItem): boolean {
+  private isUrgentDiscoveredItem(discoveredItem?: ProviderItem): boolean {
     return normalizeText(discoveredItem?.state) === 'changes requested';
   }
 
-  private getDiscoveredItemForWorkItem(item: WorkItem, discoveredItemMap: Map<string, DiscoveredItem>): DiscoveredItem | undefined {
+  private getDiscoveredItemForWorkItem(item: WorkItem, discoveredItemMap: Map<string, ProviderItem>): ProviderItem | undefined {
     if (!item.providerId || !item.externalId) {
       return undefined;
     }
@@ -277,7 +277,7 @@ export class MainViewProvider implements vscode.WebviewViewProvider {
 
   private buildIncomingCardData(
     providerId: string,
-    discoveredItem: DiscoveredItem,
+    discoveredItem: ProviderItem,
     relatedItemsIndex: RelatedItemsIndex,
     existingWorkItem?: WorkItem,
   ): ItemCardData {
@@ -299,7 +299,7 @@ export class MainViewProvider implements vscode.WebviewViewProvider {
   private buildWorkItemCardData(
     item: WorkItem,
     tierType: ItemCardData['tierType'],
-    discoveredItemMap: Map<string, DiscoveredItem>,
+    discoveredItemMap: Map<string, ProviderItem>,
     relatedItemsIndex: RelatedItemsIndex,
   ): ItemCardData {
     const discoveredItem = this.getDiscoveredItemForWorkItem(item, discoveredItemMap);
@@ -326,7 +326,7 @@ export class MainViewProvider implements vscode.WebviewViewProvider {
     return (relatedItemsIndex.get(getRelatedItemsIndexKey(providerId, externalId))?.length ?? 0) > 0;
   }
 
-  private buildBadges(providerId?: string, discoveredItem?: DiscoveredItem, itemUrl?: string): BadgeData[] {
+  private buildBadges(providerId?: string, discoveredItem?: ProviderItem, itemUrl?: string): BadgeData[] {
     const badges: BadgeData[] = [];
     // Pass through the provider's human-readable label so third-party
     // providers (anything not GitHub/ADO) get a real name on the badge

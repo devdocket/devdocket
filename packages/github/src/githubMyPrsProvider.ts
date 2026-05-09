@@ -1,4 +1,4 @@
-import { DiscoveredItem, ProviderBadge, combineSignals, createAbortError, runWorkerPool, type RelatedItemRef } from '@devdocket/shared';
+import { ProviderItem, ProviderBadge, combineSignals, createAbortError, runWorkerPool, type RelatedItemRef } from '@devdocket/shared';
 import { BaseGitHubProvider } from './baseGithubProvider';
 import { logger } from './logger';
 import { parseRepoFromUrls } from './parseRepo';
@@ -118,7 +118,7 @@ export class GitHubMyPrsProvider extends BaseGitHubProvider {
       }).filter(pr => pr.repoOwner && pr.repoName), accessToken, signal)
       : new Map<string, RelatedItemRef[]>();
 
-    const items: DiscoveredItem[] = [];
+    const items: ProviderItem[] = [];
     for (const pr of filteredAuthored) {
       const repoName = repoNameMap.get(pr.html_url)!;
       const externalId = `${repoName}#${pr.number}`;

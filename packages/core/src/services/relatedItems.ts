@@ -1,4 +1,4 @@
-import type { DiscoveredItem, RelatedItemRef } from '../api/types';
+import type { ProviderItem, RelatedItemRef } from '../api/types';
 import type { WorkItem } from '../models/workItem';
 import type { ResolvedRelatedItem } from '../views/relatedItemTypes';
 import type { ProviderRegistry } from './providerRegistry';
@@ -53,13 +53,13 @@ export function resolveRelatedItemsFor(
 export function buildRelatedItemsIndex(
   registry: ProviderRegistry,
   workGraph: WorkGraph,
-  discoveredItems: Map<string, DiscoveredItem[]> = registry.getAllDiscoveredItems(),
+  discoveredItems: Map<string, ProviderItem[]> = registry.getAllDiscoveredItems(),
 ): RelatedItemsIndex {
   return buildRelatedItemsIndexForDiscovered(discoveredItems, workGraph);
 }
 
 function buildRelatedItemsIndexForDiscovered(
-  discoveredItems: Map<string, DiscoveredItem[]>,
+  discoveredItems: Map<string, ProviderItem[]>,
   workGraph: WorkGraph,
 ): RelatedItemsIndex {
   const discoveredByRef = buildDiscoveredByRef(discoveredItems, workGraph);
@@ -129,7 +129,7 @@ function resolveReverseRefsForUndiscovered(
   providerId: string,
   externalId: string,
   itemType: RelatedItemRef['itemType'],
-  discoveredItems: Map<string, DiscoveredItem[]>,
+  discoveredItems: Map<string, ProviderItem[]>,
   workGraph: WorkGraph,
 ): ResolvedRelatedItem[] {
   const resolved = new Map<string, ResolvedRelatedItemWithSort>();
@@ -165,7 +165,7 @@ function resolveReverseRefsForUndiscovered(
   return toPublicResolvedItems(resolved);
 }
 
-function buildDiscoveredByRef(discoveredItems: Map<string, DiscoveredItem[]>, workGraph: WorkGraph): Map<string, DiscoveredMatch[]> {
+function buildDiscoveredByRef(discoveredItems: Map<string, ProviderItem[]>, workGraph: WorkGraph): Map<string, DiscoveredMatch[]> {
   const discoveredByRef = new Map<string, DiscoveredMatch[]>();
   const discoveredProvenance = new Set<string>();
   for (const [providerId, items] of discoveredItems) {
@@ -230,10 +230,10 @@ function getOrCreateResolvedSet(
 }
 
 function findDiscoveredItem(
-  discoveredItems: Map<string, DiscoveredItem[]>,
+  discoveredItems: Map<string, ProviderItem[]>,
   providerId: string,
   externalId: string,
-): DiscoveredItem | undefined {
+): ProviderItem | undefined {
   return discoveredItems.get(providerId)?.find(discovered => discovered.externalId === externalId);
 }
 

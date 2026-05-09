@@ -1,5 +1,5 @@
 import * as vscode from 'vscode';
-import { DevDocketProvider, DiscoveredItem, type ResolvedItem } from '../api/types';
+import { DevDocketProvider, ProviderItem, type ResolvedItem } from '../api/types';
 import { DiscoveredStateStore, InboxState } from '../storage/discoveredStateStore';
 import { ProviderLabelCache } from '../storage/providerLabelCache';
 import { logger } from './logger';
@@ -36,7 +36,7 @@ export class ProviderRegistry {
   static readonly MAX_ITEMS_PER_PROVIDER = 10_000;
   private readonly providers = new Map<string, DevDocketProvider>();
   private readonly subscriptions = new Map<string, { dispose(): void }>();
-  private readonly discoveredItems = new Map<string, DiscoveredItem[]>();
+  private readonly discoveredItems = new Map<string, ProviderItem[]>();
   private readonly _onDidChangeDiscoveredItems = new vscode.EventEmitter<void>();
   /** Fired whenever any provider's discovered items change. */
   readonly onDidChangeDiscoveredItems = this._onDidChangeDiscoveredItems.event;
@@ -219,7 +219,7 @@ export class ProviderRegistry {
    * @param providerId - The provider identifier.
    * @returns The array of discovered items, or an empty array if the provider has none.
    */
-  getDiscoveredItems(providerId: string): DiscoveredItem[] {
+  getDiscoveredItems(providerId: string): ProviderItem[] {
     return this.discoveredItems.get(providerId) ?? [];
   }
 
@@ -228,7 +228,7 @@ export class ProviderRegistry {
    *
    * @returns A map keyed by provider ID, with each value being the provider's discovered items.
    */
-  getAllDiscoveredItems(): Map<string, DiscoveredItem[]> {
+  getAllDiscoveredItems(): Map<string, ProviderItem[]> {
     return this.discoveredItems;
   }
 
@@ -370,7 +370,7 @@ export class ProviderRegistry {
     }
   }
 
-  private async handleDiscoveredItems(providerId: string, items: DiscoveredItem[]): Promise<void> {
+  private async handleDiscoveredItems(providerId: string, items: ProviderItem[]): Promise<void> {
     if (this._disposed) {
       return;
     }

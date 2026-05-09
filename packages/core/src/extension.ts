@@ -26,7 +26,7 @@ import { syncProviderTitles } from './services/titleSync';
 import { syncProviderDescriptions } from './services/descriptionSync';
 import { performance } from 'perf_hooks';
 
-export type { DevDocketApi, DevDocketProvider, DevDocketAction, DiscoveredItem, Disposable, ActivityLogEntry, ActivityType, StateTransitionEvent, DevDocketPRWatcher } from './api/types';
+export type { DevDocketApi, DevDocketProvider, DevDocketAction, ProviderItem, DiscoveredItem, Disposable, ActivityLogEntry, ActivityType, StateTransitionEvent, DevDocketPRWatcher } from './api/types';
 export { logger } from './services/logger';
 
 /** Wrap an event callback so unhandled errors (sync or async) are logged instead of crashing. */

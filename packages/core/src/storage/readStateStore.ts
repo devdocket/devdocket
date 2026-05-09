@@ -1,6 +1,6 @@
 import * as vscode from 'vscode';
 import type { Memento } from 'vscode';
-import type { DiscoveredItem } from '../api/types';
+import type { ProviderItem } from '../api/types';
 import { logger } from '../services/logger';
 
 const STORAGE_KEY = 'devdocket.read-state';
@@ -83,7 +83,7 @@ export class ReadStateStore {
    *
    * @returns The number of records removed.
    */
-  async prune(activeItems: Map<string, DiscoveredItem[]>): Promise<number> {
+  async prune(activeItems: Map<string, ProviderItem[]>): Promise<number> {
     if (!this.loaded) { await this.load(); }
 
     const activeKeys = new Set<string>();

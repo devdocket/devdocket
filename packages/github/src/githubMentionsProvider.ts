@@ -1,6 +1,6 @@
 import * as vscode from 'vscode';
 import { Lexer, type Token, type Tokens } from 'marked';
-import { DiscoveredItem, combineSignals, runWorkerPoolSettled, safeDecodeComponent, type RelatedItemRef, type ResolvedItem } from '@devdocket/shared';
+import { ProviderItem, combineSignals, runWorkerPoolSettled, safeDecodeComponent, type RelatedItemRef, type ResolvedItem } from '@devdocket/shared';
 import { BaseGitHubProvider } from './baseGithubProvider';
 import { logger } from './logger';
 import { parseRepoFromUrls } from './parseRepo';
@@ -114,7 +114,7 @@ export class GitHubMentionsProvider extends BaseGitHubProvider {
       ? await this.fetchRelatedItemsForPRs(prsForGraphQL, accessToken, signal)
       : new Map<string, RelatedItemRef[]>();
 
-    const items: DiscoveredItem[] = filtered.map(({ issue, repoName }) => {
+    const items: ProviderItem[] = filtered.map(({ issue, repoName }) => {
       const isPr = !!issue.pull_request;
       const externalId = `${repoName}#${issue.number}`;
       const resurfaceVersion = resurfaceVersions.get(externalId);

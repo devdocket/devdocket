@@ -1,3 +1,3 @@
 // All shared types are now imported from @devdocket/shared — this file
 // re-exports them for backward compatibility with existing intra-package imports.
-export type { Disposable, WorkItem, DevDocketAction, DevDocketProvider, DevDocketApi, Event, DiscoveredItem } from '@devdocket/shared';
+export type { Disposable, WorkItem, DevDocketAction, DevDocketProvider, DevDocketApi, Event, ProviderItem } from '@devdocket/shared';

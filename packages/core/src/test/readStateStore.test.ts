@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { MockMemento } from 'vscode';
-import type { DiscoveredItem } from '../api/types';
+import type { ProviderItem } from '../api/types';
 import { ReadStateStore } from '../storage/readStateStore';
 
 describe('ReadStateStore', () => {
@@ -145,7 +145,7 @@ describe('ReadStateStore', () => {
     it('removes only stale keys belonging to providers that returned items', async () => {
       await store.addMany(['gh::keep', 'gh::stale', 'jira::stale']);
 
-      const activeItems = new Map<string, DiscoveredItem[]>([
+      const activeItems = new Map<string, ProviderItem[]>([
         ['gh', [{ externalId: 'keep', title: 'Keep' }]],
       ]);
 
@@ -160,7 +160,7 @@ describe('ReadStateStore', () => {
     it('skips providers whose item array is empty', async () => {
       await store.add('gh::stale');
 
-      const activeItems = new Map<string, DiscoveredItem[]>([
+      const activeItems = new Map<string, ProviderItem[]>([
         ['gh', []],
       ]);
 
@@ -175,7 +175,7 @@ describe('ReadStateStore', () => {
       const listener = vi.fn();
       store.onDidChange(listener);
 
-      const activeItems = new Map<string, DiscoveredItem[]>([
+      const activeItems = new Map<string, ProviderItem[]>([
         ['gh', []],
         ['jira', []],
       ]);
@@ -193,7 +193,7 @@ describe('ReadStateStore', () => {
       const listener = vi.fn();
       store.onDidChange(listener);
 
-      const activeItems = new Map<string, DiscoveredItem[]>([
+      const activeItems = new Map<string, ProviderItem[]>([
         ['gh', [
           { externalId: 'keep-1', title: 'Keep 1' },
           { externalId: 'keep-2', title: 'Keep 2' },
@@ -211,7 +211,7 @@ describe('ReadStateStore', () => {
       const listener = vi.fn();
       store.onDidChange(listener);
 
-      const activeItems = new Map<string, DiscoveredItem[]>([
+      const activeItems = new Map<string, ProviderItem[]>([
         ['gh', [{ externalId: 'keep', title: 'Keep' }]],
       ]);
 
@@ -225,7 +225,7 @@ describe('ReadStateStore', () => {
       await memento.update('devdocket.read-state', ['gh::keep', 'gh::stale']);
 
       const freshStore = new ReadStateStore(memento);
-      const activeItems = new Map<string, DiscoveredItem[]>([
+      const activeItems = new Map<string, ProviderItem[]>([
         ['gh', [{ externalId: 'keep', title: 'Keep' }]],
       ]);
 
@@ -242,7 +242,7 @@ describe('ReadStateStore', () => {
       await memento.update('devdocket.read-state', ['legacy-key', 'gh::stale']);
 
       const freshStore = new ReadStateStore(memento);
-      const activeItems = new Map<string, DiscoveredItem[]>([
+      const activeItems = new Map<string, ProviderItem[]>([
         ['gh', [{ externalId: 'keep', title: 'Keep' }]],
       ]);
 
@@ -257,7 +257,7 @@ describe('ReadStateStore', () => {
     it('scopes per-provider when another provider returned no items', async () => {
       await store.addMany(['provider-a::keep', 'provider-a::stale', 'provider-b::stale']);
 
-      const activeItems = new Map<string, DiscoveredItem[]>([
+      const activeItems = new Map<string, ProviderItem[]>([
         ['provider-a', [{ externalId: 'keep', title: 'Keep' }]],
         ['provider-b', []],
       ]);

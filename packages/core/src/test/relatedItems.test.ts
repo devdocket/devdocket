@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import type { DiscoveredItem } from '../api/types';
+import type { ProviderItem } from '../api/types';
 import { WorkItemState, type WorkItem } from '../models/workItem';
 import { buildRelatedItemsIndex, resolveRelatedItemsFor } from '../services/relatedItems';
 import { logger } from '../services/logger';
@@ -26,7 +26,7 @@ function makeWorkItem(overrides: Partial<WorkItem> = {}): WorkItem {
   };
 }
 
-function makeRegistry(discovered: Map<string, DiscoveredItem[]>) {
+function makeRegistry(discovered: Map<string, ProviderItem[]>) {
   return {
     getAllDiscoveredItems: vi.fn(() => discovered),
   } as any;
@@ -144,8 +144,8 @@ describe('resolveRelatedItemsFor', () => {
 
   it('is live and does not cache removed refs', () => {
     const pr = makeWorkItem({ id: 'pr-1', providerId: 'github-my-prs', externalId: 'owner/repo#10' });
-    const prDiscovered: DiscoveredItem = { externalId: 'owner/repo#10', title: 'PR', itemType: 'pr', relatedItems: [{ externalId: 'owner/repo#2', itemType: 'issue', relation: 'closes' }] };
-    const discovered = new Map<string, DiscoveredItem[]>([
+    const prDiscovered: ProviderItem = { externalId: 'owner/repo#10', title: 'PR', itemType: 'pr', relatedItems: [{ externalId: 'owner/repo#2', itemType: 'issue', relation: 'closes' }] };
+    const discovered = new Map<string, ProviderItem[]>([
       ['github-my-prs', [prDiscovered]],
       ['github-issues', [{ externalId: 'owner/repo#2', title: 'Issue', itemType: 'issue' }]],
     ]);

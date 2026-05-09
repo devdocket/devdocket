@@ -1,5 +1,5 @@
 import * as vscode from 'vscode';
-import type { DiscoveredItem } from '../api/types';
+import type { ProviderItem } from '../api/types';
 import { WorkItem, WorkItemInput, WorkItemState } from '../models/workItem';
 import { ActionRegistry } from '../services/actionRegistry';
 import { ProviderRegistry } from '../services/providerRegistry';
@@ -376,7 +376,7 @@ export class WorkItemEditorPanel {
     }
   }
 
-  private getDiscoveredItem(item: WorkItem): DiscoveredItem | undefined {
+  private getDiscoveredItem(item: WorkItem): ProviderItem | undefined {
     if (!item.providerId || !item.externalId) {
       return undefined;
     }
@@ -495,12 +495,12 @@ export class WorkItemEditorPanel {
 
 /**
  * Compose the badge list shown in the editor: provider, type, then the
- * provider-supplied badges declared on the {@link DiscoveredItem}. CI badges
+ * provider-supplied badges declared on the {@link ProviderItem}. CI badges
  * are not added here — the editor doesn't currently surface CI status inline.
  */
 export function composeEditorBadges(
   providerId?: string,
-  discoveredItem?: DiscoveredItem,
+  discoveredItem?: ProviderItem,
   providerLabel?: string,
 ): BadgeData[] {
   const badges: BadgeData[] = [];
