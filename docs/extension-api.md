@@ -17,7 +17,7 @@ Your extension must declare a dependency on DevDocket so that VS Code activates 
 
 ### Installing `@devdocket/shared`
 
-The `@devdocket/shared` package provides the TypeScript types and base classes (`DiscoveredItem`, `BaseProvider`, `Event`, `Disposable`, etc.) needed to build providers and actions with full type safety.
+The `@devdocket/shared` package provides the TypeScript types and base classes (`ProviderItem`, `BaseProvider`, `Event`, `Disposable`, etc.) needed to build providers and actions with full type safety.
 
 The package is published to the GitHub Packages npm registry. Add a `.npmrc` file to your project to configure the `@devdocket` scope:
 
@@ -36,8 +36,10 @@ npm install @devdocket/shared
 You can then import types directly instead of redefining them:
 
 ```ts
-import { BaseProvider, type DiscoveredItem } from '@devdocket/shared';
+import { BaseProvider, type ProviderItem } from '@devdocket/shared';
 ```
+
+`ProviderItem` is the canonical provider item type. `DiscoveredItem` remains exported as a deprecated type alias for older consumers; migrate imports from `DiscoveredItem` to `ProviderItem` when updating.
 
 ### Acquiring the API
 
@@ -118,7 +120,7 @@ interface DevDocketProvider {
    * Event that fires when the provider has new items to report.
    * Each emission replaces the provider's entire item set.
    */
-  readonly onDidDiscoverItems: vscode.Event<DiscoveredItem[]>;
+  readonly onDidDiscoverItems: vscode.Event<ProviderItem[]>;
 
   /**
    * Called by DevDocket during initial registration/activation (for initial
@@ -152,7 +154,7 @@ interface ResolvedItem {
   notes: string;
   /** Canonical URL the user typed (after normalization). */
   url: string;
-  /** Provider-stable identifier (same shape as DiscoveredItem.externalId). */
+  /** Provider-stable identifier (same shape as ProviderItem.externalId). */
   externalId: string;
   /** Optional grouping label. */
   group?: string;
@@ -161,12 +163,12 @@ interface ResolvedItem {
 }
 ```
 
-### DiscoveredItem
+### ProviderItem
 
 Each discovered item must have a unique `externalId` within the provider:
 
 ```ts
-interface DiscoveredItem {
+interface ProviderItem {
   /**
    * Unique identifier for this item within the provider.
    * Must be stable across refreshes (e.g., 'owner/repo#123').
@@ -295,12 +297,12 @@ interface ProviderBadge {
 
 - `externalId` must be unique per provider and stable across refreshes. A good pattern is `owner/repo#123`.
 - Each `onDidDiscoverItems` emission replaces the provider's entire item set. Emit all current items, not just changes.
-- `DiscoveredItem` data is not stored as a persisted record; DevDocket tracks only the inbox state (`unseen`, `accepted`, `dismissed`) for discovered items in the `devdocket.discovered-state` `globalState` key.
+- `ProviderItem` data is not stored as a persisted record; DevDocket tracks only the inbox state (`unseen`, `accepted`, `dismissed`) for discovered items in the `devdocket.discovered-state` `globalState` key.
 - When a user accepts an item from the Incoming tier or Sources tab, DevDocket creates and persists a new `WorkItem` (in the `devdocket.workitems` `globalState` key) that includes a snapshot of the item's `title`, along with its `providerId`/`externalId`/`url` as provenance metadata.
 - Use `group` to organize items in the Sources tab. Items with the same group value are nested under a folder.
 - Use `canonicalId` when the same entity might be discovered by multiple providers (e.g., a PR found by both "My PRs" and "PR Reviews"). Items sharing a `canonicalId` are deduplicated in the Incoming tier — one representative is shown and accept/dismiss propagates to all. Use a consistent format like `github:pull:owner/repo#42`. Items without `canonicalId` show individually (backward compatible). The Sources tab is unaffected.
 - Set `itemType` to `'issue'` or `'pr'` when your provider can classify the item kind. DevDocket surfaces this as a separate type pill so users can distinguish issues from pull requests at a glance. Items without `itemType` simply omit the pill — useful for generic / manual / heterogeneous sources where the kind isn't meaningful.
-- Use `badges` to surface state, reason, or any other custom annotation. The core deliberately doesn't interpret the `state` or `reason` strings any more — those are kept on `DiscoveredItem` for provenance/dedup purposes only. If you want a pill to show, declare it explicitly. Use `show: 'editor'` for verbose detail that would clutter the sidebar.
+- Use `badges` to surface state, reason, or any other custom annotation. The core deliberately doesn't interpret the `state` or `reason` strings any more — those are kept on `ProviderItem` for provenance/dedup purposes only. If you want a pill to show, declare it explicitly. Use `show: 'editor'` for verbose detail that would clutter the sidebar.
 
 ### Registering a Provider
 
@@ -484,20 +486,20 @@ This example shows a provider that discovers items from a hypothetical task API.
 
 ```ts
 import * as vscode from 'vscode';
-import type { DiscoveredItem, DevDocketProvider } from '@devdocket/shared';
+import type { ProviderItem, DevDocketProvider } from '@devdocket/shared';
 
 class MyTaskProvider implements DevDocketProvider {
   readonly id = 'my-tasks';
   readonly label = 'My Tasks';
 
-  private readonly _onDidDiscoverItems = new vscode.EventEmitter<DiscoveredItem[]>();
+  private readonly _onDidDiscoverItems = new vscode.EventEmitter<ProviderItem[]>();
   readonly onDidDiscoverItems = this._onDidDiscoverItems.event;
 
   async refresh(): Promise<void> {
     // Fetch tasks from your external source
     const tasks = await this.fetchTasks();
 
-    const items: DiscoveredItem[] = tasks.map((task) => ({
+    const items: ProviderItem[] = tasks.map((task) => ({
       externalId: `task-${task.id}`,
       title: task.title,
       description: task.summary,

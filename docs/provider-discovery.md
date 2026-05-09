@@ -59,13 +59,13 @@ flowchart LR
     ADO --> ADOPR
     ADO --> ADOMY
 
-    GHI -- "DiscoveredItem[]" --> PR
-    GHM -- "DiscoveredItem[]" --> PR
-    GHPR -- "DiscoveredItem[]" --> PR
-    GHMY -- "DiscoveredItem[]" --> PR
-    ADOWI -- "DiscoveredItem[]" --> PR
-    ADOPR -- "DiscoveredItem[]" --> PR
-    ADOMY -- "DiscoveredItem[]" --> PR
+    GHI -- "ProviderItem[]" --> PR
+    GHM -- "ProviderItem[]" --> PR
+    GHPR -- "ProviderItem[]" --> PR
+    GHMY -- "ProviderItem[]" --> PR
+    ADOWI -- "ProviderItem[]" --> PR
+    ADOPR -- "ProviderItem[]" --> PR
+    ADOMY -- "ProviderItem[]" --> PR
 
     PR -- "new items" --> Incoming
     PR -- "all items" --> Sources

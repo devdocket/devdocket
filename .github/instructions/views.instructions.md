@@ -38,11 +38,11 @@ The status-bar item also reflects unhealthy providers; see `services/providerHea
 Badges shown next to item titles fall into four categories:
 
 1. **Provider** (GitHub / ADO / Manual) — derived from `providerId`.
-2. **Type** (Issue / PR) — derived from `DiscoveredItem.itemType`.
+2. **Type** (Issue / PR) — derived from `ProviderItem.itemType`.
 3. **CI** (passed / failed / running / etc.) — derived from the watcher service.
-4. **Provider-supplied** — declared by providers via `DiscoveredItem.badges` and rendered through `buildProviderBadges(item, view)`.
+4. **Provider-supplied** — declared by providers via `ProviderItem.badges` and rendered through `buildProviderBadges(item, view)`.
 
-Core never infers state badges from `DiscoveredItem.state` or `reason` strings — providers must declare them explicitly. See `.github/instructions/providers.instructions.md` for the badge conventions.
+Core never infers state badges from `ProviderItem.state` or `reason` strings — providers must declare them explicitly. See `.github/instructions/providers.instructions.md` for the badge conventions.
 
 ## PanelManager Lifecycle
 
