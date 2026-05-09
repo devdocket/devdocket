@@ -115,6 +115,7 @@ export class RunWatchPool implements vscode.Disposable {
     const childWatch = this.watches.get(runKey);
     if (childWatch && childWatch.parentPRKey === parentPRKey) {
       this.watches.delete(runKey);
+      this.consecutiveFailures.delete(runKey);
       this.acknowledgedFailedRunKeys.delete(runKey);
     }
   }
