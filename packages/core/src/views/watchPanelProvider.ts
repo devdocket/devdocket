@@ -7,7 +7,7 @@ import type { ProviderRegistry } from '../services/providerRegistry';
 import type { WorkGraph } from '../services/workGraph';
 import { isSafeUrl } from '../utils/url';
 import { buildTierColorCss } from '../webview/shared/colors';
-import { getDiscoveredItemKey, parseDiscoveredItemKey } from './discoveredItemKey';
+import { parseDiscoveredItemKey } from './discoveredItemKey';
 import type { PRWatchData, RunWatchData, WebviewMessage } from './mainTypes';
 
 export class WatchPanelProvider implements vscode.Disposable {
@@ -155,7 +155,7 @@ export class WatchPanelProvider implements vscode.Disposable {
       return;
     }
 
-    const discoveredKey = parseDiscoveredItemKey(message.itemId);
+    const discoveredKey = message.providerId && message.externalId ? undefined : parseDiscoveredItemKey(message.itemId);
     const providerId = message.providerId ?? discoveredKey?.providerId;
     const externalId = message.externalId ?? discoveredKey?.externalId;
     if (providerId && externalId) {
@@ -193,7 +193,10 @@ export class WatchPanelProvider implements vscode.Disposable {
         if (!isPRDiscoveredItem(providerId, item) || linkedTargets.has(item.externalId)) {
           continue;
         }
-        linkedTargets.set(item.externalId, { linkedSourceKey: getDiscoveredItemKey(providerId, item.externalId) });
+        linkedTargets.set(item.externalId, {
+          linkedSourceProviderId: providerId,
+          linkedSourceExternalId: item.externalId,
+        });
       }
     }
 
@@ -497,7 +500,8 @@ export class WatchPanelProvider implements vscode.Disposable {
 
 interface LinkedPRTarget {
   linkedItemId?: string;
-  linkedSourceKey?: string;
+  linkedSourceProviderId?: string;
+  linkedSourceExternalId?: string;
 }
 
 const PR_EMITTING_PROVIDER_IDS = new Set([

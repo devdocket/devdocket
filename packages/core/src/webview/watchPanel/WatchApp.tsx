@@ -102,7 +102,8 @@ export function WatchApp() {
                       url={entry.pr.url}
                       watchId={entry.pr.id}
                       linkedItemId={entry.pr.linkedItemId}
-                      linkedSourceKey={entry.pr.linkedSourceKey}
+                      linkedSourceProviderId={entry.pr.linkedSourceProviderId}
+                      linkedSourceExternalId={entry.pr.linkedSourceExternalId}
                     />
                   );
                 }
@@ -197,7 +198,8 @@ interface WatchCardProps {
   url?: string;
   watchId: string;
   linkedItemId?: string;
-  linkedSourceKey?: string;
+  linkedSourceProviderId?: string;
+  linkedSourceExternalId?: string;
 }
 
 function WatchCard({
@@ -211,7 +213,8 @@ function WatchCard({
   url,
   watchId,
   linkedItemId,
-  linkedSourceKey,
+  linkedSourceProviderId,
+  linkedSourceExternalId,
 }: WatchCardProps) {
   const clickable = Boolean(url);
   const openWatch = () => {
@@ -219,10 +222,20 @@ function WatchCard({
       postMessage({ type: 'openWatchUrl', url });
     }
   };
-  const linkedTargetId = linkedItemId ?? linkedSourceKey;
+  const hasLinkedSource = Boolean(linkedSourceProviderId && linkedSourceExternalId);
+  const hasLinkedTarget = Boolean(linkedItemId || hasLinkedSource);
   const openLinkedItem = () => {
-    if (linkedTargetId) {
-      postMessage({ type: 'openItem', itemId: linkedTargetId });
+    if (linkedItemId) {
+      postMessage({ type: 'openItem', itemId: linkedItemId });
+      return;
+    }
+    if (linkedSourceProviderId && linkedSourceExternalId) {
+      postMessage({
+        type: 'openItem',
+        itemId: `${linkedSourceProviderId}::${linkedSourceExternalId}`,
+        providerId: linkedSourceProviderId,
+        externalId: linkedSourceExternalId,
+      });
     }
   };
   const handleKeyDown = (event: KeyboardEvent) => {
@@ -259,7 +272,7 @@ function WatchCard({
         </div>
       </div>
       <div class="item-actions" role="group" aria-label={`${title} actions`}>
-        {linkedTargetId ? (
+        {hasLinkedTarget ? (
           <button
             type="button"
             class="item-action-btn"

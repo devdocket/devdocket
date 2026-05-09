@@ -237,11 +237,12 @@ describe('WatchPanelProvider', () => {
       id: 'pr:github-pr:owner/repo:42',
       linkedItemId: 'work-42',
     }));
-    expect(message.prWatches[0]).not.toHaveProperty('linkedSourceKey');
+    expect(message.prWatches[0]).not.toHaveProperty('linkedSourceProviderId');
+    expect(message.prWatches[0]).not.toHaveProperty('linkedSourceExternalId');
     expect(workGraph.getAll).toHaveBeenCalledTimes(1);
   });
 
-  it('adds linkedSourceKey when only a matching discovered PR exists', () => {
+  it('adds linked source provider and external IDs when only a matching discovered PR exists', () => {
     const mockPanel = createMockWebviewPanel();
     vi.mocked(window.createWebviewPanel).mockReturnValue(mockPanel.panel as any);
     const watcherService = createWatcherService([createPRWatch()]);
@@ -260,7 +261,8 @@ describe('WatchPanelProvider', () => {
     const message = getUpdateWatchPanelMessage(mockPanel);
     expect(message.prWatches[0]).toEqual(expect.objectContaining({
       id: 'pr:github-pr:owner/repo:42',
-      linkedSourceKey: 'github-pr-reviews::owner/repo#42',
+      linkedSourceProviderId: 'github-pr-reviews',
+      linkedSourceExternalId: 'owner/repo#42',
     }));
     expect(message.prWatches[0]).not.toHaveProperty('linkedItemId');
     expect(providerRegistry.getAllDiscoveredItems).toHaveBeenCalledTimes(1);
@@ -283,7 +285,8 @@ describe('WatchPanelProvider', () => {
 
     const prWatch = getUpdateWatchPanelMessage(mockPanel).prWatches[0];
     expect(prWatch).not.toHaveProperty('linkedItemId');
-    expect(prWatch).not.toHaveProperty('linkedSourceKey');
+    expect(prWatch).not.toHaveProperty('linkedSourceProviderId');
+    expect(prWatch).not.toHaveProperty('linkedSourceExternalId');
   });
 
   it('resolves PR links across PR-emitting provider IDs instead of the watcher provider ID', () => {
@@ -382,7 +385,12 @@ describe('WatchPanelProvider', () => {
     await mockPanel.simulateMessage({ type: 'openWatchUrl', url: runIdentifier.url });
     await mockPanel.simulateMessage({ type: 'openWatchUrl', url: 'javascript:alert(1)' });
     await mockPanel.simulateMessage({ type: 'openItem', itemId: 'work-42' });
-    await mockPanel.simulateMessage({ type: 'openItem', itemId: 'github-pr-reviews::owner/repo#42' });
+    await mockPanel.simulateMessage({
+      type: 'openItem',
+      itemId: 'github-pr-reviews::owner/repo#42',
+      providerId: 'github-pr-reviews',
+      externalId: 'owner/repo#42',
+    });
     await mockPanel.simulateMessage({ type: 'dismissWatch', watchId: 'pr:github-pr:owner/repo:42' });
     await mockPanel.simulateMessage({ type: 'dismissWatch', watchId: 'run:github-actions:owner/repo:99' });
 
