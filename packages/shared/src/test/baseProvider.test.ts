@@ -1,15 +1,15 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { BaseProvider, DiscoveredItem, EventEmitterLike } from '../baseProvider';
+import { BaseProvider, ProviderItem, EventEmitterLike, DiscoveredItem } from '../baseProvider';
 
 /** Minimal EventEmitter stub for testing. */
-function createMockEmitter(): EventEmitterLike<DiscoveredItem[]> {
-  const listeners: Array<(e: DiscoveredItem[]) => void> = [];
+function createMockEmitter(): EventEmitterLike<ProviderItem[]> {
+  const listeners: Array<(e: ProviderItem[]) => void> = [];
   return {
-    event: (listener: (e: DiscoveredItem[]) => void) => {
+    event: (listener: (e: ProviderItem[]) => void) => {
       listeners.push(listener);
       return { dispose: () => { const i = listeners.indexOf(listener); if (i >= 0) listeners.splice(i, 1); } };
     },
-    fire: (data: DiscoveredItem[]) => { listeners.forEach(l => l(data)); },
+    fire: (data: ProviderItem[]) => { listeners.forEach(l => l(data)); },
     dispose: vi.fn(),
   };
 }
@@ -50,6 +50,14 @@ class TestProvider extends BaseProvider {
 }
 
 describe('BaseProvider', () => {
+  it('keeps DiscoveredItem as an assignable compatibility alias', () => {
+    const legacyItem: DiscoveredItem = { externalId: 'legacy-1', title: 'Legacy item' };
+    const canonicalItem: ProviderItem = legacyItem;
+    const reverseAssignedItem: DiscoveredItem = canonicalItem;
+
+    expect(reverseAssignedItem.externalId).toBe('legacy-1');
+  });
+
   beforeEach(() => {
     vi.useFakeTimers();
   });
@@ -280,7 +288,7 @@ describe('BaseProvider', () => {
   describe('event emission', () => {
     it('fires onDidDiscoverItems after refresh', async () => {
       const provider = new TestProvider(createMockEmitter());
-      const received: DiscoveredItem[][] = [];
+      const received: ProviderItem[][] = [];
 
       provider.onDidDiscoverItems(items => received.push(items));
       await provider.refresh();
@@ -293,7 +301,7 @@ describe('BaseProvider', () => {
 
     it('fires onDidDiscoverItems after background refresh', async () => {
       const provider = new TestProvider(createMockEmitter());
-      const received: DiscoveredItem[][] = [];
+      const received: ProviderItem[][] = [];
 
       provider.onDidDiscoverItems(items => received.push(items));
       await provider.refreshInBackground();
@@ -306,7 +314,7 @@ describe('BaseProvider', () => {
 
     it('fires via the periodic timer', async () => {
       const provider = new TestProvider(createMockEmitter());
-      const received: DiscoveredItem[][] = [];
+      const received: ProviderItem[][] = [];
 
       provider.onDidDiscoverItems(items => received.push(items));
       provider.startPeriodicRefresh(60);

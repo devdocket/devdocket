@@ -1,6 +1,6 @@
 import type { CancellationTokenLike, DevDocketRunWatcher } from './runWatcher';
 import type { DevDocketPRWatcher } from './prWatcher';
-import type { Disposable, Event, DiscoveredItem, ResolvedItem } from './baseProvider';
+import type { Disposable, Event, ProviderItem, ResolvedItem } from './baseProvider';
 import type { WorkItem, ActivityType } from './workItem';
 
 /**
@@ -26,13 +26,13 @@ export interface StateTransitionEvent {
  * A provider that discovers work items from an external source.
  *
  * Providers are registered via {@link DevDocketApi.registerProvider} and emit
- * {@link DiscoveredItem} arrays when new items are found. The core extension
+ * {@link ProviderItem} arrays when new items are found. The core extension
  * reads discovered item metadata live from the provider and does not persist it;
  * only inbox state is persisted.
  *
  * @example
  * ```ts
- * const emitter = new vscode.EventEmitter<DiscoveredItem[]>();
+ * const emitter = new vscode.EventEmitter<ProviderItem[]>();
  * const provider: DevDocketProvider = {
  *   id: 'github',
  *   label: 'GitHub Issues',
@@ -51,7 +51,7 @@ export interface DevDocketProvider {
   /** Human-readable display name shown in the UI. */
   readonly label: string;
   /** Event fired when the provider discovers or refreshes its item list. */
-  readonly onDidDiscoverItems: Event<DiscoveredItem[]>;
+  readonly onDidDiscoverItems: Event<ProviderItem[]>;
   /**
    * Re-fetch items from the external source.
    * Implementations should fire {@link onDidDiscoverItems} with the results.
