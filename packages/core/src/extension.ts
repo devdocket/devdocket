@@ -1,4 +1,5 @@
 import * as vscode from 'vscode';
+import { runWorkerPool, type PRIdentifier } from '@devdocket/shared';
 import { DevDocketApi } from './api/types';
 import { DevDocketApiImpl } from './api/devDocketApi';
 import { JsonTaskStore } from './storage/jsonTaskStore';
@@ -110,6 +111,9 @@ function isAutoWatchCandidate(item: { authored?: boolean; url?: string }): item 
  * per poll interval).
  */
 const MAX_AUTO_WATCH_PER_PROVIDER = 200;
+const AUTO_WATCH_CONCURRENCY = 6;
+const AUTO_WATCH_YIELD_EVERY = 25;
+const autoWatchCapNotifiedProviders = new Set<string>();
 
 /**
  * Strip query string and fragment from a URL before logging so that
@@ -128,15 +132,36 @@ function redactUrlForLog(value: string | undefined): string | undefined {
   }
 }
 
+function getAutoWatchPRKey(identifier: PRIdentifier): string {
+  return `${identifier.providerId}:${identifier.repo}:${identifier.prId}`;
+}
+
+async function yieldToExtensionHost(): Promise<void> {
+  await new Promise<void>((resolve) => {
+    if (typeof setImmediate === 'function') {
+      setImmediate(resolve);
+      return;
+    }
+    setTimeout(resolve, 0);
+  });
+}
+
+interface AutoWatchAuthoredPROptions {
+  capNotifiedProviders?: Set<string>;
+}
+
 export async function autoWatchAuthoredPRs(
   providerId: string,
   providerRegistry: ProviderRegistry,
   prWatcherRegistry: PRWatcherRegistry,
   watcherService: WatcherService,
   signal: AbortSignal,
+  options: AutoWatchAuthoredPROptions = {},
 ): Promise<void> {
+  const capNotifiedProviders = options.capNotifiedProviders ?? autoWatchCapNotifiedProviders;
   const items = providerRegistry.getDiscoveredItems(providerId).filter(isAutoWatchCandidate);
-  let watchedThisPass = 0;
+  const seenPRKeys = new Set<string>();
+  const candidates: Array<{ identifier: PRIdentifier; sourceUrl: string }> = [];
 
   for (const item of items) {
     if (signal.aborted) {
@@ -163,19 +188,17 @@ export async function autoWatchAuthoredPRs(
       }
 
       const identifier = prWatcher.parsePRUrl(itemUrl);
+      const prKey = getAutoWatchPRKey(identifier);
+      if (seenPRKeys.has(prKey)) {
+        continue;
+      }
+      seenPRKeys.add(prKey);
+
       if (await watcherService.isPRWatched(identifier)) {
         continue;
       }
 
-      if (watchedThisPass >= MAX_AUTO_WATCH_PER_PROVIDER) {
-        logger.warn(
-          `Auto-watch cap reached for provider ${providerId} (limit ${MAX_AUTO_WATCH_PER_PROVIDER}); skipping remaining authored PRs to bound polling cost`,
-        );
-        return;
-      }
-
-      await watcherService.startPRWatch(identifier);
-      watchedThisPass++;
+      candidates.push({ identifier, sourceUrl: itemUrl });
     } catch (err) {
       if (signal.aborted) {
         return;
@@ -183,6 +206,43 @@ export async function autoWatchAuthoredPRs(
       logger.warn(`Failed to auto-watch authored PR from provider ${providerId}`, { url: redactUrlForLog(item.url) }, err);
     }
   }
+
+  const candidatesToWatch = candidates.slice(0, MAX_AUTO_WATCH_PER_PROVIDER);
+  if (candidates.length > MAX_AUTO_WATCH_PER_PROVIDER) {
+    const skippedCount = candidates.length - MAX_AUTO_WATCH_PER_PROVIDER;
+    const message = `DevDocket: Auto-watching the first ${MAX_AUTO_WATCH_PER_PROVIDER} authored PRs from ${providerId}; skipping ${skippedCount} more to keep refresh responsive.`;
+    logger.warn(
+      `Auto-watch cap reached for provider ${providerId} (limit ${MAX_AUTO_WATCH_PER_PROVIDER}); skipping ${skippedCount} authored PRs to bound polling cost`,
+    );
+    if (!capNotifiedProviders.has(providerId)) {
+      capNotifiedProviders.add(providerId);
+      void vscode.window.showInformationMessage(message).then(
+        undefined,
+        () => { /* notification is best-effort */ },
+      );
+    }
+  }
+
+  let completedCount = 0;
+  await runWorkerPool(candidatesToWatch, async ({ identifier, sourceUrl }) => {
+    if (signal.aborted) {
+      return;
+    }
+
+    try {
+      await watcherService.startPRWatch(identifier, { deferChildRunStatus: true });
+    } catch (err) {
+      if (signal.aborted) {
+        return;
+      }
+      logger.warn(`Failed to auto-watch authored PR from provider ${providerId}`, { url: redactUrlForLog(sourceUrl) }, err);
+    } finally {
+      completedCount++;
+      if (completedCount % AUTO_WATCH_YIELD_EVERY === 0) {
+        await yieldToExtensionHost();
+      }
+    }
+  }, AUTO_WATCH_CONCURRENCY);
 }
 
 function wireEvents(

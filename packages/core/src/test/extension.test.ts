@@ -436,7 +436,61 @@ describe('activate()', () => {
     expect(prWatcherRegistry.findWatcherForUrl).toHaveBeenCalledWith('https://github.com/owner/repo/pull/42');
     expect(prWatcher.parsePRUrl).toHaveBeenCalledWith('https://github.com/owner/repo/pull/42');
     expect(watcherService.isPRWatched).toHaveBeenCalledWith(identifier);
-    expect(watcherService.startPRWatch).toHaveBeenCalledWith(identifier);
+    expect(watcherService.startPRWatch).toHaveBeenCalledWith(identifier, { deferChildRunStatus: true });
+  });
+
+  it('dispatches authored PR auto-watch starts concurrently with deferred child status', async () => {
+    const items = Array.from({ length: 8 }, (_, i) => ({
+      externalId: `owner/repo#${i}`,
+      title: `PR ${i}`,
+      url: `https://github.com/owner/repo/pull/${i}`,
+      authored: true,
+    }));
+    const providerRegistry = { getDiscoveredItems: vi.fn().mockReturnValue(items) } as any;
+    const prWatcher = {
+      parsePRUrl: vi.fn((url: string) => ({ providerId: 'github-prs', prId: url, displayName: url, url, repo: 'owner/repo' })),
+    };
+    const prWatcherRegistry = { findWatcherForUrl: vi.fn(() => prWatcher) } as any;
+
+    const pendingResolvers: Array<() => void> = [];
+    let resolveImmediately = false;
+    const watcherService = {
+      isPRWatched: vi.fn().mockResolvedValue(false),
+      startPRWatch: vi.fn().mockImplementation(() => new Promise<void>((resolve) => {
+        if (resolveImmediately) {
+          resolve();
+          return;
+        }
+        pendingResolvers.push(resolve);
+      })),
+    } as any;
+
+    const autoWatchPromise = autoWatchAuthoredPRs(
+      'github-my-prs',
+      providerRegistry,
+      prWatcherRegistry,
+      watcherService,
+      new AbortController().signal,
+    );
+
+    await vi.waitFor(() => {
+      expect(watcherService.startPRWatch).toHaveBeenCalled();
+    });
+    const callsBeforeFirstWaveCompletes = watcherService.startPRWatch.mock.calls.length;
+
+    resolveImmediately = true;
+    for (const resolve of pendingResolvers.splice(0)) {
+      resolve();
+    }
+    await autoWatchPromise;
+
+    expect(callsBeforeFirstWaveCompletes).toBeGreaterThan(1);
+    expect(callsBeforeFirstWaveCompletes).toBeLessThanOrEqual(6);
+    expect(watcherService.startPRWatch).toHaveBeenCalledTimes(8);
+    for (const [identifier, options] of watcherService.startPRWatch.mock.calls) {
+      expect(identifier.providerId).toBe('github-prs');
+      expect(options).toEqual({ deferChildRunStatus: true });
+    }
   });
 
   it('refuses to auto-watch authored items whose url is not http(s)', async () => {
@@ -473,7 +527,7 @@ describe('activate()', () => {
     expect(prWatcherRegistry.findWatcherForUrl).toHaveBeenCalledTimes(1);
     expect(prWatcherRegistry.findWatcherForUrl).toHaveBeenCalledWith('https://github.com/owner/repo/pull/42');
     expect(watcherService.startPRWatch).toHaveBeenCalledTimes(1);
-    expect(watcherService.startPRWatch).toHaveBeenCalledWith(goodIdentifier);
+    expect(watcherService.startPRWatch).toHaveBeenCalledWith(goodIdentifier, { deferChildRunStatus: true });
   });
 
   it('caps the number of authored PRs auto-watched per provider per pass', async () => {
@@ -502,10 +556,41 @@ describe('activate()', () => {
       prWatcherRegistry,
       watcherService,
       new AbortController().signal,
+      { capNotifiedProviders: new Set() },
     );
 
     // Cap is 200 per provider per refresh pass.
     expect(watcherService.startPRWatch).toHaveBeenCalledTimes(200);
+    expect(vscode.window.showInformationMessage).toHaveBeenCalledTimes(1);
+    expect(vscode.window.showInformationMessage).toHaveBeenCalledWith(
+      expect.stringContaining('Auto-watching the first 200 authored PRs'),
+    );
+  });
+
+  it('shows the auto-watch cap notification only once for the same provider', async () => {
+    const items = Array.from({ length: 201 }, (_, i) => ({
+      externalId: `owner/repo#${i}`,
+      title: `PR ${i}`,
+      url: `https://github.com/owner/repo/pull/${i}`,
+      authored: true,
+    }));
+    const providerRegistry = { getDiscoveredItems: vi.fn().mockReturnValue(items) } as any;
+    const prWatcher = {
+      parsePRUrl: vi.fn((url: string) => ({ providerId: 'github-prs', prId: url, displayName: url, url, repo: 'owner/repo' })),
+    };
+    const prWatcherRegistry = { findWatcherForUrl: vi.fn(() => prWatcher) } as any;
+    const watcherService = {
+      isPRWatched: vi.fn().mockResolvedValue(false),
+      startPRWatch: vi.fn().mockResolvedValue(undefined),
+    } as any;
+    const signal = new AbortController().signal;
+
+    const capNotifiedProviders = new Set<string>();
+
+    await autoWatchAuthoredPRs('overflow-provider', providerRegistry, prWatcherRegistry, watcherService, signal, { capNotifiedProviders });
+    await autoWatchAuthoredPRs('overflow-provider', providerRegistry, prWatcherRegistry, watcherService, signal, { capNotifiedProviders });
+
+    expect(vscode.window.showInformationMessage).toHaveBeenCalledTimes(1);
   });
 
   it('runs auto-watch and auto-complete in parallel after provider refresh', async () => {
