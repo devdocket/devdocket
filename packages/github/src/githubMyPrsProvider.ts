@@ -2,7 +2,7 @@ import { DiscoveredItem, ProviderBadge, combineSignals, createAbortError, runWor
 import { BaseGitHubProvider } from './baseGithubProvider';
 import { logger } from './logger';
 import { parseRepoFromUrls } from './parseRepo';
-import { getGitHubAuthHeaders, type GitHubIssue, type GitHubSearchResponse } from './githubApiHelpers';
+import { getGitHubAuthHeaders, isMergedGitHubPr, type GitHubIssue, type GitHubSearchResponse } from './githubApiHelpers';
 import { matchesRepoPatterns } from './repoPattern';
 
 /** Map a PR status string from {@link GitHubMyPrsProvider.determinePrStatus} to its UI badge. */
@@ -79,12 +79,15 @@ export class GitHubMyPrsProvider extends BaseGitHubProvider {
       logger.error('Failed to fetch assigned PRs', err);
     }
 
+    const authoredPrs = authoredResult.prs.filter(pr => !isMergedGitHubPr(pr));
+    const assignedPrs = assignedResult.prs.filter(pr => !isMergedGitHubPr(pr));
+
     // Filter out self-authored PRs from assigned results to avoid duplicates
-    const authoredUrls = new Set(authoredResult.prs.map(pr => pr.html_url));
-    const uniqueAssignedPrs = assignedResult.prs.filter(pr => !authoredUrls.has(pr.html_url));
+    const authoredUrls = new Set(authoredPrs.map(pr => pr.html_url));
+    const uniqueAssignedPrs = assignedPrs.filter(pr => !authoredUrls.has(pr.html_url));
 
     // Parse repo name once per PR
-    const allPrsList = [...authoredResult.prs, ...uniqueAssignedPrs];
+    const allPrsList = [...authoredPrs, ...uniqueAssignedPrs];
     const repoNameMap = new Map(allPrsList.map(pr =>
       [pr.html_url, parseRepoFromUrls(pr.html_url, pr.repository_url)]
     ));
@@ -92,8 +95,8 @@ export class GitHubMyPrsProvider extends BaseGitHubProvider {
     // Post-filter when patterns are configured
     const repoFilter = (pr: GitHubIssue) => matchesRepoPatterns(repoNameMap.get(pr.html_url)!, patterns);
     const filteredAuthored = patterns.length > 0
-      ? authoredResult.prs.filter(repoFilter)
-      : authoredResult.prs;
+      ? authoredPrs.filter(repoFilter)
+      : authoredPrs;
     const filteredAssigned = patterns.length > 0
       ? uniqueAssignedPrs.filter(repoFilter)
       : uniqueAssignedPrs;

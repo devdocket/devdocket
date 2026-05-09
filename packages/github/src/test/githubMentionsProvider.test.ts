@@ -154,6 +154,34 @@ describe('GitHubMentionsProvider', () => {
     }));
   });
 
+  it('excludes merged PRs from mentioned search results before publishing', async () => {
+    const mergedPr = {
+      ...createMockPr(20, 'Already merged', 'org/repo'),
+      state: 'closed',
+      pull_request: { url: 'https://api.github.com/repos/org/repo/pulls/20', merged_at: '2025-01-01T00:00:00Z' },
+    };
+    const closedIssue = { ...createMockIssue(30, 'Closed issue', 'org/repo'), state: 'closed' };
+
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({
+        items: [
+          createMockPr(10, 'Open PR', 'org/repo'),
+          mergedPr,
+          closedIssue,
+        ],
+      }),
+    });
+
+    const listener = vi.fn();
+    provider.onDidDiscoverItems(listener);
+    await provider.refresh();
+
+    const items = listener.mock.calls[0][0];
+    expect(items.map((item: any) => item.externalId)).toEqual(['org/repo#10', 'org/repo#30']);
+    expect(items.map((item: any) => item.externalId)).not.toContain('org/repo#20');
+  });
+
   it('fetches and attaches related items for mentioned PRs only', async () => {
     const relatedItems = [{ externalId: 'other/repo#99', itemType: 'issue' as const, relation: 'closes' as const }];
     vi.spyOn(provider as any, 'fetchRelatedItemsForPRs').mockResolvedValue(new Map([

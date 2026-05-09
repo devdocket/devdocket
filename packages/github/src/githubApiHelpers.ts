@@ -12,11 +12,23 @@ export interface GitHubIssue {
   comments_url?: string;
   comments?: number;
   updated_at?: string;
-  pull_request?: { url: string };
+  pull_request?: { url: string; merged_at?: string | null };
+  merged_at?: string | null;
+  merged?: boolean;
 }
 
 export interface GitHubSearchResponse {
   items: GitHubIssue[];
+}
+
+export function isMergedGitHubPr(item: GitHubIssue): boolean {
+  if (item.pull_request?.merged_at) {
+    return true;
+  }
+  if (item.merged_at) {
+    return true;
+  }
+  return item.state?.toLowerCase() === 'closed' && item.merged === true;
 }
 
 /**
