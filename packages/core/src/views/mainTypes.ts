@@ -116,6 +116,8 @@ export interface PRWatchData {
   repo: string;
   state: 'open' | 'merged' | 'closed';
   url?: string;
+  linkedItemId?: string;
+  linkedSourceKey?: string;
   runs: RunWatchData[];
   hasWarning?: boolean;
   errorMessage?: string;

@@ -397,7 +397,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<DevDoc
   const api = new DevDocketApiImpl(pr, ar, wr, pwr, wg);
   logger.info(`Store + service init took ${Math.round(performance.now() - initStart)}ms`);
 
-  const watchPanelProvider = new WatchPanelProvider(context.extensionUri, ws);
+  const watchPanelProvider = new WatchPanelProvider(context.extensionUri, ws, wg, pr);
 
   const eventWiringStart = performance.now();
   const eventDisposables = wireEvents(pr, wg, ws, pwr);

@@ -1,9 +1,13 @@
 import * as vscode from 'vscode';
 import * as crypto from 'node:crypto';
-import type { PRIdentifier, RunConclusion, RunIdentifier, RunState } from '@devdocket/shared';
+import type { DiscoveredItem, PRIdentifier, RunIdentifier, RunState } from '@devdocket/shared';
 import { WatcherService, type WatchedPR, type WatchedRun } from '../services/watcherService';
+import type { WorkItem } from '../models/workItem';
+import type { ProviderRegistry } from '../services/providerRegistry';
+import type { WorkGraph } from '../services/workGraph';
 import { isSafeUrl } from '../utils/url';
 import { buildTierColorCss } from '../webview/shared/colors';
+import { getDiscoveredItemKey, parseDiscoveredItemKey } from './discoveredItemKey';
 import type { PRWatchData, RunWatchData, WebviewMessage } from './mainTypes';
 
 export class WatchPanelProvider implements vscode.Disposable {
@@ -15,6 +19,8 @@ export class WatchPanelProvider implements vscode.Disposable {
   constructor(
     private readonly extensionUri: vscode.Uri,
     private readonly watcherService: WatcherService,
+    private readonly workGraph: WorkGraph,
+    private readonly providerRegistry: ProviderRegistry,
   ) {}
 
   open(): void {
@@ -60,9 +66,10 @@ export class WatchPanelProvider implements vscode.Disposable {
       return;
     }
 
-    const prWatches = this.watcherService
-      .getActivePRWatches()
-      .map(prWatch => this.toPRWatchData(prWatch))
+    const activePRWatches = this.watcherService.getActivePRWatches();
+    const linkedPRTargets = activePRWatches.length > 0 ? this.buildLinkedPRTargetIndex() : new Map<string, LinkedPRTarget>();
+    const prWatches = activePRWatches
+      .map(prWatch => this.toPRWatchData(prWatch, linkedPRTargets))
       .filter(prWatch => prWatch.runs.length > 0)
       .sort((a, b) => comparePRWatches(a, b));
     const runWatches = this.watcherService
@@ -117,6 +124,10 @@ export class WatchPanelProvider implements vscode.Disposable {
         await vscode.env.openExternal(vscode.Uri.parse(safeUrl.href));
         break;
       }
+      case 'openItem': {
+        await this.openItem(message);
+        break;
+      }
       case 'dismissWatch':
         this.dismissWatchById(message.watchId);
         break;
@@ -131,6 +142,21 @@ export class WatchPanelProvider implements vscode.Disposable {
         break;
       default:
         break;
+    }
+  }
+
+  private async openItem(message: Extract<WebviewMessage, { type: 'openItem' }>): Promise<void> {
+    const workItem = this.workGraph.getItem(message.itemId);
+    if (workItem) {
+      await vscode.commands.executeCommand('devdocket.editItem', { id: message.itemId });
+      return;
+    }
+
+    const discoveredKey = parseDiscoveredItemKey(message.itemId);
+    const providerId = message.providerId ?? discoveredKey?.providerId;
+    const externalId = message.externalId ?? discoveredKey?.externalId;
+    if (providerId && externalId) {
+      await vscode.commands.executeCommand('devdocket.previewIncomingItem', { providerId, externalId });
     }
   }
 
@@ -151,14 +177,38 @@ export class WatchPanelProvider implements vscode.Disposable {
     }
   }
 
-  private toPRWatchData(prWatch: WatchedPR): PRWatchData {
+  private buildLinkedPRTargetIndex(): Map<string, LinkedPRTarget> {
+    const linkedTargets = new Map<string, LinkedPRTarget>();
+    for (const item of this.workGraph.getAll()) {
+      if (isPRWorkItem(item)) {
+        linkedTargets.set(item.externalId, { linkedItemId: item.id });
+      }
+    }
+
+    for (const [providerId, items] of this.providerRegistry.getAllDiscoveredItems()) {
+      for (const item of items) {
+        if (!isPRDiscoveredItem(providerId, item) || linkedTargets.has(item.externalId)) {
+          continue;
+        }
+        linkedTargets.set(item.externalId, { linkedSourceKey: getDiscoveredItemKey(providerId, item.externalId) });
+      }
+    }
+
+    return linkedTargets;
+  }
+
+  private toPRWatchData(prWatch: WatchedPR, linkedPRTargets: ReadonlyMap<string, LinkedPRTarget>): PRWatchData {
     const prKey = this.watcherService.getPRWatchKey(prWatch.identifier);
+    const linkedTarget = getPRExternalIds(prWatch.identifier)
+      .map(externalId => linkedPRTargets.get(externalId))
+      .find((target): target is LinkedPRTarget => target !== undefined);
     return {
       id: this.getPRPanelId(prWatch.identifier),
       title: prWatch.identifier.displayName,
       repo: prWatch.identifier.repo,
       state: prWatch.prState,
       url: prWatch.identifier.url,
+      ...(linkedTarget ?? {}),
       runs: this.watcherService
         .getChildRuns(prKey)
         .map(runWatch => this.toRunWatchData(runWatch))
@@ -438,6 +488,35 @@ export class WatchPanelProvider implements vscode.Disposable {
 </body>
 </html>`;
   }
+}
+
+interface LinkedPRTarget {
+  linkedItemId?: string;
+  linkedSourceKey?: string;
+}
+
+const PR_EMITTING_PROVIDER_IDS = new Set([
+  'github-my-prs',
+  'github-pr-reviews',
+  'github-mentions',
+  'ado-my-prs',
+  'ado-pr-reviews',
+]);
+
+function getPRExternalIds(identifier: PRIdentifier): string[] {
+  return [`${identifier.repo}#${identifier.prId}`, `${identifier.repo}/${identifier.prId}`];
+}
+
+function isPRWorkItem(item: WorkItem): item is WorkItem & { providerId: string; externalId: string } {
+  return Boolean(item.providerId && item.externalId && isPRCandidate(item.providerId, item.itemType));
+}
+
+function isPRDiscoveredItem(providerId: string, item: DiscoveredItem): boolean {
+  return isPRCandidate(providerId, item.itemType);
+}
+
+function isPRCandidate(providerId: string, itemType: 'issue' | 'pr' | undefined): boolean {
+  return itemType === 'pr' || (itemType === undefined && PR_EMITTING_PROVIDER_IDS.has(providerId));
 }
 
 function toPanelRunState(state: RunState): RunWatchData['state'] {

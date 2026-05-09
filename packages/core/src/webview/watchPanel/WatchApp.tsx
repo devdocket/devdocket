@@ -101,6 +101,8 @@ export function WatchApp() {
                       tierClass={getPRTierClass(entry.pr)}
                       url={entry.pr.url}
                       watchId={entry.pr.id}
+                      linkedItemId={entry.pr.linkedItemId}
+                      linkedSourceKey={entry.pr.linkedSourceKey}
                     />
                   );
                 }
@@ -194,6 +196,8 @@ interface WatchCardProps {
   elapsedTime?: string;
   url?: string;
   watchId: string;
+  linkedItemId?: string;
+  linkedSourceKey?: string;
 }
 
 function WatchCard({
@@ -206,11 +210,19 @@ function WatchCard({
   elapsedTime,
   url,
   watchId,
+  linkedItemId,
+  linkedSourceKey,
 }: WatchCardProps) {
   const clickable = Boolean(url);
   const openWatch = () => {
     if (url) {
       postMessage({ type: 'openWatchUrl', url });
+    }
+  };
+  const linkedTargetId = linkedItemId ?? linkedSourceKey;
+  const openLinkedItem = () => {
+    if (linkedTargetId) {
+      postMessage({ type: 'openItem', itemId: linkedTargetId });
     }
   };
   const handleKeyDown = (event: KeyboardEvent) => {
@@ -247,6 +259,21 @@ function WatchCard({
         </div>
       </div>
       <div class="item-actions" role="group" aria-label={`${title} actions`}>
+        {linkedTargetId ? (
+          <button
+            type="button"
+            class="item-action-btn"
+            title="Open in DevDocket"
+            aria-label="Open in DevDocket"
+            onKeyDown={(event) => event.stopPropagation()}
+            onClick={(event) => {
+              event.stopPropagation();
+              openLinkedItem();
+            }}
+          >
+            ⇱
+          </button>
+        ) : null}
         <button
           type="button"
           class="item-action-btn"

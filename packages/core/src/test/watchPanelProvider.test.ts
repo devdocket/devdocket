@@ -37,6 +37,73 @@ function createMockWebviewPanel() {
   };
 }
 
+function createMockWorkGraph(items: any[] = []) {
+  return {
+    getAll: vi.fn(() => items),
+    getItem: vi.fn((id: string) => items.find(item => item.id === id)),
+  };
+}
+
+function createMockProviderRegistry(discoveredItems = new Map<string, any[]>()) {
+  return {
+    getAllDiscoveredItems: vi.fn(() => discoveredItems),
+  };
+}
+
+function createPRWatch(prId = '42', repo = 'owner/repo', providerId = 'github-pr') {
+  return {
+    identifier: {
+      providerId,
+      repo,
+      prId,
+      displayName: `PR #${prId}`,
+      url: providerId === 'ado-pr'
+        ? `https://dev.azure.com/${repo.replace(/\//g, '/_git/')}/pullrequest/${prId}`
+        : `https://github.com/${repo}/pull/${prId}`,
+    },
+    prState: 'open',
+  };
+}
+
+function createChildRun(prId = '42') {
+  return {
+    identifier: {
+      providerId: 'github-actions',
+      repo: 'owner/repo',
+      runId: `100-${prId}`,
+      displayName: 'PR CI',
+      url: `https://github.com/owner/repo/actions/runs/100${prId}`,
+    },
+    status: {
+      overallState: 'completed',
+      conclusion: 'success',
+      jobs: [],
+      startedAt: new Date(Date.now() - 120_000).toISOString(),
+      completedAt: new Date(Date.now() - 30_000).toISOString(),
+    },
+    watchedAt: new Date(Date.now() - 120_000).toISOString(),
+  };
+}
+
+function createWatcherService(prWatches: any[] = []) {
+  return {
+    getActivePRWatches: vi.fn(() => prWatches),
+    getActiveStandaloneWatches: vi.fn(() => []),
+    getPRWatchKey: vi.fn((identifier: { providerId: string; repo: string; prId: string }) => `pr:${identifier.providerId}:${identifier.repo}:${identifier.prId}`),
+    getChildRuns: vi.fn((_prKey: string) => [createChildRun()]),
+    getProviderLabel: vi.fn(() => 'GitHub Actions'),
+    getActiveWatches: vi.fn(() => []),
+    dismissAllCompleted: vi.fn(),
+    acknowledgeAllFailures: vi.fn(),
+    dismissPRWatch: vi.fn(),
+    dismissWatch: vi.fn(),
+  };
+}
+
+function getUpdateWatchPanelMessage(mockPanel: ReturnType<typeof createMockWebviewPanel>) {
+  return vi.mocked(mockPanel.panel.webview.postMessage).mock.calls.at(-1)?.[0] as any;
+}
+
 describe('WatchPanelProvider', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -101,7 +168,12 @@ describe('WatchPanelProvider', () => {
       dismissWatch: vi.fn(),
     };
 
-    const provider = new WatchPanelProvider(vscode.Uri.file('C:\\repo') as any, watcherService as any);
+    const provider = new WatchPanelProvider(
+      vscode.Uri.file('C:\\repo') as any,
+      watcherService as any,
+      createMockWorkGraph(),
+      createMockProviderRegistry(),
+    );
     provider.open();
 
     expect(window.createWebviewPanel).toHaveBeenCalledWith(
@@ -141,6 +213,127 @@ describe('WatchPanelProvider', () => {
     }));
   });
 
+  it('adds linkedItemId when a matching PR work item exists', () => {
+    const mockPanel = createMockWebviewPanel();
+    vi.mocked(window.createWebviewPanel).mockReturnValue(mockPanel.panel as any);
+    const watcherService = createWatcherService([createPRWatch()]);
+    const workGraph = createMockWorkGraph([{
+      id: 'work-42',
+      providerId: 'github-my-prs',
+      externalId: 'owner/repo#42',
+      itemType: 'pr',
+    }]);
+
+    const provider = new WatchPanelProvider(
+      vscode.Uri.file('C:\\repo') as any,
+      watcherService as any,
+      workGraph as any,
+      createMockProviderRegistry(),
+    );
+    provider.open();
+
+    const message = getUpdateWatchPanelMessage(mockPanel);
+    expect(message.prWatches[0]).toEqual(expect.objectContaining({
+      id: 'pr:github-pr:owner/repo:42',
+      linkedItemId: 'work-42',
+    }));
+    expect(message.prWatches[0]).not.toHaveProperty('linkedSourceKey');
+    expect(workGraph.getAll).toHaveBeenCalledTimes(1);
+  });
+
+  it('adds linkedSourceKey when only a matching discovered PR exists', () => {
+    const mockPanel = createMockWebviewPanel();
+    vi.mocked(window.createWebviewPanel).mockReturnValue(mockPanel.panel as any);
+    const watcherService = createWatcherService([createPRWatch()]);
+    const providerRegistry = createMockProviderRegistry(new Map([
+      ['github-pr-reviews', [{ externalId: 'owner/repo#42', title: 'Review PR', itemType: 'pr' }]],
+    ]));
+
+    const provider = new WatchPanelProvider(
+      vscode.Uri.file('C:\\repo') as any,
+      watcherService as any,
+      createMockWorkGraph(),
+      providerRegistry as any,
+    );
+    provider.open();
+
+    const message = getUpdateWatchPanelMessage(mockPanel);
+    expect(message.prWatches[0]).toEqual(expect.objectContaining({
+      id: 'pr:github-pr:owner/repo:42',
+      linkedSourceKey: 'github-pr-reviews::owner/repo#42',
+    }));
+    expect(message.prWatches[0]).not.toHaveProperty('linkedItemId');
+    expect(providerRegistry.getAllDiscoveredItems).toHaveBeenCalledTimes(1);
+  });
+
+  it('omits DevDocket link data when no matching PR item exists', () => {
+    const mockPanel = createMockWebviewPanel();
+    vi.mocked(window.createWebviewPanel).mockReturnValue(mockPanel.panel as any);
+    const watcherService = createWatcherService([createPRWatch()]);
+
+    const provider = new WatchPanelProvider(
+      vscode.Uri.file('C:\\repo') as any,
+      watcherService as any,
+      createMockWorkGraph([{ id: 'issue-42', providerId: 'github', externalId: 'owner/repo#42', itemType: 'issue' }]),
+      createMockProviderRegistry(new Map([
+        ['github', [{ externalId: 'owner/repo#42', title: 'Issue #42', itemType: 'issue' }]],
+      ])),
+    );
+    provider.open();
+
+    const prWatch = getUpdateWatchPanelMessage(mockPanel).prWatches[0];
+    expect(prWatch).not.toHaveProperty('linkedItemId');
+    expect(prWatch).not.toHaveProperty('linkedSourceKey');
+  });
+
+  it('resolves PR links across PR-emitting provider IDs instead of the watcher provider ID', () => {
+    const mockPanel = createMockWebviewPanel();
+    vi.mocked(window.createWebviewPanel).mockReturnValue(mockPanel.panel as any);
+    const watcherService = createWatcherService([createPRWatch()]);
+
+    const provider = new WatchPanelProvider(
+      vscode.Uri.file('C:\\repo') as any,
+      watcherService as any,
+      createMockWorkGraph([{
+        id: 'review-work-42',
+        providerId: 'github-pr-reviews',
+        externalId: 'owner/repo#42',
+        itemType: 'pr',
+      }]),
+      createMockProviderRegistry(),
+    );
+    provider.open();
+
+    expect(getUpdateWatchPanelMessage(mockPanel).prWatches[0]).toEqual(expect.objectContaining({
+      id: 'pr:github-pr:owner/repo:42',
+      linkedItemId: 'review-work-42',
+    }));
+  });
+
+  it('resolves ADO PR watches using the ADO provider externalId format', () => {
+    const mockPanel = createMockWebviewPanel();
+    vi.mocked(window.createWebviewPanel).mockReturnValue(mockPanel.panel as any);
+    const watcherService = createWatcherService([createPRWatch('42', 'org/project/repo', 'ado-pr')]);
+
+    const provider = new WatchPanelProvider(
+      vscode.Uri.file('C:\\repo') as any,
+      watcherService as any,
+      createMockWorkGraph([{
+        id: 'ado-work-42',
+        providerId: 'ado-my-prs',
+        externalId: 'org/project/repo/42',
+        itemType: 'pr',
+      }]),
+      createMockProviderRegistry(),
+    );
+    provider.open();
+
+    expect(getUpdateWatchPanelMessage(mockPanel).prWatches[0]).toEqual(expect.objectContaining({
+      id: 'pr:ado-pr:org/project/repo:42',
+      linkedItemId: 'ado-work-42',
+    }));
+  });
+
   it('handles dismiss completed, open URL, and dismiss watch webview commands', async () => {
     const mockPanel = createMockWebviewPanel();
     vi.mocked(window.createWebviewPanel).mockReturnValue(mockPanel.panel as any);
@@ -175,19 +368,32 @@ describe('WatchPanelProvider', () => {
       dismissPRWatch: vi.fn(),
       dismissWatch: vi.fn(),
     };
+    const workGraph = createMockWorkGraph([{ id: 'work-42' }]);
 
-    const provider = new WatchPanelProvider(vscode.Uri.file('C:\\repo') as any, watcherService as any);
+    const provider = new WatchPanelProvider(
+      vscode.Uri.file('C:\\repo') as any,
+      watcherService as any,
+      workGraph as any,
+      createMockProviderRegistry(),
+    );
     provider.open();
 
     await mockPanel.simulateMessage({ type: 'dismissCompletedWatches' });
     await mockPanel.simulateMessage({ type: 'openWatchUrl', url: runIdentifier.url });
     await mockPanel.simulateMessage({ type: 'openWatchUrl', url: 'javascript:alert(1)' });
+    await mockPanel.simulateMessage({ type: 'openItem', itemId: 'work-42' });
+    await mockPanel.simulateMessage({ type: 'openItem', itemId: 'github-pr-reviews::owner/repo#42' });
     await mockPanel.simulateMessage({ type: 'dismissWatch', watchId: 'pr:github-pr:owner/repo:42' });
     await mockPanel.simulateMessage({ type: 'dismissWatch', watchId: 'run:github-actions:owner/repo:99' });
 
     // dismissCompletedWatches now routes through the shared command so the
     // confirmation prompt and logging stay in one place.
     expect(vscode.commands.executeCommand).toHaveBeenCalledWith('devdocket.dismissAllCompletedWatches');
+    expect(vscode.commands.executeCommand).toHaveBeenCalledWith('devdocket.editItem', { id: 'work-42' });
+    expect(vscode.commands.executeCommand).toHaveBeenCalledWith('devdocket.previewIncomingItem', {
+      providerId: 'github-pr-reviews',
+      externalId: 'owner/repo#42',
+    });
     expect(env.openExternal).toHaveBeenCalledTimes(1);
     expect(env.openExternal).toHaveBeenCalledWith(
       expect.objectContaining({ path: 'https://github.com/owner/repo/actions/runs/99' }),
