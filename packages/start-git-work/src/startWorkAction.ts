@@ -43,16 +43,44 @@ interface ParsedExternalId {
   itemNumber: string;
 }
 
-const SUPPORTED_PROVIDERS = [
-  'github',
-  'ado-work-items',
-  'github-my-prs',
-  'github-pr-reviews',
-  'ado-pr-reviews',
-];
+type GitHost = 'github' | 'ado';
+type WorkItemKind = 'issue' | 'pr';
 
-const PR_PROVIDERS = ['github-my-prs', 'github-pr-reviews', 'ado-pr-reviews'];
-const GITHUB_PR_PROVIDERS = ['github-my-prs', 'github-pr-reviews'];
+function detectGitHost(url: unknown): GitHost | undefined {
+  if (typeof url !== 'string' || url.length === 0) {
+    return undefined;
+  }
+
+  try {
+    const parsed = new URL(url);
+    const hostname = parsed.hostname.toLowerCase();
+    if (parsed.protocol !== 'https:') {
+      return undefined;
+    }
+    if (hostname === 'github.com') {
+      return 'github';
+    }
+    if (hostname === 'dev.azure.com' || hostname.endsWith('.visualstudio.com')) {
+      return 'ado';
+    }
+  } catch {
+    return undefined;
+  }
+
+  return undefined;
+}
+
+/** Treats missing itemType as issue-shaped for compatibility with older/generic items. */
+function getWorkItemKind(item: Readonly<WorkItem>): WorkItemKind | undefined {
+  const itemType: unknown = item.itemType;
+  if (itemType === 'pr' || itemType === 'issue') {
+    return itemType;
+  }
+  if (itemType === undefined) {
+    return 'issue';
+  }
+  return undefined;
+}
 
 type WorkMode = 'checkout' | 'worktree';
 
@@ -86,12 +114,12 @@ interface PrBranchInfo {
 /**
  * DevDocket action that bootstraps a development environment for a work item.
  *
- * Supports items from GitHub and Azure DevOps providers (both issues and PRs).
+ * Supports items with GitHub or Azure DevOps URLs (both issues and PRs).
  * When executed on an issue it creates a new branch and either checks out
  * or creates a worktree for it, based on user preference.
  * When executed on a PR it fetches the existing PR branch instead of creating one.
  *
- * Only available for items in the `InProgress` state from supported providers.
+ * Only available for `InProgress` items whose source URL and item shape are supported.
  */
 export class StartWorkAction implements DevDocketAction {
   readonly id = 'startGitWork';
@@ -104,7 +132,9 @@ export class StartWorkAction implements DevDocketAction {
   }
 
   canRun(item: Readonly<WorkItem>): boolean {
-    return item.state === WorkItemState.InProgress && SUPPORTED_PROVIDERS.includes(item.providerId ?? '');
+    return item.state === WorkItemState.InProgress
+      && this.getRouting(item) !== undefined
+      && this.parseExternalId(item.externalId) !== undefined;
   }
 
   async run(item: Readonly<WorkItem>): Promise<void> {
@@ -114,18 +144,31 @@ export class StartWorkAction implements DevDocketAction {
       return;
     }
 
-    const isPr = PR_PROVIDERS.includes(item.providerId ?? '');
+    const routing = this.getRouting(item);
+    if (!routing) {
+      void vscode.window.showErrorMessage('DevDocket: This work item is not supported by Start Git Work.');
+      return;
+    }
 
     const repoPath = await this.promptForRepoPath(parsed.repoKey);
     if (!repoPath) {
       return;
     }
 
-    if (isPr) {
-      await this.runPrFlow(item, parsed, repoPath);
+    if (routing.kind === 'pr') {
+      await this.runPrFlow(item, parsed, repoPath, routing.host);
     } else {
       await this.runIssueFlow(item, parsed, repoPath);
     }
+  }
+
+  private getRouting(item: Readonly<WorkItem>): { host: GitHost; kind: WorkItemKind } | undefined {
+    const host = detectGitHost(item.url);
+    const kind = getWorkItemKind(item);
+    if (!host || !kind) {
+      return undefined;
+    }
+    return { host, kind };
   }
 
   private async runIssueFlow(
@@ -274,6 +317,7 @@ export class StartWorkAction implements DevDocketAction {
     item: Readonly<WorkItem>,
     parsed: ParsedExternalId,
     repoPath: string,
+    host: GitHost,
   ): Promise<void> {
     const workMode = await this.promptForWorkMode();
     if (!workMode) {
@@ -290,9 +334,8 @@ export class StartWorkAction implements DevDocketAction {
         async (progress) => {
           progress.report({ message: 'Fetching PR branch...' });
 
-          const isGitHubPr = GITHUB_PR_PROVIDERS.includes(item.providerId ?? '');
-          logger.info(`PR flow: provider=${item.providerId}, type=${isGitHubPr ? 'GitHub' : 'ADO'}, repoKey=${parsed.repoKey}, itemNumber=${parsed.itemNumber}`);
-          const branchInfo = isGitHubPr
+          logger.info(`PR flow: provider=${item.providerId}, type=${host === 'github' ? 'GitHub' : 'ADO'}, repoKey=${parsed.repoKey}, itemNumber=${parsed.itemNumber}`);
+          const branchInfo = host === 'github'
             ? await this.fetchGitHubPrBranch(parsed, repoPath)
             : await this.fetchAdoPrBranch(parsed, repoPath);
 

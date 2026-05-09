@@ -35,15 +35,58 @@ vi.mock('fs', () => ({
 import { execFile } from 'child_process';
 import * as fs from 'fs';
 
+function hasOverride(overrides: Partial<any>, key: string): boolean {
+  return Object.prototype.hasOwnProperty.call(overrides, key);
+}
+
+function defaultItemType(providerId: unknown): 'issue' | 'pr' | undefined {
+  if (providerId === 'github-my-prs' || providerId === 'github-pr-reviews' || providerId === 'ado-pr-reviews') {
+    return 'pr';
+  }
+  if (providerId === 'github' || providerId === 'ado-work-items') {
+    return 'issue';
+  }
+  return undefined;
+}
+
+function defaultExternalId(providerId: unknown): string {
+  if (providerId === 'ado-pr-reviews') {
+    return 'org/project/repo/101';
+  }
+  if (providerId === 'ado-work-items') {
+    return 'org/project/456';
+  }
+  return 'owner/repo#123';
+}
+
+function defaultUrl(providerId: unknown, itemType: unknown): string {
+  if (providerId === 'ado-pr-reviews') {
+    return 'https://dev.azure.com/org/project/_git/repo/pullrequest/101';
+  }
+  if (providerId === 'ado-work-items') {
+    return 'https://dev.azure.com/org/project/_workitems/edit/456';
+  }
+  if (itemType === 'pr') {
+    return 'https://github.com/owner/repo/pull/123';
+  }
+  return 'https://github.com/owner/repo/issues/123';
+}
+
 function createWorkItem(overrides: Partial<any> = {}) {
+  const providerId = hasOverride(overrides, 'providerId') ? overrides.providerId : 'github';
+  const itemType = hasOverride(overrides, 'itemType') ? overrides.itemType : defaultItemType(providerId);
+  const externalId = hasOverride(overrides, 'externalId') ? overrides.externalId : defaultExternalId(providerId);
+  const url = hasOverride(overrides, 'url') ? overrides.url : defaultUrl(providerId, itemType);
+
   return {
     id: 'wc-test-1',
     title: '#123: Fix login redirect bug',
     description: 'Some description',
     state: 'InProgress',
-    providerId: 'github',
-    externalId: 'owner/repo#123',
-    url: 'https://github.com/owner/repo/issues/123',
+    providerId,
+    externalId,
+    itemType,
+    url,
     createdAt: Date.now(),
     updatedAt: Date.now(),
     ...overrides,
@@ -165,38 +208,62 @@ describe('StartWorkAction', () => {
   });
 
   describe('canRun', () => {
-    it('returns true for github provider items in InProgress state', () => {
+    it('returns true for github provider issue items in InProgress state', () => {
       const item = createWorkItem({ providerId: 'github', state: 'InProgress' });
       expect(action.canRun(item)).toBe(true);
     });
 
-    it('returns true for ado-work-items provider items in InProgress state', () => {
-      const item = createWorkItem({ providerId: 'ado-work-items', state: 'InProgress', externalId: 'org/project/456' });
+    it('returns true for ado-work-items provider issue items in InProgress state', () => {
+      const item = createWorkItem({ providerId: 'ado-work-items', state: 'InProgress' });
       expect(action.canRun(item)).toBe(true);
     });
 
-    it('returns true for github-my-prs provider items in InProgress state', () => {
+    it('returns true for github-my-prs provider PR items in InProgress state', () => {
       const item = createWorkItem({ providerId: 'github-my-prs', state: 'InProgress' });
       expect(action.canRun(item)).toBe(true);
     });
 
-    it('returns true for github-pr-reviews provider items in InProgress state', () => {
+    it('returns true for github-pr-reviews provider PR items in InProgress state', () => {
       const item = createWorkItem({ providerId: 'github-pr-reviews', state: 'InProgress' });
       expect(action.canRun(item)).toBe(true);
     });
 
-    it('returns true for ado-pr-reviews provider items in InProgress state', () => {
-      const item = createWorkItem({ providerId: 'ado-pr-reviews', state: 'InProgress', externalId: 'org/project/repo/101' });
+    it('returns true for ado-pr-reviews provider PR items in InProgress state', () => {
+      const item = createWorkItem({ providerId: 'ado-pr-reviews', state: 'InProgress' });
       expect(action.canRun(item)).toBe(true);
     });
 
-    it('returns false for non-supported provider items', () => {
-      const item = createWorkItem({ providerId: 'jira', state: 'InProgress' });
+    it('returns true for third-party provider PR items with GitHub URLs', () => {
+      const item = createWorkItem({
+        providerId: 'third-party-prs',
+        itemType: 'pr',
+        externalId: 'owner/repo#321',
+        url: 'https://github.com/owner/repo/pull/321',
+      });
+      expect(action.canRun(item)).toBe(true);
+    });
+
+    it('falls back to issue behavior when itemType is missing and URL is supported', () => {
+      const item = createWorkItem({ itemType: undefined });
+      expect(action.canRun(item)).toBe(true);
+    });
+
+    it('returns false for items without a URL', () => {
+      const item = createWorkItem({ url: undefined });
       expect(action.canRun(item)).toBe(false);
     });
 
-    it('returns false for items without a provider', () => {
-      const item = createWorkItem({ providerId: undefined, state: 'InProgress' });
+    it('returns false for items with unrecognized URL hosts', () => {
+      const item = createWorkItem({
+        providerId: 'third-party-issues',
+        itemType: 'issue',
+        url: 'https://jira.example.com/browse/PROJ-123',
+      });
+      expect(action.canRun(item)).toBe(false);
+    });
+
+    it('returns false for items with unrecognized item types', () => {
+      const item = createWorkItem({ itemType: 'task' });
       expect(action.canRun(item)).toBe(false);
     });
 
@@ -413,6 +480,23 @@ describe('StartWorkAction', () => {
       );
       expect(branchCall).toBeDefined();
       expect(branchCall![1]).toEqual(['branch', 'issue123', 'main']);
+    });
+
+    it('uses issue flow when itemType is issue even for a PR provider id', async () => {
+      const item = createWorkItem({
+        providerId: 'github-my-prs',
+        itemType: 'issue',
+        externalId: 'owner/repo#123',
+        url: 'https://github.com/owner/repo/issues/123',
+      });
+      await action.run(item);
+
+      const branchCall = vi.mocked(execFile).mock.calls.find(
+        (call: any[]) => call[1]?.[0] === 'branch' && call[1]?.[1] !== '--list',
+      );
+      expect(branchCall).toBeDefined();
+      expect(branchCall![1]).toEqual(['branch', 'issue123', 'origin/dev']);
+      expect(authentication.getSession).not.toHaveBeenCalled();
     });
 
     it('shows error when branch already exists', async () => {
@@ -829,6 +913,21 @@ describe('StartWorkAction', () => {
 
       const fetchCalls = vi.mocked(globalThis.fetch).mock.calls;
       expect(fetchCalls[0][0]).toBe('https://api.github.com/repos/owner/repo/pulls/99');
+    });
+
+    it('fetches PR branch via GitHub API for third-party PR items with GitHub URLs', async () => {
+      mockQuickPickWorktree();
+      const item = createWorkItem({
+        providerId: 'third-party-prs',
+        itemType: 'pr',
+        externalId: 'owner/repo#42',
+        url: 'https://github.com/owner/repo/pull/42',
+      });
+      await action.run(item);
+
+      expect(authentication.getSession).toHaveBeenCalledWith('github', ['repo'], { createIfNone: true });
+      const fetchCalls = vi.mocked(globalThis.fetch).mock.calls;
+      expect(fetchCalls[0][0]).toBe('https://api.github.com/repos/owner/repo/pulls/42');
     });
 
     it('does not prompt for base branch for PR items', async () => {
@@ -1303,6 +1402,27 @@ describe('StartWorkAction', () => {
       const item = createWorkItem({
         providerId: 'ado-pr-reviews',
         externalId: 'org/project/repo/101',
+      });
+      await action.run(item);
+
+      expect(authentication.getSession).toHaveBeenCalledWith(
+        'microsoft',
+        ['499b84ac-1321-427f-aa17-267ca6975798/.default'],
+        { createIfNone: true },
+      );
+      const fetchCalls = vi.mocked(globalThis.fetch).mock.calls;
+      expect(fetchCalls[0][0]).toBe(
+        'https://dev.azure.com/org/project/_apis/git/repositories/repo/pullrequests/101?api-version=7.1',
+      );
+    });
+
+    it('fetches PR branch via ADO API for third-party PR items with ADO URLs', async () => {
+      mockQuickPickWorktree();
+      const item = createWorkItem({
+        providerId: 'third-party-prs',
+        itemType: 'pr',
+        externalId: 'org/project/repo/101',
+        url: 'https://dev.azure.com/org/project/_git/repo/pullrequest/101',
       });
       await action.run(item);
 
