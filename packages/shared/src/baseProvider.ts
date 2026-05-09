@@ -91,7 +91,7 @@ export interface ProviderItem {
 }
 
 /** @deprecated Use ProviderItem instead. */
-export type DiscoveredItem = ProviderItem;
+export interface DiscoveredItem extends ProviderItem {}
 
 /**
  * A badge rendered alongside the core-managed Provider / Type / CI badges.
