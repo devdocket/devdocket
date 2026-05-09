@@ -2,14 +2,10 @@
  * Shared types and utilities used across all DevDocket packages.
  * @module @devdocket/shared
  */
-import type { ProviderItem as BaseProviderItem } from './baseProvider';
-
 export { createLoggerService, LogLevel, resolveLogLevel, serializeArg } from './logger';
 export type { Logger, LogOutput, LoggerService } from './logger';
 export { BaseProvider } from './baseProvider';
-export type { ProviderItem, Disposable, Event, EventEmitterLike, ProviderBadge, RelatedItemRef, ResolvedItem } from './baseProvider';
-/** @deprecated Use ProviderItem instead. */
-export type DiscoveredItem = BaseProviderItem;
+export type { ProviderItem, DiscoveredItem, Disposable, Event, EventEmitterLike, ProviderBadge, RelatedItemRef, ResolvedItem } from './baseProvider';
 export { isValidUrlSegment, isValidGitHubRepo, isValidRepoSlug, sanitizeUrlSegment, safeDecodeComponent } from './urlValidation';
 export { validateRefreshInterval } from './refreshInterval';
 export type { DevDocketRunWatcher, RunIdentifier, RunStatus, JobStatus, RunState, RunConclusion, CancellationTokenLike } from './runWatcher';
