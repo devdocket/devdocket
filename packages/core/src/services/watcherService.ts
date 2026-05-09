@@ -3,6 +3,7 @@ import type { RunIdentifier, RunStatus, JobStatus, PRIdentifier, PRState } from 
 import { WatcherRegistry } from './watcherRegistry';
 import { PRWatcherRegistry } from './prWatcherRegistry';
 import { WatchStore } from '../storage/watchStore';
+import type { Logger } from './logger';
 
 /**
  * A watched pipeline run with its current status.
@@ -72,6 +73,7 @@ export class WatcherService implements vscode.Disposable {
    * regression can re-alert the user.
    */
   private persistFailureNotified = false;
+  private readonly skippedUnregisteredChildRuns = new Set<string>();
   
   private readonly _onDidChangeWatchedRuns = new vscode.EventEmitter<WatchedRun[]>();
   readonly onDidChangeWatchedRuns = this._onDidChangeWatchedRuns.event;
@@ -92,7 +94,7 @@ export class WatcherService implements vscode.Disposable {
     private watcherRegistry: WatcherRegistry,
     private prWatcherRegistry: PRWatcherRegistry,
     private watchStore: WatchStore,
-    private logger: { info: (msg: string) => void; warn: (msg: string) => void; error: (msg: string) => void }
+    private logger: Logger
   ) {
     this.configSubscription = vscode.workspace.onDidChangeConfiguration(e => {
       if (e.affectsConfiguration('devDocket.watches.pollingIntervalSeconds') && this.pollTimer) {
@@ -287,6 +289,9 @@ export class WatcherService implements vscode.Disposable {
     // Add initial runs as child watches (batched — single event/persist after)
     for (const runId of snapshot.runs) {
       const resolved = this.resolveRunIdentifier(runId);
+      if (this.shouldSkipUnregisteredChildRun(key, resolved)) {
+        continue;
+      }
       await this.addChildRun(key, watchedPR, resolved, {
         suppressEvents: true,
         suppressPersist: true,
@@ -830,6 +835,9 @@ export class WatcherService implements vscode.Disposable {
         const newRunKeys = new Set<string>();
         for (const runId of snapshot.runs) {
           const resolved = this.resolveRunIdentifier(runId);
+          if (this.shouldSkipUnregisteredChildRun(key, resolved)) {
+            continue;
+          }
           const runKey = this.getWatchKey(resolved);
           newRunKeys.add(runKey);
           if (!currentRunKeys.has(runKey)) {
@@ -1020,9 +1028,38 @@ export class WatcherService implements vscode.Disposable {
       }
       return false;
     } catch (err) {
+      if (this.isNoWatcherRegisteredError(err)) {
+        this.logSkippedUnregisteredChildRun(prKey, runIdentifier);
+        return false;
+      }
       this.logger.warn(`Failed to add child run ${runIdentifier.displayName} for PR ${prWatch.identifier.displayName}: ${err}`);
       return false;
     }
+  }
+
+  private shouldSkipUnregisteredChildRun(prKey: string, runIdentifier: RunIdentifier): boolean {
+    if (this.watcherRegistry.get(runIdentifier.providerId)) {
+      return false;
+    }
+
+    this.logSkippedUnregisteredChildRun(prKey, runIdentifier);
+    return true;
+  }
+
+  private logSkippedUnregisteredChildRun(prKey: string, runIdentifier: RunIdentifier): void {
+    const runKey = this.getWatchKey(runIdentifier);
+    const skipKey = `${prKey}::${runKey}`;
+    if (this.skippedUnregisteredChildRuns.has(skipKey)) {
+      return;
+    }
+
+    this.skippedUnregisteredChildRuns.add(skipKey);
+    this.logger.debug(`Skipping child run with no registered watcher: ${runIdentifier.providerId}/${runIdentifier.runId}`);
+  }
+
+  private isNoWatcherRegisteredError(err: unknown): boolean {
+    const message = err instanceof Error ? err.message : String(err);
+    return message.includes('No watcher registered for provider:');
   }
 
   /**

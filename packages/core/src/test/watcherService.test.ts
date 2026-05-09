@@ -7,6 +7,7 @@ import type { DevDocketRunWatcher, RunIdentifier, RunStatus } from '@devdocket/s
 
 function createMockLogger() {
   return {
+    debug: vi.fn(),
     info: vi.fn(),
     warn: vi.fn(),
     error: vi.fn(),
@@ -538,6 +539,49 @@ describe('WatcherService', () => {
       expect(service.getActiveWatches()[0].parentPRKey).toBeDefined();
     });
 
+    it('keeps registered PR child runs while skipping unregistered providers without warning', async () => {
+      const runWatcher = createMockWatcher('github-actions');
+      (runWatcher.canWatch as ReturnType<typeof vi.fn>).mockImplementation((url: string) => url.startsWith('https://example.com/run/'));
+      registry.register(runWatcher);
+
+      const prWatcher = createMockPRWatcher('test-pr', async () => ({
+        prState: 'open',
+        runs: [
+          {
+            providerId: 'github-actions',
+            runId: 'run-1',
+            displayName: 'CI Build',
+            url: 'https://example.com/run/1',
+            repo: 'owner/repo',
+          },
+          {
+            providerId: 'github-advanced-security',
+            runId: 'codeql-1',
+            displayName: 'CodeQL',
+            url: 'https://github.com/owner/repo/security/code-scanning',
+            repo: 'owner/repo',
+          },
+        ],
+      }));
+      prRegistry.register(prWatcher);
+
+      const result = await service.startPRWatch(createPRIdentifier());
+
+      expect(result.childRunKeys).toHaveLength(1);
+      expect(service.getActiveWatches()).toHaveLength(1);
+      expect(service.getActiveWatches()[0].identifier.providerId).toBe('github-actions');
+      expect(logger.warn).not.toHaveBeenCalledWith(expect.stringContaining('Failed to add child run'));
+      expect(logger.debug).toHaveBeenCalledWith(expect.stringContaining('Skipping child run with no registered watcher'));
+
+      (logger.debug as ReturnType<typeof vi.fn>).mockClear();
+      await vi.advanceTimersByTimeAsync(60000);
+
+      expect(service.getActiveWatches()).toHaveLength(1);
+      expect(service.getActiveWatches()[0].identifier.providerId).toBe('github-actions');
+      expect(logger.warn).not.toHaveBeenCalledWith(expect.stringContaining('Failed to add child run'));
+      expect(logger.debug).not.toHaveBeenCalledWith(expect.stringContaining('Skipping child run with no registered watcher'));
+    });
+
     it('dismisses a PR watch when its last visible child run is dismissed', async () => {
       const runWatcher = createMockWatcher('github-actions');
       registry.register(runWatcher);
@@ -828,7 +872,7 @@ describe('WatcherService', () => {
       expect(service.getActiveWatches()[0].identifier.runId).toBe('555');
     });
 
-    it('skips run identifiers when no watcher matches providerId or URL', async () => {
+    it('skips run identifiers when no watcher matches providerId or URL without warning', async () => {
       // No run watchers registered — unresolvable run
       const prWatcher = createMockPRWatcher('test-pr', async () => ({
         prState: 'open',
@@ -844,10 +888,12 @@ describe('WatcherService', () => {
 
       const result = await service.startPRWatch(createPRIdentifier());
 
-      // Child run should not be added (no matching watcher)
+      // Child run should not be added (no matching watcher), but the PR watch still succeeds.
       expect(result.childRunKeys).toHaveLength(0);
+      expect(service.getActivePRWatches()).toHaveLength(1);
       expect(service.getActiveWatches()).toHaveLength(0);
-      expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining('Failed to add child run'));
+      expect(logger.warn).not.toHaveBeenCalledWith(expect.stringContaining('Failed to add child run'));
+      expect(logger.debug).toHaveBeenCalledWith(expect.stringContaining('Skipping child run with no registered watcher'));
     });
   });
 
