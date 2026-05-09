@@ -8,6 +8,7 @@ describe('Start Git Work extension activation', () => {
   let disposables: any[];
   let actionDisposable: any;
   let transitionDisposable: any;
+  let outputChannel: any;
 
   const disposeContextSubscriptions = () => {
     const currentDisposables = disposables;
@@ -22,7 +23,7 @@ describe('Start Git Work extension activation', () => {
   beforeEach(() => {
     vi.clearAllMocks();
 
-    (window as any).createOutputChannel = vi.fn(() => ({
+    outputChannel = {
       info: vi.fn(),
       debug: vi.fn(),
       warn: vi.fn(),
@@ -38,7 +39,8 @@ describe('Start Git Work extension activation', () => {
       replace: vi.fn(),
       logLevel: 2,
       onDidChangeLogLevel: vi.fn(),
-    }));
+    };
+    (window as any).createOutputChannel = vi.fn(() => outputChannel);
 
     disposables = [];
     actionDisposable = { dispose: vi.fn() };
@@ -70,14 +72,15 @@ describe('Start Git Work extension activation', () => {
     disposeContextSubscriptions();
   });
 
-  it('pushes action and transition disposables onto subscriptions', async () => {
+  it('pushes activation disposables onto subscriptions', async () => {
     await activate(mockContext);
 
     expect(mockApi.registerAction).toHaveBeenCalledTimes(1);
     expect(mockApi.onDidTransitionState).toHaveBeenCalledTimes(1);
+    expect(disposables).toContain(outputChannel);
     expect(disposables).toContain(actionDisposable);
     expect(disposables).toContain(transitionDisposable);
-    expect(disposables.length).toBeGreaterThanOrEqual(2);
+    expect(disposables.length).toBeGreaterThanOrEqual(3);
   });
 
   it('lets context subscriptions dispose registrations', async () => {
@@ -85,6 +88,7 @@ describe('Start Git Work extension activation', () => {
 
     disposeContextSubscriptions();
 
+    expect(outputChannel.dispose).toHaveBeenCalledTimes(1);
     expect(actionDisposable.dispose).toHaveBeenCalledTimes(1);
     expect(transitionDisposable.dispose).toHaveBeenCalledTimes(1);
   });
