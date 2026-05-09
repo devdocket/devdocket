@@ -9,6 +9,7 @@ describe('Start Git Work extension activation', () => {
   let actionDisposable: any;
   let transitionDisposable: any;
   let outputChannel: any;
+  let createOutputChannelSpy: { mockRestore: () => void } | undefined;
 
   const disposeContextSubscriptions = () => {
     const currentDisposables = disposables;
@@ -40,7 +41,7 @@ describe('Start Git Work extension activation', () => {
       logLevel: 2,
       onDidChangeLogLevel: vi.fn(),
     };
-    (window as any).createOutputChannel = vi.fn(() => outputChannel);
+    createOutputChannelSpy = vi.spyOn(window, 'createOutputChannel').mockReturnValue(outputChannel as any);
 
     disposables = [];
     actionDisposable = { dispose: vi.fn() };
@@ -70,6 +71,8 @@ describe('Start Git Work extension activation', () => {
 
   afterEach(() => {
     disposeContextSubscriptions();
+    createOutputChannelSpy?.mockRestore();
+    createOutputChannelSpy = undefined;
   });
 
   it('pushes activation disposables onto subscriptions', async () => {
