@@ -101,7 +101,7 @@ The `@devdocket/shared` package provides the TypeScript types and the `BaseProvi
 import { BaseProvider, type ProviderItem } from '@devdocket/shared';
 ```
 
-`ProviderItem` is the canonical name for items emitted by providers. `DiscoveredItem` is still exported as a deprecated alias for compatibility, but new provider code should import and emit `ProviderItem`.
+`ProviderItem` is the canonical name for items emitted by providers. `DiscoveredItem` is still exported as a deprecated compatibility interface, but new provider code should import and emit `ProviderItem`.
 
 If you would rather avoid the GitHub Packages dependency, you can re-declare the small subset of interfaces your extension needs. Copy the following declarations into your provider code:
 

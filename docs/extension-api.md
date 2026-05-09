@@ -39,7 +39,7 @@ You can then import types directly instead of redefining them:
 import { BaseProvider, type ProviderItem } from '@devdocket/shared';
 ```
 
-`ProviderItem` is the canonical provider item type. `DiscoveredItem` remains exported as a deprecated type alias for older consumers; migrate imports from `DiscoveredItem` to `ProviderItem` when updating.
+`ProviderItem` is the canonical provider item type. `DiscoveredItem` remains exported as a deprecated compatibility interface for older consumers; migrate imports from `DiscoveredItem` to `ProviderItem` when updating.
 
 ### Acquiring the API
 

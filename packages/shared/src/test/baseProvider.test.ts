@@ -50,7 +50,7 @@ class TestProvider extends BaseProvider {
 }
 
 describe('BaseProvider', () => {
-  it('keeps DiscoveredItem as an assignable compatibility alias', () => {
+  it('keeps DiscoveredItem as an assignable compatibility interface', () => {
     const legacyItem: DiscoveredItem = { externalId: 'legacy-1', title: 'Legacy item' };
     const canonicalItem: ProviderItem = legacyItem;
     const reverseAssignedItem: DiscoveredItem = canonicalItem;

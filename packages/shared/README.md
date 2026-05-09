@@ -24,7 +24,7 @@ npm install @devdocket/shared
 import { BaseProvider, type ProviderItem, type Event } from '@devdocket/shared';
 ```
 
-`ProviderItem` is the canonical item type emitted by providers. `DiscoveredItem` remains available as a deprecated compatibility alias; migrate consumer imports to `ProviderItem`.
+`ProviderItem` is the canonical item type emitted by providers. `DiscoveredItem` remains available as a deprecated compatibility interface; migrate consumer imports to `ProviderItem`.
 
 See the [DevDocket documentation](https://github.com/devdocket/devdocket) for details on building provider and action extensions.
 
