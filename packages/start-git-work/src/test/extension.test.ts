@@ -1,6 +1,14 @@
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
 import { extensions, window } from 'vscode';
 import { activate, deactivate } from '../extension';
+import { setLogger } from '../logger';
+
+const noopLogger = {
+  debug: () => undefined,
+  info: () => undefined,
+  warn: () => undefined,
+  error: () => undefined,
+};
 
 describe('Start Git Work extension activation', () => {
   let mockContext: any;
@@ -73,6 +81,7 @@ describe('Start Git Work extension activation', () => {
     disposeContextSubscriptions();
     createOutputChannelSpy?.mockRestore();
     createOutputChannelSpy = undefined;
+    setLogger(noopLogger);
   });
 
   it('pushes activation disposables onto subscriptions', async () => {
