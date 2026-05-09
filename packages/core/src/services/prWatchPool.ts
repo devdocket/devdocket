@@ -105,10 +105,7 @@ export class PRWatchPool implements vscode.Disposable {
 
     for (const runId of snapshot.runs) {
       const resolved = this.runControl.resolveRunIdentifier(runId);
-      await this.addChildRun(key, watchedPR, resolved, {
-        suppressEvents: true,
-        suppressPersist: true,
-      });
+      await this.addChildRun(key, watchedPR, resolved);
     }
 
     if (snapshot.prState === 'open') {
@@ -238,10 +235,7 @@ export class PRWatchPool implements vscode.Disposable {
           const runKey = this.runControl.getWatchKey(resolved);
           newRunKeys.add(runKey);
           if (!currentRunKeys.has(runKey)) {
-            const added = await this.addChildRun(key, prWatch, resolved, {
-              suppressEvents: true,
-              suppressPersist: true,
-            });
+            const added = await this.addChildRun(key, prWatch, resolved);
             if (this.isDisposed()) return { prChanged, childRunChanged };
             if (added) {
               childRunChanged = true;
@@ -292,11 +286,10 @@ export class PRWatchPool implements vscode.Disposable {
     return { prChanged, childRunChanged };
   }
 
-  async addChildRun(
+  private async addChildRun(
     prKey: string,
     prWatch: WatchedPR,
     runIdentifier: RunIdentifier,
-    options?: { suppressEvents?: boolean; suppressPersist?: boolean },
   ): Promise<boolean> {
     const runKey = this.runControl.getWatchKey(runIdentifier);
     try {
