@@ -271,7 +271,7 @@ function WatchCard({
               openLinkedItem();
             }}
           >
-            ⇱
+            <span class="codicon codicon-go-to-file" aria-hidden="true" />
           </button>
         ) : null}
         <button

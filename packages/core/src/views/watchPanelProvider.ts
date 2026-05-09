@@ -36,7 +36,10 @@ export class WatchPanelProvider implements vscode.Disposable {
       vscode.ViewColumn.Beside,
       {
         enableScripts: true,
-        localResourceRoots: [vscode.Uri.joinPath(this.extensionUri, 'webview-dist')],
+        localResourceRoots: [
+          vscode.Uri.joinPath(this.extensionUri, 'webview-dist'),
+          vscode.Uri.joinPath(this.extensionUri, 'node_modules', '@vscode/codicons', 'dist'),
+        ],
       },
     );
 
@@ -243,6 +246,7 @@ export class WatchPanelProvider implements vscode.Disposable {
 
   private getHtml(webview: vscode.Webview): string {
     const scriptUri = webview.asWebviewUri(vscode.Uri.joinPath(this.extensionUri, 'webview-dist', 'watchPanel.js'));
+    const codiconsUri = webview.asWebviewUri(vscode.Uri.joinPath(this.extensionUri, 'node_modules', '@vscode/codicons', 'dist', 'codicon.css'));
     const nonce = getNonce();
 
     return `<!DOCTYPE html>
@@ -250,8 +254,9 @@ export class WatchPanelProvider implements vscode.Disposable {
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'nonce-${nonce}'; script-src 'nonce-${nonce}';">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'nonce-${nonce}' ${webview.cspSource}; font-src ${webview.cspSource}; script-src 'nonce-${nonce}';">
   <title>CI Watches</title>
+  <link rel="stylesheet" href="${codiconsUri}">
   <style nonce="${nonce}">
     * { box-sizing: border-box; }
     body {
