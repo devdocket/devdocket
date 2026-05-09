@@ -303,6 +303,10 @@ export class PRWatchPool implements vscode.Disposable {
       }
 
       await this.runControl.startWatch(runIdentifier, prKey);
+      if (this.prWatches.get(prKey) !== prWatch || prWatch.dismissed) {
+        this.runControl.deleteOwnedWatch(runKey, prKey);
+        return false;
+      }
       if (!prWatch.childRunKeys.includes(runKey)) {
         prWatch.childRunKeys.push(runKey);
         return true;
