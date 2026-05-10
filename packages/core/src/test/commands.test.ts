@@ -826,19 +826,19 @@ describe('registerCommands', () => {
       expect(stateStore.setState).toHaveBeenCalledWith('github', 'ext-1', 'accepted');
     });
 
-    it('prefixes group to title when group is present', async () => {
+    it('keeps title unprefixed and passes group when group is present', async () => {
       const inboxItem = makeInboxItem({ group: 'org/repo' });
       workGraph.findItemByProvenance.mockReturnValue(undefined);
 
       await invoke('devdocket.acceptFromInbox', inboxItem);
 
       expect(workGraph.createItem).toHaveBeenCalledWith(
-        { title: 'org/repo Inbox Issue' },
-        expect.any(Object),
+        { title: 'Inbox Issue' },
+        expect.objectContaining({ group: 'org/repo' }),
       );
     });
 
-    it('does not prefix group when group is empty/whitespace', async () => {
+    it('does not pass group when group is empty/whitespace', async () => {
       const inboxItem = makeInboxItem({ group: '  ' });
       workGraph.findItemByProvenance.mockReturnValue(undefined);
 
@@ -1191,11 +1191,11 @@ describe('registerCommands', () => {
       await invoke('devdocket.acceptFromInbox', items[0], items);
 
       expect(workGraph.createItem).toHaveBeenCalledWith(
-        { title: 'octocat/repo Issue 1' },
+        { title: 'Issue 1' },
         expect.objectContaining({ providerId: 'github', externalId: 'ext-1', group: 'octocat/repo' }),
       );
       expect(workGraph.createItem).toHaveBeenCalledWith(
-        { title: 'octocat/other Issue 2' },
+        { title: 'Issue 2' },
         expect.objectContaining({ providerId: 'github', externalId: 'ext-2', group: 'octocat/other' }),
       );
     });
@@ -1431,6 +1431,14 @@ describe('registerCommands', () => {
         { providerId: 'github', externalId: 'ext-1', state: 'accepted' },
         { providerId: 'github', externalId: 'ext-2', state: 'accepted' },
       ]);
+      expect(workGraph.createItem).toHaveBeenCalledWith(
+        { title: 'Issue 1', description: undefined },
+        expect.objectContaining({ providerId: 'github', externalId: 'ext-1', group: 'My Mentions' }),
+      );
+      expect(workGraph.createItem).toHaveBeenCalledWith(
+        { title: 'Issue 2', description: undefined },
+        expect.objectContaining({ providerId: 'github', externalId: 'ext-2', group: 'My Mentions' }),
+      );
     });
 
     it('accepts all provider items to In Progress after confirmation', async () => {
@@ -1480,6 +1488,14 @@ describe('registerCommands', () => {
         'Accept 2 items from "GitHub > My Mentions" to In Progress?',
         { modal: true },
         'Accept All to In Progress',
+      );
+      expect(workGraph.createItem).toHaveBeenCalledWith(
+        { title: 'Issue 1', description: undefined },
+        expect.objectContaining({ providerId: 'github', externalId: 'ext-1', group: 'My Mentions' }),
+      );
+      expect(workGraph.createItem).toHaveBeenCalledWith(
+        { title: 'Issue 2', description: undefined },
+        expect.objectContaining({ providerId: 'github', externalId: 'ext-2', group: 'My Mentions' }),
       );
       expect(workGraph.transitionState).toHaveBeenCalledWith('wc-1', WorkItemState.InProgress);
       expect(workGraph.transitionState).toHaveBeenCalledWith('wc-2', WorkItemState.InProgress);
@@ -1658,6 +1674,21 @@ describe('registerCommands', () => {
       );
       expect(stateStore.setState).toHaveBeenCalledWith('github', 'ext-1', 'accepted');
       expect(workGraph.transitionState).toHaveBeenCalledWith('wc-new-1', WorkItemState.InProgress);
+    });
+
+    it('keeps title unprefixed and passes group when accepting a new item to InProgress', async () => {
+      const inboxItem = makeInboxItem({ group: 'org/repo' });
+      const created = createWorkItem({ id: 'wc-new-group' });
+      workGraph.findItemByProvenance.mockReturnValue(undefined);
+      workGraph.createItem.mockResolvedValue(created);
+
+      await invoke('devdocket.acceptToFocusFromInbox', inboxItem);
+
+      expect(workGraph.createItem).toHaveBeenCalledWith(
+        { title: 'Inbox Issue' },
+        expect.objectContaining({ providerId: 'github', externalId: 'ext-1', group: 'org/repo' }),
+      );
+      expect(workGraph.transitionState).toHaveBeenCalledWith('wc-new-group', WorkItemState.InProgress);
     });
 
     it('sets state to accepted and transitions existing New item to InProgress', async () => {
@@ -2548,15 +2579,15 @@ describe('registerCommands', () => {
       );
     });
 
-    it('prefixes group to title for source items with group', async () => {
+    it('keeps title unprefixed and passes group for source items with group', async () => {
       const sourceItem = makeSourceItem({ group: 'myorg/myrepo' });
       workGraph.findItemByProvenance.mockReturnValue(undefined);
 
       await invoke('devdocket.acceptFromSources', sourceItem);
 
       expect(workGraph.createItem).toHaveBeenCalledWith(
-        { title: 'myorg/myrepo Source Issue' },
-        expect.any(Object),
+        { title: 'Source Issue' },
+        expect.objectContaining({ group: 'myorg/myrepo' }),
       );
     });
 

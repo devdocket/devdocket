@@ -57,10 +57,8 @@ function resolveSourceItems(item?: SourcesElement, selectedItems?: SourcesElemen
   return [];
 }
 
-/** Builds a work-item title, optionally prefixed with the provider group. */
 function formatItemTitle(item: { group?: string; title: string }): string {
-  const trimmedGroup = item.group?.trim();
-  return trimmedGroup ? `${trimmedGroup} ${item.title}` : item.title;
+  return item.title;
 }
 
 // isSafeUrl is imported from ../utils/url.
