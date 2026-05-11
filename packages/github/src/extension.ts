@@ -32,27 +32,35 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 
   // Register the GitHub issue provider
   const issueProvider = new GitHubIssueProvider();
-  const config = vscode.workspace.getConfiguration('devDocketGithub');
-  const intervalSeconds = validateRefreshInterval(
-    config.get<number>('refreshIntervalSeconds', 300), logger,
-  );
-  issueProvider.startPeriodicRefresh(intervalSeconds);
-  context.subscriptions.push(api.registerProvider(issueProvider), issueProvider);
 
   // Register the GitHub PR review provider
   const prReviewProvider = new GitHubPrReviewProvider();
-  prReviewProvider.startPeriodicRefresh(intervalSeconds);
-  context.subscriptions.push(api.registerProvider(prReviewProvider), prReviewProvider);
 
   // Register the My PRs provider (authored PRs with status tracking)
   const myPrsProvider = new GitHubMyPrsProvider();
-  myPrsProvider.startPeriodicRefresh(intervalSeconds);
-  context.subscriptions.push(api.registerProvider(myPrsProvider), myPrsProvider);
 
   // Register the GitHub Mentions provider (@mentioned issues and PRs)
   const mentionsProvider = new GitHubMentionsProvider(context);
-  mentionsProvider.startPeriodicRefresh(intervalSeconds);
-  context.subscriptions.push(api.registerProvider(mentionsProvider), mentionsProvider);
+
+  const providers = [issueProvider, prReviewProvider, myPrsProvider, mentionsProvider];
+  const configureProviders = () => {
+    const config = vscode.workspace.getConfiguration('devDocketGithub');
+    const intervalSeconds = validateRefreshInterval(
+      config.get<number>('refreshIntervalSeconds', 300), logger,
+    );
+    for (const provider of providers) {
+      provider.startPeriodicRefresh(intervalSeconds);
+    }
+  };
+
+  configureProviders();
+
+  context.subscriptions.push(
+    api.registerProvider(issueProvider), issueProvider,
+    api.registerProvider(prReviewProvider), prReviewProvider,
+    api.registerProvider(myPrsProvider), myPrsProvider,
+    api.registerProvider(mentionsProvider), mentionsProvider,
+  );
 
   let watcherCount = 0;
   if (typeof api.registerRunWatcher === 'function') {
@@ -68,6 +76,14 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     context.subscriptions.push(api.registerPRWatcher(new GitHubPRWatcher()));
     prWatcherRegistered = true;
   }
+
+  context.subscriptions.push(
+    vscode.workspace.onDidChangeConfiguration(e => {
+      if (e.affectsConfiguration('devDocketGithub.refreshIntervalSeconds')) {
+        configureProviders();
+      }
+    }),
+  );
 
   const parts = ['4 providers'];
   if (watcherCount > 0) { parts.push(`${watcherCount} watcher${watcherCount === 1 ? '' : 's'}`); }

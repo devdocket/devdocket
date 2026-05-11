@@ -11,6 +11,9 @@ describe('GitHub extension activation', () => {
   let providerRegistrationDisposables: any[];
   let runWatcherDisposables: any[];
   let prWatcherDisposable: any;
+  let configChangeDisposable: any;
+  let configChangeListener: ((event: { affectsConfiguration: (section: string) => boolean }) => void) | undefined;
+  let refreshIntervalSeconds: number;
 
   const disposeContextSubscriptions = () => {
     const currentDisposables = disposables;
@@ -49,6 +52,9 @@ describe('GitHub extension activation', () => {
     providerRegistrationDisposables = [];
     runWatcherDisposables = [];
     prWatcherDisposable = { dispose: vi.fn() };
+    configChangeDisposable = { dispose: vi.fn() };
+    configChangeListener = undefined;
+    refreshIntervalSeconds = 0;
     mockContext = {
       subscriptions: {
         push: (...items: any[]) => disposables.push(...items),
@@ -79,7 +85,7 @@ describe('GitHub extension activation', () => {
       if (section === 'devDocketGithub') {
         return {
           get: vi.fn((key: string, defaultValue?: any) => {
-            if (key === 'refreshIntervalSeconds') return 0;
+            if (key === 'refreshIntervalSeconds') return refreshIntervalSeconds;
             return defaultValue;
           }),
         } as any;
@@ -87,6 +93,10 @@ describe('GitHub extension activation', () => {
       return {
         get: vi.fn((_key: string, defaultValue?: any) => defaultValue),
       } as any;
+    });
+    vi.mocked(workspace.onDidChangeConfiguration).mockImplementation((listener: any) => {
+      configChangeListener = listener;
+      return configChangeDisposable;
     });
   });
 
@@ -141,7 +151,29 @@ describe('GitHub extension activation', () => {
       expect(disposables).toContain(registration);
     }
     expect(disposables).toContain(prWatcherDisposable);
-    expect(disposables).toHaveLength(12);
+    expect(disposables).toContain(configChangeDisposable);
+    expect(disposables).toHaveLength(13);
+  });
+
+  it('updates provider refresh intervals when GitHub refresh interval config changes', async () => {
+    refreshIntervalSeconds = 120;
+    await activate(mockContext);
+
+    const providers = mockApi.registerProvider.mock.calls.map(([provider]: any[]) => provider);
+    const startPeriodicRefreshSpies = providers.map((provider: any) =>
+      vi.spyOn(provider, 'startPeriodicRefresh'),
+    );
+    expect(configChangeListener).toBeDefined();
+
+    refreshIntervalSeconds = 240;
+    configChangeListener?.({
+      affectsConfiguration: (section: string) => section === 'devDocketGithub.refreshIntervalSeconds',
+    });
+
+    for (const spy of startPeriodicRefreshSpies) {
+      expect(spy).toHaveBeenCalledWith(240);
+    }
+    expect(mockApi.registerProvider).toHaveBeenCalledTimes(4);
   });
 
   it('lets context subscriptions dispose providers, registrations, and watchers', async () => {
@@ -162,6 +194,7 @@ describe('GitHub extension activation', () => {
       expect(registration.dispose).toHaveBeenCalledTimes(1);
     }
     expect(prWatcherDisposable.dispose).toHaveBeenCalledTimes(1);
+    expect(configChangeDisposable.dispose).toHaveBeenCalledTimes(1);
   });
 
   it('deactivate is a no-op', () => {
