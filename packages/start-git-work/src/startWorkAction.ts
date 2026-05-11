@@ -198,8 +198,7 @@ export class StartWorkAction implements DevDocketAction {
     baseBranch: string,
     progress: vscode.Progress<{ message?: string }>,
   ): Promise<void> {
-    const repoBaseName = path.basename(repoPath);
-    const worktreeDirName = `${repoBaseName}-${this.toWorktreePathSuffix(branchName)}`;
+    const worktreeDirName = this.toWorktreeDirName(repoPath, branchName, item);
     const worktreePath = path.join(path.dirname(repoPath), worktreeDirName);
 
     if (fs.existsSync(worktreePath)) {
@@ -410,8 +409,7 @@ export class StartWorkAction implements DevDocketAction {
     progress: vscode.Progress<{ message?: string }>,
   ): Promise<void> {
     const { branchName, trackingRef } = branchInfo;
-    const repoBaseName = path.basename(repoPath);
-    const worktreeDirName = `${repoBaseName}-${this.toWorktreePathSuffix(branchName)}`;
+    const worktreeDirName = this.toWorktreeDirName(repoPath, branchName, item);
     const worktreePath = path.join(path.dirname(repoPath), worktreeDirName);
 
     if (fs.existsSync(worktreePath)) {
@@ -652,6 +650,12 @@ export class StartWorkAction implements DevDocketAction {
       .map(value => value?.trim())
       .find(Boolean);
     return detail ?? 'Check your network connection, permissions, and whether the branch still exists.';
+  }
+
+  private toWorktreeDirName(repoPath: string, ref: string, item: Readonly<WorkItem>): string {
+    const repoBaseName = path.basename(repoPath);
+    const itemSuffix = this.toWorktreePathSuffix(item.externalId ?? item.id);
+    return `${repoBaseName}-${this.toWorktreePathSuffix(ref)}-${itemSuffix}`;
   }
 
   private toWorktreePathSuffix(ref: string): string {

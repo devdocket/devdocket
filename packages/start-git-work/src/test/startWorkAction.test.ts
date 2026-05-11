@@ -165,7 +165,7 @@ describe('StartWorkAction', () => {
       expect(vi.mocked(execFile).mock.calls[0][1]).toEqual(['branch', '--list', 'vendor/ABC-123']);
       expect(vi.mocked(execFile).mock.calls[1][1]).toEqual(['branch', 'vendor/ABC-123', 'origin/dev']);
       expect(vi.mocked(execFile).mock.calls[2][1]).toEqual([
-        'worktree', 'add', path.join('/mock', 'workspace-vendor-ABC-123'), 'vendor/ABC-123',
+        'worktree', 'add', path.join('/mock', 'workspace-vendor-ABC-123-ABC-123'), 'vendor/ABC-123',
       ]);
       expect(memento.update).toHaveBeenCalledWith('repoPath:Vendor Repo', '/mock/workspace');
     });
@@ -188,7 +188,7 @@ describe('StartWorkAction', () => {
         ['remote', 'add', 'devdocket-fork-contributor', 'https://example.com/contributor/repo.git'],
         ['fetch', 'devdocket-fork-contributor', '+refs/heads/feature/topic:refs/remotes/devdocket-fork-contributor/feature/topic'],
         ['rev-parse', '--verify', 'refs/heads/feature/topic'],
-        ['worktree', 'add', '-b', 'feature/topic', path.join('/mock', 'workspace-feature-topic'), 'devdocket-fork-contributor/feature/topic'],
+        ['worktree', 'add', '-b', 'feature/topic', path.join('/mock', 'workspace-feature-topic-item-1'), 'devdocket-fork-contributor/feature/topic'],
       ]);
     });
 
@@ -205,7 +205,7 @@ describe('StartWorkAction', () => {
         ['remote', '-v'],
         ['fetch', 'origin', '+refs/heads/feature/topic:refs/remotes/origin/feature/topic'],
         ['rev-parse', '--verify', 'refs/heads/feature/topic'],
-        ['worktree', 'add', '-b', 'feature/topic', path.join('/mock', 'workspace-feature-topic'), 'origin/feature/topic'],
+        ['worktree', 'add', '-b', 'feature/topic', path.join('/mock', 'workspace-feature-topic-item-1'), 'origin/feature/topic'],
       ]);
     });
 
@@ -249,7 +249,7 @@ describe('StartWorkAction', () => {
         "DevDocket: Could not fetch branch 'feature/topic' from remote 'origin'. Authentication failed",
       );
       expect(vi.mocked(execFile).mock.calls.map(call => call[1])).not.toContainEqual([
-        'worktree', 'add', '-b', 'feature/topic', path.join('/mock', 'workspace-feature-topic'), 'origin/feature/topic',
+        'worktree', 'add', '-b', 'feature/topic', path.join('/mock', 'workspace-feature-topic-item-1'), 'origin/feature/topic',
       ]);
     });
 
@@ -349,7 +349,7 @@ describe('StartWorkAction', () => {
       await action.run(item);
 
       expect(vi.mocked(execFile).mock.calls.map(call => call[1])).toContainEqual([
-        'worktree', 'add', '--detach', path.join('/mock', 'workspace-feature-topic'), 'devdocket-fork-contributor/feature/topic',
+        'worktree', 'add', '--detach', path.join('/mock', 'workspace-feature-topic-item-1'), 'devdocket-fork-contributor/feature/topic',
       ]);
     });
 
@@ -404,7 +404,7 @@ describe('StartWorkAction', () => {
       await action.run(item);
 
       expect(vi.mocked(execFile).mock.calls.map(call => [call[0], call[1], call[2]])).toContainEqual([
-        'npm', ['install', '--prefix', path.join('/mock', 'workspace-issue123')], { cwd: path.join('/mock', 'workspace-issue123'), timeout: 60_000 },
+        'npm', ['install', '--prefix', path.join('/mock', 'workspace-issue123-item-1')], { cwd: path.join('/mock', 'workspace-issue123-item-1'), timeout: 60_000 },
       ]);
     });
 
