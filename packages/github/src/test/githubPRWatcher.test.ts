@@ -273,6 +273,29 @@ describe('GitHubPRWatcher', () => {
       expect(result.runs[0].runId).toBe('30');
     });
 
+    it('uses github-advanced-security providerId for CodeQL check runs', async () => {
+      mockFetchResponses(
+        { number: 42, title: 'My PR', state: 'open', merged: false, head: { sha: 'abc123' } },
+        {
+          check_runs: [
+            {
+              id: 40,
+              name: 'CodeQL',
+              html_url: 'https://github.com/owner/repo/runs/40',
+              app: { slug: 'github-advanced-security' },
+              check_suite: { id: 603 },
+            },
+          ],
+        },
+      );
+
+      const result = await watcher.getPRRunsSnapshot(makeIdentifier());
+      expect(result.runs).toHaveLength(1);
+      expect(result.runs[0].providerId).toBe('github-advanced-security');
+      expect(result.runs[0].runId).toBe('40');
+      expect(result.runs[0].url).toBe('https://github.com/owner/repo/runs/40');
+    });
+
     it('handles mix of GitHub Actions and external check runs', async () => {
       mockFetchResponses(
         { number: 42, title: 'My PR', state: 'open', merged: false, head: { sha: 'abc123' } },
