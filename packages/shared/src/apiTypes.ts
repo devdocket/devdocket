@@ -174,7 +174,7 @@ export interface DevDocketApi {
   /**
    * Look up the live {@link DiscoveredItem} for a given (providerId, externalId)
    * pair. Returns `undefined` if the provider has not (yet) emitted a matching
-   * item — for example because the provider is still loading or the item has
+   * item â€” for example because the provider is still loading or the item has
    * been removed upstream.
    *
    * Actions use this to read provider-supplied capabilities (e.g. {@link
