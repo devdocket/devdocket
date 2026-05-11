@@ -9,7 +9,7 @@ describe('GitHub extension activation', () => {
   let mockApi: any;
   let disposables: any[];
   let providerRegistrationDisposables: any[];
-  let runWatcherDisposable: any;
+  let runWatcherDisposables: any[];
   let prWatcherDisposable: any;
 
   const disposeContextSubscriptions = () => {
@@ -47,7 +47,7 @@ describe('GitHub extension activation', () => {
 
     disposables = [];
     providerRegistrationDisposables = [];
-    runWatcherDisposable = { dispose: vi.fn() };
+    runWatcherDisposables = [];
     prWatcherDisposable = { dispose: vi.fn() };
     mockContext = {
       subscriptions: {
@@ -61,7 +61,11 @@ describe('GitHub extension activation', () => {
         providerRegistrationDisposables.push(registration);
         return registration;
       }),
-      registerRunWatcher: vi.fn(() => runWatcherDisposable),
+      registerRunWatcher: vi.fn((watcher: any) => {
+        const registration = { registrationFor: watcher.id, dispose: vi.fn() };
+        runWatcherDisposables.push(registration);
+        return registration;
+      }),
       registerPRWatcher: vi.fn(() => prWatcherDisposable),
     };
 
@@ -121,7 +125,9 @@ describe('GitHub extension activation', () => {
       'github-my-prs',
       'github-mentions',
     ]);
-    expect(mockApi.registerRunWatcher).toHaveBeenCalledTimes(1);
+    expect(mockApi.registerRunWatcher).toHaveBeenCalledTimes(2);
+    const runWatcherIds = mockApi.registerRunWatcher.mock.calls.map(([watcher]: any[]) => watcher.id);
+    expect(runWatcherIds).toEqual(['github-actions', 'github-advanced-security']);
     expect(mockApi.registerPRWatcher).toHaveBeenCalledTimes(1);
 
     const subscribedProviderIds = disposables
@@ -131,9 +137,11 @@ describe('GitHub extension activation', () => {
     for (const registration of providerRegistrationDisposables) {
       expect(disposables).toContain(registration);
     }
-    expect(disposables).toContain(runWatcherDisposable);
+    for (const registration of runWatcherDisposables) {
+      expect(disposables).toContain(registration);
+    }
     expect(disposables).toContain(prWatcherDisposable);
-    expect(disposables).toHaveLength(11);
+    expect(disposables).toHaveLength(12);
   });
 
   it('lets context subscriptions dispose providers, registrations, and watchers', async () => {
@@ -150,7 +158,9 @@ describe('GitHub extension activation', () => {
     for (const providerDisposeSpy of providerDisposeSpies) {
       expect(providerDisposeSpy).toHaveBeenCalledTimes(1);
     }
-    expect(runWatcherDisposable.dispose).toHaveBeenCalledTimes(1);
+    for (const registration of runWatcherDisposables) {
+      expect(registration.dispose).toHaveBeenCalledTimes(1);
+    }
     expect(prWatcherDisposable.dispose).toHaveBeenCalledTimes(1);
   });
 

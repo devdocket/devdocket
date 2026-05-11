@@ -2,6 +2,7 @@ import * as vscode from 'vscode';
 import { GitHubIssueProvider } from './githubProvider';
 import { GitHubPrReviewProvider } from './githubPrReviewProvider';
 import { GitHubActionsWatcher } from './githubActionsWatcher';
+import { GitHubAdvancedSecurityWatcher } from './githubAdvancedSecurityWatcher';
 import { GitHubPRWatcher } from './githubPRWatcher';
 import { GitHubMyPrsProvider } from './githubMyPrsProvider';
 import { GitHubMentionsProvider } from './githubMentionsProvider';
@@ -53,10 +54,13 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   mentionsProvider.startPeriodicRefresh(intervalSeconds);
   context.subscriptions.push(api.registerProvider(mentionsProvider), mentionsProvider);
 
-  let watcherRegistered = false;
+  let watcherCount = 0;
   if (typeof api.registerRunWatcher === 'function') {
-    context.subscriptions.push(api.registerRunWatcher(new GitHubActionsWatcher()));
-    watcherRegistered = true;
+    context.subscriptions.push(
+      api.registerRunWatcher(new GitHubActionsWatcher()),
+      api.registerRunWatcher(new GitHubAdvancedSecurityWatcher()),
+    );
+    watcherCount = 2;
   }
 
   let prWatcherRegistered = false;
@@ -66,7 +70,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   }
 
   const parts = ['4 providers'];
-  if (watcherRegistered) { parts.push('1 watcher'); }
+  if (watcherCount > 0) { parts.push(`${watcherCount} watcher${watcherCount === 1 ? '' : 's'}`); }
   if (prWatcherRegistered) { parts.push('1 PR watcher'); }
   logger.info(`DevDocket GitHub activated, registered ${parts.join(' + ')}`);
 }

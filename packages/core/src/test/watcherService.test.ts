@@ -538,6 +538,33 @@ describe('WatcherService', () => {
       expect(service.getActiveWatches()[0].parentPRKey).toBeDefined();
     });
 
+    it('adds GitHub Advanced Security child runs when its watcher is registered without warn logs', async () => {
+      const runWatcher = createMockWatcher('github-advanced-security');
+      registry.register(runWatcher);
+
+      const prWatcher = createMockPRWatcher('test-pr', async () => ({
+        prState: 'open',
+        runs: [{
+          providerId: 'github-advanced-security',
+          runId: '12345',
+          displayName: 'CodeQL',
+          url: 'https://github.com/owner/repo/runs/12345',
+          repo: 'owner/repo',
+        }],
+      }));
+      prRegistry.register(prWatcher);
+
+      const result = await service.startPRWatch(createPRIdentifier());
+      const activeWatches = service.getActiveWatches();
+
+      expect(result.childRunKeys).toHaveLength(1);
+      expect(activeWatches).toHaveLength(1);
+      expect(activeWatches[0].identifier.providerId).toBe('github-advanced-security');
+      expect(activeWatches[0].identifier.runId).toBe('12345');
+      expect(activeWatches[0].identifier.displayName).toBe('CodeQL');
+      expect(logger.warn).not.toHaveBeenCalledWith(expect.stringContaining('Failed to add child run'));
+    });
+
     it('dismisses a PR watch when its last visible child run is dismissed', async () => {
       const runWatcher = createMockWatcher('github-actions');
       registry.register(runWatcher);
