@@ -471,6 +471,70 @@ export function getEditorPanelHtml({ cspSource, scriptUri, initialItem }: Editor
       gap: 10px;
     }
 
+    .ci-watch-heading-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+
+    .ci-watch-open-button {
+      min-height: 28px;
+      padding: 0 10px;
+      font-size: 12px;
+    }
+
+    .ci-watch-run-summary {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      align-items: center;
+    }
+
+    .ci-watch-chip,
+    .ci-watch-more {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      border-radius: 999px;
+      padding: 4px 9px;
+      font-size: 12px;
+      font-weight: 600;
+      border: 1px solid transparent;
+      background: var(--vscode-editorWidget-background, rgba(128, 128, 128, 0.08));
+    }
+
+    .ci-watch-chip--pass {
+      color: var(--vscode-testing-iconPassed, #73c991);
+      border-color: rgba(115, 201, 145, 0.35);
+      background: rgba(115, 201, 145, 0.12);
+    }
+
+    .ci-watch-chip--fail {
+      color: var(--vscode-testing-iconFailed, var(--vscode-errorForeground, #f14c4c));
+      border-color: rgba(241, 76, 76, 0.35);
+      background: rgba(241, 76, 76, 0.12);
+    }
+
+    .ci-watch-chip--running {
+      color: var(--vscode-progressBar-background, var(--vscode-textLink-foreground));
+      border-color: rgba(0, 122, 204, 0.35);
+      background: rgba(0, 122, 204, 0.12);
+    }
+
+    .ci-watch-chip--neutral,
+    .ci-watch-more {
+      color: var(--vscode-descriptionForeground);
+      border-color: var(--vscode-widget-border, rgba(127, 127, 127, 0.3));
+    }
+
+    .ci-watch-empty-runs,
+    .ci-watch-aggregate {
+      color: var(--vscode-descriptionForeground);
+      font-size: 12px;
+    }
+
     .related-item-group-heading {
       color: var(--vscode-descriptionForeground);
       font-size: 12px;

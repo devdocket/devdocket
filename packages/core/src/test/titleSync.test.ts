@@ -47,6 +47,22 @@ describe('syncProviderTitles', () => {
     expect(workGraph.updateItem).not.toHaveBeenCalled();
   });
 
+  it('does not update a just-accepted grouped item created with the provider title', async () => {
+    providerRegistry.getAllDiscoveredItems.mockReturnValue(new Map([
+      ['github', [{ externalId: 'owner/repo#42', title: 'Fix the thing', group: 'owner/repo' }]],
+    ]));
+    workGraph.findItemByProvenance.mockReturnValue({
+      id: 'item-1',
+      title: 'Fix the thing',
+      provenance: { providerId: 'github', externalId: 'owner/repo#42', group: 'owner/repo' },
+    });
+
+    await syncProviderTitles('github', providerRegistry as any, workGraph as any);
+
+    expect(workGraph.findItemByProvenance).toHaveBeenCalledWith('github', 'owner/repo#42');
+    expect(workGraph.updateItem).not.toHaveBeenCalled();
+  });
+
   it('skips discovered items without matching WorkItem', async () => {
     providerRegistry.getAllDiscoveredItems.mockReturnValue(new Map([
       ['github', [{ externalId: '99', title: 'Orphan' }]],

@@ -1,5 +1,5 @@
 import * as vscode from 'vscode';
-import { isValidGitHubRepo, createAbortError, runWorkerPoolSettled, type ProviderBadge } from '@devdocket/shared';
+import { isValidGitHubRepo, combineSignals, createAbortError, runWorkerPoolSettled, type ProviderBadge } from '@devdocket/shared';
 import { logger } from './logger';
 
 export interface GitHubIssue {
@@ -13,10 +13,87 @@ export interface GitHubIssue {
   comments?: number;
   updated_at?: string;
   pull_request?: { url: string };
+  merged_at?: string | null;
+  merged?: boolean;
 }
 
 export interface GitHubSearchResponse {
   items: GitHubIssue[];
+}
+
+export interface GitHubPrMergeFields {
+  state?: string;
+  merged_at?: string | null;
+  merged?: boolean;
+}
+
+export function isMergedGitHubPr(item: GitHubPrMergeFields): boolean {
+  if (item.merged_at) {
+    return true;
+  }
+  return item.state?.toLowerCase() === 'closed' && item.merged === true;
+}
+
+export async function filterMergedGitHubPrs(
+  token: string,
+  items: GitHubIssue[],
+  signal?: AbortSignal,
+): Promise<GitHubIssue[]> {
+  const mergedUrls = new Set<string>();
+  const detailCandidates: GitHubIssue[] = [];
+
+  for (const item of items) {
+    if (!item.pull_request) {
+      continue;
+    }
+    if (isMergedGitHubPr(item)) {
+      mergedUrls.add(item.html_url);
+      continue;
+    }
+    if (item.state?.toLowerCase() === 'closed' && item.pull_request.url) {
+      detailCandidates.push(item);
+    }
+  }
+
+  if (detailCandidates.length > 0) {
+    const results = await runWorkerPoolSettled(
+      detailCandidates,
+      async (item) => {
+        if (signal?.aborted) {
+          throw createAbortError();
+        }
+        try {
+          const response = await fetch(item.pull_request!.url, {
+            headers: getGitHubAuthHeaders(token),
+            signal: combineSignals(signal, 30_000),
+          });
+          if (!response.ok) {
+            logger.debug(`Failed to fetch PR merge details for ${item.html_url}: ${response.status}`);
+            return { htmlUrl: item.html_url, merged: false };
+          }
+          const detail = await response.json() as GitHubPrMergeFields;
+          return { htmlUrl: item.html_url, merged: isMergedGitHubPr(detail) };
+        } catch (error) {
+          if (error instanceof Error && error.name === 'AbortError' && signal?.aborted) { throw error; }
+          logger.debug(`Failed to fetch PR merge details for ${item.html_url}: ${String(error)}`);
+          return { htmlUrl: item.html_url, merged: false };
+        }
+      },
+      3,
+    );
+
+    for (const result of results) {
+      if (result.status === 'rejected') {
+        logger.debug(`Failed to inspect PR merge details: ${String(result.reason)}`);
+        continue;
+      }
+      if (result.value.merged) {
+        mergedUrls.add(result.value.htmlUrl);
+      }
+    }
+  }
+
+  return items.filter(item => !mergedUrls.has(item.html_url));
 }
 
 /**

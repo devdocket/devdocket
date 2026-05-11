@@ -88,6 +88,53 @@ describe('GitHubMyPrsProvider', () => {
     expect(mockFetch).not.toHaveBeenCalled();
   });
 
+  it('excludes merged PRs by fetching details for closed authored and assigned search results', async () => {
+    const openPr = createMockPr(1, 'Open PR');
+    const mergedAuthoredPr = {
+      ...createMockPr(2, 'Merged authored PR'),
+      state: 'closed',
+    };
+    const mergedAssignedPr = {
+      ...createMockPr(3, 'Merged assigned PR', 'other/repo'),
+      state: 'closed',
+    };
+
+    mockFetch.mockImplementation(async (url: string) => {
+      if (url.includes('search/issues') && url.includes('author:@me')) {
+        return mockSearchResponse([openPr, mergedAuthoredPr]);
+      }
+      if (url.includes('search/issues') && url.includes('assignee:@me')) {
+        return mockSearchResponse([mergedAssignedPr]);
+      }
+      if (url.endsWith('/pulls/1')) {
+        return mockPrDetailResponse({ draft: false });
+      }
+      if (url.endsWith('/pulls/1/reviews')) {
+        return mockReviewsResponse([]);
+      }
+      if (url.endsWith('/pulls/2')) {
+        return mockPrDetailResponse({ state: 'closed', merged: true, merged_at: '2025-01-01T00:00:00Z' });
+      }
+      if (url.endsWith('/pulls/3')) {
+        return mockPrDetailResponse({ state: 'closed', merged: true, merged_at: '2025-01-02T00:00:00Z' });
+      }
+      return mockFailedResponse(404);
+    });
+
+    const listener = vi.fn();
+    provider.onDidDiscoverItems(listener);
+    await provider.refresh();
+
+    const items = listener.mock.calls[0][0];
+    expect(items).toHaveLength(1);
+    expect(items[0].externalId).toBe('owner/repo#1');
+    expect(items.map((item: any) => item.externalId)).not.toContain('owner/repo#2');
+    expect(items.map((item: any) => item.externalId)).not.toContain('other/repo#3');
+    expect((provider as any).fetchRelatedItemsForPRs).toHaveBeenCalledWith([
+      { externalId: 'owner/repo#1', repoOwner: 'owner', repoName: 'repo', number: 1 },
+    ], 'test-token', expect.any(AbortSignal));
+  });
+
   it('discovers open authored PRs with status', async () => {
     const pr1 = createMockPr(1, 'Fix bug');
     const pr2 = createMockPr(2, 'Add feature');
