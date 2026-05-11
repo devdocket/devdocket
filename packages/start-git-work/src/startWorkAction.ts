@@ -660,8 +660,7 @@ export class StartWorkAction implements DevDocketAction {
 
   private toRemoteName(cloneUrl: string, repoLabel?: string): string {
     const candidate = this.ownerLikeSegmentFromCloneUrl(cloneUrl) ?? repoLabel ?? cloneUrl;
-    const preferredOwner = candidate.includes('/') ? candidate.split('/')[0] : candidate;
-    const suffix = preferredOwner.replace(/[^a-zA-Z0-9._-]+/g, '-').replace(/^-+|-+$/g, '') || 'source';
+    const suffix = candidate.replace(/\.git$/i, '').replace(/[^a-zA-Z0-9._-]+/g, '-').replace(/^-+|-+$/g, '') || 'source';
     const remoteName = `devdocket-fork-${suffix}`;
     return isValidRef(remoteName) ? remoteName : 'devdocket-fork-source';
   }
@@ -670,6 +669,9 @@ export class StartWorkAction implements DevDocketAction {
     if (cloneUrl.startsWith('https://')) {
       try {
         const segments = new URL(cloneUrl).pathname.split('/').filter(Boolean);
+        if (segments.some(segment => segment.toLowerCase() === '_git')) {
+          return undefined;
+        }
         return segments.length >= 2 ? segments[segments.length - 2] : undefined;
       } catch {
         return undefined;

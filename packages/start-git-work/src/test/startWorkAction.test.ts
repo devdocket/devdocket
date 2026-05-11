@@ -208,6 +208,23 @@ describe('StartWorkAction', () => {
       ]);
     });
 
+    it('uses repoLabel for ADO _git remote names', async () => {
+      mockNoLocalBranch('origin\thttps://example.com/other/repo.git (fetch)\n');
+      const item = createWorkItem();
+      const { action } = createAction(discovered('provider', 'item-1', {
+        kind: 'pr',
+        cloneUrl: 'https://dev.azure.com/myorg/MyProject/_git/myrepo',
+        ref: 'feature/topic',
+        repoLabel: 'myorg/MyProject/myrepo',
+      }));
+
+      await action.run(item);
+
+      expect(vi.mocked(execFile).mock.calls.map(call => call[1])).toContainEqual([
+        'remote', 'add', 'devdocket-fork-myorg-MyProject-myrepo', 'https://dev.azure.com/myorg/MyProject/_git/myrepo',
+      ]);
+    });
+
     it('reports fetch failures with git error details', async () => {
       vi.mocked(execFile).mockImplementation(((cmd: string, args: string[], opts: any, cb: Function) => {
         if (args[0] === 'remote' && args[1] === '-v') {
