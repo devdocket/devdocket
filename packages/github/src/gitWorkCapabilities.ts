@@ -1,4 +1,4 @@
-import { combineSignals, type GitWorkInfo } from '@devdocket/shared';
+import { combineSignals, isValidGitHubRepo, type GitWorkInfo } from '@devdocket/shared';
 import { getHeaders, retryWithAuth } from './githubApiHelpers';
 import { logger } from './logger';
 
@@ -19,7 +19,12 @@ interface GitHubPrGitWorkResponse {
   };
 }
 
-export function createGitHubIssueGitWork(repoName: string, number: number): GitWorkInfo {
+export function createGitHubIssueGitWork(repoName: string, number: number): GitWorkInfo | undefined {
+  if (!isValidGitHubRepo(repoName)) {
+    logger.warn(`Skipping GitHub issue git work for invalid repo name: ${repoName}`);
+    return undefined;
+  }
+
   return {
     kind: 'issue',
     cloneUrl: `https://github.com/${repoName}.git`,
