@@ -133,7 +133,8 @@ export class StartWorkAction implements DevDocketAction {
       void vscode.window.showErrorMessage('DevDocket: Provider returned an invalid clone URL for this work item.');
       return false;
     }
-    if (!isValidRef(gitWork.ref)) {
+    const ref = gitWork.kind === 'pr' ? this.normalizeBranchName(gitWork.ref) : gitWork.ref;
+    if (!isValidRef(ref)) {
       logger.warn(`Provider returned invalid gitWork ref for ${gitWork.kind}`);
       void vscode.window.showErrorMessage('DevDocket: Provider returned an invalid git ref for this work item.');
       return false;
@@ -332,7 +333,7 @@ export class StartWorkAction implements DevDocketAction {
   }
 
   private async fetchPrBranch(gitWork: ResolvedGitWork, repoPath: string): Promise<PrBranchInfo | undefined> {
-    const branchName = gitWork.ref;
+    const branchName = this.normalizeBranchName(gitWork.ref);
     const cloneUrl = gitWork.headCloneUrl ?? gitWork.cloneUrl;
 
     logger.info(`Fetching provider-supplied PR branch "${branchName}"`);
@@ -642,6 +643,10 @@ export class StartWorkAction implements DevDocketAction {
         );
       }
     }
+  }
+
+  private normalizeBranchName(ref: string): string {
+    return ref.startsWith('refs/heads/') ? ref.slice('refs/heads/'.length) : ref;
   }
 
   private formatGitError(error: unknown): string {

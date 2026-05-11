@@ -209,6 +209,23 @@ describe('StartWorkAction', () => {
       ]);
     });
 
+    it('normalizes fully-qualified PR head refs before fetching and checking out', async () => {
+      mockNoLocalBranch();
+      const item = createWorkItem();
+      const { action } = createAction(discovered('provider', 'item-1', {
+        kind: 'pr', cloneUrl: 'https://example.com/acme/repo.git', ref: 'refs/heads/feature/topic', repoLabel: 'acme/repo',
+      }));
+
+      await action.run(item);
+
+      expect(vi.mocked(execFile).mock.calls.map(call => call[1])).toEqual([
+        ['remote', '-v'],
+        ['fetch', 'origin', '+refs/heads/feature/topic:refs/remotes/origin/feature/topic'],
+        ['rev-parse', '--verify', 'refs/heads/feature/topic'],
+        ['worktree', 'add', '-b', 'feature/topic', path.join('/mock', 'workspace-feature-topic-item-1'), 'origin/feature/topic'],
+      ]);
+    });
+
     it('uses repoLabel for ADO _git remote names', async () => {
       mockNoLocalBranch('origin\thttps://example.com/other/repo.git (fetch)\n');
       const item = createWorkItem();
