@@ -283,6 +283,19 @@ describe('StartWorkAction', () => {
       expect(execFile).not.toHaveBeenCalled();
     });
 
+    it('rejects git SSH clone URLs with unsafe hosts', async () => {
+      const item = createWorkItem();
+      const { action } = createAction(discovered('provider', 'item-1', async () => ({
+        kind: 'issue', cloneUrl: 'git@-evil.example:acme/repo.git', ref: 'issue123', repoLabel: 'acme/repo',
+      })));
+
+      await action.run(item);
+
+      expect(window.showErrorMessage).toHaveBeenCalledWith('DevDocket: Provider returned an invalid clone URL for this work item.');
+      expect(window.showInputBox).not.toHaveBeenCalled();
+      expect(execFile).not.toHaveBeenCalled();
+    });
+
     it('rejects an invalid ref returned by a lazy resolver', async () => {
       const item = createWorkItem();
       const { action } = createAction(discovered('provider', 'item-1', async () => ({

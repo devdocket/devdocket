@@ -30,7 +30,16 @@ function isValidCloneUrl(url: unknown): url is string {
       return false;
     }
   }
-  return url.startsWith('git@');
+  return isValidGitSshCloneUrl(url);
+}
+
+function isValidGitSshCloneUrl(url: string): boolean {
+  const match = url.match(/^git@([^:]+):(.+)$/);
+  if (!match) {
+    return false;
+  }
+  const [, host, repoPath] = match;
+  return /^[A-Za-z0-9](?:[A-Za-z0-9.-]*[A-Za-z0-9])?$/.test(host) && repoPath.length > 0;
 }
 
 /** Timeout for lightweight git metadata commands (branch --list, status, rev-parse). */
