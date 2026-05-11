@@ -1045,6 +1045,10 @@ export class WatcherService implements vscode.Disposable {
       return identifier;
     }
 
+    if (this.isGitHubCheckRunUrl(identifier.url)) {
+      return identifier;
+    }
+
     const watcher = this.watcherRegistry.findWatcherForUrl(identifier.url);
     if (watcher) {
       try {
@@ -1059,6 +1063,17 @@ export class WatcherService implements vscode.Disposable {
     }
 
     return identifier;
+  }
+
+  private isGitHubCheckRunUrl(url: string): boolean {
+    try {
+      const u = new URL(url);
+      return u.protocol === 'https:'
+        && u.hostname === 'github.com'
+        && /^\/[^/]+\/[^/]+\/runs\/\d+\/?$/.test(u.pathname);
+    } catch {
+      return false;
+    }
   }
 
   private async getPersistedPRWatchKeys(): Promise<Set<string>> {

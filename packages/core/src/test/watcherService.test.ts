@@ -855,6 +855,36 @@ describe('WatcherService', () => {
       expect(service.getActiveWatches()[0].identifier.runId).toBe('555');
     });
 
+    it('does not URL-resolve ambiguous GitHub check run URLs for unrelated app slugs', async () => {
+      const runWatcher = createMockWatcher('github-advanced-security');
+      (runWatcher.canWatch as ReturnType<typeof vi.fn>).mockImplementation((url: string) => {
+        try {
+          const u = new URL(url);
+          return u.hostname === 'github.com' && /^\/[^/]+\/[^/]+\/runs\/\d+\/?$/.test(u.pathname);
+        } catch { return false; }
+      });
+      registry.register(runWatcher);
+
+      const prWatcher = createMockPRWatcher('test-pr', async () => ({
+        prState: 'open',
+        runs: [{
+          providerId: 'some-ci',
+          runId: '99',
+          displayName: 'Third-party Check',
+          url: 'https://github.com/owner/repo/runs/99',
+          repo: 'owner/repo',
+        }],
+      }));
+      prRegistry.register(prWatcher);
+
+      const result = await service.startPRWatch(createPRIdentifier());
+
+      expect(result.childRunKeys).toHaveLength(0);
+      expect(service.getActiveWatches()).toHaveLength(0);
+      expect(runWatcher.parseRunUrl).not.toHaveBeenCalled();
+      expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining('No watcher registered for provider: some-ci'));
+    });
+
     it('skips run identifiers when no watcher matches providerId or URL', async () => {
       // No run watchers registered — unresolvable run
       const prWatcher = createMockPRWatcher('test-pr', async () => ({
