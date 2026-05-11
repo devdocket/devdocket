@@ -368,6 +368,34 @@ describe('WatcherService', () => {
       expect(service.getActiveWatches()).toHaveLength(1);
       expect(service.getActiveWatches()[0].identifier.runId).toBe('run-1');
     });
+
+    it('does not clobber a run watch started while persisted watches load', async () => {
+      const identifier = { ...createIdentifier(), displayName: 'Live Run' };
+      const persistedWatch: WatchedRun = {
+        identifier: { ...identifier, displayName: 'Persisted Run' },
+        status: { overallState: 'completed', conclusion: 'success', jobs: [] },
+        watchedAt: new Date().toISOString(),
+        lastPolledAt: new Date().toISOString(),
+        dismissed: false,
+      };
+      (watchStore.loadAll as ReturnType<typeof vi.fn>).mockImplementation(() => new Promise(resolve => {
+        setTimeout(() => resolve({ runs: [persistedWatch], prs: [] }), 100);
+      }));
+      const watcher = createMockWatcher('test');
+      registry.register(watcher);
+
+      const loadPromise = service.loadPersistedWatches();
+      await vi.advanceTimersByTimeAsync(50);
+
+      const started = await service.startWatch(identifier);
+      await vi.advanceTimersByTimeAsync(50);
+      await loadPromise;
+
+      const active = service.getActiveWatches();
+      expect(active).toHaveLength(1);
+      expect(active[0]).toBe(started);
+      expect(active[0].identifier.displayName).toBe('Live Run');
+    });
   });
 
   describe('PR watching', () => {
@@ -922,6 +950,58 @@ describe('WatcherService', () => {
 
       expect(service.getActivePRWatches()).toHaveLength(1);
       expect(service.getActivePRWatches()[0].identifier.prId).toBe('42');
+    });
+
+    it('does not clobber a PR watch started while persisted watches load', async () => {
+      const identifier = createPRIdentifier();
+      const persistedPR = {
+        identifier: { ...identifier, displayName: 'Persisted PR #42' },
+        prState: 'closed' as const,
+        childRunKeys: [],
+        watchedAt: new Date().toISOString(),
+        lastPolledAt: new Date().toISOString(),
+        dismissed: false,
+      };
+      const otherPersistedPR = {
+        identifier: { ...createPRIdentifier(), prId: '99', displayName: 'Persisted PR #99' },
+        prState: 'open' as const,
+        childRunKeys: [],
+        watchedAt: new Date().toISOString(),
+        lastPolledAt: new Date().toISOString(),
+        dismissed: false,
+      };
+      (watchStore.loadAll as ReturnType<typeof vi.fn>).mockImplementation(() => new Promise(resolve => {
+        setTimeout(() => resolve({ runs: [], prs: [persistedPR, otherPersistedPR] }), 100);
+      }));
+      const prWatcher = createMockPRWatcher('test-pr', async () => ({
+        prState: 'open',
+        displayName: 'Live PR #42',
+        runs: [],
+      }));
+      prRegistry.register(prWatcher);
+
+      const loadPromise = service.loadPersistedWatches();
+      await vi.advanceTimersByTimeAsync(50);
+
+      const started = await service.startPRWatch(identifier);
+      expect(started.identifier.displayName).toBe('Live PR #42');
+
+      await vi.advanceTimersByTimeAsync(50);
+      await loadPromise;
+
+      const active = service.getActivePRWatches();
+      expect(active).toHaveLength(2);
+      expect(active.find(pr => pr.identifier.prId === '42')).toBe(started);
+      expect(active.find(pr => pr.identifier.prId === '42')?.identifier.displayName).toBe('Live PR #42');
+      expect(active.find(pr => pr.identifier.prId === '42')?.prState).toBe('open');
+      expect(active.find(pr => pr.identifier.prId === '99')?.identifier.displayName).toBe('Persisted PR #99');
+      expect(watchStore.saveAll).toHaveBeenLastCalledWith(
+        [],
+        expect.arrayContaining([
+          expect.objectContaining({ identifier: expect.objectContaining({ prId: '42', displayName: 'Live PR #42' }) }),
+          expect.objectContaining({ identifier: expect.objectContaining({ prId: '99', displayName: 'Persisted PR #99' }) }),
+        ]),
+      );
     });
 
     it('resolves run identifiers via URL matching when providerId is unknown', async () => {

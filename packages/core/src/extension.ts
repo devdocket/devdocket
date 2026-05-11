@@ -531,10 +531,13 @@ export async function activate(context: vscode.ExtensionContext): Promise<DevDoc
     ws.onDidChangePRWatches(safeHandler('watch-panel:prs', () => watchPanelProvider.refresh())),
   );
 
-  // Load persisted watches after the watch services are ready.
-  ws.loadPersistedWatches().catch(err => {
+  // Load persisted watches after watch-service subscriptions are ready but before
+  // commands and the public API can start new watches.
+  try {
+    await ws.loadPersistedWatches();
+  } catch (err) {
     logger.error('Failed to load persisted watches', err);
-  });
+  }
 
   // Scope panel cache to extension lifecycle
   const panelManager = new PanelManager();

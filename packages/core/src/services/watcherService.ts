@@ -75,6 +75,7 @@ export class WatcherService implements vscode.Disposable {
   private disposed = false;
   private consecutiveFailures = new Map<string, number>();
   private persistedPRWatchKeys: Set<string> | undefined;
+  private loadPersistedWatchesPromise: Promise<void> | undefined;
   private configSubscription: vscode.Disposable | undefined;
   /**
    * Set of run-watch keys whose failure the user has already acknowledged
@@ -122,23 +123,52 @@ export class WatcherService implements vscode.Disposable {
 
   /**
    * Load persisted watches from disk and resume polling for active ones.
+   * Concurrent callers join the same load, and restored entries never replace
+   * watches that were started in memory while the load was in flight.
    */
   async loadPersistedWatches(): Promise<void> {
-    const { runs: watches, prs } = await this.watchStore.loadAll();
-    this.persistedPRWatchKeys = new Set(prs.map(pr => this.getPRWatchKey(pr.identifier)));
-
-    // Restore non-dismissed run watches
-    const restored = watches.filter(w => !w.dismissed);
-    for (const watch of restored) {
-      const key = this.getWatchKey(watch.identifier);
-      this.watches.set(key, watch);
+    if (!this.loadPersistedWatchesPromise) {
+      this.loadPersistedWatchesPromise = this.restorePersistedWatches().catch(err => {
+        this.loadPersistedWatchesPromise = undefined;
+        throw err;
+      });
     }
 
-    // Restore non-dismissed PR watches
-    const restoredPRs = prs.filter(pr => !pr.dismissed);
-    for (const pr of restoredPRs) {
+    return this.loadPersistedWatchesPromise;
+  }
+
+  private async restorePersistedWatches(): Promise<void> {
+    const { runs: watches, prs } = await this.watchStore.loadAll();
+    const hadLiveWatches = this.watches.size > 0 || this.prWatches.size > 0;
+    const loadedPRWatchKeys = prs.map(pr => this.getPRWatchKey(pr.identifier));
+    this.persistedPRWatchKeys = new Set([
+      ...(this.persistedPRWatchKeys ?? []),
+      ...this.prWatches.keys(),
+      ...loadedPRWatchKeys,
+    ]);
+
+    // Restore non-dismissed run watches without clobbering watches that were
+    // started in memory before the load completed.
+    const restored: WatchedRun[] = [];
+    for (const watch of watches.filter(w => !w.dismissed)) {
+      const key = this.getWatchKey(watch.identifier);
+      if (this.watches.has(key)) {
+        continue;
+      }
+      this.watches.set(key, watch);
+      restored.push(watch);
+    }
+
+    // Restore non-dismissed PR watches without clobbering watches that were
+    // started in memory before the load completed.
+    const restoredPRs: WatchedPR[] = [];
+    for (const pr of prs.filter(pr => !pr.dismissed)) {
       const key = this.getPRWatchKey(pr.identifier);
+      if (this.prWatches.has(key)) {
+        continue;
+      }
       this.prWatches.set(key, pr);
+      restoredPRs.push(pr);
     }
 
     if (restored.length > 0 || restoredPRs.length > 0) {
@@ -156,6 +186,10 @@ export class WatcherService implements vscode.Disposable {
       if (hasPollable) {
         this.ensurePollingActive();
       }
+    }
+
+    if (hadLiveWatches && (restored.length > 0 || restoredPRs.length > 0)) {
+      this.persistWatches();
     }
   }
 
@@ -1125,6 +1159,15 @@ export class WatcherService implements vscode.Disposable {
   }
 
   private async getPersistedPRWatchKeys(): Promise<Set<string>> {
+    if (this.loadPersistedWatchesPromise) {
+      try {
+        await this.loadPersistedWatchesPromise;
+      } catch {
+        // Fall through to the lazy load below so isPRWatched remains resilient
+        // when the activation-time restore fails.
+      }
+    }
+
     if (!this.persistedPRWatchKeys) {
       const { prs } = await this.watchStore.loadAll();
       this.persistedPRWatchKeys = new Set(prs.map(pr => this.getPRWatchKey(pr.identifier)));
