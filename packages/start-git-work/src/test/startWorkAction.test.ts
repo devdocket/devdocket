@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { window, workspace } from 'vscode';
 import { StartWorkAction } from '../startWorkAction';
 import * as path from 'path';
+import type { DiscoveredItemCapabilities } from '@devdocket/shared';
 
 vi.mock('child_process', () => {
   const fn = vi.fn((cmd: string, args: string[], optsOrCb: any, cb?: Function) => {
@@ -31,7 +32,7 @@ import * as fs from 'fs';
 
 const ORIGIN_REMOTE_V = 'origin\thttps://example.com/acme/repo.git (fetch)\norigin\thttps://example.com/acme/repo.git (push)\n';
 
-type GitWork = NonNullable<any>;
+type GitWork = NonNullable<DiscoveredItemCapabilities['gitWork']>;
 
 function createWorkItem(overrides: Partial<any> = {}) {
   return {
