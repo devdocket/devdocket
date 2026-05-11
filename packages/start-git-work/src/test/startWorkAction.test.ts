@@ -309,6 +309,19 @@ describe('StartWorkAction', () => {
       expect(execFile).not.toHaveBeenCalled();
     });
 
+    it('rejects unsupported fully-qualified PR refs', async () => {
+      const item = createWorkItem();
+      const { action } = createAction(discovered('provider', 'item-1', async () => ({
+        kind: 'pr', cloneUrl: 'https://example.com/acme/repo.git', ref: 'refs/pull/123/head', repoLabel: 'acme/repo',
+      })));
+
+      await action.run(item);
+
+      expect(window.showErrorMessage).toHaveBeenCalledWith('DevDocket: Provider returned an unsupported PR branch ref for this work item.');
+      expect(window.showInputBox).not.toHaveBeenCalled();
+      expect(execFile).not.toHaveBeenCalled();
+    });
+
     it('aborts checkout when the working tree is dirty and the user cancels', async () => {
       vi.mocked(window.showQuickPick).mockResolvedValue({ label: 'Checkout branch', value: 'checkout' } as any);
       vi.mocked(window.showWarningMessage).mockResolvedValue(undefined as any);
