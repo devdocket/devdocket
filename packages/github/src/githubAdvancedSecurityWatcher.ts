@@ -15,7 +15,7 @@ import { logger } from './logger';
 interface GitHubCheckRun {
   id: number;
   name: string;
-  status: 'queued' | 'in_progress' | 'completed';
+  status: string;
   conclusion: 'success' | 'failure' | 'cancelled' | 'skipped' | 'timed_out' | 'action_required' | 'neutral' | null;
   started_at?: string | null;
   completed_at?: string | null;
@@ -102,8 +102,21 @@ export class GitHubAdvancedSecurityWatcher implements DevDocketRunWatcher {
     };
   }
 
-  private mapState(state: 'queued' | 'in_progress' | 'completed'): RunState {
-    return state === 'in_progress' ? 'running' : state;
+  private mapState(state: string): RunState {
+    switch (state) {
+      case 'completed':
+        return 'completed';
+      case 'in_progress':
+        return 'running';
+      case 'queued':
+      case 'waiting':
+      case 'requested':
+      case 'pending':
+        return 'queued';
+      default:
+        logger.warn(`Unknown run status '${state}', treating as queued`);
+        return 'queued';
+    }
   }
 
   private mapConclusion(conclusion: string): RunConclusion | undefined {

@@ -158,6 +158,24 @@ describe('GitHubAdvancedSecurityWatcher', () => {
       expect(result.completedAt).toBeUndefined();
     });
 
+    it('maps waiting check run status to queued', async () => {
+      fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(makeResponse({
+        json: async () => ({
+          id: 12345,
+          name: 'CodeQL',
+          status: 'waiting',
+          conclusion: null,
+          started_at: null,
+          completed_at: null,
+        }),
+      }));
+
+      const result = await watcher.getRunStatus(makeIdentifier());
+
+      expect(result.overallState).toBe('queued');
+      expect(result.jobs[0].state).toBe('queued');
+    });
+
     it('throws when repo is not set on identifier', async () => {
       const identifier = makeIdentifier();
       delete (identifier as Partial<typeof identifier>).repo;
