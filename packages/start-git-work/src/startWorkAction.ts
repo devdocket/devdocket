@@ -367,7 +367,7 @@ export class StartWorkAction implements DevDocketAction {
   private async findOrAddRemote(cloneUrl: string, repoLabel: string | undefined, repoPath: string): Promise<string> {
     const { stdout } = await execFileAsync('git', ['remote', '-v'], { cwd: repoPath, timeout: GIT_METADATA_TIMEOUT });
     for (const line of stdout.split('\n')) {
-      const match = line.match(/^(\S+)	(\S+)\s+\(fetch\)$/);
+      const match = line.match(/^(\S+)\t(\S+)\s+\(fetch\)$/);
       if (match && match[2] === cloneUrl) {
         const name = match[1];
         if (!isValidRef(name)) {
