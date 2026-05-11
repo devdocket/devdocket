@@ -108,7 +108,7 @@ function createMockProviderRegistry(discoveredByProvider: Record<string, any[]> 
   const discoveredEmitter = new EventEmitter<void>();
   const registerEmitter = new EventEmitter<void>();
 
-  return {
+  const registry: any = {
     getDiscoveredItems: vi.fn((providerId: string) => discoveredByProvider[providerId] ?? []),
     getAllDiscoveredItems: vi.fn(() => new Map(Object.entries(discoveredByProvider))),
     getProvider: vi.fn((providerId: string) => providerId ? { id: providerId, label: providerId } : undefined),
@@ -118,6 +118,9 @@ function createMockProviderRegistry(discoveredByProvider: Record<string, any[]> 
     _fireDiscoveredItemsChange: () => discoveredEmitter.fire(),
     _fireRegisterProvider: () => registerEmitter.fire(),
   };
+  registry.findDiscoveredItem = vi.fn((providerId: string, externalId: string) =>
+    registry.getDiscoveredItems(providerId).find((item: any) => item.externalId === externalId));
+  return registry;
 }
 
 function createMockActionRegistry() {

@@ -381,9 +381,7 @@ export class WorkItemEditorPanel {
       return undefined;
     }
 
-    return this.providerRegistry
-      .getDiscoveredItems(item.providerId)
-      .find(discovered => discovered.externalId === item.externalId);
+    return this.providerRegistry.findDiscoveredItem(item.providerId, item.externalId);
   }
 
   private getHtml(item: EditorItemData): string {

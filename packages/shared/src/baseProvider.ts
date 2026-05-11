@@ -26,6 +26,58 @@ export interface RelatedItemRef {
   itemType: 'issue' | 'pr';
 }
 
+
+/**
+ * Information a provider supplies so that the Start Git Work action (or any
+ * other git-aware action) can do its job without knowing anything about the
+ * provider's host or URL shape.
+ *
+ * Providers are responsible for fetching all underlying data (e.g. PR head
+ * ref via the host's API). Returning a function defers that work until the
+ * action actually runs.
+ */
+export interface GitWorkInfo {
+  /** 'issue' = create a new branch; 'pr' = check out an existing branch. */
+  kind: 'issue' | 'pr';
+  /**
+   * URL to clone the repo containing this work item (or its base for a PR).
+   * Must be a clone-style URL (https or git@…).
+   */
+  cloneUrl: string;
+  /**
+   * For 'issue': suggested branch name to create.
+   * For 'pr': the head ref (branch name) to check out.
+   */
+  ref: string;
+  /**
+   * For 'pr' from a fork: the head repository's clone URL when it differs
+   * from `cloneUrl`. When set, the action will fetch the head ref from this
+   * remote rather than from `cloneUrl`.
+   */
+  headCloneUrl?: string;
+  /** For 'pr': base ref the PR is targeting (informational, optional). */
+  baseRef?: string;
+  /**
+   * Optional human-readable label for the source repo, used in prompts.
+   * E.g. "owner/repo" or "ProjectName / repoName".
+   */
+  repoLabel?: string;
+}
+
+/**
+ * Capabilities a provider attaches to a discovered item to opt into
+ * cross-cutting actions (e.g. Start Git Work). All capabilities are optional.
+ */
+export interface DiscoveredItemCapabilities {
+  /**
+   * Indicates this item can be the basis for git-based development work.
+   * Either a literal {@link GitWorkInfo} (when all data is known upfront)
+   * or a thunk that resolves it lazily (when an API call is needed).
+   * Returning `undefined` from the thunk means "not currently resolvable".
+   */
+  gitWork?: GitWorkInfo | (() => Promise<GitWorkInfo | undefined>);
+}
+
 /**
  * An item discovered by a provider.
  * Provider data is kept in memory and read live â€” only the inbox state is persisted.
@@ -88,6 +140,8 @@ export interface DiscoveredItem {
    * Items without `canonicalId` always show individually (backward compatible).
    */
   canonicalId?: string;
+  /** Optional provider-supplied capabilities for cross-cutting actions. */
+  capabilities?: DiscoveredItemCapabilities;
 }
 
 /**

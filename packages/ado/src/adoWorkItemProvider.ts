@@ -1,5 +1,5 @@
 import * as vscode from 'vscode';
-import { BaseProvider, DiscoveredItem, type ProviderBadge, isValidUrlSegment, combineSignals, safeDecodeComponent, type ResolvedItem } from '@devdocket/shared';
+import { BaseProvider, DiscoveredItem, type GitWorkInfo, type ProviderBadge, isValidUrlSegment, combineSignals, safeDecodeComponent, type ResolvedItem } from '@devdocket/shared';
 import { logger } from './logger';
 import { OrgConfig, resolveProjectList } from './configParser';
 import { getAdoHeaders, retryAdoWithAuth, throwAdoApiError, ADO_AUTH_SCOPE } from './adoAuth';
@@ -22,6 +22,17 @@ interface AdoWorkItem {
   _links: {
     html: { href: string };
   };
+  relations?: Array<{
+    rel?: string;
+    url?: string;
+    attributes?: { name?: string };
+  }>;
+}
+
+interface AdoGitRepository {
+  name: string;
+  remoteUrl?: string;
+  webUrl?: string;
 }
 
 // Azure DevOps work item type state
@@ -50,6 +61,7 @@ export class AdoWorkItemProvider extends BaseProvider {
   readonly label = 'Azure DevOps Work Items';
 
   private _terminalStatesCache = new Map<string, Set<string>>();
+  private _repoCache = new Map<string, AdoGitRepository>();
 
   /**
    * @param orgConfigs - One or more organization configurations to query.
@@ -282,11 +294,12 @@ export class AdoWorkItemProvider extends BaseProvider {
     // Filter out items in terminal state categories
     const activeWorkItems = await this.filterActiveItems(token, org, allWorkItems, signal);
 
-    const items: DiscoveredItem[] = activeWorkItems.map((wi) => {
+    const items: DiscoveredItem[] = await Promise.all(activeWorkItems.map(async (wi) => {
       const projectName = wi.fields['System.TeamProject'];
       const wiType = wi.fields['System.WorkItemType'];
       const state = wi.fields['System.State'];
       const stateBadge: ProviderBadge[] = state ? [{ label: state, variant: 'info', show: 'editor' }] : [];
+      const gitWork = await this.resolveWorkItemGitWork(token, org, projectName, wi, signal);
       return {
         externalId: `${org}/${projectName}/${wi.id}`,
         title: `${wiType} ${wi.id}: ${wi.fields['System.Title']}`,
@@ -296,11 +309,99 @@ export class AdoWorkItemProvider extends BaseProvider {
         reason: 'assigned',
         state,
         itemType: 'issue',
+        ...(gitWork ? { capabilities: { gitWork } } : {}),
         ...(stateBadge.length > 0 ? { badges: stateBadge } : {}),
       };
-    });
+    }));
 
     return { items, failed: batchFailed };
+  }
+
+
+  private async resolveWorkItemGitWork(
+    token: string,
+    org: string,
+    project: string,
+    workItem: AdoWorkItem,
+    signal?: AbortSignal,
+  ): Promise<GitWorkInfo | undefined> {
+    const repoId = this.extractAssociatedRepoId(workItem);
+    if (!repoId) {
+      return undefined;
+    }
+
+    const repo = await this.fetchGitRepository(token, org, project, repoId, signal);
+    if (!repo) {
+      return undefined;
+    }
+
+    const cloneUrl = repo.remoteUrl
+      ?? repo.webUrl
+      ?? `https://dev.azure.com/${encodeURIComponent(org)}/${encodeURIComponent(project)}/_git/${encodeURIComponent(repo.name)}`;
+    return {
+      kind: 'issue',
+      cloneUrl,
+      ref: `issue${workItem.id}`,
+      repoLabel: `${org}/${project}/${repo.name}`,
+    };
+  }
+
+  private extractAssociatedRepoId(workItem: AdoWorkItem): string | undefined {
+    for (const relation of workItem.relations ?? []) {
+      if (relation.rel !== 'ArtifactLink') {
+        continue;
+      }
+      const relationName = relation.attributes?.name;
+      if (relationName !== 'Branch' && relationName !== 'Pull Request') {
+        continue;
+      }
+      if (!relation.url) {
+        continue;
+      }
+      const decodedUrl = safeDecodeComponent(relation.url);
+      const match = decodedUrl.match(/^vstfs:\/\/\/Git\/(?:Ref|PullRequestId)\/([^/]+)\/([^/]+)/i);
+      const repoId = match?.[2];
+      if (repoId) {
+        return repoId;
+      }
+    }
+    return undefined;
+  }
+
+  private async fetchGitRepository(
+    token: string,
+    org: string,
+    project: string,
+    repoId: string,
+    signal?: AbortSignal,
+  ): Promise<AdoGitRepository | undefined> {
+    const cacheKey = `${org}/${project}/${repoId}`;
+    const cached = this._repoCache.get(cacheKey);
+    if (cached) {
+      return cached;
+    }
+
+    const url = `https://dev.azure.com/${encodeURIComponent(org)}/${encodeURIComponent(project)}/_apis/git/repositories/${encodeURIComponent(repoId)}?api-version=7.1`;
+    try {
+      const response = await fetch(url, {
+        headers: { Authorization: `Bearer ${token}` },
+        signal: combineSignals(signal, 30_000),
+      });
+      if (!response.ok) {
+        logger.debug(`Failed to fetch ADO repository ${cacheKey}: ${response.status}`);
+        return undefined;
+      }
+      const repo = await response.json() as AdoGitRepository;
+      if (!repo?.name) {
+        return undefined;
+      }
+      this._repoCache.set(cacheKey, repo);
+      return repo;
+    } catch (err) {
+      if (err instanceof Error && err.name === 'AbortError' && signal?.aborted) { throw err; }
+      logger.debug(`Failed to fetch ADO repository ${cacheKey}: ${String(err)}`);
+      return undefined;
+    }
   }
 
   /**
