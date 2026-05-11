@@ -25,7 +25,12 @@ function isValidCloneUrl(url: unknown): url is string {
   if (url.startsWith('https://')) {
     try {
       const parsed = new URL(url);
-      return parsed.protocol === 'https:' && parsed.hostname.length > 0;
+      return parsed.protocol === 'https:'
+        && parsed.hostname.length > 0
+        && !parsed.username
+        && !parsed.password
+        && !parsed.search
+        && !parsed.hash;
     } catch {
       return false;
     }
