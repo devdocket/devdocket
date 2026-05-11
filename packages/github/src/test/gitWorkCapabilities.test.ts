@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { createGitHubIssueGitWork } from '../gitWorkCapabilities';
+import { createGitHubIssueGitWork, createGitHubPrGitWork } from '../gitWorkCapabilities';
 
 describe('gitWorkCapabilities', () => {
   describe('createGitHubIssueGitWork', () => {
@@ -14,6 +14,12 @@ describe('gitWorkCapabilities', () => {
 
     it('does not create issue git work for unknown repo fallbacks', () => {
       expect(createGitHubIssueGitWork('unknown-repo-abc123', 12)).toBeUndefined();
+    });
+  });
+
+  describe('createGitHubPrGitWork', () => {
+    it('does not create PR git work for unknown repo fallbacks', () => {
+      expect(createGitHubPrGitWork('unknown-repo-abc123', 12)).toBeUndefined();
     });
   });
 });

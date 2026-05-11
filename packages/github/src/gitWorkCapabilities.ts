@@ -33,10 +33,18 @@ export function createGitHubIssueGitWork(repoName: string, number: number): GitW
   };
 }
 
-export function createGitHubPrGitWork(repoName: string, number: number, prApiUrl?: string): () => Promise<GitWorkInfo | undefined> {
+export function createGitHubPrGitWork(repoName: string, number: number, prApiUrl?: string): (() => Promise<GitWorkInfo | undefined>) | undefined {
+  if (!isValidGitHubRepo(repoName)) {
+    logger.warn(`Skipping GitHub PR git work for invalid repo name: ${repoName}`);
+    return undefined;
+  }
+
   return async () => {
     // Resolve the head repo/ref at action time so fork and branch data are current.
     const url = prApiUrl ?? buildGitHubPrApiUrl(repoName, number);
+    if (!url) {
+      return undefined;
+    }
     const headers = await getHeaders();
     const wasAuthenticated = 'Authorization' in headers;
     let response = await fetch(url, {
@@ -83,7 +91,10 @@ export function createGitHubPrGitWork(repoName: string, number: number, prApiUrl
   };
 }
 
-function buildGitHubPrApiUrl(repoName: string, number: number): string {
+function buildGitHubPrApiUrl(repoName: string, number: number): string | undefined {
+  if (!isValidGitHubRepo(repoName)) {
+    return undefined;
+  }
   const [owner, repo] = repoName.split('/');
   return `https://api.github.com/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/pulls/${number}`;
 }
