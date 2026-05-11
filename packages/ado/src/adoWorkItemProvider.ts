@@ -134,6 +134,7 @@ export class AdoWorkItemProvider extends BaseProvider {
   }
 
   private async fetchAndPublishWorkItems(accessToken: string, isUserTriggered: boolean, signal?: AbortSignal): Promise<void> {
+    this._repoCache.clear();
     const allItems: DiscoveredItem[] = [];
     const failures: string[] = [];
 
