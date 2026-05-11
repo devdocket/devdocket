@@ -542,7 +542,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<DevDoc
   // Scope panel cache to extension lifecycle
   const panelManager = new PanelManager();
   WorkItemEditorPanel.setPanelManager(panelManager);
-  WorkItemEditorPanel.setDependencies(ar, ss);
+  WorkItemEditorPanel.setDependencies(ar, ss, ws);
 
   // panelManager must be first: its dispose() flushes pending saves via
   // WorkGraph, which must still be alive at that point. VS Code disposes

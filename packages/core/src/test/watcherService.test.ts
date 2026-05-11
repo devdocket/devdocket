@@ -497,6 +497,18 @@ describe('WatcherService', () => {
       expect(changeSpy).toHaveBeenCalled();
     });
 
+    it('finds active PR watches by repo and PR id without matching provider id', async () => {
+      const prWatcher = createMockPRWatcher('github-pr-watcher');
+      prRegistry.register(prWatcher);
+      const watch = await service.startPRWatch(createPRIdentifier('github-pr-watcher'));
+
+      expect(service.findPRWatchByExternalId('owner/repo', '42')).toBe(watch);
+      expect(service.findPRWatchByExternalId('owner/repo', '99')).toBeUndefined();
+
+      service.dismissPRWatch(watch.identifier);
+      expect(service.findPRWatchByExternalId('owner/repo', '42')).toBeUndefined();
+    });
+
     it('is idempotent when already watching the same PR (returns existing)', async () => {
       const prWatcher = createMockPRWatcher();
       prRegistry.register(prWatcher);

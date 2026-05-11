@@ -583,6 +583,15 @@ export class WatcherService implements vscode.Disposable {
   }
 
   /**
+   * Find an active PR watch by repository and PR ID, ignoring watcher provider.
+   */
+  findPRWatchByExternalId(repo: string, prId: string): WatchedPR | undefined {
+    return Array.from(this.prWatches.values()).find(
+      pr => !pr.dismissed && pr.identifier.repo === repo && pr.identifier.prId === prId,
+    );
+  }
+
+  /**
    * Check whether a PR is currently being actively watched (in memory and
    * not dismissed). In contrast with {@link isPRWatched}, this excludes
    * dismissed entries — useful for distinguishing "already actively watching"
