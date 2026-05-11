@@ -41,7 +41,7 @@ export interface GitWorkInfo {
   kind: 'issue' | 'pr';
   /**
    * URL to clone the repo containing this work item (or its base for a PR).
-   * Must be a clone-style URL (https or git@…).
+   * Must be a clone-style URL (https or git@host:owner/repo.git).
    */
   cloneUrl: string;
   /**
