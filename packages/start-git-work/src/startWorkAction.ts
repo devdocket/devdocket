@@ -340,8 +340,12 @@ export class StartWorkAction implements DevDocketAction {
     const remoteName = await this.findOrAddRemote(cloneUrl, gitWork.repoLabel, repoPath);
 
     try {
-      await execFileAsync('git', ['fetch', remoteName], { cwd: repoPath, timeout: GIT_CHECKOUT_TIMEOUT });
-      logger.debug(`Fetch complete for remote "${remoteName}"`);
+      await execFileAsync('git', [
+        'fetch',
+        remoteName,
+        `+refs/heads/${branchName}:refs/remotes/${remoteName}/${branchName}`,
+      ], { cwd: repoPath, timeout: GIT_CHECKOUT_TIMEOUT });
+      logger.debug(`Fetch complete for branch "${branchName}" from remote "${remoteName}"`);
     } catch {
       logger.info(`Failed to fetch branch "${branchName}" from ${remoteName}`);
       void vscode.window.showErrorMessage(

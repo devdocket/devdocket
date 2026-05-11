@@ -185,7 +185,7 @@ describe('StartWorkAction', () => {
       expect(vi.mocked(execFile).mock.calls.map(call => call[1])).toEqual([
         ['remote', '-v'],
         ['remote', 'add', 'devdocket-fork-contributor', 'https://example.com/contributor/repo.git'],
-        ['fetch', 'devdocket-fork-contributor'],
+        ['fetch', 'devdocket-fork-contributor', '+refs/heads/feature/topic:refs/remotes/devdocket-fork-contributor/feature/topic'],
         ['rev-parse', '--verify', 'refs/heads/feature/topic'],
         ['worktree', 'add', '-b', 'feature/topic', path.join('/mock', 'workspace-feature-topic'), 'devdocket-fork-contributor/feature/topic'],
       ]);
@@ -202,7 +202,7 @@ describe('StartWorkAction', () => {
 
       expect(vi.mocked(execFile).mock.calls.map(call => call[1])).toEqual([
         ['remote', '-v'],
-        ['fetch', 'origin'],
+        ['fetch', 'origin', '+refs/heads/feature/topic:refs/remotes/origin/feature/topic'],
         ['rev-parse', '--verify', 'refs/heads/feature/topic'],
         ['worktree', 'add', '-b', 'feature/topic', path.join('/mock', 'workspace-feature-topic'), 'origin/feature/topic'],
       ]);
@@ -277,7 +277,7 @@ describe('StartWorkAction', () => {
 
       expect(vi.mocked(execFile).mock.calls.map(call => call[1])).toEqual([
         ['remote', '-v'],
-        ['fetch', 'origin'],
+        ['fetch', 'origin', '+refs/heads/feature/topic:refs/remotes/origin/feature/topic'],
         ['status', '--porcelain'],
         ['rev-parse', '--verify', 'refs/heads/feature/topic'],
         ['checkout', 'feature/topic'],
