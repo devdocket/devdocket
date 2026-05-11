@@ -39,12 +39,16 @@ export function createGitHubPrGitWork(repoName: string, number: number, prApiUrl
     return undefined;
   }
 
+  const url = prApiUrl
+    ? normalizeGitHubPrApiUrl(prApiUrl, repoName, number)
+    : buildGitHubPrApiUrl(repoName, number);
+  if (!url) {
+    logger.warn(`Skipping GitHub PR git work for untrusted PR API URL: ${prApiUrl ?? repoName}`);
+    return undefined;
+  }
+
   return async () => {
     // Resolve the head repo/ref at action time so fork and branch data are current.
-    const url = prApiUrl ?? buildGitHubPrApiUrl(repoName, number);
-    if (!url) {
-      return undefined;
-    }
     const headers = await getHeaders();
     const wasAuthenticated = 'Authorization' in headers;
     let response = await fetch(url, {
@@ -97,4 +101,27 @@ function buildGitHubPrApiUrl(repoName: string, number: number): string | undefin
   }
   const [owner, repo] = repoName.split('/');
   return `https://api.github.com/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/pulls/${number}`;
+}
+
+function normalizeGitHubPrApiUrl(apiUrl: string, repoName: string, number: number): string | undefined {
+  try {
+    const parsed = new URL(apiUrl);
+    if (parsed.protocol !== 'https:' || parsed.hostname !== 'api.github.com' || parsed.search || parsed.hash) {
+      return undefined;
+    }
+
+    const segments = parsed.pathname.split('/').filter(Boolean).map(segment => decodeURIComponent(segment));
+    if (segments.length !== 5 || segments[0] !== 'repos' || segments[3] !== 'pulls' || segments[4] !== String(number)) {
+      return undefined;
+    }
+
+    const parsedRepoName = `${segments[1]}/${segments[2]}`;
+    if (parsedRepoName !== repoName || !isValidGitHubRepo(parsedRepoName)) {
+      return undefined;
+    }
+
+    return buildGitHubPrApiUrl(parsedRepoName, number);
+  } catch {
+    return undefined;
+  }
 }
