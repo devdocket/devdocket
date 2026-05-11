@@ -175,14 +175,14 @@ export class GitHubAdvancedSecurityWatcher implements DevDocketRunWatcher {
 
       return await response.json() as T;
     } catch (err) {
-      if (err instanceof Error && err.name === 'AbortError') {
+      if (err instanceof Error && (err.name === 'AbortError' || err.name === 'TimeoutError')) {
         if (token?.isCancellationRequested) {
           throw createAbortError();
         }
+        if (request?.signal.aborted && request.signal.reason instanceof Error && request.signal.reason.name === 'TimeoutError') {
+          throw new Error(`GitHub API request timed out after ${FETCH_TIMEOUT_MS / 1000}s`);
+        }
         throw err;
-      }
-      if (err instanceof Error && err.name === 'TimeoutError') {
-        throw new Error(`GitHub API request timed out after ${FETCH_TIMEOUT_MS / 1000}s`);
       }
       throw err;
     } finally {

@@ -290,6 +290,25 @@ describe('GitHubAdvancedSecurityWatcher', () => {
       }
     });
 
+    it('maps timeout-caused AbortError to the timeout message', async () => {
+      vi.useFakeTimers();
+      try {
+        fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementationOnce((_url, init) => new Promise((_resolve, reject) => {
+          const signal = init?.signal as AbortSignal | undefined;
+          signal?.addEventListener('abort', () => reject(new DOMException('The operation was aborted.', 'AbortError')), { once: true });
+        }));
+
+        const statusPromise = watcher.getRunStatus(makeIdentifier());
+        const expectation = expect(statusPromise).rejects.toThrow('GitHub API request timed out after 30s');
+        await vi.waitFor(() => expect(fetchSpy).toHaveBeenCalledTimes(1));
+        await vi.advanceTimersByTimeAsync(30_000);
+
+        await expectation;
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
     it('aborts an in-flight request when cancellation is requested', async () => {
       let cancellationListener: (() => void) | undefined;
       const dispose = vi.fn();
