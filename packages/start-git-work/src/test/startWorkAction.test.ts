@@ -208,6 +208,33 @@ describe('StartWorkAction', () => {
       ]);
     });
 
+    it('reports fetch failures with git error details', async () => {
+      vi.mocked(execFile).mockImplementation(((cmd: string, args: string[], opts: any, cb: Function) => {
+        if (args[0] === 'remote' && args[1] === '-v') {
+          cb(null, ORIGIN_REMOTE_V, '');
+          return;
+        }
+        if (args[0] === 'fetch') {
+          cb(new Error('fetch failed'), '', 'Authentication failed');
+          return;
+        }
+        cb(null, '', '');
+      }) as any);
+      const item = createWorkItem();
+      const { action } = createAction(discovered('provider', 'item-1', {
+        kind: 'pr', cloneUrl: 'https://example.com/acme/repo.git', ref: 'feature/topic', repoLabel: 'acme/repo',
+      }));
+
+      await action.run(item);
+
+      expect(window.showErrorMessage).toHaveBeenCalledWith(
+        "DevDocket: Could not fetch branch 'feature/topic' from remote 'origin'. Authentication failed",
+      );
+      expect(vi.mocked(execFile).mock.calls.map(call => call[1])).not.toContainEqual([
+        'worktree', 'add', '-b', 'feature/topic', path.join('/mock', 'workspace-feature-topic'), 'origin/feature/topic',
+      ]);
+    });
+
     it('rejects an invalid cloneUrl returned by a lazy resolver', async () => {
       const item = createWorkItem();
       const { action } = createAction(discovered('provider', 'item-1', async () => ({

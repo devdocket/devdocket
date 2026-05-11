@@ -346,10 +346,11 @@ export class StartWorkAction implements DevDocketAction {
         `+refs/heads/${branchName}:refs/remotes/${remoteName}/${branchName}`,
       ], { cwd: repoPath, timeout: GIT_CHECKOUT_TIMEOUT });
       logger.debug(`Fetch complete for branch "${branchName}" from remote "${remoteName}"`);
-    } catch {
-      logger.info(`Failed to fetch branch "${branchName}" from ${remoteName}`);
+    } catch (err) {
+      const details = this.formatGitError(err);
+      logger.info(`Failed to fetch branch "${branchName}" from ${remoteName}: ${details}`);
       void vscode.window.showErrorMessage(
-        `DevDocket: Could not fetch branch '${branchName}' from ${remoteName}. The branch may have been deleted.`,
+        `DevDocket: Could not fetch branch '${branchName}' from remote '${remoteName}'. ${details}`,
       );
       return undefined;
     }
@@ -643,6 +644,14 @@ export class StartWorkAction implements DevDocketAction {
         );
       }
     }
+  }
+
+  private formatGitError(error: unknown): string {
+    const gitError = error as { stderr?: string; stdout?: string; message?: string };
+    const detail = [gitError.stderr, gitError.stdout, gitError.message]
+      .map(value => value?.trim())
+      .find(Boolean);
+    return detail ?? 'Check your network connection, permissions, and whether the branch still exists.';
   }
 
   private toWorktreePathSuffix(ref: string): string {
