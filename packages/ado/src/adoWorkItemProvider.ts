@@ -295,13 +295,14 @@ export class AdoWorkItemProvider extends BaseProvider {
     // Filter out items in terminal state categories
     const activeWorkItems = await this.filterActiveItems(token, org, allWorkItems, signal);
 
-    const items: DiscoveredItem[] = await Promise.all(activeWorkItems.map(async (wi) => {
+    const items: DiscoveredItem[] = [];
+    for (const wi of activeWorkItems) {
       const projectName = wi.fields['System.TeamProject'];
       const wiType = wi.fields['System.WorkItemType'];
       const state = wi.fields['System.State'];
       const stateBadge: ProviderBadge[] = state ? [{ label: state, variant: 'info', show: 'editor' }] : [];
       const gitWork = await this.resolveWorkItemGitWork(token, org, projectName, wi, signal);
-      return {
+      items.push({
         externalId: `${org}/${projectName}/${wi.id}`,
         title: `${wiType} ${wi.id}: ${wi.fields['System.Title']}`,
         description: wi.fields['System.Description']?.replace(/<[^>]*(>|$)/g, '') ?? undefined,
@@ -312,8 +313,8 @@ export class AdoWorkItemProvider extends BaseProvider {
         itemType: 'issue',
         ...(gitWork ? { capabilities: { gitWork } } : {}),
         ...(stateBadge.length > 0 ? { badges: stateBadge } : {}),
-      };
-    }));
+      });
+    }
 
     return { items, failed: batchFailed };
   }
