@@ -343,7 +343,35 @@ describe('StartWorkAction', () => {
 
       await action.run(item);
 
-      expect(window.showErrorMessage).toHaveBeenCalledWith('DevDocket: Provider returned an unsupported PR branch ref for this work item.');
+      expect(window.showErrorMessage).toHaveBeenCalledWith('DevDocket: Provider returned an unsupported git branch ref for this work item.');
+      expect(window.showInputBox).not.toHaveBeenCalled();
+      expect(execFile).not.toHaveBeenCalled();
+    });
+
+    it('normalizes fully-qualified issue head refs before creating a branch', async () => {
+      const item = createWorkItem({ providerId: 'fake-vendor', externalId: 'ABC-123' });
+      const { action } = createAction(discovered('fake-vendor', 'ABC-123', {
+        kind: 'issue', cloneUrl: 'https://git.example.com/acme/repo.git', ref: 'refs/heads/vendor/ABC-123', repoLabel: 'Vendor Repo',
+      }));
+
+      await action.run(item);
+
+      expect(vi.mocked(execFile).mock.calls[0][1]).toEqual(['branch', '--list', 'vendor/ABC-123']);
+      expect(vi.mocked(execFile).mock.calls[1][1]).toEqual(['branch', 'vendor/ABC-123', 'origin/dev']);
+      expect(vi.mocked(execFile).mock.calls[2][1]).toEqual([
+        'worktree', 'add', path.join('/mock', 'workspace-vendor-ABC-123-ABC-123'), 'vendor/ABC-123',
+      ]);
+    });
+
+    it('rejects unsupported fully-qualified issue refs', async () => {
+      const item = createWorkItem();
+      const { action } = createAction(discovered('provider', 'item-1', async () => ({
+        kind: 'issue', cloneUrl: 'https://example.com/acme/repo.git', ref: 'refs/tags/v1', repoLabel: 'acme/repo',
+      })));
+
+      await action.run(item);
+
+      expect(window.showErrorMessage).toHaveBeenCalledWith('DevDocket: Provider returned an unsupported git branch ref for this work item.');
       expect(window.showInputBox).not.toHaveBeenCalled();
       expect(execFile).not.toHaveBeenCalled();
     });
