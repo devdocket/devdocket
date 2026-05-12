@@ -12,7 +12,22 @@ const execFileAsync = promisify(execFile);
 const SAFE_REF = /^[a-zA-Z0-9._\/-]+$/;
 
 function isValidRef(ref: unknown): ref is string {
-  return typeof ref === 'string' && ref.length > 0 && !ref.startsWith('-') && SAFE_REF.test(ref);
+  if (typeof ref !== 'string'
+    || ref.length === 0
+    || ref.startsWith('-')
+    || !SAFE_REF.test(ref)
+    || ref.endsWith('/')
+    || ref.endsWith('.')
+    || ref.includes('//')
+    || ref.includes('..')
+    || ref.includes('@{')
+    || ref === '@') {
+    return false;
+  }
+
+  return ref.split('/').every(segment => segment.length > 0
+    && !segment.startsWith('.')
+    && !segment.endsWith('.lock'));
 }
 
 /** Rejects whitespace and control characters in clone URLs. */

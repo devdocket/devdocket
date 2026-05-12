@@ -322,6 +322,19 @@ describe('StartWorkAction', () => {
       expect(execFile).not.toHaveBeenCalled();
     });
 
+    it.each(['foo..bar', 'foo.', 'foo/', 'foo//bar'])('rejects git-invalid ref %s', async (ref) => {
+      const item = createWorkItem();
+      const { action } = createAction(discovered('provider', 'item-1', async () => ({
+        kind: 'issue', cloneUrl: 'https://example.com/acme/repo.git', ref, repoLabel: 'acme/repo',
+      })));
+
+      await action.run(item);
+
+      expect(window.showErrorMessage).toHaveBeenCalledWith('DevDocket: Provider returned an invalid git ref for this work item.');
+      expect(window.showInputBox).not.toHaveBeenCalled();
+      expect(execFile).not.toHaveBeenCalled();
+    });
+
     it('rejects unsupported fully-qualified PR refs', async () => {
       const item = createWorkItem();
       const { action } = createAction(discovered('provider', 'item-1', async () => ({
