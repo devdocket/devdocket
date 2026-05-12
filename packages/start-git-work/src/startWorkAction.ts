@@ -162,7 +162,12 @@ export class StartWorkAction implements DevDocketAction {
       void vscode.window.showErrorMessage('DevDocket: Provider returned an invalid clone URL for this work item.');
       return false;
     }
-    if (typeof gitWork.ref === 'string' && gitWork.ref.startsWith('refs/') && !gitWork.ref.startsWith('refs/heads/')) {
+    if (typeof gitWork.ref !== 'string') {
+      logger.warn(`Provider returned invalid gitWork ref for ${gitWork.kind}`);
+      void vscode.window.showErrorMessage('DevDocket: Provider returned an invalid git ref for this work item.');
+      return false;
+    }
+    if (gitWork.ref.startsWith('refs/') && !gitWork.ref.startsWith('refs/heads/')) {
       logger.warn(`Provider returned unsupported gitWork ref: ${gitWork.ref}`);
       void vscode.window.showErrorMessage('DevDocket: Provider returned an unsupported git branch ref for this work item.');
       return false;
