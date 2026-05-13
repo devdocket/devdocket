@@ -13,6 +13,7 @@ type WatcherLogger = {
  */
 export class WatchPersistence {
   private persistedPRWatchKeys: Set<string> | undefined;
+  private readonly pendingPRWatchKeys = new Set<string>();
   private persistFailureNotified = false;
 
   constructor(
@@ -24,23 +25,33 @@ export class WatchPersistence {
     const data = await this.watchStore.loadAll();
     this.persistedPRWatchKeys = new Set([
       ...(this.persistedPRWatchKeys ?? []),
+      ...this.pendingPRWatchKeys,
       ...data.prs.map(getPRWatchKey),
     ]);
+    this.pendingPRWatchKeys.clear();
     return data;
   }
 
   async getPersistedPRWatchKeys(getPRWatchKey: (pr: WatchedPR) => string): Promise<Set<string>> {
     if (!this.persistedPRWatchKeys) {
       const { prs } = await this.watchStore.loadAll();
-      this.persistedPRWatchKeys = new Set(prs.map(getPRWatchKey));
+      this.persistedPRWatchKeys = new Set([
+        ...this.pendingPRWatchKeys,
+        ...prs.map(getPRWatchKey),
+      ]);
+      this.pendingPRWatchKeys.clear();
     }
 
     return this.persistedPRWatchKeys;
   }
 
   rememberPRWatchKey(key: string): void {
-    this.persistedPRWatchKeys ??= new Set<string>();
-    this.persistedPRWatchKeys.add(key);
+    if (this.persistedPRWatchKeys) {
+      this.persistedPRWatchKeys.add(key);
+      return;
+    }
+
+    this.pendingPRWatchKeys.add(key);
   }
 
   saveAll(runs: WatchedRun[], prs: WatchedPR[]): void {
@@ -65,5 +76,6 @@ export class WatchPersistence {
 
   dispose(): void {
     this.persistedPRWatchKeys = undefined;
+    this.pendingPRWatchKeys.clear();
   }
 }
