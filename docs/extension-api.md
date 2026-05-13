@@ -11,7 +11,7 @@ Your extension must declare a dependency on DevDocket so that VS Code activates 
 ```jsonc
 // package.json
 {
-  "extensionDependencies": ["mthalman.devdocket"]
+  "extensionDependencies": ["devdocket.devdocket"]
 }
 ```
 
@@ -49,9 +49,9 @@ In your extension's `activate()` function, acquire the `DevDocketApi` from the c
 import * as vscode from 'vscode';
 
 export async function activate(context: vscode.ExtensionContext): Promise<void> {
-  const coreExtension = vscode.extensions.getExtension('mthalman.devdocket');
+  const coreExtension = vscode.extensions.getExtension('devdocket.devdocket');
   if (!coreExtension) {
-    vscode.window.showErrorMessage('DevDocket core extension not found. Please install and enable "mthalman.devdocket".');
+    vscode.window.showErrorMessage('DevDocket core extension not found. Please install and enable "devdocket.devdocket".');
     return;
   }
 
@@ -72,7 +72,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     typeof (api as any).registerAction !== 'function'
   ) {
     console.error('DevDocket API is not in the expected shape', api);
-    vscode.window.showErrorMessage('DevDocket API is unavailable or invalid. Please check that "mthalman.devdocket" is up to date.');
+    vscode.window.showErrorMessage('DevDocket API is unavailable or invalid. Please check that "devdocket.devdocket" is up to date.');
     return;
   }
 
@@ -556,7 +556,7 @@ class MyTaskProvider implements DevDocketProvider {
 
 // In your activate() function:
 export async function activate(context: vscode.ExtensionContext): Promise<void> {
-  const coreExtension = vscode.extensions.getExtension('mthalman.devdocket');
+  const coreExtension = vscode.extensions.getExtension('devdocket.devdocket');
   if (!coreExtension) {
     return;
   }

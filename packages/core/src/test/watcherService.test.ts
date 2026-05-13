@@ -698,8 +698,9 @@ describe('WatcherService', () => {
       }));
       prRegistry.register(prWatcher);
 
-      const runKey = (service as any).getWatchKey(runIdentifier);
-      (service as any).watches.set(runKey, {
+      const runPool = (service as any).runPool;
+      const runKey = runPool.getWatchKey(runIdentifier);
+      runPool.watches.set(runKey, {
         identifier: runIdentifier,
         status: { overallState: 'completed', conclusion: 'failure', jobs: [] },
         watchedAt: new Date().toISOString(),
@@ -707,7 +708,7 @@ describe('WatcherService', () => {
         dismissed: true,
         parentPRKey: service.getPRWatchKey(createPRIdentifier()),
       });
-      (service as any).acknowledgedFailedRunKeys.add(runKey);
+      runPool.acknowledgedFailedRunKeys.add(runKey);
 
       await service.startPRWatch(createPRIdentifier(), { deferChildRunStatus: true });
 

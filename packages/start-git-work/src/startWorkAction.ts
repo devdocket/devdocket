@@ -465,6 +465,13 @@ export class StartWorkAction implements DevDocketAction {
     // For same-repo PRs, the branch may only exist as origin/<branch> after fetch.
     const hasLocalBranch = await this.localBranchExists(branchName, repoPath);
     const worktreeSourceRef = trackingRef ?? `origin/${branchName}`;
+    // Only relevant when we'd otherwise run `git worktree add <path> <branch>`
+    // (the local-branch path that's neither --detach nor -b). For trackingRef
+    // and no-local-branch paths, the porcelain pre-check would be wasted work.
+    const conflictingWorktree =
+      hasLocalBranch && !trackingRef
+        ? await this.findWorktreeHoldingBranch(branchName, repoPath)
+        : undefined;
     let createdBranch = false;
 
     if (hasLocalBranch && trackingRef) {
@@ -479,33 +486,21 @@ export class StartWorkAction implements DevDocketAction {
         cwd: repoPath,
         timeout: GIT_CHECKOUT_TIMEOUT,
       });
+    } else if (hasLocalBranch && conflictingWorktree) {
+      logger.info(
+        `Branch ${branchName} is already held by worktree at ${conflictingWorktree}; creating detached worktree from ${worktreeSourceRef}`,
+      );
+      progress.report({ message: 'Branch in use elsewhere; creating detached worktree...' });
+
+      await execFileAsync('git', ['worktree', 'add', '--detach', worktreePath, worktreeSourceRef], {
+        cwd: repoPath,
+        timeout: GIT_CHECKOUT_TIMEOUT,
+      });
     } else if (hasLocalBranch) {
-      try {
-        await execFileAsync('git', ['worktree', 'add', worktreePath, branchName], {
-          cwd: repoPath,
-          timeout: GIT_CHECKOUT_TIMEOUT,
-        });
-      } catch (error) {
-        const gitError = error as { stderr?: string; stdout?: string; message?: string };
-        const gitErrorText = `${gitError.stderr ?? ''}\n${gitError.stdout ?? ''}\n${gitError.message ?? ''}`;
-        const branchAlreadyCheckedOut =
-          gitErrorText.includes('already checked out') &&
-          gitErrorText.includes(branchName);
-
-        if (!branchAlreadyCheckedOut) {
-          throw error;
-        }
-
-        logger.info(
-          `Branch ${branchName} is already checked out in another worktree; creating detached worktree from ${worktreeSourceRef}`,
-        );
-        progress.report({ message: 'Branch already checked out elsewhere; creating detached worktree...' });
-
-        await execFileAsync('git', ['worktree', 'add', '--detach', worktreePath, worktreeSourceRef], {
-          cwd: repoPath,
-          timeout: GIT_CHECKOUT_TIMEOUT,
-        });
-      }
+      await execFileAsync('git', ['worktree', 'add', worktreePath, branchName], {
+        cwd: repoPath,
+        timeout: GIT_CHECKOUT_TIMEOUT,
+      });
     } else {
       await execFileAsync('git', ['worktree', 'add', '-b', branchName, worktreePath, worktreeSourceRef], {
         cwd: repoPath,
@@ -559,6 +554,21 @@ export class StartWorkAction implements DevDocketAction {
     // When a fork trackingRef is set and a local branch exists, use a detached checkout
     // to avoid destructively modifying the user's existing branch.
     const hasLocalBranch = await this.localBranchExists(branchName, repoPath);
+
+    // Pre-check: if `git checkout <branch>` would collide with another worktree
+    // that already holds the branch, surface a clear error before attempting it.
+    // The current worktree (`repoPath`) is excluded — when it's the holder, the
+    // branch is already HEAD and `git checkout <branch>` is a successful no-op.
+    if (hasLocalBranch && !trackingRef) {
+      const conflictingWorktree = await this.findWorktreeHoldingBranch(branchName, repoPath, repoPath);
+      if (conflictingWorktree) {
+        void vscode.window.showErrorMessage(
+          `DevDocket: Branch "${branchName}" is already checked out by the worktree at "${conflictingWorktree}". Use worktree mode instead, or remove the conflicting worktree first.`,
+        );
+        return;
+      }
+    }
+
     let checkoutArgs: string[];
     // Track whether this action created the branch (for safe cleanup later)
     let createdBranch = false;
@@ -576,19 +586,7 @@ export class StartWorkAction implements DevDocketAction {
       createdBranch = true;
     }
 
-    try {
-      await execFileAsync('git', checkoutArgs, { cwd: repoPath, timeout: GIT_CHECKOUT_TIMEOUT });
-    } catch (error) {
-      const gitError = error as { stderr?: string; stdout?: string; message?: string };
-      const gitErrorText = `${gitError.stderr ?? ''}\n${gitError.stdout ?? ''}\n${gitError.message ?? ''}`;
-      if (gitErrorText.includes('already checked out') || gitErrorText.includes('already used by worktree')) {
-        void vscode.window.showErrorMessage(
-          `DevDocket: Branch "${branchName}" is already checked out in another worktree. Use worktree mode instead, or remove the conflicting worktree first.`,
-        );
-        return;
-      }
-      throw error;
-    }
+    await execFileAsync('git', checkoutArgs, { cwd: repoPath, timeout: GIT_CHECKOUT_TIMEOUT });
     logger.info(`Checked out PR branch ${branchName}`);
 
     try {
@@ -638,6 +636,67 @@ export class StartWorkAction implements DevDocketAction {
     } catch {
       return false;
     }
+  }
+
+  /**
+   * Returns the path of a worktree that has {@link branchName} checked out as
+   * its branch ref (i.e., would collide with `git worktree add <path> <branch>`
+   * or `git checkout <branch>`), or `undefined` if no qualifying worktree holds
+   * it. When {@link excludeWorktreePath} is provided, a holder whose path
+   * matches it (after path normalisation, case-insensitive on Windows) is
+   * ignored — useful for callers like `prCheckoutFlow` where the current
+   * worktree being the holder is a no-op rather than a conflict.
+   *
+   * Uses `git worktree list --porcelain` so detection doesn't rely on parsing
+   * localised/version-dependent error strings from a failed git command.
+   */
+  private async findWorktreeHoldingBranch(
+    branchName: string,
+    repoPath: string,
+    excludeWorktreePath?: string,
+  ): Promise<string | undefined> {
+    let stdout: string;
+    try {
+      ({ stdout } = await execFileAsync('git', ['worktree', 'list', '--porcelain'], {
+        cwd: repoPath,
+        timeout: GIT_METADATA_TIMEOUT,
+      }));
+    } catch (err) {
+      // Pre-check is best-effort — if it fails, fall through and let the actual
+      // git operation surface any real error.
+      logger.debug(`git worktree list --porcelain failed: ${err instanceof Error ? err.message : String(err)}`);
+      return undefined;
+    }
+
+    const targetRef = `refs/heads/${branchName}`;
+    const normalizedExclude = excludeWorktreePath ? path.resolve(excludeWorktreePath) : undefined;
+    let currentWorktree: string | undefined;
+    for (const rawLine of stdout.split(/\r?\n/)) {
+      const line = rawLine.trimEnd();
+      if (line.startsWith('worktree ')) {
+        currentWorktree = line.slice('worktree '.length);
+      } else if (line === '') {
+        currentWorktree = undefined;
+      } else if (line === `branch ${targetRef}` && currentWorktree !== undefined) {
+        if (normalizedExclude !== undefined && this.pathsEqual(currentWorktree, normalizedExclude)) {
+          continue;
+        }
+        return currentWorktree;
+      }
+    }
+    return undefined;
+  }
+
+  /**
+   * Compares two filesystem paths for equality after normalisation. Uses
+   * case-insensitive comparison on Windows; case-sensitive elsewhere.
+   */
+  private pathsEqual(a: string, b: string): boolean {
+    const na = path.resolve(a);
+    const nb = path.resolve(b);
+    return process.platform === 'win32'
+      ? na.toLowerCase() === nb.toLowerCase()
+      : na === nb;
   }
 
   /**

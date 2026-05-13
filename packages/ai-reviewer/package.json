@@ -3,7 +3,7 @@
   "displayName": "DevDocket — AI Actions",
   "description": "AI-powered code review and PR walkthrough actions for DevDocket",
   "version": "0.1.0",
-  "publisher": "mthalman",
+  "publisher": "devdocket",
   "license": "MIT",
   "engines": {
     "vscode": "^1.96.0"
@@ -12,7 +12,7 @@
     "Other"
   ],
   "extensionDependencies": [
-    "mthalman.devdocket"
+    "devdocket.devdocket"
   ],
   "activationEvents": [
     "onStartupFinished"
