@@ -1,4 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import * as fs from 'node:fs';
+import * as path from 'node:path';
 import * as vscode from 'vscode';
 import { env, window } from 'vscode';
 import { WatchPanelProvider } from '../views/watchPanelProvider';
@@ -113,6 +115,29 @@ function getUpdateWatchPanelMessage(mockPanel: ReturnType<typeof createMockWebvi
 describe('WatchPanelProvider', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+  });
+
+  it('allows the watch panel webview to load codicons from the resolved package location', () => {
+    const mockPanel = createMockWebviewPanel();
+    vi.mocked(window.createWebviewPanel).mockReturnValue(mockPanel.panel as any);
+    const codiconsCssPath = require.resolve('@vscode/codicons/dist/codicon.css');
+    const codiconsDistDir = path.dirname(codiconsCssPath);
+
+    expect(fs.existsSync(codiconsCssPath)).toBe(true);
+
+    const provider = new WatchPanelProvider(
+      vscode.Uri.file('C:\\repo') as any,
+      createWatcherService() as any,
+      createMockWorkGraph(),
+      createMockProviderRegistry(),
+    );
+    provider.open();
+
+    const options = vi.mocked(window.createWebviewPanel).mock.calls[0][3] as { localResourceRoots?: Array<{ fsPath?: string }> };
+    expect(options.localResourceRoots).toEqual(expect.arrayContaining([
+      expect.objectContaining({ fsPath: codiconsDistDir }),
+    ]));
+    expect(mockPanel.panel.webview.html).toContain(`webview-resource:${codiconsCssPath}`);
   });
 
   it('assembles PR watches with child runs and standalone run watches from the watcher service', () => {
