@@ -28,7 +28,7 @@ function makeWorkItem(overrides: Partial<WorkItem> = {}): WorkItem {
 
 function makeRegistry(discovered: Map<string, ProviderItem[]>) {
   return {
-    getAllDiscoveredItems: vi.fn(() => discovered),
+    getAllProviderItems: vi.fn(() => discovered),
   } as any;
 }
 
@@ -276,12 +276,12 @@ describe('resolveRelatedItemsFor', () => {
     ]));
     const workGraph = makeWorkGraph([issue, pr]);
     const index = buildRelatedItemsIndex(registry, workGraph);
-    registry.getAllDiscoveredItems.mockClear();
+    registry.getAllProviderItems.mockClear();
 
     expect(resolveRelatedItemsFor(pr, registry, workGraph, index)).toEqual([
       { targetItemId: 'issue-1', targetTitle: 'Item', targetExternalId: 'owner/repo#2', targetKind: 'workItem', label: 'Closes Item', relation: 'closes', itemType: 'issue' },
     ]);
-    expect(registry.getAllDiscoveredItems).not.toHaveBeenCalled();
+    expect(registry.getAllProviderItems).not.toHaveBeenCalled();
   });
 
   it('falls back to persisted WorkItems when a related target is no longer discovered', () => {

@@ -31,11 +31,11 @@ class TestGitHubProvider extends BaseGitHubProvider {
   }
 
   publishForTest(items: ProviderItem[]): void {
-    this.publishDiscoveredItems(items);
+    this.publishProviderItems(items);
   }
 
   protected async fetchAndPublish(): Promise<void> {
-    this.publishDiscoveredItems([]);
+    this.publishProviderItems([]);
   }
 }
 

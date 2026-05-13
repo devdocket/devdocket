@@ -17,13 +17,13 @@ function createMockStore(): ITaskStore {
 
 function createMockRegistry(overrides: {
   getProvider?: () => any;
-  getDiscoveredItems?: () => any[];
+  getProviderItems?: () => any[];
   wasLastRefreshTruncated?: () => boolean;
   wasItemPreviouslyDiscovered?: () => boolean;
 } = {}): ProviderRegistry {
   return {
     getProvider: overrides.getProvider ?? (() => undefined),
-    getDiscoveredItems: overrides.getDiscoveredItems ?? (() => []),
+    getProviderItems: overrides.getProviderItems ?? (() => []),
     wasLastRefreshTruncated: overrides.wasLastRefreshTruncated ?? (() => false),
     wasItemPreviouslyDiscovered: overrides.wasItemPreviouslyDiscovered ?? (() => true),
   } as unknown as ProviderRegistry;

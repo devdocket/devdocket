@@ -109,17 +109,17 @@ function createMockProviderRegistry(discoveredByProvider: Record<string, any[]> 
   const registerEmitter = new EventEmitter<void>();
 
   const registry: any = {
-    getDiscoveredItems: vi.fn((providerId: string) => discoveredByProvider[providerId] ?? []),
-    getAllDiscoveredItems: vi.fn(() => new Map(Object.entries(discoveredByProvider))),
+    getProviderItems: vi.fn((providerId: string) => discoveredByProvider[providerId] ?? []),
+    getAllProviderItems: vi.fn(() => new Map(Object.entries(discoveredByProvider))),
     getProvider: vi.fn((providerId: string) => providerId ? { id: providerId, label: providerId } : undefined),
     getProviderLabel: vi.fn((providerId: string) => providerId === 'github' ? 'GitHub' : providerId),
-    onDidChangeDiscoveredItems: discoveredEmitter.event,
+    onDidChangeProviderItems: discoveredEmitter.event,
     onDidRegisterProvider: registerEmitter.event,
-    _fireDiscoveredItemsChange: () => discoveredEmitter.fire(),
+    _fireProviderItemsChange: () => discoveredEmitter.fire(),
     _fireRegisterProvider: () => registerEmitter.fire(),
   };
-  registry.findDiscoveredItem = vi.fn((providerId: string, externalId: string) =>
-    registry.getDiscoveredItems(providerId).find((item: any) => item.externalId === externalId));
+  registry.findProviderItem = vi.fn((providerId: string, externalId: string) =>
+    registry.getProviderItems(providerId).find((item: any) => item.externalId === externalId));
   return registry;
 }
 
@@ -303,18 +303,18 @@ describe('WorkItemEditorPanel', () => {
     actionRegistry.hasActionsFor.mockReturnValue(true);
     const { mock } = openPanel(item, workGraph, providerRegistry, actionRegistry);
 
-    providerRegistry.getDiscoveredItems.mockImplementation((providerId: string) => {
+    providerRegistry.getProviderItems.mockImplementation((providerId: string) => {
       if (providerId === 'github-my-prs') {
         return [{ externalId: 'owner/repo#42', title: 'Primary', state: 'closed', itemType: 'pr', relatedItems: [{ externalId: 'owner/repo#99', itemType: 'issue', relation: 'closes' }] }];
       }
       return [{ externalId: 'owner/repo#99', title: 'Peer', state: 'active', itemType: 'issue' }];
     });
-    providerRegistry.getAllDiscoveredItems.mockImplementation(() => new Map([
+    providerRegistry.getAllProviderItems.mockImplementation(() => new Map([
       ['github-my-prs', [{ externalId: 'owner/repo#42', title: 'Primary', state: 'closed', itemType: 'pr', relatedItems: [{ externalId: 'owner/repo#99', itemType: 'issue', relation: 'closes' }] }]],
       ['github-issues', [{ externalId: 'owner/repo#99', title: 'Peer', state: 'active', itemType: 'issue' }]],
     ]));
 
-    providerRegistry._fireDiscoveredItemsChange();
+    providerRegistry._fireProviderItemsChange();
 
     expect(mock.panel.webview.postMessage).toHaveBeenCalledWith(expect.objectContaining({
       type: 'updateEditorItem',

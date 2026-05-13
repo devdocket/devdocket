@@ -56,17 +56,17 @@ export class IncomingPreviewPanel {
       return;
     }
 
-    const discoveredItem = providerRegistry
-      .getDiscoveredItems(providerId)
+    const providerItem = providerRegistry
+      .getProviderItems(providerId)
       .find(item => item.externalId === externalId);
-    if (!discoveredItem) {
+    if (!providerItem) {
       void vscode.window.showWarningMessage('Item is no longer available from the provider.');
       return;
     }
 
     const panel = vscode.window.createWebviewPanel(
       IncomingPreviewPanel.viewType,
-      `Preview: ${discoveredItem.title}`,
+      `Preview: ${providerItem.title}`,
       vscode.ViewColumn.One,
       {
         enableScripts: true,
@@ -104,7 +104,7 @@ export class IncomingPreviewPanel {
     this.update();
 
     this.subscriptions.push(
-      this.providerRegistry.onDidChangeDiscoveredItems(() => this.update()),
+      this.providerRegistry.onDidChangeProviderItems(() => this.update()),
       this.stateStore.onDidChange(() => this.checkInboxState()),
       this.panel.webview.onDidReceiveMessage((msg) => {
         void this.handleMessage(msg);
@@ -166,8 +166,8 @@ export class IncomingPreviewPanel {
 
   private async acceptAndOpen(): Promise<void> {
     try {
-      const discoveredItem = this.findDiscoveredItem();
-      if (!discoveredItem) {
+      const providerItem = this.findProviderItem();
+      if (!providerItem) {
         void vscode.window.showWarningMessage('Item is no longer available from the provider.');
         return;
       }
@@ -175,13 +175,13 @@ export class IncomingPreviewPanel {
       let existing = this.workGraph.findItemByProvenance(this.providerId, this.externalId);
       if (!existing) {
         await this.workGraph.createItem(
-          { title: discoveredItem.title, description: discoveredItem.description },
+          { title: providerItem.title, description: providerItem.description },
           {
             providerId: this.providerId,
             externalId: this.externalId,
-            itemType: discoveredItem.itemType,
-            url: discoveredItem.url,
-            ...(discoveredItem.group ? { group: discoveredItem.group } : {}),
+            itemType: providerItem.itemType,
+            url: providerItem.url,
+            ...(providerItem.group ? { group: providerItem.group } : {}),
           },
         );
         existing = this.workGraph.findItemByProvenance(this.providerId, this.externalId);
@@ -228,16 +228,16 @@ export class IncomingPreviewPanel {
 
   private update(): void {
     if (this.disposed) return;
-    const discoveredItem = this.findDiscoveredItem();
-    if (!discoveredItem) {
+    const providerItem = this.findProviderItem();
+    if (!providerItem) {
       // The provider no longer surfaces this item; close the preview.
       this.dispose();
       return;
     }
 
     const relatedItemsIndex = buildRelatedItemsIndex(this.providerRegistry, this.workGraph);
-    const editorItem = this.buildEditorItemData(discoveredItem, relatedItemsIndex);
-    this.panel.title = `Preview: ${discoveredItem.title}`;
+    const editorItem = this.buildEditorItemData(providerItem, relatedItemsIndex);
+    this.panel.title = `Preview: ${providerItem.title}`;
 
     if (!this.htmlInitialized) {
       this.panel.webview.html = this.getHtml(editorItem);
@@ -255,32 +255,32 @@ export class IncomingPreviewPanel {
     void this.panel.webview.postMessage({ type: 'updateEditorItem', item: editorItem });
   }
 
-  private findDiscoveredItem(): ProviderItem | undefined {
+  private findProviderItem(): ProviderItem | undefined {
     return this.providerRegistry
-      .getDiscoveredItems(this.providerId)
+      .getProviderItems(this.providerId)
       .find(item => item.externalId === this.externalId);
   }
 
-  private buildEditorItemData(discoveredItem: ProviderItem, relatedItemsIndex: RelatedItemsIndex): EditorItemData {
+  private buildEditorItemData(providerItem: ProviderItem, relatedItemsIndex: RelatedItemsIndex): EditorItemData {
     const providerLabel = this.providerRegistry.getProviderLabel(this.providerId);
     return {
       id: getProviderItemKey(this.providerId, this.externalId),
-      title: discoveredItem.title,
+      title: providerItem.title,
       notes: undefined,
-      url: discoveredItem.url,
-      description: discoveredItem.description ? renderMarkdown(discoveredItem.description) : undefined,
+      url: providerItem.url,
+      description: providerItem.description ? renderMarkdown(providerItem.description) : undefined,
       state: 'New',
       providerLabel,
-      group: discoveredItem.group,
+      group: providerItem.group,
       createdAt: Date.now(),
       updatedAt: Date.now(),
-      badges: composeEditorBadges(this.providerId, discoveredItem, this.providerRegistry.getProviderLabel(this.providerId)),
+      badges: composeEditorBadges(this.providerId, providerItem, this.providerRegistry.getProviderLabel(this.providerId)),
       isProviderManaged: true,
       validTransitions: [],
       hasActions: false,
       activityLog: [],
       relatedItems: resolveRelatedItemsFor(
-        { providerId: this.providerId, externalId: this.externalId, itemType: discoveredItem.itemType },
+        { providerId: this.providerId, externalId: this.externalId, itemType: providerItem.itemType },
         this.providerRegistry,
         this.workGraph,
         relatedItemsIndex,

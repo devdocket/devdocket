@@ -146,7 +146,7 @@ export class GitHubMentionsProvider extends BaseGitHubProvider {
     });
 
     logger.info(`Discovered ${items.length} mentioned items`);
-    this.publishDiscoveredItems(items, patterns);
+    this.publishProviderItems(items, patterns);
 
     if (failures.length > 0) {
       const message = failures.length === 1

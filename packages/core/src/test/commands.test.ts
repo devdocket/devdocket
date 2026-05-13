@@ -95,14 +95,14 @@ function createMockStateStore(): { [K in keyof UsedStateStoreMethods]: Mock } {
   };
 }
 
-type UsedProviderRegistryMethods = Pick<ProviderRegistry, 'refreshAll' | 'resolveUrl' | 'getAllDiscoveredItems' | 'getDiscoveredItems' | 'getProviderLabel'>;
+type UsedProviderRegistryMethods = Pick<ProviderRegistry, 'refreshAll' | 'resolveUrl' | 'getAllProviderItems' | 'getProviderItems' | 'getProviderLabel'>;
 
 function createMockProviderRegistry(): { [K in keyof UsedProviderRegistryMethods]: Mock } {
   return {
     refreshAll: vi.fn().mockResolvedValue(undefined),
     resolveUrl: vi.fn().mockResolvedValue(undefined),
-    getAllDiscoveredItems: vi.fn().mockReturnValue(new Map()),
-    getDiscoveredItems: vi.fn().mockReturnValue([]),
+    getAllProviderItems: vi.fn().mockReturnValue(new Map()),
+    getProviderItems: vi.fn().mockReturnValue([]),
     getProviderLabel: vi.fn((providerId: string) => providerId),
   };
 }
@@ -1290,8 +1290,8 @@ describe('registerCommands', () => {
 
   function mockDiscoveredInboxItems(entries: Array<[string, any[]]>) {
     const discovered = new Map(entries);
-    providerRegistry.getAllDiscoveredItems.mockReturnValue(discovered);
-    providerRegistry.getDiscoveredItems.mockImplementation((providerId: string) => discovered.get(providerId) ?? []);
+    providerRegistry.getAllProviderItems.mockReturnValue(discovered);
+    providerRegistry.getProviderItems.mockImplementation((providerId: string) => discovered.get(providerId) ?? []);
   }
 
   describe('bulk inbox node commands', () => {
@@ -2636,7 +2636,7 @@ describe('registerCommands', () => {
       items.set('reviews', [
         { externalId: 'repo#1', title: 'PR #1', canonicalId: 'github:pull:repo#1' },
       ]);
-      providerRegistry.getAllDiscoveredItems.mockReturnValue(items);
+      providerRegistry.getAllProviderItems.mockReturnValue(items);
       // stateStore.getState returns undefined (unseen) for peers
       stateStore.getState.mockReturnValue(undefined);
     }
@@ -2675,7 +2675,7 @@ describe('registerCommands', () => {
     });
 
     it('does not propagate when item has no canonicalId', async () => {
-      providerRegistry.getAllDiscoveredItems.mockReturnValue(new Map());
+      providerRegistry.getAllProviderItems.mockReturnValue(new Map());
       const sourceItem = makeSourceItem({ providerId: 'prs', externalId: 'repo#1' });
       workGraph.findItemByProvenance.mockReturnValue(undefined);
       workGraph.createItem.mockResolvedValue(createWorkItem());
@@ -2693,7 +2693,7 @@ describe('registerCommands', () => {
       items.set('reviews', [
         { externalId: 'repo#1', title: 'PR #1', canonicalId: 'github:pull:repo#1' },
       ]);
-      providerRegistry.getAllDiscoveredItems.mockReturnValue(items);
+      providerRegistry.getAllProviderItems.mockReturnValue(items);
       stateStore.getState.mockReturnValue('accepted');
 
       const sourceItem = makeSourceItem({

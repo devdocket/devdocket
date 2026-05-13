@@ -125,7 +125,7 @@ describe('DevDocketApiImpl', () => {
     });
   });
 
-  describe('getDiscoveredItem', () => {
+  describe('getProviderItem', () => {
     it('looks up the live discovered item by provider and external id', () => {
       const emitter = new vscode.EventEmitter<ProviderItem[]>();
       const provider: DevDocketProvider = {
@@ -139,9 +139,9 @@ describe('DevDocketApiImpl', () => {
       api.registerProvider(provider);
       emitter.fire([item]);
 
-      expect(api.getDiscoveredItem('test-provider', 'item-1')).toBe(item);
-      expect(api.getDiscoveredItem('test-provider', 'missing')).toBeUndefined();
-      expect(api.getDiscoveredItem('missing-provider', 'item-1')).toBeUndefined();
+      expect(api.getProviderItem('test-provider', 'item-1')).toBe(item);
+      expect(api.getProviderItem('test-provider', 'missing')).toBeUndefined();
+      expect(api.getProviderItem('missing-provider', 'item-1')).toBeUndefined();
     });
   });
 

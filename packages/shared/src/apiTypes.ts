@@ -184,7 +184,7 @@ export interface DevDocketApi {
    * @param providerId - The id of the provider that emitted the item.
    * @param externalId - The provider-scoped external id (e.g. `owner/repo#123`).
    */
-  getDiscoveredItem?(providerId: string, externalId: string): ProviderItem | undefined;
+  getProviderItem?(providerId: string, externalId: string): ProviderItem | undefined;
   /**
    * Register a pipeline run watcher.
    *

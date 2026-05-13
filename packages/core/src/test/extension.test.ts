@@ -398,7 +398,7 @@ describe('activate()', () => {
   // ------------------------------------------------------------------
   it('auto-watches authored PRs discovered on provider refresh', async () => {
     const providerRegistry = {
-      getDiscoveredItems: vi.fn().mockReturnValue([
+      getProviderItems: vi.fn().mockReturnValue([
         {
           externalId: 'owner/repo#42',
           title: '#42: Authored PR',
@@ -451,7 +451,7 @@ describe('activate()', () => {
       url: `https://github.com/owner/repo/pull/${i}`,
       authored: true,
     }));
-    const providerRegistry = { getDiscoveredItems: vi.fn().mockReturnValue(items) } as any;
+    const providerRegistry = { getProviderItems: vi.fn().mockReturnValue(items) } as any;
     const prWatcher = {
       parsePRUrl: vi.fn((url: string) => ({ providerId: 'github-prs', prId: url, displayName: url, url, repo: 'owner/repo' })),
     };
@@ -501,7 +501,7 @@ describe('activate()', () => {
   it('deduplicates authored PR auto-watch starts across concurrent provider refreshes', async () => {
     const sharedSeenPRKeys = new Set<string>();
     const providerRegistry = {
-      getDiscoveredItems: vi.fn((providerId: string) => [{
+      getProviderItems: vi.fn((providerId: string) => [{
         externalId: `${providerId}:owner/repo#42`,
         title: '#42: Authored PR',
         url: 'https://github.com/owner/repo/pull/42',
@@ -562,7 +562,7 @@ describe('activate()', () => {
     // Defense-in-depth: a malicious provider can claim authored:true with
     // any URL string. Reject anything that wouldn't survive isSafeUrl.
     const providerRegistry = {
-      getDiscoveredItems: vi.fn().mockReturnValue([
+      getProviderItems: vi.fn().mockReturnValue([
         { externalId: 'a', title: 'js', url: 'javascript:alert(1)', authored: true },
         { externalId: 'b', title: 'data', url: 'data:text/html,<script>alert(1)</script>', authored: true },
         { externalId: 'c', title: 'file', url: 'file:///etc/passwd', authored: true },
@@ -605,7 +605,7 @@ describe('activate()', () => {
       url: `https://github.com/owner/repo/pull/${i}`,
       authored: true,
     }));
-    const providerRegistry = { getDiscoveredItems: vi.fn().mockReturnValue(items) } as any;
+    const providerRegistry = { getProviderItems: vi.fn().mockReturnValue(items) } as any;
     const prWatcher = {
       parsePRUrl: vi.fn((url: string) => ({ providerId: 'github-prs', prId: url, displayName: url, url, repo: 'owner/repo' })),
     };
@@ -639,7 +639,7 @@ describe('activate()', () => {
       url: `https://github.com/owner/repo/pull/${i}`,
       authored: true,
     }));
-    const providerRegistry = { getDiscoveredItems: vi.fn().mockReturnValue(items) } as any;
+    const providerRegistry = { getProviderItems: vi.fn().mockReturnValue(items) } as any;
     const prWatcher = {
       parsePRUrl: vi.fn((url: string) => ({ providerId: 'github-prs', prId: url, displayName: url, url, repo: 'owner/repo' })),
     };
@@ -725,7 +725,7 @@ describe('activate()', () => {
 
   it('does not recreate auto-watched PRs on later refreshes', async () => {
     const providerRegistry = {
-      getDiscoveredItems: vi.fn().mockReturnValue([
+      getProviderItems: vi.fn().mockReturnValue([
         {
           externalId: 'owner/repo#42',
           title: '#42: Authored PR',
@@ -767,7 +767,7 @@ describe('activate()', () => {
   it('logs auto-watch failures with URL context and error details', async () => {
     const warnSpy = vi.spyOn(logger, 'warn').mockImplementation(() => undefined);
     const providerRegistry = {
-      getDiscoveredItems: vi.fn().mockReturnValue([
+      getProviderItems: vi.fn().mockReturnValue([
         {
           externalId: 'owner/repo#42',
           title: '#42: Authored PR',

@@ -163,7 +163,7 @@ export abstract class BaseGitHubProvider extends BaseProvider {
   /**
    * Publish GitHub items after applying repository filters at the provider boundary.
    */
-  protected publishDiscoveredItems(items: ProviderItem[], patterns: RepoPattern[] = this.getConfiguredPatterns()): void {
+  protected publishProviderItems(items: ProviderItem[], patterns: RepoPattern[] = this.getConfiguredPatterns()): void {
     this._onDidDiscoverItems.fire(this.applyConfiguredRepoFilter(items, patterns));
   }
 

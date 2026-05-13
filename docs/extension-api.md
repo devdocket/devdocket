@@ -39,7 +39,7 @@ You can then import types directly instead of redefining them:
 import { BaseProvider, type ProviderItem } from '@devdocket/shared';
 ```
 
-`ProviderItem` is the canonical provider item type. `DiscoveredItem` remains exported as a deprecated compatibility interface for older consumers; migrate imports from `DiscoveredItem` to `ProviderItem` when updating.
+`ProviderItem` is the provider item type emitted by providers.
 
 ### Acquiring the API
 
@@ -97,7 +97,7 @@ interface DevDocketApi {
   registerAction(action: DevDocketAction): vscode.Disposable;
 
   /** Optional accessor for live provider data, used by actions that need capabilities. */
-  getDiscoveredItem?(providerId: string, externalId: string): ProviderItem | undefined;
+  getProviderItem?(providerId: string, externalId: string): ProviderItem | undefined;
 }
 ```
 
@@ -299,8 +299,6 @@ interface ProviderItemCapabilities {
   gitWork?: GitWorkInfo | (() => Promise<GitWorkInfo | undefined>);
 }
 
-/** @deprecated Use ProviderItemCapabilities instead. */
-interface DiscoveredItemCapabilities extends ProviderItemCapabilities {}
 
 interface ProviderBadge {
   /** Display text. Keep short — sidebar badges compete with the title. */

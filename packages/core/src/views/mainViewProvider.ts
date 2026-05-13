@@ -116,18 +116,18 @@ export class MainViewProvider implements vscode.WebviewViewProvider {
       return;
     }
 
-    const allDiscoveredItems = this.providerRegistry.getAllDiscoveredItems();
-    const relatedItemsIndex = buildRelatedItemsIndex(this.providerRegistry, this.workGraph, allDiscoveredItems);
+    const allProviderItems = this.providerRegistry.getAllProviderItems();
+    const relatedItemsIndex = buildRelatedItemsIndex(this.providerRegistry, this.workGraph, allProviderItems);
 
     // My Work renders unread markers, tier state/order, related-item markers, and CI badges.
     void this.view.webview.postMessage({
       type: 'updateItems',
-      tiers: this.buildTierData(allDiscoveredItems, relatedItemsIndex),
+      tiers: this.buildTierData(allProviderItems, relatedItemsIndex),
     });
     if (this.shouldRefreshSources(reasons)) {
       void this.view.webview.postMessage({
         type: 'updateSources',
-        providers: this.buildSourcesData(allDiscoveredItems, relatedItemsIndex),
+        providers: this.buildSourcesData(allProviderItems, relatedItemsIndex),
       });
     }
     this.updateBadge();
@@ -160,24 +160,24 @@ export class MainViewProvider implements vscode.WebviewViewProvider {
   }
 
   private buildTierData(
-    allDiscoveredItems: Map<string, ProviderItem[]>,
+    allProviderItems: Map<string, ProviderItem[]>,
     relatedItemsIndex: RelatedItemsIndex,
   ): TierData[] {
     const hiddenCanonicalKeys = buildCanonicalHiddenSet(
-      allDiscoveredItems,
+      allProviderItems,
       (providerId, externalId) => this.stateStore.getState(providerId, externalId),
     );
-    const discoveredItemMap = this.buildDiscoveredItemMap(allDiscoveredItems);
+    const providerItemMap = this.buildProviderItemMap(allProviderItems);
 
     const incomingItems: ItemCardData[] = [];
-    for (const [providerId, items] of allDiscoveredItems) {
-      for (const discoveredItem of items) {
-        const inboxState = this.stateStore.getState(providerId, discoveredItem.externalId);
+    for (const [providerId, items] of allProviderItems) {
+      for (const providerItem of items) {
+        const inboxState = this.stateStore.getState(providerId, providerItem.externalId);
         if (inboxState !== undefined && inboxState !== 'unseen') {
           continue;
         }
 
-        const key = getProviderItemKey(providerId, discoveredItem.externalId);
+        const key = getProviderItemKey(providerId, providerItem.externalId);
         if (hiddenCanonicalKeys.has(key)) {
           continue;
         }
@@ -185,9 +185,9 @@ export class MainViewProvider implements vscode.WebviewViewProvider {
         incomingItems.push(
           this.buildIncomingCardData(
             providerId,
-            discoveredItem,
+            providerItem,
             relatedItemsIndex,
-            this.workGraph.findItemByProvenance(providerId, discoveredItem.externalId),
+            this.workGraph.findItemByProvenance(providerId, providerItem.externalId),
           ),
         );
       }
@@ -196,27 +196,27 @@ export class MainViewProvider implements vscode.WebviewViewProvider {
 
     const inProgressItems = this.workGraph
       .getItemsByState(WorkItemState.InProgress)
-      .sort((a, b) => this.compareUrgency(a, b, discoveredItemMap)
+      .sort((a, b) => this.compareUrgency(a, b, providerItemMap)
         || (a.sortOrder ?? Number.MAX_SAFE_INTEGER) - (b.sortOrder ?? Number.MAX_SAFE_INTEGER)
         || b.updatedAt - a.updatedAt)
-      .map(item => this.buildWorkItemCardData(item, 'inProgress', discoveredItemMap, relatedItemsIndex));
+      .map(item => this.buildWorkItemCardData(item, 'inProgress', providerItemMap, relatedItemsIndex));
 
     const readyToStartItems = this.workGraph
       .getItemsByState(WorkItemState.New)
-      .sort((a, b) => this.compareUrgency(a, b, discoveredItemMap)
+      .sort((a, b) => this.compareUrgency(a, b, providerItemMap)
         || (a.sortOrder ?? Number.MAX_SAFE_INTEGER) - (b.sortOrder ?? Number.MAX_SAFE_INTEGER)
         || b.updatedAt - a.updatedAt)
-      .map(item => this.buildWorkItemCardData(item, 'readyToStart', discoveredItemMap, relatedItemsIndex));
+      .map(item => this.buildWorkItemCardData(item, 'readyToStart', providerItemMap, relatedItemsIndex));
 
     const pausedItems = this.workGraph
       .getItemsByState(WorkItemState.Paused)
       .sort((a, b) => a.updatedAt - b.updatedAt)
-      .map(item => this.buildWorkItemCardData(item, 'paused', discoveredItemMap, relatedItemsIndex));
+      .map(item => this.buildWorkItemCardData(item, 'paused', providerItemMap, relatedItemsIndex));
 
     const doneItems = this.workGraph
       .getItemsByState(WorkItemState.Done, WorkItemState.Archived)
       .sort((a, b) => b.updatedAt - a.updatedAt)
-      .map(item => this.buildWorkItemCardData(item, 'done', discoveredItemMap, relatedItemsIndex));
+      .map(item => this.buildWorkItemCardData(item, 'done', providerItemMap, relatedItemsIndex));
 
     return [
       { id: 'incoming', name: 'Incoming', icon: '↓', items: incomingItems, collapsed: false },
@@ -228,10 +228,10 @@ export class MainViewProvider implements vscode.WebviewViewProvider {
   }
 
   private buildSourcesData(
-    allDiscoveredItems: Map<string, ProviderItem[]>,
+    allProviderItems: Map<string, ProviderItem[]>,
     relatedItemsIndex: RelatedItemsIndex,
   ): SourceProviderData[] {
-    return Array.from(allDiscoveredItems)
+    return Array.from(allProviderItems)
       .map(([providerId, items]) => {
         const groups = new Map<string, SourceItemData[]>();
 
@@ -268,75 +268,75 @@ export class MainViewProvider implements vscode.WebviewViewProvider {
       .sort((a, b) => a.label.localeCompare(b.label));
   }
 
-  private buildDiscoveredItemMap(allDiscoveredItems: Iterable<[string, readonly ProviderItem[]]>): Map<string, ProviderItem> {
-    const discoveredItemMap = new Map<string, ProviderItem>();
-    for (const [providerId, items] of allDiscoveredItems) {
+  private buildProviderItemMap(allProviderItems: Iterable<[string, readonly ProviderItem[]]>): Map<string, ProviderItem> {
+    const providerItemMap = new Map<string, ProviderItem>();
+    for (const [providerId, items] of allProviderItems) {
       for (const item of items) {
-        discoveredItemMap.set(getProviderItemKey(providerId, item.externalId), item);
+        providerItemMap.set(getProviderItemKey(providerId, item.externalId), item);
       }
     }
-    return discoveredItemMap;
+    return providerItemMap;
   }
 
-  private compareUrgency(a: WorkItem, b: WorkItem, discoveredItemMap: Map<string, ProviderItem>): number {
-    const aUrgent = this.isUrgentWorkItem(a, discoveredItemMap);
-    const bUrgent = this.isUrgentWorkItem(b, discoveredItemMap);
+  private compareUrgency(a: WorkItem, b: WorkItem, providerItemMap: Map<string, ProviderItem>): number {
+    const aUrgent = this.isUrgentWorkItem(a, providerItemMap);
+    const bUrgent = this.isUrgentWorkItem(b, providerItemMap);
     if (aUrgent === bUrgent) {
       return 0;
     }
     return aUrgent ? -1 : 1;
   }
 
-  private isUrgentWorkItem(item: WorkItem, discoveredItemMap: Map<string, ProviderItem>): boolean {
-    return this.isUrgentDiscoveredItem(this.getDiscoveredItemForWorkItem(item, discoveredItemMap));
+  private isUrgentWorkItem(item: WorkItem, providerItemMap: Map<string, ProviderItem>): boolean {
+    return this.isUrgentProviderItem(this.getProviderItemForWorkItem(item, providerItemMap));
   }
 
-  private isUrgentDiscoveredItem(discoveredItem?: ProviderItem): boolean {
-    return normalizeText(discoveredItem?.state) === 'changes requested';
+  private isUrgentProviderItem(providerItem?: ProviderItem): boolean {
+    return normalizeText(providerItem?.state) === 'changes requested';
   }
 
-  private getDiscoveredItemForWorkItem(item: WorkItem, discoveredItemMap: Map<string, ProviderItem>): ProviderItem | undefined {
+  private getProviderItemForWorkItem(item: WorkItem, providerItemMap: Map<string, ProviderItem>): ProviderItem | undefined {
     if (!item.providerId || !item.externalId) {
       return undefined;
     }
-    return discoveredItemMap.get(getProviderItemKey(item.providerId, item.externalId));
+    return providerItemMap.get(getProviderItemKey(item.providerId, item.externalId));
   }
 
   private buildIncomingCardData(
     providerId: string,
-    discoveredItem: ProviderItem,
+    providerItem: ProviderItem,
     relatedItemsIndex: RelatedItemsIndex,
     existingWorkItem?: WorkItem,
   ): ItemCardData {
-    const key = getProviderItemKey(providerId, discoveredItem.externalId);
+    const key = getProviderItemKey(providerId, providerItem.externalId);
     return {
       id: existingWorkItem?.id ?? key,
-      title: discoveredItem.title,
-      badges: this.buildBadges(providerId, discoveredItem, discoveredItem.url),
-      repoAnnotation: discoveredItem.group ?? existingWorkItem?.group,
+      title: providerItem.title,
+      badges: this.buildBadges(providerId, providerItem, providerItem.url),
+      repoAnnotation: providerItem.group ?? existingWorkItem?.group,
       tierType: 'incoming',
       isUnseen: !this.readStateStore.has(key),
-      isUrgent: this.isUrgentDiscoveredItem(discoveredItem),
-      hasRelatedItems: this.hasResolvedRelatedItems(providerId, discoveredItem.externalId, relatedItemsIndex),
+      isUrgent: this.isUrgentProviderItem(providerItem),
+      hasRelatedItems: this.hasResolvedRelatedItems(providerId, providerItem.externalId, relatedItemsIndex),
       providerId,
-      externalId: discoveredItem.externalId,
+      externalId: providerItem.externalId,
     };
   }
 
   private buildWorkItemCardData(
     item: WorkItem,
     tierType: ItemCardData['tierType'],
-    discoveredItemMap: Map<string, ProviderItem>,
+    providerItemMap: Map<string, ProviderItem>,
     relatedItemsIndex: RelatedItemsIndex,
   ): ItemCardData {
-    const discoveredItem = this.getDiscoveredItemForWorkItem(item, discoveredItemMap);
+    const providerItem = this.getProviderItemForWorkItem(item, providerItemMap);
     return {
       id: item.id,
       title: item.title,
-      badges: this.buildBadges(item.providerId, discoveredItem, item.url),
-      repoAnnotation: item.group ?? discoveredItem?.group,
+      badges: this.buildBadges(item.providerId, providerItem, item.url),
+      repoAnnotation: item.group ?? providerItem?.group,
       tierType,
-      isUrgent: this.isUrgentWorkItem(item, discoveredItemMap),
+      isUrgent: this.isUrgentWorkItem(item, providerItemMap),
       hasRelatedItems: item.providerId && item.externalId
         ? this.hasResolvedRelatedItems(item.providerId, item.externalId, relatedItemsIndex)
         : false,
@@ -353,7 +353,7 @@ export class MainViewProvider implements vscode.WebviewViewProvider {
     return (relatedItemsIndex.get(getRelatedItemsIndexKey(providerId, externalId))?.length ?? 0) > 0;
   }
 
-  private buildBadges(providerId?: string, discoveredItem?: ProviderItem, itemUrl?: string): BadgeData[] {
+  private buildBadges(providerId?: string, providerItem?: ProviderItem, itemUrl?: string): BadgeData[] {
     const badges: BadgeData[] = [];
     // Pass through the provider's human-readable label so third-party
     // providers (anything not GitHub/ADO) get a real name on the badge
@@ -364,14 +364,14 @@ export class MainViewProvider implements vscode.WebviewViewProvider {
       badges.push(providerBadge);
     }
 
-    const typeBadge = buildTypeBadge(discoveredItem);
+    const typeBadge = buildTypeBadge(providerItem);
     if (typeBadge) {
       badges.push(typeBadge);
     }
 
-    badges.push(...buildProviderBadges(discoveredItem, 'sidebar'));
+    badges.push(...buildProviderBadges(providerItem, 'sidebar'));
 
-    const ciBadge = this.buildCIBadge(discoveredItem?.url ?? itemUrl);
+    const ciBadge = this.buildCIBadge(providerItem?.url ?? itemUrl);
     if (ciBadge) {
       badges.push(ciBadge);
     }
@@ -560,8 +560,8 @@ export class MainViewProvider implements vscode.WebviewViewProvider {
 
   private async handleAcceptItem(providerId: string, externalId: string): Promise<void> {
     try {
-      const discoveredItem = this.providerRegistry.getDiscoveredItems(providerId).find(item => item.externalId === externalId);
-      if (!discoveredItem) {
+      const providerItem = this.providerRegistry.getProviderItems(providerId).find(item => item.externalId === externalId);
+      if (!providerItem) {
         logger.warn(`DevDocket: discovered item ${providerId}/${externalId} not found for accept`);
         return;
       }
@@ -570,12 +570,12 @@ export class MainViewProvider implements vscode.WebviewViewProvider {
         kind: 'item',
         providerId,
         externalId,
-        title: discoveredItem.title,
-        description: discoveredItem.description,
-        url: discoveredItem.url,
-        ...(discoveredItem.itemType ? { itemType: discoveredItem.itemType } : {}),
-        ...(discoveredItem.group ? { group: discoveredItem.group } : {}),
-        ...(discoveredItem.canonicalId ? { canonicalId: discoveredItem.canonicalId } : {}),
+        title: providerItem.title,
+        description: providerItem.description,
+        url: providerItem.url,
+        ...(providerItem.itemType ? { itemType: providerItem.itemType } : {}),
+        ...(providerItem.group ? { group: providerItem.group } : {}),
+        ...(providerItem.canonicalId ? { canonicalId: providerItem.canonicalId } : {}),
       });
     } catch (err) {
       logger.error('DevDocket: accept failed', err);
@@ -584,9 +584,9 @@ export class MainViewProvider implements vscode.WebviewViewProvider {
   }
 
   private async handleAcceptAll(): Promise<void> {
-    const allDiscoveredItems = this.providerRegistry.getAllDiscoveredItems();
-    const relatedItemsIndex = buildRelatedItemsIndex(this.providerRegistry, this.workGraph, allDiscoveredItems);
-    const incomingTier = this.buildTierData(allDiscoveredItems, relatedItemsIndex).find(tier => tier.id === 'incoming');
+    const allProviderItems = this.providerRegistry.getAllProviderItems();
+    const relatedItemsIndex = buildRelatedItemsIndex(this.providerRegistry, this.workGraph, allProviderItems);
+    const incomingTier = this.buildTierData(allProviderItems, relatedItemsIndex).find(tier => tier.id === 'incoming');
     if (!incomingTier) {
       return;
     }
@@ -606,8 +606,8 @@ export class MainViewProvider implements vscode.WebviewViewProvider {
     // Ready to Start tier). Lets the user pull an inbox item directly into
     // active work without opening the editor first.
     try {
-      const discoveredItem = this.providerRegistry.getDiscoveredItems(providerId).find(item => item.externalId === externalId);
-      if (!discoveredItem) {
+      const providerItem = this.providerRegistry.getProviderItems(providerId).find(item => item.externalId === externalId);
+      if (!providerItem) {
         logger.warn(`DevDocket: discovered item ${providerId}/${externalId} not found for acceptToFocus`);
         return;
       }
@@ -616,12 +616,12 @@ export class MainViewProvider implements vscode.WebviewViewProvider {
         kind: 'item',
         providerId,
         externalId,
-        title: discoveredItem.title,
-        description: discoveredItem.description,
-        url: discoveredItem.url,
-        ...(discoveredItem.itemType ? { itemType: discoveredItem.itemType } : {}),
-        ...(discoveredItem.group ? { group: discoveredItem.group } : {}),
-        ...(discoveredItem.canonicalId ? { canonicalId: discoveredItem.canonicalId } : {}),
+        title: providerItem.title,
+        description: providerItem.description,
+        url: providerItem.url,
+        ...(providerItem.itemType ? { itemType: providerItem.itemType } : {}),
+        ...(providerItem.group ? { group: providerItem.group } : {}),
+        ...(providerItem.canonicalId ? { canonicalId: providerItem.canonicalId } : {}),
       });
     } catch (err) {
       logger.error('DevDocket: acceptToFocus failed', err);

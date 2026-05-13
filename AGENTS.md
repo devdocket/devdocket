@@ -85,7 +85,7 @@ interface DevDocketApi {
 }
 ```
 
-Providers emit `ProviderItem[]` via events. `DiscoveredItem` remains a deprecated compatibility interface for external consumers. Actions declare `canRun(item)` and are surfaced dynamically via the editor's **Run Action…** button.
+Providers emit `ProviderItem[]` via events. Actions declare `canRun(item)` and are surfaced dynamically via the editor's **Run Action…** button.
 
 ## Key Conventions
 
@@ -147,9 +147,9 @@ During code review (via `superpowers:code-reviewer` or manual review), **any cha
 
 These files define the contract that provider extensions depend on:
 
-- `packages/core/src/api/types.ts` — `DevDocketApi`, `DevDocketProvider`, `DevDocketAction`, and re-exported shared types (`Disposable`, `Event`, `ProviderItem`, deprecated `DiscoveredItem` compatibility interface)
+- `packages/core/src/api/types.ts` — `DevDocketApi`, `DevDocketProvider`, `DevDocketAction`, and re-exported shared types (`Disposable`, `Event`, `ProviderItem`)
 - `packages/core/src/models/workItem.ts` — `WorkItem` and `WorkItemState` (`WorkItem` is exposed to action implementors via `DevDocketAction.canRun` / `run`, and references `WorkItemState`)
-- `packages/shared/src/baseProvider.ts` — `ProviderItem`, deprecated `DiscoveredItem` compatibility interface, `Disposable`, `Event`, `EventEmitterLike`, `BaseProvider`
+- `packages/shared/src/baseProvider.ts` — `ProviderItem`, `Disposable`, `Event`, `EventEmitterLike`, `BaseProvider`
 - `packages/shared/src/index.ts` — all symbols exported from this barrel are considered public API surface of `@devdocket/shared`
 
 #### What constitutes a breaking change

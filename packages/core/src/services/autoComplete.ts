@@ -53,7 +53,7 @@ export async function checkAutoComplete(
     if (providerRegistry.wasLastRefreshTruncated(providerId)) {
       return [];
     }
-    const currentItems = providerRegistry.getDiscoveredItems(providerId);
+    const currentItems = providerRegistry.getProviderItems(providerId);
     // Guard: if the provider returned zero items, skip auto-complete. Zero items could
     // indicate a transient API failure or auth error rather than all items being closed.
     // Providers that need to handle the "all items closed" case should implement

@@ -103,7 +103,7 @@ function findCanonicalPeers(
 ): Array<{ providerId: string; externalId: string; itemType?: 'issue' | 'pr' }> {
   if (!item.canonicalId) { return []; }
   const peers: Array<{ providerId: string; externalId: string; itemType?: 'issue' | 'pr' }> = [];
-  for (const [providerId, items] of providerRegistry.getAllDiscoveredItems()) {
+  for (const [providerId, items] of providerRegistry.getAllProviderItems()) {
     for (const discovered of items) {
       if (discovered.canonicalId !== item.canonicalId) { continue; }
       if (providerId === item.providerId && discovered.externalId === item.externalId) { continue; }

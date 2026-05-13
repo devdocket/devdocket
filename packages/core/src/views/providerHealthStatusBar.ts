@@ -37,7 +37,7 @@ export class ProviderHealthStatusBar implements vscode.Disposable {
     });
     
     // Update when discovered items change (fires on provider disposal)
-    this.discoveredChangesSub = providerRegistry.onDidChangeDiscoveredItems(() => {
+    this.discoveredChangesSub = providerRegistry.onDidChangeProviderItems(() => {
       this.update();
     });
     

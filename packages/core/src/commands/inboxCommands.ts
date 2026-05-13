@@ -60,7 +60,7 @@ function findCanonicalPeers(
 ): Array<{ providerId: string; externalId: string; itemType?: 'issue' | 'pr' }> {
   if (!item.canonicalId) { return []; }
   const peers: Array<{ providerId: string; externalId: string; itemType?: 'issue' | 'pr' }> = [];
-  for (const [providerId, items] of providerRegistry.getAllDiscoveredItems()) {
+  for (const [providerId, items] of providerRegistry.getAllProviderItems()) {
     for (const discovered of items) {
       if (discovered.canonicalId !== item.canonicalId) { continue; }
       if (providerId === item.providerId && discovered.externalId === item.externalId) { continue; }
@@ -139,11 +139,11 @@ function resolveBulkInboxItems(
   stateStore: DiscoveredStateStore,
 ): InboxItem[] {
   const hidden = buildCanonicalHiddenSet(
-    providerRegistry.getAllDiscoveredItems(),
+    providerRegistry.getAllProviderItems(),
     (providerId, externalId) => stateStore.getState(providerId, externalId),
   );
 
-  return providerRegistry.getDiscoveredItems(node.providerId)
+  return providerRegistry.getProviderItems(node.providerId)
     .filter(item => {
       if (node.kind === 'group' && item.group?.trim() !== node.groupName) { return false; }
       const state = stateStore.getState(node.providerId, item.externalId);

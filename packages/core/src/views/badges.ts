@@ -56,9 +56,9 @@ export function buildProviderBadge(providerId?: string, label?: string): BadgeDa
  * {@link ProviderItem.itemType} value. Returns undefined for items where the
  * provider didn't classify the type (e.g. manual items).
  */
-export function buildTypeBadge(discoveredItem?: ProviderItem): BadgeData | undefined {
-  if (!discoveredItem?.itemType) return undefined;
-  switch (discoveredItem.itemType) {
+export function buildTypeBadge(providerItem?: ProviderItem): BadgeData | undefined {
+  if (!providerItem?.itemType) return undefined;
+  switch (providerItem.itemType) {
     case 'pr':
       return { label: 'PR', type: 'type', variant: 'pr' };
     case 'issue':
@@ -74,11 +74,11 @@ export function buildTypeBadge(discoveredItem?: ProviderItem): BadgeData | undef
  * label and severity; core picks the actual colors via {@link variantToColorKey}.
  */
 export function buildProviderBadges(
-  discoveredItem: ProviderItem | undefined,
+  providerItem: ProviderItem | undefined,
   view: 'sidebar' | 'editor',
 ): BadgeData[] {
-  if (!discoveredItem?.badges?.length) return [];
-  return discoveredItem.badges
+  if (!providerItem?.badges?.length) return [];
+  return providerItem.badges
     .filter(badge => (badge.show ?? 'both') === 'both' || badge.show === view)
     .map(badge => ({
       label: badge.label,

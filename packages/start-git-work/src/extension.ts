@@ -26,7 +26,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 
   const startWorkAction = new StartWorkAction(
     context.globalState,
-    (providerId, externalId) => api.getDiscoveredItem?.(providerId, externalId),
+    (providerId, externalId) => api.getProviderItem?.(providerId, externalId),
   );
   const actionDisposable = api.registerAction(startWorkAction);
   context.subscriptions.push(actionDisposable);

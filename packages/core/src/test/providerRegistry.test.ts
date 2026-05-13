@@ -142,7 +142,7 @@ describe('ProviderRegistry', () => {
       { externalId: 'issue-2', title: 'Feature', url: 'https://github.com/issue/2' },
     ]);
 
-    const items = registry.getDiscoveredItems('gh');
+    const items = registry.getProviderItems('gh');
     expect(items).toHaveLength(2);
     expect(items[0].title).toBe('Bug fix');
     expect(items[0].externalId).toBe('issue-1');
@@ -157,7 +157,7 @@ describe('ProviderRegistry', () => {
       { externalId: 'issue-1', title: 'Original title', description: 'Original desc' },
     ]);
 
-    expect(registry.getDiscoveredItems('gh')).toHaveLength(1);
+    expect(registry.getProviderItems('gh')).toHaveLength(1);
 
     provider.fireItems([
       { externalId: 'issue-1', title: 'Updated title', description: 'Updated desc' },
@@ -166,9 +166,9 @@ describe('ProviderRegistry', () => {
     // Per-provider serialization: the second emission is queued behind the
     // first one's awaits, so we have to drain microtasks before the updated
     // items become visible.
-    await vi.waitFor(() => expect(registry.getDiscoveredItems('gh')[0]?.title).toBe('Updated title'));
+    await vi.waitFor(() => expect(registry.getProviderItems('gh')[0]?.title).toBe('Updated title'));
 
-    const items = registry.getDiscoveredItems('gh');
+    const items = registry.getProviderItems('gh');
     expect(items).toHaveLength(1);
     expect(items[0].title).toBe('Updated title');
     expect(items[0].description).toBe('Updated desc');
@@ -297,11 +297,11 @@ describe('ProviderRegistry', () => {
     });
   });
 
-  it('returns empty array from getDiscoveredItems for unknown provider', () => {
-    expect(registry.getDiscoveredItems('nonexistent')).toEqual([]);
+  it('returns empty array from getProviderItems for unknown provider', () => {
+    expect(registry.getProviderItems('nonexistent')).toEqual([]);
   });
 
-  it('returns full map from getAllDiscoveredItems with multiple providers', () => {
+  it('returns full map from getAllProviderItems with multiple providers', () => {
     const p1 = createMockProvider('gh');
     const p2 = createMockProvider('jira');
     registry.register(p1);
@@ -310,7 +310,7 @@ describe('ProviderRegistry', () => {
     p1.fireItems([{ externalId: '1', title: 'GH item' }]);
     p2.fireItems([{ externalId: '2', title: 'Jira item' }]);
 
-    const all = registry.getAllDiscoveredItems();
+    const all = registry.getAllProviderItems();
     expect(all.size).toBe(2);
     expect(all.get('gh')).toHaveLength(1);
     expect(all.get('jira')).toHaveLength(1);
@@ -345,23 +345,23 @@ describe('ProviderRegistry', () => {
       { externalId: 'issue-1', title: 'Bug fix' },
     ]);
 
-    // Wait for handleDiscoveredItems to complete by checking items are stored
+    // Wait for handleProviderItems to complete by checking items are stored
     await vi.waitFor(() =>
-      expect(registry.getDiscoveredItems('gh')).toHaveLength(1),
+      expect(registry.getProviderItems('gh')).toHaveLength(1),
     );
     expect(stateStore.setStates).not.toHaveBeenCalled();
     expect(listener).not.toHaveBeenCalled();
   });
 
-  it('fires onDidChangeDiscoveredItems when provider discovers items', async () => {
+  it('fires onDidChangeProviderItems when provider discovers items', async () => {
     const provider = createMockProvider('gh');
     registry.register(provider);
 
     const listener = vi.fn();
-    registry.onDidChangeDiscoveredItems(listener);
+    registry.onDidChangeProviderItems(listener);
 
     provider.fireItems([{ externalId: '1', title: 'Item' }]);
-    // handleDiscoveredItems is async, wait for it to settle
+    // handleProviderItems is async, wait for it to settle
     // Event fires once for discovered items, and may fire again when loading clears
     await vi.waitFor(() => expect(listener).toHaveBeenCalled());
     const firstCallCount = listener.mock.calls.length;
@@ -415,9 +415,9 @@ describe('ProviderRegistry', () => {
       { externalId: 'issue-1', title: 'Bug fix' },
     ]);
 
-    // Wait for handleDiscoveredItems to complete
+    // Wait for handleProviderItems to complete
     await vi.waitFor(() =>
-      expect(registry.getDiscoveredItems('gh')).toHaveLength(1),
+      expect(registry.getProviderItems('gh')).toHaveLength(1),
     );
     expect(listener).not.toHaveBeenCalled();
   });
@@ -523,7 +523,7 @@ describe('ProviderRegistry', () => {
       let callbackCount = 0;
       let loadingDuringProviderEvent: boolean | undefined;
       const providerEventObserved = new Promise<void>((resolve) => {
-        registry.onDidChangeDiscoveredItems(() => {
+        registry.onDidChangeProviderItems(() => {
           callbackCount += 1;
           if (callbackCount === 2) {
             loadingDuringProviderEvent = registry.loading;
@@ -546,21 +546,21 @@ describe('ProviderRegistry', () => {
       expect(registry.loading).toBe(false);
     });
 
-    it('onDidChangeDiscoveredItems fires when loading state transitions to false', async () => {
+    it('onDidChangeProviderItems fires when loading state transitions to false', async () => {
       const { provider, resolveRefresh } = createDeferredProvider('notif');
 
       const events: boolean[] = [];
-      registry.onDidChangeDiscoveredItems(() => {
+      registry.onDidChangeProviderItems(() => {
         events.push(registry.loading);
       });
 
       registry.register(provider);
-      // Register fires onDidChangeDiscoveredItems with loading=true
+      // Register fires onDidChangeProviderItems with loading=true
       expect(events).toContain(true);
 
       resolveRefresh();
       await nextTick();
-      // The .finally() fires onDidChangeDiscoveredItems with loading=false
+      // The .finally() fires onDidChangeProviderItems with loading=false
       expect(events).toContain(false);
     });
 
@@ -612,13 +612,13 @@ describe('ProviderRegistry', () => {
 
       // Last fire wins — items are replaced, not accumulated
       await vi.waitFor(() => {
-        const items = registry.getDiscoveredItems('rapid');
+        const items = registry.getProviderItems('rapid');
         expect(items).toHaveLength(1);
         expect(items[0].externalId).toBe('3');
       });
     });
 
-    it('fires onDidChangeDiscoveredItems for each rapid update', async () => {
+    it('fires onDidChangeProviderItems for each rapid update', async () => {
       const provider = createMockProvider('rapid');
       registry.register(provider);
 
@@ -626,7 +626,7 @@ describe('ProviderRegistry', () => {
       await vi.waitFor(() => expect(registry.loading).toBe(false));
 
       const listener = vi.fn();
-      registry.onDidChangeDiscoveredItems(listener);
+      registry.onDidChangeProviderItems(listener);
 
       provider.fireItems([{ externalId: '1', title: 'A' }]);
       provider.fireItems([{ externalId: '2', title: 'B' }]);
@@ -645,10 +645,10 @@ describe('ProviderRegistry', () => {
       p1.fireItems([{ externalId: 'a2', title: 'Alpha 2' }]);
 
       await vi.waitFor(() => {
-        expect(registry.getDiscoveredItems('alpha')).toHaveLength(1);
-        expect(registry.getDiscoveredItems('alpha')[0].externalId).toBe('a2');
-        expect(registry.getDiscoveredItems('beta')).toHaveLength(1);
-        expect(registry.getDiscoveredItems('beta')[0].externalId).toBe('b1');
+        expect(registry.getProviderItems('alpha')).toHaveLength(1);
+        expect(registry.getProviderItems('alpha')[0].externalId).toBe('a2');
+        expect(registry.getProviderItems('beta')).toHaveLength(1);
+        expect(registry.getProviderItems('beta')[0].externalId).toBe('b1');
       });
     });
 
@@ -664,7 +664,7 @@ describe('ProviderRegistry', () => {
       provider.fireItems([{ externalId: '2', title: 'Two' }]);
       provider.fireItems([{ externalId: '3', title: 'Three' }]);
 
-      // Each fire triggers handleDiscoveredItems, so unseenListener fires per batch
+      // Each fire triggers handleProviderItems, so unseenListener fires per batch
       await vi.waitFor(() => expect(unseenListener).toHaveBeenCalledTimes(3));
       // Each call should report exactly 1 new unseen item
       expect(unseenListener).toHaveBeenNthCalledWith(1, 1);
@@ -683,12 +683,12 @@ describe('ProviderRegistry', () => {
 
       stateStore.setStates.mockClear();
       const changeListener = vi.fn();
-      registry.onDidChangeDiscoveredItems(changeListener);
+      registry.onDidChangeProviderItems(changeListener);
 
       provider.fireItems([]);
 
       await vi.waitFor(() => expect(changeListener).toHaveBeenCalled());
-      expect(registry.getDiscoveredItems('empty')).toEqual([]);
+      expect(registry.getProviderItems('empty')).toEqual([]);
       // No unseen items to set
       expect(stateStore.setStates).not.toHaveBeenCalled();
     });
@@ -698,10 +698,10 @@ describe('ProviderRegistry', () => {
       const disposable = registry.register(provider);
 
       provider.fireItems([{ externalId: '1', title: 'Item' }]);
-      expect(registry.getDiscoveredItems('clearme')).toHaveLength(1);
+      expect(registry.getProviderItems('clearme')).toHaveLength(1);
 
       disposable.dispose();
-      expect(registry.getDiscoveredItems('clearme')).toEqual([]);
+      expect(registry.getProviderItems('clearme')).toEqual([]);
     });
 
     it('deregistration removes loading state', async () => {
@@ -715,7 +715,7 @@ describe('ProviderRegistry', () => {
       expect(registry.loading).toBe(false);
     });
 
-    it('fires onDidChangeDiscoveredItems on deregistration', async () => {
+    it('fires onDidChangeProviderItems on deregistration', async () => {
       const provider = createMockProvider('notify');
       const disposable = registry.register(provider);
 
@@ -723,7 +723,7 @@ describe('ProviderRegistry', () => {
       await vi.waitFor(() => expect(registry.loading).toBe(false));
 
       const listener = vi.fn();
-      registry.onDidChangeDiscoveredItems(listener);
+      registry.onDidChangeProviderItems(listener);
 
       disposable.dispose();
 
@@ -836,7 +836,7 @@ describe('ProviderRegistry', () => {
       provider.fireItems(items);
 
       await vi.waitFor(() => {
-        const stored = registry.getDiscoveredItems('exact-cap');
+        const stored = registry.getProviderItems('exact-cap');
         expect(stored).toHaveLength(ProviderRegistry.MAX_ITEMS_PER_PROVIDER);
       });
     });
@@ -851,7 +851,7 @@ describe('ProviderRegistry', () => {
       provider.fireItems(items);
 
       await vi.waitFor(() => {
-        const stored = registry.getDiscoveredItems('over-cap');
+        const stored = registry.getProviderItems('over-cap');
         expect(stored).toHaveLength(ProviderRegistry.MAX_ITEMS_PER_PROVIDER);
       });
       expect(warnSpy).toHaveBeenCalledWith(
@@ -873,7 +873,7 @@ describe('ProviderRegistry', () => {
       provider.fireItems([]);
 
       await vi.waitFor(() => {
-        expect(registry.getDiscoveredItems('zero-items')).toEqual([]);
+        expect(registry.getProviderItems('zero-items')).toEqual([]);
       });
       expect(warnSpy).not.toHaveBeenCalledWith(
         expect.stringContaining('Truncating'),
@@ -889,7 +889,7 @@ describe('ProviderRegistry', () => {
       provider.fireItems(items);
 
       await vi.waitFor(() => {
-        const stored = registry.getDiscoveredItems('order-check');
+        const stored = registry.getProviderItems('order-check');
         expect(stored).toHaveLength(ProviderRegistry.MAX_ITEMS_PER_PROVIDER);
         // First and last retained items match original order
         expect(stored[0].externalId).toBe('item-0');
@@ -908,7 +908,7 @@ describe('ProviderRegistry', () => {
       provider.fireItems(items);
 
       await vi.waitFor(() => {
-        const stored = registry.getDiscoveredItems('truncated-only');
+        const stored = registry.getProviderItems('truncated-only');
         expect(stored).toHaveLength(ProviderRegistry.MAX_ITEMS_PER_PROVIDER);
         // None of the excess items should be present
         const ids = new Set(stored.map(i => i.externalId));
@@ -928,7 +928,7 @@ describe('ProviderRegistry', () => {
       provider.fireItems(makeItems(ProviderRegistry.MAX_ITEMS_PER_PROVIDER));
 
       await vi.waitFor(() => {
-        expect(registry.getDiscoveredItems('under-cap')).toHaveLength(
+        expect(registry.getProviderItems('under-cap')).toHaveLength(
           ProviderRegistry.MAX_ITEMS_PER_PROVIDER,
         );
       });
@@ -947,14 +947,14 @@ describe('ProviderRegistry', () => {
       provider.fireItems(items);
 
       await vi.waitFor(() => {
-        expect(registry.getDiscoveredItems('defensive-copy')).toHaveLength(3);
+        expect(registry.getProviderItems('defensive-copy')).toHaveLength(3);
       });
 
       // Mutate the original array after it was stored
       items.push({ externalId: 'sneaky', title: 'Sneaky' });
 
       // The registry should still have only 3 items
-      expect(registry.getDiscoveredItems('defensive-copy')).toHaveLength(3);
+      expect(registry.getProviderItems('defensive-copy')).toHaveLength(3);
     });
   });
 
@@ -1022,7 +1022,7 @@ describe('ProviderRegistry', () => {
       ]);
 
       await vi.waitFor(() =>
-        expect(registry.getDiscoveredItems('gh')).toHaveLength(1),
+        expect(registry.getProviderItems('gh')).toHaveLength(1),
       );
       expect(stateStore.setStates).not.toHaveBeenCalled();
     });
@@ -1076,7 +1076,7 @@ describe('ProviderRegistry', () => {
       ]);
 
       await vi.waitFor(() =>
-        expect(registry.getDiscoveredItems('gh')).toHaveLength(1),
+        expect(registry.getProviderItems('gh')).toHaveLength(1),
       );
       expect(stateStore.setStates).not.toHaveBeenCalled();
     });
@@ -1096,7 +1096,7 @@ describe('ProviderRegistry', () => {
       ]);
 
       await vi.waitFor(() =>
-        expect(registry.getDiscoveredItems('gh')).toHaveLength(1),
+        expect(registry.getProviderItems('gh')).toHaveLength(1),
       );
       expect(stateStore.setStates).not.toHaveBeenCalled();
     });
@@ -1221,7 +1221,7 @@ describe('ProviderRegistry', () => {
           ]);
         } else {
           await vi.waitFor(() =>
-            expect(registry.getDiscoveredItems('gh')).toHaveLength(1),
+            expect(registry.getProviderItems('gh')).toHaveLength(1),
           );
           expect(stateStore.setStates).not.toHaveBeenCalled();
         }
@@ -1690,8 +1690,8 @@ describe('ProviderRegistry', () => {
         { externalId: 'pr-1', title: 'PR 1' },
       ]);
 
-      // Allow handleDiscoveredItems to process
-      await vi.waitFor(() => expect(reg.getDiscoveredItems('gh')).toHaveLength(1));
+      // Allow handleProviderItems to process
+      await vi.waitFor(() => expect(reg.getProviderItems('gh')).toHaveLength(1));
       // No state updates should have been made
       expect(stateStore.setStates).not.toHaveBeenCalled();
       expect(listener).not.toHaveBeenCalled();
@@ -1712,10 +1712,10 @@ describe('ProviderRegistry', () => {
 
       // Re-emit same item multiple times (simulating repeated refreshes with no version)
       provider.fireItems([{ externalId: 'pr-1', title: 'PR 1' }]);
-      await vi.waitFor(() => expect(reg.getDiscoveredItems('gh')).toHaveLength(1));
+      await vi.waitFor(() => expect(reg.getProviderItems('gh')).toHaveLength(1));
 
       provider.fireItems([{ externalId: 'pr-1', title: 'PR 1' }]);
-      await vi.waitFor(() => expect(reg.getDiscoveredItems('gh')).toHaveLength(1));
+      await vi.waitFor(() => expect(reg.getProviderItems('gh')).toHaveLength(1));
 
       expect(stateStore.setStates).not.toHaveBeenCalled();
       expect(listener).not.toHaveBeenCalled();
@@ -1738,7 +1738,7 @@ describe('ProviderRegistry', () => {
         { externalId: 'pr-1', title: 'PR 1' },
       ]);
 
-      await vi.waitFor(() => expect(reg.getDiscoveredItems('gh')).toHaveLength(1));
+      await vi.waitFor(() => expect(reg.getProviderItems('gh')).toHaveLength(1));
       expect(stateStore.setStates).not.toHaveBeenCalled();
       expect(listener).not.toHaveBeenCalled();
 
@@ -1761,7 +1761,7 @@ describe('ProviderRegistry', () => {
         { externalId: 'pr-1', title: 'PR 1' },
       ]);
 
-      await vi.waitFor(() => expect(reg.getDiscoveredItems('gh')).toHaveLength(1));
+      await vi.waitFor(() => expect(reg.getProviderItems('gh')).toHaveLength(1));
       expect(stateStore.setStates).not.toHaveBeenCalled();
       expect(listener).not.toHaveBeenCalled();
 
@@ -1771,7 +1771,7 @@ describe('ProviderRegistry', () => {
     it('serializes back-to-back onDidDiscoverItems emissions per provider', async () => {
       // Regression test: two rapid emissions used to interleave their async
       // bodies, mixing up the previous-snapshot bookkeeping. Since we now
-      // queue per-provider, the second emission's handleDiscoveredItems
+      // queue per-provider, the second emission's handleProviderItems
       // can't start until the first one's awaits have all settled, so the
       // final state must reflect ONLY the second emission's items.
       const pendingResolvers: Array<() => void> = [];
@@ -1784,7 +1784,7 @@ describe('ProviderRegistry', () => {
 
       // First emission: synchronous prefix runs immediately.
       provider.fireItems([{ externalId: 'a', title: 'A' }]);
-      expect(registry.getDiscoveredItems('gh').map(i => i.externalId)).toEqual(['a']);
+      expect(registry.getProviderItems('gh').map(i => i.externalId)).toEqual(['a']);
       expect(pendingResolvers).toHaveLength(1);
 
       // Second emission while the first's setStates is still in-flight.
@@ -1792,12 +1792,12 @@ describe('ProviderRegistry', () => {
       // Synchronous portion of the second emission must NOT have run yet —
       // it's queued behind the unresolved first invocation, so the second
       // setStates hasn't been called yet either.
-      expect(registry.getDiscoveredItems('gh').map(i => i.externalId)).toEqual(['a']);
+      expect(registry.getProviderItems('gh').map(i => i.externalId)).toEqual(['a']);
       expect(pendingResolvers).toHaveLength(1);
 
       // Resolve the first's setStates so the queue can drain.
       pendingResolvers[0]();
-      await vi.waitFor(() => expect(registry.getDiscoveredItems('gh').map(i => i.externalId)).toEqual(['b']));
+      await vi.waitFor(() => expect(registry.getProviderItems('gh').map(i => i.externalId)).toEqual(['b']));
 
       // Drain the second one's setStates so the test doesn't leak a pending promise.
       await vi.waitFor(() => expect(pendingResolvers).toHaveLength(2));

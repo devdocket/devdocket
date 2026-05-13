@@ -23,23 +23,23 @@ function isActiveWorkItemState(state: WorkItemState | undefined): boolean {
 /**
  * Central registry for {@link DevDocketProvider} instances.
  *
- * Manages provider lifecycle, tracks discovered items from each provider,
+ * Manages provider lifecycle, tracks provider items from each provider,
  * and coordinates inbox state persistence through the {@link DiscoveredStateStore}.
- * Fires events when providers are registered or when their discovered items change.
+ * Fires events when providers are registered or when their provider items change.
  */
 export class ProviderRegistry {
   static readonly REFRESH_TIMEOUT_MS = 30_000;
   /**
-   * Maximum number of discovered items accepted from a single provider per refresh.
+   * Maximum number of provider items accepted from a single provider per refresh.
    * Excess items are truncated after logging a warning.
    */
   static readonly MAX_ITEMS_PER_PROVIDER = 10_000;
   private readonly providers = new Map<string, DevDocketProvider>();
   private readonly subscriptions = new Map<string, { dispose(): void }>();
-  private readonly discoveredItems = new Map<string, ProviderItem[]>();
-  private readonly _onDidChangeDiscoveredItems = new vscode.EventEmitter<void>();
-  /** Fired whenever any provider's discovered items change. */
-  readonly onDidChangeDiscoveredItems = this._onDidChangeDiscoveredItems.event;
+  private readonly providerItems = new Map<string, ProviderItem[]>();
+  private readonly _onDidChangeProviderItems = new vscode.EventEmitter<void>();
+  /** Fired whenever any provider's provider items change. */
+  readonly onDidChangeProviderItems = this._onDidChangeProviderItems.event;
   private readonly _onDidRegisterProvider = new vscode.EventEmitter<void>();
   /** Fired when a new provider is registered. */
   readonly onDidRegisterProvider = this._onDidRegisterProvider.event;
@@ -51,10 +51,10 @@ export class ProviderRegistry {
   readonly onDidChangeProviderHealth = this._onDidChangeProviderHealth.event;
   private readonly _onDidRefreshProvider = new vscode.EventEmitter<string>();
   /**
-   * Fired after a provider's discovered items have been processed, carrying the
+   * Fired after a provider's provider items have been processed, carrying the
    * provider ID. Listeners can use this to run cross-cutting checks (e.g.
    * auto-complete) against the full WorkGraph rather than just the provider's
-   * own discovered-items list.
+   * own provider-items list.
    */
   readonly onDidRefreshProvider = this._onDidRefreshProvider.event;
   /** Previous discovered-item external IDs per provider, for fallback disappearance detection. */
@@ -65,10 +65,10 @@ export class ProviderRegistry {
   private readonly _loadingProviders = new Set<string>();
   private readonly _pendingRefreshes = new Map<string, { cts: vscode.CancellationTokenSource; timeoutId: ReturnType<typeof setTimeout> }>();
   /**
-   * Per-provider serialization queue for handleDiscoveredItems. A provider that
+   * Per-provider serialization queue for handleProviderItems. A provider that
    * fires onDidDiscoverItems twice in rapid succession would otherwise have two
    * async handlers interleave their reads/writes against the state store and
-   * the discoveredItems map. Chaining each new invocation onto the previous
+   * the providerItems map. Chaining each new invocation onto the previous
    * one's promise guarantees ordered, atomic processing per provider.
    */
   private readonly _handleQueues = new Map<string, Promise<void>>();
@@ -113,23 +113,23 @@ export class ProviderRegistry {
         logger.debug(`Failed to cache provider label for provider ${provider.id} (label: ${provider.label})`, err);
       });
     }
-    if (!this.discoveredItems.has(provider.id)) {
-      this.discoveredItems.set(provider.id, []);
+    if (!this.providerItems.has(provider.id)) {
+      this.providerItems.set(provider.id, []);
     }
     logger.info(`Registered provider: ${provider.id} (${provider.label})`);
 
     const sub = provider.onDidDiscoverItems((items) => {
       // Serialize per-provider so two emissions in rapid succession don't
-      // interleave their reads of stateStore / writes to discoveredItems.
+      // interleave their reads of stateStore / writes to providerItems.
       // When nothing is in flight we invoke synchronously so the handler's
-      // sync prefix (setting discoveredItems, queueing setStates) runs
+      // sync prefix (setting providerItems, queueing setStates) runs
       // before the listener returns — preserving the contract that callers
-      // can observe the updated discovered-items map immediately after a
+      // can observe the updated provider-items map immediately after a
       // synchronous fire-and-forget event emission.
       const tail = this._handleQueues.get(provider.id);
       const startNext = (): Promise<void> =>
-        this.handleDiscoveredItems(provider.id, items)
-          .catch(err => logger.error('handleDiscoveredItems failed', err));
+        this.handleProviderItems(provider.id, items)
+          .catch(err => logger.error('handleProviderItems failed', err));
       const next = tail
         ? tail.catch(() => undefined).then(startNext)
         : startNext();
@@ -148,12 +148,12 @@ export class ProviderRegistry {
 
     this._loadingProviders.add(provider.id);
     this._onDidRegisterProvider.fire();
-    this._onDidChangeDiscoveredItems.fire();
+    this._onDidChangeProviderItems.fire();
     this.refreshWithTimeout(provider)
       .finally(() => {
         this._loadingProviders.delete(provider.id);
         if (!this._disposed) {
-          this._onDidChangeDiscoveredItems.fire();
+          this._onDidChangeProviderItems.fire();
         }
       });
 
@@ -162,14 +162,14 @@ export class ProviderRegistry {
       this.providers.delete(provider.id);
       this.subscriptions.get(provider.id)?.dispose();
       this.subscriptions.delete(provider.id);
-      this.discoveredItems.delete(provider.id);
+      this.providerItems.delete(provider.id);
       this.previousDiscoveredIds.delete(provider.id);
       this.lastRefreshTruncated.delete(provider.id);
       this.healthStatus.delete(provider.id);
       this._loadingProviders.delete(provider.id);
       this._handleQueues.delete(provider.id);
       if (!this._disposed) {
-        this._onDidChangeDiscoveredItems.fire();
+        this._onDidChangeProviderItems.fire();
       }
     });
   }
@@ -214,33 +214,33 @@ export class ProviderRegistry {
   }
 
   /**
-   * Get the discovered items for a specific provider.
+   * Get the provider items for a specific provider.
    *
    * @param providerId - The provider identifier.
-   * @returns The array of discovered items, or an empty array if the provider has none.
+   * @returns The array of provider items, or an empty array if the provider has none.
    */
-  getDiscoveredItems(providerId: string): ProviderItem[] {
-    return this.discoveredItems.get(providerId) ?? [];
+  getProviderItems(providerId: string): ProviderItem[] {
+    return this.providerItems.get(providerId) ?? [];
   }
 
   /**
-   * Get all discovered items across every registered provider.
+   * Get all provider items across every registered provider.
    *
-   * @returns A map keyed by provider ID, with each value being the provider's discovered items.
+   * @returns A map keyed by provider ID, with each value being the provider's provider items.
    */
-  getAllDiscoveredItems(): Map<string, ProviderItem[]> {
-    return this.discoveredItems;
+  getAllProviderItems(): Map<string, ProviderItem[]> {
+    return this.providerItems;
   }
 
   /**
-   * Find one live discovered item by provider and external id.
+   * Find one live provider item by provider and external id.
    */
-  findDiscoveredItem(providerId: string, externalId: string): ProviderItem | undefined {
-    return this.getDiscoveredItems(providerId).find(item => item.externalId === externalId);
+  findProviderItem(providerId: string, externalId: string): ProviderItem | undefined {
+    return this.getProviderItems(providerId).find(item => item.externalId === externalId);
   }
 
   /**
-   * Check whether an item was in the provider's discovered-items list before
+   * Check whether an item was in the provider's provider-items list before
    * the most recent refresh. Used as a fallback for auto-complete when the
    * provider does not implement `getClosedItems`.
    */
@@ -377,7 +377,7 @@ export class ProviderRegistry {
     }
   }
 
-  private async handleDiscoveredItems(providerId: string, items: ProviderItem[]): Promise<void> {
+  private async handleProviderItems(providerId: string, items: ProviderItem[]): Promise<void> {
     if (this._disposed) {
       return;
     }
@@ -413,10 +413,10 @@ export class ProviderRegistry {
     // Snapshot previous IDs before replacing, for fallback disappearance detection.
     // Always update — even when prevItems is empty — to avoid stale snapshots from
     // an earlier non-empty refresh persisting across an empty intermediate refresh.
-    const prevItems = this.discoveredItems.get(providerId) ?? [];
+    const prevItems = this.providerItems.get(providerId) ?? [];
     this.previousDiscoveredIds.set(providerId, new Set(prevItems.map(i => i.externalId)));
     this.lastRefreshTruncated.set(providerId, wasTruncated);
-    this.discoveredItems.set(providerId, items);
+    this.providerItems.set(providerId, items);
 
     const newUnseenUpdates: Array<{ providerId: string; externalId: string; state: 'unseen'; version?: string; resurfaceVersion?: string }> = [];
     const versionBackfills: Array<{ providerId: string; externalId: string; state: InboxState; version?: string; resurfaceVersion?: string }> = [];
@@ -513,7 +513,7 @@ export class ProviderRegistry {
       }
     }
     if (!this._disposed) {
-      this._onDidChangeDiscoveredItems.fire();
+      this._onDidChangeProviderItems.fire();
       this._onDidRefreshProvider.fire(providerId);
     }
   }
@@ -534,7 +534,7 @@ export class ProviderRegistry {
       sub.dispose();
     }
     this.subscriptions.clear();
-    this._onDidChangeDiscoveredItems.dispose();
+    this._onDidChangeProviderItems.dispose();
     this._onDidRegisterProvider.dispose();
     this._onDidAddNewUnseenItems.dispose();
     this._onDidChangeProviderHealth.dispose();

@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { BaseProvider, ProviderItem, EventEmitterLike, DiscoveredItem } from '../baseProvider';
+import { BaseProvider, ProviderItem, EventEmitterLike } from '../baseProvider';
+
 
 /** Minimal EventEmitter stub for testing. */
 function createMockEmitter(): EventEmitterLike<ProviderItem[]> {
@@ -50,14 +51,6 @@ class TestProvider extends BaseProvider {
 }
 
 describe('BaseProvider', () => {
-  it('keeps DiscoveredItem as an assignable compatibility interface', () => {
-    const legacyItem: DiscoveredItem = { externalId: 'legacy-1', title: 'Legacy item' };
-    const canonicalItem: ProviderItem = legacyItem;
-    const reverseAssignedItem: DiscoveredItem = canonicalItem;
-
-    expect(reverseAssignedItem.externalId).toBe('legacy-1');
-  });
-
   beforeEach(() => {
     vi.useFakeTimers();
   });

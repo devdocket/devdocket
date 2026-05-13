@@ -162,7 +162,7 @@ export class WorkItemEditorPanel {
       this.update();
     });
 
-    this.providerChangeSub = this.providerRegistry.onDidChangeDiscoveredItems(() => {
+    this.providerChangeSub = this.providerRegistry.onDidChangeProviderItems(() => {
       this.update();
     });
 
@@ -397,7 +397,7 @@ export class WorkItemEditorPanel {
   }
 
   private buildEditorItemData(item: WorkItem, relatedItemsIndex: RelatedItemsIndex): EditorItemData {
-    const discoveredItem = this.getDiscoveredItem(item);
+    const providerItem = this.getProviderItem(item);
     const providerLabel = item.providerId ? this.providerLabel ?? this.providerRegistry.getProviderLabel(item.providerId) : undefined;
 
     return {
@@ -411,7 +411,7 @@ export class WorkItemEditorPanel {
       group: item.group,
       createdAt: item.createdAt,
       updatedAt: item.updatedAt,
-      badges: composeEditorBadges(item.providerId, discoveredItem, providerLabel),
+      badges: composeEditorBadges(item.providerId, providerItem, providerLabel),
       isProviderManaged: this.isProviderManaged(item),
       validTransitions: Array.from(VALID_TRANSITIONS.get(item.state) ?? []),
       hasActions: WorkItemEditorPanel.actionRegistry?.hasActionsFor(item) ?? false,
@@ -439,12 +439,12 @@ export class WorkItemEditorPanel {
     }
   }
 
-  private getDiscoveredItem(item: WorkItem): ProviderItem | undefined {
+  private getProviderItem(item: WorkItem): ProviderItem | undefined {
     if (!item.providerId || !item.externalId) {
       return undefined;
     }
 
-    return this.providerRegistry.findDiscoveredItem(item.providerId, item.externalId);
+    return this.providerRegistry.findProviderItem(item.providerId, item.externalId);
   }
 
   private buildCIWatchData(item: WorkItem): EditorItemData['ciWatch'] {
@@ -587,21 +587,21 @@ export class WorkItemEditorPanel {
     try {
       const existing = this.workGraph.findItemByProvenance(providerId, externalId);
       if (!existing) {
-        const discoveredItem = this.providerRegistry.getDiscoveredItems(providerId).find(item => item.externalId === externalId);
-        if (!discoveredItem) {
+        const providerItem = this.providerRegistry.getProviderItems(providerId).find(item => item.externalId === externalId);
+        if (!providerItem) {
           return;
         }
         await this.workGraph.createItem(
           {
-            title: discoveredItem.title,
-            description: discoveredItem.description,
+            title: providerItem.title,
+            description: providerItem.description,
           },
           {
             providerId,
             externalId,
-            itemType: discoveredItem.itemType,
-            url: discoveredItem.url,
-            ...(discoveredItem.group ? { group: discoveredItem.group } : {}),
+            itemType: providerItem.itemType,
+            url: providerItem.url,
+            ...(providerItem.group ? { group: providerItem.group } : {}),
           },
         );
       }
@@ -680,7 +680,7 @@ function isFailingOrWarningRun(run: WatchedRun): boolean {
  */
 export function composeEditorBadges(
   providerId?: string,
-  discoveredItem?: ProviderItem,
+  providerItem?: ProviderItem,
   providerLabel?: string,
 ): BadgeData[] {
   const badges: BadgeData[] = [];
@@ -689,8 +689,8 @@ export function composeEditorBadges(
   // as "Manual".
   const providerBadge = buildProviderBadge(providerId, providerLabel);
   if (providerBadge) badges.push(providerBadge);
-  const typeBadge = buildTypeBadge(discoveredItem);
+  const typeBadge = buildTypeBadge(providerItem);
   if (typeBadge) badges.push(typeBadge);
-  badges.push(...buildProviderBadges(discoveredItem, 'editor'));
+  badges.push(...buildProviderBadges(providerItem, 'editor'));
   return badges;
 }

@@ -27,7 +27,7 @@ import { syncProviderTitles } from './services/titleSync';
 import { syncProviderDescriptions } from './services/descriptionSync';
 import { performance } from 'perf_hooks';
 
-export type { DevDocketApi, DevDocketProvider, DevDocketAction, ProviderItem, DiscoveredItem, Disposable, ActivityLogEntry, ActivityType, StateTransitionEvent, DevDocketPRWatcher } from './api/types';
+export type { DevDocketApi, DevDocketProvider, DevDocketAction, ProviderItem, Disposable, ActivityLogEntry, ActivityType, StateTransitionEvent, DevDocketPRWatcher } from './api/types';
 export { logger } from './services/logger';
 
 /** Wrap an event callback so unhandled errors (sync or async) are logged instead of crashing. */
@@ -161,7 +161,7 @@ export async function autoWatchAuthoredPRs(
 ): Promise<void> {
   const capNotifiedProviders = options.capNotifiedProviders ?? autoWatchCapNotifiedProviders;
   const sharedSeenPRKeys = options.seenPRKeys;
-  const items = providerRegistry.getDiscoveredItems(providerId).filter(isAutoWatchCandidate);
+  const items = providerRegistry.getProviderItems(providerId).filter(isAutoWatchCandidate);
   const localSeenPRKeys = new Set<string>();
   const reservedPRKeys = new Set<string>();
   const candidates: Array<{ identifier: PRIdentifier; sourceUrl: string }> = [];
@@ -274,7 +274,7 @@ function wireEvents(
   let initialLoadComplete = false;
   let wasLoading = false;
 
-  const discoveredSub = providerRegistry.onDidChangeDiscoveredItems(safeHandler('Error handling discovered items change', () => {
+  const discoveredSub = providerRegistry.onDidChangeProviderItems(safeHandler('Error handling discovered items change', () => {
     if (!initialLoadComplete) {
       if (wasLoading && !providerRegistry.loading) {
         initialLoadComplete = true;
@@ -504,7 +504,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<DevDoc
       mainProvider,
     ),
     wg.onDidChange(safeHandler('mc:workGraph', () => mainProvider.scheduleRefresh('workGraph'))),
-    pr.onDidChangeDiscoveredItems(safeHandler('mc:discovered', () => mainProvider.scheduleRefresh('discovered'))),
+    pr.onDidChangeProviderItems(safeHandler('mc:discovered', () => mainProvider.scheduleRefresh('discovered'))),
     pr.onDidChangeProviderHealth(safeHandler('mc:health', () => mainProvider.scheduleRefresh('health'))),
     ss.onDidChange(safeHandler('mc:stateStore', () => mainProvider.scheduleRefresh('state'))),
     ws.onDidChangeWatchedRuns(safeHandler('mc:watchedRuns', () => mainProvider.scheduleRefresh('watchedRuns'))),
@@ -516,7 +516,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<DevDoc
         return;
       }
 
-      const active = new Map([[providerId, pr.getDiscoveredItems(providerId)]]);
+      const active = new Map([[providerId, pr.getProviderItems(providerId)]]);
       try {
         const ssPruned = await ss.prune(active);
         const rsPruned = await readStateStore.prune(active);

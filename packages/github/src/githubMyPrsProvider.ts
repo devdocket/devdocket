@@ -169,7 +169,7 @@ export class GitHubMyPrsProvider extends BaseGitHubProvider {
       });
     }
 
-    this.publishDiscoveredItems(items, patterns);
+    this.publishProviderItems(items, patterns);
 
     const failures = [...new Set([...authoredResult.failures, ...assignedResult.failures])];
     if (failures.length > 0) {

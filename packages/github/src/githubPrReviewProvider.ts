@@ -108,7 +108,7 @@ export class GitHubPrReviewProvider extends BaseGitHubProvider {
       return item;
     });
 
-    this.publishDiscoveredItems(items, patterns);
+    this.publishProviderItems(items, patterns);
 
     if (failed) {
       this.warnOnFetchFailure('Failed to fetch PR review requests', isUserTriggered);
