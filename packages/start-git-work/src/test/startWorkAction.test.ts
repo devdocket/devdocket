@@ -435,6 +435,7 @@ describe('StartWorkAction', () => {
         ['fetch', 'origin', '+refs/heads/feature/topic:refs/remotes/origin/feature/topic'],
         ['status', '--porcelain'],
         ['rev-parse', '--verify', 'refs/heads/feature/topic'],
+        ['worktree', 'list', '--porcelain'],
         ['checkout', 'feature/topic'],
       ]);
     });
@@ -528,6 +529,223 @@ describe('StartWorkAction', () => {
       await action.run(item);
 
       expect(vi.mocked(execFile).mock.calls[1][1]).toEqual(['branch', 'fake/work-42', 'origin/dev']);
+    });
+
+    describe('worktree branch-conflict detection (porcelain pre-check)', () => {
+      it('creates detached worktree when same-repo PR branch is held by another worktree', async () => {
+        // Default mock leaves rev-parse --verify succeeding → hasLocalBranch=true.
+        // Same-repo PR (no headCloneUrl) → trackingRef=undefined →
+        // worktreeSourceRef = 'origin/feature/topic'.
+        vi.mocked(execFile).mockImplementation(((cmd: string, args: string[], opts: any, cb: Function) => {
+          if (args[0] === 'remote' && args[1] === '-v') {
+            cb(null, ORIGIN_REMOTE_V, '');
+            return;
+          }
+          if (args[0] === 'worktree' && args[1] === 'list' && args[2] === '--porcelain') {
+            cb(null,
+              'worktree /mock/workspace\n' +
+              'HEAD aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\n' +
+              'branch refs/heads/main\n' +
+              '\n' +
+              'worktree /mock/other-worktree\n' +
+              'HEAD bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\n' +
+              'branch refs/heads/feature/topic\n' +
+              '\n', '');
+            return;
+          }
+          cb(null, '', '');
+        }) as any);
+        const item = createWorkItem();
+        const { action } = createAction(discovered('provider', 'item-1', {
+          kind: 'pr', cloneUrl: 'https://example.com/acme/repo.git', ref: 'feature/topic', repoLabel: 'acme/repo',
+        }));
+
+        await action.run(item);
+
+        const worktreeAddCalls = vi.mocked(execFile).mock.calls.filter(
+          (call: any[]) => call[1]?.[0] === 'worktree' && call[1]?.[1] === 'add',
+        );
+        // Only one attempt — straight to the detached path.
+        expect(worktreeAddCalls).toHaveLength(1);
+        expect(worktreeAddCalls[0]![1]).toEqual([
+          'worktree', 'add', '--detach',
+          path.join('/mock', 'workspace-feature-topic-item-1'),
+          'origin/feature/topic',
+        ]);
+        expect(window.showErrorMessage).not.toHaveBeenCalled();
+      });
+
+      it('uses non-detached worktree add when no other worktree holds the branch', async () => {
+        // Sanity: porcelain returns empty output → no conflict → use local branch directly.
+        vi.mocked(execFile).mockImplementation(((cmd: string, args: string[], opts: any, cb: Function) => {
+          if (args[0] === 'remote' && args[1] === '-v') {
+            cb(null, ORIGIN_REMOTE_V, '');
+            return;
+          }
+          cb(null, '', '');
+        }) as any);
+        const item = createWorkItem();
+        const { action } = createAction(discovered('provider', 'item-1', {
+          kind: 'pr', cloneUrl: 'https://example.com/acme/repo.git', ref: 'feature/topic', repoLabel: 'acme/repo',
+        }));
+
+        await action.run(item);
+
+        const worktreeAddCalls = vi.mocked(execFile).mock.calls.filter(
+          (call: any[]) => call[1]?.[0] === 'worktree' && call[1]?.[1] === 'add',
+        );
+        expect(worktreeAddCalls).toHaveLength(1);
+        expect(worktreeAddCalls[0]![1]).toEqual([
+          'worktree', 'add',
+          path.join('/mock', 'workspace-feature-topic-item-1'),
+          'feature/topic',
+        ]);
+      });
+
+      it('ignores worktrees holding a branch with a similar name (substring guard)', async () => {
+        // refs/heads/feature/topic-extra must NOT match refs/heads/feature/topic.
+        vi.mocked(execFile).mockImplementation(((cmd: string, args: string[], opts: any, cb: Function) => {
+          if (args[0] === 'remote' && args[1] === '-v') {
+            cb(null, ORIGIN_REMOTE_V, '');
+            return;
+          }
+          if (args[0] === 'worktree' && args[1] === 'list' && args[2] === '--porcelain') {
+            cb(null,
+              'worktree /mock/other\n' +
+              'HEAD bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\n' +
+              'branch refs/heads/feature/topic-extra\n' +
+              '\n', '');
+            return;
+          }
+          cb(null, '', '');
+        }) as any);
+        const item = createWorkItem();
+        const { action } = createAction(discovered('provider', 'item-1', {
+          kind: 'pr', cloneUrl: 'https://example.com/acme/repo.git', ref: 'feature/topic', repoLabel: 'acme/repo',
+        }));
+
+        await action.run(item);
+
+        const worktreeAddCalls = vi.mocked(execFile).mock.calls.filter(
+          (call: any[]) => call[1]?.[0] === 'worktree' && call[1]?.[1] === 'add',
+        );
+        expect(worktreeAddCalls).toHaveLength(1);
+        expect(worktreeAddCalls[0]![1]).toEqual([
+          'worktree', 'add',
+          path.join('/mock', 'workspace-feature-topic-item-1'),
+          'feature/topic',
+        ]);
+      });
+
+      it('falls through to non-detached worktree add when porcelain command itself fails', async () => {
+        // Pre-check is best-effort — if porcelain itself errors, fall through to
+        // the normal worktree add and let any real conflict surface from git.
+        vi.mocked(execFile).mockImplementation(((cmd: string, args: string[], opts: any, cb: Function) => {
+          if (args[0] === 'remote' && args[1] === '-v') {
+            cb(null, ORIGIN_REMOTE_V, '');
+            return;
+          }
+          if (args[0] === 'worktree' && args[1] === 'list' && args[2] === '--porcelain') {
+            const err = new Error('fatal: not a git repository');
+            (err as any).stderr = 'fatal: not a git repository';
+            cb(err, '', (err as any).stderr);
+            return;
+          }
+          cb(null, '', '');
+        }) as any);
+        const item = createWorkItem();
+        const { action } = createAction(discovered('provider', 'item-1', {
+          kind: 'pr', cloneUrl: 'https://example.com/acme/repo.git', ref: 'feature/topic', repoLabel: 'acme/repo',
+        }));
+
+        await action.run(item);
+
+        const worktreeAddCalls = vi.mocked(execFile).mock.calls.filter(
+          (call: any[]) => call[1]?.[0] === 'worktree' && call[1]?.[1] === 'add',
+        );
+        expect(worktreeAddCalls).toHaveLength(1);
+        expect(worktreeAddCalls[0]![1]).toEqual([
+          'worktree', 'add',
+          path.join('/mock', 'workspace-feature-topic-item-1'),
+          'feature/topic',
+        ]);
+      });
+
+      it('shows error in checkout mode when same-repo PR branch is held by another worktree', async () => {
+        vi.mocked(window.showQuickPick).mockResolvedValue({ label: 'Checkout branch', value: 'checkout' } as any);
+        vi.mocked(execFile).mockImplementation(((cmd: string, args: string[], opts: any, cb: Function) => {
+          if (args[0] === 'remote' && args[1] === '-v') {
+            cb(null, ORIGIN_REMOTE_V, '');
+            return;
+          }
+          if (args[0] === 'worktree' && args[1] === 'list' && args[2] === '--porcelain') {
+            cb(null,
+              'worktree /mock/workspace\n' +
+              'HEAD aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\n' +
+              'branch refs/heads/main\n' +
+              '\n' +
+              'worktree /mock/other-worktree\n' +
+              'HEAD bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\n' +
+              'branch refs/heads/feature/topic\n' +
+              '\n', '');
+            return;
+          }
+          cb(null, '', '');
+        }) as any);
+        const item = createWorkItem();
+        const { action } = createAction(discovered('provider', 'item-1', {
+          kind: 'pr', cloneUrl: 'https://example.com/acme/repo.git', ref: 'feature/topic', repoLabel: 'acme/repo',
+        }));
+
+        await action.run(item);
+
+        // No checkout was attempted — short-circuited with a clear error.
+        const checkoutCall = vi.mocked(execFile).mock.calls.find(
+          (call: any[]) => call[1]?.[0] === 'checkout',
+        );
+        expect(checkoutCall).toBeUndefined();
+        expect(window.showErrorMessage).toHaveBeenCalledWith(
+          expect.stringContaining('/mock/other-worktree'),
+        );
+        expect(window.showErrorMessage).toHaveBeenCalledWith(
+          expect.stringContaining('feature/topic'),
+        );
+      });
+
+      it('proceeds with checkout when the current repo worktree itself holds the branch', async () => {
+        // If the user is already on the PR branch in the current worktree,
+        // `git checkout <branch>` is a no-op success — the pre-check must NOT
+        // block by treating the current worktree as a conflict.
+        vi.mocked(window.showQuickPick).mockResolvedValue({ label: 'Checkout branch', value: 'checkout' } as any);
+        vi.mocked(execFile).mockImplementation(((cmd: string, args: string[], opts: any, cb: Function) => {
+          if (args[0] === 'remote' && args[1] === '-v') {
+            cb(null, ORIGIN_REMOTE_V, '');
+            return;
+          }
+          if (args[0] === 'worktree' && args[1] === 'list' && args[2] === '--porcelain') {
+            cb(null,
+              'worktree /mock/workspace\n' +
+              'HEAD aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\n' +
+              'branch refs/heads/feature/topic\n' +
+              '\n', '');
+            return;
+          }
+          cb(null, '', '');
+        }) as any);
+        const item = createWorkItem();
+        const { action } = createAction(discovered('provider', 'item-1', {
+          kind: 'pr', cloneUrl: 'https://example.com/acme/repo.git', ref: 'feature/topic', repoLabel: 'acme/repo',
+        }));
+
+        await action.run(item);
+
+        expect(window.showErrorMessage).not.toHaveBeenCalled();
+        const checkoutCall = vi.mocked(execFile).mock.calls.find(
+          (call: any[]) => call[1]?.[0] === 'checkout',
+        );
+        expect(checkoutCall).toBeDefined();
+        expect(checkoutCall![1]).toEqual(['checkout', 'feature/topic']);
+      });
     });
   });
 });
