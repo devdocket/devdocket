@@ -121,6 +121,7 @@ export class RunWatchPool implements vscode.Disposable {
     }
 
     watch.dismissed = true;
+    this.consecutiveFailures.delete(key);
     this.acknowledgedFailedRunKeys.delete(key);
     const dismissedPRCount = this.onRunDismissed(key, watch);
     this.logger.info(`Dismissed watch: ${identifier.displayName}`);
@@ -140,6 +141,7 @@ export class RunWatchPool implements vscode.Disposable {
     const childWatch = this.watches.get(runKey);
     if (childWatch && !childWatch.dismissed && childWatch.parentPRKey === parentPRKey) {
       childWatch.dismissed = true;
+      this.consecutiveFailures.delete(runKey);
       if (options?.clearAcknowledgement !== false) {
         this.acknowledgedFailedRunKeys.delete(runKey);
       }
@@ -158,6 +160,7 @@ export class RunWatchPool implements vscode.Disposable {
           affectedPRKeys.add(prKey);
         }
         watch.dismissed = true;
+        this.consecutiveFailures.delete(key);
         this.acknowledgedFailedRunKeys.delete(key);
         dismissedCount++;
       }
