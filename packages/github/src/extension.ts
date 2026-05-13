@@ -18,7 +18,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   // Acquire the DevDocket API from the core extension
   const coreExtension = vscode.extensions.getExtension('devdocket.devdocket');
   if (!coreExtension) {
-    logger.error('Core extension not found');
+    logger.error('Core extension devdocket.devdocket not found. Install or enable DevDocket.');
     return;
   }
 

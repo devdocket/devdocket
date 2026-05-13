@@ -13,7 +13,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 
   const coreExtension = vscode.extensions.getExtension('devdocket.devdocket');
   if (!coreExtension) {
-    logger.error('Core extension not found');
+    logger.error('Core extension devdocket.devdocket not found. Install or enable DevDocket.');
     return;
   }
 
