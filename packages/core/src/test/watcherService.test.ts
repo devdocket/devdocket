@@ -52,15 +52,23 @@ function createMockWatchStore(): WatchStore {
 }
 
 describe('WatcherService', () => {
-  it('keeps host-specific run URL routing out of watcherService', () => {
-    const watcherServicePath = fileURLToPath(new URL('../services/watcherService.ts', import.meta.url));
-    const serviceContents = readFileSync(watcherServicePath, 'utf8');
+  it('keeps host-specific run URL routing out of watcher services', () => {
+    const serviceFiles = [
+      '../services/watcherService.ts',
+      '../services/prWatchPool.ts',
+      '../services/runWatchPool.ts',
+    ];
     const slash = String.fromCharCode(47);
     const backslash = String.fromCharCode(92);
 
-    expect(serviceContents).not.toContain(['github', 'com'].join('.'));
-    expect(serviceContents).not.toContain(`${slash}runs${slash}`);
-    expect(serviceContents).not.toContain(`${backslash}${slash}runs${backslash}${slash}`);
+    for (const serviceFile of serviceFiles) {
+      const servicePath = fileURLToPath(new URL(serviceFile, import.meta.url));
+      const serviceContents = readFileSync(servicePath, 'utf8');
+      expect(serviceContents).not.toContain(['github', 'com'].join('.'));
+      expect(serviceContents).not.toContain('isGitHubCheckRunUrl');
+      expect(serviceContents).not.toContain(`${slash}runs${slash}`);
+      expect(serviceContents).not.toContain(`${backslash}${slash}runs${backslash}${slash}`);
+    }
   });
 
   let service: WatcherService;
@@ -711,8 +719,9 @@ describe('WatcherService', () => {
       }));
       prRegistry.register(prWatcher);
 
-      const runKey = (service as any).getWatchKey(runIdentifier);
-      (service as any).watches.set(runKey, {
+      const runPool = (service as any).runPool;
+      const runKey = runPool.getWatchKey(runIdentifier);
+      runPool.watches.set(runKey, {
         identifier: runIdentifier,
         status: { overallState: 'completed', conclusion: 'failure', jobs: [] },
         watchedAt: new Date().toISOString(),
@@ -720,7 +729,7 @@ describe('WatcherService', () => {
         dismissed: true,
         parentPRKey: service.getPRWatchKey(createPRIdentifier()),
       });
-      (service as any).acknowledgedFailedRunKeys.add(runKey);
+      runPool.acknowledgedFailedRunKeys.add(runKey);
 
       await service.startPRWatch(createPRIdentifier(), { deferChildRunStatus: true });
 

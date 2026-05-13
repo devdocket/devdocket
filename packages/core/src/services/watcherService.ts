@@ -2,6 +2,9 @@ import * as vscode from 'vscode';
 import type { RunIdentifier, RunStatus, JobStatus, PRIdentifier, PRState } from '@devdocket/shared';
 import { WatcherRegistry } from './watcherRegistry';
 import { PRWatcherRegistry } from './prWatcherRegistry';
+import { RunWatchPool } from './runWatchPool';
+import { PRWatchPool } from './prWatchPool';
+import { WatchPersistence } from './watchPersistence';
 import { WatchStore } from '../storage/watchStore';
 
 /**
@@ -49,19 +52,11 @@ interface StartPRWatchOptions {
   deferChildRunStatus?: boolean;
 }
 
-interface AddChildRunOptions {
-  suppressEvents?: boolean;
-  suppressPersist?: boolean;
-  deferStatusFetch?: boolean;
-}
-
 /**
  * Service that manages watching pipeline runs and pull requests.
  * Polls for status changes, detects job failures, and fires events.
  */
 export class WatcherService implements vscode.Disposable {
-  private watches = new Map<string, WatchedRun>();
-  private prWatches = new Map<string, WatchedPR>();
   private pollTimer: NodeJS.Timeout | undefined;
   private isPollInFlight = false;
   /**
@@ -73,31 +68,19 @@ export class WatcherService implements vscode.Disposable {
    * the in-flight poll resumes).
    */
   private disposed = false;
-  private consecutiveFailures = new Map<string, number>();
-  private persistedPRWatchKeys: Set<string> | undefined;
   private loadPersistedWatchesPromise: Promise<void> | undefined;
   private configSubscription: vscode.Disposable | undefined;
-  /**
-   * Set of run-watch keys whose failure the user has already acknowledged
-   * (e.g. by opening the watch panel). Used to suppress the warning color
-   * on the status bar once the user has been alerted to a failure.
-   * In-memory only; resets on extension reload.
-   */
-  private acknowledgedFailedRunKeys = new Set<string>();
-  /**
-   * Tracks whether the most recent persistWatches() attempt failed. Toggled
-   * on/off by {@link persistWatches} so that consecutive failures only show
-   * the user one toast. The next successful save resets this so a future
-   * regression can re-alert the user.
-   */
-  private persistFailureNotified = false;
-  
+  private readonly runPool: RunWatchPool;
+  private readonly prPool: PRWatchPool;
+  private readonly persistence: WatchPersistence;
+  private readonly poolSubscriptions: vscode.Disposable[];
+
   private readonly _onDidChangeWatchedRuns = new vscode.EventEmitter<WatchedRun[]>();
   readonly onDidChangeWatchedRuns = this._onDidChangeWatchedRuns.event;
-  
+
   private readonly _onDidDetectJobFailure = new vscode.EventEmitter<{ run: WatchedRun; job: JobStatus }>();
   readonly onDidDetectJobFailure = this._onDidDetectJobFailure.event;
-  
+
   private readonly _onDidCompleteRun = new vscode.EventEmitter<WatchedRun>();
   readonly onDidCompleteRun = this._onDidCompleteRun.event;
 
@@ -110,9 +93,31 @@ export class WatcherService implements vscode.Disposable {
   constructor(
     private watcherRegistry: WatcherRegistry,
     private prWatcherRegistry: PRWatcherRegistry,
-    private watchStore: WatchStore,
+    watchStore: WatchStore,
     private logger: { info: (msg: string) => void; warn: (msg: string) => void; error: (msg: string) => void }
   ) {
+    this.persistence = new WatchPersistence(watchStore, logger);
+    this.runPool = new RunWatchPool(
+      watcherRegistry,
+      logger,
+      () => this.disposed,
+      () => this.ensurePollingActive(),
+      (runKey, watch) => this.prPool?.dismissChildlessPRWatchesForRun(runKey, watch) ?? 0,
+    );
+    this.prPool = new PRWatchPool(
+      prWatcherRegistry,
+      this.runPool,
+      logger,
+      () => this.disposed,
+      () => this.ensurePollingActive(),
+      key => this.persistence.rememberPRWatchKey(key),
+    );
+    this.poolSubscriptions = [
+      this.runPool.onDidDetectJobFailure(event => this._onDidDetectJobFailure.fire(event)),
+      this.runPool.onDidCompleteRun(run => this._onDidCompleteRun.fire(run)),
+      this.prPool.onDidCompletePR(pr => this._onDidCompletePR.fire(pr)),
+    ];
+
     this.configSubscription = vscode.workspace.onDidChangeConfiguration(e => {
       if (e.affectsConfiguration('devDocket.watches.pollingIntervalSeconds') && this.pollTimer) {
         this.stopPolling();
@@ -138,57 +143,23 @@ export class WatcherService implements vscode.Disposable {
   }
 
   private async restorePersistedWatches(): Promise<void> {
-    const { runs: watches, prs } = await this.watchStore.loadAll();
-    const hadLiveWatches = this.watches.size > 0 || this.prWatches.size > 0;
-    const loadedPRWatchKeys = prs.map(pr => this.getPRWatchKey(pr.identifier));
-    this.persistedPRWatchKeys = new Set([
-      ...(this.persistedPRWatchKeys ?? []),
-      ...this.prWatches.keys(),
-      ...loadedPRWatchKeys,
-    ]);
+    const { runs: watches, prs } = await this.persistence.loadAll(pr => this.getPRWatchKey(pr.identifier));
+    const hadLiveWatches = this.getAllWatches().length > 0 || this.getAllPRWatches().length > 0;
+    const restored = this.runPool.restore(watches);
+    const restoredPRs = this.prPool.restore(prs);
 
-    // Restore non-dismissed run watches without clobbering watches that were
-    // started in memory before the load completed.
-    const restored: WatchedRun[] = [];
-    for (const watch of watches.filter(w => !w.dismissed)) {
-      const key = this.getWatchKey(watch.identifier);
-      if (this.watches.has(key)) {
-        continue;
-      }
-      this.watches.set(key, watch);
-      restored.push(watch);
-    }
-
-    // Restore non-dismissed PR watches without clobbering watches that were
-    // started in memory before the load completed.
-    const restoredPRs: WatchedPR[] = [];
-    for (const pr of prs.filter(pr => !pr.dismissed)) {
-      const key = this.getPRWatchKey(pr.identifier);
-      if (this.prWatches.has(key)) {
-        continue;
-      }
-      this.prWatches.set(key, pr);
-      restoredPRs.push(pr);
-    }
-
-    if (restored.length > 0 || restoredPRs.length > 0) {
-      this.logger.info(`Restored ${restored.length} run watch(es) and ${restoredPRs.length} PR watch(es)`);
+    if (restored > 0 || restoredPRs > 0) {
+      this.logger.info(`Restored ${restored} run watch(es) and ${restoredPRs} PR watch(es)`);
       this._onDidChangeWatchedRuns.fire(this.getAllWatches());
-      if (restoredPRs.length > 0) {
+      if (restoredPRs > 0) {
         this._onDidChangePRWatches.fire();
       }
-      // Resume polling for any that are still in progress
-      const hasPollable = restored.some(
-        w => w.status.overallState !== 'completed' && !w.hasWarning
-      ) || restoredPRs.some(
-        pr => pr.prState === 'open' && !pr.hasWarning
-      );
-      if (hasPollable) {
+      if (this.runPool.hasPollableWatches() || this.prPool.hasPollablePRWatches()) {
         this.ensurePollingActive();
       }
     }
 
-    if (hadLiveWatches && (restored.length > 0 || restoredPRs.length > 0)) {
+    if (hadLiveWatches && (restored > 0 || restoredPRs > 0)) {
       this.persistWatches();
     }
   }
@@ -206,62 +177,19 @@ export class WatcherService implements vscode.Disposable {
     parentPRKey?: string,
     options?: { suppressEvents?: boolean; suppressPersist?: boolean },
   ): Promise<WatchedRun> {
-    const key = this.getWatchKey(identifier);
-    const existing = this.watches.get(key);
-    if (existing && !existing.dismissed) {
-      // Already actively watching — return existing watch unchanged. This
-      // makes the "Watch URL" command idempotent so users don't see a hostile
-      // error when they re-add a URL that's already being watched. The PR
-      // re-add path also lands here, where we keep ownership unchanged to
-      // avoid converting a standalone watch into a PR-owned watch.
-      return existing;
-    }
-    // Remove dismissed watch to allow re-watching
-    if (existing) {
-      this.watches.delete(key);
-      // A re-watched run should be able to alert again on the next failure.
-      this.acknowledgedFailedRunKeys.delete(key);
+    const result = await this.runPool.startWatch(identifier, parentPRKey);
+    if (!result.changed || this.disposed) {
+      return result.watch;
     }
 
-    const watcher = this.watcherRegistry.get(identifier.providerId);
-    if (!watcher) {
-      throw new Error(`No watcher registered for provider: ${identifier.providerId}`);
-    }
-
-    // Fetch initial status
-    const status = await watcher.getRunStatus(identifier);
-    // Update display name if the watcher returned one
-    if (status.displayName) {
-      identifier.displayName = status.displayName;
-    }
-    const now = new Date().toISOString();
-    
-    const watchedRun: WatchedRun = {
-      identifier,
-      status,
-      watchedAt: now,
-      lastPolledAt: now,
-      dismissed: false,
-      parentPRKey,
-    };
-
-    this.watches.set(key, watchedRun);
-    this.consecutiveFailures.delete(key);
-    this.logger.info(`Started watching: ${identifier.displayName} (${identifier.providerId})`);
-    
     if (!options?.suppressEvents) {
       this._onDidChangeWatchedRuns.fire(this.getAllWatches());
     }
-    
-    // Start polling if the watch is pollable (not already completed)
-    if (watchedRun.status.overallState !== 'completed') {
-      this.ensurePollingActive();
-    }
-    
+
     if (!options?.suppressPersist) {
       this.persistWatches();
     }
-    return watchedRun;
+    return result.watch;
   }
 
   /**
@@ -289,98 +217,24 @@ export class WatcherService implements vscode.Disposable {
     identifier: PRIdentifier,
     options?: StartPRWatchOptions,
   ): Promise<WatchedPR> {
-    const key = this.getPRWatchKey(identifier);
-    const existing = this.prWatches.get(key);
-
-    if (options?.forceRecreate && existing) {
-      // Wipe owned child runs so the fresh snapshot starts clean. Children
-      // are 'owned' when their parentPRKey matches this PR's key — a
-      // standalone watch the user added directly that happens to point at
-      // the same run does not have parentPRKey set, so we leave it alone.
-      for (const childKey of existing.childRunKeys) {
-        const childWatch = this.watches.get(childKey);
-        if (childWatch && childWatch.parentPRKey === key) {
-          this.watches.delete(childKey);
-          // Re-watched runs should be able to alert on their next failure.
-          this.acknowledgedFailedRunKeys.delete(childKey);
-        }
-      }
-      this.prWatches.delete(key);
-    } else if (existing && !existing.dismissed) {
-      // Already actively watching — return existing unchanged. Used by the
-      // auto-watch path (which checks isPRWatched first anyway); keeps the
-      // public API forgiving for callers that don't pass forceRecreate.
-      return existing;
-    } else if (existing) {
-      // Previously dismissed — delete and recreate fresh.
-      this.prWatches.delete(key);
-    }
-
-    const prWatcher = this.prWatcherRegistry.get(identifier.providerId);
-    if (!prWatcher) {
-      throw new Error(`No PR watcher registered for provider: ${identifier.providerId}`);
-    }
-
-    // Fetch initial snapshot
-    const snapshot = await prWatcher.getPRRunsSnapshot(identifier);
-    if (snapshot.displayName) {
-      identifier.displayName = snapshot.displayName;
-    }
-    const now = new Date().toISOString();
-
-    const watchedPR: WatchedPR = {
-      identifier,
-      prState: snapshot.prState,
-      childRunKeys: [],
-      watchedAt: now,
-      lastPolledAt: now,
-      dismissed: false,
-    };
-
-    this.prWatches.set(key, watchedPR);
-    this.persistedPRWatchKeys?.add(key);
-    this.consecutiveFailures.delete(key);
-    this.logger.info(`Started watching PR: ${identifier.displayName} (${identifier.providerId})`);
-
-    // Add initial runs as child watches (batched — single event/persist after)
-    for (const runId of snapshot.runs) {
-      const resolved = this.resolveRunIdentifier(runId);
-      await this.addChildRun(key, watchedPR, resolved, {
-        suppressEvents: true,
-        suppressPersist: true,
-        deferStatusFetch: options?.deferChildRunStatus,
-      });
+    const result = await this.prPool.startPRWatch(identifier, options);
+    if (!result.changed || this.disposed) {
+      return result.watch;
     }
 
     this._onDidChangePRWatches.fire();
     this._onDidChangeWatchedRuns.fire(this.getAllWatches());
-
-    // Deferred child watches start as queued placeholders, so make sure the
-    // poller wakes up to fetch their first real statuses even if the PR itself
-    // is no longer open.
-    if (snapshot.prState === 'open' || watchedPR.childRunKeys.length > 0) {
-      this.ensurePollingActive();
-    }
-
     this.persistWatches();
-    return watchedPR;
+    return result.watch;
   }
 
   /**
    * Dismiss a watched run (hides it from the tree).
    */
   dismissWatch(identifier: RunIdentifier): void {
-    const key = this.getWatchKey(identifier);
-    const watch = this.watches.get(key);
-    if (watch) {
-      const affectedPRKeys = this.getPRKeysForRun(key, watch);
-      watch.dismissed = true;
-      // Drop the acknowledgement so a re-watch (or recovery + re-failure)
-      // can alert again.
-      this.acknowledgedFailedRunKeys.delete(key);
-      const dismissedPRCount = this.dismissChildlessPRWatches(affectedPRKeys);
-      this.logger.info(`Dismissed watch: ${identifier.displayName}`);
-      if (dismissedPRCount > 0) {
+    const result = this.runPool.dismissWatch(identifier);
+    if (result.dismissed) {
+      if (result.dismissedPRCount > 0) {
         this._onDidChangePRWatches.fire();
       }
       this._onDidChangeWatchedRuns.fire(this.getAllWatches());
@@ -394,20 +248,8 @@ export class WatcherService implements vscode.Disposable {
    * unlinked but not dismissed.
    */
   dismissPRWatch(identifier: PRIdentifier): void {
-    const key = this.getPRWatchKey(identifier);
-    const prWatch = this.prWatches.get(key);
-    if (prWatch) {
-      prWatch.dismissed = true;
-      // Only dismiss child runs actually owned by this PR
-      for (const childKey of prWatch.childRunKeys) {
-        const childWatch = this.watches.get(childKey);
-        if (childWatch && childWatch.parentPRKey === key) {
-          childWatch.dismissed = true;
-          // Drop the acknowledgement so a re-watch can alert again.
-          this.acknowledgedFailedRunKeys.delete(childKey);
-        }
-      }
-      this.logger.info(`Dismissed PR watch: ${identifier.displayName}`);
+    const result = this.prPool.dismissPRWatch(identifier);
+    if (result.dismissed) {
       this._onDidChangePRWatches.fire();
       this._onDidChangeWatchedRuns.fire(this.getAllWatches());
       this.persistWatches();
@@ -420,41 +262,13 @@ export class WatcherService implements vscode.Disposable {
    * @returns The number of watches (runs + PRs + child runs of dismissed PRs) marked dismissed.
    */
   dismissAllCompleted(): number {
-    let dismissedCount = 0;
-    const affectedPRKeys = new Set<string>();
-    const runToPRKeys = this.buildActiveChildRunIndex();
-
-    for (const [key, watch] of this.watches.entries()) {
-      if (watch.status.overallState === 'completed' && !watch.dismissed) {
-        for (const prKey of this.getPRKeysForRun(key, watch, runToPRKeys)) {
-          affectedPRKeys.add(prKey);
-        }
-        watch.dismissed = true;
-        // Drop the ack so a re-watch can alert again. Mirrors dismissWatch.
-        this.acknowledgedFailedRunKeys.delete(key);
-        dismissedCount++;
-      }
-    }
-
-    for (const prWatch of this.prWatches.values()) {
-      if ((prWatch.prState === 'merged' || prWatch.prState === 'closed') && !prWatch.dismissed) {
-        const key = this.getPRWatchKey(prWatch.identifier);
-        prWatch.dismissed = true;
-        // Only dismiss child runs actually owned by this PR
-        for (const childKey of prWatch.childRunKeys) {
-          const childWatch = this.watches.get(childKey);
-          if (childWatch && !childWatch.dismissed && childWatch.parentPRKey === key) {
-            childWatch.dismissed = true;
-            // Drop the ack so a re-watch can alert again.
-            this.acknowledgedFailedRunKeys.delete(childKey);
-            dismissedCount++;
-          }
-        }
-        dismissedCount++;
-      }
-    }
-
-    dismissedCount += this.dismissChildlessPRWatches(affectedPRKeys);
+    const runToPRKeys = this.prPool.buildActiveChildRunIndex();
+    const runResult = this.runPool.dismissCompletedRuns(
+      (runKey, watch) => this.prPool.getPRKeysForRun(runKey, watch, runToPRKeys),
+    );
+    const dismissedPRCount = this.prPool.dismissCompletedPRWatches();
+    const cascadedPRCount = this.prPool.dismissChildlessPRWatches(runResult.affectedPRKeys);
+    const dismissedCount = runResult.dismissedCount + dismissedPRCount + cascadedPRCount;
 
     if (dismissedCount > 0) {
       this.logger.info(`Dismissed ${dismissedCount} completed watch(es)`);
@@ -471,59 +285,14 @@ export class WatcherService implements vscode.Disposable {
    * count before invoking the destructive operation.
    */
   countCompletedActiveWatches(): number {
-    let count = 0;
-    const dismissedRunKeys = new Set<string>();
-    const dismissedPRKeys = new Set<string>();
-    const affectedPRKeys = new Set<string>();
-    const runToPRKeys = this.buildActiveChildRunIndex();
-
-    for (const [key, watch] of this.watches.entries()) {
-      if (!watch.dismissed && watch.status.overallState === 'completed') {
-        dismissedRunKeys.add(key);
-        for (const prKey of this.getPRKeysForRun(key, watch, runToPRKeys)) {
-          affectedPRKeys.add(prKey);
-        }
-        count++;
-      }
-    }
-
-    for (const [prKey, prWatch] of this.prWatches.entries()) {
-      if (!prWatch.dismissed && (prWatch.prState === 'merged' || prWatch.prState === 'closed')) {
-        dismissedPRKeys.add(prKey);
-        count++;
-        for (const childKey of prWatch.childRunKeys) {
-          const childWatch = this.watches.get(childKey);
-          if (
-            childWatch
-            && !childWatch.dismissed
-            && childWatch.parentPRKey === prKey
-            && !dismissedRunKeys.has(childKey)
-          ) {
-            dismissedRunKeys.add(childKey);
-            count++;
-          }
-        }
-      }
-    }
-
-    // Every affected PR was reached from an active completed child run, so the
-    // observed-child guard is already satisfied for this simulated cascade.
-    for (const prKey of affectedPRKeys) {
-      if (dismissedPRKeys.has(prKey)) continue;
-      const activeChildKeys = this.getActiveChildRunKeys(prKey);
-      if (activeChildKeys.length > 0 && activeChildKeys.every(childKey => dismissedRunKeys.has(childKey))) {
-        count++;
-      }
-    }
-
-    return count;
+    return this.prPool.countCompletedActiveWatches();
   }
 
   /**
    * Get all active watches (not dismissed).
    */
   getActiveWatches(): WatchedRun[] {
-    return Array.from(this.watches.values()).filter(w => !w.dismissed);
+    return this.runPool.getActiveWatches();
   }
 
   /**
@@ -541,13 +310,7 @@ export class WatcherService implements vscode.Disposable {
    * acknowledged failure to reappear is via re-watch.
    */
   acknowledgeAllFailures(): void {
-    let added = 0;
-    for (const [key, watch] of this.watches.entries()) {
-      if (!watch.dismissed && WatcherService.isFailedRun(watch) && !this.acknowledgedFailedRunKeys.has(key)) {
-        this.acknowledgedFailedRunKeys.add(key);
-        added += 1;
-      }
-    }
+    const added = this.runPool.acknowledgeAllFailures();
     if (added > 0) {
       this._onDidChangeWatchedRuns.fire(this.getActiveWatches());
     }
@@ -558,37 +321,21 @@ export class WatcherService implements vscode.Disposable {
    * the watch panel while the run was in this failed state).
    */
   isFailureAcknowledged(watch: WatchedRun): boolean {
-    return this.acknowledgedFailedRunKeys.has(this.getWatchKey(watch.identifier));
-  }
-
-  private static isFailedRun(watch: WatchedRun): boolean {
-    // hasWarning means we couldn't poll successfully — surface it as a
-    // 'failure' for ack-tracking purposes so the user can suppress the
-    // status-bar warning. cancelled / skipped / neutral conclusions are
-    // explicit non-results (not failures), matching the canonical
-    // definition in mainViewProvider.ts and the watch panel webview.
-    if (watch.hasWarning) return true;
-    if (watch.status.overallState !== 'completed') return false;
-    const conclusion = watch.status.conclusion;
-    if (conclusion === undefined || conclusion === 'success') return false;
-    if (conclusion === 'cancelled' || conclusion === 'skipped' || conclusion === 'neutral') return false;
-    return true;
+    return this.runPool.isFailureAcknowledged(watch);
   }
 
   /**
    * Get all active PR watches (not dismissed).
    */
   getActivePRWatches(): WatchedPR[] {
-    return Array.from(this.prWatches.values()).filter(pr => !pr.dismissed);
+    return this.prPool.getActivePRWatches();
   }
 
   /**
    * Find an active PR watch by repository and PR ID, ignoring watcher provider.
    */
   findPRWatchByExternalId(repo: string, prId: string): WatchedPR | undefined {
-    return Array.from(this.prWatches.values()).find(
-      pr => !pr.dismissed && pr.identifier.repo === repo && pr.identifier.prId === prId,
-    );
+    return this.prPool.findPRWatchByExternalId(repo, prId);
   }
 
   /**
@@ -598,9 +345,7 @@ export class WatcherService implements vscode.Disposable {
    * from "previously watched and dismissed" in user-facing flows.
    */
   isPRActive(identifier: PRIdentifier): boolean {
-    const key = this.getPRWatchKey(identifier);
-    const existing = this.prWatches.get(key);
-    return existing !== undefined && !existing.dismissed;
+    return this.prPool.isPRActive(identifier);
   }
 
   /**
@@ -608,9 +353,7 @@ export class WatcherService implements vscode.Disposable {
    * not dismissed).
    */
   isRunActive(identifier: RunIdentifier): boolean {
-    const key = this.getWatchKey(identifier);
-    const existing = this.watches.get(key);
-    return existing !== undefined && !existing.dismissed;
+    return this.runPool.isRunActive(identifier);
   }
 
   /**
@@ -618,117 +361,34 @@ export class WatcherService implements vscode.Disposable {
    */
   async isPRWatched(identifier: PRIdentifier): Promise<boolean> {
     const key = this.getPRWatchKey(identifier);
-    if (this.prWatches.has(key)) {
+    if (this.prPool.hasPRWatch(key)) {
       return true;
     }
 
-    return (await this.getPersistedPRWatchKeys()).has(key);
+    if (this.loadPersistedWatchesPromise) {
+      try {
+        await this.loadPersistedWatchesPromise;
+      } catch {
+        // Fall through to the lazy load below so isPRWatched remains resilient
+        // when the activation-time restore fails.
+      }
+    }
+
+    return (await this.persistence.getPersistedPRWatchKeys(pr => this.getPRWatchKey(pr.identifier))).has(key);
   }
 
   /**
    * Get active standalone watches (not dismissed, no parent PR).
    */
   getActiveStandaloneWatches(): WatchedRun[] {
-    // Collect run keys linked by any active PR
-    const prLinkedKeys = new Set<string>();
-    for (const prWatch of this.prWatches.values()) {
-      if (!prWatch.dismissed) {
-        for (const childKey of prWatch.childRunKeys) {
-          prLinkedKeys.add(childKey);
-        }
-      }
-    }
-    return Array.from(this.watches.values()).filter(
-      w => !w.dismissed && !w.parentPRKey && !prLinkedKeys.has(this.getWatchKey(w.identifier))
-    );
+    return this.runPool.getActiveStandaloneWatches(this.prPool.getActiveLinkedRunKeys());
   }
 
   /**
    * Get active child runs for a PR watch.
    */
   getChildRuns(prKey: string): WatchedRun[] {
-    const childRuns = new Map<string, WatchedRun>();
-    for (const childRunKey of this.getActiveChildRunKeys(prKey)) {
-      const watch = this.watches.get(childRunKey);
-      if (watch) {
-        childRuns.set(childRunKey, watch);
-      }
-    }
-    return Array.from(childRuns.values());
-  }
-
-  private getActiveChildRunKeys(prKey: string): string[] {
-    const childRuns = new Set<string>();
-    // Include runs tracked via childRunKeys (covers linked standalone watches)
-    const prWatch = this.prWatches.get(prKey);
-    for (const childRunKey of prWatch?.childRunKeys ?? []) {
-      const watch = this.watches.get(childRunKey);
-      if (watch && !watch.dismissed) {
-        childRuns.add(childRunKey);
-      }
-    }
-    // Also include any runs explicitly parented by this PR
-    for (const [watchKey, watch] of this.watches.entries()) {
-      if (!watch.dismissed && watch.parentPRKey === prKey) {
-        childRuns.add(watchKey);
-      }
-    }
-    return Array.from(childRuns.values());
-  }
-
-  private getPRKeysForRun(
-    runKey: string,
-    watch: WatchedRun,
-    runToPRKeys = this.buildActiveChildRunIndex(),
-  ): Set<string> {
-    const prKeys = new Set<string>();
-    if (watch.parentPRKey) {
-      prKeys.add(watch.parentPRKey);
-    }
-    for (const prKey of runToPRKeys.get(runKey) ?? []) {
-      prKeys.add(prKey);
-    }
-    return prKeys;
-  }
-
-  private buildActiveChildRunIndex(): Map<string, Set<string>> {
-    const runToPRKeys = new Map<string, Set<string>>();
-    for (const [prKey, prWatch] of this.prWatches.entries()) {
-      if (prWatch.dismissed) continue;
-      for (const childKey of prWatch.childRunKeys) {
-        const prKeys = runToPRKeys.get(childKey) ?? new Set<string>();
-        prKeys.add(prKey);
-        runToPRKeys.set(childKey, prKeys);
-      }
-    }
-    return runToPRKeys;
-  }
-
-  private dismissChildlessPRWatches(prKeys: Iterable<string>, options?: { assumeObserved?: boolean }): number {
-    let dismissedCount = 0;
-    for (const prKey of prKeys) {
-      const prWatch = this.prWatches.get(prKey);
-      if (!prWatch || prWatch.dismissed) continue;
-      if (!options?.assumeObserved && !this.hasObservedChildRun(prKey, prWatch)) continue;
-      if (this.getActiveChildRunKeys(prKey).length > 0) continue;
-
-      prWatch.dismissed = true;
-      dismissedCount++;
-      this.logger.info(`Dismissed childless PR watch: ${prWatch.identifier.displayName}`);
-    }
-    return dismissedCount;
-  }
-
-  private hasObservedChildRun(prKey: string, prWatch: WatchedPR): boolean {
-    if (prWatch.childRunKeys.length > 0) {
-      return true;
-    }
-    for (const watch of this.watches.values()) {
-      if (watch.parentPRKey === prKey) {
-        return true;
-      }
-    }
-    return false;
+    return this.prPool.getChildRuns(prKey);
   }
 
   /**
@@ -745,21 +405,21 @@ export class WatcherService implements vscode.Disposable {
    * Get all watches including dismissed.
    */
   getAllWatches(): WatchedRun[] {
-    return Array.from(this.watches.values());
+    return this.runPool.getAllWatches();
   }
 
   /**
    * Get all PR watches including dismissed.
    */
   getAllPRWatches(): WatchedPR[] {
-    return Array.from(this.prWatches.values());
+    return this.prPool.getAllPRWatches();
   }
 
   /**
    * Get a unique key for a PR watch.
    */
   getPRWatchKey(identifier: PRIdentifier): string {
-    return `pr:${identifier.providerId}:${identifier.repo}:${identifier.prId}`;
+    return this.prPool.getPRWatchKey(identifier);
   }
 
   /**
@@ -775,17 +435,20 @@ export class WatcherService implements vscode.Disposable {
    * Start or restart the polling timer.
    */
   private ensurePollingActive(): void {
+    if (this.disposed) {
+      return;
+    }
     if (this.pollTimer) {
       return; // Already active
     }
-    
+
     const intervalSeconds = this.getPollingInterval();
     this.pollTimer = setInterval(() => {
       this.pollAllWatches().catch(err => {
         this.logger.error(`Poll error: ${err}`);
       });
     }, intervalSeconds * 1000);
-    
+
     this.logger.info(`Started polling (interval: ${intervalSeconds}s)`);
   }
 
@@ -804,7 +467,6 @@ export class WatcherService implements vscode.Disposable {
    * Poll all active watches for status updates.
    */
   private async pollAllWatches(): Promise<void> {
-    // Concurrency guard: skip if previous poll still in flight
     if (this.isPollInFlight || this.disposed) {
       if (this.isPollInFlight) {
         this.logger.warn('Poll already in flight, skipping tick');
@@ -814,14 +476,10 @@ export class WatcherService implements vscode.Disposable {
 
     this.isPollInFlight = true;
     try {
-      // Phase 1: Poll PR watches first — may add/remove child runs
-      const prResult = await this.pollPRWatches();
-      // Bail if dispose() ran during phase 1 — don't fire events or persist
-      // an empty/partial state that would overwrite the on-disk record.
+      const prResult = await this.prPool.pollPRWatches();
       if (this.disposed) return;
 
-      // Phase 2: Poll run watches (including newly added child runs)
-      const runChanged = await this.pollRunWatches();
+      const runChanged = await this.runPool.pollRunWatches();
       if (this.disposed) return;
 
       if (prResult.prChanged) {
@@ -837,14 +495,7 @@ export class WatcherService implements vscode.Disposable {
         this.persistWatches();
       }
 
-      // Check if anything is still pollable
-      const hasPollableRuns = this.getActiveWatches().some(
-        w => w.status.overallState !== 'completed' && !w.hasWarning
-      );
-      const hasPollablePRs = this.getActivePRWatches().some(
-        pr => pr.prState === 'open' && !pr.hasWarning
-      );
-      if (!hasPollableRuns && !hasPollablePRs) {
+      if (!this.runPool.hasPollableWatches() && !this.prPool.hasPollablePRWatches()) {
         this.stopPolling();
       }
     } finally {
@@ -852,377 +503,24 @@ export class WatcherService implements vscode.Disposable {
     }
   }
 
-  /**
-   * Poll PR watches for state changes and run updates.
-   * @returns Object indicating whether PR metadata or child runs changed
-   */
-  private async pollPRWatches(): Promise<{ prChanged: boolean; childRunChanged: boolean }> {
-    const activePRs = this.getActivePRWatches().filter(
-      pr => pr.prState === 'open' && !pr.hasWarning
-    );
-    if (activePRs.length === 0) return { prChanged: false, childRunChanged: false };
-
-    let prChanged = false;
-    let childRunChanged = false;
-
-    for (const prWatch of activePRs) {
-      const key = this.getPRWatchKey(prWatch.identifier);
-      try {
-        const prWatcher = this.prWatcherRegistry.get(prWatch.identifier.providerId);
-        if (!prWatcher) {
-          throw new Error(`PR watcher '${prWatch.identifier.providerId}' is no longer registered`);
-        }
-
-        const snapshot = await prWatcher.getPRRunsSnapshot(prWatch.identifier);
-        // Bail if the watch was dismissed, replaced (forceRecreate), or the
-        // service was disposed while the snapshot fetch was in flight.
-        // Otherwise we'd mutate stale state, fire onDidCompletePR for an
-        // already-replaced PR, or leak orphan child runs whose parentPRKey
-        // points at a PR no longer in this.prWatches.
-        if (this.disposed) return { prChanged, childRunChanged };
-        if (this.prWatches.get(key) !== prWatch || prWatch.dismissed) {
-          continue;
-        }
-        prWatch.lastPolledAt = new Date().toISOString();
-
-        // Apply updated display name from snapshot
-        if (snapshot.displayName && snapshot.displayName !== prWatch.identifier.displayName) {
-          prWatch.identifier.displayName = snapshot.displayName;
-          prChanged = true;
-        }
-
-        // Reset failure count
-        this.consecutiveFailures.delete(key);
-        prWatch.hasWarning = false;
-        prWatch.errorMessage = undefined;
-
-        // Handle new/removed runs
-        const currentRunKeys = new Set(prWatch.childRunKeys);
-        const newRunKeys = new Set<string>();
-        for (const runId of snapshot.runs) {
-          const resolved = this.resolveRunIdentifier(runId);
-          const runKey = this.getWatchKey(resolved);
-          newRunKeys.add(runKey);
-          if (!currentRunKeys.has(runKey)) {
-            const added = await this.addChildRun(key, prWatch, resolved, {
-              suppressEvents: true,
-              suppressPersist: true,
-            });
-            if (this.disposed) return { prChanged, childRunChanged };
-            if (added) {
-              childRunChanged = true;
-            }
-          }
-        }
-
-        // Remove orphaned child runs (only dismiss runs owned by this PR)
-        const hadObservedChildren = currentRunKeys.size > 0 || this.hasObservedChildRun(key, prWatch);
-        for (const childKey of currentRunKeys) {
-          if (!newRunKeys.has(childKey)) {
-            const childWatch = this.watches.get(childKey);
-            if (childWatch && !childWatch.dismissed && childWatch.parentPRKey === key) {
-              childWatch.dismissed = true;
-              childRunChanged = true;
-            }
-            prWatch.childRunKeys = prWatch.childRunKeys.filter(k => k !== childKey);
-          }
-        }
-        if (
-          hadObservedChildren
-          && this.getActiveChildRunKeys(key).length === 0
-          && this.dismissChildlessPRWatches([key], { assumeObserved: true }) > 0
-        ) {
-          prChanged = true;
-          continue;
-        }
-
-        // Check PR state transitions
-        if (snapshot.prState !== prWatch.prState) {
-          prWatch.prState = snapshot.prState;
-          prChanged = true;
-          if (snapshot.prState === 'merged' || snapshot.prState === 'closed') {
-            this._onDidCompletePR.fire(prWatch);
-          }
-        }
-
-      } catch (err) {
-        const failures = (this.consecutiveFailures.get(key) || 0) + 1;
-        this.consecutiveFailures.set(key, failures);
-
-        if (failures >= 3) {
-          prWatch.hasWarning = true;
-          prWatch.errorMessage = err instanceof Error ? err.message : String(err);
-          prChanged = true;
-          this.logger.warn(`3 consecutive failures for PR ${prWatch.identifier.displayName}, marking with warning`);
-        } else {
-          this.logger.warn(`PR poll failed for ${prWatch.identifier.displayName} (attempt ${failures}/3): ${err}`);
-        }
-      }
-    }
-
-    return { prChanged, childRunChanged };
-  }
-
-  /**
-   * Poll run watches for status updates.
-   */
-  private async pollRunWatches(): Promise<boolean> {
-    const activeWatches = this.getActiveWatches();
-    const pollableWatches = activeWatches.filter(
-      w => w.status.overallState !== 'completed' && !w.hasWarning
-    );
-    if (pollableWatches.length === 0) return false;
-
-    let anyChanged = false;
-
-    for (const watch of pollableWatches) {
-
-      try {
-        const watcher = this.watcherRegistry.get(watch.identifier.providerId);
-        if (!watcher) {
-          throw new Error(`Watcher '${watch.identifier.providerId}' is no longer registered`);
-        }
-
-        const newStatus = await watcher.getRunStatus(watch.identifier);
-        const key = this.getWatchKey(watch.identifier);
-        // Bail if the watch was dismissed, replaced, or the service was
-        // disposed while the status fetch was in flight. Otherwise we'd
-        // mutate a watch the user just hid and potentially fire
-        // onDidCompleteRun for it (popping a "Run completed" toast for
-        // something that's no longer in the panel).
-        if (this.disposed) return anyChanged;
-        if (this.watches.get(key) !== watch || watch.dismissed) {
-          continue;
-        }
-        watch.lastPolledAt = new Date().toISOString();
-
-        const suppressStatusEvents = watch.suppressNextStatusEvents === true;
-        if (suppressStatusEvents) {
-          delete watch.suppressNextStatusEvents;
-          anyChanged = true;
-        }
-
-        // Reset failure count on success
-        this.consecutiveFailures.delete(key);
-        watch.hasWarning = false;
-        watch.errorMessage = undefined;
-
-        // Snapshot old status for comparison, then update immediately
-        // so event subscribers always see current data.
-        const oldStatus = watch.status;
-        const statusChanged = oldStatus.overallState !== newStatus.overallState
-          || oldStatus.conclusion !== newStatus.conclusion
-          || oldStatus.jobs.length !== newStatus.jobs.length
-          || newStatus.jobs.some(newJob => {
-            const oldJob = newJob.id
-              ? oldStatus.jobs.find(j => j.id === newJob.id)
-              : oldStatus.jobs.find(j => j.name === newJob.name);
-            return !oldJob || oldJob.state !== newJob.state || oldJob.conclusion !== newJob.conclusion;
-          });
-        watch.status = newStatus;
-        // Update display name if the watcher returned one
-        if (newStatus.displayName && newStatus.displayName !== watch.identifier.displayName) {
-          watch.identifier.displayName = newStatus.displayName;
-          anyChanged = true;
-        }
-        if (statusChanged) {
-          anyChanged = true;
-        }
-
-        // Detect job failures (while run is still in progress)
-        if (!suppressStatusEvents && newStatus.overallState !== 'completed') {
-          for (const newJob of newStatus.jobs) {
-            if (newJob.state === 'completed' && newJob.conclusion === 'failure') {
-              const oldJob = newJob.id
-                ? oldStatus.jobs.find(j => j.id === newJob.id)
-                : oldStatus.jobs.find(j => j.name === newJob.name);
-              if (!oldJob || oldJob.state !== 'completed' || oldJob.conclusion !== 'failure') {
-                this._onDidDetectJobFailure.fire({ run: watch, job: newJob });
-              }
-            }
-          }
-        }
-
-        // Check if run just completed
-        if (!suppressStatusEvents && oldStatus.overallState !== 'completed' && newStatus.overallState === 'completed') {
-          this._onDidCompleteRun.fire(watch);
-        }
-
-      } catch (err) {
-        const key = this.getWatchKey(watch.identifier);
-        const failures = (this.consecutiveFailures.get(key) || 0) + 1;
-        this.consecutiveFailures.set(key, failures);
-        
-        if (failures >= 3) {
-          watch.hasWarning = true;
-          watch.errorMessage = err instanceof Error ? err.message : String(err);
-          anyChanged = true;
-          this.logger.warn(`3 consecutive failures for ${watch.identifier.displayName}, marking with warning`);
-        } else {
-          this.logger.warn(`Poll failed for ${watch.identifier.displayName} (attempt ${failures}/3): ${err}`);
-        }
-      }
-    }
-
-    return anyChanged;
-  }
-
-  /**
-   * Add a child run to a PR watch, starting a new watch for it.
-   * @returns true if the PR's child run list actually changed
-   */
-  private async addChildRun(
-    prKey: string,
-    prWatch: WatchedPR,
-    runIdentifier: RunIdentifier,
-    options?: AddChildRunOptions,
-  ): Promise<boolean> {
-    const runKey = this.getWatchKey(runIdentifier);
-    try {
-      const existing = this.watches.get(runKey);
-      if (existing && !existing.dismissed) {
-        // Preserve ownership of existing watches. Standalone watches remain
-        // standalone even when linked from a PR watch.
-        if (!prWatch.childRunKeys.includes(runKey)) {
-          prWatch.childRunKeys.push(runKey);
-          return true;
-        }
-        return false;
-      }
-
-      if (options?.deferStatusFetch) {
-        if (!this.watcherRegistry.get(runIdentifier.providerId)) {
-          throw new Error(`No watcher registered for provider: ${runIdentifier.providerId}`);
-        }
-
-        const now = new Date().toISOString();
-        this.watches.set(runKey, {
-          identifier: runIdentifier,
-          status: { overallState: 'queued', jobs: [] },
-          watchedAt: now,
-          lastPolledAt: now,
-          dismissed: false,
-          parentPRKey: prKey,
-          suppressNextStatusEvents: true,
-        });
-        this.consecutiveFailures.delete(runKey);
-        // Match startWatch's dismissed-then-restarted behavior so re-watched
-        // failed runs can alert again after deferred registration.
-        this.acknowledgedFailedRunKeys.delete(runKey);
-        this.logger.info(`Started watching: ${runIdentifier.displayName} (${runIdentifier.providerId})`);
-        if (!options.suppressEvents) {
-          this._onDidChangeWatchedRuns.fire(this.getAllWatches());
-        }
-        if (!options.suppressPersist) {
-          this.persistWatches();
-        }
-      } else {
-        await this.startWatch(runIdentifier, prKey, options);
-      }
-
-      if (!prWatch.childRunKeys.includes(runKey)) {
-        prWatch.childRunKeys.push(runKey);
-        return true;
-      }
-      return false;
-    } catch (err) {
-      this.logger.warn(`Failed to add child run ${runIdentifier.displayName} for PR ${prWatch.identifier.displayName}: ${err}`);
-      return false;
-    }
-  }
-
-  /**
-   * Generate a unique key for a watch.
-   */
-  private getWatchKey(identifier: RunIdentifier): string {
-    return identifier.repo
-      ? `${identifier.providerId}:${identifier.repo}:${identifier.runId}`
-      : `${identifier.providerId}:${identifier.runId}`;
-  }
-
-  /**
-   * Resolve a run identifier to one backed by a registered watcher.
-   *
-   * If upstream metadata already classified the run, trust it. Core must not
-   * second-guess provider-owned classifications by inspecting host-specific URLs.
-   *
-   * If the identifier has no provider hint, fall back to URL-based matching for
-   * synthetic identifiers created from a raw URL.
-   */
-  private resolveRunIdentifier(identifier: RunIdentifier): RunIdentifier {
-    if (identifier.providerId) {
-      return identifier;
-    }
-
-    const watcher = this.watcherRegistry.findWatcherForUrl(identifier.url);
-    if (watcher) {
-      try {
-        const parsed = watcher.parseRunUrl(identifier.url);
-        return {
-          ...parsed,
-          displayName: identifier.displayName || parsed.displayName,
-        };
-      } catch (err) {
-        this.logger.warn(`URL matched watcher '${watcher.id}' but parseRunUrl failed for ${identifier.url}: ${err}`);
-      }
-    }
-
-    return identifier;
-  }
-
-  private async getPersistedPRWatchKeys(): Promise<Set<string>> {
-    if (this.loadPersistedWatchesPromise) {
-      try {
-        await this.loadPersistedWatchesPromise;
-      } catch {
-        // Fall through to the lazy load below so isPRWatched remains resilient
-        // when the activation-time restore fails.
-      }
-    }
-
-    if (!this.persistedPRWatchKeys) {
-      const { prs } = await this.watchStore.loadAll();
-      this.persistedPRWatchKeys = new Set(prs.map(pr => this.getPRWatchKey(pr.identifier)));
-    }
-
-    return this.persistedPRWatchKeys;
-  }
-
   private persistWatches(): void {
-    this.watchStore.saveAll(this.getAllWatches(), this.getAllPRWatches()).then(
-      () => {
-        if (this.persistFailureNotified) {
-          this.persistFailureNotified = false;
-          this.logger.info('Watch persistence recovered.');
-        }
-      },
-      err => {
-        this.logger.error(`Failed to persist watches: ${err}`);
-        // Throttle: only escalate once per failure streak. The flag clears
-        // on the next successful save so a future regression re-alerts.
-        if (!this.persistFailureNotified) {
-          this.persistFailureNotified = true;
-          void vscode.window.showWarningMessage(
-            'DevDocket could not save watch state. Watches may be lost when the window reloads.',
-          );
-        }
-      },
-    );
+    this.persistence.saveAll(this.getAllWatches(), this.getAllPRWatches());
   }
 
   dispose(): void {
     this.disposed = true;
     this.configSubscription?.dispose();
     this.stopPolling();
+    for (const subscription of this.poolSubscriptions) {
+      subscription.dispose();
+    }
     this._onDidChangeWatchedRuns.dispose();
     this._onDidDetectJobFailure.dispose();
     this._onDidCompleteRun.dispose();
     this._onDidChangePRWatches.dispose();
     this._onDidCompletePR.dispose();
-    this.watches.clear();
-    this.prWatches.clear();
-    this.consecutiveFailures.clear();
-    this.acknowledgedFailedRunKeys.clear();
-    this.persistedPRWatchKeys = undefined;
+    this.runPool.dispose();
+    this.prPool.dispose();
+    this.persistence.dispose();
   }
 }

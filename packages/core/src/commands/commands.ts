@@ -761,7 +761,7 @@ export function registerCommands(
       wrapCommand('Failed to open walkthrough', () =>
         vscode.commands.executeCommand(
           'workbench.action.openWalkthrough',
-          'mthalman.devdocket#devdocket.gettingStarted',
+          'devdocket.devdocket#devdocket.gettingStarted',
           false,
         ),
       )),
