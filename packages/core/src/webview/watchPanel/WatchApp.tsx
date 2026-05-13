@@ -101,6 +101,9 @@ export function WatchApp() {
                       tierClass={getPRTierClass(entry.pr)}
                       url={entry.pr.url}
                       watchId={entry.pr.id}
+                      linkedItemId={entry.pr.linkedItemId}
+                      linkedSourceProviderId={entry.pr.linkedSourceProviderId}
+                      linkedSourceExternalId={entry.pr.linkedSourceExternalId}
                     />
                   );
                 }
@@ -194,6 +197,9 @@ interface WatchCardProps {
   elapsedTime?: string;
   url?: string;
   watchId: string;
+  linkedItemId?: string;
+  linkedSourceProviderId?: string;
+  linkedSourceExternalId?: string;
 }
 
 function WatchCard({
@@ -206,11 +212,30 @@ function WatchCard({
   elapsedTime,
   url,
   watchId,
+  linkedItemId,
+  linkedSourceProviderId,
+  linkedSourceExternalId,
 }: WatchCardProps) {
   const clickable = Boolean(url);
   const openWatch = () => {
     if (url) {
       postMessage({ type: 'openWatchUrl', url });
+    }
+  };
+  const hasLinkedSource = Boolean(linkedSourceProviderId && linkedSourceExternalId);
+  const hasLinkedTarget = Boolean(linkedItemId || hasLinkedSource);
+  const openLinkedItem = () => {
+    if (linkedItemId) {
+      postMessage({ type: 'openItem', itemId: linkedItemId });
+      return;
+    }
+    if (linkedSourceProviderId && linkedSourceExternalId) {
+      postMessage({
+        type: 'openItem',
+        itemId: `${linkedSourceProviderId}::${linkedSourceExternalId}`,
+        providerId: linkedSourceProviderId,
+        externalId: linkedSourceExternalId,
+      });
     }
   };
   const handleKeyDown = (event: KeyboardEvent) => {
@@ -247,6 +272,21 @@ function WatchCard({
         </div>
       </div>
       <div class="item-actions" role="group" aria-label={`${title} actions`}>
+        {hasLinkedTarget ? (
+          <button
+            type="button"
+            class="item-action-btn"
+            title="Open in DevDocket"
+            aria-label="Open in DevDocket"
+            onKeyDown={(event) => event.stopPropagation()}
+            onClick={(event) => {
+              event.stopPropagation();
+              openLinkedItem();
+            }}
+          >
+            <span class="codicon codicon-go-to-file" aria-hidden="true" />
+          </button>
+        ) : null}
         <button
           type="button"
           class="item-action-btn"
