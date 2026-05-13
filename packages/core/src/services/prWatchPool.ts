@@ -84,10 +84,12 @@ export class PRWatchPool implements vscode.Disposable {
       for (const childKey of existing.childRunKeys) {
         this.runControl.deleteOwnedWatch(childKey, key);
       }
+      this.consecutiveFailures.delete(key);
       this.prWatches.delete(key);
     } else if (existing && !existing.dismissed) {
       return { watch: existing, changed: false };
     } else if (existing) {
+      this.consecutiveFailures.delete(key);
       this.prWatches.delete(key);
     }
 
@@ -130,6 +132,7 @@ export class PRWatchPool implements vscode.Disposable {
           this.runControl.deleteOwnedWatch(childKey, key);
         }
         if (this.prWatches.get(key) === watchedPR) {
+          this.consecutiveFailures.delete(key);
           this.prWatches.delete(key);
         }
         return { watch: watchedPR, changed: false };
@@ -154,6 +157,7 @@ export class PRWatchPool implements vscode.Disposable {
     }
 
     prWatch.dismissed = true;
+    this.consecutiveFailures.delete(key);
     let childRunChanged = false;
     for (const childKey of prWatch.childRunKeys) {
       childRunChanged = this.runControl.dismissOwnedChildRun(childKey, key) || childRunChanged;
@@ -168,6 +172,7 @@ export class PRWatchPool implements vscode.Disposable {
       if ((prWatch.prState === 'merged' || prWatch.prState === 'closed') && !prWatch.dismissed) {
         const key = this.getPRWatchKey(prWatch.identifier);
         prWatch.dismissed = true;
+        this.consecutiveFailures.delete(key);
         for (const childKey of prWatch.childRunKeys) {
           if (this.runControl.dismissOwnedChildRun(childKey, key)) {
             dismissedCount++;
@@ -365,6 +370,7 @@ export class PRWatchPool implements vscode.Disposable {
       if (this.getActiveChildRunKeys(prKey).length > 0) continue;
 
       prWatch.dismissed = true;
+      this.consecutiveFailures.delete(prKey);
       dismissedCount++;
       this.logger.info(`Dismissed childless PR watch: ${prWatch.identifier.displayName}`);
     }
