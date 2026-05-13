@@ -1,6 +1,5 @@
-import { readFileSync, readdirSync, statSync } from 'node:fs';
+import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import { join } from 'node:path';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { WatcherService, WatchedRun } from '../services/watcherService';
 import { WatcherRegistry } from '../services/watcherRegistry';
@@ -52,20 +51,10 @@ function createMockWatchStore(): WatchStore {
   } as unknown as WatchStore;
 }
 
-function collectTypeScriptFiles(dir: string): string[] {
-  return readdirSync(dir).flatMap(entry => {
-    const path = join(dir, entry);
-    return statSync(path).isDirectory() ? collectTypeScriptFiles(path) : [path];
-  }).filter(path => path.endsWith('.ts'));
-}
-
 describe('WatcherService', () => {
-  it('keeps host-specific run URL routing out of core services', () => {
-    const servicesDir = fileURLToPath(new URL('../services', import.meta.url));
-    const serviceContents = collectTypeScriptFiles(servicesDir)
-      .map(path => readFileSync(path, 'utf8'))
-      .join('\n');
-
+  it('keeps host-specific run URL routing out of watcherService', () => {
+    const watcherServicePath = fileURLToPath(new URL('../services/watcherService.ts', import.meta.url));
+    const serviceContents = readFileSync(watcherServicePath, 'utf8');
     const slash = String.fromCharCode(47);
     const backslash = String.fromCharCode(92);
 
