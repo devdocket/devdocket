@@ -653,9 +653,10 @@ export class StartWorkAction implements DevDocketAction {
 
     // Pre-check: if `git checkout <branch>` would collide with another worktree
     // that already holds the branch, surface a clear error before attempting it.
-    // (Does not apply when the strategy is detached or creates a new branch.)
+    // The current worktree (`repoPath`) is excluded — when it's the holder, the
+    // branch is already HEAD and `git checkout <branch>` is a successful no-op.
     if (hasLocalBranch && !trackingRef) {
-      const conflictingWorktree = await this.findWorktreeHoldingBranch(branchName, repoPath);
+      const conflictingWorktree = await this.findWorktreeHoldingBranch(branchName, repoPath, repoPath);
       if (conflictingWorktree) {
         void vscode.window.showErrorMessage(
           `DevDocket: Branch "${branchName}" is already checked out by the worktree at "${conflictingWorktree}". Use worktree mode instead, or remove the conflicting worktree first.`,
@@ -734,14 +735,22 @@ export class StartWorkAction implements DevDocketAction {
   }
 
   /**
-   * Returns the path of the worktree that has {@link branchName} checked out as
+   * Returns the path of a worktree that has {@link branchName} checked out as
    * its branch ref (i.e., would collide with `git worktree add <path> <branch>`
-   * or `git checkout <branch>`), or `undefined` if no other worktree holds it.
+   * or `git checkout <branch>`), or `undefined` if no qualifying worktree holds
+   * it. When {@link excludeWorktreePath} is provided, a holder whose path
+   * matches it (after path normalisation, case-insensitive on Windows) is
+   * ignored — useful for callers like `prCheckoutFlow` where the current
+   * worktree being the holder is a no-op rather than a conflict.
    *
    * Uses `git worktree list --porcelain` so detection doesn't rely on parsing
    * localised/version-dependent error strings from a failed git command.
    */
-  private async findWorktreeHoldingBranch(branchName: string, repoPath: string): Promise<string | undefined> {
+  private async findWorktreeHoldingBranch(
+    branchName: string,
+    repoPath: string,
+    excludeWorktreePath?: string,
+  ): Promise<string | undefined> {
     let stdout: string;
     try {
       ({ stdout } = await execFileAsync('git', ['worktree', 'list', '--porcelain'], {
@@ -756,6 +765,7 @@ export class StartWorkAction implements DevDocketAction {
     }
 
     const targetRef = `refs/heads/${branchName}`;
+    const normalizedExclude = excludeWorktreePath ? path.resolve(excludeWorktreePath) : undefined;
     let currentWorktree: string | undefined;
     for (const rawLine of stdout.split(/\r?\n/)) {
       const line = rawLine.trimEnd();
@@ -764,10 +774,25 @@ export class StartWorkAction implements DevDocketAction {
       } else if (line === '') {
         currentWorktree = undefined;
       } else if (line === `branch ${targetRef}` && currentWorktree !== undefined) {
+        if (normalizedExclude !== undefined && this.pathsEqual(currentWorktree, normalizedExclude)) {
+          continue;
+        }
         return currentWorktree;
       }
     }
     return undefined;
+  }
+
+  /**
+   * Compares two filesystem paths for equality after normalisation. Uses
+   * case-insensitive comparison on Windows; case-sensitive elsewhere.
+   */
+  private pathsEqual(a: string, b: string): boolean {
+    const na = path.resolve(a);
+    const nb = path.resolve(b);
+    return process.platform === 'win32'
+      ? na.toLowerCase() === nb.toLowerCase()
+      : na === nb;
   }
 
   /**

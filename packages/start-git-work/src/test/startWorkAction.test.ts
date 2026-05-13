@@ -1276,6 +1276,47 @@ describe('StartWorkAction', () => {
       ]);
     });
 
+    it('proceeds with checkout when the current repo worktree itself holds the branch', async () => {
+      // Edge case: in checkout mode, if `git worktree list --porcelain` reports
+      // the branch is held only by the current `repoPath` worktree, that means
+      // the user is already on the PR branch. `git checkout <branch>` would be
+      // a no-op success — we must NOT block with a "branch already checked out"
+      // error in this case (the holder is excluded from conflict detection).
+      mockQuickPickCheckout();
+
+      vi.mocked(execFile).mockImplementation(((cmd: string, args: string[], opts: any, cb: Function) => {
+        if (args[0] === 'remote' && args[1] === '-v') {
+          cb(null, ORIGIN_REMOTE_V, '');
+          return;
+        }
+        if (args[0] === 'worktree' && args[1] === 'list' && args[2] === '--porcelain') {
+          cb(null,
+            'worktree /mock/workspace\n' +
+            'HEAD aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\n' +
+            'branch refs/heads/feature/my-branch\n' +
+            '\n', '');
+          return;
+        }
+        cb(null, '', '');
+      }) as any);
+
+      const item = createWorkItem({
+        providerId: 'github-my-prs',
+        externalId: 'owner/repo#42',
+      });
+      await action.run(item);
+
+      // No error surfaced — the current worktree is excluded from conflict detection.
+      expect(window.showErrorMessage).not.toHaveBeenCalled();
+
+      // Checkout proceeded normally.
+      const checkoutCall = vi.mocked(execFile).mock.calls.find(
+        (call: any[]) => call[1]?.[0] === 'checkout',
+      );
+      expect(checkoutCall).toBeDefined();
+      expect(checkoutCall![1]).toEqual(['checkout', 'feature/my-branch']);
+    });
+
     it('shows error when fork repository has been deleted', async () => {
       mockFetchResponse(createGitHubPrResponse({
         head: {
