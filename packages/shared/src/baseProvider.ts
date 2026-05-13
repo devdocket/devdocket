@@ -145,10 +145,12 @@ export interface ProviderItem {
 }
 
 /** @deprecated Use ProviderItemCapabilities instead. */
-export type DiscoveredItemCapabilities = ProviderItemCapabilities;
+export interface DiscoveredItemCapabilities extends ProviderItemCapabilities {}
 
 /** @deprecated Use ProviderItem instead. */
-export interface DiscoveredItem extends ProviderItem {}
+export interface DiscoveredItem extends ProviderItem {
+  capabilities?: DiscoveredItemCapabilities;
+}
 
 /**
  * A badge rendered alongside the core-managed Provider / Type / CI badges.

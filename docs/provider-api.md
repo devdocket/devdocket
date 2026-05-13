@@ -151,10 +151,12 @@ interface ProviderItem {
 }
 
 /** @deprecated Use ProviderItemCapabilities instead. */
-type DiscoveredItemCapabilities = ProviderItemCapabilities;
+interface DiscoveredItemCapabilities extends ProviderItemCapabilities {}
 
 /** @deprecated Use ProviderItem instead. */
-interface DiscoveredItem extends ProviderItem {}
+interface DiscoveredItem extends ProviderItem {
+  capabilities?: DiscoveredItemCapabilities;
+}
 
 interface DevDocketProvider {
   readonly id: string;

@@ -300,7 +300,7 @@ interface ProviderItemCapabilities {
 }
 
 /** @deprecated Use ProviderItemCapabilities instead. */
-type DiscoveredItemCapabilities = ProviderItemCapabilities;
+interface DiscoveredItemCapabilities extends ProviderItemCapabilities {}
 
 interface ProviderBadge {
   /** Display text. Keep short — sidebar badges compete with the title. */
