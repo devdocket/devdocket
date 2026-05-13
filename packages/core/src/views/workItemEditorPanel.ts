@@ -674,9 +674,9 @@ function isFailingOrWarningRun(run: WatchedRun): boolean {
 
 /**
  * Compose the badge list shown in the editor: provider, type, then the
-  * provider-supplied badges declared on the {@link ProviderItem}. CI badges
-  * are not added here — the editor surfaces active watch details in its
-  * dedicated CI Watch section instead.
+ * provider-supplied badges declared on the {@link ProviderItem}. CI badges
+ * are not added here â€” the editor surfaces active watch details in its
+ * dedicated CI Watch section instead.
  */
 export function composeEditorBadges(
   providerId?: string,
