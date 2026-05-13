@@ -4,7 +4,7 @@ import { promisify } from 'util';
 import * as path from 'path';
 import * as fs from 'fs';
 import { logger } from './logger';
-import { WorkItemState, type WorkItem, type DevDocketAction } from '@devdocket/shared';
+import { WorkItemState, type ProviderItem, type GitWorkInfo, type WorkItem, type DevDocketAction } from '@devdocket/shared';
 
 const execFileAsync = promisify(execFile);
 
@@ -12,7 +12,22 @@ const execFileAsync = promisify(execFile);
 const SAFE_REF = /^[a-zA-Z0-9._\/-]+$/;
 
 function isValidRef(ref: unknown): ref is string {
-  return typeof ref === 'string' && ref.length > 0 && !ref.startsWith('-') && SAFE_REF.test(ref);
+  if (typeof ref !== 'string'
+    || ref.length === 0
+    || ref.startsWith('-')
+    || !SAFE_REF.test(ref)
+    || ref.endsWith('/')
+    || ref.endsWith('.')
+    || ref.includes('//')
+    || ref.includes('..')
+    || ref.includes('@{')
+    || ref === '@') {
+    return false;
+  }
+
+  return ref.split('/').every(segment => segment.length > 0
+    && !segment.startsWith('.')
+    && !segment.endsWith('.lock'));
 }
 
 /** Rejects whitespace and control characters in clone URLs. */
@@ -25,12 +40,26 @@ function isValidCloneUrl(url: unknown): url is string {
   if (url.startsWith('https://')) {
     try {
       const parsed = new URL(url);
-      return parsed.protocol === 'https:' && parsed.hostname.length > 0;
+      return parsed.protocol === 'https:'
+        && parsed.hostname.length > 0
+        && !parsed.username
+        && !parsed.password
+        && !parsed.search
+        && !parsed.hash;
     } catch {
       return false;
     }
   }
-  return url.startsWith('git@');
+  return isValidGitSshCloneUrl(url);
+}
+
+function isValidGitSshCloneUrl(url: string): boolean {
+  const match = url.match(/^git@([^:]+):(.+)$/);
+  if (!match) {
+    return false;
+  }
+  const [, host, repoPath] = match;
+  return /^[A-Za-z0-9](?:[A-Za-z0-9.-]*[A-Za-z0-9])?$/.test(host) && repoPath.length > 0;
 }
 
 /** Timeout for lightweight git metadata commands (branch --list, status, rev-parse). */
@@ -38,44 +67,11 @@ const GIT_METADATA_TIMEOUT = 30_000;
 /** Timeout for heavy git operations that touch the working tree (worktree add, checkout, fetch). */
 const GIT_CHECKOUT_TIMEOUT = 300_000;
 
-interface ParsedExternalId {
-  repoKey: string;
-  itemNumber: string;
-}
+type GetDiscoveredItem = (providerId: string, externalId: string) => ProviderItem | undefined;
 
-const SUPPORTED_PROVIDERS = [
-  'github',
-  'ado-work-items',
-  'github-my-prs',
-  'github-pr-reviews',
-  'ado-pr-reviews',
-];
-
-const PR_PROVIDERS = ['github-my-prs', 'github-pr-reviews', 'ado-pr-reviews'];
-const GITHUB_PR_PROVIDERS = ['github-my-prs', 'github-pr-reviews'];
+type ResolvedGitWork = GitWorkInfo & { cloneUrl: string; ref: string };
 
 type WorkMode = 'checkout' | 'worktree';
-
-interface GitHubPrHead {
-  ref: string;
-  repo: {
-    full_name: string;
-    clone_url: string;
-  } | null;
-}
-
-interface GitHubPrResponse {
-  head: GitHubPrHead;
-  base: {
-    repo: {
-      full_name: string;
-    };
-  };
-}
-
-interface AdoPrResponse {
-  sourceRefName: string;
-}
 
 interface PrBranchInfo {
   branchName: string;
@@ -86,12 +82,9 @@ interface PrBranchInfo {
 /**
  * DevDocket action that bootstraps a development environment for a work item.
  *
- * Supports items from GitHub and Azure DevOps providers (both issues and PRs).
- * When executed on an issue it creates a new branch and either checks out
- * or creates a worktree for it, based on user preference.
- * When executed on a PR it fetches the existing PR branch instead of creating one.
- *
- * Only available for items in the `InProgress` state from supported providers.
+ * Supports any provider that attaches a gitWork capability to its live
+ * discovered item. The action consumes only provider-supplied git metadata;
+ * it does not know about provider ids, URL hosts, or provider HTTP APIs.
  */
 export class StartWorkAction implements DevDocketAction {
   readonly id = 'startGitWork';
@@ -99,43 +92,114 @@ export class StartWorkAction implements DevDocketAction {
 
   private readonly globalState: vscode.Memento;
 
-  constructor(globalState: vscode.Memento) {
+  constructor(
+    globalState: vscode.Memento,
+    private readonly getDiscoveredItem: GetDiscoveredItem = () => undefined,
+  ) {
     this.globalState = globalState;
   }
 
   canRun(item: Readonly<WorkItem>): boolean {
-    return item.state === WorkItemState.InProgress && SUPPORTED_PROVIDERS.includes(item.providerId ?? '');
+    if (item.state !== WorkItemState.InProgress || !item.providerId || !item.externalId) {
+      return false;
+    }
+
+    return !!this.getDiscoveredItem(item.providerId, item.externalId)?.capabilities?.gitWork;
   }
 
   async run(item: Readonly<WorkItem>): Promise<void> {
-    const parsed = this.parseExternalId(item.externalId);
-    if (!parsed) {
-      void vscode.window.showErrorMessage('Could not determine work item number.');
+    const gitWork = await this.resolveGitWork(item);
+    if (!gitWork) {
+      void vscode.window.showErrorMessage('DevDocket: This work item is not supported by Start Git Work.');
       return;
     }
 
-    const isPr = PR_PROVIDERS.includes(item.providerId ?? '');
+    if (!this.validateGitWork(gitWork)) {
+      return;
+    }
 
-    const repoPath = await this.promptForRepoPath(parsed.repoKey);
+    const repoLabel = gitWork.repoLabel ?? gitWork.cloneUrl;
+    const repoPath = await this.promptForRepoPath(repoLabel);
     if (!repoPath) {
       return;
     }
 
-    if (isPr) {
-      await this.runPrFlow(item, parsed, repoPath);
+    if (gitWork.kind === 'pr') {
+      await this.runPrFlow(item, gitWork, repoPath);
     } else {
-      await this.runIssueFlow(item, parsed, repoPath);
+      await this.runIssueFlow(item, gitWork, repoPath);
     }
+  }
+
+  private async resolveGitWork(item: Readonly<WorkItem>): Promise<GitWorkInfo | undefined> {
+    if (!item.providerId || !item.externalId) {
+      return undefined;
+    }
+
+    const capability = this.getDiscoveredItem(item.providerId, item.externalId)?.capabilities?.gitWork;
+    if (!capability) {
+      return undefined;
+    }
+
+    try {
+      return typeof capability === 'function' ? await capability() : capability;
+    } catch (err) {
+      logger.error('Provider gitWork capability failed', err);
+      const message = err instanceof Error ? err.message : String(err);
+      void vscode.window.showErrorMessage(`DevDocket: Could not resolve git work information — ${message}`);
+      return undefined;
+    }
+  }
+
+  private validateGitWork(gitWork: GitWorkInfo): gitWork is ResolvedGitWork {
+    if (gitWork.kind !== 'issue' && gitWork.kind !== 'pr') {
+      logger.warn('Provider returned invalid gitWork kind');
+      void vscode.window.showErrorMessage('DevDocket: Provider returned an invalid git work kind for this item.');
+      return false;
+    }
+    if (!isValidCloneUrl(gitWork.cloneUrl)) {
+      logger.warn(`Provider returned invalid gitWork cloneUrl for ${gitWork.kind}`);
+      void vscode.window.showErrorMessage('DevDocket: Provider returned an invalid clone URL for this work item.');
+      return false;
+    }
+    if (typeof gitWork.ref !== 'string') {
+      logger.warn(`Provider returned invalid gitWork ref for ${gitWork.kind}`);
+      void vscode.window.showErrorMessage('DevDocket: Provider returned an invalid git ref for this work item.');
+      return false;
+    }
+    if (gitWork.ref.startsWith('refs/') && !gitWork.ref.startsWith('refs/heads/')) {
+      logger.warn(`Provider returned unsupported gitWork ref: ${gitWork.ref}`);
+      void vscode.window.showErrorMessage('DevDocket: Provider returned an unsupported git branch ref for this work item.');
+      return false;
+    }
+    const ref = this.normalizeBranchName(gitWork.ref);
+    if (!isValidRef(ref)) {
+      logger.warn(`Provider returned invalid gitWork ref for ${gitWork.kind}`);
+      void vscode.window.showErrorMessage('DevDocket: Provider returned an invalid git ref for this work item.');
+      return false;
+    }
+    if (gitWork.headCloneUrl !== undefined && !isValidCloneUrl(gitWork.headCloneUrl)) {
+      logger.warn('Provider returned invalid gitWork headCloneUrl for PR');
+      void vscode.window.showErrorMessage('DevDocket: Provider returned an invalid PR source clone URL.');
+      return false;
+    }
+    if (gitWork.baseRef !== undefined && !isValidRef(gitWork.baseRef)) {
+      logger.warn('Provider returned invalid gitWork baseRef for PR');
+      void vscode.window.showErrorMessage('DevDocket: Provider returned an invalid PR base ref.');
+      return false;
+    }
+    return true;
   }
 
   private async runIssueFlow(
     item: Readonly<WorkItem>,
-    parsed: ParsedExternalId,
+    gitWork: ResolvedGitWork,
     repoPath: string,
   ): Promise<void> {
-    const branchName = `issue${parsed.itemNumber}`;
+    const branchName = this.normalizeBranchName(gitWork.ref);
+    const repoLabel = gitWork.repoLabel ?? gitWork.cloneUrl;
 
-    const baseBranch = await this.promptForBaseBranch(parsed.repoKey);
+    const baseBranch = await this.promptForBaseBranch(repoLabel);
     if (!baseBranch) {
       return;
     }
@@ -149,12 +213,12 @@ export class StartWorkAction implements DevDocketAction {
       await vscode.window.withProgress(
         {
           location: vscode.ProgressLocation.Notification,
-          title: `Starting git work for issue ${parsed.itemNumber}`,
+          title: 'Starting git work for issue',
           cancellable: false,
         },
         async (progress) => {
           if (workMode === 'worktree') {
-            await this.issueWorktreeFlow(item, parsed, repoPath, branchName, baseBranch, progress);
+            await this.issueWorktreeFlow(item, repoPath, branchName, baseBranch, progress);
           } else {
             await this.issueCheckoutFlow(item, repoPath, branchName, baseBranch, progress);
           }
@@ -169,14 +233,12 @@ export class StartWorkAction implements DevDocketAction {
 
   private async issueWorktreeFlow(
     item: Readonly<WorkItem>,
-    parsed: ParsedExternalId,
     repoPath: string,
     branchName: string,
     baseBranch: string,
     progress: vscode.Progress<{ message?: string }>,
   ): Promise<void> {
-    const repoBaseName = path.basename(repoPath);
-    const worktreeDirName = `${repoBaseName}-issue${parsed.itemNumber}`;
+    const worktreeDirName = this.toWorktreeDirName(repoPath, branchName, item);
     const worktreePath = path.join(path.dirname(repoPath), worktreeDirName);
 
     if (fs.existsSync(worktreePath)) {
@@ -272,7 +334,7 @@ export class StartWorkAction implements DevDocketAction {
 
   private async runPrFlow(
     item: Readonly<WorkItem>,
-    parsed: ParsedExternalId,
+    gitWork: ResolvedGitWork,
     repoPath: string,
   ): Promise<void> {
     const workMode = await this.promptForWorkMode();
@@ -284,24 +346,19 @@ export class StartWorkAction implements DevDocketAction {
       await vscode.window.withProgress(
         {
           location: vscode.ProgressLocation.Notification,
-          title: `Starting git work for PR #${parsed.itemNumber}`,
+          title: 'Starting git work for PR',
           cancellable: false,
         },
         async (progress) => {
           progress.report({ message: 'Fetching PR branch...' });
 
-          const isGitHubPr = GITHUB_PR_PROVIDERS.includes(item.providerId ?? '');
-          logger.info(`PR flow: provider=${item.providerId}, type=${isGitHubPr ? 'GitHub' : 'ADO'}, repoKey=${parsed.repoKey}, itemNumber=${parsed.itemNumber}`);
-          const branchInfo = isGitHubPr
-            ? await this.fetchGitHubPrBranch(parsed, repoPath)
-            : await this.fetchAdoPrBranch(parsed, repoPath);
-
+          const branchInfo = await this.fetchPrBranch(gitWork, repoPath);
           if (!branchInfo) {
             return;
           }
 
           if (workMode === 'worktree') {
-            await this.prWorktreeFlow(item, parsed, repoPath, branchInfo, progress);
+            await this.prWorktreeFlow(item, repoPath, branchInfo, progress);
           } else {
             await this.prCheckoutFlow(item, repoPath, branchInfo, progress);
           }
@@ -314,112 +371,40 @@ export class StartWorkAction implements DevDocketAction {
     }
   }
 
-  /**
-   * Fetches the branch name for a GitHub PR and ensures it is available locally.
-   * Finds (or adds) the remote whose URL matches the PR head repo, then does a
-   * full fetch so all refs are available for checkout/worktree creation.
-   */
-  private async fetchGitHubPrBranch(parsed: ParsedExternalId, repoPath: string): Promise<PrBranchInfo | undefined> {
-    const session = await vscode.authentication.getSession('github', ['repo'], { createIfNone: true });
-    if (!session) {
-      void vscode.window.showErrorMessage('DevDocket: GitHub authentication required.');
-      return undefined;
-    }
+  private async fetchPrBranch(gitWork: ResolvedGitWork, repoPath: string): Promise<PrBranchInfo | undefined> {
+    const branchName = this.normalizeBranchName(gitWork.ref);
+    const cloneUrl = gitWork.headCloneUrl ?? gitWork.cloneUrl;
 
-    const repoKeyParts = parsed.repoKey.split('/');
-    if (repoKeyParts.length !== 2 || !repoKeyParts[0] || !repoKeyParts[1]) {
-      void vscode.window.showErrorMessage(`DevDocket: Invalid GitHub repository key "${parsed.repoKey}".`);
-      return undefined;
-    }
-    const [owner, repo] = repoKeyParts;
-    const url = `https://api.github.com/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/pulls/${parsed.itemNumber}`;
-    logger.debug(`GitHub PR API: ${url}`);
+    logger.info(`Fetching provider-supplied PR branch "${branchName}"`);
+    const remoteName = await this.findOrAddRemote(cloneUrl, gitWork.repoLabel, repoPath);
 
-    const response = await fetch(url, {
-      headers: {
-        Authorization: `Bearer ${session.accessToken}`,
-        Accept: 'application/vnd.github+json',
-        'User-Agent': 'DevDocket-VSCode',
-        'X-GitHub-Api-Version': '2022-11-28',
-      },
-      signal: AbortSignal.timeout(30_000),
-    });
-
-    if (!response.ok) {
-      logger.info(`GitHub PR API returned ${response.status} for PR #${parsed.itemNumber}`);
-      if (response.status === 404) {
-        void vscode.window.showErrorMessage(`DevDocket: Could not find PR #${parsed.itemNumber}`);
-      } else {
-        void vscode.window.showErrorMessage(`DevDocket: GitHub API error (${response.status})`);
-      }
-      return undefined;
-    }
-
-    const pr = await response.json() as GitHubPrResponse;
-
-    if (
-      !pr ||
-      typeof pr !== 'object' ||
-      !pr.head ||
-      typeof pr.head.ref !== 'string' ||
-      !pr.base ||
-      !pr.base.repo ||
-      typeof pr.base.repo.full_name !== 'string'
-    ) {
-      void vscode.window.showErrorMessage('DevDocket: GitHub API returned an unexpected response shape.');
-      return undefined;
-    }
-
-    const branchName = pr.head.ref;
-
-    if (!isValidRef(branchName)) {
-      void vscode.window.showErrorMessage('DevDocket: PR branch name contains invalid characters.');
-      return undefined;
-    }
-
-    const isFork = pr.head.repo ? pr.head.repo.full_name !== pr.base.repo.full_name : false;
-    logger.debug(`GitHub PR #${parsed.itemNumber}: head.ref=${branchName}, head.repo=${pr.head.repo?.full_name ?? 'null'}, base.repo=${pr.base.repo.full_name}, isFork=${isFork}`);
-
-    if (!pr.head.repo) {
-      logger.info(`PR #${parsed.itemNumber}: source repository has been deleted`);
+    try {
+      await execFileAsync('git', [
+        'fetch',
+        remoteName,
+        `+refs/heads/${branchName}:refs/remotes/${remoteName}/${branchName}`,
+      ], { cwd: repoPath, timeout: GIT_CHECKOUT_TIMEOUT });
+      logger.debug(`Fetch complete for branch "${branchName}" from remote "${remoteName}"`);
+    } catch (err) {
+      const details = this.formatGitError(err);
+      logger.info(`Failed to fetch branch "${branchName}" from ${remoteName}: ${details}`);
       void vscode.window.showErrorMessage(
-        `DevDocket: The source repository for PR #${parsed.itemNumber} has been deleted.`,
+        `DevDocket: Could not fetch branch '${branchName}' from remote '${remoteName}'. ${details}`,
       );
       return undefined;
     }
 
-    const headCloneUrl = pr.head.repo.clone_url;
-    if (!isValidCloneUrl(headCloneUrl)) {
-      void vscode.window.showErrorMessage('DevDocket: PR source repository has an invalid clone URL.');
-      return undefined;
-    }
-    const fullName = pr.head.repo.full_name;
-    if (typeof fullName !== 'string' || !/^[a-zA-Z0-9._-]+\/[a-zA-Z0-9._-]+$/.test(fullName)) {
-      void vscode.window.showErrorMessage('DevDocket: PR source repository has an invalid full name.');
-      return undefined;
-    }
-
-    logger.debug(`Looking up remote for clone URL: ${headCloneUrl}`);
-    const remoteName = await this.findOrAddRemote(headCloneUrl, fullName, repoPath);
-
-    // Full fetch to ensure all refs (including the PR branch) are available
-    logger.info(`Fetching all refs from remote "${remoteName}"`);
-    await execFileAsync('git', ['fetch', remoteName], { cwd: repoPath, timeout: GIT_CHECKOUT_TIMEOUT });
-    logger.debug(`Fetch complete for remote "${remoteName}"`);
-
     if (remoteName === 'origin') {
-      logger.info(`PR branch "${branchName}" available on origin`);
       return { branchName };
     }
-    logger.info(`PR branch available as ${remoteName}/${branchName}`);
     return { branchName, trackingRef: `${remoteName}/${branchName}` };
   }
 
   /**
    * Finds a local remote whose fetch URL matches {@link cloneUrl}, or adds a
-   * new `devdocket-fork-{owner}` remote pointing to it.
+   * new DevDocket-managed remote pointing to it.
    */
-  private async findOrAddRemote(cloneUrl: string, fullName: string, repoPath: string): Promise<string> {
+  private async findOrAddRemote(cloneUrl: string, repoLabel: string | undefined, repoPath: string): Promise<string> {
     const { stdout } = await execFileAsync('git', ['remote', '-v'], { cwd: repoPath, timeout: GIT_METADATA_TIMEOUT });
     for (const line of stdout.split('\n')) {
       const match = line.match(/^(\S+)\t(\S+)\s+\(fetch\)$/);
@@ -434,118 +419,37 @@ export class StartWorkAction implements DevDocketAction {
       }
     }
 
-    // No existing remote matches — add a DevDocket-managed one
-    const forkOwner = fullName.split('/')[0];
-    const forkRemoteName = `devdocket-fork-${forkOwner}`;
-    logger.debug(`No remote found for ${cloneUrl}, adding "${forkRemoteName}"`);
+    const remoteName = this.toRemoteName(cloneUrl, repoLabel);
+    logger.debug(`No remote found for ${cloneUrl}, adding "${remoteName}"`);
 
     try {
-      await execFileAsync('git', ['remote', 'add', forkRemoteName, cloneUrl], { cwd: repoPath, timeout: GIT_METADATA_TIMEOUT });
-      logger.info(`Added remote "${forkRemoteName}" → ${cloneUrl}`);
+      await execFileAsync('git', ['remote', 'add', remoteName, cloneUrl], { cwd: repoPath, timeout: GIT_METADATA_TIMEOUT });
+      logger.info(`Added remote "${remoteName}" → ${cloneUrl}`);
     } catch (err) {
       try {
-        const { stdout: existingUrl } = await execFileAsync('git', ['remote', 'get-url', forkRemoteName], { cwd: repoPath, timeout: GIT_METADATA_TIMEOUT });
+        const { stdout: existingUrl } = await execFileAsync('git', ['remote', 'get-url', remoteName], { cwd: repoPath, timeout: GIT_METADATA_TIMEOUT });
         if (existingUrl.trim() !== cloneUrl) {
-          logger.info(`Remote "${forkRemoteName}" exists with different URL, updating to "${cloneUrl}".`);
-          await execFileAsync('git', ['remote', 'set-url', forkRemoteName, cloneUrl], { cwd: repoPath, timeout: GIT_METADATA_TIMEOUT });
+          logger.info(`Remote "${remoteName}" exists with different URL, updating to "${cloneUrl}".`);
+          await execFileAsync('git', ['remote', 'set-url', remoteName, cloneUrl], { cwd: repoPath, timeout: GIT_METADATA_TIMEOUT });
         } else {
-          logger.debug(`Remote "${forkRemoteName}" already exists with correct URL`);
+          logger.debug(`Remote "${remoteName}" already exists with correct URL`);
         }
       } catch {
         throw err;
       }
     }
 
-    return forkRemoteName;
-  }
-
-  /**
-   * Fetches the branch name for an ADO PR.
-   * Strips the `refs/heads/` prefix from `sourceRefName`.
-   */
-  private async fetchAdoPrBranch(parsed: ParsedExternalId, repoPath: string): Promise<PrBranchInfo | undefined> {
-    const session = await vscode.authentication.getSession(
-      'microsoft',
-      ['499b84ac-1321-427f-aa17-267ca6975798/.default'],
-      { createIfNone: true },
-    );
-    if (!session) {
-      void vscode.window.showErrorMessage('DevDocket: Microsoft authentication required.');
-      return undefined;
-    }
-
-    // ADO PR externalId format: org/project/repo/id
-    const parts = parsed.repoKey.split('/');
-    if (parts.length < 3) {
-      void vscode.window.showErrorMessage(`DevDocket: Invalid ADO repo key "${parsed.repoKey}".`);
-      return undefined;
-    }
-    const org = parts[0];
-    const project = parts[1];
-    const adoRepo = parts[2];
-    const url = `https://dev.azure.com/${encodeURIComponent(org)}/${encodeURIComponent(project)}/_apis/git/repositories/${encodeURIComponent(adoRepo)}/pullrequests/${parsed.itemNumber}?api-version=7.1`;
-    logger.debug(`ADO PR API: ${url}`);
-
-    const response = await fetch(url, {
-      headers: {
-        Authorization: `Bearer ${session.accessToken}`,
-        Accept: 'application/json',
-        'User-Agent': 'DevDocket-VSCode',
-      },
-      signal: AbortSignal.timeout(30_000),
-    });
-
-    if (!response.ok) {
-      logger.info(`ADO PR API returned ${response.status} for PR #${parsed.itemNumber}`);
-      if (response.status === 404) {
-        void vscode.window.showErrorMessage(`DevDocket: Could not find PR #${parsed.itemNumber}`);
-      } else {
-        void vscode.window.showErrorMessage(`DevDocket: ADO API error (${response.status})`);
-      }
-      return undefined;
-    }
-
-    const pr = await response.json() as AdoPrResponse;
-
-    if (typeof pr?.sourceRefName !== 'string') {
-      void vscode.window.showErrorMessage('DevDocket: ADO API returned an unexpected response shape.');
-      return undefined;
-    }
-
-    const branchName = pr.sourceRefName.replace(/^refs\/heads\//, '');
-
-    if (!isValidRef(branchName)) {
-      void vscode.window.showErrorMessage('DevDocket: PR branch name contains invalid characters.');
-      return undefined;
-    }
-
-    logger.debug(`ADO PR #${parsed.itemNumber}: sourceRefName=${pr.sourceRefName}, branchName=${branchName}`);
-
-    logger.info(`Fetching branch "${branchName}" from origin`);
-    try {
-      await execFileAsync('git', ['fetch', 'origin', branchName], { cwd: repoPath, timeout: GIT_CHECKOUT_TIMEOUT });
-      logger.debug(`Fetch complete for origin/${branchName}`);
-    } catch {
-      logger.info(`Failed to fetch branch "${branchName}" from origin`);
-      void vscode.window.showErrorMessage(
-        `DevDocket: Could not fetch branch '${branchName}' from origin. The branch may have been deleted.`,
-      );
-      return undefined;
-    }
-
-    return { branchName };
+    return remoteName;
   }
 
   private async prWorktreeFlow(
     item: Readonly<WorkItem>,
-    parsed: ParsedExternalId,
     repoPath: string,
     branchInfo: PrBranchInfo,
     progress: vscode.Progress<{ message?: string }>,
   ): Promise<void> {
     const { branchName, trackingRef } = branchInfo;
-    const repoBaseName = path.basename(repoPath);
-    const worktreeDirName = `${repoBaseName}-pr${parsed.itemNumber}`;
+    const worktreeDirName = this.toWorktreeDirName(repoPath, branchName, item);
     const worktreePath = path.join(path.dirname(repoPath), worktreeDirName);
 
     if (fs.existsSync(worktreePath)) {
@@ -780,31 +684,54 @@ export class StartWorkAction implements DevDocketAction {
     }
   }
 
-  /**
-   * Parses the externalId into repoKey and itemNumber.
-   * Supports three formats:
-   *   GitHub:      "owner/repo#123"           → repoKey="owner/repo", itemNumber="123"
-   *   ADO Issue:   "org/project/123"           → repoKey="org/project", itemNumber="123"
-   *   ADO PR:      "org/project/repo/101"      → repoKey="org/project/repo", itemNumber="101"
-   */
-  private parseExternalId(externalId: string | undefined): ParsedExternalId | undefined {
-    if (!externalId) {
+  private normalizeBranchName(ref: string): string {
+    return ref.startsWith('refs/heads/') ? ref.slice('refs/heads/'.length) : ref;
+  }
+
+  private formatGitError(error: unknown): string {
+    const gitError = error as { stderr?: string; stdout?: string; message?: string };
+    const detail = [gitError.stderr, gitError.stdout, gitError.message]
+      .map(value => value?.trim())
+      .find(Boolean);
+    return detail ?? 'Check your network connection, permissions, and whether the branch still exists.';
+  }
+
+  private toWorktreeDirName(repoPath: string, ref: string, item: Readonly<WorkItem>): string {
+    const repoBaseName = path.basename(repoPath);
+    const itemSuffix = this.toWorktreePathSuffix(item.externalId ?? item.id);
+    return `${repoBaseName}-${this.toWorktreePathSuffix(ref)}-${itemSuffix}`;
+  }
+
+  private toWorktreePathSuffix(ref: string): string {
+    return ref.replace(/[^a-zA-Z0-9._-]+/g, '-').replace(/^-+|-+$/g, '') || 'branch';
+  }
+
+  private toRemoteName(cloneUrl: string, repoLabel?: string): string {
+    const candidate = this.ownerLikeSegmentFromCloneUrl(cloneUrl) ?? repoLabel ?? cloneUrl;
+    const suffix = candidate.replace(/\.git$/i, '').replace(/[^a-zA-Z0-9._-]+/g, '-').replace(/^-+|-+$/g, '') || 'source';
+    const remoteName = `devdocket-fork-${suffix}`;
+    return isValidRef(remoteName) ? remoteName : 'devdocket-fork-source';
+  }
+
+  private ownerLikeSegmentFromCloneUrl(cloneUrl: string): string | undefined {
+    if (cloneUrl.startsWith('https://')) {
+      try {
+        const segments = new URL(cloneUrl).pathname.split('/').filter(Boolean);
+        if (segments.some(segment => segment.toLowerCase() === '_git')) {
+          return undefined;
+        }
+        return segments.length >= 2 ? segments[segments.length - 2] : undefined;
+      } catch {
+        return undefined;
+      }
+    }
+
+    const gitPath = cloneUrl.match(/^git@[^:]+:(.+)$/)?.[1];
+    if (!gitPath) {
       return undefined;
     }
-
-    // Try GitHub format first (has #)
-    const ghMatch = externalId.match(/^(.+?)#(\d+)$/);
-    if (ghMatch) {
-      return { repoKey: ghMatch[1], itemNumber: ghMatch[2] };
-    }
-
-    // Fall back to ADO format: last /-separated segment is numeric
-    const adoMatch = externalId.match(/^(.+)\/(\d+)$/);
-    if (adoMatch) {
-      return { repoKey: adoMatch[1], itemNumber: adoMatch[2] };
-    }
-
-    return undefined;
+    const segments = gitPath.split('/').filter(Boolean);
+    return segments.length >= 2 ? segments[segments.length - 2] : undefined;
   }
 
   /**

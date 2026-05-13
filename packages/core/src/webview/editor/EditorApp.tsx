@@ -4,6 +4,7 @@ import type { EditorItemData, ExtensionMessage } from '../shared/types';
 import { useThemeChangeCounter } from '../shared/theme';
 import { ActivityLog } from './components/ActivityLog';
 import { ActionBar } from './components/ActionBar';
+import { CIWatchSection } from './components/CIWatchSection';
 import { EditableField } from './components/EditableField';
 import { EditorHeader } from './components/EditorHeader';
 import { RelatedItems } from './components/RelatedItems';
@@ -194,6 +195,7 @@ export function EditorApp() {
           externalId: relatedItem.targetExternalId,
         })}
       />
+      <CIWatchSection ciWatch={item.ciWatch} onOpenWatches={() => postMessage({ type: 'openWatches' })} />
       <ActivityLog entries={item.activityLog} />
     </div>
   );

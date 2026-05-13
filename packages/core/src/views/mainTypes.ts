@@ -1,3 +1,4 @@
+import type { RunConclusion } from '@devdocket/shared';
 import type { ResolvedRelatedItem } from './relatedItemTypes';
 
 export type ExtensionMessage =
@@ -24,6 +25,7 @@ export type WebviewMessage =
   | { type: 'openWalkthrough' }
   | { type: 'clearHistory' }
   | { type: 'runAction'; itemId: string }
+  | { type: 'openWatches' }
   | { type: 'openUrl'; url: string }
   | { type: 'openWatchUrl'; url: string }
   | { type: 'dismissCompletedWatches' }
@@ -66,6 +68,19 @@ export interface BadgeData {
   variant: string;
 }
 
+export interface EditorCIWatchData {
+  state: 'open' | 'merged' | 'closed';
+  runs: Array<{
+    id: string;
+    name: string;
+    state: 'queued' | 'in_progress' | 'completed';
+    conclusion?: RunConclusion;
+    hasWarning?: boolean;
+  }>;
+  totalActive: number;
+  totalFailing: number;
+}
+
 export interface EditorItemData {
   id: string;
   title: string;
@@ -83,6 +98,7 @@ export interface EditorItemData {
   hasActions: boolean;
   activityLog: Array<{ timestamp: number; type: string; detail?: string }>;
   relatedItems: ResolvedRelatedItem[];
+  ciWatch?: EditorCIWatchData;
   isIncoming?: boolean;
   providerId?: string;
   externalId?: string;

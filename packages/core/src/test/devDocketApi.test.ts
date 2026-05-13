@@ -125,6 +125,26 @@ describe('DevDocketApiImpl', () => {
     });
   });
 
+  describe('getDiscoveredItem', () => {
+    it('looks up the live discovered item by provider and external id', () => {
+      const emitter = new vscode.EventEmitter<ProviderItem[]>();
+      const provider: DevDocketProvider = {
+        id: 'test-provider',
+        label: 'Test Provider',
+        onDidDiscoverItems: emitter.event,
+        refresh: vi.fn().mockResolvedValue(undefined),
+      };
+      const item: ProviderItem = { externalId: 'item-1', title: 'Item 1' };
+
+      api.registerProvider(provider);
+      emitter.fire([item]);
+
+      expect(api.getDiscoveredItem('test-provider', 'item-1')).toBe(item);
+      expect(api.getDiscoveredItem('test-provider', 'missing')).toBeUndefined();
+      expect(api.getDiscoveredItem('missing-provider', 'item-1')).toBeUndefined();
+    });
+  });
+
   describe('registerAction', () => {
     it('delegates to actionRegistry.register', () => {
       const action = createMockAction('test-action');

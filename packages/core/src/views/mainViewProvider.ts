@@ -26,12 +26,22 @@ import type {
   WebviewMessage,
 } from './mainTypes';
 
+export type RefreshReason =
+  | 'workGraph'
+  | 'discovered'
+  | 'health'
+  | 'state'
+  | 'watchedRuns'
+  | 'watchedPRs'
+  | 'readState';
+
 export class MainViewProvider implements vscode.WebviewViewProvider {
   public static readonly viewId = 'devdocket.main';
   private static readonly REFRESH_DEBOUNCE_MS = 50;
 
   private view?: vscode.WebviewView;
   private refreshTimer?: ReturnType<typeof setTimeout>;
+  private pendingRefreshReasons = new Set<RefreshReason>();
   private disposed = false;
 
   constructor(
@@ -54,6 +64,7 @@ export class MainViewProvider implements vscode.WebviewViewProvider {
       clearTimeout(this.refreshTimer);
       this.refreshTimer = undefined;
     }
+    this.pendingRefreshReasons.clear();
   }
 
   resolveWebviewView(
@@ -73,19 +84,22 @@ export class MainViewProvider implements vscode.WebviewViewProvider {
       void this.handleMessage(message);
     });
 
-    this.scheduleRefresh();
+    this.scheduleRefresh('discovered');
   }
 
-  scheduleRefresh(): void {
+  scheduleRefresh(reason: RefreshReason): void {
     if (this.disposed) {
       return;
     }
+    this.pendingRefreshReasons.add(reason);
     if (this.refreshTimer) {
       clearTimeout(this.refreshTimer);
     }
     this.refreshTimer = setTimeout(() => {
+      const reasons = new Set(this.pendingRefreshReasons);
+      this.pendingRefreshReasons.clear();
       this.refreshTimer = undefined;
-      this.refresh();
+      this.refresh(reasons);
     }, MainViewProvider.REFRESH_DEBOUNCE_MS);
   }
 
@@ -97,7 +111,7 @@ export class MainViewProvider implements vscode.WebviewViewProvider {
     void this.view?.webview.postMessage({ type: 'toggleSearch' });
   }
 
-  private refresh(): void {
+  private refresh(reasons: ReadonlySet<RefreshReason>): void {
     if (!this.view) {
       return;
     }
@@ -105,15 +119,28 @@ export class MainViewProvider implements vscode.WebviewViewProvider {
     const allDiscoveredItems = this.providerRegistry.getAllDiscoveredItems();
     const relatedItemsIndex = buildRelatedItemsIndex(this.providerRegistry, this.workGraph, allDiscoveredItems);
 
+    // My Work renders unread markers, tier state/order, related-item markers, and CI badges.
     void this.view.webview.postMessage({
       type: 'updateItems',
       tiers: this.buildTierData(allDiscoveredItems, relatedItemsIndex),
     });
-    void this.view.webview.postMessage({
-      type: 'updateSources',
-      providers: this.buildSourcesData(allDiscoveredItems, relatedItemsIndex),
-    });
+    if (this.shouldRefreshSources(reasons)) {
+      void this.view.webview.postMessage({
+        type: 'updateSources',
+        providers: this.buildSourcesData(allDiscoveredItems, relatedItemsIndex),
+      });
+    }
     this.updateBadge();
+  }
+
+  private shouldRefreshSources(reasons: ReadonlySet<RefreshReason>): boolean {
+    // Sources render provider health, discovered-state marks, related-item markers, and CI badges.
+    return reasons.has('discovered')
+      || reasons.has('health')
+      || reasons.has('state')
+      || reasons.has('workGraph')
+      || reasons.has('watchedRuns')
+      || reasons.has('watchedPRs');
   }
 
   /** Update the activity-bar badge with the unread incoming count. */

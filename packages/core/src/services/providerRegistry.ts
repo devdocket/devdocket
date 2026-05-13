@@ -233,6 +233,13 @@ export class ProviderRegistry {
   }
 
   /**
+   * Find one live discovered item by provider and external id.
+   */
+  findDiscoveredItem(providerId: string, externalId: string): ProviderItem | undefined {
+    return this.getDiscoveredItems(providerId).find(item => item.externalId === externalId);
+  }
+
+  /**
    * Check whether an item was in the provider's discovered-items list before
    * the most recent refresh. Used as a fallback for auto-complete when the
    * provider does not implement `getClosedItems`.

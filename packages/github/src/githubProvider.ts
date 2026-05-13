@@ -4,6 +4,7 @@ import { logger } from './logger';
 import { parseRepoFromUrls } from './parseRepo';
 import { getHeaders, getGitHubAuthHeaders, retryWithAuth, throwApiError, parseCanonicalRepo, fetchClosedGitHubItems, buildIssueStateBadge, type GitHubIssue } from './githubApiHelpers';
 import { matchesRepoPatterns } from './repoPattern';
+import { createGitHubIssueGitWork } from './gitWorkCapabilities';
 
 /**
  * DevDocket provider that discovers GitHub issues assigned to the current user.
@@ -45,6 +46,7 @@ export class GitHubIssueProvider extends BaseGitHubProvider {
         reason: 'assigned',
         canonicalId: `github:issue:${repoName}#${issue.number}`,
         itemType: 'issue',
+        capabilities: { gitWork: createGitHubIssueGitWork(repoName, issue.number) },
         badges: [
           { label: 'Assigned', variant: 'warning' },
           ...buildIssueStateBadge(issue.state),

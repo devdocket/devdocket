@@ -3,8 +3,9 @@ import { ProviderItem, combineSignals, createAbortError, runWorkerPool, safeDeco
 import { BaseGitHubProvider } from './baseGithubProvider';
 import { logger } from './logger';
 import { parseRepoFromUrls } from './parseRepo';
-import { getHeaders, getGitHubAuthHeaders, retryWithAuth, throwApiError, parseCanonicalRepo, fetchClosedGitHubItems, buildIssueStateBadge, type GitHubIssue, type GitHubSearchResponse } from './githubApiHelpers';
+import { getHeaders, getGitHubAuthHeaders, retryWithAuth, throwApiError, parseCanonicalRepo, fetchClosedGitHubItems, buildIssueStateBadge, filterMergedGitHubPrs, type GitHubIssue, type GitHubSearchResponse } from './githubApiHelpers';
 import { matchesRepoPatterns } from './repoPattern';
+import { createGitHubPrGitWork } from './gitWorkCapabilities';
 
 interface TimelineEvent {
   event?: string;
@@ -30,16 +31,17 @@ export class GitHubPrReviewProvider extends BaseGitHubProvider {
     const patterns = this.getConfiguredPatterns();
 
     const { prs, failed } = await this.fetchAllPrReviews(accessToken, signal);
+    const activePrs = await filterMergedGitHubPrs(accessToken, prs, signal);
 
     // Parse repo name once per PR
-    const repoNameMap = new Map(prs.map(pr =>
+    const repoNameMap = new Map(activePrs.map(pr =>
       [pr.html_url, parseRepoFromUrls(pr.html_url, pr.repository_url)]
     ));
 
     // Post-filter when patterns are configured
     const filteredPrs = patterns.length > 0
-      ? prs.filter(pr => matchesRepoPatterns(repoNameMap.get(pr.html_url)!, patterns))
-      : prs;
+      ? activePrs.filter(pr => matchesRepoPatterns(repoNameMap.get(pr.html_url)!, patterns))
+      : activePrs;
 
     logger.info(`Discovered ${filteredPrs.length} PR review requests`);
 
@@ -87,6 +89,7 @@ export class GitHubPrReviewProvider extends BaseGitHubProvider {
         reason: 'review_requested',
         canonicalId: `github:pull:${repoName}#${pr.number}`,
         itemType: 'pr',
+        capabilities: { gitWork: createGitHubPrGitWork(repoName, pr.number, pr.pull_request?.url) },
         ...(relatedItems ? { relatedItems } : {}),
         badges: [
           { label: 'Review requested', variant: 'warning' },

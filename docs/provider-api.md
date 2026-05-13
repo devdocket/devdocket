@@ -114,6 +114,19 @@ interface Event<T> {
   (listener: (e: T) => void): Disposable;
 }
 
+interface GitWorkInfo {
+  kind: 'issue' | 'pr';
+  cloneUrl: string;
+  ref: string;
+  headCloneUrl?: string;
+  baseRef?: string;
+  repoLabel?: string;
+}
+
+interface ProviderItemCapabilities {
+  gitWork?: GitWorkInfo | (() => Promise<GitWorkInfo | undefined>);
+}
+
 interface ProviderItem {
   externalId: string;
   title: string;
@@ -129,11 +142,19 @@ interface ProviderItem {
   canonicalId?: string;
   itemType?: 'issue' | 'pr';
   badges?: ProviderBadge[];
+  /** Optional capabilities, such as provider-supplied git metadata for Start Git Work. */
+  capabilities?: ProviderItemCapabilities;
   /** Opaque "soft" version token. See provider-discovery.md#resurfacing. */
   version?: string;
   /** Opaque "always-resurface" token. See provider-discovery.md#resurfacing. */
   resurfaceVersion?: string;
 }
+
+/** @deprecated Use ProviderItemCapabilities instead. */
+type DiscoveredItemCapabilities = ProviderItemCapabilities;
+
+/** @deprecated Use ProviderItem instead. */
+interface DiscoveredItem extends ProviderItem {}
 
 interface DevDocketProvider {
   readonly id: string;
@@ -397,6 +418,28 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 ```
 
 ---
+
+
+### Git work capability
+
+Providers can opt discovered items into Start Git Work by attaching `capabilities.gitWork`. The action is provider-agnostic: it does not parse URL hosts, provider ids, or external ids. Providers supply `GitWorkInfo` directly for issue-shaped items when all data is already known, or a lazy function for PR-shaped items when resolving the head ref or fork clone URL requires the provider's API.
+
+```ts
+const item: ProviderItem = {
+  externalId: 'project/TICKET-123',
+  title: 'TICKET-123: Fix login',
+  capabilities: {
+    gitWork: {
+      kind: 'issue',
+      cloneUrl: 'https://git.example.com/team/repo.git',
+      ref: 'ticket/TICKET-123',
+      repoLabel: 'team/repo',
+    },
+  },
+};
+```
+
+For PRs, return `headCloneUrl` only when the source branch lives in a fork or different repository. Returning `undefined` from a lazy capability means the item is not currently resolvable. Start Git Work is shown only after the user moves the work item to In Progress, and it uses `repoLabel` as part of its local-path/base-branch cache key, so keep that label stable for a given repository.
 
 ## Implementing an Action
 
