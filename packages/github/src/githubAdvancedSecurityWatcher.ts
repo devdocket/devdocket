@@ -16,7 +16,7 @@ interface GitHubCheckRun {
   id: number;
   name: string;
   status: string;
-  conclusion: 'success' | 'failure' | 'cancelled' | 'skipped' | 'timed_out' | 'action_required' | 'neutral' | null;
+  conclusion: 'success' | 'failure' | 'cancelled' | 'skipped' | 'timed_out' | 'action_required' | 'neutral' | 'stale' | null;
   started_at?: string | null;
   completed_at?: string | null;
   app?: {
@@ -137,6 +137,8 @@ export class GitHubAdvancedSecurityWatcher implements DevDocketRunWatcher {
       case 'action_required':
       case 'neutral':
         return conclusion;
+      case 'stale':
+        return 'neutral';
       default:
         logger.warn(`Unknown run conclusion '${conclusion}', treating as undefined`);
         return undefined;

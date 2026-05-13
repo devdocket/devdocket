@@ -162,6 +162,17 @@ describe('GitHubAdvancedSecurityWatcher', () => {
       expect(result.completedAt).toBeUndefined();
     });
 
+    it('maps stale check run conclusion to neutral', async () => {
+      fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(makeResponse({
+        json: async () => makeCheckRunResponse({ conclusion: 'stale' }),
+      }));
+
+      const result = await watcher.getRunStatus(makeIdentifier());
+
+      expect(result.conclusion).toBe('neutral');
+      expect(result.jobs[0].conclusion).toBe('neutral');
+    });
+
     it('maps waiting check run status to queued', async () => {
       fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(makeResponse({
         json: async () => makeCheckRunResponse({
