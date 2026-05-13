@@ -65,7 +65,7 @@ export interface GitWorkInfo {
 }
 
 /**
- * Capabilities a provider attaches to a discovered item to opt into
+ * Capabilities a provider attaches to a provider item to opt into
  * cross-cutting actions (e.g. Start Git Work). All capabilities are optional.
  */
 export interface ProviderItemCapabilities {
