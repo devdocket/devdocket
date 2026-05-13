@@ -11,7 +11,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 
   log.info('DevDocket Start Git Work activating...');
 
-  const coreExtension = vscode.extensions.getExtension('DevDocket.devdocket');
+  const coreExtension = vscode.extensions.getExtension('devdocket.devdocket');
   if (!coreExtension) {
     logger.error('Core extension not found');
     return;

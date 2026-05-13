@@ -135,12 +135,12 @@ export interface DevDocketAction {
  * Public API surface of the DevDocket extension.
  *
  * Obtain this API from the core extension by getting its extension wrapper via
- * `vscode.extensions.getExtension('DevDocket.devdocket')`, then activating it
+ * `vscode.extensions.getExtension('devdocket.devdocket')`, then activating it
  * with `await extension.activate()` (or reading `extension.exports` after activation).
  *
  * @example
  * ```ts
- * const ext = vscode.extensions.getExtension<DevDocketApi>('DevDocket.devdocket');
+ * const ext = vscode.extensions.getExtension<DevDocketApi>('devdocket.devdocket');
  * const api = await ext?.activate();
  * if (api) {
  *   api.registerProvider(myProvider);

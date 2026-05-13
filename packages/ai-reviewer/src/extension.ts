@@ -12,7 +12,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 
   log.info('Activating DevDocket AI Reviewer extension');
 
-  const coreExtension = vscode.extensions.getExtension<DevDocketApi>('DevDocket.devdocket');
+  const coreExtension = vscode.extensions.getExtension<DevDocketApi>('devdocket.devdocket');
   if (!coreExtension) {
     const msg = 'DevDocket AI Reviewer: core extension not found. Install the DevDocket extension.';
     log.error(msg);

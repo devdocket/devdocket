@@ -3,7 +3,7 @@
   "displayName": "DevDocket GitHub",
   "description": "GitHub provider for DevDocket — discovers assigned issues, PR reviews, and authored PRs with status tracking.",
   "version": "0.1.0",
-  "publisher": "DevDocket",
+  "publisher": "devdocket",
   "license": "MIT",
   "engines": {
     "vscode": "^1.92.0"
@@ -12,7 +12,7 @@
     "Other"
   ],
   "extensionDependencies": [
-    "DevDocket.devdocket"
+    "devdocket.devdocket"
   ],
   "activationEvents": [
     "onStartupFinished"
