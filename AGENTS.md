@@ -74,7 +74,7 @@ See `.github/instructions/storage.instructions.md` for the full storage contract
 
 ### Extension API
 
-The core extension returns `DevDocketApi` from `activate()`. Provider extensions acquire it via `vscode.extensions.getExtension('mthalman.devdocket')`.
+The core extension returns `DevDocketApi` from `activate()`. Provider extensions acquire it via `vscode.extensions.getExtension('devdocket.devdocket')`.
 
 ```ts
 interface DevDocketApi {

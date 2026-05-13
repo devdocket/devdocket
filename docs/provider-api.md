@@ -44,7 +44,7 @@ Add DevDocket as an extension dependency in your `package.json` so VS Code activ
 ```jsonc
 // package.json
 {
-  "extensionDependencies": ["mthalman.devdocket"]
+  "extensionDependencies": ["devdocket.devdocket"]
 }
 ```
 
@@ -56,10 +56,10 @@ In your extension's `activate()` function, get the `DevDocketApi` from the core 
 import * as vscode from 'vscode';
 
 export async function activate(context: vscode.ExtensionContext): Promise<void> {
-  const coreExtension = vscode.extensions.getExtension('mthalman.devdocket');
+  const coreExtension = vscode.extensions.getExtension('devdocket.devdocket');
   if (!coreExtension) {
     vscode.window.showErrorMessage(
-      'DevDocket core extension not found. Install "mthalman.devdocket".'
+      'DevDocket core extension not found. Install "devdocket.devdocket".'
     );
     return;
   }
@@ -84,7 +84,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     typeof api.registerAction !== 'function'
   ) {
     vscode.window.showErrorMessage(
-      'DevDocket API is unavailable or invalid. Update "mthalman.devdocket".'
+      'DevDocket API is unavailable or invalid. Update "devdocket.devdocket".'
     );
     return;
   }
