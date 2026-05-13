@@ -22,6 +22,8 @@ export interface WatchedRun {
   errorMessage?: string;
   /** Key of the parent PR watch, if this run is a child of a PR watch */
   parentPRKey?: string;
+  /** Suppress completion/failure events for the next successful status fetch */
+  suppressNextStatusEvents?: boolean;
 }
 
 /**
@@ -40,6 +42,16 @@ export interface WatchedPR {
   errorMessage?: string;
 }
 
+interface StartPRWatchOptions {
+  forceRecreate?: boolean;
+  /**
+   * Register child runs from the initial PR snapshot without immediately
+   * calling getRunStatus for each run. The normal polling loop will fetch
+   * their first statuses on its next tick.
+   */
+  deferChildRunStatus?: boolean;
+}
+
 /**
  * Service that manages watching pipeline runs and pull requests.
  * Polls for status changes, detects job failures, and fires events.
@@ -56,6 +68,7 @@ export class WatcherService implements vscode.Disposable {
    * the in-flight poll resumes).
    */
   private disposed = false;
+  private loadPersistedWatchesPromise: Promise<void> | undefined;
   private configSubscription: vscode.Disposable | undefined;
   private readonly runPool: RunWatchPool;
   private readonly prPool: PRWatchPool;
@@ -115,9 +128,23 @@ export class WatcherService implements vscode.Disposable {
 
   /**
    * Load persisted watches from disk and resume polling for active ones.
+   * Concurrent callers join the same load, and restored entries never replace
+   * watches that were started in memory while the load was in flight.
    */
   async loadPersistedWatches(): Promise<void> {
+    if (!this.loadPersistedWatchesPromise) {
+      this.loadPersistedWatchesPromise = this.restorePersistedWatches().catch(err => {
+        this.loadPersistedWatchesPromise = undefined;
+        throw err;
+      });
+    }
+
+    return this.loadPersistedWatchesPromise;
+  }
+
+  private async restorePersistedWatches(): Promise<void> {
     const { runs: watches, prs } = await this.persistence.loadAll(pr => this.getPRWatchKey(pr.identifier));
+    const hadLiveWatches = this.getAllWatches().length > 0 || this.getAllPRWatches().length > 0;
     const restored = this.runPool.restore(watches);
     const restoredPRs = this.prPool.restore(prs);
 
@@ -130,6 +157,10 @@ export class WatcherService implements vscode.Disposable {
       if (this.runPool.hasPollableWatches() || this.prPool.hasPollablePRWatches()) {
         this.ensurePollingActive();
       }
+    }
+
+    if (hadLiveWatches && (restored > 0 || restoredPRs > 0)) {
+      this.persistWatches();
     }
   }
 
@@ -173,12 +204,18 @@ export class WatcherService implements vscode.Disposable {
    * the previously-active state may have stale or invisible child runs that
    * the user can't recover any other way.
    *
+   * Pass `{ deferChildRunStatus: true }` to register child runs from the
+   * initial PR snapshot without immediately fetching each run's status. This
+   * is intended for bulk auto-watch; manual callers should keep the default
+   * eager child-run snapshot behavior.
+   *
    * @param identifier - PR identifier from parsePRUrl
+   * @param options - Optional controls for recreation and initial child-run status fetching
    * @returns The watched PR (existing or newly created)
    */
   async startPRWatch(
     identifier: PRIdentifier,
-    options?: { forceRecreate?: boolean },
+    options?: StartPRWatchOptions,
   ): Promise<WatchedPR> {
     const result = await this.prPool.startPRWatch(identifier, options);
     if (!result.changed || this.disposed) {
@@ -295,6 +332,13 @@ export class WatcherService implements vscode.Disposable {
   }
 
   /**
+   * Find an active PR watch by repository and PR ID, ignoring watcher provider.
+   */
+  findPRWatchByExternalId(repo: string, prId: string): WatchedPR | undefined {
+    return this.prPool.findPRWatchByExternalId(repo, prId);
+  }
+
+  /**
    * Check whether a PR is currently being actively watched (in memory and
    * not dismissed). In contrast with {@link isPRWatched}, this excludes
    * dismissed entries — useful for distinguishing "already actively watching"
@@ -319,6 +363,15 @@ export class WatcherService implements vscode.Disposable {
     const key = this.getPRWatchKey(identifier);
     if (this.prPool.hasPRWatch(key)) {
       return true;
+    }
+
+    if (this.loadPersistedWatchesPromise) {
+      try {
+        await this.loadPersistedWatchesPromise;
+      } catch {
+        // Fall through to the lazy load below so isPRWatched remains resilient
+        // when the activation-time restore fails.
+      }
     }
 
     return (await this.persistence.getPersistedPRWatchKeys(pr => this.getPRWatchKey(pr.identifier))).has(key);

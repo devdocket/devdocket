@@ -1,5 +1,5 @@
 import * as vscode from 'vscode';
-import type { JobStatus, RunIdentifier } from '@devdocket/shared';
+import type { JobStatus, RunIdentifier, RunStatus } from '@devdocket/shared';
 import { WatcherRegistry } from './watcherRegistry';
 import type { WatchedRun } from './watcherService';
 
@@ -12,6 +12,10 @@ type WatcherLogger = {
 export interface WatchStartResult {
   watch: WatchedRun;
   changed: boolean;
+}
+
+export interface StartWatchOptions {
+  deferStatusFetch?: boolean;
 }
 
 export interface DismissWatchResult {
@@ -47,14 +51,19 @@ export class RunWatchPool implements vscode.Disposable {
   ) {}
 
   restore(watches: WatchedRun[]): number {
-    const restored = watches.filter(w => !w.dismissed);
-    for (const watch of restored) {
-      this.watches.set(this.getWatchKey(watch.identifier), watch);
+    let restored = 0;
+    for (const watch of watches.filter(w => !w.dismissed)) {
+      const key = this.getWatchKey(watch.identifier);
+      if (this.watches.has(key)) {
+        continue;
+      }
+      this.watches.set(key, watch);
+      restored++;
     }
-    return restored.length;
+    return restored;
   }
 
-  async startWatch(identifier: RunIdentifier, parentPRKey?: string): Promise<WatchStartResult> {
+  async startWatch(identifier: RunIdentifier, parentPRKey?: string, options?: StartWatchOptions): Promise<WatchStartResult> {
     const key = this.getWatchKey(identifier);
     const existing = this.watches.get(key);
     if (existing && !existing.dismissed) {
@@ -71,7 +80,9 @@ export class RunWatchPool implements vscode.Disposable {
       throw new Error(`No watcher registered for provider: ${identifier.providerId}`);
     }
 
-    const status = await watcher.getRunStatus(identifier);
+    const status: RunStatus = options?.deferStatusFetch
+      ? { overallState: 'queued', jobs: [] }
+      : await watcher.getRunStatus(identifier);
     if (status.displayName) {
       identifier.displayName = status.displayName;
     }
@@ -84,6 +95,7 @@ export class RunWatchPool implements vscode.Disposable {
       lastPolledAt: now,
       dismissed: false,
       parentPRKey,
+      suppressNextStatusEvents: options?.deferStatusFetch ? true : undefined,
     };
 
     if (this.isDisposed()) {
@@ -223,6 +235,12 @@ export class RunWatchPool implements vscode.Disposable {
         }
         watch.lastPolledAt = new Date().toISOString();
 
+        const suppressStatusEvents = watch.suppressNextStatusEvents === true;
+        if (suppressStatusEvents) {
+          delete watch.suppressNextStatusEvents;
+          anyChanged = true;
+        }
+
         this.consecutiveFailures.delete(key);
         watch.hasWarning = false;
         watch.errorMessage = undefined;
@@ -246,7 +264,7 @@ export class RunWatchPool implements vscode.Disposable {
           anyChanged = true;
         }
 
-        if (newStatus.overallState !== 'completed') {
+        if (!suppressStatusEvents && newStatus.overallState !== 'completed') {
           for (const newJob of newStatus.jobs) {
             if (newJob.state === 'completed' && newJob.conclusion === 'failure') {
               const oldJob = newJob.id
@@ -259,7 +277,7 @@ export class RunWatchPool implements vscode.Disposable {
           }
         }
 
-        if (oldStatus.overallState !== 'completed' && newStatus.overallState === 'completed') {
+        if (!suppressStatusEvents && oldStatus.overallState !== 'completed' && newStatus.overallState === 'completed') {
           this._onDidCompleteRun.fire(watch);
         }
       } catch (err) {

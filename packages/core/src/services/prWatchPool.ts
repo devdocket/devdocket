@@ -2,7 +2,7 @@ import * as vscode from 'vscode';
 import type { PRIdentifier, RunIdentifier } from '@devdocket/shared';
 import { PRWatcherRegistry } from './prWatcherRegistry';
 import type { WatchedPR, WatchedRun } from './watcherService';
-import type { WatchStartResult } from './runWatchPool';
+import type { StartWatchOptions, WatchStartResult } from './runWatchPool';
 
 type WatcherLogger = {
   info: (msg: string) => void;
@@ -11,7 +11,7 @@ type WatcherLogger = {
 };
 
 export interface RunWatchControl {
-  startWatch(identifier: RunIdentifier, parentPRKey?: string): Promise<WatchStartResult>;
+  startWatch(identifier: RunIdentifier, parentPRKey?: string, options?: StartWatchOptions): Promise<WatchStartResult>;
   getWatchKey(identifier: RunIdentifier): string;
   getWatch(runKey: string): WatchedRun | undefined;
   entries(): IterableIterator<[string, WatchedRun]>;
@@ -23,6 +23,15 @@ export interface RunWatchControl {
 export interface PRWatchStartResult {
   watch: WatchedPR;
   changed: boolean;
+}
+
+export interface StartPRWatchOptions {
+  forceRecreate?: boolean;
+  deferChildRunStatus?: boolean;
+}
+
+interface AddChildRunOptions {
+  deferStatusFetch?: boolean;
 }
 
 export interface PRPollResult {
@@ -55,14 +64,19 @@ export class PRWatchPool implements vscode.Disposable {
   ) {}
 
   restore(prs: WatchedPR[]): number {
-    const restored = prs.filter(pr => !pr.dismissed);
-    for (const pr of restored) {
-      this.prWatches.set(this.getPRWatchKey(pr.identifier), pr);
+    let restored = 0;
+    for (const pr of prs.filter(pr => !pr.dismissed)) {
+      const key = this.getPRWatchKey(pr.identifier);
+      if (this.prWatches.has(key)) {
+        continue;
+      }
+      this.prWatches.set(key, pr);
+      restored++;
     }
-    return restored.length;
+    return restored;
   }
 
-  async startPRWatch(identifier: PRIdentifier, options?: { forceRecreate?: boolean }): Promise<PRWatchStartResult> {
+  async startPRWatch(identifier: PRIdentifier, options?: StartPRWatchOptions): Promise<PRWatchStartResult> {
     const key = this.getPRWatchKey(identifier);
     const existing = this.prWatches.get(key);
 
@@ -108,7 +122,9 @@ export class PRWatchPool implements vscode.Disposable {
 
     for (const runId of snapshot.runs) {
       const resolved = this.runControl.resolveRunIdentifier(runId);
-      await this.addChildRun(key, watchedPR, resolved);
+      await this.addChildRun(key, watchedPR, resolved, {
+        deferStatusFetch: options?.deferChildRunStatus,
+      });
       if (this.isDisposed()) {
         for (const childKey of watchedPR.childRunKeys) {
           this.runControl.deleteOwnedWatch(childKey, key);
@@ -123,7 +139,7 @@ export class PRWatchPool implements vscode.Disposable {
       }
     }
 
-    if (snapshot.prState === 'open') {
+    if (snapshot.prState === 'open' || watchedPR.childRunKeys.length > 0) {
       this.onPollingNeeded();
     }
 
@@ -305,6 +321,7 @@ export class PRWatchPool implements vscode.Disposable {
     prKey: string,
     prWatch: WatchedPR,
     runIdentifier: RunIdentifier,
+    options?: AddChildRunOptions,
   ): Promise<boolean> {
     const runKey = this.runControl.getWatchKey(runIdentifier);
     try {
@@ -317,7 +334,9 @@ export class PRWatchPool implements vscode.Disposable {
         return false;
       }
 
-      await this.runControl.startWatch(runIdentifier, prKey);
+      await this.runControl.startWatch(runIdentifier, prKey, {
+        deferStatusFetch: options?.deferStatusFetch,
+      });
       if (this.prWatches.get(prKey) !== prWatch || prWatch.dismissed) {
         this.runControl.deleteOwnedWatch(runKey, prKey);
         return false;
@@ -413,6 +432,12 @@ export class PRWatchPool implements vscode.Disposable {
 
   getAllPRWatches(): WatchedPR[] {
     return Array.from(this.prWatches.values());
+  }
+
+  findPRWatchByExternalId(repo: string, prId: string): WatchedPR | undefined {
+    return Array.from(this.prWatches.values()).find(
+      pr => !pr.dismissed && pr.identifier.repo === repo && pr.identifier.prId === prId,
+    );
   }
 
   hasPRWatch(key: string): boolean {

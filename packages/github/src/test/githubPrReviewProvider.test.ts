@@ -160,6 +160,42 @@ describe('GitHubPrReviewProvider', () => {
     );
   });
 
+  it('excludes merged PRs by fetching details for closed search results before publishing', async () => {
+    const openPr = { ...createMockPrWithApi(42, 'Add feature', 'org/myrepo'), state: 'open' };
+    const mergedPr = {
+      ...createMockPrWithApi(43, 'Already merged', 'org/myrepo'),
+      state: 'closed',
+    };
+    const closedUnmergedPr = {
+      ...createMockPrWithApi(44, 'Closed without merge', 'org/myrepo'),
+      state: 'closed',
+    };
+
+    mockFetch.mockImplementation(async (url: string) => {
+      if (url.includes('search/issues')) {
+        return {
+          ok: true,
+          json: async () => ({ items: [openPr, mergedPr, closedUnmergedPr] }),
+        };
+      }
+      if (url.endsWith('/pulls/43')) {
+        return { ok: true, json: async () => ({ state: 'closed', merged: true, merged_at: '2025-01-01T00:00:00Z' }) };
+      }
+      if (url.endsWith('/pulls/44')) {
+        return { ok: true, json: async () => ({ state: 'closed', merged: false, merged_at: null }) };
+      }
+      return { ok: false, status: 404, statusText: 'Not Found' };
+    });
+
+    const listener = vi.fn();
+    provider.onDidDiscoverItems(listener);
+    await provider.refresh();
+
+    const items = listener.mock.calls[0][0];
+    expect(items.map((item: any) => item.externalId)).toEqual(['org/myrepo#42', 'org/myrepo#44']);
+    expect(items.map((item: any) => item.externalId)).not.toContain('org/myrepo#43');
+  });
+
   it('fires onDidDiscoverItems with correctly mapped DiscoveredItems', async () => {
     mockFetch.mockResolvedValueOnce({
       ok: true,
@@ -183,6 +219,7 @@ describe('GitHubPrReviewProvider', () => {
       reason: 'review_requested',
       canonicalId: 'github:pull:org/myrepo#42',
       itemType: 'pr',
+      capabilities: { gitWork: expect.any(Function) },
       badges: [{ label: 'Review requested', variant: 'warning' }],
     });
   });

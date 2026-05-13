@@ -22,7 +22,10 @@ export class WatchPersistence {
 
   async loadAll(getPRWatchKey: (pr: WatchedPR) => string): Promise<{ runs: WatchedRun[]; prs: WatchedPR[] }> {
     const data = await this.watchStore.loadAll();
-    this.persistedPRWatchKeys = new Set(data.prs.map(getPRWatchKey));
+    this.persistedPRWatchKeys = new Set([
+      ...(this.persistedPRWatchKeys ?? []),
+      ...data.prs.map(getPRWatchKey),
+    ]);
     return data;
   }
 
@@ -36,7 +39,8 @@ export class WatchPersistence {
   }
 
   rememberPRWatchKey(key: string): void {
-    this.persistedPRWatchKeys?.add(key);
+    this.persistedPRWatchKeys ??= new Set<string>();
+    this.persistedPRWatchKeys.add(key);
   }
 
   saveAll(runs: WatchedRun[], prs: WatchedPR[]): void {
