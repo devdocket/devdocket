@@ -10,7 +10,7 @@ import { ProviderRegistry } from '../services/providerRegistry';
 import { buildRelatedItemsIndex, getRelatedItemsIndexKey, type RelatedItemsIndex } from '../services/relatedItems';
 import { WatcherService, type WatchedPR, type WatchedRun } from '../services/watcherService';
 import { WorkGraph } from '../services/workGraph';
-import { DiscoveredStateStore } from '../storage/discoveredStateStore';
+import { InboxStateStore } from '../storage/inboxStateStore';
 import { ReadStateStore } from '../storage/readStateStore';
 import { isSafeUrl } from '../utils/url';
 import { buildTierColorCss } from '../webview/shared/colors';
@@ -48,7 +48,7 @@ export class MainViewProvider implements vscode.WebviewViewProvider {
     private readonly extensionUri: vscode.Uri,
     private readonly workGraph: WorkGraph,
     private readonly providerRegistry: ProviderRegistry,
-    private readonly stateStore: DiscoveredStateStore,
+    private readonly stateStore: InboxStateStore,
     private readonly readStateStore: ReadStateStore,
     private readonly watcherService: WatcherService,
     private readonly actionRegistry: ActionRegistry,
@@ -134,7 +134,7 @@ export class MainViewProvider implements vscode.WebviewViewProvider {
   }
 
   private shouldRefreshSources(reasons: ReadonlySet<RefreshReason>): boolean {
-    // Sources render provider health, discovered-state marks, related-item markers, and CI badges.
+    // Sources render provider health, inbox-state marks, related-item markers, and CI badges.
     return reasons.has('discovered')
       || reasons.has('health')
       || reasons.has('state')

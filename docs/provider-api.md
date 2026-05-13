@@ -533,9 +533,9 @@ DevDocket maintains two records in VS Code `globalState`:
 | `globalState` key | Contents |
 |-------------------|----------|
 | `devdocket.workitems` | Full `WorkItem` records with state machine lifecycle |
-| `devdocket.discovered-state` | Thin index mapping `providerId + externalId` → inbox state (`unseen`, `accepted`, `dismissed`) |
+| `devdocket.inbox-state` | Thin index mapping `providerId + externalId` → inbox state (`unseen`, `accepted`, `dismissed`) |
 
-**`ProviderItem` fields are not persisted in `devdocket.discovered-state`.** That key stores only inbox state keyed by `providerId + externalId`, which keeps the discovery index lightweight.
+**`ProviderItem` fields are not persisted in `devdocket.inbox-state`.** That key stores only inbox state keyed by `providerId + externalId`, which keeps the discovery index lightweight.
 
 When a user **accepts** an item from the Incoming tier or Sources tab, DevDocket creates a new `WorkItem` (under `devdocket.workitems`) using provider-backed data: the provider's `title` is stored verbatim, the `url` is normalized through `isSafeUrl` (rejecting non-http(s) schemes), and the `group` value is persisted on the work item as a separate field — it is **not** prefixed onto the title. Provenance metadata (`providerId`, `externalId`) is stored alongside.
 

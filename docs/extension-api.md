@@ -321,7 +321,7 @@ interface ProviderBadge {
 
 - `externalId` must be unique per provider and stable across refreshes. A good pattern is `owner/repo#123`.
 - Each `onDidDiscoverItems` emission replaces the provider's entire item set. Emit all current items, not just changes.
-- `ProviderItem` data is not stored as a persisted record; DevDocket tracks only the inbox state (`unseen`, `accepted`, `dismissed`) for discovered items in the `devdocket.discovered-state` `globalState` key.
+- `ProviderItem` data is not stored as a persisted record; DevDocket tracks only the inbox state (`unseen`, `accepted`, `dismissed`) for discovered items in the `devdocket.inbox-state` `globalState` key.
 - When a user accepts an item from the Incoming tier or Sources tab, DevDocket creates and persists a new `WorkItem` (in the `devdocket.workitems` `globalState` key) that includes a snapshot of the item's `title`, along with its `providerId`/`externalId`/`url` as provenance metadata.
 - Use `group` to organize items in the Sources tab. Items with the same group value are nested under a folder.
 - To opt into git-based actions such as Start Git Work, attach `capabilities.gitWork`. Use a literal `GitWorkInfo` when clone/ref data is already known (typical issues), or a lazy function when the provider must call its own API to resolve PR head/base data. This is a non-breaking optional addition.

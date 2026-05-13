@@ -3,7 +3,7 @@ import { runWorkerPool, type PRIdentifier } from '@devdocket/shared';
 import { DevDocketApi } from './api/types';
 import { DevDocketApiImpl } from './api/devDocketApi';
 import { JsonTaskStore } from './storage/jsonTaskStore';
-import { DiscoveredStateStore } from './storage/discoveredStateStore';
+import { InboxStateStore } from './storage/inboxStateStore';
 import { ReadStateStore } from './storage/readStateStore';
 import { ProviderLabelCache } from './storage/providerLabelCache';
 import { migrateToGlobalState } from './storage/migration';
@@ -49,15 +49,15 @@ function initializeLogging(context: vscode.ExtensionContext): vscode.LogOutputCh
   return log;
 }
 
-async function loadStores(globalState: vscode.Memento): Promise<{ workGraph: WorkGraph; stateStore: DiscoveredStateStore; readStateStore: ReadStateStore; labelCache: ProviderLabelCache }> {
+async function loadStores(globalState: vscode.Memento): Promise<{ workGraph: WorkGraph; stateStore: InboxStateStore; readStateStore: ReadStateStore; labelCache: ProviderLabelCache }> {
   const store = new JsonTaskStore(globalState);
   const wg = new WorkGraph(store);
   await wg.load();
   logger.debug(`Loaded ${wg.getAll().length} work items`);
 
-  const ss = new DiscoveredStateStore(globalState);
+  const ss = new InboxStateStore(globalState);
   await ss.load();
-  logger.debug('Loaded discovered state');
+  logger.debug('Loaded inbox state');
 
   const readStateStore = new ReadStateStore(globalState);
   await readStateStore.load();
@@ -74,7 +74,7 @@ async function loadStores(globalState: vscode.Memento): Promise<{ workGraph: Wor
   return { workGraph: wg, stateStore: ss, readStateStore, labelCache };
 }
 
-async function migrateDiscoveredState(workGraph: WorkGraph, stateStore: DiscoveredStateStore): Promise<void> {
+async function migrateInboxState(workGraph: WorkGraph, stateStore: InboxStateStore): Promise<void> {
   const itemsToMigrate: Array<{ providerId: string; externalId: string; state: 'accepted' }> = [];
 
   for (const item of workGraph.getAll()) {
@@ -460,7 +460,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<DevDoc
   const storagePath = context.globalStorageUri.fsPath;
   await migrateToGlobalState(context.globalState, storagePath);
   const { workGraph: wg, stateStore: ss, readStateStore, labelCache } = await loadStores(context.globalState);
-  await migrateDiscoveredState(wg, ss);
+  await migrateInboxState(wg, ss);
 
   const pr = new ProviderRegistry(
     ss, labelCache,
@@ -521,7 +521,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<DevDoc
         const ssPruned = await ss.prune(active);
         const rsPruned = await readStateStore.prune(active);
         if (ssPruned > 0 || rsPruned > 0) {
-          logger.debug(`Pruned ${ssPruned} discovered-state and ${rsPruned} read-state records for provider ${providerId}`);
+          logger.debug(`Pruned ${ssPruned} inbox-state and ${rsPruned} read-state records for provider ${providerId}`);
         }
       } catch (err) {
         logger.error('DevDocket: prune failed', err);

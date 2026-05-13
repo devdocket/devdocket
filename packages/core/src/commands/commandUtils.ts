@@ -1,7 +1,7 @@
 import * as vscode from 'vscode';
 import { WorkItemState } from '../models/workItem';
 import { WorkGraph } from '../services/workGraph';
-import { DiscoveredStateStore, type InboxState } from '../storage/discoveredStateStore';
+import { InboxStateStore, type InboxState } from '../storage/inboxStateStore';
 import { logger } from '../services/logger';
 
 /**
@@ -109,7 +109,7 @@ export interface AcceptableItem {
 
 export async function batchAcceptItems<T extends AcceptableItem>(
   workGraph: WorkGraph,
-  stateStore: DiscoveredStateStore,
+  stateStore: InboxStateStore,
   items: T[],
   logLabel: string,
 ): Promise<T[]> {

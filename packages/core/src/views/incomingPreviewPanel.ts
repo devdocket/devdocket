@@ -4,7 +4,7 @@ import { logger } from '../services/logger';
 import { ProviderRegistry } from '../services/providerRegistry';
 import { buildRelatedItemsIndex, resolveRelatedItemsFor, type RelatedItemsIndex } from '../services/relatedItems';
 import { WorkGraph } from '../services/workGraph';
-import { DiscoveredStateStore } from '../storage/discoveredStateStore';
+import { InboxStateStore } from '../storage/inboxStateStore';
 import { ReadStateStore } from '../storage/readStateStore';
 import { isSafeUrl } from '../utils/url';
 import { getProviderItemKey, parseProviderItemKey } from './providerItemKey';
@@ -29,7 +29,7 @@ export class IncomingPreviewPanel {
 
   private readonly panel: vscode.WebviewPanel;
   private readonly providerRegistry: ProviderRegistry;
-  private readonly stateStore: DiscoveredStateStore;
+  private readonly stateStore: InboxStateStore;
   private readonly readStateStore: ReadStateStore;
   private readonly workGraph: WorkGraph;
   private readonly providerId: string;
@@ -42,7 +42,7 @@ export class IncomingPreviewPanel {
   static open(
     context: vscode.ExtensionContext,
     providerRegistry: ProviderRegistry,
-    stateStore: DiscoveredStateStore,
+    stateStore: InboxStateStore,
     readStateStore: ReadStateStore,
     workGraph: WorkGraph,
     providerId: string,
@@ -85,7 +85,7 @@ export class IncomingPreviewPanel {
   private constructor(
     panel: vscode.WebviewPanel,
     providerRegistry: ProviderRegistry,
-    stateStore: DiscoveredStateStore,
+    stateStore: InboxStateStore,
     readStateStore: ReadStateStore,
     workGraph: WorkGraph,
     providerId: string,

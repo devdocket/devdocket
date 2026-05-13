@@ -170,10 +170,10 @@ describe('activate()', () => {
     expect(openSpy).toHaveBeenCalled();
   });
 
-  it('prunes stale read-state and discovered-state records after non-empty provider refresh', async () => {
+  it('prunes stale read-state and inbox-state records after non-empty provider refresh', async () => {
     const globalState = context.globalState as InstanceType<typeof MockMemento>;
     await globalState.update('devdocket.migrated', true);
-    await globalState.update('devdocket.discovered-state', [
+    await globalState.update('devdocket.inbox-state', [
       { providerId: 'prune-provider', externalId: 'keep', inboxState: 'accepted' },
       { providerId: 'prune-provider', externalId: 'stale', inboxState: 'dismissed' },
       { providerId: 'other-provider', externalId: 'stale', inboxState: 'accepted' },
@@ -210,7 +210,7 @@ describe('activate()', () => {
       const active = pruneSpy.mock.calls.at(-1)?.[0] as Map<string, unknown[]>;
       expect(active.get('prune-provider')).toEqual([activeItem]);
 
-      const discoveredRecords = globalState.get<Array<{ providerId: string; externalId: string }>>('devdocket.discovered-state') ?? [];
+      const discoveredRecords = globalState.get<Array<{ providerId: string; externalId: string }>>('devdocket.inbox-state') ?? [];
       expect(discoveredRecords.map(record => `${record.providerId}::${record.externalId}`).sort()).toEqual([
         'other-provider::stale',
         'prune-provider::keep',
@@ -220,10 +220,10 @@ describe('activate()', () => {
     }
   });
 
-  it('leaves read-state and discovered-state records untouched after empty provider refresh', async () => {
+  it('leaves read-state and inbox-state records untouched after empty provider refresh', async () => {
     const globalState = context.globalState as InstanceType<typeof MockMemento>;
     await globalState.update('devdocket.migrated', true);
-    await globalState.update('devdocket.discovered-state', [
+    await globalState.update('devdocket.inbox-state', [
       { providerId: 'empty-provider', externalId: 'stale', inboxState: 'accepted' },
     ]);
     await globalState.update('devdocket.read-state', ['empty-provider::stale']);
@@ -247,7 +247,7 @@ describe('activate()', () => {
       const active = pruneSpy.mock.calls.at(-1)?.[0] as Map<string, unknown[]>;
       expect(active.get('empty-provider')).toEqual([]);
       expect(globalState.get<string[]>('devdocket.read-state')).toEqual(['empty-provider::stale']);
-      expect(globalState.get<Array<{ providerId: string; externalId: string }>>('devdocket.discovered-state')).toEqual([
+      expect(globalState.get<Array<{ providerId: string; externalId: string }>>('devdocket.inbox-state')).toEqual([
         { providerId: 'empty-provider', externalId: 'stale', inboxState: 'accepted' },
       ]);
     } finally {
@@ -302,7 +302,7 @@ describe('activate()', () => {
   it('skips prune after a truncated provider refresh', async () => {
     const globalState = context.globalState as InstanceType<typeof MockMemento>;
     await globalState.update('devdocket.migrated', true);
-    await globalState.update('devdocket.discovered-state', [
+    await globalState.update('devdocket.inbox-state', [
       { providerId: 'truncated-provider', externalId: 'stale', inboxState: 'accepted' },
     ]);
     await globalState.update('devdocket.read-state', ['truncated-provider::stale']);
@@ -329,14 +329,14 @@ describe('activate()', () => {
       } as any);
 
       await vi.waitFor(() => {
-        const records = globalState.get<Array<{ providerId: string; externalId: string }>>('devdocket.discovered-state') ?? [];
+        const records = globalState.get<Array<{ providerId: string; externalId: string }>>('devdocket.inbox-state') ?? [];
         expect(records.some(record => record.providerId === 'truncated-provider' && record.externalId === 'one')).toBe(true);
       });
       await flushMicrotasks();
 
       expect(pruneSpy).not.toHaveBeenCalled();
       expect(globalState.get<string[]>('devdocket.read-state')).toEqual(['truncated-provider::stale']);
-      const discoveredRecords = globalState.get<Array<{ providerId: string; externalId: string }>>('devdocket.discovered-state') ?? [];
+      const discoveredRecords = globalState.get<Array<{ providerId: string; externalId: string }>>('devdocket.inbox-state') ?? [];
       expect(discoveredRecords.some(record => record.providerId === 'truncated-provider' && record.externalId === 'stale')).toBe(true);
     } finally {
       pruneSpy.mockRestore();
@@ -833,8 +833,8 @@ describe('activate()', () => {
 
     await activate(context);
 
-    // The discovered state should contain the accepted state in globalState
-    const discoveredState = globalState.get<unknown[]>('devdocket.discovered-state');
+    // The inbox state should contain the accepted state in globalState
+    const discoveredState = globalState.get<unknown[]>('devdocket.inbox-state');
     expect(discoveredState).toBeDefined();
     const acceptedRecord = (discoveredState as any[]).find(
       (r: any) => r.providerId === 'gh' && r.externalId === 'ext-99' && r.inboxState === 'accepted',

@@ -7,7 +7,7 @@ import { PRWatcherRegistry } from '../services/prWatcherRegistry';
 import { WorkGraph } from '../services/workGraph';
 import { ITaskStore } from '../storage/taskStore';
 import * as vscode from 'vscode';
-import { InboxState } from '../storage/discoveredStateStore';
+import { InboxState } from '../storage/inboxStateStore';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 function createMockStateStore() {
@@ -28,7 +28,7 @@ function createMockStateStore() {
     loadAll: vi.fn(async () => []),
     onDidChange: vi.fn(() => ({ dispose: vi.fn() })),
     dispose: vi.fn(),
-  } as unknown as import('../storage/discoveredStateStore').DiscoveredStateStore;
+  } as unknown as import('../storage/inboxStateStore').InboxStateStore;
 }
 
 function createMockProvider(id: string): DevDocketProvider {

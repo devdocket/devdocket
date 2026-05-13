@@ -1,10 +1,10 @@
 import { ProviderRegistry } from './providerRegistry';
-import { DiscoveredStateStore } from '../storage/discoveredStateStore';
+import { InboxStateStore } from '../storage/inboxStateStore';
 import { buildCanonicalHiddenSet } from './canonicalDedup';
 
 export function getInboxUnseenCount(
   providerRegistry: ProviderRegistry,
-  stateStore: DiscoveredStateStore,
+  stateStore: InboxStateStore,
   seenItems?: ReadonlySet<string>,
 ): number {
   const hidden = buildCanonicalHiddenSet(

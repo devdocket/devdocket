@@ -9,7 +9,7 @@ import {
   requiredEnum,
 } from './validation';
 
-const STORAGE_KEY = 'devdocket.discovered-state';
+const STORAGE_KEY = 'devdocket.inbox-state';
 
 /** Possible states for a provider-discovered item in the inbox workflow. */
 const inboxStates = ['unseen', 'accepted', 'dismissed'] as const;
@@ -19,7 +19,7 @@ export type InboxState = (typeof inboxStates)[number];
 const validInboxStates = new Set<string>(inboxStates);
 
 /** Persisted mapping of a provider item to its inbox state. */
-export interface DiscoveredStateRecord {
+export interface InboxStateRecord {
   providerId: string;
   externalId: string;
   inboxState: InboxState;
@@ -30,10 +30,10 @@ export interface DiscoveredStateRecord {
 }
 
 /**
- * Validates that a parsed JSON value has the required shape of a DiscoveredStateRecord.
+ * Validates that a parsed JSON value has the required shape of an InboxStateRecord.
  * Returns a descriptive error string if invalid, or undefined if valid.
  */
-function validateDiscoveredStateRecord(value: unknown, index: number): string | undefined {
+function validateInboxStateRecord(value: unknown, index: number): string | undefined {
   const result = validateObject(value, `Record at index ${index}`);
   if (typeof result === 'string') return result;
 
@@ -52,9 +52,9 @@ function validateDiscoveredStateRecord(value: unknown, index: number): string | 
  * Only the state enum is stored — item data (title, description, url) is
  * always read live from the provider.
  */
-export class DiscoveredStateStore {
+export class InboxStateStore {
   private readonly globalState: Memento;
-  private readonly cache = new Map<string, DiscoveredStateRecord>();
+  private readonly cache = new Map<string, InboxStateRecord>();
   private readonly _onDidChange = new vscode.EventEmitter<void>();
   readonly onDidChange = this._onDidChange.event;
   private loaded = false;
@@ -102,7 +102,7 @@ export class DiscoveredStateStore {
     if (!this.loaded) { await this.load(); }
     const k = this.key(providerId, externalId);
     const previousValue = this.cache.get(k);
-    const newRecord: DiscoveredStateRecord = { providerId, externalId, inboxState: state };
+    const newRecord: InboxStateRecord = { providerId, externalId, inboxState: state };
     if (version !== undefined) {
       newRecord.version = version;
     } else if (previousValue?.version !== undefined) {
@@ -125,7 +125,7 @@ export class DiscoveredStateStore {
     for (const item of items) {
       const k = this.key(item.providerId, item.externalId);
       const previousRecord = this.cache.get(k);
-      const newRecord: DiscoveredStateRecord = { providerId: item.providerId, externalId: item.externalId, inboxState: item.state };
+      const newRecord: InboxStateRecord = { providerId: item.providerId, externalId: item.externalId, inboxState: item.state };
       if (item.version !== undefined) {
         newRecord.version = item.version;
       } else if (previousRecord?.version !== undefined) {
@@ -145,7 +145,7 @@ export class DiscoveredStateStore {
   /**
    * Returns all persisted state records, loading from globalState on first call.
    */
-  async loadAll(): Promise<DiscoveredStateRecord[]> {
+  async loadAll(): Promise<InboxStateRecord[]> {
     await this.load();
     return Array.from(this.cache.values());
   }
@@ -159,15 +159,15 @@ export class DiscoveredStateStore {
     this.cache.clear();
     if (Array.isArray(parsed)) {
       for (let i = 0; i < parsed.length; i++) {
-        const error = validateDiscoveredStateRecord(parsed[i], i);
+        const error = validateInboxStateRecord(parsed[i], i);
         if (error) {
-          logger.warn(`Skipping invalid discovered state record: ${error}`);
+          logger.warn(`Skipping invalid inbox state record: ${error}`);
           continue;
         }
-        const record = parsed[i] as DiscoveredStateRecord;
+        const record = parsed[i] as InboxStateRecord;
         this.cache.set(this.key(record.providerId, record.externalId), record);
       }
-      logger.debug(`Loaded discovered state: ${this.cache.size} entries`);
+      logger.debug(`Loaded inbox state: ${this.cache.size} entries`);
     }
     this.loaded = true;
   }

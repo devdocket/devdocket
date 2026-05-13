@@ -43,7 +43,7 @@ flowchart LR
 
     subgraph Core["DevDocket Core"]
         PR["ProviderRegistry"]
-        SS["DiscoveredStateStore"]
+        SS["InboxStateStore"]
         subgraph UI["Sidebar UI"]
             Incoming["Incoming tier<br/>(unseen)"]
             Sources["Sources tab<br/>(all items)"]

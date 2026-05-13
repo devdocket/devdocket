@@ -11,7 +11,7 @@ const SIZE_WARNING_THRESHOLD = 512 * 1024; // 512 KB
 /** Maps each legacy JSON filename to its globalState key. */
 export const FILE_KEY_MAP: Record<string, string> = {
   'workitems.json': 'devdocket.workitems',
-  'discovered-state.json': 'devdocket.discovered-state',
+  'discovered-state.json': 'devdocket.inbox-state',
   'read-state.json': 'devdocket.read-state',
   'provider-labels.json': 'devdocket.provider-labels',
   'watches.json': 'devdocket.watches',

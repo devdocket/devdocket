@@ -6,7 +6,7 @@ import { ProviderRegistry } from '../services/providerRegistry';
 import { buildRelatedItemsIndex, resolveRelatedItemsFor, type RelatedItemsIndex } from '../services/relatedItems';
 import { VALID_TRANSITIONS, WorkGraph } from '../services/workGraph';
 import type { WatcherService, WatchedPR, WatchedRun } from '../services/watcherService';
-import type { DiscoveredStateStore } from '../storage/discoveredStateStore';
+import type { InboxStateStore } from '../storage/inboxStateStore';
 import { isSafeUrl } from '../utils/url';
 import { buildProviderBadge, buildProviderBadges, buildTypeBadge } from './badges';
 import { parseProviderItemKey } from './providerItemKey';
@@ -55,7 +55,7 @@ export class WorkItemEditorPanel {
   private static readonly viewType = 'devdocket.editItem';
   private static panelManager = new PanelManager();
   private static actionRegistry?: ActionRegistry;
-  private static stateStore?: DiscoveredStateStore;
+  private static stateStore?: InboxStateStore;
   private static watcherService?: WatcherService;
 
   private readonly panel: vscode.WebviewPanel;
@@ -93,7 +93,7 @@ export class WorkItemEditorPanel {
     WorkItemEditorPanel.panelManager = manager;
   }
 
-  static setDependencies(actionRegistry?: ActionRegistry, stateStore?: DiscoveredStateStore, watcherService?: WatcherService): void {
+  static setDependencies(actionRegistry?: ActionRegistry, stateStore?: InboxStateStore, watcherService?: WatcherService): void {
     WorkItemEditorPanel.actionRegistry = actionRegistry;
     WorkItemEditorPanel.stateStore = stateStore;
     WorkItemEditorPanel.watcherService = watcherService;

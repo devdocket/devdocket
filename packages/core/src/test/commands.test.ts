@@ -6,7 +6,7 @@ import { isSafeUrl } from '../utils/url';
 import type { WorkGraph } from '../services/workGraph';
 import type { ActionRegistry } from '../services/actionRegistry';
 import type { ProviderRegistry } from '../services/providerRegistry';
-import type { DiscoveredStateStore } from '../storage/discoveredStateStore';
+import type { InboxStateStore } from '../storage/inboxStateStore';
 import type { ProviderLabelCache } from '../storage/providerLabelCache';
 import type { WatcherRegistry } from '../services/watcherRegistry';
 import type { PRWatcherRegistry } from '../services/prWatcherRegistry';
@@ -85,7 +85,7 @@ function createMockActionRegistry(): { [K in keyof UsedActionRegistryMethods]: M
   };
 }
 
-type UsedStateStoreMethods = Pick<DiscoveredStateStore, 'setState' | 'setStates' | 'getState'>;
+type UsedStateStoreMethods = Pick<InboxStateStore, 'setState' | 'setStates' | 'getState'>;
 
 function createMockStateStore(): { [K in keyof UsedStateStoreMethods]: Mock } {
   return {

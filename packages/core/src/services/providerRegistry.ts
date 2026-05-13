@@ -1,6 +1,6 @@
 import * as vscode from 'vscode';
 import { DevDocketProvider, ProviderItem, type ResolvedItem } from '../api/types';
-import { DiscoveredStateStore, InboxState } from '../storage/discoveredStateStore';
+import { InboxStateStore, InboxState } from '../storage/inboxStateStore';
 import { ProviderLabelCache } from '../storage/providerLabelCache';
 import { logger } from './logger';
 import { WorkItemState } from '../models/workItem';
@@ -24,7 +24,7 @@ function isActiveWorkItemState(state: WorkItemState | undefined): boolean {
  * Central registry for {@link DevDocketProvider} instances.
  *
  * Manages provider lifecycle, tracks provider items from each provider,
- * and coordinates inbox state persistence through the {@link DiscoveredStateStore}.
+ * and coordinates inbox state persistence through the {@link InboxStateStore}.
  * Fires events when providers are registered or when their provider items change.
  */
 export class ProviderRegistry {
@@ -85,7 +85,7 @@ export class ProviderRegistry {
   }
 
   constructor(
-    private readonly stateStore: DiscoveredStateStore,
+    private readonly stateStore: InboxStateStore,
     private readonly labelCache?: ProviderLabelCache,
     private readonly getWorkItemState?: (providerId: string, externalId: string) => WorkItemState | undefined,
     // Kept for constructor compatibility; suppressed version bumps no longer log activity.
@@ -509,7 +509,7 @@ export class ProviderRegistry {
           this._onDidAddNewUnseenItems.fire(newUnseenUpdates.length);
         }
       } catch (err) {
-        logger.error('Failed to persist discovered states', err);
+        logger.error('Failed to persist inbox states', err);
       }
     }
     if (!this._disposed) {

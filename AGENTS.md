@@ -68,7 +68,7 @@ User-facing terminology: **never** use the legacy view names ("Inbox view", "Que
 ### Two persisted stores (both backed by VS Code `globalState`)
 
 - **`devdocket.workitems`** — Persisted `WorkItem` records with state machine lifecycle (`New` → `InProgress` → `Done` → `Archived`).
-- **`devdocket.discovered-state`** — Thin index mapping `providerId + externalId` → `InboxState` (`unseen` | `accepted` | `dismissed`). Provider item data (title, description, url) is **not persisted** — always read live from the provider.
+- **`devdocket.inbox-state`** — Thin index mapping `providerId + externalId` → `InboxState` (`unseen` | `accepted` | `dismissed`). Provider item data (title, description, url) is **not persisted** — always read live from the provider.
 
 See `.github/instructions/storage.instructions.md` for the full storage contract (including the read-state, provider-labels, and watches keys).
 
@@ -118,7 +118,7 @@ When resolving merge conflicts or syncing with `dev`, use `git merge origin/dev`
 
 ### Storage writes rely on `Memento.update` atomicity
 
-Stores like `JsonTaskStore` and `DiscoveredStateStore` write through `globalState.update(...)`, which VS Code treats as atomic from the extension's perspective. There is **no** write-queue or file-level locking. See `.github/instructions/storage.instructions.md` for the full convention.
+Stores like `JsonTaskStore` and `InboxStateStore` write through `globalState.update(...)`, which VS Code treats as atomic from the extension's perspective. There is **no** write-queue or file-level locking. See `.github/instructions/storage.instructions.md` for the full convention.
 
 ### vscode module is mocked for tests
 
