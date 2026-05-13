@@ -25,6 +25,19 @@ function makeResponse(overrides?: Partial<Response>): Response {
   } as Response;
 }
 
+function makeCheckRunResponse(overrides?: Record<string, unknown>) {
+  return {
+    id: 12345,
+    name: 'CodeQL',
+    status: 'completed',
+    conclusion: 'success',
+    started_at: '2026-01-01T00:00:00Z',
+    completed_at: '2026-01-01T00:05:00Z',
+    app: { slug: 'github-advanced-security' },
+    ...overrides,
+  };
+}
+
 describe('GitHubAdvancedSecurityWatcher', () => {
   let watcher: GitHubAdvancedSecurityWatcher;
   let fetchSpy: ReturnType<typeof vi.spyOn> | undefined;
@@ -96,14 +109,7 @@ describe('GitHubAdvancedSecurityWatcher', () => {
 
   describe('getRunStatus', () => {
     it('maps GitHub check run response to RunStatus', async () => {
-      const checkRunResponse = {
-        id: 12345,
-        name: 'CodeQL',
-        status: 'completed',
-        conclusion: 'success',
-        started_at: '2026-01-01T00:00:00Z',
-        completed_at: '2026-01-01T00:05:00Z',
-      };
+      const checkRunResponse = makeCheckRunResponse();
       let requestSignal: AbortSignal | undefined;
       fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementationOnce((_url, init) => {
         requestSignal = init?.signal as AbortSignal | undefined;
@@ -139,12 +145,10 @@ describe('GitHubAdvancedSecurityWatcher', () => {
 
     it('maps in_progress status to running and omits null conclusion', async () => {
       fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(makeResponse({
-        json: async () => ({
-          id: 12345,
+        json: async () => makeCheckRunResponse({
           name: 'Secret scanning',
           status: 'in_progress',
           conclusion: null,
-          started_at: '2026-01-01T00:00:00Z',
           completed_at: null,
         }),
       }));
@@ -160,9 +164,7 @@ describe('GitHubAdvancedSecurityWatcher', () => {
 
     it('maps waiting check run status to queued', async () => {
       fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(makeResponse({
-        json: async () => ({
-          id: 12345,
-          name: 'CodeQL',
+        json: async () => makeCheckRunResponse({
           status: 'waiting',
           conclusion: null,
           started_at: null,
@@ -174,6 +176,16 @@ describe('GitHubAdvancedSecurityWatcher', () => {
 
       expect(result.overallState).toBe('queued');
       expect(result.jobs[0].state).toBe('queued');
+    });
+
+    it('throws when the fetched check run belongs to another app', async () => {
+      fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(makeResponse({
+        json: async () => makeCheckRunResponse({ app: { slug: 'other-check-provider' } }),
+      }));
+
+      await expect(watcher.getRunStatus(makeIdentifier())).rejects.toThrow(
+        "Expected GitHub Advanced Security check run but found app 'other-check-provider'",
+      );
     });
 
     it('throws when repo is not set on identifier', async () => {
@@ -247,14 +259,7 @@ describe('GitHubAdvancedSecurityWatcher', () => {
         onCancellationRequested: vi.fn(() => ({ dispose })),
       };
       fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(makeResponse({
-        json: async () => ({
-          id: 12345,
-          name: 'CodeQL',
-          status: 'completed',
-          conclusion: 'success',
-          started_at: '2026-01-01T00:00:00Z',
-          completed_at: '2026-01-01T00:05:00Z',
-        }),
+        json: async () => makeCheckRunResponse(),
       }));
 
       await watcher.getRunStatus(makeIdentifier(), token as any);

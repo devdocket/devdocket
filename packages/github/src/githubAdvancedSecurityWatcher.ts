@@ -19,6 +19,9 @@ interface GitHubCheckRun {
   conclusion: 'success' | 'failure' | 'cancelled' | 'skipped' | 'timed_out' | 'action_required' | 'neutral' | null;
   started_at?: string | null;
   completed_at?: string | null;
+  app?: {
+    slug?: string | null;
+  } | null;
 }
 
 interface CancellationTokenWithEvent extends CancellationTokenLike {
@@ -27,6 +30,7 @@ interface CancellationTokenWithEvent extends CancellationTokenLike {
 
 const CHECK_RUN_URL_RE = /^\/([^/]+)\/([^/]+)\/runs\/(\d+)\/?$/;
 const FETCH_TIMEOUT_MS = 30_000;
+const GITHUB_ADVANCED_SECURITY_APP_SLUG = 'github-advanced-security';
 
 export class GitHubAdvancedSecurityWatcher implements DevDocketRunWatcher {
   readonly id = 'github-advanced-security';
@@ -80,6 +84,10 @@ export class GitHubAdvancedSecurityWatcher implements DevDocketRunWatcher {
       `https://api.github.com/repos/${encodedOwner}/${encodedRepo}/check-runs/${encodedRunId}`,
       token,
     );
+
+    if (checkRun.app?.slug !== GITHUB_ADVANCED_SECURITY_APP_SLUG) {
+      throw new Error(`Expected GitHub Advanced Security check run but found app '${checkRun.app?.slug ?? 'unknown'}'`);
+    }
 
     const overallState = this.mapState(checkRun.status);
     const conclusion = checkRun.conclusion ? this.mapConclusion(checkRun.conclusion) : undefined;
