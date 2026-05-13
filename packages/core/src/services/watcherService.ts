@@ -1036,16 +1036,15 @@ export class WatcherService implements vscode.Disposable {
 
   /**
    * Resolve a run identifier to one backed by a registered watcher.
-   * If the identifier's providerId matches a registered watcher directly, returns as-is.
-   * Otherwise, tries URL-based matching against all registered run watchers.
-   * Returns the resolved identifier, or the original if no resolution is possible.
+   *
+   * If upstream metadata already classified the run, trust it. Core must not
+   * second-guess provider-owned classifications by inspecting host-specific URLs.
+   *
+   * If the identifier has no provider hint, fall back to URL-based matching for
+   * synthetic identifiers created from a raw URL.
    */
   private resolveRunIdentifier(identifier: RunIdentifier): RunIdentifier {
-    if (this.watcherRegistry.get(identifier.providerId)) {
-      return identifier;
-    }
-
-    if (this.isGitHubCheckRunUrl(identifier.url)) {
+    if (identifier.providerId) {
       return identifier;
     }
 
@@ -1063,17 +1062,6 @@ export class WatcherService implements vscode.Disposable {
     }
 
     return identifier;
-  }
-
-  private isGitHubCheckRunUrl(url: string): boolean {
-    try {
-      const u = new URL(url);
-      return u.protocol === 'https:'
-        && u.hostname === 'github.com'
-        && /^\/[^/]+\/[^/]+\/runs\/\d+\/?$/.test(u.pathname);
-    } catch {
-      return false;
-    }
   }
 
   private async getPersistedPRWatchKeys(): Promise<Set<string>> {
