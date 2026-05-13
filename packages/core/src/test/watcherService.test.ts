@@ -381,6 +381,34 @@ describe('WatcherService', () => {
       expect(service.getActiveWatches()).toHaveLength(1);
       expect(service.getActiveWatches()[0].identifier.runId).toBe('run-1');
     });
+
+    it('does not clobber a run watch started while persisted watches load', async () => {
+      const identifier = { ...createIdentifier(), displayName: 'Live Run' };
+      const persistedWatch: WatchedRun = {
+        identifier: { ...identifier, displayName: 'Persisted Run' },
+        status: { overallState: 'completed', conclusion: 'success', jobs: [] },
+        watchedAt: new Date().toISOString(),
+        lastPolledAt: new Date().toISOString(),
+        dismissed: false,
+      };
+      (watchStore.loadAll as ReturnType<typeof vi.fn>).mockImplementation(() => new Promise(resolve => {
+        setTimeout(() => resolve({ runs: [persistedWatch], prs: [] }), 100);
+      }));
+      const watcher = createMockWatcher('test');
+      registry.register(watcher);
+
+      const loadPromise = service.loadPersistedWatches();
+      await vi.advanceTimersByTimeAsync(50);
+
+      const started = await service.startWatch(identifier);
+      await vi.advanceTimersByTimeAsync(50);
+      await loadPromise;
+
+      const active = service.getActiveWatches();
+      expect(active).toHaveLength(1);
+      expect(active[0]).toBe(started);
+      expect(active[0].identifier.displayName).toBe('Live Run');
+    });
   });
 
   describe('PR watching', () => {
@@ -482,6 +510,18 @@ describe('WatcherService', () => {
       expect(changeSpy).toHaveBeenCalled();
     });
 
+    it('finds active PR watches by repo and PR id without matching provider id', async () => {
+      const prWatcher = createMockPRWatcher('github-pr-watcher');
+      prRegistry.register(prWatcher);
+      const watch = await service.startPRWatch(createPRIdentifier('github-pr-watcher'));
+
+      expect(service.findPRWatchByExternalId('owner/repo', '42')).toBe(watch);
+      expect(service.findPRWatchByExternalId('owner/repo', '99')).toBeUndefined();
+
+      service.dismissPRWatch(watch.identifier);
+      expect(service.findPRWatchByExternalId('owner/repo', '42')).toBeUndefined();
+    });
+
     it('is idempotent when already watching the same PR (returns existing)', async () => {
       const prWatcher = createMockPRWatcher();
       prRegistry.register(prWatcher);
@@ -549,6 +589,144 @@ describe('WatcherService', () => {
       expect(result.childRunKeys).toHaveLength(1);
       expect(service.getActiveWatches()).toHaveLength(1);
       expect(service.getActiveWatches()[0].parentPRKey).toBeDefined();
+      expect(runWatcher.getRunStatus).toHaveBeenCalledTimes(1);
+    });
+
+    it('can defer initial child run status fetches while still registering child runs', async () => {
+      const runWatcher = createMockWatcher('github-actions');
+      registry.register(runWatcher);
+
+      const prWatcher = createMockPRWatcher('test-pr', async () => ({
+        prState: 'open',
+        runs: [{
+          providerId: 'github-actions',
+          runId: 'run-1',
+          displayName: 'CI Build',
+          url: 'https://example.com/run/1',
+          repo: 'owner/repo',
+        }],
+      }));
+      prRegistry.register(prWatcher);
+
+      const result = await service.startPRWatch(createPRIdentifier(), { deferChildRunStatus: true });
+
+      expect(result.childRunKeys).toHaveLength(1);
+      expect(service.getActiveWatches()).toHaveLength(1);
+      expect(service.getActiveWatches()[0].parentPRKey).toBe(service.getPRWatchKey(result.identifier));
+      expect(runWatcher.getRunStatus).not.toHaveBeenCalled();
+    });
+
+    it('suppresses completion and failure events for the first deferred child run status fetch', async () => {
+      const runWatcher: DevDocketRunWatcher = {
+        id: 'github-actions',
+        label: 'GitHub Actions',
+        canWatch: vi.fn().mockReturnValue(true),
+        parseRunUrl: vi.fn(),
+        getRunStatus: vi.fn(async (identifier: RunIdentifier) => {
+          if (identifier.runId === 'completed-run') {
+            return { overallState: 'completed' as const, conclusion: 'success' as const, jobs: [] };
+          }
+          return {
+            overallState: 'running' as const,
+            conclusion: undefined,
+            jobs: [{ name: 'build', state: 'completed' as const, conclusion: 'failure' as const }],
+          };
+        }),
+      };
+      registry.register(runWatcher);
+
+      const prWatcher = createMockPRWatcher('test-pr', async () => ({
+        prState: 'open',
+        runs: [
+          {
+            providerId: 'github-actions',
+            runId: 'completed-run',
+            displayName: 'Completed Run',
+            url: 'https://example.com/run/completed',
+            repo: 'owner/repo',
+          },
+          {
+            providerId: 'github-actions',
+            runId: 'failing-run',
+            displayName: 'Failing Run',
+            url: 'https://example.com/run/failing',
+            repo: 'owner/repo',
+          },
+        ],
+      }));
+      prRegistry.register(prWatcher);
+      const completeSpy = vi.fn();
+      const failureSpy = vi.fn();
+      service.onDidCompleteRun(completeSpy);
+      service.onDidDetectJobFailure(failureSpy);
+
+      await service.startPRWatch(createPRIdentifier(), { deferChildRunStatus: true });
+      expect(service.getActiveWatches().every(w => w.suppressNextStatusEvents)).toBe(true);
+
+      await vi.advanceTimersByTimeAsync(60000);
+
+      expect(completeSpy).not.toHaveBeenCalled();
+      expect(failureSpy).not.toHaveBeenCalled();
+      expect(service.getActiveWatches().every(w => w.suppressNextStatusEvents === undefined)).toBe(true);
+      expect(service.getActiveWatches().map(w => w.status.overallState).sort()).toEqual(['completed', 'running']);
+
+      (runWatcher.getRunStatus as ReturnType<typeof vi.fn>).mockImplementation(async (identifier: RunIdentifier) => {
+        if (identifier.runId === 'completed-run') {
+          return { overallState: 'completed' as const, conclusion: 'success' as const, jobs: [] };
+        }
+        return {
+          overallState: 'running' as const,
+          conclusion: undefined,
+          jobs: [
+            { name: 'build', state: 'completed' as const, conclusion: 'failure' as const },
+            { name: 'test', state: 'completed' as const, conclusion: 'failure' as const },
+          ],
+        };
+      });
+
+      await vi.advanceTimersByTimeAsync(60000);
+
+      expect(failureSpy).toHaveBeenCalledTimes(1);
+      expect(failureSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          job: expect.objectContaining({ name: 'test', conclusion: 'failure' }),
+        }),
+      );
+    });
+
+    it('clears failure acknowledgement when deferred child registration replaces a dismissed run', async () => {
+      const runWatcher = createMockWatcher('github-actions');
+      registry.register(runWatcher);
+
+      const runIdentifier = {
+        providerId: 'github-actions',
+        runId: 'run-1',
+        displayName: 'CI Build',
+        url: 'https://example.com/run/1',
+        repo: 'owner/repo',
+      };
+      const prWatcher = createMockPRWatcher('test-pr', async () => ({
+        prState: 'open',
+        runs: [runIdentifier],
+      }));
+      prRegistry.register(prWatcher);
+
+      const runKey = (service as any).getWatchKey(runIdentifier);
+      (service as any).watches.set(runKey, {
+        identifier: runIdentifier,
+        status: { overallState: 'completed', conclusion: 'failure', jobs: [] },
+        watchedAt: new Date().toISOString(),
+        lastPolledAt: new Date().toISOString(),
+        dismissed: true,
+        parentPRKey: service.getPRWatchKey(createPRIdentifier()),
+      });
+      (service as any).acknowledgedFailedRunKeys.add(runKey);
+
+      await service.startPRWatch(createPRIdentifier(), { deferChildRunStatus: true });
+
+      const [rewatchedRun] = service.getActiveWatches();
+      expect(rewatchedRun).toBeDefined();
+      expect(service.isFailureAcknowledged(rewatchedRun)).toBe(false);
     });
 
     it('adds child runs when the provider-owned watcher is registered without warn logs', async () => {
@@ -824,6 +1002,58 @@ describe('WatcherService', () => {
 
       expect(service.getActivePRWatches()).toHaveLength(1);
       expect(service.getActivePRWatches()[0].identifier.prId).toBe('42');
+    });
+
+    it('does not clobber a PR watch started while persisted watches load', async () => {
+      const identifier = createPRIdentifier();
+      const persistedPR = {
+        identifier: { ...identifier, displayName: 'Persisted PR #42' },
+        prState: 'closed' as const,
+        childRunKeys: [],
+        watchedAt: new Date().toISOString(),
+        lastPolledAt: new Date().toISOString(),
+        dismissed: false,
+      };
+      const otherPersistedPR = {
+        identifier: { ...createPRIdentifier(), prId: '99', displayName: 'Persisted PR #99' },
+        prState: 'open' as const,
+        childRunKeys: [],
+        watchedAt: new Date().toISOString(),
+        lastPolledAt: new Date().toISOString(),
+        dismissed: false,
+      };
+      (watchStore.loadAll as ReturnType<typeof vi.fn>).mockImplementation(() => new Promise(resolve => {
+        setTimeout(() => resolve({ runs: [], prs: [persistedPR, otherPersistedPR] }), 100);
+      }));
+      const prWatcher = createMockPRWatcher('test-pr', async () => ({
+        prState: 'open',
+        displayName: 'Live PR #42',
+        runs: [],
+      }));
+      prRegistry.register(prWatcher);
+
+      const loadPromise = service.loadPersistedWatches();
+      await vi.advanceTimersByTimeAsync(50);
+
+      const started = await service.startPRWatch(identifier);
+      expect(started.identifier.displayName).toBe('Live PR #42');
+
+      await vi.advanceTimersByTimeAsync(50);
+      await loadPromise;
+
+      const active = service.getActivePRWatches();
+      expect(active).toHaveLength(2);
+      expect(active.find(pr => pr.identifier.prId === '42')).toBe(started);
+      expect(active.find(pr => pr.identifier.prId === '42')?.identifier.displayName).toBe('Live PR #42');
+      expect(active.find(pr => pr.identifier.prId === '42')?.prState).toBe('open');
+      expect(active.find(pr => pr.identifier.prId === '99')?.identifier.displayName).toBe('Persisted PR #99');
+      expect(watchStore.saveAll).toHaveBeenLastCalledWith(
+        [],
+        expect.arrayContaining([
+          expect.objectContaining({ identifier: expect.objectContaining({ prId: '42', displayName: 'Live PR #42' }) }),
+          expect.objectContaining({ identifier: expect.objectContaining({ prId: '99', displayName: 'Persisted PR #99' }) }),
+        ]),
+      );
     });
 
     it('trusts non-empty child run providerIds without URL matching', async () => {

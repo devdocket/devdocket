@@ -9,6 +9,7 @@ import {
   runWorkerPool,
   safeDecodeComponent,
   type ResolvedItem,
+  type GitWorkInfo,
 } from '@devdocket/shared';
 import { logger } from './logger';
 import { OrgConfig, resolveProjectList } from './configParser';
@@ -28,7 +29,11 @@ export interface AdoPullRequest {
     name: string;
     project: { name: string };
     webUrl?: string;
+    remoteUrl?: string;
+    sshUrl?: string;
   };
+  sourceRefName?: string;
+  targetRefName?: string;
   lastMergeSourceCommit?: {
     commitId: string;
   };
@@ -386,6 +391,51 @@ export abstract class BaseAdoPrProvider extends BaseProvider {
       url: `${repoUrl}/pullrequest/${pr.pullRequestId}`,
       group: `${projectName}/${repoName}`,
       itemType: 'pr',
+      capabilities: { gitWork: this.createPrGitWork(pr, org) },
+    };
+  }
+
+  private createPrGitWork(pr: AdoPullRequest, org: string): () => Promise<GitWorkInfo | undefined> {
+    const projectName = pr.repository.project.name;
+    const repoName = pr.repository.name;
+    const repoLabel = `${projectName}/${repoName}`;
+    const cloneUrl = pr.repository.remoteUrl
+      ?? pr.repository.webUrl
+      ?? `https://dev.azure.com/${encodeURIComponent(org)}/${encodeURIComponent(projectName)}/_git/${encodeURIComponent(repoName)}`;
+    const detailUrl = `https://dev.azure.com/${encodeURIComponent(org)}/${encodeURIComponent(projectName)}/_apis/git/repositories/${encodeURIComponent(repoName)}/pullrequests/${pr.pullRequestId}?api-version=7.1`;
+
+    return async () => {
+      // Resolve the source ref at action time so Start Git Work checks out the current PR head.
+      const headers = await getAdoHeaders();
+      const wasAuthenticated = 'Authorization' in headers;
+      let response = await fetch(detailUrl, {
+        headers,
+        signal: combineSignals(undefined, 30_000),
+      });
+      if (response.status === 401 || response.status === 403 || (response.status === 404 && !wasAuthenticated)) {
+        const retryResponse = await retryAdoWithAuth(detailUrl);
+        if (retryResponse) { response = retryResponse; }
+      }
+      if (!response.ok) {
+        logger.info(`ADO PR API returned ${response.status} while resolving git work info for ${org}/${projectName}/${repoName}/${pr.pullRequestId}`);
+        return undefined;
+      }
+
+      const detail = await response.json() as Pick<AdoPullRequest, 'sourceRefName' | 'targetRefName' | 'repository'>;
+      const sourceRefName = typeof detail.sourceRefName === 'string' ? detail.sourceRefName : pr.sourceRefName;
+      if (!sourceRefName) {
+        return undefined;
+      }
+
+      const detailCloneUrl = detail.repository?.remoteUrl ?? detail.repository?.webUrl ?? cloneUrl;
+      const targetRefName = typeof detail.targetRefName === 'string' ? detail.targetRefName : pr.targetRefName;
+      return {
+        kind: 'pr',
+        cloneUrl: detailCloneUrl,
+        ref: sourceRefName.replace(/^refs\/heads\//, ''),
+        ...(targetRefName ? { baseRef: targetRefName.replace(/^refs\/heads\//, '') } : {}),
+        repoLabel,
+      };
     };
   }
 

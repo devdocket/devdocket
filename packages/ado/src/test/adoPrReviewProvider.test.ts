@@ -186,6 +186,23 @@ describe('AdoPrReviewProvider', () => {
       group: 'MyProject/myrepo',
       reason: 'review_requested',
       itemType: 'pr',
+      capabilities: { gitWork: expect.any(Function) },
+    });
+
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({
+        sourceRefName: 'refs/heads/users/me/fix',
+        targetRefName: 'refs/heads/dev',
+        repository: { remoteUrl: 'https://dev.azure.com/myorg/MyProject/_git/myrepo' },
+      }),
+    });
+    await expect(items[0].capabilities.gitWork()).resolves.toEqual({
+      kind: 'pr',
+      cloneUrl: 'https://dev.azure.com/myorg/MyProject/_git/myrepo',
+      ref: 'users/me/fix',
+      baseRef: 'dev',
+      repoLabel: 'MyProject/myrepo',
     });
   });
 

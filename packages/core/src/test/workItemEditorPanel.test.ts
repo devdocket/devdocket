@@ -108,7 +108,7 @@ function createMockProviderRegistry(discoveredByProvider: Record<string, any[]> 
   const discoveredEmitter = new EventEmitter<void>();
   const registerEmitter = new EventEmitter<void>();
 
-  return {
+  const registry: any = {
     getDiscoveredItems: vi.fn((providerId: string) => discoveredByProvider[providerId] ?? []),
     getAllDiscoveredItems: vi.fn(() => new Map(Object.entries(discoveredByProvider))),
     getProvider: vi.fn((providerId: string) => providerId ? { id: providerId, label: providerId } : undefined),
@@ -118,6 +118,9 @@ function createMockProviderRegistry(discoveredByProvider: Record<string, any[]> 
     _fireDiscoveredItemsChange: () => discoveredEmitter.fire(),
     _fireRegisterProvider: () => registerEmitter.fire(),
   };
+  registry.findDiscoveredItem = vi.fn((providerId: string, externalId: string) =>
+    registry.getDiscoveredItems(providerId).find((item: any) => item.externalId === externalId));
+  return registry;
 }
 
 function createMockActionRegistry() {
@@ -135,6 +138,87 @@ function createMockStateStore() {
   };
 }
 
+function makeWatchedRun(overrides: Record<string, any> = {}) {
+  const now = new Date().toISOString();
+  return {
+    identifier: {
+      providerId: 'github-actions',
+      runId: 'run-1',
+      displayName: 'build',
+      repo: 'owner/repo',
+      url: 'https://example.com/run/1',
+    },
+    status: {
+      overallState: 'running',
+      conclusion: undefined,
+      jobs: [],
+    },
+    watchedAt: now,
+    lastPolledAt: now,
+    dismissed: false,
+    parentPRKey: 'pr:github-pr-watcher:owner/repo:42',
+    ...overrides,
+  };
+}
+
+function makeWatchedPR(overrides: Record<string, any> = {}) {
+  const now = new Date().toISOString();
+  return {
+    identifier: {
+      providerId: 'github-pr-watcher',
+      prId: '42',
+      displayName: 'PR #42',
+      repo: 'owner/repo',
+      url: 'https://example.com/pull/42',
+    },
+    prState: 'open',
+    childRunKeys: ['github-actions:owner/repo:run-1'],
+    watchedAt: now,
+    lastPolledAt: now,
+    dismissed: false,
+    ...overrides,
+  };
+}
+
+function createMockWatcherService(initialWatch?: any, initialRuns: any[] = []) {
+  const prEmitter = new EventEmitter<void>();
+  const runEmitter = new EventEmitter<any[]>();
+  let watch = initialWatch;
+  let runs = [...initialRuns];
+
+  return {
+    findPRWatchByExternalId: vi.fn((repo: string, prId: string) => (
+      watch && !watch.dismissed && watch.identifier.repo === repo && watch.identifier.prId === prId ? watch : undefined
+    )),
+    getPRWatchKey: vi.fn((identifier: any) => `pr:${identifier.providerId}:${identifier.repo}:${identifier.prId}`),
+    getChildRuns: vi.fn(() => runs.filter(run => !run.dismissed)),
+    onDidChangePRWatches: prEmitter.event,
+    onDidChangeWatchedRuns: runEmitter.event,
+    _setWatch: (nextWatch: any) => { watch = nextWatch; },
+    _setRuns: (nextRuns: any[]) => { runs = [...nextRuns]; },
+    _firePRWatchesChange: () => prEmitter.fire(),
+    _fireWatchedRunsChange: (changedRuns = runs) => runEmitter.fire(changedRuns),
+  };
+}
+
+function getBootstrapItem(html: string) {
+  const match = html.match(/window\.__DEVDOCKET_EDITOR_BOOTSTRAP__ = (.*?);\s*<\/script>/s);
+  if (!match) {
+    throw new Error('Missing editor bootstrap payload');
+  }
+  return JSON.parse(match[1]);
+}
+
+function getLastEditorUpdate(mock: ReturnType<typeof createMockWebviewPanel>) {
+  const messages = vi.mocked(mock.panel.webview.postMessage).mock.calls.map(call => call[0] as any);
+  for (let index = messages.length - 1; index >= 0; index--) {
+    if (messages[index].type === 'updateEditorItem') {
+      return messages[index];
+    }
+  }
+  return undefined;
+}
+
 function createMockContext() {
   return {
     extensionUri: vscode.Uri.file('C:\\repos\\devdocket-mission-control-454\\packages\\core'),
@@ -148,13 +232,14 @@ function openPanel(
   providerRegistry = createMockProviderRegistry(),
   actionRegistry = createMockActionRegistry(),
   stateStore = createMockStateStore(),
+  watcherService?: ReturnType<typeof createMockWatcherService>,
 ) {
   const mock = createMockWebviewPanel();
   const context = createMockContext();
   vi.mocked(window.createWebviewPanel).mockReturnValue(mock.panel as any);
-  WorkItemEditorPanel.setDependencies(actionRegistry as any, stateStore as any);
+  WorkItemEditorPanel.setDependencies(actionRegistry as any, stateStore as any, watcherService as any);
   WorkItemEditorPanel.open(context, workGraph as any, providerRegistry as any, item, item.providerId ? 'GitHub' : undefined);
-  return { mock, context, workGraph, providerRegistry, actionRegistry, stateStore };
+  return { mock, context, workGraph, providerRegistry, actionRegistry, stateStore, watcherService };
 }
 
 describe('WorkItemEditorPanel', () => {
@@ -240,6 +325,160 @@ describe('WorkItemEditorPanel', () => {
         relatedItems: [expect.objectContaining({ targetItemId: 'peer-1', label: 'Closes Peer' })],
       }),
     }));
+  });
+
+  it('includes CI watch data for watched PRs across provider IDs', () => {
+    const item = makeItem({
+      title: 'Watched PR',
+      providerId: 'github-my-prs',
+      externalId: 'owner/repo#42',
+      itemType: 'pr',
+    });
+    const watch = makeWatchedPR();
+    const runs = [
+      makeWatchedRun({ identifier: { ...makeWatchedRun().identifier, runId: 'run-1', displayName: 'build' } }),
+      makeWatchedRun({
+        identifier: { ...makeWatchedRun().identifier, runId: 'run-2', displayName: 'test' },
+        status: { overallState: 'completed', conclusion: 'success', jobs: [] },
+      }),
+      makeWatchedRun({
+        identifier: { ...makeWatchedRun().identifier, runId: 'run-3', displayName: 'deploy' },
+        status: { overallState: 'completed', conclusion: 'failure', jobs: [] },
+      }),
+    ];
+    const watcherService = createMockWatcherService(watch, runs);
+
+    const { mock } = openPanel(item, createMockWorkGraph(item), createMockProviderRegistry(), createMockActionRegistry(), createMockStateStore(), watcherService);
+    const bootstrap = getBootstrapItem(mock.panel.webview.html);
+
+    expect(watcherService.findPRWatchByExternalId).toHaveBeenCalledWith('owner/repo', '42');
+    expect(bootstrap.ciWatch).toEqual({
+      state: 'open',
+      runs: [
+        { id: 'github-actions:owner/repo:run-1', name: 'build', state: 'in_progress' },
+        { id: 'github-actions:owner/repo:run-2', name: 'test', state: 'completed', conclusion: 'success' },
+        { id: 'github-actions:owner/repo:run-3', name: 'deploy', state: 'completed', conclusion: 'failure' },
+      ],
+      totalActive: 1,
+      totalFailing: 1,
+    });
+  });
+
+  it('omits CI watch data when the PR is not watched', () => {
+    const item = makeItem({
+      title: 'Unwatched PR',
+      providerId: 'github-my-prs',
+      externalId: 'owner/repo#42',
+      itemType: 'pr',
+    });
+    const watcherService = createMockWatcherService(undefined, []);
+
+    const { mock } = openPanel(item, createMockWorkGraph(item), createMockProviderRegistry(), createMockActionRegistry(), createMockStateStore(), watcherService);
+    const bootstrap = getBootstrapItem(mock.panel.webview.html);
+
+    expect(bootstrap.ciWatch).toBeUndefined();
+    expect(mock.panel.webview.html).not.toContain('ciWatch');
+  });
+
+  it('removes CI watch data when the PR watch is dismissed while open', () => {
+    const item = makeItem({ providerId: 'github-my-prs', externalId: 'owner/repo#42', itemType: 'pr' });
+    const watch = makeWatchedPR();
+    const watcherService = createMockWatcherService(watch, [makeWatchedRun()]);
+    const { mock } = openPanel(item, createMockWorkGraph(item), createMockProviderRegistry(), createMockActionRegistry(), createMockStateStore(), watcherService);
+
+    watcherService._setWatch({ ...watch, dismissed: true });
+    watcherService._firePRWatchesChange();
+
+    expect(getLastEditorUpdate(mock)).toEqual(expect.objectContaining({
+      type: 'updateEditorItem',
+      item: expect.not.objectContaining({ ciWatch: expect.anything() }),
+    }));
+  });
+
+  it('updates CI watch data when a child run changes state while open', () => {
+    const item = makeItem({ providerId: 'github-my-prs', externalId: 'owner/repo#42', itemType: 'pr' });
+    const watch = makeWatchedPR();
+    const watcherService = createMockWatcherService(watch, [makeWatchedRun()]);
+    const { mock } = openPanel(item, createMockWorkGraph(item), createMockProviderRegistry(), createMockActionRegistry(), createMockStateStore(), watcherService);
+
+    watcherService._setRuns([
+      makeWatchedRun({ status: { overallState: 'completed', conclusion: 'failure', jobs: [] } }),
+    ]);
+    watcherService._fireWatchedRunsChange();
+
+    expect(getLastEditorUpdate(mock)).toEqual(expect.objectContaining({
+      type: 'updateEditorItem',
+      item: expect.objectContaining({
+        ciWatch: expect.objectContaining({
+          runs: [{ id: 'github-actions:owner/repo:run-1', name: 'build', state: 'completed', conclusion: 'failure' }],
+          totalActive: 0,
+          totalFailing: 1,
+        }),
+      }),
+    }));
+  });
+
+  it('refreshes CI watch data when the last child run disappears while the PR remains watched', () => {
+    const item = makeItem({ providerId: 'github-my-prs', externalId: 'owner/repo#42', itemType: 'pr' });
+    const watch = makeWatchedPR();
+    const watcherService = createMockWatcherService(watch, [makeWatchedRun()]);
+    const { mock } = openPanel(item, createMockWorkGraph(item), createMockProviderRegistry(), createMockActionRegistry(), createMockStateStore(), watcherService);
+
+    watcherService._setRuns([]);
+    watcherService._fireWatchedRunsChange();
+
+    expect(getLastEditorUpdate(mock)).toEqual(expect.objectContaining({
+      type: 'updateEditorItem',
+      item: expect.objectContaining({
+        ciWatch: expect.objectContaining({
+          runs: [],
+          totalActive: 0,
+          totalFailing: 0,
+        }),
+      }),
+    }));
+  });
+
+  it('ignores PR watch changes when the current PR watch state is unchanged', () => {
+    const item = makeItem({ providerId: 'github-my-prs', externalId: 'owner/repo#42', itemType: 'pr' });
+    const watcherService = createMockWatcherService(makeWatchedPR(), [makeWatchedRun()]);
+    const { mock } = openPanel(item, createMockWorkGraph(item), createMockProviderRegistry(), createMockActionRegistry(), createMockStateStore(), watcherService);
+    vi.mocked(mock.panel.webview.postMessage).mockClear();
+
+    watcherService._firePRWatchesChange();
+
+    expect(mock.panel.webview.postMessage).not.toHaveBeenCalled();
+  });
+
+  it('ignores watched run changes that do not affect the current PR watch', () => {
+    const item = makeItem({ providerId: 'github-my-prs', externalId: 'owner/repo#42', itemType: 'pr' });
+    const watcherService = createMockWatcherService(makeWatchedPR(), [makeWatchedRun()]);
+    const { mock } = openPanel(item, createMockWorkGraph(item), createMockProviderRegistry(), createMockActionRegistry(), createMockStateStore(), watcherService);
+    vi.mocked(mock.panel.webview.postMessage).mockClear();
+
+    watcherService._fireWatchedRunsChange([
+      makeWatchedRun({
+        identifier: {
+          providerId: 'github-actions',
+          runId: 'run-99',
+          displayName: 'unrelated',
+          repo: 'owner/other-repo',
+          url: 'https://example.com/run/99',
+        },
+        parentPRKey: 'pr:github-pr-watcher:owner/other-repo:99',
+      }),
+    ]);
+
+    expect(mock.panel.webview.postMessage).not.toHaveBeenCalled();
+  });
+
+  it('opens the CI Watches panel from editor messages', async () => {
+    const item = makeItem();
+    const { mock } = openPanel(item);
+
+    await mock.simulateMessage({ type: 'openWatches' });
+
+    expect(vscode.commands.executeCommand).toHaveBeenCalledWith('devdocket.showWatchesQuickPick');
   });
 
   it('debounces autosave and saves manual fields', async () => {

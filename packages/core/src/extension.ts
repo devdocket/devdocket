@@ -1,4 +1,5 @@
 import * as vscode from 'vscode';
+import { runWorkerPool, type PRIdentifier } from '@devdocket/shared';
 import { DevDocketApi } from './api/types';
 import { DevDocketApiImpl } from './api/devDocketApi';
 import { JsonTaskStore } from './storage/jsonTaskStore';
@@ -110,6 +111,9 @@ function isAutoWatchCandidate(item: { authored?: boolean; url?: string }): item 
  * per poll interval).
  */
 const MAX_AUTO_WATCH_PER_PROVIDER = 200;
+const AUTO_WATCH_CONCURRENCY = 6;
+const AUTO_WATCH_YIELD_EVERY = 25;
+const autoWatchCapNotifiedProviders = new Set<string>();
 
 /**
  * Strip query string and fragment from a URL before logging so that
@@ -128,59 +132,135 @@ function redactUrlForLog(value: string | undefined): string | undefined {
   }
 }
 
+function getAutoWatchPRKey(identifier: PRIdentifier): string {
+  return `${identifier.providerId}:${identifier.repo}:${identifier.prId}`;
+}
+
+async function yieldToExtensionHost(): Promise<void> {
+  await new Promise<void>((resolve) => {
+    if (typeof setImmediate === 'function') {
+      setImmediate(resolve);
+      return;
+    }
+    setTimeout(resolve, 0);
+  });
+}
+
+interface AutoWatchAuthoredPROptions {
+  capNotifiedProviders?: Set<string>;
+  seenPRKeys?: Set<string>;
+}
+
 export async function autoWatchAuthoredPRs(
   providerId: string,
   providerRegistry: ProviderRegistry,
   prWatcherRegistry: PRWatcherRegistry,
   watcherService: WatcherService,
   signal: AbortSignal,
+  options: AutoWatchAuthoredPROptions = {},
 ): Promise<void> {
+  const capNotifiedProviders = options.capNotifiedProviders ?? autoWatchCapNotifiedProviders;
+  const sharedSeenPRKeys = options.seenPRKeys;
   const items = providerRegistry.getDiscoveredItems(providerId).filter(isAutoWatchCandidate);
-  let watchedThisPass = 0;
+  const localSeenPRKeys = new Set<string>();
+  const reservedPRKeys = new Set<string>();
+  const candidates: Array<{ identifier: PRIdentifier; sourceUrl: string }> = [];
+  let skippedCount = 0;
 
-  for (const item of items) {
-    if (signal.aborted) {
-      return;
-    }
-
-    try {
-      const itemUrl = item.url;
-      if (!itemUrl) {
-        continue;
-      }
-
-      // Defense-in-depth: only http(s) URLs are safe to feed into PR
-      // watcher resolution. A malicious provider can claim authored:true
-      // for arbitrary strings; reject anything that wouldn't survive
-      // isSafeUrl downstream.
-      if (!isSafeUrl(itemUrl)) {
-        continue;
-      }
-
-      const prWatcher = prWatcherRegistry.findWatcherForUrl(itemUrl);
-      if (!prWatcher) {
-        continue;
-      }
-
-      const identifier = prWatcher.parsePRUrl(itemUrl);
-      if (await watcherService.isPRWatched(identifier)) {
-        continue;
-      }
-
-      if (watchedThisPass >= MAX_AUTO_WATCH_PER_PROVIDER) {
-        logger.warn(
-          `Auto-watch cap reached for provider ${providerId} (limit ${MAX_AUTO_WATCH_PER_PROVIDER}); skipping remaining authored PRs to bound polling cost`,
-        );
-        return;
-      }
-
-      await watcherService.startPRWatch(identifier);
-      watchedThisPass++;
-    } catch (err) {
+  try {
+    for (const item of items) {
       if (signal.aborted) {
         return;
       }
-      logger.warn(`Failed to auto-watch authored PR from provider ${providerId}`, { url: redactUrlForLog(item.url) }, err);
+
+      try {
+        const itemUrl = item.url;
+        if (!itemUrl) {
+          continue;
+        }
+
+        // Defense-in-depth: only http(s) URLs are safe to feed into PR
+        // watcher resolution. A malicious provider can claim authored:true
+        // for arbitrary strings; reject anything that wouldn't survive
+        // isSafeUrl downstream.
+        if (!isSafeUrl(itemUrl)) {
+          continue;
+        }
+
+        const prWatcher = prWatcherRegistry.findWatcherForUrl(itemUrl);
+        if (!prWatcher) {
+          continue;
+        }
+
+        const identifier = prWatcher.parsePRUrl(itemUrl);
+        const prKey = getAutoWatchPRKey(identifier);
+        if (localSeenPRKeys.has(prKey) || sharedSeenPRKeys?.has(prKey)) {
+          continue;
+        }
+        localSeenPRKeys.add(prKey);
+
+        if (await watcherService.isPRWatched(identifier)) {
+          continue;
+        }
+
+        if (sharedSeenPRKeys?.has(prKey)) {
+          continue;
+        }
+
+        if (candidates.length >= MAX_AUTO_WATCH_PER_PROVIDER) {
+          skippedCount++;
+          continue;
+        }
+
+        sharedSeenPRKeys?.add(prKey);
+        reservedPRKeys.add(prKey);
+        candidates.push({ identifier, sourceUrl: itemUrl });
+      } catch (err) {
+        if (signal.aborted) {
+          return;
+        }
+        logger.warn(`Failed to auto-watch authored PR from provider ${providerId}`, { url: redactUrlForLog(item.url) }, err);
+      }
+    }
+
+    const candidatesToWatch = candidates;
+    if (skippedCount > 0) {
+      const message = `DevDocket: Auto-watching the first ${MAX_AUTO_WATCH_PER_PROVIDER} authored PRs from ${providerId}; skipping ${skippedCount} more to keep refresh responsive.`;
+      logger.warn(
+        `Auto-watch cap reached for provider ${providerId} (limit ${MAX_AUTO_WATCH_PER_PROVIDER}); skipping ${skippedCount} authored PRs to bound polling cost`,
+      );
+      if (!capNotifiedProviders.has(providerId)) {
+        capNotifiedProviders.add(providerId);
+        void vscode.window.showInformationMessage(message).then(
+          undefined,
+          () => { /* notification is best-effort */ },
+        );
+      }
+    }
+
+    let completedCount = 0;
+    await runWorkerPool(candidatesToWatch, async ({ identifier, sourceUrl }) => {
+      if (signal.aborted) {
+        return;
+      }
+
+      try {
+        await watcherService.startPRWatch(identifier, { deferChildRunStatus: true });
+      } catch (err) {
+        if (signal.aborted) {
+          return;
+        }
+        logger.warn(`Failed to auto-watch authored PR from provider ${providerId}`, { url: redactUrlForLog(sourceUrl) }, err);
+      } finally {
+        completedCount++;
+        if (completedCount % AUTO_WATCH_YIELD_EVERY === 0) {
+          await yieldToExtensionHost();
+        }
+      }
+    }, AUTO_WATCH_CONCURRENCY);
+  } finally {
+    for (const prKey of reservedPRKeys) {
+      sharedSeenPRKeys?.delete(prKey);
     }
   }
 }
@@ -273,6 +353,7 @@ function wireEvents(
   }));
 
   const autoWatchControllers = new Map<string, AbortController>();
+  const autoWatchSeenPRKeys = new Set<string>();
   const autoCompleteControllers = new Map<string, AbortController>();
   const autoCompleteSub = providerRegistry.onDidRefreshProvider(safeHandler('Error handling provider refresh', async (providerId) => {
     try {
@@ -299,7 +380,7 @@ function wireEvents(
       autoWatchControllers.set(providerId, autoWatchController);
       refreshTasks.push((async () => {
         try {
-          await autoWatchAuthoredPRs(providerId, providerRegistry, prWatcherRegistry, watcherService, autoWatchController.signal);
+          await autoWatchAuthoredPRs(providerId, providerRegistry, prWatcherRegistry, watcherService, autoWatchController.signal, { seenPRKeys: autoWatchSeenPRKeys });
         } finally {
           if (autoWatchControllers.get(providerId) === autoWatchController) {
             autoWatchControllers.delete(providerId);
@@ -450,15 +531,18 @@ export async function activate(context: vscode.ExtensionContext): Promise<DevDoc
     ws.onDidChangePRWatches(safeHandler('watch-panel:prs', () => watchPanelProvider.refresh())),
   );
 
-  // Load persisted watches after the watch services are ready.
-  ws.loadPersistedWatches().catch(err => {
+  // Load persisted watches after watch-service subscriptions are ready but before
+  // commands and the public API can start new watches.
+  try {
+    await ws.loadPersistedWatches();
+  } catch (err) {
     logger.error('Failed to load persisted watches', err);
-  });
+  }
 
   // Scope panel cache to extension lifecycle
   const panelManager = new PanelManager();
   WorkItemEditorPanel.setPanelManager(panelManager);
-  WorkItemEditorPanel.setDependencies(ar, ss);
+  WorkItemEditorPanel.setDependencies(ar, ss, ws);
 
   // panelManager must be first: its dispose() flushes pending saves via
   // WorkGraph, which must still be alive at that point. VS Code disposes

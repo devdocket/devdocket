@@ -93,6 +93,9 @@ import * as vscode from 'vscode';
 interface DevDocketApi {
   registerProvider(provider: DevDocketProvider): vscode.Disposable;
   registerAction(action: DevDocketAction): vscode.Disposable;
+
+  /** Optional accessor for live provider data, used by actions that need capabilities. */
+  getDiscoveredItem?(providerId: string, externalId: string): DiscoveredItem | undefined;
 }
 ```
 
@@ -240,6 +243,13 @@ interface DiscoveredItem {
   itemType?: 'issue' | 'pr';
 
   /**
+   * Optional provider-supplied capabilities for cross-cutting actions. For
+   * example, Start Git Work reads `capabilities.gitWork` instead of parsing
+   * URL hosts or knowing provider ids.
+   */
+  capabilities?: DiscoveredItemCapabilities;
+
+  /**
    * Optional provider-declared badges shown alongside the core's Provider /
    * Type / CI badges. Use this to surface state-like information ("Approved",
    * "Changes requested", "Mentioned", etc) — DevDocket never infers badges
@@ -274,6 +284,19 @@ interface DiscoveredItem {
   resurfaceVersion?: string;
 }
 
+interface GitWorkInfo {
+  kind: 'issue' | 'pr';
+  cloneUrl: string;
+  ref: string;
+  headCloneUrl?: string;
+  baseRef?: string;
+  repoLabel?: string;
+}
+
+interface DiscoveredItemCapabilities {
+  gitWork?: GitWorkInfo | (() => Promise<GitWorkInfo | undefined>);
+}
+
 interface ProviderBadge {
   /** Display text. Keep short — sidebar badges compete with the title. */
   label: string;
@@ -298,6 +321,7 @@ interface ProviderBadge {
 - `DiscoveredItem` data is not stored as a persisted record; DevDocket tracks only the inbox state (`unseen`, `accepted`, `dismissed`) for discovered items in the `devdocket.discovered-state` `globalState` key.
 - When a user accepts an item from the Incoming tier or Sources tab, DevDocket creates and persists a new `WorkItem` (in the `devdocket.workitems` `globalState` key) that includes a snapshot of the item's `title`, along with its `providerId`/`externalId`/`url` as provenance metadata.
 - Use `group` to organize items in the Sources tab. Items with the same group value are nested under a folder.
+- To opt into git-based actions such as Start Git Work, attach `capabilities.gitWork`. Use a literal `GitWorkInfo` when clone/ref data is already known (typical issues), or a lazy function when the provider must call its own API to resolve PR head/base data. This is a non-breaking optional addition.
 - Use `canonicalId` when the same entity might be discovered by multiple providers (e.g., a PR found by both "My PRs" and "PR Reviews"). Items sharing a `canonicalId` are deduplicated in the Incoming tier — one representative is shown and accept/dismiss propagates to all. Use a consistent format like `github:pull:owner/repo#42`. Items without `canonicalId` show individually (backward compatible). The Sources tab is unaffected.
 - Set `itemType` to `'issue'` or `'pr'` when your provider can classify the item kind. DevDocket surfaces this as a separate type pill so users can distinguish issues from pull requests at a glance. Items without `itemType` simply omit the pill — useful for generic / manual / heterogeneous sources where the kind isn't meaningful.
 - Use `badges` to surface state, reason, or any other custom annotation. The core deliberately doesn't interpret the `state` or `reason` strings any more — those are kept on `DiscoveredItem` for provenance/dedup purposes only. If you want a pill to show, declare it explicitly. Use `show: 'editor'` for verbose detail that would clutter the sidebar.
