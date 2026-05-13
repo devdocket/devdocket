@@ -168,15 +168,21 @@ export class WatchPanelProvider implements vscode.Disposable {
   }
 
   private async openItem(message: Extract<WebviewMessage, { type: 'openItem' }>): Promise<void> {
+    if (typeof message.itemId !== 'string') {
+      return;
+    }
+
     const workItem = this.workGraph.getItem(message.itemId);
     if (workItem) {
       await vscode.commands.executeCommand('devdocket.editItem', { id: message.itemId });
       return;
     }
 
-    const discoveredKey = message.providerId && message.externalId ? undefined : parseDiscoveredItemKey(message.itemId);
-    const providerId = message.providerId ?? discoveredKey?.providerId;
-    const externalId = message.externalId ?? discoveredKey?.externalId;
+    const messageProviderId = typeof message.providerId === 'string' ? message.providerId : undefined;
+    const messageExternalId = typeof message.externalId === 'string' ? message.externalId : undefined;
+    const discoveredKey = messageProviderId && messageExternalId ? undefined : parseDiscoveredItemKey(message.itemId);
+    const providerId = messageProviderId ?? discoveredKey?.providerId;
+    const externalId = messageExternalId ?? discoveredKey?.externalId;
     if (providerId && externalId) {
       await vscode.commands.executeCommand('devdocket.previewIncomingItem', { providerId, externalId });
     }

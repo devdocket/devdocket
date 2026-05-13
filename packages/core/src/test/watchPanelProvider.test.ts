@@ -401,6 +401,38 @@ describe('WatchPanelProvider', () => {
     }));
   });
 
+  it('validates source link fields before previewing incoming items', async () => {
+    const mockPanel = createMockWebviewPanel();
+    vi.mocked(window.createWebviewPanel).mockReturnValue(mockPanel.panel as any);
+
+    const provider = new WatchPanelProvider(
+      vscode.Uri.file('C:\\repo') as any,
+      createWatcherService() as any,
+      createMockWorkGraph(),
+      createMockProviderRegistry(),
+    );
+    provider.open();
+
+    await mockPanel.simulateMessage({
+      type: 'openItem',
+      itemId: 'github-pr-reviews::owner/repo#42',
+      providerId: 42,
+      externalId: {},
+    } as any);
+    await mockPanel.simulateMessage({
+      type: 'openItem',
+      itemId: ['not-a-key'],
+      providerId: 'github-pr-reviews',
+      externalId: 'owner/repo#42',
+    } as any);
+
+    expect(vscode.commands.executeCommand).toHaveBeenCalledTimes(1);
+    expect(vscode.commands.executeCommand).toHaveBeenCalledWith('devdocket.previewIncomingItem', {
+      providerId: 'github-pr-reviews',
+      externalId: 'owner/repo#42',
+    });
+  });
+
   it('handles dismiss completed, open URL, and dismiss watch webview commands', async () => {
     const mockPanel = createMockWebviewPanel();
     vi.mocked(window.createWebviewPanel).mockReturnValue(mockPanel.panel as any);
