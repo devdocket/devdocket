@@ -1,49 +1,46 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { window, workspace, authentication } from 'vscode';
+import { window, workspace } from 'vscode';
 import { StartWorkAction } from '../startWorkAction';
 import * as path from 'path';
+import type { DiscoveredItemCapabilities } from '@devdocket/shared';
 
-// Mock child_process with custom promisify so util.promisify(execFile) returns { stdout, stderr }
 vi.mock('child_process', () => {
   const fn = vi.fn((cmd: string, args: string[], optsOrCb: any, cb?: Function) => {
     const callback = typeof optsOrCb === 'function' ? optsOrCb : cb;
     callback?.(null, '', '');
   });
   const customSymbol = Symbol.for('nodejs.util.promisify.custom');
-  (fn as any)[customSymbol] = (...promiseArgs: any[]) => {
-    return new Promise<{ stdout: string; stderr: string }>((resolve, reject) => {
-      const cb = (err: Error | null, stdout: string, stderr: string) => {
-        if (err) {
-          (err as any).stdout = stdout;
-          (err as any).stderr = stderr;
-          reject(err);
-        } else {
-          resolve({ stdout, stderr });
-        }
-      };
-      fn(...promiseArgs, cb);
-    });
-  };
+  (fn as any)[customSymbol] = (...promiseArgs: any[]) => new Promise<{ stdout: string; stderr: string }>((resolve, reject) => {
+    const cb = (err: Error | null, stdout: string, stderr: string) => {
+      if (err) {
+        (err as any).stdout = stdout;
+        (err as any).stderr = stderr;
+        reject(err);
+      } else {
+        resolve({ stdout, stderr });
+      }
+    };
+    fn(...promiseArgs, cb);
+  });
   return { execFile: fn };
 });
 
-// Mock fs
-vi.mock('fs', () => ({
-  existsSync: vi.fn(() => false),
-}));
+vi.mock('fs', () => ({ existsSync: vi.fn(() => false) }));
 
 import { execFile } from 'child_process';
 import * as fs from 'fs';
 
+const ORIGIN_REMOTE_V = 'origin\thttps://example.com/acme/repo.git (fetch)\norigin\thttps://example.com/acme/repo.git (push)\n';
+
+type GitWork = NonNullable<DiscoveredItemCapabilities['gitWork']>;
+
 function createWorkItem(overrides: Partial<any> = {}) {
   return {
     id: 'wc-test-1',
-    title: '#123: Fix login redirect bug',
-    description: 'Some description',
+    title: 'Test item',
     state: 'InProgress',
-    providerId: 'github',
-    externalId: 'owner/repo#123',
-    url: 'https://github.com/owner/repo/issues/123',
+    providerId: 'provider',
+    externalId: 'item-1',
     createdAt: Date.now(),
     updatedAt: Date.now(),
     ...overrides,
@@ -60,8 +57,17 @@ function createMockMemento() {
   };
 }
 
-/** Sets up showInputBox to return specific values based on which prompt is shown. */
-function mockInputBox(repoPath: string | undefined, baseBranch: string | undefined) {
+function createAction(items: Record<string, { capabilities?: { gitWork?: GitWork } }> = {}) {
+  const memento = createMockMemento();
+  const action = new StartWorkAction(memento as any, (providerId, externalId) => items[`${providerId}:${externalId}`] as any);
+  return { action, memento };
+}
+
+function discovered(providerId: string, externalId: string, gitWork?: GitWork) {
+  return { [`${providerId}:${externalId}`]: { capabilities: gitWork ? { gitWork } : undefined } };
+}
+
+function mockInputBox(repoPath: string | undefined, baseBranch = 'origin/dev') {
   vi.mocked(window.showInputBox).mockImplementation(async (options: any) => {
     if (options?.prompt?.includes('local path')) {
       return repoPath;
@@ -73,27 +79,17 @@ function mockInputBox(repoPath: string | undefined, baseBranch: string | undefin
   });
 }
 
-/** Sets up showQuickPick to return the worktree option (default for existing tests). */
 function mockQuickPickWorktree() {
   vi.mocked(window.showQuickPick).mockResolvedValue({ label: 'Create worktree', value: 'worktree' } as any);
 }
 
-/** Sets up showQuickPick to return the checkout option. */
-function mockQuickPickCheckout() {
-  vi.mocked(window.showQuickPick).mockResolvedValue({ label: 'Checkout branch', value: 'checkout' } as any);
-}
-
-/** Default git remote -v output — origin points at the default PR response's repo. */
-const ORIGIN_REMOTE_V = 'origin\thttps://github.com/owner/repo.git (fetch)\norigin\thttps://github.com/owner/repo.git (push)\n';
-
-/** Mocks execFile to fail for local branch existence checks (rev-parse --verify refs/heads/*). */
-function mockNoLocalBranch() {
+function mockNoLocalBranch(remoteOutput = ORIGIN_REMOTE_V) {
   vi.mocked(execFile).mockImplementation(((cmd: string, args: string[], opts: any, cb: Function) => {
     if (args[0] === 'remote' && args[1] === '-v') {
-      cb(null, ORIGIN_REMOTE_V, '');
+      cb(null, remoteOutput, '');
       return;
     }
-    if (args[0] === 'rev-parse' && args[1] === '--verify' && args[2]?.startsWith('refs/heads/')) {
+    if (args[0] === 'rev-parse' && args[1] === '--verify') {
       cb(new Error('not a valid ref'), '', '');
       return;
     }
@@ -101,524 +97,313 @@ function mockNoLocalBranch() {
   }) as any);
 }
 
-function mockFetchResponse(body: any, status = 200) {
-  const mockResponse = {
-    ok: status >= 200 && status < 300,
-    status,
-    json: vi.fn().mockResolvedValue(body),
-  };
-  vi.stubGlobal('fetch', vi.fn().mockResolvedValue(mockResponse));
-}
-
-function createGitHubPrResponse(overrides: Partial<any> = {}) {
-  return {
-    head: {
-      ref: 'feature/my-branch',
-      repo: {
-        full_name: 'owner/repo',
-        clone_url: 'https://github.com/owner/repo.git',
-      },
-    },
-    base: {
-      repo: {
-        full_name: 'owner/repo',
-      },
-    },
-    ...overrides,
-  };
-}
-
 describe('StartWorkAction', () => {
-  let action: StartWorkAction;
-  let mockMemento: ReturnType<typeof createMockMemento>;
-
   beforeEach(() => {
     vi.clearAllMocks();
-    vi.unstubAllGlobals();
-    mockMemento = createMockMemento();
-    action = new StartWorkAction(mockMemento as any);
-
-    // Default: showInputBox returns repo path and base branch based on prompt
-    mockInputBox('/mock/workspace', 'origin/dev');
-
-    // Default: select worktree mode (preserves existing test behavior)
+    mockInputBox('/mock/workspace');
     mockQuickPickWorktree();
-
-    // Default: no post-worktree commands configured
     vi.mocked(workspace.getConfiguration).mockReturnValue({
       get: vi.fn((key: string, defaultValue?: any) => defaultValue),
     } as any);
-
-    // Reset execFile mock to succeed with empty output; includes git remote -v
-    vi.mocked(execFile).mockImplementation(((cmd: string, args: string[], opts: any, cb: Function) => {
-      if (args[0] === 'remote' && args[1] === '-v') {
-        cb(null, ORIGIN_REMOTE_V, '');
-        return;
-      }
-      cb(null, '', '');
-    }) as any);
-
-    // Return true for .git paths (repo validation), false otherwise (worktree check)
-    vi.mocked(fs.existsSync).mockImplementation((path: any) => {
-      return path.toString().endsWith('.git');
-    });
+    vi.mocked(fs.existsSync).mockImplementation((p: any) => p.toString().endsWith('.git'));
+    vi.mocked(execFile).mockImplementation(((cmd: string, args: string[], opts: any, cb: Function) => cb(null, '', '')) as any);
   });
 
   describe('canRun', () => {
-    it('returns true for github provider items in InProgress state', () => {
-      const item = createWorkItem({ providerId: 'github', state: 'InProgress' });
+    it('returns true when a literal gitWork capability is present', () => {
+      const item = createWorkItem();
+      const { action } = createAction(discovered('provider', 'item-1', {
+        kind: 'issue', cloneUrl: 'https://example.com/acme/repo.git', ref: 'issue123', repoLabel: 'acme/repo',
+      }));
+
       expect(action.canRun(item)).toBe(true);
     });
 
-    it('returns true for ado-work-items provider items in InProgress state', () => {
-      const item = createWorkItem({ providerId: 'ado-work-items', state: 'InProgress', externalId: 'org/project/456' });
+    it('returns true when a lazy gitWork capability is present', () => {
+      const item = createWorkItem();
+      const { action } = createAction(discovered('provider', 'item-1', async () => ({
+        kind: 'pr', cloneUrl: 'https://example.com/acme/repo.git', ref: 'feature/topic', repoLabel: 'acme/repo',
+      })));
+
       expect(action.canRun(item)).toBe(true);
     });
 
-    it('returns true for github-my-prs provider items in InProgress state', () => {
-      const item = createWorkItem({ providerId: 'github-my-prs', state: 'InProgress' });
-      expect(action.canRun(item)).toBe(true);
-    });
+    it('returns false when no capability is present', () => {
+      const item = createWorkItem();
+      const { action } = createAction(discovered('provider', 'item-1'));
 
-    it('returns true for github-pr-reviews provider items in InProgress state', () => {
-      const item = createWorkItem({ providerId: 'github-pr-reviews', state: 'InProgress' });
-      expect(action.canRun(item)).toBe(true);
-    });
-
-    it('returns true for ado-pr-reviews provider items in InProgress state', () => {
-      const item = createWorkItem({ providerId: 'ado-pr-reviews', state: 'InProgress', externalId: 'org/project/repo/101' });
-      expect(action.canRun(item)).toBe(true);
-    });
-
-    it('returns false for non-supported provider items', () => {
-      const item = createWorkItem({ providerId: 'jira', state: 'InProgress' });
       expect(action.canRun(item)).toBe(false);
     });
 
-    it('returns false for items without a provider', () => {
-      const item = createWorkItem({ providerId: undefined, state: 'InProgress' });
+    it('returns false when the live discovered item is not found', () => {
+      const item = createWorkItem();
+      const { action } = createAction({});
+
       expect(action.canRun(item)).toBe(false);
     });
 
-    it('returns false for non-InProgress state items', () => {
-      const newItem = createWorkItem({ state: 'New' });
-      expect(action.canRun(newItem)).toBe(false);
+    it('returns false for non-InProgress items', () => {
+      const item = createWorkItem({ state: 'New' });
+      const { action } = createAction(discovered('provider', 'item-1', {
+        kind: 'issue', cloneUrl: 'https://example.com/acme/repo.git', ref: 'issue123', repoLabel: 'acme/repo',
+      }));
 
-      const done = createWorkItem({ state: 'Done' });
-      expect(action.canRun(done)).toBe(false);
-
-      const paused = createWorkItem({ state: 'Paused' });
-      expect(action.canRun(paused)).toBe(false);
+      expect(action.canRun(item)).toBe(false);
     });
   });
 
-  describe('repo path prompting', () => {
-    it('prompts user for repo path with no default on first use', async () => {
-      const item = createWorkItem();
-      await action.run(item);
+  describe('run', () => {
+    it('creates the provider-suggested branch for an issue', async () => {
+      const item = createWorkItem({ providerId: 'fake-vendor', externalId: 'ABC-123' });
+      const { action, memento } = createAction(discovered('fake-vendor', 'ABC-123', {
+        kind: 'issue', cloneUrl: 'https://git.example.com/acme/repo.git', ref: 'vendor/ABC-123', repoLabel: 'Vendor Repo',
+      }));
 
-      expect(window.showInputBox).toHaveBeenCalledWith({
-        prompt: 'Enter the local path to the git repository for owner/repo',
-        value: '',
-        ignoreFocusOut: true,
-      });
-    });
-
-    it('pre-fills cached path as default on subsequent use', async () => {
-      mockMemento._store.set('repoPath:owner/repo', '/cached/path');
-      mockInputBox('/cached/path', 'origin/dev');
-
-      const item = createWorkItem();
-      await action.run(item);
-
-      expect(window.showInputBox).toHaveBeenCalledWith(
-        expect.objectContaining({ value: '/cached/path' }),
-      );
-    });
-
-    it('caches the selected repo path on success', async () => {
-      const item = createWorkItem();
-      await action.run(item);
-
-      expect(mockMemento.update).toHaveBeenCalledWith('repoPath:owner/repo', '/mock/workspace');
-    });
-
-    it('does not cache when user cancels input box', async () => {
-      mockInputBox(undefined, undefined);
-
-      const item = createWorkItem();
-      await action.run(item);
-
-      expect(mockMemento.update).not.toHaveBeenCalled();
-      expect(execFile).not.toHaveBeenCalled();
-    });
-
-    it('does not cache when user provides empty path', async () => {
-      mockInputBox('   ', undefined);
-
-      const item = createWorkItem();
-      await action.run(item);
-
-      expect(mockMemento.update).not.toHaveBeenCalled();
-      expect(window.showErrorMessage).toHaveBeenCalledWith(
-        'DevDocket: No repository path provided.',
-      );
-    });
-
-    it('does not cache when path is not a git repository', async () => {
-      mockInputBox('/not/a/repo', undefined);
-      vi.mocked(fs.existsSync).mockReturnValue(false);
-
-      const item = createWorkItem();
-      await action.run(item);
-
-      expect(mockMemento.update).not.toHaveBeenCalled();
-      expect(window.showErrorMessage).toHaveBeenCalledWith(
-        'DevDocket: "/not/a/repo" is not a git repository.',
-      );
-    });
-
-    it('isolates cache by repo key — repo A does not prefill for repo B', async () => {
-      mockMemento._store.set('repoPath:owner/repoA', '/path/to/repoA');
-
-      const item = createWorkItem({ externalId: 'owner/repoB#456' });
-      await action.run(item);
-
-      expect(window.showInputBox).toHaveBeenCalledWith(
-        expect.objectContaining({ value: '' }),
-      );
-    });
-
-    it('same repo prefills across different issues', async () => {
-      mockMemento._store.set('repoPath:owner/repo', '/cached/path');
-      mockInputBox('/cached/path', 'origin/dev');
-
-      const item1 = createWorkItem({ externalId: 'owner/repo#100' });
-      await action.run(item1);
-
-      vi.clearAllMocks();
-      mockInputBox('/cached/path', 'origin/dev');
-      mockQuickPickWorktree();
-      vi.mocked(execFile).mockImplementation(((cmd: string, args: string[], opts: any, cb: Function) => {
-        cb(null, '', '');
-      }) as any);
-      vi.mocked(fs.existsSync).mockImplementation((p: any) => p.toString().endsWith('.git'));
-
-      const item2 = createWorkItem({ externalId: 'owner/repo#200' });
-      await action.run(item2);
-
-      expect(window.showInputBox).toHaveBeenCalledWith(
-        expect.objectContaining({ value: '/cached/path' }),
-      );
-    });
-  });
-
-  describe('checkout vs worktree prompt', () => {
-    it('shows quick pick with checkout and worktree options for issue items', async () => {
-      const item = createWorkItem();
-      await action.run(item);
-
-      expect(window.showQuickPick).toHaveBeenCalledWith(
-        [
-          { label: 'Checkout branch', value: 'checkout' },
-          { label: 'Create worktree', value: 'worktree' },
-        ],
-        {
-          placeHolder: 'How would you like to work on this?',
-          ignoreFocusOut: true,
-        },
-      );
-    });
-
-    it('aborts when user cancels work mode selection', async () => {
-      vi.mocked(window.showQuickPick).mockResolvedValue(undefined);
-
-      const item = createWorkItem();
-      await action.run(item);
-
-      expect(execFile).not.toHaveBeenCalled();
-    });
-  });
-
-  describe('run (worktree mode)', () => {
-    it('creates branch and worktree with correct names for GitHub items', async () => {
-      const item = createWorkItem({ title: '#123: Fix login redirect bug' });
       await action.run(item);
 
       expect(execFile).toHaveBeenCalledTimes(3);
-
-      // First call: check if branch exists
-      const firstCall = vi.mocked(execFile).mock.calls[0];
-      expect(firstCall[0]).toBe('git');
-      expect(firstCall[1]).toEqual(['branch', '--list', 'issue123']);
-      expect(firstCall[2]).toEqual({ cwd: '/mock/workspace', timeout: 30_000 });
-
-      // Second call: create branch from user-specified base
-      const secondCall = vi.mocked(execFile).mock.calls[1];
-      expect(secondCall[0]).toBe('git');
-      expect(secondCall[1]).toEqual(['branch', 'issue123', 'origin/dev']);
-      expect(secondCall[2]).toEqual({ cwd: '/mock/workspace', timeout: 30_000 });
-
-      // Third call: create worktree
-      const thirdCall = vi.mocked(execFile).mock.calls[2];
-      expect(thirdCall[0]).toBe('git');
-      expect(thirdCall[1]).toEqual([
-        'worktree', 'add',
-        path.join('/mock', 'workspace-issue123'),
-        'issue123',
+      expect(vi.mocked(execFile).mock.calls[0][1]).toEqual(['branch', '--list', 'vendor/ABC-123']);
+      expect(vi.mocked(execFile).mock.calls[1][1]).toEqual(['branch', 'vendor/ABC-123', 'origin/dev']);
+      expect(vi.mocked(execFile).mock.calls[2][1]).toEqual([
+        'worktree', 'add', path.join('/mock', 'workspace-vendor-ABC-123-ABC-123'), 'vendor/ABC-123',
       ]);
-      expect(thirdCall[2]).toEqual({ cwd: '/mock/workspace', timeout: 300_000 });
+      expect(memento.update).toHaveBeenCalledWith('repoPath:Vendor Repo', '/mock/workspace');
     });
 
-    it('creates branch and worktree with correct names for ADO items', async () => {
-      const item = createWorkItem({
-        providerId: 'ado-work-items',
-        externalId: 'org/project/456',
-        title: 'ADO work item 456',
-      });
+    it('uses headCloneUrl when a PR supplies one', async () => {
+      mockNoLocalBranch();
+      const item = createWorkItem();
+      const { action } = createAction(discovered('provider', 'item-1', {
+        kind: 'pr',
+        cloneUrl: 'https://example.com/acme/repo.git',
+        headCloneUrl: 'https://example.com/contributor/repo.git',
+        ref: 'feature/topic',
+        repoLabel: 'acme/repo',
+      }));
+
       await action.run(item);
 
-      expect(execFile).toHaveBeenCalledTimes(3);
-
-      // First call: check if branch exists
-      const firstCall = vi.mocked(execFile).mock.calls[0];
-      expect(firstCall[0]).toBe('git');
-      expect(firstCall[1]).toEqual(['branch', '--list', 'issue456']);
-      expect(firstCall[2]).toEqual({ cwd: '/mock/workspace', timeout: 30_000 });
-
-      // Second call: create branch
-      const secondCall = vi.mocked(execFile).mock.calls[1];
-      expect(secondCall[0]).toBe('git');
-      expect(secondCall[1]).toEqual(['branch', 'issue456', 'origin/dev']);
-
-      // Third call: create worktree
-      const thirdCall = vi.mocked(execFile).mock.calls[2];
-      expect(thirdCall[0]).toBe('git');
-      expect(thirdCall[1]).toEqual([
-        'worktree', 'add',
-        path.join('/mock', 'workspace-issue456'),
-        'issue456',
+      expect(vi.mocked(execFile).mock.calls.map(call => call[1])).toEqual([
+        ['remote', '-v'],
+        ['remote', 'add', 'devdocket-fork-contributor', 'https://example.com/contributor/repo.git'],
+        ['fetch', 'devdocket-fork-contributor', '+refs/heads/feature/topic:refs/remotes/devdocket-fork-contributor/feature/topic'],
+        ['rev-parse', '--verify', 'refs/heads/feature/topic'],
+        ['worktree', 'add', '-b', 'feature/topic', path.join('/mock', 'workspace-feature-topic-item-1'), 'devdocket-fork-contributor/feature/topic'],
       ]);
-      expect(thirdCall[2]).toEqual({ cwd: '/mock/workspace', timeout: 300_000 });
     });
 
-    it('uses user-specified base branch for branch creation', async () => {
-      mockInputBox('/mock/workspace', 'main');
+    it('falls back to cloneUrl when a PR has no headCloneUrl', async () => {
+      mockNoLocalBranch();
+      const item = createWorkItem();
+      const { action } = createAction(discovered('provider', 'item-1', {
+        kind: 'pr', cloneUrl: 'https://example.com/acme/repo.git', ref: 'feature/topic', repoLabel: 'acme/repo',
+      }));
 
-      const item = createWorkItem({ title: '#123: Fix bug' });
       await action.run(item);
 
-      const branchCall = vi.mocked(execFile).mock.calls.find(
-        (call: any[]) => call[1]?.[0] === 'branch' && call[1]?.[1] !== '--list',
-      );
-      expect(branchCall).toBeDefined();
-      expect(branchCall![1]).toEqual(['branch', 'issue123', 'main']);
+      expect(vi.mocked(execFile).mock.calls.map(call => call[1])).toEqual([
+        ['remote', '-v'],
+        ['fetch', 'origin', '+refs/heads/feature/topic:refs/remotes/origin/feature/topic'],
+        ['rev-parse', '--verify', 'refs/heads/feature/topic'],
+        ['worktree', 'add', '-b', 'feature/topic', path.join('/mock', 'workspace-feature-topic-item-1'), 'origin/feature/topic'],
+      ]);
     });
 
-    it('shows error when branch already exists', async () => {
+    it('normalizes fully-qualified PR head refs before fetching and checking out', async () => {
+      mockNoLocalBranch();
+      const item = createWorkItem();
+      const { action } = createAction(discovered('provider', 'item-1', {
+        kind: 'pr', cloneUrl: 'https://example.com/acme/repo.git', ref: 'refs/heads/feature/topic', repoLabel: 'acme/repo',
+      }));
+
+      await action.run(item);
+
+      expect(vi.mocked(execFile).mock.calls.map(call => call[1])).toEqual([
+        ['remote', '-v'],
+        ['fetch', 'origin', '+refs/heads/feature/topic:refs/remotes/origin/feature/topic'],
+        ['rev-parse', '--verify', 'refs/heads/feature/topic'],
+        ['worktree', 'add', '-b', 'feature/topic', path.join('/mock', 'workspace-feature-topic-item-1'), 'origin/feature/topic'],
+      ]);
+    });
+
+    it('uses repoLabel for ADO _git remote names', async () => {
+      mockNoLocalBranch('origin\thttps://example.com/other/repo.git (fetch)\n');
+      const item = createWorkItem();
+      const { action } = createAction(discovered('provider', 'item-1', {
+        kind: 'pr',
+        cloneUrl: 'https://dev.azure.com/myorg/MyProject/_git/myrepo',
+        ref: 'feature/topic',
+        repoLabel: 'myorg/MyProject/myrepo',
+      }));
+
+      await action.run(item);
+
+      expect(vi.mocked(execFile).mock.calls.map(call => call[1])).toContainEqual([
+        'remote', 'add', 'devdocket-fork-myorg-MyProject-myrepo', 'https://dev.azure.com/myorg/MyProject/_git/myrepo',
+      ]);
+    });
+
+    it('reports fetch failures with git error details', async () => {
       vi.mocked(execFile).mockImplementation(((cmd: string, args: string[], opts: any, cb: Function) => {
-        if (args[0] === 'branch' && args[1] === '--list') {
-          cb(null, '  issue123\n', '');
-        } else {
-          cb(null, '', '');
-        }
-      }) as any);
-
-      const item = createWorkItem();
-      await action.run(item);
-
-      expect(window.showErrorMessage).toHaveBeenCalledWith(
-        'DevDocket: Branch "issue123" already exists.',
-      );
-    });
-
-    it('shows error when worktree directory already exists', async () => {
-      vi.mocked(fs.existsSync).mockImplementation((p: any) => {
-        const pathStr = p.toString();
-        // .git check passes, worktree dir check also passes (already exists)
-        return pathStr.endsWith('.git') || pathStr.includes('workspace-issue123');
-      });
-
-      const item = createWorkItem();
-      await action.run(item);
-
-      expect(window.showErrorMessage).toHaveBeenCalledWith(
-        expect.stringContaining('already exists'),
-      );
-      // Should not have created any branches (fail-fast before git operations)
-      expect(execFile).not.toHaveBeenCalled();
-    });
-
-    it('shows error when externalId is missing', async () => {
-      const item = createWorkItem({ externalId: undefined });
-      await action.run(item);
-
-      expect(window.showErrorMessage).toHaveBeenCalledWith(
-        'Could not determine work item number.',
-      );
-    });
-
-    it('shows error when externalId format is invalid', async () => {
-      const item = createWorkItem({ externalId: 'invalid-format' });
-      await action.run(item);
-
-      expect(window.showErrorMessage).toHaveBeenCalledWith(
-        'Could not determine work item number.',
-      );
-    });
-
-    it('shows success message after creating worktree', async () => {
-      const item = createWorkItem();
-      await action.run(item);
-
-      expect(window.showInformationMessage).toHaveBeenCalledWith(
-        'DevDocket: Created worktree for issue123',
-      );
-    });
-
-    it('runs post-worktree commands with {path} placeholder', async () => {
-      vi.mocked(workspace.getConfiguration).mockReturnValue({
-        get: vi.fn((key: string, defaultValue?: any) => {
-          if (key === 'commands') {
-            return [
-              { command: 'npm', args: ['install', '--prefix', '{path}'] },
-            ];
-          }
-          return defaultValue;
-        }),
-      } as any);
-
-      const item = createWorkItem();
-      await action.run(item);
-
-      // git commands (3) + 1 post-worktree command
-      expect(execFile).toHaveBeenCalledTimes(4);
-      const postCmd = vi.mocked(execFile).mock.calls[3];
-      expect(postCmd[0]).toBe('npm');
-      const expectedWorktreePath = path.join('/mock', 'workspace-issue123');
-      expect(postCmd[1]).toEqual(['install', '--prefix', expectedWorktreePath]);
-      expect(postCmd[2]).toEqual({ cwd: expectedWorktreePath, timeout: 60_000 });
-    });
-
-    it('shows warning when post-worktree command fails', async () => {
-      vi.mocked(workspace.getConfiguration).mockReturnValue({
-        get: vi.fn((key: string, defaultValue?: any) => {
-          if (key === 'commands') {
-            return [{ command: 'bad-cmd' }];
-          }
-          return defaultValue;
-        }),
-      } as any);
-
-      vi.mocked(execFile).mockImplementation(((cmd: string, args: string[], optsOrCb: any, cb?: Function) => {
-        const callback = typeof optsOrCb === 'function' ? optsOrCb : cb;
-        if (cmd === 'bad-cmd') {
-          callback?.(new Error('command not found'), '', '');
+        if (args[0] === 'remote' && args[1] === '-v') {
+          cb(null, ORIGIN_REMOTE_V, '');
           return;
         }
-        callback?.(null, '', '');
-      }) as any);
-
-      const item = createWorkItem();
-      await action.run(item);
-
-      expect(window.showWarningMessage).toHaveBeenCalledWith(
-        expect.stringContaining('bad-cmd'),
-      );
-    });
-
-    it('handles git worktree failure and rolls back branch', async () => {
-      let callCount = 0;
-      vi.mocked(execFile).mockImplementation(((cmd: string, args: string[], opts: any, cb: Function) => {
-        callCount++;
-        if (args[0] === 'worktree') {
-          cb(new Error('worktree failed'), '', '');
+        if (args[0] === 'fetch') {
+          cb(new Error('fetch failed'), '', 'Authentication failed');
           return;
         }
         cb(null, '', '');
       }) as any);
-
       const item = createWorkItem();
+      const { action } = createAction(discovered('provider', 'item-1', {
+        kind: 'pr', cloneUrl: 'https://example.com/acme/repo.git', ref: 'feature/topic', repoLabel: 'acme/repo',
+      }));
+
       await action.run(item);
 
-      // Should have attempted rollback (branch -D)
-      const rollbackCall = vi.mocked(execFile).mock.calls.find(
-        (call: any[]) => call[1]?.[0] === 'branch' && call[1]?.[1] === '-D',
+      expect(window.showErrorMessage).toHaveBeenCalledWith(
+        "DevDocket: Could not fetch branch 'feature/topic' from remote 'origin'. Authentication failed",
       );
-      expect(rollbackCall).toBeDefined();
-      expect(rollbackCall![1]).toEqual(['branch', '-D', 'issue123']);
+      expect(vi.mocked(execFile).mock.calls.map(call => call[1])).not.toContainEqual([
+        'worktree', 'add', '-b', 'feature/topic', path.join('/mock', 'workspace-feature-topic-item-1'), 'origin/feature/topic',
+      ]);
     });
 
-    it('logs activity with worktreePath and repoPath', async () => {
-      const { commands } = await import('vscode');
+    it('rejects an invalid cloneUrl returned by a lazy resolver', async () => {
       const item = createWorkItem();
+      const { action } = createAction(discovered('provider', 'item-1', async () => ({
+        kind: 'issue', cloneUrl: 'not a url', ref: 'issue123', repoLabel: 'acme/repo',
+      })));
+
       await action.run(item);
 
-      const expectedWorktreePath = path.join('/mock', 'workspace-issue123');
-      expect(commands.executeCommand).toHaveBeenCalledWith(
-        'devdocket.addActivity',
-        item.id,
-        'work-started',
-        JSON.stringify({ branchName: 'issue123', worktreePath: expectedWorktreePath, repoPath: '/mock/workspace' }),
-      );
-    });
-  });
-
-  describe('run (checkout mode)', () => {
-    beforeEach(() => {
-      mockQuickPickCheckout();
+      expect(window.showErrorMessage).toHaveBeenCalledWith('DevDocket: Provider returned an invalid clone URL for this work item.');
+      expect(window.showInputBox).not.toHaveBeenCalled();
+      expect(execFile).not.toHaveBeenCalled();
     });
 
-    it('checks out new branch with git checkout -b for issue items', async () => {
+    it('rejects git SSH clone URLs with unsafe hosts', async () => {
       const item = createWorkItem();
+      const { action } = createAction(discovered('provider', 'item-1', async () => ({
+        kind: 'issue', cloneUrl: 'git@-evil.example:acme/repo.git', ref: 'issue123', repoLabel: 'acme/repo',
+      })));
+
       await action.run(item);
 
-      // git status --porcelain + git checkout -b
-      expect(execFile).toHaveBeenCalledTimes(2);
-
-      const statusCall = vi.mocked(execFile).mock.calls[0];
-      expect(statusCall[1]).toEqual(['status', '--porcelain']);
-
-      const checkoutCall = vi.mocked(execFile).mock.calls[1];
-      expect(checkoutCall[0]).toBe('git');
-      expect(checkoutCall[1]).toEqual(['checkout', '-b', 'issue123', 'origin/dev']);
-      expect(checkoutCall[2]).toEqual({ cwd: '/mock/workspace', timeout: 300_000 });
+      expect(window.showErrorMessage).toHaveBeenCalledWith('DevDocket: Provider returned an invalid clone URL for this work item.');
+      expect(window.showInputBox).not.toHaveBeenCalled();
+      expect(execFile).not.toHaveBeenCalled();
     });
 
-    it('shows success message after checkout', async () => {
+    it('rejects HTTPS clone URLs with embedded credentials or token-bearing suffixes', async () => {
       const item = createWorkItem();
+      const { action } = createAction(discovered('provider', 'item-1', async () => ({
+        kind: 'issue', cloneUrl: 'https://user:token@example.com/acme/repo.git?token=secret', ref: 'issue123', repoLabel: 'acme/repo',
+      })));
+
       await action.run(item);
 
-      expect(window.showInformationMessage).toHaveBeenCalledWith(
-        'DevDocket: Checked out branch issue123',
-      );
+      expect(window.showErrorMessage).toHaveBeenCalledWith('DevDocket: Provider returned an invalid clone URL for this work item.');
+      expect(window.showInputBox).not.toHaveBeenCalled();
+      expect(execFile).not.toHaveBeenCalled();
     });
 
-    it('logs activity with branchName and repoPath (no worktreePath)', async () => {
-      const { commands } = await import('vscode');
+    it('rejects an invalid ref returned by a lazy resolver', async () => {
       const item = createWorkItem();
+      const { action } = createAction(discovered('provider', 'item-1', async () => ({
+        kind: 'issue', cloneUrl: 'https://example.com/acme/repo.git', ref: '-bad', repoLabel: 'acme/repo',
+      })));
+
       await action.run(item);
 
-      expect(commands.executeCommand).toHaveBeenCalledWith(
-        'devdocket.addActivity',
-        item.id,
-        'work-started',
-        JSON.stringify({ branchName: 'issue123', repoPath: '/mock/workspace' }),
-      );
+      expect(window.showErrorMessage).toHaveBeenCalledWith('DevDocket: Provider returned an invalid git ref for this work item.');
+      expect(window.showInputBox).not.toHaveBeenCalled();
+      expect(execFile).not.toHaveBeenCalled();
     });
 
-    it('prompts confirmation when working tree is dirty', async () => {
+    it.each(['foo..bar', 'foo.', 'foo/', 'foo//bar'])('rejects git-invalid ref %s', async (ref) => {
+      const item = createWorkItem();
+      const { action } = createAction(discovered('provider', 'item-1', async () => ({
+        kind: 'issue', cloneUrl: 'https://example.com/acme/repo.git', ref, repoLabel: 'acme/repo',
+      })));
+
+      await action.run(item);
+
+      expect(window.showErrorMessage).toHaveBeenCalledWith('DevDocket: Provider returned an invalid git ref for this work item.');
+      expect(window.showInputBox).not.toHaveBeenCalled();
+      expect(execFile).not.toHaveBeenCalled();
+    });
+
+    it('rejects non-string provider refs without throwing', async () => {
+      const item = createWorkItem();
+      const { action } = createAction(discovered('provider', 'item-1', async () => ({
+        kind: 'issue', cloneUrl: 'https://example.com/acme/repo.git', ref: 123 as any, repoLabel: 'acme/repo',
+      })));
+
+      await action.run(item);
+
+      expect(window.showErrorMessage).toHaveBeenCalledWith('DevDocket: Provider returned an invalid git ref for this work item.');
+      expect(window.showInputBox).not.toHaveBeenCalled();
+      expect(execFile).not.toHaveBeenCalled();
+    });
+
+    it('rejects unsupported fully-qualified PR refs', async () => {
+      const item = createWorkItem();
+      const { action } = createAction(discovered('provider', 'item-1', async () => ({
+        kind: 'pr', cloneUrl: 'https://example.com/acme/repo.git', ref: 'refs/pull/123/head', repoLabel: 'acme/repo',
+      })));
+
+      await action.run(item);
+
+      expect(window.showErrorMessage).toHaveBeenCalledWith('DevDocket: Provider returned an unsupported git branch ref for this work item.');
+      expect(window.showInputBox).not.toHaveBeenCalled();
+      expect(execFile).not.toHaveBeenCalled();
+    });
+
+    it('normalizes fully-qualified issue head refs before creating a branch', async () => {
+      const item = createWorkItem({ providerId: 'fake-vendor', externalId: 'ABC-123' });
+      const { action } = createAction(discovered('fake-vendor', 'ABC-123', {
+        kind: 'issue', cloneUrl: 'https://git.example.com/acme/repo.git', ref: 'refs/heads/vendor/ABC-123', repoLabel: 'Vendor Repo',
+      }));
+
+      await action.run(item);
+
+      expect(vi.mocked(execFile).mock.calls[0][1]).toEqual(['branch', '--list', 'vendor/ABC-123']);
+      expect(vi.mocked(execFile).mock.calls[1][1]).toEqual(['branch', 'vendor/ABC-123', 'origin/dev']);
+      expect(vi.mocked(execFile).mock.calls[2][1]).toEqual([
+        'worktree', 'add', path.join('/mock', 'workspace-vendor-ABC-123-ABC-123'), 'vendor/ABC-123',
+      ]);
+    });
+
+    it('rejects unsupported fully-qualified issue refs', async () => {
+      const item = createWorkItem();
+      const { action } = createAction(discovered('provider', 'item-1', async () => ({
+        kind: 'issue', cloneUrl: 'https://example.com/acme/repo.git', ref: 'refs/tags/v1', repoLabel: 'acme/repo',
+      })));
+
+      await action.run(item);
+
+      expect(window.showErrorMessage).toHaveBeenCalledWith('DevDocket: Provider returned an unsupported git branch ref for this work item.');
+      expect(window.showInputBox).not.toHaveBeenCalled();
+      expect(execFile).not.toHaveBeenCalled();
+    });
+
+    it('aborts checkout when the working tree is dirty and the user cancels', async () => {
+      vi.mocked(window.showQuickPick).mockResolvedValue({ label: 'Checkout branch', value: 'checkout' } as any);
+      vi.mocked(window.showWarningMessage).mockResolvedValue(undefined as any);
       vi.mocked(execFile).mockImplementation(((cmd: string, args: string[], opts: any, cb: Function) => {
-        if (args[0] === 'status' && args[1] === '--porcelain') {
+        if (args[0] === 'status') {
           cb(null, ' M file.ts\n', '');
           return;
         }
         cb(null, '', '');
       }) as any);
-
-      vi.mocked(window.showWarningMessage).mockResolvedValue('Yes' as any);
-
       const item = createWorkItem();
+      const { action } = createAction(discovered('provider', 'item-1', {
+        kind: 'issue', cloneUrl: 'https://example.com/acme/repo.git', ref: 'issue123', repoLabel: 'acme/repo',
+      }));
+
       await action.run(item);
 
       expect(window.showWarningMessage).toHaveBeenCalledWith(
@@ -626,1165 +411,341 @@ describe('StartWorkAction', () => {
         { modal: true },
         'Yes',
       );
-      // Should still proceed
-      const checkoutCall = vi.mocked(execFile).mock.calls.find(
-        (call: any[]) => call[1]?.[0] === 'checkout',
-      );
-      expect(checkoutCall).toBeDefined();
+      expect(vi.mocked(execFile).mock.calls.map(call => call[1])).not.toContainEqual(['checkout', '-b', 'issue123', 'origin/dev']);
     });
 
-    it('aborts checkout when user declines dirty tree prompt', async () => {
-      vi.mocked(execFile).mockImplementation(((cmd: string, args: string[], opts: any, cb: Function) => {
-        if (args[0] === 'status' && args[1] === '--porcelain') {
-          cb(null, ' M file.ts\n', '');
-          return;
-        }
-        cb(null, '', '');
-      }) as any);
-
-      vi.mocked(window.showWarningMessage).mockResolvedValue(undefined as any);
-
-      const item = createWorkItem();
-      await action.run(item);
-
-      const checkoutCall = vi.mocked(execFile).mock.calls.find(
-        (call: any[]) => call[1]?.[0] === 'checkout',
-      );
-      expect(checkoutCall).toBeUndefined();
-    });
-
-    it('does not prompt when working tree is clean', async () => {
-      const item = createWorkItem();
-      await action.run(item);
-
-      expect(window.showWarningMessage).not.toHaveBeenCalledWith(
-        expect.stringContaining('uncommitted changes'),
-        expect.anything(),
-        expect.anything(),
-      );
-    });
-  });
-
-  describe('base branch prompting', () => {
-    it('prompts user for base branch with no default on first use', async () => {
-      const item = createWorkItem();
-      await action.run(item);
-
-      const baseBranchCall = vi.mocked(window.showInputBox).mock.calls.find(
-        (call: any[]) => call[0]?.prompt?.includes('base branch'),
-      );
-      expect(baseBranchCall).toBeDefined();
-      expect(baseBranchCall![0]).toEqual({
-        prompt: 'Enter the base branch for owner/repo',
-        value: '',
-        ignoreFocusOut: true,
-      });
-    });
-
-    it('pre-fills cached branch as default on subsequent use', async () => {
-      mockMemento._store.set('baseBranch:owner/repo', 'origin/main');
-      mockInputBox('/mock/workspace', 'origin/main');
-
-      const item = createWorkItem();
-      await action.run(item);
-
-      const baseBranchCall = vi.mocked(window.showInputBox).mock.calls.find(
-        (call: any[]) => call[0]?.prompt?.includes('base branch'),
-      );
-      expect(baseBranchCall![0]).toEqual(
-        expect.objectContaining({ value: 'origin/main' }),
-      );
-    });
-
-    it('caches the selected base branch on success', async () => {
-      const item = createWorkItem();
-      await action.run(item);
-
-      expect(mockMemento.update).toHaveBeenCalledWith('baseBranch:owner/repo', 'origin/dev');
-    });
-
-    it('does not proceed when user cancels base branch input', async () => {
-      mockInputBox('/mock/workspace', undefined);
-
-      const item = createWorkItem();
-      await action.run(item);
-
-      // Should have cached repo path but not proceeded to git commands
-      expect(mockMemento.update).toHaveBeenCalledTimes(1); // only repoPath
-      expect(execFile).not.toHaveBeenCalled();
-    });
-
-    it('shows error when user provides empty base branch', async () => {
-      mockInputBox('/mock/workspace', '   ');
-
-      const item = createWorkItem();
-      await action.run(item);
-
-      expect(window.showErrorMessage).toHaveBeenCalledWith(
-        'DevDocket: No base branch provided.',
-      );
-    });
-  });
-
-  describe('ADO-specific behavior', () => {
-    it('parses ADO externalId org/project/456 correctly', async () => {
-      const item = createWorkItem({
-        providerId: 'ado-work-items',
-        externalId: 'org/project/456',
-      });
-      await action.run(item);
-
-      // Repo path prompt should use repoKey "org/project"
-      expect(window.showInputBox).toHaveBeenCalledWith(
-        expect.objectContaining({
-          prompt: 'Enter the local path to the git repository for org/project',
-        }),
-      );
-    });
-
-    it('creates branch issue456 for ADO items', async () => {
-      const item = createWorkItem({
-        providerId: 'ado-work-items',
-        externalId: 'org/project/456',
-      });
-      await action.run(item);
-
-      const branchListCall = vi.mocked(execFile).mock.calls[0];
-      expect(branchListCall[1]).toEqual(['branch', '--list', 'issue456']);
-    });
-
-    it('creates worktree dir workspace-issue456 for ADO items', async () => {
-      const item = createWorkItem({
-        providerId: 'ado-work-items',
-        externalId: 'org/project/456',
-      });
-      await action.run(item);
-
-      const worktreeCall = vi.mocked(execFile).mock.calls.find(
-        (call: any[]) => call[1]?.[0] === 'worktree',
-      );
-      expect(worktreeCall).toBeDefined();
-      expect(worktreeCall![1]).toEqual([
-        'worktree', 'add',
-        path.join('/mock', 'workspace-issue456'),
-        'issue456',
-      ]);
-    });
-
-    it('caches repo path per ADO repoKey', async () => {
-      const item = createWorkItem({
-        providerId: 'ado-work-items',
-        externalId: 'org/project/456',
-      });
-      await action.run(item);
-
-      expect(mockMemento.update).toHaveBeenCalledWith('repoPath:org/project', '/mock/workspace');
-    });
-  });
-
-  describe('error scenarios', () => {
-    it('handles generic git failure gracefully', async () => {
-      vi.mocked(execFile).mockImplementation(((cmd: string, args: string[], opts: any, cb: Function) => {
-        if (args[0] === 'branch' && args[1] !== '--list') {
-          cb(new Error('git error: permission denied'), '', '');
-          return;
-        }
-        cb(null, '', '');
-      }) as any);
-
-      const item = createWorkItem();
-      await action.run(item);
-
-      expect(window.showErrorMessage).toHaveBeenCalledWith(
-        expect.stringContaining('Failed to start work'),
-      );
-    });
-  });
-
-  describe('GitHub PR flow', () => {
-    beforeEach(() => {
-      mockFetchResponse(createGitHubPrResponse());
-    });
-
-    it('fetches PR branch via GitHub API for github-my-prs items', async () => {
-      mockQuickPickWorktree();
-      const item = createWorkItem({
-        providerId: 'github-my-prs',
-        externalId: 'owner/repo#42',
-      });
-      await action.run(item);
-
-      expect(authentication.getSession).toHaveBeenCalledWith('github', ['repo'], { createIfNone: true });
-      const fetchCalls = vi.mocked(globalThis.fetch).mock.calls;
-      expect(fetchCalls[0][0]).toBe('https://api.github.com/repos/owner/repo/pulls/42');
-    });
-
-    it('fetches PR branch via GitHub API for github-pr-reviews items', async () => {
-      mockQuickPickWorktree();
-      const item = createWorkItem({
-        providerId: 'github-pr-reviews',
-        externalId: 'owner/repo#99',
-      });
-      await action.run(item);
-
-      const fetchCalls = vi.mocked(globalThis.fetch).mock.calls;
-      expect(fetchCalls[0][0]).toBe('https://api.github.com/repos/owner/repo/pulls/99');
-    });
-
-    it('does not prompt for base branch for PR items', async () => {
-      const item = createWorkItem({
-        providerId: 'github-my-prs',
-        externalId: 'owner/repo#42',
-      });
-      await action.run(item);
-
-      const baseBranchCall = vi.mocked(window.showInputBox).mock.calls.find(
-        (call: any[]) => call[0]?.prompt?.includes('base branch'),
-      );
-      expect(baseBranchCall).toBeUndefined();
-    });
-
-    it('fetches from origin for same-repo PRs', async () => {
-      mockQuickPickWorktree();
-      const item = createWorkItem({
-        providerId: 'github-my-prs',
-        externalId: 'owner/repo#42',
-      });
-      await action.run(item);
-
-      const fetchCall = vi.mocked(execFile).mock.calls.find(
-        (call: any[]) => call[1]?.[0] === 'fetch',
-      );
-      expect(fetchCall).toBeDefined();
-      expect(fetchCall![1]).toEqual(['fetch', 'origin']);
-    });
-
-    it('adds fork remote and full-fetches for fork PRs', async () => {
-      mockFetchResponse(createGitHubPrResponse({
-        head: {
-          ref: 'fix/something',
-          repo: {
-            full_name: 'contributor/repo',
-            clone_url: 'https://github.com/contributor/repo.git',
-          },
-        },
-      }));
-      mockQuickPickWorktree();
-      mockNoLocalBranch();
-
-      const item = createWorkItem({
-        providerId: 'github-my-prs',
-        externalId: 'owner/repo#42',
-      });
-      await action.run(item);
-
-      // Should look up remotes
-      const remoteVCall = vi.mocked(execFile).mock.calls.find(
-        (call: any[]) => call[1]?.[0] === 'remote' && call[1]?.[1] === '-v',
-      );
-      expect(remoteVCall).toBeDefined();
-
-      // Should add a fork remote (origin URL doesn't match fork URL)
-      const remoteAddCall = vi.mocked(execFile).mock.calls.find(
-        (call: any[]) => call[1]?.[0] === 'remote' && call[1]?.[1] === 'add',
-      );
-      expect(remoteAddCall).toBeDefined();
-      expect(remoteAddCall![1]).toEqual(['remote', 'add', 'devdocket-fork-contributor', 'https://github.com/contributor/repo.git']);
-
-      // Should do a full fetch (no branch specified)
-      const fetchCall = vi.mocked(execFile).mock.calls.find(
-        (call: any[]) => call[1]?.[0] === 'fetch',
-      );
-      expect(fetchCall).toBeDefined();
-      expect(fetchCall![1]).toEqual(['fetch', 'devdocket-fork-contributor']);
-
-      const worktreeCall = vi.mocked(execFile).mock.calls.find(
-        (call: any[]) => call[1]?.[0] === 'worktree',
-      );
-      expect(worktreeCall).toBeDefined();
-      expect(worktreeCall![1]).toEqual([
-        'worktree', 'add', '-b', 'fix/something',
-        path.join('/mock', 'workspace-pr42'),
-        'devdocket-fork-contributor/fix/something',
-      ]);
-    });
-
-    it('uses existing remote when it matches fork URL', async () => {
-      mockFetchResponse(createGitHubPrResponse({
-        head: {
-          ref: 'fix/something',
-          repo: {
-            full_name: 'contributor/repo',
-            clone_url: 'https://github.com/contributor/repo.git',
-          },
-        },
-      }));
-      mockQuickPickWorktree();
-
-      // git remote -v returns a user remote that matches the fork URL
-      vi.mocked(execFile).mockImplementation(((cmd: string, args: string[], opts: any, cb: Function) => {
-        if (args[0] === 'remote' && args[1] === '-v') {
-          cb(null, 'origin\thttps://github.com/owner/repo.git (fetch)\norigin\thttps://github.com/owner/repo.git (push)\nmy-fork\thttps://github.com/contributor/repo.git (fetch)\nmy-fork\thttps://github.com/contributor/repo.git (push)\n', '');
-          return;
-        }
-        cb(null, '', '');
-      }) as any);
-
-      const item = createWorkItem({
-        providerId: 'github-my-prs',
-        externalId: 'owner/repo#42',
-      });
-      await action.run(item);
-
-      // Should NOT add a new remote
-      const remoteAddCall = vi.mocked(execFile).mock.calls.find(
-        (call: any[]) => call[1]?.[0] === 'remote' && call[1]?.[1] === 'add',
-      );
-      expect(remoteAddCall).toBeUndefined();
-
-      // Should fetch from the existing remote
-      const fetchCall = vi.mocked(execFile).mock.calls.find(
-        (call: any[]) => call[1]?.[0] === 'fetch',
-      );
-      expect(fetchCall).toBeDefined();
-      expect(fetchCall![1]).toEqual(['fetch', 'my-fork']);
-    });
-
-    it('updates existing devdocket-fork remote with different URL', async () => {
-      mockFetchResponse(createGitHubPrResponse({
-        head: {
-          ref: 'fix/something',
-          repo: {
-            full_name: 'contributor/repo',
-            clone_url: 'https://github.com/contributor/repo.git',
-          },
-        },
-      }));
-      mockQuickPickWorktree();
-
-      // remote add fails (already exists); get-url returns a different URL
+    it('checks out an existing same-repo PR branch directly', async () => {
+      vi.mocked(window.showQuickPick).mockResolvedValue({ label: 'Checkout branch', value: 'checkout' } as any);
       vi.mocked(execFile).mockImplementation(((cmd: string, args: string[], opts: any, cb: Function) => {
         if (args[0] === 'remote' && args[1] === '-v') {
           cb(null, ORIGIN_REMOTE_V, '');
+          return;
+        }
+        cb(null, '', '');
+      }) as any);
+      const item = createWorkItem();
+      const { action } = createAction(discovered('provider', 'item-1', {
+        kind: 'pr', cloneUrl: 'https://example.com/acme/repo.git', ref: 'feature/topic', repoLabel: 'acme/repo',
+      }));
+
+      await action.run(item);
+
+      expect(vi.mocked(execFile).mock.calls.map(call => call[1])).toEqual([
+        ['remote', '-v'],
+        ['fetch', 'origin', '+refs/heads/feature/topic:refs/remotes/origin/feature/topic'],
+        ['status', '--porcelain'],
+        ['rev-parse', '--verify', 'refs/heads/feature/topic'],
+        ['worktree', 'list', '--porcelain'],
+        ['checkout', 'feature/topic'],
+      ]);
+    });
+
+    it('creates a detached PR worktree when a fork PR branch already exists locally', async () => {
+      vi.mocked(execFile).mockImplementation(((cmd: string, args: string[], opts: any, cb: Function) => {
+        if (args[0] === 'remote' && args[1] === '-v') {
+          cb(null, ORIGIN_REMOTE_V, '');
+          return;
+        }
+        cb(null, '', '');
+      }) as any);
+      const item = createWorkItem();
+      const { action } = createAction(discovered('provider', 'item-1', {
+        kind: 'pr',
+        cloneUrl: 'https://example.com/acme/repo.git',
+        headCloneUrl: 'https://example.com/contributor/repo.git',
+        ref: 'feature/topic',
+        repoLabel: 'acme/repo',
+      }));
+
+      await action.run(item);
+
+      expect(vi.mocked(execFile).mock.calls.map(call => call[1])).toContainEqual([
+        'worktree', 'add', '--detach', path.join('/mock', 'workspace-feature-topic-item-1'), 'devdocket-fork-contributor/feature/topic',
+      ]);
+    });
+
+    it('updates an existing DevDocket-managed remote with a stale URL', async () => {
+      mockNoLocalBranch('devdocket-fork-contributor\thttps://example.com/old/repo.git (fetch)\n');
+      vi.mocked(execFile).mockImplementation(((cmd: string, args: string[], opts: any, cb: Function) => {
+        if (args[0] === 'remote' && args[1] === '-v') {
+          cb(null, 'devdocket-fork-contributor\thttps://example.com/old/repo.git (fetch)\n', '');
           return;
         }
         if (args[0] === 'remote' && args[1] === 'add') {
-          cb(new Error('remote devdocket-fork-contributor already exists'), '', '');
+          cb(new Error('remote already exists'), '', '');
           return;
         }
         if (args[0] === 'remote' && args[1] === 'get-url') {
-          cb(null, 'https://github.com/old-contributor/repo.git\n', '');
+          cb(null, 'https://example.com/old/repo.git\n', '');
+          return;
+        }
+        if (args[0] === 'rev-parse') {
+          cb(new Error('not a valid ref'), '', '');
           return;
         }
         cb(null, '', '');
       }) as any);
-
-      const item = createWorkItem({
-        providerId: 'github-my-prs',
-        externalId: 'owner/repo#42',
-      });
-      await action.run(item);
-
-      // Should update the URL
-      const setUrlCall = vi.mocked(execFile).mock.calls.find(
-        (call: any[]) => call[1]?.[0] === 'remote' && call[1]?.[1] === 'set-url',
-      );
-      expect(setUrlCall).toBeDefined();
-      expect(setUrlCall![1]).toEqual(['remote', 'set-url', 'devdocket-fork-contributor', 'https://github.com/contributor/repo.git']);
-
-      // Should still fetch
-      const fetchCall = vi.mocked(execFile).mock.calls.find(
-        (call: any[]) => call[1]?.[0] === 'fetch',
-      );
-      expect(fetchCall).toBeDefined();
-      expect(fetchCall![1]).toEqual(['fetch', 'devdocket-fork-contributor']);
-    });
-
-    it('creates detached worktree from tracking ref when local branch exists (fork PR)', async () => {
-      mockFetchResponse(createGitHubPrResponse({
-        head: {
-          ref: 'fix/something',
-          repo: {
-            full_name: 'contributor/repo',
-            clone_url: 'https://github.com/contributor/repo.git',
-          },
-        },
-      }));
-      mockQuickPickWorktree();
-      // Local branch exists — should create detached worktree from tracking ref
-
-      const item = createWorkItem({
-        providerId: 'github-my-prs',
-        externalId: 'owner/repo#42',
-      });
-      await action.run(item);
-
-      const worktreeCall = vi.mocked(execFile).mock.calls.find(
-        (call: any[]) => call[1]?.[0] === 'worktree',
-      );
-      expect(worktreeCall).toBeDefined();
-      expect(worktreeCall![1]).toEqual([
-        'worktree', 'add', '--detach',
-        path.join('/mock', 'workspace-pr42'),
-        'devdocket-fork-contributor/fix/something',
-      ]);
-    });
-
-    it('uses checkout -b with tracking ref for fork PRs in checkout mode', async () => {
-      mockFetchResponse(createGitHubPrResponse({
-        head: {
-          ref: 'fix/something',
-          repo: {
-            full_name: 'contributor/repo',
-            clone_url: 'https://github.com/contributor/repo.git',
-          },
-        },
-      }));
-      mockQuickPickCheckout();
-      mockNoLocalBranch();
-
-      const item = createWorkItem({
-        providerId: 'github-my-prs',
-        externalId: 'owner/repo#42',
-      });
-      await action.run(item);
-
-      const checkoutCall = vi.mocked(execFile).mock.calls.find(
-        (call: any[]) => call[1]?.[0] === 'checkout',
-      );
-      expect(checkoutCall).toBeDefined();
-      expect(checkoutCall![1]).toEqual(['checkout', '-b', 'fix/something', 'devdocket-fork-contributor/fix/something']);
-    });
-
-    it('uses detached checkout for fork PR when local branch exists', async () => {
-      mockFetchResponse(createGitHubPrResponse({
-        head: {
-          ref: 'fix/something',
-          repo: {
-            full_name: 'contributor/repo',
-            clone_url: 'https://github.com/contributor/repo.git',
-          },
-        },
-      }));
-      mockQuickPickCheckout();
-      // Local branch exists — should use --detach to avoid resetting user's branch
-      const item = createWorkItem({
-        providerId: 'github-my-prs',
-        externalId: 'owner/repo#42',
-      });
-      await action.run(item);
-
-      const checkoutCall = vi.mocked(execFile).mock.calls.find(
-        (call: any[]) => call[1]?.[0] === 'checkout',
-      );
-      expect(checkoutCall).toBeDefined();
-      expect(checkoutCall![1]).toEqual(['checkout', '--detach', 'devdocket-fork-contributor/fix/something']);
-    });
-
-    it('creates detached worktree when same-repo PR branch is held by another worktree (porcelain pre-check)', async () => {
-      // Same-repo PR (default response) — origin already points at the PR's repo,
-      // so trackingRef will be undefined and worktreeSourceRef = 'origin/<branch>'.
-      mockQuickPickWorktree();
-
-      // Default mock has hasLocalBranch=true. Make `git worktree list --porcelain`
-      // report a sibling worktree holding refs/heads/feature/my-branch — the
-      // pre-check should detect this and route directly to the detached path
-      // without attempting (and failing) a non-detached worktree add first.
-      vi.mocked(execFile).mockImplementation(((cmd: string, args: string[], opts: any, cb: Function) => {
-        if (args[0] === 'remote' && args[1] === '-v') {
-          cb(null, ORIGIN_REMOTE_V, '');
-          return;
-        }
-        if (args[0] === 'worktree' && args[1] === 'list' && args[2] === '--porcelain') {
-          cb(null,
-            'worktree /mock/workspace\n' +
-            'HEAD aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\n' +
-            'branch refs/heads/main\n' +
-            '\n' +
-            'worktree /mock/other-worktree\n' +
-            'HEAD bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\n' +
-            'branch refs/heads/feature/my-branch\n' +
-            '\n', '');
-          return;
-        }
-        cb(null, '', '');
-      }) as any);
-
-      const item = createWorkItem({
-        providerId: 'github-my-prs',
-        externalId: 'owner/repo#42',
-      });
-      await action.run(item);
-
-      const worktreeAddCalls = vi.mocked(execFile).mock.calls.filter(
-        (call: any[]) => call[1]?.[0] === 'worktree' && call[1]?.[1] === 'add',
-      );
-      // Only one attempt — the detached one. No failed pre-attempt.
-      expect(worktreeAddCalls).toHaveLength(1);
-      expect(worktreeAddCalls[0]![1]).toEqual([
-        'worktree', 'add', '--detach',
-        path.join('/mock', 'workspace-pr42'),
-        'origin/feature/my-branch',
-      ]);
-
-      // No error surfaced to the user.
-      expect(window.showErrorMessage).not.toHaveBeenCalled();
-    });
-
-    it('uses non-detached worktree add when no other worktree holds the branch', async () => {
-      // Sanity check that the porcelain pre-check does NOT incorrectly route
-      // to the detached path when the branch is free.
-      mockQuickPickWorktree();
-      // Default mock returns empty stdout for `git worktree list --porcelain`,
-      // so findWorktreeHoldingBranch returns undefined. The worktree add should
-      // use the local branch directly (non-detached).
-
-      const item = createWorkItem({
-        providerId: 'github-my-prs',
-        externalId: 'owner/repo#42',
-      });
-      await action.run(item);
-
-      const worktreeAddCalls = vi.mocked(execFile).mock.calls.filter(
-        (call: any[]) => call[1]?.[0] === 'worktree' && call[1]?.[1] === 'add',
-      );
-      expect(worktreeAddCalls).toHaveLength(1);
-      expect(worktreeAddCalls[0]![1]).toEqual([
-        'worktree', 'add',
-        path.join('/mock', 'workspace-pr42'),
-        'feature/my-branch',
-      ]);
-    });
-
-    it('porcelain pre-check ignores worktrees holding a branch with a similar name', async () => {
-      // Guards against substring/false-positive matches: a worktree holding
-      // refs/heads/feature/my-branch-extra must NOT be treated as conflicting
-      // with refs/heads/feature/my-branch.
-      mockQuickPickWorktree();
-
-      vi.mocked(execFile).mockImplementation(((cmd: string, args: string[], opts: any, cb: Function) => {
-        if (args[0] === 'remote' && args[1] === '-v') {
-          cb(null, ORIGIN_REMOTE_V, '');
-          return;
-        }
-        if (args[0] === 'worktree' && args[1] === 'list' && args[2] === '--porcelain') {
-          cb(null,
-            'worktree /mock/other\n' +
-            'HEAD bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\n' +
-            'branch refs/heads/feature/my-branch-extra\n' +
-            '\n', '');
-          return;
-        }
-        cb(null, '', '');
-      }) as any);
-
-      const item = createWorkItem({
-        providerId: 'github-my-prs',
-        externalId: 'owner/repo#42',
-      });
-      await action.run(item);
-
-      const worktreeAddCalls = vi.mocked(execFile).mock.calls.filter(
-        (call: any[]) => call[1]?.[0] === 'worktree' && call[1]?.[1] === 'add',
-      );
-      // Used the local branch directly — no detached fallback.
-      expect(worktreeAddCalls).toHaveLength(1);
-      expect(worktreeAddCalls[0]![1]).toEqual([
-        'worktree', 'add',
-        path.join('/mock', 'workspace-pr42'),
-        'feature/my-branch',
-      ]);
-    });
-
-    it('shows error in checkout mode when same-repo PR branch is held by another worktree (porcelain pre-check)', async () => {
-      mockQuickPickCheckout();
-
-      vi.mocked(execFile).mockImplementation(((cmd: string, args: string[], opts: any, cb: Function) => {
-        if (args[0] === 'remote' && args[1] === '-v') {
-          cb(null, ORIGIN_REMOTE_V, '');
-          return;
-        }
-        if (args[0] === 'worktree' && args[1] === 'list' && args[2] === '--porcelain') {
-          cb(null,
-            'worktree /mock/workspace\n' +
-            'HEAD aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\n' +
-            'branch refs/heads/main\n' +
-            '\n' +
-            'worktree /mock/other-worktree\n' +
-            'HEAD bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\n' +
-            'branch refs/heads/feature/my-branch\n' +
-            '\n', '');
-          return;
-        }
-        cb(null, '', '');
-      }) as any);
-
-      const item = createWorkItem({
-        providerId: 'github-my-prs',
-        externalId: 'owner/repo#42',
-      });
-      await action.run(item);
-
-      // No checkout was attempted — we short-circuited with a clear error.
-      const checkoutCall = vi.mocked(execFile).mock.calls.find(
-        (call: any[]) => call[1]?.[0] === 'checkout',
-      );
-      expect(checkoutCall).toBeUndefined();
-
-      expect(window.showErrorMessage).toHaveBeenCalledWith(
-        expect.stringContaining('/mock/other-worktree'),
-      );
-      expect(window.showErrorMessage).toHaveBeenCalledWith(
-        expect.stringContaining('feature/my-branch'),
-      );
-    });
-
-    it('falls through to non-detached worktree add when porcelain pre-check command fails', async () => {
-      // The porcelain pre-check is best-effort: if `git worktree list --porcelain`
-      // itself errors, we should fall through to the normal worktree add path
-      // and let any real conflict surface from git directly.
-      mockQuickPickWorktree();
-
-      vi.mocked(execFile).mockImplementation(((cmd: string, args: string[], opts: any, cb: Function) => {
-        if (args[0] === 'remote' && args[1] === '-v') {
-          cb(null, ORIGIN_REMOTE_V, '');
-          return;
-        }
-        if (args[0] === 'worktree' && args[1] === 'list' && args[2] === '--porcelain') {
-          const err = new Error('fatal: not a git repository');
-          (err as any).stderr = 'fatal: not a git repository';
-          cb(err, '', (err as any).stderr);
-          return;
-        }
-        cb(null, '', '');
-      }) as any);
-
-      const item = createWorkItem({
-        providerId: 'github-my-prs',
-        externalId: 'owner/repo#42',
-      });
-      await action.run(item);
-
-      const worktreeAddCalls = vi.mocked(execFile).mock.calls.filter(
-        (call: any[]) => call[1]?.[0] === 'worktree' && call[1]?.[1] === 'add',
-      );
-      expect(worktreeAddCalls).toHaveLength(1);
-      expect(worktreeAddCalls[0]![1]).toEqual([
-        'worktree', 'add',
-        path.join('/mock', 'workspace-pr42'),
-        'feature/my-branch',
-      ]);
-    });
-
-    it('proceeds with checkout when the current repo worktree itself holds the branch', async () => {
-      // Edge case: in checkout mode, if `git worktree list --porcelain` reports
-      // the branch is held only by the current `repoPath` worktree, that means
-      // the user is already on the PR branch. `git checkout <branch>` would be
-      // a no-op success — we must NOT block with a "branch already checked out"
-      // error in this case (the holder is excluded from conflict detection).
-      mockQuickPickCheckout();
-
-      vi.mocked(execFile).mockImplementation(((cmd: string, args: string[], opts: any, cb: Function) => {
-        if (args[0] === 'remote' && args[1] === '-v') {
-          cb(null, ORIGIN_REMOTE_V, '');
-          return;
-        }
-        if (args[0] === 'worktree' && args[1] === 'list' && args[2] === '--porcelain') {
-          cb(null,
-            'worktree /mock/workspace\n' +
-            'HEAD aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\n' +
-            'branch refs/heads/feature/my-branch\n' +
-            '\n', '');
-          return;
-        }
-        cb(null, '', '');
-      }) as any);
-
-      const item = createWorkItem({
-        providerId: 'github-my-prs',
-        externalId: 'owner/repo#42',
-      });
-      await action.run(item);
-
-      // No error surfaced — the current worktree is excluded from conflict detection.
-      expect(window.showErrorMessage).not.toHaveBeenCalled();
-
-      // Checkout proceeded normally.
-      const checkoutCall = vi.mocked(execFile).mock.calls.find(
-        (call: any[]) => call[1]?.[0] === 'checkout',
-      );
-      expect(checkoutCall).toBeDefined();
-      expect(checkoutCall![1]).toEqual(['checkout', 'feature/my-branch']);
-    });
-
-    it('shows error when fork repository has been deleted', async () => {
-      mockFetchResponse(createGitHubPrResponse({
-        head: {
-          ref: 'fix/something',
-          repo: null,
-        },
-      }));
-      mockQuickPickWorktree();
-
-      const item = createWorkItem({
-        providerId: 'github-my-prs',
-        externalId: 'owner/repo#42',
-      });
-      await action.run(item);
-
-      expect(window.showErrorMessage).toHaveBeenCalledWith(
-        'DevDocket: The source repository for PR #42 has been deleted.',
-      );
-    });
-
-    it('creates worktree with pr-prefixed directory name', async () => {
-      mockQuickPickWorktree();
-      const item = createWorkItem({
-        providerId: 'github-my-prs',
-        externalId: 'owner/repo#42',
-      });
-      await action.run(item);
-
-      const worktreeCall = vi.mocked(execFile).mock.calls.find(
-        (call: any[]) => call[1]?.[0] === 'worktree' && call[1]?.[1] === 'add',
-      );
-      expect(worktreeCall).toBeDefined();
-      expect(worktreeCall![1]).toEqual([
-        'worktree', 'add',
-        path.join('/mock', 'workspace-pr42'),
-        'feature/my-branch',
-      ]);
-    });
-
-    it('checks out PR branch for checkout mode', async () => {
-      mockQuickPickCheckout();
-      const item = createWorkItem({
-        providerId: 'github-my-prs',
-        externalId: 'owner/repo#42',
-      });
-      await action.run(item);
-
-      const checkoutCall = vi.mocked(execFile).mock.calls.find(
-        (call: any[]) => call[1]?.[0] === 'checkout',
-      );
-      expect(checkoutCall).toBeDefined();
-      expect(checkoutCall![1]).toEqual(['checkout', 'feature/my-branch']);
-    });
-
-    it('creates local branch from origin when no local branch exists (worktree)', async () => {
-      mockQuickPickWorktree();
-      mockNoLocalBranch();
-      const item = createWorkItem({
-        providerId: 'github-my-prs',
-        externalId: 'owner/repo#42',
-      });
-      await action.run(item);
-
-      const worktreeCall = vi.mocked(execFile).mock.calls.find(
-        (call: any[]) => call[1]?.[0] === 'worktree',
-      );
-      expect(worktreeCall).toBeDefined();
-      expect(worktreeCall![1]).toEqual([
-        'worktree', 'add', '-b', 'feature/my-branch',
-        path.join('/mock', 'workspace-pr42'),
-        'origin/feature/my-branch',
-      ]);
-    });
-
-    it('creates local branch from origin when no local branch exists (checkout)', async () => {
-      mockQuickPickCheckout();
-      mockNoLocalBranch();
-      const item = createWorkItem({
-        providerId: 'github-my-prs',
-        externalId: 'owner/repo#42',
-      });
-      await action.run(item);
-
-      const checkoutCall = vi.mocked(execFile).mock.calls.find(
-        (call: any[]) => call[1]?.[0] === 'checkout',
-      );
-      expect(checkoutCall).toBeDefined();
-      expect(checkoutCall![1]).toEqual(['checkout', '-b', 'feature/my-branch', '--track', 'origin/feature/my-branch']);
-    });
-
-    it('shows error for 404 PR response', async () => {
-      mockFetchResponse({}, 404);
-      mockQuickPickWorktree();
-
-      const item = createWorkItem({
-        providerId: 'github-my-prs',
-        externalId: 'owner/repo#999',
-      });
-      await action.run(item);
-
-      expect(window.showErrorMessage).toHaveBeenCalledWith(
-        'DevDocket: Could not find PR #999',
-      );
-    });
-
-    it('shows error for non-404 API errors', async () => {
-      mockFetchResponse({}, 500);
-      mockQuickPickWorktree();
-
-      const item = createWorkItem({
-        providerId: 'github-my-prs',
-        externalId: 'owner/repo#42',
-      });
-      await action.run(item);
-
-      expect(window.showErrorMessage).toHaveBeenCalledWith(
-        'DevDocket: GitHub API error (500)',
-      );
-    });
-
-    it('logs activity with worktreePath for worktree mode', async () => {
-      const { commands } = await import('vscode');
-      mockQuickPickWorktree();
-      const item = createWorkItem({
-        providerId: 'github-my-prs',
-        externalId: 'owner/repo#42',
-      });
-      await action.run(item);
-
-      const expectedWorktreePath = path.join('/mock', 'workspace-pr42');
-      expect(commands.executeCommand).toHaveBeenCalledWith(
-        'devdocket.addActivity',
-        item.id,
-        'work-started',
-        JSON.stringify({ worktreePath: expectedWorktreePath, repoPath: '/mock/workspace' }),
-      );
-    });
-
-    it('logs activity without worktreePath for checkout mode', async () => {
-      const { commands } = await import('vscode');
-      mockQuickPickCheckout();
-      const item = createWorkItem({
-        providerId: 'github-my-prs',
-        externalId: 'owner/repo#42',
-      });
-      await action.run(item);
-
-      expect(commands.executeCommand).toHaveBeenCalledWith(
-        'devdocket.addActivity',
-        item.id,
-        'work-started',
-        JSON.stringify({ repoPath: '/mock/workspace' }),
-      );
-    });
-
-    it('prompts for dirty tree before checkout', async () => {
-      mockQuickPickCheckout();
-      vi.mocked(execFile).mockImplementation(((cmd: string, args: string[], opts: any, cb: Function) => {
-        if (args[0] === 'status' && args[1] === '--porcelain') {
-          cb(null, ' M dirty.ts\n', '');
-          return;
-        }
-        cb(null, '', '');
-      }) as any);
-      vi.mocked(window.showWarningMessage).mockResolvedValue('Yes' as any);
-
-      const item = createWorkItem({
-        providerId: 'github-my-prs',
-        externalId: 'owner/repo#42',
-      });
-      await action.run(item);
-
-      expect(window.showWarningMessage).toHaveBeenCalledWith(
-        'Working tree has uncommitted changes. Checkout anyway?',
-        { modal: true },
-        'Yes',
-      );
-    });
-
-    it('aborts when user cancels work mode selection for PR', async () => {
-      vi.mocked(window.showQuickPick).mockResolvedValue(undefined);
-
-      const item = createWorkItem({
-        providerId: 'github-my-prs',
-        externalId: 'owner/repo#42',
-      });
-      await action.run(item);
-
-      // fetch should not have been called (work mode prompt comes before API call)
-      expect(vi.mocked(globalThis.fetch)).not.toHaveBeenCalled();
-      expect(execFile).not.toHaveBeenCalled();
-    });
-
-    it('shows error when worktree dir already exists for PR', async () => {
-      mockQuickPickWorktree();
-      vi.mocked(fs.existsSync).mockImplementation((p: any) => {
-        const pathStr = p.toString();
-        return pathStr.endsWith('.git') || pathStr.includes('workspace-pr42');
-      });
-
-      const item = createWorkItem({
-        providerId: 'github-my-prs',
-        externalId: 'owner/repo#42',
-      });
-      await action.run(item);
-
-      expect(window.showErrorMessage).toHaveBeenCalledWith(
-        expect.stringContaining('already exists'),
-      );
-    });
-  });
-
-  describe('ADO PR flow', () => {
-    beforeEach(() => {
-      mockFetchResponse({ sourceRefName: 'refs/heads/feature/ado-branch' });
-    });
-
-    it('fetches PR branch via ADO API for ado-pr-reviews items', async () => {
-      mockQuickPickWorktree();
-      const item = createWorkItem({
-        providerId: 'ado-pr-reviews',
-        externalId: 'org/project/repo/101',
-      });
-      await action.run(item);
-
-      expect(authentication.getSession).toHaveBeenCalledWith(
-        'microsoft',
-        ['499b84ac-1321-427f-aa17-267ca6975798/.default'],
-        { createIfNone: true },
-      );
-      const fetchCalls = vi.mocked(globalThis.fetch).mock.calls;
-      expect(fetchCalls[0][0]).toBe(
-        'https://dev.azure.com/org/project/_apis/git/repositories/repo/pullrequests/101?api-version=7.1',
-      );
-    });
-
-    it('strips refs/heads/ prefix from sourceRefName', async () => {
-      mockQuickPickWorktree();
-      const item = createWorkItem({
-        providerId: 'ado-pr-reviews',
-        externalId: 'org/project/repo/101',
-      });
-      await action.run(item);
-
-      const fetchCall = vi.mocked(execFile).mock.calls.find(
-        (call: any[]) => call[1]?.[0] === 'fetch',
-      );
-      expect(fetchCall).toBeDefined();
-      expect(fetchCall![1]).toEqual(['fetch', 'origin', 'feature/ado-branch']);
-    });
-
-    it('creates worktree with pr-prefixed directory for ADO PRs', async () => {
-      mockQuickPickWorktree();
-      const item = createWorkItem({
-        providerId: 'ado-pr-reviews',
-        externalId: 'org/project/repo/101',
-      });
-      await action.run(item);
-
-      const worktreeCall = vi.mocked(execFile).mock.calls.find(
-        (call: any[]) => call[1]?.[0] === 'worktree' && call[1]?.[1] === 'add',
-      );
-      expect(worktreeCall).toBeDefined();
-      expect(worktreeCall![1]).toEqual([
-        'worktree', 'add',
-        path.join('/mock', 'workspace-pr101'),
-        'feature/ado-branch',
-      ]);
-    });
-
-    it('checks out ADO PR branch for checkout mode', async () => {
-      mockQuickPickCheckout();
-      const item = createWorkItem({
-        providerId: 'ado-pr-reviews',
-        externalId: 'org/project/repo/101',
-      });
-      await action.run(item);
-
-      const checkoutCall = vi.mocked(execFile).mock.calls.find(
-        (call: any[]) => call[1]?.[0] === 'checkout',
-      );
-      expect(checkoutCall).toBeDefined();
-      expect(checkoutCall![1]).toEqual(['checkout', 'feature/ado-branch']);
-    });
-
-    it('shows error when ADO branch fetch fails', async () => {
-      mockQuickPickWorktree();
-
-      vi.mocked(execFile).mockImplementation(((cmd: string, args: string[], opts: any, cb: Function) => {
-        if (args[0] === 'fetch') {
-          cb(new Error("fatal: couldn't find remote ref feature/ado-branch"), '', '');
-          return;
-        }
-        cb(null, '', '');
-      }) as any);
-
-      const item = createWorkItem({
-        providerId: 'ado-pr-reviews',
-        externalId: 'org/project/repo/101',
-      });
-      await action.run(item);
-
-      expect(window.showErrorMessage).toHaveBeenCalledWith(
-        "DevDocket: Could not fetch branch 'feature/ado-branch' from origin. The branch may have been deleted.",
-      );
-
-      const worktreeCall = vi.mocked(execFile).mock.calls.find(
-        (call: any[]) => call[1]?.[0] === 'worktree',
-      );
-      expect(worktreeCall).toBeUndefined();
-    });
-
-    it('shows error for 404 ADO PR response', async () => {
-      mockFetchResponse({}, 404);
-      mockQuickPickWorktree();
-
-      const item = createWorkItem({
-        providerId: 'ado-pr-reviews',
-        externalId: 'org/project/repo/999',
-      });
-      await action.run(item);
-
-      expect(window.showErrorMessage).toHaveBeenCalledWith(
-        'DevDocket: Could not find PR #999',
-      );
-    });
-  });
-
-  describe('git ref validation (security)', () => {
-    it('rejects GitHub PR with hyphen-prefixed branch name', async () => {
-      mockFetchResponse(createGitHubPrResponse({
-        head: {
-          ref: '--malicious',
-          repo: {
-            full_name: 'owner/repo',
-            clone_url: 'https://github.com/owner/repo.git',
-          },
-        },
-      }));
-      mockQuickPickWorktree();
-
-      const item = createWorkItem({
-        providerId: 'github-my-prs',
-        externalId: 'owner/repo#42',
-      });
-      await action.run(item);
-
-      expect(window.showErrorMessage).toHaveBeenCalledWith(
-        expect.stringContaining('invalid characters'),
-      );
-      // No git checkout/worktree commands should have been made
-      const gitCalls = vi.mocked(execFile).mock.calls.filter(
-        (call: any[]) => call[1]?.[0] === 'checkout' || call[1]?.[0] === 'worktree' || call[1]?.[0] === 'fetch',
-      );
-      expect(gitCalls).toHaveLength(0);
-    });
-
-    it('rejects ADO PR with hyphen-prefixed branch name', async () => {
-      mockFetchResponse({ sourceRefName: 'refs/heads/--malicious' });
-      mockQuickPickWorktree();
-
-      const item = createWorkItem({
-        providerId: 'ado-pr-reviews',
-        externalId: 'org/project/repo/101',
-      });
-      await action.run(item);
-
-      expect(window.showErrorMessage).toHaveBeenCalledWith(
-        expect.stringContaining('invalid characters'),
-      );
-      // No git checkout/worktree commands should have been made
-      const gitCalls = vi.mocked(execFile).mock.calls.filter(
-        (call: any[]) => call[1]?.[0] === 'checkout' || call[1]?.[0] === 'worktree' || call[1]?.[0] === 'fetch',
-      );
-      expect(gitCalls).toHaveLength(0);
-    });
-
-    it('rejects base branch with hyphen prefix', async () => {
-      mockInputBox('/mock/workspace', '--evil-flag');
-
       const item = createWorkItem();
-      await action.run(item);
-
-      expect(window.showErrorMessage).toHaveBeenCalledWith(
-        'DevDocket: Base branch name contains invalid characters.',
-      );
-      // No branch/checkout git commands should have been made
-      const gitCalls = vi.mocked(execFile).mock.calls.filter(
-        (call: any[]) => call[1]?.[0] === 'branch' || call[1]?.[0] === 'checkout' || call[1]?.[0] === 'worktree',
-      );
-      expect(gitCalls).toHaveLength(0);
-    });
-
-    it('allows valid GitHub PR branch names', async () => {
-      mockFetchResponse(createGitHubPrResponse({
-        head: {
-          ref: 'feature/my-branch',
-          repo: {
-            full_name: 'owner/repo',
-            clone_url: 'https://github.com/owner/repo.git',
-          },
-        },
+      const { action } = createAction(discovered('provider', 'item-1', {
+        kind: 'pr',
+        cloneUrl: 'https://example.com/acme/repo.git',
+        headCloneUrl: 'https://example.com/contributor/repo.git',
+        ref: 'feature/topic',
+        repoLabel: 'acme/repo',
       }));
-      mockQuickPickWorktree();
 
-      const item = createWorkItem({
-        providerId: 'github-my-prs',
-        externalId: 'owner/repo#42',
-      });
       await action.run(item);
 
-      // Should NOT show an error about invalid characters
-      expect(window.showErrorMessage).not.toHaveBeenCalledWith(
-        expect.stringContaining('invalid characters'),
-      );
-      // Should have proceeded to git operations
-      const fetchCall = vi.mocked(execFile).mock.calls.find(
-        (call: any[]) => call[1]?.[0] === 'fetch',
-      );
-      expect(fetchCall).toBeDefined();
+      expect(vi.mocked(execFile).mock.calls.map(call => call[1])).toContainEqual([
+        'remote', 'set-url', 'devdocket-fork-contributor', 'https://example.com/contributor/repo.git',
+      ]);
     });
 
-    it('allows valid base branch like origin/dev', async () => {
-      mockInputBox('/mock/workspace', 'origin/dev');
-
+    it('runs configured post-worktree commands with the created worktree path', async () => {
+      vi.mocked(workspace.getConfiguration).mockReturnValue({
+        get: vi.fn((key: string, defaultValue?: any) => key === 'commands'
+          ? [{ command: 'npm', args: ['install', '--prefix', '{path}'] }]
+          : defaultValue),
+      } as any);
       const item = createWorkItem();
+      const { action } = createAction(discovered('provider', 'item-1', {
+        kind: 'issue', cloneUrl: 'https://example.com/acme/repo.git', ref: 'issue123', repoLabel: 'acme/repo',
+      }));
+
       await action.run(item);
 
-      expect(window.showErrorMessage).not.toHaveBeenCalledWith(
-        'DevDocket: Base branch name contains invalid characters.',
-      );
-      // Should have proceeded to git operations
-      const branchCall = vi.mocked(execFile).mock.calls.find(
-        (call: any[]) => call[1]?.[0] === 'branch' && call[1]?.[1] !== '--list',
-      );
-      expect(branchCall).toBeDefined();
+      expect(vi.mocked(execFile).mock.calls.map(call => [call[0], call[1], call[2]])).toContainEqual([
+        'npm', ['install', '--prefix', path.join('/mock', 'workspace-issue123-item-1')], { cwd: path.join('/mock', 'workspace-issue123-item-1'), timeout: 60_000 },
+      ]);
     });
 
-    it('rejects GitHub PR with invalid clone URL', async () => {
-      mockFetchResponse(createGitHubPrResponse({
-        head: {
-          ref: 'feature/branch',
-          repo: {
-            full_name: 'evil/repo',
-            clone_url: '--upload-pack=malicious',
-          },
-        },
-        base: {
-          repo: {
-            full_name: 'owner/repo',
-          },
-        },
+    it('accepts and routes a third-party provider without host or provider-id knowledge', async () => {
+      const item = createWorkItem({ providerId: 'fake-vendor', externalId: 'work-42' });
+      const { action } = createAction(discovered('fake-vendor', 'work-42', {
+        kind: 'issue', cloneUrl: 'git@git.fake-vendor.example:team/repo.git', ref: 'fake/work-42', repoLabel: 'Fake Vendor Repo',
       }));
-      mockQuickPickWorktree();
 
-      const item = createWorkItem({
-        providerId: 'github-my-prs',
-        externalId: 'owner/repo#42',
-      });
+      expect(action.canRun(item)).toBe(true);
       await action.run(item);
 
-      expect(window.showErrorMessage).toHaveBeenCalledWith(
-        expect.stringContaining('invalid clone URL'),
-      );
-      const gitCalls = vi.mocked(execFile).mock.calls.filter(
-        (call: any[]) => call[1]?.[0] === 'remote' || call[1]?.[0] === 'fetch',
-      );
-      expect(gitCalls).toHaveLength(0);
+      expect(vi.mocked(execFile).mock.calls[1][1]).toEqual(['branch', 'fake/work-42', 'origin/dev']);
+    });
+
+    describe('worktree branch-conflict detection (porcelain pre-check)', () => {
+      it('creates detached worktree when same-repo PR branch is held by another worktree', async () => {
+        // Default mock leaves rev-parse --verify succeeding → hasLocalBranch=true.
+        // Same-repo PR (no headCloneUrl) → trackingRef=undefined →
+        // worktreeSourceRef = 'origin/feature/topic'.
+        vi.mocked(execFile).mockImplementation(((cmd: string, args: string[], opts: any, cb: Function) => {
+          if (args[0] === 'remote' && args[1] === '-v') {
+            cb(null, ORIGIN_REMOTE_V, '');
+            return;
+          }
+          if (args[0] === 'worktree' && args[1] === 'list' && args[2] === '--porcelain') {
+            cb(null,
+              'worktree /mock/workspace\n' +
+              'HEAD aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\n' +
+              'branch refs/heads/main\n' +
+              '\n' +
+              'worktree /mock/other-worktree\n' +
+              'HEAD bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\n' +
+              'branch refs/heads/feature/topic\n' +
+              '\n', '');
+            return;
+          }
+          cb(null, '', '');
+        }) as any);
+        const item = createWorkItem();
+        const { action } = createAction(discovered('provider', 'item-1', {
+          kind: 'pr', cloneUrl: 'https://example.com/acme/repo.git', ref: 'feature/topic', repoLabel: 'acme/repo',
+        }));
+
+        await action.run(item);
+
+        const worktreeAddCalls = vi.mocked(execFile).mock.calls.filter(
+          (call: any[]) => call[1]?.[0] === 'worktree' && call[1]?.[1] === 'add',
+        );
+        // Only one attempt — straight to the detached path.
+        expect(worktreeAddCalls).toHaveLength(1);
+        expect(worktreeAddCalls[0]![1]).toEqual([
+          'worktree', 'add', '--detach',
+          path.join('/mock', 'workspace-feature-topic-item-1'),
+          'origin/feature/topic',
+        ]);
+        expect(window.showErrorMessage).not.toHaveBeenCalled();
+      });
+
+      it('uses non-detached worktree add when no other worktree holds the branch', async () => {
+        // Sanity: porcelain returns empty output → no conflict → use local branch directly.
+        vi.mocked(execFile).mockImplementation(((cmd: string, args: string[], opts: any, cb: Function) => {
+          if (args[0] === 'remote' && args[1] === '-v') {
+            cb(null, ORIGIN_REMOTE_V, '');
+            return;
+          }
+          cb(null, '', '');
+        }) as any);
+        const item = createWorkItem();
+        const { action } = createAction(discovered('provider', 'item-1', {
+          kind: 'pr', cloneUrl: 'https://example.com/acme/repo.git', ref: 'feature/topic', repoLabel: 'acme/repo',
+        }));
+
+        await action.run(item);
+
+        const worktreeAddCalls = vi.mocked(execFile).mock.calls.filter(
+          (call: any[]) => call[1]?.[0] === 'worktree' && call[1]?.[1] === 'add',
+        );
+        expect(worktreeAddCalls).toHaveLength(1);
+        expect(worktreeAddCalls[0]![1]).toEqual([
+          'worktree', 'add',
+          path.join('/mock', 'workspace-feature-topic-item-1'),
+          'feature/topic',
+        ]);
+      });
+
+      it('ignores worktrees holding a branch with a similar name (substring guard)', async () => {
+        // refs/heads/feature/topic-extra must NOT match refs/heads/feature/topic.
+        vi.mocked(execFile).mockImplementation(((cmd: string, args: string[], opts: any, cb: Function) => {
+          if (args[0] === 'remote' && args[1] === '-v') {
+            cb(null, ORIGIN_REMOTE_V, '');
+            return;
+          }
+          if (args[0] === 'worktree' && args[1] === 'list' && args[2] === '--porcelain') {
+            cb(null,
+              'worktree /mock/other\n' +
+              'HEAD bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\n' +
+              'branch refs/heads/feature/topic-extra\n' +
+              '\n', '');
+            return;
+          }
+          cb(null, '', '');
+        }) as any);
+        const item = createWorkItem();
+        const { action } = createAction(discovered('provider', 'item-1', {
+          kind: 'pr', cloneUrl: 'https://example.com/acme/repo.git', ref: 'feature/topic', repoLabel: 'acme/repo',
+        }));
+
+        await action.run(item);
+
+        const worktreeAddCalls = vi.mocked(execFile).mock.calls.filter(
+          (call: any[]) => call[1]?.[0] === 'worktree' && call[1]?.[1] === 'add',
+        );
+        expect(worktreeAddCalls).toHaveLength(1);
+        expect(worktreeAddCalls[0]![1]).toEqual([
+          'worktree', 'add',
+          path.join('/mock', 'workspace-feature-topic-item-1'),
+          'feature/topic',
+        ]);
+      });
+
+      it('falls through to non-detached worktree add when porcelain command itself fails', async () => {
+        // Pre-check is best-effort — if porcelain itself errors, fall through to
+        // the normal worktree add and let any real conflict surface from git.
+        vi.mocked(execFile).mockImplementation(((cmd: string, args: string[], opts: any, cb: Function) => {
+          if (args[0] === 'remote' && args[1] === '-v') {
+            cb(null, ORIGIN_REMOTE_V, '');
+            return;
+          }
+          if (args[0] === 'worktree' && args[1] === 'list' && args[2] === '--porcelain') {
+            const err = new Error('fatal: not a git repository');
+            (err as any).stderr = 'fatal: not a git repository';
+            cb(err, '', (err as any).stderr);
+            return;
+          }
+          cb(null, '', '');
+        }) as any);
+        const item = createWorkItem();
+        const { action } = createAction(discovered('provider', 'item-1', {
+          kind: 'pr', cloneUrl: 'https://example.com/acme/repo.git', ref: 'feature/topic', repoLabel: 'acme/repo',
+        }));
+
+        await action.run(item);
+
+        const worktreeAddCalls = vi.mocked(execFile).mock.calls.filter(
+          (call: any[]) => call[1]?.[0] === 'worktree' && call[1]?.[1] === 'add',
+        );
+        expect(worktreeAddCalls).toHaveLength(1);
+        expect(worktreeAddCalls[0]![1]).toEqual([
+          'worktree', 'add',
+          path.join('/mock', 'workspace-feature-topic-item-1'),
+          'feature/topic',
+        ]);
+      });
+
+      it('shows error in checkout mode when same-repo PR branch is held by another worktree', async () => {
+        vi.mocked(window.showQuickPick).mockResolvedValue({ label: 'Checkout branch', value: 'checkout' } as any);
+        vi.mocked(execFile).mockImplementation(((cmd: string, args: string[], opts: any, cb: Function) => {
+          if (args[0] === 'remote' && args[1] === '-v') {
+            cb(null, ORIGIN_REMOTE_V, '');
+            return;
+          }
+          if (args[0] === 'worktree' && args[1] === 'list' && args[2] === '--porcelain') {
+            cb(null,
+              'worktree /mock/workspace\n' +
+              'HEAD aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\n' +
+              'branch refs/heads/main\n' +
+              '\n' +
+              'worktree /mock/other-worktree\n' +
+              'HEAD bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\n' +
+              'branch refs/heads/feature/topic\n' +
+              '\n', '');
+            return;
+          }
+          cb(null, '', '');
+        }) as any);
+        const item = createWorkItem();
+        const { action } = createAction(discovered('provider', 'item-1', {
+          kind: 'pr', cloneUrl: 'https://example.com/acme/repo.git', ref: 'feature/topic', repoLabel: 'acme/repo',
+        }));
+
+        await action.run(item);
+
+        // No checkout was attempted — short-circuited with a clear error.
+        const checkoutCall = vi.mocked(execFile).mock.calls.find(
+          (call: any[]) => call[1]?.[0] === 'checkout',
+        );
+        expect(checkoutCall).toBeUndefined();
+        expect(window.showErrorMessage).toHaveBeenCalledWith(
+          expect.stringContaining('/mock/other-worktree'),
+        );
+        expect(window.showErrorMessage).toHaveBeenCalledWith(
+          expect.stringContaining('feature/topic'),
+        );
+      });
+
+      it('proceeds with checkout when the current repo worktree itself holds the branch', async () => {
+        // If the user is already on the PR branch in the current worktree,
+        // `git checkout <branch>` is a no-op success — the pre-check must NOT
+        // block by treating the current worktree as a conflict.
+        vi.mocked(window.showQuickPick).mockResolvedValue({ label: 'Checkout branch', value: 'checkout' } as any);
+        vi.mocked(execFile).mockImplementation(((cmd: string, args: string[], opts: any, cb: Function) => {
+          if (args[0] === 'remote' && args[1] === '-v') {
+            cb(null, ORIGIN_REMOTE_V, '');
+            return;
+          }
+          if (args[0] === 'worktree' && args[1] === 'list' && args[2] === '--porcelain') {
+            cb(null,
+              'worktree /mock/workspace\n' +
+              'HEAD aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\n' +
+              'branch refs/heads/feature/topic\n' +
+              '\n', '');
+            return;
+          }
+          cb(null, '', '');
+        }) as any);
+        const item = createWorkItem();
+        const { action } = createAction(discovered('provider', 'item-1', {
+          kind: 'pr', cloneUrl: 'https://example.com/acme/repo.git', ref: 'feature/topic', repoLabel: 'acme/repo',
+        }));
+
+        await action.run(item);
+
+        expect(window.showErrorMessage).not.toHaveBeenCalled();
+        const checkoutCall = vi.mocked(execFile).mock.calls.find(
+          (call: any[]) => call[1]?.[0] === 'checkout',
+        );
+        expect(checkoutCall).toBeDefined();
+        expect(checkoutCall![1]).toEqual(['checkout', 'feature/topic']);
+      });
     });
   });
 });

@@ -623,6 +623,30 @@ describe('MainViewProvider', () => {
     });
   });
 
+  it('skips sources updates for read-state-only refreshes', async () => {
+    vi.useFakeTimers();
+    const provider = createProvider(
+      createMockWorkGraph(),
+      createProviderRegistry({
+        github: [{ externalId: 'incoming-1', title: 'Incoming item', state: 'open' }],
+      }),
+      createStateStore(),
+    );
+    const mockView = createMockWebviewView();
+
+    provider.resolveWebviewView(mockView.view, {} as any, {} as any);
+    await vi.advanceTimersByTimeAsync(50);
+    expect(findPostedMessage(mockView, 'updateSources')).toBeDefined();
+
+    mockView.webview.postMessage.mockClear();
+    provider.scheduleRefresh('readState');
+    await vi.advanceTimersByTimeAsync(50);
+
+    const messageTypes = mockView.getMessages().map(message => message?.type);
+    expect(messageTypes).toEqual(['updateItems']);
+    expect(findPostedMessage(mockView, 'updateSources')).toBeUndefined();
+  });
+
   it('debounces refreshes so rapid calls post a single update', async () => {
     vi.useFakeTimers();
     const provider = createProvider(
@@ -633,8 +657,8 @@ describe('MainViewProvider', () => {
     const mockView = createMockWebviewView();
 
     provider.resolveWebviewView(mockView.view, {} as any, {} as any);
-    provider.scheduleRefresh();
-    provider.scheduleRefresh();
+    provider.scheduleRefresh('workGraph');
+    provider.scheduleRefresh('state');
 
     await vi.advanceTimersByTimeAsync(49);
     expect(mockView.webview.postMessage).not.toHaveBeenCalled();

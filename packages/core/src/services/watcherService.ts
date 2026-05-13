@@ -19,6 +19,8 @@ export interface WatchedRun {
   errorMessage?: string;
   /** Key of the parent PR watch, if this run is a child of a PR watch */
   parentPRKey?: string;
+  /** Suppress completion/failure events for the next successful status fetch */
+  suppressNextStatusEvents?: boolean;
 }
 
 /**
@@ -35,6 +37,22 @@ export interface WatchedPR {
   hasWarning?: boolean;
   /** Error message from last failed poll */
   errorMessage?: string;
+}
+
+interface StartPRWatchOptions {
+  forceRecreate?: boolean;
+  /**
+   * Register child runs from the initial PR snapshot without immediately
+   * calling getRunStatus for each run. The normal polling loop will fetch
+   * their first statuses on its next tick.
+   */
+  deferChildRunStatus?: boolean;
+}
+
+interface AddChildRunOptions {
+  suppressEvents?: boolean;
+  suppressPersist?: boolean;
+  deferStatusFetch?: boolean;
 }
 
 /**
@@ -57,6 +75,7 @@ export class WatcherService implements vscode.Disposable {
   private disposed = false;
   private consecutiveFailures = new Map<string, number>();
   private persistedPRWatchKeys: Set<string> | undefined;
+  private loadPersistedWatchesPromise: Promise<void> | undefined;
   private configSubscription: vscode.Disposable | undefined;
   /**
    * Set of run-watch keys whose failure the user has already acknowledged
@@ -104,23 +123,52 @@ export class WatcherService implements vscode.Disposable {
 
   /**
    * Load persisted watches from disk and resume polling for active ones.
+   * Concurrent callers join the same load, and restored entries never replace
+   * watches that were started in memory while the load was in flight.
    */
   async loadPersistedWatches(): Promise<void> {
-    const { runs: watches, prs } = await this.watchStore.loadAll();
-    this.persistedPRWatchKeys = new Set(prs.map(pr => this.getPRWatchKey(pr.identifier)));
-
-    // Restore non-dismissed run watches
-    const restored = watches.filter(w => !w.dismissed);
-    for (const watch of restored) {
-      const key = this.getWatchKey(watch.identifier);
-      this.watches.set(key, watch);
+    if (!this.loadPersistedWatchesPromise) {
+      this.loadPersistedWatchesPromise = this.restorePersistedWatches().catch(err => {
+        this.loadPersistedWatchesPromise = undefined;
+        throw err;
+      });
     }
 
-    // Restore non-dismissed PR watches
-    const restoredPRs = prs.filter(pr => !pr.dismissed);
-    for (const pr of restoredPRs) {
+    return this.loadPersistedWatchesPromise;
+  }
+
+  private async restorePersistedWatches(): Promise<void> {
+    const { runs: watches, prs } = await this.watchStore.loadAll();
+    const hadLiveWatches = this.watches.size > 0 || this.prWatches.size > 0;
+    const loadedPRWatchKeys = prs.map(pr => this.getPRWatchKey(pr.identifier));
+    this.persistedPRWatchKeys = new Set([
+      ...(this.persistedPRWatchKeys ?? []),
+      ...this.prWatches.keys(),
+      ...loadedPRWatchKeys,
+    ]);
+
+    // Restore non-dismissed run watches without clobbering watches that were
+    // started in memory before the load completed.
+    const restored: WatchedRun[] = [];
+    for (const watch of watches.filter(w => !w.dismissed)) {
+      const key = this.getWatchKey(watch.identifier);
+      if (this.watches.has(key)) {
+        continue;
+      }
+      this.watches.set(key, watch);
+      restored.push(watch);
+    }
+
+    // Restore non-dismissed PR watches without clobbering watches that were
+    // started in memory before the load completed.
+    const restoredPRs: WatchedPR[] = [];
+    for (const pr of prs.filter(pr => !pr.dismissed)) {
       const key = this.getPRWatchKey(pr.identifier);
+      if (this.prWatches.has(key)) {
+        continue;
+      }
       this.prWatches.set(key, pr);
+      restoredPRs.push(pr);
     }
 
     if (restored.length > 0 || restoredPRs.length > 0) {
@@ -138,6 +186,10 @@ export class WatcherService implements vscode.Disposable {
       if (hasPollable) {
         this.ensurePollingActive();
       }
+    }
+
+    if (hadLiveWatches && (restored.length > 0 || restoredPRs.length > 0)) {
+      this.persistWatches();
     }
   }
 
@@ -224,12 +276,18 @@ export class WatcherService implements vscode.Disposable {
    * the previously-active state may have stale or invisible child runs that
    * the user can't recover any other way.
    *
+   * Pass `{ deferChildRunStatus: true }` to register child runs from the
+   * initial PR snapshot without immediately fetching each run's status. This
+   * is intended for bulk auto-watch; manual callers should keep the default
+   * eager child-run snapshot behavior.
+   *
    * @param identifier - PR identifier from parsePRUrl
+   * @param options - Optional controls for recreation and initial child-run status fetching
    * @returns The watched PR (existing or newly created)
    */
   async startPRWatch(
     identifier: PRIdentifier,
-    options?: { forceRecreate?: boolean },
+    options?: StartPRWatchOptions,
   ): Promise<WatchedPR> {
     const key = this.getPRWatchKey(identifier);
     const existing = this.prWatches.get(key);
@@ -290,13 +348,17 @@ export class WatcherService implements vscode.Disposable {
       await this.addChildRun(key, watchedPR, resolved, {
         suppressEvents: true,
         suppressPersist: true,
+        deferStatusFetch: options?.deferChildRunStatus,
       });
     }
 
     this._onDidChangePRWatches.fire();
     this._onDidChangeWatchedRuns.fire(this.getAllWatches());
 
-    if (snapshot.prState === 'open') {
+    // Deferred child watches start as queued placeholders, so make sure the
+    // poller wakes up to fetch their first real statuses even if the PR itself
+    // is no longer open.
+    if (snapshot.prState === 'open' || watchedPR.childRunKeys.length > 0) {
       this.ensurePollingActive();
     }
 
@@ -518,6 +580,15 @@ export class WatcherService implements vscode.Disposable {
    */
   getActivePRWatches(): WatchedPR[] {
     return Array.from(this.prWatches.values()).filter(pr => !pr.dismissed);
+  }
+
+  /**
+   * Find an active PR watch by repository and PR ID, ignoring watcher provider.
+   */
+  findPRWatchByExternalId(repo: string, prId: string): WatchedPR | undefined {
+    return Array.from(this.prWatches.values()).find(
+      pr => !pr.dismissed && pr.identifier.repo === repo && pr.identifier.prId === prId,
+    );
   }
 
   /**
@@ -925,6 +996,12 @@ export class WatcherService implements vscode.Disposable {
         }
         watch.lastPolledAt = new Date().toISOString();
 
+        const suppressStatusEvents = watch.suppressNextStatusEvents === true;
+        if (suppressStatusEvents) {
+          delete watch.suppressNextStatusEvents;
+          anyChanged = true;
+        }
+
         // Reset failure count on success
         this.consecutiveFailures.delete(key);
         watch.hasWarning = false;
@@ -953,7 +1030,7 @@ export class WatcherService implements vscode.Disposable {
         }
 
         // Detect job failures (while run is still in progress)
-        if (newStatus.overallState !== 'completed') {
+        if (!suppressStatusEvents && newStatus.overallState !== 'completed') {
           for (const newJob of newStatus.jobs) {
             if (newJob.state === 'completed' && newJob.conclusion === 'failure') {
               const oldJob = newJob.id
@@ -967,7 +1044,7 @@ export class WatcherService implements vscode.Disposable {
         }
 
         // Check if run just completed
-        if (oldStatus.overallState !== 'completed' && newStatus.overallState === 'completed') {
+        if (!suppressStatusEvents && oldStatus.overallState !== 'completed' && newStatus.overallState === 'completed') {
           this._onDidCompleteRun.fire(watch);
         }
 
@@ -998,7 +1075,7 @@ export class WatcherService implements vscode.Disposable {
     prKey: string,
     prWatch: WatchedPR,
     runIdentifier: RunIdentifier,
-    options?: { suppressEvents?: boolean; suppressPersist?: boolean },
+    options?: AddChildRunOptions,
   ): Promise<boolean> {
     const runKey = this.getWatchKey(runIdentifier);
     try {
@@ -1013,7 +1090,36 @@ export class WatcherService implements vscode.Disposable {
         return false;
       }
 
-      await this.startWatch(runIdentifier, prKey, options);
+      if (options?.deferStatusFetch) {
+        if (!this.watcherRegistry.get(runIdentifier.providerId)) {
+          throw new Error(`No watcher registered for provider: ${runIdentifier.providerId}`);
+        }
+
+        const now = new Date().toISOString();
+        this.watches.set(runKey, {
+          identifier: runIdentifier,
+          status: { overallState: 'queued', jobs: [] },
+          watchedAt: now,
+          lastPolledAt: now,
+          dismissed: false,
+          parentPRKey: prKey,
+          suppressNextStatusEvents: true,
+        });
+        this.consecutiveFailures.delete(runKey);
+        // Match startWatch's dismissed-then-restarted behavior so re-watched
+        // failed runs can alert again after deferred registration.
+        this.acknowledgedFailedRunKeys.delete(runKey);
+        this.logger.info(`Started watching: ${runIdentifier.displayName} (${runIdentifier.providerId})`);
+        if (!options.suppressEvents) {
+          this._onDidChangeWatchedRuns.fire(this.getAllWatches());
+        }
+        if (!options.suppressPersist) {
+          this.persistWatches();
+        }
+      } else {
+        await this.startWatch(runIdentifier, prKey, options);
+      }
+
       if (!prWatch.childRunKeys.includes(runKey)) {
         prWatch.childRunKeys.push(runKey);
         return true;
@@ -1062,6 +1168,15 @@ export class WatcherService implements vscode.Disposable {
   }
 
   private async getPersistedPRWatchKeys(): Promise<Set<string>> {
+    if (this.loadPersistedWatchesPromise) {
+      try {
+        await this.loadPersistedWatchesPromise;
+      } catch {
+        // Fall through to the lazy load below so isPRWatched remains resilient
+        // when the activation-time restore fails.
+      }
+    }
+
     if (!this.persistedPRWatchKeys) {
       const { prs } = await this.watchStore.loadAll();
       this.persistedPRWatchKeys = new Set(prs.map(pr => this.getPRWatchKey(pr.identifier)));
