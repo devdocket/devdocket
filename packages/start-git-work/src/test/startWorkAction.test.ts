@@ -1081,6 +1081,201 @@ describe('StartWorkAction', () => {
       expect(checkoutCall![1]).toEqual(['checkout', '--detach', 'devdocket-fork-contributor/fix/something']);
     });
 
+    it('creates detached worktree when same-repo PR branch is held by another worktree (porcelain pre-check)', async () => {
+      // Same-repo PR (default response) — origin already points at the PR's repo,
+      // so trackingRef will be undefined and worktreeSourceRef = 'origin/<branch>'.
+      mockQuickPickWorktree();
+
+      // Default mock has hasLocalBranch=true. Make `git worktree list --porcelain`
+      // report a sibling worktree holding refs/heads/feature/my-branch — the
+      // pre-check should detect this and route directly to the detached path
+      // without attempting (and failing) a non-detached worktree add first.
+      vi.mocked(execFile).mockImplementation(((cmd: string, args: string[], opts: any, cb: Function) => {
+        if (args[0] === 'remote' && args[1] === '-v') {
+          cb(null, ORIGIN_REMOTE_V, '');
+          return;
+        }
+        if (args[0] === 'worktree' && args[1] === 'list' && args[2] === '--porcelain') {
+          cb(null,
+            'worktree /mock/workspace\n' +
+            'HEAD aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\n' +
+            'branch refs/heads/main\n' +
+            '\n' +
+            'worktree /mock/other-worktree\n' +
+            'HEAD bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\n' +
+            'branch refs/heads/feature/my-branch\n' +
+            '\n', '');
+          return;
+        }
+        cb(null, '', '');
+      }) as any);
+
+      const item = createWorkItem({
+        providerId: 'github-my-prs',
+        externalId: 'owner/repo#42',
+      });
+      await action.run(item);
+
+      const worktreeAddCalls = vi.mocked(execFile).mock.calls.filter(
+        (call: any[]) => call[1]?.[0] === 'worktree' && call[1]?.[1] === 'add',
+      );
+      // Only one attempt — the detached one. No failed pre-attempt.
+      expect(worktreeAddCalls).toHaveLength(1);
+      expect(worktreeAddCalls[0]![1]).toEqual([
+        'worktree', 'add', '--detach',
+        path.join('/mock', 'workspace-pr42'),
+        'origin/feature/my-branch',
+      ]);
+
+      // No error surfaced to the user.
+      expect(window.showErrorMessage).not.toHaveBeenCalled();
+    });
+
+    it('uses non-detached worktree add when no other worktree holds the branch', async () => {
+      // Sanity check that the porcelain pre-check does NOT incorrectly route
+      // to the detached path when the branch is free.
+      mockQuickPickWorktree();
+      // Default mock returns empty stdout for `git worktree list --porcelain`,
+      // so findWorktreeHoldingBranch returns undefined. The worktree add should
+      // use the local branch directly (non-detached).
+
+      const item = createWorkItem({
+        providerId: 'github-my-prs',
+        externalId: 'owner/repo#42',
+      });
+      await action.run(item);
+
+      const worktreeAddCalls = vi.mocked(execFile).mock.calls.filter(
+        (call: any[]) => call[1]?.[0] === 'worktree' && call[1]?.[1] === 'add',
+      );
+      expect(worktreeAddCalls).toHaveLength(1);
+      expect(worktreeAddCalls[0]![1]).toEqual([
+        'worktree', 'add',
+        path.join('/mock', 'workspace-pr42'),
+        'feature/my-branch',
+      ]);
+    });
+
+    it('porcelain pre-check ignores worktrees holding a branch with a similar name', async () => {
+      // Guards against substring/false-positive matches: a worktree holding
+      // refs/heads/feature/my-branch-extra must NOT be treated as conflicting
+      // with refs/heads/feature/my-branch.
+      mockQuickPickWorktree();
+
+      vi.mocked(execFile).mockImplementation(((cmd: string, args: string[], opts: any, cb: Function) => {
+        if (args[0] === 'remote' && args[1] === '-v') {
+          cb(null, ORIGIN_REMOTE_V, '');
+          return;
+        }
+        if (args[0] === 'worktree' && args[1] === 'list' && args[2] === '--porcelain') {
+          cb(null,
+            'worktree /mock/other\n' +
+            'HEAD bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\n' +
+            'branch refs/heads/feature/my-branch-extra\n' +
+            '\n', '');
+          return;
+        }
+        cb(null, '', '');
+      }) as any);
+
+      const item = createWorkItem({
+        providerId: 'github-my-prs',
+        externalId: 'owner/repo#42',
+      });
+      await action.run(item);
+
+      const worktreeAddCalls = vi.mocked(execFile).mock.calls.filter(
+        (call: any[]) => call[1]?.[0] === 'worktree' && call[1]?.[1] === 'add',
+      );
+      // Used the local branch directly — no detached fallback.
+      expect(worktreeAddCalls).toHaveLength(1);
+      expect(worktreeAddCalls[0]![1]).toEqual([
+        'worktree', 'add',
+        path.join('/mock', 'workspace-pr42'),
+        'feature/my-branch',
+      ]);
+    });
+
+    it('shows error in checkout mode when same-repo PR branch is held by another worktree (porcelain pre-check)', async () => {
+      mockQuickPickCheckout();
+
+      vi.mocked(execFile).mockImplementation(((cmd: string, args: string[], opts: any, cb: Function) => {
+        if (args[0] === 'remote' && args[1] === '-v') {
+          cb(null, ORIGIN_REMOTE_V, '');
+          return;
+        }
+        if (args[0] === 'worktree' && args[1] === 'list' && args[2] === '--porcelain') {
+          cb(null,
+            'worktree /mock/workspace\n' +
+            'HEAD aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\n' +
+            'branch refs/heads/main\n' +
+            '\n' +
+            'worktree /mock/other-worktree\n' +
+            'HEAD bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\n' +
+            'branch refs/heads/feature/my-branch\n' +
+            '\n', '');
+          return;
+        }
+        cb(null, '', '');
+      }) as any);
+
+      const item = createWorkItem({
+        providerId: 'github-my-prs',
+        externalId: 'owner/repo#42',
+      });
+      await action.run(item);
+
+      // No checkout was attempted — we short-circuited with a clear error.
+      const checkoutCall = vi.mocked(execFile).mock.calls.find(
+        (call: any[]) => call[1]?.[0] === 'checkout',
+      );
+      expect(checkoutCall).toBeUndefined();
+
+      expect(window.showErrorMessage).toHaveBeenCalledWith(
+        expect.stringContaining('/mock/other-worktree'),
+      );
+      expect(window.showErrorMessage).toHaveBeenCalledWith(
+        expect.stringContaining('feature/my-branch'),
+      );
+    });
+
+    it('falls through to non-detached worktree add when porcelain pre-check command fails', async () => {
+      // The porcelain pre-check is best-effort: if `git worktree list --porcelain`
+      // itself errors, we should fall through to the normal worktree add path
+      // and let any real conflict surface from git directly.
+      mockQuickPickWorktree();
+
+      vi.mocked(execFile).mockImplementation(((cmd: string, args: string[], opts: any, cb: Function) => {
+        if (args[0] === 'remote' && args[1] === '-v') {
+          cb(null, ORIGIN_REMOTE_V, '');
+          return;
+        }
+        if (args[0] === 'worktree' && args[1] === 'list' && args[2] === '--porcelain') {
+          const err = new Error('fatal: not a git repository');
+          (err as any).stderr = 'fatal: not a git repository';
+          cb(err, '', (err as any).stderr);
+          return;
+        }
+        cb(null, '', '');
+      }) as any);
+
+      const item = createWorkItem({
+        providerId: 'github-my-prs',
+        externalId: 'owner/repo#42',
+      });
+      await action.run(item);
+
+      const worktreeAddCalls = vi.mocked(execFile).mock.calls.filter(
+        (call: any[]) => call[1]?.[0] === 'worktree' && call[1]?.[1] === 'add',
+      );
+      expect(worktreeAddCalls).toHaveLength(1);
+      expect(worktreeAddCalls[0]![1]).toEqual([
+        'worktree', 'add',
+        path.join('/mock', 'workspace-pr42'),
+        'feature/my-branch',
+      ]);
+    });
+
     it('shows error when fork repository has been deleted', async () => {
       mockFetchResponse(createGitHubPrResponse({
         head: {
@@ -1110,7 +1305,7 @@ describe('StartWorkAction', () => {
       await action.run(item);
 
       const worktreeCall = vi.mocked(execFile).mock.calls.find(
-        (call: any[]) => call[1]?.[0] === 'worktree',
+        (call: any[]) => call[1]?.[0] === 'worktree' && call[1]?.[1] === 'add',
       );
       expect(worktreeCall).toBeDefined();
       expect(worktreeCall![1]).toEqual([
@@ -1341,7 +1536,7 @@ describe('StartWorkAction', () => {
       await action.run(item);
 
       const worktreeCall = vi.mocked(execFile).mock.calls.find(
-        (call: any[]) => call[1]?.[0] === 'worktree',
+        (call: any[]) => call[1]?.[0] === 'worktree' && call[1]?.[1] === 'add',
       );
       expect(worktreeCall).toBeDefined();
       expect(worktreeCall![1]).toEqual([
