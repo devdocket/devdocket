@@ -219,6 +219,7 @@ describe('GitHubPrReviewProvider', () => {
       reason: 'review_requested',
       canonicalId: 'github:pull:org/myrepo#42',
       itemType: 'pr',
+      capabilities: { gitWork: expect.any(Function) },
       badges: [{ label: 'Review requested', variant: 'warning' }],
     });
   });

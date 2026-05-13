@@ -132,6 +132,47 @@ describe('AdoWorkItemProvider', () => {
     });
   });
 
+  it('populates gitWork when a work item has an associated Git repo relation', async () => {
+    mockFetch
+      .mockResolvedValueOnce({ ok: true, json: async () => createWiqlResponse([1]) })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          value: [{
+            ...createWorkItemDetail(1, 'Fix login bug'),
+            relations: [{
+              rel: 'ArtifactLink',
+              url: 'vstfs:///Git/Ref/project-guid%2Frepo-guid%2FGBmain',
+              attributes: { name: 'Branch' },
+            }],
+          }],
+        }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ value: [{ name: 'Active', category: 'InProgress' }] }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          name: 'myrepo',
+          remoteUrl: 'https://dev.azure.com/myorg/MyProject/_git/myrepo',
+        }),
+      });
+
+    const listener = vi.fn();
+    provider.onDidDiscoverItems(listener);
+    await provider.refresh();
+
+    expect(listener).toHaveBeenCalledTimes(1);
+    expect(listener.mock.calls[0][0][0].capabilities.gitWork).toEqual({
+      kind: 'issue',
+      cloneUrl: 'https://dev.azure.com/myorg/MyProject/_git/myrepo',
+      ref: 'issue1',
+      repoLabel: 'myorg/MyProject/myrepo',
+    });
+  });
+
   it('strips HTML tags from description', async () => {
     mockFetch
       .mockResolvedValueOnce({

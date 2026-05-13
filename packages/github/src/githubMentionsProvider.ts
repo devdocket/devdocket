@@ -6,6 +6,7 @@ import { logger } from './logger';
 import { parseRepoFromUrls } from './parseRepo';
 import { matchesRepoPatterns } from './repoPattern';
 import { getHeaders, getGitHubAuthHeaders, retryWithAuth, throwApiError, parseCanonicalRepo, fetchClosedGitHubItems, buildIssueStateBadge, filterMergedGitHubPrs, type GitHubIssue, type GitHubSearchResponse } from './githubApiHelpers';
+import { createGitHubIssueGitWork, createGitHubPrGitWork } from './gitWorkCapabilities';
 
 const MENTIONS_ACTIVATED_KEY = 'mentionsActivatedAt';
 const COMMENT_FETCH_CONCURRENCY = 3;
@@ -129,6 +130,11 @@ export class GitHubMentionsProvider extends BaseGitHubProvider {
         reason: 'mentioned',
         canonicalId: `github:${isPr ? 'pull' : 'issue'}:${repoName}#${issue.number}`,
         itemType: isPr ? 'pr' : 'issue',
+        capabilities: {
+          gitWork: isPr
+            ? createGitHubPrGitWork(repoName, issue.number, issue.pull_request?.url)
+            : createGitHubIssueGitWork(repoName, issue.number),
+        },
         badges: [
           { label: 'Mentioned', variant: 'warning' },
           ...buildIssueStateBadge(issue.state),

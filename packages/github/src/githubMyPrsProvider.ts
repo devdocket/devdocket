@@ -4,6 +4,7 @@ import { logger } from './logger';
 import { parseRepoFromUrls } from './parseRepo';
 import { getGitHubAuthHeaders, filterMergedGitHubPrs, type GitHubIssue, type GitHubPrMergeFields, type GitHubSearchResponse } from './githubApiHelpers';
 import { matchesRepoPatterns } from './repoPattern';
+import { createGitHubPrGitWork } from './gitWorkCapabilities';
 
 /** Map a PR status string from {@link GitHubMyPrsProvider.determinePrStatus} to its UI badge. */
 function statusToBadge(status: string): ProviderBadge | undefined {
@@ -141,6 +142,7 @@ export class GitHubMyPrsProvider extends BaseGitHubProvider {
         state: status,
         canonicalId: `github:pull:${repoName}#${pr.number}`,
         itemType: 'pr',
+        capabilities: { gitWork: createGitHubPrGitWork(repoName, pr.number, pr.pull_request?.url) },
         ...(relatedItems ? { relatedItems } : {}),
         ...(statusBadge ? { badges: [statusBadge] } : {}),
       });
@@ -161,6 +163,7 @@ export class GitHubMyPrsProvider extends BaseGitHubProvider {
         state: status,
         canonicalId: `github:pull:${repoName}#${pr.number}`,
         itemType: 'pr',
+        capabilities: { gitWork: createGitHubPrGitWork(repoName, pr.number, pr.pull_request?.url) },
         ...(relatedItems ? { relatedItems } : {}),
         ...(statusBadge ? { badges: [statusBadge] } : {}),
       });

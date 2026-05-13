@@ -172,6 +172,20 @@ export interface DevDocketApi {
    */
   registerAction(action: DevDocketAction): Disposable;
   /**
+   * Look up the live {@link DiscoveredItem} for a given (providerId, externalId)
+   * pair. Returns `undefined` if the provider has not (yet) emitted a matching
+   * item — for example because the provider is still loading or the item has
+   * been removed upstream.
+   *
+   * Actions use this to read provider-supplied capabilities (e.g. {@link
+   * DiscoveredItemCapabilities.gitWork}) when running against a {@link WorkItem}
+   * that was previously accepted from this provider.
+   *
+   * @param providerId - The id of the provider that emitted the item.
+   * @param externalId - The provider-scoped external id (e.g. `owner/repo#123`).
+   */
+  getDiscoveredItem?(providerId: string, externalId: string): DiscoveredItem | undefined;
+  /**
    * Register a pipeline run watcher.
    *
    * Run watchers provide status polling for CI/CD pipelines (GitHub Actions, ADO Pipelines, etc.).

@@ -27,6 +27,10 @@ export class DevDocketApiImpl implements DevDocketApi {
     return this.actionRegistry.register(action);
   }
 
+  getDiscoveredItem(providerId: string, externalId: string) {
+    return this.providerRegistry.findDiscoveredItem(providerId, externalId);
+  }
+
   registerRunWatcher(watcher: DevDocketRunWatcher): Disposable {
     return this.watcherRegistry.register(watcher);
   }

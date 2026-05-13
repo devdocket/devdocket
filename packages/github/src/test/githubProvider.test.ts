@@ -165,6 +165,9 @@ describe('GitHubIssueProvider', () => {
       reason: 'assigned',
       canonicalId: 'github:issue:owner/repo#10',
       itemType: 'issue',
+      capabilities: {
+        gitWork: { kind: 'issue', cloneUrl: 'https://github.com/owner/repo.git', ref: 'issue10', repoLabel: 'owner/repo' },
+      },
       badges: [{ label: 'Assigned', variant: 'warning' }],
     });
   });

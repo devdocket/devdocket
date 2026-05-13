@@ -5,6 +5,7 @@ import { logger } from './logger';
 import { parseRepoFromUrls } from './parseRepo';
 import { getHeaders, getGitHubAuthHeaders, retryWithAuth, throwApiError, parseCanonicalRepo, fetchClosedGitHubItems, buildIssueStateBadge, filterMergedGitHubPrs, type GitHubIssue, type GitHubSearchResponse } from './githubApiHelpers';
 import { matchesRepoPatterns } from './repoPattern';
+import { createGitHubPrGitWork } from './gitWorkCapabilities';
 
 interface TimelineEvent {
   event?: string;
@@ -88,6 +89,7 @@ export class GitHubPrReviewProvider extends BaseGitHubProvider {
         reason: 'review_requested',
         canonicalId: `github:pull:${repoName}#${pr.number}`,
         itemType: 'pr',
+        capabilities: { gitWork: createGitHubPrGitWork(repoName, pr.number, pr.pull_request?.url) },
         ...(relatedItems ? { relatedItems } : {}),
         badges: [
           { label: 'Review requested', variant: 'warning' },

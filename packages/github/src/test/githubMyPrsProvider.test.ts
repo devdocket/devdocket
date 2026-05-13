@@ -185,6 +185,53 @@ describe('GitHubMyPrsProvider', () => {
     expect(items[1].canonicalId).toBe('github:pull:owner/repo#2');
   });
 
+  it('populates lazy gitWork for fork PRs', async () => {
+    const pr = createMockPr(7, 'Fork PR');
+    mockFetch.mockImplementation(async (url: string) => {
+      if (url.includes('search/issues') && url.includes('author:@me')) {
+        return mockSearchResponse([pr]);
+      }
+      if (url.includes('search/issues') && url.includes('assignee:@me')) {
+        return mockSearchResponse([]);
+      }
+      if (url.endsWith('/pulls/7/reviews')) {
+        return mockReviewsResponse([]);
+      }
+      if (url.endsWith('/pulls/7')) {
+        return {
+          ok: true,
+          json: async () => ({
+            draft: false,
+            mergeable_state: 'clean',
+            head: {
+              ref: 'contributor/topic',
+              repo: { full_name: 'contributor/repo', clone_url: 'https://github.com/contributor/repo.git' },
+            },
+            base: {
+              ref: 'dev',
+              repo: { full_name: 'owner/repo', clone_url: 'https://github.com/owner/repo.git' },
+            },
+          }),
+        };
+      }
+      return mockFailedResponse(404);
+    });
+
+    const listener = vi.fn();
+    provider.onDidDiscoverItems(listener);
+    await provider.refresh();
+
+    const gitWork = await listener.mock.calls[0][0][0].capabilities.gitWork();
+    expect(gitWork).toEqual({
+      kind: 'pr',
+      cloneUrl: 'https://github.com/owner/repo.git',
+      ref: 'contributor/topic',
+      headCloneUrl: 'https://github.com/contributor/repo.git',
+      baseRef: 'dev',
+      repoLabel: 'owner/repo',
+    });
+  });
+
   it('attaches relatedItems from PR enrichment before publishing', async () => {
     vi.mocked(workspace.getConfiguration).mockReturnValue({
       get: vi.fn((key: string, defaultValue?: any) => {
