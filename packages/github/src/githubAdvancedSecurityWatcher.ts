@@ -39,7 +39,7 @@ export class GitHubAdvancedSecurityWatcher implements DevDocketRunWatcher {
   canWatch(url: string): boolean {
     try {
       const u = new URL(url);
-      return u.protocol === 'https:'
+      return (u.protocol === 'https:' || u.protocol === 'http:')
         && u.hostname === 'github.com'
         && CHECK_RUN_URL_RE.test(u.pathname);
     } catch {

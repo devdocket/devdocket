@@ -61,6 +61,7 @@ describe('GitHubAdvancedSecurityWatcher', () => {
     it('returns true for canonical GitHub check run URLs', () => {
       expect(watcher.canWatch('https://github.com/owner/repo/runs/12345')).toBe(true);
       expect(watcher.canWatch('https://github.com/owner/repo/runs/12345/')).toBe(true);
+      expect(watcher.canWatch('http://github.com/owner/repo/runs/12345')).toBe(true);
     });
 
     it('returns false for non-GitHub URLs', () => {
