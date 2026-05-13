@@ -9,7 +9,7 @@ import type { WatcherService, WatchedPR, WatchedRun } from '../services/watcherS
 import type { DiscoveredStateStore } from '../storage/discoveredStateStore';
 import { isSafeUrl } from '../utils/url';
 import { buildProviderBadge, buildProviderBadges, buildTypeBadge } from './badges';
-import { parseDiscoveredItemKey } from './discoveredItemKey';
+import { parseProviderItemKey } from './providerItemKey';
 import { getEditorPanelHtml, renderMarkdown } from './editorPanelHtml';
 import type { BadgeData, EditorItemData } from './mainTypes';
 
@@ -433,7 +433,7 @@ export class WorkItemEditorPanel {
 
     const discoveredKey = typeof providerId === 'string' && typeof externalId === 'string'
       ? { providerId, externalId }
-      : parseDiscoveredItemKey(itemId);
+      : parseProviderItemKey(itemId);
     if (discoveredKey) {
       await vscode.commands.executeCommand('devdocket.previewIncomingItem', discoveredKey);
     }

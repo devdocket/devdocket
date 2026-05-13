@@ -7,7 +7,7 @@ import { WorkGraph } from '../services/workGraph';
 import { DiscoveredStateStore } from '../storage/discoveredStateStore';
 import { ReadStateStore } from '../storage/readStateStore';
 import { isSafeUrl } from '../utils/url';
-import { getDiscoveredItemKey, parseDiscoveredItemKey } from './discoveredItemKey';
+import { getProviderItemKey, parseProviderItemKey } from './providerItemKey';
 import { getEditorPanelHtml, renderMarkdown } from './editorPanelHtml';
 import type { EditorItemData } from './mainTypes';
 import { composeEditorBadges } from './workItemEditorPanel';
@@ -158,7 +158,7 @@ export class IncomingPreviewPanel {
 
     const discoveredKey = typeof providerId === 'string' && typeof externalId === 'string'
       ? { providerId, externalId }
-      : parseDiscoveredItemKey(itemId);
+      : parseProviderItemKey(itemId);
     if (discoveredKey) {
       await vscode.commands.executeCommand('devdocket.previewIncomingItem', discoveredKey);
     }
@@ -245,7 +245,7 @@ export class IncomingPreviewPanel {
       // Mark as seen so the unread indicator clears once the user opens the
       // preview. Persistence failures aren't user-actionable from here, but
       // log them so a stuck unread dot is diagnosable from the output channel.
-      const discoveredKey = getDiscoveredItemKey(this.providerId, this.externalId);
+      const discoveredKey = getProviderItemKey(this.providerId, this.externalId);
       void this.readStateStore.add(discoveredKey).catch(err => {
         logger.warn(`DevDocket: failed to mark ${discoveredKey} as seen`, err);
       });
@@ -264,7 +264,7 @@ export class IncomingPreviewPanel {
   private buildEditorItemData(discoveredItem: ProviderItem, relatedItemsIndex: RelatedItemsIndex): EditorItemData {
     const providerLabel = this.providerRegistry.getProviderLabel(this.providerId);
     return {
-      id: getDiscoveredItemKey(this.providerId, this.externalId),
+      id: getProviderItemKey(this.providerId, this.externalId),
       title: discoveredItem.title,
       notes: undefined,
       url: discoveredItem.url,
@@ -303,7 +303,7 @@ export class IncomingPreviewPanel {
   }
 
   private static cacheKey(providerId: string, externalId: string): string {
-    return getDiscoveredItemKey(providerId, externalId);
+    return getProviderItemKey(providerId, externalId);
   }
 
   dispose(): void {

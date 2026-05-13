@@ -15,7 +15,7 @@ import { ReadStateStore } from '../storage/readStateStore';
 import { isSafeUrl } from '../utils/url';
 import { buildTierColorCss } from '../webview/shared/colors';
 import { buildProviderBadge, buildProviderBadges, buildTypeBadge } from './badges';
-import { getDiscoveredItemKey, parseDiscoveredItemKey } from './discoveredItemKey';
+import { getProviderItemKey, parseProviderItemKey } from './providerItemKey';
 import type {
   BadgeData,
   ItemCardData,
@@ -177,7 +177,7 @@ export class MainViewProvider implements vscode.WebviewViewProvider {
           continue;
         }
 
-        const key = getDiscoveredItemKey(providerId, discoveredItem.externalId);
+        const key = getProviderItemKey(providerId, discoveredItem.externalId);
         if (hiddenCanonicalKeys.has(key)) {
           continue;
         }
@@ -272,7 +272,7 @@ export class MainViewProvider implements vscode.WebviewViewProvider {
     const discoveredItemMap = new Map<string, ProviderItem>();
     for (const [providerId, items] of allDiscoveredItems) {
       for (const item of items) {
-        discoveredItemMap.set(getDiscoveredItemKey(providerId, item.externalId), item);
+        discoveredItemMap.set(getProviderItemKey(providerId, item.externalId), item);
       }
     }
     return discoveredItemMap;
@@ -299,7 +299,7 @@ export class MainViewProvider implements vscode.WebviewViewProvider {
     if (!item.providerId || !item.externalId) {
       return undefined;
     }
-    return discoveredItemMap.get(getDiscoveredItemKey(item.providerId, item.externalId));
+    return discoveredItemMap.get(getProviderItemKey(item.providerId, item.externalId));
   }
 
   private buildIncomingCardData(
@@ -308,7 +308,7 @@ export class MainViewProvider implements vscode.WebviewViewProvider {
     relatedItemsIndex: RelatedItemsIndex,
     existingWorkItem?: WorkItem,
   ): ItemCardData {
-    const key = getDiscoveredItemKey(providerId, discoveredItem.externalId);
+    const key = getProviderItemKey(providerId, discoveredItem.externalId);
     return {
       id: existingWorkItem?.id ?? key,
       title: discoveredItem.title,
@@ -460,7 +460,7 @@ export class MainViewProvider implements vscode.WebviewViewProvider {
         let providerId: string | undefined = message.providerId;
         let externalId: string | undefined = message.externalId;
         if (!providerId || !externalId) {
-          const discoveredKey = parseDiscoveredItemKey(message.itemId);
+          const discoveredKey = parseProviderItemKey(message.itemId);
           if (discoveredKey) {
             providerId = discoveredKey.providerId;
             externalId = discoveredKey.externalId;
@@ -552,7 +552,7 @@ export class MainViewProvider implements vscode.WebviewViewProvider {
 
   private async handleMarkSeen(providerId: string, externalId: string): Promise<void> {
     try {
-      await this.readStateStore.add(getDiscoveredItemKey(providerId, externalId));
+      await this.readStateStore.add(getProviderItemKey(providerId, externalId));
     } catch (err) {
       logger.error('DevDocket: markSeen failed', err);
     }

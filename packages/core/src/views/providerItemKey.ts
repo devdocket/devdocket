@@ -3,11 +3,11 @@ export interface ProviderItemKey {
   externalId: string;
 }
 
-export function getDiscoveredItemKey(providerId: string, externalId: string): string {
+export function getProviderItemKey(providerId: string, externalId: string): string {
   return `${providerId}::${externalId}`;
 }
 
-export function parseDiscoveredItemKey(value: string): ProviderItemKey | undefined {
+export function parseProviderItemKey(value: string): ProviderItemKey | undefined {
   const separatorIndex = value.indexOf('::');
   if (separatorIndex <= 0) {
     return undefined;
