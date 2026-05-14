@@ -585,6 +585,39 @@ describe('MainViewProvider', () => {
     });
   });
 
+  it('uses singular wording when accepting one incoming item', async () => {
+    vi.useFakeTimers();
+    (vscode.window.showInformationMessage as Mock).mockResolvedValueOnce('Accept All');
+    const provider = createProvider(
+      createMockWorkGraph(),
+      createProviderRegistry({
+        github: [{ externalId: 'incoming-one', title: 'Incoming One' }],
+      }),
+      createStateStore(),
+    );
+    const mockView = createMockWebviewView();
+
+    provider.resolveWebviewView(mockView.view, {} as any, {} as any);
+    await vi.advanceTimersByTimeAsync(50);
+    vi.clearAllMocks();
+
+    mockView.simulateMessage({ type: 'acceptAll' });
+
+    await vi.waitFor(() => {
+      expect(vscode.window.showInformationMessage).toHaveBeenCalledWith(
+        'Accept all 1 item into Ready to Start? You can still triage them one by one.',
+        { modal: true },
+        'Accept All',
+      );
+    });
+    await vi.waitFor(() => {
+      expect(vscode.commands.executeCommand).toHaveBeenCalledWith(
+        'devdocket.acceptFromInbox',
+        expect.objectContaining({ providerId: 'github', externalId: 'incoming-one' }),
+      );
+    });
+  });
+
   it('does not accept incoming items when accept-all confirmation is canceled', async () => {
     vi.useFakeTimers();
     (vscode.window.showInformationMessage as Mock).mockResolvedValueOnce(undefined);
