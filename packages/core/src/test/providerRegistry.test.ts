@@ -1521,6 +1521,26 @@ describe('ProviderRegistry', () => {
       expect(registry.getProviderHealth('temp')).toEqual({ status: 'unknown' });
     });
 
+    it('ignores queued provider item updates after the provider is unregistered', async () => {
+      let releaseFirstUpdate!: () => void;
+      const firstUpdate = new Promise<void>(resolve => { releaseFirstUpdate = resolve; });
+      stateStore.setStates.mockImplementationOnce(() => firstUpdate);
+      const { provider } = createDeferredProvider('stale-items');
+      const disposable = registry.register(provider);
+
+      provider.fireItems([{ externalId: 'first', title: 'First' }]);
+      provider.fireItems([{ externalId: 'second', title: 'Second' }]);
+      await vi.waitFor(() => expect(registry.getProviderHealth('stale-items').status).toBe('healthy'));
+
+      disposable.dispose();
+      releaseFirstUpdate();
+      await nextTick();
+      await nextTick();
+
+      expect(registry.getProviderHealth('stale-items')).toEqual({ status: 'unknown' });
+      expect(registry.getProviderItems('stale-items')).toEqual([]);
+    });
+
     it('preserves lastRefreshTime from previous healthy state on failure', async () => {
       const provider = createMockProvider('flaky');
       registry.register(provider);

@@ -439,6 +439,9 @@ export class ProviderRegistry {
   }
 
   private updateHealth(providerId: string, status: 'healthy' | 'unhealthy', lastError?: string): void {
+    if (this._disposed || !this.providers.has(providerId)) {
+      return;
+    }
     const prev = this.healthStatus.get(providerId);
     const next: ProviderHealthStatus = {
       status,
@@ -459,7 +462,7 @@ export class ProviderRegistry {
   }
 
   private async handleProviderItems(providerId: string, items: ProviderItem[]): Promise<void> {
-    if (this._disposed) {
+    if (this._disposed || !this.providers.has(providerId)) {
       return;
     }
     // Receiving items via onDidDiscoverItems is a "successful refresh" signal.
