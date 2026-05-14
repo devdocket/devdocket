@@ -43,12 +43,12 @@ function registerCommandsWith(options: {
   return { watcherRegistry, prWatcherRegistry, watcherService, context };
 }
 
-function invoke(name: string) {
+function invoke(name: string, ...args: any[]) {
   const handler = commandHandlers.get(name);
   if (!handler) {
     throw new Error(`Command not registered: ${name}`);
   }
-  return handler();
+  return handler(...args);
 }
 
 describe('registerWatchCommands', () => {
@@ -144,6 +144,27 @@ describe('registerWatchCommands', () => {
     expect(watcherService.startWatch).not.toHaveBeenCalled();
     expect(watcherService.startPRWatch).not.toHaveBeenCalled();
     expect(vscode.window.showErrorMessage).not.toHaveBeenCalled();
+  });
+
+  it('shows run-specific feedback when an item URL run is already watched', async () => {
+    const input = 'https://github.com/owner/repo/actions/runs/12345';
+    const runIdentifier = {
+      providerId: 'github-actions',
+      runId: '12345',
+      displayName: 'CI Build',
+      url: input,
+      repo: 'owner/repo',
+    };
+    const runWatcher = {
+      id: 'github-actions',
+      label: 'GitHub Actions',
+      parseRunUrl: vi.fn(() => runIdentifier),
+    };
+    registerCommandsWith({ input: undefined, runWatcher, runActive: true });
+
+    await invoke('devdocket.watchPRFromItem', { url: input });
+
+    expect(vscode.window.showInformationMessage).toHaveBeenCalledWith('Already watching run: CI Build');
   });
 
   it('shows actionable feedback without starting a watch for unsupported URLs', async () => {

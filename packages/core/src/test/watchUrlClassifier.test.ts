@@ -90,10 +90,11 @@ describe('classifyWatchUrl', () => {
     const watcherRegistry = { findWatcherForUrl: vi.fn(() => undefined) };
     const prWatcherRegistry = { findWatcherForUrl: vi.fn(() => undefined) };
 
-    expect(classifyWatchUrl('   ', watcherRegistry, prWatcherRegistry)).toEqual({ ok: false, message: 'URL cannot be empty.' });
-    expect(classifyWatchUrl('file:///repo', watcherRegistry, prWatcherRegistry)).toEqual({ ok: false, message: 'Only http(s) URLs are supported.' });
+    expect(classifyWatchUrl('   ', watcherRegistry, prWatcherRegistry)).toEqual({ ok: false, reason: 'empty', message: 'URL cannot be empty.' });
+    expect(classifyWatchUrl('file:///repo', watcherRegistry, prWatcherRegistry)).toEqual({ ok: false, reason: 'unsafe', message: 'Only http(s) URLs are supported.' });
     expect(classifyWatchUrl('https://example.com/nope', watcherRegistry, prWatcherRegistry)).toEqual({
       ok: false,
+      reason: 'unsupported',
       message: 'Unsupported URL. Paste a GitHub PR, GitHub Actions run, Azure DevOps PR, or Azure DevOps pipeline run URL.',
     });
   });

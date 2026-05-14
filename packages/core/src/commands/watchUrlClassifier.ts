@@ -22,6 +22,7 @@ export type WatchUrlClassification =
   }
   | {
     ok: false;
+    reason: 'empty' | 'unsafe' | 'unsupported';
     message: string;
   };
 
@@ -32,11 +33,11 @@ export function classifyWatchUrl(
 ): WatchUrlClassification {
   const trimmed = value.trim();
   if (!trimmed) {
-    return { ok: false, message: 'URL cannot be empty.' };
+    return { ok: false, reason: 'empty', message: 'URL cannot be empty.' };
   }
 
   if (!isSafeUrl(trimmed)) {
-    return { ok: false, message: 'Only http(s) URLs are supported.' };
+    return { ok: false, reason: 'unsafe', message: 'Only http(s) URLs are supported.' };
   }
 
   const prWatcher = prWatcherRegistry.findWatcherForUrl(trimmed);
@@ -65,6 +66,7 @@ export function classifyWatchUrl(
 
   return {
     ok: false,
+    reason: 'unsupported',
     message: 'Unsupported URL. Paste a GitHub PR, GitHub Actions run, Azure DevOps PR, or Azure DevOps pipeline run URL.',
   };
 }

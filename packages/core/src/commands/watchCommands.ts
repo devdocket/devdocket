@@ -57,7 +57,7 @@ async function handleWatchUrl(
 
 function formatWatchUrlValidation(classification: WatchUrlClassification): string | vscode.InputBoxValidationMessage | undefined {
   if (!classification.ok) {
-    return classification.message === 'URL cannot be empty.' ? undefined : classification.message;
+    return classification.reason === 'empty' ? undefined : classification.message;
   }
   return {
     message: classification.validationMessage,
@@ -134,7 +134,7 @@ async function handleWatchPRFromItem(
     const wasActive = watcherService.isRunActive(identifier);
     const watch = await watcherService.startWatch(identifier);
     const message = wasActive
-      ? `Already watching: ${watch.identifier.displayName}`
+      ? `Already watching run: ${watch.identifier.displayName}`
       : `Now watching run: ${watch.identifier.displayName}`;
     void vscode.window.showInformationMessage(message);
     return;
