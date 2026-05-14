@@ -12,93 +12,12 @@ concurrency:
   group: publish-${{ github.workflow }}
   cancel-in-progress: false
 
-env:
-  PACKAGE_DIR: packages/ai-reviewer
-  PACKAGE_TITLE: DevDocket AI Reviewer
-  TAG_PREFIX: ai-reviewer-v
-
 jobs:
   publish:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: "npm"
-
-      - name: Install dependencies
-        run: npm ci
-
-      - name: Build workspace
-        run: npm run build
-
-      - name: Verify tag version matches package.json
-        run: |
-          TAG_VERSION="${GITHUB_REF_NAME#${TAG_PREFIX}}"
-          PACKAGE_NAME=$(node -p "require('./${PACKAGE_DIR}/package.json').name")
-          PKG_VERSION=$(node -p "require('./${PACKAGE_DIR}/package.json').version")
-          if [ "$TAG_VERSION" != "$PKG_VERSION" ]; then
-            echo "Tag version ($TAG_VERSION) does not match package.json version ($PKG_VERSION)"
-            exit 1
-          fi
-          echo "TAG_VERSION=$TAG_VERSION" >> "$GITHUB_ENV"
-          echo "PACKAGE_NAME=$PACKAGE_NAME" >> "$GITHUB_ENV"
-          echo "VSIX_PATH=$PACKAGE_NAME-$TAG_VERSION.vsix" >> "$GITHUB_ENV"
-
-      - name: Validate marketplace token
-        run: |
-          if [ -z "$VSCE_PAT" ]; then
-            echo "The VSCE_PAT repository secret is required to publish to the VS Code Marketplace."
-            exit 1
-          fi
-        env:
-          VSCE_PAT: ${{ secrets.VSCE_PAT }}
-
-      - name: Package extension
-        working-directory: ${{ env.PACKAGE_DIR }}
-        run: npx --yes @vscode/vsce package --allow-missing-repository --out "$VSIX_PATH"
-
-      - name: Publish extension
-        working-directory: ${{ env.PACKAGE_DIR }}
-        run: npx --yes @vscode/vsce publish --packagePath "$VSIX_PATH"
-        env:
-          VSCE_PAT: ${{ secrets.VSCE_PAT }}
-
-      - name: Generate release notes
-        run: |
-          generate_fallback_notes() {
-            PREV_TAG=$(git tag -l "${TAG_PREFIX}*" --sort=-v:refname | grep -vFx "${GITHUB_REF_NAME}" | head -n1)
-            if [ -n "$PREV_TAG" ]; then
-              RANGE="${PREV_TAG}..${GITHUB_REF_NAME}"
-            else
-              RANGE="$GITHUB_REF_NAME"
-            fi
-
-            NOTES=$(git log "$RANGE" --pretty=format:"* %s (%h)" -- "$PACKAGE_DIR/")
-            if [ -z "$NOTES" ]; then
-              NOTES="* No changes to $PACKAGE_DIR in this release"
-            fi
-            printf '%s\n' "$NOTES" > release-notes.md
-          }
-
-          CHANGELOG_PATH="$PACKAGE_DIR/CHANGELOG.md"
-          if [ -f scripts/extract-changelog.mjs ] && [ -f "$CHANGELOG_PATH" ]; then
-            error_log=release-notes-error.log
-            if ! node scripts/extract-changelog.mjs "$CHANGELOG_PATH" > release-notes.md 2>"$error_log"; then
-              echo "Failed to extract changelog entry; falling back to scoped git log:" >&2
-              cat "$error_log" >&2
-              generate_fallback_notes
-            fi
-            rm -f "$error_log"
-          else
-            generate_fallback_notes
-          fi
-
-      - name: Create GitHub Release
-        run: gh release create "$GITHUB_REF_NAME" --title "$PACKAGE_TITLE $TAG_VERSION" --notes-file release-notes.md
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    uses: ./.github/workflows/_publish-vscode-extension.yml
+    with:
+      package-directory: packages/ai-reviewer
+      package-title: DevDocket AI Reviewer
+      tag-prefix: ai-reviewer-v
+    secrets:
+      VSCE_PAT: ${{ secrets.VSCE_PAT }}
