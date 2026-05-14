@@ -631,7 +631,7 @@ export class MainViewProvider implements vscode.WebviewViewProvider {
   }
 
   private async handleDismissItem(providerId: string, externalId: string): Promise<void> {
-    let dismissedTitle = externalId;
+    let dismissedTitle: string;
     try {
       const providerItem = this.providerRegistry.getProviderItems(providerId).find(item => item.externalId === externalId);
       dismissedTitle = providerItem?.title ?? externalId;
