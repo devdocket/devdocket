@@ -84,8 +84,12 @@ export class ProviderHealthStatusBar implements vscode.Disposable {
         ? `$(sync~spin) ${refreshingCount} refreshing, ${unhealthyCount} unhealthy`
         : `$(sync~spin) ${refreshingCount} provider${refreshingCount === 1 ? '' : 's'} refreshing`;
       this.statusBarItem.tooltip = 'Click to view provider health details';
-      this.statusBarItem.backgroundColor = undefined;
-      this.statusBarItem.color = undefined;
+      this.statusBarItem.backgroundColor = unhealthyCount > 0
+        ? new vscode.ThemeColor('statusBarItem.warningBackground')
+        : undefined;
+      this.statusBarItem.color = unhealthyCount > 0
+        ? new vscode.ThemeColor('statusBarItem.warningForeground')
+        : undefined;
       this.statusBarItem.show();
       return;
     }

@@ -3,17 +3,20 @@ import * as vscode from 'vscode';
 import { ProviderHealthStatusBar, showProviderHealthQuickPick } from '../views/providerHealthStatusBar';
 import type { ProviderRegistry } from '../services/providerRegistry';
 
-function createRegistry(options: { refreshing?: string[] } = {}) {
+function createRegistry(options: { refreshing?: string[]; unhealthy?: string[] } = {}) {
   const refreshing = new Set(options.refreshing ?? []);
+  const unhealthy = new Set(options.unhealthy ?? []);
   const providers = [
     { id: 'github', label: 'GitHub' },
     { id: 'ado', label: 'Azure DevOps' },
   ];
   return {
     getProviders: vi.fn(() => providers),
-    getProviderHealth: vi.fn((id: string) => id === 'ado'
-      ? { status: 'healthy' as const }
-      : { status: 'unknown' as const }),
+    getProviderHealth: vi.fn((id: string) => unhealthy.has(id)
+      ? { status: 'unhealthy' as const, lastError: 'network error' }
+      : id === 'ado'
+        ? { status: 'healthy' as const }
+        : { status: 'unknown' as const }),
     isProviderRefreshing: vi.fn((id: string) => refreshing.has(id)),
     onDidChangeProviderHealth: vi.fn(() => ({ dispose: vi.fn() })),
     onDidChangeProviderRefreshState: vi.fn(() => ({ dispose: vi.fn() })),
@@ -36,6 +39,19 @@ describe('ProviderHealthStatusBar', () => {
 
     expect(item.text).toBe('$(sync~spin) 1 provider refreshing');
     expect(item.show).toHaveBeenCalled();
+
+    statusBar.dispose();
+  });
+
+  it('preserves warning styling while refreshing with unhealthy providers', () => {
+    const registry = createRegistry({ refreshing: ['ado'], unhealthy: ['github'] });
+
+    const statusBar = new ProviderHealthStatusBar(registry);
+    const item = (vscode.window.createStatusBarItem as Mock).mock.results[0].value;
+
+    expect(item.text).toBe('$(sync~spin) 1 refreshing, 1 unhealthy');
+    expect(item.backgroundColor.id).toBe('statusBarItem.warningBackground');
+    expect(item.color.id).toBe('statusBarItem.warningForeground');
 
     statusBar.dispose();
   });
