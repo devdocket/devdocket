@@ -5,7 +5,7 @@ import { MainViewProvider } from '../views/mainViewProvider';
 
 type MessageHandler = (message: unknown) => void | Promise<void>;
 
-type TestDiscoveredItem = {
+type TestProviderItem = {
   externalId: string;
   title: string;
   description?: string;
@@ -122,14 +122,14 @@ function createMockWorkGraph(initialItems: WorkItem[] = []) {
 }
 
 function createProviderRegistry(
-  itemsByProvider: Record<string, TestDiscoveredItem[]>,
+  itemsByProvider: Record<string, TestProviderItem[]>,
   labels: Record<string, string> = {},
   health: Record<string, { status: string }> = {},
 ) {
-  const discovered = new Map<string, TestDiscoveredItem[]>(Object.entries(itemsByProvider));
+  const discovered = new Map<string, TestProviderItem[]>(Object.entries(itemsByProvider));
   return {
-    getAllDiscoveredItems: vi.fn(() => discovered),
-    getDiscoveredItems: vi.fn((providerId: string) => discovered.get(providerId) ?? []),
+    getAllProviderItems: vi.fn(() => discovered),
+    getProviderItems: vi.fn((providerId: string) => discovered.get(providerId) ?? []),
     getProviderLabel: vi.fn((providerId: string) => labels[providerId] ?? providerId),
     getProviderHealth: vi.fn((providerId: string) => health[providerId] ?? { status: 'healthy' }),
   };

@@ -1,7 +1,7 @@
 import * as vscode from 'vscode';
 import {
   BaseProvider,
-  DiscoveredItem,
+  ProviderItem,
   type ProviderBadge,
   isValidUrlSegment,
   combineSignals,
@@ -68,7 +68,7 @@ export abstract class BaseAdoPrProvider extends BaseProvider {
   private static readonly ADO_PR_PATTERN = /^https?:\/\/dev\.azure\.com\/([^/]+)\/([^/]+)\/_git\/([^/]+)\/pullrequest\/(\d+)\b/i;
 
   constructor(private readonly orgConfigs: OrgConfig[]) {
-    super(new vscode.EventEmitter<DiscoveredItem[]>());
+    super(new vscode.EventEmitter<ProviderItem[]>());
   }
 
   async refresh(token?: vscode.CancellationToken): Promise<void> {
@@ -136,7 +136,7 @@ export abstract class BaseAdoPrProvider extends BaseProvider {
     sessionAccountId: string,
     signal?: AbortSignal,
   ): Promise<void> {
-    const allItems: DiscoveredItem[] = [];
+    const allItems: ProviderItem[] = [];
     const identityFailures: string[] = [];
     const fetchFailures: string[] = [];
     const additionalIdentityLookupFailures: string[] = [];
@@ -180,7 +180,7 @@ export abstract class BaseAdoPrProvider extends BaseProvider {
       }
 
       const uniqueAdditionalValues = [...new Set(additionalSearchCriteriaValues)].filter(value => value !== userId);
-      const additionalFetches: Array<{ items: DiscoveredItem[]; failedTargets: string[] }> = [];
+      const additionalFetches: Array<{ items: ProviderItem[]; failedTargets: string[] }> = [];
       await runWorkerPool(uniqueAdditionalValues, async searchCriteriaValue => {
         const additionalFetch = await this.fetchPrsForProjects(
           accessToken,
@@ -231,7 +231,7 @@ export abstract class BaseAdoPrProvider extends BaseProvider {
     }
   }
 
-  protected mapPrToItem(pr: AdoPullRequest, org: string): DiscoveredItem {
+  protected mapPrToItem(pr: AdoPullRequest, org: string): ProviderItem {
     const resurfaceVersion = this.getResurfaceVersion(pr);
     const stateBadge = buildAdoPrStateBadge(pr.status);
     return {
@@ -244,7 +244,7 @@ export abstract class BaseAdoPrProvider extends BaseProvider {
   }
 
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  protected async postProcessItems(_items: DiscoveredItem[], _token: string, _signal?: AbortSignal): Promise<void> {}
+  protected async postProcessItems(_items: ProviderItem[], _token: string, _signal?: AbortSignal): Promise<void> {}
 
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
   protected async getAdditionalSearchCriteriaValues(_token: string, _org: string, _userId: string, _sessionAccountId: string, _signal?: AbortSignal): Promise<string[]> {
@@ -378,7 +378,7 @@ export abstract class BaseAdoPrProvider extends BaseProvider {
     };
   }
 
-  private createBaseItem(pr: AdoPullRequest, org: string): DiscoveredItem {
+  private createBaseItem(pr: AdoPullRequest, org: string): ProviderItem {
     const projectName = pr.repository.project.name;
     const repoName = pr.repository.name;
     const repoUrl = pr.repository.webUrl
@@ -505,8 +505,8 @@ export abstract class BaseAdoPrProvider extends BaseProvider {
     projectList: string[],
     searchCriteriaValue: string,
     signal?: AbortSignal,
-  ): Promise<{ items: DiscoveredItem[]; failedTargets: string[] }> {
-    const items: DiscoveredItem[] = [];
+  ): Promise<{ items: ProviderItem[]; failedTargets: string[] }> {
+    const items: ProviderItem[] = [];
     const failedTargets: string[] = [];
     const results = await Promise.allSettled(
       projectList.map(project => this.fetchPrsForProject(token, org, project, searchCriteriaValue, signal)),
@@ -548,9 +548,9 @@ export abstract class BaseAdoPrProvider extends BaseProvider {
     return { items, failedTargets };
   }
 
-  private dedupeItems(items: DiscoveredItem[]): DiscoveredItem[] {
+  private dedupeItems(items: ProviderItem[]): ProviderItem[] {
     // Direct-reviewer fetches run first, so direct assignments win over duplicate group hits.
-    const deduped = new Map<string, DiscoveredItem>();
+    const deduped = new Map<string, ProviderItem>();
     for (const item of items) {
       if (!deduped.has(item.externalId)) {
         deduped.set(item.externalId, item);
@@ -565,7 +565,7 @@ export abstract class BaseAdoPrProvider extends BaseProvider {
     project: string,
     searchCriteriaValue: string,
     signal?: AbortSignal,
-  ): Promise<{ items: DiscoveredItem[]; failed: boolean }> {
+  ): Promise<{ items: ProviderItem[]; failed: boolean }> {
     logger.debug(`Fetching PRs for project: ${project || org}`);
     const projectPath = project ? `/${encodeURIComponent(project)}` : '';
     const url = `https://dev.azure.com/${encodeURIComponent(org)}${projectPath}/_apis/git/pullrequests?searchCriteria.${this.searchCriteriaParam}=${encodeURIComponent(searchCriteriaValue)}&searchCriteria.status=active&api-version=7.1`;

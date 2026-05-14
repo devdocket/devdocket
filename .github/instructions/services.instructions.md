@@ -19,7 +19,7 @@ Provider refreshes are separate — they happen on a periodic schedule or via ex
 `ProviderRegistry` tracks health via `ProviderHealthStatus` with status (`'healthy' | 'unhealthy' | 'unknown'`), `lastRefreshTime`, and `lastError`. Health updates happen in two places:
 
 - **`refreshWithTimeout()`** — invoked at provider registration and from `refreshAll()`. Successful refresh → `'healthy'`; error → `'unhealthy'` with message; timeout → `'unhealthy'` with `'Refresh timed out'`.
-- **`handleDiscoveredItems()`** — invoked whenever a provider emits items via `onDidDiscoverItems`. Marks the provider `'healthy'` regardless of how the emission was triggered. This is the only health signal for providers extending `BaseProvider`, because `BaseProvider`'s internal `setInterval` calls `doBackgroundRefresh()` directly and bypasses `refreshWithTimeout()`. Without this path a provider that went unhealthy on its initial refresh would stay unhealthy even though every subsequent background refresh was succeeding.
+- **`handleProviderItems()`** — invoked whenever a provider emits items via `onDidDiscoverItems`. Marks the provider `'healthy'` regardless of how the emission was triggered. This is the only health signal for providers extending `BaseProvider`, because `BaseProvider`'s internal `setInterval` calls `doBackgroundRefresh()` directly and bypasses `refreshWithTimeout()`. Without this path a provider that went unhealthy on its initial refresh would stay unhealthy even though every subsequent background refresh was succeeding.
 
 `updateHealth()` is a no-op when status is unchanged, so calling it on every emission is cheap. The `onDidChangeProviderHealth` event drives UI reactivity. Health tracking only works if providers let refresh failures reject — see `providers.instructions.md` for provider-side guidance.
 
@@ -35,9 +35,9 @@ Provider refreshes are separate — they happen on a periodic schedule or via ex
 
 ## Version-Based Resurfacing
 
-`DiscoveredItem.version` enables resurfacing for `accepted` items: when the stored version differs from the incoming version, state resets to `unseen` only if no linked work item exists or the linked work item is `Done`/`Archived`. For linked work items in `New`/`InProgress`/`Paused`, update the stored version silently and keep the inbox state unchanged.
+`ProviderItem.version` enables resurfacing for `accepted` items: when the stored version differs from the incoming version, state resets to `unseen` only if no linked work item exists or the linked work item is `Done`/`Archived`. For linked work items in `New`/`InProgress`/`Paused`, update the stored version silently and keep the inbox state unchanged.
 
-`DiscoveredItem.resurfaceVersion` enables resurfacing for `accepted` and `dismissed` items with the same lifecycle gate: resurface only when no linked work item exists or the linked work item is `Done`/`Archived`; otherwise silently update the stored resurface version.
+`ProviderItem.resurfaceVersion` enables resurfacing for `accepted` and `dismissed` items with the same lifecycle gate: resurface only when no linked work item exists or the linked work item is `Done`/`Archived`; otherwise silently update the stored resurface version.
 
 ## 3-Strike Failure Handling
 

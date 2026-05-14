@@ -1,4 +1,4 @@
-import { combineSignals, createAbortError, runWorkerPool, type DiscoveredItem } from '@devdocket/shared';
+import { combineSignals, createAbortError, runWorkerPool, type ProviderItem } from '@devdocket/shared';
 import { BaseAdoPrProvider, buildAdoMyPrsStateBadge, type AdoPullRequest } from './baseAdoPrProvider';
 import { logger } from './logger';
 import type { OrgConfig } from './configParser';
@@ -15,7 +15,7 @@ export class AdoMyPrsProvider extends BaseAdoPrProvider {
     super(orgConfigs);
   }
 
-  protected override mapPrToItem(pr: AdoPullRequest, org: string): DiscoveredItem {
+  protected override mapPrToItem(pr: AdoPullRequest, org: string): ProviderItem {
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
     const { resurfaceVersion: _resurfaceVersion, ...item } = super.mapPrToItem(pr, org);
     if (pr.isDraft) {
@@ -25,11 +25,11 @@ export class AdoMyPrsProvider extends BaseAdoPrProvider {
     return item;
   }
 
-  protected override async postProcessItems(items: DiscoveredItem[], token: string, signal?: AbortSignal): Promise<void> {
+  protected override async postProcessItems(items: ProviderItem[], token: string, signal?: AbortSignal): Promise<void> {
     const candidates = items
       .map((item, index) => ({ item, index, parsed: this.parsePrExternalId(item.externalId) }))
       .filter(
-        (entry): entry is { item: DiscoveredItem; index: number; parsed: NonNullable<ReturnType<AdoMyPrsProvider['parsePrExternalId']>> } =>
+        (entry): entry is { item: ProviderItem; index: number; parsed: NonNullable<ReturnType<AdoMyPrsProvider['parsePrExternalId']>> } =>
           entry.item.state !== 'Draft' && entry.parsed !== undefined,
       );
 

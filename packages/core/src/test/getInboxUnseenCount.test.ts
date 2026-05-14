@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { EventEmitter } from 'vscode';
-import { DevDocketProvider, DiscoveredItem } from '../api/types';
+import { DevDocketProvider, ProviderItem } from '../api/types';
 import { ProviderRegistry } from '../services/providerRegistry';
 import { getInboxUnseenCount } from '../services/inboxBadge';
 
@@ -28,8 +28,8 @@ function createMockStateStore() {
   };
 }
 
-function createMockProvider(id: string): DevDocketProvider & { fireItems: (items: DiscoveredItem[]) => void } {
-  const emitter = new EventEmitter<DiscoveredItem[]>();
+function createMockProvider(id: string): DevDocketProvider & { fireItems: (items: ProviderItem[]) => void } {
+  const emitter = new EventEmitter<ProviderItem[]>();
   return {
     id,
     label: `Provider ${id}`,

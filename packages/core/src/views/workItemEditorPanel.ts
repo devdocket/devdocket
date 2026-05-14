@@ -1,15 +1,15 @@
 import * as vscode from 'vscode';
-import type { DiscoveredItem } from '../api/types';
+import type { ProviderItem } from '../api/types';
 import { WorkItem, WorkItemInput, WorkItemState } from '../models/workItem';
 import { ActionRegistry } from '../services/actionRegistry';
 import { ProviderRegistry } from '../services/providerRegistry';
 import { buildRelatedItemsIndex, resolveRelatedItemsFor, type RelatedItemsIndex } from '../services/relatedItems';
 import { VALID_TRANSITIONS, WorkGraph } from '../services/workGraph';
 import type { WatcherService, WatchedPR, WatchedRun } from '../services/watcherService';
-import type { DiscoveredStateStore } from '../storage/discoveredStateStore';
+import type { InboxStateStore } from '../storage/inboxStateStore';
 import { isSafeUrl } from '../utils/url';
 import { buildProviderBadge, buildProviderBadges, buildTypeBadge } from './badges';
-import { parseDiscoveredItemKey } from './discoveredItemKey';
+import { parseProviderItemKey } from './providerItemKey';
 import { getEditorPanelHtml, renderMarkdown } from './editorPanelHtml';
 import type { BadgeData, EditorItemData } from './mainTypes';
 
@@ -55,7 +55,7 @@ export class WorkItemEditorPanel {
   private static readonly viewType = 'devdocket.editItem';
   private static panelManager = new PanelManager();
   private static actionRegistry?: ActionRegistry;
-  private static stateStore?: DiscoveredStateStore;
+  private static stateStore?: InboxStateStore;
   private static watcherService?: WatcherService;
 
   private readonly panel: vscode.WebviewPanel;
@@ -93,7 +93,7 @@ export class WorkItemEditorPanel {
     WorkItemEditorPanel.panelManager = manager;
   }
 
-  static setDependencies(actionRegistry?: ActionRegistry, stateStore?: DiscoveredStateStore, watcherService?: WatcherService): void {
+  static setDependencies(actionRegistry?: ActionRegistry, stateStore?: InboxStateStore, watcherService?: WatcherService): void {
     WorkItemEditorPanel.actionRegistry = actionRegistry;
     WorkItemEditorPanel.stateStore = stateStore;
     WorkItemEditorPanel.watcherService = watcherService;
@@ -162,7 +162,7 @@ export class WorkItemEditorPanel {
       this.update();
     });
 
-    this.providerChangeSub = this.providerRegistry.onDidChangeDiscoveredItems(() => {
+    this.providerChangeSub = this.providerRegistry.onDidChangeProviderItems(() => {
       this.update();
     });
 
@@ -397,7 +397,7 @@ export class WorkItemEditorPanel {
   }
 
   private buildEditorItemData(item: WorkItem, relatedItemsIndex: RelatedItemsIndex): EditorItemData {
-    const discoveredItem = this.getDiscoveredItem(item);
+    const providerItem = this.getProviderItem(item);
     const providerLabel = item.providerId ? this.providerLabel ?? this.providerRegistry.getProviderLabel(item.providerId) : undefined;
 
     return {
@@ -411,7 +411,7 @@ export class WorkItemEditorPanel {
       group: item.group,
       createdAt: item.createdAt,
       updatedAt: item.updatedAt,
-      badges: composeEditorBadges(item.providerId, discoveredItem, providerLabel),
+      badges: composeEditorBadges(item.providerId, providerItem, providerLabel),
       isProviderManaged: this.isProviderManaged(item),
       validTransitions: Array.from(VALID_TRANSITIONS.get(item.state) ?? []),
       hasActions: WorkItemEditorPanel.actionRegistry?.hasActionsFor(item) ?? false,
@@ -433,18 +433,18 @@ export class WorkItemEditorPanel {
 
     const discoveredKey = typeof providerId === 'string' && typeof externalId === 'string'
       ? { providerId, externalId }
-      : parseDiscoveredItemKey(itemId);
+      : parseProviderItemKey(itemId);
     if (discoveredKey) {
       await vscode.commands.executeCommand('devdocket.previewIncomingItem', discoveredKey);
     }
   }
 
-  private getDiscoveredItem(item: WorkItem): DiscoveredItem | undefined {
+  private getProviderItem(item: WorkItem): ProviderItem | undefined {
     if (!item.providerId || !item.externalId) {
       return undefined;
     }
 
-    return this.providerRegistry.findDiscoveredItem(item.providerId, item.externalId);
+    return this.providerRegistry.findProviderItem(item.providerId, item.externalId);
   }
 
   private buildCIWatchData(item: WorkItem): EditorItemData['ciWatch'] {
@@ -587,21 +587,21 @@ export class WorkItemEditorPanel {
     try {
       const existing = this.workGraph.findItemByProvenance(providerId, externalId);
       if (!existing) {
-        const discoveredItem = this.providerRegistry.getDiscoveredItems(providerId).find(item => item.externalId === externalId);
-        if (!discoveredItem) {
+        const providerItem = this.providerRegistry.getProviderItems(providerId).find(item => item.externalId === externalId);
+        if (!providerItem) {
           return;
         }
         await this.workGraph.createItem(
           {
-            title: discoveredItem.title,
-            description: discoveredItem.description,
+            title: providerItem.title,
+            description: providerItem.description,
           },
           {
             providerId,
             externalId,
-            itemType: discoveredItem.itemType,
-            url: discoveredItem.url,
-            ...(discoveredItem.group ? { group: discoveredItem.group } : {}),
+            itemType: providerItem.itemType,
+            url: providerItem.url,
+            ...(providerItem.group ? { group: providerItem.group } : {}),
           },
         );
       }
@@ -674,13 +674,13 @@ function isFailingOrWarningRun(run: WatchedRun): boolean {
 
 /**
  * Compose the badge list shown in the editor: provider, type, then the
- * provider-supplied badges declared on the {@link DiscoveredItem}. CI badges
+ * provider-supplied badges declared on the {@link ProviderItem}. CI badges
  * are not added here — the editor surfaces active watch details in its
  * dedicated CI Watch section instead.
  */
 export function composeEditorBadges(
   providerId?: string,
-  discoveredItem?: DiscoveredItem,
+  providerItem?: ProviderItem,
   providerLabel?: string,
 ): BadgeData[] {
   const badges: BadgeData[] = [];
@@ -689,8 +689,8 @@ export function composeEditorBadges(
   // as "Manual".
   const providerBadge = buildProviderBadge(providerId, providerLabel);
   if (providerBadge) badges.push(providerBadge);
-  const typeBadge = buildTypeBadge(discoveredItem);
+  const typeBadge = buildTypeBadge(providerItem);
   if (typeBadge) badges.push(typeBadge);
-  badges.push(...buildProviderBadges(discoveredItem, 'editor'));
+  badges.push(...buildProviderBadges(providerItem, 'editor'));
   return badges;
 }

@@ -29,7 +29,7 @@ DevDocket organizes work items through a lifecycle, surfaced as tiers in the **M
 | **Done** | Completed and archived items |
 | **Sources** (separate tab) | A browsable library of everything providers know about |
 
-**Providers** feed items into this system by emitting `DiscoveredItem` arrays. For discovery surfaces (the **Incoming** tier and the **Sources** tab), item data is read live from the provider. When a user accepts an item, DevDocket stores a snapshot of it as a `WorkItem`, and the **In Progress / Ready to Start / Paused / Done** tiers render that persisted data instead of always reading live from the provider.
+**Providers** feed items into this system by emitting `ProviderItem` arrays. For discovery surfaces (the **Incoming** tier and the **Sources** tab), item data is read live from the provider. When a user accepts an item, DevDocket stores a snapshot of it as a `WorkItem`, and the **In Progress / Ready to Start / Paused / Done** tiers render that persisted data instead of always reading live from the provider.
 
 **Actions** extend what users can do with work items. The editor's `Run Action…` button exposes the available actions for the current item, filtered via a `canRun()` predicate.
 
@@ -98,8 +98,10 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 The `@devdocket/shared` package provides the TypeScript types and the `BaseProvider` base class needed to build providers and actions with full type safety. It is published to the GitHub Packages npm registry — see [the Extension API guide](./extension-api.md#installing-devdocketshared) for the `.npmrc` setup and authentication notes.
 
 ```ts
-import { BaseProvider, type DiscoveredItem } from '@devdocket/shared';
+import { BaseProvider, type ProviderItem } from '@devdocket/shared';
 ```
+
+`ProviderItem` is the name for items emitted by providers. Provider code should import and emit `ProviderItem`.
 
 If you would rather avoid the GitHub Packages dependency, you can re-declare the small subset of interfaces your extension needs. Copy the following declarations into your provider code:
 
@@ -121,11 +123,11 @@ interface GitWorkInfo {
   repoLabel?: string;
 }
 
-interface DiscoveredItemCapabilities {
+interface ProviderItemCapabilities {
   gitWork?: GitWorkInfo | (() => Promise<GitWorkInfo | undefined>);
 }
 
-interface DiscoveredItem {
+interface ProviderItem {
   externalId: string;
   title: string;
   description?: string;
@@ -141,17 +143,18 @@ interface DiscoveredItem {
   itemType?: 'issue' | 'pr';
   badges?: ProviderBadge[];
   /** Optional capabilities, such as provider-supplied git metadata for Start Git Work. */
-  capabilities?: DiscoveredItemCapabilities;
+  capabilities?: ProviderItemCapabilities;
   /** Opaque "soft" version token. See provider-discovery.md#resurfacing. */
   version?: string;
   /** Opaque "always-resurface" token. See provider-discovery.md#resurfacing. */
   resurfaceVersion?: string;
 }
 
+
 interface DevDocketProvider {
   readonly id: string;
   readonly label: string;
-  readonly onDidDiscoverItems: Event<DiscoveredItem[]>;
+  readonly onDidDiscoverItems: Event<ProviderItem[]>;
   refresh(token?: vscode.CancellationToken): Promise<void>;
   resolveUrl?(url: string, signal?: AbortSignal): Promise<ResolvedItem | undefined>;
   getClosedItems?(externalIds: string[], signal?: AbortSignal): Promise<string[]>;
@@ -178,7 +181,7 @@ A provider discovers items from an external source and reports them to DevDocket
 ```ts
 import * as vscode from 'vscode';
 
-interface DiscoveredItem {
+interface ProviderItem {
   externalId: string;
   title: string;
   description?: string;
@@ -200,7 +203,7 @@ interface Event<T> {
 interface DevDocketProvider {
   readonly id: string;
   readonly label: string;
-  readonly onDidDiscoverItems: Event<DiscoveredItem[]>;
+  readonly onDidDiscoverItems: Event<ProviderItem[]>;
   refresh(token?: vscode.CancellationToken): Promise<void>;
   resolveUrl?(url: string, signal?: AbortSignal): Promise<ResolvedItem | undefined>;
   getClosedItems?(externalIds: string[], signal?: AbortSignal): Promise<string[]>;
@@ -221,7 +224,7 @@ class JiraProvider implements DevDocketProvider {
 
   // Use vscode.EventEmitter to implement the onDidDiscoverItems event
   private readonly _onDidDiscoverItems =
-    new vscode.EventEmitter<DiscoveredItem[]>();
+    new vscode.EventEmitter<ProviderItem[]>();
   readonly onDidDiscoverItems = this._onDidDiscoverItems.event;
 
   private refreshTimer: ReturnType<typeof setInterval> | undefined;
@@ -230,7 +233,7 @@ class JiraProvider implements DevDocketProvider {
   async refresh(token?: vscode.CancellationToken): Promise<void> {
     const tickets = await this.fetchTickets();
 
-    const items: DiscoveredItem[] = tickets.map((ticket) => ({
+    const items: ProviderItem[] = tickets.map((ticket) => ({
       // externalId must be unique within this provider and stable across refreshes
       externalId: `${ticket.project}/${ticket.key}`,
       title: `${ticket.key}: ${ticket.summary}`,
@@ -345,7 +348,7 @@ class JiraProvider implements DevDocketProvider {
 
 ### Key Points
 
-- **EventEmitter pattern** — Use `vscode.EventEmitter<DiscoveredItem[]>` to create the event. Expose its `.event` property as the readonly `onDidDiscoverItems`.
+- **EventEmitter pattern** — Use `vscode.EventEmitter<ProviderItem[]>` to create the event. Expose its `.event` property as the readonly `onDidDiscoverItems`.
 - **`refresh()` is called by DevDocket** — It is invoked automatically when the provider is registered for initial discovery. It must be safe to call multiple times. DevDocket passes a `CancellationToken` and enforces a refresh timeout; providers should check `token.isCancellationRequested` before and during long-running operations.
 - **`externalId` must be unique per provider** — DevDocket uses the combination of `providerId + externalId` to track inbox state. Use a stable identifier like `owner/repo#123` or `PROJECT/TICKET-42`.
 - **`group` is optional** — When set, items with the same group value are nested under a folder node in the Sources tab and surfaced as a small annotation below the title on each item card.
@@ -417,7 +420,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
 Providers can opt discovered items into Start Git Work by attaching `capabilities.gitWork`. The action is provider-agnostic: it does not parse URL hosts, provider ids, or external ids. Providers supply `GitWorkInfo` directly for issue-shaped items when all data is already known, or a lazy function for PR-shaped items when resolving the head ref or fork clone URL requires the provider's API.
 
 ```ts
-const item: DiscoveredItem = {
+const item: ProviderItem = {
   externalId: 'project/TICKET-123',
   title: 'TICKET-123: Fix login',
   capabilities: {
@@ -513,7 +516,7 @@ Understanding how items move through DevDocket helps you build effective provide
 
 ```mermaid
 flowchart TD
-    P["Provider emits DiscoveredItem[]"] --> Incoming["Incoming\n(unseen)"]
+    P["Provider emits ProviderItem[]"] --> Incoming["Incoming\n(unseen)"]
     Incoming -- accept --> Ready["Ready to Start\n(New)"]
     Incoming -- dismiss --> Dismissed["dismissed\n(Sources only)"]
     User["User creates item directly"] -- manual add --> Ready
@@ -530,9 +533,9 @@ DevDocket maintains two records in VS Code `globalState`:
 | `globalState` key | Contents |
 |-------------------|----------|
 | `devdocket.workitems` | Full `WorkItem` records with state machine lifecycle |
-| `devdocket.discovered-state` | Thin index mapping `providerId + externalId` → inbox state (`unseen`, `accepted`, `dismissed`) |
+| `devdocket.inbox-state` | Thin index mapping `providerId + externalId` → inbox state (`unseen`, `accepted`, `dismissed`) |
 
-**`DiscoveredItem` fields are not persisted in `devdocket.discovered-state`.** That key stores only inbox state keyed by `providerId + externalId`, which keeps the discovery index lightweight.
+**`ProviderItem` fields are not persisted in `devdocket.inbox-state`.** That key stores only inbox state keyed by `providerId + externalId`, which keeps the discovery index lightweight.
 
 When a user **accepts** an item from the Incoming tier or Sources tab, DevDocket creates a new `WorkItem` (under `devdocket.workitems`) using provider-backed data: the provider's `title` is stored verbatim, the `url` is normalized through `isSafeUrl` (rejecting non-http(s) schemes), and the `group` value is persisted on the work item as a separate field — it is **not** prefixed onto the title. Provenance metadata (`providerId`, `externalId`) is stored alongside.
 
@@ -558,7 +561,7 @@ Good patterns: `owner/repo#123`, `PROJECT-42`, `ticket/12345`
 
 ### Don't store provider item data
 
-DevDocket reads `DiscoveredItem` data live from the provider. There is no need to persist item details on your side — just emit the current set on each refresh. This ensures discovery surfaces (the Incoming tier and the Sources tab) show the latest provider data, while accepted items in the Ready to Start / In Progress / Paused / Done tiers continue to display their persisted `WorkItem` snapshots.
+DevDocket reads `ProviderItem` data live from the provider. There is no need to persist item details on your side — just emit the current set on each refresh. This ensures discovery surfaces (the Incoming tier and the Sources tab) show the latest provider data, while accepted items in the Ready to Start / In Progress / Paused / Done tiers continue to display their persisted `WorkItem` snapshots.
 
 ### Dispose subscriptions properly
 
@@ -577,19 +580,19 @@ Each `onDidDiscoverItems` emission **replaces** the provider's entire known item
 
 ### Use `group` for organization
 
-Set the `group` field on `DiscoveredItem` to organize items under folder nodes in the Sources tab and to display as a sub-annotation under each item card. For example, a GitHub provider groups issues by repository name.
+Set the `group` field on `ProviderItem` to organize items under folder nodes in the Sources tab and to display as a sub-annotation under each item card. For example, a GitHub provider groups issues by repository name.
 
 ### Classify items with `itemType`
 
 Set `itemType` to `'issue'` or `'pr'` when your provider knows the kind of item it's surfacing. DevDocket renders this as a dedicated Issue/PR pill alongside the provider, state, and CI badges.
 
 - **Do** set `itemType` from authoritative provider data (e.g. an API field, the URL pattern of the source, or a dedicated endpoint).
-- **Don't** make consumers of `DiscoveredItem` infer the kind from URLs or state strings — only the provider has authoritative knowledge of what it actually fetched.
+- **Don't** make consumers of `ProviderItem` infer the kind from URLs or state strings — only the provider has authoritative knowledge of what it actually fetched.
 - **Leave `itemType` undefined** for generic / heterogeneous sources where the kind isn't meaningful (e.g. a "starred items" feed). The pill simply won't render.
 
 ### Declare badges explicitly
 
-DevDocket itself owns three badge categories: **Provider** (GitHub / ADO / Manual), **Type** (Issue / PR via `itemType`), and **CI** (from the watcher service). For everything else — state, review status, the reason an item showed up in the inbox — declare badges via `DiscoveredItem.badges`.
+DevDocket itself owns three badge categories: **Provider** (GitHub / ADO / Manual), **Type** (Issue / PR via `itemType`), and **CI** (from the watcher service). For everything else — state, review status, the reason an item showed up in the inbox — declare badges via `ProviderItem.badges`.
 
 The core never infers badges from `state` or `reason` strings, so if you want a pill in the UI you must declare it explicitly.
 
@@ -678,7 +681,7 @@ interface DevDocketProvider {
    * Event that fires when the provider has items to report.
    * Each emission replaces the provider's entire item set.
    */
-  readonly onDidDiscoverItems: Event<DiscoveredItem[]>;
+  readonly onDidDiscoverItems: Event<ProviderItem[]>;
 
   /**
    * Called by DevDocket on registration for initial discovery.
@@ -742,12 +745,12 @@ interface ResolvedItem {
 }
 ```
 
-### `DiscoveredItem`
+### `ProviderItem`
 
 Represents an item discovered by a provider.
 
 ```ts
-interface DiscoveredItem {
+interface ProviderItem {
   /**
    * Unique identifier within the provider. Must be stable across refreshes.
    * DevDocket uses providerId + externalId to track inbox state.

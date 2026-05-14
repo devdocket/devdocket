@@ -196,7 +196,7 @@ describe('GitHubPrReviewProvider', () => {
     expect(items.map((item: any) => item.externalId)).not.toContain('org/myrepo#43');
   });
 
-  it('fires onDidDiscoverItems with correctly mapped DiscoveredItems', async () => {
+  it('fires onDidDiscoverItems with correctly mapped ProviderItems', async () => {
     mockFetch.mockResolvedValueOnce({
       ok: true,
       json: async () => ({

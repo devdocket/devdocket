@@ -10,7 +10,7 @@ function createMockWorkGraph() {
 
 function createMockProviderRegistry() {
   return {
-    getAllDiscoveredItems: vi.fn(() => new Map<string, any[]>()),
+    getAllProviderItems: vi.fn(() => new Map<string, any[]>()),
   };
 }
 
@@ -25,7 +25,7 @@ describe('syncProviderDescriptions', () => {
   });
 
   it('updates WorkItem description when provider description differs', async () => {
-    providerRegistry.getAllDiscoveredItems.mockReturnValue(new Map([
+    providerRegistry.getAllProviderItems.mockReturnValue(new Map([
       ['github', [{ externalId: '42', description: 'New description' }]],
     ]));
     workGraph.findItemByProvenance.mockReturnValue({ id: 'item-1', description: 'Old description' });
@@ -37,7 +37,7 @@ describe('syncProviderDescriptions', () => {
   });
 
   it('does not update when descriptions match', async () => {
-    providerRegistry.getAllDiscoveredItems.mockReturnValue(new Map([
+    providerRegistry.getAllProviderItems.mockReturnValue(new Map([
       ['github', [{ externalId: '42', description: 'Same description' }]],
     ]));
     workGraph.findItemByProvenance.mockReturnValue({ id: 'item-1', description: 'Same description' });
@@ -48,7 +48,7 @@ describe('syncProviderDescriptions', () => {
   });
 
   it('skips discovered items without matching WorkItem', async () => {
-    providerRegistry.getAllDiscoveredItems.mockReturnValue(new Map([
+    providerRegistry.getAllProviderItems.mockReturnValue(new Map([
       ['github', [{ externalId: '99', description: 'Orphan' }]],
     ]));
     workGraph.findItemByProvenance.mockReturnValue(undefined);
@@ -59,7 +59,7 @@ describe('syncProviderDescriptions', () => {
   });
 
   it('only scans the specified provider, not others', async () => {
-    providerRegistry.getAllDiscoveredItems.mockReturnValue(new Map([
+    providerRegistry.getAllProviderItems.mockReturnValue(new Map([
       ['github', [
         { externalId: '1', description: 'Updated GH desc' },
       ]],
@@ -78,7 +78,7 @@ describe('syncProviderDescriptions', () => {
   });
 
   it('handles multiple items within the specified provider', async () => {
-    providerRegistry.getAllDiscoveredItems.mockReturnValue(new Map([
+    providerRegistry.getAllProviderItems.mockReturnValue(new Map([
       ['github', [
         { externalId: '1', description: 'Updated GH desc' },
         { externalId: '2', description: 'Same GH desc' },
@@ -95,7 +95,7 @@ describe('syncProviderDescriptions', () => {
   });
 
   it('continues syncing other items when one update fails', async () => {
-    providerRegistry.getAllDiscoveredItems.mockReturnValue(new Map([
+    providerRegistry.getAllProviderItems.mockReturnValue(new Map([
       ['github', [
         { externalId: '1', description: 'Fail' },
         { externalId: '2', description: 'Updated' },
@@ -115,7 +115,7 @@ describe('syncProviderDescriptions', () => {
   });
 
   it('does nothing when provider has no items', async () => {
-    providerRegistry.getAllDiscoveredItems.mockReturnValue(new Map());
+    providerRegistry.getAllProviderItems.mockReturnValue(new Map());
 
     await syncProviderDescriptions('github', providerRegistry as any, workGraph as any);
 
@@ -124,7 +124,7 @@ describe('syncProviderDescriptions', () => {
   });
 
   it('syncs cleared description (undefined) when provider has no description', async () => {
-    providerRegistry.getAllDiscoveredItems.mockReturnValue(new Map([
+    providerRegistry.getAllProviderItems.mockReturnValue(new Map([
       ['github', [{ externalId: '42', description: undefined }]],
     ]));
     workGraph.findItemByProvenance.mockReturnValue({ id: 'item-1', description: 'Old description' });
@@ -135,7 +135,7 @@ describe('syncProviderDescriptions', () => {
   });
 
   it('does not update when both descriptions are undefined', async () => {
-    providerRegistry.getAllDiscoveredItems.mockReturnValue(new Map([
+    providerRegistry.getAllProviderItems.mockReturnValue(new Map([
       ['github', [{ externalId: '42', description: undefined }]],
     ]));
     workGraph.findItemByProvenance.mockReturnValue({ id: 'item-1', description: undefined });
@@ -146,7 +146,7 @@ describe('syncProviderDescriptions', () => {
   });
 
   it('does not clear description when provider omits description property', async () => {
-    providerRegistry.getAllDiscoveredItems.mockReturnValue(new Map([
+    providerRegistry.getAllProviderItems.mockReturnValue(new Map([
       ['github', [{ externalId: '42', title: 'Bug' }]],
     ]));
     workGraph.findItemByProvenance.mockReturnValue({ id: 'item-1', description: 'Existing description' });

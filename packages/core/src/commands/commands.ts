@@ -4,7 +4,7 @@ import { ACTIVITY_TYPES, type ActivityType } from '../models/activityLog';
 import { WorkGraph } from '../services/workGraph';
 import { ActionRegistry } from '../services/actionRegistry';
 import { ProviderRegistry } from '../services/providerRegistry';
-import { DiscoveredStateStore, type InboxState } from '../storage/discoveredStateStore';
+import { InboxStateStore, type InboxState } from '../storage/inboxStateStore';
 import type { ProviderLabelCache } from '../storage/providerLabelCache';
 import type { ReadStateStore } from '../storage/readStateStore';
 import { WorkItemEditorPanel } from '../views/workItemEditorPanel';
@@ -99,11 +99,11 @@ interface CanonicalItem {
 function findCanonicalPeers(
   item: CanonicalItem,
   providerRegistry: ProviderRegistry,
-  stateStore: DiscoveredStateStore,
+  stateStore: InboxStateStore,
 ): Array<{ providerId: string; externalId: string; itemType?: 'issue' | 'pr' }> {
   if (!item.canonicalId) { return []; }
   const peers: Array<{ providerId: string; externalId: string; itemType?: 'issue' | 'pr' }> = [];
-  for (const [providerId, items] of providerRegistry.getAllDiscoveredItems()) {
+  for (const [providerId, items] of providerRegistry.getAllProviderItems()) {
     for (const discovered of items) {
       if (discovered.canonicalId !== item.canonicalId) { continue; }
       if (providerId === item.providerId && discovered.externalId === item.externalId) { continue; }
@@ -119,7 +119,7 @@ function findCanonicalPeers(
 async function propagateStateToCanonicalPeers(
   item: CanonicalItem,
   providerRegistry: ProviderRegistry,
-  stateStore: DiscoveredStateStore,
+  stateStore: InboxStateStore,
   state: 'accepted' | 'dismissed',
 ): Promise<void> {
   const peers = findCanonicalPeers(item, providerRegistry, stateStore);
@@ -138,7 +138,7 @@ async function propagateStateToCanonicalPeers(
 function expandWithCanonicalPeers(
   items: InboxItem[],
   providerRegistry: ProviderRegistry,
-  stateStore: DiscoveredStateStore,
+  stateStore: InboxStateStore,
 ): InboxItem[] {
   const keys = new Set(items.map(i => `${i.providerId}::${i.externalId}`));
   const extra: InboxItem[] = [];
@@ -215,7 +215,7 @@ interface AcceptableItem {
 
 async function batchAcceptItems(
   workGraph: WorkGraph,
-  stateStore: DiscoveredStateStore,
+  stateStore: InboxStateStore,
   items: AcceptableItem[],
   logLabel: string,
 ): Promise<void> {
@@ -608,7 +608,7 @@ async function handleRefresh(providerRegistry: ProviderRegistry): Promise<void> 
 
 async function handleAcceptFromSources(
   workGraph: WorkGraph,
-  stateStore: DiscoveredStateStore,
+  stateStore: InboxStateStore,
   providerRegistry: ProviderRegistry,
   item?: SourcesElement,
   selectedItems?: SourcesElement[],
@@ -630,7 +630,7 @@ async function handleAcceptFromSources(
 
 async function acceptSingleSourceItem(
   workGraph: WorkGraph,
-  stateStore: DiscoveredStateStore,
+  stateStore: InboxStateStore,
   providerRegistry: ProviderRegistry,
   item: SourceItemNode,
 ): Promise<void> {
@@ -701,7 +701,7 @@ async function acceptSingleSourceItem(
 }
 
 async function handleDismissFromSources(
-  stateStore: DiscoveredStateStore,
+  stateStore: InboxStateStore,
   providerRegistry: ProviderRegistry,
   item?: SourcesElement,
   selectedItems?: SourcesElement[],
@@ -742,7 +742,7 @@ export function registerCommands(
   context: vscode.ExtensionContext,
   workGraph: WorkGraph,
   actionRegistry: ActionRegistry,
-  stateStore: DiscoveredStateStore,
+  stateStore: InboxStateStore,
   readStateStore: ReadStateStore,
   providerRegistry: ProviderRegistry,
   labelCache: ProviderLabelCache,

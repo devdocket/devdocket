@@ -1,4 +1,4 @@
-import type { DiscoveredItem, RelatedItemRef } from '../api/types';
+import type { ProviderItem, RelatedItemRef } from '../api/types';
 import type { WorkItem } from '../models/workItem';
 import type { ResolvedRelatedItem } from '../views/relatedItemTypes';
 import type { ProviderRegistry } from './providerRegistry';
@@ -11,7 +11,7 @@ interface ResolvedRelatedItemWithSort extends ResolvedRelatedItem {
   externalId: string;
 }
 
-interface DiscoveredMatch {
+interface ProviderItemMatch {
   providerId: string;
   externalId: string;
   itemType: RelatedItemRef['itemType'];
@@ -36,16 +36,16 @@ export function resolveRelatedItemsFor(
     return precomputed;
   }
 
-  const discoveredItems = registry.getAllDiscoveredItems();
-  const indexed = relatedItemsIndex ? undefined : buildRelatedItemsIndexForDiscovered(discoveredItems, workGraph).get(indexKey);
+  const providerItems = registry.getAllProviderItems();
+  const indexed = relatedItemsIndex ? undefined : buildRelatedItemsIndexForDiscovered(providerItems, workGraph).get(indexKey);
   if (indexed) {
     return indexed;
   }
 
-  const currentDiscovered = findDiscoveredItem(discoveredItems, item.providerId, item.externalId);
-  const currentItemType = item.itemType ?? currentDiscovered?.itemType;
-  if (!currentDiscovered && isRelatedItemType(currentItemType)) {
-    return resolveReverseRefsForUndiscovered(item.providerId, item.externalId, currentItemType, discoveredItems, workGraph);
+  const currentProviderItem = findProviderItem(providerItems, item.providerId, item.externalId);
+  const currentItemType = item.itemType ?? currentProviderItem?.itemType;
+  if (!currentProviderItem && isRelatedItemType(currentItemType)) {
+    return resolveReverseRefsForUndiscovered(item.providerId, item.externalId, currentItemType, providerItems, workGraph);
   }
   return [];
 }
@@ -53,22 +53,22 @@ export function resolveRelatedItemsFor(
 export function buildRelatedItemsIndex(
   registry: ProviderRegistry,
   workGraph: WorkGraph,
-  discoveredItems: Map<string, DiscoveredItem[]> = registry.getAllDiscoveredItems(),
+  providerItems: Map<string, ProviderItem[]> = registry.getAllProviderItems(),
 ): RelatedItemsIndex {
-  return buildRelatedItemsIndexForDiscovered(discoveredItems, workGraph);
+  return buildRelatedItemsIndexForDiscovered(providerItems, workGraph);
 }
 
 function buildRelatedItemsIndexForDiscovered(
-  discoveredItems: Map<string, DiscoveredItem[]>,
+  providerItems: Map<string, ProviderItem[]>,
   workGraph: WorkGraph,
 ): RelatedItemsIndex {
-  const discoveredByRef = buildDiscoveredByRef(discoveredItems, workGraph);
+  const providerItemsByRef = buildProviderItemsByRef(providerItems, workGraph);
   const workingIndex = new Map<string, Map<string, ResolvedRelatedItemWithSort>>();
   let totalRefCount = 0;
   let resolvedRefCount = 0;
   let droppedRefCount = 0;
 
-  for (const [providerId, items] of discoveredItems) {
+  for (const [providerId, items] of providerItems) {
     for (const item of items) {
       const relatedItems = item.relatedItems ?? [];
       if (relatedItems.length === 0) {
@@ -78,7 +78,7 @@ function buildRelatedItemsIndexForDiscovered(
       const resolved = getOrCreateResolvedSet(workingIndex, providerId, item.externalId);
       for (const ref of relatedItems) {
         totalRefCount++;
-        const target = resolveRef(ref, discoveredByRef, workGraph);
+        const target = resolveRef(ref, providerItemsByRef, workGraph);
         if (target) {
           resolvedRefCount++;
           upsertResolved(resolved, target);
@@ -89,19 +89,19 @@ function buildRelatedItemsIndexForDiscovered(
     }
   }
 
-  for (const [providerId, items] of discoveredItems) {
+  for (const [providerId, items] of providerItems) {
     for (const candidate of items) {
       if (candidate.itemType !== 'pr' || !candidate.relatedItems?.length) {
         continue;
       }
 
       for (const ref of candidate.relatedItems) {
-        const target = resolveDiscoveredTarget(providerId, candidate.externalId, candidate.itemType, ref.relation, workGraph, 'reverse', candidate.title);
+        const target = resolveProviderItemTarget(providerId, candidate.externalId, candidate.itemType, ref.relation, workGraph, 'reverse', candidate.title);
         if (!target) {
           continue;
         }
 
-        for (const match of discoveredByRef.get(getRefKey(ref.itemType, ref.externalId)) ?? []) {
+        for (const match of providerItemsByRef.get(getRefKey(ref.itemType, ref.externalId)) ?? []) {
           if (match.providerId === providerId && match.externalId === candidate.externalId) {
             continue;
           }
@@ -129,11 +129,11 @@ function resolveReverseRefsForUndiscovered(
   providerId: string,
   externalId: string,
   itemType: RelatedItemRef['itemType'],
-  discoveredItems: Map<string, DiscoveredItem[]>,
+  providerItems: Map<string, ProviderItem[]>,
   workGraph: WorkGraph,
 ): ResolvedRelatedItem[] {
   const resolved = new Map<string, ResolvedRelatedItemWithSort>();
-  for (const [candidateProviderId, items] of discoveredItems) {
+  for (const [candidateProviderId, items] of providerItems) {
     for (const candidate of items) {
       if (candidate.itemType !== 'pr' || !candidate.relatedItems?.length) {
         continue;
@@ -147,7 +147,7 @@ function resolveReverseRefsForUndiscovered(
           continue;
         }
 
-        const target = resolveDiscoveredTarget(
+        const target = resolveProviderItemTarget(
           candidateProviderId,
           candidate.externalId,
           candidate.itemType,
@@ -165,21 +165,21 @@ function resolveReverseRefsForUndiscovered(
   return toPublicResolvedItems(resolved);
 }
 
-function buildDiscoveredByRef(discoveredItems: Map<string, DiscoveredItem[]>, workGraph: WorkGraph): Map<string, DiscoveredMatch[]> {
-  const discoveredByRef = new Map<string, DiscoveredMatch[]>();
+function buildProviderItemsByRef(providerItems: Map<string, ProviderItem[]>, workGraph: WorkGraph): Map<string, ProviderItemMatch[]> {
+  const providerItemsByRef = new Map<string, ProviderItemMatch[]>();
   const discoveredProvenance = new Set<string>();
-  for (const [providerId, items] of discoveredItems) {
+  for (const [providerId, items] of providerItems) {
     for (const item of items) {
       discoveredProvenance.add(getProvenanceKey(providerId, item.externalId));
-      addPotentialTargetMatch(discoveredByRef, item.itemType, providerId, item.externalId, item.title);
+      addPotentialTargetMatch(providerItemsByRef, item.itemType, providerId, item.externalId, item.title);
     }
   }
   for (const item of workGraph.getAll()) {
     if (item.providerId && item.externalId && !discoveredProvenance.has(getProvenanceKey(item.providerId, item.externalId))) {
-      addPotentialTargetMatch(discoveredByRef, item.itemType, item.providerId, item.externalId, item.title);
+      addPotentialTargetMatch(providerItemsByRef, item.itemType, item.providerId, item.externalId, item.title);
     }
   }
-  return discoveredByRef;
+  return providerItemsByRef;
 }
 
 function getProvenanceKey(providerId: string, externalId: string): string {
@@ -187,31 +187,31 @@ function getProvenanceKey(providerId: string, externalId: string): string {
 }
 
 function addPotentialTargetMatch(
-  discoveredByRef: Map<string, DiscoveredMatch[]>,
+  providerItemsByRef: Map<string, ProviderItemMatch[]>,
   itemType: RelatedItemRef['itemType'] | undefined,
   providerId: string,
   externalId: string,
   title?: string,
 ): void {
   if (isRelatedItemType(itemType)) {
-    addDiscoveredMatch(discoveredByRef, itemType, providerId, externalId, title);
+    addProviderItemMatch(providerItemsByRef, itemType, providerId, externalId, title);
   } else {
-    addDiscoveredMatch(discoveredByRef, 'issue', providerId, externalId, title);
-    addDiscoveredMatch(discoveredByRef, 'pr', providerId, externalId, title);
+    addProviderItemMatch(providerItemsByRef, 'issue', providerId, externalId, title);
+    addProviderItemMatch(providerItemsByRef, 'pr', providerId, externalId, title);
   }
 }
 
-function addDiscoveredMatch(
-  discoveredByRef: Map<string, DiscoveredMatch[]>,
+function addProviderItemMatch(
+  providerItemsByRef: Map<string, ProviderItemMatch[]>,
   itemType: RelatedItemRef['itemType'],
   providerId: string,
   externalId: string,
   title?: string,
 ): void {
   const key = getRefKey(itemType, externalId);
-  const matches = discoveredByRef.get(key) ?? [];
+  const matches = providerItemsByRef.get(key) ?? [];
   matches.push({ providerId, externalId, itemType, title });
-  discoveredByRef.set(key, matches);
+  providerItemsByRef.set(key, matches);
 }
 
 function getOrCreateResolvedSet(
@@ -229,22 +229,22 @@ function getOrCreateResolvedSet(
   return resolved;
 }
 
-function findDiscoveredItem(
-  discoveredItems: Map<string, DiscoveredItem[]>,
+function findProviderItem(
+  providerItems: Map<string, ProviderItem[]>,
   providerId: string,
   externalId: string,
-): DiscoveredItem | undefined {
-  return discoveredItems.get(providerId)?.find(discovered => discovered.externalId === externalId);
+): ProviderItem | undefined {
+  return providerItems.get(providerId)?.find(item => item.externalId === externalId);
 }
 
 function resolveRef(
   ref: RelatedItemRef,
-  discoveredByRef: Map<string, DiscoveredMatch[]>,
+  providerItemsByRef: Map<string, ProviderItemMatch[]>,
   workGraph: WorkGraph,
 ): ResolvedRelatedItemWithSort | undefined {
   let fallback: ResolvedRelatedItemWithSort | undefined;
-  for (const match of discoveredByRef.get(getRefKey(ref.itemType, ref.externalId)) ?? []) {
-    const target = resolveDiscoveredTarget(match.providerId, match.externalId, match.itemType, ref.relation, workGraph, 'forward', match.title);
+  for (const match of providerItemsByRef.get(getRefKey(ref.itemType, ref.externalId)) ?? []) {
+    const target = resolveProviderItemTarget(match.providerId, match.externalId, match.itemType, ref.relation, workGraph, 'forward', match.title);
     if (!target) {
       continue;
     }
@@ -256,7 +256,7 @@ function resolveRef(
   return fallback;
 }
 
-function resolveDiscoveredTarget(
+function resolveProviderItemTarget(
   providerId: string,
   externalId: string,
   itemType: RelatedItemRef['itemType'] | undefined,

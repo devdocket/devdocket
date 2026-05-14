@@ -1,21 +1,21 @@
 import { ProviderRegistry } from './providerRegistry';
-import { DiscoveredStateStore } from '../storage/discoveredStateStore';
+import { InboxStateStore } from '../storage/inboxStateStore';
 import { buildCanonicalHiddenSet } from './canonicalDedup';
 
 export function getInboxUnseenCount(
   providerRegistry: ProviderRegistry,
-  stateStore: DiscoveredStateStore,
+  stateStore: InboxStateStore,
   seenItems?: ReadonlySet<string>,
 ): number {
   const hidden = buildCanonicalHiddenSet(
-    providerRegistry.getAllDiscoveredItems(),
+    providerRegistry.getAllProviderItems(),
     (pid, eid) => stateStore.getState(pid, eid),
   );
 
   // Precompute which canonical groups have any member seen in this session
   const seenCanonicalIds = new Set<string>();
   if (seenItems && seenItems.size > 0) {
-    for (const [providerId, items] of providerRegistry.getAllDiscoveredItems()) {
+    for (const [providerId, items] of providerRegistry.getAllProviderItems()) {
       for (const item of items) {
         if (item.canonicalId && seenItems.has(`${providerId}::${item.externalId}`)) {
           seenCanonicalIds.add(item.canonicalId);
@@ -25,7 +25,7 @@ export function getInboxUnseenCount(
   }
 
   let count = 0;
-  for (const [providerId, items] of providerRegistry.getAllDiscoveredItems()) {
+  for (const [providerId, items] of providerRegistry.getAllProviderItems()) {
     for (const item of items) {
       const state = stateStore.getState(providerId, item.externalId);
       if (state === undefined || state === 'unseen') {

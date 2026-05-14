@@ -3,7 +3,7 @@ import { WorkItemState } from '../models/workItem';
 import { WorkGraph } from '../services/workGraph';
 import { ProviderRegistry } from '../services/providerRegistry';
 import { buildCanonicalHiddenSet } from '../services/canonicalDedup';
-import { DiscoveredStateStore, type InboxState } from '../storage/discoveredStateStore';
+import { InboxStateStore, type InboxState } from '../storage/inboxStateStore';
 import {
   type InboxItem,
   type InboxElement,
@@ -56,11 +56,11 @@ interface CanonicalItem {
 function findCanonicalPeers(
   item: CanonicalItem,
   providerRegistry: ProviderRegistry,
-  stateStore: DiscoveredStateStore,
+  stateStore: InboxStateStore,
 ): Array<{ providerId: string; externalId: string; itemType?: 'issue' | 'pr' }> {
   if (!item.canonicalId) { return []; }
   const peers: Array<{ providerId: string; externalId: string; itemType?: 'issue' | 'pr' }> = [];
-  for (const [providerId, items] of providerRegistry.getAllDiscoveredItems()) {
+  for (const [providerId, items] of providerRegistry.getAllProviderItems()) {
     for (const discovered of items) {
       if (discovered.canonicalId !== item.canonicalId) { continue; }
       if (providerId === item.providerId && discovered.externalId === item.externalId) { continue; }
@@ -75,7 +75,7 @@ function findCanonicalPeers(
 async function propagateStateToCanonicalPeers(
   item: CanonicalItem,
   providerRegistry: ProviderRegistry,
-  stateStore: DiscoveredStateStore,
+  stateStore: InboxStateStore,
   state: 'accepted' | 'dismissed',
 ): Promise<void> {
   const peers = findCanonicalPeers(item, providerRegistry, stateStore);
@@ -90,7 +90,7 @@ async function propagateStateToCanonicalPeers(
 function expandWithCanonicalPeers(
   items: InboxItem[],
   providerRegistry: ProviderRegistry,
-  stateStore: DiscoveredStateStore,
+  stateStore: InboxStateStore,
 ): InboxItem[] {
   const keys = new Set(items.map(i => `${i.providerId}::${i.externalId}`));
   const extra: InboxItem[] = [];
@@ -119,7 +119,7 @@ function expandWithCanonicalPeers(
 async function propagateStateToCanonicalPeersBatch(
   items: InboxItem[],
   providerRegistry: ProviderRegistry,
-  stateStore: DiscoveredStateStore,
+  stateStore: InboxStateStore,
   state: 'accepted' | 'dismissed',
 ): Promise<void> {
   const expanded = expandWithCanonicalPeers(items, providerRegistry, stateStore);
@@ -136,14 +136,14 @@ async function propagateStateToCanonicalPeersBatch(
 function resolveBulkInboxItems(
   node: InboxProviderNode | InboxGroupNode,
   providerRegistry: ProviderRegistry,
-  stateStore: DiscoveredStateStore,
+  stateStore: InboxStateStore,
 ): InboxItem[] {
   const hidden = buildCanonicalHiddenSet(
-    providerRegistry.getAllDiscoveredItems(),
+    providerRegistry.getAllProviderItems(),
     (providerId, externalId) => stateStore.getState(providerId, externalId),
   );
 
-  return providerRegistry.getDiscoveredItems(node.providerId)
+  return providerRegistry.getProviderItems(node.providerId)
     .filter(item => {
       if (node.kind === 'group' && item.group?.trim() !== node.groupName) { return false; }
       const state = stateStore.getState(node.providerId, item.externalId);
@@ -186,7 +186,7 @@ function formatBulkInboxMessage(
 
 async function acceptSingleInboxItem(
   workGraph: WorkGraph,
-  stateStore: DiscoveredStateStore,
+  stateStore: InboxStateStore,
   providerRegistry: ProviderRegistry,
   item: InboxItem,
 ): Promise<void> {
@@ -259,7 +259,7 @@ async function acceptSingleInboxItem(
 
 async function acceptToFocusSingleInboxItem(
   workGraph: WorkGraph,
-  stateStore: DiscoveredStateStore,
+  stateStore: InboxStateStore,
   providerRegistry: ProviderRegistry,
   item: InboxItem,
 ): Promise<void> {
@@ -347,7 +347,7 @@ async function acceptToFocusSingleInboxItem(
 
 async function batchAcceptToFocusItems(
   workGraph: WorkGraph,
-  stateStore: DiscoveredStateStore,
+  stateStore: InboxStateStore,
   items: InboxItem[],
 ): Promise<InboxItem[]> {
   const stateUpdates: Array<{ providerId: string; externalId: string; state: InboxState }> = [];
@@ -460,7 +460,7 @@ async function batchAcceptToFocusItems(
 
 async function handleAcceptFromInbox(
   workGraph: WorkGraph,
-  stateStore: DiscoveredStateStore,
+  stateStore: InboxStateStore,
   providerRegistry: ProviderRegistry,
   item?: InboxElement,
   selectedItems?: InboxElement[],
@@ -479,7 +479,7 @@ async function handleAcceptFromInbox(
 
 async function handleAcceptToFocusFromInbox(
   workGraph: WorkGraph,
-  stateStore: DiscoveredStateStore,
+  stateStore: InboxStateStore,
   providerRegistry: ProviderRegistry,
   item?: InboxElement,
   selectedItems?: InboxElement[],
@@ -497,7 +497,7 @@ async function handleAcceptToFocusFromInbox(
 }
 
 async function handleDismissFromInbox(
-  stateStore: DiscoveredStateStore,
+  stateStore: InboxStateStore,
   providerRegistry: ProviderRegistry,
   item?: InboxElement,
   selectedItems?: InboxElement[],
@@ -530,7 +530,7 @@ async function handleDismissFromInbox(
 
 async function handleAcceptAllFromInbox(
   workGraph: WorkGraph,
-  stateStore: DiscoveredStateStore,
+  stateStore: InboxStateStore,
   providerRegistry: ProviderRegistry,
   node?: InboxElement,
 ): Promise<void> {
@@ -552,7 +552,7 @@ async function handleAcceptAllFromInbox(
 
 async function handleAcceptAllToFocusFromInbox(
   workGraph: WorkGraph,
-  stateStore: DiscoveredStateStore,
+  stateStore: InboxStateStore,
   providerRegistry: ProviderRegistry,
   node?: InboxElement,
 ): Promise<void> {
@@ -573,7 +573,7 @@ async function handleAcceptAllToFocusFromInbox(
 }
 
 async function handleDismissAllFromInbox(
-  stateStore: DiscoveredStateStore,
+  stateStore: InboxStateStore,
   providerRegistry: ProviderRegistry,
   node?: InboxElement,
 ): Promise<void> {
@@ -604,7 +604,7 @@ async function handleDismissAllFromInbox(
 export function registerInboxCommands(
   context: vscode.ExtensionContext,
   workGraph: WorkGraph,
-  stateStore: DiscoveredStateStore,
+  stateStore: InboxStateStore,
   providerRegistry: ProviderRegistry,
 ): void {
   context.subscriptions.push(

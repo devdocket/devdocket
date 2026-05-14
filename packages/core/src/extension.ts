@@ -3,7 +3,7 @@ import { runWorkerPool, type PRIdentifier } from '@devdocket/shared';
 import { DevDocketApi } from './api/types';
 import { DevDocketApiImpl } from './api/devDocketApi';
 import { JsonTaskStore } from './storage/jsonTaskStore';
-import { DiscoveredStateStore } from './storage/discoveredStateStore';
+import { InboxStateStore } from './storage/inboxStateStore';
 import { ReadStateStore } from './storage/readStateStore';
 import { ProviderLabelCache } from './storage/providerLabelCache';
 import { migrateToGlobalState } from './storage/migration';
@@ -27,7 +27,7 @@ import { syncProviderTitles } from './services/titleSync';
 import { syncProviderDescriptions } from './services/descriptionSync';
 import { performance } from 'perf_hooks';
 
-export type { DevDocketApi, DevDocketProvider, DevDocketAction, DiscoveredItem, Disposable, ActivityLogEntry, ActivityType, StateTransitionEvent, DevDocketPRWatcher } from './api/types';
+export type { DevDocketApi, DevDocketProvider, DevDocketAction, ProviderItem, Disposable, ActivityLogEntry, ActivityType, StateTransitionEvent, DevDocketPRWatcher } from './api/types';
 export { logger } from './services/logger';
 
 /** Wrap an event callback so unhandled errors (sync or async) are logged instead of crashing. */
@@ -49,15 +49,15 @@ function initializeLogging(context: vscode.ExtensionContext): vscode.LogOutputCh
   return log;
 }
 
-async function loadStores(globalState: vscode.Memento): Promise<{ workGraph: WorkGraph; stateStore: DiscoveredStateStore; readStateStore: ReadStateStore; labelCache: ProviderLabelCache }> {
+async function loadStores(globalState: vscode.Memento): Promise<{ workGraph: WorkGraph; stateStore: InboxStateStore; readStateStore: ReadStateStore; labelCache: ProviderLabelCache }> {
   const store = new JsonTaskStore(globalState);
   const wg = new WorkGraph(store);
   await wg.load();
   logger.debug(`Loaded ${wg.getAll().length} work items`);
 
-  const ss = new DiscoveredStateStore(globalState);
+  const ss = new InboxStateStore(globalState);
   await ss.load();
-  logger.debug('Loaded discovered state');
+  logger.debug('Loaded inbox state');
 
   const readStateStore = new ReadStateStore(globalState);
   await readStateStore.load();
@@ -74,7 +74,7 @@ async function loadStores(globalState: vscode.Memento): Promise<{ workGraph: Wor
   return { workGraph: wg, stateStore: ss, readStateStore, labelCache };
 }
 
-async function migrateDiscoveredState(workGraph: WorkGraph, stateStore: DiscoveredStateStore): Promise<void> {
+async function migrateInboxState(workGraph: WorkGraph, stateStore: InboxStateStore): Promise<void> {
   const itemsToMigrate: Array<{ providerId: string; externalId: string; state: 'accepted' }> = [];
 
   for (const item of workGraph.getAll()) {
@@ -161,7 +161,7 @@ export async function autoWatchAuthoredPRs(
 ): Promise<void> {
   const capNotifiedProviders = options.capNotifiedProviders ?? autoWatchCapNotifiedProviders;
   const sharedSeenPRKeys = options.seenPRKeys;
-  const items = providerRegistry.getDiscoveredItems(providerId).filter(isAutoWatchCandidate);
+  const items = providerRegistry.getProviderItems(providerId).filter(isAutoWatchCandidate);
   const localSeenPRKeys = new Set<string>();
   const reservedPRKeys = new Set<string>();
   const candidates: Array<{ identifier: PRIdentifier; sourceUrl: string }> = [];
@@ -274,7 +274,7 @@ function wireEvents(
   let initialLoadComplete = false;
   let wasLoading = false;
 
-  const discoveredSub = providerRegistry.onDidChangeDiscoveredItems(safeHandler('Error handling discovered items change', () => {
+  const discoveredSub = providerRegistry.onDidChangeProviderItems(safeHandler('Error handling discovered items change', () => {
     if (!initialLoadComplete) {
       if (wasLoading && !providerRegistry.loading) {
         initialLoadComplete = true;
@@ -460,7 +460,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<DevDoc
   const storagePath = context.globalStorageUri.fsPath;
   await migrateToGlobalState(context.globalState, storagePath);
   const { workGraph: wg, stateStore: ss, readStateStore, labelCache } = await loadStores(context.globalState);
-  await migrateDiscoveredState(wg, ss);
+  await migrateInboxState(wg, ss);
 
   const pr = new ProviderRegistry(
     ss, labelCache,
@@ -504,7 +504,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<DevDoc
       mainProvider,
     ),
     wg.onDidChange(safeHandler('mc:workGraph', () => mainProvider.scheduleRefresh('workGraph'))),
-    pr.onDidChangeDiscoveredItems(safeHandler('mc:discovered', () => mainProvider.scheduleRefresh('discovered'))),
+    pr.onDidChangeProviderItems(safeHandler('mc:discovered', () => mainProvider.scheduleRefresh('discovered'))),
     pr.onDidChangeProviderHealth(safeHandler('mc:health', () => mainProvider.scheduleRefresh('health'))),
     ss.onDidChange(safeHandler('mc:stateStore', () => mainProvider.scheduleRefresh('state'))),
     ws.onDidChangeWatchedRuns(safeHandler('mc:watchedRuns', () => mainProvider.scheduleRefresh('watchedRuns'))),
@@ -516,12 +516,12 @@ export async function activate(context: vscode.ExtensionContext): Promise<DevDoc
         return;
       }
 
-      const active = new Map([[providerId, pr.getDiscoveredItems(providerId)]]);
+      const active = new Map([[providerId, pr.getProviderItems(providerId)]]);
       try {
         const ssPruned = await ss.prune(active);
         const rsPruned = await readStateStore.prune(active);
         if (ssPruned > 0 || rsPruned > 0) {
-          logger.debug(`Pruned ${ssPruned} discovered-state and ${rsPruned} read-state records for provider ${providerId}`);
+          logger.debug(`Pruned ${ssPruned} inbox-state and ${rsPruned} read-state records for provider ${providerId}`);
         }
       } catch (err) {
         logger.error('DevDocket: prune failed', err);

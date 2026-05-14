@@ -1,5 +1,5 @@
 import { DevDocketApiImpl } from '../api/devDocketApi';
-import { DevDocketProvider, DevDocketAction, DiscoveredItem } from '../api/types';
+import { DevDocketProvider, DevDocketAction, ProviderItem } from '../api/types';
 import { ProviderRegistry } from '../services/providerRegistry';
 import { ActionRegistry } from '../services/actionRegistry';
 import { WatcherRegistry } from '../services/watcherRegistry';
@@ -7,7 +7,7 @@ import { PRWatcherRegistry } from '../services/prWatcherRegistry';
 import { WorkGraph } from '../services/workGraph';
 import { ITaskStore } from '../storage/taskStore';
 import * as vscode from 'vscode';
-import { InboxState } from '../storage/discoveredStateStore';
+import { InboxState } from '../storage/inboxStateStore';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 function createMockStateStore() {
@@ -28,11 +28,11 @@ function createMockStateStore() {
     loadAll: vi.fn(async () => []),
     onDidChange: vi.fn(() => ({ dispose: vi.fn() })),
     dispose: vi.fn(),
-  } as unknown as import('../storage/discoveredStateStore').DiscoveredStateStore;
+  } as unknown as import('../storage/inboxStateStore').InboxStateStore;
 }
 
 function createMockProvider(id: string): DevDocketProvider {
-  const emitter = new vscode.EventEmitter<DiscoveredItem[]>();
+  const emitter = new vscode.EventEmitter<ProviderItem[]>();
   return {
     id,
     label: `Provider ${id}`,
@@ -125,23 +125,23 @@ describe('DevDocketApiImpl', () => {
     });
   });
 
-  describe('getDiscoveredItem', () => {
+  describe('getProviderItem', () => {
     it('looks up the live discovered item by provider and external id', () => {
-      const emitter = new vscode.EventEmitter<DiscoveredItem[]>();
+      const emitter = new vscode.EventEmitter<ProviderItem[]>();
       const provider: DevDocketProvider = {
         id: 'test-provider',
         label: 'Test Provider',
         onDidDiscoverItems: emitter.event,
         refresh: vi.fn().mockResolvedValue(undefined),
       };
-      const item: DiscoveredItem = { externalId: 'item-1', title: 'Item 1' };
+      const item: ProviderItem = { externalId: 'item-1', title: 'Item 1' };
 
       api.registerProvider(provider);
       emitter.fire([item]);
 
-      expect(api.getDiscoveredItem('test-provider', 'item-1')).toBe(item);
-      expect(api.getDiscoveredItem('test-provider', 'missing')).toBeUndefined();
-      expect(api.getDiscoveredItem('missing-provider', 'item-1')).toBeUndefined();
+      expect(api.getProviderItem('test-provider', 'item-1')).toBe(item);
+      expect(api.getProviderItem('test-provider', 'missing')).toBeUndefined();
+      expect(api.getProviderItem('missing-provider', 'item-1')).toBeUndefined();
     });
   });
 

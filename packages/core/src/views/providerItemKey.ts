@@ -1,13 +1,13 @@
-export interface DiscoveredItemKey {
+export interface ProviderItemKey {
   providerId: string;
   externalId: string;
 }
 
-export function getDiscoveredItemKey(providerId: string, externalId: string): string {
+export function getProviderItemKey(providerId: string, externalId: string): string {
   return `${providerId}::${externalId}`;
 }
 
-export function parseDiscoveredItemKey(value: string): DiscoveredItemKey | undefined {
+export function parseProviderItemKey(value: string): ProviderItemKey | undefined {
   const separatorIndex = value.indexOf('::');
   if (separatorIndex <= 0) {
     return undefined;

@@ -18,11 +18,11 @@ export async function syncProviderTitles(
   providerRegistry: ProviderRegistry,
   workGraph: WorkGraph,
 ): Promise<void> {
-  const discoveredItems = providerRegistry.getAllDiscoveredItems().get(providerId);
-  if (!discoveredItems) {
+  const providerItems = providerRegistry.getAllProviderItems().get(providerId);
+  if (!providerItems) {
     return;
   }
-  for (const discovered of discoveredItems) {
+  for (const discovered of providerItems) {
     const workItem = workGraph.findItemByProvenance(providerId, discovered.externalId);
     if (workItem && discovered.title?.trim() && workItem.title !== discovered.title) {
       try {

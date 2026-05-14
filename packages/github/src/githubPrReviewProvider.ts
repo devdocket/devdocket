@@ -1,5 +1,5 @@
 import * as vscode from 'vscode';
-import { DiscoveredItem, combineSignals, createAbortError, runWorkerPool, safeDecodeComponent, type RelatedItemRef, type ResolvedItem } from '@devdocket/shared';
+import { ProviderItem, combineSignals, createAbortError, runWorkerPool, safeDecodeComponent, type RelatedItemRef, type ResolvedItem } from '@devdocket/shared';
 import { BaseGitHubProvider } from './baseGithubProvider';
 import { logger } from './logger';
 import { parseRepoFromUrls } from './parseRepo';
@@ -76,11 +76,11 @@ export class GitHubPrReviewProvider extends BaseGitHubProvider {
       }).filter(pr => pr.repoOwner && pr.repoName), accessToken, signal)
       : new Map<string, RelatedItemRef[]>();
 
-    const items: DiscoveredItem[] = filteredPrs.map((pr) => {
+    const items: ProviderItem[] = filteredPrs.map((pr) => {
       const repoName = repoNameMap.get(pr.html_url)!;
       const externalId = `${repoName}#${pr.number}`;
       const relatedItems = relatedItemsMap.get(externalId);
-      const item: DiscoveredItem = {
+      const item: ProviderItem = {
         externalId,
         title: `#${pr.number}: ${pr.title}`,
         description: pr.body ?? undefined,
@@ -108,7 +108,7 @@ export class GitHubPrReviewProvider extends BaseGitHubProvider {
       return item;
     });
 
-    this.publishDiscoveredItems(items, patterns);
+    this.publishProviderItems(items, patterns);
 
     if (failed) {
       this.warnOnFetchFailure('Failed to fetch PR review requests', isUserTriggered);

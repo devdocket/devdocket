@@ -13,7 +13,7 @@ These are different base classes — do not mix them.
 
 ## Item Type Classification
 
-Set `DiscoveredItem.itemType` to `'issue'` or `'pr'` when the provider knows
+Set `ProviderItem.itemType` to `'issue'` or `'pr'` when the provider knows
 the kind of item it's surfacing. The core extension renders this as a distinct
 type pill (alongside the Provider, State, and CI badges) in both the sidebar
 and editor. The field is purely advisory — leaving it `undefined` simply
@@ -36,13 +36,13 @@ label.
 extension — it's the provider's job to classify, since only the provider has
 authoritative knowledge of what it fetched.
 
-## Pill Conventions (`DiscoveredItem.badges`)
+## Pill Conventions (`ProviderItem.badges`)
 
 The core extension owns three badge categories: **Provider** (GitHub/ADO/Manual),
 **Type** (Issue/PR via `itemType`), and **CI** (from the watcher service). For
 *everything else* — state, review status, the reason an item showed up in the
 inbox — the provider is responsible for declaring badges via the
-`DiscoveredItem.badges` field. The core never infers pills from the
+`ProviderItem.badges` field. The core never infers pills from the
 `state` or `reason` strings.
 
 ### Variant → color mapping

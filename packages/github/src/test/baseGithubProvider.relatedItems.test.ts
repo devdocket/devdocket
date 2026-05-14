@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { DiscoveredItem, RelatedItemRef } from '@devdocket/shared';
+import type { ProviderItem, RelatedItemRef } from '@devdocket/shared';
 import { BaseGitHubProvider } from '../baseGithubProvider';
 import {
   mapClosingIssuesReferencesToRelatedItems,
@@ -30,12 +30,12 @@ class TestGitHubProvider extends BaseGitHubProvider {
     return this.fetchRelatedItemsForPRs(prs, accessToken, signal);
   }
 
-  publishForTest(items: DiscoveredItem[]): void {
-    this.publishDiscoveredItems(items);
+  publishForTest(items: ProviderItem[]): void {
+    this.publishProviderItems(items);
   }
 
   protected async fetchAndPublish(): Promise<void> {
-    this.publishDiscoveredItems([]);
+    this.publishProviderItems([]);
   }
 }
 

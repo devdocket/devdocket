@@ -1,4 +1,4 @@
-import { DiscoveredItem, combineSignals, createAbortError, safeDecodeComponent, type ResolvedItem } from '@devdocket/shared';
+import { ProviderItem, combineSignals, createAbortError, safeDecodeComponent, type ResolvedItem } from '@devdocket/shared';
 import { BaseGitHubProvider } from './baseGithubProvider';
 import { logger } from './logger';
 import { parseRepoFromUrls } from './parseRepo';
@@ -36,7 +36,7 @@ export class GitHubIssueProvider extends BaseGitHubProvider {
       ? issuesWithRepo.filter(({ repoName }) => matchesRepoPatterns(repoName, patterns))
       : issuesWithRepo;
 
-    const items: DiscoveredItem[] = filteredIssues.map(({ issue, repoName }) => {
+    const items: ProviderItem[] = filteredIssues.map(({ issue, repoName }) => {
       return {
         externalId: `${repoName}#${issue.number}`,
         title: `#${issue.number}: ${issue.title}`,
@@ -56,7 +56,7 @@ export class GitHubIssueProvider extends BaseGitHubProvider {
     });
 
     logger.info(`Discovered ${items.length} GitHub issues`);
-    this.publishDiscoveredItems(items, patterns);
+    this.publishProviderItems(items, patterns);
 
     if (failed) {
       this.warnOnFetchFailure('Failed to fetch assigned issues', isUserTriggered);

@@ -4,7 +4,7 @@ import { promisify } from 'util';
 import * as path from 'path';
 import * as fs from 'fs';
 import { logger } from './logger';
-import { WorkItemState, type DiscoveredItem, type GitWorkInfo, type WorkItem, type DevDocketAction } from '@devdocket/shared';
+import { WorkItemState, type ProviderItem, type GitWorkInfo, type WorkItem, type DevDocketAction } from '@devdocket/shared';
 
 const execFileAsync = promisify(execFile);
 
@@ -67,7 +67,7 @@ const GIT_METADATA_TIMEOUT = 30_000;
 /** Timeout for heavy git operations that touch the working tree (worktree add, checkout, fetch). */
 const GIT_CHECKOUT_TIMEOUT = 300_000;
 
-type GetDiscoveredItem = (providerId: string, externalId: string) => DiscoveredItem | undefined;
+type GetProviderItem = (providerId: string, externalId: string) => ProviderItem | undefined;
 
 type ResolvedGitWork = GitWorkInfo & { cloneUrl: string; ref: string };
 
@@ -94,7 +94,7 @@ export class StartWorkAction implements DevDocketAction {
 
   constructor(
     globalState: vscode.Memento,
-    private readonly getDiscoveredItem: GetDiscoveredItem = () => undefined,
+    private readonly getProviderItem: GetProviderItem = () => undefined,
   ) {
     this.globalState = globalState;
   }
@@ -104,7 +104,7 @@ export class StartWorkAction implements DevDocketAction {
       return false;
     }
 
-    return !!this.getDiscoveredItem(item.providerId, item.externalId)?.capabilities?.gitWork;
+    return !!this.getProviderItem(item.providerId, item.externalId)?.capabilities?.gitWork;
   }
 
   async run(item: Readonly<WorkItem>): Promise<void> {
@@ -136,7 +136,7 @@ export class StartWorkAction implements DevDocketAction {
       return undefined;
     }
 
-    const capability = this.getDiscoveredItem(item.providerId, item.externalId)?.capabilities?.gitWork;
+    const capability = this.getProviderItem(item.providerId, item.externalId)?.capabilities?.gitWork;
     if (!capability) {
       return undefined;
     }

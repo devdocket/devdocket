@@ -1,14 +1,14 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { MockMemento } from 'vscode';
-import { DiscoveredStateStore } from '../storage/discoveredStateStore';
+import { InboxStateStore } from '../storage/inboxStateStore';
 
-describe('DiscoveredStateStore', () => {
+describe('InboxStateStore', () => {
   let memento: InstanceType<typeof MockMemento>;
-  let store: DiscoveredStateStore;
+  let store: InboxStateStore;
 
   beforeEach(() => {
     memento = new MockMemento();
-    store = new DiscoveredStateStore(memento);
+    store = new InboxStateStore(memento);
   });
 
   afterEach(() => {
@@ -26,7 +26,7 @@ describe('DiscoveredStateStore', () => {
   it('should create a record and persist on setState', async () => {
     await store.setState('gh', 'issue-1', 'unseen');
 
-    const persisted = memento.get<unknown[]>('devdocket.discovered-state');
+    const persisted = memento.get<unknown[]>('devdocket.inbox-state');
     expect(persisted).toHaveLength(1);
     expect(persisted![0]).toEqual({
       providerId: 'gh',
@@ -92,7 +92,7 @@ describe('DiscoveredStateStore', () => {
     await store.setState('gh', 'issue-1', 'accepted');
     await store.setState('gh', 'issue-2', 'dismissed');
 
-    const store2 = new DiscoveredStateStore(memento);
+    const store2 = new InboxStateStore(memento);
     await store2.load();
 
     expect(store2.getState('gh', 'issue-1')).toBe('accepted');
@@ -104,12 +104,12 @@ describe('DiscoveredStateStore', () => {
 
   describe('schema validation', () => {
     it('should skip records missing providerId', async () => {
-      await memento.update('devdocket.discovered-state', [
+      await memento.update('devdocket.inbox-state', [
         { externalId: 'issue-1', inboxState: 'unseen' },
         { providerId: 'gh', externalId: 'issue-2', inboxState: 'accepted' },
       ]);
 
-      const store2 = new DiscoveredStateStore(memento);
+      const store2 = new InboxStateStore(memento);
       const records = await store2.loadAll();
       expect(records).toHaveLength(1);
       expect(records[0].externalId).toBe('issue-2');
@@ -117,12 +117,12 @@ describe('DiscoveredStateStore', () => {
     });
 
     it('should skip records missing externalId', async () => {
-      await memento.update('devdocket.discovered-state', [
+      await memento.update('devdocket.inbox-state', [
         { providerId: 'gh', inboxState: 'unseen' },
         { providerId: 'gh', externalId: 'issue-2', inboxState: 'accepted' },
       ]);
 
-      const store2 = new DiscoveredStateStore(memento);
+      const store2 = new InboxStateStore(memento);
       const records = await store2.loadAll();
       expect(records).toHaveLength(1);
       expect(records[0].externalId).toBe('issue-2');
@@ -130,12 +130,12 @@ describe('DiscoveredStateStore', () => {
     });
 
     it('should skip records with invalid inboxState', async () => {
-      await memento.update('devdocket.discovered-state', [
+      await memento.update('devdocket.inbox-state', [
         { providerId: 'gh', externalId: 'issue-1', inboxState: 'bogus' },
         { providerId: 'gh', externalId: 'issue-2', inboxState: 'accepted' },
       ]);
 
-      const store2 = new DiscoveredStateStore(memento);
+      const store2 = new InboxStateStore(memento);
       const records = await store2.loadAll();
       expect(records).toHaveLength(1);
       expect(records[0].externalId).toBe('issue-2');
@@ -143,23 +143,23 @@ describe('DiscoveredStateStore', () => {
     });
 
     it('should return empty for non-array data', async () => {
-      await memento.update('devdocket.discovered-state', { not: 'an array' });
+      await memento.update('devdocket.inbox-state', { not: 'an array' });
 
-      const store2 = new DiscoveredStateStore(memento);
+      const store2 = new InboxStateStore(memento);
       const records = await store2.loadAll();
       expect(records).toEqual([]);
       store2.dispose();
     });
 
     it('should skip non-object entries', async () => {
-      await memento.update('devdocket.discovered-state', [
+      await memento.update('devdocket.inbox-state', [
         'a string',
         42,
         null,
         { providerId: 'gh', externalId: 'issue-1', inboxState: 'accepted' },
       ]);
 
-      const store2 = new DiscoveredStateStore(memento);
+      const store2 = new InboxStateStore(memento);
       const records = await store2.loadAll();
       expect(records).toHaveLength(1);
       expect(records[0].externalId).toBe('issue-1');
@@ -191,7 +191,7 @@ describe('DiscoveredStateStore', () => {
         { providerId: 'gh', externalId: 'b', state: 'accepted' },
       ]);
 
-      const persisted = memento.get<unknown[]>('devdocket.discovered-state');
+      const persisted = memento.get<unknown[]>('devdocket.inbox-state');
       expect(persisted).toHaveLength(2);
     });
 
@@ -293,11 +293,11 @@ describe('DiscoveredStateStore', () => {
     });
 
     it('setState triggers lazy load if not yet loaded', async () => {
-      await memento.update('devdocket.discovered-state', [
+      await memento.update('devdocket.inbox-state', [
         { providerId: 'gh', externalId: 'pre-existing', inboxState: 'unseen' },
       ]);
 
-      const freshStore = new DiscoveredStateStore(memento);
+      const freshStore = new InboxStateStore(memento);
       await freshStore.setState('gh', 'new-item', 'accepted');
 
       expect(freshStore.getState('gh', 'pre-existing')).toBe('unseen');
@@ -306,11 +306,11 @@ describe('DiscoveredStateStore', () => {
     });
 
     it('setStates triggers lazy load if not yet loaded', async () => {
-      await memento.update('devdocket.discovered-state', [
+      await memento.update('devdocket.inbox-state', [
         { providerId: 'gh', externalId: 'pre-existing', inboxState: 'dismissed' },
       ]);
 
-      const freshStore = new DiscoveredStateStore(memento);
+      const freshStore = new InboxStateStore(memento);
       await freshStore.setStates([
         { providerId: 'gh', externalId: 'new-item', state: 'unseen' },
       ]);
@@ -385,7 +385,7 @@ describe('DiscoveredStateStore', () => {
       expect(store.getState('gh', 'item-1199')).toBe('unseen');
 
       // Verify persistence by reloading from a fresh instance
-      const store2 = new DiscoveredStateStore(memento);
+      const store2 = new InboxStateStore(memento);
       await store2.load();
       const reloaded = await store2.loadAll();
       expect(reloaded).toHaveLength(1200);
@@ -432,16 +432,16 @@ describe('DiscoveredStateStore', () => {
     it('should persist version to globalState', async () => {
       await store.setState('gh', 'pr-1', 'unseen', 'sha-abc');
 
-      const persisted = memento.get<unknown[]>('devdocket.discovered-state');
+      const persisted = memento.get<unknown[]>('devdocket.inbox-state');
       expect((persisted![0] as any).version).toBe('sha-abc');
     });
 
     it('should load version from globalState', async () => {
-      await memento.update('devdocket.discovered-state', [
+      await memento.update('devdocket.inbox-state', [
         { providerId: 'gh', externalId: 'pr-1', inboxState: 'accepted', version: 'sha-disk' },
       ]);
 
-      const freshStore = new DiscoveredStateStore(memento);
+      const freshStore = new InboxStateStore(memento);
       await freshStore.load();
       expect(freshStore.getVersion('gh', 'pr-1')).toBe('sha-disk');
       freshStore.dispose();
@@ -464,12 +464,12 @@ describe('DiscoveredStateStore', () => {
     });
 
     it('should skip records with non-string version during load', async () => {
-      await memento.update('devdocket.discovered-state', [
+      await memento.update('devdocket.inbox-state', [
         { providerId: 'gh', externalId: 'pr-1', inboxState: 'accepted', version: 42 },
         { providerId: 'gh', externalId: 'pr-2', inboxState: 'accepted', version: 'valid' },
       ]);
 
-      const freshStore = new DiscoveredStateStore(memento);
+      const freshStore = new InboxStateStore(memento);
       const records = await freshStore.loadAll();
       expect(records).toHaveLength(1);
       expect(records[0].externalId).toBe('pr-2');
@@ -525,28 +525,28 @@ describe('DiscoveredStateStore', () => {
         { providerId: 'gh', externalId: 'pr-1', state: 'unseen', resurfaceVersion: 'rv-abc' },
       ]);
 
-      const persisted = memento.get<unknown[]>('devdocket.discovered-state');
+      const persisted = memento.get<unknown[]>('devdocket.inbox-state');
       expect((persisted![0] as any).resurfaceVersion).toBe('rv-abc');
     });
 
     it('should load resurfaceVersion from globalState', async () => {
-      await memento.update('devdocket.discovered-state', [
+      await memento.update('devdocket.inbox-state', [
         { providerId: 'gh', externalId: 'pr-1', inboxState: 'accepted', resurfaceVersion: 'rv-disk' },
       ]);
 
-      const freshStore = new DiscoveredStateStore(memento);
+      const freshStore = new InboxStateStore(memento);
       await freshStore.load();
       expect(freshStore.getResurfaceVersion('gh', 'pr-1')).toBe('rv-disk');
       freshStore.dispose();
     });
 
     it('should skip records with non-string resurfaceVersion during load', async () => {
-      await memento.update('devdocket.discovered-state', [
+      await memento.update('devdocket.inbox-state', [
         { providerId: 'gh', externalId: 'pr-1', inboxState: 'accepted', resurfaceVersion: 99 },
         { providerId: 'gh', externalId: 'pr-2', inboxState: 'accepted', resurfaceVersion: 'valid' },
       ]);
 
-      const freshStore = new DiscoveredStateStore(memento);
+      const freshStore = new InboxStateStore(memento);
       const records = await freshStore.loadAll();
       expect(records).toHaveLength(1);
       expect(records[0].externalId).toBe('pr-2');

@@ -1,18 +1,18 @@
 import { describe, expect, it, vi, afterEach } from 'vitest';
 import { workspace } from 'vscode';
-import { type DiscoveredItem } from '@devdocket/shared';
+import { type ProviderItem } from '@devdocket/shared';
 import { BaseGitHubProvider } from '../baseGithubProvider';
 
 class TestGitHubProvider extends BaseGitHubProvider {
   readonly id = 'test-github';
   readonly label = 'Test GitHub';
 
-  publishForTest(items: DiscoveredItem[]): void {
-    this.publishDiscoveredItems(items);
+  publishForTest(items: ProviderItem[]): void {
+    this.publishProviderItems(items);
   }
 
   protected async fetchAndPublish(): Promise<void> {
-    this.publishDiscoveredItems([]);
+    this.publishProviderItems([]);
   }
 }
 
@@ -42,7 +42,7 @@ describe('BaseGitHubProvider repository filtering', () => {
     ]);
 
     expect(listener).toHaveBeenCalledTimes(1);
-    expect(listener.mock.calls[0][0].map((item: DiscoveredItem) => item.title)).toEqual([
+    expect(listener.mock.calls[0][0].map((item: ProviderItem) => item.title)).toEqual([
       'Allowed',
       'Re-included',
       'No repo identity',

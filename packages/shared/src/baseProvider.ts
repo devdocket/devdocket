@@ -11,7 +11,7 @@ export interface Event<T> {
 }
 
 /**
- * A reference from one DiscoveredItem to another, supplied by the provider.
+ * A reference from one ProviderItem to another, supplied by the provider.
  * Used by the core to render navigable "Related" links.
  *
  * Resolution is live (no persistence): when provider data no longer contains
@@ -65,10 +65,10 @@ export interface GitWorkInfo {
 }
 
 /**
- * Capabilities a provider attaches to a discovered item to opt into
+ * Capabilities a provider attaches to a provider item to opt into
  * cross-cutting actions (e.g. Start Git Work). All capabilities are optional.
  */
-export interface DiscoveredItemCapabilities {
+export interface ProviderItemCapabilities {
   /**
    * Indicates this item can be the basis for git-based development work.
    * Either a literal {@link GitWorkInfo} (when all data is known upfront)
@@ -82,7 +82,7 @@ export interface DiscoveredItemCapabilities {
  * An item discovered by a provider.
  * Provider data is kept in memory and read live — only the inbox state is persisted.
  */
-export interface DiscoveredItem {
+export interface ProviderItem {
   /** Provider-scoped unique identifier (e.g. GitHub issue number). */
   externalId: string;
   /** Short display title shown in Inbox and Sources views. */
@@ -141,13 +141,14 @@ export interface DiscoveredItem {
    */
   canonicalId?: string;
   /** Optional provider-supplied capabilities for cross-cutting actions. */
-  capabilities?: DiscoveredItemCapabilities;
+  capabilities?: ProviderItemCapabilities;
 }
+
 
 /**
  * A badge rendered alongside the core-managed Provider / Type / CI badges.
  * Providers declare these explicitly — the core extension never infers badges
- * from {@link DiscoveredItem.state} or {@link DiscoveredItem.reason}.
+ * from {@link ProviderItem.state} or {@link ProviderItem.reason}.
  */
 export interface ProviderBadge {
   /** Display text. Keep short — sidebar badges compete with the title. */
@@ -197,8 +198,8 @@ export interface EventEmitterLike<T> {
  * Owns the EventEmitter lifecycle, refresh timer, concurrency guard, and dispose logic.
  */
 export abstract class BaseProvider {
-  protected readonly _onDidDiscoverItems: EventEmitterLike<DiscoveredItem[]>;
-  readonly onDidDiscoverItems: Event<DiscoveredItem[]>;
+  protected readonly _onDidDiscoverItems: EventEmitterLike<ProviderItem[]>;
+  readonly onDidDiscoverItems: Event<ProviderItem[]>;
 
   private refreshTimer: ReturnType<typeof setInterval> | undefined;
   protected _isRefreshing = false;
@@ -207,7 +208,7 @@ export abstract class BaseProvider {
   /** Optional error handler for background refresh failures. Override to add logging. */
   protected onBackgroundRefreshError: (error: unknown) => void = () => {};
 
-  constructor(emitter: EventEmitterLike<DiscoveredItem[]>) {
+  constructor(emitter: EventEmitterLike<ProviderItem[]>) {
     this._onDidDiscoverItems = emitter;
     this.onDidDiscoverItems = emitter.event;
   }

@@ -1,4 +1,4 @@
-import type { DiscoveredItem, ProviderBadge } from '../api/types';
+import type { ProviderItem, ProviderBadge } from '../api/types';
 import type { BadgeData } from './mainTypes';
 
 /**
@@ -12,7 +12,7 @@ import type { BadgeData } from './mainTypes';
  *   3. CI       (passed / failed / etc) — derived from the watcher service
  *
  * Everything else — state, reason, custom workflow names — is the provider's
- * responsibility, declared via {@link DiscoveredItem.badges}. Core renders
+ * responsibility, declared via {@link ProviderItem.badges}. Core renders
  * exactly what the provider gives it, no inference from raw `state`/`reason`
  * strings.
  */
@@ -53,12 +53,12 @@ export function buildProviderBadge(providerId?: string, label?: string): BadgeDa
 
 /**
  * Build a "type" badge (Issue / PR) from the provider-supplied
- * {@link DiscoveredItem.itemType} value. Returns undefined for items where the
+ * {@link ProviderItem.itemType} value. Returns undefined for items where the
  * provider didn't classify the type (e.g. manual items).
  */
-export function buildTypeBadge(discoveredItem?: DiscoveredItem): BadgeData | undefined {
-  if (!discoveredItem?.itemType) return undefined;
-  switch (discoveredItem.itemType) {
+export function buildTypeBadge(providerItem?: ProviderItem): BadgeData | undefined {
+  if (!providerItem?.itemType) return undefined;
+  switch (providerItem.itemType) {
     case 'pr':
       return { label: 'PR', type: 'type', variant: 'pr' };
     case 'issue':
@@ -74,11 +74,11 @@ export function buildTypeBadge(discoveredItem?: DiscoveredItem): BadgeData | und
  * label and severity; core picks the actual colors via {@link variantToColorKey}.
  */
 export function buildProviderBadges(
-  discoveredItem: DiscoveredItem | undefined,
+  providerItem: ProviderItem | undefined,
   view: 'sidebar' | 'editor',
 ): BadgeData[] {
-  if (!discoveredItem?.badges?.length) return [];
-  return discoveredItem.badges
+  if (!providerItem?.badges?.length) return [];
+  return providerItem.badges
     .filter(badge => (badge.show ?? 'both') === 'both' || badge.show === view)
     .map(badge => ({
       label: badge.label,

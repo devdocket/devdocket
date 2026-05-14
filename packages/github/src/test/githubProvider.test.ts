@@ -143,7 +143,7 @@ describe('GitHubIssueProvider', () => {
     ]);
   });
 
-  it('fires onDidDiscoverItems with correctly mapped DiscoveredItem[]', async () => {
+  it('fires onDidDiscoverItems with correctly mapped ProviderItem[]', async () => {
     mockFetch.mockResolvedValueOnce({
       ok: true,
       json: async () => [createMockIssue(10, 'My issue')],

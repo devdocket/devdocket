@@ -1,7 +1,7 @@
 import * as vscode from 'vscode';
 import * as crypto from 'node:crypto';
 import * as path from 'node:path';
-import type { DiscoveredItem, PRIdentifier, RunIdentifier, RunState } from '@devdocket/shared';
+import type { ProviderItem, PRIdentifier, RunIdentifier, RunState } from '@devdocket/shared';
 import { logger } from '../services/logger';
 import { WatcherService, type WatchedPR, type WatchedRun } from '../services/watcherService';
 import type { WorkItem } from '../models/workItem';
@@ -9,7 +9,7 @@ import type { ProviderRegistry } from '../services/providerRegistry';
 import type { WorkGraph } from '../services/workGraph';
 import { isSafeUrl } from '../utils/url';
 import { buildTierColorCss } from '../webview/shared/colors';
-import { parseDiscoveredItemKey } from './discoveredItemKey';
+import { parseProviderItemKey } from './providerItemKey';
 import type { PRWatchData, RunWatchData, WebviewMessage } from './mainTypes';
 
 interface CodiconsResources {
@@ -33,7 +33,7 @@ export class WatchPanelProvider implements vscode.Disposable {
   ) {
     this.refreshDisposables = [
       this.workGraph.onDidChange(() => this.refresh()),
-      this.providerRegistry.onDidChangeDiscoveredItems(() => this.refresh()),
+      this.providerRegistry.onDidChangeProviderItems(() => this.refresh()),
     ];
   }
 
@@ -180,9 +180,9 @@ export class WatchPanelProvider implements vscode.Disposable {
 
     const messageProviderId = typeof message.providerId === 'string' ? message.providerId : undefined;
     const messageExternalId = typeof message.externalId === 'string' ? message.externalId : undefined;
-    const discoveredKey = messageProviderId && messageExternalId ? undefined : parseDiscoveredItemKey(message.itemId);
-    const providerId = messageProviderId ?? discoveredKey?.providerId;
-    const externalId = messageExternalId ?? discoveredKey?.externalId;
+    const providerItemKey = messageProviderId && messageExternalId ? undefined : parseProviderItemKey(message.itemId);
+    const providerId = messageProviderId ?? providerItemKey?.providerId;
+    const externalId = messageExternalId ?? providerItemKey?.externalId;
     if (providerId && externalId) {
       await vscode.commands.executeCommand('devdocket.previewIncomingItem', { providerId, externalId });
     }
@@ -213,9 +213,9 @@ export class WatchPanelProvider implements vscode.Disposable {
       }
     }
 
-    for (const [providerId, items] of this.providerRegistry.getAllDiscoveredItems()) {
+    for (const [providerId, items] of this.providerRegistry.getAllProviderItems()) {
       for (const item of items) {
-        if (!isPRDiscoveredItem(providerId, item) || linkedTargets.has(item.externalId)) {
+        if (!isPRProviderItem(providerId, item) || linkedTargets.has(item.externalId)) {
           continue;
         }
         linkedTargets.set(item.externalId, {
@@ -547,7 +547,7 @@ function isPRWorkItem(item: WorkItem): item is WorkItem & { providerId: string; 
   return Boolean(item.providerId && item.externalId && isPRCandidate(item.providerId, item.itemType));
 }
 
-function isPRDiscoveredItem(providerId: string, item: DiscoveredItem): boolean {
+function isPRProviderItem(providerId: string, item: ProviderItem): boolean {
   return isPRCandidate(providerId, item.itemType);
 }
 

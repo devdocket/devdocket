@@ -49,12 +49,12 @@ function createMockWorkGraph(items: any[] = []) {
   };
 }
 
-function createMockProviderRegistry(discoveredItems = new Map<string, any[]>()) {
-  const discoveredItemsEmitter = new vscode.EventEmitter<void>();
+function createMockProviderRegistry(providerItems = new Map<string, any[]>()) {
+  const providerItemsEmitter = new vscode.EventEmitter<void>();
   return {
-    getAllDiscoveredItems: vi.fn(() => discoveredItems),
-    onDidChangeDiscoveredItems: discoveredItemsEmitter.event,
-    fireDidChangeDiscoveredItems: () => discoveredItemsEmitter.fire(),
+    getAllProviderItems: vi.fn(() => providerItems),
+    onDidChangeProviderItems: providerItemsEmitter.event,
+    fireDidChangeProviderItems: () => providerItemsEmitter.fire(),
   };
 }
 
@@ -296,7 +296,7 @@ describe('WatchPanelProvider', () => {
       linkedSourceExternalId: 'owner/repo#42',
     }));
     expect(message.prWatches[0]).not.toHaveProperty('linkedItemId');
-    expect(providerRegistry.getAllDiscoveredItems).toHaveBeenCalledTimes(1);
+    expect(providerRegistry.getAllProviderItems).toHaveBeenCalledTimes(1);
   });
 
   it('omits DevDocket link data when no matching PR item exists', () => {
@@ -325,9 +325,9 @@ describe('WatchPanelProvider', () => {
     vi.mocked(window.createWebviewPanel).mockReturnValue(mockPanel.panel as any);
     const watcherService = createWatcherService([createPRWatch()]);
     const workItems: any[] = [];
-    const discoveredItems = new Map<string, any[]>();
+    const providerItems = new Map<string, any[]>();
     const workGraph = createMockWorkGraph(workItems);
-    const providerRegistry = createMockProviderRegistry(discoveredItems);
+    const providerRegistry = createMockProviderRegistry(providerItems);
 
     const provider = new WatchPanelProvider(
       vscode.Uri.file('C:\\repo') as any,
@@ -339,8 +339,8 @@ describe('WatchPanelProvider', () => {
 
     expect(getUpdateWatchPanelMessage(mockPanel).prWatches[0]).not.toHaveProperty('linkedItemId');
 
-    discoveredItems.set('github-pr-reviews', [{ externalId: 'owner/repo#42', title: 'Review PR', itemType: 'pr' }]);
-    providerRegistry.fireDidChangeDiscoveredItems();
+    providerItems.set('github-pr-reviews', [{ externalId: 'owner/repo#42', title: 'Review PR', itemType: 'pr' }]);
+    providerRegistry.fireDidChangeProviderItems();
     expect(getUpdateWatchPanelMessage(mockPanel).prWatches[0]).toEqual(expect.objectContaining({
       linkedSourceProviderId: 'github-pr-reviews',
       linkedSourceExternalId: 'owner/repo#42',
