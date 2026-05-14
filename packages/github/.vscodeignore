@@ -6,4 +6,7 @@ node_modules/**
 tsconfig.json
 vitest.config.ts
 eslint.config.mjs
-**/*.map
+dist/*.map
+webview-dist/*.map
+!dist/extension.js
+!webview-dist/*.js
