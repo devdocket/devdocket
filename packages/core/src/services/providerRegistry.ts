@@ -343,7 +343,8 @@ export class ProviderRegistry {
   async refreshProvider(providerId: string, token?: vscode.CancellationToken): Promise<ProviderRefreshOutcome> {
     const provider = this.providers.get(providerId);
     if (!provider) {
-      throw new Error(`Provider not registered: ${providerId}`);
+      logger.warn(`Provider not registered: ${providerId}`);
+      return 'cancelled';
     }
     if (token?.isCancellationRequested) {
       return 'cancelled';

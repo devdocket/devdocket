@@ -296,6 +296,10 @@ describe('ProviderRegistry', () => {
     expect(registry.getProviderHealth('progress-throws').status).toBe('healthy');
   });
 
+  it('returns cancelled when refreshing an unregistered provider by id', async () => {
+    await expect(registry.refreshProvider('missing')).resolves.toBe('cancelled');
+  });
+
   it('cleans up all subscriptions on dispose', () => {
     const p1 = createMockProvider('p1');
     const p2 = createMockProvider('p2');
