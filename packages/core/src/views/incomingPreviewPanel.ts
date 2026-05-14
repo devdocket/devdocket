@@ -433,12 +433,16 @@ function parseIncomingPreviewPanelState(state: unknown): IncomingPreviewPanelSta
 }
 
 function getUnavailableHtml(title: string, message: string): string {
+  const nonce = crypto.randomBytes(16).toString('hex');
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'none';">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'nonce-${nonce}';">
   <title>${escapeHtml(title)}</title>
+  <style nonce="${nonce}">
+    body { color: var(--vscode-foreground); background: var(--vscode-editor-background); font-family: var(--vscode-font-family); padding: 16px; }
+  </style>
 </head>
 <body>
   <p>${escapeHtml(message)}</p>
