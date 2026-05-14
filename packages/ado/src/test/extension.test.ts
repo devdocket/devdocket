@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
-import { workspace, extensions, window } from 'vscode';
+import { workspace, extensions, window, commands } from 'vscode';
 import { activate, deactivate } from '../extension';
 
 // Stub fetch globally to prevent real network calls from provider.refresh()
@@ -229,6 +229,67 @@ describe('extension activation', () => {
     await activate(mockContext);
 
     expect(mockApi.registerProvider).not.toHaveBeenCalled();
+  });
+
+  it('opens ADO projects settings from the missing-projects warning', async () => {
+    vi.mocked(window.showWarningMessage).mockResolvedValue('Open Settings' as any);
+    vi.mocked(workspace.getConfiguration).mockImplementation((section?: string) => {
+      if (section === 'devDocketAdo') {
+        return {
+          get: vi.fn((key: string, defaultValue?: any) => {
+            if (key === 'organization') return '';
+            if (key === 'projects') return [];
+            if (key === 'refreshIntervalSeconds') return 0;
+            return defaultValue;
+          }),
+        } as any;
+      }
+      return {
+        get: vi.fn((_key: string, defaultValue?: any) => defaultValue),
+      } as any;
+    });
+
+    await activate(mockContext);
+    await new Promise(resolve => setTimeout(resolve, 0));
+
+    expect(window.showWarningMessage).toHaveBeenCalledWith(
+      expect.stringContaining('No Azure DevOps organizations configured'),
+      'Open Settings',
+    );
+    expect(commands.executeCommand).toHaveBeenCalledWith(
+      'workbench.action.openSettings',
+      'devDocketAdo.projects',
+    );
+  });
+
+  it('opens ADO projects settings from the invalid-projects warning', async () => {
+    vi.mocked(window.showWarningMessage).mockResolvedValue('Open Settings' as any);
+    vi.mocked(workspace.getConfiguration).mockImplementation((section?: string) => {
+      if (section === 'devDocketAdo') {
+        return {
+          get: vi.fn((key: string, defaultValue?: any) => {
+            if (key === 'projects') return [' / '];
+            if (key === 'refreshIntervalSeconds') return 0;
+            return defaultValue;
+          }),
+        } as any;
+      }
+      return {
+        get: vi.fn((_key: string, defaultValue?: any) => defaultValue),
+      } as any;
+    });
+
+    await activate(mockContext);
+    await new Promise(resolve => setTimeout(resolve, 0));
+
+    expect(window.showWarningMessage).toHaveBeenCalledWith(
+      expect.stringContaining('entries are invalid'),
+      'Open Settings',
+    );
+    expect(commands.executeCommand).toHaveBeenCalledWith(
+      'workbench.action.openSettings',
+      'devDocketAdo.projects',
+    );
   });
 
   it('creates an output channel', async () => {

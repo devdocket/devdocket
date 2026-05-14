@@ -8,6 +8,17 @@ import { parseAdoProjectsConfig } from './configParser';
 import { validateRefreshInterval, type DevDocketApi } from '@devdocket/shared';
 import { logger, setLogger } from './logger';
 
+const OPEN_SETTINGS = 'Open Settings';
+const ADO_PROJECTS_SETTING = 'devDocketAdo.projects';
+
+function showAdoProjectsSettingsWarning(message: string): void {
+  void vscode.window.showWarningMessage(message, OPEN_SETTINGS).then(action => {
+    if (action === OPEN_SETTINGS) {
+      void vscode.commands.executeCommand('workbench.action.openSettings', ADO_PROJECTS_SETTING);
+    }
+  });
+}
+
 export async function activate(context: vscode.ExtensionContext): Promise<void> {
   const log = vscode.window.createOutputChannel('DevDocket ADO', { log: true });
   context.subscriptions.push(log);
@@ -61,18 +72,18 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     if (orgConfigs.length === 0) {
       const hasEntries = projects.some(p => p.trim().length > 0);
       if (hasEntries) {
-        logger.info('All devdocketAdo.projects entries are invalid — entries must be "org" or "org/project"');
+        logger.info('All devDocketAdo.projects entries are invalid — entries must be "org" or "org/project"');
         if (!orgWarningShown) {
-          void vscode.window.showWarningMessage(
-            'DevDocket ADO: All devdocketAdo.projects entries are invalid. Each entry must be "org" or "org/project".',
+          showAdoProjectsSettingsWarning(
+            'DevDocket ADO: All devDocketAdo.projects entries are invalid. Each entry must be "org" or "org/project".',
           );
           orgWarningShown = true;
         }
       } else {
-        logger.info('No organizations configured — set devdocketAdo.projects to enable ADO providers');
+        logger.info('No organizations configured — set devDocketAdo.projects to enable ADO providers');
         if (!orgWarningShown) {
-          void vscode.window.showWarningMessage(
-            'DevDocket ADO: No Azure DevOps organizations configured. Add entries to devdocketAdo.projects (e.g. "myorg" or "myorg/myproject").',
+          showAdoProjectsSettingsWarning(
+            'DevDocket ADO: No Azure DevOps organizations configured. Add entries to devDocketAdo.projects (e.g. "myorg" or "myorg/myproject").',
           );
           orgWarningShown = true;
         }
