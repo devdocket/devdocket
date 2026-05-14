@@ -115,6 +115,37 @@ describe('registerWatchCommands', () => {
     expect(vscode.window.showInformationMessage).toHaveBeenCalledWith('Now watching run: CI Build');
   });
 
+  it('shows run-specific feedback when a run is already watched', async () => {
+    const input = 'https://github.com/owner/repo/actions/runs/12345';
+    const runIdentifier = {
+      providerId: 'github-actions',
+      runId: '12345',
+      displayName: 'CI Build',
+      url: input,
+      repo: 'owner/repo',
+    };
+    const runWatcher = {
+      id: 'github-actions',
+      label: 'GitHub Actions',
+      parseRunUrl: vi.fn(() => runIdentifier),
+    };
+    registerCommandsWith({ input, runWatcher, runActive: true });
+
+    await invoke('devdocket.watchUrl');
+
+    expect(vscode.window.showInformationMessage).toHaveBeenCalledWith('Already watching run: CI Build');
+  });
+
+  it('ignores empty submissions without showing an error toast', async () => {
+    const { watcherService } = registerCommandsWith({ input: '   ' });
+
+    await invoke('devdocket.watchUrl');
+
+    expect(watcherService.startWatch).not.toHaveBeenCalled();
+    expect(watcherService.startPRWatch).not.toHaveBeenCalled();
+    expect(vscode.window.showErrorMessage).not.toHaveBeenCalled();
+  });
+
   it('shows actionable feedback without starting a watch for unsupported URLs', async () => {
     registerCommandsWith({ input: 'https://example.com/nope' });
 

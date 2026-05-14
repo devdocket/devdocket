@@ -18,7 +18,7 @@ async function handleWatchUrl(
     validateInput: (value) => formatWatchUrlValidation(classifyWatchUrl(value, watcherRegistry, prWatcherRegistry)),
   });
 
-  if (url === undefined) {
+  if (!url?.trim()) {
     return;
   }
 
@@ -44,7 +44,7 @@ async function handleWatchUrl(
     const wasActive = watcherService.isRunActive(identifier);
     const watch = await watcherService.startWatch(identifier);
     const message = wasActive
-      ? `Already watching: ${watch.identifier.displayName}`
+      ? `Already watching run: ${watch.identifier.displayName}`
       : `Now watching run: ${watch.identifier.displayName}`;
     void vscode.window.showInformationMessage(message);
   } catch (err: unknown) {
