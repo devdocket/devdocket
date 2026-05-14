@@ -79,14 +79,22 @@ function mockInputBox(repoPath: string | undefined, baseBranch = 'origin/dev') {
   });
 }
 
+function isRepoPathPickItems(items: unknown): items is Array<{ kind?: string; repoPath?: string }> {
+  return Array.isArray(items) && items.some(item => ['repo', 'paste', 'browse'].includes((item as { kind?: string }).kind ?? ''));
+}
+
+function isWorkModePickItems(items: unknown): boolean {
+  return Array.isArray(items) && items.some(item => ['checkout', 'worktree'].includes((item as { value?: string }).value ?? ''));
+}
+
 function mockQuickPicks(repoPath = '/mock/workspace', workMode: 'checkout' | 'worktree' = 'worktree') {
-  vi.mocked(window.showQuickPick).mockImplementation(async (items: any, options: any) => {
-    if (options?.placeHolder?.includes('local repository') || options?.placeHolder?.includes('repository folder')) {
-      return items.find((item: any) => item.kind === 'repo' && item.repoPath === repoPath)
-        ?? items.find((item: any) => item.kind === 'repo')
+  vi.mocked(window.showQuickPick).mockImplementation(async (items: any) => {
+    if (isRepoPathPickItems(items)) {
+      return items.find(item => item.kind === 'repo' && item.repoPath === repoPath)
+        ?? items.find(item => item.kind === 'repo')
         ?? undefined;
     }
-    if (options?.placeHolder?.includes('How would')) {
+    if (isWorkModePickItems(items)) {
       return {
         label: workMode === 'worktree' ? 'Create worktree' : 'Checkout branch',
         value: workMode,
@@ -210,11 +218,11 @@ describe('StartWorkAction', () => {
     });
 
     it('uses the selected folder from Browse for the repository path', async () => {
-      vi.mocked(window.showQuickPick).mockImplementation(async (items: any, options: any) => {
-        if (options?.placeHolder?.includes('local repository')) {
-          return items.find((item: any) => item.kind === 'browse');
+      vi.mocked(window.showQuickPick).mockImplementation(async (items: any) => {
+        if (isRepoPathPickItems(items)) {
+          return items.find(item => item.kind === 'browse');
         }
-        if (options?.placeHolder?.includes('How would')) {
+        if (isWorkModePickItems(items)) {
           return { label: 'Create worktree', value: 'worktree' } as any;
         }
         return undefined;
@@ -236,11 +244,11 @@ describe('StartWorkAction', () => {
     });
 
     it('keeps paste path as a legacy fallback', async () => {
-      vi.mocked(window.showQuickPick).mockImplementation(async (items: any, options: any) => {
-        if (options?.placeHolder?.includes('local repository')) {
-          return items.find((item: any) => item.kind === 'paste');
+      vi.mocked(window.showQuickPick).mockImplementation(async (items: any) => {
+        if (isRepoPathPickItems(items)) {
+          return items.find(item => item.kind === 'paste');
         }
-        if (options?.placeHolder?.includes('How would')) {
+        if (isWorkModePickItems(items)) {
           return { label: 'Create worktree', value: 'worktree' } as any;
         }
         return undefined;
@@ -268,14 +276,12 @@ describe('StartWorkAction', () => {
       memento._store.set('repoPath:acme/repo', '/invalid/repo');
       (workspace as any).workspaceFolders = [{ uri: { fsPath: '/valid/repo' } }];
       vi.mocked(fs.existsSync).mockImplementation((p: any) => p.toString().replace(/\\/g, '/').endsWith('/valid/repo/.git'));
-      vi.mocked(window.showQuickPick).mockImplementation(async (items: any, options: any) => {
-        if (options?.placeHolder?.includes('local repository')) {
-          return items.find((item: any) => item.kind === 'repo' && item.repoPath === '/invalid/repo');
+      vi.mocked(window.showQuickPick).mockImplementation(async (items: any) => {
+        if (isRepoPathPickItems(items)) {
+          const repoPick = vi.mocked(window.showQuickPick).mock.calls.length === 1 ? '/invalid/repo' : '/valid/repo';
+          return items.find(item => item.kind === 'repo' && item.repoPath === repoPick);
         }
-        if (options?.placeHolder?.includes('does not contain a .git directory')) {
-          return items.find((item: any) => item.kind === 'repo' && item.repoPath === '/valid/repo');
-        }
-        if (options?.placeHolder?.includes('How would')) {
+        if (isWorkModePickItems(items)) {
           return { label: 'Create worktree', value: 'worktree' } as any;
         }
         return undefined;
