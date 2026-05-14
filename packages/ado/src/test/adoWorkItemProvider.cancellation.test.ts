@@ -141,6 +141,45 @@ describe('AdoWorkItemProvider — cancellation (AbortSignal wiring)', () => {
     });
   });
 
+  // ── Pre-cancelled token ────────────────────────────────────────────
+
+  describe('already-cancelled token', () => {
+    it('returns immediately without clearing items', async () => {
+      const token = {
+        isCancellationRequested: true,
+        onCancellationRequested: vi.fn().mockReturnValue({ dispose: vi.fn() }),
+      };
+      const listener = vi.fn();
+      provider.onDidDiscoverItems(listener);
+
+      await provider.refresh(token as any);
+
+      expect(authentication.getSession).not.toHaveBeenCalled();
+      expect(mockFetch).not.toHaveBeenCalled();
+      expect(listener).not.toHaveBeenCalled();
+    });
+
+    it('does not clear items when cancelled during authentication', async () => {
+      const { token, cancel } = createMockCancellationToken();
+      vi.mocked(authentication.getSession).mockImplementation(async () => {
+        cancel();
+        return {
+          accessToken: 'test-token',
+          id: 'session-1',
+          scopes: ['499b84ac-1321-427f-aa17-267ca6975798/.default'],
+          account: { id: '1', label: 'testuser' },
+        } as any;
+      });
+      const listener = vi.fn();
+      provider.onDidDiscoverItems(listener);
+
+      await provider.refresh(token);
+
+      expect(mockFetch).not.toHaveBeenCalled();
+      expect(listener).not.toHaveBeenCalled();
+    });
+  });
+
   // ── Mid-fetch cancellation ─────────────────────────────────────────
 
   describe('mid-fetch cancellation', () => {

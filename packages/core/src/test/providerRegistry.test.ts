@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { EventEmitter } from 'vscode';
+import { CancellationTokenSource, EventEmitter } from 'vscode';
 import { DevDocketProvider, ProviderItem } from '../api/types';
 import { WorkGraph } from '../services/workGraph';
 import { ProviderRegistry } from '../services/providerRegistry';
@@ -199,6 +199,75 @@ describe('ProviderRegistry', () => {
 
     // Should not throw
     await expect(registry.refreshAll()).resolves.toBeUndefined();
+  });
+
+  it('cancels provider refresh tokens when refreshAll token is cancelled', async () => {
+    const provider = createMockProvider('cancel');
+    registry.register(provider);
+    await new Promise(resolve => setTimeout(resolve, 0));
+    vi.mocked(provider.refresh).mockClear();
+
+    let providerToken: { isCancellationRequested: boolean } | undefined;
+    vi.mocked(provider.refresh).mockImplementationOnce((token?: any) => {
+      providerToken = token;
+      return new Promise<void>(() => {});
+    });
+    const listener = vi.fn();
+    registry.onDidChangeProviderRefreshState(listener);
+    const cts = new CancellationTokenSource();
+
+    const refreshPromise = registry.refreshAll(cts.token);
+    await vi.waitFor(() => expect(registry.isProviderRefreshing('cancel')).toBe(true));
+    expect(providerToken?.isCancellationRequested).toBe(false);
+
+    cts.cancel();
+    await refreshPromise;
+
+    expect(providerToken?.isCancellationRequested).toBe(true);
+    expect(registry.isProviderRefreshing('cancel')).toBe(false);
+    expect(registry.getProviderHealth('cancel').status).not.toBe('unhealthy');
+    expect(listener).toHaveBeenCalledWith('cancel');
+    cts.dispose();
+  });
+
+  it('reports refreshAll progress as each provider completes', async () => {
+    const p1 = createMockProvider('p1');
+    const p2 = createMockProvider('p2');
+    registry.register(p1);
+    registry.register(p2);
+    await new Promise(resolve => setTimeout(resolve, 0));
+    vi.mocked(p1.refresh).mockClear();
+    vi.mocked(p2.refresh).mockClear();
+
+    let resolveP1!: () => void;
+    let resolveP2!: () => void;
+    vi.mocked(p1.refresh).mockImplementationOnce(() => new Promise<void>(resolve => { resolveP1 = resolve; }));
+    vi.mocked(p2.refresh).mockImplementationOnce(() => new Promise<void>(resolve => { resolveP2 = resolve; }));
+    const onProgress = vi.fn();
+
+    const refreshPromise = registry.refreshAll(undefined, onProgress);
+    await vi.waitFor(() => expect(p2.refresh).toHaveBeenCalledTimes(1));
+
+    resolveP2();
+    await vi.waitFor(() => expect(onProgress).toHaveBeenCalledWith({
+      providerId: 'p2',
+      providerLabel: 'Provider p2',
+      completed: 1,
+      total: 2,
+      pendingProviders: [{ id: 'p1', label: 'Provider p1' }],
+      outcome: 'success',
+    }));
+
+    resolveP1();
+    await refreshPromise;
+    expect(onProgress).toHaveBeenCalledWith({
+      providerId: 'p1',
+      providerLabel: 'Provider p1',
+      completed: 2,
+      total: 2,
+      pendingProviders: [],
+      outcome: 'success',
+    });
   });
 
   it('cleans up all subscriptions on dispose', () => {

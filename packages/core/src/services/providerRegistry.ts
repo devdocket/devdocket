@@ -16,6 +16,17 @@ export interface ProviderHealthStatus {
   lastError?: string;
 }
 
+export type ProviderRefreshOutcome = 'success' | 'failed' | 'timedOut' | 'cancelled';
+
+export interface ProviderRefreshProgress {
+  providerId: string;
+  providerLabel: string;
+  completed: number;
+  total: number;
+  pendingProviders: Array<{ id: string; label: string }>;
+  outcome: ProviderRefreshOutcome;
+}
+
 function isActiveWorkItemState(state: WorkItemState | undefined): boolean {
   return state === WorkItemState.New || state === WorkItemState.InProgress || state === WorkItemState.Paused;
 }
@@ -49,6 +60,9 @@ export class ProviderRegistry {
   private readonly _onDidChangeProviderHealth = new vscode.EventEmitter<string>();
   /** Fired when a provider's health info changes (status, lastError, or lastRefreshTime), with the provider ID. */
   readonly onDidChangeProviderHealth = this._onDidChangeProviderHealth.event;
+  private readonly _onDidChangeProviderRefreshState = new vscode.EventEmitter<string>();
+  /** Fired when a provider starts or stops refreshing, with the provider ID. */
+  readonly onDidChangeProviderRefreshState = this._onDidChangeProviderRefreshState.event;
   private readonly _onDidRefreshProvider = new vscode.EventEmitter<string>();
   /**
    * Fired after a provider's provider items have been processed, carrying the
@@ -213,6 +227,11 @@ export class ProviderRegistry {
     return this.healthStatus.get(providerId) ?? { status: 'unknown' };
   }
 
+  /** Whether a provider refresh is currently in flight. */
+  isProviderRefreshing(providerId: string): boolean {
+    return this._pendingRefreshes.has(providerId);
+  }
+
   /**
    * Get the provider items for a specific provider.
    *
@@ -283,23 +302,52 @@ export class ProviderRegistry {
    * Errors from individual providers are logged but do not reject the
    * returned promise, so one failing provider does not block others.
    */
-  async refreshAll(): Promise<void> {
+  async refreshAll(
+    token?: vscode.CancellationToken,
+    onProgress?: (progress: ProviderRefreshProgress) => void,
+  ): Promise<void> {
     const providers = Array.from(this.providers.values());
-    const results = await Promise.allSettled(
-      providers.map((p) => {
-        logger.debug(`Provider ${p.id} refreshing...`);
-        return this.refreshWithTimeout(p);
-      }),
-    );
-    for (let i = 0; i < results.length; i++) {
-      const result = results[i];
-      if (result.status === 'rejected') {
-        logger.error(`Provider "${providers[i].id}" refresh failed`, result.reason);
+    const completedProviderIds = new Set<string>();
+    let completed = 0;
+
+    await Promise.all(providers.map(async (provider) => {
+      let outcome: ProviderRefreshOutcome;
+      if (token?.isCancellationRequested) {
+        outcome = 'cancelled';
+      } else {
+        logger.debug(`Provider ${provider.id} refreshing...`);
+        outcome = await this.refreshWithTimeout(provider, token);
       }
-    }
+
+      completedProviderIds.add(provider.id);
+      completed++;
+      onProgress?.({
+        providerId: provider.id,
+        providerLabel: provider.label,
+        completed,
+        total: providers.length,
+        pendingProviders: providers
+          .filter(p => !completedProviderIds.has(p.id))
+          .map(p => ({ id: p.id, label: p.label })),
+        outcome,
+      });
+    }));
   }
 
-  private refreshWithTimeout(provider: DevDocketProvider): Promise<void> {
+  /** Refresh a single registered provider by ID. */
+  async refreshProvider(providerId: string, token?: vscode.CancellationToken): Promise<ProviderRefreshOutcome> {
+    const provider = this.providers.get(providerId);
+    if (!provider) {
+      throw new Error(`Provider not registered: ${providerId}`);
+    }
+    if (token?.isCancellationRequested) {
+      return 'cancelled';
+    }
+    logger.debug(`Provider ${provider.id} refreshing...`);
+    return this.refreshWithTimeout(provider, token);
+  }
+
+  private refreshWithTimeout(provider: DevDocketProvider, parentToken?: vscode.CancellationToken): Promise<ProviderRefreshOutcome> {
     this.cancelPendingRefresh(provider.id);
     const cts = new vscode.CancellationTokenSource();
     let timedOut = false;
@@ -310,38 +358,58 @@ export class ProviderRegistry {
       }
       cts.cancel();
     }, ProviderRegistry.REFRESH_TIMEOUT_MS);
+    const parentSub = parentToken?.onCancellationRequested?.(() => cts.cancel());
+    if (parentToken?.isCancellationRequested) {
+      cts.cancel();
+    }
     const entry = { cts, timeoutId };
     this._pendingRefreshes.set(provider.id, entry);
+    this._onDidChangeProviderRefreshState.fire(provider.id);
 
     const refreshPromise = provider.refresh(cts.token)
-      .then(() => {
-        if (!cts.token.isCancellationRequested) {
-          this.updateHealth(provider.id, 'healthy');
+      .then<ProviderRefreshOutcome>(() => {
+        if (timedOut) {
+          return 'timedOut';
         }
+        if (cts.token.isCancellationRequested) {
+          return 'cancelled';
+        }
+        this.updateHealth(provider.id, 'healthy');
+        return 'success';
       })
-      .catch((err: unknown) => {
-        if (!cts.token.isCancellationRequested) {
-          logger.error(`Provider "${provider.id}" refresh failed`, err);
-          const message = err instanceof Error ? err.message : String(err);
-          this.updateHealth(provider.id, 'unhealthy', message);
+      .catch<ProviderRefreshOutcome>((err: unknown) => {
+        if (timedOut) {
+          return 'timedOut';
         }
+        if (cts.token.isCancellationRequested) {
+          logger.debug(`Provider "${provider.id}" refresh cancelled`, err);
+          return 'cancelled';
+        }
+        logger.error(`Provider "${provider.id}" refresh failed`, err);
+        const message = err instanceof Error ? err.message : String(err);
+        this.updateHealth(provider.id, 'unhealthy', message);
+        return 'failed';
       });
 
-    const cancelledPromise = new Promise<void>((resolve) => {
+    const cancelledPromise = new Promise<ProviderRefreshOutcome>((resolve) => {
       cts.token.onCancellationRequested(() => {
         if (timedOut) {
           this.updateHealth(provider.id, 'unhealthy', 'Refresh timed out');
+          resolve('timedOut');
+          return;
         }
-        resolve();
+        resolve('cancelled');
       });
     });
 
     return Promise.race([refreshPromise, cancelledPromise])
       .finally(() => {
         clearTimeout(timeoutId);
+        parentSub?.dispose();
         // Only clean up if this entry is still the current one for this provider
         if (this._pendingRefreshes.get(provider.id) === entry) {
           this._pendingRefreshes.delete(provider.id);
+          this._onDidChangeProviderRefreshState.fire(provider.id);
         }
         cts.dispose();
       });
@@ -354,6 +422,7 @@ export class ProviderRegistry {
       pending.cts.cancel();
       // CTS is disposed in refreshWithTimeout's finally block
       this._pendingRefreshes.delete(providerId);
+      this._onDidChangeProviderRefreshState.fire(providerId);
     }
   }
 

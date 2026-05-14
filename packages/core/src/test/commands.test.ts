@@ -95,7 +95,7 @@ function createMockStateStore(): { [K in keyof UsedStateStoreMethods]: Mock } {
   };
 }
 
-type UsedProviderRegistryMethods = Pick<ProviderRegistry, 'refreshAll' | 'resolveUrl' | 'getAllProviderItems' | 'getProviderItems' | 'getProviderLabel'>;
+type UsedProviderRegistryMethods = Pick<ProviderRegistry, 'refreshAll' | 'resolveUrl' | 'getAllProviderItems' | 'getProviderItems' | 'getProviderLabel' | 'getProviders'>;
 
 function createMockProviderRegistry(): { [K in keyof UsedProviderRegistryMethods]: Mock } {
   return {
@@ -104,6 +104,10 @@ function createMockProviderRegistry(): { [K in keyof UsedProviderRegistryMethods
     getAllProviderItems: vi.fn().mockReturnValue(new Map()),
     getProviderItems: vi.fn().mockReturnValue([]),
     getProviderLabel: vi.fn((providerId: string) => providerId),
+    getProviders: vi.fn().mockReturnValue([
+      { id: 'github', label: 'GitHub' },
+      { id: 'ado', label: 'Azure DevOps' },
+    ]),
   };
 }
 
@@ -229,14 +233,40 @@ describe('registerCommands', () => {
   // ── refresh ──────────────────────────────────────────────────────
 
   describe('devdocket.refresh', () => {
-    it('calls providerRegistry.refreshAll and shows progress', async () => {
+    it('calls providerRegistry.refreshAll with cancellable notification progress', async () => {
+      const report = vi.fn();
+      const token = { isCancellationRequested: false, onCancellationRequested: vi.fn() };
+      (vscode.window.withProgress as Mock).mockImplementationOnce((_options: any, task: any) =>
+        task({ report }, token),
+      );
+
       await invoke('devdocket.refresh');
 
       expect(vscode.window.withProgress).toHaveBeenCalledWith(
-        expect.objectContaining({ location: vscode.ProgressLocation.Window }),
+        expect.objectContaining({
+          location: vscode.ProgressLocation.Notification,
+          title: 'DevDocket: Refresh',
+          cancellable: true,
+        }),
         expect.any(Function),
       );
-      expect(providerRegistry.refreshAll).toHaveBeenCalled();
+      expect(report).toHaveBeenCalledWith({
+        message: 'Refreshing… 0/2 providers done — waiting on GitHub and Azure DevOps',
+      });
+      expect(providerRegistry.refreshAll).toHaveBeenCalledWith(token, expect.any(Function));
+
+      const onProgress = providerRegistry.refreshAll.mock.calls[0][1];
+      onProgress({
+        providerId: 'github',
+        providerLabel: 'GitHub',
+        completed: 1,
+        total: 2,
+        pendingProviders: [{ id: 'ado', label: 'Azure DevOps' }],
+        outcome: 'success',
+      });
+      expect(report).toHaveBeenCalledWith({
+        message: 'GitHub refreshed — Refreshing… 1/2 providers done — waiting on Azure DevOps',
+      });
     });
   });
 

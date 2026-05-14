@@ -3,7 +3,7 @@ import { WorkItemState } from '../models/workItem';
 import { ACTIVITY_TYPES, type ActivityType } from '../models/activityLog';
 import { WorkGraph } from '../services/workGraph';
 import { ActionRegistry } from '../services/actionRegistry';
-import { ProviderRegistry } from '../services/providerRegistry';
+import { ProviderRegistry, type ProviderRefreshProgress } from '../services/providerRegistry';
 import { InboxStateStore, type InboxState } from '../storage/inboxStateStore';
 import type { ProviderLabelCache } from '../storage/providerLabelCache';
 import type { ReadStateStore } from '../storage/readStateStore';
@@ -595,14 +595,63 @@ async function handleFocusMoveDown(workGraph: WorkGraph, item?: { id?: string })
   await workGraph.moveItem(item.id, 'down');
 }
 
+type PendingProvider = ProviderRefreshProgress['pendingProviders'][number];
+
+function formatWaitingProviders(providers: readonly PendingProvider[]): string {
+  const labels = providers.map(provider => provider.label);
+  if (labels.length <= 2) {
+    return labels.join(' and ');
+  }
+  return `${labels.slice(0, 2).join(', ')}, and ${labels.length - 2} more`;
+}
+
+function formatRefreshProgressMessage(
+  completed: number,
+  total: number,
+  pendingProviders: readonly PendingProvider[],
+  latestOutcome?: string,
+): string {
+  if (total === 0) {
+    return 'No providers registered';
+  }
+  const message = `Refreshing… ${completed}/${total} providers done`;
+  const detail = pendingProviders.length > 0
+    ? `${message} — waiting on ${formatWaitingProviders(pendingProviders)}`
+    : message;
+  return latestOutcome ? `${latestOutcome} — ${detail}` : detail;
+}
+
+function formatProviderOutcome(event: ProviderRefreshProgress): string {
+  switch (event.outcome) {
+    case 'success': return `${event.providerLabel} refreshed`;
+    case 'failed': return `${event.providerLabel} failed`;
+    case 'timedOut': return `${event.providerLabel} timed out`;
+    case 'cancelled': return `${event.providerLabel} cancelled`;
+  }
+}
+
 async function handleRefresh(providerRegistry: ProviderRegistry): Promise<void> {
   logger.info('Manual refresh triggered');
+  const providers = providerRegistry.getProviders().map(provider => ({ id: provider.id, label: provider.label }));
   await vscode.window.withProgress(
     {
-      location: vscode.ProgressLocation.Window,
-      title: 'DevDocket: Refreshing…',
+      location: vscode.ProgressLocation.Notification,
+      title: 'DevDocket: Refresh',
+      cancellable: true,
     },
-    () => providerRegistry.refreshAll(),
+    (progress, token) => {
+      progress.report({ message: formatRefreshProgressMessage(0, providers.length, providers) });
+      return providerRegistry.refreshAll(token, event => {
+        progress.report({
+          message: formatRefreshProgressMessage(
+            event.completed,
+            event.total,
+            event.pendingProviders,
+            formatProviderOutcome(event),
+          ),
+        });
+      });
+    },
   );
 }
 
