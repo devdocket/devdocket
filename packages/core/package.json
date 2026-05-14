@@ -333,7 +333,7 @@
       },
       {
         "command": "devdocket.watchUrl",
-        "title": "DevDocket: Watch URL…",
+        "title": "Watch URL…",
         "category": "DevDocket",
         "icon": "$(add)"
       },
