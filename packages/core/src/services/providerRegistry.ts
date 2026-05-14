@@ -366,7 +366,14 @@ export class ProviderRegistry {
     this._pendingRefreshes.set(provider.id, entry);
     this._onDidChangeProviderRefreshState.fire(provider.id);
 
-    const refreshPromise = provider.refresh(cts.token)
+    let providerRefreshPromise: Promise<void>;
+    try {
+      providerRefreshPromise = Promise.resolve(provider.refresh(cts.token));
+    } catch (err) {
+      providerRefreshPromise = Promise.reject(err);
+    }
+
+    const refreshPromise = providerRefreshPromise
       .then<ProviderRefreshOutcome>(() => {
         if (timedOut) {
           return 'timedOut';

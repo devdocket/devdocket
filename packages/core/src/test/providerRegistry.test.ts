@@ -201,6 +201,19 @@ describe('ProviderRegistry', () => {
     await expect(registry.refreshAll()).resolves.toBeUndefined();
   });
 
+  it('handles synchronous refresh throws gracefully in refreshAll', async () => {
+    const p1 = createMockProvider('sync-throw');
+    registry.register(p1);
+    await new Promise(resolve => setTimeout(resolve, 0));
+    vi.mocked(p1.refresh).mockClear();
+    vi.mocked(p1.refresh).mockImplementationOnce(() => { throw new Error('sync boom'); });
+
+    await expect(registry.refreshAll()).resolves.toBeUndefined();
+
+    expect(registry.isProviderRefreshing('sync-throw')).toBe(false);
+    expect(registry.getProviderHealth('sync-throw').lastError).toBe('sync boom');
+  });
+
   it('cancels provider refresh tokens when refreshAll token is cancelled', async () => {
     const provider = createMockProvider('cancel');
     registry.register(provider);
