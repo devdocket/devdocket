@@ -211,7 +211,7 @@ describe('StartWorkAction', () => {
       expect(repoPickItems.map(item => item.label)).toEqual([
         '/cached/repo',
         '/workspace/repo',
-        'Paste path…',
+        'Enter path manually…',
         'Browse…',
       ]);
       expect(memento.update).toHaveBeenCalledWith('repoPath:acme/repo', '/workspace/repo');
@@ -243,7 +243,7 @@ describe('StartWorkAction', () => {
       expect(memento.update).toHaveBeenCalledWith('repoPath:acme/repo', '/chosen/repo');
     });
 
-    it('keeps paste path as a legacy fallback', async () => {
+    it('keeps manual entry as a legacy fallback', async () => {
       vi.mocked(window.showQuickPick).mockImplementation(async (items: any) => {
         if (isRepoPathPickItems(items)) {
           return items.find(item => item.pickKind === 'paste');

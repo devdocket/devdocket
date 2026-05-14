@@ -857,7 +857,7 @@ export class StartWorkAction implements DevDocketAction {
       }
     }
 
-    picks.push({ label: 'Paste path…', description: 'Enter a repository path manually', pickKind: 'paste' });
+    picks.push({ label: 'Enter path manually…', description: 'Type or paste a repository path', pickKind: 'paste' });
     picks.push({ label: 'Browse…', description: 'Choose a repository folder', pickKind: 'browse' });
     return picks;
   }
