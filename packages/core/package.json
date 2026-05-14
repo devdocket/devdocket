@@ -12,7 +12,10 @@
     "Other"
   ],
   "activationEvents": [
-    "onView:devdocket.main"
+    "onView:devdocket.main",
+    "onWebviewPanel:devdocket.editItem",
+    "onWebviewPanel:devdocket.previewItem",
+    "onWebviewPanel:devdocket.watchPanel"
   ],
   "main": "./dist/extension.js",
   "contributes": {

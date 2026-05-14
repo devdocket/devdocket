@@ -6,15 +6,32 @@ declare const acquireVsCodeApi: () => {
   setState(state: unknown): void;
 };
 
-let vscodeApi: ReturnType<typeof acquireVsCodeApi> | undefined;
+type VsCodeApi = ReturnType<typeof acquireVsCodeApi>;
+
+declare global {
+  interface Window {
+    __DEVDOCKET_VSCODE_API__?: VsCodeApi;
+  }
+}
+
+let vscodeApi: VsCodeApi | undefined;
 
 export function getVsCodeApi() {
   if (!vscodeApi) {
-    vscodeApi = acquireVsCodeApi();
+    vscodeApi = window.__DEVDOCKET_VSCODE_API__ ?? acquireVsCodeApi();
+    window.__DEVDOCKET_VSCODE_API__ = vscodeApi;
   }
   return vscodeApi;
 }
 
 export function postMessage(message: WebviewMessage): void {
   getVsCodeApi().postMessage(message);
+}
+
+export function setWebviewState(state: unknown): void {
+  getVsCodeApi().setState(state);
+}
+
+export function getWebviewState(): unknown {
+  return getVsCodeApi().getState();
 }

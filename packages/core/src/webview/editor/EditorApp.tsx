@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'preact/hooks';
-import { postMessage } from '../shared/messaging';
+import { postMessage, setWebviewState } from '../shared/messaging';
 import type { EditorItemData, ExtensionMessage } from '../shared/types';
 import { useThemeChangeCounter } from '../shared/theme';
 import { ActivityLog } from './components/ActivityLog';
@@ -33,6 +33,13 @@ export function EditorApp() {
   useEffect(() => {
     itemRef.current = item;
   }, [item]);
+
+  useEffect(() => {
+    const state = item ? getSerializedEditorState(item) : undefined;
+    if (state) {
+      setWebviewState(state);
+    }
+  }, [item?.id, item?.isIncoming, item?.providerId, item?.externalId]);
 
   useEffect(() => {
     titleRef.current = title;
@@ -232,6 +239,25 @@ export function EditorApp() {
     itemRef.current = updatedItem;
     titleRef.current = resolvedTitle;
   }
+}
+
+function getSerializedEditorState(item: EditorItemData): unknown {
+  if (item.isIncoming && item.providerId && item.externalId) {
+    return {
+      version: 1,
+      providerId: item.providerId,
+      externalId: item.externalId,
+    };
+  }
+
+  if (!item.isIncoming) {
+    return {
+      version: 1,
+      itemId: item.id,
+    };
+  }
+
+  return undefined;
 }
 
 function shouldPreserveEditableField(item: EditorItemData | null, draftValue: string, persistedValue?: string): boolean {

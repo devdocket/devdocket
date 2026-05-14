@@ -40,6 +40,17 @@ describe('getEditorPanelHtml', () => {
     expect(html).not.toContain('unsafe-inline');
   });
 
+  it('seeds serialized webview state without acquiring the VS Code API twice', () => {
+    const html = getEditorPanelHtml({
+      cspSource: 'https://example.test',
+      scriptUri: 'https://example.test/editor.js',
+      initialItem: makeEditorItem(),
+    });
+
+    expect(html).toContain('window.__DEVDOCKET_VSCODE_API__ = window.__DEVDOCKET_VSCODE_API__ || acquireVsCodeApi();');
+    expect(html).toContain('window.__DEVDOCKET_VSCODE_API__.setState({"version":1,"itemId":"item-1"});');
+  });
+
   it('bootstraps the editor app with transitions, activity, and related item data', () => {
     const html = getEditorPanelHtml({
       cspSource: 'https://example.test',

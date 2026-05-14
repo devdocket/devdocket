@@ -52,7 +52,7 @@ export class PanelManager {
 }
 
 export class WorkItemEditorPanel {
-  private static readonly viewType = 'devdocket.editItem';
+  static readonly viewType = 'devdocket.editItem';
   private static panelManager = new PanelManager();
   private static actionRegistry?: ActionRegistry;
   private static stateStore?: InboxStateStore;
@@ -99,6 +99,32 @@ export class WorkItemEditorPanel {
     WorkItemEditorPanel.watcherService = watcherService;
   }
 
+  static createSerializer(
+    context: vscode.ExtensionContext,
+    workGraph: WorkGraph,
+    providerRegistry: ProviderRegistry,
+  ): vscode.WebviewPanelSerializer {
+    return {
+      async deserializeWebviewPanel(panel, state): Promise<void> {
+        const itemId = parseEditorPanelState(state);
+        panel.webview.options = WorkItemEditorPanel.getWebviewOptions(context);
+        if (!itemId) {
+          WorkItemEditorPanel.showUnavailable(panel, 'Work item editor state is unavailable. Close this tab and reopen the item from DevDocket.');
+          return;
+        }
+
+        const item = workGraph.getItem(itemId);
+        if (!item) {
+          WorkItemEditorPanel.showUnavailable(panel, 'Work item no longer exists. Close this tab and reopen it from DevDocket if it is still available.');
+          return;
+        }
+
+        const providerLabel = item.providerId ? providerRegistry.getProviderLabel(item.providerId) : undefined;
+        WorkItemEditorPanel.revive(context, workGraph, providerRegistry, panel, item, providerLabel);
+      },
+    };
+  }
+
   static open(
     context: vscode.ExtensionContext,
     workGraph: WorkGraph,
@@ -120,15 +146,43 @@ export class WorkItemEditorPanel {
       `Edit: ${item.title}`,
       vscode.ViewColumn.One,
       {
-        enableScripts: true,
+        ...WorkItemEditorPanel.getWebviewOptions(context),
         retainContextWhenHidden: true,
-        localResourceRoots: [vscode.Uri.joinPath(context.extensionUri, 'webview-dist')],
       },
     );
 
+    WorkItemEditorPanel.revive(context, workGraph, providerRegistry, panel, item, providerLabel);
+  }
+
+  private static revive(
+    context: vscode.ExtensionContext,
+    workGraph: WorkGraph,
+    providerRegistry: ProviderRegistry,
+    panel: vscode.WebviewPanel,
+    item: WorkItem,
+    providerLabel?: string,
+  ): void {
+    const manager = WorkItemEditorPanel.panelManager;
+    const existing = manager.openPanels.get(item.id);
+    if (existing) {
+      existing.dispose();
+    }
+
+    panel.webview.options = WorkItemEditorPanel.getWebviewOptions(context);
     const editor = new WorkItemEditorPanel(panel, workGraph, providerRegistry, item.id, manager, context.extensionUri, providerLabel);
     manager.openPanels.set(item.id, editor);
-    context.subscriptions.push({ dispose: () => editor.dispose() });
+  }
+
+  private static getWebviewOptions(context: vscode.ExtensionContext): vscode.WebviewOptions {
+    return {
+      enableScripts: true,
+      localResourceRoots: [vscode.Uri.joinPath(context.extensionUri, 'webview-dist')],
+    };
+  }
+
+  private static showUnavailable(panel: vscode.WebviewPanel, message: string): void {
+    panel.title = 'Work item unavailable';
+    panel.webview.html = getUnavailableHtml('Work item unavailable', message);
   }
 
   /** @internal Exposed for testing only. */
@@ -625,6 +679,41 @@ export class WorkItemEditorPanel {
       void vscode.window.showErrorMessage(`Failed to dismiss item: ${message}`);
     }
   }
+}
+
+function getUnavailableHtml(title: string, message: string): string {
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none';">
+  <title>${escapeHtml(title)}</title>
+</head>
+<body>
+  <p>${escapeHtml(message)}</p>
+</body>
+</html>`;
+}
+
+function escapeHtml(value: string): string {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+function parseEditorPanelState(state: unknown): string | undefined {
+  if (!state || typeof state !== 'object') {
+    return undefined;
+  }
+  const candidate = state as { version?: unknown; itemId?: unknown };
+  if (candidate.version !== undefined && candidate.version !== 1) {
+    return undefined;
+  }
+  const itemId = candidate.itemId;
+  return typeof itemId === 'string' && itemId.length > 0 ? itemId : undefined;
 }
 
 function isPRWorkItem(item: WorkItem | undefined): item is WorkItem & { itemType: 'pr' } {

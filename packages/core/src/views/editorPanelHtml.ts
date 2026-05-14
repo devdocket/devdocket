@@ -11,6 +11,10 @@ export interface EditorHtmlOptions {
 
 export function getEditorPanelHtml({ cspSource, scriptUri, initialItem }: EditorHtmlOptions): string {
   const nonce = getNonce();
+  const initialState = getSerializedEditorState(initialItem);
+  const initialStateScript = initialState
+    ? `\n    window.__DEVDOCKET_VSCODE_API__ = window.__DEVDOCKET_VSCODE_API__ || acquireVsCodeApi();\n    window.__DEVDOCKET_VSCODE_API__.setState(${serializeForScript(initialState)});`
+    : '';
 
   return /* html */ `<!DOCTYPE html>
 <html lang="en">
@@ -619,7 +623,7 @@ export function getEditorPanelHtml({ cspSource, scriptUri, initialItem }: Editor
 </head>
 <body>
   <div id="root"></div>
-  <script nonce="${nonce}">
+  <script nonce="${nonce}">${initialStateScript}
     window.__DEVDOCKET_EDITOR_BOOTSTRAP__ = ${serializeForScript(initialItem)};
   </script>
   <script nonce="${nonce}" type="module" src="${escapeAttr(scriptUri)}"></script>
@@ -654,7 +658,26 @@ function getNonce(): string {
   return crypto.randomBytes(16).toString('hex');
 }
 
-function serializeForScript(value: EditorItemData): string {
+function getSerializedEditorState(item: EditorItemData): unknown {
+  if (item.isIncoming && item.providerId && item.externalId) {
+    return {
+      version: 1,
+      providerId: item.providerId,
+      externalId: item.externalId,
+    };
+  }
+
+  if (!item.isIncoming) {
+    return {
+      version: 1,
+      itemId: item.id,
+    };
+  }
+
+  return undefined;
+}
+
+function serializeForScript(value: unknown): string {
   return JSON.stringify(value)
     .replace(/</g, '\\u003c')
     .replace(/>/g, '\\u003e')

@@ -19,6 +19,7 @@ import { WatchesStatusBar } from './views/watchesStatusBar';
 import { ProviderHealthStatusBar } from './views/providerHealthStatusBar';
 import { WatchPanelProvider } from './views/watchPanelProvider';
 import { WorkItemEditorPanel, PanelManager } from './views/workItemEditorPanel';
+import { IncomingPreviewPanel } from './views/incomingPreviewPanel';
 import { MainViewProvider } from './views/mainViewProvider';
 import { registerCommands } from './commands/commands';
 import { isSafeUrl } from './utils/url';
@@ -550,6 +551,18 @@ export async function activate(context: vscode.ExtensionContext): Promise<DevDoc
   // before WorkGraph is disposed.
   context.subscriptions.push(
     panelManager,
+    vscode.window.registerWebviewPanelSerializer(
+      WorkItemEditorPanel.viewType,
+      WorkItemEditorPanel.createSerializer(context, wg, pr),
+    ),
+    vscode.window.registerWebviewPanelSerializer(
+      IncomingPreviewPanel.viewType,
+      IncomingPreviewPanel.createSerializer(context, pr, ss, readStateStore, wg),
+    ),
+    vscode.window.registerWebviewPanelSerializer(
+      WatchPanelProvider.viewType,
+      watchPanelProvider.createSerializer(),
+    ),
     ...eventDisposables,
     mainProvider,
     watchPanelProvider,

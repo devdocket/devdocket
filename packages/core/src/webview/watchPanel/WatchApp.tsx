@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'preact/hooks';
 import type { BadgeData, ExtensionMessage, PRWatchData, RunWatchData } from '../shared/types';
-import { postMessage } from '../shared/messaging';
+import { postMessage, setWebviewState } from '../shared/messaging';
 import { BadgePill } from '../shared/components/BadgePill';
 import { useThemeChangeCounter } from '../shared/theme';
 
@@ -11,6 +11,8 @@ export function WatchApp() {
   useThemeChangeCounter();
 
   useEffect(() => {
+    setWebviewState({ version: 1, panel: 'watchPanel' });
+
     const handler = (event: MessageEvent<ExtensionMessage>) => {
       const message = event.data;
       if (message.type === 'updateWatchPanel') {
