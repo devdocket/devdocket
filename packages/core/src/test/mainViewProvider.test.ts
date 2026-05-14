@@ -618,6 +618,58 @@ describe('MainViewProvider', () => {
     });
   });
 
+  it('accepts only incoming items requested by the webview', async () => {
+    vi.useFakeTimers();
+    (vscode.window.showInformationMessage as Mock).mockResolvedValueOnce('Accept All');
+    const provider = createProvider(
+      createMockWorkGraph(),
+      createProviderRegistry({
+        github: [
+          { externalId: 'visible', title: 'Visible incoming' },
+          { externalId: 'hidden', title: 'Hidden incoming' },
+        ],
+        ado: [{ externalId: 'other-visible', title: 'Other visible incoming' }],
+      }),
+      createStateStore(),
+    );
+    const mockView = createMockWebviewView();
+
+    provider.resolveWebviewView(mockView.view, {} as any, {} as any);
+    await vi.advanceTimersByTimeAsync(50);
+    vi.clearAllMocks();
+
+    mockView.simulateMessage({
+      type: 'acceptAll',
+      items: [
+        { providerId: 'github', externalId: 'visible' },
+        { providerId: 'ado', externalId: 'other-visible' },
+      ],
+    });
+
+    await vi.waitFor(() => {
+      expect(vscode.window.showInformationMessage).toHaveBeenCalledWith(
+        'Accept all 2 items into Ready to Start? You can still triage them one by one.',
+        { modal: true },
+        'Accept All',
+      );
+    });
+    await vi.waitFor(() => {
+      expect(vscode.commands.executeCommand).toHaveBeenCalledTimes(2);
+      expect(vscode.commands.executeCommand).toHaveBeenCalledWith(
+        'devdocket.acceptFromInbox',
+        expect.objectContaining({ providerId: 'github', externalId: 'visible' }),
+      );
+      expect(vscode.commands.executeCommand).toHaveBeenCalledWith(
+        'devdocket.acceptFromInbox',
+        expect.objectContaining({ providerId: 'ado', externalId: 'other-visible' }),
+      );
+      expect(vscode.commands.executeCommand).not.toHaveBeenCalledWith(
+        'devdocket.acceptFromInbox',
+        expect.objectContaining({ providerId: 'github', externalId: 'hidden' }),
+      );
+    });
+  });
+
   it('does not accept incoming items when accept-all confirmation is canceled', async () => {
     vi.useFakeTimers();
     (vscode.window.showInformationMessage as Mock).mockResolvedValueOnce(undefined);

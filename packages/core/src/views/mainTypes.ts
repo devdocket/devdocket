@@ -17,7 +17,7 @@ export type WebviewMessage =
   | { type: 'showProviderHealth'; providerId: string }
   | { type: 'acceptItem'; providerId: string; externalId: string }
   | { type: 'acceptToFocus'; providerId: string; externalId: string }
-  | { type: 'acceptAll' }
+  | { type: 'acceptAll'; items?: Array<{ providerId: string; externalId: string }> }
   | { type: 'dismissItem'; providerId: string; externalId: string }
   | { type: 'transitionState'; itemId: string; targetState: string }
   | { type: 'reorderItems'; itemIds: string[] }

@@ -500,7 +500,7 @@ export class MainViewProvider implements vscode.WebviewViewProvider {
         await this.handleAcceptToFocus(message.providerId, message.externalId);
         break;
       case 'acceptAll':
-        await this.handleAcceptAll();
+        await this.handleAcceptAll(message.items);
         break;
       case 'dismissItem':
         await this.handleDismissItem(message.providerId, message.externalId);
@@ -583,7 +583,7 @@ export class MainViewProvider implements vscode.WebviewViewProvider {
     }
   }
 
-  private async handleAcceptAll(): Promise<void> {
+  private async handleAcceptAll(requestedItems?: ReadonlyArray<{ providerId: string; externalId: string }>): Promise<void> {
     const allProviderItems = this.providerRegistry.getAllProviderItems();
     const relatedItemsIndex = buildRelatedItemsIndex(this.providerRegistry, this.workGraph, allProviderItems);
     const incomingTier = this.buildTierData(allProviderItems, relatedItemsIndex).find(tier => tier.id === 'incoming');
@@ -591,8 +591,13 @@ export class MainViewProvider implements vscode.WebviewViewProvider {
       return;
     }
 
+    const requestedKeys = requestedItems
+      ? new Set(requestedItems.map(item => getProviderItemKey(item.providerId, item.externalId)))
+      : undefined;
     const itemsToAccept = incomingTier.items.filter((item): item is ItemCardData & { providerId: string; externalId: string } => (
-      Boolean(item.providerId) && Boolean(item.externalId)
+      Boolean(item.providerId)
+      && Boolean(item.externalId)
+      && (!requestedKeys || requestedKeys.has(getProviderItemKey(item.providerId, item.externalId)))
     ));
     if (itemsToAccept.length === 0) {
       return;
