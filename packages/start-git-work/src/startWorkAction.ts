@@ -898,7 +898,7 @@ export class StartWorkAction implements DevDocketAction {
       return `"${repoPath}" is not an absolute path. Choose a repository folder.`;
     }
     if (!fs.existsSync(path.join(repoPath, '.git'))) {
-      return `"${repoPath}" does not contain a .git directory. Choose a repository folder.`;
+      return `"${repoPath}" does not contain git metadata. Choose a repository folder.`;
     }
     return undefined;
   }
