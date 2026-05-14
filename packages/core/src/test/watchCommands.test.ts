@@ -93,6 +93,27 @@ describe('registerWatchCommands', () => {
     expect(vscode.window.showInformationMessage).toHaveBeenCalledWith('Now watching PR: PR #42');
   });
 
+  it('adds PR watches through the legacy watchPR alias using the unified URL classifier', async () => {
+    const input = 'https://github.com/owner/repo/pull/42';
+    const prIdentifier = {
+      providerId: 'github-pr',
+      prId: '42',
+      displayName: 'PR #42',
+      url: input,
+      repo: 'owner/repo',
+    };
+    const prWatcher = {
+      id: 'github-pr',
+      label: 'GitHub Pull Requests',
+      parsePRUrl: vi.fn(() => prIdentifier),
+    };
+    const { watcherService } = registerCommandsWith({ input, prWatcher });
+
+    await invoke('devdocket.watchPR');
+
+    expect(watcherService.startPRWatch).toHaveBeenCalledWith(prIdentifier, { forceRecreate: true });
+  });
+
   it('adds run watches through the legacy watchRun alias using the unified URL classifier', async () => {
     const input = 'https://github.com/owner/repo/actions/runs/12345';
     const runIdentifier = {
