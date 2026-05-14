@@ -1,6 +1,7 @@
 import * as crypto from 'crypto';
 import { marked } from 'marked';
 import sanitizeHtml from 'sanitize-html';
+import { getSerializedEditorState } from '../webview/shared/editorState';
 import type { EditorItemData } from './mainTypes';
 
 export interface EditorHtmlOptions {
@@ -656,25 +657,6 @@ export function renderMarkdown(markdown: string): string {
 
 function getNonce(): string {
   return crypto.randomBytes(16).toString('hex');
-}
-
-function getSerializedEditorState(item: EditorItemData): unknown {
-  if (item.isIncoming && item.providerId && item.externalId) {
-    return {
-      version: 1,
-      providerId: item.providerId,
-      externalId: item.externalId,
-    };
-  }
-
-  if (!item.isIncoming) {
-    return {
-      version: 1,
-      itemId: item.id,
-    };
-  }
-
-  return undefined;
 }
 
 function serializeForScript(value: unknown): string {

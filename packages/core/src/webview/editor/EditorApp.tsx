@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'preact/hooks';
+import { getSerializedEditorState } from '../shared/editorState';
 import { postMessage, setWebviewState } from '../shared/messaging';
 import type { EditorItemData, ExtensionMessage } from '../shared/types';
 import { useThemeChangeCounter } from '../shared/theme';
@@ -239,25 +240,6 @@ export function EditorApp() {
     itemRef.current = updatedItem;
     titleRef.current = resolvedTitle;
   }
-}
-
-function getSerializedEditorState(item: EditorItemData): unknown {
-  if (item.isIncoming && item.providerId && item.externalId) {
-    return {
-      version: 1,
-      providerId: item.providerId,
-      externalId: item.externalId,
-    };
-  }
-
-  if (!item.isIncoming) {
-    return {
-      version: 1,
-      itemId: item.id,
-    };
-  }
-
-  return undefined;
 }
 
 function shouldPreserveEditableField(item: EditorItemData | null, draftValue: string, persistedValue?: string): boolean {
