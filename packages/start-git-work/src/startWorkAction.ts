@@ -74,9 +74,9 @@ type ResolvedGitWork = GitWorkInfo & { cloneUrl: string; ref: string };
 type WorkMode = 'checkout' | 'worktree';
 
 type RepoPathPick = vscode.QuickPickItem & (
-  | { kind: 'repo'; repoPath: string }
-  | { kind: 'paste' }
-  | { kind: 'browse' }
+  | { pickKind: 'repo'; repoPath: string }
+  | { pickKind: 'paste' }
+  | { pickKind: 'browse' }
 );
 
 interface PrBranchInfo {
@@ -840,10 +840,10 @@ export class StartWorkAction implements DevDocketAction {
   private createRepoPathPicks(cachedPath: string | undefined): RepoPathPick[] {
     const picks: RepoPathPick[] = [];
     const addRepoPath = (repoPath: string, description: string) => {
-      if (picks.some(pick => pick.kind === 'repo' && this.pathsEqual(pick.repoPath, repoPath))) {
+      if (picks.some(pick => pick.pickKind === 'repo' && this.pathsEqual(pick.repoPath, repoPath))) {
         return;
       }
-      picks.push({ label: repoPath, description, kind: 'repo', repoPath });
+      picks.push({ label: repoPath, description, pickKind: 'repo', repoPath });
     };
 
     if (cachedPath) {
@@ -857,8 +857,8 @@ export class StartWorkAction implements DevDocketAction {
       }
     }
 
-    picks.push({ label: 'Paste path…', description: 'Enter a repository path manually', kind: 'paste' });
-    picks.push({ label: 'Browse…', description: 'Choose a repository folder', kind: 'browse' });
+    picks.push({ label: 'Paste path…', description: 'Enter a repository path manually', pickKind: 'paste' });
+    picks.push({ label: 'Browse…', description: 'Choose a repository folder', pickKind: 'browse' });
     return picks;
   }
 
@@ -867,11 +867,11 @@ export class StartWorkAction implements DevDocketAction {
     cachedPath: string | undefined,
     repoKey: string,
   ): Promise<string | undefined> {
-    if (selected.kind === 'repo') {
+    if (selected.pickKind === 'repo') {
       return selected.repoPath.trim();
     }
 
-    if (selected.kind === 'paste') {
+    if (selected.pickKind === 'paste') {
       const pastedPath = await vscode.window.showInputBox({
         prompt: `Enter the local path to the git repository for ${repoKey}`,
         value: cachedPath ?? '',

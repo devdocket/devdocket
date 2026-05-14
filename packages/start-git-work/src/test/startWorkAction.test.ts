@@ -79,8 +79,8 @@ function mockInputBox(repoPath: string | undefined, baseBranch = 'origin/dev') {
   });
 }
 
-function isRepoPathPickItems(items: unknown): items is Array<{ kind?: string; repoPath?: string }> {
-  return Array.isArray(items) && items.some(item => ['repo', 'paste', 'browse'].includes((item as { kind?: string }).kind ?? ''));
+function isRepoPathPickItems(items: unknown): items is Array<{ pickKind?: string; repoPath?: string }> {
+  return Array.isArray(items) && items.some(item => ['repo', 'paste', 'browse'].includes((item as { pickKind?: string }).pickKind ?? ''));
 }
 
 function isWorkModePickItems(items: unknown): boolean {
@@ -90,8 +90,8 @@ function isWorkModePickItems(items: unknown): boolean {
 function mockQuickPicks(repoPath = '/mock/workspace', workMode: 'checkout' | 'worktree' = 'worktree') {
   vi.mocked(window.showQuickPick).mockImplementation(async (items: any) => {
     if (isRepoPathPickItems(items)) {
-      return items.find(item => item.kind === 'repo' && item.repoPath === repoPath)
-        ?? items.find(item => item.kind === 'repo')
+      return items.find(item => item.pickKind === 'repo' && item.repoPath === repoPath)
+        ?? items.find(item => item.pickKind === 'repo')
         ?? undefined;
     }
     if (isWorkModePickItems(items)) {
@@ -220,7 +220,7 @@ describe('StartWorkAction', () => {
     it('uses the selected folder from Browse for the repository path', async () => {
       vi.mocked(window.showQuickPick).mockImplementation(async (items: any) => {
         if (isRepoPathPickItems(items)) {
-          return items.find(item => item.kind === 'browse');
+          return items.find(item => item.pickKind === 'browse');
         }
         if (isWorkModePickItems(items)) {
           return { label: 'Create worktree', value: 'worktree' } as any;
@@ -246,7 +246,7 @@ describe('StartWorkAction', () => {
     it('keeps paste path as a legacy fallback', async () => {
       vi.mocked(window.showQuickPick).mockImplementation(async (items: any) => {
         if (isRepoPathPickItems(items)) {
-          return items.find(item => item.kind === 'paste');
+          return items.find(item => item.pickKind === 'paste');
         }
         if (isWorkModePickItems(items)) {
           return { label: 'Create worktree', value: 'worktree' } as any;
@@ -279,7 +279,7 @@ describe('StartWorkAction', () => {
       vi.mocked(window.showQuickPick).mockImplementation(async (items: any) => {
         if (isRepoPathPickItems(items)) {
           const repoPick = vi.mocked(window.showQuickPick).mock.calls.length === 1 ? '/invalid/repo' : '/valid/repo';
-          return items.find(item => item.kind === 'repo' && item.repoPath === repoPick);
+          return items.find(item => item.pickKind === 'repo' && item.repoPath === repoPick);
         }
         if (isWorkModePickItems(items)) {
           return { label: 'Create worktree', value: 'worktree' } as any;
