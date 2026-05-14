@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { WatcherService, WatchedRun } from '../services/watcherService';
 import { WatcherRegistry } from '../services/watcherRegistry';
@@ -50,6 +52,25 @@ function createMockWatchStore(): WatchStore {
 }
 
 describe('WatcherService', () => {
+  it('keeps host-specific run URL routing out of watcher services', () => {
+    const serviceFiles = [
+      '../services/watcherService.ts',
+      '../services/prWatchPool.ts',
+      '../services/runWatchPool.ts',
+    ];
+    const slash = String.fromCharCode(47);
+    const backslash = String.fromCharCode(92);
+
+    for (const serviceFile of serviceFiles) {
+      const servicePath = fileURLToPath(new URL(serviceFile, import.meta.url));
+      const serviceContents = readFileSync(servicePath, 'utf8');
+      expect(serviceContents).not.toContain(['github', 'com'].join('.'));
+      expect(serviceContents).not.toContain('isGitHubCheckRunUrl');
+      expect(serviceContents).not.toContain(`${slash}runs${slash}`);
+      expect(serviceContents).not.toContain(`${backslash}${slash}runs${backslash}${slash}`);
+    }
+  });
+
   let service: WatcherService;
   let registry: WatcherRegistry;
   let prRegistry: PRWatcherRegistry;
@@ -717,6 +738,33 @@ describe('WatcherService', () => {
       expect(service.isFailureAcknowledged(rewatchedRun)).toBe(false);
     });
 
+    it('adds child runs when the provider-owned watcher is registered without warn logs', async () => {
+      const runWatcher = createMockWatcher('security-scanner');
+      registry.register(runWatcher);
+
+      const prWatcher = createMockPRWatcher('test-pr', async () => ({
+        prState: 'open',
+        runs: [{
+          providerId: 'security-scanner',
+          runId: '12345',
+          displayName: 'Security Scan',
+          url: 'https://scanner.example.com/results/12345',
+          repo: 'owner/repo',
+        }],
+      }));
+      prRegistry.register(prWatcher);
+
+      const result = await service.startPRWatch(createPRIdentifier());
+      const activeWatches = service.getActiveWatches();
+
+      expect(result.childRunKeys).toHaveLength(1);
+      expect(activeWatches).toHaveLength(1);
+      expect(activeWatches[0].identifier.providerId).toBe('security-scanner');
+      expect(activeWatches[0].identifier.runId).toBe('12345');
+      expect(activeWatches[0].identifier.displayName).toBe('Security Scan');
+      expect(logger.warn).not.toHaveBeenCalledWith(expect.stringContaining('Failed to add child run'));
+    });
+
     it('dismisses a PR watch when its last visible child run is dismissed', async () => {
       const runWatcher = createMockWatcher('github-actions');
       registry.register(runWatcher);
@@ -1017,34 +1065,56 @@ describe('WatcherService', () => {
       );
     });
 
-    it('resolves run identifiers via URL matching when providerId is unknown', async () => {
-      // Register a run watcher that recognizes URLs
-      const runWatcher = createMockWatcher('ado-pipelines');
-      (runWatcher.canWatch as ReturnType<typeof vi.fn>).mockImplementation(
-        (url: string) => {
-          try {
-            const u = new URL(url);
-            return u.hostname === 'dev.azure.com' && u.pathname.includes('_build/results');
-          } catch { return false; }
-        },
-      );
-      (runWatcher.parseRunUrl as ReturnType<typeof vi.fn>).mockReturnValue({
-        providerId: 'ado-pipelines',
-        runId: '555',
-        displayName: 'Build 555',
-        url: 'https://dev.azure.com/org/project/_build/results?buildId=555',
-        repo: 'org/project',
-      });
+    it('trusts non-empty child run providerIds without URL matching', async () => {
+      const runWatcher = createMockWatcher('url-matched-provider');
+      (runWatcher.canWatch as ReturnType<typeof vi.fn>).mockReturnValue(true);
       registry.register(runWatcher);
+      const findWatcherForUrlSpy = vi.spyOn(registry, 'findWatcherForUrl');
 
-      // PR watcher returns a run with an unknown providerId but a recognizable URL
       const prWatcher = createMockPRWatcher('test-pr', async () => ({
         prState: 'open',
         runs: [{
-          providerId: 'azure-pipelines',
+          providerId: 'authoritative-provider',
+          runId: '99',
+          displayName: 'Provider-owned Check',
+          url: 'https://ci.example.com/checks/99',
+          repo: 'owner/repo',
+        }],
+      }));
+      prRegistry.register(prWatcher);
+
+      const result = await service.startPRWatch(createPRIdentifier());
+
+      expect(result.childRunKeys).toHaveLength(0);
+      expect(service.getActiveWatches()).toHaveLength(0);
+      expect(findWatcherForUrlSpy).not.toHaveBeenCalled();
+      expect(runWatcher.canWatch).not.toHaveBeenCalled();
+      expect(runWatcher.parseRunUrl).not.toHaveBeenCalled();
+      expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining('No watcher registered for provider: authoritative-provider'));
+    });
+
+    it('resolves run identifiers via URL matching when providerId is empty', async () => {
+      const runWatcher = createMockWatcher('url-matched-provider');
+      (runWatcher.canWatch as ReturnType<typeof vi.fn>).mockImplementation(
+        (url: string) => url.startsWith('https://ci.example.com/builds/'),
+      );
+      (runWatcher.parseRunUrl as ReturnType<typeof vi.fn>).mockReturnValue({
+        providerId: 'url-matched-provider',
+        runId: '555',
+        displayName: 'Build 555',
+        url: 'https://ci.example.com/builds/555',
+        repo: 'org/project',
+      });
+      registry.register(runWatcher);
+      const findWatcherForUrlSpy = vi.spyOn(registry, 'findWatcherForUrl');
+
+      const prWatcher = createMockPRWatcher('test-pr', async () => ({
+        prState: 'open',
+        runs: [{
+          providerId: '',
           runId: '10',
-          displayName: 'ADO Pipeline',
-          url: 'https://dev.azure.com/org/project/_build/results?buildId=555',
+          displayName: 'Raw URL Build',
+          url: 'https://ci.example.com/builds/555',
           repo: 'owner/repo',
         }],
       }));
@@ -1054,13 +1124,13 @@ describe('WatcherService', () => {
 
       expect(result.childRunKeys).toHaveLength(1);
       expect(service.getActiveWatches()).toHaveLength(1);
-      // The resolved identifier should use the watcher's providerId
-      expect(service.getActiveWatches()[0].identifier.providerId).toBe('ado-pipelines');
+      expect(findWatcherForUrlSpy).toHaveBeenCalledWith('https://ci.example.com/builds/555');
+      expect(runWatcher.parseRunUrl).toHaveBeenCalledWith('https://ci.example.com/builds/555');
+      expect(service.getActiveWatches()[0].identifier.providerId).toBe('url-matched-provider');
       expect(service.getActiveWatches()[0].identifier.runId).toBe('555');
     });
 
-    it('skips run identifiers when no watcher matches providerId or URL', async () => {
-      // No run watchers registered — unresolvable run
+    it('skips run identifiers when no watcher matches providerId', async () => {
       const prWatcher = createMockPRWatcher('test-pr', async () => ({
         prState: 'open',
         runs: [{

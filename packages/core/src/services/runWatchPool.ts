@@ -309,7 +309,7 @@ export class RunWatchPool implements vscode.Disposable {
   }
 
   resolveRunIdentifier(identifier: RunIdentifier): RunIdentifier {
-    if (this.watcherRegistry.get(identifier.providerId)) {
+    if (identifier.providerId) {
       return identifier;
     }
 
