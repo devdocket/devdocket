@@ -75,8 +75,6 @@
             },
             "completionEvents": [
               "onCommand:devdocket.watchUrl",
-              "onCommand:devdocket.watchRun",
-              "onCommand:devdocket.watchPR",
               "onCommand:devdocket.watchPRFromItem"
             ]
           }
@@ -338,18 +336,6 @@
         "icon": "$(add)"
       },
       {
-        "command": "devdocket.watchRun",
-        "title": "DevDocket: Watch Pipeline Run",
-        "category": "DevDocket",
-        "icon": "$(add)"
-      },
-      {
-        "command": "devdocket.watchPR",
-        "title": "DevDocket: Watch Pull Request",
-        "category": "DevDocket",
-        "icon": "$(git-pull-request)"
-      },
-      {
         "command": "devdocket.watchPRFromItem",
         "title": "Watch CI",
         "category": "DevDocket",
@@ -421,14 +407,6 @@
       "commandPalette": [
         {
           "command": "devdocket.addActivity",
-          "when": "false"
-        },
-        {
-          "command": "devdocket.watchRun",
-          "when": "false"
-        },
-        {
-          "command": "devdocket.watchPR",
           "when": "false"
         },
         {

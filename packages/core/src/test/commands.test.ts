@@ -216,8 +216,6 @@ describe('registerCommands', () => {
       'devdocket.clearHistory',
       'devdocket.addActivity',
       'devdocket.watchUrl',
-      'devdocket.watchRun',
-      'devdocket.watchPR',
       'devdocket.showWatchesQuickPick',
     ];
     for (const cmd of expected) {

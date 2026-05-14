@@ -56,12 +56,10 @@ describe('registerWatchCommands', () => {
     vi.clearAllMocks();
   });
 
-  it('registers Watch URL plus typed command aliases', () => {
+  it('registers Watch URL', () => {
     registerCommandsWith();
 
     expect(commandHandlers.has('devdocket.watchUrl')).toBe(true);
-    expect(commandHandlers.has('devdocket.watchRun')).toBe(true);
-    expect(commandHandlers.has('devdocket.watchPR')).toBe(true);
   });
 
   it('adds PR watches through the unified Watch URL input with live informational validation', async () => {
@@ -91,49 +89,6 @@ describe('registerWatchCommands', () => {
     });
     expect(watcherService.startPRWatch).toHaveBeenCalledWith(prIdentifier, { forceRecreate: true });
     expect(vscode.window.showInformationMessage).toHaveBeenCalledWith('Now watching PR: PR #42');
-  });
-
-  it('adds PR watches through the legacy watchPR alias using the unified URL classifier', async () => {
-    const input = 'https://github.com/owner/repo/pull/42';
-    const prIdentifier = {
-      providerId: 'github-pr',
-      prId: '42',
-      displayName: 'PR #42',
-      url: input,
-      repo: 'owner/repo',
-    };
-    const prWatcher = {
-      id: 'github-pr',
-      label: 'GitHub Pull Requests',
-      parsePRUrl: vi.fn(() => prIdentifier),
-    };
-    const { watcherService } = registerCommandsWith({ input, prWatcher });
-
-    await invoke('devdocket.watchPR');
-
-    expect(watcherService.startPRWatch).toHaveBeenCalledWith(prIdentifier, { forceRecreate: true });
-  });
-
-  it('adds run watches through the legacy watchRun alias using the unified URL classifier', async () => {
-    const input = 'https://github.com/owner/repo/actions/runs/12345';
-    const runIdentifier = {
-      providerId: 'github-actions',
-      runId: '12345',
-      displayName: 'CI Build',
-      url: input,
-      repo: 'owner/repo',
-    };
-    const runWatcher = {
-      id: 'github-actions',
-      label: 'GitHub Actions',
-      parseRunUrl: vi.fn(() => runIdentifier),
-    };
-    const { watcherService } = registerCommandsWith({ input, runWatcher });
-
-    await invoke('devdocket.watchRun');
-
-    expect(watcherService.startWatch).toHaveBeenCalledWith(runIdentifier);
-    expect(vscode.window.showInformationMessage).toHaveBeenCalledWith('Now watching run: CI Build');
   });
 
   it('shows run-specific feedback when a run is already watched', async () => {

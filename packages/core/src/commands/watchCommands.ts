@@ -240,11 +240,6 @@ export function registerWatchCommands(
   context.subscriptions.push(
     vscode.commands.registerCommand('devdocket.watchUrl',
       wrapCommand('Failed to watch URL', () => handleWatchUrl(watcherRegistry, prWatcherRegistry, watcherService))),
-    // Keep the typed commands as back-compat aliases while exposing one unified command in the palette.
-    vscode.commands.registerCommand('devdocket.watchRun',
-      wrapCommand('Failed to watch URL', () => handleWatchUrl(watcherRegistry, prWatcherRegistry, watcherService))),
-    vscode.commands.registerCommand('devdocket.watchPR',
-      wrapCommand('Failed to watch URL', () => handleWatchUrl(watcherRegistry, prWatcherRegistry, watcherService))),
     vscode.commands.registerCommand('devdocket.watchPRFromItem',
       wrapCommand('Failed to watch CI from item', (arg: unknown) => handleWatchPRFromItem(watcherRegistry, prWatcherRegistry, watcherService, arg))),
     vscode.commands.registerCommand('devdocket.dismissWatch',
