@@ -478,6 +478,7 @@ describe('WatchPanelProvider', () => {
     provider.open();
 
     await mockPanel.simulateMessage({ type: 'dismissCompletedWatches' });
+    await mockPanel.simulateMessage({ type: 'addWatchUrl' });
     await mockPanel.simulateMessage({ type: 'openWatchUrl', url: runIdentifier.url });
     await mockPanel.simulateMessage({ type: 'openWatchUrl', url: 'javascript:alert(1)' });
     await mockPanel.simulateMessage({ type: 'openItem', itemId: 'work-42' });
@@ -493,6 +494,7 @@ describe('WatchPanelProvider', () => {
     // dismissCompletedWatches now routes through the shared command so the
     // confirmation prompt and logging stay in one place.
     expect(vscode.commands.executeCommand).toHaveBeenCalledWith('devdocket.dismissAllCompletedWatches');
+    expect(vscode.commands.executeCommand).toHaveBeenCalledWith('devdocket.watchUrl');
     expect(vscode.commands.executeCommand).toHaveBeenCalledWith('devdocket.editItem', { id: 'work-42' });
     expect(vscode.commands.executeCommand).toHaveBeenCalledWith('devdocket.previewIncomingItem', {
       providerId: 'github-pr-reviews',
