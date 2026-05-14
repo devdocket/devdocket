@@ -132,7 +132,6 @@ export class WorkItemEditorPanel {
       providerLabel,
     );
     manager.openPanels.set(item.id, editor);
-    context.subscriptions.push({ dispose: () => editor.dispose() });
   }
 
   private constructor(
