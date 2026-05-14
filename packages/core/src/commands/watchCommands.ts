@@ -13,7 +13,7 @@ async function handleWatchUrl(
   watcherService: WatcherService,
 ): Promise<void> {
   const url = await vscode.window.showInputBox({
-    prompt: 'Paste a GitHub or Azure DevOps pull request or pipeline run URL',
+    prompt: 'Paste a pull request or pipeline run URL supported by a registered watcher',
     placeHolder: WATCH_URL_PLACEHOLDER,
     validateInput: (value) => formatWatchUrlValidation(classifyWatchUrl(value, watcherRegistry, prWatcherRegistry)),
   });
