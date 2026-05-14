@@ -175,10 +175,10 @@ describe('registerWatchCommands', () => {
     const inputOptions = (vscode.window.showInputBox as Mock).mock.calls[0][0];
     expect(inputOptions.validateInput('')).toBeUndefined();
     expect(inputOptions.validateInput('https://example.com/nope')).toBe(
-      'Unsupported URL. Paste a GitHub PR, GitHub Actions run, Azure DevOps PR, or Azure DevOps pipeline run URL.',
+      'Unsupported URL. Paste a supported pull request or pipeline run URL (for example, a GitHub PR, GitHub Actions run, Azure DevOps PR, or Azure DevOps pipeline run URL).',
     );
     expect(vscode.window.showErrorMessage).toHaveBeenCalledWith(
-      'DevDocket: Unsupported URL. Paste a GitHub PR, GitHub Actions run, Azure DevOps PR, or Azure DevOps pipeline run URL.',
+      'DevDocket: Unsupported URL. Paste a supported pull request or pipeline run URL (for example, a GitHub PR, GitHub Actions run, Azure DevOps PR, or Azure DevOps pipeline run URL).',
     );
   });
 });

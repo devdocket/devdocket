@@ -67,7 +67,7 @@ export function classifyWatchUrl(
   return {
     ok: false,
     reason: 'unsupported',
-    message: 'Unsupported URL. Paste a GitHub PR, GitHub Actions run, Azure DevOps PR, or Azure DevOps pipeline run URL.',
+    message: 'Unsupported URL. Paste a supported pull request or pipeline run URL (for example, a GitHub PR, GitHub Actions run, Azure DevOps PR, or Azure DevOps pipeline run URL).',
   };
 }
 
