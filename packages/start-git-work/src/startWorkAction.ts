@@ -73,6 +73,12 @@ type ResolvedGitWork = GitWorkInfo & { cloneUrl: string; ref: string };
 
 type WorkMode = 'checkout' | 'worktree';
 
+type RepoPathPick = vscode.QuickPickItem & (
+  | { kind: 'repo'; repoPath: string }
+  | { kind: 'paste' }
+  | { kind: 'browse' }
+);
+
 interface PrBranchInfo {
   branchName: string;
   /** Remote tracking ref when branch is on a non-origin remote (e.g. "devdocket-fork-contributor/fix-bug"). */
@@ -794,37 +800,107 @@ export class StartWorkAction implements DevDocketAction {
   }
 
   /**
-   * Prompts the user for a local repo path, pre-filling the last-used path for this repo.
+   * Prompts the user for a local repo path, offering cached and open workspace repositories first.
    * Caches the selection on success. Does not cache on cancel, empty input, or invalid path.
    */
   private async promptForRepoPath(repoKey: string): Promise<string | undefined> {
     const cacheKey = `repoPath:${repoKey}`;
-    const cachedPath = this.globalState.get<string>(cacheKey);
+    const cachedPath = this.globalState.get<string>(cacheKey)?.trim();
+    let validationMessage: string | undefined;
 
-    const selectedPath = await vscode.window.showInputBox({
-      prompt: `Enter the local path to the git repository for ${repoKey}`,
-      value: cachedPath ?? '',
-      ignoreFocusOut: true,
+    while (true) {
+      const selected = await vscode.window.showQuickPick(
+        this.createRepoPathPicks(cachedPath),
+        {
+          placeHolder: validationMessage ?? `Select the local repository for ${repoKey}`,
+          ignoreFocusOut: true,
+        },
+      );
+
+      if (!selected) {
+        return undefined;
+      }
+
+      const selectedPath = await this.resolveRepoPathPick(selected, cachedPath, repoKey);
+      if (selectedPath === undefined) {
+        return undefined;
+      }
+
+      const validationError = this.validateRepoPath(selectedPath);
+      if (validationError) {
+        validationMessage = validationError;
+        continue;
+      }
+
+      await this.globalState.update(cacheKey, selectedPath);
+      return selectedPath;
+    }
+  }
+
+  private createRepoPathPicks(cachedPath: string | undefined): RepoPathPick[] {
+    const picks: RepoPathPick[] = [];
+    const addRepoPath = (repoPath: string, description: string) => {
+      if (picks.some(pick => pick.kind === 'repo' && path.normalize(pick.repoPath) === path.normalize(repoPath))) {
+        return;
+      }
+      picks.push({ label: repoPath, description, kind: 'repo', repoPath });
+    };
+
+    if (cachedPath) {
+      addRepoPath(cachedPath, 'Last used');
+    }
+
+    for (const folder of vscode.workspace.workspaceFolders ?? []) {
+      const folderPath = folder.uri.fsPath;
+      if (fs.existsSync(path.join(folderPath, '.git'))) {
+        addRepoPath(folderPath, 'Open workspace folder');
+      }
+    }
+
+    picks.push({ label: 'Paste path…', description: 'Enter a repository path manually', kind: 'paste' });
+    picks.push({ label: 'Browse…', description: 'Choose a repository folder', kind: 'browse' });
+    return picks;
+  }
+
+  private async resolveRepoPathPick(
+    selected: RepoPathPick,
+    cachedPath: string | undefined,
+    repoKey: string,
+  ): Promise<string | undefined> {
+    if (selected.kind === 'repo') {
+      return selected.repoPath.trim();
+    }
+
+    if (selected.kind === 'paste') {
+      const pastedPath = await vscode.window.showInputBox({
+        prompt: `Enter the local path to the git repository for ${repoKey}`,
+        value: cachedPath ?? '',
+        ignoreFocusOut: true,
+      });
+      return pastedPath?.trim();
+    }
+
+    const selectedFolders = await vscode.window.showOpenDialog({
+      canSelectFolders: true,
+      canSelectFiles: false,
+      canSelectMany: false,
+      openLabel: 'Select Repository Folder',
+      title: `Select local repository for ${repoKey}`,
     });
+    return selectedFolders?.[0]?.fsPath.trim();
+  }
 
-    if (selectedPath === undefined) {
-      return undefined;
+  private validateRepoPath(repoPath: string): string | undefined {
+    if (!repoPath) {
+      return 'Choose a repository folder or paste an absolute path.';
     }
-
-    const trimmedPath = selectedPath.trim();
-    if (!trimmedPath) {
-      void vscode.window.showErrorMessage('DevDocket: No repository path provided.');
-      return undefined;
+    if (!path.isAbsolute(repoPath)) {
+      return `"${repoPath}" is not an absolute path. Choose a repository folder.`;
     }
-
-    const gitPath = path.join(trimmedPath, '.git');
-    if (!fs.existsSync(gitPath)) {
-      void vscode.window.showErrorMessage(`DevDocket: "${trimmedPath}" is not a git repository.`);
-      return undefined;
+    if (!fs.existsSync(path.join(repoPath, '.git'))) {
+      return `"${repoPath}" does not contain a .git directory. Choose a repository folder.`;
     }
-
-    await this.globalState.update(cacheKey, trimmedPath);
-    return trimmedPath;
+    return undefined;
   }
 
   /**
