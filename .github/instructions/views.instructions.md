@@ -44,9 +44,9 @@ Badges shown next to item titles fall into four categories:
 
 Core never infers state badges from `ProviderItem.state` or `reason` strings — providers must declare them explicitly. See `.github/instructions/providers.instructions.md` for the badge conventions.
 
-## PanelManager Lifecycle
+## Panel Lifecycle
 
-`WorkItemEditorPanel` and `IncomingPreviewPanel` use a `PanelManager` instantiated during `activate()` and disposed with the extension context. The static `setPanelManager()` pattern preserves the static API facade while scoping panel cache ownership to the extension lifecycle.
+`WorkItemEditorPanel` receives a `PanelManager` plus its action/state/watch dependencies through its `open(...)` factory. `IncomingPreviewPanel` receives an `IncomingPreviewPanelManager` through its `open(...)` factory. Instantiate both managers during `activate()` and dispose them with the extension context so panel caches are scoped to one activation; do not add mutable static dependency singletons to view modules.
 
 ## Webview Security
 
