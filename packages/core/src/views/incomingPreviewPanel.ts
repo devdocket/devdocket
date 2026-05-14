@@ -40,6 +40,7 @@ export class IncomingPreviewPanel {
   private htmlInitialized = false;
   private disposed = false;
   private providerRefreshObserved = false;
+  private lastPendingRestoreSignature: string | undefined;
 
   static createSerializer(
     context: vscode.ExtensionContext,
@@ -311,6 +312,7 @@ export class IncomingPreviewPanel {
       return;
     }
 
+    this.lastPendingRestoreSignature = undefined;
     const relatedItemsIndex = buildRelatedItemsIndex(this.providerRegistry, this.workGraph);
     const editorItem = this.buildEditorItemData(providerItem, relatedItemsIndex);
     this.panel.title = `Preview: ${providerItem.title}`;
@@ -332,15 +334,22 @@ export class IncomingPreviewPanel {
   }
 
   private showPendingRestore(): void {
-    this.htmlInitialized = false;
     const providerMissing = !this.providerRegistry.getProvider(this.providerId) && !this.providerRegistry.loading;
     const unavailable = this.providerRefreshObserved || providerMissing;
-    this.panel.title = unavailable ? 'Preview unavailable' : 'Preview: Loading…';
+    const title = unavailable ? 'Preview unavailable' : 'Preview: Loading…';
     const message = this.providerRefreshObserved
       ? 'This incoming item was not found after the provider refreshed. It may have been completed, dismissed, or removed.'
       : providerMissing
         ? 'The provider for this incoming item is not registered. If the provider extension is still loading, this preview will restore after its items refresh.'
         : 'Loading incoming item from provider…';
+    const signature = `${title}\n${message}`;
+    if (this.lastPendingRestoreSignature === signature) {
+      return;
+    }
+
+    this.htmlInitialized = false;
+    this.lastPendingRestoreSignature = signature;
+    this.panel.title = title;
     this.panel.webview.html = getStatePreservingHtml(
       message,
       { version: 1, providerId: this.providerId, externalId: this.externalId },

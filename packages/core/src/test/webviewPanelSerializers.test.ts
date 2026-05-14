@@ -212,6 +212,26 @@ describe('webview panel serializers', () => {
     expect(mockPanel.panel.webview.html).toContain('Eventually restored item');
   });
 
+  it('does not rewrite pending incoming preview HTML when the restore message is unchanged', async () => {
+    const context = createContext();
+    const providerRegistry = createMockProviderRegistry({ github: [] });
+    const mockPanel = createMockWebviewPanel();
+
+    const serializer = IncomingPreviewPanel.createSerializer(
+      context,
+      providerRegistry as any,
+      createMockInboxStateStore() as any,
+      createMockReadStateStore() as any,
+      createMockWorkGraph() as any,
+    );
+    await serializer.deserializeWebviewPanel(mockPanel.panel as any, { version: 1, providerId: 'github', externalId: 'owner/repo#4' });
+    const initialHtml = mockPanel.panel.webview.html;
+
+    providerRegistry.fireProviderItemsChanged();
+
+    expect(mockPanel.panel.webview.html).toBe(initialHtml);
+  });
+
   it('shows an unavailable message when a restored incoming preview is still missing after refresh', async () => {
     const context = createContext();
     const providerRegistry = createMockProviderRegistry({ github: [] });
