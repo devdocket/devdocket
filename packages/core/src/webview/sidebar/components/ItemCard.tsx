@@ -204,7 +204,7 @@ export function ItemCard({
             <button
               key={action.id}
               type="button"
-              class="item-action-btn"
+              class={getItemActionClassName(action.id)}
               title={action.title}
               aria-label={action.title}
               tabIndex={actionsOpen ? 0 : -1}
@@ -246,6 +246,10 @@ function buildItemAriaLabel(item: ItemCardData): string {
   if (item.hasRelatedItems) parts.push('has related items');
   if (item.isSelected) parts.push('selected');
   return parts.filter((value): value is string => Boolean(value)).join(', ');
+}
+
+export function getItemActionClassName(actionId: string): string {
+  return `item-action-btn ${actionId === 'dismiss' ? 'item-action-btn--dismiss' : ''}`.trim();
 }
 
 function getItemActions(

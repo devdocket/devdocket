@@ -7,6 +7,7 @@ import { WorkGraph } from '../services/workGraph';
 import { InboxStateStore } from '../storage/inboxStateStore';
 import { ReadStateStore } from '../storage/readStateStore';
 import { isSafeUrl } from '../utils/url';
+import { showDismissUndoMessage } from './dismissUndo';
 import { getProviderItemKey, parseProviderItemKey } from './providerItemKey';
 import { getEditorPanelHtml, renderMarkdown } from './editorPanelHtml';
 import type { EditorItemData } from './mainTypes';
@@ -209,13 +210,19 @@ export class IncomingPreviewPanel {
   }
 
   private async dismiss(): Promise<void> {
+    let dismissedTitle = this.externalId;
     try {
+      const providerItem = this.findProviderItem();
+      dismissedTitle = providerItem?.title ?? this.externalId;
       await this.stateStore.setState(this.providerId, this.externalId, 'dismissed');
-      this.dispose();
     } catch (err) {
       logger.error('IncomingPreview: dismiss failed', err);
       void vscode.window.showErrorMessage(`Failed to dismiss item: ${err instanceof Error ? err.message : String(err)}`);
+      return;
     }
+
+    this.dispose();
+    showDismissUndoMessage(this.stateStore, this.providerId, this.externalId, dismissedTitle);
   }
 
   /** If the item has been accepted/dismissed elsewhere, close the preview. */

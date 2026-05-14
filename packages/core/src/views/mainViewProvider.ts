@@ -15,6 +15,7 @@ import { ReadStateStore } from '../storage/readStateStore';
 import { isSafeUrl } from '../utils/url';
 import { buildTierColorCss } from '../webview/shared/colors';
 import { buildProviderBadge, buildProviderBadges, buildTypeBadge } from './badges';
+import { showDismissUndoMessage } from './dismissUndo';
 import { getProviderItemKey, parseProviderItemKey } from './providerItemKey';
 import type {
   BadgeData,
@@ -630,12 +631,18 @@ export class MainViewProvider implements vscode.WebviewViewProvider {
   }
 
   private async handleDismissItem(providerId: string, externalId: string): Promise<void> {
+    let dismissedTitle = externalId;
     try {
+      const providerItem = this.providerRegistry.getProviderItems(providerId).find(item => item.externalId === externalId);
+      dismissedTitle = providerItem?.title ?? externalId;
       await this.stateStore.setState(providerId, externalId, 'dismissed');
     } catch (err) {
       logger.error('DevDocket: dismiss failed', err);
       void vscode.window.showErrorMessage(`Failed to dismiss item: ${err instanceof Error ? err.message : String(err)}`);
+      return;
     }
+
+    showDismissUndoMessage(this.stateStore, providerId, externalId, dismissedTitle);
   }
 
   private async handleTransitionState(itemId: string, targetState: string): Promise<void> {
@@ -1242,6 +1249,10 @@ export class MainViewProvider implements vscode.WebviewViewProvider {
       cursor: pointer;
       font-size: 18px;
       line-height: 1;
+    }
+    .item-action-btn--dismiss {
+      color: var(--vscode-errorForeground, var(--vscode-foreground));
+      margin-left: 2px;
     }
     .item-action-btn:hover {
       background: var(--vscode-toolbar-hoverBackground, rgba(127, 127, 127, 0.25));

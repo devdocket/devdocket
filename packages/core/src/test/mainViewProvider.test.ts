@@ -544,6 +544,52 @@ describe('MainViewProvider', () => {
     expect(workGraph.createItem).not.toHaveBeenCalled();
   });
 
+  it('offers undo when dismissing incoming sidebar items', async () => {
+    vi.mocked(vscode.window.showInformationMessage).mockResolvedValueOnce('Undo' as any);
+    const stateStore = createStateStore();
+    const provider = createProvider(
+      createMockWorkGraph(),
+      createProviderRegistry({
+        github: [{ externalId: 'incoming-dismiss', title: 'Incoming dismiss' }],
+      }),
+      stateStore,
+    );
+    const mockView = createMockWebviewView();
+
+    provider.resolveWebviewView(mockView.view, {} as any, {} as any);
+
+    await mockView.simulateMessage({ type: 'dismissItem', providerId: 'github', externalId: 'incoming-dismiss' });
+
+    await vi.waitFor(() => {
+      expect(stateStore.setState).toHaveBeenCalledWith('github', 'incoming-dismiss', 'dismissed');
+      expect(vscode.window.showInformationMessage).toHaveBeenCalledWith('Dismissed "Incoming dismiss"', 'Undo');
+      expect(stateStore.setState).toHaveBeenCalledWith('github', 'incoming-dismiss', 'unseen');
+    });
+  });
+
+  it('does not undo dismiss when the notification is ignored', async () => {
+    vi.mocked(vscode.window.showInformationMessage).mockResolvedValueOnce(undefined);
+    const stateStore = createStateStore();
+    const provider = createProvider(
+      createMockWorkGraph(),
+      createProviderRegistry({
+        github: [{ externalId: 'incoming-dismiss', title: 'Incoming dismiss' }],
+      }),
+      stateStore,
+    );
+    const mockView = createMockWebviewView();
+
+    provider.resolveWebviewView(mockView.view, {} as any, {} as any);
+
+    await mockView.simulateMessage({ type: 'dismissItem', providerId: 'github', externalId: 'incoming-dismiss' });
+
+    await vi.waitFor(() => {
+      expect(vscode.window.showInformationMessage).toHaveBeenCalledWith('Dismissed "Incoming dismiss"', 'Undo');
+    });
+    expect(stateStore.setState).toHaveBeenCalledWith('github', 'incoming-dismiss', 'dismissed');
+    expect(stateStore.setState).not.toHaveBeenCalledWith('github', 'incoming-dismiss', 'unseen');
+  });
+
   it('routes incoming acceptToFocus messages through the accept-to-focus-from-inbox command', async () => {
     vi.useFakeTimers();
     const workGraph = createMockWorkGraph();
