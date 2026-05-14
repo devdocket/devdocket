@@ -210,7 +210,7 @@ export class IncomingPreviewPanel {
   }
 
   private async dismiss(): Promise<void> {
-    let dismissedTitle = this.externalId;
+    let dismissedTitle: string;
     try {
       const providerItem = this.findProviderItem();
       dismissedTitle = providerItem?.title ?? this.externalId;
