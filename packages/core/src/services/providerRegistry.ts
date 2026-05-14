@@ -321,7 +321,7 @@ export class ProviderRegistry {
 
       completedProviderIds.add(provider.id);
       completed++;
-      onProgress?.({
+      const progressEvent: ProviderRefreshProgress = {
         providerId: provider.id,
         providerLabel: provider.label,
         completed,
@@ -330,7 +330,12 @@ export class ProviderRegistry {
           .filter(p => !completedProviderIds.has(p.id))
           .map(p => ({ id: p.id, label: p.label })),
         outcome,
-      });
+      };
+      try {
+        onProgress?.(progressEvent);
+      } catch (err) {
+        logger.warn('Provider refresh progress callback failed', err);
+      }
     }));
   }
 

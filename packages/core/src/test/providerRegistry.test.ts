@@ -283,6 +283,19 @@ describe('ProviderRegistry', () => {
     });
   });
 
+  it('does not reject refreshAll when progress reporting throws', async () => {
+    const provider = createMockProvider('progress-throws');
+    registry.register(provider);
+    await new Promise(resolve => setTimeout(resolve, 0));
+    vi.mocked(provider.refresh).mockClear();
+    const onProgress = vi.fn(() => { throw new Error('progress broke'); });
+
+    await expect(registry.refreshAll(undefined, onProgress)).resolves.toBeUndefined();
+
+    expect(provider.refresh).toHaveBeenCalledTimes(1);
+    expect(registry.getProviderHealth('progress-throws').status).toBe('healthy');
+  });
+
   it('cleans up all subscriptions on dispose', () => {
     const p1 = createMockProvider('p1');
     const p2 = createMockProvider('p2');
