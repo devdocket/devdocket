@@ -501,7 +501,7 @@ export class MainViewProvider implements vscode.WebviewViewProvider {
         await this.handleAcceptToFocus(message.providerId, message.externalId);
         break;
       case 'acceptAll':
-        await this.handleAcceptAll();
+        await this.handleAcceptAll(message.items);
         break;
       case 'dismissItem':
         await this.handleDismissItem(message.providerId, message.externalId);
@@ -584,7 +584,7 @@ export class MainViewProvider implements vscode.WebviewViewProvider {
     }
   }
 
-  private async handleAcceptAll(): Promise<void> {
+  private async handleAcceptAll(requestedItems?: ReadonlyArray<{ providerId: string; externalId: string }>): Promise<void> {
     const allProviderItems = this.providerRegistry.getAllProviderItems();
     const relatedItemsIndex = buildRelatedItemsIndex(this.providerRegistry, this.workGraph, allProviderItems);
     const incomingTier = this.buildTierData(allProviderItems, relatedItemsIndex).find(tier => tier.id === 'incoming');
@@ -592,11 +592,31 @@ export class MainViewProvider implements vscode.WebviewViewProvider {
       return;
     }
 
-    for (const item of incomingTier.items) {
-      if (!item.providerId || !item.externalId) {
-        continue;
-      }
+    const requestedByProvider = requestedItems?.reduce((index, item) => {
+      const providerItems = index.get(item.providerId) ?? new Set<string>();
+      providerItems.add(item.externalId);
+      index.set(item.providerId, providerItems);
+      return index;
+    }, new Map<string, Set<string>>());
+    const itemsToAccept = incomingTier.items.filter((item): item is ItemCardData & { providerId: string; externalId: string } => (
+      Boolean(item.providerId)
+      && Boolean(item.externalId)
+      && (!requestedByProvider || requestedByProvider.get(item.providerId)?.has(item.externalId) === true)
+    ));
+    if (itemsToAccept.length === 0) {
+      return;
+    }
 
+    const confirm = await vscode.window.showInformationMessage(
+      `Accept all ${itemsToAccept.length} item${itemsToAccept.length === 1 ? '' : 's'} into Ready to Start? You can still triage them one by one.`,
+      { modal: true },
+      'Accept All',
+    );
+    if (confirm !== 'Accept All') {
+      return;
+    }
+
+    for (const item of itemsToAccept) {
       await this.handleAcceptItem(item.providerId, item.externalId);
     }
   }
