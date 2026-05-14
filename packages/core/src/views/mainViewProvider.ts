@@ -591,11 +591,23 @@ export class MainViewProvider implements vscode.WebviewViewProvider {
       return;
     }
 
-    for (const item of incomingTier.items) {
-      if (!item.providerId || !item.externalId) {
-        continue;
-      }
+    const itemsToAccept = incomingTier.items.filter((item): item is ItemCardData & { providerId: string; externalId: string } => (
+      Boolean(item.providerId) && Boolean(item.externalId)
+    ));
+    if (itemsToAccept.length === 0) {
+      return;
+    }
 
+    const confirm = await vscode.window.showInformationMessage(
+      `Accept all ${itemsToAccept.length} item${itemsToAccept.length === 1 ? '' : 's'} into Ready to Start? You can still triage them one by one.`,
+      { modal: true },
+      'Accept All',
+    );
+    if (confirm !== 'Accept All') {
+      return;
+    }
+
+    for (const item of itemsToAccept) {
       await this.handleAcceptItem(item.providerId, item.externalId);
     }
   }

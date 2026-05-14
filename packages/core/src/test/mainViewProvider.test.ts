@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi, type Mock } from 'vitest';
 import * as vscode from 'vscode';
 import { WorkItemState, type WorkItem } from '../models/workItem';
 import { MainViewProvider } from '../views/mainViewProvider';
@@ -542,6 +542,79 @@ describe('MainViewProvider', () => {
       },
     );
     expect(workGraph.createItem).not.toHaveBeenCalled();
+  });
+
+  it('confirms before accepting all incoming items', async () => {
+    vi.useFakeTimers();
+    (vscode.window.showInformationMessage as Mock).mockResolvedValueOnce('Accept All');
+    const provider = createProvider(
+      createMockWorkGraph(),
+      createProviderRegistry({
+        github: [
+          { externalId: 'incoming-a', title: 'Incoming A', description: 'A' },
+          { externalId: 'incoming-b', title: 'Incoming B', description: 'B' },
+        ],
+      }),
+      createStateStore(),
+    );
+    const mockView = createMockWebviewView();
+
+    provider.resolveWebviewView(mockView.view, {} as any, {} as any);
+    await vi.advanceTimersByTimeAsync(50);
+    vi.clearAllMocks();
+
+    mockView.simulateMessage({ type: 'acceptAll' });
+
+    await vi.waitFor(() => {
+      expect(vscode.window.showInformationMessage).toHaveBeenCalledWith(
+        'Accept all 2 items into Ready to Start? You can still triage them one by one.',
+        { modal: true },
+        'Accept All',
+      );
+    });
+    await vi.waitFor(() => {
+      expect(vscode.commands.executeCommand).toHaveBeenCalledTimes(2);
+      expect(vscode.commands.executeCommand).toHaveBeenCalledWith(
+        'devdocket.acceptFromInbox',
+        expect.objectContaining({ providerId: 'github', externalId: 'incoming-a' }),
+      );
+      expect(vscode.commands.executeCommand).toHaveBeenCalledWith(
+        'devdocket.acceptFromInbox',
+        expect.objectContaining({ providerId: 'github', externalId: 'incoming-b' }),
+      );
+    });
+  });
+
+  it('does not accept incoming items when accept-all confirmation is canceled', async () => {
+    vi.useFakeTimers();
+    (vscode.window.showInformationMessage as Mock).mockResolvedValueOnce(undefined);
+    const provider = createProvider(
+      createMockWorkGraph(),
+      createProviderRegistry({
+        github: [
+          { externalId: 'incoming-a', title: 'Incoming A' },
+          { externalId: 'incoming-b', title: 'Incoming B' },
+        ],
+      }),
+      createStateStore(),
+    );
+    const mockView = createMockWebviewView();
+
+    provider.resolveWebviewView(mockView.view, {} as any, {} as any);
+    await vi.advanceTimersByTimeAsync(50);
+    vi.clearAllMocks();
+
+    mockView.simulateMessage({ type: 'acceptAll' });
+
+    await vi.waitFor(() => {
+      expect(vscode.window.showInformationMessage).toHaveBeenCalledWith(
+        'Accept all 2 items into Ready to Start? You can still triage them one by one.',
+        { modal: true },
+        'Accept All',
+      );
+    });
+    await Promise.resolve();
+    expect(vscode.commands.executeCommand).not.toHaveBeenCalled();
   });
 
   it('routes incoming acceptToFocus messages through the accept-to-focus-from-inbox command', async () => {
