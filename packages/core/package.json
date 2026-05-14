@@ -74,6 +74,7 @@
               "markdown": "media/walkthroughs/watches.md"
             },
             "completionEvents": [
+              "onCommand:devdocket.watchUrl",
               "onCommand:devdocket.watchRun",
               "onCommand:devdocket.watchPR",
               "onCommand:devdocket.watchPRFromItem"
@@ -331,6 +332,12 @@
         "icon": "$(refresh)"
       },
       {
+        "command": "devdocket.watchUrl",
+        "title": "DevDocket: Watch URL…",
+        "category": "DevDocket",
+        "icon": "$(add)"
+      },
+      {
         "command": "devdocket.watchRun",
         "title": "DevDocket: Watch Pipeline Run",
         "category": "DevDocket",
@@ -414,6 +421,14 @@
       "commandPalette": [
         {
           "command": "devdocket.addActivity",
+          "when": "false"
+        },
+        {
+          "command": "devdocket.watchRun",
+          "when": "false"
+        },
+        {
+          "command": "devdocket.watchPR",
           "when": "false"
         },
         {

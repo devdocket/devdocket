@@ -59,6 +59,12 @@ const ProgressLocation = {
   Notification: 15,
 };
 
+const InputBoxValidationSeverity = {
+  Info: 1,
+  Warning: 2,
+  Error: 3,
+};
+
 const window = {
   showInputBox: vi.fn(),
   showInformationMessage: vi.fn().mockResolvedValue(undefined),
@@ -257,6 +263,7 @@ export {
   ConfigurationTarget,
   StatusBarAlignment,
   ProgressLocation,
+  InputBoxValidationSeverity,
   window,
   commands,
   env,
