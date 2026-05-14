@@ -268,6 +268,21 @@ describe('registerCommands', () => {
         message: 'GitHub refreshed — Refreshing… 1/2 providers done — waiting on Azure DevOps',
       });
     });
+
+    it('uses singular provider wording for one registered provider', async () => {
+      const report = vi.fn();
+      const token = { isCancellationRequested: false, onCancellationRequested: vi.fn() };
+      providerRegistry.getProviders.mockReturnValueOnce([{ id: 'github', label: 'GitHub' }] as any);
+      (vscode.window.withProgress as Mock).mockImplementationOnce((_options: any, task: any) =>
+        task({ report }, token),
+      );
+
+      await invoke('devdocket.refresh');
+
+      expect(report).toHaveBeenCalledWith({
+        message: 'Refreshing… 0/1 provider done — waiting on GitHub',
+      });
+    });
   });
 
   describe('devdocket.showWatchesQuickPick', () => {

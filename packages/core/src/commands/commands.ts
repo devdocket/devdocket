@@ -614,7 +614,8 @@ function formatRefreshProgressMessage(
   if (total === 0) {
     return 'No providers registered';
   }
-  const message = `Refreshing… ${completed}/${total} providers done`;
+  const providerWord = total === 1 ? 'provider' : 'providers';
+  const message = `Refreshing… ${completed}/${total} ${providerWord} done`;
   const detail = pendingProviders.length > 0
     ? `${message} — waiting on ${formatWaitingProviders(pendingProviders)}`
     : message;
