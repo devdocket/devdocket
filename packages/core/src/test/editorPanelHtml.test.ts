@@ -80,6 +80,16 @@ describe('getEditorPanelHtml', () => {
     expect(html).not.toContain('<script>alert(1)</script>');
     expect(html).toContain('\\u003cscript\\u003ealert(1)\\u003c/script\\u003e');
   });
+
+  it('escapes line separators before embedding bootstrap data in script', () => {
+    const html = getEditorPanelHtml({
+      cspSource: 'https://example.test',
+      scriptUri: 'https://example.test/editor.js',
+      initialItem: makeEditorItem({ title: 'Line\u2028Paragraph\u2029End' }),
+    });
+
+    expect(html).toContain('Line\\u2028Paragraph\\u2029End');
+  });
 });
 
 describe('renderMarkdown', () => {
