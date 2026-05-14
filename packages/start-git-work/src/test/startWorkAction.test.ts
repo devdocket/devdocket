@@ -79,8 +79,29 @@ function mockInputBox(repoPath: string | undefined, baseBranch = 'origin/dev') {
   });
 }
 
-function mockQuickPickWorktree() {
-  vi.mocked(window.showQuickPick).mockResolvedValue({ label: 'Create worktree', value: 'worktree' } as any);
+function isRepoPathPickItems(items: unknown): items is Array<{ pickKind?: string; repoPath?: string }> {
+  return Array.isArray(items) && items.some(item => ['repo', 'paste', 'browse'].includes((item as { pickKind?: string }).pickKind ?? ''));
+}
+
+function isWorkModePickItems(items: unknown): boolean {
+  return Array.isArray(items) && items.some(item => ['checkout', 'worktree'].includes((item as { value?: string }).value ?? ''));
+}
+
+function mockQuickPicks(repoPath = '/mock/workspace', workMode: 'checkout' | 'worktree' = 'worktree') {
+  vi.mocked(window.showQuickPick).mockImplementation(async (items: any) => {
+    if (isRepoPathPickItems(items)) {
+      return items.find(item => item.pickKind === 'repo' && item.repoPath === repoPath)
+        ?? items.find(item => item.pickKind === 'repo')
+        ?? undefined;
+    }
+    if (isWorkModePickItems(items)) {
+      return {
+        label: workMode === 'worktree' ? 'Create worktree' : 'Checkout branch',
+        value: workMode,
+      } as any;
+    }
+    return undefined;
+  });
 }
 
 function mockNoLocalBranch(remoteOutput = ORIGIN_REMOTE_V) {
@@ -100,8 +121,9 @@ function mockNoLocalBranch(remoteOutput = ORIGIN_REMOTE_V) {
 describe('StartWorkAction', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    (workspace as any).workspaceFolders = [{ uri: { fsPath: '/mock/workspace' } }];
     mockInputBox('/mock/workspace');
-    mockQuickPickWorktree();
+    mockQuickPicks();
     vi.mocked(workspace.getConfiguration).mockReturnValue({
       get: vi.fn((key: string, defaultValue?: any) => defaultValue),
     } as any);
@@ -168,6 +190,108 @@ describe('StartWorkAction', () => {
         'worktree', 'add', path.join('/mock', 'workspace-vendor-ABC-123-ABC-123'), 'vendor/ABC-123',
       ]);
       expect(memento.update).toHaveBeenCalledWith('repoPath:Vendor Repo', '/mock/workspace');
+    });
+
+    it('offers cached and git workspace folders before paste and browse choices', async () => {
+      (workspace as any).workspaceFolders = [
+        { uri: { fsPath: '/workspace/repo' } },
+        { uri: { fsPath: '/workspace/not-git' } },
+      ];
+      vi.mocked(fs.existsSync).mockImplementation((p: any) => p.toString().replace(/\\/g, '/').endsWith('/workspace/repo/.git'));
+      mockQuickPicks('/workspace/repo');
+      const item = createWorkItem();
+      const { action, memento } = createAction(discovered('provider', 'item-1', {
+        kind: 'issue', cloneUrl: 'https://example.com/acme/repo.git', ref: 'issue123', repoLabel: 'acme/repo',
+      }));
+      memento._store.set('repoPath:acme/repo', '/cached/repo');
+
+      await action.run(item);
+
+      const repoPickItems = vi.mocked(window.showQuickPick).mock.calls[0]![0] as any[];
+      expect(repoPickItems.map(item => item.label)).toEqual([
+        '/cached/repo',
+        '/workspace/repo',
+        'Enter path manually…',
+        'Browse…',
+      ]);
+      expect(memento.update).toHaveBeenCalledWith('repoPath:acme/repo', '/workspace/repo');
+    });
+
+    it('uses the selected folder from Browse for the repository path', async () => {
+      vi.mocked(window.showQuickPick).mockImplementation(async (items: any) => {
+        if (isRepoPathPickItems(items)) {
+          return items.find(item => item.pickKind === 'browse');
+        }
+        if (isWorkModePickItems(items)) {
+          return { label: 'Create worktree', value: 'worktree' } as any;
+        }
+        return undefined;
+      });
+      vi.mocked(window.showOpenDialog).mockResolvedValue([{ fsPath: '/chosen/repo' }] as any);
+      vi.mocked(fs.existsSync).mockImplementation((p: any) => p.toString().replace(/\\/g, '/').endsWith('/chosen/repo/.git'));
+      const item = createWorkItem();
+      const { action, memento } = createAction(discovered('provider', 'item-1', {
+        kind: 'issue', cloneUrl: 'https://example.com/acme/repo.git', ref: 'issue123', repoLabel: 'acme/repo',
+      }));
+
+      await action.run(item);
+
+      expect(window.showOpenDialog).toHaveBeenCalledWith(expect.objectContaining({
+        canSelectFolders: true,
+        canSelectFiles: false,
+      }));
+      expect(memento.update).toHaveBeenCalledWith('repoPath:acme/repo', '/chosen/repo');
+    });
+
+    it('keeps manual entry as a legacy fallback', async () => {
+      vi.mocked(window.showQuickPick).mockImplementation(async (items: any) => {
+        if (isRepoPathPickItems(items)) {
+          return items.find(item => item.pickKind === 'paste');
+        }
+        if (isWorkModePickItems(items)) {
+          return { label: 'Create worktree', value: 'worktree' } as any;
+        }
+        return undefined;
+      });
+      mockInputBox('/pasted/repo');
+      vi.mocked(fs.existsSync).mockImplementation((p: any) => p.toString().replace(/\\/g, '/').endsWith('/pasted/repo/.git'));
+      const item = createWorkItem();
+      const { action, memento } = createAction(discovered('provider', 'item-1', {
+        kind: 'issue', cloneUrl: 'https://example.com/acme/repo.git', ref: 'issue123', repoLabel: 'acme/repo',
+      }));
+
+      await action.run(item);
+
+      expect(window.showInputBox).toHaveBeenCalledWith(expect.objectContaining({
+        prompt: 'Enter the local path to the git repository for acme/repo',
+      }));
+      expect(memento.update).toHaveBeenCalledWith('repoPath:acme/repo', '/pasted/repo');
+    });
+
+    it('re-prompts instead of erroring when the picked path is not a git repository', async () => {
+      const item = createWorkItem();
+      const { action, memento } = createAction(discovered('provider', 'item-1', {
+        kind: 'issue', cloneUrl: 'https://example.com/acme/repo.git', ref: 'issue123', repoLabel: 'acme/repo',
+      }));
+      memento._store.set('repoPath:acme/repo', '/invalid/repo');
+      (workspace as any).workspaceFolders = [{ uri: { fsPath: '/valid/repo' } }];
+      vi.mocked(fs.existsSync).mockImplementation((p: any) => p.toString().replace(/\\/g, '/').endsWith('/valid/repo/.git'));
+      vi.mocked(window.showQuickPick).mockImplementation(async (items: any) => {
+        if (isRepoPathPickItems(items)) {
+          const repoPick = vi.mocked(window.showQuickPick).mock.calls.length === 1 ? '/invalid/repo' : '/valid/repo';
+          return items.find(item => item.pickKind === 'repo' && item.repoPath === repoPick);
+        }
+        if (isWorkModePickItems(items)) {
+          return { label: 'Create worktree', value: 'worktree' } as any;
+        }
+        return undefined;
+      });
+
+      await action.run(item);
+
+      expect(window.showErrorMessage).not.toHaveBeenCalled();
+      expect(window.showQuickPick).toHaveBeenCalledTimes(3);
+      expect(memento.update).toHaveBeenCalledWith('repoPath:acme/repo', '/valid/repo');
     });
 
     it('uses headCloneUrl when a PR supplies one', async () => {
@@ -390,7 +514,7 @@ describe('StartWorkAction', () => {
     });
 
     it('aborts checkout when the working tree is dirty and the user cancels', async () => {
-      vi.mocked(window.showQuickPick).mockResolvedValue({ label: 'Checkout branch', value: 'checkout' } as any);
+      mockQuickPicks('/mock/workspace', 'checkout');
       vi.mocked(window.showWarningMessage).mockResolvedValue(undefined as any);
       vi.mocked(execFile).mockImplementation(((cmd: string, args: string[], opts: any, cb: Function) => {
         if (args[0] === 'status') {
@@ -415,7 +539,7 @@ describe('StartWorkAction', () => {
     });
 
     it('checks out an existing same-repo PR branch directly', async () => {
-      vi.mocked(window.showQuickPick).mockResolvedValue({ label: 'Checkout branch', value: 'checkout' } as any);
+      mockQuickPicks('/mock/workspace', 'checkout');
       vi.mocked(execFile).mockImplementation(((cmd: string, args: string[], opts: any, cb: Function) => {
         if (args[0] === 'remote' && args[1] === '-v') {
           cb(null, ORIGIN_REMOTE_V, '');
@@ -672,7 +796,7 @@ describe('StartWorkAction', () => {
       });
 
       it('shows error in checkout mode when same-repo PR branch is held by another worktree', async () => {
-        vi.mocked(window.showQuickPick).mockResolvedValue({ label: 'Checkout branch', value: 'checkout' } as any);
+        mockQuickPicks('/mock/workspace', 'checkout');
         vi.mocked(execFile).mockImplementation(((cmd: string, args: string[], opts: any, cb: Function) => {
           if (args[0] === 'remote' && args[1] === '-v') {
             cb(null, ORIGIN_REMOTE_V, '');
@@ -716,7 +840,7 @@ describe('StartWorkAction', () => {
         // If the user is already on the PR branch in the current worktree,
         // `git checkout <branch>` is a no-op success — the pre-check must NOT
         // block by treating the current worktree as a conflict.
-        vi.mocked(window.showQuickPick).mockResolvedValue({ label: 'Checkout branch', value: 'checkout' } as any);
+        mockQuickPicks('/mock/workspace', 'checkout');
         vi.mocked(execFile).mockImplementation(((cmd: string, args: string[], opts: any, cb: Function) => {
           if (args[0] === 'remote' && args[1] === '-v') {
             cb(null, ORIGIN_REMOTE_V, '');
