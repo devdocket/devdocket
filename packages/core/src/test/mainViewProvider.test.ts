@@ -670,6 +670,30 @@ describe('MainViewProvider', () => {
     });
   });
 
+  it('does not accept a different incoming item whose legacy key collides with a requested item', async () => {
+    vi.useFakeTimers();
+    const provider = createProvider(
+      createMockWorkGraph(),
+      createProviderRegistry({
+        'a::b': [{ externalId: 'c', title: 'Collision candidate' }],
+      }),
+      createStateStore(),
+    );
+    const mockView = createMockWebviewView();
+
+    provider.resolveWebviewView(mockView.view, {} as any, {} as any);
+    await vi.advanceTimersByTimeAsync(50);
+    vi.clearAllMocks();
+
+    await mockView.simulateMessage({
+      type: 'acceptAll',
+      items: [{ providerId: 'a', externalId: 'b::c' }],
+    });
+
+    expect(vscode.window.showInformationMessage).not.toHaveBeenCalled();
+    expect(vscode.commands.executeCommand).not.toHaveBeenCalled();
+  });
+
   it('does not accept incoming items when accept-all confirmation is canceled', async () => {
     vi.useFakeTimers();
     (vscode.window.showInformationMessage as Mock).mockResolvedValueOnce(undefined);

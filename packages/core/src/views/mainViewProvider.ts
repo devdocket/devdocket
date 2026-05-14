@@ -591,13 +591,16 @@ export class MainViewProvider implements vscode.WebviewViewProvider {
       return;
     }
 
-    const requestedKeys = requestedItems
-      ? new Set(requestedItems.map(item => getProviderItemKey(item.providerId, item.externalId)))
-      : undefined;
+    const requestedByProvider = requestedItems?.reduce((index, item) => {
+      const providerItems = index.get(item.providerId) ?? new Set<string>();
+      providerItems.add(item.externalId);
+      index.set(item.providerId, providerItems);
+      return index;
+    }, new Map<string, Set<string>>());
     const itemsToAccept = incomingTier.items.filter((item): item is ItemCardData & { providerId: string; externalId: string } => (
       Boolean(item.providerId)
       && Boolean(item.externalId)
-      && (!requestedKeys || requestedKeys.has(getProviderItemKey(item.providerId, item.externalId)))
+      && (!requestedByProvider || requestedByProvider.get(item.providerId)?.has(item.externalId) === true)
     ));
     if (itemsToAccept.length === 0) {
       return;
