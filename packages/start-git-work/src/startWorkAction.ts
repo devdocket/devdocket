@@ -840,7 +840,7 @@ export class StartWorkAction implements DevDocketAction {
   private createRepoPathPicks(cachedPath: string | undefined): RepoPathPick[] {
     const picks: RepoPathPick[] = [];
     const addRepoPath = (repoPath: string, description: string) => {
-      if (picks.some(pick => pick.kind === 'repo' && path.normalize(pick.repoPath) === path.normalize(repoPath))) {
+      if (picks.some(pick => pick.kind === 'repo' && this.pathsEqual(pick.repoPath, repoPath))) {
         return;
       }
       picks.push({ label: repoPath, description, kind: 'repo', repoPath });
