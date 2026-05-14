@@ -102,7 +102,7 @@ The manual Watch URL flow is **idempotent** for already-watched URLs and force-r
 
 DevDocket contributes two right-aligned status bar items (priorities `100000` and `100001`, immediately to the left of the Copilot button). Quick access to the sidebar itself is via the activity-bar container, not the status bar.
 
-- **Provider Health** (priority `100000`) — `⚠ N providers unhealthy`. Hidden when every provider is healthy, so the status bar stays quiet by default; click to open the Provider Health quick pick.
+- **Provider Health** (priority `100000`) — `$(check) DevDocket • N providers` when every provider is healthy, `$(circle-outline) DevDocket • N providers` while provider health is still unknown, and `$(warning) N providers unhealthy` when degraded; click to open the Provider Health quick pick.
 - **Watches** (priority `100001`) — eye icon + run counts (`🔄 N active · ✓ N passed · ✗ N failed`); always visible. Turns amber when at least one watched run has failed and the failure has not yet been acknowledged. Click to open the CI Watches panel.
 
 ## Item Lifecycle
