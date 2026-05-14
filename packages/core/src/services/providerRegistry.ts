@@ -607,6 +607,7 @@ export class ProviderRegistry {
     this._onDidRegisterProvider.dispose();
     this._onDidAddNewUnseenItems.dispose();
     this._onDidChangeProviderHealth.dispose();
+    this._onDidChangeProviderRefreshState.dispose();
     this._onDidRefreshProvider.dispose();
   }
 }
