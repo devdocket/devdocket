@@ -1,5 +1,5 @@
 import { describe, expect, it, vi, afterEach } from 'vitest';
-import { workspace } from 'vscode';
+import { authentication, commands, window, workspace } from 'vscode';
 import { type ProviderItem } from '@devdocket/shared';
 import { BaseGitHubProvider } from '../baseGithubProvider';
 
@@ -11,6 +11,10 @@ class TestGitHubProvider extends BaseGitHubProvider {
     this.publishProviderItems(items);
   }
 
+  warnForTest(message: string, isUserTriggered: boolean): void {
+    this.warnOnFetchFailure(message, isUserTriggered);
+  }
+
   protected async fetchAndPublish(): Promise<void> {
     this.publishProviderItems([]);
   }
@@ -18,6 +22,9 @@ class TestGitHubProvider extends BaseGitHubProvider {
 
 describe('BaseGitHubProvider repository filtering', () => {
   afterEach(() => {
+    vi.mocked(authentication.getSession).mockReset();
+    vi.mocked(commands.executeCommand).mockReset();
+    vi.mocked(window.showWarningMessage).mockReset();
     vi.mocked(workspace.getConfiguration).mockReset();
   });
 
@@ -47,6 +54,50 @@ describe('BaseGitHubProvider repository filtering', () => {
       'Re-included',
       'No repo identity',
     ]);
+
+    provider.dispose();
+  });
+
+  it('opens GitHub extension settings from user-triggered fetch warnings', async () => {
+    vi.mocked(window.showWarningMessage).mockResolvedValue('Open Settings' as any);
+    const provider = new TestGitHubProvider();
+
+    provider.warnForTest('Failed to fetch assigned issues', true);
+    await new Promise(resolve => setTimeout(resolve, 0));
+
+    expect(window.showWarningMessage).toHaveBeenCalledWith(
+      'DevDocket GitHub: Failed to fetch assigned issues',
+      'Open Settings',
+    );
+    expect(commands.executeCommand).toHaveBeenCalledWith(
+      'workbench.action.openSettings',
+      '@ext:devdocket.devdocket-github',
+    );
+
+    provider.dispose();
+  });
+
+  it('offers GitHub sign-in when authentication fails', async () => {
+    vi.mocked(window.showWarningMessage).mockResolvedValue('Sign in' as any);
+    vi.mocked(authentication.getSession)
+      .mockRejectedValueOnce(new Error('auth unavailable'))
+      .mockResolvedValueOnce({ accessToken: 'new-token' } as any);
+    const provider = new TestGitHubProvider();
+
+    await provider.refresh();
+    await new Promise(resolve => setTimeout(resolve, 0));
+
+    expect(window.showWarningMessage).toHaveBeenCalledWith(
+      'DevDocket GitHub: Authentication failed — auth unavailable',
+      'Sign in',
+    );
+    expect(authentication.getSession).toHaveBeenCalledTimes(2);
+    expect(authentication.getSession).toHaveBeenLastCalledWith(
+      'github',
+      ['repo'],
+      { createIfNone: true },
+    );
+    expect(commands.executeCommand).not.toHaveBeenCalledWith('github.signin');
 
     provider.dispose();
   });

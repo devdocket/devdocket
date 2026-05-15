@@ -127,6 +127,7 @@ describe('GitHubPrReviewProvider — error handling', () => {
 
       expect(window.showWarningMessage).toHaveBeenCalledWith(
         expect.stringContaining('Failed to fetch PR review requests'),
+        'Open Settings',
       );
     });
 
@@ -137,6 +138,7 @@ describe('GitHubPrReviewProvider — error handling', () => {
 
       expect(window.showWarningMessage).toHaveBeenCalledWith(
         expect.stringContaining('Failed to fetch PR review requests'),
+        'Open Settings',
       );
     });
 
@@ -147,6 +149,7 @@ describe('GitHubPrReviewProvider — error handling', () => {
 
       expect(window.showWarningMessage).toHaveBeenCalledWith(
         expect.stringContaining('Failed to fetch PR review requests'),
+        'Open Settings',
       );
     });
 

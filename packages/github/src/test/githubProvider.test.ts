@@ -264,6 +264,7 @@ describe('GitHubIssueProvider', () => {
 
     expect(window.showWarningMessage).toHaveBeenCalledWith(
       expect.stringContaining('Authentication failed'),
+      'Sign in',
     );
     expect(listener).not.toHaveBeenCalled();
     expect(mockFetch).not.toHaveBeenCalled();

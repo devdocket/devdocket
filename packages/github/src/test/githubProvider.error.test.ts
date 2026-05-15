@@ -175,6 +175,7 @@ describe('GitHubIssueProvider — error handling', () => {
 
       expect(window.showWarningMessage).toHaveBeenCalledWith(
         expect.stringContaining('Failed to fetch assigned issues'),
+        'Open Settings',
       );
     });
 
@@ -411,6 +412,7 @@ describe('GitHubIssueProvider — error handling', () => {
 
       expect(window.showWarningMessage).toHaveBeenCalledWith(
         expect.stringContaining('Failed to fetch assigned issues'),
+        'Open Settings',
       );
     });
 
