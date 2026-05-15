@@ -1,0 +1,161 @@
+import { beforeEach, describe, expect, it, vi, type Mock } from 'vitest';
+import * as vscode from 'vscode';
+import { registerWatchCommands } from '../commands/watchCommands';
+
+let commandHandlers: Map<string, (...args: any[]) => any>;
+
+function registerCommandsWith(options: {
+  input?: string;
+  runWatcher?: any;
+  prWatcher?: any;
+  runActive?: boolean;
+  prActive?: boolean;
+} = {}) {
+  commandHandlers = new Map();
+  (vscode.commands.registerCommand as Mock).mockImplementation((id: string, handler: (...args: any[]) => any) => {
+    commandHandlers.set(id, handler);
+    return { dispose: vi.fn() };
+  });
+  (vscode.window.showInputBox as Mock).mockResolvedValue(options.input);
+
+  const watcherRegistry = {
+    findWatcherForUrl: vi.fn(() => options.runWatcher),
+    getAll: vi.fn(() => (options.runWatcher ? [options.runWatcher] : [])),
+  };
+  const prWatcherRegistry = {
+    findWatcherForUrl: vi.fn(() => options.prWatcher),
+    getAll: vi.fn(() => (options.prWatcher ? [options.prWatcher] : [])),
+  };
+  const watcherService = {
+    isRunActive: vi.fn(() => options.runActive ?? false),
+    isPRActive: vi.fn(() => options.prActive ?? false),
+    startWatch: vi.fn(async (identifier) => ({ identifier })),
+    startPRWatch: vi.fn(async (identifier) => ({ identifier })),
+  };
+  const context = { subscriptions: [] };
+
+  registerWatchCommands(
+    context as any,
+    watcherRegistry as any,
+    prWatcherRegistry as any,
+    watcherService as any,
+    { open: vi.fn() } as any,
+  );
+
+  return { watcherRegistry, prWatcherRegistry, watcherService, context };
+}
+
+function invoke(name: string, ...args: any[]) {
+  const handler = commandHandlers.get(name);
+  if (!handler) {
+    throw new Error(`Command not registered: ${name}`);
+  }
+  return handler(...args);
+}
+
+describe('registerWatchCommands', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('registers Watch URL', () => {
+    registerCommandsWith();
+
+    expect(commandHandlers.has('devdocket.watchUrl')).toBe(true);
+  });
+
+  it('adds PR watches through the unified Watch URL input with live informational validation', async () => {
+    const input = 'https://github.com/owner/repo/pull/42';
+    const prIdentifier = {
+      providerId: 'github-pr',
+      prId: '42',
+      displayName: 'PR #42',
+      url: input,
+      repo: 'owner/repo',
+    };
+    const prWatcher = {
+      id: 'github-pr',
+      label: 'GitHub Pull Requests',
+      parsePRUrl: vi.fn(() => prIdentifier),
+    };
+    const { watcherService } = registerCommandsWith({ input, prWatcher });
+
+    await invoke('devdocket.watchUrl');
+
+    const inputOptions = (vscode.window.showInputBox as Mock).mock.calls[0][0];
+    expect(inputOptions.placeHolder).toBe('Pull request or pipeline run URL');
+    expect(inputOptions.validateInput(input)).toEqual({
+      message: 'Recognized by GitHub Pull Requests — will be added as a PR watch.',
+      severity: vscode.InputBoxValidationSeverity.Info,
+    });
+    expect(watcherService.startPRWatch).toHaveBeenCalledWith(prIdentifier, { forceRecreate: true });
+    expect(vscode.window.showInformationMessage).toHaveBeenCalledWith('Now watching PR: PR #42');
+  });
+
+  it('shows run-specific feedback when a run is already watched', async () => {
+    const input = 'https://github.com/owner/repo/actions/runs/12345';
+    const runIdentifier = {
+      providerId: 'github-actions',
+      runId: '12345',
+      displayName: 'CI Build',
+      url: input,
+      repo: 'owner/repo',
+    };
+    const runWatcher = {
+      id: 'github-actions',
+      label: 'GitHub Actions',
+      parseRunUrl: vi.fn(() => runIdentifier),
+    };
+    registerCommandsWith({ input, runWatcher, runActive: true });
+
+    await invoke('devdocket.watchUrl');
+
+    expect(vscode.window.showInformationMessage).toHaveBeenCalledWith('Already watching run: CI Build');
+  });
+
+  it('ignores empty submissions without showing an error toast', async () => {
+    const { watcherService } = registerCommandsWith({ input: '   ' });
+
+    await invoke('devdocket.watchUrl');
+
+    expect(watcherService.startWatch).not.toHaveBeenCalled();
+    expect(watcherService.startPRWatch).not.toHaveBeenCalled();
+    expect(vscode.window.showErrorMessage).not.toHaveBeenCalled();
+  });
+
+  it('shows run-specific feedback when an item URL run is already watched', async () => {
+    const input = 'https://github.com/owner/repo/actions/runs/12345';
+    const runIdentifier = {
+      providerId: 'github-actions',
+      runId: '12345',
+      displayName: 'CI Build',
+      url: input,
+      repo: 'owner/repo',
+    };
+    const runWatcher = {
+      id: 'github-actions',
+      label: 'GitHub Actions',
+      parseRunUrl: vi.fn(() => runIdentifier),
+    };
+    registerCommandsWith({ input: undefined, runWatcher, runActive: true });
+
+    await invoke('devdocket.watchPRFromItem', { url: input });
+
+    expect(vscode.window.showInformationMessage).toHaveBeenCalledWith('Already watching run: CI Build');
+  });
+
+  it('shows actionable feedback without starting a watch for unsupported URLs', async () => {
+    registerCommandsWith({ input: 'https://example.com/nope' });
+
+    await invoke('devdocket.watchUrl');
+
+    const inputOptions = (vscode.window.showInputBox as Mock).mock.calls[0][0];
+    expect(inputOptions.validateInput('')).toBeUndefined();
+    expect(inputOptions.validateInput('https://example.com/nope')).toBe(
+      'Unsupported URL. No pull request or pipeline run watchers are currently registered. Install a provider extension that contributes a watcher.',
+    );
+    expect(vscode.window.showErrorMessage).toHaveBeenCalledWith(
+      'DevDocket: Unsupported URL. No pull request or pipeline run watchers are currently registered. Install a provider extension that contributes a watcher.',
+    );
+  });
+});

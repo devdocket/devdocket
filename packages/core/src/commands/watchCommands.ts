@@ -5,113 +5,64 @@ import { PRWatcherRegistry } from '../services/prWatcherRegistry';
 import type { WatchPanelProvider } from '../views/watchPanelProvider';
 import { isSafeUrl } from '../utils/url';
 import { wrapCommand, handleCommandError } from './commandUtils';
+import { classifyWatchUrl, WATCH_URL_PLACEHOLDER, type WatchUrlClassification } from './watchUrlClassifier';
 
-async function handleWatchRun(watcherRegistry: WatcherRegistry, prWatcherRegistry: PRWatcherRegistry, watcherService: WatcherService): Promise<void> {
+async function handleWatchUrl(
+  watcherRegistry: WatcherRegistry,
+  prWatcherRegistry: PRWatcherRegistry,
+  watcherService: WatcherService,
+): Promise<void> {
   const url = await vscode.window.showInputBox({
-    prompt: 'Enter a pipeline run URL',
-    placeHolder: 'https://github.com/owner/repo/actions/runs/123456789',
-    validateInput: (value) => {
-      const trimmed = value.trim();
-      if (!trimmed) {
-        return 'URL cannot be empty';
-      }
-      if (!isSafeUrl(trimmed)) {
-        return 'Only http(s) URLs are supported.';
-      }
-      const watcher = watcherRegistry.findWatcherForUrl(trimmed);
-      const prWatcher = prWatcherRegistry.findWatcherForUrl(trimmed);
-      if (!watcher && !prWatcher) {
-        return 'Unsupported URL format. No registered watcher recognizes this URL.';
-      }
-      return undefined;
-    },
+    prompt: 'Paste a pull request or pipeline run URL supported by a registered watcher',
+    placeHolder: WATCH_URL_PLACEHOLDER,
+    validateInput: (value) => formatWatchUrlValidation(classifyWatchUrl(value, watcherRegistry, prWatcherRegistry)),
   });
 
-  if (!url) {
+  if (!url?.trim()) {
     return;
   }
 
-  const trimmedUrl = url.trim();
+  const classification = classifyWatchUrl(url, watcherRegistry, prWatcherRegistry);
+  if (!classification.ok) {
+    void vscode.window.showErrorMessage(`DevDocket: ${classification.message}`);
+    return;
+  }
 
-  // If a PR watcher recognizes the URL, redirect to PR watch flow
-  const prWatcher = prWatcherRegistry.findWatcherForUrl(trimmedUrl);
-  if (prWatcher) {
-    try {
-      const identifier = prWatcher.parsePRUrl(trimmedUrl);
+  try {
+    if (classification.kind === 'pr') {
+      const identifier = classification.watcher.parsePRUrl(classification.url);
       const wasActive = watcherService.isPRActive(identifier);
       const watch = await watcherService.startPRWatch(identifier, { forceRecreate: true });
       const message = wasActive
         ? `Re-watching PR: ${watch.identifier.displayName}`
         : `Now watching PR: ${watch.identifier.displayName}`;
       void vscode.window.showInformationMessage(message);
-    } catch (err: unknown) {
-      handleCommandError('Failed to watch PR', err);
-    }
-    return;
-  }
-
-  try {
-    const watcher = watcherRegistry.findWatcherForUrl(trimmedUrl);
-    if (!watcher) {
-      void vscode.window.showErrorMessage('Unsupported URL format. No registered watcher recognizes this URL.');
       return;
     }
 
-    const identifier = watcher.parseRunUrl(trimmedUrl);
+    const identifier = classification.watcher.parseRunUrl(classification.url);
     const wasActive = watcherService.isRunActive(identifier);
     const watch = await watcherService.startWatch(identifier);
     const message = wasActive
-      ? `Already watching: ${watch.identifier.displayName}`
-      : `Now watching: ${watch.identifier.displayName}`;
+      ? `Already watching run: ${watch.identifier.displayName}`
+      : `Now watching run: ${watch.identifier.displayName}`;
     void vscode.window.showInformationMessage(message);
   } catch (err: unknown) {
-    handleCommandError('Failed to watch pipeline run', err);
+    handleCommandError(
+      classification.kind === 'pr' ? 'Failed to watch PR' : 'Failed to watch pipeline run',
+      err,
+    );
   }
 }
 
-async function handleWatchPR(prWatcherRegistry: PRWatcherRegistry, watcherService: WatcherService): Promise<void> {
-  const url = await vscode.window.showInputBox({
-    prompt: 'Enter a pull request URL',
-    placeHolder: 'https://github.com/owner/repo/pull/42',
-    validateInput: (value) => {
-      const trimmed = value.trim();
-      if (!trimmed) {
-        return 'URL cannot be empty';
-      }
-      if (!isSafeUrl(trimmed)) {
-        return 'Only http(s) URLs are supported.';
-      }
-      const watcher = prWatcherRegistry.findWatcherForUrl(trimmed);
-      if (!watcher) {
-        return 'Unsupported URL format. No registered PR watcher recognizes this URL.';
-      }
-      return undefined;
-    },
-  });
-
-  if (!url) {
-    return;
+function formatWatchUrlValidation(classification: WatchUrlClassification): string | vscode.InputBoxValidationMessage | undefined {
+  if (!classification.ok) {
+    return classification.reason === 'empty' ? undefined : classification.message;
   }
-
-  const trimmedUrl = url.trim();
-
-  try {
-    const prWatcher = prWatcherRegistry.findWatcherForUrl(trimmedUrl);
-    if (!prWatcher) {
-      void vscode.window.showErrorMessage('Unsupported URL format. No registered PR watcher recognizes this URL.');
-      return;
-    }
-
-    const identifier = prWatcher.parsePRUrl(trimmedUrl);
-    const wasActive = watcherService.isPRActive(identifier);
-    const watch = await watcherService.startPRWatch(identifier, { forceRecreate: true });
-    const message = wasActive
-      ? `Re-watching PR: ${watch.identifier.displayName}`
-      : `Now watching PR: ${watch.identifier.displayName}`;
-    void vscode.window.showInformationMessage(message);
-  } catch (err: unknown) {
-    handleCommandError('Failed to watch PR', err);
-  }
+  return {
+    message: classification.validationMessage,
+    severity: vscode.InputBoxValidationSeverity.Info,
+  };
 }
 
 // Normalize argument: context menu passes WatchedRunNode, inline click passes WatchedRun
@@ -183,7 +134,7 @@ async function handleWatchPRFromItem(
     const wasActive = watcherService.isRunActive(identifier);
     const watch = await watcherService.startWatch(identifier);
     const message = wasActive
-      ? `Already watching: ${watch.identifier.displayName}`
+      ? `Already watching run: ${watch.identifier.displayName}`
       : `Now watching run: ${watch.identifier.displayName}`;
     void vscode.window.showInformationMessage(message);
     return;
@@ -287,10 +238,8 @@ export function registerWatchCommands(
   watchPanelProvider: WatchPanelProvider,
 ): void {
   context.subscriptions.push(
-    vscode.commands.registerCommand('devdocket.watchRun',
-      wrapCommand('Failed to watch pipeline run', () => handleWatchRun(watcherRegistry, prWatcherRegistry, watcherService))),
-    vscode.commands.registerCommand('devdocket.watchPR',
-      wrapCommand('Failed to watch PR', () => handleWatchPR(prWatcherRegistry, watcherService))),
+    vscode.commands.registerCommand('devdocket.watchUrl',
+      wrapCommand('Failed to watch URL', () => handleWatchUrl(watcherRegistry, prWatcherRegistry, watcherService))),
     vscode.commands.registerCommand('devdocket.watchPRFromItem',
       wrapCommand('Failed to watch CI from item', (arg: unknown) => handleWatchPRFromItem(watcherRegistry, prWatcherRegistry, watcherService, arg))),
     vscode.commands.registerCommand('devdocket.dismissWatch',

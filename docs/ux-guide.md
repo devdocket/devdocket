@@ -87,8 +87,9 @@ A floating webview that monitors GitHub Actions / Azure DevOps Pipeline runs and
 
 ### Adding watches
 
-- Inside the panel, click **+ Watch URL** in the header. Paste either a pipeline run URL or a pull request URL — DevDocket detects which kind it is.
-- From the command palette: **DevDocket: Watch Pipeline Run** or **DevDocket: Watch Pull Request**.
+- Inside the panel, click **+ Watch URL** in the header. Paste a supported URL — DevDocket detects whether it is a PR or run, and validates the URL before submission. Examples: `https://github.com/owner/repo/pull/123` and `https://github.com/owner/repo/actions/runs/12345`.
+- From the command palette: **DevDocket: Watch URL…**.
+- Supported surfaces include GitHub PR URLs, GitHub Actions run URLs, Azure DevOps PR URLs, and Azure DevOps Pipeline run URLs.
 - GitHub PRs you authored can be auto-watched on discovery — see `devDocket.watches.autoWatchAuthoredPRs`.
 
 The manual Watch URL flow is **idempotent** for already-watched URLs and force-recreates the watch when a PR is in a bad state (e.g. all child runs were dismissed making it invisible).

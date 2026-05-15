@@ -74,8 +74,7 @@
               "markdown": "media/walkthroughs/watches.md"
             },
             "completionEvents": [
-              "onCommand:devdocket.watchRun",
-              "onCommand:devdocket.watchPR",
+              "onCommand:devdocket.watchUrl",
               "onCommand:devdocket.watchPRFromItem"
             ]
           }
@@ -331,16 +330,10 @@
         "icon": "$(refresh)"
       },
       {
-        "command": "devdocket.watchRun",
-        "title": "DevDocket: Watch Pipeline Run",
+        "command": "devdocket.watchUrl",
+        "title": "Watch URL…",
         "category": "DevDocket",
         "icon": "$(add)"
-      },
-      {
-        "command": "devdocket.watchPR",
-        "title": "DevDocket: Watch Pull Request",
-        "category": "DevDocket",
-        "icon": "$(git-pull-request)"
       },
       {
         "command": "devdocket.watchPRFromItem",
