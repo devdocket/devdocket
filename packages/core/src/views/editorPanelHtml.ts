@@ -594,6 +594,29 @@ export function getEditorPanelHtml({ cspSource, scriptUri, initialItem }: Editor
       color: var(--vscode-descriptionForeground);
     }
 
+    .activity-entry-detail--structured {
+      display: grid;
+      grid-template-columns: max-content minmax(0, 1fr);
+      column-gap: 8px;
+      row-gap: 2px;
+      margin: 2px 0 0;
+      align-self: flex-start;
+    }
+
+    .activity-detail-row {
+      display: contents;
+    }
+
+    .activity-detail-label {
+      font-weight: 600;
+      color: var(--vscode-foreground);
+    }
+
+    .activity-detail-value {
+      margin: 0;
+      word-break: break-all;
+    }
+
     .activity-entry-time {
       flex-shrink: 0;
       color: var(--vscode-descriptionForeground);

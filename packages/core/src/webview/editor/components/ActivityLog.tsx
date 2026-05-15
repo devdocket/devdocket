@@ -1,3 +1,4 @@
+import type { VNode } from 'preact';
 import { useState } from 'preact/hooks';
 import { formatRelativeTime } from '../../shared/timeUtils';
 import type { EditorItemData } from '../../shared/types';
@@ -37,7 +38,7 @@ export function ActivityLog({ entries }: ActivityLogProps) {
             <div class="activity-entry" key={`${entry.timestamp}-${entry.type}-${index}`}>
               <div class="activity-entry-main">
                 <span class="activity-entry-type">{activityTypeLabel(entry.type)}</span>
-                {entry.detail ? <span class="activity-entry-detail">{entry.detail}</span> : null}
+                {entry.detail ? renderActivityDetail(entry.type, entry.detail) : null}
               </div>
               <span class="activity-entry-time">{formatRelativeTime(entry.timestamp)}</span>
             </div>
@@ -45,5 +46,75 @@ export function ActivityLog({ entries }: ActivityLogProps) {
         </div>
       ) : null}
     </section>
+  );
+}
+
+type ActivityDetailRenderer = (detail: string) => VNode;
+
+const activityDetailRenderers: Partial<Record<string, ActivityDetailRenderer>> = {
+  'work-started': renderWorkStartedDetail,
+};
+
+function renderActivityDetail(type: string, detail: string): VNode {
+  const renderer = activityDetailRenderers[type] ?? renderPlainActivityDetail;
+  return renderer(detail);
+}
+
+function renderPlainActivityDetail(detail: string): VNode {
+  return <span class="activity-entry-detail">{detail}</span>;
+}
+
+interface WorkStartedDetail {
+  branchName?: string;
+  worktreePath?: string;
+  repoPath?: string;
+}
+
+function parseWorkStartedDetail(raw: string): WorkStartedDetail | undefined {
+  try {
+    const parsed = JSON.parse(raw) as unknown;
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+      return undefined;
+    }
+
+    const values = parsed as Record<string, unknown>;
+    const detail: WorkStartedDetail = {};
+    if (typeof values.branchName === 'string') {
+      detail.branchName = values.branchName;
+    }
+    if (typeof values.worktreePath === 'string') {
+      detail.worktreePath = values.worktreePath;
+    }
+    if (typeof values.repoPath === 'string') {
+      detail.repoPath = values.repoPath;
+    }
+
+    return detail.branchName || detail.worktreePath || detail.repoPath ? detail : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function renderWorkStartedDetail(raw: string): VNode {
+  const detail = parseWorkStartedDetail(raw);
+  if (!detail) {
+    return renderPlainActivityDetail(raw);
+  }
+
+  return (
+    <dl class="activity-entry-detail activity-entry-detail--structured">
+      {detail.branchName ? renderDetailRow('Branch', detail.branchName) : null}
+      {detail.worktreePath ? renderDetailRow('Worktree', detail.worktreePath) : null}
+      {detail.repoPath ? renderDetailRow('Repo', detail.repoPath) : null}
+    </dl>
+  );
+}
+
+function renderDetailRow(label: string, value: string): VNode {
+  return (
+    <div class="activity-detail-row" key={label}>
+      <dt class="activity-detail-label">{label}:</dt>
+      <dd class="activity-detail-value">{value}</dd>
+    </div>
   );
 }
