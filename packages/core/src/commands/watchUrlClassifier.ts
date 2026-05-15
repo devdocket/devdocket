@@ -3,7 +3,7 @@ import type { PRWatcherRegistry } from '../services/prWatcherRegistry';
 import type { WatcherRegistry } from '../services/watcherRegistry';
 import { isSafeUrl } from '../utils/url';
 
-export const WATCH_URL_PLACEHOLDER = 'https://github.com/owner/repo/pull/123 • https://github.com/owner/repo/actions/runs/12345';
+export const WATCH_URL_PLACEHOLDER = 'Pull request or pipeline run URL';
 
 export type WatchUrlClassification =
   | {

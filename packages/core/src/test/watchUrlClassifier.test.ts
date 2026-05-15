@@ -23,9 +23,8 @@ function createPRWatcher(id: string, label: string): DevDocketPRWatcher {
 }
 
 describe('classifyWatchUrl', () => {
-  it('provides GitHub PR and run examples for the shared input placeholder', () => {
-    expect(WATCH_URL_PLACEHOLDER).toContain('https://github.com/owner/repo/pull/123');
-    expect(WATCH_URL_PLACEHOLDER).toContain('https://github.com/owner/repo/actions/runs/12345');
+  it('uses a short hint placeholder describing the accepted URL types', () => {
+    expect(WATCH_URL_PLACEHOLDER).toBe('Pull request or pipeline run URL');
   });
 
   it('classifies pull request URLs before run URLs', () => {

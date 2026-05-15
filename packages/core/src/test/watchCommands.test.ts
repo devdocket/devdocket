@@ -81,8 +81,7 @@ describe('registerWatchCommands', () => {
     await invoke('devdocket.watchUrl');
 
     const inputOptions = (vscode.window.showInputBox as Mock).mock.calls[0][0];
-    expect(inputOptions.placeHolder).toContain('https://github.com/owner/repo/pull/123');
-    expect(inputOptions.placeHolder).toContain('https://github.com/owner/repo/actions/runs/12345');
+    expect(inputOptions.placeHolder).toBe('Pull request or pipeline run URL');
     expect(inputOptions.validateInput(input)).toEqual({
       message: 'This looks like a GitHub PR — will be added as a PR watch.',
       severity: vscode.InputBoxValidationSeverity.Info,
