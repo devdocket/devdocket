@@ -82,6 +82,7 @@ export function WatchApp() {
             <CollapsibleSection icon="🔀" name="PR Watches" count={prWatches.length}>
               {prWatches.map(prWatch => {
                 const summary = summarizeRuns(prWatch.runs);
+                const hasRuns = summary.total > 0;
                 const explicitExpanded = expandedPRRuns.get(prWatch.id);
                 const expanded = explicitExpanded ?? summary.failed > 0;
                 const preview = getPRPreview(prWatch, summary);
@@ -92,7 +93,7 @@ export function WatchApp() {
                     meta={prWatch.repo}
                     preview={preview}
                     previewIsWarning={prWatch.hasWarning || summary.failed > 0}
-                    summary={formatRunSummary(summary)}
+                    summary={hasRuns ? formatRunSummary(summary) : undefined}
                     badge={getPRBadge(prWatch)}
                     tierClass={summary.failed > 0 ? 'urgent' : getPRTierClass(prWatch)}
                     url={prWatch.url}
@@ -100,26 +101,28 @@ export function WatchApp() {
                     linkedItemId={prWatch.linkedItemId}
                     linkedSourceProviderId={prWatch.linkedSourceProviderId}
                     linkedSourceExternalId={prWatch.linkedSourceExternalId}
-                    expanded={expanded}
-                    onToggleExpanded={() => togglePRRuns(prWatch.id, expanded)}
+                    expanded={hasRuns ? expanded : undefined}
+                    onToggleExpanded={hasRuns ? () => togglePRRuns(prWatch.id, expanded) : undefined}
                   >
-                    <div class="nested-run-list" aria-label={`Runs for ${prWatch.title}`}>
-                      {prWatch.runs.map(run => (
-                        <WatchCard
-                          key={`run-${run.id}`}
-                          title={run.name}
-                          meta={`${run.repo} · run on ${prWatch.title}`}
-                          preview={run.failurePreview}
-                          previewIsWarning={run.hasWarning || isFailedRun(run)}
-                          badge={getRunBadge(run)}
-                          tierClass={getRunTierClass(run)}
-                          elapsedTime={run.elapsedTime}
-                          url={run.url}
-                          watchId={run.id}
-                          dismissible={false}
-                        />
-                      ))}
-                    </div>
+                    {hasRuns ? (
+                      <div class="nested-run-list" aria-label={`Runs for ${prWatch.title}`}>
+                        {prWatch.runs.map(run => (
+                          <WatchCard
+                            key={`run-${run.id}`}
+                            title={run.name}
+                            meta={`${run.repo} · run on ${prWatch.title}`}
+                            preview={run.failurePreview}
+                            previewIsWarning={run.hasWarning || isFailedRun(run)}
+                            badge={getRunBadge(run)}
+                            tierClass={getRunTierClass(run)}
+                            elapsedTime={run.elapsedTime}
+                            url={run.url}
+                            watchId={run.id}
+                            dismissible={false}
+                          />
+                        ))}
+                      </div>
+                    ) : null}
                   </WatchCard>
                 );
               })}

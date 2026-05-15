@@ -76,6 +76,17 @@ describe('WatchApp PR watch rendering', () => {
     expect(prSection.textContent).toContain('E2E tests');
   });
 
+  it('hides roll-up and disclosure controls for PR watches without runs', async () => {
+    await mountWatchApp();
+    await sendUpdate([makePRWatch()]);
+
+    const prSection = getSection('PR Watches');
+    expect(prSection.querySelectorAll('.tier-items > .item-card')).toHaveLength(1);
+    expect(prSection.querySelector('.watch-run-summary')).toBeNull();
+    expect(findButton(prSection, label => label === 'Expand runs for Add grouped PR watches')).toBeUndefined();
+    expect(prSection.querySelector('.watch-card-details')).toBeNull();
+  });
+
   it('keeps standalone run watches as flat cards', async () => {
     await mountWatchApp();
     await sendUpdate([], [
