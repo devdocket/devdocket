@@ -12,7 +12,8 @@ import type { WatcherRegistry } from '../services/watcherRegistry';
 import type { PRWatcherRegistry } from '../services/prWatcherRegistry';
 import type { WatcherService } from '../services/watcherService';
 import type { InboxItem, InboxProviderNode, InboxGroupNode, SourceItemNode, SourceProviderNode, SourceGroupNode } from '../commands/commandItemTypes';
-import { WorkItemEditorPanel } from '../views/workItemEditorPanel';
+import { PanelManager, WorkItemEditorPanel, type WorkItemEditorPanelDependencies } from '../views/workItemEditorPanel';
+import { IncomingPreviewPanelManager } from '../views/incomingPreviewPanel';
 import { logger } from '../services/logger';
 
 vi.mock('../services/logger', () => ({
@@ -137,6 +138,8 @@ describe('registerCommands', () => {
   let providerRegistry: ReturnType<typeof createMockProviderRegistry>;
   let labelCache: ReturnType<typeof createMockLabelCache>;
   let watchPanelProvider: { open: Mock };
+  let editorPanelDependencies: WorkItemEditorPanelDependencies;
+  let incomingPreviewPanelManager: IncomingPreviewPanelManager;
   let ctx: vscode.ExtensionContext;
 
   beforeEach(() => {
@@ -160,6 +163,12 @@ describe('registerCommands', () => {
     providerRegistry = createMockProviderRegistry();
     labelCache = createMockLabelCache();
     watchPanelProvider = { open: vi.fn() };
+    editorPanelDependencies = {
+      panelManager: new PanelManager(),
+      actionRegistry: actionRegistry as any,
+      stateStore: stateStore as any,
+    };
+    incomingPreviewPanelManager = new IncomingPreviewPanelManager();
     ctx = createMockContext();
 
     registerCommands(
@@ -174,6 +183,8 @@ describe('registerCommands', () => {
       {} as PRWatcherRegistry,
       {} as WatcherService,
       watchPanelProvider as any,
+      editorPanelDependencies,
+      incomingPreviewPanelManager,
       vi.fn(),
     );
   });
@@ -219,6 +230,7 @@ describe('registerCommands', () => {
       'devdocket.createItemFromUrl',
       'devdocket.clearHistory',
       'devdocket.addActivity',
+      'devdocket.watchUrl',
       'devdocket.showWatchesQuickPick',
     ];
     for (const cmd of expected) {
@@ -309,6 +321,7 @@ describe('registerCommands', () => {
         workGraph,
         providerRegistry,
         createdItem,
+        editorPanelDependencies,
         undefined,
       );
       expect(vscode.window.showInformationMessage).toHaveBeenCalledWith(
@@ -377,7 +390,7 @@ describe('registerCommands', () => {
 
       expect(workGraph.createItem).not.toHaveBeenCalled();
       expect(WorkItemEditorPanel.open).toHaveBeenCalledWith(
-        expect.anything(), expect.anything(), expect.anything(), existing, undefined,
+        expect.anything(), expect.anything(), expect.anything(), existing, editorPanelDependencies, undefined,
       );
       expect(vscode.window.showInformationMessage).toHaveBeenCalledWith(
         'DevDocket: Item already exists for this source item',
@@ -456,7 +469,7 @@ describe('registerCommands', () => {
       invoke('devdocket.editItem', { id: item.id });
 
       expect(workGraph.getItem).toHaveBeenCalledWith(item.id);
-      expect(WorkItemEditorPanel.open).toHaveBeenCalledWith(ctx, workGraph, providerRegistry, item, undefined);
+      expect(WorkItemEditorPanel.open).toHaveBeenCalledWith(ctx, workGraph, providerRegistry, item, editorPanelDependencies, undefined);
     });
 
     it('passes provider label when item has providerId', () => {
@@ -467,7 +480,7 @@ describe('registerCommands', () => {
       invoke('devdocket.editItem', { id: item.id });
 
       expect(labelCache.get).toHaveBeenCalledWith('github');
-      expect(WorkItemEditorPanel.open).toHaveBeenCalledWith(ctx, workGraph, providerRegistry, item, 'GitHub Issues');
+      expect(WorkItemEditorPanel.open).toHaveBeenCalledWith(ctx, workGraph, providerRegistry, item, editorPanelDependencies, 'GitHub Issues');
     });
 
     it('does not open editor when item is not found', () => {

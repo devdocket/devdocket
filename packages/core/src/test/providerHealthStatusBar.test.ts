@@ -1,29 +1,33 @@
-import { beforeEach, describe, expect, it, vi, type Mock } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import * as vscode from 'vscode';
-import { ProviderHealthStatusBar, showProviderHealthQuickPick } from '../views/providerHealthStatusBar';
-import type { ProviderRegistry } from '../services/providerRegistry';
+import { EventEmitter, ThemeColor, window } from 'vscode';
+import { ProviderHealthStatusBar } from '../views/providerHealthStatusBar';
 
-function createRegistry(options: { refreshing?: string[]; unhealthy?: string[] } = {}) {
-  const refreshing = new Set(options.refreshing ?? []);
-  const unhealthy = new Set(options.unhealthy ?? []);
-  const providers = [
-    { id: 'github', label: 'GitHub' },
-    { id: 'ado', label: 'Azure DevOps' },
-  ];
+function createProviderRegistry(
+  providers: Array<{ id: string; label: string }>,
+  healthByProvider: Record<string, { status: 'healthy' | 'unhealthy' | 'unknown'; lastRefreshTime?: Date; lastError?: string }>,
+) {
+  const healthEmitter = new EventEmitter<void>();
+  const registerEmitter = new EventEmitter<void>();
+  const itemsEmitter = new EventEmitter<void>();
+  const refreshStateEmitter = new EventEmitter<void>();
+
   return {
     getProviders: vi.fn(() => providers),
-    getProviderHealth: vi.fn((id: string) => unhealthy.has(id)
-      ? { status: 'unhealthy' as const, lastError: 'network error' }
-      : id === 'ado'
-        ? { status: 'healthy' as const }
-        : { status: 'unknown' as const }),
-    isProviderRefreshing: vi.fn((id: string) => refreshing.has(id)),
-    onDidChangeProviderHealth: vi.fn(() => ({ dispose: vi.fn() })),
-    onDidChangeProviderRefreshState: vi.fn(() => ({ dispose: vi.fn() })),
-    onDidRegisterProvider: vi.fn(() => ({ dispose: vi.fn() })),
-    onDidChangeProviderItems: vi.fn(() => ({ dispose: vi.fn() })),
-    refreshProvider: vi.fn().mockResolvedValue('success'),
-  } as unknown as ProviderRegistry & { refreshProvider: Mock };
+    getProviderHealth: vi.fn((providerId: string) => healthByProvider[providerId] ?? { status: 'unknown' }),
+    isProviderRefreshing: vi.fn(() => false),
+    onDidChangeProviderHealth: healthEmitter.event,
+    onDidChangeProviderRefreshState: refreshStateEmitter.event,
+    onDidRegisterProvider: registerEmitter.event,
+    onDidChangeProviderItems: itemsEmitter.event,
+    setHealth(providerId: string, health: { status: 'healthy' | 'unhealthy' | 'unknown'; lastRefreshTime?: Date; lastError?: string }) {
+      healthByProvider[providerId] = health;
+      healthEmitter.fire();
+    },
+    fireProviderItemsChanged() {
+      itemsEmitter.fire();
+    },
+  };
 }
 
 describe('ProviderHealthStatusBar', () => {
@@ -31,60 +35,76 @@ describe('ProviderHealthStatusBar', () => {
     vi.clearAllMocks();
   });
 
-  it('shows a spinner status bar item while providers are refreshing', () => {
-    const registry = createRegistry({ refreshing: ['ado'] });
+  it('hides when no providers are registered', () => {
+    const providerRegistry = createProviderRegistry([], {});
 
-    const statusBar = new ProviderHealthStatusBar(registry);
-    const item = (vscode.window.createStatusBarItem as Mock).mock.results[0].value;
+    new ProviderHealthStatusBar(providerRegistry as any);
 
-    expect(item.text).toBe('$(sync~spin) 1 provider refreshing');
-    expect(item.show).toHaveBeenCalled();
-
-    statusBar.dispose();
+    const statusBarItem = (window.createStatusBarItem as ReturnType<typeof vi.fn>).mock.results[0].value;
+    expect(statusBarItem.hide).toHaveBeenCalled();
+    expect(statusBarItem.show).not.toHaveBeenCalled();
   });
 
-  it('preserves warning styling while refreshing with unhealthy providers', () => {
-    const registry = createRegistry({ refreshing: ['ado'], unhealthy: ['github'] });
-
-    const statusBar = new ProviderHealthStatusBar(registry);
-    const item = (vscode.window.createStatusBarItem as Mock).mock.results[0].value;
-
-    expect(item.text).toBe('$(sync~spin) 1 refreshing, 1 unhealthy');
-    expect(item.backgroundColor.id).toBe('statusBarItem.warningBackground');
-    expect(item.color.id).toBe('statusBarItem.warningForeground');
-
-    statusBar.dispose();
-  });
-
-  it('marks refreshing providers in the health quick pick', async () => {
-    const registry = createRegistry({ refreshing: ['ado'] });
-    (vscode.window.showQuickPick as Mock).mockResolvedValueOnce(undefined);
-
-    await showProviderHealthQuickPick(registry);
-
-    const items = (vscode.window.showQuickPick as Mock).mock.calls[0][0];
-    expect(items[0]).toMatchObject({
-      label: '$(sync~spin) Azure DevOps',
-      description: 'refreshing',
-      providerId: 'ado',
-    });
-  });
-
-  it('refreshes only the selected provider from the quick pick', async () => {
-    const registry = createRegistry();
-    (vscode.window.showQuickPick as Mock).mockResolvedValueOnce({ providerId: 'github' });
-    (vscode.window.showInformationMessage as Mock).mockResolvedValueOnce('Refresh');
-
-    await showProviderHealthQuickPick(registry);
-
-    expect(vscode.window.withProgress).toHaveBeenCalledWith(
-      expect.objectContaining({
-        location: vscode.ProgressLocation.Notification,
-        title: 'DevDocket: Refresh GitHub',
-        cancellable: true,
-      }),
-      expect.any(Function),
+  it('shows a low-key healthy summary when every provider is healthy', () => {
+    const providerRegistry = createProviderRegistry(
+      [
+        { id: 'github', label: 'GitHub' },
+        { id: 'ado', label: 'Azure DevOps' },
+      ],
+      {
+        github: { status: 'healthy', lastRefreshTime: new Date('2024-01-02T03:04:05Z') },
+        ado: { status: 'healthy' },
+      },
     );
-    expect(registry.refreshProvider).toHaveBeenCalledWith('github', expect.any(Object));
+
+    new ProviderHealthStatusBar(providerRegistry as any);
+
+    const statusBarItem = (window.createStatusBarItem as ReturnType<typeof vi.fn>).mock.results[0].value;
+    expect(statusBarItem.text).toBe('$(check) DevDocket • 2 providers');
+    expect(statusBarItem.command).toBe('devdocket.showProviderHealthQuickPick');
+    expect(statusBarItem.tooltip).toContain('GitHub: healthy');
+    expect(statusBarItem.tooltip).toContain('Azure DevOps: healthy (not refreshed yet)');
+    expect(statusBarItem.backgroundColor).toBeUndefined();
+    expect(statusBarItem.color).toBeUndefined();
+    expect(statusBarItem.show).toHaveBeenCalled();
+    expect(statusBarItem.hide).not.toHaveBeenCalled();
+  });
+
+  it('switches between warning and healthy text as provider health changes', () => {
+    const providerRegistry = createProviderRegistry(
+      [{ id: 'github', label: 'GitHub' }],
+      { github: { status: 'unhealthy', lastError: 'Token expired\nRefresh failed' } },
+    );
+
+    new ProviderHealthStatusBar(providerRegistry as any);
+
+    const statusBarItem = (vscode.window.createStatusBarItem as ReturnType<typeof vi.fn>).mock.results[0].value;
+    expect(statusBarItem.text).toBe('$(warning) 1 provider unhealthy');
+    expect(statusBarItem.tooltip).toContain('GitHub: unhealthy — Token expired Refresh failed');
+    expect(statusBarItem.backgroundColor).toEqual(new ThemeColor('statusBarItem.warningBackground'));
+    expect(statusBarItem.color).toEqual(new ThemeColor('statusBarItem.warningForeground'));
+
+    providerRegistry.setHealth('github', { status: 'healthy', lastRefreshTime: new Date('2024-01-02T03:04:05Z') });
+
+    expect(statusBarItem.text).toBe('$(check) DevDocket • 1 provider');
+    expect(statusBarItem.backgroundColor).toBeUndefined();
+    expect(statusBarItem.color).toBeUndefined();
+    expect(statusBarItem.show).toHaveBeenCalledTimes(2);
+  });
+
+  it('shows a neutral summary while registered provider health is unknown', () => {
+    const providerRegistry = createProviderRegistry(
+      [{ id: 'github', label: 'GitHub' }],
+      { github: { status: 'unknown' } },
+    );
+
+    new ProviderHealthStatusBar(providerRegistry as any);
+
+    const statusBarItem = (window.createStatusBarItem as ReturnType<typeof vi.fn>).mock.results[0].value;
+    expect(statusBarItem.text).toBe('$(circle-outline) DevDocket • 1 provider');
+    expect(statusBarItem.tooltip).toContain('GitHub: unknown (not refreshed yet)');
+    expect(statusBarItem.backgroundColor).toBeUndefined();
+    expect(statusBarItem.color).toBeUndefined();
+    expect(statusBarItem.show).toHaveBeenCalled();
   });
 });

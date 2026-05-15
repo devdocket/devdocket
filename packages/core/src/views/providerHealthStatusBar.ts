@@ -12,6 +12,10 @@ function sanitizeError(error: string, maxLength = 100): string {
   return trimmed.length > maxLength ? trimmed.substring(0, maxLength) + '…' : trimmed;
 }
 
+function formatProviderCount(count: number): string {
+  return `${count} provider${count === 1 ? '' : 's'}`;
+}
+
 async function refreshProviderWithProgress(
   providerRegistry: ProviderRegistry,
   provider: { id: string; label: string },
@@ -27,8 +31,9 @@ async function refreshProviderWithProgress(
 }
 
 /**
- * Status bar item that shows a warning when any provider is unhealthy.
- * Click to open quick-pick with provider health details.
+ * Status bar item that shows provider health at a glance, including
+ * per-provider in-flight refresh state. Click to open quick-pick with
+ * provider health details.
  */
 export class ProviderHealthStatusBar implements vscode.Disposable {
   private statusBarItem: vscode.StatusBarItem;
@@ -40,8 +45,7 @@ export class ProviderHealthStatusBar implements vscode.Disposable {
   constructor(private providerRegistry: ProviderRegistry) {
     this.statusBarItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 100000);
     this.statusBarItem.command = 'devdocket.showProviderHealthQuickPick';
-    
-    // Update on provider health changes
+
     this.healthChangeSub = providerRegistry.onDidChangeProviderHealth(() => {
       this.update();
     });
@@ -49,23 +53,21 @@ export class ProviderHealthStatusBar implements vscode.Disposable {
     this.refreshStateSub = providerRegistry.onDidChangeProviderRefreshState(() => {
       this.update();
     });
-    
-    // Update when new providers register
+
     this.registerSub = providerRegistry.onDidRegisterProvider(() => {
       this.update();
     });
-    
-    // Update when discovered items change (fires on provider disposal)
+
     this.discoveredChangesSub = providerRegistry.onDidChangeProviderItems(() => {
       this.update();
     });
-    
+
     this.update();
   }
 
   private update(): void {
     const providers = this.providerRegistry.getProviders();
-    
+
     if (providers.length === 0) {
       this.statusBarItem.hide();
       return;
@@ -82,8 +84,8 @@ export class ProviderHealthStatusBar implements vscode.Disposable {
       const unhealthyCount = unhealthyProviders.length;
       this.statusBarItem.text = unhealthyCount > 0
         ? `$(sync~spin) ${refreshingCount} refreshing, ${unhealthyCount} unhealthy`
-        : `$(sync~spin) ${refreshingCount} provider${refreshingCount === 1 ? '' : 's'} refreshing`;
-      this.statusBarItem.tooltip = 'Click to view provider health details';
+        : `$(sync~spin) ${formatProviderCount(refreshingCount)} refreshing`;
+      this.statusBarItem.tooltip = this.buildTooltip(providers);
       this.statusBarItem.backgroundColor = unhealthyCount > 0
         ? new vscode.ThemeColor('statusBarItem.warningBackground')
         : undefined;
@@ -94,17 +96,36 @@ export class ProviderHealthStatusBar implements vscode.Disposable {
       return;
     }
 
-    if (unhealthyProviders.length === 0) {
-      this.statusBarItem.hide();
+    if (unhealthyProviders.length > 0) {
+      this.statusBarItem.text = `$(warning) ${formatProviderCount(unhealthyProviders.length)} unhealthy`;
+      this.statusBarItem.tooltip = this.buildTooltip(providers);
+      this.statusBarItem.backgroundColor = new vscode.ThemeColor('statusBarItem.warningBackground');
+      this.statusBarItem.color = new vscode.ThemeColor('statusBarItem.warningForeground');
+      this.statusBarItem.show();
       return;
     }
 
-    const count = unhealthyProviders.length;
-    this.statusBarItem.text = `$(warning) ${count} provider${count === 1 ? '' : 's'} unhealthy`;
-    this.statusBarItem.tooltip = 'Click to view provider health details';
-    this.statusBarItem.backgroundColor = new vscode.ThemeColor('statusBarItem.warningBackground');
-    this.statusBarItem.color = new vscode.ThemeColor('statusBarItem.warningForeground');
+    const hasUnknownProviders = providers.some(p => this.providerRegistry.getProviderHealth(p.id).status === 'unknown');
+    this.statusBarItem.text = `${hasUnknownProviders ? '$(circle-outline)' : '$(check)'} DevDocket • ${formatProviderCount(providers.length)}`;
+    this.statusBarItem.tooltip = this.buildTooltip(providers);
+    this.statusBarItem.backgroundColor = undefined;
+    this.statusBarItem.color = undefined;
     this.statusBarItem.show();
+  }
+
+  private buildTooltip(providers: ReturnType<ProviderRegistry['getProviders']>): string {
+    const providerLines = providers.map(provider => {
+      const health = this.providerRegistry.getProviderHealth(provider.id);
+      const isRefreshing = this.providerRegistry.isProviderRefreshing(provider.id);
+      const status = isRefreshing ? 'refreshing' : health.status;
+      const lastRefresh = health.lastRefreshTime
+        ? `last refreshed ${health.lastRefreshTime.toLocaleString()}`
+        : 'not refreshed yet';
+      const error = health.lastError ? ` — ${sanitizeError(health.lastError)}` : '';
+      return `${provider.label}: ${status}${error} (${lastRefresh})`;
+    });
+
+    return ['Click to view provider health details', '', ...providerLines].join('\n');
   }
 
   dispose(): void {
@@ -121,7 +142,7 @@ export class ProviderHealthStatusBar implements vscode.Disposable {
  */
 export async function showProviderHealthQuickPick(providerRegistry: ProviderRegistry): Promise<void> {
   const providers = providerRegistry.getProviders();
-  
+
   if (providers.length === 0) {
     void vscode.window.showInformationMessage('No providers are registered.');
     return;
@@ -137,14 +158,14 @@ export async function showProviderHealthQuickPick(providerRegistry: ProviderRegi
 
     const aHealth = providerRegistry.getProviderHealth(a.id);
     const bHealth = providerRegistry.getProviderHealth(b.id);
-    
+
     if (aHealth.status === 'unhealthy' && bHealth.status !== 'unhealthy') {
       return -1;
     }
     if (aHealth.status !== 'unhealthy' && bHealth.status === 'unhealthy') {
       return 1;
     }
-    
+
     return a.label.localeCompare(b.label);
   });
 
@@ -159,12 +180,12 @@ export async function showProviderHealthQuickPick(providerRegistry: ProviderRegi
                  health.status === 'unhealthy' ? '$(warning)' :
                  health.status === 'healthy' ? '$(pass)' :
                  '$(circle-outline)';
-    
+
     let description: string = isRefreshing ? 'refreshing' : health.status;
     if (health.lastError) {
       description = `${description} — ${sanitizeError(health.lastError)}`;
     }
-    
+
     return {
       label: `${icon} ${provider.label}`,
       description,
@@ -192,7 +213,7 @@ export async function showProviderHealthQuickPick(providerRegistry: ProviderRegi
       const action = health.status === 'unhealthy'
         ? await vscode.window.showWarningMessage(message, 'Refresh')
         : await vscode.window.showInformationMessage(message, 'Refresh');
-      
+
       if (action === 'Refresh') {
         await refreshProviderWithProgress(providerRegistry, provider);
       }

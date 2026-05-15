@@ -13,6 +13,31 @@ import type { EditorItemData } from './mainTypes';
 import { composeEditorBadges } from './workItemEditorPanel';
 
 /**
+ * Manages the lifecycle of open IncomingPreviewPanels.
+ * Created during extension activation and disposed with the extension context,
+ * preventing stale preview references across extension reloads.
+ */
+export class IncomingPreviewPanelManager {
+  /** @internal Used by IncomingPreviewPanel — not part of public API. */
+  readonly openPanels = new Map<string, IncomingPreviewPanel>();
+  private disposed = false;
+
+  clearPanelCache(): void {
+    const panels = Array.from(this.openPanels.values());
+    for (const preview of panels) {
+      preview.dispose();
+    }
+    this.openPanels.clear();
+  }
+
+  dispose(): void {
+    if (this.disposed) { return; }
+    this.disposed = true;
+    this.clearPanelCache();
+  }
+}
+
+/**
  * Read-only "preview" editor panel for an incoming/discovered item that does
  * not yet have a backing WorkItem.
  *
@@ -25,13 +50,13 @@ import { composeEditorBadges } from './workItemEditorPanel';
  */
 export class IncomingPreviewPanel {
   private static readonly viewType = 'devdocket.previewItem';
-  private static readonly openPanels = new Map<string, IncomingPreviewPanel>();
 
   private readonly panel: vscode.WebviewPanel;
   private readonly providerRegistry: ProviderRegistry;
   private readonly stateStore: InboxStateStore;
   private readonly readStateStore: ReadStateStore;
   private readonly workGraph: WorkGraph;
+  private readonly panelManager: IncomingPreviewPanelManager;
   private readonly providerId: string;
   private readonly externalId: string;
   private readonly extensionUri: vscode.Uri;
@@ -41,6 +66,7 @@ export class IncomingPreviewPanel {
 
   static open(
     context: vscode.ExtensionContext,
+    panelManager: IncomingPreviewPanelManager,
     providerRegistry: ProviderRegistry,
     stateStore: InboxStateStore,
     readStateStore: ReadStateStore,
@@ -49,7 +75,7 @@ export class IncomingPreviewPanel {
     externalId: string,
   ): void {
     const key = IncomingPreviewPanel.cacheKey(providerId, externalId);
-    const existing = IncomingPreviewPanel.openPanels.get(key);
+    const existing = panelManager.openPanels.get(key);
     if (existing) {
       existing.update();
       existing.panel.reveal();
@@ -75,8 +101,8 @@ export class IncomingPreviewPanel {
       },
     );
 
-    const preview = new IncomingPreviewPanel(panel, providerRegistry, stateStore, readStateStore, workGraph, providerId, externalId, context.extensionUri);
-    IncomingPreviewPanel.openPanels.set(key, preview);
+    const preview = new IncomingPreviewPanel(panel, providerRegistry, stateStore, readStateStore, workGraph, panelManager, providerId, externalId, context.extensionUri);
+    panelManager.openPanels.set(key, preview);
     // Panel cleanup is wired in the constructor via panel.onDidDispose →
     // this.dispose(). Pushing onto context.subscriptions would leak a
     // closure per open (panels self-dispose long before the extension does).
@@ -88,6 +114,7 @@ export class IncomingPreviewPanel {
     stateStore: InboxStateStore,
     readStateStore: ReadStateStore,
     workGraph: WorkGraph,
+    panelManager: IncomingPreviewPanelManager,
     providerId: string,
     externalId: string,
     extensionUri: vscode.Uri,
@@ -97,6 +124,7 @@ export class IncomingPreviewPanel {
     this.stateStore = stateStore;
     this.readStateStore = readStateStore;
     this.workGraph = workGraph;
+    this.panelManager = panelManager;
     this.providerId = providerId;
     this.externalId = externalId;
     this.extensionUri = extensionUri;
@@ -309,7 +337,7 @@ export class IncomingPreviewPanel {
   dispose(): void {
     if (this.disposed) return;
     this.disposed = true;
-    IncomingPreviewPanel.openPanels.delete(IncomingPreviewPanel.cacheKey(this.providerId, this.externalId));
+    this.panelManager.openPanels.delete(IncomingPreviewPanel.cacheKey(this.providerId, this.externalId));
     for (const sub of this.subscriptions) {
       try { sub.dispose(); } catch { /* ignore */ }
     }

@@ -88,6 +88,7 @@ describe('GitHubPrReviewProvider', () => {
 
     expect(window.showWarningMessage).toHaveBeenCalledWith(
       expect.stringContaining('Authentication failed'),
+      'Sign in',
     );
     expect(listener).not.toHaveBeenCalled();
     expect(mockFetch).not.toHaveBeenCalled();
@@ -329,6 +330,7 @@ describe('GitHubPrReviewProvider', () => {
 
     expect(window.showWarningMessage).toHaveBeenCalledWith(
       expect.stringContaining('Failed to fetch PR review requests'),
+      'Open Settings',
     );
   });
 
@@ -577,6 +579,7 @@ describe('GitHubPrReviewProvider', () => {
       expect(listener).toHaveBeenCalledWith([]);
       expect(window.showWarningMessage).toHaveBeenCalledWith(
         expect.stringContaining('Failed to fetch PR review requests'),
+        'Open Settings',
       );
     });
   });

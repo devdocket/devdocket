@@ -7,8 +7,8 @@ import { ProviderRegistry, type ProviderRefreshProgress } from '../services/prov
 import { InboxStateStore, type InboxState } from '../storage/inboxStateStore';
 import type { ProviderLabelCache } from '../storage/providerLabelCache';
 import type { ReadStateStore } from '../storage/readStateStore';
-import { WorkItemEditorPanel } from '../views/workItemEditorPanel';
-import { IncomingPreviewPanel } from '../views/incomingPreviewPanel';
+import { WorkItemEditorPanel, type WorkItemEditorPanelDependencies } from '../views/workItemEditorPanel';
+import { IncomingPreviewPanel, type IncomingPreviewPanelManager } from '../views/incomingPreviewPanel';
 import { type InboxItem, type SourceItemNode, type SourcesElement } from './commandItemTypes';
 import { logger } from '../services/logger';
 import type { ResolvedItem } from '../api/types';
@@ -294,6 +294,7 @@ async function handleCreateItem(
   workGraph: WorkGraph,
   providerRegistry: ProviderRegistry,
   labelCache: ProviderLabelCache,
+  editorPanelDependencies: WorkItemEditorPanelDependencies,
 ): Promise<void> {
   const title = await vscode.window.showInputBox({
     prompt: 'Work item title',
@@ -307,7 +308,7 @@ async function handleCreateItem(
   logger.info(`Creating new work item: ${title.trim()}`);
   const createdItem = await workGraph.createItem({ title: title.trim() });
   const providerLabel = createdItem.providerId ? labelCache.get(createdItem.providerId) : undefined;
-  void WorkItemEditorPanel.open(context, workGraph, providerRegistry, createdItem, providerLabel);
+  void WorkItemEditorPanel.open(context, workGraph, providerRegistry, createdItem, editorPanelDependencies, providerLabel);
   void vscode.window.showInformationMessage(`DevDocket: Created "${title.trim()}"`);
 }
 
@@ -316,6 +317,7 @@ async function handleCreateItemFromUrl(
   workGraph: WorkGraph,
   providerRegistry: ProviderRegistry,
   labelCache: ProviderLabelCache,
+  editorPanelDependencies: WorkItemEditorPanelDependencies,
 ): Promise<void> {
   const url = await vscode.window.showInputBox({
     prompt: 'Enter a URL to create a work item from',
@@ -353,7 +355,7 @@ async function handleCreateItemFromUrl(
   const existing = workGraph.findItemByProvenance(details.providerId, details.externalId);
   if (existing) {
     const providerLabel = existing.providerId ? labelCache.get(existing.providerId) : undefined;
-    WorkItemEditorPanel.open(context, workGraph, providerRegistry, existing, providerLabel);
+    WorkItemEditorPanel.open(context, workGraph, providerRegistry, existing, editorPanelDependencies, providerLabel);
     void vscode.window.showInformationMessage('DevDocket: Item already exists for this source item');
     return;
   }
@@ -365,7 +367,7 @@ async function handleCreateItemFromUrl(
   );
 
   const providerLabel = createdItem.providerId ? labelCache.get(createdItem.providerId) : undefined;
-  WorkItemEditorPanel.open(context, workGraph, providerRegistry, createdItem, providerLabel);
+  WorkItemEditorPanel.open(context, workGraph, providerRegistry, createdItem, editorPanelDependencies, providerLabel);
   void vscode.window.showInformationMessage(`DevDocket: Created "${details.title}"`);
 }
 
@@ -416,13 +418,14 @@ function handleEditItem(
   workGraph: WorkGraph,
   providerRegistry: ProviderRegistry,
   labelCache: ProviderLabelCache,
+  editorPanelDependencies: WorkItemEditorPanelDependencies,
   item?: { id?: string },
 ): void {
   if (!item?.id) { return; }
   const workItem = workGraph.getItem(item.id);
   if (workItem) {
     const providerLabel = workItem.providerId ? labelCache.get(workItem.providerId) : undefined;
-    WorkItemEditorPanel.open(context, workGraph, providerRegistry, workItem, providerLabel);
+    WorkItemEditorPanel.open(context, workGraph, providerRegistry, workItem, editorPanelDependencies, providerLabel);
   }
 }
 
@@ -800,6 +803,8 @@ export function registerCommands(
   prWatcherRegistry: PRWatcherRegistry,
   watcherService: WatcherService,
   watchPanelProvider: WatchPanelProvider,
+  editorPanelDependencies: WorkItemEditorPanelDependencies,
+  incomingPreviewPanelManager: IncomingPreviewPanelManager,
   toggleMainSearch: () => void,
 ): void {
   context.subscriptions.push(
@@ -816,9 +821,9 @@ export function registerCommands(
         ),
       )),
     vscode.commands.registerCommand('devdocket.createItem',
-      wrapCommand('Failed to create item', () => handleCreateItem(context, workGraph, providerRegistry, labelCache))),
+      wrapCommand('Failed to create item', () => handleCreateItem(context, workGraph, providerRegistry, labelCache, editorPanelDependencies))),
     vscode.commands.registerCommand('devdocket.createItemFromUrl',
-      wrapCommand('Failed to create item from URL', () => handleCreateItemFromUrl(context, workGraph, providerRegistry, labelCache))),
+      wrapCommand('Failed to create item from URL', () => handleCreateItemFromUrl(context, workGraph, providerRegistry, labelCache, editorPanelDependencies))),
     vscode.commands.registerCommand('devdocket.previewIncomingItem',
       wrapCommand('Failed to preview incoming item', (arg: unknown) => {
         if (!arg || typeof arg !== 'object') {
@@ -828,7 +833,7 @@ export function registerCommands(
         if (typeof providerId !== 'string' || typeof externalId !== 'string') {
           throw new Error('previewIncomingItem requires string providerId and externalId');
         }
-        IncomingPreviewPanel.open(context, providerRegistry, stateStore, readStateStore, workGraph, providerId, externalId);
+        IncomingPreviewPanel.open(context, incomingPreviewPanelManager, providerRegistry, stateStore, readStateStore, workGraph, providerId, externalId);
       })),
     vscode.commands.registerCommand('devdocket.acceptToFocus',
       wrapCommand('Failed to move item to In Progress', (item, selectedItems) => handleAcceptToFocus(workGraph, item, selectedItems))),
@@ -845,7 +850,7 @@ export function registerCommands(
     vscode.commands.registerCommand('devdocket.clearHistory',
       wrapCommand('Failed to clear history', () => handleClearHistory(workGraph))),
     vscode.commands.registerCommand('devdocket.editItem',
-      wrapCommand('Failed to open editor', (item) => handleEditItem(context, workGraph, providerRegistry, labelCache, item))),
+      wrapCommand('Failed to open editor', (item) => handleEditItem(context, workGraph, providerRegistry, labelCache, editorPanelDependencies, item))),
     vscode.commands.registerCommand('devdocket.openInBrowser',
       wrapCommand('Failed to open in browser', (item) => handleOpenInBrowser(workGraph, item))),
     vscode.commands.registerCommand('devdocket.copyUrl',

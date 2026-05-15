@@ -87,8 +87,9 @@ A floating webview that monitors GitHub Actions / Azure DevOps Pipeline runs and
 
 ### Adding watches
 
-- Inside the panel, click **+ Watch URL** in the header. Paste either a pipeline run URL or a pull request URL — DevDocket detects which kind it is.
-- From the command palette: **DevDocket: Watch Pipeline Run** or **DevDocket: Watch Pull Request**.
+- Inside the panel, click **+ Watch URL** in the header. Paste a supported URL — DevDocket detects whether it is a PR or run, and validates the URL before submission. Examples: `https://github.com/owner/repo/pull/123` and `https://github.com/owner/repo/actions/runs/12345`.
+- From the command palette: **DevDocket: Watch URL…**.
+- Supported surfaces include GitHub PR URLs, GitHub Actions run URLs, Azure DevOps PR URLs, and Azure DevOps Pipeline run URLs.
 - GitHub PRs you authored can be auto-watched on discovery — see `devDocket.watches.autoWatchAuthoredPRs`.
 
 The manual Watch URL flow is **idempotent** for already-watched URLs and force-recreates the watch when a PR is in a bad state (e.g. all child runs were dismissed making it invisible).
@@ -102,7 +103,7 @@ The manual Watch URL flow is **idempotent** for already-watched URLs and force-r
 
 DevDocket contributes two right-aligned status bar items (priorities `100000` and `100001`, immediately to the left of the Copilot button). Quick access to the sidebar itself is via the activity-bar container, not the status bar.
 
-- **Provider Health** (priority `100000`) — `⚠ N providers unhealthy`. Hidden when every provider is healthy, so the status bar stays quiet by default; click to open the Provider Health quick pick.
+- **Provider Health** (priority `100000`) — `✓ DevDocket • N providers` when every provider is healthy, `○ DevDocket • N providers` while provider health is still unknown, and `⚠ N providers unhealthy` when degraded; click to open the Provider Health quick pick.
 - **Watches** (priority `100001`) — eye icon + run counts (`🔄 N active · ✓ N passed · ✗ N failed`); always visible. Turns amber when at least one watched run has failed and the failure has not yet been acknowledged. Click to open the CI Watches panel.
 
 ## Item Lifecycle

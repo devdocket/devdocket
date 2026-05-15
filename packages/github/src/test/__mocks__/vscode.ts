@@ -47,7 +47,7 @@ class MockTreeItem {
 const window = {
   showInputBox: vi.fn(),
   showInformationMessage: vi.fn(),
-  showWarningMessage: vi.fn(),
+  showWarningMessage: vi.fn(async () => undefined),
   showErrorMessage: vi.fn(),
   showQuickPick: vi.fn(),
   registerTreeDataProvider: vi.fn(() => ({ dispose: vi.fn() })),
