@@ -37,6 +37,14 @@ export class WatchPanelProvider implements vscode.Disposable {
     ];
   }
 
+  createSerializer(): vscode.WebviewPanelSerializer {
+    return {
+      deserializeWebviewPanel: async (panel): Promise<void> => {
+        this.revive(panel);
+      },
+    };
+  }
+
   open(): void {
     if (this.panel) {
       this.panel.reveal(vscode.ViewColumn.Beside);
@@ -44,21 +52,27 @@ export class WatchPanelProvider implements vscode.Disposable {
       return;
     }
 
-    const localResourceRoots = [vscode.Uri.joinPath(this.extensionUri, 'webview-dist')];
-    if (this.codiconsResources) {
-      localResourceRoots.push(vscode.Uri.file(this.codiconsResources.distDir));
-    }
-
-    this.panel = vscode.window.createWebviewPanel(
+    const panel = vscode.window.createWebviewPanel(
       WatchPanelProvider.viewType,
       'CI Watches',
       vscode.ViewColumn.Beside,
-      {
-        enableScripts: true,
-        localResourceRoots,
-      },
+      this.getWebviewOptions(),
     );
 
+    this.attachPanel(panel);
+  }
+
+  revive(panel: vscode.WebviewPanel): void {
+    if (this.panel && this.panel !== panel) {
+      this.panel.dispose();
+    }
+    this.attachPanel(panel);
+  }
+
+  private attachPanel(panel: vscode.WebviewPanel): void {
+    this.clearPanel();
+    this.panel = panel;
+    this.panel.webview.options = this.getWebviewOptions();
     this.panel.webview.html = this.getHtml(this.panel.webview);
     this.panelDisposables = [
       this.panel.webview.onDidReceiveMessage((message: WebviewMessage) => {
@@ -78,6 +92,18 @@ export class WatchPanelProvider implements vscode.Disposable {
     ];
 
     this.refresh();
+  }
+
+  private getWebviewOptions(): vscode.WebviewPanelOptions & vscode.WebviewOptions {
+    const localResourceRoots = [vscode.Uri.joinPath(this.extensionUri, 'webview-dist')];
+    if (this.codiconsResources) {
+      localResourceRoots.push(vscode.Uri.file(this.codiconsResources.distDir));
+    }
+
+    return {
+      enableScripts: true,
+      localResourceRoots,
+    };
   }
 
   refresh(): void {

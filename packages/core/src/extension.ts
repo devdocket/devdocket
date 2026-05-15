@@ -18,8 +18,8 @@ import { WatchStore } from './storage/watchStore';
 import { WatchesStatusBar } from './views/watchesStatusBar';
 import { ProviderHealthStatusBar } from './views/providerHealthStatusBar';
 import { WatchPanelProvider } from './views/watchPanelProvider';
-import { PanelManager, type WorkItemEditorPanelDependencies } from './views/workItemEditorPanel';
-import { IncomingPreviewPanelManager } from './views/incomingPreviewPanel';
+import { WorkItemEditorPanel, PanelManager, type WorkItemEditorPanelDependencies } from './views/workItemEditorPanel';
+import { IncomingPreviewPanel, IncomingPreviewPanelManager } from './views/incomingPreviewPanel';
 import { MainViewProvider } from './views/mainViewProvider';
 import { registerCommands } from './commands/commands';
 import { isSafeUrl } from './utils/url';
@@ -557,6 +557,18 @@ export async function activate(context: vscode.ExtensionContext): Promise<DevDoc
   context.subscriptions.push(
     panelManager,
     incomingPreviewPanelManager,
+    vscode.window.registerWebviewPanelSerializer(
+      WorkItemEditorPanel.viewType,
+      WorkItemEditorPanel.createSerializer(context, wg, pr, editorPanelDependencies),
+    ),
+    vscode.window.registerWebviewPanelSerializer(
+      IncomingPreviewPanel.viewType,
+      IncomingPreviewPanel.createSerializer(context, incomingPreviewPanelManager, pr, ss, readStateStore, wg),
+    ),
+    vscode.window.registerWebviewPanelSerializer(
+      WatchPanelProvider.viewType,
+      watchPanelProvider.createSerializer(),
+    ),
     ...eventDisposables,
     mainProvider,
     watchPanelProvider,

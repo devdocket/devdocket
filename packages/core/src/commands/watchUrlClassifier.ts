@@ -82,4 +82,3 @@ function buildUnsupportedMessage(
   }
   return `Unsupported URL. Paste a URL recognized by one of: ${labels.join(', ')}.`;
 }
-

@@ -1,6 +1,7 @@
 import * as crypto from 'crypto';
 import { marked } from 'marked';
 import sanitizeHtml from 'sanitize-html';
+import { getSerializedEditorState } from '../webview/shared/editorState';
 import type { EditorItemData } from './mainTypes';
 
 export interface EditorHtmlOptions {
@@ -11,6 +12,10 @@ export interface EditorHtmlOptions {
 
 export function getEditorPanelHtml({ cspSource, scriptUri, initialItem }: EditorHtmlOptions): string {
   const nonce = getNonce();
+  const initialState = getSerializedEditorState(initialItem);
+  const initialStateScript = initialState
+    ? `\n    window.__DEVDOCKET_VSCODE_API__ = window.__DEVDOCKET_VSCODE_API__ || acquireVsCodeApi();\n    window.__DEVDOCKET_VSCODE_API__.setState(${serializeForScript(initialState)});`
+    : '';
 
   return /* html */ `<!DOCTYPE html>
 <html lang="en">
@@ -619,7 +624,7 @@ export function getEditorPanelHtml({ cspSource, scriptUri, initialItem }: Editor
 </head>
 <body>
   <div id="root"></div>
-  <script nonce="${nonce}">
+  <script nonce="${nonce}">${initialStateScript}
     window.__DEVDOCKET_EDITOR_BOOTSTRAP__ = ${serializeForScript(initialItem)};
   </script>
   <script nonce="${nonce}" type="module" src="${escapeAttr(scriptUri)}"></script>
@@ -654,11 +659,13 @@ function getNonce(): string {
   return crypto.randomBytes(16).toString('hex');
 }
 
-function serializeForScript(value: EditorItemData): string {
+function serializeForScript(value: unknown): string {
   return JSON.stringify(value)
     .replace(/</g, '\\u003c')
     .replace(/>/g, '\\u003e')
-    .replace(/&/g, '\\u0026');
+    .replace(/&/g, '\\u0026')
+    .replace(/\u2028/g, '\\u2028')
+    .replace(/\u2029/g, '\\u2029');
 }
 
 function escapeAttr(value: string): string {

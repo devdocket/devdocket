@@ -110,6 +110,19 @@ describe('activate()', () => {
   // ------------------------------------------------------------------
   // 4. Registers commands
   // ------------------------------------------------------------------
+  it('registers webview panel serializers for restorable panels', async () => {
+    await activate(context);
+
+    const registerSerializer = vscode.window.registerWebviewPanelSerializer as ReturnType<typeof vi.fn>;
+    const viewTypes = registerSerializer.mock.calls.map((call: any[]) => call[0]);
+
+    expect(viewTypes).toEqual(expect.arrayContaining([
+      'devdocket.editItem',
+      'devdocket.previewItem',
+      'devdocket.watchPanel',
+    ]));
+  });
+
   it('registers extension commands', async () => {
     await activate(context);
     const registerCommand = vscode.commands.registerCommand as ReturnType<typeof vi.fn>;
