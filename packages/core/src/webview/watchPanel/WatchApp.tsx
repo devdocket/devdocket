@@ -7,6 +7,7 @@ import { useThemeChangeCounter } from '../shared/theme';
 export function WatchApp() {
   const [prWatches, setPrWatches] = useState<PRWatchData[]>([]);
   const [runWatches, setRunWatches] = useState<RunWatchData[]>([]);
+  const [expandedPRRuns, setExpandedPRRuns] = useState<Map<string, boolean>>(() => new Map());
   // Re-render badges when the user switches VS Code theme.
   useThemeChangeCounter();
 
@@ -39,24 +40,13 @@ export function WatchApp() {
     [prWatches, runWatches],
   );
   const totalCount = prWatches.length + runWatches.length;
-
-  // Flatten PR watches with their child runs into a single ordered list so
-  // each row is a top-level item-card (matching the sidebar tier rendering).
-  // Children stay adjacent to their parent so the visual grouping is preserved
-  // by ordering rather than nesting.
-  const prSectionItems = useMemo(() => {
-    const items: Array<
-      | { kind: 'pr'; pr: PRWatchData }
-      | { kind: 'run'; run: RunWatchData; parentTitle: string }
-    > = [];
-    for (const pr of prWatches) {
-      items.push({ kind: 'pr', pr });
-      for (const run of pr.runs) {
-        items.push({ kind: 'run', run, parentTitle: pr.title });
-      }
-    }
-    return items;
-  }, [prWatches]);
+  const togglePRRuns = (prId: string, currentlyExpanded: boolean) => {
+    setExpandedPRRuns(current => {
+      const next = new Map(current);
+      next.set(prId, !currentlyExpanded);
+      return next;
+    });
+  };
 
   return (
     <div class="watch-panel">
@@ -90,38 +80,47 @@ export function WatchApp() {
         <div class="tiers">
           {prWatches.length > 0 ? (
             <CollapsibleSection icon="🔀" name="PR Watches" count={prWatches.length}>
-              {prSectionItems.map(entry => {
-                if (entry.kind === 'pr') {
-                  return (
-                    <WatchCard
-                      key={`pr-${entry.pr.id}`}
-                      title={entry.pr.title}
-                      meta={entry.pr.repo}
-                      preview={entry.pr.errorMessage}
-                      previewIsWarning={entry.pr.hasWarning}
-                      badge={getPRBadge(entry.pr)}
-                      tierClass={getPRTierClass(entry.pr)}
-                      url={entry.pr.url}
-                      watchId={entry.pr.id}
-                      linkedItemId={entry.pr.linkedItemId}
-                      linkedSourceProviderId={entry.pr.linkedSourceProviderId}
-                      linkedSourceExternalId={entry.pr.linkedSourceExternalId}
-                    />
-                  );
-                }
+              {prWatches.map(prWatch => {
+                const summary = summarizeRuns(prWatch.runs);
+                const explicitExpanded = expandedPRRuns.get(prWatch.id);
+                const expanded = explicitExpanded ?? summary.failed > 0;
+                const preview = getPRPreview(prWatch, summary);
                 return (
                   <WatchCard
-                    key={`run-${entry.run.id}`}
-                    title={entry.run.name}
-                    meta={`${entry.run.repo} · run on ${entry.parentTitle}`}
-                    preview={entry.run.failurePreview}
-                    previewIsWarning={entry.run.hasWarning || isFailedRun(entry.run)}
-                    badge={getRunBadge(entry.run)}
-                    tierClass={getRunTierClass(entry.run)}
-                    elapsedTime={entry.run.elapsedTime}
-                    url={entry.run.url}
-                    watchId={entry.run.id}
-                  />
+                    key={`pr-${prWatch.id}`}
+                    title={prWatch.title}
+                    meta={prWatch.repo}
+                    preview={preview}
+                    previewIsWarning={prWatch.hasWarning || summary.failed > 0}
+                    summary={formatRunSummary(summary)}
+                    badge={getPRBadge(prWatch)}
+                    tierClass={summary.failed > 0 ? 'urgent' : getPRTierClass(prWatch)}
+                    url={prWatch.url}
+                    watchId={prWatch.id}
+                    linkedItemId={prWatch.linkedItemId}
+                    linkedSourceProviderId={prWatch.linkedSourceProviderId}
+                    linkedSourceExternalId={prWatch.linkedSourceExternalId}
+                    expanded={expanded}
+                    onToggleExpanded={() => togglePRRuns(prWatch.id, expanded)}
+                  >
+                    <div class="nested-run-list" aria-label={`Runs for ${prWatch.title}`}>
+                      {prWatch.runs.map(run => (
+                        <WatchCard
+                          key={`run-${run.id}`}
+                          title={run.name}
+                          meta={`${run.repo} · run on ${prWatch.title}`}
+                          preview={run.failurePreview}
+                          previewIsWarning={run.hasWarning || isFailedRun(run)}
+                          badge={getRunBadge(run)}
+                          tierClass={getRunTierClass(run)}
+                          elapsedTime={run.elapsedTime}
+                          url={run.url}
+                          watchId={run.id}
+                          dismissible={false}
+                        />
+                      ))}
+                    </div>
+                  </WatchCard>
                 );
               })}
             </CollapsibleSection>
@@ -194,6 +193,7 @@ interface WatchCardProps {
   meta: string;
   preview?: string;
   previewIsWarning?: boolean;
+  summary?: string;
   badge: BadgeData;
   tierClass: string;
   elapsedTime?: string;
@@ -202,6 +202,10 @@ interface WatchCardProps {
   linkedItemId?: string;
   linkedSourceProviderId?: string;
   linkedSourceExternalId?: string;
+  expanded?: boolean;
+  onToggleExpanded?: () => void;
+  dismissible?: boolean;
+  children?: preact.ComponentChildren;
 }
 
 function WatchCard({
@@ -209,6 +213,7 @@ function WatchCard({
   meta,
   preview,
   previewIsWarning,
+  summary,
   badge,
   tierClass,
   elapsedTime,
@@ -217,6 +222,10 @@ function WatchCard({
   linkedItemId,
   linkedSourceProviderId,
   linkedSourceExternalId,
+  expanded,
+  onToggleExpanded,
+  dismissible = true,
+  children,
 }: WatchCardProps) {
   const clickable = Boolean(url);
   const openWatch = () => {
@@ -226,6 +235,8 @@ function WatchCard({
   };
   const hasLinkedSource = Boolean(linkedSourceProviderId && linkedSourceExternalId);
   const hasLinkedTarget = Boolean(linkedItemId || hasLinkedSource);
+  const hasActions = hasLinkedTarget || dismissible;
+  const hasDetails = Boolean(onToggleExpanded && children);
   const openLinkedItem = () => {
     if (linkedItemId) {
       postMessage({ type: 'openItem', itemId: linkedItemId });
@@ -258,51 +269,82 @@ function WatchCard({
       onClick={openWatch}
       onKeyDown={handleKeyDown}
     >
-      <div class="item-card-main">
-        <div class="item-line-1">
-          <div class="item-title-wrap">
-            <span class="item-title">{title}</span>
+      <div class="item-card-row">
+        <div class="item-card-main">
+          <div class="item-line-1">
+            <div class="item-title-wrap">
+              {onToggleExpanded ? (
+                <button
+                  type="button"
+                  class="watch-disclosure-button"
+                  aria-label={`${expanded ? 'Collapse' : 'Expand'} runs for ${title}`}
+                  aria-expanded={expanded}
+                  onKeyDown={(event) => event.stopPropagation()}
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    onToggleExpanded();
+                  }}
+                >
+                  <span aria-hidden="true">{expanded ? '▾' : '▸'}</span>
+                </button>
+              ) : null}
+              <span class="item-title">{title}</span>
+            </div>
+          </div>
+          <div class="item-repo-annotation">{meta}</div>
+          {preview ? (
+            <div class={`watch-row-preview ${previewIsWarning ? 'warning' : ''}`.trim()}>{preview}</div>
+          ) : null}
+          {summary ? <div class="watch-run-summary">{summary}</div> : null}
+          <div class="badge-row">
+            <BadgePill badge={badge} />
+            {elapsedTime ? <span class="watch-time">{elapsedTime}</span> : null}
           </div>
         </div>
-        <div class="item-repo-annotation">{meta}</div>
-        {preview ? (
-          <div class={`watch-row-preview ${previewIsWarning ? 'warning' : ''}`.trim()}>{preview}</div>
+        {hasActions ? (
+          <div class="item-actions" role="group" aria-label={`${title} actions`}>
+            {hasLinkedTarget ? (
+              <button
+                type="button"
+                class="item-action-btn"
+                title="Open in DevDocket"
+                aria-label="Open in DevDocket"
+                onKeyDown={(event) => event.stopPropagation()}
+                onClick={(event) => {
+                  event.stopPropagation();
+                  openLinkedItem();
+                }}
+              >
+                <span class="codicon codicon-go-to-file" aria-hidden="true" />
+              </button>
+            ) : null}
+            {dismissible ? (
+              <button
+                type="button"
+                class="item-action-btn"
+                title="Dismiss watch"
+                aria-label={`Dismiss ${title}`}
+                onKeyDown={(event) => event.stopPropagation()}
+                onClick={(event) => {
+                  event.stopPropagation();
+                  postMessage({ type: 'dismissWatch', watchId });
+                }}
+              >
+                ✗
+              </button>
+            ) : null}
+          </div>
         ) : null}
-        <div class="badge-row">
-          <BadgePill badge={badge} />
-          {elapsedTime ? <span class="watch-time">{elapsedTime}</span> : null}
-        </div>
       </div>
-      <div class="item-actions" role="group" aria-label={`${title} actions`}>
-        {hasLinkedTarget ? (
-          <button
-            type="button"
-            class="item-action-btn"
-            title="Open in DevDocket"
-            aria-label="Open in DevDocket"
-            onKeyDown={(event) => event.stopPropagation()}
-            onClick={(event) => {
-              event.stopPropagation();
-              openLinkedItem();
-            }}
-          >
-            <span class="codicon codicon-go-to-file" aria-hidden="true" />
-          </button>
-        ) : null}
-        <button
-          type="button"
-          class="item-action-btn"
-          title="Dismiss watch"
-          aria-label={`Dismiss ${title}`}
+      {hasDetails && expanded ? (
+        <div
+          class="watch-card-details"
+          onClick={(event) => event.stopPropagation()}
           onKeyDown={(event) => event.stopPropagation()}
-          onClick={(event) => {
-            event.stopPropagation();
-            postMessage({ type: 'dismissWatch', watchId });
-          }}
         >
-          ✗
-        </button>
-      </div>
+          {children}
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -329,6 +371,52 @@ function getRunBadge(runWatch: RunWatchData): BadgeData {
     return { label: 'Passed', type: 'ci', variant: 'ci-pass' };
   }
   return { label: toConclusionLabel(runWatch.conclusion), type: 'ci', variant: 'ci-fail' };
+}
+
+interface RunSummary {
+  passed: number;
+  failed: number;
+  running: number;
+  other: number;
+  total: number;
+  failurePreview?: string;
+}
+
+function summarizeRuns(runs: RunWatchData[]): RunSummary {
+  return runs.reduce<RunSummary>((summary, run) => {
+    const runFailed = run.hasWarning || isFailedRun(run);
+    if (runFailed) {
+      summary.failed += 1;
+      summary.failurePreview ??= run.failurePreview;
+    } else if (run.state !== 'completed') {
+      summary.running += 1;
+    } else if (run.conclusion === 'success') {
+      summary.passed += 1;
+    } else {
+      summary.other += 1;
+    }
+    summary.total += 1;
+    return summary;
+  }, { passed: 0, failed: 0, running: 0, other: 0, total: 0 });
+}
+
+function formatRunSummary(summary: RunSummary): string {
+  const parts = [
+    `✓ ${summary.passed} passed`,
+    `✗ ${summary.failed} failed`,
+    `⏳ ${summary.running} running`,
+  ];
+  if (summary.other > 0) {
+    parts.push(`• ${summary.other} other`);
+  }
+  return `Checks: ${parts.join(' · ')} (${summary.total} total)`;
+}
+
+function getPRPreview(prWatch: PRWatchData, summary: RunSummary): string | undefined {
+  if (summary.failurePreview && prWatch.errorMessage) {
+    return `${summary.failurePreview} · ${prWatch.errorMessage}`;
+  }
+  return summary.failurePreview ?? prWatch.errorMessage;
 }
 
 function getPRTierClass(prWatch: PRWatchData): string {

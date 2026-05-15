@@ -82,8 +82,8 @@ A floating webview that monitors GitHub Actions / Azure DevOps Pipeline runs and
 
 ### Two sections
 
-- **PR Watches** — pull requests being monitored, with each PR's CI runs flattened beneath it (the PR card and its run cards appear adjacent in the list).
-- **Run Watches** — standalone pipeline runs you've added directly.
+- **PR Watches** — pull requests being monitored. Each PR renders as one card with a checks roll-up; expand the card to see individual CI runs. PRs auto-expand when a child run fails, and the failure preview appears on the PR card.
+- **Run Watches** — standalone pipeline runs you've added directly. These continue to render as flat run cards.
 
 ### Adding watches
 
@@ -96,7 +96,8 @@ The manual Watch URL flow is **idempotent** for already-watched URLs and force-r
 
 ### Dismissing watches
 
-- Hover any watch card and click the **✗** button.
+- Hover a PR card and click the **✗** button to dismiss the whole PR watch, including its child runs. Child run cards inside an expanded PR are informational and do not have their own dismiss button.
+- Hover a standalone run card and click the **✗** button to dismiss that run watch.
 - **Dismiss Completed** in the panel header clears all merged / closed PRs and finished runs in one click.
 
 ### Status bar

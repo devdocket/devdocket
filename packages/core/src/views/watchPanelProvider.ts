@@ -407,13 +407,19 @@ export class WatchPanelProvider implements vscode.Disposable {
     .item-card {
       position: relative;
       display: flex;
-      align-items: stretch;
-      gap: 10px;
+      flex-direction: column;
+      gap: 8px;
       padding: 8px 10px 8px 12px;
       border-radius: 6px;
       background: var(--vscode-editor-background);
       border-left: 3px solid transparent;
       cursor: pointer;
+    }
+    .item-card-row {
+      position: relative;
+      display: flex;
+      align-items: stretch;
+      gap: 10px;
     }
     .item-card:focus-visible {
       outline: 1px solid var(--vscode-focusBorder);
@@ -467,6 +473,50 @@ export class WatchPanelProvider implements vscode.Disposable {
     }
     .watch-row-preview.warning {
       color: var(--vscode-testing-iconFailed, var(--vscode-errorForeground));
+    }
+    .watch-run-summary {
+      font-size: 12px;
+      color: var(--vscode-descriptionForeground);
+    }
+    .watch-disclosure-button {
+      flex: 0 0 auto;
+      width: 18px;
+      height: 18px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      margin: 0;
+      padding: 0;
+      border: none;
+      border-radius: 4px;
+      background: transparent;
+      color: var(--vscode-descriptionForeground);
+      cursor: pointer;
+      font: inherit;
+      line-height: 1;
+    }
+    .watch-disclosure-button:hover {
+      background: var(--vscode-toolbar-hoverBackground, rgba(127, 127, 127, 0.25));
+      color: var(--vscode-foreground);
+    }
+    .watch-disclosure-button:focus-visible {
+      outline: 1px solid var(--vscode-focusBorder);
+      outline-offset: -1px;
+    }
+    .watch-card-details {
+      margin-left: 10px;
+      padding-left: 10px;
+      border-left: 1px solid var(--vscode-widget-border, rgba(127, 127, 127, 0.35));
+    }
+    .nested-run-list {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+    .watch-card-details .item-card {
+      padding: 7px 9px;
+      background: var(--vscode-sideBar-background, var(--vscode-editor-background));
+      border-left-width: 2px;
     }
     .badge-row {
       display: flex;
