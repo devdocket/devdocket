@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import * as vscode from 'vscode';
 import { EventEmitter, ViewColumn, window } from 'vscode';
-import { WorkItemEditorPanel } from '../views/workItemEditorPanel';
+import { PanelManager, WorkItemEditorPanel, type WorkItemEditorPanelDependencies } from '../views/workItemEditorPanel';
 import { WorkItem, WorkItemState } from '../models/workItem';
 
 function makeItem(overrides: Partial<WorkItem> = {}): WorkItem {
@@ -226,6 +226,20 @@ function createMockContext() {
   } as unknown as vscode.ExtensionContext;
 }
 
+function createEditorDependencies(
+  actionRegistry = createMockActionRegistry(),
+  stateStore = createMockStateStore(),
+  watcherService?: ReturnType<typeof createMockWatcherService>,
+  panelManager = new PanelManager(),
+): WorkItemEditorPanelDependencies {
+  return {
+    panelManager,
+    actionRegistry: actionRegistry as any,
+    stateStore: stateStore as any,
+    watcherService: watcherService as any,
+  };
+}
+
 function openPanel(
   item: WorkItem,
   workGraph = createMockWorkGraph(item),
@@ -233,21 +247,27 @@ function openPanel(
   actionRegistry = createMockActionRegistry(),
   stateStore = createMockStateStore(),
   watcherService?: ReturnType<typeof createMockWatcherService>,
+  panelManager = new PanelManager(),
 ) {
   const mock = createMockWebviewPanel();
   const context = createMockContext();
+  const dependencies = createEditorDependencies(actionRegistry, stateStore, watcherService, panelManager);
   vi.mocked(window.createWebviewPanel).mockReturnValue(mock.panel as any);
-  WorkItemEditorPanel.setDependencies(actionRegistry as any, stateStore as any, watcherService as any);
-  WorkItemEditorPanel.open(context, workGraph as any, providerRegistry as any, item, item.providerId ? 'GitHub' : undefined);
-  return { mock, context, workGraph, providerRegistry, actionRegistry, stateStore, watcherService };
+  WorkItemEditorPanel.open(context, workGraph as any, providerRegistry as any, item, dependencies, item.providerId ? 'GitHub' : undefined);
+  return { mock, context, workGraph, providerRegistry, actionRegistry, stateStore, watcherService, panelManager, dependencies };
 }
 
 describe('WorkItemEditorPanel', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    WorkItemEditorPanel.clearPanelCache();
-    WorkItemEditorPanel.setDependencies(undefined, undefined);
     vi.useRealTimers();
+  });
+
+  it('does not expose mutable static dependency state', () => {
+    const keys = Reflect.ownKeys(WorkItemEditorPanel);
+    for (const key of ['panelManager', 'actionRegistry', 'stateStore', 'watcherService', 'setPanelManager', 'setDependencies']) {
+      expect(keys).not.toContain(key);
+    }
   });
 
   it('creates a webview panel with the editor bundle shell', () => {
@@ -646,12 +666,40 @@ describe('WorkItemEditorPanel', () => {
     const mock = createMockWebviewPanel();
     const context = createMockContext();
     vi.mocked(window.createWebviewPanel).mockReturnValue(mock.panel as any);
-    WorkItemEditorPanel.setDependencies(createMockActionRegistry() as any, createMockStateStore() as any);
+    const dependencies = createEditorDependencies(undefined, undefined, undefined, new PanelManager());
 
-    WorkItemEditorPanel.open(context, createMockWorkGraph(item) as any, createMockProviderRegistry() as any, item);
-    WorkItemEditorPanel.open(context, createMockWorkGraph(item) as any, createMockProviderRegistry() as any, item);
+    WorkItemEditorPanel.open(context, createMockWorkGraph(item) as any, createMockProviderRegistry() as any, item, dependencies);
+    WorkItemEditorPanel.open(context, createMockWorkGraph(item) as any, createMockProviderRegistry() as any, item, dependencies);
 
     expect(window.createWebviewPanel).toHaveBeenCalledTimes(1);
     expect(mock.panel.reveal).toHaveBeenCalledTimes(1);
+  });
+
+  it('scopes panel reuse to the injected panel manager', () => {
+    const item = makeItem({ id: 'reuse-activation-1', title: 'Reusable per activation' });
+    const firstMock = createMockWebviewPanel();
+    const secondMock = createMockWebviewPanel();
+    vi.mocked(window.createWebviewPanel)
+      .mockReturnValueOnce(firstMock.panel as any)
+      .mockReturnValueOnce(secondMock.panel as any);
+
+    WorkItemEditorPanel.open(
+      createMockContext(),
+      createMockWorkGraph(item) as any,
+      createMockProviderRegistry() as any,
+      item,
+      createEditorDependencies(undefined, undefined, undefined, new PanelManager()),
+    );
+    WorkItemEditorPanel.open(
+      createMockContext(),
+      createMockWorkGraph(item) as any,
+      createMockProviderRegistry() as any,
+      item,
+      createEditorDependencies(undefined, undefined, undefined, new PanelManager()),
+    );
+
+    expect(window.createWebviewPanel).toHaveBeenCalledTimes(2);
+    expect(firstMock.panel.reveal).not.toHaveBeenCalled();
+    expect(secondMock.panel.reveal).not.toHaveBeenCalled();
   });
 });

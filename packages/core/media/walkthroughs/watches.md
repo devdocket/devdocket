@@ -12,13 +12,18 @@ The panel groups watches into:
 
 ## Add a Watch
 
-From inside the **CI Watches** panel, click **+ Watch URL** in the top-right and paste either a pipeline run URL or a pull request URL. DevDocket figures out which kind it is and starts monitoring.
+From inside the **CI Watches** panel, click **+ Watch URL** in the top-right and paste a supported URL. DevDocket validates the URL as you type, tells you whether it will become a PR watch or run watch, then starts monitoring.
+
+Supported surfaces include:
+
+- GitHub pull requests, for example `https://github.com/owner/repo/pull/123`
+- GitHub Actions runs, for example `https://github.com/owner/repo/actions/runs/12345`
+- Azure DevOps pull requests
+- Azure DevOps Pipeline runs
 
 You can also use the Command Palette:
 
-[Watch a Pipeline Run](command:devdocket.watchRun)
-
-[Watch a Pull Request](command:devdocket.watchPR)
+[Watch a URL](command:devdocket.watchUrl)
 
 ## Auto-Watching Authored PRs
 

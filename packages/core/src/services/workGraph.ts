@@ -28,6 +28,7 @@ export class WorkGraph {
   private readonly duplicateProvenanceCounts: Map<string, number> = new Map();
   /** Lazily-built index of items grouped by state; nulled on any mutation to {@link items}. */
   private stateCache: Map<WorkItemState, WorkItem[]> | null = null;
+  private currentMutation: Promise<void> = Promise.resolve();
   private readonly _onDidChange = new vscode.EventEmitter<void>();
   private readonly _onDidTransitionState = new vscode.EventEmitter<{ itemId: string; item: WorkItem; oldState: string; newState: string }>();
   /**
@@ -41,6 +42,18 @@ export class WorkGraph {
   readonly onDidTransitionState = this._onDidTransitionState.event;
 
   constructor(private readonly store: ITaskStore) {}
+
+  private async withLock<T>(work: () => Promise<T>): Promise<T> {
+    const prev = this.currentMutation;
+    let release!: () => void;
+    this.currentMutation = new Promise<void>(resolve => { release = resolve; });
+    try {
+      await prev;
+      return await work();
+    } finally {
+      release();
+    }
+  }
 
   private static provenanceKey(providerId: string, externalId: string): string {
     return `${providerId}::${externalId}`;
@@ -172,6 +185,13 @@ export class WorkGraph {
     input: WorkItemInput,
     provenance?: { providerId: string; externalId: string; itemType?: WorkItem['itemType']; url?: string; group?: string },
   ): Promise<WorkItem> {
+    return this.withLock(() => this.doCreateItem(input, provenance));
+  }
+
+  private async doCreateItem(
+    input: WorkItemInput,
+    provenance?: { providerId: string; externalId: string; itemType?: WorkItem['itemType']; url?: string; group?: string },
+  ): Promise<WorkItem> {
     const sortOrder = this.nextSortOrder(WorkItemState.New);
     const now = Date.now();
     const createdEntry: ActivityLogEntry = { timestamp: now, type: 'created' };
@@ -214,6 +234,10 @@ export class WorkGraph {
 
   /** Apply a partial update (title, notes, description, and/or url) to an existing work item. */
   async updateItem(id: string, patch: Partial<WorkItemInput>): Promise<void> {
+    return this.withLock(() => this.doUpdateItem(id, patch));
+  }
+
+  private async doUpdateItem(id: string, patch: Partial<WorkItemInput>): Promise<void> {
     const item = this.items.get(id);
     if (!item) {
       throw new Error(`Work item not found: ${id}`);
@@ -254,6 +278,10 @@ export class WorkGraph {
 
   /** Transition a work item to a new lifecycle state. */
   async transitionState(id: string, newState: WorkItemState): Promise<void> {
+    return this.withLock(() => this.doTransitionState(id, newState));
+  }
+
+  private async doTransitionState(id: string, newState: WorkItemState): Promise<void> {
     const item = this.items.get(id);
     if (!item) {
       throw new Error(`Work item not found: ${id}`);
@@ -298,6 +326,10 @@ export class WorkGraph {
 
   /** Swap a work item one position up or down among siblings in the same state. */
   async moveItem(id: string, direction: 'up' | 'down'): Promise<void> {
+    return this.withLock(() => this.doMoveItem(id, direction));
+  }
+
+  private async doMoveItem(id: string, direction: 'up' | 'down'): Promise<void> {
     const item = this.items.get(id);
     if (!item) {
       throw new Error(`Work item not found: ${id}`);
@@ -353,6 +385,10 @@ export class WorkGraph {
 
   /** Move a work item to the first position among siblings in the same state. */
   async moveToTop(id: string): Promise<void> {
+    return this.withLock(() => this.doMoveToTop(id));
+  }
+
+  private async doMoveToTop(id: string): Promise<void> {
     const item = this.items.get(id);
     if (!item) { return; }
 
@@ -387,11 +423,15 @@ export class WorkGraph {
 
   /** Move a work item to the last position among siblings in the same state. Alias for moveToEnd. */
   async moveToBottom(id: string): Promise<void> {
-    return this.moveToEnd(id);
+    return this.withLock(() => this.doMoveToEnd(id));
   }
 
   /** Insert a work item before or after a target item (drag-and-drop reorder). */
   async reorderItem(draggedId: string, targetId: string): Promise<void> {
+    return this.withLock(() => this.doReorderItem(draggedId, targetId));
+  }
+
+  private async doReorderItem(draggedId: string, targetId: string): Promise<void> {
     const dragged = this.items.get(draggedId);
     const target = this.items.get(targetId);
     if (!dragged || !target) { return; }
@@ -432,6 +472,10 @@ export class WorkGraph {
 
   /** Move a work item to the last position among siblings in the same state. */
   async moveToEnd(id: string): Promise<void> {
+    return this.withLock(() => this.doMoveToEnd(id));
+  }
+
+  private async doMoveToEnd(id: string): Promise<void> {
     const item = this.items.get(id);
     if (!item) { return; }
 
@@ -471,6 +515,10 @@ export class WorkGraph {
    * could not be deleted (individual errors are logged and do not abort the batch).
    */
   async clearOldHistory(maxAgeDays: number): Promise<{ deleted: number; failed: number }> {
+    return this.withLock(() => this.doClearOldHistory(maxAgeDays));
+  }
+
+  private async doClearOldHistory(maxAgeDays: number): Promise<{ deleted: number; failed: number }> {
     if (!Number.isFinite(maxAgeDays) || maxAgeDays < 1) {
       return { deleted: 0, failed: 0 };
     }
@@ -488,7 +536,7 @@ export class WorkGraph {
     try {
       for (const item of toDelete) {
         try {
-          await this.deleteItem(item.id, { silent: true });
+          await this.doDeleteItem(item.id, { silent: true });
           deleted++;
         } catch (err) {
           failed++;
@@ -509,6 +557,10 @@ export class WorkGraph {
    * @param options.silent When true, suppresses the `onDidChange` event (used for batch operations).
    */
   async deleteItem(id: string, options?: { silent?: boolean }): Promise<void> {
+    return this.withLock(() => this.doDeleteItem(id, options));
+  }
+
+  private async doDeleteItem(id: string, options?: { silent?: boolean }): Promise<void> {
     const item = this.items.get(id);
     await this.store.delete(id);
     if (item?.providerId && item?.externalId) {
@@ -567,6 +619,10 @@ export class WorkGraph {
    * activities like branch creation or cleanup.
    */
   async addActivity(id: string, type: ActivityType, detail?: string): Promise<void> {
+    return this.withLock(() => this.doAddActivity(id, type, detail));
+  }
+
+  private async doAddActivity(id: string, type: ActivityType, detail?: string): Promise<void> {
     const item = this.items.get(id);
     if (!item) {
       throw new Error(`Work item not found: ${id}`);

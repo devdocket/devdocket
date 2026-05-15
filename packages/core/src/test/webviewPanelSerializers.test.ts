@@ -1,9 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import * as vscode from 'vscode';
 import { EventEmitter } from 'vscode';
-import { IncomingPreviewPanel } from '../views/incomingPreviewPanel';
+import { IncomingPreviewPanel, IncomingPreviewPanelManager } from '../views/incomingPreviewPanel';
 import { WatchPanelProvider } from '../views/watchPanelProvider';
-import { WorkItemEditorPanel } from '../views/workItemEditorPanel';
+import { WorkItemEditorPanel, PanelManager, type WorkItemEditorPanelDependencies } from '../views/workItemEditorPanel';
 import { WorkItem, WorkItemState } from '../models/workItem';
 
 type MessageHandler = (message: unknown) => void | Promise<void>;
@@ -111,6 +111,39 @@ function createMockReadStateStore() {
   };
 }
 
+function createMockActionRegistry() {
+  const changeEmitter = new EventEmitter<void>();
+  return {
+    hasActionsFor: vi.fn(() => false),
+    onDidChangeRegistrations: changeEmitter.event,
+  };
+}
+
+function createEditorDependencies(): WorkItemEditorPanelDependencies {
+  return {
+    panelManager: new PanelManager(),
+    actionRegistry: createMockActionRegistry() as any,
+    stateStore: createMockInboxStateStore() as any,
+  };
+}
+
+function createIncomingSerializer(
+  context: vscode.ExtensionContext,
+  providerRegistry = createMockProviderRegistry(),
+  stateStore = createMockInboxStateStore(),
+  readStateStore = createMockReadStateStore(),
+  workGraph = createMockWorkGraph(),
+): vscode.WebviewPanelSerializer {
+  return IncomingPreviewPanel.createSerializer(
+    context,
+    new IncomingPreviewPanelManager(),
+    providerRegistry as any,
+    stateStore as any,
+    readStateStore as any,
+    workGraph as any,
+  );
+}
+
 function createMockWatcherService() {
   return {
     getActivePRWatches: vi.fn(() => []),
@@ -128,7 +161,6 @@ function createMockWatcherService() {
 describe('webview panel serializers', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    WorkItemEditorPanel.clearPanelCache();
   });
 
   it('restores a work item editor panel from serialized item state', async () => {
@@ -138,7 +170,7 @@ describe('webview panel serializers', () => {
     const providerRegistry = createMockProviderRegistry();
     const mockPanel = createMockWebviewPanel();
 
-    const serializer = WorkItemEditorPanel.createSerializer(context, workGraph as any, providerRegistry as any);
+    const serializer = WorkItemEditorPanel.createSerializer(context, workGraph as any, providerRegistry as any, createEditorDependencies());
     await serializer.deserializeWebviewPanel(mockPanel.panel as any, { version: 1, itemId: item.id });
 
     expect(mockPanel.panel.title).toBe('Edit: Restored work item');
@@ -155,6 +187,7 @@ describe('webview panel serializers', () => {
       context,
       createMockWorkGraph() as any,
       createMockProviderRegistry() as any,
+      createEditorDependencies(),
     );
     await serializer.deserializeWebviewPanel(mockPanel.panel as any, { version: 2, itemId: 'item-1' });
 
@@ -171,13 +204,7 @@ describe('webview panel serializers', () => {
     const providerRegistry = createMockProviderRegistry(providerItems);
     const mockPanel = createMockWebviewPanel();
 
-    const serializer = IncomingPreviewPanel.createSerializer(
-      context,
-      providerRegistry as any,
-      createMockInboxStateStore() as any,
-      createMockReadStateStore() as any,
-      createMockWorkGraph() as any,
-    );
+    const serializer = createIncomingSerializer(context, providerRegistry);
     await serializer.deserializeWebviewPanel(mockPanel.panel as any, { version: 1, providerId: 'github', externalId: 'owner/repo#2' });
 
     expect(mockPanel.panel.title).toBe('Preview: Restored incoming item');
@@ -192,13 +219,7 @@ describe('webview panel serializers', () => {
     const providerRegistry = createMockProviderRegistry(providerItems);
     const mockPanel = createMockWebviewPanel();
 
-    const serializer = IncomingPreviewPanel.createSerializer(
-      context,
-      providerRegistry as any,
-      createMockInboxStateStore() as any,
-      createMockReadStateStore() as any,
-      createMockWorkGraph() as any,
-    );
+    const serializer = createIncomingSerializer(context, providerRegistry);
     await serializer.deserializeWebviewPanel(mockPanel.panel as any, { version: 1, providerId: 'github', externalId: 'owner/repo#3' });
 
     expect(mockPanel.panel.title).toBe('Preview: Loading…');
@@ -217,13 +238,7 @@ describe('webview panel serializers', () => {
     const providerRegistry = createMockProviderRegistry({ github: [] });
     const mockPanel = createMockWebviewPanel();
 
-    const serializer = IncomingPreviewPanel.createSerializer(
-      context,
-      providerRegistry as any,
-      createMockInboxStateStore() as any,
-      createMockReadStateStore() as any,
-      createMockWorkGraph() as any,
-    );
+    const serializer = createIncomingSerializer(context, providerRegistry);
     await serializer.deserializeWebviewPanel(mockPanel.panel as any, { version: 1, providerId: 'github', externalId: 'owner/repo#4' });
     const initialHtml = mockPanel.panel.webview.html;
 
@@ -237,13 +252,7 @@ describe('webview panel serializers', () => {
     const providerRegistry = createMockProviderRegistry({ github: [] });
     const mockPanel = createMockWebviewPanel();
 
-    const serializer = IncomingPreviewPanel.createSerializer(
-      context,
-      providerRegistry as any,
-      createMockInboxStateStore() as any,
-      createMockReadStateStore() as any,
-      createMockWorkGraph() as any,
-    );
+    const serializer = createIncomingSerializer(context, providerRegistry);
     await serializer.deserializeWebviewPanel(mockPanel.panel as any, { version: 1, providerId: 'github', externalId: 'owner/repo#4' });
 
     providerRegistry.fireProviderRefreshed('github');
@@ -258,13 +267,7 @@ describe('webview panel serializers', () => {
     const context = createContext();
     const mockPanel = createMockWebviewPanel();
 
-    const serializer = IncomingPreviewPanel.createSerializer(
-      context,
-      createMockProviderRegistry() as any,
-      createMockInboxStateStore() as any,
-      createMockReadStateStore() as any,
-      createMockWorkGraph() as any,
-    );
+    const serializer = createIncomingSerializer(context);
     await serializer.deserializeWebviewPanel(mockPanel.panel as any, { version: 2, providerId: 'github', externalId: 'owner/repo#5' });
 
     expect(mockPanel.panel.title).toBe('Incoming preview unavailable');

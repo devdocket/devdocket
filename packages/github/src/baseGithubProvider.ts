@@ -5,6 +5,9 @@ import { logger } from './logger';
 import { matchesRepoPatterns, parseRepoPatterns, type RepoPattern } from './repoPattern';
 
 const RELATED_ITEMS_BATCH_SIZE = 10;
+const OPEN_SETTINGS = 'Open Settings';
+const SIGN_IN = 'Sign in';
+const GITHUB_SETTINGS_QUERY = '@ext:devdocket.devdocket-github';
 
 /**
  * Base class for GitHub providers that handles the common authentication
@@ -49,7 +52,7 @@ export abstract class BaseGitHubProvider extends BaseProvider {
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
         logger.error('GitHub authentication failed', err);
-        void vscode.window.showWarningMessage(`DevDocket GitHub: Authentication failed — ${message}`);
+        this.showGitHubAuthenticationWarning(`DevDocket GitHub: Authentication failed — ${message}`);
         return;
       }
 
@@ -210,10 +213,27 @@ export abstract class BaseGitHubProvider extends BaseProvider {
    */
   protected warnOnFetchFailure(message: string, isUserTriggered: boolean): void {
     if (isUserTriggered) {
-      void vscode.window.showWarningMessage(`DevDocket GitHub: ${message}`);
+      this.showGitHubSettingsWarning(`DevDocket GitHub: ${message}`);
     } else {
       logger.warn(message);
     }
+  }
+
+  private showGitHubAuthenticationWarning(message: string): void {
+    void vscode.window.showWarningMessage(message, SIGN_IN).then(action => {
+      if (action === SIGN_IN) {
+        void vscode.authentication.getSession('github', this.getAuthenticationScopes(), { createIfNone: true })
+          .catch(err => logger.error('GitHub sign-in failed', err));
+      }
+    });
+  }
+
+  private showGitHubSettingsWarning(message: string): void {
+    void vscode.window.showWarningMessage(message, OPEN_SETTINGS).then(action => {
+      if (action === OPEN_SETTINGS) {
+        void vscode.commands.executeCommand('workbench.action.openSettings', GITHUB_SETTINGS_QUERY);
+      }
+    });
   }
 
 }

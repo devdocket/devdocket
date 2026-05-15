@@ -18,8 +18,8 @@ import { WatchStore } from './storage/watchStore';
 import { WatchesStatusBar } from './views/watchesStatusBar';
 import { ProviderHealthStatusBar } from './views/providerHealthStatusBar';
 import { WatchPanelProvider } from './views/watchPanelProvider';
-import { WorkItemEditorPanel, PanelManager } from './views/workItemEditorPanel';
-import { IncomingPreviewPanel } from './views/incomingPreviewPanel';
+import { WorkItemEditorPanel, PanelManager, type WorkItemEditorPanelDependencies } from './views/workItemEditorPanel';
+import { IncomingPreviewPanel, IncomingPreviewPanelManager } from './views/incomingPreviewPanel';
 import { MainViewProvider } from './views/mainViewProvider';
 import { registerCommands } from './commands/commands';
 import { isSafeUrl } from './utils/url';
@@ -540,24 +540,30 @@ export async function activate(context: vscode.ExtensionContext): Promise<DevDoc
     logger.error('Failed to load persisted watches', err);
   }
 
-  // Scope panel cache to extension lifecycle
+  // Scope panel caches to extension lifecycle.
   const panelManager = new PanelManager();
-  WorkItemEditorPanel.setPanelManager(panelManager);
-  WorkItemEditorPanel.setDependencies(ar, ss, ws);
+  const incomingPreviewPanelManager = new IncomingPreviewPanelManager();
+  const editorPanelDependencies: WorkItemEditorPanelDependencies = {
+    panelManager,
+    actionRegistry: ar,
+    stateStore: ss,
+    watcherService: ws,
+  };
 
-  // panelManager must be first: its dispose() flushes pending saves via
+  // Panel managers must be first: editor disposal flushes pending saves via
   // WorkGraph, which must still be alive at that point. VS Code disposes
-  // subscriptions in array order, so placing it first ensures it runs
+  // subscriptions in array order, so placing them first ensures they run
   // before WorkGraph is disposed.
   context.subscriptions.push(
     panelManager,
+    incomingPreviewPanelManager,
     vscode.window.registerWebviewPanelSerializer(
       WorkItemEditorPanel.viewType,
-      WorkItemEditorPanel.createSerializer(context, wg, pr),
+      WorkItemEditorPanel.createSerializer(context, wg, pr, editorPanelDependencies),
     ),
     vscode.window.registerWebviewPanelSerializer(
       IncomingPreviewPanel.viewType,
-      IncomingPreviewPanel.createSerializer(context, pr, ss, readStateStore, wg),
+      IncomingPreviewPanel.createSerializer(context, incomingPreviewPanelManager, pr, ss, readStateStore, wg),
     ),
     vscode.window.registerWebviewPanelSerializer(
       WatchPanelProvider.viewType,
@@ -579,7 +585,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<DevDoc
   );
 
   const commandRegStart = performance.now();
-  registerCommands(context, wg, ar, ss, readStateStore, pr, labelCache, wr, pwr, ws, watchPanelProvider, () => mainProvider.toggleSearch());
+  registerCommands(context, wg, ar, ss, readStateStore, pr, labelCache, wr, pwr, ws, watchPanelProvider, editorPanelDependencies, incomingPreviewPanelManager, () => mainProvider.toggleSearch());
   logger.info(`Command registration took ${Math.round(performance.now() - commandRegStart)}ms`);
 
   logger.info(`DevDocket activated in ${Math.round(performance.now() - activationStart)}ms`);

@@ -189,7 +189,7 @@ export interface DevDocketApi {
    * Register a pipeline run watcher.
    *
    * Run watchers provide status polling for CI/CD pipelines (GitHub Actions, ADO Pipelines, etc.).
-   * Once registered, users can watch runs by pasting URLs into the "Watch Pipeline Run" command.
+   * Once registered, users can watch runs by pasting URLs into the "Watch URL" command.
    *
    * @param watcher - The run watcher to register.
    * @returns A {@link Disposable} that unregisters the watcher when disposed.

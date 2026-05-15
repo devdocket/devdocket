@@ -50,6 +50,7 @@ const window = {
   showWarningMessage: vi.fn(),
   showErrorMessage: vi.fn(),
   showQuickPick: vi.fn(),
+  showOpenDialog: vi.fn(),
   withProgress: vi.fn(async (_options: any, task: Function) => task({ report: vi.fn() })),
   registerTreeDataProvider: vi.fn(() => ({ dispose: vi.fn() })),
   createWebviewPanel: vi.fn(),

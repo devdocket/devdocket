@@ -324,7 +324,12 @@ export function App() {
                     onCrossTierDrop={tier.id === 'ready-to-start' || tier.id === 'in-progress'
                       ? (itemId) => postMessage({ type: 'crossTierDrop', itemId, targetTier: tier.id })
                       : undefined}
-                    onAcceptAll={tier.id === 'incoming' ? () => postMessage({ type: 'acceptAll' }) : undefined}
+                    onAcceptAll={tier.id === 'incoming' ? () => postMessage({
+                      type: 'acceptAll',
+                      items: tier.items.flatMap(item => (item.providerId && item.externalId)
+                        ? [{ providerId: item.providerId, externalId: item.externalId }]
+                        : []),
+                    }) : undefined}
                     onClearHistory={tier.id === 'done' ? () => postMessage({ type: 'clearHistory' }) : undefined}
                   />
                 ))}

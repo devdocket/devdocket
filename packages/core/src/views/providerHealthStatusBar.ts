@@ -12,8 +12,12 @@ function sanitizeError(error: string, maxLength = 100): string {
   return trimmed.length > maxLength ? trimmed.substring(0, maxLength) + '…' : trimmed;
 }
 
+function formatProviderCount(count: number): string {
+  return `${count} provider${count === 1 ? '' : 's'}`;
+}
+
 /**
- * Status bar item that shows a warning when any provider is unhealthy.
+ * Status bar item that shows provider health at a glance.
  * Click to open quick-pick with provider health details.
  */
 export class ProviderHealthStatusBar implements vscode.Disposable {
@@ -57,17 +61,35 @@ export class ProviderHealthStatusBar implements vscode.Disposable {
       return health.status === 'unhealthy';
     });
 
-    if (unhealthyProviders.length === 0) {
-      this.statusBarItem.hide();
+    const count = unhealthyProviders.length;
+    if (count > 0) {
+      this.statusBarItem.text = `$(warning) ${formatProviderCount(count)} unhealthy`;
+      this.statusBarItem.tooltip = this.buildTooltip(providers);
+      this.statusBarItem.backgroundColor = new vscode.ThemeColor('statusBarItem.warningBackground');
+      this.statusBarItem.color = new vscode.ThemeColor('statusBarItem.warningForeground');
+      this.statusBarItem.show();
       return;
     }
 
-    const count = unhealthyProviders.length;
-    this.statusBarItem.text = `$(warning) ${count} provider${count === 1 ? '' : 's'} unhealthy`;
-    this.statusBarItem.tooltip = 'Click to view provider health details';
-    this.statusBarItem.backgroundColor = new vscode.ThemeColor('statusBarItem.warningBackground');
-    this.statusBarItem.color = new vscode.ThemeColor('statusBarItem.warningForeground');
+    const hasUnknownProviders = providers.some(p => this.providerRegistry.getProviderHealth(p.id).status === 'unknown');
+    this.statusBarItem.text = `${hasUnknownProviders ? '$(circle-outline)' : '$(check)'} DevDocket • ${formatProviderCount(providers.length)}`;
+    this.statusBarItem.tooltip = this.buildTooltip(providers);
+    this.statusBarItem.backgroundColor = undefined;
+    this.statusBarItem.color = undefined;
     this.statusBarItem.show();
+  }
+
+  private buildTooltip(providers: ReturnType<ProviderRegistry['getProviders']>): string {
+    const providerLines = providers.map(provider => {
+      const health = this.providerRegistry.getProviderHealth(provider.id);
+      const lastRefresh = health.lastRefreshTime
+        ? `last refreshed ${health.lastRefreshTime.toLocaleString()}`
+        : 'not refreshed yet';
+      const error = health.lastError ? ` — ${sanitizeError(health.lastError)}` : '';
+      return `${provider.label}: ${health.status}${error} (${lastRefresh})`;
+    });
+
+    return ['Click to view provider health details', '', ...providerLines].join('\n');
   }
 
   dispose(): void {
