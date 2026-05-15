@@ -34,9 +34,15 @@ describe('WatchesStatusBar', () => {
     new WatchesStatusBar(watcherService as any);
 
     const statusBarItem = (window.createStatusBarItem as ReturnType<typeof vi.fn>).mock.results[0].value;
-    expect(statusBarItem.text).toBe('🔄 2 active · ✓ 1 passed · ✗ 2 failed');
+    expect(statusBarItem.text).toBe('👁 DevDocket • 🔄 2 · ✓ 1 · ✗ 2');
     expect(statusBarItem.command).toBe('devdocket.showWatchesQuickPick');
-    expect(statusBarItem.tooltip).toBe('Click to open CI watch details');
+    expect(statusBarItem.tooltip).toBe([
+      'DevDocket CI Watches',
+      '  🔄 2 running',
+      '  ✓ 1 passed',
+      '  ✗ 2 failed',
+      'Click to open CI Watches panel.',
+    ].join('\n'));
     expect(statusBarItem.backgroundColor).toEqual(new ThemeColor('statusBarItem.warningBackground'));
     expect(statusBarItem.color).toEqual(new ThemeColor('statusBarItem.warningForeground'));
     expect(statusBarItem.show).toHaveBeenCalled();
@@ -48,16 +54,20 @@ describe('WatchesStatusBar', () => {
 
     const statusBarItem = (vscode.window.createStatusBarItem as ReturnType<typeof vi.fn>).mock.results[0].value;
     expect(statusBarItem.command).toBe('devdocket.showWatchPanel');
-    expect(statusBarItem.text).toBe('👁 Watches');
+    expect(statusBarItem.text).toBe('👁 DevDocket • Watches');
+    expect(statusBarItem.tooltip).toContain('  🔄 0 running');
+    expect(statusBarItem.tooltip).toContain('  ✓ 0 passed');
+    expect(statusBarItem.tooltip).toContain('  ✗ 0 failed');
     expect(statusBarItem.show).toHaveBeenCalledTimes(1);
     expect(statusBarItem.hide).not.toHaveBeenCalled();
 
     watcherService.setWatches([{ status: { overallState: 'running' } }]);
-    expect(statusBarItem.text).toBe('🔄 1 active · ✓ 0 passed · ✗ 0 failed');
+    expect(statusBarItem.text).toBe('👁 DevDocket • 🔄 1 · ✓ 0 · ✗ 0');
+    expect(statusBarItem.tooltip).toContain('  🔄 1 running');
     expect(statusBarItem.show).toHaveBeenCalledTimes(2);
 
     watcherService.setWatches([]);
-    expect(statusBarItem.text).toBe('👁 Watches');
+    expect(statusBarItem.text).toBe('👁 DevDocket • Watches');
     expect(statusBarItem.show).toHaveBeenCalledTimes(3);
     expect(statusBarItem.hide).not.toHaveBeenCalled();
   });
