@@ -51,18 +51,24 @@ export class PanelManager {
   }
 }
 
+export interface WorkItemEditorPanelDependencies {
+  panelManager: PanelManager;
+  actionRegistry: ActionRegistry;
+  stateStore: InboxStateStore;
+  watcherService?: WatcherService;
+}
+
 export class WorkItemEditorPanel {
   private static readonly viewType = 'devdocket.editItem';
-  private static panelManager = new PanelManager();
-  private static actionRegistry?: ActionRegistry;
-  private static stateStore?: InboxStateStore;
-  private static watcherService?: WatcherService;
 
   private readonly panel: vscode.WebviewPanel;
   private readonly workGraph: WorkGraph;
   private readonly providerRegistry: ProviderRegistry;
   private readonly itemId: string;
   private readonly panelManager: PanelManager;
+  private readonly actionRegistry: ActionRegistry;
+  private readonly stateStore: InboxStateStore;
+  private readonly watcherService?: WatcherService;
   private readonly extensionUri: vscode.Uri;
   private disposed = false;
   private htmlInitialized = false;
@@ -73,7 +79,7 @@ export class WorkItemEditorPanel {
   private readonly workGraphSub: vscode.Disposable;
   private readonly providerRegSub: vscode.Disposable;
   private readonly providerChangeSub: vscode.Disposable;
-  private readonly actionRegistrySub?: vscode.Disposable;
+  private readonly actionRegistrySub: vscode.Disposable;
   private readonly watcherSubscriptions: vscode.Disposable[] = [];
   private lastDisplayedTitle: string | undefined;
   private lastDisplayedUrl: string | undefined;
@@ -85,28 +91,15 @@ export class WorkItemEditorPanel {
   private lastDisplayedCIWatchSignature: string | undefined;
   private lastDisplayedCIWatchRunKeys = new Set<string>();
 
-  /**
-   * Replace the active panel manager. Called during `activate()` to scope
-   * the panel cache to the extension lifecycle.
-   */
-  static setPanelManager(manager: PanelManager): void {
-    WorkItemEditorPanel.panelManager = manager;
-  }
-
-  static setDependencies(actionRegistry?: ActionRegistry, stateStore?: InboxStateStore, watcherService?: WatcherService): void {
-    WorkItemEditorPanel.actionRegistry = actionRegistry;
-    WorkItemEditorPanel.stateStore = stateStore;
-    WorkItemEditorPanel.watcherService = watcherService;
-  }
-
   static open(
     context: vscode.ExtensionContext,
     workGraph: WorkGraph,
     providerRegistry: ProviderRegistry,
     item: WorkItem,
+    dependencies: WorkItemEditorPanelDependencies,
     providerLabel?: string,
   ): void {
-    const manager = WorkItemEditorPanel.panelManager;
+    const manager = dependencies.panelManager;
     const existing = manager.openPanels.get(item.id);
     if (existing) {
       existing.providerLabel = providerLabel;
@@ -126,14 +119,19 @@ export class WorkItemEditorPanel {
       },
     );
 
-    const editor = new WorkItemEditorPanel(panel, workGraph, providerRegistry, item.id, manager, context.extensionUri, providerLabel);
+    const editor = new WorkItemEditorPanel(
+      panel,
+      workGraph,
+      providerRegistry,
+      item.id,
+      manager,
+      dependencies.actionRegistry,
+      dependencies.stateStore,
+      dependencies.watcherService,
+      context.extensionUri,
+      providerLabel,
+    );
     manager.openPanels.set(item.id, editor);
-    context.subscriptions.push({ dispose: () => editor.dispose() });
-  }
-
-  /** @internal Exposed for testing only. */
-  static clearPanelCache(): void {
-    WorkItemEditorPanel.panelManager.clearPanelCache();
   }
 
   private constructor(
@@ -142,6 +140,9 @@ export class WorkItemEditorPanel {
     providerRegistry: ProviderRegistry,
     itemId: string,
     panelManager: PanelManager,
+    actionRegistry: ActionRegistry,
+    stateStore: InboxStateStore,
+    watcherService: WatcherService | undefined,
     extensionUri: vscode.Uri,
     private providerLabel?: string,
   ) {
@@ -150,6 +151,9 @@ export class WorkItemEditorPanel {
     this.providerRegistry = providerRegistry;
     this.itemId = itemId;
     this.panelManager = panelManager;
+    this.actionRegistry = actionRegistry;
+    this.stateStore = stateStore;
+    this.watcherService = watcherService;
     this.extensionUri = extensionUri;
 
     this.update();
@@ -166,15 +170,15 @@ export class WorkItemEditorPanel {
       this.update();
     });
 
-    this.actionRegistrySub = WorkItemEditorPanel.actionRegistry?.onDidChangeRegistrations(() => {
+    this.actionRegistrySub = this.actionRegistry.onDidChangeRegistrations(() => {
       this.update();
     });
 
-    const watcherService = WorkItemEditorPanel.watcherService;
-    if (watcherService) {
+    const activeWatcherService = this.watcherService;
+    if (activeWatcherService) {
       this.watcherSubscriptions.push(
-        watcherService.onDidChangePRWatches(() => this.refreshForPRWatchChange()),
-        watcherService.onDidChangeWatchedRuns(runs => this.refreshForWatchedRunsChange(runs)),
+        activeWatcherService.onDidChangePRWatches(() => this.refreshForPRWatchChange()),
+        activeWatcherService.onDidChangeWatchedRuns(runs => this.refreshForWatchedRunsChange(runs)),
       );
     }
 
@@ -244,7 +248,7 @@ export class WorkItemEditorPanel {
         this.workGraphSub.dispose();
         this.providerRegSub.dispose();
         this.providerChangeSub.dispose();
-        this.actionRegistrySub?.dispose();
+        this.actionRegistrySub.dispose();
         this.disposeWatcherSubscriptions();
       }
     });
@@ -414,7 +418,7 @@ export class WorkItemEditorPanel {
       badges: composeEditorBadges(item.providerId, providerItem, providerLabel),
       isProviderManaged: this.isProviderManaged(item),
       validTransitions: Array.from(VALID_TRANSITIONS.get(item.state) ?? []),
-      hasActions: WorkItemEditorPanel.actionRegistry?.hasActionsFor(item) ?? false,
+      hasActions: this.actionRegistry.hasActionsFor(item),
       activityLog: item.activityLog ?? [],
       relatedItems: resolveRelatedItemsFor(item, this.providerRegistry, this.workGraph, relatedItemsIndex),
       ciWatch: this.buildCIWatchData(item),
@@ -472,7 +476,7 @@ export class WorkItemEditorPanel {
       return undefined;
     }
 
-    const watcherService = WorkItemEditorPanel.watcherService;
+    const watcherService = this.watcherService;
     const external = item.externalId ? parsePRExternalId(item.externalId) : undefined;
     if (!watcherService || !external) {
       return undefined;
@@ -538,7 +542,7 @@ export class WorkItemEditorPanel {
       this.workGraphSub.dispose();
       this.providerRegSub.dispose();
       this.providerChangeSub.dispose();
-      this.actionRegistrySub?.dispose();
+      this.actionRegistrySub.dispose();
       this.disposeWatcherSubscriptions();
       this.panel.dispose();
     }
@@ -579,11 +583,6 @@ export class WorkItemEditorPanel {
   }
 
   private async handleAcceptItem(providerId: string, externalId: string): Promise<void> {
-    const stateStore = WorkItemEditorPanel.stateStore;
-    if (!stateStore) {
-      return;
-    }
-
     try {
       const existing = this.workGraph.findItemByProvenance(providerId, externalId);
       if (!existing) {
@@ -605,7 +604,7 @@ export class WorkItemEditorPanel {
           },
         );
       }
-      await stateStore.setState(providerId, externalId, 'accepted');
+      await this.stateStore.setState(providerId, externalId, 'accepted');
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       void vscode.window.showErrorMessage(`Failed to accept item: ${message}`);
@@ -613,13 +612,8 @@ export class WorkItemEditorPanel {
   }
 
   private async handleDismissItem(providerId: string, externalId: string): Promise<void> {
-    const stateStore = WorkItemEditorPanel.stateStore;
-    if (!stateStore) {
-      return;
-    }
-
     try {
-      await stateStore.setState(providerId, externalId, 'dismissed');
+      await this.stateStore.setState(providerId, externalId, 'dismissed');
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       void vscode.window.showErrorMessage(`Failed to dismiss item: ${message}`);
