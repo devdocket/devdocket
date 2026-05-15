@@ -87,7 +87,6 @@ export class AdoWorkItemProvider extends BaseProvider {
     try {
       logger.info('Fetching assigned ADO work items...');
       if (token?.isCancellationRequested) {
-        this._onDidDiscoverItems.fire([]);
         return;
       }
 
@@ -95,7 +94,10 @@ export class AdoWorkItemProvider extends BaseProvider {
         createIfNone: true,
       }).catch(() => null);
 
-      if (!session || token?.isCancellationRequested) {
+      if (token?.isCancellationRequested) {
+        return;
+      }
+      if (!session) {
         this._onDidDiscoverItems.fire([]);
         return;
       }

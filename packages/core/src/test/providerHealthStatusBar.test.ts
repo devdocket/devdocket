@@ -10,11 +10,14 @@ function createProviderRegistry(
   const healthEmitter = new EventEmitter<void>();
   const registerEmitter = new EventEmitter<void>();
   const itemsEmitter = new EventEmitter<void>();
+  const refreshStateEmitter = new EventEmitter<void>();
 
   return {
     getProviders: vi.fn(() => providers),
     getProviderHealth: vi.fn((providerId: string) => healthByProvider[providerId] ?? { status: 'unknown' }),
+    isProviderRefreshing: vi.fn(() => false),
     onDidChangeProviderHealth: healthEmitter.event,
+    onDidChangeProviderRefreshState: refreshStateEmitter.event,
     onDidRegisterProvider: registerEmitter.event,
     onDidChangeProviderItems: itemsEmitter.event,
     setHealth(providerId: string, health: { status: 'healthy' | 'unhealthy' | 'unknown'; lastRefreshTime?: Date; lastError?: string }) {

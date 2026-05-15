@@ -85,19 +85,18 @@ describe('AdoPrReviewProvider', () => {
     expect(mockFetch).not.toHaveBeenCalled();
   });
 
-  it('fires empty items when cancellation is requested before auth', async () => {
+  it('does not clear items when cancellation is requested before auth', async () => {
     const token = { isCancellationRequested: true } as any;
 
     const listener = vi.fn();
     provider.onDidDiscoverItems(listener);
     await provider.refresh(token);
 
-    expect(listener).toHaveBeenCalledTimes(1);
-    expect(listener).toHaveBeenCalledWith([]);
+    expect(listener).not.toHaveBeenCalled();
     expect(mockFetch).not.toHaveBeenCalled();
   });
 
-  it('fires empty items when cancellation is requested after auth', async () => {
+  it('does not clear items when cancellation is requested after auth', async () => {
     const token = { isCancellationRequested: false } as any;
     vi.mocked(authentication.getSession).mockImplementation(async () => {
       token.isCancellationRequested = true;
@@ -113,8 +112,7 @@ describe('AdoPrReviewProvider', () => {
     provider.onDidDiscoverItems(listener);
     await provider.refresh(token);
 
-    expect(listener).toHaveBeenCalledTimes(1);
-    expect(listener).toHaveBeenCalledWith([]);
+    expect(listener).not.toHaveBeenCalled();
     expect(mockFetch).not.toHaveBeenCalled();
   });
 

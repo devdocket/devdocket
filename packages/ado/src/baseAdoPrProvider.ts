@@ -82,7 +82,6 @@ export abstract class BaseAdoPrProvider extends BaseProvider {
     try {
       logger.info(`Fetching ADO ${this.logLabel}...`);
       if (token?.isCancellationRequested) {
-        this._onDidDiscoverItems.fire([]);
         return;
       }
 
@@ -90,7 +89,10 @@ export abstract class BaseAdoPrProvider extends BaseProvider {
         createIfNone: true,
       }).catch(() => null);
 
-      if (!session || token?.isCancellationRequested) {
+      if (token?.isCancellationRequested) {
+        return;
+      }
+      if (!session) {
         this._onDidDiscoverItems.fire([]);
         return;
       }
