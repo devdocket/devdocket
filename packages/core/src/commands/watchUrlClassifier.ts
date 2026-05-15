@@ -28,8 +28,8 @@ export type WatchUrlClassification =
 
 export function classifyWatchUrl(
   value: string,
-  watcherRegistry: Pick<WatcherRegistry, 'findWatcherForUrl'>,
-  prWatcherRegistry: Pick<PRWatcherRegistry, 'findWatcherForUrl'>,
+  watcherRegistry: Pick<WatcherRegistry, 'findWatcherForUrl' | 'getAll'>,
+  prWatcherRegistry: Pick<PRWatcherRegistry, 'findWatcherForUrl' | 'getAll'>,
 ): WatchUrlClassification {
   const trimmed = value.trim();
   if (!trimmed) {
@@ -42,50 +42,44 @@ export function classifyWatchUrl(
 
   const prWatcher = prWatcherRegistry.findWatcherForUrl(trimmed);
   if (prWatcher) {
-    const providerName = providerDisplayName(prWatcher);
     return {
       ok: true,
       kind: 'pr',
       url: trimmed,
       watcher: prWatcher,
-      validationMessage: `This looks like ${indefiniteArticle(providerName)} ${providerName} PR — will be added as a PR watch.`,
+      validationMessage: `Recognized by ${prWatcher.label} — will be added as a PR watch.`,
     };
   }
 
   const runWatcher = watcherRegistry.findWatcherForUrl(trimmed);
   if (runWatcher) {
-    const providerName = providerDisplayName(runWatcher);
     return {
       ok: true,
       kind: 'run',
       url: trimmed,
       watcher: runWatcher,
-      validationMessage: `This looks like ${indefiniteArticle(providerName)} ${providerName} run — will be added as a run watch.`,
+      validationMessage: `Recognized by ${runWatcher.label} — will be added as a run watch.`,
     };
   }
 
   return {
     ok: false,
     reason: 'unsupported',
-    message: 'Unsupported URL. Paste a supported pull request or pipeline run URL (for example, a GitHub PR, GitHub Actions run, Azure DevOps PR, or Azure DevOps pipeline run URL).',
+    message: buildUnsupportedMessage(watcherRegistry, prWatcherRegistry),
   };
 }
 
-function providerDisplayName(watcher: { id: string; label: string }): string {
-  switch (watcher.id) {
-    case 'github-pr':
-      return 'GitHub';
-    case 'github-actions':
-      return 'GitHub Actions';
-    case 'ado-pr':
-      return 'Azure DevOps';
-    case 'ado-pipelines':
-      return 'Azure DevOps Pipeline';
-    default:
-      return watcher.label;
+function buildUnsupportedMessage(
+  watcherRegistry: Pick<WatcherRegistry, 'getAll'>,
+  prWatcherRegistry: Pick<PRWatcherRegistry, 'getAll'>,
+): string {
+  const labels = [
+    ...prWatcherRegistry.getAll().map(w => w.label),
+    ...watcherRegistry.getAll().map(w => w.label),
+  ];
+  if (labels.length === 0) {
+    return 'Unsupported URL. No pull request or pipeline run watchers are currently registered. Install a provider extension that contributes a watcher.';
   }
+  return `Unsupported URL. Paste a URL recognized by one of: ${labels.join(', ')}.`;
 }
 
-function indefiniteArticle(value: string): 'a' | 'an' {
-  return /^[aeiou]/i.test(value) ? 'an' : 'a';
-}

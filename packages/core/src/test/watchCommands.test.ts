@@ -20,9 +20,11 @@ function registerCommandsWith(options: {
 
   const watcherRegistry = {
     findWatcherForUrl: vi.fn(() => options.runWatcher),
+    getAll: vi.fn(() => (options.runWatcher ? [options.runWatcher] : [])),
   };
   const prWatcherRegistry = {
     findWatcherForUrl: vi.fn(() => options.prWatcher),
+    getAll: vi.fn(() => (options.prWatcher ? [options.prWatcher] : [])),
   };
   const watcherService = {
     isRunActive: vi.fn(() => options.runActive ?? false),
@@ -83,7 +85,7 @@ describe('registerWatchCommands', () => {
     const inputOptions = (vscode.window.showInputBox as Mock).mock.calls[0][0];
     expect(inputOptions.placeHolder).toBe('Pull request or pipeline run URL');
     expect(inputOptions.validateInput(input)).toEqual({
-      message: 'This looks like a GitHub PR — will be added as a PR watch.',
+      message: 'Recognized by GitHub Pull Requests — will be added as a PR watch.',
       severity: vscode.InputBoxValidationSeverity.Info,
     });
     expect(watcherService.startPRWatch).toHaveBeenCalledWith(prIdentifier, { forceRecreate: true });
@@ -150,10 +152,10 @@ describe('registerWatchCommands', () => {
     const inputOptions = (vscode.window.showInputBox as Mock).mock.calls[0][0];
     expect(inputOptions.validateInput('')).toBeUndefined();
     expect(inputOptions.validateInput('https://example.com/nope')).toBe(
-      'Unsupported URL. Paste a supported pull request or pipeline run URL (for example, a GitHub PR, GitHub Actions run, Azure DevOps PR, or Azure DevOps pipeline run URL).',
+      'Unsupported URL. No pull request or pipeline run watchers are currently registered. Install a provider extension that contributes a watcher.',
     );
     expect(vscode.window.showErrorMessage).toHaveBeenCalledWith(
-      'DevDocket: Unsupported URL. Paste a supported pull request or pipeline run URL (for example, a GitHub PR, GitHub Actions run, Azure DevOps PR, or Azure DevOps pipeline run URL).',
+      'DevDocket: Unsupported URL. No pull request or pipeline run watchers are currently registered. Install a provider extension that contributes a watcher.',
     );
   });
 });
