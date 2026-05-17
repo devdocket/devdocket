@@ -27,7 +27,7 @@ export function toRunCompletionLabel(conclusion?: RunConclusion): string {
   return toConclusionLabel(conclusion);
 }
 
-export function isFailedConclusion(conclusion?: RunConclusion): boolean {
+export function isFailedConclusion(conclusion?: string): boolean {
   return conclusion !== undefined
     && conclusion !== 'success'
     && conclusion !== 'cancelled'
