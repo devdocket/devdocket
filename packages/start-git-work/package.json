@@ -23,30 +23,36 @@
       {
         "title": "DevDocket Start Git Work",
         "properties": {
-        "devDocketStartGitWork.commands": {
-          "type": "array",
-          "scope": "application",
-          "items": {
-            "type": "object",
-            "properties": {
-              "command": {
-                "type": "string",
-                "description": "The executable to run."
-              },
-              "args": {
-                "type": "array",
-                "items": {
-                  "type": "string"
+          "devDocketStartGitWork.commands": {
+            "type": "array",
+            "scope": "application",
+            "items": {
+              "type": "object",
+              "properties": {
+                "command": {
+                  "type": "string",
+                  "description": "The executable to run."
                 },
-                "description": "Arguments passed to the command. Use {path} as a placeholder for the worktree path."
-              }
+                "args": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  },
+                  "description": "Arguments passed to the command. Use {path} as a placeholder for the worktree path."
+                }
+              },
+              "required": ["command"]
             },
-            "required": ["command"]
+            "default": [],
+            "description": "Commands to run after creating a worktree. Each entry specifies a command and optional args. Use {path} in args to reference the worktree path."
           },
-          "default": [],
-          "description": "Commands to run after creating a worktree. Each entry specifies a command and optional args. Use {path} in args to reference the worktree path."
+          "devdocket.startGitWork.promptForNames": {
+            "type": "boolean",
+            "scope": "application",
+            "default": true,
+            "description": "When enabled, Start Git Work prompts for branch name and worktree path, prefilled with auto-derived defaults. When disabled, the auto-derived values are used silently."
+          }
         }
-      }
       }
     ]
   },

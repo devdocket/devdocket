@@ -75,8 +75,22 @@ function mockInputBox(repoPath: string | undefined, baseBranch = 'origin/dev') {
     if (options?.prompt?.includes('base branch')) {
       return baseBranch;
     }
+    if (options?.title === 'DevDocket: Branch name' || options?.title === 'DevDocket: Worktree path') {
+      return options.value;
+    }
     return undefined;
   });
+}
+
+function setPromptForNames(enabled: boolean) {
+  vi.mocked(workspace.getConfiguration).mockReturnValue({
+    get: vi.fn((key: string, defaultValue?: any) => key === 'devdocket.startGitWork.promptForNames' ? enabled : defaultValue),
+  } as any);
+}
+
+function inputBoxOptions(title: string): any {
+  const call = vi.mocked(window.showInputBox).mock.calls.find(([options]) => (options as any)?.title === title);
+  return call?.[0];
 }
 
 function isRepoPathPickItems(items: unknown): items is Array<{ pickKind?: string; repoPath?: string }> {
@@ -190,6 +204,149 @@ describe('StartWorkAction', () => {
         'worktree', 'add', path.join('/mock', 'workspace-vendor-ABC-123-ABC-123'), 'vendor/ABC-123',
       ]);
       expect(memento.update).toHaveBeenCalledWith('repoPath:Vendor Repo', '/mock/workspace');
+    });
+
+    it('prompts for issue branch name and worktree path when promptForNames is enabled', async () => {
+      const customWorktreePath = path.join('/mock', 'custom-worktree');
+      vi.mocked(window.showInputBox).mockImplementation(async (options: any) => {
+        if (options?.prompt?.includes('base branch')) {
+          return 'origin/dev';
+        }
+        if (options?.title === 'DevDocket: Branch name') {
+          return 'team/custom-branch';
+        }
+        if (options?.title === 'DevDocket: Worktree path') {
+          return customWorktreePath;
+        }
+        return options?.value;
+      });
+      const item = createWorkItem();
+      const { action } = createAction(discovered('provider', 'item-1', {
+        kind: 'issue', cloneUrl: 'https://example.com/acme/repo.git', ref: 'issue123', repoLabel: 'acme/repo',
+      }));
+
+      await action.run(item);
+
+      expect(inputBoxOptions('DevDocket: Branch name')).toEqual(expect.objectContaining({
+        value: 'issue123',
+        valueSelection: [0, 'issue123'.length],
+      }));
+      expect(inputBoxOptions('DevDocket: Worktree path')).toEqual(expect.objectContaining({
+        value: path.join('/mock', 'workspace-team-custom-branch-item-1'),
+      }));
+      expect(vi.mocked(execFile).mock.calls.map(call => call[1])).toEqual([
+        ['branch', '--list', 'team/custom-branch'],
+        ['branch', 'team/custom-branch', 'origin/dev'],
+        ['worktree', 'add', customWorktreePath, 'team/custom-branch'],
+      ]);
+    });
+
+    it('uses issue branch name and worktree path silently when promptForNames is disabled', async () => {
+      setPromptForNames(false);
+      const item = createWorkItem();
+      const { action } = createAction(discovered('provider', 'item-1', {
+        kind: 'issue', cloneUrl: 'https://example.com/acme/repo.git', ref: 'issue123', repoLabel: 'acme/repo',
+      }));
+
+      await action.run(item);
+
+      expect(inputBoxOptions('DevDocket: Branch name')).toBeUndefined();
+      expect(inputBoxOptions('DevDocket: Worktree path')).toBeUndefined();
+      expect(vi.mocked(execFile).mock.calls.map(call => call[1])).toEqual([
+        ['branch', '--list', 'issue123'],
+        ['branch', 'issue123', 'origin/dev'],
+        ['worktree', 'add', path.join('/mock', 'workspace-issue123-item-1'), 'issue123'],
+      ]);
+    });
+
+    it('validates prompted branch names synchronously', async () => {
+      const item = createWorkItem();
+      const { action } = createAction(discovered('provider', 'item-1', {
+        kind: 'issue', cloneUrl: 'https://example.com/acme/repo.git', ref: 'issue123', repoLabel: 'acme/repo',
+      }));
+
+      await action.run(item);
+
+      const validateInput = inputBoxOptions('DevDocket: Branch name').validateInput;
+      expect(validateInput('')).toBe('Branch name is required.');
+      expect(validateInput('-bad')).toContain('valid git ref');
+      expect(validateInput('bad..branch')).toContain('valid git ref');
+      expect(validateInput('bad branch')).toContain('valid git ref');
+      expect(validateInput('bad\nbranch')).toContain('valid git ref');
+      expect(validateInput('feature/good-branch')).toBeUndefined();
+    });
+
+    it('validates prompted worktree paths synchronously', async () => {
+      const item = createWorkItem();
+      const { action } = createAction(discovered('provider', 'item-1', {
+        kind: 'issue', cloneUrl: 'https://example.com/acme/repo.git', ref: 'issue123', repoLabel: 'acme/repo',
+      }));
+
+      await action.run(item);
+
+      const validateInput = inputBoxOptions('DevDocket: Worktree path').validateInput;
+      const outsideTarget = path.join(path.parse(process.cwd()).root, 'devdocket-test-worktrees', 'target');
+      const outsideParent = path.dirname(outsideTarget);
+      expect(validateInput('relative-worktree')).toBe('Worktree path must be absolute.');
+
+      vi.mocked(fs.existsSync).mockReturnValue(false);
+      expect(validateInput(outsideTarget)).toContain('does not exist');
+
+      vi.mocked(fs.existsSync).mockImplementation((p: any) => path.resolve(p.toString()) === path.resolve(outsideParent));
+      expect(validateInput(outsideTarget)).toBeUndefined();
+
+      vi.mocked(fs.existsSync).mockImplementation((p: any) => {
+        const resolved = path.resolve(p.toString());
+        return resolved === path.resolve(outsideParent) || resolved === path.resolve(outsideTarget);
+      });
+      expect(validateInput(outsideTarget)).toContain('already exists');
+
+      const nestedTarget = path.join('/mock', 'workspace', 'nested-parent', 'target');
+      const nestedParent = path.dirname(nestedTarget);
+      vi.mocked(fs.existsSync).mockImplementation((p: any) => path.resolve(p.toString()) === path.resolve(nestedParent));
+      expect(validateInput(nestedTarget)).toBe('Worktree parent directory must not be inside the source repository.');
+    });
+
+    it('aborts without side effects when the branch-name prompt is cancelled', async () => {
+      vi.mocked(window.showInputBox).mockImplementation(async (options: any) => {
+        if (options?.prompt?.includes('base branch')) {
+          return 'origin/dev';
+        }
+        if (options?.title === 'DevDocket: Branch name') {
+          return undefined;
+        }
+        return options?.value;
+      });
+      const item = createWorkItem();
+      const { action } = createAction(discovered('provider', 'item-1', {
+        kind: 'issue', cloneUrl: 'https://example.com/acme/repo.git', ref: 'issue123', repoLabel: 'acme/repo',
+      }));
+
+      await action.run(item);
+
+      expect(execFile).not.toHaveBeenCalled();
+      expect(window.withProgress).not.toHaveBeenCalled();
+    });
+
+    it('aborts without side effects when the worktree-path prompt is cancelled', async () => {
+      vi.mocked(window.showInputBox).mockImplementation(async (options: any) => {
+        if (options?.prompt?.includes('base branch')) {
+          return 'origin/dev';
+        }
+        if (options?.title === 'DevDocket: Worktree path') {
+          return undefined;
+        }
+        return options?.value;
+      });
+      const item = createWorkItem();
+      const { action } = createAction(discovered('provider', 'item-1', {
+        kind: 'issue', cloneUrl: 'https://example.com/acme/repo.git', ref: 'issue123', repoLabel: 'acme/repo',
+      }));
+
+      await action.run(item);
+
+      expect(execFile).not.toHaveBeenCalled();
+      expect(window.withProgress).not.toHaveBeenCalled();
     });
 
     it('offers cached and git workspace folders before paste and browse choices', async () => {
@@ -331,6 +488,86 @@ describe('StartWorkAction', () => {
         ['rev-parse', '--verify', 'refs/heads/feature/topic'],
         ['worktree', 'add', '-b', 'feature/topic', path.join('/mock', 'workspace-feature-topic-item-1'), 'origin/feature/topic'],
       ]);
+    });
+
+    it('prompts for PR worktree path but not branch name when promptForNames is enabled', async () => {
+      mockNoLocalBranch();
+      const customWorktreePath = path.join('/mock', 'custom-pr-worktree');
+      vi.mocked(window.showInputBox).mockImplementation(async (options: any) => {
+        if (options?.title === 'DevDocket: Worktree path') {
+          return customWorktreePath;
+        }
+        return options?.value;
+      });
+      const item = createWorkItem();
+      const { action } = createAction(discovered('provider', 'item-1', {
+        kind: 'pr', cloneUrl: 'https://example.com/acme/repo.git', ref: 'feature/topic', repoLabel: 'acme/repo',
+      }));
+
+      await action.run(item);
+
+      expect(inputBoxOptions('DevDocket: Branch name')).toBeUndefined();
+      expect(inputBoxOptions('DevDocket: Worktree path')).toEqual(expect.objectContaining({
+        value: path.join('/mock', 'workspace-feature-topic-item-1'),
+      }));
+      expect(vi.mocked(execFile).mock.calls.map(call => call[1])).toContainEqual([
+        'worktree', 'add', '-b', 'feature/topic', customWorktreePath, 'origin/feature/topic',
+      ]);
+    });
+
+    it('uses PR worktree path silently when promptForNames is disabled', async () => {
+      setPromptForNames(false);
+      mockNoLocalBranch();
+      const item = createWorkItem();
+      const { action } = createAction(discovered('provider', 'item-1', {
+        kind: 'pr', cloneUrl: 'https://example.com/acme/repo.git', ref: 'feature/topic', repoLabel: 'acme/repo',
+      }));
+
+      await action.run(item);
+
+      expect(inputBoxOptions('DevDocket: Branch name')).toBeUndefined();
+      expect(inputBoxOptions('DevDocket: Worktree path')).toBeUndefined();
+      expect(vi.mocked(execFile).mock.calls.map(call => call[1])).toContainEqual([
+        'worktree', 'add', '-b', 'feature/topic', path.join('/mock', 'workspace-feature-topic-item-1'), 'origin/feature/topic',
+      ]);
+    });
+
+    it('prompts for issue checkout branch name but skips worktree path', async () => {
+      mockQuickPicks('/mock/workspace', 'checkout');
+      vi.mocked(window.showInputBox).mockImplementation(async (options: any) => {
+        if (options?.prompt?.includes('base branch')) {
+          return 'origin/dev';
+        }
+        if (options?.title === 'DevDocket: Branch name') {
+          return 'custom-checkout';
+        }
+        return options?.value;
+      });
+      const item = createWorkItem();
+      const { action } = createAction(discovered('provider', 'item-1', {
+        kind: 'issue', cloneUrl: 'https://example.com/acme/repo.git', ref: 'issue123', repoLabel: 'acme/repo',
+      }));
+
+      await action.run(item);
+
+      expect(inputBoxOptions('DevDocket: Branch name')).toBeDefined();
+      expect(inputBoxOptions('DevDocket: Worktree path')).toBeUndefined();
+      expect(vi.mocked(execFile).mock.calls.map(call => call[1])).toContainEqual(['checkout', '-b', 'custom-checkout', 'origin/dev']);
+    });
+
+    it('skips branch-name and worktree-path prompts for PR checkout', async () => {
+      mockQuickPicks('/mock/workspace', 'checkout');
+      mockNoLocalBranch();
+      const item = createWorkItem();
+      const { action } = createAction(discovered('provider', 'item-1', {
+        kind: 'pr', cloneUrl: 'https://example.com/acme/repo.git', ref: 'feature/topic', repoLabel: 'acme/repo',
+      }));
+
+      await action.run(item);
+
+      expect(inputBoxOptions('DevDocket: Branch name')).toBeUndefined();
+      expect(inputBoxOptions('DevDocket: Worktree path')).toBeUndefined();
+      expect(vi.mocked(execFile).mock.calls.map(call => call[1])).toContainEqual(['checkout', '-b', 'feature/topic', '--track', 'origin/feature/topic']);
     });
 
     it('normalizes fully-qualified PR head refs before fetching and checking out', async () => {

@@ -205,11 +205,14 @@ Registers **AI Code Review** and **AI Walkthrough** actions that can be run on a
 
 ### Start Git Work (`devdocket-start-git-work`)
 
-Registers a **Start Git Work** action available on **In Progress** GitHub and ADO work items. Prompts for repository path and base branch (with cached defaults), creates a feature branch named `issue{num}`, sets up a git worktree in a sibling directory, and runs any configured post-worktree commands.
+Registers a **Start Git Work** action available on **In Progress** GitHub and ADO work items. Prompts for repository path and base branch (with cached defaults), creates a feature branch, sets up a git worktree when requested, and runs any configured post-worktree commands.
+
+By default, Start Git Work also prompts for the branch name on issue flows and the worktree path on worktree flows. These prompts are prefilled with the same auto-derived values that would be used silently.
 
 ```jsonc
 // settings.json (user-level only — workspace settings are not supported)
 {
+  "devdocket.startGitWork.promptForNames": true,
   "devDocketStartGitWork.commands": [
     { "command": "code.cmd", "args": ["{path}"] },
     { "command": "wt", "args": ["-d", "{path}"] }
@@ -217,7 +220,7 @@ Registers a **Start Git Work** action available on **In Progress** GitHub and AD
 }
 ```
 
-Use `{path}` in args as a placeholder for the worktree path. Commands run in sequence; failures show a warning but don't block the action.
+Set `devdocket.startGitWork.promptForNames` to `false` to use the auto-derived branch and worktree names without prompting. Use `{path}` in args as a placeholder for the worktree path. Commands run in sequence; failures show a warning but don't block the action.
 
 > **Note:** On Windows, use the explicit `.cmd` extension for executables that are batch files (e.g., `code.cmd` instead of `code`).
 

@@ -202,7 +202,7 @@ export class StartWorkAction implements DevDocketAction {
     gitWork: ResolvedGitWork,
     repoPath: string,
   ): Promise<void> {
-    const branchName = this.normalizeBranchName(gitWork.ref);
+    let branchName = this.normalizeBranchName(gitWork.ref);
     const repoLabel = gitWork.repoLabel ?? gitWork.cloneUrl;
 
     const baseBranch = await this.promptForBaseBranch(repoLabel);
@@ -215,6 +215,22 @@ export class StartWorkAction implements DevDocketAction {
       return;
     }
 
+    let worktreePath: string | undefined;
+    if (this.shouldPromptForNames()) {
+      const promptedBranchName = await this.promptForBranchName(branchName, workMode);
+      if (promptedBranchName === undefined) {
+        return;
+      }
+      branchName = promptedBranchName;
+
+      if (workMode === 'worktree') {
+        worktreePath = await this.promptForWorktreePath(repoPath, branchName, item);
+        if (worktreePath === undefined) {
+          return;
+        }
+      }
+    }
+
     try {
       await vscode.window.withProgress(
         {
@@ -224,7 +240,7 @@ export class StartWorkAction implements DevDocketAction {
         },
         async (progress) => {
           if (workMode === 'worktree') {
-            await this.issueWorktreeFlow(item, repoPath, branchName, baseBranch, progress);
+            await this.issueWorktreeFlow(item, repoPath, branchName, baseBranch, progress, worktreePath);
           } else {
             await this.issueCheckoutFlow(item, repoPath, branchName, baseBranch, progress);
           }
@@ -243,9 +259,9 @@ export class StartWorkAction implements DevDocketAction {
     branchName: string,
     baseBranch: string,
     progress: vscode.Progress<{ message?: string }>,
+    promptedWorktreePath?: string,
   ): Promise<void> {
-    const worktreeDirName = this.toWorktreeDirName(repoPath, branchName, item);
-    const worktreePath = path.join(path.dirname(repoPath), worktreeDirName);
+    const worktreePath = promptedWorktreePath ?? this.getDefaultWorktreePath(repoPath, branchName, item);
 
     if (fs.existsSync(worktreePath)) {
       void vscode.window.showErrorMessage(`DevDocket: Directory "${worktreePath}" already exists.`);
@@ -348,6 +364,15 @@ export class StartWorkAction implements DevDocketAction {
       return;
     }
 
+    let worktreePath: string | undefined;
+    if (workMode === 'worktree' && this.shouldPromptForNames()) {
+      const branchName = this.normalizeBranchName(gitWork.ref);
+      worktreePath = await this.promptForWorktreePath(repoPath, branchName, item);
+      if (worktreePath === undefined) {
+        return;
+      }
+    }
+
     try {
       await vscode.window.withProgress(
         {
@@ -364,7 +389,7 @@ export class StartWorkAction implements DevDocketAction {
           }
 
           if (workMode === 'worktree') {
-            await this.prWorktreeFlow(item, repoPath, branchInfo, progress);
+            await this.prWorktreeFlow(item, repoPath, branchInfo, progress, worktreePath);
           } else {
             await this.prCheckoutFlow(item, repoPath, branchInfo, progress);
           }
@@ -453,10 +478,10 @@ export class StartWorkAction implements DevDocketAction {
     repoPath: string,
     branchInfo: PrBranchInfo,
     progress: vscode.Progress<{ message?: string }>,
+    promptedWorktreePath?: string,
   ): Promise<void> {
     const { branchName, trackingRef } = branchInfo;
-    const worktreeDirName = this.toWorktreeDirName(repoPath, branchName, item);
-    const worktreePath = path.join(path.dirname(repoPath), worktreeDirName);
+    const worktreePath = promptedWorktreePath ?? this.getDefaultWorktreePath(repoPath, branchName, item);
 
     if (fs.existsSync(worktreePath)) {
       void vscode.window.showErrorMessage(`DevDocket: Directory "${worktreePath}" already exists.`);
@@ -722,6 +747,76 @@ export class StartWorkAction implements DevDocketAction {
     return choice?.value;
   }
 
+  private shouldPromptForNames(): boolean {
+    return vscode.workspace.getConfiguration().get<boolean>('devdocket.startGitWork.promptForNames', true);
+  }
+
+  private async promptForBranchName(proposedBranchName: string, workMode: WorkMode): Promise<string | undefined> {
+    return vscode.window.showInputBox({
+      title: 'DevDocket: Branch name',
+      prompt: `Branch to ${workMode === 'worktree' ? 'create for the new worktree' : 'check out'}`,
+      value: proposedBranchName,
+      valueSelection: [0, proposedBranchName.length],
+      ignoreFocusOut: true,
+      validateInput: input => this.validateBranchName(input),
+    });
+  }
+
+  private async promptForWorktreePath(
+    repoPath: string,
+    branchName: string,
+    item: Readonly<WorkItem>,
+  ): Promise<string | undefined> {
+    const defaultWorktreePath = this.getDefaultWorktreePath(repoPath, branchName, item);
+    const defaultDirName = path.basename(defaultWorktreePath);
+    return vscode.window.showInputBox({
+      title: 'DevDocket: Worktree path',
+      prompt: 'Filesystem path where the new worktree will be created',
+      value: defaultWorktreePath,
+      valueSelection: [defaultWorktreePath.length - defaultDirName.length, defaultWorktreePath.length],
+      ignoreFocusOut: true,
+      validateInput: input => this.validateWorktreePath(input, repoPath),
+    });
+  }
+
+  private validateBranchName(input: string): string | undefined {
+    if (input.length === 0) {
+      return 'Branch name is required.';
+    }
+    if (!isValidRef(input)) {
+      return 'Branch name must be a valid git ref (letters, digits, ., _, /, -; no leading -, spaces, .., or control characters).';
+    }
+    return undefined;
+  }
+
+  private validateWorktreePath(input: string, repoPath: string): string | undefined {
+    if (input.trim().length === 0) {
+      return 'Worktree path is required.';
+    }
+    if (!path.isAbsolute(input)) {
+      return 'Worktree path must be absolute.';
+    }
+
+    const resolvedPath = path.resolve(input);
+    const parentPath = path.dirname(resolvedPath);
+    if (!fs.existsSync(parentPath)) {
+      return `Parent directory "${parentPath}" does not exist.`;
+    }
+    if (fs.existsSync(resolvedPath)) {
+      return `Worktree path "${resolvedPath}" already exists.`;
+    }
+    if (this.isPathInsideOrEqual(parentPath, repoPath)) {
+      return 'Worktree parent directory must not be inside the source repository.';
+    }
+
+    return undefined;
+  }
+
+  private isPathInsideOrEqual(candidatePath: string, containerPath: string): boolean {
+    const relative = path.relative(path.resolve(containerPath), path.resolve(candidatePath));
+    return relative === '' || (relative.length > 0 && !relative.startsWith('..') && !path.isAbsolute(relative));
+  }
+
   /**
    * Runs user-configured post-worktree commands.
    */
@@ -759,6 +854,10 @@ export class StartWorkAction implements DevDocketAction {
       .map(value => value?.trim())
       .find(Boolean);
     return detail ?? 'Check your network connection, permissions, and whether the branch still exists.';
+  }
+
+  private getDefaultWorktreePath(repoPath: string, ref: string, item: Readonly<WorkItem>): string {
+    return path.join(path.dirname(repoPath), this.toWorktreeDirName(repoPath, ref, item));
   }
 
   private toWorktreeDirName(repoPath: string, ref: string, item: Readonly<WorkItem>): string {
