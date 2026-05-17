@@ -1,5 +1,6 @@
 import * as vscode from 'vscode';
 import { WatcherService } from '../services/watcherService';
+import { affectsStatusBarLogoIconSetting, getStatusBarBrandPrefix } from './statusBarBrand';
 
 /**
  * Status bar item that shows running/passed/failed watch counts.
@@ -8,6 +9,7 @@ import { WatcherService } from '../services/watcherService';
 export class WatchesStatusBar implements vscode.Disposable {
   private readonly statusBarItem: vscode.StatusBarItem;
   private readonly watchChangeSub: vscode.Disposable;
+  private readonly configurationSub: vscode.Disposable;
 
   constructor(
     private readonly watcherService: WatcherService,
@@ -18,13 +20,19 @@ export class WatchesStatusBar implements vscode.Disposable {
     this.watchChangeSub = watcherService.onDidChangeWatchedRuns(() => {
       this.update();
     });
+    this.configurationSub = vscode.workspace.onDidChangeConfiguration(event => {
+      if (affectsStatusBarLogoIconSetting(event)) {
+        this.update();
+      }
+    });
     this.update();
   }
 
   private update(): void {
     const watches = this.watcherService.getActiveWatches();
+    const brandPrefix = getStatusBarBrandPrefix();
     if (watches.length === 0) {
-      this.statusBarItem.text = '👁 DevDocket • Watches';
+      this.statusBarItem.text = `👁 ${brandPrefix} • Watches`;
       this.statusBarItem.tooltip = this.buildTooltip(0, 0, 0);
       this.statusBarItem.backgroundColor = undefined;
       this.statusBarItem.color = undefined;
@@ -70,7 +78,7 @@ export class WatchesStatusBar implements vscode.Disposable {
       }
     }
 
-    this.statusBarItem.text = `👁 DevDocket • 🔄 ${runningCount} · ✓ ${passedCount} · ✗ ${failedCount}`;
+    this.statusBarItem.text = `👁 ${brandPrefix} • 🔄 ${runningCount} · ✓ ${passedCount} · ✗ ${failedCount}`;
     this.statusBarItem.tooltip = this.buildTooltip(runningCount, passedCount, failedCount);
     // Only highlight the status bar with the warning color if there is at
     // least one failed watch the user hasn't seen yet — once they open the
@@ -96,6 +104,7 @@ export class WatchesStatusBar implements vscode.Disposable {
 
   dispose(): void {
     this.watchChangeSub.dispose();
+    this.configurationSub.dispose();
     this.statusBarItem.dispose();
   }
 }

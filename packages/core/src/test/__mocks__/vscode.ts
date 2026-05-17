@@ -205,15 +205,36 @@ class MockMemento {
 }
 
 const _onDidChangeConfigurationEmitter = new MockEventEmitter();
+const _configurationValues = new Map<string, unknown>();
+
+function getConfigurationValue(section: string | undefined, key: string, defaultValue: any): any {
+  const fullKey = section ? `${section}.${key}` : key;
+  return _configurationValues.has(fullKey) ? _configurationValues.get(fullKey) : defaultValue;
+}
 
 const workspace = {
-  getConfiguration: vi.fn().mockReturnValue({
-    get: vi.fn((key: string, defaultValue?: any) => defaultValue),
+  getConfiguration: vi.fn((section?: string) => ({
+    get: vi.fn((key: string, defaultValue?: any) => getConfigurationValue(section, key, defaultValue)),
     update: vi.fn().mockResolvedValue(undefined),
     inspect: vi.fn(() => undefined),
-  }),
+  })),
   onDidChangeConfiguration: vi.fn((listener: Function) => _onDidChangeConfigurationEmitter.event(listener)),
   _onDidChangeConfigurationEmitter,
+  _setConfigurationValue: (key: string, value: unknown) => {
+    if (value === undefined) {
+      _configurationValues.delete(key);
+      return;
+    }
+    _configurationValues.set(key, value);
+  },
+  _resetConfiguration: () => {
+    _configurationValues.clear();
+  },
+  _fireDidChangeConfiguration: (key: string) => {
+    _onDidChangeConfigurationEmitter.fire({
+      affectsConfiguration: (section: string) => section === key || key.startsWith(`${section}.`),
+    });
+  },
 };
 
 class MockThemeColor {

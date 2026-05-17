@@ -20,6 +20,7 @@ function createWatcherService(initialWatches: any[]) {
 describe('WatchesStatusBar', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    (vscode.workspace as any)._resetConfiguration();
   });
 
   it('formats running, passed, and failed counts and wires the click command', () => {
@@ -70,5 +71,34 @@ describe('WatchesStatusBar', () => {
     expect(statusBarItem.text).toBe('👁 DevDocket • Watches');
     expect(statusBarItem.show).toHaveBeenCalledTimes(3);
     expect(statusBarItem.hide).not.toHaveBeenCalled();
+  });
+
+  it('uses the logo glyph when the status bar logo setting is enabled', () => {
+    (vscode.workspace as any)._setConfigurationValue('devdocket.statusBar.useLogoIcon', true);
+    const watcherService = createWatcherService([
+      { status: { overallState: 'running' } },
+      { status: { overallState: 'completed', conclusion: 'success' } },
+    ]);
+
+    new WatchesStatusBar(watcherService as any);
+
+    const statusBarItem = (window.createStatusBarItem as ReturnType<typeof vi.fn>).mock.results[0].value;
+    expect(statusBarItem.text).toBe('👁 $(devdocket-logo) • 🔄 1 · ✓ 1 · ✗ 0');
+    expect(statusBarItem.tooltip).toContain('DevDocket CI Watches');
+  });
+
+  it('refreshes watches text when the logo setting changes', () => {
+    const watcherService = createWatcherService([]);
+
+    new WatchesStatusBar(watcherService as any);
+
+    const statusBarItem = (window.createStatusBarItem as ReturnType<typeof vi.fn>).mock.results[0].value;
+    expect(statusBarItem.text).toBe('👁 DevDocket • Watches');
+
+    (vscode.workspace as any)._setConfigurationValue('devdocket.statusBar.useLogoIcon', true);
+    (vscode.workspace as any)._fireDidChangeConfiguration('devdocket.statusBar.useLogoIcon');
+
+    expect(statusBarItem.text).toBe('👁 $(devdocket-logo) • Watches');
+    expect(statusBarItem.show).toHaveBeenCalledTimes(2);
   });
 });
