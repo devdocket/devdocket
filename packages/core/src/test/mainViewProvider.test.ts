@@ -342,6 +342,41 @@ describe('MainViewProvider', () => {
     expect(readyTier.items[0].badges).toContainEqual({ label: 'CI issues', type: 'ci', variant: 'ci-warn' });
   });
 
+  it('leaves unknown completed run conclusions neutral in the sidebar', async () => {
+    vi.useFakeTimers();
+    const workGraph = createMockWorkGraph([
+      makeWorkItem({
+        id: 'custom-run-item',
+        title: 'Custom run item',
+        state: WorkItemState.New,
+        providerId: 'ado',
+        externalId: 'custom-run-item',
+        url: 'https://dev.azure.com/org/project/_build/results?buildId=999',
+      }),
+    ]);
+    const providerRegistry = createProviderRegistry({
+      ado: [{ externalId: 'custom-run-item', title: 'Custom run item', url: 'https://dev.azure.com/org/project/_build/results?buildId=999' }],
+    });
+    const stateStore = createStateStore({ 'ado::custom-run-item': 'accepted' });
+    const watcherService = createWatcherService({
+      runs: [{
+        identifier: { providerId: 'ado-pipelines', runId: '999', url: 'https://dev.azure.com/org/project/_build/results?buildId=999' },
+        status: { overallState: 'completed', conclusion: 'provider_future_value' },
+      }],
+    });
+    const provider = createProvider(workGraph, providerRegistry, stateStore, watcherService);
+    const mockView = createMockWebviewView();
+
+    provider.resolveWebviewView(mockView.view, {} as any, {} as any);
+    await vi.advanceTimersByTimeAsync(50);
+
+    const updateItems = findPostedMessage(mockView, 'updateItems');
+    const readyTier = updateItems.tiers.find((tier: { id: string }) => tier.id === 'ready-to-start');
+    expect(readyTier.items[0].badges).not.toContainEqual({ label: 'CI failed', type: 'ci', variant: 'ci-fail' });
+    expect(readyTier.items[0].badges).not.toContainEqual({ label: 'CI passed', type: 'ci', variant: 'ci-pass' });
+    expect(readyTier.items[0].badges.some((badge: { type: string }) => badge.type === 'ci')).toBe(false);
+  });
+
   it('filters empty tiers out of the refresh payload', async () => {
     vi.useFakeTimers();
     const provider = createProvider(

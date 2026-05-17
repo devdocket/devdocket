@@ -419,7 +419,10 @@ export class MainViewProvider implements vscode.WebviewViewProvider {
     if (watchedRun.status.conclusion === 'partial_success') {
       return { label: 'CI issues', type: 'ci', variant: 'ci-warn' };
     }
-    return { label: 'CI passed', type: 'ci', variant: 'ci-pass' };
+    if (watchedRun.status.conclusion === 'success') {
+      return { label: 'CI passed', type: 'ci', variant: 'ci-pass' };
+    }
+    return undefined;
   }
 
   private getPRCIBadge(watchedPR: WatchedPR): BadgeData | undefined {
