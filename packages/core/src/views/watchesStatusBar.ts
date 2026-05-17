@@ -64,13 +64,11 @@ export class WatchesStatusBar implements vscode.Disposable {
         continue;
       }
       // Delegate to the shared helper so the status bar matches the CI watch surfaces.
-      if (!isFailedConclusion(conclusion)) {
-        passedCount += 1;
-        continue;
-      }
-      failedCount += 1;
-      if (!this.watcherService.isFailureAcknowledged(watch)) {
-        unacknowledgedFailedCount += 1;
+      if (isFailedConclusion(conclusion)) {
+        failedCount += 1;
+        if (!this.watcherService.isFailureAcknowledged(watch)) {
+          unacknowledgedFailedCount += 1;
+        }
       }
     }
 

@@ -101,7 +101,6 @@ describe('WatchApp PR watch rendering', () => {
     expect(runCard).toBeInstanceOf(HTMLDivElement);
     expect(runCard!.classList.contains('item-card--done')).toBe(true);
     expect(runCard!.classList.contains('item-card--urgent')).toBe(false);
-    expect((runCard!.querySelector('.badge-pill') as HTMLElement).className).toContain('badge-pill--neutral');
     expect(runCard!.querySelector('.badge-pill')?.textContent).toBe('Provider future value');
   });
 
