@@ -81,14 +81,22 @@ function getRunLabel(run: CIRun): string {
   if (run.state === 'in_progress') {
     return 'in progress';
   }
-  return run.conclusion?.replace(/_/g, ' ') ?? 'completed';
+  return run.conclusion ? toConclusionLabel(run.conclusion) : 'completed';
 }
 
 function isFailedRun(run: CIRun): boolean {
   if (run.state !== 'completed') return false;
   const conclusion = run.conclusion;
   if (conclusion === undefined || conclusion === 'success') return false;
-  return conclusion !== 'cancelled' && conclusion !== 'skipped' && conclusion !== 'neutral';
+  return conclusion !== 'cancelled' && conclusion !== 'skipped' && conclusion !== 'neutral' && conclusion !== 'partial_success';
+}
+
+function toConclusionLabel(conclusion: string): string {
+  if (conclusion === 'partial_success') {
+    return 'Succeeded with issues';
+  }
+  const label = conclusion.replace(/_/g, ' ');
+  return label.charAt(0).toUpperCase() + label.slice(1);
 }
 
 function formatCount(count: number, label: string): string {

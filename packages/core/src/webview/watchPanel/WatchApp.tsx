@@ -373,6 +373,9 @@ function getRunBadge(runWatch: RunWatchData): BadgeData {
   if (runWatch.conclusion === 'success') {
     return { label: 'Passed', type: 'ci', variant: 'ci-pass' };
   }
+  if (runWatch.conclusion === 'partial_success') {
+    return { label: 'Succeeded with issues', type: 'ci', variant: 'ci-warn' };
+  }
   return { label: toConclusionLabel(runWatch.conclusion), type: 'ci', variant: 'ci-fail' };
 }
 
@@ -440,6 +443,9 @@ function getRunTierClass(runWatch: RunWatchData): string {
   if (runWatch.conclusion === 'success') {
     return 'in-progress';
   }
+  if (runWatch.conclusion === 'partial_success') {
+    return 'paused';
+  }
   if (runWatch.conclusion === 'cancelled' || runWatch.conclusion === 'skipped' || runWatch.conclusion === 'neutral') {
     return 'done';
   }
@@ -450,10 +456,10 @@ function isFailedRun(runWatch: RunWatchData): boolean {
   if (runWatch.state !== 'completed') return false;
   const conclusion = runWatch.conclusion;
   if (conclusion === undefined || conclusion === 'success') return false;
-  // cancelled / skipped / neutral are explicit non-results, not failures.
+  // cancelled / skipped / neutral / partial success are explicit non-failures.
   // Mirrors the canonical definition in mainViewProvider.ts so the watch
   // panel webview and the sidebar agree on what counts as a failed run.
-  if (conclusion === 'cancelled' || conclusion === 'skipped' || conclusion === 'neutral') return false;
+  if (conclusion === 'cancelled' || conclusion === 'skipped' || conclusion === 'neutral' || conclusion === 'partial_success') return false;
   return true;
 }
 
@@ -461,5 +467,9 @@ function toConclusionLabel(conclusion?: string): string {
   if (!conclusion) {
     return 'Completed';
   }
-  return conclusion.replace(/_/g, ' ');
+  if (conclusion === 'partial_success') {
+    return 'Succeeded with issues';
+  }
+  const label = conclusion.replace(/_/g, ' ');
+  return label.charAt(0).toUpperCase() + label.slice(1);
 }

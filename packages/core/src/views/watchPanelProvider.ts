@@ -660,7 +660,7 @@ function getFailurePreview(runWatch: WatchedRun): string | undefined {
   }
 
   if (runWatch.status.overallState === 'completed' && runWatch.status.conclusion && runWatch.status.conclusion !== 'success') {
-    return `Conclusion: ${toDisplayLabel(runWatch.status.conclusion)}`;
+    return `Conclusion: ${toConclusionLabel(runWatch.status.conclusion)}`;
   }
 
   return undefined;
@@ -736,10 +736,10 @@ function isFailedRun(runWatch: RunWatchData): boolean {
   if (runWatch.state !== 'completed') return false;
   const conclusion = runWatch.conclusion;
   if (conclusion === undefined || conclusion === 'success') return false;
-  // cancelled / skipped / neutral are explicit non-results, not failures.
+  // cancelled / skipped / neutral / partial success are explicit non-failures.
   // Mirrors the canonical definition in mainViewProvider.ts so the watch
   // panel and the sidebar agree on what counts as a failed run.
-  if (conclusion === 'cancelled' || conclusion === 'skipped' || conclusion === 'neutral') return false;
+  if (conclusion === 'cancelled' || conclusion === 'skipped' || conclusion === 'neutral' || conclusion === 'partial_success') return false;
   return true;
 }
 
@@ -747,8 +747,12 @@ function truncate(value: string, maxLength = 140): string {
   return value.length > maxLength ? `${value.slice(0, maxLength - 1)}…` : value;
 }
 
-function toDisplayLabel(value: string): string {
-  return value.replace(/_/g, ' ');
+function toConclusionLabel(value: string): string {
+  if (value === 'partial_success') {
+    return 'Succeeded with issues';
+  }
+  const label = value.replace(/_/g, ' ');
+  return label.charAt(0).toUpperCase() + label.slice(1);
 }
 
 function resolveCodiconsResources(): CodiconsResources | undefined {

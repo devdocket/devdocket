@@ -760,7 +760,7 @@ function isFailingOrWarningRun(run: WatchedRun): boolean {
   if (run.status.overallState !== 'completed') return false;
   const conclusion = run.status.conclusion;
   if (conclusion === undefined || conclusion === 'success') return false;
-  return conclusion !== 'cancelled' && conclusion !== 'skipped' && conclusion !== 'neutral';
+  return conclusion !== 'cancelled' && conclusion !== 'skipped' && conclusion !== 'neutral' && conclusion !== 'partial_success';
 }
 
 /**

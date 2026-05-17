@@ -48,6 +48,20 @@ describe('WatchesStatusBar', () => {
     expect(statusBarItem.show).toHaveBeenCalled();
   });
 
+  it('counts partial-success runs as passed instead of failed', () => {
+    const watcherService = createWatcherService([
+      { status: { overallState: 'completed', conclusion: 'partial_success' } },
+    ]);
+
+    new WatchesStatusBar(watcherService as any);
+
+    const statusBarItem = (window.createStatusBarItem as ReturnType<typeof vi.fn>).mock.results[0].value;
+    expect(statusBarItem.text).toBe('👁 DevDocket • 🔄 0 · ✓ 1 · ✗ 0');
+    expect(statusBarItem.tooltip).toContain('  ✓ 1 passed');
+    expect(statusBarItem.tooltip).toContain('  ✗ 0 failed');
+    expect(statusBarItem.backgroundColor).toBeUndefined();
+  });
+
   it('updates text when watch activity changes and remains visible when empty', () => {
     const watcherService = createWatcherService([]);
     new WatchesStatusBar(watcherService as any, 'devdocket.showWatchPanel');

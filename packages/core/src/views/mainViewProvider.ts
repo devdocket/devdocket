@@ -1395,9 +1395,9 @@ function isFailedRun(runWatch: WatchedRun): boolean {
   if (runWatch.status.overallState !== 'completed') return false;
   const conclusion = runWatch.status.conclusion;
   if (conclusion === undefined || conclusion === 'success') return false;
-  // Cancelled / skipped / neutral runs aren't failures from a CI-health
-  // standpoint — they're explicit non-results. Don't paint them red.
-  if (conclusion === 'cancelled' || conclusion === 'skipped' || conclusion === 'neutral') return false;
+  // Cancelled / skipped / neutral / partial-success runs aren't failures
+  // from a CI-health standpoint. Don't paint them red.
+  if (conclusion === 'cancelled' || conclusion === 'skipped' || conclusion === 'neutral' || conclusion === 'partial_success') return false;
   return true;
 }
 

@@ -57,10 +57,10 @@ export class WatchesStatusBar implements vscode.Disposable {
         passedCount += 1;
         continue;
       }
-      // cancelled / skipped / neutral are explicit non-results, not failures.
+      // cancelled / skipped / neutral / partial success are explicit non-failures.
       // Mirrors the canonical isFailedRun in mainViewProvider.ts and the
       // watch panel webview so the status bar agrees with the panel UI.
-      if (conclusion === 'cancelled' || conclusion === 'skipped' || conclusion === 'neutral') {
+      if (conclusion === 'cancelled' || conclusion === 'skipped' || conclusion === 'neutral' || conclusion === 'partial_success') {
         passedCount += 1;
         continue;
       }

@@ -158,6 +158,20 @@ describe('WatcherService', () => {
       expect(service.isFailureAcknowledged(watch)).toBe(false);
     });
 
+    it('does not acknowledge partial-success runs as failures', async () => {
+      const watcher = createMockWatcher('test', async () => ({
+        overallState: 'completed' as const,
+        conclusion: 'partial_success' as const,
+        jobs: [],
+      }));
+      registry.register(watcher);
+      const watch = await service.startWatch(createIdentifier());
+
+      service.acknowledgeAllFailures();
+
+      expect(service.isFailureAcknowledged(watch)).toBe(false);
+    });
+
     it('clears the acknowledgement when a dismissed watch is re-watched', async () => {
       const watcher = createMockWatcher('test', async () => ({
         overallState: 'completed' as const,

@@ -248,6 +248,41 @@ describe('WatchPanelProvider', () => {
     }));
   });
 
+  it('uses title-cased partial-success previews in watch panel data', () => {
+    const mockPanel = createMockWebviewPanel();
+    vi.mocked(window.createWebviewPanel).mockReturnValue(mockPanel.panel as any);
+    const watcherService = createWatcherService();
+    vi.mocked(watcherService.getActiveStandaloneWatches).mockReturnValue([{
+      identifier: {
+        providerId: 'ado-pipelines',
+        runId: '570',
+        displayName: 'Publish artifacts',
+        url: 'https://dev.azure.com/org/project/_build/results?buildId=570',
+      },
+      status: {
+        overallState: 'completed',
+        conclusion: 'partial_success',
+        jobs: [],
+      },
+      watchedAt: new Date(Date.now() - 120_000).toISOString(),
+    }]);
+
+    const provider = new WatchPanelProvider(
+      vscode.Uri.file('C:\\repo') as any,
+      watcherService as any,
+      createMockWorkGraph(),
+      createMockProviderRegistry(),
+    );
+    provider.open();
+
+    const message = getUpdateWatchPanelMessage(mockPanel);
+    expect(message.runWatches[0]).toEqual(expect.objectContaining({
+      state: 'completed',
+      conclusion: 'partial_success',
+      failurePreview: 'Conclusion: Succeeded with issues',
+    }));
+  });
+
   it('adds linkedItemId when a matching PR work item exists', () => {
     const mockPanel = createMockWebviewPanel();
     vi.mocked(window.createWebviewPanel).mockReturnValue(mockPanel.panel as any);

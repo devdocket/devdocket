@@ -334,7 +334,7 @@ export class RunWatchPool implements vscode.Disposable {
     if (watch.status.overallState !== 'completed') return false;
     const conclusion = watch.status.conclusion;
     if (conclusion === undefined || conclusion === 'success') return false;
-    if (conclusion === 'cancelled' || conclusion === 'skipped' || conclusion === 'neutral') return false;
+    if (conclusion === 'cancelled' || conclusion === 'skipped' || conclusion === 'neutral' || conclusion === 'partial_success') return false;
     return true;
   }
 

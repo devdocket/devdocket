@@ -31,7 +31,7 @@ export const providerBadgeColors = {
 // State badge colors  (semantic: red = action needed, green = positive, etc.)
 // ---------------------------------------------------------------------------
 
-export interface ThemedColor { dark: { bg: string; fg: string }; light: { bg: string; fg: string } }
+export interface ThemedColor { dark: { bg: string; fg: string; border?: string }; light: { bg: string; fg: string; border?: string } }
 
 export const stateBadgeColors: Record<string, ThemedColor> = {
   'changes-requested': {
@@ -76,6 +76,10 @@ export const ciBadgeColors: Record<string, ThemedColor> = {
   'ci-fail': {
     dark:  { bg: 'rgba(241,76,76,0.15)',   fg: '#F14C4C' },
     light: { bg: 'rgba(205,45,45,0.10)',   fg: '#CD2D2D' },
+  },
+  'ci-warn': {
+    dark:  { bg: 'rgba(204,167,0,0.15)',   fg: tierColors.paused.dark, border: tierColors.paused.dark },
+    light: { bg: 'rgba(191,136,3,0.10)',   fg: tierColors.paused.light, border: tierColors.paused.light },
   },
   'ci-running': {
     dark:  { bg: 'rgba(55,148,255,0.15)',  fg: '#3794FF' },

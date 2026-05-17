@@ -307,6 +307,40 @@ describe('MainViewProvider', () => {
     expect(doneTier.items[0].badges).toContainEqual({ label: 'CI passed', type: 'ci', variant: 'ci-pass' });
   });
 
+  it('does not classify partial-success run badges as failed', async () => {
+    vi.useFakeTimers();
+    const workGraph = createMockWorkGraph([
+      makeWorkItem({
+        id: 'partial-run-item',
+        title: 'Partial run item',
+        state: WorkItemState.New,
+        providerId: 'ado',
+        externalId: 'partial-run-item',
+        url: 'https://dev.azure.com/org/project/_build/results?buildId=570',
+      }),
+    ]);
+    const providerRegistry = createProviderRegistry({
+      ado: [{ externalId: 'partial-run-item', title: 'Partial run item', url: 'https://dev.azure.com/org/project/_build/results?buildId=570' }],
+    });
+    const stateStore = createStateStore({ 'ado::partial-run-item': 'accepted' });
+    const watcherService = createWatcherService({
+      runs: [{
+        identifier: { providerId: 'ado-pipelines', runId: '570', url: 'https://dev.azure.com/org/project/_build/results?buildId=570' },
+        status: { overallState: 'completed', conclusion: 'partial_success' },
+      }],
+    });
+    const provider = createProvider(workGraph, providerRegistry, stateStore, watcherService);
+    const mockView = createMockWebviewView();
+
+    provider.resolveWebviewView(mockView.view, {} as any, {} as any);
+    await vi.advanceTimersByTimeAsync(50);
+
+    const updateItems = findPostedMessage(mockView, 'updateItems');
+    const readyTier = updateItems.tiers.find((tier: { id: string }) => tier.id === 'ready-to-start');
+    expect(readyTier.items[0].badges).not.toContainEqual({ label: 'CI failed', type: 'ci', variant: 'ci-fail' });
+    expect(readyTier.items[0].badges).toContainEqual({ label: 'CI passed', type: 'ci', variant: 'ci-pass' });
+  });
+
   it('filters empty tiers out of the refresh payload', async () => {
     vi.useFakeTimers();
     const provider = createProvider(

@@ -384,6 +384,32 @@ describe('WorkItemEditorPanel', () => {
     });
   });
 
+  it('excludes partial-success child runs from CI watch failing totals', () => {
+    const item = makeItem({
+      title: 'Watched PR',
+      providerId: 'github-my-prs',
+      externalId: 'owner/repo#42',
+      itemType: 'pr',
+    });
+    const watch = makeWatchedPR();
+    const runs = [
+      makeWatchedRun({
+        identifier: { ...makeWatchedRun().identifier, runId: 'run-partial', displayName: 'publish' },
+        status: { overallState: 'completed', conclusion: 'partial_success', jobs: [] },
+      }),
+    ];
+    const watcherService = createMockWatcherService(watch, runs);
+
+    const { mock } = openPanel(item, createMockWorkGraph(item), createMockProviderRegistry(), createMockActionRegistry(), createMockStateStore(), watcherService);
+    const bootstrap = getBootstrapItem(mock.panel.webview.html);
+
+    expect(bootstrap.ciWatch).toEqual(expect.objectContaining({
+      runs: [{ id: 'github-actions:owner/repo:run-partial', name: 'publish', state: 'completed', conclusion: 'partial_success' }],
+      totalActive: 0,
+      totalFailing: 0,
+    }));
+  });
+
   it('omits CI watch data when the PR is not watched', () => {
     const item = makeItem({
       title: 'Unwatched PR',

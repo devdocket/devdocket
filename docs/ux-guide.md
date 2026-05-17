@@ -85,6 +85,8 @@ A floating webview that monitors GitHub Actions / Azure DevOps Pipeline runs and
 - **PR Watches** — pull requests being monitored. Each PR renders as one card with a checks roll-up; expand the card to see individual CI runs. PRs auto-expand when a child run fails, and the failure preview appears on the PR card.
 - **Run Watches** — standalone pipeline runs you've added directly. These continue to render as flat run cards.
 
+Completed runs render in three distinct states: **Passed** (green), **Succeeded with issues** (amber, used for Azure DevOps partial success), and **Failed** (red). Runs that succeeded with issues do not count as failures and do not auto-expand their parent PR card.
+
 ### Adding watches
 
 - Inside the panel, click **+ Watch URL** in the header. Paste a supported URL — DevDocket detects whether it is a PR or run, and validates the URL before submission. Examples: `https://github.com/owner/repo/pull/123` and `https://github.com/owner/repo/actions/runs/12345`.
