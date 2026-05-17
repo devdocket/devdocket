@@ -25,7 +25,7 @@ export class WatchesStatusBar implements vscode.Disposable {
     const watches = this.watcherService.getActiveWatches();
     if (watches.length === 0) {
       this.statusBarItem.text = '👁 DevDocket • Watches';
-      this.statusBarItem.tooltip = this.buildTooltip(0, 0, 0);
+      this.statusBarItem.tooltip = this.buildTooltip(0, 0, 0, 0);
       this.statusBarItem.backgroundColor = undefined;
       this.statusBarItem.color = undefined;
       this.statusBarItem.show();
@@ -34,6 +34,7 @@ export class WatchesStatusBar implements vscode.Disposable {
 
     let runningCount = 0;
     let passedCount = 0;
+    let partialSuccessCount = 0;
     let failedCount = 0;
     let unacknowledgedFailedCount = 0;
 
@@ -57,10 +58,14 @@ export class WatchesStatusBar implements vscode.Disposable {
         passedCount += 1;
         continue;
       }
-      // cancelled / skipped / neutral / partial success are explicit non-failures.
+      if (conclusion === 'partial_success') {
+        partialSuccessCount += 1;
+        continue;
+      }
+      // cancelled / skipped / neutral are explicit non-results, not failures.
       // Mirrors the canonical isFailedRun in mainViewProvider.ts and the
       // watch panel webview so the status bar agrees with the panel UI.
-      if (conclusion === 'cancelled' || conclusion === 'skipped' || conclusion === 'neutral' || conclusion === 'partial_success') {
+      if (conclusion === 'cancelled' || conclusion === 'skipped' || conclusion === 'neutral') {
         passedCount += 1;
         continue;
       }
@@ -70,8 +75,9 @@ export class WatchesStatusBar implements vscode.Disposable {
       }
     }
 
-    this.statusBarItem.text = `👁 DevDocket • 🔄 ${runningCount} · ✓ ${passedCount} · ✗ ${failedCount}`;
-    this.statusBarItem.tooltip = this.buildTooltip(runningCount, passedCount, failedCount);
+    const partialText = partialSuccessCount > 0 ? ` · ⚠ ${partialSuccessCount}` : '';
+    this.statusBarItem.text = `👁 DevDocket • 🔄 ${runningCount} · ✓ ${passedCount}${partialText} · ✗ ${failedCount}`;
+    this.statusBarItem.tooltip = this.buildTooltip(runningCount, passedCount, partialSuccessCount, failedCount);
     // Only highlight the status bar with the warning color if there is at
     // least one failed watch the user hasn't seen yet — once they open the
     // watch panel, acknowledge clears the alert until a NEW failure arrives.
@@ -84,11 +90,12 @@ export class WatchesStatusBar implements vscode.Disposable {
     this.statusBarItem.show();
   }
 
-  private buildTooltip(runningCount: number, passedCount: number, failedCount: number): string {
+  private buildTooltip(runningCount: number, passedCount: number, partialSuccessCount: number, failedCount: number): string {
     return [
       'DevDocket CI Watches',
       `  🔄 ${runningCount} running`,
       `  ✓ ${passedCount} passed`,
+      ...(partialSuccessCount > 0 ? [`  ⚠ ${partialSuccessCount} succeeded with issues`] : []),
       `  ✗ ${failedCount} failed`,
       'Click to open CI Watches panel.',
     ].join('\n');
