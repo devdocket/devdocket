@@ -218,6 +218,39 @@ describe('activate()', () => {
     expect(vscode.window.showWarningMessage).not.toHaveBeenCalled();
   });
 
+  it('formats non-success run completion conclusions for notifications', async () => {
+    vi.useFakeTimers();
+    const api = await activate(context);
+    const url = 'https://example.com/runs/timed-out';
+    let statusCallCount = 0;
+
+    api.registerRunWatcher({
+      id: 'test-runs',
+      label: 'Test Runs',
+      canWatch: (candidate: string) => candidate === url,
+      parseRunUrl: () => ({
+        providerId: 'test-runs',
+        runId: 'timed-out',
+        displayName: 'ADO Build',
+        url,
+      }),
+      getRunStatus: vi.fn(async () => {
+        statusCallCount += 1;
+        return statusCallCount === 1
+          ? { overallState: 'running' as const, jobs: [] }
+          : { overallState: 'completed' as const, conclusion: 'timed_out' as const, jobs: [] };
+      }),
+    });
+    (vscode.window.showInputBox as ReturnType<typeof vi.fn>).mockResolvedValue(url);
+
+    await getCommandHandler('devdocket.watchUrl')();
+    vi.mocked(vscode.window.showInformationMessage).mockClear();
+    vi.mocked(vscode.window.showWarningMessage).mockClear();
+    await vi.advanceTimersByTimeAsync(60_000);
+
+    expect(vscode.window.showWarningMessage).toHaveBeenCalledWith('ADO Build Timed out', 'View Run');
+  });
+
   it('prunes stale read-state and inbox-state records after non-empty provider refresh', async () => {
     const globalState = context.globalState as InstanceType<typeof MockMemento>;
     await globalState.update('devdocket.migrated', true);

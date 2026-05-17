@@ -331,7 +331,7 @@ function wireEvents(
   const runCompleteSub = watcherService.onDidCompleteRun(safeHandler('Error handling run completion', (run) => {
     const isSuccess = run.status.conclusion === 'success';
     const isPartialSuccess = run.status.conclusion === 'partial_success';
-    const message = `${run.identifier.displayName} ${isSuccess ? 'succeeded' : isPartialSuccess ? 'succeeded with issues' : run.status.conclusion || 'completed'}`;
+    const message = `${run.identifier.displayName} ${toRunCompletionLabel(run.status.conclusion)}`;
 
     if (isSuccess || isPartialSuccess) {
       void vscode.window.showInformationMessage(message, 'View Run').then(action => {
@@ -441,6 +441,23 @@ function wireEvents(
     autoWatchCleanup,
     autoCompleteCleanup,
   ];
+}
+
+function toRunCompletionLabel(conclusion?: string): string {
+  if (!conclusion) {
+    return 'completed';
+  }
+  if (conclusion === 'success') {
+    return 'succeeded';
+  }
+  if (conclusion === 'partial_success') {
+    return 'succeeded with issues';
+  }
+  if (conclusion === 'failure') {
+    return 'failed';
+  }
+  const label = conclusion.replace(/_/g, ' ');
+  return label.charAt(0).toUpperCase() + label.slice(1);
 }
 
 /**
