@@ -735,8 +735,7 @@ function getRunPriority(runWatch: RunWatchData): number {
 
 function isFailedRun(runWatch: RunWatchData): boolean {
   if (runWatch.state !== 'completed') return false;
-  // Mirrors the canonical definition in mainViewProvider.ts so the watch
-  // panel and the sidebar agree on what counts as a failed run.
+  // Delegate to the shared helper so all CI watch surfaces agree on what counts as a failed run.
   return isFailedConclusion(runWatch.conclusion);
 }
 
