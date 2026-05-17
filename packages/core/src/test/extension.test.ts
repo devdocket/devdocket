@@ -246,6 +246,7 @@ describe('activate()', () => {
     await getCommandHandler('devdocket.watchUrl')();
     vi.mocked(vscode.window.showInformationMessage).mockClear();
     vi.mocked(vscode.window.showWarningMessage).mockClear();
+    vi.mocked(vscode.window.showWarningMessage).mockResolvedValue(undefined);
     await vi.advanceTimersByTimeAsync(60_000);
 
     expect(vscode.window.showWarningMessage).toHaveBeenCalledWith('ADO Build Timed out', 'View Run');
