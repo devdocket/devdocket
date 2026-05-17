@@ -769,7 +769,7 @@ export class StartWorkAction implements DevDocketAction {
   ): Promise<string | undefined> {
     const defaultWorktreePath = this.getDefaultWorktreePath(repoPath, branchName, item);
     const defaultDirName = path.basename(defaultWorktreePath);
-    return vscode.window.showInputBox({
+    const selectedPath = await vscode.window.showInputBox({
       title: 'DevDocket: Worktree path',
       prompt: 'Filesystem path where the new worktree will be created',
       value: defaultWorktreePath,
@@ -777,6 +777,7 @@ export class StartWorkAction implements DevDocketAction {
       ignoreFocusOut: true,
       validateInput: input => this.validateWorktreePath(input, repoPath),
     });
+    return selectedPath?.trim();
   }
 
   private validateBranchName(input: string): string | undefined {
@@ -790,14 +791,15 @@ export class StartWorkAction implements DevDocketAction {
   }
 
   private validateWorktreePath(input: string, repoPath: string): string | undefined {
-    if (input.trim().length === 0) {
+    const trimmedInput = input.trim();
+    if (trimmedInput.length === 0) {
       return 'Worktree path is required.';
     }
-    if (!path.isAbsolute(input)) {
+    if (!path.isAbsolute(trimmedInput)) {
       return 'Worktree path must be absolute.';
     }
 
-    const resolvedPath = path.resolve(input);
+    const resolvedPath = path.resolve(trimmedInput);
     const parentPath = path.dirname(resolvedPath);
     if (!fs.existsSync(parentPath)) {
       return `Parent directory "${parentPath}" does not exist.`;

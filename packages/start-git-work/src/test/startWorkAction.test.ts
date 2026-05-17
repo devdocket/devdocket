@@ -294,6 +294,7 @@ describe('StartWorkAction', () => {
 
       vi.mocked(fs.existsSync).mockImplementation((p: any) => path.resolve(p.toString()) === path.resolve(outsideParent));
       expect(validateInput(outsideTarget)).toBeUndefined();
+      expect(validateInput(`  ${outsideTarget}  `)).toBeUndefined();
 
       vi.mocked(fs.existsSync).mockImplementation((p: any) => {
         const resolved = path.resolve(p.toString());
