@@ -63,6 +63,20 @@ describe('WatchesStatusBar', () => {
     expect(statusBarItem.backgroundColor).toBeUndefined();
   });
 
+  it('does not count unknown completed conclusions as passed or failed', () => {
+    const watcherService = createWatcherService([
+      { status: { overallState: 'completed', conclusion: 'provider_future_value' } },
+    ]);
+
+    new WatchesStatusBar(watcherService as any);
+
+    const statusBarItem = (window.createStatusBarItem as ReturnType<typeof vi.fn>).mock.results[0].value;
+    expect(statusBarItem.text).toBe('👁 DevDocket • Watches');
+    expect(statusBarItem.tooltip).toContain('  ✓ 0 passed');
+    expect(statusBarItem.tooltip).toContain('  ✗ 0 failed');
+    expect(statusBarItem.backgroundColor).toBeUndefined();
+  });
+
   it('updates text when watch activity changes and remains visible when empty', () => {
     const watcherService = createWatcherService([]);
     new WatchesStatusBar(watcherService as any, 'devdocket.showWatchPanel');

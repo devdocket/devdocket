@@ -55,7 +55,7 @@ export class WatchesStatusBar implements vscode.Disposable {
         continue;
       }
       const conclusion = watch.status.conclusion;
-      if (conclusion === undefined || conclusion === 'success') {
+      if (conclusion === 'success') {
         passedCount += 1;
         continue;
       }
