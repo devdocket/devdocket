@@ -215,6 +215,10 @@ describe('WatchPanelProvider', () => {
     );
     expect(mockPanel.panel.title).toBe('CI Watches (2)');
     expect(mockPanel.panel.webview.html).toContain('watchPanel.js');
+    const message = getUpdateWatchPanelMessage(mockPanel);
+    expect(message.prWatches).toHaveLength(1);
+    expect(message.prWatches[0].runs).toHaveLength(1);
+    expect(message.runWatches).toHaveLength(1);
     expect(mockPanel.panel.webview.postMessage).toHaveBeenCalledWith(expect.objectContaining({
       type: 'updateWatchPanel',
       prWatches: [expect.objectContaining({
