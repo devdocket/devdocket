@@ -24,7 +24,7 @@ export function filterTiers(tiers: TierData[], query: string): { tiers: TierData
           matchesNormalizedQuery(item.title, normalizedQuery)
           || (item.repoAnnotation ? matchesNormalizedQuery(item.repoAnnotation, normalizedQuery) : false)
           || (item.author?.displayName ? matchesNormalizedQuery(item.author.displayName, normalizedQuery) : false)
-          || (item.author?.handle ? matchesNormalizedQuery(item.author.handle, normalizedQuery) : false),
+          || (item.author?.handle ? matchesNormalizedQuery(item.author.handle, normalizedQuery) || matchesNormalizedQuery(`@${item.author.handle}`, normalizedQuery) : false),
         ),
       }))
       .filter(tier => tier.items.length > 0),
