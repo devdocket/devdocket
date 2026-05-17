@@ -826,7 +826,7 @@ export class StartWorkAction implements DevDocketAction {
 
   private isPathInsideOrEqual(candidatePath: string, containerPath: string): boolean {
     const relative = path.relative(path.resolve(containerPath), path.resolve(candidatePath));
-    return relative === '' || (relative.length > 0 && !relative.startsWith('..') && !path.isAbsolute(relative));
+    return relative === '' || (relative.length > 0 && relative !== '..' && !relative.startsWith(`..${path.sep}`) && !path.isAbsolute(relative));
   }
 
   /**

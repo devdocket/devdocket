@@ -308,6 +308,11 @@ describe('StartWorkAction', () => {
       const nestedParent = path.dirname(nestedTarget);
       vi.mocked(fs.existsSync).mockImplementation((p: any) => path.resolve(p.toString()) === path.resolve(nestedParent));
       expect(validateInput(nestedTarget)).toBe('Worktree parent directory must not be inside the source repository.');
+
+      const dotDotPrefixTarget = path.join('/mock', 'workspace', '..worktrees', 'target');
+      const dotDotPrefixParent = path.dirname(dotDotPrefixTarget);
+      vi.mocked(fs.existsSync).mockImplementation((p: any) => path.resolve(p.toString()) === path.resolve(dotDotPrefixParent));
+      expect(validateInput(dotDotPrefixTarget)).toBe('Worktree parent directory must not be inside the source repository.');
     });
 
     it('aborts without side effects when the branch-name prompt is cancelled', async () => {
