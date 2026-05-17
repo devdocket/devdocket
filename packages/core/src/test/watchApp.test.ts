@@ -90,6 +90,21 @@ describe('WatchApp PR watch rendering', () => {
     expect(runCard!.querySelector('.watch-row-preview')).toBeNull();
   });
 
+  it('renders unknown completed conclusions as neutral non-failures', async () => {
+    await mountWatchApp();
+    await sendUpdate([], [
+      makeRunWatch({ id: 'run-custom', name: 'Custom run', state: 'completed', conclusion: 'provider_future_value' }),
+    ]);
+
+    const runSection = getSection('Run Watches');
+    const runCard = runSection.querySelector('.tier-items > .item-card');
+    expect(runCard).toBeInstanceOf(HTMLDivElement);
+    expect(runCard!.classList.contains('item-card--done')).toBe(true);
+    expect(runCard!.classList.contains('item-card--urgent')).toBe(false);
+    expect((runCard!.querySelector('.badge-pill') as HTMLElement).className).toContain('badge-pill--neutral');
+    expect(runCard!.querySelector('.badge-pill')?.textContent).toBe('Provider future value');
+  });
+
   it('renders partial-success runs as amber non-failures', async () => {
     await mountWatchApp();
     await sendUpdate([], [
