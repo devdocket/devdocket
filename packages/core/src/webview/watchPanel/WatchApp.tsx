@@ -380,10 +380,10 @@ function getRunBadge(runWatch: RunWatchData): BadgeData {
   if (runWatch.conclusion === 'partial_success') {
     return { label: 'Succeeded with issues', type: 'ci', variant: 'ci-warn' };
   }
-  if (runWatch.conclusion === 'cancelled' || runWatch.conclusion === 'skipped' || runWatch.conclusion === 'neutral') {
-    return { label: toConclusionLabel(runWatch.conclusion), type: 'ci', variant: 'neutral' };
+  if (isFailedConclusion(runWatch.conclusion)) {
+    return { label: toConclusionLabel(runWatch.conclusion), type: 'ci', variant: 'ci-fail' };
   }
-  return { label: toConclusionLabel(runWatch.conclusion), type: 'ci', variant: 'ci-fail' };
+  return { label: toConclusionLabel(runWatch.conclusion), type: 'ci', variant: 'neutral' };
 }
 
 interface RunSummary {
