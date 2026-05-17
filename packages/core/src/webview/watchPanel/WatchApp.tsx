@@ -456,16 +456,10 @@ function getRunTierClass(runWatch: RunWatchData): string {
   if (runWatch.conclusion === 'success') {
     return 'in-progress';
   }
-  if (runWatch.conclusion === undefined) {
-    return 'done';
-  }
   if (runWatch.conclusion === 'partial_success') {
     return 'paused';
   }
-  if (runWatch.conclusion === 'cancelled' || runWatch.conclusion === 'skipped' || runWatch.conclusion === 'neutral') {
-    return 'done';
-  }
-  return 'urgent';
+  return isFailedConclusion(runWatch.conclusion) ? 'urgent' : 'done';
 }
 
 function isFailedRun(runWatch: RunWatchData): boolean {
