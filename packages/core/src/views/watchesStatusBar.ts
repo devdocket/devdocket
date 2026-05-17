@@ -63,8 +63,7 @@ export class WatchesStatusBar implements vscode.Disposable {
         partialSuccessCount += 1;
         continue;
       }
-      // Mirrors the canonical isFailedRun in mainViewProvider.ts and the
-      // watch panel webview so the status bar agrees with the panel UI.
+      // Delegate to the shared helper so the status bar matches the CI watch surfaces.
       if (!isFailedConclusion(conclusion)) {
         passedCount += 1;
         continue;
