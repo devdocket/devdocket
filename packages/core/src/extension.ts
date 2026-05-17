@@ -26,6 +26,7 @@ import { isSafeUrl } from './utils/url';
 import { logger, setLogger } from './services/logger';
 import { syncProviderTitles } from './services/titleSync';
 import { syncProviderDescriptions } from './services/descriptionSync';
+import { toRunCompletionLabel } from './webview/shared/runConclusionLabels';
 import { performance } from 'perf_hooks';
 
 export type { DevDocketApi, DevDocketProvider, DevDocketAction, ProviderItem, Disposable, ActivityLogEntry, ActivityType, StateTransitionEvent, DevDocketPRWatcher } from './api/types';
@@ -443,22 +444,6 @@ function wireEvents(
   ];
 }
 
-function toRunCompletionLabel(conclusion?: string): string {
-  if (!conclusion) {
-    return 'completed';
-  }
-  if (conclusion === 'success') {
-    return 'succeeded';
-  }
-  if (conclusion === 'partial_success') {
-    return 'succeeded with issues';
-  }
-  if (conclusion === 'failure') {
-    return 'failed';
-  }
-  const label = conclusion.replace(/_/g, ' ');
-  return label.charAt(0).toUpperCase() + label.slice(1);
-}
 
 /**
  * Activate the DevDocket extension.

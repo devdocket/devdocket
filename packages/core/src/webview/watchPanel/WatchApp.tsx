@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'preact/hooks';
 import type { BadgeData, ExtensionMessage, PRWatchData, RunWatchData } from '../shared/types';
 import { postMessage, setWebviewState } from '../shared/messaging';
 import { BadgePill } from '../shared/components/BadgePill';
+import { toConclusionLabel } from '../shared/runConclusionLabels';
 import { useThemeChangeCounter } from '../shared/theme';
 
 export function WatchApp() {
@@ -370,6 +371,9 @@ function getRunBadge(runWatch: RunWatchData): BadgeData {
   if (runWatch.state !== 'completed') {
     return { label: runWatch.state === 'queued' ? 'Queued' : 'Running', type: 'ci', variant: 'ci-running' };
   }
+  if (runWatch.conclusion === undefined) {
+    return { label: toConclusionLabel(runWatch.conclusion), type: 'ci', variant: 'neutral' };
+  }
   if (runWatch.conclusion === 'success') {
     return { label: 'Passed', type: 'ci', variant: 'ci-pass' };
   }
@@ -452,6 +456,9 @@ function getRunTierClass(runWatch: RunWatchData): string {
   if (runWatch.conclusion === 'success') {
     return 'in-progress';
   }
+  if (runWatch.conclusion === undefined) {
+    return 'done';
+  }
   if (runWatch.conclusion === 'partial_success') {
     return 'paused';
   }
@@ -472,13 +479,3 @@ function isFailedRun(runWatch: RunWatchData): boolean {
   return true;
 }
 
-function toConclusionLabel(conclusion?: string): string {
-  if (!conclusion) {
-    return 'Completed';
-  }
-  if (conclusion === 'partial_success') {
-    return 'Succeeded with issues';
-  }
-  const label = conclusion.replace(/_/g, ' ');
-  return label.charAt(0).toUpperCase() + label.slice(1);
-}

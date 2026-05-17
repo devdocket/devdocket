@@ -1,3 +1,4 @@
+import { toConclusionLabel } from '../../shared/runConclusionLabels';
 import type { EditorCIWatchData } from '../../shared/types';
 
 interface CIWatchSectionProps {
@@ -97,13 +98,6 @@ function isFailedRun(run: CIRun): boolean {
   return conclusion !== 'cancelled' && conclusion !== 'skipped' && conclusion !== 'neutral' && conclusion !== 'partial_success';
 }
 
-function toConclusionLabel(conclusion: string): string {
-  if (conclusion === 'partial_success') {
-    return 'Succeeded with issues';
-  }
-  const label = conclusion.replace(/_/g, ' ');
-  return label.charAt(0).toUpperCase() + label.slice(1);
-}
 
 function formatCount(count: number, label: string): string {
   return `${count} ${label}${count === 1 ? '' : 's'}`;

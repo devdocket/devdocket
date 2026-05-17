@@ -76,6 +76,20 @@ describe('WatchApp PR watch rendering', () => {
     expect(prSection.textContent).toContain('E2E tests');
   });
 
+  it('renders completed runs without conclusions as neutral non-failures', async () => {
+    await mountWatchApp();
+    await sendUpdate([], [
+      makeRunWatch({ id: 'run-completed', name: 'Completed run', state: 'completed' }),
+    ]);
+
+    const runSection = getSection('Run Watches');
+    const runCard = runSection.querySelector('.tier-items > .item-card');
+    expect(runCard).toBeInstanceOf(HTMLDivElement);
+    expect(runCard!.classList.contains('item-card--done')).toBe(true);
+    expect(runCard!.querySelector('.badge-pill')?.textContent).toBe('Completed');
+    expect(runCard!.querySelector('.watch-row-preview')).toBeNull();
+  });
+
   it('renders partial-success runs as amber non-failures', async () => {
     await mountWatchApp();
     await sendUpdate([], [

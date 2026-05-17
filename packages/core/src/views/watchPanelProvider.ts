@@ -9,6 +9,7 @@ import type { ProviderRegistry } from '../services/providerRegistry';
 import type { WorkGraph } from '../services/workGraph';
 import { isSafeUrl } from '../utils/url';
 import { buildTierColorCss } from '../webview/shared/colors';
+import { toConclusionLabel } from '../webview/shared/runConclusionLabels';
 import { parseProviderItemKey } from './providerItemKey';
 import type { PRWatchData, RunWatchData, WebviewMessage } from './mainTypes';
 
@@ -747,13 +748,6 @@ function truncate(value: string, maxLength = 140): string {
   return value.length > maxLength ? `${value.slice(0, maxLength - 1)}…` : value;
 }
 
-function toConclusionLabel(value: string): string {
-  if (value === 'partial_success') {
-    return 'Succeeded with issues';
-  }
-  const label = value.replace(/_/g, ' ');
-  return label.charAt(0).toUpperCase() + label.slice(1);
-}
 
 function resolveCodiconsResources(): CodiconsResources | undefined {
   try {
