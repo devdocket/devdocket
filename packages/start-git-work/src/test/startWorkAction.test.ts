@@ -273,6 +273,8 @@ describe('StartWorkAction', () => {
       expect(validateInput('bad..branch')).toContain('valid git ref');
       expect(validateInput('bad branch')).toContain('valid git ref');
       expect(validateInput('bad\nbranch')).toContain('valid git ref');
+      expect(validateInput('refs/tags/v1')).toContain('branch ref');
+      expect(validateInput('refs/heads/feature/good-branch')).toBeUndefined();
       expect(validateInput('feature/good-branch')).toBeUndefined();
     });
 
@@ -540,7 +542,7 @@ describe('StartWorkAction', () => {
           return 'origin/dev';
         }
         if (options?.title === 'DevDocket: Branch name') {
-          return 'custom-checkout';
+          return 'refs/heads/custom-checkout';
         }
         return options?.value;
       });

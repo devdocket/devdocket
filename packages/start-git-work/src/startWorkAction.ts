@@ -752,7 +752,7 @@ export class StartWorkAction implements DevDocketAction {
   }
 
   private async promptForBranchName(proposedBranchName: string, workMode: WorkMode): Promise<string | undefined> {
-    return vscode.window.showInputBox({
+    const selectedBranchName = await vscode.window.showInputBox({
       title: 'DevDocket: Branch name',
       prompt: `Branch to ${workMode === 'worktree' ? 'create for the new worktree' : 'check out'}`,
       value: proposedBranchName,
@@ -760,6 +760,7 @@ export class StartWorkAction implements DevDocketAction {
       ignoreFocusOut: true,
       validateInput: input => this.validateBranchName(input),
     });
+    return selectedBranchName === undefined ? undefined : this.normalizePromptedBranchName(selectedBranchName);
   }
 
   private async promptForWorktreePath(
@@ -781,13 +782,22 @@ export class StartWorkAction implements DevDocketAction {
   }
 
   private validateBranchName(input: string): string | undefined {
-    if (input.length === 0) {
+    const trimmedInput = input.trim();
+    const branchName = this.normalizePromptedBranchName(input);
+    if (branchName.length === 0) {
       return 'Branch name is required.';
     }
-    if (!isValidRef(input)) {
+    if (trimmedInput.startsWith('refs/') && !trimmedInput.startsWith('refs/heads/')) {
+      return 'Branch name must be a branch ref, not another refs/ namespace.';
+    }
+    if (!isValidRef(branchName)) {
       return 'Branch name must be a valid git ref (letters, digits, ., _, /, -; no leading -, spaces, .., or control characters).';
     }
     return undefined;
+  }
+
+  private normalizePromptedBranchName(input: string): string {
+    return this.normalizeBranchName(input.trim());
   }
 
   private validateWorktreePath(input: string, repoPath: string): string | undefined {
