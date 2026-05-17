@@ -55,6 +55,9 @@ function getRunIcon(run: CIRun): string {
   if (run.conclusion === 'success') {
     return '✓';
   }
+  if (run.conclusion === 'partial_success') {
+    return '⚠';
+  }
   return '○';
 }
 
@@ -67,6 +70,9 @@ function getRunVariant(run: CIRun): string {
   }
   if (run.conclusion === 'success') {
     return 'pass';
+  }
+  if (run.conclusion === 'partial_success') {
+    return 'warn';
   }
   return 'neutral';
 }

@@ -522,6 +522,12 @@ export function getEditorPanelHtml({ cspSource, scriptUri, initialItem }: Editor
       background: rgba(241, 76, 76, 0.12);
     }
 
+    .ci-watch-chip--warn {
+      color: #CCA700;
+      border-color: rgba(204, 167, 0, 0.35);
+      background: rgba(204, 167, 0, 0.12);
+    }
+
     .ci-watch-chip--running {
       color: var(--vscode-progressBar-background, var(--vscode-textLink-foreground));
       border-color: rgba(0, 122, 204, 0.35);
