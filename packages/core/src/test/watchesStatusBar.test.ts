@@ -71,7 +71,7 @@ describe('WatchesStatusBar', () => {
     new WatchesStatusBar(watcherService as any);
 
     const statusBarItem = (window.createStatusBarItem as ReturnType<typeof vi.fn>).mock.results[0].value;
-    expect(statusBarItem.text).toBe('👁 DevDocket • Watches');
+    expect(statusBarItem.text).toBe('👁 DevDocket • 🔄 0 · ✓ 0 · ✗ 0');
     expect(statusBarItem.tooltip).toContain('  ✓ 0 passed');
     expect(statusBarItem.tooltip).toContain('  ✗ 0 failed');
     expect(statusBarItem.backgroundColor).toBeUndefined();
