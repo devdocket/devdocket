@@ -472,6 +472,9 @@ export class WorkItemEditorPanel {
       state: item.state,
       providerLabel,
       group: item.group,
+      author: providerItem?.author
+        ? { displayName: providerItem.author.displayName, handle: providerItem.author.handle }
+        : undefined,
       createdAt: item.createdAt,
       updatedAt: item.updatedAt,
       badges: composeEditorBadges(item.providerId, providerItem, providerLabel),

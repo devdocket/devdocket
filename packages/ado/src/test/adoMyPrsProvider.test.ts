@@ -114,7 +114,11 @@ describe('AdoMyPrsProvider', () => {
       .mockResolvedValueOnce(mockConnectionData('author-123'))
       .mockResolvedValueOnce({
         ok: true,
-        json: async () => ({ value: [createMockPr(101, 'Fix bug')] }),
+        json: async () => ({
+          value: [createMockPr(101, 'Fix bug', 'MyProject', 'myrepo', {
+            createdBy: { displayName: 'Jane Doe', uniqueName: 'jane@example.com' },
+          })],
+        }),
       })
       .mockResolvedValueOnce({
         ok: true,
@@ -135,6 +139,11 @@ describe('AdoMyPrsProvider', () => {
       title: 'PR 101: Fix bug',
       description: 'Description for PR 101',
       url: 'https://dev.azure.com/myorg/MyProject/_git/myrepo/pullrequest/101',
+      author: {
+        displayName: 'Jane Doe',
+        handle: 'jane@example.com',
+      },
+      authored: true,
       group: 'MyProject/myrepo',
       reason: 'You authored this PR',
       state: 'Waiting on reviews',

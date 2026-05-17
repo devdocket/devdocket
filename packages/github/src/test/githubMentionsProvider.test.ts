@@ -154,6 +154,36 @@ describe('GitHubMentionsProvider', () => {
     }));
   });
 
+  it('populates author from the mentioned issue author', async () => {
+    mockFetch
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          items: [{
+            ...createMockIssue(10, 'Bug report', 'org/repo'),
+            user: {
+              login: 'issue-author',
+              avatar_url: 'https://avatars.githubusercontent.com/u/10?v=4',
+              html_url: 'https://github.com/issue-author',
+            },
+          }],
+        }),
+      })
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ login: 'testuser' }) })
+      .mockResolvedValueOnce({ ok: true, json: async () => [] });
+
+    const listener = vi.fn();
+    provider.onDidDiscoverItems(listener);
+    await provider.refresh();
+
+    expect(listener.mock.calls[0][0][0].author).toEqual({
+      displayName: 'issue-author',
+      handle: 'issue-author',
+      avatarUrl: 'https://avatars.githubusercontent.com/u/10?v=4',
+      profileUrl: 'https://github.com/issue-author',
+    });
+  });
+
   it('excludes merged PRs by fetching details for closed mentioned search results before publishing', async () => {
     const mergedPr = {
       ...createMockPr(20, 'Already merged', 'org/repo'),

@@ -136,6 +136,14 @@ export class GitHubMyPrsProvider extends BaseGitHubProvider {
         title: `#${pr.number}: ${pr.title}`,
         description: pr.body ?? undefined,
         url: pr.html_url,
+        ...(pr.user?.login ? {
+          author: {
+            displayName: pr.user.login,
+            handle: pr.user.login,
+            avatarUrl: pr.user.avatar_url,
+            profileUrl: pr.user.html_url,
+          },
+        } : {}),
         authored: true,
         group: repoName,
         reason: 'You authored this PR',
@@ -158,6 +166,14 @@ export class GitHubMyPrsProvider extends BaseGitHubProvider {
         title: `#${pr.number}: ${pr.title}`,
         description: pr.body ?? undefined,
         url: pr.html_url,
+        ...(pr.user?.login ? {
+          author: {
+            displayName: pr.user.login,
+            handle: pr.user.login,
+            avatarUrl: pr.user.avatar_url,
+            profileUrl: pr.user.html_url,
+          },
+        } : {}),
         group: repoName,
         reason: 'You are assigned to this PR',
         state: status,

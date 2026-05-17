@@ -132,6 +132,35 @@ describe('AdoWorkItemProvider', () => {
     });
   });
 
+  it('populates author from ADO System.CreatedBy', async () => {
+    mockFetch
+      .mockResolvedValueOnce({ ok: true, json: async () => createWiqlResponse([1]) })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          value: [{
+            ...createWorkItemDetail(1, 'Fix login bug'),
+            fields: {
+              ...createWorkItemDetail(1, 'Fix login bug').fields,
+              'System.CreatedBy': {
+                displayName: 'Jane Doe',
+                uniqueName: 'jane@example.com',
+              },
+            },
+          }],
+        }),
+      });
+
+    const listener = vi.fn();
+    provider.onDidDiscoverItems(listener);
+    await provider.refresh();
+
+    expect(listener.mock.calls[0][0][0].author).toEqual({
+      displayName: 'Jane Doe',
+      handle: 'jane@example.com',
+    });
+  });
+
   it('populates gitWork when a work item has an associated Git repo relation', async () => {
     mockFetch
       .mockResolvedValueOnce({ ok: true, json: async () => createWiqlResponse([1]) })

@@ -5,7 +5,7 @@ import { setLogger } from '../logger';
 
 const mockFetch = vi.fn();
 
-function createMockPr(number: number, title: string, repo = 'owner/repo') {
+function createMockPr(number: number, title: string, repo = 'owner/repo', extra: Record<string, unknown> = {}) {
   return {
     number,
     title,
@@ -14,6 +14,7 @@ function createMockPr(number: number, title: string, repo = 'owner/repo') {
     html_url: `https://github.com/${repo}/pull/${number}`,
     repository_url: `https://api.github.com/repos/${repo}`,
     pull_request: { url: `https://api.github.com/repos/${repo}/pulls/${number}` },
+    ...extra,
   };
 }
 
@@ -433,8 +434,12 @@ describe('GitHubMyPrsProvider', () => {
   });
 
   it('discovers assigned PRs alongside authored PRs', async () => {
-    const authoredPr = createMockPr(1, 'My PR');
-    const assignedPr = createMockPr(2, 'Assigned to me', 'other/repo');
+    const authoredPr = createMockPr(1, 'My PR', 'owner/repo', {
+      user: { login: 'me', avatar_url: 'https://avatars.githubusercontent.com/u/2?v=4', html_url: 'https://github.com/me' },
+    });
+    const assignedPr = createMockPr(2, 'Assigned to me', 'other/repo', {
+      user: { login: 'teammate', avatar_url: 'https://avatars.githubusercontent.com/u/3?v=4', html_url: 'https://github.com/teammate' },
+    });
 
     mockFetch.mockImplementation(async (url: string) => {
       if (url.includes('search/issues') && url.includes('author:@me')) {
@@ -469,10 +474,22 @@ describe('GitHubMyPrsProvider', () => {
     expect(items[0].externalId).toBe('owner/repo#1');
     expect(items[0].reason).toBe('You authored this PR');
     expect(items[0].authored).toBe(true);
+    expect(items[0].author).toEqual({
+      displayName: 'me',
+      handle: 'me',
+      avatarUrl: 'https://avatars.githubusercontent.com/u/2?v=4',
+      profileUrl: 'https://github.com/me',
+    });
 
     expect(items[1].externalId).toBe('other/repo#2');
     expect(items[1].reason).toBe('You are assigned to this PR');
     expect(items[1].authored).toBeUndefined();
+    expect(items[1].author).toEqual({
+      displayName: 'teammate',
+      handle: 'teammate',
+      avatarUrl: 'https://avatars.githubusercontent.com/u/3?v=4',
+      profileUrl: 'https://github.com/teammate',
+    });
   });
 
   it('excludes self-authored PRs from assigned results', async () => {

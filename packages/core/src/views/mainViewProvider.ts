@@ -315,6 +315,8 @@ export class MainViewProvider implements vscode.WebviewViewProvider {
       title: providerItem.title,
       badges: this.buildBadges(providerId, providerItem, providerItem.url),
       repoAnnotation: providerItem.group ?? existingWorkItem?.group,
+      author: toItemAuthorData(providerItem),
+      authored: providerItem.authored,
       tierType: 'incoming',
       isUnseen: !this.readStateStore.has(key),
       isUrgent: this.isUrgentProviderItem(providerItem),
@@ -336,6 +338,8 @@ export class MainViewProvider implements vscode.WebviewViewProvider {
       title: item.title,
       badges: this.buildBadges(item.providerId, providerItem, item.url),
       repoAnnotation: item.group ?? providerItem?.group,
+      author: toItemAuthorData(providerItem),
+      authored: providerItem?.authored,
       tierType,
       isUrgent: this.isUrgentWorkItem(item, providerItemMap),
       hasRelatedItems: item.providerId && item.externalId
@@ -1408,6 +1412,12 @@ function isFailedRun(runWatch: WatchedRun): boolean {
 
 function normalizeText(value?: string): string {
   return value?.trim().toLowerCase().replace(/[_-]+/g, ' ').replace(/\s+/g, ' ') ?? '';
+}
+
+function toItemAuthorData(providerItem: ProviderItem | undefined): ItemCardData['author'] {
+  return providerItem?.author
+    ? { displayName: providerItem.author.displayName, handle: providerItem.author.handle }
+    : undefined;
 }
 
 function getNonce(): string {

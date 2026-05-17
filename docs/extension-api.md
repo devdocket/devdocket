@@ -171,6 +171,17 @@ interface ResolvedItem {
 Each discovered item must have a unique `externalId` within the provider:
 
 ```ts
+interface ProviderItemAuthor {
+  /** Display name preferred for UI, e.g. "Octocat" or "Jane Doe". */
+  displayName: string;
+  /** Optional stable handle, e.g. GitHub login or ADO uniqueName. */
+  handle?: string;
+  /** Optional avatar URL for future richer rendering. */
+  avatarUrl?: string;
+  /** Optional URL to the author's source-system profile. */
+  profileUrl?: string;
+}
+
 interface ProviderItem {
   /**
    * Unique identifier for this item within the provider.
@@ -199,6 +210,14 @@ interface ProviderItem {
    * setting and a per-refresh cap).
    */
   authored?: boolean;
+
+  /**
+   * Optional metadata about who created the underlying item upstream.
+   * Independent of `authored`, which is only a self-reference flag.
+   * When present, DevDocket shows the author's display name or handle in
+   * the sidebar annotation and editor Details section.
+   */
+  author?: ProviderItemAuthor;
 
   /**
    * Optional notification reason explaining why this item was surfaced

@@ -404,6 +404,9 @@ export class IncomingPreviewPanel {
       state: 'New',
       providerLabel,
       group: providerItem.group,
+      author: providerItem.author
+        ? { displayName: providerItem.author.displayName, handle: providerItem.author.handle }
+        : undefined,
       createdAt: Date.now(),
       updatedAt: Date.now(),
       badges: composeEditorBadges(this.providerId, providerItem, this.providerRegistry.getProviderLabel(this.providerId)),

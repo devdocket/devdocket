@@ -50,7 +50,7 @@ The drag handle (left side of the card) appears on hover for tiers that support 
 Each card shows:
 
 - **Title** (with a blue dot prefix for unread Incoming items)
-- **Repo annotation** (diminished text below the title) — typically `owner/repo` for provider items
+- **Repo annotation** (diminished text below the title) — typically `owner/repo` for provider items. When the provider supplies author metadata, the same annotation adds the author inline (for example, `owner/repo · @octocat`), except for items marked as authored by you.
 - **Badges** — Provider (GitHub / ADO / Manual), Type (Issue / PR), provider-declared badges (e.g. `Mentioned`, `Review requested`, `Approved`), and CI badges (`CI passed` / `CI failed`) when a watcher is active for the item
 
 ### Sources tab
@@ -66,6 +66,7 @@ A browsable library of everything providers know about, organized as **Provider 
 Clicking a non-incoming work item opens the editor in a tab. It contains:
 
 - A **header** with the item title (clickable for provider items — opens the source URL), inline copy-title and copy-URL buttons, the **state-dependent transition buttons** offered by the editor (Start / Pause / Resume / Complete / Requeue / Archive — only the ones valid for the current state are shown), the **Run Action…** button when at least one registered action declares `canRun(item) === true`, and badges for provider, type, and provider-supplied state.
+- A **Details** section when editable details or provider author metadata are available. Provider authors are shown as read-only plain text with the display name first and `@handle` as secondary text when present.
 - A **Description** section (markdown-rendered) for provider items, when one is present.
 - A **Notes** section (auto-saving textarea) for your own notes — hidden when previewing an unaccepted incoming item.
 - A collapsible **Activity Log** that records every state transition, action invocation, version change, etc.

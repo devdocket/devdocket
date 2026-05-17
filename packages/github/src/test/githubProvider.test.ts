@@ -172,6 +172,32 @@ describe('GitHubIssueProvider', () => {
     });
   });
 
+  it('populates author from the GitHub issue user', async () => {
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: async () => [{
+        ...createMockIssue(11, 'Authored issue'),
+        user: {
+          login: 'octocat',
+          avatar_url: 'https://avatars.githubusercontent.com/u/1?v=4',
+          html_url: 'https://github.com/octocat',
+        },
+      }],
+      headers: { get: () => null },
+    });
+
+    const listener = vi.fn();
+    provider.onDidDiscoverItems(listener);
+    await provider.refresh();
+
+    expect(listener.mock.calls[0][0][0].author).toEqual({
+      displayName: 'octocat',
+      handle: 'octocat',
+      avatarUrl: 'https://avatars.githubusercontent.com/u/1?v=4',
+      profileUrl: 'https://github.com/octocat',
+    });
+  });
+
   it('should include state when issue has a state field', async () => {
     mockFetch.mockResolvedValueOnce({
       ok: true,

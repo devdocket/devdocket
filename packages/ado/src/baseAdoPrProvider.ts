@@ -25,6 +25,10 @@ export interface AdoPullRequest {
     id?: string;
     vote?: number;
   }>;
+  createdBy?: {
+    displayName?: string;
+    uniqueName?: string;
+  };
   repository: {
     name: string;
     project: { name: string };
@@ -391,6 +395,12 @@ export abstract class BaseAdoPrProvider extends BaseProvider {
       title: `PR ${pr.pullRequestId}: ${pr.title}`,
       description: pr.description ?? undefined,
       url: `${repoUrl}/pullrequest/${pr.pullRequestId}`,
+      ...(pr.createdBy?.displayName ? {
+        author: {
+          displayName: pr.createdBy.displayName,
+          handle: pr.createdBy.uniqueName,
+        },
+      } : {}),
       group: `${projectName}/${repoName}`,
       itemType: 'pr',
       capabilities: { gitWork: this.createPrGitWork(pr, org) },

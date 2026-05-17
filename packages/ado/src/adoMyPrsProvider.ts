@@ -18,11 +18,12 @@ export class AdoMyPrsProvider extends BaseAdoPrProvider {
   protected override mapPrToItem(pr: AdoPullRequest, org: string): ProviderItem {
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
     const { resurfaceVersion: _resurfaceVersion, ...item } = super.mapPrToItem(pr, org);
+    const authoredItem = { ...item, authored: true };
     if (pr.isDraft) {
       const badge = buildAdoMyPrsStateBadge('Draft');
-      return { ...item, state: 'Draft', ...(badge ? { badges: [badge] } : {}) };
+      return { ...authoredItem, state: 'Draft', ...(badge ? { badges: [badge] } : {}) };
     }
-    return item;
+    return authoredItem;
   }
 
   protected override async postProcessItems(items: ProviderItem[], token: string, signal?: AbortSignal): Promise<void> {

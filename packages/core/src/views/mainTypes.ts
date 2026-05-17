@@ -47,12 +47,19 @@ export interface TierData {
   collapsed: boolean;
 }
 
+export interface ItemAuthorData {
+  displayName: string;
+  handle?: string;
+}
+
 export interface ItemCardData {
   id: string;
   title: string;
   badges: BadgeData[];
   /** Compact repo/source label rendered as a subtle annotation below the title (e.g. "owner/repo"). */
   repoAnnotation?: string;
+  author?: ItemAuthorData;
+  authored?: boolean;
   tierType: 'incoming' | 'inProgress' | 'readyToStart' | 'paused' | 'done';
   isUnseen?: boolean;
   isUrgent?: boolean;
@@ -90,6 +97,7 @@ export interface EditorItemData {
   state: string;
   providerLabel?: string;
   group?: string;
+  author?: ItemAuthorData;
   createdAt: number;
   updatedAt: number;
   badges: BadgeData[];

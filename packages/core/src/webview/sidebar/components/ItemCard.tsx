@@ -56,6 +56,7 @@ export function ItemCard({
   const isDraggable = !disableDragReorder && (item.tierType === 'readyToStart' || item.tierType === 'inProgress');
   const [actionsOpen, setActionsOpen] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
+  const annotation = getItemAnnotation(item);
   const itemElementRef = useRef<HTMLDivElement | null>(null);
   const actionButtonRefs = useRef<Record<string, HTMLButtonElement | null>>({});
 
@@ -186,8 +187,8 @@ export function ItemCard({
             {item.hasRelatedItems ? <span class="related-indicator" aria-hidden="true">🔗</span> : null}
           </div>
         </div>
-        {item.repoAnnotation ? (
-          <div class="item-repo-annotation"><HighlightedText text={item.repoAnnotation} query={query} /></div>
+        {annotation ? (
+          <div class="item-repo-annotation"><HighlightedText text={annotation} query={query} /></div>
         ) : null}
         {item.badges.length > 0 ? (
           <div class="badge-row">
@@ -228,6 +229,14 @@ export function ItemCard({
   );
 }
 
+function getItemAnnotation(item: ItemCardData): string | undefined {
+  const parts = [item.repoAnnotation];
+  if (item.author && item.authored !== true) {
+    parts.push(item.author.handle ? `@${item.author.handle}` : item.author.displayName);
+  }
+  return parts.filter((value): value is string => Boolean(value)).join(' · ') || undefined;
+}
+
 function buildItemAriaLabel(item: ItemCardData): string {
   // aria-label fully overrides child text for screen readers, so build the
   // announcement from every visible piece of context: the title, repo
@@ -239,7 +248,8 @@ function buildItemAriaLabel(item: ItemCardData): string {
   if (item.isUnseen) parts.push('unread');
   if (item.isUrgent) parts.push('urgent');
   parts.push(item.title);
-  if (item.repoAnnotation) parts.push(item.repoAnnotation);
+  const annotation = getItemAnnotation(item);
+  if (annotation) parts.push(annotation);
   for (const badge of item.badges) {
     parts.push(badge.label);
   }
