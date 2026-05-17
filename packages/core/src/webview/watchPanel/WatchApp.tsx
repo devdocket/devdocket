@@ -384,6 +384,7 @@ function getRunBadge(runWatch: RunWatchData): BadgeData {
 
 interface RunSummary {
   passed: number;
+  partialSuccess: number;
   failed: number;
   running: number;
   other: number;
@@ -401,12 +402,14 @@ function summarizeRuns(runs: RunWatchData[]): RunSummary {
       summary.running += 1;
     } else if (run.conclusion === 'success') {
       summary.passed += 1;
+    } else if (run.conclusion === 'partial_success') {
+      summary.partialSuccess += 1;
     } else {
       summary.other += 1;
     }
     summary.total += 1;
     return summary;
-  }, { passed: 0, failed: 0, running: 0, other: 0, total: 0 });
+  }, { passed: 0, partialSuccess: 0, failed: 0, running: 0, other: 0, total: 0 });
 }
 
 function formatRunSummary(summary: RunSummary): string {
@@ -415,6 +418,9 @@ function formatRunSummary(summary: RunSummary): string {
     `✗ ${summary.failed} failed`,
     `⏳ ${summary.running} running`,
   ];
+  if (summary.partialSuccess > 0) {
+    parts.push(`⚠ ${summary.partialSuccess} succeeded with issues`);
+  }
   if (summary.other > 0) {
     parts.push(`• ${summary.other} other`);
   }

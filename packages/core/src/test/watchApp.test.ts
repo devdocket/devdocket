@@ -119,7 +119,7 @@ describe('WatchApp PR watch rendering', () => {
     expect(prCard).toBeInstanceOf(HTMLDivElement);
     expect(prCard!.classList.contains('item-card--urgent')).toBe(false);
     expect(prCard!.querySelector('.watch-row-preview')).toBeNull();
-    expect(prSection.textContent).toContain('Checks: ✓ 1 passed · ✗ 0 failed · ⏳ 0 running · • 1 other (2 total)');
+    expect(prSection.textContent).toContain('Checks: ✓ 1 passed · ✗ 0 failed · ⏳ 0 running · ⚠ 1 succeeded with issues (2 total)');
     expect(prSection.querySelector('.watch-card-details')).toBeNull();
   });
 
