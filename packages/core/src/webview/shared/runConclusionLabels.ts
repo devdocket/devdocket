@@ -27,11 +27,8 @@ export function toRunCompletionLabel(conclusion?: RunConclusion): string {
   return toConclusionLabel(conclusion);
 }
 
+const failedConclusions = new Set(['failure', 'timed_out', 'action_required']);
+
 export function isFailedConclusion(conclusion?: string): boolean {
-  return conclusion !== undefined
-    && conclusion !== 'success'
-    && conclusion !== 'cancelled'
-    && conclusion !== 'skipped'
-    && conclusion !== 'neutral'
-    && conclusion !== 'partial_success';
+  return conclusion !== undefined && failedConclusions.has(conclusion);
 }
