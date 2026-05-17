@@ -26,3 +26,12 @@ export function toRunCompletionLabel(conclusion?: RunConclusion): string {
   }
   return toConclusionLabel(conclusion);
 }
+
+export function isFailedConclusion(conclusion?: RunConclusion): boolean {
+  return conclusion !== undefined
+    && conclusion !== 'success'
+    && conclusion !== 'cancelled'
+    && conclusion !== 'skipped'
+    && conclusion !== 'neutral'
+    && conclusion !== 'partial_success';
+}

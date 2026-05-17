@@ -2,6 +2,7 @@ import * as vscode from 'vscode';
 import type { JobStatus, RunIdentifier, RunStatus } from '@devdocket/shared';
 import { WatcherRegistry } from './watcherRegistry';
 import type { WatchedRun } from './watcherService';
+import { isFailedConclusion } from '../webview/shared/runConclusionLabels';
 
 type WatcherLogger = {
   info: (msg: string) => void;
@@ -332,10 +333,7 @@ export class RunWatchPool implements vscode.Disposable {
   private static isFailedRun(watch: WatchedRun): boolean {
     if (watch.hasWarning) return true;
     if (watch.status.overallState !== 'completed') return false;
-    const conclusion = watch.status.conclusion;
-    if (conclusion === undefined || conclusion === 'success') return false;
-    if (conclusion === 'cancelled' || conclusion === 'skipped' || conclusion === 'neutral' || conclusion === 'partial_success') return false;
-    return true;
+    return isFailedConclusion(watch.status.conclusion);
   }
 
   dispose(): void {

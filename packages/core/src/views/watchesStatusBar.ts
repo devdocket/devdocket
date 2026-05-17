@@ -1,5 +1,6 @@
 import * as vscode from 'vscode';
 import { WatcherService } from '../services/watcherService';
+import { isFailedConclusion } from '../webview/shared/runConclusionLabels';
 
 /**
  * Status bar item that shows running/passed/failed watch counts.
@@ -62,10 +63,9 @@ export class WatchesStatusBar implements vscode.Disposable {
         partialSuccessCount += 1;
         continue;
       }
-      // cancelled / skipped / neutral are explicit non-results, not failures.
       // Mirrors the canonical isFailedRun in mainViewProvider.ts and the
       // watch panel webview so the status bar agrees with the panel UI.
-      if (conclusion === 'cancelled' || conclusion === 'skipped' || conclusion === 'neutral') {
+      if (!isFailedConclusion(conclusion)) {
         passedCount += 1;
         continue;
       }

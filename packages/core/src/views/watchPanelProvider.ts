@@ -9,7 +9,7 @@ import type { ProviderRegistry } from '../services/providerRegistry';
 import type { WorkGraph } from '../services/workGraph';
 import { isSafeUrl } from '../utils/url';
 import { buildTierColorCss } from '../webview/shared/colors';
-import { toConclusionLabel } from '../webview/shared/runConclusionLabels';
+import { isFailedConclusion, toConclusionLabel } from '../webview/shared/runConclusionLabels';
 import { parseProviderItemKey } from './providerItemKey';
 import type { PRWatchData, RunWatchData, WebviewMessage } from './mainTypes';
 
@@ -735,13 +735,9 @@ function getRunPriority(runWatch: RunWatchData): number {
 
 function isFailedRun(runWatch: RunWatchData): boolean {
   if (runWatch.state !== 'completed') return false;
-  const conclusion = runWatch.conclusion;
-  if (conclusion === undefined || conclusion === 'success') return false;
-  // cancelled / skipped / neutral / partial success are explicit non-failures.
   // Mirrors the canonical definition in mainViewProvider.ts so the watch
   // panel and the sidebar agree on what counts as a failed run.
-  if (conclusion === 'cancelled' || conclusion === 'skipped' || conclusion === 'neutral' || conclusion === 'partial_success') return false;
-  return true;
+  return isFailedConclusion(runWatch.conclusion);
 }
 
 function truncate(value: string, maxLength = 140): string {

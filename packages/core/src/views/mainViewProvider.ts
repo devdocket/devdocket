@@ -14,6 +14,7 @@ import { InboxStateStore } from '../storage/inboxStateStore';
 import { ReadStateStore } from '../storage/readStateStore';
 import { isSafeUrl } from '../utils/url';
 import { buildTierColorCss } from '../webview/shared/colors';
+import { isFailedConclusion } from '../webview/shared/runConclusionLabels';
 import { buildProviderBadge, buildProviderBadges, buildTypeBadge } from './badges';
 import { getProviderItemKey, parseProviderItemKey } from './providerItemKey';
 import type {
@@ -1399,12 +1400,7 @@ export class MainViewProvider implements vscode.WebviewViewProvider {
 
 function isFailedRun(runWatch: WatchedRun): boolean {
   if (runWatch.status.overallState !== 'completed') return false;
-  const conclusion = runWatch.status.conclusion;
-  if (conclusion === undefined || conclusion === 'success') return false;
-  // Cancelled / skipped / neutral / partial-success runs aren't failures
-  // from a CI-health standpoint. Don't paint them red.
-  if (conclusion === 'cancelled' || conclusion === 'skipped' || conclusion === 'neutral' || conclusion === 'partial_success') return false;
-  return true;
+  return isFailedConclusion(runWatch.status.conclusion);
 }
 
 function normalizeText(value?: string): string {

@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'preact/hooks';
 import type { BadgeData, ExtensionMessage, PRWatchData, RunWatchData } from '../shared/types';
 import { postMessage, setWebviewState } from '../shared/messaging';
 import { BadgePill } from '../shared/components/BadgePill';
-import { toConclusionLabel } from '../shared/runConclusionLabels';
+import { isFailedConclusion, toConclusionLabel } from '../shared/runConclusionLabels';
 import { useThemeChangeCounter } from '../shared/theme';
 
 export function WatchApp() {
@@ -470,12 +470,8 @@ function getRunTierClass(runWatch: RunWatchData): string {
 
 function isFailedRun(runWatch: RunWatchData): boolean {
   if (runWatch.state !== 'completed') return false;
-  const conclusion = runWatch.conclusion;
-  if (conclusion === undefined || conclusion === 'success') return false;
-  // cancelled / skipped / neutral / partial success are explicit non-failures.
   // Mirrors the canonical definition in mainViewProvider.ts so the watch
   // panel webview and the sidebar agree on what counts as a failed run.
-  if (conclusion === 'cancelled' || conclusion === 'skipped' || conclusion === 'neutral' || conclusion === 'partial_success') return false;
-  return true;
+  return isFailedConclusion(runWatch.conclusion);
 }
 

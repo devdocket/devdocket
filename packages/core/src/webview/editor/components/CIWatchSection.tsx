@@ -1,4 +1,4 @@
-import { toConclusionLabel } from '../../shared/runConclusionLabels';
+import { isFailedConclusion, toConclusionLabel } from '../../shared/runConclusionLabels';
 import type { EditorCIWatchData } from '../../shared/types';
 
 interface CIWatchSectionProps {
@@ -93,9 +93,7 @@ function getRunLabel(run: CIRun): string {
 
 function isFailedRun(run: CIRun): boolean {
   if (run.state !== 'completed') return false;
-  const conclusion = run.conclusion;
-  if (conclusion === undefined || conclusion === 'success') return false;
-  return conclusion !== 'cancelled' && conclusion !== 'skipped' && conclusion !== 'neutral' && conclusion !== 'partial_success';
+  return isFailedConclusion(run.conclusion);
 }
 
 
