@@ -181,6 +181,7 @@ export class AdoPipelineWatcher implements DevDocketRunWatcher {
       case 'failed':
         return 'failure';
       case 'partiallySucceeded':
+      case 'succeededWithIssues':
         return 'partial_success';
       case 'canceled':
         return 'cancelled';

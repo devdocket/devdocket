@@ -118,7 +118,7 @@ describe('AdoPipelineWatcher', () => {
           ok: true,
           json: async () => ({
             records: [
-              { id: 'job-1', name: 'Build', type: 'Job', state: 'completed', result: 'partiallySucceeded' },
+              { id: 'job-1', name: 'Build', type: 'Job', state: 'completed', result: 'succeededWithIssues' },
             ],
           }),
         } as Response);
