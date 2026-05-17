@@ -330,9 +330,10 @@ function wireEvents(
 
   const runCompleteSub = watcherService.onDidCompleteRun(safeHandler('Error handling run completion', (run) => {
     const isSuccess = run.status.conclusion === 'success';
-    const message = `${run.identifier.displayName} ${isSuccess ? 'succeeded' : run.status.conclusion || 'completed'}`;
+    const isPartialSuccess = run.status.conclusion === 'partial_success';
+    const message = `${run.identifier.displayName} ${isSuccess ? 'succeeded' : isPartialSuccess ? 'succeeded with issues' : run.status.conclusion || 'completed'}`;
 
-    if (isSuccess) {
+    if (isSuccess || isPartialSuccess) {
       void vscode.window.showInformationMessage(message, 'View Run').then(action => {
         if (action === 'View Run') {
           const safe = isSafeUrl(run.identifier.url);

@@ -63,6 +63,7 @@ describe('activate()', () => {
     for (const sub of [...context.subscriptions].reverse()) {
       try { (sub as any).dispose?.(); } catch (e) { errors.push(e); }
     }
+    vi.useRealTimers();
     if (errors.length > 0) {
       throw new Error(
         `Failed to dispose ${errors.length} subscription(s): ` +
@@ -181,6 +182,40 @@ describe('activate()', () => {
     await getCommandHandler('devdocket.showWatchesQuickPick')();
 
     expect(openSpy).toHaveBeenCalled();
+  });
+
+  it('announces partial-success run completions as succeeded with issues', async () => {
+    vi.useFakeTimers();
+    const api = await activate(context);
+    const url = 'https://example.com/runs/partial-success';
+    let statusCallCount = 0;
+
+    api.registerRunWatcher({
+      id: 'test-runs',
+      label: 'Test Runs',
+      canWatch: (candidate: string) => candidate === url,
+      parseRunUrl: () => ({
+        providerId: 'test-runs',
+        runId: 'partial-success',
+        displayName: 'ADO Build',
+        url,
+      }),
+      getRunStatus: vi.fn(async () => {
+        statusCallCount += 1;
+        return statusCallCount === 1
+          ? { overallState: 'running' as const, jobs: [] }
+          : { overallState: 'completed' as const, conclusion: 'partial_success' as const, jobs: [] };
+      }),
+    });
+    (vscode.window.showInputBox as ReturnType<typeof vi.fn>).mockResolvedValue(url);
+
+    await getCommandHandler('devdocket.watchUrl')();
+    vi.mocked(vscode.window.showInformationMessage).mockClear();
+    vi.mocked(vscode.window.showWarningMessage).mockClear();
+    await vi.advanceTimersByTimeAsync(60_000);
+
+    expect(vscode.window.showInformationMessage).toHaveBeenCalledWith('ADO Build succeeded with issues', 'View Run');
+    expect(vscode.window.showWarningMessage).not.toHaveBeenCalled();
   });
 
   it('prunes stale read-state and inbox-state records after non-empty provider refresh', async () => {
