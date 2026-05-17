@@ -415,6 +415,9 @@ export class MainViewProvider implements vscode.WebviewViewProvider {
     if (watchedRun.status.overallState !== 'completed') {
       return { label: 'CI running', type: 'ci', variant: 'ci-running' };
     }
+    if (watchedRun.status.conclusion === 'partial_success') {
+      return { label: 'CI issues', type: 'ci', variant: 'ci-warn' };
+    }
     return { label: 'CI passed', type: 'ci', variant: 'ci-pass' };
   }
 
@@ -435,6 +438,9 @@ export class MainViewProvider implements vscode.WebviewViewProvider {
     }
     if (childRuns.every(runWatch => runWatch.status.conclusion === 'success')) {
       return { label: 'CI passed', type: 'ci', variant: 'ci-pass' };
+    }
+    if (childRuns.some(runWatch => runWatch.status.conclusion === 'partial_success')) {
+      return { label: 'CI issues', type: 'ci', variant: 'ci-warn' };
     }
     return undefined;
   }

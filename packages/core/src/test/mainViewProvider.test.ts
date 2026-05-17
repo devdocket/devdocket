@@ -338,7 +338,8 @@ describe('MainViewProvider', () => {
     const updateItems = findPostedMessage(mockView, 'updateItems');
     const readyTier = updateItems.tiers.find((tier: { id: string }) => tier.id === 'ready-to-start');
     expect(readyTier.items[0].badges).not.toContainEqual({ label: 'CI failed', type: 'ci', variant: 'ci-fail' });
-    expect(readyTier.items[0].badges).toContainEqual({ label: 'CI passed', type: 'ci', variant: 'ci-pass' });
+    expect(readyTier.items[0].badges).not.toContainEqual({ label: 'CI passed', type: 'ci', variant: 'ci-pass' });
+    expect(readyTier.items[0].badges).toContainEqual({ label: 'CI issues', type: 'ci', variant: 'ci-warn' });
   });
 
   it('filters empty tiers out of the refresh payload', async () => {
