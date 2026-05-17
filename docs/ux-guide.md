@@ -85,7 +85,7 @@ A floating webview that monitors GitHub Actions / Azure DevOps Pipeline runs and
 - **PR Watches** — pull requests being monitored. Each PR renders as one card with a checks roll-up; expand the card to see individual CI runs. PRs auto-expand when a child run fails, and the failure preview appears on the PR card.
 - **Run Watches** — standalone pipeline runs you've added directly. These continue to render as flat run cards.
 
-Completed runs are grouped into three health categories: **Passed** (green), **Succeeded with issues** (amber, used for Azure DevOps partial success), and **Failed** (red). Other completed non-result conclusions, such as cancelled, skipped, neutral, timed out, and action required, retain their own labels. Runs that succeeded with issues do not count as failures and do not auto-expand their parent PR card.
+Completed runs are grouped into three health categories: **Passed** (green), **Succeeded with issues** (amber, used for Azure DevOps partial success), and **Failed** (red). Other completed conclusions retain their own labels: cancelled, skipped, and neutral are non-failures, while timed out and action required count as failures. Runs that succeeded with issues do not count as failures and do not auto-expand their parent PR card.
 
 ### Adding watches
 
