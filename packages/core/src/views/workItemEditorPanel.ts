@@ -10,6 +10,7 @@ import type { WatcherService, WatchedPR, WatchedRun } from '../services/watcherS
 import type { InboxStateStore } from '../storage/inboxStateStore';
 import { isSafeUrl } from '../utils/url';
 import { buildProviderBadge, buildProviderBadges, buildTypeBadge } from './badges';
+import { isFailedConclusion } from '../webview/shared/runConclusionLabels';
 import { parseProviderItemKey } from './providerItemKey';
 import { getEditorPanelHtml, renderMarkdown } from './editorPanelHtml';
 import type { BadgeData, EditorItemData } from './mainTypes';
@@ -758,9 +759,7 @@ function toEditorRunState(state: WatchedRun['status']['overallState']): NonNulla
 function isFailingOrWarningRun(run: WatchedRun): boolean {
   if (run.hasWarning) return true;
   if (run.status.overallState !== 'completed') return false;
-  const conclusion = run.status.conclusion;
-  if (conclusion === undefined || conclusion === 'success') return false;
-  return conclusion !== 'cancelled' && conclusion !== 'skipped' && conclusion !== 'neutral';
+  return isFailedConclusion(run.status.conclusion);
 }
 
 /**

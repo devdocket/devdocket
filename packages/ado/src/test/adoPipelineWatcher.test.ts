@@ -102,6 +102,41 @@ describe('AdoPipelineWatcher', () => {
       fetchSpy.mockRestore();
     });
 
+    it('maps partiallySucceeded builds to partial_success', async () => {
+      const fetchSpy = vi.spyOn(globalThis, 'fetch')
+        .mockResolvedValueOnce({
+          ok: true,
+          json: async () => ({
+            id: 2955325,
+            buildNumber: '20240101.2',
+            definition: { name: 'CI' },
+            status: 'completed',
+            result: 'partiallySucceeded',
+          }),
+        } as Response)
+        .mockResolvedValueOnce({
+          ok: true,
+          json: async () => ({
+            records: [
+              { id: 'job-1', name: 'Build', type: 'Job', state: 'completed', result: 'succeededWithIssues' },
+            ],
+          }),
+        } as Response);
+
+      const result = await watcher.getRunStatus({
+        providerId: 'ado-pipelines',
+        runId: '2955325',
+        displayName: 'Build 2955325',
+        url: 'https://dev.azure.com/dnceng/internal/_build/results?buildId=2955325',
+        repo: 'dnceng/internal',
+      });
+
+      expect(result.conclusion).toBe('partial_success');
+      expect(result.jobs[0].conclusion).toBe('partial_success');
+
+      fetchSpy.mockRestore();
+    });
+
     it('maps inProgress status to running', async () => {
       const fetchSpy = vi.spyOn(globalThis, 'fetch')
         .mockResolvedValueOnce({

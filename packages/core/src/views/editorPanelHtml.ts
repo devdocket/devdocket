@@ -522,6 +522,19 @@ export function getEditorPanelHtml({ cspSource, scriptUri, initialItem }: Editor
       background: rgba(241, 76, 76, 0.12);
     }
 
+    .ci-watch-chip--warn {
+      color: var(--vscode-editorWarning-foreground, #CCA700);
+      border-color: rgba(204, 167, 0, 0.35);
+      background: rgba(204, 167, 0, 0.12);
+    }
+
+    body.vscode-light .ci-watch-chip--warn,
+    body.vscode-high-contrast-light .ci-watch-chip--warn {
+      color: var(--vscode-editorWarning-foreground, #8A6100);
+      border-color: rgba(138, 97, 0, 0.35);
+      background: rgba(138, 97, 0, 0.10);
+    }
+
     .ci-watch-chip--running {
       color: var(--vscode-progressBar-background, var(--vscode-textLink-foreground));
       border-color: rgba(0, 122, 204, 0.35);

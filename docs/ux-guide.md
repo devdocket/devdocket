@@ -78,19 +78,20 @@ A read-only variant of the editor used when you click an Incoming item or an una
 
 ## CI Watches Panel
 
-A floating webview that monitors GitHub Actions / Azure DevOps Pipeline runs and pull request lifecycle status (open / merged / closed). Open it from the **eye icon** in the status bar — the icon shows the current watch count and turns amber when a watched run fails.
+A floating webview that monitors CI runs and pull request lifecycle status (open / merged / closed). Open it from the **eye icon** in the status bar — the icon shows the current watch count and turns amber when a watched run fails.
 
 ### Two sections
 
 - **PR Watches** — pull requests being monitored. Each PR renders as one card with a checks roll-up; expand the card to see individual CI runs. PRs auto-expand when a child run fails, and the failure preview appears on the PR card.
 - **Run Watches** — standalone pipeline runs you've added directly. These continue to render as flat run cards.
 
+Completed runs are grouped into three health categories: **Passed** (green), **Succeeded with issues** (amber), and **Failed** (red). Other completed conclusions retain their own labels: cancelled, skipped, and neutral are non-failures, while timed out and action required count as failures. Runs that succeeded with issues do not count as failures and do not auto-expand their parent PR card.
+
 ### Adding watches
 
 - Inside the panel, click **+ Watch URL** in the header. Paste a supported URL — DevDocket detects whether it is a PR or run, and validates the URL before submission. Examples: `https://github.com/owner/repo/pull/123` and `https://github.com/owner/repo/actions/runs/12345`.
 - From the command palette: **DevDocket: Watch URL…**.
-- Supported surfaces include GitHub PR URLs, GitHub Actions run URLs, Azure DevOps PR URLs, and Azure DevOps Pipeline run URLs.
-- GitHub PRs you authored can be auto-watched on discovery — see `devDocket.watches.autoWatchAuthoredPRs`.
+- PRs you authored can be auto-watched on discovery — see `devDocket.watches.autoWatchAuthoredPRs`.
 
 The manual Watch URL flow is **idempotent** for already-watched URLs and force-recreates the watch when a PR is in a bad state (e.g. all child runs were dismissed making it invisible).
 
@@ -104,8 +105,8 @@ The manual Watch URL flow is **idempotent** for already-watched URLs and force-r
 
 DevDocket contributes two right-aligned status bar items (priorities `100000` and `100001`, immediately to the left of the Copilot button). Quick access to the sidebar itself is via the activity-bar container, not the status bar.
 
-- **Provider Health** (priority `100000`) — `✓ DevDocket • N providers` when every provider is healthy, `○ DevDocket • N providers` while provider health is still unknown, and `⚠ N providers unhealthy` when degraded; click to open the Provider Health quick pick.
-- **Watches** (priority `100001`) — `👁 DevDocket • Watches` when empty and `👁 DevDocket • 🔄 N · ✓ N · ✗ N` when watches exist; always visible. Turns amber when at least one watched run has failed and the failure has not yet been acknowledged. Click to open the CI Watches panel.
+- **Provider Health** — `✓ DevDocket • N providers` when every provider is healthy, `○ DevDocket • N providers` while provider health is still unknown, and `⚠ N providers unhealthy` when degraded; click to open the Provider Health quick pick.
+- **Watches** — `👁 DevDocket • Watches` when empty and `👁 DevDocket • 🔄 N · ✓ N · ✗ N` when watches exist, with an additional `⚠ N` segment when runs have succeeded with issues; always visible. Turns amber when at least one watched run has failed and the failure has not yet been acknowledged. Click to open the CI Watches panel.
 
 Set `devdocket.statusBar.useLogoIcon` to `true` to replace the DevDocket brand text in these status bar items with the compact `$(devdocket-logo)` glyph. In the Watches item, the glyph also replaces the leading eye emoji so the logo remains the visible brand marker instead of becoming a secondary icon. The setting defaults to `false`, so existing users keep the text label. The logo saves horizontal space but is less explicit at a glance, especially in high-contrast or unfamiliar themes; tooltips always include the full DevDocket name.
 

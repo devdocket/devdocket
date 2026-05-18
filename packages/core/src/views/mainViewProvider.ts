@@ -14,6 +14,7 @@ import { InboxStateStore } from '../storage/inboxStateStore';
 import { ReadStateStore } from '../storage/readStateStore';
 import { isSafeUrl } from '../utils/url';
 import { buildTierColorCss } from '../webview/shared/colors';
+import { isFailedConclusion } from '../webview/shared/runConclusionLabels';
 import { buildProviderBadge, buildProviderBadges, buildTypeBadge } from './badges';
 import { getProviderItemKey, parseProviderItemKey } from './providerItemKey';
 import type {
@@ -415,7 +416,13 @@ export class MainViewProvider implements vscode.WebviewViewProvider {
     if (watchedRun.status.overallState !== 'completed') {
       return { label: 'CI running', type: 'ci', variant: 'ci-running' };
     }
-    return { label: 'CI passed', type: 'ci', variant: 'ci-pass' };
+    if (watchedRun.status.conclusion === 'partial_success') {
+      return { label: 'CI issues', type: 'ci', variant: 'ci-warn' };
+    }
+    if (watchedRun.status.conclusion === 'success') {
+      return { label: 'CI passed', type: 'ci', variant: 'ci-pass' };
+    }
+    return undefined;
   }
 
   private getPRCIBadge(watchedPR: WatchedPR): BadgeData | undefined {
@@ -435,6 +442,9 @@ export class MainViewProvider implements vscode.WebviewViewProvider {
     }
     if (childRuns.every(runWatch => runWatch.status.conclusion === 'success')) {
       return { label: 'CI passed', type: 'ci', variant: 'ci-pass' };
+    }
+    if (childRuns.some(runWatch => runWatch.status.conclusion === 'partial_success')) {
+      return { label: 'CI issues', type: 'ci', variant: 'ci-warn' };
     }
     return undefined;
   }
@@ -1393,12 +1403,7 @@ export class MainViewProvider implements vscode.WebviewViewProvider {
 
 function isFailedRun(runWatch: WatchedRun): boolean {
   if (runWatch.status.overallState !== 'completed') return false;
-  const conclusion = runWatch.status.conclusion;
-  if (conclusion === undefined || conclusion === 'success') return false;
-  // Cancelled / skipped / neutral runs aren't failures from a CI-health
-  // standpoint — they're explicit non-results. Don't paint them red.
-  if (conclusion === 'cancelled' || conclusion === 'skipped' || conclusion === 'neutral') return false;
-  return true;
+  return isFailedConclusion(runWatch.status.conclusion);
 }
 
 function normalizeText(value?: string): string {
