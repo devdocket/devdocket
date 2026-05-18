@@ -385,6 +385,7 @@ export class StartWorkAction implements DevDocketAction {
     let branchName = upstreamBranchName;
     let worktreePath: string | undefined;
     if (this.shouldPromptForNames()) {
+      // PR branch prompts rename only the local branch; fetch still uses the upstream ref.
       const promptedBranchName = await this.promptForBranchName(branchName, workMode);
       if (promptedBranchName === undefined) {
         return;
