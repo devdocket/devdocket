@@ -78,6 +78,17 @@ export interface ProviderItemCapabilities {
   gitWork?: GitWorkInfo | (() => Promise<GitWorkInfo | undefined>);
 }
 
+export interface ProviderItemAuthor {
+  /** Display name preferred for UI, e.g. "Octocat" or "Jane Doe". */
+  displayName: string;
+  /** Optional stable handle, e.g. GitHub login or ADO uniqueName. */
+  handle?: string;
+  /** Optional avatar URL for future richer rendering. */
+  avatarUrl?: string;
+  /** Optional URL to the author's source-system profile. */
+  profileUrl?: string;
+}
+
 /**
  * An item discovered by a provider.
  * Provider data is kept in memory and read live — only the inbox state is persisted.
@@ -93,6 +104,8 @@ export interface ProviderItem {
   url?: string;
   /** Optional flag indicating the current user authored the item. */
   authored?: boolean;
+  /** Optional metadata about who created the underlying item upstream. */
+  author?: ProviderItemAuthor;
   /** Optional grouping key used to organize items in the UI (for example, in the Inbox and Sources views). */
   group?: string;
   /** Optional notification reason explaining why this item was surfaced (e.g. `"assigned"`, `"review_requested"`). */

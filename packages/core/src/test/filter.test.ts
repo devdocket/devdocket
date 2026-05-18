@@ -90,6 +90,26 @@ describe('filterTiers', () => {
     expect(result.tiers[0].items.map(item => item.id)).toEqual(['two']);
   });
 
+  it('matches against author display name and rendered handle', () => {
+    const resultByName = filterTiers([tier({
+      items: [{ id: 'one', title: 'Fix bug', badges: [], tierType: 'readyToStart', author: { displayName: 'Octo Cat', handle: 'octocat' } }],
+    })], 'octo cat');
+    const resultByHandle = filterTiers([tier({
+      items: [{ id: 'one', title: 'Fix bug', badges: [], tierType: 'readyToStart', author: { displayName: 'Octo Cat', handle: 'octocat' } }],
+    })], '@octocat');
+
+    expect(resultByName.tiers[0].items.map(item => item.id)).toEqual(['one']);
+    expect(resultByHandle.tiers[0].items.map(item => item.id)).toEqual(['one']);
+  });
+
+  it('does not match hidden author text for self-authored items', () => {
+    const result = filterTiers([tier({
+      items: [{ id: 'one', title: 'Fix bug', badges: [], tierType: 'readyToStart', author: { displayName: 'Octo Cat', handle: 'octocat' }, authored: true }],
+    })], '@octocat');
+
+    expect(result.tiers).toEqual([]);
+  });
+
   it('reports pre-filter total counts', () => {
     const result = filterTiers([tier({ id: 'ready' }), tier({ id: 'done', items: [] })], 'layout');
 

@@ -11,6 +11,7 @@ import type { InboxStateStore } from '../storage/inboxStateStore';
 import { isSafeUrl } from '../utils/url';
 import { buildProviderBadge, buildProviderBadges, buildTypeBadge } from './badges';
 import { isFailedConclusion } from '../webview/shared/runConclusionLabels';
+import { toItemAuthorData } from './itemAuthorData';
 import { parseProviderItemKey } from './providerItemKey';
 import { getEditorPanelHtml, renderMarkdown } from './editorPanelHtml';
 import type { BadgeData, EditorItemData } from './mainTypes';
@@ -398,11 +399,13 @@ export class WorkItemEditorPanel {
     const patch: Partial<WorkItemInput> = {};
 
     if (!managed) {
-      const title = data.title?.trim() ?? '';
-      if (!title) {
-        return;
+      if ('title' in data) {
+        const title = data.title?.trim() ?? '';
+        if (!title) {
+          return;
+        }
+        patch.title = title;
       }
-      patch.title = title;
 
       if ('url' in data) {
         const rawUrl = data.url?.trim() ?? '';
@@ -472,6 +475,8 @@ export class WorkItemEditorPanel {
       state: item.state,
       providerLabel,
       group: item.group,
+      author: toItemAuthorData(providerItem),
+      authored: providerItem?.authored,
       createdAt: item.createdAt,
       updatedAt: item.updatedAt,
       badges: composeEditorBadges(item.providerId, providerItem, providerLabel),

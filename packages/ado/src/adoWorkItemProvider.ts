@@ -18,6 +18,10 @@ interface AdoWorkItem {
     'System.TeamProject': string;
     'System.WorkItemType': string;
     'System.State': string;
+    'System.CreatedBy'?: {
+      displayName?: string;
+      uniqueName?: string;
+    };
   };
   _links: {
     html: { href: string };
@@ -309,6 +313,12 @@ export class AdoWorkItemProvider extends BaseProvider {
         title: `${wiType} ${wi.id}: ${wi.fields['System.Title']}`,
         description: wi.fields['System.Description']?.replace(/<[^>]*(>|$)/g, '') ?? undefined,
         url: wi._links.html.href,
+        ...(wi.fields['System.CreatedBy']?.displayName ? {
+          author: {
+            displayName: wi.fields['System.CreatedBy'].displayName,
+            handle: wi.fields['System.CreatedBy'].uniqueName,
+          },
+        } : {}),
         group: `${org}/${projectName}`,
         reason: 'assigned',
         state,

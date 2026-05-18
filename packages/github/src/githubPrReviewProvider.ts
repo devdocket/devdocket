@@ -85,6 +85,14 @@ export class GitHubPrReviewProvider extends BaseGitHubProvider {
         title: `#${pr.number}: ${pr.title}`,
         description: pr.body ?? undefined,
         url: pr.html_url,
+        ...(pr.user?.login ? {
+          author: {
+            displayName: pr.user.login,
+            handle: pr.user.login,
+            avatarUrl: pr.user.avatar_url,
+            profileUrl: pr.user.html_url,
+          },
+        } : {}),
         group: repoName,
         reason: 'review_requested',
         canonicalId: `github:pull:${repoName}#${pr.number}`,

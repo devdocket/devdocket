@@ -81,19 +81,19 @@ export function EditorApp() {
     }
 
     const timer = window.setTimeout(() => {
-      const nextTitle = titleRef.current.trim();
-      if (!item.isProviderManaged && nextTitle.length === 0) {
-        return;
+      const data: { title?: string; notes?: string; url?: string } = {
+        notes: notesRef.current.trim(),
+      };
+
+      if (!item.isProviderManaged) {
+        const nextTitle = titleRef.current.trim();
+        if (nextTitle) {
+          data.title = nextTitle;
+          data.url = urlRef.current.trim();
+        }
       }
 
-      postMessage({
-        type: 'autosave',
-        data: {
-          title: nextTitle,
-          notes: notesRef.current.trim(),
-          url: urlRef.current.trim(),
-        },
-      });
+      postMessage({ type: 'autosave', data });
     }, 500);
 
     return () => {
@@ -131,7 +131,16 @@ export function EditorApp() {
       <EditorHeader
         item={item}
         title={title}
+        url={url}
         onCopyText={text => postMessage({ type: 'copyToClipboard', text })}
+        onTitleInput={!item.isProviderManaged && !item.isIncoming ? value => {
+          setTitle(value);
+          setAutosaveVersion(version => version + 1);
+        } : undefined}
+        onUrlInput={!item.isProviderManaged && !item.isIncoming ? value => {
+          setUrl(value);
+          setAutosaveVersion(version => version + 1);
+        } : undefined}
         actionButtons={
           <ActionBar
             item={item}
@@ -142,33 +151,6 @@ export function EditorApp() {
           />
         }
       />
-      {item.isProviderManaged ? null : (
-        <section class="editor-section" aria-labelledby="editor-details-heading">
-          <div class="editor-section-heading" id="editor-details-heading">Details</div>
-          <div class="editor-fields-grid">
-            <EditableField
-              label="Title"
-              value={title}
-              readOnly={false}
-              onInput={value => {
-                setTitle(value);
-                setAutosaveVersion(version => version + 1);
-              }}
-            />
-            <EditableField
-              label="URL"
-              value={url}
-              type="url"
-              placeholder="https://..."
-              readOnly={false}
-              onInput={value => {
-                setUrl(value);
-                setAutosaveVersion(version => version + 1);
-              }}
-            />
-          </div>
-        </section>
-      )}
       {description || !item.isIncoming ? (
         <section class="editor-section" aria-labelledby={description ? 'editor-description-heading' : undefined}>
           {description ? (

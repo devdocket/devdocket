@@ -12,6 +12,11 @@ export interface GitHubIssue {
   comments_url?: string;
   comments?: number;
   updated_at?: string;
+  user?: {
+    login?: string;
+    avatar_url?: string;
+    html_url?: string;
+  };
   pull_request?: { url: string };
   merged_at?: string | null;
   merged?: boolean;

@@ -16,6 +16,7 @@ import { isSafeUrl } from '../utils/url';
 import { buildTierColorCss } from '../webview/shared/colors';
 import { isFailedConclusion } from '../webview/shared/runConclusionLabels';
 import { buildProviderBadge, buildProviderBadges, buildTypeBadge } from './badges';
+import { toItemAuthorData } from './itemAuthorData';
 import { getProviderItemKey, parseProviderItemKey } from './providerItemKey';
 import type {
   BadgeData,
@@ -315,6 +316,8 @@ export class MainViewProvider implements vscode.WebviewViewProvider {
       title: providerItem.title,
       badges: this.buildBadges(providerId, providerItem, providerItem.url),
       repoAnnotation: providerItem.group ?? existingWorkItem?.group,
+      author: toItemAuthorData(providerItem),
+      authored: providerItem.authored,
       tierType: 'incoming',
       isUnseen: !this.readStateStore.has(key),
       isUrgent: this.isUrgentProviderItem(providerItem),
@@ -336,6 +339,8 @@ export class MainViewProvider implements vscode.WebviewViewProvider {
       title: item.title,
       badges: this.buildBadges(item.providerId, providerItem, item.url),
       repoAnnotation: item.group ?? providerItem?.group,
+      author: toItemAuthorData(providerItem),
+      authored: providerItem?.authored,
       tierType,
       isUrgent: this.isUrgentWorkItem(item, providerItemMap),
       hasRelatedItems: item.providerId && item.externalId

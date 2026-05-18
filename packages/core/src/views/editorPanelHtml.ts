@@ -150,6 +150,30 @@ export function getEditorPanelHtml({ cspSource, scriptUri, initialItem }: Editor
       word-break: break-word;
       display: inline;
     }
+    .editor-title--visually-hidden {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      padding: 0;
+      margin: -1px;
+      overflow: hidden;
+      clip: rect(0 0 0 0);
+      white-space: nowrap;
+      border: 0;
+    }
+    .editor-title-input {
+      box-sizing: border-box;
+      width: min(100%, 720px);
+      border: 1px solid var(--vscode-input-border, transparent);
+      border-radius: 6px;
+      background: var(--vscode-input-background);
+      color: var(--vscode-input-foreground);
+      font: inherit;
+      font-size: 22px;
+      font-weight: 700;
+      line-height: 1.2;
+      padding: 6px 8px;
+    }
     /*
      * When the heading wraps an anchor (item has a URL) the anchor
      * inherits the heading's font but takes its own link colors so it
@@ -175,6 +199,34 @@ export function getEditorPanelHtml({ cspSource, scriptUri, initialItem }: Editor
       opacity: 0.85;
       word-break: break-all;
       margin-top: 4px;
+    }
+    .editor-url-field {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+      margin-top: 8px;
+      color: var(--vscode-descriptionForeground);
+    }
+    .editor-url-label {
+      font-size: 12px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+    }
+    .editor-url-input {
+      flex: 1 1 260px;
+      max-width: 520px;
+      min-width: 180px;
+    }
+    .editor-url-link {
+      color: var(--vscode-textLink-foreground);
+      text-decoration: none;
+      white-space: nowrap;
+    }
+    .editor-url-link:hover {
+      color: var(--vscode-textLink-activeForeground, var(--vscode-textLink-foreground));
+      text-decoration: underline;
     }
     .icon-button--inline {
       width: 22px;
@@ -251,6 +303,7 @@ export function getEditorPanelHtml({ cspSource, scriptUri, initialItem }: Editor
 
     .icon-button:focus-visible,
     .editor-button:focus-visible,
+    .editor-title-input:focus-visible,
     .editor-input:focus-visible,
     .related-item:focus-visible {
       outline: 1px solid var(--vscode-focusBorder);

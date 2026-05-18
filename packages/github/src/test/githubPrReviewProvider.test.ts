@@ -201,7 +201,14 @@ describe('GitHubPrReviewProvider', () => {
     mockFetch.mockResolvedValueOnce({
       ok: true,
       json: async () => ({
-        items: [createMockPr(42, 'Add feature', 'org/myrepo')],
+        items: [{
+          ...createMockPr(42, 'Add feature', 'org/myrepo'),
+          user: {
+            login: 'octocat',
+            avatar_url: 'https://avatars.githubusercontent.com/u/1?v=4',
+            html_url: 'https://github.com/octocat',
+          },
+        }],
       }),
     });
 
@@ -216,6 +223,12 @@ describe('GitHubPrReviewProvider', () => {
       title: '#42: Add feature',
       description: 'Body for PR 42',
       url: 'https://github.com/org/myrepo/pull/42',
+      author: {
+        displayName: 'octocat',
+        handle: 'octocat',
+        avatarUrl: 'https://avatars.githubusercontent.com/u/1?v=4',
+        profileUrl: 'https://github.com/octocat',
+      },
       group: 'org/myrepo',
       reason: 'review_requested',
       canonicalId: 'github:pull:org/myrepo#42',

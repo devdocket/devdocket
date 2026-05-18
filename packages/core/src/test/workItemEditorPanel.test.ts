@@ -574,6 +574,22 @@ describe('WorkItemEditorPanel', () => {
     });
   });
 
+  it('saves manual notes without requiring title or URL fields', async () => {
+    vi.useFakeTimers();
+    const item = makeItem({ title: 'Original' });
+    const workGraph = createMockWorkGraph(item);
+    const { mock } = openPanel(item, workGraph);
+
+    mock.simulateMessage({
+      type: 'autosave',
+      data: { notes: ' Draft note ' },
+    });
+
+    await vi.advanceTimersByTimeAsync(300);
+
+    expect(workGraph.updateItem).toHaveBeenCalledWith('item-1', { notes: 'Draft note' });
+  });
+
   it('only saves notes for provider-managed items', async () => {
     vi.useFakeTimers();
     const item = makeItem({ providerId: 'github', externalId: '42', title: 'Provider item' });

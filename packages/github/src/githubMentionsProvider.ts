@@ -126,6 +126,14 @@ export class GitHubMentionsProvider extends BaseGitHubProvider {
         title: `#${issue.number}: ${issue.title}`,
         description: issue.body ?? undefined,
         url: issue.html_url,
+        ...(issue.user?.login ? {
+          author: {
+            displayName: issue.user.login,
+            handle: issue.user.login,
+            avatarUrl: issue.user.avatar_url,
+            profileUrl: issue.user.html_url,
+          },
+        } : {}),
         group: repoName,
         reason: 'mentioned',
         canonicalId: `github:${isPr ? 'pull' : 'issue'}:${repoName}#${issue.number}`,

@@ -3,6 +3,7 @@ export type {
   EditorCIWatchData,
   EditorItemData,
   ExtensionMessage,
+  ItemAuthorData,
   ItemCardData,
   SourceGroupData,
   SourceItemData,

@@ -4,7 +4,7 @@ import { AdoPrReviewProvider } from '../adoPrReviewProvider';
 
 const mockFetch = vi.fn();
 
-function createMockPr(id: number, title: string, project = 'MyProject', repo = 'myrepo') {
+function createMockPr(id: number, title: string, project = 'MyProject', repo = 'myrepo', extra: Record<string, unknown> = {}) {
   return {
     pullRequestId: id,
     title,
@@ -14,6 +14,7 @@ function createMockPr(id: number, title: string, project = 'MyProject', repo = '
       project: { name: project },
       webUrl: `https://dev.azure.com/myorg/${project}/_git/${repo}`,
     },
+    ...extra,
   };
 }
 
@@ -141,7 +142,9 @@ describe('AdoPrReviewProvider', () => {
       .mockResolvedValueOnce({
         ok: true,
         json: async () => ({
-          value: [createMockPr(101, 'Fix bug')],
+          value: [createMockPr(101, 'Fix bug', 'MyProject', 'myrepo', {
+            createdBy: { displayName: 'Jane Doe', uniqueName: 'jane@example.com' },
+          })],
         }),
       })
       .mockResolvedValueOnce(mockGraphDescriptor())
@@ -181,6 +184,10 @@ describe('AdoPrReviewProvider', () => {
       title: 'PR 101: Fix bug',
       description: 'Description for PR 101',
       url: 'https://dev.azure.com/myorg/MyProject/_git/myrepo/pullrequest/101',
+      author: {
+        displayName: 'Jane Doe',
+        handle: 'jane@example.com',
+      },
       group: 'MyProject/myrepo',
       reason: 'review_requested',
       itemType: 'pr',

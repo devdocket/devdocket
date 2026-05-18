@@ -22,7 +22,9 @@ export function filterTiers(tiers: TierData[], query: string): { tiers: TierData
         ...tier,
         items: tier.items.filter(item =>
           matchesNormalizedQuery(item.title, normalizedQuery)
-          || (item.repoAnnotation ? matchesNormalizedQuery(item.repoAnnotation, normalizedQuery) : false),
+          || (item.repoAnnotation ? matchesNormalizedQuery(item.repoAnnotation, normalizedQuery) : false)
+          || (item.authored !== true && item.author?.displayName ? matchesNormalizedQuery(item.author.displayName, normalizedQuery) : false)
+          || (item.authored !== true && item.author?.handle ? matchesNormalizedQuery(item.author.handle, normalizedQuery) || matchesNormalizedQuery(`@${item.author.handle}`, normalizedQuery) : false),
         ),
       }))
       .filter(tier => tier.items.length > 0),
