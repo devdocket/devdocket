@@ -194,5 +194,7 @@ describe('EditorApp author annotation', () => {
     expect(container.querySelector<HTMLInputElement>('input.editor-title-input')?.value).toBe('Fix bug');
     expect(container.querySelector<HTMLInputElement>('input.editor-url-input')?.value).toBe('https://example.com/work/1');
     expect(container.querySelector('a.editor-url-link')?.getAttribute('href')).toBe('https://example.com/work/1');
+    expect(container.querySelector('h1.editor-title input')).toBeNull();
+    expect(container.querySelector('h1.editor-title')?.textContent).toBe('Fix bug');
   });
 });

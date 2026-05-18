@@ -150,6 +150,17 @@ export function getEditorPanelHtml({ cspSource, scriptUri, initialItem }: Editor
       word-break: break-word;
       display: inline;
     }
+    .editor-title--visually-hidden {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      padding: 0;
+      margin: -1px;
+      overflow: hidden;
+      clip: rect(0 0 0 0);
+      white-space: nowrap;
+      border: 0;
+    }
     .editor-title-input {
       box-sizing: border-box;
       width: min(100%, 720px);

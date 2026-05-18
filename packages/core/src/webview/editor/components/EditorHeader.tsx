@@ -17,9 +17,11 @@ interface EditorHeaderProps {
 }
 
 export function EditorHeader({ item, title, url = item.url ?? '', onCopyText, onTitleInput, onUrlInput, actionButtons }: EditorHeaderProps) {
-  // Always render the title inside an <h1> so the page has a primary
-  // heading. When a read-only item has a URL, the heading wraps an anchor
-  // so it's still keyboard-activatable and styled as a link.
+  // Always render an <h1> so the page has a primary heading. Editable manual
+  // items keep that heading as screen-reader text and place the input beside it
+  // in the header, avoiding interactive controls nested inside the heading.
+  // When a read-only item has a URL, the heading wraps an anchor so it's still
+  // keyboard-activatable and styled as a link.
   //
   // Defense-in-depth: validate the URL with isSafeUrl before binding it
   // to href. The delegated click handler routes through postMessage which
@@ -27,22 +29,25 @@ export function EditorHeader({ item, title, url = item.url ?? '', onCopyText, on
   // use the raw href and bypass that handler. Fall back to plain text (no
   // anchor) when invalid.
   const safeUrl = url ? isSafeUrl(url) : null;
-  const titleContent = onTitleInput ? (
-    <input
-      class="editor-title-input"
-      aria-label="Title"
-      value={title}
-      onInput={event => onTitleInput(event.currentTarget.value)}
-    />
-  ) : safeUrl ? (
+  const readOnlyTitleContent = safeUrl ? (
     <a class="editor-title-link" href={safeUrl.href}>
       {title}
     </a>
   ) : (
     title
   );
-  const titleNode = (
-    <h1 class="editor-title">{titleContent}</h1>
+  const titleNode = onTitleInput ? (
+    <>
+      <h1 class="editor-title editor-title--visually-hidden">{title || 'Untitled work item'}</h1>
+      <input
+        class="editor-title-input"
+        aria-label="Title"
+        value={title}
+        onInput={event => onTitleInput(event.currentTarget.value)}
+      />
+    </>
+  ) : (
+    <h1 class="editor-title">{readOnlyTitleContent}</h1>
   );
   const annotation = formatProviderAnnotation({ source: item.group, author: item.author, authored: item.authored });
 
