@@ -1,12 +1,16 @@
 import * as vscode from 'vscode';
 
 export const statusBarLogoIconSetting = 'devdocket.statusBar.useLogoIcon';
+export const statusBarLogoThemeIcon = '$(devdocket-logo)';
 
-export function getStatusBarBrandPrefix(): string {
-  const useLogoIcon = vscode.workspace
+export function shouldUseStatusBarLogoIcon(): boolean {
+  return vscode.workspace
     .getConfiguration()
     .get<boolean>(statusBarLogoIconSetting, false);
-  return useLogoIcon ? '$(devdocket-logo)' : 'DevDocket';
+}
+
+export function getStatusBarBrandPrefix(): string {
+  return shouldUseStatusBarLogoIcon() ? statusBarLogoThemeIcon : 'DevDocket';
 }
 
 export function affectsStatusBarLogoIconSetting(event: vscode.ConfigurationChangeEvent): boolean {

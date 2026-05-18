@@ -83,7 +83,8 @@ describe('WatchesStatusBar', () => {
     new WatchesStatusBar(watcherService as any);
 
     const statusBarItem = (window.createStatusBarItem as ReturnType<typeof vi.fn>).mock.results[0].value;
-    expect(statusBarItem.text).toBe('👁 $(devdocket-logo) • 🔄 1 · ✓ 1 · ✗ 0');
+    expect(statusBarItem.text).toBe('$(devdocket-logo) • 🔄 1 · ✓ 1 · ✗ 0');
+    expect(statusBarItem.text).not.toContain('👁');
     expect(statusBarItem.tooltip).toContain('DevDocket CI Watches');
   });
 
@@ -98,7 +99,8 @@ describe('WatchesStatusBar', () => {
     (vscode.workspace as any)._setConfigurationValue('devdocket.statusBar.useLogoIcon', true);
     (vscode.workspace as any)._fireDidChangeConfiguration('devdocket.statusBar.useLogoIcon');
 
-    expect(statusBarItem.text).toBe('👁 $(devdocket-logo) • Watches');
+    expect(statusBarItem.text).toBe('$(devdocket-logo) • Watches');
+    expect(statusBarItem.text).not.toContain('👁');
     expect(statusBarItem.show).toHaveBeenCalledTimes(2);
   });
 });

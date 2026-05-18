@@ -1,6 +1,11 @@
 import * as vscode from 'vscode';
 import { WatcherService } from '../services/watcherService';
-import { affectsStatusBarLogoIconSetting, getStatusBarBrandPrefix } from './statusBarBrand';
+import { affectsStatusBarLogoIconSetting, shouldUseStatusBarLogoIcon, statusBarLogoThemeIcon } from './statusBarBrand';
+
+function getWatchesStatusBarBrandPrefix(): string {
+  // The eye emoji is the text-mode brand marker for watches; the logo setting replaces it so the glyph is visually primary.
+  return shouldUseStatusBarLogoIcon() ? statusBarLogoThemeIcon : '👁 DevDocket';
+}
 
 /**
  * Status bar item that shows running/passed/failed watch counts.
@@ -30,9 +35,9 @@ export class WatchesStatusBar implements vscode.Disposable {
 
   private update(): void {
     const watches = this.watcherService.getActiveWatches();
-    const brandPrefix = getStatusBarBrandPrefix();
+    const brandPrefix = getWatchesStatusBarBrandPrefix();
     if (watches.length === 0) {
-      this.statusBarItem.text = `👁 ${brandPrefix} • Watches`;
+      this.statusBarItem.text = `${brandPrefix} • Watches`;
       this.statusBarItem.tooltip = this.buildTooltip(0, 0, 0);
       this.statusBarItem.backgroundColor = undefined;
       this.statusBarItem.color = undefined;
@@ -78,7 +83,7 @@ export class WatchesStatusBar implements vscode.Disposable {
       }
     }
 
-    this.statusBarItem.text = `👁 ${brandPrefix} • 🔄 ${runningCount} · ✓ ${passedCount} · ✗ ${failedCount}`;
+    this.statusBarItem.text = `${brandPrefix} • 🔄 ${runningCount} · ✓ ${passedCount} · ✗ ${failedCount}`;
     this.statusBarItem.tooltip = this.buildTooltip(runningCount, passedCount, failedCount);
     // Only highlight the status bar with the warning color if there is at
     // least one failed watch the user hasn't seen yet — once they open the

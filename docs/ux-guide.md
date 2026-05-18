@@ -107,7 +107,7 @@ DevDocket contributes two right-aligned status bar items (priorities `100000` an
 - **Provider Health** (priority `100000`) — `✓ DevDocket • N providers` when every provider is healthy, `○ DevDocket • N providers` while provider health is still unknown, and `⚠ N providers unhealthy` when degraded; click to open the Provider Health quick pick.
 - **Watches** (priority `100001`) — `👁 DevDocket • Watches` when empty and `👁 DevDocket • 🔄 N · ✓ N · ✗ N` when watches exist; always visible. Turns amber when at least one watched run has failed and the failure has not yet been acknowledged. Click to open the CI Watches panel.
 
-Set `devdocket.statusBar.useLogoIcon` to `true` to replace the word `DevDocket` in these status bar items with the compact `$(devdocket-logo)` glyph. The setting defaults to `false`, so existing users keep the text label. The logo saves horizontal space but is less explicit at a glance, especially in high-contrast or unfamiliar themes; tooltips always include the full DevDocket name.
+Set `devdocket.statusBar.useLogoIcon` to `true` to replace the DevDocket brand text in these status bar items with the compact `$(devdocket-logo)` glyph. In the Watches item, the glyph also replaces the leading eye emoji so the logo remains the visible brand marker instead of becoming a secondary icon. The setting defaults to `false`, so existing users keep the text label. The logo saves horizontal space but is less explicit at a glance, especially in high-contrast or unfamiliar themes; tooltips always include the full DevDocket name.
 
 ## Item Lifecycle
 
