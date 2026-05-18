@@ -128,11 +128,6 @@
             "type": "boolean",
             "default": true,
             "description": "Automatically watch authored pull requests when a provider refresh discovers them"
-          },
-          "devdocket.statusBar.useLogoIcon": {
-            "type": "boolean",
-            "default": false,
-            "description": "Use the DevDocket logo glyph instead of the word DevDocket in DevDocket status bar items. Tooltips still include the full name."
           }
         }
       }

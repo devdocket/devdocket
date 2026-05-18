@@ -33,7 +33,6 @@ function createProviderRegistry(
 describe('ProviderHealthStatusBar', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    (vscode.workspace as any)._resetConfiguration();
   });
 
   it('hides when no providers are registered', () => {
@@ -61,7 +60,7 @@ describe('ProviderHealthStatusBar', () => {
     new ProviderHealthStatusBar(providerRegistry as any);
 
     const statusBarItem = (window.createStatusBarItem as ReturnType<typeof vi.fn>).mock.results[0].value;
-    expect(statusBarItem.text).toBe('$(check) DevDocket • 2 providers');
+    expect(statusBarItem.text).toBe('$(check) $(devdocket-logo) • 2 providers');
     expect(statusBarItem.command).toBe('devdocket.showProviderHealthQuickPick');
     expect(statusBarItem.tooltip).toContain('DevDocket Provider Health');
     expect(statusBarItem.tooltip).toContain('GitHub: healthy');
@@ -88,7 +87,7 @@ describe('ProviderHealthStatusBar', () => {
 
     providerRegistry.setHealth('github', { status: 'healthy', lastRefreshTime: new Date('2024-01-02T03:04:05Z') });
 
-    expect(statusBarItem.text).toBe('$(check) DevDocket • 1 provider');
+    expect(statusBarItem.text).toBe('$(check) $(devdocket-logo) • 1 provider');
     expect(statusBarItem.backgroundColor).toBeUndefined();
     expect(statusBarItem.color).toBeUndefined();
     expect(statusBarItem.show).toHaveBeenCalledTimes(2);
@@ -103,42 +102,10 @@ describe('ProviderHealthStatusBar', () => {
     new ProviderHealthStatusBar(providerRegistry as any);
 
     const statusBarItem = (window.createStatusBarItem as ReturnType<typeof vi.fn>).mock.results[0].value;
-    expect(statusBarItem.text).toBe('$(circle-outline) DevDocket • 1 provider');
+    expect(statusBarItem.text).toBe('$(circle-outline) $(devdocket-logo) • 1 provider');
     expect(statusBarItem.tooltip).toContain('GitHub: unknown (not refreshed yet)');
     expect(statusBarItem.backgroundColor).toBeUndefined();
     expect(statusBarItem.color).toBeUndefined();
     expect(statusBarItem.show).toHaveBeenCalled();
-  });
-
-  it('uses the logo glyph when the status bar logo setting is enabled', () => {
-    (vscode.workspace as any)._setConfigurationValue('devdocket.statusBar.useLogoIcon', true);
-    const providerRegistry = createProviderRegistry(
-      [{ id: 'github', label: 'GitHub' }],
-      { github: { status: 'healthy' } },
-    );
-
-    new ProviderHealthStatusBar(providerRegistry as any);
-
-    const statusBarItem = (window.createStatusBarItem as ReturnType<typeof vi.fn>).mock.results[0].value;
-    expect(statusBarItem.text).toBe('$(check) $(devdocket-logo) • 1 provider');
-    expect(statusBarItem.tooltip).toContain('DevDocket Provider Health');
-  });
-
-  it('refreshes provider health text when the logo setting changes', () => {
-    const providerRegistry = createProviderRegistry(
-      [{ id: 'github', label: 'GitHub' }],
-      { github: { status: 'healthy' } },
-    );
-
-    new ProviderHealthStatusBar(providerRegistry as any);
-
-    const statusBarItem = (window.createStatusBarItem as ReturnType<typeof vi.fn>).mock.results[0].value;
-    expect(statusBarItem.text).toBe('$(check) DevDocket • 1 provider');
-
-    (vscode.workspace as any)._setConfigurationValue('devdocket.statusBar.useLogoIcon', true);
-    (vscode.workspace as any)._fireDidChangeConfiguration('devdocket.statusBar.useLogoIcon');
-
-    expect(statusBarItem.text).toBe('$(check) $(devdocket-logo) • 1 provider');
-    expect(statusBarItem.show).toHaveBeenCalledTimes(2);
   });
 });

@@ -105,10 +105,10 @@ The manual Watch URL flow is **idempotent** for already-watched URLs and force-r
 
 DevDocket contributes two right-aligned status bar items (priorities `100000` and `100001`, immediately to the left of the Copilot button). Quick access to the sidebar itself is via the activity-bar container, not the status bar.
 
-- **Provider Health** — `✓ DevDocket • N providers` when every provider is healthy, `○ DevDocket • N providers` while provider health is still unknown, and `⚠ N providers unhealthy` when degraded; click to open the Provider Health quick pick.
-- **Watches** — `👁 DevDocket • Watches` when empty and `👁 DevDocket • 🔄 N · ✓ N · ✗ N` when watches exist, with an additional `⚠ N` segment when runs have succeeded with issues; always visible. Turns amber when at least one watched run has failed and the failure has not yet been acknowledged. Click to open the CI Watches panel.
+- **Provider Health** — `✓ $(devdocket-logo) • N providers` when every provider is healthy, `○ $(devdocket-logo) • N providers` while provider health is still unknown, and `⚠ N providers unhealthy` when degraded; click to open the Provider Health quick pick.
+- **Watches** — `$(devdocket-logo) • Watches` when empty and `$(devdocket-logo) • 🔄 N · ✓ N · ✗ N` when watches exist, with an additional `⚠ N` segment when runs have succeeded with issues; always visible. Turns amber when at least one watched run has failed and the failure has not yet been acknowledged. Click to open the CI Watches panel.
 
-Set `devdocket.statusBar.useLogoIcon` to `true` to replace the DevDocket brand text in these status bar items with the compact `$(devdocket-logo)` glyph. In the Watches item, the glyph also replaces the leading eye emoji so the logo remains the visible brand marker instead of becoming a secondary icon. The setting defaults to `false`, so existing users keep the text label. The logo saves horizontal space but is less explicit at a glance, especially in high-contrast or unfamiliar themes; tooltips always include the full DevDocket name.
+The compact DevDocket logo glyph is the default status bar brand marker. In the Watches item, the glyph replaces both the former `DevDocket` text and leading eye emoji so the logo remains visually primary. Tooltips always include the full DevDocket name for hover and assistive tech.
 
 ## Item Lifecycle
 
@@ -234,7 +234,6 @@ Use `{path}` in args as a placeholder for the worktree path. Commands run in seq
 | `devDocket.watches.autoWatchAuthoredPRs` | `boolean` | `true` | Automatically watch GitHub PRs you authored as the GitHub provider discovers them. |
 | `devDocket.watches.pollingIntervalSeconds` | `number` | `60` | How often the watcher polls active CI runs and PRs. Minimum 15 seconds. |
 | `devDocket.watches.notifyOnJobFailure` | `boolean` | `true` | Show a notification when an individual job fails while the pipeline run is still in progress. |
-| `devdocket.statusBar.useLogoIcon` | `boolean` | `false` | Replace the word `DevDocket` in status bar items with the compact DevDocket logo glyph. |
 
 ## Keyboard Shortcuts
 

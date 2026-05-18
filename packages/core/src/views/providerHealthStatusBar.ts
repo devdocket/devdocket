@@ -1,6 +1,5 @@
 import * as vscode from 'vscode';
 import { ProviderRegistry } from '../services/providerRegistry';
-import { affectsStatusBarLogoIconSetting, getStatusBarBrandPrefix } from './statusBarBrand';
 
 /**
  * Sanitizes error messages for display by removing newlines and truncating.
@@ -42,7 +41,6 @@ export class ProviderHealthStatusBar implements vscode.Disposable {
   private refreshStateSub: vscode.Disposable;
   private registerSub: vscode.Disposable;
   private discoveredChangesSub: vscode.Disposable;
-  private configurationSub: vscode.Disposable;
 
   constructor(private providerRegistry: ProviderRegistry) {
     this.statusBarItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 100000);
@@ -62,12 +60,6 @@ export class ProviderHealthStatusBar implements vscode.Disposable {
 
     this.discoveredChangesSub = providerRegistry.onDidChangeProviderItems(() => {
       this.update();
-    });
-
-    this.configurationSub = vscode.workspace.onDidChangeConfiguration(event => {
-      if (affectsStatusBarLogoIconSetting(event)) {
-        this.update();
-      }
     });
 
     this.update();
@@ -114,8 +106,7 @@ export class ProviderHealthStatusBar implements vscode.Disposable {
     }
 
     const hasUnknownProviders = providers.some(p => this.providerRegistry.getProviderHealth(p.id).status === 'unknown');
-    const brandPrefix = getStatusBarBrandPrefix();
-    this.statusBarItem.text = `${hasUnknownProviders ? '$(circle-outline)' : '$(check)'} ${brandPrefix} • ${formatProviderCount(providers.length)}`;
+    this.statusBarItem.text = `${hasUnknownProviders ? '$(circle-outline)' : '$(check)'} $(devdocket-logo) • ${formatProviderCount(providers.length)}`;
     this.statusBarItem.tooltip = this.buildTooltip(providers);
     this.statusBarItem.backgroundColor = undefined;
     this.statusBarItem.color = undefined;
@@ -142,7 +133,6 @@ export class ProviderHealthStatusBar implements vscode.Disposable {
     this.refreshStateSub.dispose();
     this.registerSub.dispose();
     this.discoveredChangesSub.dispose();
-    this.configurationSub.dispose();
     this.statusBarItem.dispose();
   }
 }

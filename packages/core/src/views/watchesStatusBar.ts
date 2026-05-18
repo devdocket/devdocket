@@ -1,12 +1,8 @@
 import * as vscode from 'vscode';
 import { WatcherService } from '../services/watcherService';
 import { isFailedConclusion } from '../webview/shared/runConclusionLabels';
-import { affectsStatusBarLogoIconSetting, shouldUseStatusBarLogoIcon, statusBarLogoThemeIcon } from './statusBarBrand';
 
-function getWatchesStatusBarBrandPrefix(): string {
-  // The eye emoji is the text-mode brand marker for watches; the logo setting replaces it so the glyph is visually primary.
-  return shouldUseStatusBarLogoIcon() ? statusBarLogoThemeIcon : '👁 DevDocket';
-}
+const statusBarLogoThemeIcon = '$(devdocket-logo)';
 
 /**
  * Status bar item that shows running/passed/failed watch counts.
@@ -15,7 +11,6 @@ function getWatchesStatusBarBrandPrefix(): string {
 export class WatchesStatusBar implements vscode.Disposable {
   private readonly statusBarItem: vscode.StatusBarItem;
   private readonly watchChangeSub: vscode.Disposable;
-  private readonly configurationSub: vscode.Disposable;
 
   constructor(
     private readonly watcherService: WatcherService,
@@ -26,19 +21,13 @@ export class WatchesStatusBar implements vscode.Disposable {
     this.watchChangeSub = watcherService.onDidChangeWatchedRuns(() => {
       this.update();
     });
-    this.configurationSub = vscode.workspace.onDidChangeConfiguration(event => {
-      if (affectsStatusBarLogoIconSetting(event)) {
-        this.update();
-      }
-    });
     this.update();
   }
 
   private update(): void {
     const watches = this.watcherService.getActiveWatches();
-    const brandPrefix = getWatchesStatusBarBrandPrefix();
     if (watches.length === 0) {
-      this.statusBarItem.text = `${brandPrefix} • Watches`;
+      this.statusBarItem.text = `${statusBarLogoThemeIcon} • Watches`;
       this.statusBarItem.tooltip = this.buildTooltip(0, 0, 0, 0);
       this.statusBarItem.backgroundColor = undefined;
       this.statusBarItem.color = undefined;
@@ -86,7 +75,7 @@ export class WatchesStatusBar implements vscode.Disposable {
     }
 
     const partialText = partialSuccessCount > 0 ? ` · ⚠ ${partialSuccessCount}` : '';
-    this.statusBarItem.text = `${brandPrefix} • 🔄 ${runningCount} · ✓ ${passedCount}${partialText} · ✗ ${failedCount}`;
+    this.statusBarItem.text = `${statusBarLogoThemeIcon} • 🔄 ${runningCount} · ✓ ${passedCount}${partialText} · ✗ ${failedCount}`;
     this.statusBarItem.tooltip = this.buildTooltip(runningCount, passedCount, partialSuccessCount, failedCount);
     // Only highlight the status bar with the warning color if there is at
     // least one failed watch the user hasn't seen yet — once they open the
@@ -113,7 +102,6 @@ export class WatchesStatusBar implements vscode.Disposable {
 
   dispose(): void {
     this.watchChangeSub.dispose();
-    this.configurationSub.dispose();
     this.statusBarItem.dispose();
   }
 }
