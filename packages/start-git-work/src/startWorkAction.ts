@@ -872,10 +872,9 @@ export class StartWorkAction implements DevDocketAction {
     return path.join(path.dirname(repoPath), this.toWorktreeDirName(repoPath, ref, item));
   }
 
-  private toWorktreeDirName(repoPath: string, ref: string, item: Readonly<WorkItem>): string {
+  private toWorktreeDirName(repoPath: string, ref: string, _item: Readonly<WorkItem>): string {
     const repoBaseName = path.basename(repoPath);
-    const itemSuffix = this.toWorktreePathSuffix(item.externalId ?? item.id);
-    return `${repoBaseName}-${this.toWorktreePathSuffix(ref)}-${itemSuffix}`;
+    return `${repoBaseName}-${this.toWorktreePathSuffix(ref)}`;
   }
 
   private toWorktreePathSuffix(ref: string): string {
