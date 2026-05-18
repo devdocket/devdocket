@@ -65,6 +65,33 @@ describe('ActivityLog', () => {
     expect(detail!.textContent).toBe('New → InProgress');
   });
 
+  it('renders v1 work-started detail as labelled fields', () => {
+    renderActivityLog([{
+      timestamp: Date.now(),
+      type: 'work-started',
+      detail: JSON.stringify({ v: 1, branchName: 'feature/x', repoPath: '/r' }),
+    }]);
+
+    expandActivityLog();
+
+    const detail = container!.querySelector('.activity-entry-detail--structured');
+    expect(detail).toBeInstanceOf(HTMLDListElement);
+    expect(detail!.textContent).toContain('feature/x');
+  });
+
+  it('falls back to raw detail for unknown work-started schema version', () => {
+    const raw = JSON.stringify({ v: 99, branchName: 'feature/x', repoPath: '/r' });
+    renderActivityLog([{ timestamp: Date.now(), type: 'work-started', detail: raw }]);
+
+    expandActivityLog();
+
+    const structured = container!.querySelector('.activity-entry-detail--structured');
+    expect(structured).toBeNull();
+    const plain = container!.querySelector('.activity-entry-detail');
+    expect(plain).toBeInstanceOf(HTMLSpanElement);
+    expect(plain!.textContent).toBe(raw);
+  });
+
   function renderActivityLog(entries: TestActivityEntry[]) {
     container = document.createElement('div');
     document.body.appendChild(container);

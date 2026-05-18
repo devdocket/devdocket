@@ -30,6 +30,10 @@ import { execFile } from 'child_process';
 import { promptGitCleanup } from '../gitCleanup';
 
 function workStartedEntry(data: { branchName?: string; worktreePath?: string; repoPath?: string }) {
+  return { timestamp: Date.now(), type: 'work-started', detail: JSON.stringify({ v: 1, ...data }) };
+}
+
+function legacyWorkStartedEntry(data: { branchName?: string; worktreePath?: string; repoPath?: string }) {
   return { timestamp: Date.now(), type: 'work-started', detail: JSON.stringify(data) };
 }
 
@@ -132,5 +136,33 @@ describe('promptGitCleanup', () => {
     await promptGitCleanup(createItem({
       activityLog: [workStartedEntry({ branchName: 'feature/x', repoPath: '/repos/main' })],
     }), addActivity);
+  });
+
+  it('still prompts for legacy entries without a version tag', async () => {
+    (fs.access as Mock).mockResolvedValue(undefined);
+    (execFile as unknown as Mock).mockResolvedValueOnce({ stdout: '', stderr: '' });
+    (vscode.window.showInformationMessage as Mock).mockResolvedValue('Yes');
+    (execFile as unknown as Mock).mockResolvedValueOnce({ stdout: '', stderr: '' });
+
+    await promptGitCleanup(createItem({
+      activityLog: [legacyWorkStartedEntry({ branchName: 'feature/x', repoPath: '/repos/main' })],
+    }), addActivity);
+
+    expect(vscode.window.showInformationMessage).toHaveBeenCalledWith(
+      expect.stringContaining('branch "feature/x"'), 'Yes', 'No',
+    );
+    expect(addActivity).toHaveBeenCalledWith('wc-test-1', 'cleanup', 'Removed branch feature/x');
+  });
+
+  it('does not prompt when the entry has an unknown schema version', async () => {
+    const unknownVersion = {
+      timestamp: Date.now(),
+      type: 'work-started',
+      detail: JSON.stringify({ v: 99, branchName: 'feature/x', repoPath: '/repos/main' }),
+    };
+
+    await promptGitCleanup(createItem({ activityLog: [unknownVersion] }), addActivity);
+
+    expect(vscode.window.showInformationMessage).not.toHaveBeenCalled();
   });
 });

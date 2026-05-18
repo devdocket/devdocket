@@ -70,6 +70,17 @@ interface WorkStartedDetail {
   repoPath?: string;
 }
 
+/**
+ * Parse the `'work-started'` activity entry detail for rendering.
+ *
+ * Must stay in lockstep with the schema owned by
+ * `packages/start-git-work/src/workStartedDetail.ts`. When that schema
+ * bumps to V2, this version check (and the rendered fields) must be
+ * updated in the same change. Unknown versions fall through to the
+ * plain JSON rendering so the user still sees the raw payload.
+ */
+const KNOWN_WORK_STARTED_DETAIL_VERSION = 1;
+
 function parseWorkStartedDetail(raw: string): WorkStartedDetail | undefined {
   try {
     const parsed = JSON.parse(raw) as unknown;
@@ -78,6 +89,11 @@ function parseWorkStartedDetail(raw: string): WorkStartedDetail | undefined {
     }
 
     const values = parsed as Record<string, unknown>;
+
+    if (values.v !== undefined && values.v !== KNOWN_WORK_STARTED_DETAIL_VERSION) {
+      return undefined;
+    }
+
     const detail: WorkStartedDetail = {};
     if (typeof values.branchName === 'string') {
       detail.branchName = values.branchName;

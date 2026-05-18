@@ -29,4 +29,17 @@ env: {
 
 ## Activity Log Integration
 
-When creating branches/worktrees, log via `devdocket.addActivity` with type `'work-started'` and a JSON detail string containing `{ branchName, worktreePath, repoPath }`. Cleanup operations log `'cleanup'` or `'cleanup-dismissed'` entries. The activity log is the source of truth for branch/worktree associations — do not add metadata fields to WorkItem.
+When creating branches/worktrees, log via `devdocket.addActivity` with type `'work-started'` and a JSON detail string built with the **`encodeWorkStartedDetail` helper** from `./workStartedDetail`. Never call `JSON.stringify` directly on an ad-hoc shape — the helper stamps a version tag so future readers (e.g. `gitCleanup.ts`) can detect schema mismatches instead of silently degrading.
+
+```ts
+import { encodeWorkStartedDetail } from './workStartedDetail';
+
+const detail = encodeWorkStartedDetail({ branchName, worktreePath, repoPath });
+await vscode.commands.executeCommand('devdocket.addActivity', item.id, 'work-started', detail);
+```
+
+To read the detail elsewhere, use `decodeWorkStartedDetail` from the same module. It handles current `v: 1` payloads, accepts legacy unversioned entries for backward compatibility, and warns (returning `undefined`) for unknown schema versions.
+
+Cleanup operations log `'cleanup'` or `'cleanup-dismissed'` entries. The activity log is the source of truth for branch/worktree associations — do not add metadata fields to WorkItem.
+
+**Bumping the schema:** if the payload shape needs to change, introduce a new `WorkStartedDetailV2` interface, update the encoder to write `v: 2`, and update the decoder to recognise both versions. The editor's `packages/core/src/webview/editor/components/ActivityLog.tsx` also reads these entries to render them — its `KNOWN_WORK_STARTED_DETAIL_VERSION` and field set must be updated in the same change. Renaming or removing existing fields without a version bump silently breaks cleanup for every pre-existing activity entry.

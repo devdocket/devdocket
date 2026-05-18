@@ -4,6 +4,7 @@ import * as fs from 'fs/promises';
 import { execFile } from 'child_process';
 import { promisify } from 'util';
 import { logger } from './logger';
+import { decodeWorkStartedDetail, type WorkStartedDetail } from './workStartedDetail';
 import type { WorkItem, ActivityType } from '@devdocket/shared';
 
 const execFileAsync = promisify(execFile);
@@ -17,19 +18,12 @@ async function pathExists(p: string): Promise<boolean> {
   }
 }
 
-/** Structured data stored in the detail field of a 'work-started' activity entry. */
-interface WorkStartedData {
-  branchName?: string;
-  worktreePath?: string;
-  repoPath?: string;
-}
-
 /**
  * Extract branch/worktree/repo info from the item's activity log.
  * Finds the most recent 'work-started' entry, then checks whether a
  * 'cleanup-dismissed' entry exists after it (which suppresses prompting).
  */
-function getWorkStartedInfo(item: Readonly<WorkItem>): WorkStartedData | undefined {
+function getWorkStartedInfo(item: Readonly<WorkItem>): WorkStartedDetail | undefined {
   const log = item.activityLog;
   if (!log || log.length === 0) {
     return undefined;
@@ -54,25 +48,7 @@ function getWorkStartedInfo(item: Readonly<WorkItem>): WorkStartedData | undefin
     }
   }
 
-  const detail = log[lastStartedIdx].detail;
-  if (!detail) {
-    return undefined;
-  }
-
-  try {
-    const parsed = JSON.parse(detail) as Record<string, unknown>;
-    if (typeof parsed !== 'object' || parsed === null) {
-      return undefined;
-    }
-    return {
-      branchName: typeof parsed.branchName === 'string' ? parsed.branchName : undefined,
-      worktreePath: typeof parsed.worktreePath === 'string' ? parsed.worktreePath : undefined,
-      repoPath: typeof parsed.repoPath === 'string' ? parsed.repoPath : undefined,
-    };
-  } catch {
-    logger.warn('Failed to parse work-started activity detail');
-    return undefined;
-  }
+  return decodeWorkStartedDetail(log[lastStartedIdx].detail);
 }
 
 interface CleanupState {
