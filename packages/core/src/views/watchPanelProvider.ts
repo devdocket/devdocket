@@ -9,6 +9,7 @@ import type { ProviderRegistry } from '../services/providerRegistry';
 import type { WorkGraph } from '../services/workGraph';
 import { isSafeUrl } from '../utils/url';
 import { buildTierColorCss } from '../webview/shared/colors';
+import { isFailedConclusion, toConclusionLabel } from '../webview/shared/runConclusionLabels';
 import { parseProviderItemKey } from './providerItemKey';
 import type { PRWatchData, RunWatchData, WebviewMessage } from './mainTypes';
 
@@ -660,7 +661,7 @@ function getFailurePreview(runWatch: WatchedRun): string | undefined {
   }
 
   if (runWatch.status.overallState === 'completed' && runWatch.status.conclusion && runWatch.status.conclusion !== 'success') {
-    return `Conclusion: ${toDisplayLabel(runWatch.status.conclusion)}`;
+    return `Conclusion: ${toConclusionLabel(runWatch.status.conclusion)}`;
   }
 
   return undefined;
@@ -734,22 +735,14 @@ function getRunPriority(runWatch: RunWatchData): number {
 
 function isFailedRun(runWatch: RunWatchData): boolean {
   if (runWatch.state !== 'completed') return false;
-  const conclusion = runWatch.conclusion;
-  if (conclusion === undefined || conclusion === 'success') return false;
-  // cancelled / skipped / neutral are explicit non-results, not failures.
-  // Mirrors the canonical definition in mainViewProvider.ts so the watch
-  // panel and the sidebar agree on what counts as a failed run.
-  if (conclusion === 'cancelled' || conclusion === 'skipped' || conclusion === 'neutral') return false;
-  return true;
+  // Delegate to the shared helper so all CI watch surfaces agree on what counts as a failed run.
+  return isFailedConclusion(runWatch.conclusion);
 }
 
 function truncate(value: string, maxLength = 140): string {
   return value.length > maxLength ? `${value.slice(0, maxLength - 1)}…` : value;
 }
 
-function toDisplayLabel(value: string): string {
-  return value.replace(/_/g, ' ');
-}
 
 function resolveCodiconsResources(): CodiconsResources | undefined {
   try {

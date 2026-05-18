@@ -6,7 +6,7 @@ export type RunState = 'queued' | 'running' | 'completed';
 /**
  * Conclusion of a pipeline run or job (only meaningful when state is 'completed').
  */
-export type RunConclusion = 'success' | 'failure' | 'cancelled' | 'skipped' | 'timed_out' | 'action_required' | 'neutral';
+export type RunConclusion = 'success' | 'failure' | 'cancelled' | 'skipped' | 'timed_out' | 'action_required' | 'neutral' | 'partial_success';
 
 /**
  * Minimal cancellation token interface compatible with vscode.CancellationToken.

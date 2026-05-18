@@ -76,6 +76,99 @@ describe('WatchApp PR watch rendering', () => {
     expect(prSection.textContent).toContain('E2E tests');
   });
 
+  it('renders completed runs without conclusions as neutral non-failures', async () => {
+    await mountWatchApp();
+    await sendUpdate([], [
+      makeRunWatch({ id: 'run-completed', name: 'Completed run', state: 'completed' }),
+    ]);
+
+    const runSection = getSection('Run Watches');
+    const runCard = runSection.querySelector('.tier-items > .item-card');
+    expect(runCard).toBeInstanceOf(HTMLDivElement);
+    expect(runCard!.classList.contains('item-card--done')).toBe(true);
+    expect(runCard!.querySelector('.badge-pill')?.textContent).toBe('Completed');
+    expect(runCard!.querySelector('.watch-row-preview')).toBeNull();
+  });
+
+  it('renders unknown completed conclusions as neutral non-failures', async () => {
+    await mountWatchApp();
+    await sendUpdate([], [
+      makeRunWatch({ id: 'run-custom', name: 'Custom run', state: 'completed', conclusion: 'provider_future_value' }),
+    ]);
+
+    const runSection = getSection('Run Watches');
+    const runCard = runSection.querySelector('.tier-items > .item-card');
+    expect(runCard).toBeInstanceOf(HTMLDivElement);
+    expect(runCard!.classList.contains('item-card--done')).toBe(true);
+    expect(runCard!.classList.contains('item-card--urgent')).toBe(false);
+    expect(runCard!.querySelector('.badge-pill')?.textContent).toBe('Provider future value');
+  });
+
+  it('renders partial-success runs as amber non-failures', async () => {
+    await mountWatchApp();
+    await sendUpdate([], [
+      makeRunWatch({
+        id: 'run-warn',
+        name: 'Publish artifacts',
+        state: 'completed',
+        conclusion: 'partial_success',
+        failurePreview: 'Conclusion: Succeeded with issues',
+      }),
+    ]);
+
+    const runSection = getSection('Run Watches');
+    const runCard = runSection.querySelector('.tier-items > .item-card');
+    expect(runCard).toBeInstanceOf(HTMLDivElement);
+    expect(runCard!.classList.contains('item-card--paused')).toBe(true);
+    expect(runCard!.querySelector('.badge-pill')?.textContent).toBe('Succeeded with issues');
+    expect((runCard!.querySelector('.badge-pill') as HTMLElement).style.color).toBe('rgb(204, 167, 0)');
+    expect(runCard!.querySelector('.watch-row-preview')?.classList.contains('warning')).toBe(false);
+  });
+
+  it('does not auto-expand or show failure previews for partial-success PR child runs', async () => {
+    await mountWatchApp();
+    await sendUpdate([
+      makePRWatch({
+        runs: [
+          makeRunWatch({ id: 'run-unit', name: 'Unit tests', state: 'completed', conclusion: 'success' }),
+          makeRunWatch({
+            id: 'run-publish',
+            name: 'Publish artifacts',
+            state: 'completed',
+            conclusion: 'partial_success',
+            failurePreview: 'Conclusion: Succeeded with issues',
+          }),
+        ],
+      }),
+    ]);
+
+    const prSection = getSection('PR Watches');
+    const prCard = prSection.querySelector('.tier-items > .item-card');
+    expect(prCard).toBeInstanceOf(HTMLDivElement);
+    expect(prCard!.classList.contains('item-card--urgent')).toBe(false);
+    expect(prCard!.querySelector('.watch-row-preview')).toBeNull();
+    expect(prSection.textContent).toContain('Checks: ✓ 1 passed · ✗ 0 failed · ⏳ 0 running · ⚠ 1 succeeded with issues (2 total)');
+    expect(prSection.querySelector('.watch-card-details')).toBeNull();
+  });
+
+  it('title-cases conclusion badge labels', async () => {
+    await mountWatchApp();
+    await sendUpdate([], [
+      makeRunWatch({ id: 'run-failure', name: 'Failure run', state: 'completed', conclusion: 'failure' }),
+      makeRunWatch({ id: 'run-timeout', name: 'Timeout run', state: 'completed', conclusion: 'timed_out' }),
+      makeRunWatch({ id: 'run-action', name: 'Action run', state: 'completed', conclusion: 'action_required' }),
+      makeRunWatch({ id: 'run-neutral', name: 'Neutral run', state: 'completed', conclusion: 'neutral' }),
+    ]);
+
+    const runSection = getSection('Run Watches');
+    expect(Array.from(runSection.querySelectorAll('.badge-pill')).map(badge => badge.textContent)).toEqual([
+      'Failure',
+      'Timed out',
+      'Action required',
+      'Neutral',
+    ]);
+  });
+
   it('hides roll-up and disclosure controls for PR watches without runs', async () => {
     await mountWatchApp();
     await sendUpdate([makePRWatch()]);

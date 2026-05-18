@@ -26,6 +26,7 @@ import { isSafeUrl } from './utils/url';
 import { logger, setLogger } from './services/logger';
 import { syncProviderTitles } from './services/titleSync';
 import { syncProviderDescriptions } from './services/descriptionSync';
+import { isFailedConclusion, toRunCompletionLabel } from './webview/shared/runConclusionLabels';
 import { performance } from 'perf_hooks';
 
 export type { DevDocketApi, DevDocketProvider, DevDocketAction, ProviderItem, Disposable, ActivityLogEntry, ActivityType, StateTransitionEvent, DevDocketPRWatcher } from './api/types';
@@ -329,10 +330,10 @@ function wireEvents(
   }));
 
   const runCompleteSub = watcherService.onDidCompleteRun(safeHandler('Error handling run completion', (run) => {
-    const isSuccess = run.status.conclusion === 'success';
-    const message = `${run.identifier.displayName} ${isSuccess ? 'succeeded' : run.status.conclusion || 'completed'}`;
+    const isFailed = isFailedConclusion(run.status.conclusion);
+    const message = `${run.identifier.displayName} ${toRunCompletionLabel(run.status.conclusion)}`;
 
-    if (isSuccess) {
+    if (!isFailed) {
       void vscode.window.showInformationMessage(message, 'View Run').then(action => {
         if (action === 'View Run') {
           const safe = isSafeUrl(run.identifier.url);
@@ -441,6 +442,7 @@ function wireEvents(
     autoCompleteCleanup,
   ];
 }
+
 
 /**
  * Activate the DevDocket extension.

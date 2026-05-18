@@ -1,3 +1,4 @@
+import { isFailedConclusion, toConclusionLabel } from '../../shared/runConclusionLabels';
 import type { EditorCIWatchData } from '../../shared/types';
 
 interface CIWatchSectionProps {
@@ -55,6 +56,9 @@ function getRunIcon(run: CIRun): string {
   if (run.conclusion === 'success') {
     return '✓';
   }
+  if (run.conclusion === 'partial_success') {
+    return '⚠';
+  }
   return '○';
 }
 
@@ -67,6 +71,9 @@ function getRunVariant(run: CIRun): string {
   }
   if (run.conclusion === 'success') {
     return 'pass';
+  }
+  if (run.conclusion === 'partial_success') {
+    return 'warn';
   }
   return 'neutral';
 }
@@ -81,15 +88,14 @@ function getRunLabel(run: CIRun): string {
   if (run.state === 'in_progress') {
     return 'in progress';
   }
-  return run.conclusion?.replace(/_/g, ' ') ?? 'completed';
+  return run.conclusion ? toConclusionLabel(run.conclusion) : 'completed';
 }
 
 function isFailedRun(run: CIRun): boolean {
   if (run.state !== 'completed') return false;
-  const conclusion = run.conclusion;
-  if (conclusion === undefined || conclusion === 'success') return false;
-  return conclusion !== 'cancelled' && conclusion !== 'skipped' && conclusion !== 'neutral';
+  return isFailedConclusion(run.conclusion);
 }
+
 
 function formatCount(count: number, label: string): string {
   return `${count} ${label}${count === 1 ? '' : 's'}`;

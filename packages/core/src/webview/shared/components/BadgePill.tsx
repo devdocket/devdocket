@@ -43,7 +43,11 @@ function getBadgeColors(badge: BadgeData): JSX.CSSProperties {
   const themed = palette[badge.variant];
   if (themed) {
     const pair = isLightTheme() ? themed.light : themed.dark;
-    return { backgroundColor: pair.bg, color: pair.fg };
+    return {
+      backgroundColor: pair.bg,
+      color: pair.fg,
+      ...(pair.border ? { border: `1px solid ${pair.border}` } : {}),
+    };
   }
 
   return outlineFallback;
