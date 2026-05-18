@@ -86,11 +86,11 @@ export function EditorApp() {
       };
 
       if (!item.isProviderManaged) {
-        data.title = titleRef.current.trim();
-        if (!data.title) {
-          return;
+        const nextTitle = titleRef.current.trim();
+        if (nextTitle) {
+          data.title = nextTitle;
+          data.url = urlRef.current.trim();
         }
-        data.url = urlRef.current.trim();
       }
 
       postMessage({ type: 'autosave', data });

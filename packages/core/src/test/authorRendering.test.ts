@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import { h, render } from 'preact';
+import { act } from 'preact/test-utils';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { ProviderItem } from '../api/types';
 import { WorkItemState, type WorkItem } from '../models/workItem';
@@ -69,7 +70,9 @@ afterEach(() => {
   render(null, document.body);
   document.body.innerHTML = '';
   delete window.__DEVDOCKET_EDITOR_BOOTSTRAP__;
+  delete (window as any).__DEVDOCKET_VSCODE_API__;
   vi.unstubAllGlobals();
+  vi.useRealTimers();
   vi.resetModules();
 });
 
@@ -147,9 +150,11 @@ describe('ItemCard author annotation', () => {
 });
 
 describe('EditorApp author annotation', () => {
-  async function renderEditor(item: EditorItemData): Promise<HTMLDivElement> {
+  async function renderEditorWithPostMessage(item: EditorItemData): Promise<{ container: HTMLDivElement; postMessage: ReturnType<typeof vi.fn> }> {
+    const postMessage = vi.fn();
+    delete (window as any).__DEVDOCKET_VSCODE_API__;
     vi.stubGlobal('acquireVsCodeApi', () => ({
-      postMessage: vi.fn(),
+      postMessage,
       getState: vi.fn(),
       setState: vi.fn(),
     }));
@@ -158,7 +163,11 @@ describe('EditorApp author annotation', () => {
     const container = document.createElement('div');
     document.body.appendChild(container);
     render(h(EditorApp, {}), container);
-    return container;
+    return { container, postMessage };
+  }
+
+  async function renderEditor(item: EditorItemData): Promise<HTMLDivElement> {
+    return (await renderEditorWithPostMessage(item)).container;
   }
 
   it('renders author inline with the repo annotation', async () => {
@@ -202,5 +211,30 @@ describe('EditorApp author annotation', () => {
     expect(container.querySelector('a.editor-url-link')?.getAttribute('href')).toBe('https://example.com/work/1');
     expect(container.querySelector('h1.editor-title input')).toBeNull();
     expect(container.querySelector('h1.editor-title')?.textContent).toBe('Fix bug');
+  });
+
+  it('autosaves manual notes while the title draft is empty', async () => {
+    vi.useFakeTimers();
+    const { container, postMessage } = await renderEditorWithPostMessage(makeEditorItem({
+      isProviderManaged: false,
+      notes: 'Existing note',
+    }));
+    const titleInput = container.querySelector<HTMLInputElement>('input.editor-title-input');
+    const notesInput = container.querySelector<HTMLTextAreaElement>('textarea.editor-textarea');
+
+    expect(titleInput).not.toBeNull();
+    expect(notesInput).not.toBeNull();
+
+    await act(async () => {
+      titleInput!.value = '';
+      titleInput!.dispatchEvent(new Event('input', { bubbles: true }));
+      notesInput!.value = 'Draft note';
+      notesInput!.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(500);
+    });
+
+    expect(postMessage).toHaveBeenLastCalledWith({ type: 'autosave', data: { notes: 'Draft note' } });
   });
 });
