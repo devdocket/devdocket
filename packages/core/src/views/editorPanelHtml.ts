@@ -366,7 +366,6 @@ export function getEditorPanelHtml({ cspSource, scriptUri, initialItem }: Editor
       color: var(--vscode-disabledForeground, var(--vscode-foreground));
     }
 
-
     .editor-textarea {
       resize: none;
       line-height: 1.5;
