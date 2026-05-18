@@ -52,19 +52,13 @@ jobs:
 
       - name: Generate release notes
         run: |
-          # Find the previous shared-v* tag to scope the changelog
-          PREV_TAG=$(git tag -l 'shared-v*' --sort=-v:refname | grep -vFx "${GITHUB_REF_NAME}" | head -n1)
-          if [ -n "$PREV_TAG" ]; then
-            RANGE="${PREV_TAG}..${GITHUB_REF_NAME}"
-          else
-            RANGE="$GITHUB_REF_NAME"
+          error_log=release-notes-error.log
+          if ! node scripts/extract-changelog.mjs packages/shared/CHANGELOG.md > release-notes.md 2>"$error_log"; then
+            echo "Failed to extract changelog entry:" >&2
+            cat "$error_log" >&2
+            echo "* Failed to extract changelog entry; see workflow logs" > release-notes.md
           fi
-          # Only include commits that touched packages/shared/
-          NOTES=$(git log "$RANGE" --pretty=format:"* %s (%h)" -- packages/shared/)
-          if [ -z "$NOTES" ]; then
-            NOTES="* No changes to packages/shared in this release"
-          fi
-          printf '%s\n' "$NOTES" > release-notes.md
+          rm -f "$error_log"
 
       - name: Create GitHub Release
         run: gh release create "$GITHUB_REF_NAME" --title "$GITHUB_REF_NAME" --notes-file release-notes.md

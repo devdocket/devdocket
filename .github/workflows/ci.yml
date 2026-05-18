@@ -21,6 +21,7 @@ jobs:
       ado: ${{ steps.filter.outputs.ado }}
       start_git_work: ${{ steps.filter.outputs.start_git_work }}
       ai_reviewer: ${{ steps.filter.outputs.ai_reviewer }}
+      changesets: ${{ steps.filter.outputs.changesets }}
     steps:
       - uses: actions/checkout@v4
 
@@ -63,6 +64,9 @@ jobs:
               - 'package.json'
               - 'package-lock.json'
               - '.github/workflows/**'
+            changesets:
+              - '.changeset/*.md'
+              - '!.changeset/README.md'
 
   build-shared:
     needs: detect-changes
@@ -204,6 +208,14 @@ jobs:
 
       - name: Test ai-reviewer
         run: cd packages/ai-reviewer && npm run test
+
+  changeset-warning:
+    needs: detect-changes
+    if: github.event_name == 'pull_request' && needs.detect-changes.outputs.changesets != 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Warn about missing changeset
+        run: echo "::warning title=Missing changeset file::This PR does not include a .changeset/*.md file. Add one if package changes need a version bump and changelog entry."
 
   ci-gate:
     runs-on: ubuntu-latest
