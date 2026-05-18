@@ -50,7 +50,7 @@
             "type": "boolean",
             "scope": "application",
             "default": true,
-            "description": "When enabled, Start Git Work prompts for branch name and worktree path, prefilled with auto-derived defaults. When disabled, the auto-derived values are used silently."
+            "description": "When enabled, Start Git Work prompts for issue branch names and worktree paths, prefilled with auto-derived defaults when applicable. When disabled, the auto-derived values are used silently."
           }
         }
       }
