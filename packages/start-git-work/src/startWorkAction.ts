@@ -81,7 +81,6 @@ type RepoPathPick = vscode.QuickPickItem & (
 
 interface PrBranchInfo {
   branchName: string;
-  upstreamBranchName: string;
   sourceRef: string;
   /** Remote tracking ref when branch is on a non-origin remote (e.g. "devdocket-fork-contributor/fix-bug"). */
   trackingRef?: string;
@@ -447,9 +446,9 @@ export class StartWorkAction implements DevDocketAction {
     }
 
     if (remoteName === 'origin') {
-      return { branchName, upstreamBranchName, sourceRef };
+      return { branchName, sourceRef };
     }
-    return { branchName, upstreamBranchName, sourceRef, trackingRef: sourceRef };
+    return { branchName, sourceRef, trackingRef: sourceRef };
   }
 
   /**
