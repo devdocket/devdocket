@@ -798,6 +798,7 @@ describe('StartWorkAction', () => {
         { modal: true },
         'Yes',
       );
+      expect(inputBoxOptions('DevDocket: Branch name')).toBeUndefined();
       expect(vi.mocked(execFile).mock.calls.map(call => call[1])).not.toContainEqual(['checkout', '-b', 'issue123', 'origin/dev']);
     });
 

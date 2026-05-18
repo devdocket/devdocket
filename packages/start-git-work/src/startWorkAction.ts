@@ -215,23 +215,34 @@ export class StartWorkAction implements DevDocketAction {
       return;
     }
 
-    let worktreePath: string | undefined;
-    if (this.shouldPromptForNames()) {
-      const promptedBranchName = await this.promptForBranchName(branchName, workMode);
-      if (promptedBranchName === undefined) {
-        return;
-      }
-      branchName = promptedBranchName;
+    const promptForNames = this.shouldPromptForNames();
+    let checkoutDirtyTreeChecked = false;
 
-      if (workMode === 'worktree') {
-        worktreePath = await this.promptForWorktreePath(repoPath, branchName, item);
-        if (worktreePath === undefined) {
+    try {
+      if (promptForNames && workMode === 'checkout') {
+        const canProceed = await this.checkDirtyTree(repoPath);
+        checkoutDirtyTreeChecked = true;
+        if (!canProceed) {
           return;
         }
       }
-    }
 
-    try {
+      let worktreePath: string | undefined;
+      if (promptForNames) {
+        const promptedBranchName = await this.promptForBranchName(branchName, workMode);
+        if (promptedBranchName === undefined) {
+          return;
+        }
+        branchName = promptedBranchName;
+
+        if (workMode === 'worktree') {
+          worktreePath = await this.promptForWorktreePath(repoPath, branchName, item);
+          if (worktreePath === undefined) {
+            return;
+          }
+        }
+      }
+
       await vscode.window.withProgress(
         {
           location: vscode.ProgressLocation.Notification,
@@ -242,7 +253,7 @@ export class StartWorkAction implements DevDocketAction {
           if (workMode === 'worktree') {
             await this.issueWorktreeFlow(item, repoPath, branchName, baseBranch, progress, worktreePath);
           } else {
-            await this.issueCheckoutFlow(item, repoPath, branchName, baseBranch, progress);
+            await this.issueCheckoutFlow(item, repoPath, branchName, baseBranch, progress, checkoutDirtyTreeChecked);
           }
         },
       );
@@ -328,10 +339,13 @@ export class StartWorkAction implements DevDocketAction {
     branchName: string,
     baseBranch: string,
     progress: vscode.Progress<{ message?: string }>,
+    dirtyTreeChecked = false,
   ): Promise<void> {
-    const canProceed = await this.checkDirtyTree(repoPath);
-    if (!canProceed) {
-      return;
+    if (!dirtyTreeChecked) {
+      const canProceed = await this.checkDirtyTree(repoPath);
+      if (!canProceed) {
+        return;
+      }
     }
 
     progress.report({ message: 'Creating and checking out branch...' });
