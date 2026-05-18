@@ -113,6 +113,10 @@ export function decodeWorkStartedDetail(detail: string | undefined): WorkStarted
   }
 
   if (typeof obj.repoPath !== 'string') {
+    // Missing/invalid repoPath is the most common producer bug because the
+    // type system already requires it on the encoder input — surfacing a
+    // warning makes it easier to diagnose silent cleanup no-ops.
+    logger.warn(`work-started activity detail is missing a string "repoPath" (version=${version === undefined ? 'legacy' : String(version)}); cleanup will be skipped for this entry.`);
     return undefined;
   }
 

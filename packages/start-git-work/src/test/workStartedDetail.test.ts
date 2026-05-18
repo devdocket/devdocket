@@ -96,16 +96,19 @@ describe('decodeWorkStartedDetail', () => {
   it('returns undefined for v1 payloads missing required repoPath', () => {
     const noRepoPath = JSON.stringify({ v: 1, branchName: 'feature/x', worktreePath: '/w' });
     expect(decodeWorkStartedDetail(noRepoPath)).toBeUndefined();
+    expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining('missing a string "repoPath"'));
   });
 
   it('returns undefined for legacy unversioned payloads missing repoPath', () => {
     const legacyNoRepoPath = JSON.stringify({ branchName: 'feature/x', worktreePath: '/w' });
     expect(decodeWorkStartedDetail(legacyNoRepoPath)).toBeUndefined();
+    expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining('missing a string "repoPath"'));
   });
 
   it('returns undefined when repoPath has a non-string value', () => {
     const nonStringRepoPath = JSON.stringify({ v: 1, repoPath: 42, branchName: 'b' });
     expect(decodeWorkStartedDetail(nonStringRepoPath)).toBeUndefined();
+    expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining('missing a string "repoPath"'));
   });
 });
 
