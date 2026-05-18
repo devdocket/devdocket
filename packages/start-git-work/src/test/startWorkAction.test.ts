@@ -93,6 +93,11 @@ function inputBoxOptions(title: string): any {
   return call?.[0];
 }
 
+function inputBoxInvocationOrder(title: string): number | undefined {
+  const index = vi.mocked(window.showInputBox).mock.calls.findIndex(([options]) => (options as any)?.title === title);
+  return index === -1 ? undefined : vi.mocked(window.showInputBox).mock.invocationCallOrder[index];
+}
+
 function isRepoPathPickItems(items: unknown): items is Array<{ pickKind?: string; repoPath?: string }> {
   return Array.isArray(items) && items.some(item => ['repo', 'paste', 'browse'].includes((item as { pickKind?: string }).pickKind ?? ''));
 }
@@ -877,8 +882,46 @@ describe('StartWorkAction', () => {
         { modal: true },
         'Yes',
       );
-      expect(inputBoxOptions('DevDocket: Branch name')).toBeUndefined();
+      expect(inputBoxOptions('DevDocket: Branch name')).toBeDefined();
+      const branchPromptOrder = inputBoxInvocationOrder('DevDocket: Branch name');
+      const dirtyPromptOrder = vi.mocked(window.showWarningMessage).mock.invocationCallOrder[0];
+      expect(branchPromptOrder).toBeDefined();
+      expect(branchPromptOrder!).toBeLessThan(dirtyPromptOrder);
       expect(vi.mocked(execFile).mock.calls.map(call => call[1])).not.toContainEqual(['checkout', '-b', 'issue123', 'origin/dev']);
+    });
+
+    it('prompts for the issue checkout branch before proceeding through a dirty working tree', async () => {
+      mockQuickPicks('/mock/workspace', 'checkout');
+      vi.mocked(window.showWarningMessage).mockResolvedValue('Yes' as any);
+      vi.mocked(window.showInputBox).mockImplementation(async (options: any) => {
+        if (options?.prompt?.includes('base branch')) {
+          return 'origin/dev';
+        }
+        if (options?.title === 'DevDocket: Branch name') {
+          return 'custom-dirty-checkout';
+        }
+        return options?.value;
+      });
+      vi.mocked(execFile).mockImplementation(((cmd: string, args: string[], opts: any, cb: Function) => {
+        if (args[0] === 'status') {
+          cb(null, ' M file.ts\n', '');
+          return;
+        }
+        cb(null, '', '');
+      }) as any);
+      const item = createWorkItem();
+      const { action } = createAction(discovered('provider', 'item-1', {
+        kind: 'issue', cloneUrl: 'https://example.com/acme/repo.git', ref: 'issue123', repoLabel: 'acme/repo',
+      }));
+
+      await action.run(item);
+
+      expect(inputBoxOptions('DevDocket: Branch name')).toBeDefined();
+      const branchPromptOrder = inputBoxInvocationOrder('DevDocket: Branch name');
+      const dirtyPromptOrder = vi.mocked(window.showWarningMessage).mock.invocationCallOrder[0];
+      expect(branchPromptOrder).toBeDefined();
+      expect(branchPromptOrder!).toBeLessThan(dirtyPromptOrder);
+      expect(vi.mocked(execFile).mock.calls.map(call => call[1])).toContainEqual(['checkout', '-b', 'custom-dirty-checkout', 'origin/dev']);
     });
 
     it('checks out an existing same-repo PR branch directly', async () => {

@@ -218,17 +218,8 @@ export class StartWorkAction implements DevDocketAction {
     }
 
     const promptForNames = this.shouldPromptForNames();
-    let checkoutDirtyTreeChecked = false;
 
     try {
-      if (promptForNames && workMode === 'checkout') {
-        const canProceed = await this.checkDirtyTree(repoPath);
-        checkoutDirtyTreeChecked = true;
-        if (!canProceed) {
-          return;
-        }
-      }
-
       let worktreePath: string | undefined;
       if (promptForNames) {
         const promptedBranchName = await this.promptForBranchName(branchName, workMode);
@@ -255,7 +246,7 @@ export class StartWorkAction implements DevDocketAction {
           if (workMode === 'worktree') {
             await this.issueWorktreeFlow(item, gitWork, repoPath, branchName, baseBranch, progress, worktreePath);
           } else {
-            await this.issueCheckoutFlow(item, repoPath, branchName, baseBranch, progress, checkoutDirtyTreeChecked);
+            await this.issueCheckoutFlow(item, repoPath, branchName, baseBranch, progress);
           }
         },
       );
@@ -342,13 +333,10 @@ export class StartWorkAction implements DevDocketAction {
     branchName: string,
     baseBranch: string,
     progress: vscode.Progress<{ message?: string }>,
-    dirtyTreeChecked = false,
   ): Promise<void> {
-    if (!dirtyTreeChecked) {
-      const canProceed = await this.checkDirtyTree(repoPath);
-      if (!canProceed) {
-        return;
-      }
+    const canProceed = await this.checkDirtyTree(repoPath);
+    if (!canProceed) {
+      return;
     }
 
     progress.report({ message: 'Creating and checking out branch...' });
