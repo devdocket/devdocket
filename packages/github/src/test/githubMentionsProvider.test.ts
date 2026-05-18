@@ -1550,5 +1550,30 @@ describe('GitHubMentionsProvider', () => {
       const result = await provider.resolveUrl('https://example.com/issue/5');
       expect(result).toBeUndefined();
     });
+
+    it('throws a specific rate-limit message (not a misleading "private repo" hint) on 403 when authenticated', async () => {
+      vi.mocked(authentication.getSession).mockResolvedValue({
+        accessToken: 'test-token',
+        id: 'session-1',
+        scopes: ['repo'],
+        account: { id: '1', label: 'testuser' },
+      } as any);
+
+      const headerMap = new Map<string, string>([
+        ['x-ratelimit-remaining', '0'],
+        ['x-ratelimit-reset', String(Math.floor(Date.now() / 1000) + 1800)],
+      ]);
+      mockFetch.mockResolvedValueOnce({
+        ok: false,
+        status: 403,
+        statusText: 'Forbidden',
+        headers: { get: (name: string) => headerMap.get(name.toLowerCase()) ?? null },
+        text: async () => JSON.stringify({ message: 'API rate limit exceeded for user ID 1.' }),
+      });
+
+      await expect(
+        provider.resolveUrl('https://github.com/owner/repo/issues/5'),
+      ).rejects.toThrow(/rate limit exceeded/i);
+    });
   });
 });
