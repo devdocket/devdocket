@@ -78,21 +78,20 @@ A read-only variant of the editor used when you click an Incoming item or an una
 
 ## CI Watches Panel
 
-A floating webview that monitors GitHub Actions / Azure DevOps Pipeline runs and pull request lifecycle status (open / merged / closed). Open it from the **eye icon** in the status bar — the icon shows the current watch count and turns amber when a watched run fails.
+A floating webview that monitors CI runs and pull request lifecycle status (open / merged / closed). Open it from the **eye icon** in the status bar — the icon shows the current watch count and turns amber when a watched run fails.
 
 ### Two sections
 
 - **PR Watches** — pull requests being monitored. Each PR renders as one card with a checks roll-up; expand the card to see individual CI runs. PRs auto-expand when a child run fails, and the failure preview appears on the PR card.
 - **Run Watches** — standalone pipeline runs you've added directly. These continue to render as flat run cards.
 
-Completed runs are grouped into three health categories: **Passed** (green), **Succeeded with issues** (amber, used for Azure DevOps partial success), and **Failed** (red). Other completed conclusions retain their own labels: cancelled, skipped, and neutral are non-failures, while timed out and action required count as failures. Runs that succeeded with issues do not count as failures and do not auto-expand their parent PR card.
+Completed runs are grouped into three health categories: **Passed** (green), **Succeeded with issues** (amber), and **Failed** (red). Other completed conclusions retain their own labels: cancelled, skipped, and neutral are non-failures, while timed out and action required count as failures. Runs that succeeded with issues do not count as failures and do not auto-expand their parent PR card.
 
 ### Adding watches
 
 - Inside the panel, click **+ Watch URL** in the header. Paste a supported URL — DevDocket detects whether it is a PR or run, and validates the URL before submission. Examples: `https://github.com/owner/repo/pull/123` and `https://github.com/owner/repo/actions/runs/12345`.
 - From the command palette: **DevDocket: Watch URL…**.
-- Supported surfaces include GitHub PR URLs, GitHub Actions run URLs, Azure DevOps PR URLs, and Azure DevOps Pipeline run URLs.
-- GitHub PRs you authored can be auto-watched on discovery — see `devDocket.watches.autoWatchAuthoredPRs`.
+- PRs you authored can be auto-watched on discovery — see `devDocket.watches.autoWatchAuthoredPRs`.
 
 The manual Watch URL flow is **idempotent** for already-watched URLs and force-recreates the watch when a PR is in a bad state (e.g. all child runs were dismissed making it invisible).
 
