@@ -215,7 +215,7 @@ interface ProviderItem {
    * Optional metadata about who created the underlying item upstream.
    * Independent of `authored`, which is only a self-reference flag.
    * When present, DevDocket shows the author's display name or handle in
-   * the sidebar annotation and editor Details section.
+   * the sidebar card annotation and editor header annotation.
    */
   author?: ProviderItemAuthor;
 

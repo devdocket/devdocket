@@ -65,8 +65,7 @@ A browsable library of everything providers know about, organized as **Provider 
 
 Clicking a non-incoming work item opens the editor in a tab. It contains:
 
-- A **header** with the item title (clickable for provider items — opens the source URL), inline copy-title and copy-URL buttons, the **state-dependent transition buttons** offered by the editor (Start / Pause / Resume / Complete / Requeue / Archive — only the ones valid for the current state are shown), the **Run Action…** button when at least one registered action declares `canRun(item) === true`, and badges for provider, type, and provider-supplied state.
-- A **Details** section for editable manual-item fields. Provider item authors appear inline in the header's repo annotation instead (for example, `owner/repo · @octocat`), matching the sidebar card presentation.
+- A **header** with the item title, inline copy-title and copy-URL buttons, repo/author annotation (for example, `owner/repo · @octocat`, except for items authored by you), the **state-dependent transition buttons** offered by the editor (Start / Pause / Resume / Complete / Requeue / Archive — only the ones valid for the current state are shown), the **Run Action…** button when at least one registered action declares `canRun(item) === true`, and badges for provider, type, and provider-supplied state. When an item has a safe URL, provider-managed item titles link to that source; manual items keep editable title and URL controls in the header.
 - A **Description** section (markdown-rendered) for provider items, when one is present.
 - A **Notes** section (auto-saving textarea) for your own notes — hidden when previewing an unaccepted incoming item.
 - A collapsible **Activity Log** that records every state transition, action invocation, version change, etc.

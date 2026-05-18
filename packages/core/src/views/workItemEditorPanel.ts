@@ -398,11 +398,13 @@ export class WorkItemEditorPanel {
     const patch: Partial<WorkItemInput> = {};
 
     if (!managed) {
-      const title = data.title?.trim() ?? '';
-      if (!title) {
-        return;
+      if ('title' in data) {
+        const title = data.title?.trim() ?? '';
+        if (!title) {
+          return;
+        }
+        patch.title = title;
       }
-      patch.title = title;
 
       if ('url' in data) {
         const rawUrl = data.url?.trim() ?? '';

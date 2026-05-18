@@ -182,4 +182,17 @@ describe('EditorApp author annotation', () => {
     expect(container.querySelector('.editor-repo-annotation')?.textContent).toBe('owner/repo');
     expect(container.textContent).not.toContain('@octocat');
   });
+
+  it('does not render a Details section for manual items', async () => {
+    const container = await renderEditor(makeEditorItem({
+      isProviderManaged: false,
+      url: 'https://example.com/work/1',
+    }));
+
+    expect(container.querySelector('#editor-details-heading')).toBeNull();
+    expect(container.textContent).not.toContain('Details');
+    expect(container.querySelector<HTMLInputElement>('input.editor-title-input')?.value).toBe('Fix bug');
+    expect(container.querySelector<HTMLInputElement>('input.editor-url-input')?.value).toBe('https://example.com/work/1');
+    expect(container.querySelector('a.editor-url-link')?.getAttribute('href')).toBe('https://example.com/work/1');
+  });
 });
