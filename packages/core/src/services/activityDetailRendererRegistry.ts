@@ -19,6 +19,15 @@ import { logger } from './logger';
  */
 export class ActivityDetailRendererRegistry {
   private readonly renderers = new Map<ActivityType, ActivityDetailRenderer>();
+  private readonly _onDidChange = new vscode.EventEmitter<void>();
+  /**
+   * Fires after a renderer is registered or unregistered. Open editor
+   * panels subscribe to this so they can re-render their activity log
+   * once a relevant renderer becomes available — this matters when an
+   * editor opens before the provider extension that owns the renderer
+   * has finished activating.
+   */
+  readonly onDidChange: vscode.Event<void> = this._onDidChange.event;
 
   /**
    * Register a renderer for an activity type.
@@ -30,7 +39,8 @@ export class ActivityDetailRendererRegistry {
       throw new Error(`Activity detail renderer already registered for type: ${type}`);
     }
     this.renderers.set(type, renderer);
-    logger.warn(`Registered activity detail renderer for type: ${type}`);
+    logger.info(`Registered activity detail renderer for type: ${type}`);
+    this._onDidChange.fire();
     let disposed = false;
     return new vscode.Disposable(() => {
       if (disposed) {
@@ -39,6 +49,7 @@ export class ActivityDetailRendererRegistry {
       disposed = true;
       if (this.renderers.get(type) === renderer) {
         this.renderers.delete(type);
+        this._onDidChange.fire();
       }
     });
   }
@@ -65,5 +76,6 @@ export class ActivityDetailRendererRegistry {
 
   dispose(): void {
     this.renderers.clear();
+    this._onDidChange.dispose();
   }
 }

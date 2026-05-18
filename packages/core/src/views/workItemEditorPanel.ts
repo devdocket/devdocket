@@ -86,6 +86,7 @@ export class WorkItemEditorPanel {
   private readonly providerRegSub: vscode.Disposable;
   private readonly providerChangeSub: vscode.Disposable;
   private readonly actionRegistrySub: vscode.Disposable;
+  private readonly activityRendererSub?: vscode.Disposable;
   private readonly watcherSubscriptions: vscode.Disposable[] = [];
   private lastDisplayedTitle: string | undefined;
   private lastDisplayedUrl: string | undefined;
@@ -240,6 +241,15 @@ export class WorkItemEditorPanel {
       this.update();
     });
 
+    if (this.activityDetailRendererRegistry) {
+      // Re-render when an activity detail renderer is added or removed —
+      // this covers the case where this editor opened before a provider
+      // extension finished activating and registering its renderer.
+      this.activityRendererSub = this.activityDetailRendererRegistry.onDidChange(() => {
+        this.update();
+      });
+    }
+
     const activeWatcherService = this.watcherService;
     if (activeWatcherService) {
       this.watcherSubscriptions.push(
@@ -315,6 +325,7 @@ export class WorkItemEditorPanel {
         this.providerRegSub.dispose();
         this.providerChangeSub.dispose();
         this.actionRegistrySub.dispose();
+        this.activityRendererSub?.dispose();
         this.disposeWatcherSubscriptions();
       }
     });
@@ -618,6 +629,7 @@ export class WorkItemEditorPanel {
       this.providerRegSub.dispose();
       this.providerChangeSub.dispose();
       this.actionRegistrySub.dispose();
+      this.activityRendererSub?.dispose();
       this.disposeWatcherSubscriptions();
       this.panel.dispose();
     }

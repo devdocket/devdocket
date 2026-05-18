@@ -71,4 +71,20 @@ describe('ActivityDetailRendererRegistry', () => {
     expect(registry.render('work-started', '')).toBeUndefined();
     expect(registry.render('cleanup', '')).toBeUndefined();
   });
+
+  it('fires onDidChange when a renderer is registered and unregistered', () => {
+    const listener = vi.fn();
+    registry.onDidChange(listener);
+    expect(listener).not.toHaveBeenCalled();
+
+    const disposable = registry.register('work-started', () => undefined);
+    expect(listener).toHaveBeenCalledTimes(1);
+
+    disposable.dispose();
+    expect(listener).toHaveBeenCalledTimes(2);
+
+    // Disposing an already-disposed registration is a no-op (no extra event).
+    disposable.dispose();
+    expect(listener).toHaveBeenCalledTimes(2);
+  });
 });
