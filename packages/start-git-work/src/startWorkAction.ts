@@ -787,7 +787,9 @@ export class StartWorkAction implements DevDocketAction {
   private async promptForBranchName(proposedBranchName: string, workMode: WorkMode): Promise<string | undefined> {
     const selectedBranchName = await vscode.window.showInputBox({
       title: 'DevDocket: Branch name',
-      prompt: `Branch to ${workMode === 'worktree' ? 'create for the new worktree' : 'check out'}`,
+      prompt: workMode === 'worktree'
+        ? 'Local branch name to use for the new worktree (created if needed)'
+        : 'Local branch name to check out (created if needed)',
       value: proposedBranchName,
       valueSelection: [0, proposedBranchName.length],
       ignoreFocusOut: true,
