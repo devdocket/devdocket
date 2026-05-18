@@ -201,7 +201,7 @@ describe('StartWorkAction', () => {
       expect(vi.mocked(execFile).mock.calls[0][1]).toEqual(['branch', '--list', 'vendor/ABC-123']);
       expect(vi.mocked(execFile).mock.calls[1][1]).toEqual(['branch', 'vendor/ABC-123', 'origin/dev']);
       expect(vi.mocked(execFile).mock.calls[2][1]).toEqual([
-        'worktree', 'add', path.join('/mock', 'workspace-vendor-ABC-123'), 'vendor/ABC-123',
+        'worktree', 'add', path.join('/mock', 'Vendor-Repo-issue-123'), 'vendor/ABC-123',
       ]);
       expect(memento.update).toHaveBeenCalledWith('repoPath:Vendor Repo', '/mock/workspace');
     });
@@ -217,10 +217,10 @@ describe('StartWorkAction', () => {
       await action.run(item);
 
       expect(inputBoxOptions('DevDocket: Worktree path')).toEqual(expect.objectContaining({
-        value: path.join('/mock', 'sdk-issue-53921-fix-foo'),
+        value: path.join('/mock', 'sdk-issue-53921'),
       }));
       expect(vi.mocked(execFile).mock.calls.map(call => call[1])).toContainEqual([
-        'worktree', 'add', path.join('/mock', 'sdk-issue-53921-fix-foo'), 'issue-53921-fix-foo',
+        'worktree', 'add', path.join('/mock', 'sdk-issue-53921'), 'issue-53921-fix-foo',
       ]);
     });
 
@@ -250,7 +250,7 @@ describe('StartWorkAction', () => {
         valueSelection: [0, 'issue123'.length],
       }));
       expect(inputBoxOptions('DevDocket: Worktree path')).toEqual(expect.objectContaining({
-        value: path.join('/mock', 'workspace-team-custom-branch'),
+        value: path.join('/mock', 'repo-issue-1'),
       }));
       expect(vi.mocked(execFile).mock.calls.map(call => call[1])).toEqual([
         ['branch', '--list', 'team/custom-branch'],
@@ -273,7 +273,7 @@ describe('StartWorkAction', () => {
       expect(vi.mocked(execFile).mock.calls.map(call => call[1])).toEqual([
         ['branch', '--list', 'issue123'],
         ['branch', 'issue123', 'origin/dev'],
-        ['worktree', 'add', path.join('/mock', 'workspace-issue123'), 'issue123'],
+        ['worktree', 'add', path.join('/mock', 'repo-issue-1'), 'issue123'],
       ]);
     });
 
@@ -495,7 +495,7 @@ describe('StartWorkAction', () => {
         ['remote', 'add', 'devdocket-fork-contributor', 'https://example.com/contributor/repo.git'],
         ['fetch', 'devdocket-fork-contributor', '+refs/heads/feature/topic:refs/remotes/devdocket-fork-contributor/feature/topic'],
         ['rev-parse', '--verify', 'refs/heads/feature/topic'],
-        ['worktree', 'add', '-b', 'feature/topic', path.join('/mock', 'workspace-feature-topic'), 'devdocket-fork-contributor/feature/topic'],
+        ['worktree', 'add', '-b', 'feature/topic', path.join('/mock', 'repo-pr-1'), 'devdocket-fork-contributor/feature/topic'],
       ]);
     });
 
@@ -512,14 +512,17 @@ describe('StartWorkAction', () => {
         ['remote', '-v'],
         ['fetch', 'origin', '+refs/heads/feature/topic:refs/remotes/origin/feature/topic'],
         ['rev-parse', '--verify', 'refs/heads/feature/topic'],
-        ['worktree', 'add', '-b', 'feature/topic', path.join('/mock', 'workspace-feature-topic'), 'origin/feature/topic'],
+        ['worktree', 'add', '-b', 'feature/topic', path.join('/mock', 'repo-pr-1'), 'origin/feature/topic'],
       ]);
     });
 
-    it('prompts for PR worktree path but not branch name when promptForNames is enabled', async () => {
+    it('prompts for PR branch name and worktree path when promptForNames is enabled', async () => {
       mockNoLocalBranch();
       const customWorktreePath = path.join('/mock', 'custom-pr-worktree');
       vi.mocked(window.showInputBox).mockImplementation(async (options: any) => {
+        if (options?.title === 'DevDocket: Branch name') {
+          return 'custom-pr-branch';
+        }
         if (options?.title === 'DevDocket: Worktree path') {
           return customWorktreePath;
         }
@@ -532,12 +535,17 @@ describe('StartWorkAction', () => {
 
       await action.run(item);
 
-      expect(inputBoxOptions('DevDocket: Branch name')).toBeUndefined();
+      expect(inputBoxOptions('DevDocket: Branch name')).toEqual(expect.objectContaining({
+        value: 'feature/topic',
+      }));
       expect(inputBoxOptions('DevDocket: Worktree path')).toEqual(expect.objectContaining({
-        value: path.join('/mock', 'workspace-feature-topic'),
+        value: path.join('/mock', 'repo-pr-1'),
       }));
       expect(vi.mocked(execFile).mock.calls.map(call => call[1])).toContainEqual([
-        'worktree', 'add', '-b', 'feature/topic', customWorktreePath, 'origin/feature/topic',
+        'fetch', 'origin', '+refs/heads/feature/topic:refs/remotes/origin/feature/topic',
+      ]);
+      expect(vi.mocked(execFile).mock.calls.map(call => call[1])).toContainEqual([
+        'worktree', 'add', '-b', 'custom-pr-branch', customWorktreePath, 'origin/feature/topic',
       ]);
     });
 
@@ -554,8 +562,70 @@ describe('StartWorkAction', () => {
       expect(inputBoxOptions('DevDocket: Branch name')).toBeUndefined();
       expect(inputBoxOptions('DevDocket: Worktree path')).toBeUndefined();
       expect(vi.mocked(execFile).mock.calls.map(call => call[1])).toContainEqual([
-        'worktree', 'add', '-b', 'feature/topic', path.join('/mock', 'workspace-feature-topic'), 'origin/feature/topic',
+        'worktree', 'add', '-b', 'feature/topic', path.join('/mock', 'repo-pr-1'), 'origin/feature/topic',
       ]);
+    });
+
+    it('aborts without side effects when the PR branch-name prompt is cancelled', async () => {
+      vi.mocked(window.showInputBox).mockImplementation(async (options: any) => {
+        if (options?.title === 'DevDocket: Branch name') {
+          return undefined;
+        }
+        return options?.value;
+      });
+      const item = createWorkItem();
+      const { action } = createAction(discovered('provider', 'item-1', {
+        kind: 'pr', cloneUrl: 'https://example.com/acme/repo.git', ref: 'feature/topic', repoLabel: 'acme/repo',
+      }));
+
+      await action.run(item);
+
+      expect(execFile).not.toHaveBeenCalled();
+      expect(window.withProgress).not.toHaveBeenCalled();
+    });
+
+    it('defaults PR worktree paths to source repo and PR number', async () => {
+      mockNoLocalBranch();
+      (workspace as any).workspaceFolders = [{ uri: { fsPath: '/mock/sdk' } }];
+      mockQuickPicks('/mock/sdk');
+      const item = createWorkItem({ externalId: 'dotnet/install-scripts#692' });
+      const { action } = createAction(discovered('provider', 'dotnet/install-scripts#692', {
+        kind: 'pr', cloneUrl: 'https://github.com/dotnet/install-scripts.git', ref: 'fix-incorrect-corrupted-size-message', repoLabel: 'dotnet/install-scripts',
+      }));
+
+      await action.run(item);
+
+      expect(inputBoxOptions('DevDocket: Worktree path')).toEqual(expect.objectContaining({
+        value: path.join('/mock', 'install-scripts-pr-692'),
+      }));
+    });
+
+    it('defaults ADO PR worktree paths from bang-delimited external ids', async () => {
+      mockNoLocalBranch();
+      const item = createWorkItem({ externalId: 'org/project/repo!42' });
+      const { action } = createAction(discovered('provider', 'org/project/repo!42', {
+        kind: 'pr', cloneUrl: 'https://dev.azure.com/org/project/_git/repo', ref: 'feature/topic', repoLabel: 'org/project/repo',
+      }));
+
+      await action.run(item);
+
+      expect(inputBoxOptions('DevDocket: Worktree path')).toEqual(expect.objectContaining({
+        value: path.join('/mock', 'repo-pr-42'),
+      }));
+    });
+
+    it('falls back to the local repo and ref slug when no work item number is derivable', async () => {
+      mockNoLocalBranch();
+      const item = createWorkItem({ externalId: 'work-item' });
+      const { action } = createAction(discovered('provider', 'work-item', {
+        kind: 'pr', cloneUrl: 'https://example.com/acme/repo.git', ref: 'feature/topic', repoLabel: undefined,
+      }));
+
+      await action.run(item);
+
+      expect(inputBoxOptions('DevDocket: Worktree path')).toEqual(expect.objectContaining({
+        value: path.join('/mock', 'workspace-feature-topic'),
+      }));
     });
 
     it('prompts for issue checkout branch name but skips worktree path', async () => {
@@ -581,9 +651,15 @@ describe('StartWorkAction', () => {
       expect(vi.mocked(execFile).mock.calls.map(call => call[1])).toContainEqual(['checkout', '-b', 'custom-checkout', 'origin/dev']);
     });
 
-    it('skips branch-name and worktree-path prompts for PR checkout', async () => {
+    it('prompts for PR checkout branch name but skips worktree path', async () => {
       mockQuickPicks('/mock/workspace', 'checkout');
       mockNoLocalBranch();
+      vi.mocked(window.showInputBox).mockImplementation(async (options: any) => {
+        if (options?.title === 'DevDocket: Branch name') {
+          return 'refs/heads/custom-pr-checkout';
+        }
+        return options?.value;
+      });
       const item = createWorkItem();
       const { action } = createAction(discovered('provider', 'item-1', {
         kind: 'pr', cloneUrl: 'https://example.com/acme/repo.git', ref: 'feature/topic', repoLabel: 'acme/repo',
@@ -591,9 +667,12 @@ describe('StartWorkAction', () => {
 
       await action.run(item);
 
-      expect(inputBoxOptions('DevDocket: Branch name')).toBeUndefined();
+      expect(inputBoxOptions('DevDocket: Branch name')).toBeDefined();
       expect(inputBoxOptions('DevDocket: Worktree path')).toBeUndefined();
-      expect(vi.mocked(execFile).mock.calls.map(call => call[1])).toContainEqual(['checkout', '-b', 'feature/topic', '--track', 'origin/feature/topic']);
+      expect(vi.mocked(execFile).mock.calls.map(call => call[1])).toContainEqual([
+        'fetch', 'origin', '+refs/heads/feature/topic:refs/remotes/origin/feature/topic',
+      ]);
+      expect(vi.mocked(execFile).mock.calls.map(call => call[1])).toContainEqual(['checkout', '-b', 'custom-pr-checkout', '--track', 'origin/feature/topic']);
     });
 
     it('normalizes fully-qualified PR head refs before fetching and checking out', async () => {
@@ -609,7 +688,7 @@ describe('StartWorkAction', () => {
         ['remote', '-v'],
         ['fetch', 'origin', '+refs/heads/feature/topic:refs/remotes/origin/feature/topic'],
         ['rev-parse', '--verify', 'refs/heads/feature/topic'],
-        ['worktree', 'add', '-b', 'feature/topic', path.join('/mock', 'workspace-feature-topic'), 'origin/feature/topic'],
+        ['worktree', 'add', '-b', 'feature/topic', path.join('/mock', 'repo-pr-1'), 'origin/feature/topic'],
       ]);
     });
 
@@ -653,7 +732,7 @@ describe('StartWorkAction', () => {
         "DevDocket: Could not fetch branch 'feature/topic' from remote 'origin'. Authentication failed",
       );
       expect(vi.mocked(execFile).mock.calls.map(call => call[1])).not.toContainEqual([
-        'worktree', 'add', '-b', 'feature/topic', path.join('/mock', 'workspace-feature-topic'), 'origin/feature/topic',
+        'worktree', 'add', '-b', 'feature/topic', path.join('/mock', 'repo-pr-1'), 'origin/feature/topic',
       ]);
     });
 
@@ -759,7 +838,7 @@ describe('StartWorkAction', () => {
       expect(vi.mocked(execFile).mock.calls[0][1]).toEqual(['branch', '--list', 'vendor/ABC-123']);
       expect(vi.mocked(execFile).mock.calls[1][1]).toEqual(['branch', 'vendor/ABC-123', 'origin/dev']);
       expect(vi.mocked(execFile).mock.calls[2][1]).toEqual([
-        'worktree', 'add', path.join('/mock', 'workspace-vendor-ABC-123'), 'vendor/ABC-123',
+        'worktree', 'add', path.join('/mock', 'Vendor-Repo-issue-123'), 'vendor/ABC-123',
       ]);
     });
 
@@ -848,7 +927,7 @@ describe('StartWorkAction', () => {
       await action.run(item);
 
       expect(vi.mocked(execFile).mock.calls.map(call => call[1])).toContainEqual([
-        'worktree', 'add', '--detach', path.join('/mock', 'workspace-feature-topic'), 'devdocket-fork-contributor/feature/topic',
+        'worktree', 'add', '--detach', path.join('/mock', 'repo-pr-1'), 'devdocket-fork-contributor/feature/topic',
       ]);
     });
 
@@ -903,7 +982,7 @@ describe('StartWorkAction', () => {
       await action.run(item);
 
       expect(vi.mocked(execFile).mock.calls.map(call => [call[0], call[1], call[2]])).toContainEqual([
-        'npm', ['install', '--prefix', path.join('/mock', 'workspace-issue123')], { cwd: path.join('/mock', 'workspace-issue123'), timeout: 60_000 },
+        'npm', ['install', '--prefix', path.join('/mock', 'repo-issue-1')], { cwd: path.join('/mock', 'repo-issue-1'), timeout: 60_000 },
       ]);
     });
 
@@ -957,7 +1036,7 @@ describe('StartWorkAction', () => {
         expect(worktreeAddCalls).toHaveLength(1);
         expect(worktreeAddCalls[0]![1]).toEqual([
           'worktree', 'add', '--detach',
-          path.join('/mock', 'workspace-feature-topic'),
+          path.join('/mock', 'repo-pr-1'),
           'origin/feature/topic',
         ]);
         expect(window.showErrorMessage).not.toHaveBeenCalled();
@@ -985,7 +1064,7 @@ describe('StartWorkAction', () => {
         expect(worktreeAddCalls).toHaveLength(1);
         expect(worktreeAddCalls[0]![1]).toEqual([
           'worktree', 'add',
-          path.join('/mock', 'workspace-feature-topic'),
+          path.join('/mock', 'repo-pr-1'),
           'feature/topic',
         ]);
       });
@@ -1020,7 +1099,7 @@ describe('StartWorkAction', () => {
         expect(worktreeAddCalls).toHaveLength(1);
         expect(worktreeAddCalls[0]![1]).toEqual([
           'worktree', 'add',
-          path.join('/mock', 'workspace-feature-topic'),
+          path.join('/mock', 'repo-pr-1'),
           'feature/topic',
         ]);
       });
@@ -1054,7 +1133,7 @@ describe('StartWorkAction', () => {
         expect(worktreeAddCalls).toHaveLength(1);
         expect(worktreeAddCalls[0]![1]).toEqual([
           'worktree', 'add',
-          path.join('/mock', 'workspace-feature-topic'),
+          path.join('/mock', 'repo-pr-1'),
           'feature/topic',
         ]);
       });

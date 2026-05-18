@@ -81,6 +81,8 @@ type RepoPathPick = vscode.QuickPickItem & (
 
 interface PrBranchInfo {
   branchName: string;
+  upstreamBranchName: string;
+  sourceRef: string;
   /** Remote tracking ref when branch is on a non-origin remote (e.g. "devdocket-fork-contributor/fix-bug"). */
   trackingRef?: string;
 }
@@ -236,7 +238,7 @@ export class StartWorkAction implements DevDocketAction {
         branchName = promptedBranchName;
 
         if (workMode === 'worktree') {
-          worktreePath = await this.promptForWorktreePath(repoPath, branchName, item);
+          worktreePath = await this.promptForWorktreePath(repoPath, branchName, item, gitWork);
           if (worktreePath === undefined) {
             return;
           }
@@ -251,7 +253,7 @@ export class StartWorkAction implements DevDocketAction {
         },
         async (progress) => {
           if (workMode === 'worktree') {
-            await this.issueWorktreeFlow(item, repoPath, branchName, baseBranch, progress, worktreePath);
+            await this.issueWorktreeFlow(item, gitWork, repoPath, branchName, baseBranch, progress, worktreePath);
           } else {
             await this.issueCheckoutFlow(item, repoPath, branchName, baseBranch, progress, checkoutDirtyTreeChecked);
           }
@@ -266,13 +268,14 @@ export class StartWorkAction implements DevDocketAction {
 
   private async issueWorktreeFlow(
     item: Readonly<WorkItem>,
+    gitWork: ResolvedGitWork,
     repoPath: string,
     branchName: string,
     baseBranch: string,
     progress: vscode.Progress<{ message?: string }>,
     promptedWorktreePath?: string,
   ): Promise<void> {
-    const worktreePath = promptedWorktreePath ?? this.getDefaultWorktreePath(repoPath, branchName, item);
+    const worktreePath = promptedWorktreePath ?? this.getDefaultWorktreePath(repoPath, branchName, item, gitWork);
 
     if (fs.existsSync(worktreePath)) {
       void vscode.window.showErrorMessage(`DevDocket: Directory "${worktreePath}" already exists.`);
@@ -378,12 +381,21 @@ export class StartWorkAction implements DevDocketAction {
       return;
     }
 
+    const upstreamBranchName = this.normalizeBranchName(gitWork.ref);
+    let branchName = upstreamBranchName;
     let worktreePath: string | undefined;
-    if (workMode === 'worktree' && this.shouldPromptForNames()) {
-      const branchName = this.normalizeBranchName(gitWork.ref);
-      worktreePath = await this.promptForWorktreePath(repoPath, branchName, item);
-      if (worktreePath === undefined) {
+    if (this.shouldPromptForNames()) {
+      const promptedBranchName = await this.promptForBranchName(branchName, workMode);
+      if (promptedBranchName === undefined) {
         return;
+      }
+      branchName = promptedBranchName;
+
+      if (workMode === 'worktree') {
+        worktreePath = await this.promptForWorktreePath(repoPath, branchName, item, gitWork);
+        if (worktreePath === undefined) {
+          return;
+        }
       }
     }
 
@@ -397,13 +409,13 @@ export class StartWorkAction implements DevDocketAction {
         async (progress) => {
           progress.report({ message: 'Fetching PR branch...' });
 
-          const branchInfo = await this.fetchPrBranch(gitWork, repoPath);
+          const branchInfo = await this.fetchPrBranch(gitWork, repoPath, branchName);
           if (!branchInfo) {
             return;
           }
 
           if (workMode === 'worktree') {
-            await this.prWorktreeFlow(item, repoPath, branchInfo, progress, worktreePath);
+            await this.prWorktreeFlow(item, gitWork, repoPath, branchInfo, progress, worktreePath);
           } else {
             await this.prCheckoutFlow(item, repoPath, branchInfo, progress);
           }
@@ -416,33 +428,39 @@ export class StartWorkAction implements DevDocketAction {
     }
   }
 
-  private async fetchPrBranch(gitWork: ResolvedGitWork, repoPath: string): Promise<PrBranchInfo | undefined> {
-    const branchName = this.normalizeBranchName(gitWork.ref);
+  private async fetchPrBranch(
+    gitWork: ResolvedGitWork,
+    repoPath: string,
+    localBranchName?: string,
+  ): Promise<PrBranchInfo | undefined> {
+    const upstreamBranchName = this.normalizeBranchName(gitWork.ref);
+    const branchName = localBranchName ?? upstreamBranchName;
     const cloneUrl = gitWork.headCloneUrl ?? gitWork.cloneUrl;
 
-    logger.info(`Fetching provider-supplied PR branch "${branchName}"`);
+    logger.info(`Fetching provider-supplied PR branch "${upstreamBranchName}"`);
     const remoteName = await this.findOrAddRemote(cloneUrl, gitWork.repoLabel, repoPath);
+    const sourceRef = `${remoteName}/${upstreamBranchName}`;
 
     try {
       await execFileAsync('git', [
         'fetch',
         remoteName,
-        `+refs/heads/${branchName}:refs/remotes/${remoteName}/${branchName}`,
+        `+refs/heads/${upstreamBranchName}:refs/remotes/${remoteName}/${upstreamBranchName}`,
       ], { cwd: repoPath, timeout: GIT_CHECKOUT_TIMEOUT });
-      logger.debug(`Fetch complete for branch "${branchName}" from remote "${remoteName}"`);
+      logger.debug(`Fetch complete for branch "${upstreamBranchName}" from remote "${remoteName}"`);
     } catch (err) {
       const details = this.formatGitError(err);
-      logger.info(`Failed to fetch branch "${branchName}" from ${remoteName}: ${details}`);
+      logger.info(`Failed to fetch branch "${upstreamBranchName}" from ${remoteName}: ${details}`);
       void vscode.window.showErrorMessage(
-        `DevDocket: Could not fetch branch '${branchName}' from remote '${remoteName}'. ${details}`,
+        `DevDocket: Could not fetch branch '${upstreamBranchName}' from remote '${remoteName}'. ${details}`,
       );
       return undefined;
     }
 
     if (remoteName === 'origin') {
-      return { branchName };
+      return { branchName, upstreamBranchName, sourceRef };
     }
-    return { branchName, trackingRef: `${remoteName}/${branchName}` };
+    return { branchName, upstreamBranchName, sourceRef, trackingRef: sourceRef };
   }
 
   /**
@@ -489,13 +507,14 @@ export class StartWorkAction implements DevDocketAction {
 
   private async prWorktreeFlow(
     item: Readonly<WorkItem>,
+    gitWork: ResolvedGitWork,
     repoPath: string,
     branchInfo: PrBranchInfo,
     progress: vscode.Progress<{ message?: string }>,
     promptedWorktreePath?: string,
   ): Promise<void> {
-    const { branchName, trackingRef } = branchInfo;
-    const worktreePath = promptedWorktreePath ?? this.getDefaultWorktreePath(repoPath, branchName, item);
+    const { branchName, sourceRef, trackingRef } = branchInfo;
+    const worktreePath = promptedWorktreePath ?? this.getDefaultWorktreePath(repoPath, branchName, item, gitWork);
 
     if (fs.existsSync(worktreePath)) {
       void vscode.window.showErrorMessage(`DevDocket: Directory "${worktreePath}" already exists.`);
@@ -509,7 +528,7 @@ export class StartWorkAction implements DevDocketAction {
     // exists, to avoid using a stale/unrelated same-named local branch).
     // For same-repo PRs, the branch may only exist as origin/<branch> after fetch.
     const hasLocalBranch = await this.localBranchExists(branchName, repoPath);
-    const worktreeSourceRef = trackingRef ?? `origin/${branchName}`;
+    const worktreeSourceRef = sourceRef;
     // Only relevant when we'd otherwise run `git worktree add <path> <branch>`
     // (the local-branch path that's neither --detach nor -b). For trackingRef
     // and no-local-branch paths, the porcelain pre-check would be wasted work.
@@ -585,7 +604,7 @@ export class StartWorkAction implements DevDocketAction {
     branchInfo: PrBranchInfo,
     progress: vscode.Progress<{ message?: string }>,
   ): Promise<void> {
-    const { branchName, trackingRef } = branchInfo;
+    const { branchName, sourceRef, trackingRef } = branchInfo;
     const canProceed = await this.checkDirtyTree(repoPath);
     if (!canProceed) {
       return;
@@ -627,7 +646,7 @@ export class StartWorkAction implements DevDocketAction {
       checkoutArgs = ['checkout', '-b', branchName, trackingRef];
       createdBranch = true;
     } else {
-      checkoutArgs = ['checkout', '-b', branchName, '--track', `origin/${branchName}`];
+      checkoutArgs = ['checkout', '-b', branchName, '--track', sourceRef];
       createdBranch = true;
     }
 
@@ -781,8 +800,9 @@ export class StartWorkAction implements DevDocketAction {
     repoPath: string,
     branchName: string,
     item: Readonly<WorkItem>,
+    gitWork: ResolvedGitWork,
   ): Promise<string | undefined> {
-    const defaultWorktreePath = this.getDefaultWorktreePath(repoPath, branchName, item);
+    const defaultWorktreePath = this.getDefaultWorktreePath(repoPath, branchName, item, gitWork);
     const defaultDirName = path.basename(defaultWorktreePath);
     const selectedPath = await vscode.window.showInputBox({
       title: 'DevDocket: Worktree path',
@@ -882,13 +902,53 @@ export class StartWorkAction implements DevDocketAction {
     return detail ?? 'Check your network connection, permissions, and whether the branch still exists.';
   }
 
-  private getDefaultWorktreePath(repoPath: string, ref: string, item: Readonly<WorkItem>): string {
-    return path.join(path.dirname(repoPath), this.toWorktreeDirName(repoPath, ref, item));
+  private getDefaultWorktreePath(
+    repoPath: string,
+    ref: string,
+    item: Readonly<WorkItem>,
+    gitWork: ResolvedGitWork,
+  ): string {
+    return path.join(path.dirname(repoPath), this.toWorktreeDirName(repoPath, ref, item, gitWork));
   }
 
-  private toWorktreeDirName(repoPath: string, ref: string, _item: Readonly<WorkItem>): string {
+  private toWorktreeDirName(
+    repoPath: string,
+    ref: string,
+    item: Readonly<WorkItem>,
+    gitWork: ResolvedGitWork,
+  ): string {
+    const itemNumber = this.workItemNumber(item.externalId ?? item.id);
+    if (itemNumber) {
+      const repoBaseName = this.sourceRepoBaseName(gitWork, repoPath);
+      return `${repoBaseName}-${gitWork.kind}-${itemNumber}`;
+    }
+
     const repoBaseName = path.basename(repoPath);
     return `${repoBaseName}-${this.toWorktreePathSuffix(ref)}`;
+  }
+
+  private workItemNumber(externalId: string | undefined): string | undefined {
+    return externalId?.trim().match(/(?:#|!)(\d+)$/)?.[1]
+      ?? externalId?.trim().match(/(?:^|[\/\\_-])(\d+)$/)?.[1];
+  }
+
+  private sourceRepoBaseName(gitWork: ResolvedGitWork, repoPath: string): string {
+    const candidate = this.repoBaseNameFromLabel(gitWork.repoLabel)
+      ?? this.repoBaseNameFromCloneUrl(gitWork.cloneUrl)
+      ?? path.basename(repoPath);
+    return this.toWorktreePathSuffix(candidate);
+  }
+
+  private repoBaseNameFromLabel(repoLabel: string | undefined): string | undefined {
+    return repoLabel?.split(/[\\/]/).filter(Boolean).at(-1);
+  }
+
+  private repoBaseNameFromCloneUrl(cloneUrl: string): string | undefined {
+    try {
+      return new URL(cloneUrl).pathname.split('/').filter(Boolean).at(-1)?.replace(/\.git$/i, '');
+    } catch {
+      return cloneUrl.match(/^git@[^:]+:(.+)$/)?.[1].split('/').filter(Boolean).at(-1)?.replace(/\.git$/i, '');
+    }
   }
 
   private toWorktreePathSuffix(ref: string): string {
