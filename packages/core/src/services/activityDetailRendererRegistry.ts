@@ -63,12 +63,14 @@ export class ActivityDetailRendererRegistry {
    * exceptions are caught and logged so a buggy renderer cannot break
    * the editor.
    *
-   * Output is also shape-validated: the rendered value is sent to the
-   * editor webview via `postMessage` (which uses structured clone),
-   * so a renderer that returns a non-serialisable value would
-   * otherwise crash the editor update. Validation rejects unknown
-   * `kind` values, non-string fields, and missing `rows`, all of
-   * which would either fail structured-clone or render garbage.
+   * Output is shape-validated AND normalised: only the known fields of
+   * the discriminated union are copied into the returned value. The
+   * rendered value is sent to the editor webview via `postMessage`
+   * (which uses structured clone), so a renderer that returns extra
+   * non-cloneable properties (e.g. functions, BigInt, cyclic refs)
+   * alongside the expected shape would otherwise crash the editor
+   * update. Normalisation drops every property the contract does not
+   * promise, guaranteeing the result is safe to post.
    */
   render(type: ActivityType, detail: string | undefined): ActivityDetailRender | undefined {
     const renderer = this.renderers.get(type);
@@ -85,11 +87,12 @@ export class ActivityDetailRendererRegistry {
     if (result === undefined) {
       return undefined;
     }
-    if (!isValidActivityDetailRender(result)) {
+    const normalised = normaliseActivityDetailRender(result);
+    if (!normalised) {
       logger.warn(`Activity detail renderer for type "${type}" returned an invalid shape; falling back to plain text`);
       return undefined;
     }
-    return result;
+    return normalised;
   }
 
   dispose(): void {
@@ -98,26 +101,43 @@ export class ActivityDetailRendererRegistry {
   }
 }
 
-function isValidActivityDetailRender(value: unknown): value is ActivityDetailRender {
+/**
+ * Validate {@link value} against the {@link ActivityDetailRender} contract
+ * AND return a freshly-constructed copy containing only the contract
+ * fields. Returns `undefined` if the value is not a valid render.
+ *
+ * Constructing a new object is intentional — see the JSDoc on
+ * {@link ActivityDetailRendererRegistry.render} for why extra properties
+ * on the renderer's return value must be stripped before crossing the
+ * webview boundary.
+ */
+function normaliseActivityDetailRender(value: unknown): ActivityDetailRender | undefined {
   if (!value || typeof value !== 'object') {
-    return false;
+    return undefined;
   }
-  const obj = value as { kind?: unknown };
+  const obj = value as { kind?: unknown; text?: unknown; rows?: unknown };
   if (obj.kind === 'text') {
-    return typeof (value as { text?: unknown }).text === 'string';
+    if (typeof obj.text !== 'string') {
+      return undefined;
+    }
+    return { kind: 'text', text: obj.text };
   }
   if (obj.kind === 'fields') {
-    const rows = (value as { rows?: unknown }).rows;
-    if (!Array.isArray(rows)) {
-      return false;
+    if (!Array.isArray(obj.rows)) {
+      return undefined;
     }
-    return rows.every(row => {
+    const rows: Array<{ label: string; value: string }> = [];
+    for (const row of obj.rows) {
       if (!row || typeof row !== 'object') {
-        return false;
+        return undefined;
       }
       const r = row as { label?: unknown; value?: unknown };
-      return typeof r.label === 'string' && typeof r.value === 'string';
-    });
+      if (typeof r.label !== 'string' || typeof r.value !== 'string') {
+        return undefined;
+      }
+      rows.push({ label: r.label, value: r.value });
+    }
+    return { kind: 'fields', rows };
   }
-  return false;
+  return undefined;
 }

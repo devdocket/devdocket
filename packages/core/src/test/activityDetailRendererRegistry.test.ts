@@ -121,5 +121,37 @@ describe('ActivityDetailRendererRegistry', () => {
       registry.register('work-started', () => bad as unknown as ReturnType<Parameters<typeof registry.register>[1]>);
       expect(registry.render('work-started', '')).toBeUndefined();
     });
+
+    it('strips extra properties from text renders', () => {
+      registry.register('work-started', () => ({
+        kind: 'text',
+        text: 'ok',
+        nope: () => 1,
+        extra: Symbol('not cloneable'),
+      } as unknown as ReturnType<Parameters<typeof registry.register>[1]>));
+      const result = registry.render('work-started', '');
+      expect(result).toEqual({ kind: 'text', text: 'ok' });
+      expect(Object.keys(result!)).toEqual(['kind', 'text']);
+    });
+
+    it('strips extra properties from fields renders and from each row', () => {
+      registry.register('work-started', () => ({
+        kind: 'fields',
+        rows: [
+          { label: 'L', value: 'V', extra: () => 1 },
+          { label: 'L2', value: 'V2', another: Symbol('x') },
+        ],
+        extraTopLevel: 'should be dropped',
+      } as unknown as ReturnType<Parameters<typeof registry.register>[1]>));
+      const result = registry.render('work-started', '');
+      expect(result).toEqual({
+        kind: 'fields',
+        rows: [{ label: 'L', value: 'V' }, { label: 'L2', value: 'V2' }],
+      });
+      expect(Object.keys(result!)).toEqual(['kind', 'rows']);
+      for (const row of (result as { rows: Array<Record<string, unknown>> }).rows) {
+        expect(Object.keys(row)).toEqual(['label', 'value']);
+      }
+    });
   });
 });
