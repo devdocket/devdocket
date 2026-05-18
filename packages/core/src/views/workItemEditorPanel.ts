@@ -475,6 +475,7 @@ export class WorkItemEditorPanel {
       author: providerItem?.author
         ? { displayName: providerItem.author.displayName, handle: providerItem.author.handle }
         : undefined,
+      authored: providerItem?.authored,
       createdAt: item.createdAt,
       updatedAt: item.updatedAt,
       badges: composeEditorBadges(item.providerId, providerItem, providerLabel),

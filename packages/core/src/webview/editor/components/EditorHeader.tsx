@@ -36,6 +36,7 @@ export function EditorHeader({ item, title, onCopyText, actionButtons }: EditorH
   const titleNode = (
     <h1 class="editor-title">{titleContent}</h1>
   );
+  const annotation = getEditorAnnotation(item);
 
   return (
     <header class="editor-header">
@@ -62,8 +63,8 @@ export function EditorHeader({ item, title, onCopyText, actionButtons }: EditorH
               🔗
             </button>
           ) : null}
-          {item.group ? (
-            <div class="editor-repo-annotation">{item.group}</div>
+          {annotation ? (
+            <div class="editor-repo-annotation">{annotation}</div>
           ) : null}
         </div>
         <div class="editor-title-actions">
@@ -82,4 +83,12 @@ export function EditorHeader({ item, title, onCopyText, actionButtons }: EditorH
       </div>
     </header>
   );
+}
+
+function getEditorAnnotation(item: EditorItemData): string | undefined {
+  const parts = [item.group];
+  if (item.author && item.authored !== true) {
+    parts.push(item.author.handle ? `@${item.author.handle}` : item.author.displayName);
+  }
+  return parts.filter((value): value is string => Boolean(value)).join(' · ') || undefined;
 }

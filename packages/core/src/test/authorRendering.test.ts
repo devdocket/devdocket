@@ -92,6 +92,7 @@ describe('author view-model plumbing', () => {
     const providerItem: ProviderItem = {
       externalId: 'owner/repo#1',
       title: '#1: Fix bug',
+      authored: true,
       author: { displayName: 'Octocat', handle: 'octocat' },
     };
     const panel = Object.create(WorkItemEditorPanel.prototype) as any;
@@ -115,6 +116,7 @@ describe('author view-model plumbing', () => {
     const editorItem = panel.buildEditorItemData(workItem, new Map()) as EditorItemData;
 
     expect(editorItem.author).toEqual({ displayName: 'Octocat', handle: 'octocat' });
+    expect(editorItem.authored).toBe(true);
   });
 });
 
@@ -138,7 +140,7 @@ describe('ItemCard author annotation', () => {
   });
 });
 
-describe('EditorApp author details', () => {
+describe('EditorApp author annotation', () => {
   async function renderEditor(item: EditorItemData): Promise<HTMLDivElement> {
     vi.stubGlobal('acquireVsCodeApi', () => ({
       postMessage: vi.fn(),
@@ -153,18 +155,31 @@ describe('EditorApp author details', () => {
     return container;
   }
 
-  it('renders a read-only Author row when author is present', async () => {
-    const container = await renderEditor(makeEditorItem({ author: { displayName: 'Octocat', handle: 'octocat' } }));
+  it('renders author inline with the repo annotation', async () => {
+    const container = await renderEditor(makeEditorItem({
+      group: 'owner/repo',
+      author: { displayName: 'Octocat', handle: 'octocat' },
+    }));
 
-    expect(container.textContent).toContain('Author');
-    expect(container.querySelector('.editor-readonly-value')?.textContent).toContain('Octocat');
-    expect(container.querySelector('.editor-readonly-value')?.textContent).toContain('@octocat');
-    expect(container.querySelector('a[href="https://github.com/octocat"]')).toBeNull();
+    expect(container.querySelector('.editor-repo-annotation')?.textContent).toBe('owner/repo · @octocat');
+    expect(container.textContent).not.toContain('Author');
   });
 
-  it('omits the Author row when author is missing', async () => {
-    const container = await renderEditor(makeEditorItem());
+  it('renders unchanged when author is missing', async () => {
+    const container = await renderEditor(makeEditorItem({ group: 'owner/repo' }));
 
+    expect(container.querySelector('.editor-repo-annotation')?.textContent).toBe('owner/repo');
     expect(container.textContent).not.toContain('Author');
+  });
+
+  it('suppresses the author annotation for self-authored items', async () => {
+    const container = await renderEditor(makeEditorItem({
+      group: 'owner/repo',
+      author: { displayName: 'Octocat', handle: 'octocat' },
+      authored: true,
+    }));
+
+    expect(container.querySelector('.editor-repo-annotation')?.textContent).toBe('owner/repo');
+    expect(container.textContent).not.toContain('@octocat');
   });
 });

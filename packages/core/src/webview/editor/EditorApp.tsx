@@ -126,8 +126,6 @@ export function EditorApp() {
     return <div class="editor-empty-state">Loading item…</div>;
   }
 
-  const authorHandle = item.author?.handle ? `@${item.author.handle}` : undefined;
-
   return (
     <div class="editor-app" onClickCapture={handleEditorClick}>
       <EditorHeader
@@ -144,44 +142,33 @@ export function EditorApp() {
           />
         }
       />
-      {!item.isProviderManaged || item.author ? (
+      {item.isProviderManaged ? null : (
         <section class="editor-section" aria-labelledby="editor-details-heading">
           <div class="editor-section-heading" id="editor-details-heading">Details</div>
           <div class="editor-fields-grid">
-            {!item.isProviderManaged ? (
-              <>
-                <EditableField
-                  label="Title"
-                  value={title}
-                  readOnly={false}
-                  onInput={value => {
-                    setTitle(value);
-                    setAutosaveVersion(version => version + 1);
-                  }}
-                />
-                <EditableField
-                  label="URL"
-                  value={url}
-                  type="url"
-                  placeholder="https://..."
-                  readOnly={false}
-                  onInput={value => {
-                    setUrl(value);
-                    setAutosaveVersion(version => version + 1);
-                  }}
-                />
-              </>
-            ) : null}
-            {item.author ? (
-              <ReadOnlyDetailField
-                label="Author"
-                value={item.author.displayName}
-                secondary={authorHandle}
-              />
-            ) : null}
+            <EditableField
+              label="Title"
+              value={title}
+              readOnly={false}
+              onInput={value => {
+                setTitle(value);
+                setAutosaveVersion(version => version + 1);
+              }}
+            />
+            <EditableField
+              label="URL"
+              value={url}
+              type="url"
+              placeholder="https://..."
+              readOnly={false}
+              onInput={value => {
+                setUrl(value);
+                setAutosaveVersion(version => version + 1);
+              }}
+            />
           </div>
         </section>
-      ) : null}
+      )}
       {description || !item.isIncoming ? (
         <section class="editor-section" aria-labelledby={description ? 'editor-description-heading' : undefined}>
           {description ? (
@@ -253,18 +240,6 @@ export function EditorApp() {
     itemRef.current = updatedItem;
     titleRef.current = resolvedTitle;
   }
-}
-
-function ReadOnlyDetailField({ label, value, secondary }: { label: string; value: string; secondary?: string }) {
-  return (
-    <div class="editor-field">
-      <span class="editor-field-label">{label}</span>
-      <div class="editor-readonly-value">
-        <span>{value}</span>
-        {secondary ? <span class="editor-readonly-secondary">{secondary}</span> : null}
-      </div>
-    </div>
-  );
 }
 
 function shouldPreserveEditableField(item: EditorItemData | null, draftValue: string, persistedValue?: string): boolean {

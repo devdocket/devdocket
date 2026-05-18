@@ -407,6 +407,7 @@ export class IncomingPreviewPanel {
       author: providerItem.author
         ? { displayName: providerItem.author.displayName, handle: providerItem.author.handle }
         : undefined,
+      authored: providerItem.authored,
       createdAt: Date.now(),
       updatedAt: Date.now(),
       badges: composeEditorBadges(this.providerId, providerItem, this.providerRegistry.getProviderLabel(this.providerId)),

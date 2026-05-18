@@ -366,22 +366,6 @@ export function getEditorPanelHtml({ cspSource, scriptUri, initialItem }: Editor
       color: var(--vscode-disabledForeground, var(--vscode-foreground));
     }
 
-    .editor-readonly-value {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 6px;
-      align-items: baseline;
-      min-height: 38px;
-      padding: 9px 10px;
-      border-radius: 6px;
-      background: var(--vscode-editor-inactiveSelectionBackground, rgba(128, 128, 128, 0.12));
-      color: var(--vscode-foreground);
-    }
-
-    .editor-readonly-secondary {
-      color: var(--vscode-descriptionForeground);
-      font-size: 12px;
-    }
 
     .editor-textarea {
       resize: none;

@@ -98,6 +98,7 @@ export interface EditorItemData {
   providerLabel?: string;
   group?: string;
   author?: ItemAuthorData;
+  authored?: boolean;
   createdAt: number;
   updatedAt: number;
   badges: BadgeData[];
