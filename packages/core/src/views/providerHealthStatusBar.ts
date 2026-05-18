@@ -106,7 +106,7 @@ export class ProviderHealthStatusBar implements vscode.Disposable {
     }
 
     const hasUnknownProviders = providers.some(p => this.providerRegistry.getProviderHealth(p.id).status === 'unknown');
-    this.statusBarItem.text = `${hasUnknownProviders ? '$(circle-outline)' : '$(check)'} DevDocket • ${formatProviderCount(providers.length)}`;
+    this.statusBarItem.text = `${hasUnknownProviders ? '$(circle-outline)' : '$(check)'} $(devdocket-logo) • ${formatProviderCount(providers.length)}`;
     this.statusBarItem.tooltip = this.buildTooltip(providers);
     this.statusBarItem.backgroundColor = undefined;
     this.statusBarItem.color = undefined;
@@ -125,7 +125,7 @@ export class ProviderHealthStatusBar implements vscode.Disposable {
       return `${provider.label}: ${status}${error} (${lastRefresh})`;
     });
 
-    return ['Click to view provider health details', '', ...providerLines].join('\n');
+    return ['DevDocket Provider Health', 'Click to view provider health details', '', ...providerLines].join('\n');
   }
 
   dispose(): void {

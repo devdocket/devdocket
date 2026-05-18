@@ -2,6 +2,8 @@ import * as vscode from 'vscode';
 import { WatcherService } from '../services/watcherService';
 import { isFailedConclusion } from '../webview/shared/runConclusionLabels';
 
+const statusBarLogoThemeIcon = '$(devdocket-logo)';
+
 /**
  * Status bar item that shows running/passed/failed watch counts.
  * Click to open the floating watch panel.
@@ -25,7 +27,7 @@ export class WatchesStatusBar implements vscode.Disposable {
   private update(): void {
     const watches = this.watcherService.getActiveWatches();
     if (watches.length === 0) {
-      this.statusBarItem.text = '👁 DevDocket • Watches';
+      this.statusBarItem.text = `${statusBarLogoThemeIcon} • Watches`;
       this.statusBarItem.tooltip = this.buildTooltip(0, 0, 0, 0);
       this.statusBarItem.backgroundColor = undefined;
       this.statusBarItem.color = undefined;
@@ -73,7 +75,7 @@ export class WatchesStatusBar implements vscode.Disposable {
     }
 
     const partialText = partialSuccessCount > 0 ? ` · ⚠ ${partialSuccessCount}` : '';
-    this.statusBarItem.text = `👁 DevDocket • 🔄 ${runningCount} · ✓ ${passedCount}${partialText} · ✗ ${failedCount}`;
+    this.statusBarItem.text = `${statusBarLogoThemeIcon} • 🔄 ${runningCount} · ✓ ${passedCount}${partialText} · ✗ ${failedCount}`;
     this.statusBarItem.tooltip = this.buildTooltip(runningCount, passedCount, partialSuccessCount, failedCount);
     // Only highlight the status bar with the warning color if there is at
     // least one failed watch the user hasn't seen yet — once they open the

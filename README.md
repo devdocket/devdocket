@@ -65,6 +65,12 @@ DevDocket is not yet available on the VS Code Marketplace. To run it, build from
    ```
    Run this from each extension folder you want to package (e.g., `packages/core`, `packages/github`). This produces a `.vsix` file you can install via **Extensions → ⋯ → Install from VSIX…** in VS Code.
 
+5. **Regenerate the status-bar icon font** (only when the logomark changes):
+   ```bash
+   npm run build:icons -w devdocket
+   ```
+   This converts `packages/core/resources/devdocket-logo-mono.svg` into the checked-in `packages/core/resources/devdocket-icons.woff` glyph used by VS Code status bar icons.
+
 ## Plugin Ecosystem
 
 DevDocket is extensible with two types of plugins:

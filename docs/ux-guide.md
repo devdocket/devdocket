@@ -105,8 +105,10 @@ The manual Watch URL flow is **idempotent** for already-watched URLs and force-r
 
 DevDocket contributes two right-aligned status bar items (priorities `100000` and `100001`, immediately to the left of the Copilot button). Quick access to the sidebar itself is via the activity-bar container, not the status bar.
 
-- **Provider Health** — `✓ DevDocket • N providers` when every provider is healthy, `○ DevDocket • N providers` while provider health is still unknown, and `⚠ N providers unhealthy` when degraded; click to open the Provider Health quick pick.
-- **Watches** — `👁 DevDocket • Watches` when empty and `👁 DevDocket • 🔄 N · ✓ N · ✗ N` when watches exist, with an additional `⚠ N` segment when runs have succeeded with issues; always visible. Turns amber when at least one watched run has failed and the failure has not yet been acknowledged. Click to open the CI Watches panel.
+- **Provider Health** — `✓ $(devdocket-logo) • N providers` when every provider is healthy, `○ $(devdocket-logo) • N providers` while provider health is still unknown, and `⚠ N providers unhealthy` when degraded; click to open the Provider Health quick pick.
+- **Watches** — `$(devdocket-logo) • Watches` when empty and `$(devdocket-logo) • 🔄 N · ✓ N · ✗ N` when watches exist, with an additional `⚠ N` segment when runs have succeeded with issues; always visible. Turns amber when at least one watched run has failed and the failure has not yet been acknowledged. Click to open the CI Watches panel.
+
+The compact DevDocket logo glyph is the default status bar brand marker. In the Watches item, the glyph replaces both the former `DevDocket` text and leading eye emoji so the logo remains visually primary. Tooltips always include the full DevDocket name for hover and assistive tech.
 
 ## Item Lifecycle
 

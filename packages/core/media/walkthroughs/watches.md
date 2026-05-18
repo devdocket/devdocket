@@ -4,7 +4,7 @@ Watches are fire-and-forget monitoring for CI pipelines and pull requests. DevDo
 
 ## Where Watches Live
 
-The **CI Watches** panel is a floating webview separate from the main DevDocket sidebar. Open it by clicking the eye icon (👁) in the VS Code status bar at the bottom — it shows the current watch count and turns amber when a watched run fails.
+The **CI Watches** panel is a floating webview separate from the main DevDocket sidebar. Open it by clicking the DevDocket logo glyph in the VS Code status bar at the bottom — it shows the current watch count and turns amber when a watched run fails.
 
 The panel groups watches into:
 - **PR Watches** — pull requests being monitored, with each PR's CI runs flattened beneath it
