@@ -16,6 +16,7 @@ import { isSafeUrl } from '../utils/url';
 import { buildTierColorCss } from '../webview/shared/colors';
 import { isFailedConclusion } from '../webview/shared/runConclusionLabels';
 import { buildProviderBadge, buildProviderBadges, buildTypeBadge } from './badges';
+import { toItemAuthorData } from './itemAuthorData';
 import { getProviderItemKey, parseProviderItemKey } from './providerItemKey';
 import type {
   BadgeData,
@@ -1412,12 +1413,6 @@ function isFailedRun(runWatch: WatchedRun): boolean {
 
 function normalizeText(value?: string): string {
   return value?.trim().toLowerCase().replace(/[_-]+/g, ' ').replace(/\s+/g, ' ') ?? '';
-}
-
-function toItemAuthorData(providerItem: ProviderItem | undefined): ItemCardData['author'] {
-  return providerItem?.author
-    ? { displayName: providerItem.author.displayName, handle: providerItem.author.handle }
-    : undefined;
 }
 
 function getNonce(): string {

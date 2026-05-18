@@ -11,6 +11,7 @@ import type { InboxStateStore } from '../storage/inboxStateStore';
 import { isSafeUrl } from '../utils/url';
 import { buildProviderBadge, buildProviderBadges, buildTypeBadge } from './badges';
 import { isFailedConclusion } from '../webview/shared/runConclusionLabels';
+import { toItemAuthorData } from './itemAuthorData';
 import { parseProviderItemKey } from './providerItemKey';
 import { getEditorPanelHtml, renderMarkdown } from './editorPanelHtml';
 import type { BadgeData, EditorItemData } from './mainTypes';
@@ -474,9 +475,7 @@ export class WorkItemEditorPanel {
       state: item.state,
       providerLabel,
       group: item.group,
-      author: providerItem?.author
-        ? { displayName: providerItem.author.displayName, handle: providerItem.author.handle }
-        : undefined,
+      author: toItemAuthorData(providerItem),
       authored: providerItem?.authored,
       createdAt: item.createdAt,
       updatedAt: item.updatedAt,

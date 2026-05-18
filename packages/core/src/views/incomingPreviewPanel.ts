@@ -8,6 +8,7 @@ import { WorkGraph } from '../services/workGraph';
 import { InboxStateStore } from '../storage/inboxStateStore';
 import { ReadStateStore } from '../storage/readStateStore';
 import { isSafeUrl } from '../utils/url';
+import { toItemAuthorData } from './itemAuthorData';
 import { getProviderItemKey, parseProviderItemKey } from './providerItemKey';
 import { getEditorPanelHtml, renderMarkdown } from './editorPanelHtml';
 import type { EditorItemData } from './mainTypes';
@@ -404,9 +405,7 @@ export class IncomingPreviewPanel {
       state: 'New',
       providerLabel,
       group: providerItem.group,
-      author: providerItem.author
-        ? { displayName: providerItem.author.displayName, handle: providerItem.author.handle }
-        : undefined,
+      author: toItemAuthorData(providerItem),
       authored: providerItem.authored,
       createdAt: Date.now(),
       updatedAt: Date.now(),
