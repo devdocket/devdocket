@@ -12,17 +12,20 @@ on:
       tag-prefix:
         required: true
         type: string
-    secrets:
-      VSCE_PAT:
-        required: true
 
 jobs:
   publish:
     runs-on: ubuntu-latest
+    environment: marketplace-publish
+    permissions:
+      contents: write
+      id-token: write
     env:
       PACKAGE_DIR: ${{ inputs.package-directory }}
       PACKAGE_TITLE: ${{ inputs.package-title }}
       TAG_PREFIX: ${{ inputs.tag-prefix }}
+      AZURE_CLIENT_ID: ${{ vars.AZURE_PUBLISH_CLIENT_ID }}
+      AZURE_TENANT_ID: ${{ vars.AZURE_PUBLISH_TENANT_ID }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -58,14 +61,19 @@ jobs:
           echo "PACKAGE_NAME=$PACKAGE_NAME" >> "$GITHUB_ENV"
           echo "VSIX_PATH=$PACKAGE_NAME-$TAG_VERSION.vsix" >> "$GITHUB_ENV"
 
-      - name: Validate marketplace token
+      - name: Validate Entra ID configuration
         run: |
-          if [ -z "$VSCE_PAT" ]; then
-            echo "The VSCE_PAT repository secret is required to publish to the VS Code Marketplace."
+          if [ -z "$AZURE_CLIENT_ID" ] || [ -z "$AZURE_TENANT_ID" ]; then
+            echo "Repository variables AZURE_PUBLISH_CLIENT_ID and AZURE_PUBLISH_TENANT_ID are required to publish to the VS Code Marketplace via OIDC."
             exit 1
           fi
-        env:
-          VSCE_PAT: ${{ secrets.VSCE_PAT }}
+
+      - name: Authenticate to Azure (Entra ID via OIDC)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ vars.AZURE_PUBLISH_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_PUBLISH_TENANT_ID }}
+          allow-no-subscriptions: true
 
       - name: Package extension
         working-directory: ${{ env.PACKAGE_DIR }}
@@ -73,9 +81,7 @@ jobs:
 
       - name: Publish extension
         working-directory: ${{ env.PACKAGE_DIR }}
-        run: npx --yes @vscode/vsce publish --packagePath "$VSIX_PATH"
-        env:
-          VSCE_PAT: ${{ secrets.VSCE_PAT }}
+        run: npx --yes @vscode/vsce publish --azure-credential --packagePath "$VSIX_PATH"
 
       - name: Generate release notes
         run: |
