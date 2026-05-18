@@ -21,15 +21,8 @@ export type PrUrlParts =
 
 /** Parse a GitHub PR URL, returning org, repo, and PR number. */
 export function parsePrUrl(url: string): GitHubPrUrlParts | undefined {
-  let parsed: URL;
-  try {
-    parsed = new URL(url);
-  } catch {
-    return undefined;
-  }
-
-  if (parsed.hostname !== 'github.com') return undefined;
-  if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return undefined;
+  const parsed = parseHttpUrl(url);
+  if (!parsed || parsed.hostname !== 'github.com') return undefined;
 
   const segments = parsed.pathname.split('/').filter(Boolean);
   // Expected: [org, repo, 'pull', number]
@@ -44,15 +37,8 @@ export function parsePrUrl(url: string): GitHubPrUrlParts | undefined {
 
 /** Parse an Azure DevOps PR URL, returning organization, project, repo, and PR ID. */
 export function parseAdoPrUrl(url: string): AdoPrUrlParts | undefined {
-  let parsed: URL;
-  try {
-    parsed = new URL(url);
-  } catch {
-    return undefined;
-  }
-
-  if (parsed.hostname.toLowerCase() !== 'dev.azure.com') return undefined;
-  if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return undefined;
+  const parsed = parseHttpUrl(url);
+  if (!parsed || parsed.hostname.toLowerCase() !== 'dev.azure.com') return undefined;
 
   const segments = parsed.pathname.split('/').filter(Boolean);
   // Expected: [org, project, '_git', repo, 'pullrequest', id]
@@ -85,6 +71,16 @@ export function parsePullRequestUrl(url: string): PrUrlParts | undefined {
 function decodeUrlSegment(segment: string): string | undefined {
   try {
     return decodeURIComponent(segment);
+  } catch {
+    return undefined;
+  }
+}
+
+function parseHttpUrl(url: string): URL | undefined {
+  try {
+    const parsed = new URL(url);
+    if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return undefined;
+    return parsed;
   } catch {
     return undefined;
   }
