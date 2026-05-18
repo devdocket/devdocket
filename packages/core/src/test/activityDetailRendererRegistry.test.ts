@@ -87,4 +87,39 @@ describe('ActivityDetailRendererRegistry', () => {
     disposable.dispose();
     expect(listener).toHaveBeenCalledTimes(2);
   });
+
+  describe('output shape validation', () => {
+    it('accepts a valid text render', () => {
+      registry.register('work-started', () => ({ kind: 'text', text: 'ok' }));
+      expect(registry.render('work-started', '')).toEqual({ kind: 'text', text: 'ok' });
+    });
+
+    it('accepts a valid fields render', () => {
+      registry.register('work-started', () => ({
+        kind: 'fields',
+        rows: [{ label: 'L', value: 'V' }, { label: 'L2', value: 'V2' }],
+      }));
+      expect(registry.render('work-started', '')).toEqual({
+        kind: 'fields',
+        rows: [{ label: 'L', value: 'V' }, { label: 'L2', value: 'V2' }],
+      });
+    });
+
+    it.each([
+      ['unknown kind', { kind: 'wat', text: 'x' }],
+      ['text without string text', { kind: 'text', text: 42 }],
+      ['fields without rows array', { kind: 'fields', rows: 'nope' }],
+      ['fields with non-string label', { kind: 'fields', rows: [{ label: 42, value: 'v' }] }],
+      ['fields with non-string value', { kind: 'fields', rows: [{ label: 'l', value: null }] }],
+      ['fields with non-object row', { kind: 'fields', rows: ['not an object'] }],
+      ['null', null],
+      ['array', []],
+      ['string', 'not a render'],
+      ['number', 42],
+      ['function', () => undefined],
+    ])('rejects %s and returns undefined', (_label, bad) => {
+      registry.register('work-started', () => bad as unknown as ReturnType<Parameters<typeof registry.register>[1]>);
+      expect(registry.render('work-started', '')).toBeUndefined();
+    });
+  });
 });

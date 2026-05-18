@@ -58,24 +58,66 @@ export class ActivityDetailRendererRegistry {
    * Invoke the renderer for {@link type} on {@link detail}.
    *
    * Returns `undefined` when no renderer is registered, the renderer
-   * returns `undefined`, or the renderer throws. Renderer exceptions
-   * are caught and logged so a buggy renderer cannot break the editor.
+   * returns `undefined` or a shape that doesn't match
+   * {@link ActivityDetailRender}, or the renderer throws. Renderer
+   * exceptions are caught and logged so a buggy renderer cannot break
+   * the editor.
+   *
+   * Output is also shape-validated: the rendered value is sent to the
+   * editor webview via `postMessage` (which uses structured clone),
+   * so a renderer that returns a non-serialisable value would
+   * otherwise crash the editor update. Validation rejects unknown
+   * `kind` values, non-string fields, and missing `rows`, all of
+   * which would either fail structured-clone or render garbage.
    */
   render(type: ActivityType, detail: string | undefined): ActivityDetailRender | undefined {
     const renderer = this.renderers.get(type);
     if (!renderer) {
       return undefined;
     }
+    let result: ActivityDetailRender | undefined;
     try {
-      return renderer(detail);
+      result = renderer(detail);
     } catch (err) {
       logger.warn(`Activity detail renderer for type "${type}" threw; falling back to plain text`, err);
       return undefined;
     }
+    if (result === undefined) {
+      return undefined;
+    }
+    if (!isValidActivityDetailRender(result)) {
+      logger.warn(`Activity detail renderer for type "${type}" returned an invalid shape; falling back to plain text`);
+      return undefined;
+    }
+    return result;
   }
 
   dispose(): void {
     this.renderers.clear();
     this._onDidChange.dispose();
   }
+}
+
+function isValidActivityDetailRender(value: unknown): value is ActivityDetailRender {
+  if (!value || typeof value !== 'object') {
+    return false;
+  }
+  const obj = value as { kind?: unknown };
+  if (obj.kind === 'text') {
+    return typeof (value as { text?: unknown }).text === 'string';
+  }
+  if (obj.kind === 'fields') {
+    const rows = (value as { rows?: unknown }).rows;
+    if (!Array.isArray(rows)) {
+      return false;
+    }
+    return rows.every(row => {
+      if (!row || typeof row !== 'object') {
+        return false;
+      }
+      const r = row as { label?: unknown; value?: unknown };
+      return typeof r.label === 'string' && typeof r.value === 'string';
+    });
+  }
+  return false;
 }
