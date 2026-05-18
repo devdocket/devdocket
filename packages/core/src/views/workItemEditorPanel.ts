@@ -3,6 +3,7 @@ import * as crypto from 'node:crypto';
 import type { ProviderItem } from '../api/types';
 import { WorkItem, WorkItemInput, WorkItemState } from '../models/workItem';
 import { ActionRegistry } from '../services/actionRegistry';
+import { ActivityDetailRendererRegistry } from '../services/activityDetailRendererRegistry';
 import { ProviderRegistry } from '../services/providerRegistry';
 import { buildRelatedItemsIndex, resolveRelatedItemsFor, type RelatedItemsIndex } from '../services/relatedItems';
 import { VALID_TRANSITIONS, WorkGraph } from '../services/workGraph';
@@ -59,6 +60,7 @@ export interface WorkItemEditorPanelDependencies {
   actionRegistry: ActionRegistry;
   stateStore: InboxStateStore;
   watcherService?: WatcherService;
+  activityDetailRendererRegistry?: ActivityDetailRendererRegistry;
 }
 
 export class WorkItemEditorPanel {
@@ -72,6 +74,7 @@ export class WorkItemEditorPanel {
   private readonly actionRegistry: ActionRegistry;
   private readonly stateStore: InboxStateStore;
   private readonly watcherService?: WatcherService;
+  private readonly activityDetailRendererRegistry?: ActivityDetailRendererRegistry;
   private readonly extensionUri: vscode.Uri;
   private disposed = false;
   private htmlInitialized = false;
@@ -83,6 +86,7 @@ export class WorkItemEditorPanel {
   private readonly providerRegSub: vscode.Disposable;
   private readonly providerChangeSub: vscode.Disposable;
   private readonly actionRegistrySub: vscode.Disposable;
+  private readonly activityRendererSub?: vscode.Disposable;
   private readonly watcherSubscriptions: vscode.Disposable[] = [];
   private lastDisplayedTitle: string | undefined;
   private lastDisplayedUrl: string | undefined;
@@ -176,6 +180,7 @@ export class WorkItemEditorPanel {
       dependencies.actionRegistry,
       dependencies.stateStore,
       dependencies.watcherService,
+      dependencies.activityDetailRendererRegistry,
       context.extensionUri,
       providerLabel,
     );
@@ -203,6 +208,7 @@ export class WorkItemEditorPanel {
     actionRegistry: ActionRegistry,
     stateStore: InboxStateStore,
     watcherService: WatcherService | undefined,
+    activityDetailRendererRegistry: ActivityDetailRendererRegistry | undefined,
     extensionUri: vscode.Uri,
     private providerLabel?: string,
   ) {
@@ -214,6 +220,7 @@ export class WorkItemEditorPanel {
     this.actionRegistry = actionRegistry;
     this.stateStore = stateStore;
     this.watcherService = watcherService;
+    this.activityDetailRendererRegistry = activityDetailRendererRegistry;
     this.extensionUri = extensionUri;
 
     this.update();
@@ -233,6 +240,15 @@ export class WorkItemEditorPanel {
     this.actionRegistrySub = this.actionRegistry.onDidChangeRegistrations(() => {
       this.update();
     });
+
+    if (this.activityDetailRendererRegistry) {
+      // Re-render when an activity detail renderer is added or removed —
+      // this covers the case where this editor opened before a provider
+      // extension finished activating and registering its renderer.
+      this.activityRendererSub = this.activityDetailRendererRegistry.onDidChange(() => {
+        this.update();
+      });
+    }
 
     const activeWatcherService = this.watcherService;
     if (activeWatcherService) {
@@ -309,6 +325,7 @@ export class WorkItemEditorPanel {
         this.providerRegSub.dispose();
         this.providerChangeSub.dispose();
         this.actionRegistrySub.dispose();
+        this.activityRendererSub?.dispose();
         this.disposeWatcherSubscriptions();
       }
     });
@@ -483,7 +500,12 @@ export class WorkItemEditorPanel {
       isProviderManaged: this.isProviderManaged(item),
       validTransitions: Array.from(VALID_TRANSITIONS.get(item.state) ?? []),
       hasActions: this.actionRegistry.hasActionsFor(item),
-      activityLog: item.activityLog ?? [],
+      activityLog: (item.activityLog ?? []).map(entry => ({
+        timestamp: entry.timestamp,
+        type: entry.type,
+        detail: entry.detail,
+        displayDetail: this.activityDetailRendererRegistry?.render(entry.type, entry.detail),
+      })),
       relatedItems: resolveRelatedItemsFor(item, this.providerRegistry, this.workGraph, relatedItemsIndex),
       ciWatch: this.buildCIWatchData(item),
       isIncoming: false,
@@ -607,6 +629,7 @@ export class WorkItemEditorPanel {
       this.providerRegSub.dispose();
       this.providerChangeSub.dispose();
       this.actionRegistrySub.dispose();
+      this.activityRendererSub?.dispose();
       this.disposeWatcherSubscriptions();
       this.panel.dispose();
     }

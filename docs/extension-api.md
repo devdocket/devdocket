@@ -98,7 +98,27 @@ interface DevDocketApi {
 
   /** Optional accessor for live provider data, used by actions that need capabilities. */
   getProviderItem?(providerId: string, externalId: string): ProviderItem | undefined;
+
+  /**
+   * Optional: register a renderer that converts an activity log entry's
+   * raw `detail` string into a display-ready representation for the
+   * editor. Use this when your extension writes structured `detail`
+   * payloads (e.g. JSON) that the core extension should not be coupled to.
+   * See "Activity log rendering" below.
+   */
+  registerActivityDetailRenderer?(
+    type: ActivityType,
+    render: (detail: string | undefined) => ActivityDetailRender | undefined,
+  ): vscode.Disposable;
 }
+```
+
+`ActivityDetailRender` is one of:
+
+```ts
+type ActivityDetailRender =
+  | { kind: 'text'; text: string }
+  | { kind: 'fields'; rows: ReadonlyArray<{ label: string; value: string }> };
 ```
 
 Both methods return a `vscode.Disposable`. Push it into `context.subscriptions` so VS Code cleans up on deactivation.
@@ -474,6 +494,30 @@ Items transition through these states as the user interacts with them in the UI.
 | `Archived` | **Done** | Archived items (rendered alongside Done items). |
 
 Action authors should use this mapping when implementing `canRun()` — for example, an action that only applies to active work should target `InProgress` and `Paused`.
+
+## Activity log rendering
+
+Activity log entries carry a free-form `detail` string. Extensions that write structured payloads (e.g. JSON encoded with their own schema) should register a renderer so the core extension can display the entry without parsing the schema itself. This keeps the core decoupled from extension-private schemas — only the writer extension knows the shape.
+
+```ts
+api.registerActivityDetailRenderer?.('work-started', (raw) => {
+  const decoded = decodeMyDetail(raw);
+  if (!decoded) {
+    return undefined; // falls back to plain-text rendering of `raw`
+  }
+  return {
+    kind: 'fields',
+    rows: [
+      { label: 'Branch', value: decoded.branchName },
+      { label: 'Repo', value: decoded.repoPath },
+    ],
+  };
+});
+```
+
+The renderer must be synchronous and return a JSON-serialisable shape (since the result is sent to the editor webview). Returning `undefined`, or throwing, causes the core to fall back to plain-text rendering of the raw `detail`. Only one renderer may be registered per activity type. The disposable should be pushed into `context.subscriptions` so the renderer is removed when the extension deactivates.
+
+If the extension does not register a renderer for an activity type, the raw `detail` string is rendered verbatim — this is appropriate for simple human-readable details such as `"New → InProgress"` for `'state-changed'` entries.
 
 ## Limits and Security
 

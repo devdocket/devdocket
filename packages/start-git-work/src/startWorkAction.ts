@@ -5,6 +5,7 @@ import * as path from 'path';
 import * as fs from 'fs';
 import { logger } from './logger';
 import { WorkItemState, type ProviderItem, type GitWorkInfo, type WorkItem, type DevDocketAction } from '@devdocket/shared';
+import { encodeWorkStartedDetail } from './workStartedDetail';
 
 const execFileAsync = promisify(execFile);
 
@@ -310,7 +311,7 @@ export class StartWorkAction implements DevDocketAction {
     logger.info(`Created worktree at ${worktreePath}`);
 
     try {
-      const detail = JSON.stringify({ branchName, worktreePath, repoPath });
+      const detail = encodeWorkStartedDetail({ branchName, worktreePath, repoPath });
       await vscode.commands.executeCommand('devdocket.addActivity', item.id, 'work-started', detail);
     } catch (activityErr) {
       logger.error('Failed to log work-started activity', activityErr);
@@ -344,7 +345,7 @@ export class StartWorkAction implements DevDocketAction {
     logger.info(`Starting work: checked out new branch ${branchName}`);
 
     try {
-      const detail = JSON.stringify({ branchName, repoPath });
+      const detail = encodeWorkStartedDetail({ branchName, repoPath });
       await vscode.commands.executeCommand('devdocket.addActivity', item.id, 'work-started', detail);
     } catch (activityErr) {
       logger.error('Failed to log work-started activity', activityErr);
@@ -566,7 +567,7 @@ export class StartWorkAction implements DevDocketAction {
     try {
       // Only include branchName when this action created the branch, so cleanup
       // won't accidentally delete a pre-existing user branch.
-      const detail = JSON.stringify({
+      const detail = encodeWorkStartedDetail({
         ...(createdBranch ? { branchName } : {}),
         worktreePath,
         repoPath,
@@ -644,7 +645,7 @@ export class StartWorkAction implements DevDocketAction {
     try {
       // Only include branchName when this action created the branch, so cleanup
       // won't accidentally delete a pre-existing user branch.
-      const detail = JSON.stringify({
+      const detail = encodeWorkStartedDetail({
         ...(createdBranch ? { branchName } : {}),
         repoPath,
       });

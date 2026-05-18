@@ -1,7 +1,7 @@
 import type { VNode } from 'preact';
 import { useState } from 'preact/hooks';
 import { formatRelativeTime } from '../../shared/timeUtils';
-import type { EditorItemData } from '../../shared/types';
+import type { ActivityDetailRender, EditorActivityLogEntry, EditorItemData } from '../../shared/types';
 import { activityTypeLabel } from '../editorUtils';
 
 interface ActivityLogProps {
@@ -38,7 +38,7 @@ export function ActivityLog({ entries }: ActivityLogProps) {
             <div class="activity-entry" key={`${entry.timestamp}-${entry.type}-${index}`}>
               <div class="activity-entry-main">
                 <span class="activity-entry-type">{activityTypeLabel(entry.type)}</span>
-                {entry.detail ? renderActivityDetail(entry.type, entry.detail) : null}
+                {renderActivityDetail(entry, index)}
               </div>
               <span class="activity-entry-time">{formatRelativeTime(entry.timestamp)}</span>
             </div>
@@ -49,70 +49,36 @@ export function ActivityLog({ entries }: ActivityLogProps) {
   );
 }
 
-type ActivityDetailRenderer = (detail: string) => VNode;
+function renderActivityDetail(entry: EditorActivityLogEntry, entryIndex: number): VNode | null {
+  if (entry.displayDetail) {
+    return renderDisplayDetail(entry.displayDetail, entryIndex);
+  }
+  if (entry.detail) {
+    return renderPlainActivityDetail(entry.detail);
+  }
+  return null;
+}
 
-const activityDetailRenderers: Partial<Record<string, ActivityDetailRenderer>> = {
-  'work-started': renderWorkStartedDetail,
-};
-
-function renderActivityDetail(type: string, detail: string): VNode {
-  const renderer = activityDetailRenderers[type] ?? renderPlainActivityDetail;
-  return renderer(detail);
+function renderDisplayDetail(display: ActivityDetailRender, entryIndex: number): VNode {
+  if (display.kind === 'fields') {
+    return (
+      <dl class="activity-entry-detail activity-entry-detail--structured">
+        {display.rows.map((row, rowIndex) => renderDetailRow(row.label, row.value, entryIndex, rowIndex))}
+      </dl>
+    );
+  }
+  return renderPlainActivityDetail(display.text);
 }
 
 function renderPlainActivityDetail(detail: string): VNode {
   return <span class="activity-entry-detail">{detail}</span>;
 }
 
-interface WorkStartedDetail {
-  branchName?: string;
-  worktreePath?: string;
-  repoPath?: string;
-}
-
-function parseWorkStartedDetail(raw: string): WorkStartedDetail | undefined {
-  try {
-    const parsed = JSON.parse(raw) as unknown;
-    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
-      return undefined;
-    }
-
-    const values = parsed as Record<string, unknown>;
-    const detail: WorkStartedDetail = {};
-    if (typeof values.branchName === 'string') {
-      detail.branchName = values.branchName;
-    }
-    if (typeof values.worktreePath === 'string') {
-      detail.worktreePath = values.worktreePath;
-    }
-    if (typeof values.repoPath === 'string') {
-      detail.repoPath = values.repoPath;
-    }
-
-    return detail.branchName || detail.worktreePath || detail.repoPath ? detail : undefined;
-  } catch {
-    return undefined;
-  }
-}
-
-function renderWorkStartedDetail(raw: string): VNode {
-  const detail = parseWorkStartedDetail(raw);
-  if (!detail) {
-    return renderPlainActivityDetail(raw);
-  }
-
+function renderDetailRow(label: string, value: string, entryIndex: number, rowIndex: number): VNode {
+  // Include both indices so duplicate labels (rare but possible — the API
+  // does not require row labels to be unique) cannot collide on the Preact key.
   return (
-    <dl class="activity-entry-detail activity-entry-detail--structured">
-      {detail.branchName ? renderDetailRow('Branch', detail.branchName) : null}
-      {detail.worktreePath ? renderDetailRow('Worktree', detail.worktreePath) : null}
-      {detail.repoPath ? renderDetailRow('Repo', detail.repoPath) : null}
-    </dl>
-  );
-}
-
-function renderDetailRow(label: string, value: string): VNode {
-  return (
-    <div class="activity-detail-row" key={label}>
+    <div class="activity-detail-row" key={`${entryIndex}-${rowIndex}-${label}`}>
       <dt class="activity-detail-label">{label}:</dt>
       <dd class="activity-detail-value">{value}</dd>
     </div>

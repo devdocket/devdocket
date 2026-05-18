@@ -1,5 +1,6 @@
 export type {
   BadgeData,
+  EditorActivityLogEntry,
   EditorCIWatchData,
   EditorItemData,
   ExtensionMessage,
@@ -14,3 +15,4 @@ export type {
   WatchData,
   WebviewMessage,
 } from '../../views/mainTypes';
+export type { ActivityDetailRender } from '../../api/types';
