@@ -69,11 +69,6 @@ async function checkCleanupState(item: Readonly<WorkItem>): Promise<CleanupState
     return undefined;
   }
 
-  if (!info.repoPath) {
-    logger.warn('Cannot check cleanup state: repoPath is missing');
-    return undefined;
-  }
-
   const repoPath = info.repoPath;
   if (!await pathExists(path.join(repoPath, '.git'))) {
     logger.warn('Skipping cleanup: repoPath is not a valid git repo');

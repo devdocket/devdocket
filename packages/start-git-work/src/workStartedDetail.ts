@@ -14,33 +14,27 @@ import { logger } from './logger';
  * and update {@link decodeWorkStartedDetail} to recognise the
  * new version alongside the old one.
  *
- * All fields except `v` are optional because the writer omits
- * fields it cannot safely act on later (e.g. `branchName` is
- * omitted for PR flows when the action did not create the
- * branch, so cleanup will not delete a pre-existing user
- * branch).
+ * `repoPath` is required: every write site has a known repo,
+ * and downstream cleanup cannot act on an entry without one.
+ * The decoder enforces this and rejects v1 payloads missing it.
+ * `branchName` / `worktreePath` stay optional because the PR
+ * flows intentionally omit `branchName` when the action did not
+ * create the branch (so cleanup will not delete a pre-existing
+ * user branch), and the checkout flows have no worktree.
  */
 export interface WorkStartedDetailV1 {
   /** Schema version. */
   v: 1;
+  /** Absolute filesystem path of the repository the action operated on. */
+  repoPath: string;
   /** Branch name created by the action, if any. */
   branchName?: string;
   /** Absolute filesystem path of the worktree created by the action, if any. */
   worktreePath?: string;
-  /** Absolute filesystem path of the repository the action operated on. */
-  repoPath?: string;
 }
 
-/** Input accepted by {@link encodeWorkStartedDetail} — the version tag is supplied by the encoder.
- *
- * `repoPath` is required because every code path in {@link ./startWorkAction}
- * has a known repo to record, and {@link decodeWorkStartedDetail} consumers
- * (e.g. cleanup) cannot act on an entry without it. `branchName` /
- * `worktreePath` stay optional: the PR flows intentionally omit `branchName`
- * when the action did not create the branch, and the checkout flows have no
- * worktree.
- */
-export type WorkStartedDetailInput = Omit<WorkStartedDetailV1, 'v' | 'repoPath'> & { repoPath: string };
+/** Input accepted by {@link encodeWorkStartedDetail} — the version tag is supplied by the encoder. */
+export type WorkStartedDetailInput = Omit<WorkStartedDetailV1, 'v'>;
 
 /** Decoded payload returned by {@link decodeWorkStartedDetail}.
  *
@@ -62,15 +56,12 @@ export const WORK_STARTED_DETAIL_VERSION = 1 as const;
  * names at the top level.
  */
 export function encodeWorkStartedDetail(input: Readonly<WorkStartedDetailInput>): string {
-  const payload: WorkStartedDetailV1 = { v: WORK_STARTED_DETAIL_VERSION };
+  const payload: WorkStartedDetailV1 = { v: WORK_STARTED_DETAIL_VERSION, repoPath: input.repoPath };
   if (input.branchName !== undefined) {
     payload.branchName = input.branchName;
   }
   if (input.worktreePath !== undefined) {
     payload.worktreePath = input.worktreePath;
-  }
-  if (input.repoPath !== undefined) {
-    payload.repoPath = input.repoPath;
   }
   return JSON.stringify(payload);
 }
@@ -89,6 +80,9 @@ export function encodeWorkStartedDetail(input: Readonly<WorkStartedDetailInput>)
  *   `v` is present but unrecognised. This makes future
  *   schema mismatches visible in the logs instead of
  *   silently downgrading cleanup to a no-op.
+ * - Returns `undefined` when the payload is missing the
+ *   required `repoPath` field, since callers cannot act on
+ *   an entry without it.
  */
 export function decodeWorkStartedDetail(detail: string | undefined): WorkStartedDetail | undefined {
   if (!detail) {
@@ -117,15 +111,16 @@ export function decodeWorkStartedDetail(detail: string | undefined): WorkStarted
     return undefined;
   }
 
-  const result: WorkStartedDetailV1 = { v: WORK_STARTED_DETAIL_VERSION };
+  if (typeof obj.repoPath !== 'string') {
+    return undefined;
+  }
+
+  const result: WorkStartedDetailV1 = { v: WORK_STARTED_DETAIL_VERSION, repoPath: obj.repoPath };
   if (typeof obj.branchName === 'string') {
     result.branchName = obj.branchName;
   }
   if (typeof obj.worktreePath === 'string') {
     result.worktreePath = obj.worktreePath;
-  }
-  if (typeof obj.repoPath === 'string') {
-    result.repoPath = obj.repoPath;
   }
   return result;
 }

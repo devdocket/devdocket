@@ -91,6 +91,21 @@ describe('decodeWorkStartedDetail', () => {
     expect(decodeWorkStartedDetail(stringVersion)).toBeUndefined();
     expect(logger.warn).toHaveBeenCalledWith(expect.stringContaining('Unknown work-started activity detail version'));
   });
+
+  it('returns undefined for v1 payloads missing required repoPath', () => {
+    const noRepoPath = JSON.stringify({ v: 1, branchName: 'feature/x', worktreePath: '/w' });
+    expect(decodeWorkStartedDetail(noRepoPath)).toBeUndefined();
+  });
+
+  it('returns undefined for legacy unversioned payloads missing repoPath', () => {
+    const legacyNoRepoPath = JSON.stringify({ branchName: 'feature/x', worktreePath: '/w' });
+    expect(decodeWorkStartedDetail(legacyNoRepoPath)).toBeUndefined();
+  });
+
+  it('returns undefined when repoPath has a non-string value', () => {
+    const nonStringRepoPath = JSON.stringify({ v: 1, repoPath: 42, branchName: 'b' });
+    expect(decodeWorkStartedDetail(nonStringRepoPath)).toBeUndefined();
+  });
 });
 
 describe('encodeWorkStartedDetail (extra invariants)', () => {
