@@ -207,7 +207,7 @@ Registers **AI Code Review** and **AI Walkthrough** actions that can be run on a
 
 Registers a **Start Git Work** action available on **In Progress** GitHub and ADO work items. Prompts for repository path and base branch (with cached defaults), creates a feature branch, sets up a git worktree when requested, and runs any configured post-worktree commands.
 
-By default, Start Git Work also prompts for the branch name on issue flows and the worktree path on worktree flows. These prompts are prefilled with the same auto-derived values that would be used silently.
+By default, Start Git Work also prompts for the branch name on issue flows, the local branch name on PR flows, and the worktree path on worktree flows. These prompts are prefilled with the same auto-derived values that would be used silently.
 
 ```jsonc
 // settings.json (user-level only — workspace settings are not supported)
