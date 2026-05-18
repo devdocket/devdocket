@@ -33,7 +33,7 @@ export interface WorkStartedDetailV1 {
 
 /** Input accepted by {@link encodeWorkStartedDetail} — the version tag is supplied by the encoder.
  *
- * `repoPath` is required because every code path in {@link ../startWorkAction}
+ * `repoPath` is required because every code path in {@link ./startWorkAction}
  * has a known repo to record, and {@link decodeWorkStartedDetail} consumers
  * (e.g. cleanup) cannot act on an entry without it. `branchName` /
  * `worktreePath` stay optional: the PR flows intentionally omit `branchName`
