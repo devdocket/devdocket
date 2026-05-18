@@ -619,7 +619,7 @@ describe('StartWorkAction', () => {
       }));
     });
 
-    it('falls back to the local repo and ref slug when no work item number is derivable', async () => {
+    it('falls back to the local repo, ref slug, and stable identity when no work item number is derivable', async () => {
       mockNoLocalBranch();
       const item = createWorkItem({ externalId: 'work-item' });
       const { action } = createAction(discovered('provider', 'work-item', {
@@ -628,9 +628,35 @@ describe('StartWorkAction', () => {
 
       await action.run(item);
 
-      expect(inputBoxOptions('DevDocket: Worktree path')).toEqual(expect.objectContaining({
-        value: path.join('/mock', 'workspace-feature-topic'),
-      }));
+      const defaultPath = inputBoxOptions('DevDocket: Worktree path')?.value;
+      expect(path.basename(defaultPath)).toMatch(/^workspace-feature-topic-[a-z0-9]{6}$/);
+    });
+
+    it('keeps fallback worktree paths distinct for different work items with the same ref', async () => {
+      setPromptForNames(false);
+      mockNoLocalBranch();
+      const gitWork = {
+        kind: 'pr' as const,
+        cloneUrl: 'https://example.com/acme/repo.git',
+        ref: 'feature/topic',
+        repoLabel: undefined,
+      };
+      const { action } = createAction({
+        ...discovered('provider', 'work-a', gitWork),
+        ...discovered('provider', 'work-b', gitWork),
+      });
+
+      await action.run(createWorkItem({ id: 'wc-test-a', externalId: 'work-a' }));
+      await action.run(createWorkItem({ id: 'wc-test-b', externalId: 'work-b' }));
+
+      const worktreePaths = vi.mocked(execFile).mock.calls
+        .map(call => call[1])
+        .filter(args => args[0] === 'worktree' && args[1] === 'add')
+        .map(args => args[4]);
+      expect(worktreePaths).toHaveLength(2);
+      expect(path.basename(worktreePaths[0])).toMatch(/^workspace-feature-topic-[a-z0-9]{6}$/);
+      expect(path.basename(worktreePaths[1])).toMatch(/^workspace-feature-topic-[a-z0-9]{6}$/);
+      expect(worktreePaths[0]).not.toEqual(worktreePaths[1]);
     });
 
     it('prompts for issue checkout branch name but skips worktree path', async () => {

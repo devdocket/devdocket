@@ -914,7 +914,23 @@ export class StartWorkAction implements DevDocketAction {
     }
 
     const repoBaseName = path.basename(repoPath);
-    return `${repoBaseName}-${this.toWorktreePathSuffix(ref)}`;
+    const refSuffix = this.toWorktreePathSuffix(ref);
+    const identitySuffix = this.worktreeFallbackIdentity(item);
+    return identitySuffix ? `${repoBaseName}-${refSuffix}-${identitySuffix}` : `${repoBaseName}-${refSuffix}`;
+  }
+
+  private worktreeFallbackIdentity(item: Readonly<WorkItem>): string | undefined {
+    const identity = [item.providerId, item.externalId ?? item.id].filter(Boolean).join(':');
+    return identity ? this.shortStableHash(identity) : undefined;
+  }
+
+  private shortStableHash(value: string): string {
+    let hash = 0x811c9dc5;
+    for (const char of value) {
+      hash ^= char.charCodeAt(0);
+      hash = Math.imul(hash, 0x01000193) >>> 0;
+    }
+    return hash.toString(36).padStart(6, '0').slice(0, 6);
   }
 
   private workItemNumber(externalId: string | undefined): string | undefined {
