@@ -133,6 +133,12 @@ describe('ItemCard author annotation', () => {
     expect(container.querySelector('.item-repo-annotation')?.textContent).toBe('owner/repo');
   });
 
+  it('prefers display name when the handle is an email address', () => {
+    const container = renderCard(makeCardItem({ author: { displayName: 'Jane Example', handle: 'jane@example.com' } }));
+
+    expect(container.querySelector('.item-repo-annotation')?.textContent).toBe('owner/repo · Jane Example');
+  });
+
   it('suppresses the author annotation for self-authored items', () => {
     const container = renderCard(makeCardItem({ author: { displayName: 'Octocat', handle: 'octocat' }, authored: true }));
 

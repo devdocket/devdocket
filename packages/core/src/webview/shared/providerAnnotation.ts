@@ -9,7 +9,11 @@ interface ProviderAnnotationOptions {
 export function formatProviderAnnotation({ source, author, authored }: ProviderAnnotationOptions): string | undefined {
   const parts = [source];
   if (author && authored !== true) {
-    parts.push(author.handle ? `@${author.handle}` : author.displayName);
+    parts.push(formatAuthorAnnotation(author));
   }
   return parts.filter((value): value is string => Boolean(value)).join(' · ') || undefined;
+}
+
+function formatAuthorAnnotation(author: ItemAuthorData): string {
+  return author.handle && !author.handle.includes('@') ? `@${author.handle}` : author.displayName;
 }
