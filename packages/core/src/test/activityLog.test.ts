@@ -3,11 +3,13 @@ import { h, render } from 'preact';
 import { act } from 'preact/test-utils';
 import { afterEach, describe, expect, it } from 'vitest';
 import { ActivityLog } from '../webview/editor/components/ActivityLog';
+import type { ActivityDetailRender } from '../api/types';
 
 interface TestActivityEntry {
   timestamp: number;
   type: string;
   detail?: string;
+  displayDetail?: ActivityDetailRender;
 }
 
 describe('ActivityLog', () => {
@@ -21,15 +23,19 @@ describe('ActivityLog', () => {
     }
   });
 
-  it('renders work-started JSON detail as labelled fields', () => {
+  it('renders displayDetail.fields as a labelled definition list', () => {
     renderActivityLog([{
       timestamp: Date.now(),
       type: 'work-started',
-      detail: JSON.stringify({
-        branchName: 'feature/activity-renderer',
-        worktreePath: 'C:\\repos\\devdocket-activity-renderer',
-        repoPath: 'C:\\repos\\devdocket',
-      }),
+      detail: 'raw payload (should not be rendered)',
+      displayDetail: {
+        kind: 'fields',
+        rows: [
+          { label: 'Branch', value: 'feature/activity-renderer' },
+          { label: 'Worktree', value: 'C:\\repos\\devdocket-activity-renderer' },
+          { label: 'Repo', value: 'C:\\repos\\devdocket' },
+        ],
+      },
     }]);
 
     expandActivityLog();
@@ -44,8 +50,23 @@ describe('ActivityLog', () => {
     expect(detail!.textContent).toContain('C:\\repos\\devdocket');
   });
 
-  it('falls back to raw detail when work-started JSON is invalid', () => {
-    const rawDetail = '{"branchName":';
+  it('renders displayDetail.text in place of the raw detail', () => {
+    renderActivityLog([{
+      timestamp: Date.now(),
+      type: 'work-started',
+      detail: 'ignored raw payload',
+      displayDetail: { kind: 'text', text: 'pretty text from renderer' },
+    }]);
+
+    expandActivityLog();
+
+    const detail = container!.querySelector('.activity-entry-detail');
+    expect(detail).toBeInstanceOf(HTMLSpanElement);
+    expect(detail!.textContent).toBe('pretty text from renderer');
+  });
+
+  it('falls back to raw detail when no displayDetail is provided', () => {
+    const rawDetail = '{"branchName": "feature/x"}';
     renderActivityLog([{ timestamp: Date.now(), type: 'work-started', detail: rawDetail }]);
 
     expandActivityLog();
@@ -55,7 +76,7 @@ describe('ActivityLog', () => {
     expect(detail!.textContent).toBe(rawDetail);
   });
 
-  it('renders other activity type details verbatim', () => {
+  it('renders plain detail strings verbatim', () => {
     renderActivityLog([{ timestamp: Date.now(), type: 'state-changed', detail: 'New → InProgress' }]);
 
     expandActivityLog();
@@ -65,31 +86,13 @@ describe('ActivityLog', () => {
     expect(detail!.textContent).toBe('New → InProgress');
   });
 
-  it('renders v1 work-started detail as labelled fields', () => {
-    renderActivityLog([{
-      timestamp: Date.now(),
-      type: 'work-started',
-      detail: JSON.stringify({ v: 1, branchName: 'feature/x', repoPath: '/r' }),
-    }]);
+  it('renders nothing for the detail slot when both detail and displayDetail are absent', () => {
+    renderActivityLog([{ timestamp: Date.now(), type: 'created' }]);
 
     expandActivityLog();
 
-    const detail = container!.querySelector('.activity-entry-detail--structured');
-    expect(detail).toBeInstanceOf(HTMLDListElement);
-    expect(detail!.textContent).toContain('feature/x');
-  });
-
-  it('falls back to raw detail for unknown work-started schema version', () => {
-    const raw = JSON.stringify({ v: 99, branchName: 'feature/x', repoPath: '/r' });
-    renderActivityLog([{ timestamp: Date.now(), type: 'work-started', detail: raw }]);
-
-    expandActivityLog();
-
-    const structured = container!.querySelector('.activity-entry-detail--structured');
-    expect(structured).toBeNull();
-    const plain = container!.querySelector('.activity-entry-detail');
-    expect(plain).toBeInstanceOf(HTMLSpanElement);
-    expect(plain!.textContent).toBe(raw);
+    const detail = container!.querySelector('.activity-entry-detail');
+    expect(detail).toBeNull();
   });
 
   function renderActivityLog(entries: TestActivityEntry[]) {

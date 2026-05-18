@@ -11,6 +11,7 @@ import { WorkGraph } from './services/workGraph';
 import { ProviderRegistry } from './services/providerRegistry';
 import { checkAutoComplete, showAutoCompleteNotification } from './services/autoComplete';
 import { ActionRegistry } from './services/actionRegistry';
+import { ActivityDetailRendererRegistry } from './services/activityDetailRendererRegistry';
 import { WatcherRegistry } from './services/watcherRegistry';
 import { PRWatcherRegistry } from './services/prWatcherRegistry';
 import { WatcherService } from './services/watcherService';
@@ -474,11 +475,12 @@ export async function activate(context: vscode.ExtensionContext): Promise<DevDoc
     },
   );
   const ar = new ActionRegistry();
+  const adrr = new ActivityDetailRendererRegistry();
   const wr = new WatcherRegistry(logger);
   const pwr = new PRWatcherRegistry(logger);
   const watchStore = new WatchStore(context.globalState);
   const ws = new WatcherService(wr, pwr, watchStore, logger);
-  const api = new DevDocketApiImpl(pr, ar, wr, pwr, wg);
+  const api = new DevDocketApiImpl(pr, ar, wr, pwr, wg, adrr);
   logger.info(`Store + service init took ${Math.round(performance.now() - initStart)}ms`);
 
   const watchPanelProvider = new WatchPanelProvider(context.extensionUri, ws, wg, pr);
@@ -550,6 +552,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<DevDoc
     actionRegistry: ar,
     stateStore: ss,
     watcherService: ws,
+    activityDetailRendererRegistry: adrr,
   };
 
   // Panel managers must be first: editor disposal flushes pending saves via

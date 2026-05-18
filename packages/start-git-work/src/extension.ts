@@ -1,6 +1,7 @@
 import * as vscode from 'vscode';
 import { StartWorkAction } from './startWorkAction';
 import { promptGitCleanup } from './gitCleanup';
+import { renderWorkStartedActivityDetail } from './workStartedDetail';
 import { logger, setLogger } from './logger';
 import type { StateTransitionEvent, ActivityType, DevDocketApi } from '@devdocket/shared';
 
@@ -30,6 +31,19 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   );
   const actionDisposable = api.registerAction(startWorkAction);
   context.subscriptions.push(actionDisposable);
+
+  // Register the activity-detail renderer for our 'work-started' entries.
+  // The core extension uses this to render entries without parsing the
+  // schema itself, keeping the cross-package contract one-directional
+  // (we own the schema, the encoder, the decoder, and the renderer).
+  if (typeof api.registerActivityDetailRenderer === 'function') {
+    try {
+      const rendererDisposable = api.registerActivityDetailRenderer('work-started', renderWorkStartedActivityDetail);
+      context.subscriptions.push(rendererDisposable);
+    } catch (err) {
+      logger.warn('Failed to register work-started activity detail renderer', err);
+    }
+  }
 
   // Listen for Done transitions to prompt for branch/worktree cleanup
   if (typeof api.onDidTransitionState === 'function') {

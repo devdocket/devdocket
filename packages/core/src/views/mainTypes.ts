@@ -1,4 +1,5 @@
 import type { RunConclusion } from '@devdocket/shared';
+import type { ActivityDetailRender } from '../api/types';
 import type { ResolvedRelatedItem } from './relatedItemTypes';
 
 export type ExtensionMessage =
@@ -88,6 +89,21 @@ export interface EditorCIWatchData {
   totalFailing: number;
 }
 
+/** A single activity log entry as serialised for the editor webview. */
+export interface EditorActivityLogEntry {
+  timestamp: number;
+  type: string;
+  /** Raw `detail` string written by the producer. */
+  detail?: string;
+  /**
+   * Pre-rendered display representation produced by an
+   * extension-registered renderer. When present, the webview renders
+   * this in place of {@link detail}. Otherwise the webview falls
+   * back to plain-text rendering of {@link detail}.
+   */
+  displayDetail?: ActivityDetailRender;
+}
+
 export interface EditorItemData {
   id: string;
   title: string;
@@ -105,7 +121,7 @@ export interface EditorItemData {
   isProviderManaged: boolean;
   validTransitions: string[];
   hasActions: boolean;
-  activityLog: Array<{ timestamp: number; type: string; detail?: string }>;
+  activityLog: EditorActivityLogEntry[];
   relatedItems: ResolvedRelatedItem[];
   ciWatch?: EditorCIWatchData;
   isIncoming?: boolean;

@@ -1,0 +1,69 @@
+import * as vscode from 'vscode';
+import type { ActivityType, ActivityDetailRender, ActivityDetailRenderer } from '../api/types';
+import { logger } from './logger';
+
+/**
+ * Registry for {@link ActivityDetailRenderer} functions keyed by
+ * {@link ActivityType}.
+ *
+ * Extensions register a renderer for activity types whose `detail`
+ * payload they own (typically a structured JSON blob). When the
+ * editor webview is built, the core extension calls
+ * {@link render} on each activity entry; if a renderer is registered
+ * for that type, its output is sent to the webview alongside the raw
+ * detail string. The webview prefers the rendered representation
+ * when present and falls back to plain text otherwise.
+ *
+ * This keeps the core extension free of any knowledge of the
+ * `detail` schema owned by other extensions.
+ */
+export class ActivityDetailRendererRegistry {
+  private readonly renderers = new Map<ActivityType, ActivityDetailRenderer>();
+
+  /**
+   * Register a renderer for an activity type.
+   *
+   * @throws If a renderer is already registered for {@link type}.
+   */
+  register(type: ActivityType, renderer: ActivityDetailRenderer): vscode.Disposable {
+    if (this.renderers.has(type)) {
+      throw new Error(`Activity detail renderer already registered for type: ${type}`);
+    }
+    this.renderers.set(type, renderer);
+    logger.warn(`Registered activity detail renderer for type: ${type}`);
+    let disposed = false;
+    return new vscode.Disposable(() => {
+      if (disposed) {
+        return;
+      }
+      disposed = true;
+      if (this.renderers.get(type) === renderer) {
+        this.renderers.delete(type);
+      }
+    });
+  }
+
+  /**
+   * Invoke the renderer for {@link type} on {@link detail}.
+   *
+   * Returns `undefined` when no renderer is registered, the renderer
+   * returns `undefined`, or the renderer throws. Renderer exceptions
+   * are caught and logged so a buggy renderer cannot break the editor.
+   */
+  render(type: ActivityType, detail: string | undefined): ActivityDetailRender | undefined {
+    const renderer = this.renderers.get(type);
+    if (!renderer) {
+      return undefined;
+    }
+    try {
+      return renderer(detail);
+    } catch (err) {
+      logger.warn(`Activity detail renderer for type "${type}" threw; falling back to plain text`, err);
+      return undefined;
+    }
+  }
+
+  dispose(): void {
+    this.renderers.clear();
+  }
+}

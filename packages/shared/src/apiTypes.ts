@@ -4,6 +4,36 @@ import type { Disposable, Event, ProviderItem, ResolvedItem } from './baseProvid
 import type { WorkItem, ActivityType } from './workItem';
 
 /**
+ * Rendered representation of an activity log entry's `detail` field,
+ * returned by an {@link ActivityDetailRenderer}.
+ *
+ * The shape is plain JSON so it can be serialised across the webview
+ * boundary.
+ *
+ * - `text` — a single string rendered verbatim where the raw detail
+ *   would otherwise appear.
+ * - `fields` — an ordered set of label/value rows rendered as a
+ *   definition list. Use this for structured payloads that benefit
+ *   from labelled per-field display.
+ */
+export type ActivityDetailRender =
+  | { readonly kind: 'text'; readonly text: string }
+  | { readonly kind: 'fields'; readonly rows: ReadonlyArray<{ readonly label: string; readonly value: string }> };
+
+/**
+ * Renders the `detail` payload of an activity log entry into a
+ * display-ready representation. Called by the core extension when
+ * serialising activity entries for the editor webview.
+ *
+ * Extensions that write structured `detail` payloads (e.g. JSON) own
+ * the schema and should register a renderer so the core extension can
+ * display the data without parsing the schema itself. Returning
+ * `undefined` (or throwing) falls back to the default rendering, which
+ * shows the raw `detail` string verbatim.
+ */
+export type ActivityDetailRenderer = (detail: string | undefined) => ActivityDetailRender | undefined;
+
+/**
  * Event payload emitted when a work item changes lifecycle state.
  *
  * The {@link oldState} and {@link newState} fields are plain strings (e.g.
@@ -206,6 +236,26 @@ export interface DevDocketApi {
    * @param detail - Optional human-readable detail string.
    */
   addActivity?(itemId: string, type: ActivityType, detail?: string): Promise<void>;
+  /**
+   * Register a renderer that converts an activity log entry's raw
+   * `detail` string into a display-ready representation.
+   *
+   * Extensions that write structured `detail` payloads (e.g. JSON
+   * encoded by the writer) should register a renderer for their
+   * activity types so the core extension can render entries without
+   * having to understand the writer's schema. The core extension
+   * always falls back to plain-text rendering of the raw `detail`
+   * when no renderer is registered or the renderer returns
+   * `undefined`.
+   *
+   * Only one renderer may be registered per activity type. Attempting
+   * to register a second renderer for the same type throws.
+   *
+   * @param type - The activity type this renderer handles.
+   * @param render - The rendering function.
+   * @returns A {@link Disposable} that unregisters the renderer.
+   */
+  registerActivityDetailRenderer?(type: ActivityType, render: ActivityDetailRenderer): Disposable;
   /**
    * Register a PR watcher for tracking pull request pipelines.
    *

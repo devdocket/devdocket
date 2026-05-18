@@ -1,4 +1,5 @@
 import { logger } from './logger';
+import type { ActivityDetailRender } from '@devdocket/shared';
 
 /**
  * Versioned schema for the `detail` field of a `'work-started'`
@@ -123,4 +124,31 @@ export function decodeWorkStartedDetail(detail: string | undefined): WorkStarted
     result.worktreePath = obj.worktreePath;
   }
   return result;
+}
+
+/**
+ * Render a `'work-started'` activity entry's `detail` payload into a
+ * display-ready representation for the editor's activity log.
+ *
+ * Registered with the core extension via
+ * `DevDocketApi.registerActivityDetailRenderer('work-started', ...)`
+ * so that the core extension does not need to understand the v1
+ * schema. Returns `undefined` when the detail cannot be decoded,
+ * which causes the core to fall back to plain-text rendering of
+ * the raw `detail` string.
+ */
+export function renderWorkStartedActivityDetail(detail: string | undefined): ActivityDetailRender | undefined {
+  const decoded = decodeWorkStartedDetail(detail);
+  if (!decoded) {
+    return undefined;
+  }
+  const rows: Array<{ label: string; value: string }> = [];
+  if (decoded.branchName) {
+    rows.push({ label: 'Branch', value: decoded.branchName });
+  }
+  if (decoded.worktreePath) {
+    rows.push({ label: 'Worktree', value: decoded.worktreePath });
+  }
+  rows.push({ label: 'Repo', value: decoded.repoPath });
+  return { kind: 'fields', rows };
 }

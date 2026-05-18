@@ -1,7 +1,7 @@
 import type { VNode } from 'preact';
 import { useState } from 'preact/hooks';
 import { formatRelativeTime } from '../../shared/timeUtils';
-import type { EditorItemData } from '../../shared/types';
+import type { ActivityDetailRender, EditorActivityLogEntry, EditorItemData } from '../../shared/types';
 import { activityTypeLabel } from '../editorUtils';
 
 interface ActivityLogProps {
@@ -38,7 +38,7 @@ export function ActivityLog({ entries }: ActivityLogProps) {
             <div class="activity-entry" key={`${entry.timestamp}-${entry.type}-${index}`}>
               <div class="activity-entry-main">
                 <span class="activity-entry-type">{activityTypeLabel(entry.type)}</span>
-                {entry.detail ? renderActivityDetail(entry.type, entry.detail) : null}
+                {renderActivityDetail(entry)}
               </div>
               <span class="activity-entry-time">{formatRelativeTime(entry.timestamp)}</span>
             </div>
@@ -49,81 +49,29 @@ export function ActivityLog({ entries }: ActivityLogProps) {
   );
 }
 
-type ActivityDetailRenderer = (detail: string) => VNode;
+function renderActivityDetail(entry: EditorActivityLogEntry): VNode | null {
+  if (entry.displayDetail) {
+    return renderDisplayDetail(entry.displayDetail);
+  }
+  if (entry.detail) {
+    return renderPlainActivityDetail(entry.detail);
+  }
+  return null;
+}
 
-const activityDetailRenderers: Partial<Record<string, ActivityDetailRenderer>> = {
-  'work-started': renderWorkStartedDetail,
-};
-
-function renderActivityDetail(type: string, detail: string): VNode {
-  const renderer = activityDetailRenderers[type] ?? renderPlainActivityDetail;
-  return renderer(detail);
+function renderDisplayDetail(display: ActivityDetailRender): VNode {
+  if (display.kind === 'fields') {
+    return (
+      <dl class="activity-entry-detail activity-entry-detail--structured">
+        {display.rows.map(row => renderDetailRow(row.label, row.value))}
+      </dl>
+    );
+  }
+  return renderPlainActivityDetail(display.text);
 }
 
 function renderPlainActivityDetail(detail: string): VNode {
   return <span class="activity-entry-detail">{detail}</span>;
-}
-
-interface WorkStartedDetail {
-  branchName?: string;
-  worktreePath?: string;
-  repoPath?: string;
-}
-
-/**
- * Parse the `'work-started'` activity entry detail for rendering.
- *
- * Must stay in lockstep with the schema owned by
- * `packages/start-git-work/src/workStartedDetail.ts`. When that schema
- * bumps to V2, this version check (and the rendered fields) must be
- * updated in the same change. Unknown versions fall through to the
- * plain JSON rendering so the user still sees the raw payload.
- */
-const KNOWN_WORK_STARTED_DETAIL_VERSION = 1;
-
-function parseWorkStartedDetail(raw: string): WorkStartedDetail | undefined {
-  try {
-    const parsed = JSON.parse(raw) as unknown;
-    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
-      return undefined;
-    }
-
-    const values = parsed as Record<string, unknown>;
-
-    if (values.v !== undefined && values.v !== KNOWN_WORK_STARTED_DETAIL_VERSION) {
-      return undefined;
-    }
-
-    const detail: WorkStartedDetail = {};
-    if (typeof values.branchName === 'string') {
-      detail.branchName = values.branchName;
-    }
-    if (typeof values.worktreePath === 'string') {
-      detail.worktreePath = values.worktreePath;
-    }
-    if (typeof values.repoPath === 'string') {
-      detail.repoPath = values.repoPath;
-    }
-
-    return detail.branchName || detail.worktreePath || detail.repoPath ? detail : undefined;
-  } catch {
-    return undefined;
-  }
-}
-
-function renderWorkStartedDetail(raw: string): VNode {
-  const detail = parseWorkStartedDetail(raw);
-  if (!detail) {
-    return renderPlainActivityDetail(raw);
-  }
-
-  return (
-    <dl class="activity-entry-detail activity-entry-detail--structured">
-      {detail.branchName ? renderDetailRow('Branch', detail.branchName) : null}
-      {detail.worktreePath ? renderDetailRow('Worktree', detail.worktreePath) : null}
-      {detail.repoPath ? renderDetailRow('Repo', detail.repoPath) : null}
-    </dl>
-  );
 }
 
 function renderDetailRow(label: string, value: string): VNode {

@@ -12,6 +12,7 @@ import { logger } from '../logger';
 import {
   encodeWorkStartedDetail,
   decodeWorkStartedDetail,
+  renderWorkStartedActivityDetail,
   WORK_STARTED_DETAIL_VERSION,
 } from '../workStartedDetail';
 
@@ -105,6 +106,49 @@ describe('decodeWorkStartedDetail', () => {
   it('returns undefined when repoPath has a non-string value', () => {
     const nonStringRepoPath = JSON.stringify({ v: 1, repoPath: 42, branchName: 'b' });
     expect(decodeWorkStartedDetail(nonStringRepoPath)).toBeUndefined();
+  });
+});
+
+describe('renderWorkStartedActivityDetail', () => {
+  it('renders all known fields as labelled rows', () => {
+    const encoded = encodeWorkStartedDetail({
+      branchName: 'feature/x',
+      worktreePath: '/path/to/worktree',
+      repoPath: '/path/to/repo',
+    });
+    expect(renderWorkStartedActivityDetail(encoded)).toEqual({
+      kind: 'fields',
+      rows: [
+        { label: 'Branch', value: 'feature/x' },
+        { label: 'Worktree', value: '/path/to/worktree' },
+        { label: 'Repo', value: '/path/to/repo' },
+      ],
+    });
+  });
+
+  it('omits rows whose underlying field is absent', () => {
+    const encoded = encodeWorkStartedDetail({ repoPath: '/path/to/repo' });
+    expect(renderWorkStartedActivityDetail(encoded)).toEqual({
+      kind: 'fields',
+      rows: [{ label: 'Repo', value: '/path/to/repo' }],
+    });
+  });
+
+  it('returns undefined for undecodable detail (lets core fall back to plain text)', () => {
+    expect(renderWorkStartedActivityDetail(undefined)).toBeUndefined();
+    expect(renderWorkStartedActivityDetail('not json')).toBeUndefined();
+    expect(renderWorkStartedActivityDetail(JSON.stringify({ v: 99 }))).toBeUndefined();
+  });
+
+  it('renders legacy unversioned entries (backward compatibility)', () => {
+    const legacy = JSON.stringify({ branchName: 'feature/x', repoPath: '/r' });
+    expect(renderWorkStartedActivityDetail(legacy)).toEqual({
+      kind: 'fields',
+      rows: [
+        { label: 'Branch', value: 'feature/x' },
+        { label: 'Repo', value: '/r' },
+      ],
+    });
   });
 });
 

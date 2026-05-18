@@ -2,6 +2,7 @@ import { DevDocketApiImpl } from '../api/devDocketApi';
 import { DevDocketProvider, DevDocketAction, ProviderItem } from '../api/types';
 import { ProviderRegistry } from '../services/providerRegistry';
 import { ActionRegistry } from '../services/actionRegistry';
+import { ActivityDetailRendererRegistry } from '../services/activityDetailRendererRegistry';
 import { WatcherRegistry } from '../services/watcherRegistry';
 import { PRWatcherRegistry } from '../services/prWatcherRegistry';
 import { WorkGraph } from '../services/workGraph';
@@ -70,6 +71,7 @@ describe('DevDocketApiImpl', () => {
   let watcherRegistry: WatcherRegistry;
   let prWatcherRegistry: PRWatcherRegistry;
   let workGraph: WorkGraph;
+  let activityDetailRendererRegistry: ActivityDetailRendererRegistry;
 
   beforeEach(async () => {
     const stateStore = createMockStateStore();
@@ -79,7 +81,8 @@ describe('DevDocketApiImpl', () => {
     prWatcherRegistry = new PRWatcherRegistry({ info: vi.fn(), warn: vi.fn() });
     workGraph = new WorkGraph(createMockStore());
     await workGraph.load();
-    api = new DevDocketApiImpl(providerRegistry, actionRegistry, watcherRegistry, prWatcherRegistry, workGraph);
+    activityDetailRendererRegistry = new ActivityDetailRendererRegistry();
+    api = new DevDocketApiImpl(providerRegistry, actionRegistry, watcherRegistry, prWatcherRegistry, workGraph, activityDetailRendererRegistry);
   });
 
   describe('registerProvider', () => {
@@ -252,6 +255,21 @@ describe('DevDocketApiImpl', () => {
       disposable.dispose();
 
       expect(prWatcherRegistry.get('test-pr-watcher')).toBeUndefined();
+    });
+  });
+
+  describe('registerActivityDetailRenderer', () => {
+    it('delegates to ActivityDetailRendererRegistry.register and returns a Disposable', () => {
+      const renderer = vi.fn().mockReturnValue({ kind: 'text', text: 'pretty' });
+      const spy = vi.spyOn(activityDetailRendererRegistry, 'register');
+
+      const disposable = api.registerActivityDetailRenderer('work-started', renderer);
+
+      expect(spy).toHaveBeenCalledWith('work-started', renderer);
+      expect(activityDetailRendererRegistry.render('work-started', '{}')).toEqual({ kind: 'text', text: 'pretty' });
+
+      disposable.dispose();
+      expect(activityDetailRendererRegistry.render('work-started', '{}')).toBeUndefined();
     });
   });
 
