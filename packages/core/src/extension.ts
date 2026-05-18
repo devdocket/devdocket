@@ -587,6 +587,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<DevDoc
     { dispose: () => pwr.dispose() },
     { dispose: () => pr.dispose() },
     { dispose: () => ar.dispose() },
+    { dispose: () => adrr.dispose() },
   );
 
   const commandRegStart = performance.now();

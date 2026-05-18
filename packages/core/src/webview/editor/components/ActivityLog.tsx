@@ -38,7 +38,7 @@ export function ActivityLog({ entries }: ActivityLogProps) {
             <div class="activity-entry" key={`${entry.timestamp}-${entry.type}-${index}`}>
               <div class="activity-entry-main">
                 <span class="activity-entry-type">{activityTypeLabel(entry.type)}</span>
-                {renderActivityDetail(entry)}
+                {renderActivityDetail(entry, index)}
               </div>
               <span class="activity-entry-time">{formatRelativeTime(entry.timestamp)}</span>
             </div>
@@ -49,9 +49,9 @@ export function ActivityLog({ entries }: ActivityLogProps) {
   );
 }
 
-function renderActivityDetail(entry: EditorActivityLogEntry): VNode | null {
+function renderActivityDetail(entry: EditorActivityLogEntry, entryIndex: number): VNode | null {
   if (entry.displayDetail) {
-    return renderDisplayDetail(entry.displayDetail);
+    return renderDisplayDetail(entry.displayDetail, entryIndex);
   }
   if (entry.detail) {
     return renderPlainActivityDetail(entry.detail);
@@ -59,11 +59,11 @@ function renderActivityDetail(entry: EditorActivityLogEntry): VNode | null {
   return null;
 }
 
-function renderDisplayDetail(display: ActivityDetailRender): VNode {
+function renderDisplayDetail(display: ActivityDetailRender, entryIndex: number): VNode {
   if (display.kind === 'fields') {
     return (
       <dl class="activity-entry-detail activity-entry-detail--structured">
-        {display.rows.map(row => renderDetailRow(row.label, row.value))}
+        {display.rows.map((row, rowIndex) => renderDetailRow(row.label, row.value, entryIndex, rowIndex))}
       </dl>
     );
   }
@@ -74,9 +74,11 @@ function renderPlainActivityDetail(detail: string): VNode {
   return <span class="activity-entry-detail">{detail}</span>;
 }
 
-function renderDetailRow(label: string, value: string): VNode {
+function renderDetailRow(label: string, value: string, entryIndex: number, rowIndex: number): VNode {
+  // Include both indices so duplicate labels (rare but possible — the API
+  // does not require row labels to be unique) cannot collide on the Preact key.
   return (
-    <div class="activity-detail-row" key={label}>
+    <div class="activity-detail-row" key={`${entryIndex}-${rowIndex}-${label}`}>
       <dt class="activity-detail-label">{label}:</dt>
       <dd class="activity-detail-value">{value}</dd>
     </div>
