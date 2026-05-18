@@ -171,15 +171,182 @@ export async function retryWithAuth(apiUrl: string, signal?: AbortSignal): Promi
   return undefined;
 }
 
-/** Throw a descriptive error for a non-ok GitHub API response. */
-export function throwApiError(response: Response, label: string): never {
-  if (response.status === 404) {
+/**
+ * Inspect a non-ok GitHub API response and throw a descriptive error.
+ *
+ * Reads the response body (best-effort) and any diagnostic headers, logs a
+ * warning with the real HTTP status / headers / body snippet, and then throws
+ * an Error whose message describes the *actual* failure signature (rate limit,
+ * SSO, authentication, not-found, etc.) instead of defaulting to a generic
+ * "may be private" hint for every 4xx.
+ *
+ * Always throws — the `Promise<never>` return type lets callers `await` it
+ * inside an `if (!response.ok)` branch.
+ */
+export async function throwApiError(response: Response, label: string): Promise<never> {
+  const status = response.status;
+  const statusText = response.statusText ?? '';
+  const bodyText = await safeReadResponseBody(response);
+  const apiMessage = extractGitHubApiMessage(bodyText);
+
+  const remaining = response.headers.get('x-ratelimit-remaining');
+  const reset = response.headers.get('x-ratelimit-reset');
+  const retryAfter = response.headers.get('retry-after');
+  const sso = response.headers.get('x-github-sso');
+
+  const bodySnippet = bodyText ? truncateForLog(bodyText) : null;
+  const diag = [
+    `status=${status}`,
+    statusText ? `statusText="${statusText}"` : null,
+    remaining !== null ? `rate-limit-remaining=${remaining}` : null,
+    reset !== null ? `rate-limit-reset=${reset}` : null,
+    retryAfter !== null ? `retry-after=${retryAfter}` : null,
+    sso !== null ? `x-github-sso="${sso}"` : null,
+    apiMessage ? `message="${apiMessage}"` : null,
+    bodySnippet ? `body=${bodySnippet}` : null,
+  ].filter((part): part is string => part !== null).join(' ');
+  logger.warn(`GitHub API request failed for ${label}: ${diag}`);
+
+  if (status === 404) {
     throw new Error(`${label} not found. It may be private or deleted.`);
   }
-  if (response.status === 401 || response.status === 403) {
-    throw new Error(`GitHub access denied for ${label}. The repo may be private — sign in to GitHub in VS Code, or check rate limits.`);
+  if (status === 401) {
+    throw new Error(
+      `GitHub authentication failed for ${label} (HTTP 401)` +
+      `${apiMessage ? `: ${apiMessage}` : '.'}` +
+      ' Sign in to GitHub in VS Code or refresh your credentials.',
+    );
   }
-  throw new Error(`GitHub API error: ${response.status} ${response.statusText}`);
+  if (status === 403) {
+    // Order matters: prefer the most specific signature so a coincidental
+    // `remaining===0` doesn't mask SSO or secondary-rate-limit responses.
+    if (sso) {
+      throw new Error(
+        `GitHub SSO authorization required for ${label}` +
+        `${apiMessage ? `: ${apiMessage}` : '.'}` +
+        ' Authorize the token for the organization, then retry.',
+      );
+    }
+    if (isSecondaryRateLimited(retryAfter, apiMessage)) {
+      const wait = formatRetryAfter(retryAfter);
+      throw new Error(`GitHub secondary rate limit hit for ${label}.${wait ? ` ${wait}` : ''}`);
+    }
+    if (isPrimaryRateLimited(remaining, apiMessage)) {
+      const resetHint = formatRateLimitReset(reset);
+      throw new Error(
+        `GitHub API rate limit exceeded for ${label}.` +
+        `${resetHint ? ` ${resetHint}` : ''}` +
+        ' Sign in to GitHub in VS Code for a higher quota.',
+      );
+    }
+    throw new Error(
+      `GitHub denied access to ${label} (HTTP 403)` +
+      `${apiMessage ? `: ${apiMessage}` : '. The token may lack required permissions, or the resource may be private.'}`,
+    );
+  }
+  throw new Error(
+    `GitHub API error for ${label}: HTTP ${status}` +
+    `${statusText ? ` ${statusText}` : ''}` +
+    `${apiMessage ? ` — ${apiMessage}` : ''}`,
+  );
+}
+
+async function safeReadResponseBody(response: Response): Promise<string> {
+  try {
+    const text = await response.text();
+    return text ?? '';
+  } catch {
+    return '';
+  }
+}
+
+function extractGitHubApiMessage(bodyText: string): string | undefined {
+  if (!bodyText) { return undefined; }
+  try {
+    const parsed = JSON.parse(bodyText) as { message?: unknown };
+    if (parsed && typeof parsed.message === 'string' && parsed.message.trim().length > 0) {
+      return parsed.message.trim();
+    }
+  } catch {
+    // Body wasn't JSON — fall through.
+  }
+  return undefined;
+}
+
+function truncateForLog(text: string, limit = 200): string {
+  const collapsed = text.replace(/\s+/g, ' ').trim();
+  if (collapsed.length <= limit) { return JSON.stringify(collapsed); }
+  return JSON.stringify(collapsed.slice(0, limit) + '…');
+}
+
+function isPrimaryRateLimited(remaining: string | null, apiMessage: string | undefined): boolean {
+  if (remaining === '0') { return true; }
+  if (apiMessage && /api rate limit exceeded/i.test(apiMessage)) { return true; }
+  return false;
+}
+
+function isSecondaryRateLimited(retryAfter: string | null, apiMessage: string | undefined): boolean {
+  if (apiMessage && /secondary rate limit/i.test(apiMessage)) { return true; }
+  if (!retryAfter) { return false; }
+  // GitHub usually sends Retry-After with 403 only for abuse / secondary
+  // rate-limit paths. The header may be either delta-seconds (RFC 7231) or
+  // an HTTP-date; accept both forms.
+  if (Number.isFinite(Number(retryAfter))) { return true; }
+  if (!Number.isNaN(Date.parse(retryAfter))) { return true; }
+  return false;
+}
+
+/**
+ * Render a Retry-After header value as a short user-facing hint. Returns
+ * undefined when the value is missing or unparseable. Numeric values are
+ * shown as "Retry after Xs."; HTTP-date values are shown as a delta from
+ * `Date.now()` when the date is in the future.
+ */
+function formatRetryAfter(retryAfter: string | null): string | undefined {
+  if (!retryAfter) { return undefined; }
+  const seconds = Number(retryAfter);
+  if (Number.isFinite(seconds)) { return `Retry after ${seconds}s.`; }
+  const ts = Date.parse(retryAfter);
+  if (Number.isNaN(ts)) { return undefined; }
+  const delta = Math.max(0, Math.round((ts - Date.now()) / 1000));
+  return delta > 0 ? `Retry after ${delta}s.` : 'Retry shortly.';
+}
+
+function formatRateLimitReset(reset: string | null): string | undefined {
+  if (!reset) { return undefined; }
+  const epochSeconds = Number(reset);
+  if (!Number.isFinite(epochSeconds)) { return undefined; }
+  const nowSeconds = Date.now() / 1000;
+  const deltaSeconds = Math.max(0, Math.round(epochSeconds - nowSeconds));
+  if (deltaSeconds === 0) { return 'Quota should reset momentarily.'; }
+  if (deltaSeconds < 60) { return `Resets in ${deltaSeconds}s.`; }
+  const minutes = Math.round(deltaSeconds / 60);
+  if (minutes < 60) { return `Resets in ${minutes} minute${minutes === 1 ? '' : 's'}.`; }
+  const hours = Math.round(deltaSeconds / 3600);
+  return `Resets in ${hours} hour${hours === 1 ? '' : 's'}.`;
+}
+
+/**
+ * Header-only heuristic for whether a 403 response looks like a rate-limit
+ * response (primary IP/user rate limit or secondary/abuse limit), based on
+ * `x-ratelimit-remaining` and `Retry-After`. This is cheap to evaluate (no
+ * body read) and is used to decide whether an unauthenticated `resolveUrl`
+ * request should retry with interactive auth — prompting the user to sign in
+ * only makes sense when the failure is plausibly fixed by getting a higher
+ * authenticated quota.
+ *
+ * Returns false for non-403 responses.
+ */
+export function looksLikeRateLimited403(response: Response): boolean {
+  if (response.status !== 403) { return false; }
+  const remaining = response.headers.get('x-ratelimit-remaining');
+  if (remaining === '0') { return true; }
+  const retryAfter = response.headers.get('retry-after');
+  if (retryAfter) {
+    if (Number.isFinite(Number(retryAfter))) { return true; }
+    if (!Number.isNaN(Date.parse(retryAfter))) { return true; }
+  }
+  return false;
 }
 
 /** Extract canonical owner/repo from a GitHub html_url. */

@@ -2,7 +2,7 @@ import { ProviderItem, combineSignals, createAbortError, safeDecodeComponent, ty
 import { BaseGitHubProvider } from './baseGithubProvider';
 import { logger } from './logger';
 import { parseRepoFromUrls } from './parseRepo';
-import { getHeaders, getGitHubAuthHeaders, retryWithAuth, throwApiError, parseCanonicalRepo, fetchClosedGitHubItems, buildIssueStateBadge, type GitHubIssue } from './githubApiHelpers';
+import { getHeaders, getGitHubAuthHeaders, retryWithAuth, throwApiError, looksLikeRateLimited403, parseCanonicalRepo, fetchClosedGitHubItems, buildIssueStateBadge, type GitHubIssue } from './githubApiHelpers';
 import { matchesRepoPatterns } from './repoPattern';
 import { createGitHubIssueGitWork } from './gitWorkCapabilities';
 
@@ -87,13 +87,14 @@ export class GitHubIssueProvider extends BaseGitHubProvider {
 
     let response = await fetch(apiUrl, { headers, signal });
 
-    if (response.status === 404 && !wasAuthenticated && !signal?.aborted) {
+    if (!response.ok && !wasAuthenticated && !signal?.aborted &&
+        (response.status === 404 || looksLikeRateLimited403(response))) {
       const retryResponse = await retryWithAuth(apiUrl, signal);
       if (retryResponse) { response = retryResponse; }
     }
 
     if (!response.ok) {
-      throwApiError(response, `GitHub issue ${owner}/${repo}#${number}`);
+      await throwApiError(response, `GitHub issue ${owner}/${repo}#${number}`);
     }
 
     const data = await response.json() as { title: string; body: string | null; html_url: string };

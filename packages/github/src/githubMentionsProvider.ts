@@ -5,7 +5,7 @@ import { BaseGitHubProvider } from './baseGithubProvider';
 import { logger } from './logger';
 import { parseRepoFromUrls } from './parseRepo';
 import { matchesRepoPatterns } from './repoPattern';
-import { getHeaders, getGitHubAuthHeaders, retryWithAuth, throwApiError, parseCanonicalRepo, fetchClosedGitHubItems, buildIssueStateBadge, filterMergedGitHubPrs, type GitHubIssue, type GitHubSearchResponse } from './githubApiHelpers';
+import { getHeaders, getGitHubAuthHeaders, retryWithAuth, throwApiError, looksLikeRateLimited403, parseCanonicalRepo, fetchClosedGitHubItems, buildIssueStateBadge, filterMergedGitHubPrs, type GitHubIssue, type GitHubSearchResponse } from './githubApiHelpers';
 import { createGitHubIssueGitWork, createGitHubPrGitWork } from './gitWorkCapabilities';
 
 const MENTIONS_ACTIVATED_KEY = 'mentionsActivatedAt';
@@ -187,14 +187,15 @@ export class GitHubMentionsProvider extends BaseGitHubProvider {
 
     let response = await fetch(apiUrl, { headers, signal });
 
-    if (response.status === 404 && !wasAuthenticated && !signal?.aborted) {
+    if (!response.ok && !wasAuthenticated && !signal?.aborted &&
+        (response.status === 404 || looksLikeRateLimited403(response))) {
       const retryResponse = await retryWithAuth(apiUrl, signal);
       if (retryResponse) { response = retryResponse; }
     }
 
     if (!response.ok) {
       const label = isPr ? 'GitHub PR' : 'GitHub issue';
-      throwApiError(response, `${label} ${owner}/${repo}#${number}`);
+      await throwApiError(response, `${label} ${owner}/${repo}#${number}`);
     }
 
     const data = await response.json() as { title: string; body: string | null; html_url: string };
