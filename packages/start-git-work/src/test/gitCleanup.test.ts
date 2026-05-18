@@ -28,9 +28,10 @@ vi.mock('../logger', () => ({
 import * as fs from 'fs/promises';
 import { execFile } from 'child_process';
 import { promptGitCleanup } from '../gitCleanup';
+import { encodeWorkStartedDetail } from '../workStartedDetail';
 
-function workStartedEntry(data: { branchName?: string; worktreePath?: string; repoPath?: string }) {
-  return { timestamp: Date.now(), type: 'work-started', detail: JSON.stringify({ v: 1, ...data }) };
+function workStartedEntry(data: { repoPath: string; branchName?: string; worktreePath?: string }) {
+  return { timestamp: Date.now(), type: 'work-started', detail: encodeWorkStartedDetail(data) };
 }
 
 function legacyWorkStartedEntry(data: { branchName?: string; worktreePath?: string; repoPath?: string }) {
