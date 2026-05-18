@@ -1,5 +1,6 @@
 import type { ComponentChildren } from 'preact';
 import { BadgePill } from '../../shared/components/BadgePill';
+import { formatProviderAnnotation } from '../../shared/providerAnnotation';
 import type { EditorItemData } from '../../shared/types';
 import { stateLabel, stateTone } from '../editorUtils';
 import { isSafeUrl } from '../../../utils/url';
@@ -36,7 +37,7 @@ export function EditorHeader({ item, title, onCopyText, actionButtons }: EditorH
   const titleNode = (
     <h1 class="editor-title">{titleContent}</h1>
   );
-  const annotation = getEditorAnnotation(item);
+  const annotation = formatProviderAnnotation({ source: item.group, author: item.author, authored: item.authored });
 
   return (
     <header class="editor-header">
@@ -83,12 +84,4 @@ export function EditorHeader({ item, title, onCopyText, actionButtons }: EditorH
       </div>
     </header>
   );
-}
-
-function getEditorAnnotation(item: EditorItemData): string | undefined {
-  const parts = [item.group];
-  if (item.author && item.authored !== true) {
-    parts.push(item.author.handle ? `@${item.author.handle}` : item.author.displayName);
-  }
-  return parts.filter((value): value is string => Boolean(value)).join(' · ') || undefined;
 }

@@ -1,4 +1,5 @@
 import { useRef, useState } from 'preact/hooks';
+import { formatProviderAnnotation } from '../../shared/providerAnnotation';
 import type { ItemCardData } from '../../shared/types';
 import { BadgePill } from './BadgePill';
 import { HighlightedText } from './HighlightedText';
@@ -56,7 +57,7 @@ export function ItemCard({
   const isDraggable = !disableDragReorder && (item.tierType === 'readyToStart' || item.tierType === 'inProgress');
   const [actionsOpen, setActionsOpen] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
-  const annotation = getItemAnnotation(item);
+  const annotation = formatProviderAnnotation({ source: item.repoAnnotation, author: item.author, authored: item.authored });
   const itemElementRef = useRef<HTMLDivElement | null>(null);
   const actionButtonRefs = useRef<Record<string, HTMLButtonElement | null>>({});
 
@@ -229,14 +230,6 @@ export function ItemCard({
   );
 }
 
-function getItemAnnotation(item: ItemCardData): string | undefined {
-  const parts = [item.repoAnnotation];
-  if (item.author && item.authored !== true) {
-    parts.push(item.author.handle ? `@${item.author.handle}` : item.author.displayName);
-  }
-  return parts.filter((value): value is string => Boolean(value)).join(' · ') || undefined;
-}
-
 function buildItemAriaLabel(item: ItemCardData): string {
   // aria-label fully overrides child text for screen readers, so build the
   // announcement from every visible piece of context: the title, repo
@@ -248,7 +241,7 @@ function buildItemAriaLabel(item: ItemCardData): string {
   if (item.isUnseen) parts.push('unread');
   if (item.isUrgent) parts.push('urgent');
   parts.push(item.title);
-  const annotation = getItemAnnotation(item);
+  const annotation = formatProviderAnnotation({ source: item.repoAnnotation, author: item.author, authored: item.authored });
   if (annotation) parts.push(annotation);
   for (const badge of item.badges) {
     parts.push(badge.label);
