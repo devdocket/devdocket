@@ -2,105 +2,67 @@ import * as vscode from 'vscode';
 import { WatcherService, type WatchedRun, type WatchedPR } from '../services/watcherService';
 import { WatcherRegistry } from '../services/watcherRegistry';
 import { PRWatcherRegistry } from '../services/prWatcherRegistry';
-import { showWatchesQuickPick } from '../views/watchesStatusBar';
+import type { WatchPanelProvider } from '../views/watchPanelProvider';
 import { isSafeUrl } from '../utils/url';
 import { wrapCommand, handleCommandError } from './commandUtils';
+import { classifyWatchUrl, WATCH_URL_PLACEHOLDER, type WatchUrlClassification } from './watchUrlClassifier';
 
-async function handleWatchRun(watcherRegistry: WatcherRegistry, prWatcherRegistry: PRWatcherRegistry, watcherService: WatcherService): Promise<void> {
+async function handleWatchUrl(
+  watcherRegistry: WatcherRegistry,
+  prWatcherRegistry: PRWatcherRegistry,
+  watcherService: WatcherService,
+): Promise<void> {
   const url = await vscode.window.showInputBox({
-    prompt: 'Enter a pipeline run URL',
-    placeHolder: 'https://github.com/owner/repo/actions/runs/123456789',
-    validateInput: (value) => {
-      const trimmed = value.trim();
-      if (!trimmed) {
-        return 'URL cannot be empty';
-      }
-      if (!isSafeUrl(trimmed)) {
-        return 'Only http(s) URLs are supported.';
-      }
-      const watcher = watcherRegistry.findWatcherForUrl(trimmed);
-      const prWatcher = prWatcherRegistry.findWatcherForUrl(trimmed);
-      if (!watcher && !prWatcher) {
-        return 'Unsupported URL format. No registered watcher recognizes this URL.';
-      }
-      return undefined;
-    },
+    prompt: 'Paste a pull request or pipeline run URL supported by a registered watcher',
+    placeHolder: WATCH_URL_PLACEHOLDER,
+    validateInput: (value) => formatWatchUrlValidation(classifyWatchUrl(value, watcherRegistry, prWatcherRegistry)),
   });
 
-  if (!url) {
+  if (!url?.trim()) {
     return;
   }
 
-  const trimmedUrl = url.trim();
-
-  // If a PR watcher recognizes the URL, redirect to PR watch flow
-  const prWatcher = prWatcherRegistry.findWatcherForUrl(trimmedUrl);
-  if (prWatcher) {
-    try {
-      const identifier = prWatcher.parsePRUrl(trimmedUrl);
-      await watcherService.startPRWatch(identifier);
-      void vscode.window.showInformationMessage(`Now watching PR: ${identifier.displayName}`);
-    } catch (err: unknown) {
-      handleCommandError('Failed to watch PR', err);
-    }
+  const classification = classifyWatchUrl(url, watcherRegistry, prWatcherRegistry);
+  if (!classification.ok) {
+    void vscode.window.showErrorMessage(`DevDocket: ${classification.message}`);
     return;
   }
 
   try {
-    const watcher = watcherRegistry.findWatcherForUrl(trimmedUrl);
-    if (!watcher) {
-      void vscode.window.showErrorMessage('Unsupported URL format. No registered watcher recognizes this URL.');
+    if (classification.kind === 'pr') {
+      const identifier = classification.watcher.parsePRUrl(classification.url);
+      const wasActive = watcherService.isPRActive(identifier);
+      const watch = await watcherService.startPRWatch(identifier, { forceRecreate: true });
+      const message = wasActive
+        ? `Re-watching PR: ${watch.identifier.displayName}`
+        : `Now watching PR: ${watch.identifier.displayName}`;
+      void vscode.window.showInformationMessage(message);
       return;
     }
 
-    const identifier = watcher.parseRunUrl(trimmedUrl);
-    await watcherService.startWatch(identifier);
-    
-    void vscode.window.showInformationMessage(`Now watching: ${identifier.displayName}`);
+    const identifier = classification.watcher.parseRunUrl(classification.url);
+    const wasActive = watcherService.isRunActive(identifier);
+    const watch = await watcherService.startWatch(identifier);
+    const message = wasActive
+      ? `Already watching run: ${watch.identifier.displayName}`
+      : `Now watching run: ${watch.identifier.displayName}`;
+    void vscode.window.showInformationMessage(message);
   } catch (err: unknown) {
-    handleCommandError('Failed to watch pipeline run', err);
+    handleCommandError(
+      classification.kind === 'pr' ? 'Failed to watch PR' : 'Failed to watch pipeline run',
+      err,
+    );
   }
 }
 
-async function handleWatchPR(prWatcherRegistry: PRWatcherRegistry, watcherService: WatcherService): Promise<void> {
-  const url = await vscode.window.showInputBox({
-    prompt: 'Enter a pull request URL',
-    placeHolder: 'https://github.com/owner/repo/pull/42',
-    validateInput: (value) => {
-      const trimmed = value.trim();
-      if (!trimmed) {
-        return 'URL cannot be empty';
-      }
-      if (!isSafeUrl(trimmed)) {
-        return 'Only http(s) URLs are supported.';
-      }
-      const watcher = prWatcherRegistry.findWatcherForUrl(trimmed);
-      if (!watcher) {
-        return 'Unsupported URL format. No registered PR watcher recognizes this URL.';
-      }
-      return undefined;
-    },
-  });
-
-  if (!url) {
-    return;
+function formatWatchUrlValidation(classification: WatchUrlClassification): string | vscode.InputBoxValidationMessage | undefined {
+  if (!classification.ok) {
+    return classification.reason === 'empty' ? undefined : classification.message;
   }
-
-  const trimmedUrl = url.trim();
-
-  try {
-    const prWatcher = prWatcherRegistry.findWatcherForUrl(trimmedUrl);
-    if (!prWatcher) {
-      void vscode.window.showErrorMessage('Unsupported URL format. No registered PR watcher recognizes this URL.');
-      return;
-    }
-
-    const identifier = prWatcher.parsePRUrl(trimmedUrl);
-    await watcherService.startPRWatch(identifier);
-    void vscode.window.showInformationMessage(`Now watching PR: ${identifier.displayName}`);
-  } catch (err: unknown) {
-    handleCommandError('Failed to watch PR', err);
-  }
+  return {
+    message: classification.validationMessage,
+    severity: vscode.InputBoxValidationSeverity.Info,
+  };
 }
 
 // Normalize argument: context menu passes WatchedRunNode, inline click passes WatchedRun
@@ -153,16 +115,28 @@ async function handleWatchPRFromItem(
   const prWatcher = prWatcherRegistry.findWatcherForUrl(safeUrl.href);
   if (prWatcher) {
     const identifier = prWatcher.parsePRUrl(safeUrl.href);
-    await watcherService.startPRWatch(identifier);
-    void vscode.window.showInformationMessage(`Now watching PR: ${identifier.displayName}`);
+    const wasActive = watcherService.isPRActive(identifier);
+    // Pass forceRecreate so this acts as an "explicit user intent" entry
+    // point (matching the manual Watch URL command). Without it, a PR
+    // that ended up invisible after all its child runs were dismissed
+    // would silently re-return the broken watch unchanged.
+    const watch = await watcherService.startPRWatch(identifier, { forceRecreate: true });
+    const message = wasActive
+      ? `Re-watching PR: ${watch.identifier.displayName}`
+      : `Now watching PR: ${watch.identifier.displayName}`;
+    void vscode.window.showInformationMessage(message);
     return;
   }
 
   const runWatcher = watcherRegistry.findWatcherForUrl(safeUrl.href);
   if (runWatcher) {
     const identifier = runWatcher.parseRunUrl(safeUrl.href);
-    await watcherService.startWatch(identifier);
-    void vscode.window.showInformationMessage(`Now watching run: ${identifier.displayName}`);
+    const wasActive = watcherService.isRunActive(identifier);
+    const watch = await watcherService.startWatch(identifier);
+    const message = wasActive
+      ? `Already watching run: ${watch.identifier.displayName}`
+      : `Now watching run: ${watch.identifier.displayName}`;
+    void vscode.window.showInformationMessage(message);
     return;
   }
 
@@ -200,6 +174,20 @@ async function handleDismissWatch(arg: unknown, watcherService: WatcherService):
 
 async function handleDismissAllCompletedWatches(watcherService: WatcherService): Promise<void> {
   try {
+    const count = watcherService.countCompletedActiveWatches();
+    if (count === 0) {
+      void vscode.window.showInformationMessage('No completed watches to dismiss.');
+      return;
+    }
+    const noun = count === 1 ? 'watch' : 'watches';
+    const confirm = await vscode.window.showWarningMessage(
+      `Dismiss ${count} completed ${noun}? They will be removed from the Watches view.`,
+      { modal: true },
+      'Dismiss',
+    );
+    if (confirm !== 'Dismiss') {
+      return;
+    }
     watcherService.dismissAllCompleted();
   } catch (err: unknown) {
     handleCommandError('Failed to dismiss all completed watches', err);
@@ -247,12 +235,11 @@ export function registerWatchCommands(
   watcherRegistry: WatcherRegistry,
   prWatcherRegistry: PRWatcherRegistry,
   watcherService: WatcherService,
+  watchPanelProvider: WatchPanelProvider,
 ): void {
   context.subscriptions.push(
-    vscode.commands.registerCommand('devdocket.watchRun',
-      wrapCommand('Failed to watch pipeline run', () => handleWatchRun(watcherRegistry, prWatcherRegistry, watcherService))),
-    vscode.commands.registerCommand('devdocket.watchPR',
-      wrapCommand('Failed to watch PR', () => handleWatchPR(prWatcherRegistry, watcherService))),
+    vscode.commands.registerCommand('devdocket.watchUrl',
+      wrapCommand('Failed to watch URL', () => handleWatchUrl(watcherRegistry, prWatcherRegistry, watcherService))),
     vscode.commands.registerCommand('devdocket.watchPRFromItem',
       wrapCommand('Failed to watch CI from item', (arg: unknown) => handleWatchPRFromItem(watcherRegistry, prWatcherRegistry, watcherService, arg))),
     vscode.commands.registerCommand('devdocket.dismissWatch',
@@ -262,6 +249,6 @@ export function registerWatchCommands(
     vscode.commands.registerCommand('devdocket.openWatchUrl',
       wrapCommand('Failed to open watch URL', (arg: unknown) => handleOpenWatchUrl(arg))),
     vscode.commands.registerCommand('devdocket.showWatchesQuickPick',
-      wrapCommand('Failed to show watches quick pick', () => showWatchesQuickPick(watcherService))),
+      wrapCommand('Failed to show watch panel', () => watchPanelProvider.open())),
   );
 }

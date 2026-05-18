@@ -1,4 +1,5 @@
 import type { Memento } from 'vscode';
+import type { PRIdentifier } from '@devdocket/shared';
 import { logger } from '../services/logger';
 import type { WatchedRun, WatchedPR } from '../services/watcherService';
 
@@ -70,6 +71,18 @@ export class WatchStore {
       : [];
 
     return { runs, prs };
+  }
+
+  /**
+   * Check whether a PR watch exists in persisted state, including dismissed entries.
+   */
+  async hasPRWatch(identifier: PRIdentifier): Promise<boolean> {
+    const { prs } = await this.loadAll();
+    return prs.some(pr =>
+      pr.identifier.providerId === identifier.providerId
+      && pr.identifier.repo === identifier.repo
+      && pr.identifier.prId === identifier.prId,
+    );
   }
 
   /**

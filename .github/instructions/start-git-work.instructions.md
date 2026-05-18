@@ -29,4 +29,31 @@ env: {
 
 ## Activity Log Integration
 
-When creating branches/worktrees, log via `devdocket.addActivity` with type `'work-started'` and a JSON detail string containing `{ branchName, worktreePath, repoPath }`. Cleanup operations log `'cleanup'` or `'cleanup-dismissed'` entries. The activity log is the source of truth for branch/worktree associations — do not add metadata fields to WorkItem.
+When creating branches/worktrees, log via `devdocket.addActivity` with type `'work-started'` and a JSON detail string built with the **`encodeWorkStartedDetail` helper** from `./workStartedDetail`. Never call `JSON.stringify` directly on an ad-hoc shape — the helper stamps a version tag so future readers (e.g. `gitCleanup.ts`) can detect schema mismatches instead of silently degrading.
+
+```ts
+import { encodeWorkStartedDetail } from './workStartedDetail';
+
+const detail = encodeWorkStartedDetail({ branchName, worktreePath, repoPath });
+await vscode.commands.executeCommand('devdocket.addActivity', item.id, 'work-started', detail);
+```
+
+To read the detail elsewhere, use `decodeWorkStartedDetail` from the same module. It handles current `v: 1` payloads, accepts legacy unversioned entries for backward compatibility, and warns (returning `undefined`) for unknown schema versions.
+
+### Rendering in the editor
+
+The `'work-started'` schema is private to this extension — the core extension does not parse it. The editor displays each entry by calling a renderer that we register at activation:
+
+```ts
+api.registerActivityDetailRenderer?.('work-started', renderWorkStartedActivityDetail);
+```
+
+`renderWorkStartedActivityDetail` (also in `workStartedDetail.ts`) decodes the v1 payload and returns an `ActivityDetailRender` shape that the core sends to the editor webview as-is. If the renderer returns `undefined` (for an undecodable / unknown-version entry), the core falls back to rendering the raw `detail` string as plain text.
+
+### Other activity types
+
+Cleanup operations log `'cleanup'` or `'cleanup-dismissed'` entries with plain-text `detail` (or no detail). They don't need a renderer because the raw text is already display-ready. The activity log is the source of truth for branch/worktree associations — do not add metadata fields to WorkItem.
+
+### Bumping the schema
+
+If the payload shape needs to change, introduce a new `WorkStartedDetailV2` interface, update the encoder to write `v: 2`, and update the decoder to recognise both versions. Update `renderWorkStartedActivityDetail` to render the new fields. All of this lives inside `workStartedDetail.ts`; the core extension does not need to be touched. Renaming or removing existing fields without a version bump silently breaks cleanup for every pre-existing activity entry.

@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
 import { authentication } from 'vscode';
 import { AdoPrReviewProvider } from '../adoPrReviewProvider';
-import { initLogger, LogLevel } from '../logger';
+import { setLogger } from '../logger';
 
 const mockFetch = vi.fn();
 
@@ -30,15 +30,15 @@ function createMockCancellationToken() {
 
 describe('AdoPrReviewProvider — cancellation (AbortSignal wiring)', () => {
   let provider: AdoPrReviewProvider;
-  let mockChannel: { appendLine: ReturnType<typeof vi.fn> };
+  let mockChannel: any;
 
   beforeEach(() => {
     vi.clearAllMocks();
     vi.stubGlobal('fetch', mockFetch);
     provider = new AdoPrReviewProvider([{ org: 'myorg', projects: ['MyProject'] }]);
 
-    mockChannel = { appendLine: vi.fn() };
-    initLogger(mockChannel as any, LogLevel.Debug);
+    mockChannel = { info: vi.fn(), debug: vi.fn(), warn: vi.fn(), error: vi.fn(), appendLine: vi.fn() };
+    setLogger(mockChannel);
 
     vi.mocked(authentication.getSession).mockResolvedValue({
       accessToken: 'test-token',
@@ -107,6 +107,45 @@ describe('AdoPrReviewProvider — cancellation (AbortSignal wiring)', () => {
     });
   });
 
+  // ── Pre-cancelled token ────────────────────────────────────────────
+
+  describe('already-cancelled token', () => {
+    it('returns immediately without clearing items', async () => {
+      const token = {
+        isCancellationRequested: true,
+        onCancellationRequested: vi.fn().mockReturnValue({ dispose: vi.fn() }),
+      };
+      const listener = vi.fn();
+      provider.onDidDiscoverItems(listener);
+
+      await provider.refresh(token as any);
+
+      expect(authentication.getSession).not.toHaveBeenCalled();
+      expect(mockFetch).not.toHaveBeenCalled();
+      expect(listener).not.toHaveBeenCalled();
+    });
+
+    it('does not clear items when cancelled during authentication', async () => {
+      const { token, cancel } = createMockCancellationToken();
+      vi.mocked(authentication.getSession).mockImplementation(async () => {
+        cancel();
+        return {
+          accessToken: 'test-token',
+          id: 'session-1',
+          scopes: ['499b84ac-1321-427f-aa17-267ca6975798/.default'],
+          account: { id: '1', label: 'testuser' },
+        } as any;
+      });
+      const listener = vi.fn();
+      provider.onDidDiscoverItems(listener);
+
+      await provider.refresh(token);
+
+      expect(mockFetch).not.toHaveBeenCalled();
+      expect(listener).not.toHaveBeenCalled();
+    });
+  });
+
   // ── Mid-fetch cancellation ─────────────────────────────────────────
 
   describe('mid-fetch cancellation', () => {
@@ -157,6 +196,33 @@ describe('AdoPrReviewProvider — cancellation (AbortSignal wiring)', () => {
       expect(listener).not.toHaveBeenCalled();
     });
 
+    it('does not log fetch errors when token fires during PR list fetch', async () => {
+      const { token, cancel } = createMockCancellationToken();
+
+      mockFetch.mockImplementation(async (url: string) => {
+        if (typeof url === 'string' && url.includes('/connectiondata')) {
+          return {
+            ok: true,
+            json: async () => ({ authenticatedUser: { id: 'user-123' } }),
+          };
+        }
+        if (typeof url === 'string' && url.includes('/pullrequests')) {
+          cancel();
+          const error = new Error('The operation was aborted.');
+          error.name = 'AbortError';
+          throw error;
+        }
+        throw new Error(`Unexpected fetch: ${String(url)}`);
+      });
+
+      await provider.refresh(token);
+
+      const prFetchErrorLogged = mockChannel.error.mock.calls.some(
+        (call: unknown[]) => String(call[0]).includes('PR reviews from'),
+      );
+      expect(prFetchErrorLogged).toBe(false);
+    });
+
     it('logs cancellation at debug level, not error', async () => {
       const { token, cancel } = createMockCancellationToken();
 
@@ -172,13 +238,13 @@ describe('AdoPrReviewProvider — cancellation (AbortSignal wiring)', () => {
 
       await provider.refresh(token);
 
-      const debugLogged = mockChannel.appendLine.mock.calls.some(
-        (call: string[]) => call[0].includes('[DEBUG]') && call[0].includes('aborted'),
+      const debugLogged = mockChannel.debug.mock.calls.some(
+        (call: unknown[]) => String(call[0]).includes('aborted'),
       );
       expect(debugLogged).toBe(true);
 
-      const errorLogged = mockChannel.appendLine.mock.calls.some(
-        (call: string[]) => call[0].includes('[ERROR]') && call[0].includes('Failed to fetch'),
+      const errorLogged = mockChannel.error.mock.calls.some(
+        (call: unknown[]) => String(call[0]).includes('Failed to fetch'),
       );
       expect(errorLogged).toBe(false);
     });

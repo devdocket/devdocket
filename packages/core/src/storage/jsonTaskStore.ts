@@ -13,6 +13,7 @@ import {
 
 const STORAGE_KEY = 'devdocket.workitems';
 const validWorkItemStates = new Set<string>(Object.values(WorkItemState));
+const validItemTypes = new Set(['issue', 'pr']);
 
 /**
  * Validates that a parsed JSON value has the required shape of a WorkItem.
@@ -37,6 +38,10 @@ function validateWorkItem(value: unknown, index: number): string | undefined {
     ?? optionalString(result, 'notes', ctx)
     ?? optionalFiniteNumber(result, 'sortOrder', ctx);
   if (err) return err;
+
+  if (result.itemType !== undefined && !validItemTypes.has(String(result.itemType))) {
+    return `${ctx} has invalid "itemType"`;
+  }
 
   if (result.activityLog !== undefined) {
     if (!Array.isArray(result.activityLog)) {

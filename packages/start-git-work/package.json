@@ -3,16 +3,16 @@
   "displayName": "DevDocket Start Git Work",
   "description": "Start Git Work action for DevDocket — creates git branches and worktrees for GitHub and Azure DevOps work items.",
   "version": "0.1.0",
-  "publisher": "mthalman",
+  "publisher": "devdocket",
   "license": "MIT",
   "engines": {
-    "vscode": "^1.85.0"
+    "vscode": "^1.92.0"
   },
   "categories": [
     "Other"
   ],
   "extensionDependencies": [
-    "mthalman.devdocket"
+    "devdocket.devdocket"
   ],
   "activationEvents": [
     "onStartupFinished"
@@ -23,30 +23,36 @@
       {
         "title": "DevDocket Start Git Work",
         "properties": {
-        "devDocketStartGitWork.commands": {
-          "type": "array",
-          "scope": "application",
-          "items": {
-            "type": "object",
-            "properties": {
-              "command": {
-                "type": "string",
-                "description": "The executable to run."
-              },
-              "args": {
-                "type": "array",
-                "items": {
-                  "type": "string"
+          "devDocketStartGitWork.commands": {
+            "type": "array",
+            "scope": "application",
+            "items": {
+              "type": "object",
+              "properties": {
+                "command": {
+                  "type": "string",
+                  "description": "The executable to run."
                 },
-                "description": "Arguments passed to the command. Use {path} as a placeholder for the worktree path."
-              }
+                "args": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  },
+                  "description": "Arguments passed to the command. Use {path} as a placeholder for the worktree path."
+                }
+              },
+              "required": ["command"]
             },
-            "required": ["command"]
+            "default": [],
+            "description": "Commands to run after creating a worktree. Each entry specifies a command and optional args. Use {path} in args to reference the worktree path."
           },
-          "default": [],
-          "description": "Commands to run after creating a worktree. Each entry specifies a command and optional args. Use {path} in args to reference the worktree path."
+          "devdocket.startGitWork.promptForNames": {
+            "type": "boolean",
+            "scope": "application",
+            "default": true,
+            "description": "When enabled, Start Git Work prompts for issue branch names, PR local branch names, and worktree paths, prefilled with auto-derived defaults when applicable. When disabled, the auto-derived values are used silently."
+          }
         }
-      }
       }
     ]
   },
@@ -63,7 +69,7 @@
   },
   "devDependencies": {
     "@types/node": "^20.11.0",
-    "@types/vscode": "^1.85.0",
+    "@types/vscode": "^1.92.0",
     "@typescript-eslint/eslint-plugin": "^7.0.0",
     "@typescript-eslint/parser": "^7.0.0",
     "esbuild": "^0.25.0",

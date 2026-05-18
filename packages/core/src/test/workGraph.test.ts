@@ -1,6 +1,8 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { MockMemento } from 'vscode';
 import { WorkGraph } from '../services/workGraph';
 import { WorkItemState } from '../models/workItem';
+import { JsonTaskStore } from '../storage/jsonTaskStore';
 import { ITaskStore } from '../storage/taskStore';
 
 function createMockStore(): ITaskStore {
@@ -101,6 +103,31 @@ describe('WorkGraph', () => {
 
     const updated = graph.getItem(item.id);
     expect(updated?.title).toBe('Updated');
+  });
+
+  it('serializes concurrent mutations so state and field updates both survive', async () => {
+    const memento = new MockMemento();
+    const realStore = new JsonTaskStore(memento);
+    const realGraph = new WorkGraph(realStore);
+    await realGraph.load();
+    const item = await realGraph.createItem({ title: 'A' });
+
+    await Promise.all([
+      realGraph.transitionState(item.id, WorkItemState.InProgress),
+      realGraph.updateItem(item.id, { title: 'B' }),
+    ]);
+
+    const updated = realGraph.getItem(item.id);
+    expect(updated?.state).toBe(WorkItemState.InProgress);
+    expect(updated?.title).toBe('B');
+    expect(updated?.activityLog?.map(entry => entry.type)).toEqual(['created', 'state-changed', 'updated']);
+
+    const freshGraph = new WorkGraph(new JsonTaskStore(memento));
+    await freshGraph.load();
+    const persisted = freshGraph.getItem(item.id);
+    expect(persisted?.state).toBe(WorkItemState.InProgress);
+    expect(persisted?.title).toBe('B');
+    expect(persisted?.activityLog?.map(entry => entry.type)).toEqual(['created', 'state-changed', 'updated']);
   });
 
   it('throws when updating unknown item', async () => {
@@ -364,6 +391,16 @@ describe('WorkGraph', () => {
       const found = graph.findItemByProvenance('github', '42');
       expect(found).toBeDefined();
       expect(found!.id).toBe(item.id);
+    });
+
+    it('persists provider item type from provenance', async () => {
+      const item = await graph.createItem(
+        { title: 'Indexed issue' },
+        { providerId: 'github', externalId: '42', itemType: 'issue' },
+      );
+
+      expect(item.itemType).toBe('issue');
+      expect(store.save).toHaveBeenCalledWith(expect.objectContaining({ id: item.id, itemType: 'issue' }));
     });
 
     it('returns undefined for unknown provenance', () => {

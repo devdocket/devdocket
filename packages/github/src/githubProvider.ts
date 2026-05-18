@@ -1,10 +1,10 @@
-import * as vscode from 'vscode';
-import { DiscoveredItem, combineSignals, createAbortError, safeDecodeComponent, type ResolvedItem } from '@devdocket/shared';
+import { ProviderItem, combineSignals, createAbortError, safeDecodeComponent, type ResolvedItem } from '@devdocket/shared';
 import { BaseGitHubProvider } from './baseGithubProvider';
 import { logger } from './logger';
 import { parseRepoFromUrls } from './parseRepo';
-import { getHeaders, getGitHubAuthHeaders, retryWithAuth, throwApiError, parseCanonicalRepo, fetchClosedGitHubItems, type GitHubIssue } from './githubApiHelpers';
+import { getHeaders, getGitHubAuthHeaders, retryWithAuth, throwApiError, looksLikeRateLimited403, parseCanonicalRepo, fetchClosedGitHubItems, buildIssueStateBadge, type GitHubIssue } from './githubApiHelpers';
 import { matchesRepoPatterns } from './repoPattern';
+import { createGitHubIssueGitWork } from './gitWorkCapabilities';
 
 /**
  * DevDocket provider that discovers GitHub issues assigned to the current user.
@@ -36,29 +36,38 @@ export class GitHubIssueProvider extends BaseGitHubProvider {
       ? issuesWithRepo.filter(({ repoName }) => matchesRepoPatterns(repoName, patterns))
       : issuesWithRepo;
 
-    const items: DiscoveredItem[] = filteredIssues.map(({ issue, repoName }) => {
+    const items: ProviderItem[] = filteredIssues.map(({ issue, repoName }) => {
       return {
         externalId: `${repoName}#${issue.number}`,
         title: `#${issue.number}: ${issue.title}`,
         description: issue.body ?? undefined,
         url: issue.html_url,
+        ...(issue.user?.login ? {
+          author: {
+            displayName: issue.user.login,
+            handle: issue.user.login,
+            avatarUrl: issue.user.avatar_url,
+            profileUrl: issue.user.html_url,
+          },
+        } : {}),
         group: repoName,
         reason: 'assigned',
         canonicalId: `github:issue:${repoName}#${issue.number}`,
+        itemType: 'issue',
+        capabilities: { gitWork: createGitHubIssueGitWork(repoName, issue.number) },
+        badges: [
+          { label: 'Assigned', variant: 'warning' },
+          ...buildIssueStateBadge(issue.state),
+        ],
         ...(issue.state ? { state: issue.state } : {}),
       };
     });
 
     logger.info(`Discovered ${items.length} GitHub issues`);
-    this._onDidDiscoverItems.fire(items);
+    this.publishProviderItems(items, patterns);
 
     if (failed) {
-      const message = 'Failed to fetch assigned issues';
-      if (isUserTriggered) {
-        void vscode.window.showWarningMessage(`DevDocket GitHub: ${message}`);
-      } else {
-        logger.warn(message);
-      }
+      this.warnOnFetchFailure('Failed to fetch assigned issues', isUserTriggered);
     }
   }
 
@@ -78,13 +87,14 @@ export class GitHubIssueProvider extends BaseGitHubProvider {
 
     let response = await fetch(apiUrl, { headers, signal });
 
-    if (response.status === 404 && !wasAuthenticated && !signal?.aborted) {
+    if (!response.ok && !wasAuthenticated && !signal?.aborted &&
+        (response.status === 404 || looksLikeRateLimited403(response))) {
       const retryResponse = await retryWithAuth(apiUrl, signal);
       if (retryResponse) { response = retryResponse; }
     }
 
     if (!response.ok) {
-      throwApiError(response, `GitHub issue ${owner}/${repo}#${number}`);
+      await throwApiError(response, `GitHub issue ${owner}/${repo}#${number}`);
     }
 
     const data = await response.json() as { title: string; body: string | null; html_url: string };

@@ -10,7 +10,7 @@ function createMockWorkGraph() {
 
 function createMockProviderRegistry() {
   return {
-    getAllDiscoveredItems: vi.fn(() => new Map<string, any[]>()),
+    getAllProviderItems: vi.fn(() => new Map<string, any[]>()),
   };
 }
 
@@ -25,7 +25,7 @@ describe('syncProviderTitles', () => {
   });
 
   it('updates WorkItem title when provider title differs', async () => {
-    providerRegistry.getAllDiscoveredItems.mockReturnValue(new Map([
+    providerRegistry.getAllProviderItems.mockReturnValue(new Map([
       ['github', [{ externalId: '42', title: 'New Title' }]],
     ]));
     workGraph.findItemByProvenance.mockReturnValue({ id: 'item-1', title: 'Old Title' });
@@ -37,7 +37,7 @@ describe('syncProviderTitles', () => {
   });
 
   it('does not update when titles match', async () => {
-    providerRegistry.getAllDiscoveredItems.mockReturnValue(new Map([
+    providerRegistry.getAllProviderItems.mockReturnValue(new Map([
       ['github', [{ externalId: '42', title: 'Same Title' }]],
     ]));
     workGraph.findItemByProvenance.mockReturnValue({ id: 'item-1', title: 'Same Title' });
@@ -47,8 +47,24 @@ describe('syncProviderTitles', () => {
     expect(workGraph.updateItem).not.toHaveBeenCalled();
   });
 
+  it('does not update a just-accepted grouped item created with the provider title', async () => {
+    providerRegistry.getAllProviderItems.mockReturnValue(new Map([
+      ['github', [{ externalId: 'owner/repo#42', title: 'Fix the thing', group: 'owner/repo' }]],
+    ]));
+    workGraph.findItemByProvenance.mockReturnValue({
+      id: 'item-1',
+      title: 'Fix the thing',
+      provenance: { providerId: 'github', externalId: 'owner/repo#42', group: 'owner/repo' },
+    });
+
+    await syncProviderTitles('github', providerRegistry as any, workGraph as any);
+
+    expect(workGraph.findItemByProvenance).toHaveBeenCalledWith('github', 'owner/repo#42');
+    expect(workGraph.updateItem).not.toHaveBeenCalled();
+  });
+
   it('skips discovered items without matching WorkItem', async () => {
-    providerRegistry.getAllDiscoveredItems.mockReturnValue(new Map([
+    providerRegistry.getAllProviderItems.mockReturnValue(new Map([
       ['github', [{ externalId: '99', title: 'Orphan' }]],
     ]));
     workGraph.findItemByProvenance.mockReturnValue(undefined);
@@ -59,7 +75,7 @@ describe('syncProviderTitles', () => {
   });
 
   it('only scans the specified provider, not others', async () => {
-    providerRegistry.getAllDiscoveredItems.mockReturnValue(new Map([
+    providerRegistry.getAllProviderItems.mockReturnValue(new Map([
       ['github', [
         { externalId: '1', title: 'Updated GH' },
       ]],
@@ -78,7 +94,7 @@ describe('syncProviderTitles', () => {
   });
 
   it('handles multiple items within the specified provider', async () => {
-    providerRegistry.getAllDiscoveredItems.mockReturnValue(new Map([
+    providerRegistry.getAllProviderItems.mockReturnValue(new Map([
       ['github', [
         { externalId: '1', title: 'Updated GH' },
         { externalId: '2', title: 'Same GH' },
@@ -95,7 +111,7 @@ describe('syncProviderTitles', () => {
   });
 
   it('continues syncing other items when one update fails', async () => {
-    providerRegistry.getAllDiscoveredItems.mockReturnValue(new Map([
+    providerRegistry.getAllProviderItems.mockReturnValue(new Map([
       ['github', [
         { externalId: '1', title: 'Fail' },
         { externalId: '2', title: 'Updated' },
@@ -115,7 +131,7 @@ describe('syncProviderTitles', () => {
   });
 
   it('does nothing when provider has no items', async () => {
-    providerRegistry.getAllDiscoveredItems.mockReturnValue(new Map());
+    providerRegistry.getAllProviderItems.mockReturnValue(new Map());
 
     await syncProviderTitles('github', providerRegistry as any, workGraph as any);
 
@@ -124,7 +140,7 @@ describe('syncProviderTitles', () => {
   });
 
   it('does not overwrite persisted title with empty provider title', async () => {
-    providerRegistry.getAllDiscoveredItems.mockReturnValue(new Map([
+    providerRegistry.getAllProviderItems.mockReturnValue(new Map([
       ['github', [{ externalId: '42', title: '' }]],
     ]));
     workGraph.findItemByProvenance.mockReturnValue({ id: 'item-1', title: 'Good Title' });
@@ -135,7 +151,7 @@ describe('syncProviderTitles', () => {
   });
 
   it('does not overwrite persisted title with whitespace-only provider title', async () => {
-    providerRegistry.getAllDiscoveredItems.mockReturnValue(new Map([
+    providerRegistry.getAllProviderItems.mockReturnValue(new Map([
       ['github', [{ externalId: '42', title: '   ' }]],
     ]));
     workGraph.findItemByProvenance.mockReturnValue({ id: 'item-1', title: 'Good Title' });

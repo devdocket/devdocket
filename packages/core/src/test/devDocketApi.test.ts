@@ -1,13 +1,14 @@
 import { DevDocketApiImpl } from '../api/devDocketApi';
-import { DevDocketProvider, DevDocketAction, DiscoveredItem } from '../api/types';
+import { DevDocketProvider, DevDocketAction, ProviderItem } from '../api/types';
 import { ProviderRegistry } from '../services/providerRegistry';
 import { ActionRegistry } from '../services/actionRegistry';
+import { ActivityDetailRendererRegistry } from '../services/activityDetailRendererRegistry';
 import { WatcherRegistry } from '../services/watcherRegistry';
 import { PRWatcherRegistry } from '../services/prWatcherRegistry';
 import { WorkGraph } from '../services/workGraph';
 import { ITaskStore } from '../storage/taskStore';
 import * as vscode from 'vscode';
-import { InboxState } from '../storage/discoveredStateStore';
+import { InboxState } from '../storage/inboxStateStore';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 function createMockStateStore() {
@@ -28,11 +29,11 @@ function createMockStateStore() {
     loadAll: vi.fn(async () => []),
     onDidChange: vi.fn(() => ({ dispose: vi.fn() })),
     dispose: vi.fn(),
-  } as unknown as import('../storage/discoveredStateStore').DiscoveredStateStore;
+  } as unknown as import('../storage/inboxStateStore').InboxStateStore;
 }
 
 function createMockProvider(id: string): DevDocketProvider {
-  const emitter = new vscode.EventEmitter<DiscoveredItem[]>();
+  const emitter = new vscode.EventEmitter<ProviderItem[]>();
   return {
     id,
     label: `Provider ${id}`,
@@ -70,6 +71,7 @@ describe('DevDocketApiImpl', () => {
   let watcherRegistry: WatcherRegistry;
   let prWatcherRegistry: PRWatcherRegistry;
   let workGraph: WorkGraph;
+  let activityDetailRendererRegistry: ActivityDetailRendererRegistry;
 
   beforeEach(async () => {
     const stateStore = createMockStateStore();
@@ -79,7 +81,8 @@ describe('DevDocketApiImpl', () => {
     prWatcherRegistry = new PRWatcherRegistry({ info: vi.fn(), warn: vi.fn() });
     workGraph = new WorkGraph(createMockStore());
     await workGraph.load();
-    api = new DevDocketApiImpl(providerRegistry, actionRegistry, watcherRegistry, prWatcherRegistry, workGraph);
+    activityDetailRendererRegistry = new ActivityDetailRendererRegistry();
+    api = new DevDocketApiImpl(providerRegistry, actionRegistry, watcherRegistry, prWatcherRegistry, workGraph, activityDetailRendererRegistry);
   });
 
   describe('registerProvider', () => {
@@ -122,6 +125,26 @@ describe('DevDocketApiImpl', () => {
       api.registerProvider(p1);
 
       expect(() => api.registerProvider(p2)).toThrow('Provider already registered: dup');
+    });
+  });
+
+  describe('getProviderItem', () => {
+    it('looks up the live discovered item by provider and external id', () => {
+      const emitter = new vscode.EventEmitter<ProviderItem[]>();
+      const provider: DevDocketProvider = {
+        id: 'test-provider',
+        label: 'Test Provider',
+        onDidDiscoverItems: emitter.event,
+        refresh: vi.fn().mockResolvedValue(undefined),
+      };
+      const item: ProviderItem = { externalId: 'item-1', title: 'Item 1' };
+
+      api.registerProvider(provider);
+      emitter.fire([item]);
+
+      expect(api.getProviderItem('test-provider', 'item-1')).toBe(item);
+      expect(api.getProviderItem('test-provider', 'missing')).toBeUndefined();
+      expect(api.getProviderItem('missing-provider', 'item-1')).toBeUndefined();
     });
   });
 
@@ -232,6 +255,21 @@ describe('DevDocketApiImpl', () => {
       disposable.dispose();
 
       expect(prWatcherRegistry.get('test-pr-watcher')).toBeUndefined();
+    });
+  });
+
+  describe('registerActivityDetailRenderer', () => {
+    it('delegates to ActivityDetailRendererRegistry.register and returns a Disposable', () => {
+      const renderer = vi.fn().mockReturnValue({ kind: 'text', text: 'pretty' });
+      const spy = vi.spyOn(activityDetailRendererRegistry, 'register');
+
+      const disposable = api.registerActivityDetailRenderer('work-started', renderer);
+
+      expect(spy).toHaveBeenCalledWith('work-started', renderer);
+      expect(activityDetailRendererRegistry.render('work-started', '{}')).toEqual({ kind: 'text', text: 'pretty' });
+
+      disposable.dispose();
+      expect(activityDetailRendererRegistry.render('work-started', '{}')).toBeUndefined();
     });
   });
 

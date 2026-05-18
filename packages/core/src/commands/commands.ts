@@ -3,47 +3,23 @@ import { WorkItemState } from '../models/workItem';
 import { ACTIVITY_TYPES, type ActivityType } from '../models/activityLog';
 import { WorkGraph } from '../services/workGraph';
 import { ActionRegistry } from '../services/actionRegistry';
-import { ProviderRegistry } from '../services/providerRegistry';
-import { DiscoveredStateStore, type InboxState } from '../storage/discoveredStateStore';
+import { ProviderRegistry, type ProviderRefreshProgress } from '../services/providerRegistry';
+import { InboxStateStore, type InboxState } from '../storage/inboxStateStore';
 import type { ProviderLabelCache } from '../storage/providerLabelCache';
-import { WorkItemEditorPanel } from '../views/workItemEditorPanel';
-import { type InboxItem, type InboxElement } from '../views/inboxTreeProvider';
-import { type SourceItemNode, type SourcesElement } from '../views/sourcesTreeProvider';
+import type { ReadStateStore } from '../storage/readStateStore';
+import { WorkItemEditorPanel, type WorkItemEditorPanelDependencies } from '../views/workItemEditorPanel';
+import { IncomingPreviewPanel, type IncomingPreviewPanelManager } from '../views/incomingPreviewPanel';
+import { type InboxItem, type SourceItemNode, type SourcesElement } from './commandItemTypes';
 import { logger } from '../services/logger';
 import type { ResolvedItem } from '../api/types';
-import { toggleViewLayout, setViewLayout } from '../views/viewLayout';
-import type { ViewRevealer } from '../services/viewRevealer';
 import { WatcherService } from '../services/watcherService';
 import { WatcherRegistry } from '../services/watcherRegistry';
 import { PRWatcherRegistry } from '../services/prWatcherRegistry';
 import { registerWatchCommands } from './watchCommands';
+import { registerInboxCommands } from './inboxCommands';
 import { showProviderHealthQuickPick } from '../views/providerHealthStatusBar';
+import type { WatchPanelProvider } from '../views/watchPanelProvider';
 import { isSafeUrl } from '../utils/url';
-
-/**
- * Resolves the effective list of inbox items from VS Code's multi-select command args.
- * When canSelectMany is enabled, VS Code passes InboxElement (the union type) in
- * selectedItems, which may include provider/group nodes — we filter to leaf items only.
- * Falls back to the single context item when the filtered selection is empty or
- * does not include the right-clicked item.
- */
-function isInboxItem(i?: InboxElement): i is InboxItem {
-  return !!i && i.kind === 'item' && !!i.providerId && !!i.externalId;
-}
-
-function resolveInboxItems(item?: InboxElement, selectedItems?: InboxElement[]): InboxItem[] {
-  if (selectedItems && selectedItems.length > 0) {
-    const filtered = selectedItems.filter(isInboxItem);
-    if (filtered.length > 0 && (!isInboxItem(item) || filtered.some(
-      f => f.providerId === item.providerId && f.externalId === item.externalId))) {
-      return filtered;
-    }
-  }
-  if (isInboxItem(item)) {
-    return [item];
-  }
-  return [];
-}
 
 /**
  * Resolves item IDs from VS Code multi-select args for WorkItem-based views.
@@ -81,10 +57,8 @@ function resolveSourceItems(item?: SourcesElement, selectedItems?: SourcesElemen
   return [];
 }
 
-/** Builds a work-item title, optionally prefixed with the provider group. */
 function formatItemTitle(item: { group?: string; title: string }): string {
-  const trimmedGroup = item.group?.trim();
-  return trimmedGroup ? `${trimmedGroup} ${item.title}` : item.title;
+  return item.title;
 }
 
 // isSafeUrl is imported from ../utils/url.
@@ -125,17 +99,17 @@ interface CanonicalItem {
 function findCanonicalPeers(
   item: CanonicalItem,
   providerRegistry: ProviderRegistry,
-  stateStore: DiscoveredStateStore,
-): Array<{ providerId: string; externalId: string }> {
+  stateStore: InboxStateStore,
+): Array<{ providerId: string; externalId: string; itemType?: 'issue' | 'pr' }> {
   if (!item.canonicalId) { return []; }
-  const peers: Array<{ providerId: string; externalId: string }> = [];
-  for (const [providerId, items] of providerRegistry.getAllDiscoveredItems()) {
+  const peers: Array<{ providerId: string; externalId: string; itemType?: 'issue' | 'pr' }> = [];
+  for (const [providerId, items] of providerRegistry.getAllProviderItems()) {
     for (const discovered of items) {
       if (discovered.canonicalId !== item.canonicalId) { continue; }
       if (providerId === item.providerId && discovered.externalId === item.externalId) { continue; }
       const state = stateStore.getState(providerId, discovered.externalId);
       if (state !== undefined && state !== 'unseen') { continue; }
-      peers.push({ providerId, externalId: discovered.externalId });
+      peers.push({ providerId, externalId: discovered.externalId, itemType: discovered.itemType });
     }
   }
   return peers;
@@ -145,7 +119,7 @@ function findCanonicalPeers(
 async function propagateStateToCanonicalPeers(
   item: CanonicalItem,
   providerRegistry: ProviderRegistry,
-  stateStore: DiscoveredStateStore,
+  stateStore: InboxStateStore,
   state: 'accepted' | 'dismissed',
 ): Promise<void> {
   const peers = findCanonicalPeers(item, providerRegistry, stateStore);
@@ -164,7 +138,7 @@ async function propagateStateToCanonicalPeers(
 function expandWithCanonicalPeers(
   items: InboxItem[],
   providerRegistry: ProviderRegistry,
-  stateStore: DiscoveredStateStore,
+  stateStore: InboxStateStore,
 ): InboxItem[] {
   const keys = new Set(items.map(i => `${i.providerId}::${i.externalId}`));
   const extra: InboxItem[] = [];
@@ -179,6 +153,7 @@ function expandWithCanonicalPeers(
           providerId: peer.providerId,
           externalId: peer.externalId,
           title: item.title,
+          itemType: peer.itemType ?? item.itemType,
           url: item.url,
           group: item.group,
         });
@@ -202,11 +177,9 @@ async function batchTransition(
   ids: string[],
   targetState: WorkItemState,
   successMessage: (count: number) => string,
-  revealer?: ViewRevealer,
 ): Promise<void> {
   if (ids.length === 1) {
     await workGraph.transitionState(ids[0], targetState);
-    void revealer?.revealByState(ids[0]);
     return;
   }
   const failedIds: string[] = [];
@@ -235,13 +208,14 @@ interface AcceptableItem {
   externalId: string;
   title: string;
   description?: string;
+  itemType?: 'issue' | 'pr';
   url?: string;
   group?: string;
 }
 
 async function batchAcceptItems(
   workGraph: WorkGraph,
-  stateStore: DiscoveredStateStore,
+  stateStore: InboxStateStore,
   items: AcceptableItem[],
   logLabel: string,
 ): Promise<void> {
@@ -254,7 +228,7 @@ async function batchAcceptItems(
   for (const item of items) {
     const existing = workGraph.findItemByProvenance(item.providerId, item.externalId);
     if (existing) {
-      // Re-open items in terminal states so resurfaced items return to Queue
+      // Re-open items in terminal states so resurfaced items return to Ready to Start
       if (existing.state === WorkItemState.Done || existing.state === WorkItemState.Archived) {
         const originalState = existing.state;
         try {
@@ -272,7 +246,7 @@ async function batchAcceptItems(
     try {
       const createdItem = await workGraph.createItem(
         { title: formatItemTitle(item), description: item.description },
-        { providerId: item.providerId, externalId: item.externalId, url: item.url, group: item.group?.trim() || undefined },
+        { providerId: item.providerId, externalId: item.externalId, itemType: item.itemType, url: item.url, group: item.group?.trim() || undefined },
       );
       createdIds.push(createdItem.id);
       stateUpdates.push({ providerId: item.providerId, externalId: item.externalId, state: 'accepted' });
@@ -304,8 +278,8 @@ async function batchAcceptItems(
   const total = stateUpdates.length;
   if (total > 0) {
     const msg = failed > 0
-      ? `Accepted ${total} of ${total + failed} items to Queue`
-      : `Accepted ${total} item${total === 1 ? '' : 's'} to Queue`;
+      ? `Accepted ${total} of ${total + failed} items to Ready to Start`
+      : `Accepted ${total} item${total === 1 ? '' : 's'} to Ready to Start`;
     void vscode.window.showInformationMessage(msg);
   }
   if (failed > 0) {
@@ -315,7 +289,13 @@ async function batchAcceptItems(
   }
 }
 
-async function handleCreateItem(workGraph: WorkGraph, revealer?: ViewRevealer): Promise<void> {
+async function handleCreateItem(
+  context: vscode.ExtensionContext,
+  workGraph: WorkGraph,
+  providerRegistry: ProviderRegistry,
+  labelCache: ProviderLabelCache,
+  editorPanelDependencies: WorkItemEditorPanelDependencies,
+): Promise<void> {
   const title = await vscode.window.showInputBox({
     prompt: 'Work item title',
     placeHolder: 'e.g. Fix login redirect bug',
@@ -327,8 +307,9 @@ async function handleCreateItem(workGraph: WorkGraph, revealer?: ViewRevealer): 
 
   logger.info(`Creating new work item: ${title.trim()}`);
   const createdItem = await workGraph.createItem({ title: title.trim() });
+  const providerLabel = createdItem.providerId ? labelCache.get(createdItem.providerId) : undefined;
+  void WorkItemEditorPanel.open(context, workGraph, providerRegistry, createdItem, editorPanelDependencies, providerLabel);
   void vscode.window.showInformationMessage(`DevDocket: Created "${title.trim()}"`);
-  void revealer?.revealInQueue(createdItem.id);
 }
 
 async function handleCreateItemFromUrl(
@@ -336,7 +317,7 @@ async function handleCreateItemFromUrl(
   workGraph: WorkGraph,
   providerRegistry: ProviderRegistry,
   labelCache: ProviderLabelCache,
-  revealer?: ViewRevealer,
+  editorPanelDependencies: WorkItemEditorPanelDependencies,
 ): Promise<void> {
   const url = await vscode.window.showInputBox({
     prompt: 'Enter a URL to create a work item from',
@@ -374,7 +355,7 @@ async function handleCreateItemFromUrl(
   const existing = workGraph.findItemByProvenance(details.providerId, details.externalId);
   if (existing) {
     const providerLabel = existing.providerId ? labelCache.get(existing.providerId) : undefined;
-    WorkItemEditorPanel.open(context, workGraph, providerRegistry, existing, providerLabel);
+    WorkItemEditorPanel.open(context, workGraph, providerRegistry, existing, editorPanelDependencies, providerLabel);
     void vscode.window.showInformationMessage('DevDocket: Item already exists for this source item');
     return;
   }
@@ -386,51 +367,50 @@ async function handleCreateItemFromUrl(
   );
 
   const providerLabel = createdItem.providerId ? labelCache.get(createdItem.providerId) : undefined;
-  WorkItemEditorPanel.open(context, workGraph, providerRegistry, createdItem, providerLabel);
+  WorkItemEditorPanel.open(context, workGraph, providerRegistry, createdItem, editorPanelDependencies, providerLabel);
   void vscode.window.showInformationMessage(`DevDocket: Created "${details.title}"`);
-  void revealer?.revealInQueue(createdItem.id);
 }
 
-async function handleAcceptToFocus(workGraph: WorkGraph, item?: { id?: string }, selectedItems?: { id?: string }[], revealer?: ViewRevealer): Promise<void> {
+async function handleAcceptToFocus(workGraph: WorkGraph, item?: { id?: string }, selectedItems?: { id?: string }[]): Promise<void> {
   const ids = resolveItemIds(item, selectedItems);
   if (ids.length === 0) { return; }
   await batchTransition(workGraph, ids, WorkItemState.InProgress,
-    (n) => `Moved ${n} item${n === 1 ? '' : 's'} to Focus`, revealer);
+    (n) => `Moved ${n} item${n === 1 ? '' : 's'} to In Progress`);
 }
 
-async function handleArchiveItem(workGraph: WorkGraph, item?: { id?: string }, selectedItems?: { id?: string }[], revealer?: ViewRevealer): Promise<void> {
+async function handleArchiveItem(workGraph: WorkGraph, item?: { id?: string }, selectedItems?: { id?: string }[]): Promise<void> {
   const ids = resolveItemIds(item, selectedItems);
   if (ids.length === 0) { return; }
   await batchTransition(workGraph, ids, WorkItemState.Archived,
-    (n) => `Archived ${n} item${n === 1 ? '' : 's'}`, revealer);
+    (n) => `Archived ${n} item${n === 1 ? '' : 's'}`);
 }
 
-async function handleCompleteItem(workGraph: WorkGraph, item?: { id?: string }, selectedItems?: { id?: string }[], revealer?: ViewRevealer): Promise<void> {
+async function handleCompleteItem(workGraph: WorkGraph, item?: { id?: string }, selectedItems?: { id?: string }[]): Promise<void> {
   const ids = resolveItemIds(item, selectedItems);
   if (ids.length === 0) { return; }
   await batchTransition(workGraph, ids, WorkItemState.Done,
-    (n) => `Completed ${n} item${n === 1 ? '' : 's'}`, revealer);
+    (n) => `Completed ${n} item${n === 1 ? '' : 's'}`);
 }
 
-async function handlePauseItem(workGraph: WorkGraph, item?: { id?: string }, selectedItems?: { id?: string }[], revealer?: ViewRevealer): Promise<void> {
+async function handlePauseItem(workGraph: WorkGraph, item?: { id?: string }, selectedItems?: { id?: string }[]): Promise<void> {
   const ids = resolveItemIds(item, selectedItems);
   if (ids.length === 0) { return; }
   await batchTransition(workGraph, ids, WorkItemState.Paused,
-    (n) => `Paused ${n} item${n === 1 ? '' : 's'}`, revealer);
+    (n) => `Paused ${n} item${n === 1 ? '' : 's'}`);
 }
 
-async function handleResumeItem(workGraph: WorkGraph, item?: { id?: string }, selectedItems?: { id?: string }[], revealer?: ViewRevealer): Promise<void> {
+async function handleResumeItem(workGraph: WorkGraph, item?: { id?: string }, selectedItems?: { id?: string }[]): Promise<void> {
   const ids = resolveItemIds(item, selectedItems);
   if (ids.length === 0) { return; }
   await batchTransition(workGraph, ids, WorkItemState.InProgress,
-    (n) => `Resumed ${n} item${n === 1 ? '' : 's'}`, revealer);
+    (n) => `Resumed ${n} item${n === 1 ? '' : 's'}`);
 }
 
-async function handleMoveToQueue(workGraph: WorkGraph, item?: { id?: string }, selectedItems?: { id?: string }[], revealer?: ViewRevealer): Promise<void> {
+async function handleMoveToQueue(workGraph: WorkGraph, item?: { id?: string }, selectedItems?: { id?: string }[]): Promise<void> {
   const ids = resolveItemIds(item, selectedItems);
   if (ids.length === 0) { return; }
   await batchTransition(workGraph, ids, WorkItemState.New,
-    (n) => `Moved ${n} item${n === 1 ? '' : 's'} to Queue`, revealer);
+    (n) => `Moved ${n} item${n === 1 ? '' : 's'} to Ready to Start`);
 }
 
 function handleEditItem(
@@ -438,13 +418,14 @@ function handleEditItem(
   workGraph: WorkGraph,
   providerRegistry: ProviderRegistry,
   labelCache: ProviderLabelCache,
+  editorPanelDependencies: WorkItemEditorPanelDependencies,
   item?: { id?: string },
 ): void {
   if (!item?.id) { return; }
   const workItem = workGraph.getItem(item.id);
   if (workItem) {
     const providerLabel = workItem.providerId ? labelCache.get(workItem.providerId) : undefined;
-    WorkItemEditorPanel.open(context, workGraph, providerRegistry, workItem, providerLabel);
+    WorkItemEditorPanel.open(context, workGraph, providerRegistry, workItem, editorPanelDependencies, providerLabel);
   }
 }
 
@@ -470,6 +451,22 @@ async function handleOpenInBrowser(workGraph: WorkGraph, item?: { id?: string; u
   if (!opened) {
     void vscode.window.showWarningMessage('Failed to open URL in the browser.');
   }
+}
+
+async function handleCopyUrl(workGraph: WorkGraph, item?: { id?: string; url?: string }): Promise<void> {
+  if (!item || (!item.id && !item.url)) {
+    void vscode.window.showWarningMessage('DevDocket: Select an item to copy its URL.');
+    return;
+  }
+  const workItem = item.id ? workGraph.getItem(item.id) : undefined;
+  const url = workItem?.url ?? item.url;
+  if (!url) {
+    void vscode.window.showWarningMessage('This item has no URL to copy.');
+    return;
+  }
+
+  await vscode.env.clipboard.writeText(url);
+  vscode.window.setStatusBarMessage('DevDocket: URL copied to clipboard', 3000);
 }
 
 async function handleRunAction(
@@ -601,383 +598,79 @@ async function handleFocusMoveDown(workGraph: WorkGraph, item?: { id?: string })
   await workGraph.moveItem(item.id, 'down');
 }
 
-async function handleAcceptFromInbox(
-  workGraph: WorkGraph,
-  stateStore: DiscoveredStateStore,
-  providerRegistry: ProviderRegistry,
-  item?: InboxElement,
-  selectedItems?: InboxElement[],
-  revealer?: ViewRevealer,
-): Promise<void> {
-  const items = resolveInboxItems(item, selectedItems);
-  if (items.length === 0) { return; }
+type PendingProvider = ProviderRefreshProgress['pendingProviders'][number];
 
-  if (items.length === 1) {
-    await acceptSingleInboxItem(workGraph, stateStore, providerRegistry, items[0], revealer);
-    return;
+function formatWaitingProviders(providers: readonly PendingProvider[]): string {
+  const labels = providers.map(provider => provider.label);
+  if (labels.length <= 2) {
+    return labels.join(' and ');
   }
-
-  await batchAcceptItems(workGraph, stateStore, items, 'inbox item');
-  // Propagate state to canonical peers (state-only, no work items created)
-  for (const batchItem of items) {
-    await propagateStateToCanonicalPeers(batchItem, providerRegistry, stateStore, 'accepted');
-  }
+  return `${labels.slice(0, 2).join(', ')}, and ${labels.length - 2} more`;
 }
 
-async function acceptSingleInboxItem(
-  workGraph: WorkGraph,
-  stateStore: DiscoveredStateStore,
-  providerRegistry: ProviderRegistry,
-  item: InboxItem,
-  revealer?: ViewRevealer,
-): Promise<void> {
-  logger.info(`Accepting inbox item: ${item.externalId} from ${item.providerId}`);
-  const existing = workGraph.findItemByProvenance(item.providerId, item.externalId);
-  if (existing) {
-    // Re-open items in terminal states so resurfaced items return to Queue
-    if (existing.state === WorkItemState.Done || existing.state === WorkItemState.Archived) {
-      const originalState = existing.state;
-      try {
-        await workGraph.transitionState(existing.id, WorkItemState.New);
-      } catch (err: unknown) {
-        handleCommandError('Failed to re-open item', err);
-        return;
-      }
-      try {
-        await stateStore.setState(item.providerId, item.externalId, 'accepted');
-      } catch (err: unknown) {
-        try { await workGraph.transitionState(existing.id, originalState); } catch (rollbackErr: unknown) {
-          logger.error('Failed to roll back re-opened item after setState failure', rollbackErr);
-        }
-        handleCommandError('Failed to update state for re-opened item', err);
-        return;
-      }
-      await propagateStateToCanonicalPeers(item, providerRegistry, stateStore, 'accepted');
-      void revealer?.revealInQueue(existing.id);
-      return;
-    }
-    void vscode.window.showInformationMessage(
-      `DevDocket: Item already accepted as "${existing.title}"`
-    );
-    try {
-      await stateStore.setState(item.providerId, item.externalId, 'accepted');
-    } catch (err: unknown) {
-      handleCommandError('Failed to update state for existing accepted item', err);
-    }
-    await propagateStateToCanonicalPeers(item, providerRegistry, stateStore, 'accepted');
-    return;
+function formatRefreshProgressMessage(
+  completed: number,
+  total: number,
+  pendingProviders: readonly PendingProvider[],
+  latestOutcome?: string,
+): string {
+  if (total === 0) {
+    return 'No providers registered';
   }
-  const group = item.group?.trim();
-  let createdItem: Awaited<ReturnType<typeof workGraph.createItem>>;
-  try {
-    createdItem = await workGraph.createItem(
-      { title: formatItemTitle(item), description: item.description },
-      {
-        providerId: item.providerId,
-        externalId: item.externalId,
-        url: item.url,
-        ...(group ? { group } : {}),
-      },
-    );
-  } catch (err: unknown) {
-    handleCommandError('Failed to accept inbox item', err);
-    return;
-  }
-  try {
-    await stateStore.setState(item.providerId, item.externalId, 'accepted');
-  } catch (err: unknown) {
-    // Roll back the created work item to prevent it appearing in Queue while still unseen in Inbox
-    try {
-      await workGraph.deleteItem(createdItem.id);
-    } catch (rollbackErr: unknown) {
-      logger.error('Failed to roll back created item after setState failure', rollbackErr);
-    }
-    handleCommandError('Failed to update state after accepting item', err);
-    return;
-  }
-  // Propagate accept to canonical peers
-  await propagateStateToCanonicalPeers(item, providerRegistry, stateStore, 'accepted');
-  void revealer?.revealInQueue(createdItem.id);
+  const providerWord = total === 1 ? 'provider' : 'providers';
+  const message = `Refreshing… ${completed}/${total} ${providerWord} done`;
+  const detail = pendingProviders.length > 0
+    ? `${message} — waiting on ${formatWaitingProviders(pendingProviders)}`
+    : message;
+  return latestOutcome ? `${latestOutcome} — ${detail}` : detail;
 }
 
-async function acceptToFocusSingleInboxItem(
-  workGraph: WorkGraph,
-  stateStore: DiscoveredStateStore,
-  providerRegistry: ProviderRegistry,
-  item: InboxItem,
-  revealer?: ViewRevealer,
-): Promise<void> {
-  logger.info(`Accepting inbox item to Focus: ${item.externalId} from ${item.providerId}`);
-  let workItemId: string;
-  const existing = workGraph.findItemByProvenance(item.providerId, item.externalId);
-  if (existing) {
-    if (existing.state === WorkItemState.InProgress || existing.state === WorkItemState.Paused) {
-      try {
-        await stateStore.setState(item.providerId, item.externalId, 'accepted');
-      } catch (err: unknown) {
-        handleCommandError('Failed to update state for existing focus item', err);
-        return;
-      }
-      void vscode.window.showInformationMessage('DevDocket: Item is already in Focus');
-      await propagateStateToCanonicalPeers(item, providerRegistry, stateStore, 'accepted');
-      return;
-    }
-    if (existing.state === WorkItemState.Done || existing.state === WorkItemState.Archived) {
-      const originalState = existing.state;
-      try {
-        await workGraph.transitionState(existing.id, WorkItemState.New);
-      } catch (err: unknown) {
-        handleCommandError('Failed to re-open item', err);
-        return;
-      }
-      // Roll back if setState fails to keep workGraph and discovered state consistent
-      workItemId = existing.id;
-      try {
-        await stateStore.setState(item.providerId, item.externalId, 'accepted');
-      } catch (err: unknown) {
-        try { await workGraph.transitionState(existing.id, originalState); } catch (rollbackErr: unknown) {
-          logger.error('Failed to roll back re-opened item after setState failure', rollbackErr);
-        }
-        handleCommandError('Failed to update state for re-opened item', err);
-        return;
-      }
-    } else {
-      workItemId = existing.id;
-      try {
-        await stateStore.setState(item.providerId, item.externalId, 'accepted');
-      } catch (err: unknown) {
-        handleCommandError('Failed to update state for existing accepted item', err);
-        return;
-      }
-    }
-  } else {
-    const group = item.group?.trim();
-    let createdItem: Awaited<ReturnType<typeof workGraph.createItem>>;
-    try {
-      createdItem = await workGraph.createItem(
-        { title: formatItemTitle(item), description: item.description },
-        {
-          providerId: item.providerId,
-          externalId: item.externalId,
-          url: item.url,
-          ...(group ? { group } : {}),
-        },
-      );
-    } catch (err: unknown) {
-      handleCommandError('Failed to accept inbox item to Focus', err);
-      return;
-    }
-    try {
-      await stateStore.setState(item.providerId, item.externalId, 'accepted');
-    } catch (err: unknown) {
-      try {
-        await workGraph.deleteItem(createdItem.id);
-      } catch (rollbackErr: unknown) {
-        logger.error('Failed to roll back created item after setState failure', rollbackErr);
-      }
-      handleCommandError('Failed to update state after accepting item', err);
-      return;
-    }
-    workItemId = createdItem.id;
-  }
-  try {
-    await workGraph.transitionState(workItemId, WorkItemState.InProgress);
-  } catch (err: unknown) {
-    handleCommandError('Failed to move item to Focus', err);
-    return;
-  }
-  // Propagate accept to canonical peers
-  await propagateStateToCanonicalPeers(item, providerRegistry, stateStore, 'accepted');
-  void revealer?.revealInFocus(workItemId);
-}
-
-async function batchAcceptToFocusItems(
-  workGraph: WorkGraph,
-  stateStore: DiscoveredStateStore,
-  items: InboxItem[],
-): Promise<void> {
-  const stateUpdates: Array<{ providerId: string; externalId: string; state: InboxState }> = [];
-  const createdIds: string[] = [];
-  const allIds: string[] = [];
-  const reopenedItems: Array<{ id: string; originalState: WorkItemState }> = [];
-  let failed = 0;
-  let skipped = 0;
-
-  for (const item of items) {
-    const existing = workGraph.findItemByProvenance(item.providerId, item.externalId);
-    if (existing) {
-      if (existing.state === WorkItemState.InProgress || existing.state === WorkItemState.Paused) {
-        logger.info(`Skipping "${item.title}" — already in Focus`);
-        stateUpdates.push({ providerId: item.providerId, externalId: item.externalId, state: 'accepted' });
-        skipped++;
-        continue;
-      }
-      if (existing.state === WorkItemState.Done || existing.state === WorkItemState.Archived) {
-        const originalState = existing.state;
-        try {
-          await workGraph.transitionState(existing.id, WorkItemState.New);
-          reopenedItems.push({ id: existing.id, originalState });
-        } catch (err: unknown) {
-          failed++;
-          logger.error(`Failed to re-open "${item.title}"`, err);
-          continue;
-        }
-      }
-      stateUpdates.push({ providerId: item.providerId, externalId: item.externalId, state: 'accepted' });
-      allIds.push(existing.id);
-      continue;
-    }
-    const group = item.group?.trim();
-    try {
-      const createdItem = await workGraph.createItem(
-        { title: formatItemTitle(item), description: item.description },
-        {
-          providerId: item.providerId,
-          externalId: item.externalId,
-          url: item.url,
-          ...(group ? { group } : {}),
-        },
-      );
-      createdIds.push(createdItem.id);
-      allIds.push(createdItem.id);
-      stateUpdates.push({ providerId: item.providerId, externalId: item.externalId, state: 'accepted' });
-    } catch (err: unknown) {
-      failed++;
-      logger.error(`Failed to accept inbox item to Focus "${item.title}"`, err);
-    }
-  }
-
-  if (stateUpdates.length > 0) {
-    try {
-      await stateStore.setStates(stateUpdates);
-    } catch (err: unknown) {
-      for (const id of createdIds) {
-        try { await workGraph.deleteItem(id); } catch (rollbackErr: unknown) {
-          logger.error('Failed to roll back created item after batch setStates failure', rollbackErr);
-        }
-      }
-      for (const { id, originalState } of reopenedItems) {
-        try { await workGraph.transitionState(id, originalState); } catch (rollbackErr: unknown) {
-          logger.error('Failed to roll back re-opened item after batch setStates failure', rollbackErr);
-        }
-      }
-      handleCommandError('Failed to update states after accepting items', err);
-      return;
-    }
-  }
-
-  // Transition all successfully accepted items to InProgress
-  let transitionFailed = 0;
-  for (const id of allIds) {
-    try {
-      await workGraph.transitionState(id, WorkItemState.InProgress);
-    } catch (err: unknown) {
-      transitionFailed++;
-      logger.error(`Failed to transition item ${id} to Focus`, err);
-    }
-  }
-
-  const succeeded = allIds.length - transitionFailed;
-  if (succeeded > 0 || skipped > 0) {
-    const parts: string[] = [];
-    if (succeeded > 0) {
-      parts.push(`Accepted ${succeeded} item${succeeded === 1 ? '' : 's'} to Focus`);
-    }
-    if (skipped > 0) {
-      parts.push(`${skipped} item${skipped === 1 ? '' : 's'} already in Focus or cannot be moved`);
-    }
-    const msg = (failed > 0 || transitionFailed > 0)
-      ? `${parts.join('; ')} (${failed + transitionFailed} failed)`
-      : parts.join('; ');
-    void vscode.window.showInformationMessage(msg);
-  }
-  if (failed > 0 || transitionFailed > 0) {
-    void vscode.window.showErrorMessage(
-      `DevDocket: Failed to process ${failed + transitionFailed} item(s); see Output for details`,
-    );
-  }
-}
-
-async function handleAcceptToFocusFromInbox(
-  workGraph: WorkGraph,
-  stateStore: DiscoveredStateStore,
-  providerRegistry: ProviderRegistry,
-  item?: InboxElement,
-  selectedItems?: InboxElement[],
-  revealer?: ViewRevealer,
-): Promise<void> {
-  const items = resolveInboxItems(item, selectedItems);
-  if (items.length === 0) { return; }
-
-  if (items.length === 1) {
-    await acceptToFocusSingleInboxItem(workGraph, stateStore, providerRegistry, items[0], revealer);
-    return;
-  }
-
-  await batchAcceptToFocusItems(workGraph, stateStore, items);
-  // Propagate state to canonical peers (state-only, no work items created)
-  for (const batchItem of items) {
-    await propagateStateToCanonicalPeers(batchItem, providerRegistry, stateStore, 'accepted');
-  }
-}
-
-async function handleDismissFromInbox(
-  stateStore: DiscoveredStateStore,
-  providerRegistry: ProviderRegistry,
-  item?: InboxElement,
-  selectedItems?: InboxElement[],
-): Promise<void> {
-  const items = resolveInboxItems(item, selectedItems);
-  if (items.length === 0) { return; }
-
-  // Expand with canonical peers so dismiss propagates
-  const expanded = expandWithCanonicalPeers(items, providerRegistry, stateStore);
-
-  if (expanded.length === 1) {
-    try {
-      logger.info(`Dismissing inbox item: ${expanded[0].externalId}`);
-      await stateStore.setState(expanded[0].providerId, expanded[0].externalId, 'dismissed');
-    } catch (err: unknown) {
-      handleCommandError('Failed to dismiss item', err);
-    }
-    return;
-  }
-
-  try {
-    logger.info(`Batch dismissing ${expanded.length} inbox items`);
-    await stateStore.setStates(
-      expanded.map(i => ({ providerId: i.providerId, externalId: i.externalId, state: 'dismissed' as const }))
-    );
-    void vscode.window.showInformationMessage(`Dismissed ${expanded.length} item${expanded.length === 1 ? '' : 's'}`);
-  } catch (err: unknown) {
-    handleCommandError('Failed to dismiss items', err);
+function formatProviderOutcome(event: ProviderRefreshProgress): string {
+  switch (event.outcome) {
+    case 'success': return `${event.providerLabel} refreshed`;
+    case 'failed': return `${event.providerLabel} failed`;
+    case 'timedOut': return `${event.providerLabel} timed out`;
+    case 'cancelled': return `${event.providerLabel} cancelled`;
   }
 }
 
 async function handleRefresh(providerRegistry: ProviderRegistry): Promise<void> {
   logger.info('Manual refresh triggered');
+  const providers = providerRegistry.getProviders().map(provider => ({ id: provider.id, label: provider.label }));
   await vscode.window.withProgress(
     {
-      location: vscode.ProgressLocation.Window,
-      title: 'DevDocket: Refreshing…',
+      location: vscode.ProgressLocation.Notification,
+      title: 'DevDocket: Refresh',
+      cancellable: true,
     },
-    () => providerRegistry.refreshAll(),
+    (progress, token) => {
+      progress.report({ message: formatRefreshProgressMessage(0, providers.length, providers) });
+      return providerRegistry.refreshAll(token, event => {
+        progress.report({
+          message: formatRefreshProgressMessage(
+            event.completed,
+            event.total,
+            event.pendingProviders,
+            formatProviderOutcome(event),
+          ),
+        });
+      });
+    },
   );
 }
 
 async function handleAcceptFromSources(
   workGraph: WorkGraph,
-  stateStore: DiscoveredStateStore,
+  stateStore: InboxStateStore,
   providerRegistry: ProviderRegistry,
   item?: SourcesElement,
   selectedItems?: SourcesElement[],
-  revealer?: ViewRevealer,
 ): Promise<void> {
   const items = resolveSourceItems(item, selectedItems);
   if (items.length === 0) { return; }
 
   if (items.length === 1) {
-    await acceptSingleSourceItem(workGraph, stateStore, providerRegistry, items[0], revealer);
+    await acceptSingleSourceItem(workGraph, stateStore, providerRegistry, items[0]);
     return;
   }
 
@@ -990,15 +683,14 @@ async function handleAcceptFromSources(
 
 async function acceptSingleSourceItem(
   workGraph: WorkGraph,
-  stateStore: DiscoveredStateStore,
+  stateStore: InboxStateStore,
   providerRegistry: ProviderRegistry,
   item: SourceItemNode,
-  revealer?: ViewRevealer,
 ): Promise<void> {
   logger.info(`Accepting sources item: ${item.externalId}`);
   const existing = workGraph.findItemByProvenance(item.providerId, item.externalId);
   if (existing) {
-    // Re-open items in terminal states so resurfaced items return to Queue
+    // Re-open items in terminal states so resurfaced items return to Ready to Start
     if (existing.state === WorkItemState.Done || existing.state === WorkItemState.Archived) {
       const originalState = existing.state;
       try {
@@ -1017,7 +709,6 @@ async function acceptSingleSourceItem(
         return;
       }
       await propagateStateToCanonicalPeers(item, providerRegistry, stateStore, 'accepted');
-      void revealer?.revealInQueue(existing.id);
       return;
     }
     try {
@@ -1039,6 +730,7 @@ async function acceptSingleSourceItem(
       {
         providerId: item.providerId,
         externalId: item.externalId,
+        itemType: item.itemType,
         url: item.url,
         ...(group ? { group } : {}),
       },
@@ -1058,12 +750,11 @@ async function acceptSingleSourceItem(
     handleCommandError('Failed to update state after accepting item', err);
     return;
   }
-  void revealer?.revealInQueue(createdItem.id);
   await propagateStateToCanonicalPeers(item, providerRegistry, stateStore, 'accepted');
 }
 
 async function handleDismissFromSources(
-  stateStore: DiscoveredStateStore,
+  stateStore: InboxStateStore,
   providerRegistry: ProviderRegistry,
   item?: SourcesElement,
   selectedItems?: SourcesElement[],
@@ -1104,39 +795,66 @@ export function registerCommands(
   context: vscode.ExtensionContext,
   workGraph: WorkGraph,
   actionRegistry: ActionRegistry,
-  stateStore: DiscoveredStateStore,
+  stateStore: InboxStateStore,
+  readStateStore: ReadStateStore,
   providerRegistry: ProviderRegistry,
   labelCache: ProviderLabelCache,
   watcherRegistry: WatcherRegistry,
   prWatcherRegistry: PRWatcherRegistry,
   watcherService: WatcherService,
-  revealer?: ViewRevealer,
+  watchPanelProvider: WatchPanelProvider,
+  editorPanelDependencies: WorkItemEditorPanelDependencies,
+  incomingPreviewPanelManager: IncomingPreviewPanelManager,
+  toggleMainSearch: () => void,
 ): void {
   context.subscriptions.push(
     vscode.commands.registerCommand('devdocket.refresh',
       wrapCommand('Failed to refresh', () => handleRefresh(providerRegistry))),
+    vscode.commands.registerCommand('devdocket.toggleSearch',
+      wrapCommand('Failed to toggle search', () => toggleMainSearch())),
+    vscode.commands.registerCommand('devdocket.openWalkthrough',
+      wrapCommand('Failed to open walkthrough', () =>
+        vscode.commands.executeCommand(
+          'workbench.action.openWalkthrough',
+          'devdocket.devdocket#devdocket.gettingStarted',
+          false,
+        ),
+      )),
     vscode.commands.registerCommand('devdocket.createItem',
-      wrapCommand('Failed to create item', () => handleCreateItem(workGraph, revealer))),
+      wrapCommand('Failed to create item', () => handleCreateItem(context, workGraph, providerRegistry, labelCache, editorPanelDependencies))),
     vscode.commands.registerCommand('devdocket.createItemFromUrl',
-      wrapCommand('Failed to create item from URL', () => handleCreateItemFromUrl(context, workGraph, providerRegistry, labelCache, revealer))),
+      wrapCommand('Failed to create item from URL', () => handleCreateItemFromUrl(context, workGraph, providerRegistry, labelCache, editorPanelDependencies))),
+    vscode.commands.registerCommand('devdocket.previewIncomingItem',
+      wrapCommand('Failed to preview incoming item', (arg: unknown) => {
+        if (!arg || typeof arg !== 'object') {
+          throw new Error('previewIncomingItem requires { providerId, externalId }');
+        }
+        const { providerId, externalId } = arg as { providerId?: unknown; externalId?: unknown };
+        if (typeof providerId !== 'string' || typeof externalId !== 'string') {
+          throw new Error('previewIncomingItem requires string providerId and externalId');
+        }
+        IncomingPreviewPanel.open(context, incomingPreviewPanelManager, providerRegistry, stateStore, readStateStore, workGraph, providerId, externalId);
+      })),
     vscode.commands.registerCommand('devdocket.acceptToFocus',
-      wrapCommand('Failed to focus item', (item, selectedItems) => handleAcceptToFocus(workGraph, item, selectedItems, revealer))),
+      wrapCommand('Failed to move item to In Progress', (item, selectedItems) => handleAcceptToFocus(workGraph, item, selectedItems))),
     vscode.commands.registerCommand('devdocket.archiveItem',
-      wrapCommand('Failed to archive item', (item, selectedItems) => handleArchiveItem(workGraph, item, selectedItems, revealer))),
+      wrapCommand('Failed to archive item', (item, selectedItems) => handleArchiveItem(workGraph, item, selectedItems))),
     vscode.commands.registerCommand('devdocket.completeItem',
-      wrapCommand('Failed to complete item', (item, selectedItems) => handleCompleteItem(workGraph, item, selectedItems, revealer))),
+      wrapCommand('Failed to complete item', (item, selectedItems) => handleCompleteItem(workGraph, item, selectedItems))),
     vscode.commands.registerCommand('devdocket.pauseItem',
-      wrapCommand('Failed to pause item', (item, selectedItems) => handlePauseItem(workGraph, item, selectedItems, revealer))),
+      wrapCommand('Failed to pause item', (item, selectedItems) => handlePauseItem(workGraph, item, selectedItems))),
     vscode.commands.registerCommand('devdocket.resumeItem',
-      wrapCommand('Failed to resume item', (item, selectedItems) => handleResumeItem(workGraph, item, selectedItems, revealer))),
+      wrapCommand('Failed to resume item', (item, selectedItems) => handleResumeItem(workGraph, item, selectedItems))),
     vscode.commands.registerCommand('devdocket.deleteItem',
       wrapCommand('Failed to delete item', (item, selectedItems) => handleDeleteItem(workGraph, item, selectedItems))),
     vscode.commands.registerCommand('devdocket.clearHistory',
       wrapCommand('Failed to clear history', () => handleClearHistory(workGraph))),
     vscode.commands.registerCommand('devdocket.editItem',
-      wrapCommand('Failed to open editor', (item) => handleEditItem(context, workGraph, providerRegistry, labelCache, item))),
+      wrapCommand('Failed to open editor', (item) => handleEditItem(context, workGraph, providerRegistry, labelCache, editorPanelDependencies, item))),
     vscode.commands.registerCommand('devdocket.openInBrowser',
       wrapCommand('Failed to open in browser', (item) => handleOpenInBrowser(workGraph, item))),
+    vscode.commands.registerCommand('devdocket.copyUrl',
+      wrapCommand('Failed to copy URL', (item) => handleCopyUrl(workGraph, item))),
     vscode.commands.registerCommand('devdocket.runAction',
       wrapCommand('Failed to run action', (item) => handleRunAction(workGraph, actionRegistry, item))),
     vscode.commands.registerCommand('devdocket.moveUp',
@@ -1148,54 +866,11 @@ export function registerCommands(
     vscode.commands.registerCommand('devdocket.focusMoveDown',
       wrapCommand('Failed to move focus item down', (item) => handleFocusMoveDown(workGraph, item))),
     vscode.commands.registerCommand('devdocket.moveToQueue',
-      wrapCommand('Failed to move item to queue', (item, selectedItems) => handleMoveToQueue(workGraph, item, selectedItems, revealer))),
-    vscode.commands.registerCommand('devdocket.acceptFromInbox',
-      wrapCommand('Failed to accept from inbox', (item: InboxElement, selectedItems?: InboxElement[]) => handleAcceptFromInbox(workGraph, stateStore, providerRegistry, item, selectedItems, revealer))),
-    vscode.commands.registerCommand('devdocket.acceptToFocusFromInbox',
-      wrapCommand('Failed to accept to focus from inbox', (item: InboxElement, selectedItems?: InboxElement[]) => handleAcceptToFocusFromInbox(workGraph, stateStore, providerRegistry, item, selectedItems, revealer))),
-    vscode.commands.registerCommand('devdocket.dismissFromInbox',
-      wrapCommand('Failed to dismiss from inbox', (item: InboxElement, selectedItems?: InboxElement[]) => handleDismissFromInbox(stateStore, providerRegistry, item, selectedItems))),
+      wrapCommand('Failed to move item to Ready to Start', (item, selectedItems) => handleMoveToQueue(workGraph, item, selectedItems))),
     vscode.commands.registerCommand('devdocket.acceptFromSources',
-      wrapCommand('Failed to accept from sources', (item: SourcesElement, selectedItems?: SourcesElement[]) => handleAcceptFromSources(workGraph, stateStore, providerRegistry, item, selectedItems, revealer))),
+      wrapCommand('Failed to accept from sources', (item: SourcesElement, selectedItems?: SourcesElement[]) => handleAcceptFromSources(workGraph, stateStore, providerRegistry, item, selectedItems))),
     vscode.commands.registerCommand('devdocket.dismissFromSources',
       wrapCommand('Failed to dismiss from sources', (item: SourcesElement, selectedItems?: SourcesElement[]) => handleDismissFromSources(stateStore, providerRegistry, item, selectedItems))),
-    vscode.commands.registerCommand('devdocket.switchInboxToTree',
-      wrapCommand('Failed to switch inbox layout', () => setViewLayout('inbox', 'tree'))),
-    vscode.commands.registerCommand('devdocket.switchInboxToFlat',
-      wrapCommand('Failed to switch inbox layout', () => setViewLayout('inbox', 'flat'))),
-    vscode.commands.registerCommand('devdocket.switchQueueToTree',
-      wrapCommand('Failed to switch queue layout', () => setViewLayout('queue', 'tree'))),
-    vscode.commands.registerCommand('devdocket.switchQueueToFlat',
-      wrapCommand('Failed to switch queue layout', () => setViewLayout('queue', 'flat'))),
-    vscode.commands.registerCommand('devdocket.switchFocusToTree',
-      wrapCommand('Failed to switch focus layout', () => setViewLayout('focus', 'tree'))),
-    vscode.commands.registerCommand('devdocket.switchFocusToFlat',
-      wrapCommand('Failed to switch focus layout', () => setViewLayout('focus', 'flat'))),
-    vscode.commands.registerCommand('devdocket.switchHistoryToTree',
-      wrapCommand('Failed to switch history layout', () => setViewLayout('history', 'tree'))),
-    vscode.commands.registerCommand('devdocket.switchHistoryToFlat',
-      wrapCommand('Failed to switch history layout', () => setViewLayout('history', 'flat'))),
-    vscode.commands.registerCommand('devdocket.switchSourcesToTree',
-      wrapCommand('Failed to switch sources layout', () => setViewLayout('sources', 'tree'))),
-    vscode.commands.registerCommand('devdocket.switchSourcesToFlat',
-      wrapCommand('Failed to switch sources layout', () => setViewLayout('sources', 'flat'))),
-    // Toggle commands — cycle between flat and tree layouts via a single command
-    vscode.commands.registerCommand('devdocket.toggleInboxLayout',
-      wrapCommand('Failed to switch inbox layout', () => toggleViewLayout('inbox'))),
-    vscode.commands.registerCommand('devdocket.toggleQueueLayout',
-      wrapCommand('Failed to switch queue layout', () => toggleViewLayout('queue'))),
-    vscode.commands.registerCommand('devdocket.toggleFocusLayout',
-      wrapCommand('Failed to switch focus layout', () => toggleViewLayout('focus'))),
-    vscode.commands.registerCommand('devdocket.toggleHistoryLayout',
-      wrapCommand('Failed to switch history layout', () => toggleViewLayout('history'))),
-    vscode.commands.registerCommand('devdocket.toggleSourcesLayout',
-      wrapCommand('Failed to switch sources layout', () => toggleViewLayout('sources'))),
-    vscode.commands.registerCommand('devdocket.switchWatchesToTree',
-      wrapCommand('Failed to switch watches layout', () => setViewLayout('watches', 'tree'))),
-    vscode.commands.registerCommand('devdocket.switchWatchesToFlat',
-      wrapCommand('Failed to switch watches layout', () => setViewLayout('watches', 'flat'))),
-    vscode.commands.registerCommand('devdocket.toggleWatchesLayout',
-      wrapCommand('Failed to switch watches layout', () => toggleViewLayout('watches'))),
     vscode.commands.registerCommand('devdocket.showProviderHealthQuickPick',
       wrapCommand('Failed to show provider health quick pick', () => showProviderHealthQuickPick(providerRegistry))),
     vscode.commands.registerCommand('devdocket.addActivity',
@@ -1210,5 +885,6 @@ export function registerCommands(
       }),
   );
 
-  registerWatchCommands(context, watcherRegistry, prWatcherRegistry, watcherService);
+  registerInboxCommands(context, workGraph, stateStore, providerRegistry);
+  registerWatchCommands(context, watcherRegistry, prWatcherRegistry, watcherService, watchPanelProvider);
 }

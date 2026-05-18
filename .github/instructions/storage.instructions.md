@@ -8,7 +8,7 @@ applyTo: "**/storage/**"
 
 All stores persist data via VS Code's `Memento` (`globalState`) API. Each store takes a `Memento` in its constructor and writes via `this.globalState.update(key, data)`.
 
-Most stores (e.g., `JsonTaskStore`, `DiscoveredStateStore`, `ReadStateStore`) maintain an in-memory cache populated on first load and expose a private `persist()` method. Simpler stores (e.g., `WatchStore`) read/write directly without a cache. Loading methods vary by store (`loadAll()`, `load()`).
+Most stores (e.g., `JsonTaskStore`, `InboxStateStore`, `ReadStateStore`) maintain an in-memory cache populated on first load and expose a private `persist()` method. Simpler stores (e.g., `WatchStore`) read/write directly without a cache. Loading methods vary by store (`loadAll()`, `load()`).
 
 Because `globalState.update()` is atomic from the extension's perspective, there is no write-queue or file-level locking. Stores no longer extend a base class.
 
@@ -40,11 +40,11 @@ return requiredString(obj, 'id', ctx)
 Five globalState keys hold persisted data:
 
 - **`devdocket.workitems`** — Persisted WorkItems with state machine lifecycle (`New` → `InProgress` → `Done` → `Archived`).
-- **`devdocket.discovered-state`** — Thin index mapping `providerId + externalId` → `InboxState` (`unseen` | `accepted` | `dismissed`). Provider item data (title, description, url) is **not persisted** — always read live from the provider.
+- **`devdocket.inbox-state`** — Thin index mapping `providerId + externalId` → `InboxState` (`unseen` | `accepted` | `dismissed`). Provider item data (title, description, url) is **not persisted** — always read live from the provider.
 - **`devdocket.read-state`** — Set of inbox item IDs the user has viewed.
 - **`devdocket.provider-labels`** — Cached mapping of `providerId` → display label (for example, `"github"` → `"GitHub Issues"`).
 - **`devdocket.watches`** — User-configured watch entries.
 
 ## Provider Items Are References, Not Copies
 
-Items in Inbox and Sources are read live from the provider's in-memory data. The only persisted state is the `inboxState` enum. This keeps data fresh and avoids stale copies. Never cache or persist provider item data beyond the thin `devdocket.discovered-state` globalState entry.
+Items in the Incoming tier and the Sources tab are read live from the provider's in-memory data. The only persisted state is the `inboxState` enum. This keeps data fresh and avoids stale copies. Never cache or persist provider item data beyond the thin `devdocket.inbox-state` globalState entry.

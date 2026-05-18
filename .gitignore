@@ -7,6 +7,7 @@ node_modules/
 
 # Build output
 dist/
+webview-dist/
 
 # OS files
 .DS_Store

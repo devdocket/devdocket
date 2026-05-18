@@ -1,4 +1,6 @@
+import * as vscode from 'vscode';
 import type { Memento } from 'vscode';
+import type { ProviderItem } from '../api/types';
 import { logger } from '../services/logger';
 
 const STORAGE_KEY = 'devdocket.read-state';
@@ -14,6 +16,9 @@ export class ReadStateStore {
   private readonly globalState: Memento;
   private readonly items = new Set<string>();
   private loaded = false;
+  private readonly _onDidChange = new vscode.EventEmitter<void>();
+  /** Fires whenever the set of read keys changes (add, addMany, deleteMany, prune). */
+  readonly onDidChange = this._onDidChange.event;
 
   constructor(globalState: Memento) {
     this.globalState = globalState;
@@ -33,6 +38,7 @@ export class ReadStateStore {
     if (this.items.has(key)) { return false; }
     this.items.add(key);
     await this.persist();
+    this._onDidChange.fire();
     return true;
   }
 
@@ -49,6 +55,7 @@ export class ReadStateStore {
     }
     if (newlyAdded.length > 0) {
       await this.persist();
+      this._onDidChange.fire();
     }
     return newlyAdded;
   }
@@ -65,7 +72,51 @@ export class ReadStateStore {
     }
     if (changed) {
       await this.persist();
+      this._onDidChange.fire();
     }
+  }
+
+  /**
+   * Removes persisted read keys for items that are no longer reported by
+   * their provider. Providers with empty item arrays are skipped to avoid
+   * pruning during transient API failures.
+   *
+   * @returns The number of records removed.
+   */
+  async prune(activeItems: Map<string, ProviderItem[]>): Promise<number> {
+    if (!this.loaded) { await this.load(); }
+
+    const activeKeys = new Set<string>();
+    const activeProviderIds = new Set<string>();
+    for (const [providerId, items] of activeItems) {
+      if (items.length === 0) { continue; }
+      activeProviderIds.add(providerId);
+      for (const item of items) {
+        activeKeys.add(`${providerId}::${item.externalId}`);
+      }
+    }
+
+    if (activeProviderIds.size === 0) { return 0; }
+
+    const staleKeys: string[] = [];
+    for (const key of this.items) {
+      const delimiterIndex = key.indexOf('::');
+      if (delimiterIndex === -1) { continue; }
+      const providerId = key.slice(0, delimiterIndex);
+      if (activeProviderIds.has(providerId) && !activeKeys.has(key)) {
+        staleKeys.push(key);
+      }
+    }
+
+    if (staleKeys.length === 0) { return 0; }
+
+    for (const key of staleKeys) {
+      this.items.delete(key);
+    }
+
+    await this.persist();
+    this._onDidChange.fire();
+    return staleKeys.length;
   }
 
   async load(): Promise<void> {
@@ -87,5 +138,9 @@ export class ReadStateStore {
       logger.debug(`Loaded read state: ${this.items.size} entries`);
     }
     this.loaded = true;
+  }
+
+  dispose(): void {
+    this._onDidChange.dispose();
   }
 }

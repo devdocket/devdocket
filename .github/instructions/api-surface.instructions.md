@@ -10,9 +10,9 @@ Any change to the public API surface **must** be evaluated for breaking changes 
 
 These files define the contract that provider extensions depend on:
 
-- `packages/core/src/api/types.ts` — `DevDocketApi`, `DevDocketProvider`, `DevDocketAction`, and re-exported shared types (`Disposable`, `Event`, `DiscoveredItem`)
+- `packages/core/src/api/types.ts` — `DevDocketApi`, `DevDocketProvider`, `DevDocketAction`, and re-exported shared types (`Disposable`, `Event`, `ProviderItem`)
 - `packages/core/src/models/workItem.ts` — `WorkItem` and `WorkItemState` (exposed to action implementors via `DevDocketAction.canRun` / `run`)
-- `packages/shared/src/baseProvider.ts` — `DiscoveredItem`, `Disposable`, `Event`, `EventEmitterLike`, `BaseProvider`
+- `packages/shared/src/baseProvider.ts` — `ProviderItem`, `Disposable`, `Event`, `EventEmitterLike`, `BaseProvider`
 - `packages/shared/src/index.ts` — all symbols exported from this barrel are public API surface of `@devdocket/shared`
 
 ## What Constitutes a Breaking Change

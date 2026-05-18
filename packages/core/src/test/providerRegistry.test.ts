@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { EventEmitter } from 'vscode';
-import { DevDocketProvider, DiscoveredItem } from '../api/types';
+import { CancellationTokenSource, EventEmitter } from 'vscode';
+import { DevDocketProvider, ProviderItem } from '../api/types';
 import { WorkGraph } from '../services/workGraph';
 import { ProviderRegistry } from '../services/providerRegistry';
 import { logger } from '../services/logger';
@@ -64,8 +64,8 @@ function createMockStateStore() {
   };
 }
 
-function createMockProvider(id: string): DevDocketProvider & { fireItems: (items: DiscoveredItem[]) => void } {
-  const emitter = new EventEmitter<DiscoveredItem[]>();
+function createMockProvider(id: string): DevDocketProvider & { fireItems: (items: ProviderItem[]) => void } {
+  const emitter = new EventEmitter<ProviderItem[]>();
   return {
     id,
     label: `Provider ${id}`,
@@ -142,14 +142,14 @@ describe('ProviderRegistry', () => {
       { externalId: 'issue-2', title: 'Feature', url: 'https://github.com/issue/2' },
     ]);
 
-    const items = registry.getDiscoveredItems('gh');
+    const items = registry.getProviderItems('gh');
     expect(items).toHaveLength(2);
     expect(items[0].title).toBe('Bug fix');
     expect(items[0].externalId).toBe('issue-1');
     expect(items[1].title).toBe('Feature');
   });
 
-  it('replaces discovered items on re-discovery', () => {
+  it('replaces discovered items on re-discovery', async () => {
     const provider = createMockProvider('gh');
     registry.register(provider);
 
@@ -157,13 +157,18 @@ describe('ProviderRegistry', () => {
       { externalId: 'issue-1', title: 'Original title', description: 'Original desc' },
     ]);
 
-    expect(registry.getDiscoveredItems('gh')).toHaveLength(1);
+    expect(registry.getProviderItems('gh')).toHaveLength(1);
 
     provider.fireItems([
       { externalId: 'issue-1', title: 'Updated title', description: 'Updated desc' },
     ]);
 
-    const items = registry.getDiscoveredItems('gh');
+    // Per-provider serialization: the second emission is queued behind the
+    // first one's awaits, so we have to drain microtasks before the updated
+    // items become visible.
+    await vi.waitFor(() => expect(registry.getProviderItems('gh')[0]?.title).toBe('Updated title'));
+
+    const items = registry.getProviderItems('gh');
     expect(items).toHaveLength(1);
     expect(items[0].title).toBe('Updated title');
     expect(items[0].description).toBe('Updated desc');
@@ -194,6 +199,105 @@ describe('ProviderRegistry', () => {
 
     // Should not throw
     await expect(registry.refreshAll()).resolves.toBeUndefined();
+  });
+
+  it('handles synchronous refresh throws gracefully in refreshAll', async () => {
+    const p1 = createMockProvider('sync-throw');
+    registry.register(p1);
+    await new Promise(resolve => setTimeout(resolve, 0));
+    vi.mocked(p1.refresh).mockClear();
+    vi.mocked(p1.refresh).mockImplementationOnce(() => { throw new Error('sync boom'); });
+
+    await expect(registry.refreshAll()).resolves.toBeUndefined();
+
+    expect(registry.isProviderRefreshing('sync-throw')).toBe(false);
+    expect(registry.getProviderHealth('sync-throw').lastError).toBe('sync boom');
+  });
+
+  it('cancels provider refresh tokens when refreshAll token is cancelled', async () => {
+    const provider = createMockProvider('cancel');
+    registry.register(provider);
+    await new Promise(resolve => setTimeout(resolve, 0));
+    vi.mocked(provider.refresh).mockClear();
+
+    let providerToken: { isCancellationRequested: boolean } | undefined;
+    vi.mocked(provider.refresh).mockImplementationOnce((token?: any) => {
+      providerToken = token;
+      return new Promise<void>(() => {});
+    });
+    const listener = vi.fn();
+    registry.onDidChangeProviderRefreshState(listener);
+    const cts = new CancellationTokenSource();
+
+    const refreshPromise = registry.refreshAll(cts.token);
+    await vi.waitFor(() => expect(registry.isProviderRefreshing('cancel')).toBe(true));
+    expect(providerToken?.isCancellationRequested).toBe(false);
+
+    cts.cancel();
+    await refreshPromise;
+
+    expect(providerToken?.isCancellationRequested).toBe(true);
+    expect(registry.isProviderRefreshing('cancel')).toBe(false);
+    expect(registry.getProviderHealth('cancel').status).not.toBe('unhealthy');
+    expect(listener).toHaveBeenCalledWith('cancel');
+    cts.dispose();
+  });
+
+  it('reports refreshAll progress as each provider completes', async () => {
+    const p1 = createMockProvider('p1');
+    const p2 = createMockProvider('p2');
+    registry.register(p1);
+    registry.register(p2);
+    await new Promise(resolve => setTimeout(resolve, 0));
+    vi.mocked(p1.refresh).mockClear();
+    vi.mocked(p2.refresh).mockClear();
+
+    let resolveP1!: () => void;
+    let resolveP2!: () => void;
+    vi.mocked(p1.refresh).mockImplementationOnce(() => new Promise<void>(resolve => { resolveP1 = resolve; }));
+    vi.mocked(p2.refresh).mockImplementationOnce(() => new Promise<void>(resolve => { resolveP2 = resolve; }));
+    const onProgress = vi.fn();
+
+    const refreshPromise = registry.refreshAll(undefined, onProgress);
+    await vi.waitFor(() => expect(p2.refresh).toHaveBeenCalledTimes(1));
+
+    resolveP2();
+    await vi.waitFor(() => expect(onProgress).toHaveBeenCalledWith({
+      providerId: 'p2',
+      providerLabel: 'Provider p2',
+      completed: 1,
+      total: 2,
+      pendingProviders: [{ id: 'p1', label: 'Provider p1' }],
+      outcome: 'success',
+    }));
+
+    resolveP1();
+    await refreshPromise;
+    expect(onProgress).toHaveBeenCalledWith({
+      providerId: 'p1',
+      providerLabel: 'Provider p1',
+      completed: 2,
+      total: 2,
+      pendingProviders: [],
+      outcome: 'success',
+    });
+  });
+
+  it('does not reject refreshAll when progress reporting throws', async () => {
+    const provider = createMockProvider('progress-throws');
+    registry.register(provider);
+    await new Promise(resolve => setTimeout(resolve, 0));
+    vi.mocked(provider.refresh).mockClear();
+    const onProgress = vi.fn(() => { throw new Error('progress broke'); });
+
+    await expect(registry.refreshAll(undefined, onProgress)).resolves.toBeUndefined();
+
+    expect(provider.refresh).toHaveBeenCalledTimes(1);
+    expect(registry.getProviderHealth('progress-throws').status).toBe('healthy');
+  });
+
+  it('returns cancelled when refreshing an unregistered provider by id', async () => {
+    await expect(registry.refreshProvider('missing')).resolves.toBe('cancelled');
   });
 
   it('cleans up all subscriptions on dispose', () => {
@@ -292,11 +396,11 @@ describe('ProviderRegistry', () => {
     });
   });
 
-  it('returns empty array from getDiscoveredItems for unknown provider', () => {
-    expect(registry.getDiscoveredItems('nonexistent')).toEqual([]);
+  it('returns empty array from getProviderItems for unknown provider', () => {
+    expect(registry.getProviderItems('nonexistent')).toEqual([]);
   });
 
-  it('returns full map from getAllDiscoveredItems with multiple providers', () => {
+  it('returns full map from getAllProviderItems with multiple providers', () => {
     const p1 = createMockProvider('gh');
     const p2 = createMockProvider('jira');
     registry.register(p1);
@@ -305,7 +409,7 @@ describe('ProviderRegistry', () => {
     p1.fireItems([{ externalId: '1', title: 'GH item' }]);
     p2.fireItems([{ externalId: '2', title: 'Jira item' }]);
 
-    const all = registry.getAllDiscoveredItems();
+    const all = registry.getAllProviderItems();
     expect(all.size).toBe(2);
     expect(all.get('gh')).toHaveLength(1);
     expect(all.get('jira')).toHaveLength(1);
@@ -340,23 +444,23 @@ describe('ProviderRegistry', () => {
       { externalId: 'issue-1', title: 'Bug fix' },
     ]);
 
-    // Wait for handleDiscoveredItems to complete by checking items are stored
+    // Wait for handleProviderItems to complete by checking items are stored
     await vi.waitFor(() =>
-      expect(registry.getDiscoveredItems('gh')).toHaveLength(1),
+      expect(registry.getProviderItems('gh')).toHaveLength(1),
     );
     expect(stateStore.setStates).not.toHaveBeenCalled();
     expect(listener).not.toHaveBeenCalled();
   });
 
-  it('fires onDidChangeDiscoveredItems when provider discovers items', async () => {
+  it('fires onDidChangeProviderItems when provider discovers items', async () => {
     const provider = createMockProvider('gh');
     registry.register(provider);
 
     const listener = vi.fn();
-    registry.onDidChangeDiscoveredItems(listener);
+    registry.onDidChangeProviderItems(listener);
 
     provider.fireItems([{ externalId: '1', title: 'Item' }]);
-    // handleDiscoveredItems is async, wait for it to settle
+    // handleProviderItems is async, wait for it to settle
     // Event fires once for discovered items, and may fire again when loading clears
     await vi.waitFor(() => expect(listener).toHaveBeenCalled());
     const firstCallCount = listener.mock.calls.length;
@@ -410,9 +514,9 @@ describe('ProviderRegistry', () => {
       { externalId: 'issue-1', title: 'Bug fix' },
     ]);
 
-    // Wait for handleDiscoveredItems to complete
+    // Wait for handleProviderItems to complete
     await vi.waitFor(() =>
-      expect(registry.getDiscoveredItems('gh')).toHaveLength(1),
+      expect(registry.getProviderItems('gh')).toHaveLength(1),
     );
     expect(listener).not.toHaveBeenCalled();
   });
@@ -431,8 +535,8 @@ describe('ProviderRegistry', () => {
         resolveRefresh = resolve;
         rejectRefresh = reject;
       });
-      const emitter = new EventEmitter<DiscoveredItem[]>();
-      const provider: DevDocketProvider & { fireItems: (items: DiscoveredItem[]) => void } = {
+      const emitter = new EventEmitter<ProviderItem[]>();
+      const provider: DevDocketProvider & { fireItems: (items: ProviderItem[]) => void } = {
         id,
         label: `Provider ${id}`,
         onDidDiscoverItems: emitter.event,
@@ -518,7 +622,7 @@ describe('ProviderRegistry', () => {
       let callbackCount = 0;
       let loadingDuringProviderEvent: boolean | undefined;
       const providerEventObserved = new Promise<void>((resolve) => {
-        registry.onDidChangeDiscoveredItems(() => {
+        registry.onDidChangeProviderItems(() => {
           callbackCount += 1;
           if (callbackCount === 2) {
             loadingDuringProviderEvent = registry.loading;
@@ -541,21 +645,21 @@ describe('ProviderRegistry', () => {
       expect(registry.loading).toBe(false);
     });
 
-    it('onDidChangeDiscoveredItems fires when loading state transitions to false', async () => {
+    it('onDidChangeProviderItems fires when loading state transitions to false', async () => {
       const { provider, resolveRefresh } = createDeferredProvider('notif');
 
       const events: boolean[] = [];
-      registry.onDidChangeDiscoveredItems(() => {
+      registry.onDidChangeProviderItems(() => {
         events.push(registry.loading);
       });
 
       registry.register(provider);
-      // Register fires onDidChangeDiscoveredItems with loading=true
+      // Register fires onDidChangeProviderItems with loading=true
       expect(events).toContain(true);
 
       resolveRefresh();
       await nextTick();
-      // The .finally() fires onDidChangeDiscoveredItems with loading=false
+      // The .finally() fires onDidChangeProviderItems with loading=false
       expect(events).toContain(false);
     });
 
@@ -607,13 +711,13 @@ describe('ProviderRegistry', () => {
 
       // Last fire wins — items are replaced, not accumulated
       await vi.waitFor(() => {
-        const items = registry.getDiscoveredItems('rapid');
+        const items = registry.getProviderItems('rapid');
         expect(items).toHaveLength(1);
         expect(items[0].externalId).toBe('3');
       });
     });
 
-    it('fires onDidChangeDiscoveredItems for each rapid update', async () => {
+    it('fires onDidChangeProviderItems for each rapid update', async () => {
       const provider = createMockProvider('rapid');
       registry.register(provider);
 
@@ -621,7 +725,7 @@ describe('ProviderRegistry', () => {
       await vi.waitFor(() => expect(registry.loading).toBe(false));
 
       const listener = vi.fn();
-      registry.onDidChangeDiscoveredItems(listener);
+      registry.onDidChangeProviderItems(listener);
 
       provider.fireItems([{ externalId: '1', title: 'A' }]);
       provider.fireItems([{ externalId: '2', title: 'B' }]);
@@ -640,10 +744,10 @@ describe('ProviderRegistry', () => {
       p1.fireItems([{ externalId: 'a2', title: 'Alpha 2' }]);
 
       await vi.waitFor(() => {
-        expect(registry.getDiscoveredItems('alpha')).toHaveLength(1);
-        expect(registry.getDiscoveredItems('alpha')[0].externalId).toBe('a2');
-        expect(registry.getDiscoveredItems('beta')).toHaveLength(1);
-        expect(registry.getDiscoveredItems('beta')[0].externalId).toBe('b1');
+        expect(registry.getProviderItems('alpha')).toHaveLength(1);
+        expect(registry.getProviderItems('alpha')[0].externalId).toBe('a2');
+        expect(registry.getProviderItems('beta')).toHaveLength(1);
+        expect(registry.getProviderItems('beta')[0].externalId).toBe('b1');
       });
     });
 
@@ -659,7 +763,7 @@ describe('ProviderRegistry', () => {
       provider.fireItems([{ externalId: '2', title: 'Two' }]);
       provider.fireItems([{ externalId: '3', title: 'Three' }]);
 
-      // Each fire triggers handleDiscoveredItems, so unseenListener fires per batch
+      // Each fire triggers handleProviderItems, so unseenListener fires per batch
       await vi.waitFor(() => expect(unseenListener).toHaveBeenCalledTimes(3));
       // Each call should report exactly 1 new unseen item
       expect(unseenListener).toHaveBeenNthCalledWith(1, 1);
@@ -678,12 +782,12 @@ describe('ProviderRegistry', () => {
 
       stateStore.setStates.mockClear();
       const changeListener = vi.fn();
-      registry.onDidChangeDiscoveredItems(changeListener);
+      registry.onDidChangeProviderItems(changeListener);
 
       provider.fireItems([]);
 
       await vi.waitFor(() => expect(changeListener).toHaveBeenCalled());
-      expect(registry.getDiscoveredItems('empty')).toEqual([]);
+      expect(registry.getProviderItems('empty')).toEqual([]);
       // No unseen items to set
       expect(stateStore.setStates).not.toHaveBeenCalled();
     });
@@ -693,10 +797,10 @@ describe('ProviderRegistry', () => {
       const disposable = registry.register(provider);
 
       provider.fireItems([{ externalId: '1', title: 'Item' }]);
-      expect(registry.getDiscoveredItems('clearme')).toHaveLength(1);
+      expect(registry.getProviderItems('clearme')).toHaveLength(1);
 
       disposable.dispose();
-      expect(registry.getDiscoveredItems('clearme')).toEqual([]);
+      expect(registry.getProviderItems('clearme')).toEqual([]);
     });
 
     it('deregistration removes loading state', async () => {
@@ -710,7 +814,7 @@ describe('ProviderRegistry', () => {
       expect(registry.loading).toBe(false);
     });
 
-    it('fires onDidChangeDiscoveredItems on deregistration', async () => {
+    it('fires onDidChangeProviderItems on deregistration', async () => {
       const provider = createMockProvider('notify');
       const disposable = registry.register(provider);
 
@@ -718,7 +822,7 @@ describe('ProviderRegistry', () => {
       await vi.waitFor(() => expect(registry.loading).toBe(false));
 
       const listener = vi.fn();
-      registry.onDidChangeDiscoveredItems(listener);
+      registry.onDidChangeProviderItems(listener);
 
       disposable.dispose();
 
@@ -816,7 +920,7 @@ describe('ProviderRegistry', () => {
   });
 
   describe('item cap (MAX_ITEMS_PER_PROVIDER)', () => {
-    function makeItems(count: number): DiscoveredItem[] {
+    function makeItems(count: number): ProviderItem[] {
       return Array.from({ length: count }, (_, i) => ({
         externalId: `item-${i}`,
         title: `Item ${i}`,
@@ -831,7 +935,7 @@ describe('ProviderRegistry', () => {
       provider.fireItems(items);
 
       await vi.waitFor(() => {
-        const stored = registry.getDiscoveredItems('exact-cap');
+        const stored = registry.getProviderItems('exact-cap');
         expect(stored).toHaveLength(ProviderRegistry.MAX_ITEMS_PER_PROVIDER);
       });
     });
@@ -846,7 +950,7 @@ describe('ProviderRegistry', () => {
       provider.fireItems(items);
 
       await vi.waitFor(() => {
-        const stored = registry.getDiscoveredItems('over-cap');
+        const stored = registry.getProviderItems('over-cap');
         expect(stored).toHaveLength(ProviderRegistry.MAX_ITEMS_PER_PROVIDER);
       });
       expect(warnSpy).toHaveBeenCalledWith(
@@ -868,7 +972,7 @@ describe('ProviderRegistry', () => {
       provider.fireItems([]);
 
       await vi.waitFor(() => {
-        expect(registry.getDiscoveredItems('zero-items')).toEqual([]);
+        expect(registry.getProviderItems('zero-items')).toEqual([]);
       });
       expect(warnSpy).not.toHaveBeenCalledWith(
         expect.stringContaining('Truncating'),
@@ -884,7 +988,7 @@ describe('ProviderRegistry', () => {
       provider.fireItems(items);
 
       await vi.waitFor(() => {
-        const stored = registry.getDiscoveredItems('order-check');
+        const stored = registry.getProviderItems('order-check');
         expect(stored).toHaveLength(ProviderRegistry.MAX_ITEMS_PER_PROVIDER);
         // First and last retained items match original order
         expect(stored[0].externalId).toBe('item-0');
@@ -903,7 +1007,7 @@ describe('ProviderRegistry', () => {
       provider.fireItems(items);
 
       await vi.waitFor(() => {
-        const stored = registry.getDiscoveredItems('truncated-only');
+        const stored = registry.getProviderItems('truncated-only');
         expect(stored).toHaveLength(ProviderRegistry.MAX_ITEMS_PER_PROVIDER);
         // None of the excess items should be present
         const ids = new Set(stored.map(i => i.externalId));
@@ -923,7 +1027,7 @@ describe('ProviderRegistry', () => {
       provider.fireItems(makeItems(ProviderRegistry.MAX_ITEMS_PER_PROVIDER));
 
       await vi.waitFor(() => {
-        expect(registry.getDiscoveredItems('under-cap')).toHaveLength(
+        expect(registry.getProviderItems('under-cap')).toHaveLength(
           ProviderRegistry.MAX_ITEMS_PER_PROVIDER,
         );
       });
@@ -942,14 +1046,14 @@ describe('ProviderRegistry', () => {
       provider.fireItems(items);
 
       await vi.waitFor(() => {
-        expect(registry.getDiscoveredItems('defensive-copy')).toHaveLength(3);
+        expect(registry.getProviderItems('defensive-copy')).toHaveLength(3);
       });
 
       // Mutate the original array after it was stored
       items.push({ externalId: 'sneaky', title: 'Sneaky' });
 
       // The registry should still have only 3 items
-      expect(registry.getDiscoveredItems('defensive-copy')).toHaveLength(3);
+      expect(registry.getProviderItems('defensive-copy')).toHaveLength(3);
     });
   });
 
@@ -1017,7 +1121,7 @@ describe('ProviderRegistry', () => {
       ]);
 
       await vi.waitFor(() =>
-        expect(registry.getDiscoveredItems('gh')).toHaveLength(1),
+        expect(registry.getProviderItems('gh')).toHaveLength(1),
       );
       expect(stateStore.setStates).not.toHaveBeenCalled();
     });
@@ -1071,7 +1175,7 @@ describe('ProviderRegistry', () => {
       ]);
 
       await vi.waitFor(() =>
-        expect(registry.getDiscoveredItems('gh')).toHaveLength(1),
+        expect(registry.getProviderItems('gh')).toHaveLength(1),
       );
       expect(stateStore.setStates).not.toHaveBeenCalled();
     });
@@ -1091,7 +1195,7 @@ describe('ProviderRegistry', () => {
       ]);
 
       await vi.waitFor(() =>
-        expect(registry.getDiscoveredItems('gh')).toHaveLength(1),
+        expect(registry.getProviderItems('gh')).toHaveLength(1),
       );
       expect(stateStore.setStates).not.toHaveBeenCalled();
     });
@@ -1188,25 +1292,40 @@ describe('ProviderRegistry', () => {
       await vi.waitFor(() => expect(listener).toHaveBeenCalledWith(1));
     });
 
-    it('does not resurface when resurfaceVersion is unchanged', async () => {
-      const provider = createMockProvider('gh');
-      registry.register(provider);
+    it.each([
+      { inboxState: 'accepted' as const, commentKind: 'mention' as const, resurfaceVersion: 'rr-new', shouldResurface: true },
+      { inboxState: 'accepted' as const, commentKind: 'non-mention' as const, resurfaceVersion: 'rr-old', shouldResurface: false },
+      { inboxState: 'dismissed' as const, commentKind: 'mention' as const, resurfaceVersion: 'rr-new', shouldResurface: true },
+      { inboxState: 'dismissed' as const, commentKind: 'non-mention' as const, resurfaceVersion: 'rr-old', shouldResurface: false },
+    ])(
+      '$inboxState item handles $commentKind comment resurfacing',
+      async ({ inboxState, resurfaceVersion, shouldResurface }) => {
+        const provider = createMockProvider('gh');
+        registry.register(provider);
 
-      stateStore._set('gh', 'pr-1', 'accepted');
-      stateStore._setVersion('gh', 'pr-1', 'sha-same');
-      stateStore._setResurfaceVersion('gh', 'pr-1', 'rr-same');
+        stateStore._set('gh', 'pr-1', inboxState);
+        stateStore._setVersion('gh', 'pr-1', 'sha-same');
+        stateStore._setResurfaceVersion('gh', 'pr-1', 'rr-old');
 
-      stateStore.setStates.mockClear();
+        stateStore.setStates.mockClear();
 
-      provider.fireItems([
-        { externalId: 'pr-1', title: 'PR 1', version: 'sha-same', resurfaceVersion: 'rr-same' },
-      ]);
+        provider.fireItems([
+          { externalId: 'pr-1', title: 'PR 1', version: 'sha-same', resurfaceVersion },
+        ]);
 
-      await vi.waitFor(() =>
-        expect(registry.getDiscoveredItems('gh')).toHaveLength(1),
-      );
-      expect(stateStore.setStates).not.toHaveBeenCalled();
-    });
+        if (shouldResurface) {
+          await vi.waitFor(() => expect(stateStore.setStates).toHaveBeenCalled());
+          expect(stateStore.setStates).toHaveBeenCalledWith([
+            { providerId: 'gh', externalId: 'pr-1', state: 'unseen', version: 'sha-same', resurfaceVersion },
+          ]);
+        } else {
+          await vi.waitFor(() =>
+            expect(registry.getProviderItems('gh')).toHaveLength(1),
+          );
+          expect(stateStore.setStates).not.toHaveBeenCalled();
+        }
+      },
+    );
 
     it('backfills resurfaceVersion for accepted item without stored resurfaceVersion', async () => {
       const provider = createMockProvider('gh');
@@ -1225,23 +1344,22 @@ describe('ProviderRegistry', () => {
       ]);
     });
 
-    it('does not resurface dismissed item even when resurfaceVersion changes', async () => {
+    it('backfills resurfaceVersion for dismissed item without stored resurfaceVersion', async () => {
       const provider = createMockProvider('gh');
       registry.register(provider);
 
       stateStore._set('gh', 'pr-1', 'dismissed');
-      stateStore._setResurfaceVersion('gh', 'pr-1', 'rr-old');
 
       stateStore.setStates.mockClear();
 
       provider.fireItems([
-        { externalId: 'pr-1', title: 'PR 1', resurfaceVersion: 'rr-new' },
+        { externalId: 'pr-1', title: 'PR 1', resurfaceVersion: 'rr-first' },
       ]);
 
-      await vi.waitFor(() =>
-        expect(registry.getDiscoveredItems('gh')).toHaveLength(1),
-      );
-      expect(stateStore.setStates).not.toHaveBeenCalled();
+      await vi.waitFor(() => expect(stateStore.setStates).toHaveBeenCalled());
+      expect(stateStore.setStates).toHaveBeenCalledWith([
+        { providerId: 'gh', externalId: 'pr-1', state: 'dismissed', resurfaceVersion: 'rr-first' },
+      ]);
     });
 
     it('resurfaces when version is unchanged but resurfaceVersion changes', async () => {
@@ -1295,8 +1413,8 @@ describe('ProviderRegistry', () => {
         resolveRefresh = resolve;
         rejectRefresh = reject;
       });
-      const emitter = new EventEmitter<DiscoveredItem[]>();
-      const provider: DevDocketProvider & { fireItems: (items: DiscoveredItem[]) => void } = {
+      const emitter = new EventEmitter<ProviderItem[]>();
+      const provider: DevDocketProvider & { fireItems: (items: ProviderItem[]) => void } = {
         id,
         label: `Provider ${id}`,
         onDidDiscoverItems: emitter.event,
@@ -1341,7 +1459,7 @@ describe('ProviderRegistry', () => {
       vi.useFakeTimers();
       try {
         const neverResolve = new Promise<void>(() => {});
-        const emitter = new EventEmitter<DiscoveredItem[]>();
+        const emitter = new EventEmitter<ProviderItem[]>();
         const provider: DevDocketProvider = {
           id: 'slow',
           label: 'Slow Provider',
@@ -1407,6 +1525,26 @@ describe('ProviderRegistry', () => {
       expect(registry.getProviderHealth('temp')).toEqual({ status: 'unknown' });
     });
 
+    it('ignores queued provider item updates after the provider is unregistered', async () => {
+      let releaseFirstUpdate!: () => void;
+      const firstUpdate = new Promise<void>(resolve => { releaseFirstUpdate = resolve; });
+      stateStore.setStates.mockImplementationOnce(() => firstUpdate);
+      const { provider } = createDeferredProvider('stale-items');
+      const disposable = registry.register(provider);
+
+      provider.fireItems([{ externalId: 'first', title: 'First' }]);
+      provider.fireItems([{ externalId: 'second', title: 'Second' }]);
+      await vi.waitFor(() => expect(registry.getProviderHealth('stale-items').status).toBe('healthy'));
+
+      disposable.dispose();
+      releaseFirstUpdate();
+      await nextTick();
+      await nextTick();
+
+      expect(registry.getProviderHealth('stale-items')).toEqual({ status: 'unknown' });
+      expect(registry.getProviderItems('stale-items')).toEqual([]);
+    });
+
     it('preserves lastRefreshTime from previous healthy state on failure', async () => {
       const provider = createMockProvider('flaky');
       registry.register(provider);
@@ -1425,11 +1563,49 @@ describe('ProviderRegistry', () => {
       // lastRefreshTime is preserved from the last healthy refresh
       expect(health.lastRefreshTime).toEqual(healthyTime);
     });
+
+    it('recovers to healthy when a background refresh emits items after going unhealthy', async () => {
+      // Providers extending BaseProvider drive periodic refresh via their own
+      // setInterval, calling doBackgroundRefresh() directly. Those background
+      // refreshes bypass refreshWithTimeout(), so receiving onDidDiscoverItems
+      // is the only signal the registry has that a refresh succeeded.
+      const provider = createMockProvider('recovers');
+      vi.mocked(provider.refresh).mockRejectedValueOnce(new Error('initial fail'));
+      registry.register(provider);
+      await nextTick();
+
+      expect(registry.getProviderHealth('recovers').status).toBe('unhealthy');
+
+      const listener = vi.fn();
+      registry.onDidChangeProviderHealth(listener);
+
+      // Simulate a successful background refresh: provider emits items via
+      // its own setInterval timer, without going through refreshWithTimeout.
+      provider.fireItems([{ externalId: 'item-1', title: 'Recovered' }]);
+      await nextTick();
+
+      const health = registry.getProviderHealth('recovers');
+      expect(health.status).toBe('healthy');
+      expect(health.lastError).toBeUndefined();
+      expect(health.lastRefreshTime).toBeInstanceOf(Date);
+      expect(listener).toHaveBeenCalledWith('recovers');
+    });
   });
 
-  describe('soft version resurfacing with work item state', () => {
-    it('suppresses version resurfacing when work item is InProgress', async () => {
-      const getWorkItemState = vi.fn().mockReturnValue(WorkItemState.InProgress);
+  describe('resurfacing with work item state', () => {
+    const activeWorkItemStates = [
+      WorkItemState.New,
+      WorkItemState.InProgress,
+      WorkItemState.Paused,
+    ];
+    const completedOrMissingWorkItemStates = [
+      WorkItemState.Done,
+      WorkItemState.Archived,
+      undefined,
+    ];
+
+    it.each(activeWorkItemStates)('suppresses accepted version resurfacing when work item is %s', async (workItemState) => {
+      const getWorkItemState = vi.fn().mockReturnValue(workItemState);
       const addActivityFn = vi.fn().mockResolvedValue(undefined);
       const reg = new ProviderRegistry(stateStore, undefined, getWorkItemState, addActivityFn);
       const provider = createMockProvider('gh');
@@ -1446,182 +1622,158 @@ describe('ProviderRegistry', () => {
       ]);
 
       await vi.waitFor(() => expect(stateStore.setStates).toHaveBeenCalled());
-      // Should backfill version, not resurface
       expect(stateStore.setStates).toHaveBeenCalledWith([
         { providerId: 'gh', externalId: 'pr-1', state: 'accepted', version: 'sha-new' },
       ]);
+      expect(stateStore.getVersion('gh', 'pr-1')).toBe('sha-new');
       expect(listener).not.toHaveBeenCalled();
-      expect(getWorkItemState).toHaveBeenCalledWith('gh', 'pr-1');
-      // Activity log should be called
-      await vi.waitFor(() => expect(addActivityFn).toHaveBeenCalledWith('gh', 'pr-1', 'version-updated'));
-
-      reg.dispose();
-    });
-
-    it('suppresses version resurfacing when work item is Paused', async () => {
-      const getWorkItemState = vi.fn().mockReturnValue(WorkItemState.Paused);
-      const addActivityFn = vi.fn().mockResolvedValue(undefined);
-      const reg = new ProviderRegistry(stateStore, undefined, getWorkItemState, addActivityFn);
-      const provider = createMockProvider('gh');
-      reg.register(provider);
-
-      stateStore._set('gh', 'pr-1', 'accepted');
-      stateStore._setVersion('gh', 'pr-1', 'sha-old');
-
-      provider.fireItems([
-        { externalId: 'pr-1', title: 'PR 1', version: 'sha-new' },
-      ]);
-
-      await vi.waitFor(() => expect(stateStore.setStates).toHaveBeenCalled());
-      expect(stateStore.setStates).toHaveBeenCalledWith([
-        { providerId: 'gh', externalId: 'pr-1', state: 'accepted', version: 'sha-new' },
-      ]);
-
-      reg.dispose();
-    });
-
-    it('suppresses version resurfacing when work item is New', async () => {
-      const getWorkItemState = vi.fn().mockReturnValue(WorkItemState.New);
-      const addActivityFn = vi.fn().mockResolvedValue(undefined);
-      const reg = new ProviderRegistry(stateStore, undefined, getWorkItemState, addActivityFn);
-      const provider = createMockProvider('gh');
-      reg.register(provider);
-
-      stateStore._set('gh', 'pr-1', 'accepted');
-      stateStore._setVersion('gh', 'pr-1', 'sha-old');
-
-      provider.fireItems([
-        { externalId: 'pr-1', title: 'PR 1', version: 'sha-new' },
-      ]);
-
-      await vi.waitFor(() => expect(stateStore.setStates).toHaveBeenCalled());
-      expect(stateStore.setStates).toHaveBeenCalledWith([
-        { providerId: 'gh', externalId: 'pr-1', state: 'accepted', version: 'sha-new' },
-      ]);
-
-      reg.dispose();
-    });
-
-    it('resurfaces when version changes and work item is Done', async () => {
-      const getWorkItemState = vi.fn().mockReturnValue(WorkItemState.Done);
-      const reg = new ProviderRegistry(stateStore, undefined, getWorkItemState);
-      const provider = createMockProvider('gh');
-      reg.register(provider);
-
-      stateStore._set('gh', 'pr-1', 'accepted');
-      stateStore._setVersion('gh', 'pr-1', 'sha-old');
-
-      const listener = vi.fn();
-      reg.onDidAddNewUnseenItems(listener);
-
-      provider.fireItems([
-        { externalId: 'pr-1', title: 'PR 1', version: 'sha-new' },
-      ]);
-
-      await vi.waitFor(() => expect(stateStore.setStates).toHaveBeenCalled());
-      expect(stateStore.setStates).toHaveBeenCalledWith([
-        { providerId: 'gh', externalId: 'pr-1', state: 'unseen', version: 'sha-new' },
-      ]);
-      await vi.waitFor(() => expect(listener).toHaveBeenCalledWith(1));
-
-      reg.dispose();
-    });
-
-    it('resurfaces when version changes and work item is Archived', async () => {
-      const getWorkItemState = vi.fn().mockReturnValue(WorkItemState.Archived);
-      const reg = new ProviderRegistry(stateStore, undefined, getWorkItemState);
-      const provider = createMockProvider('gh');
-      reg.register(provider);
-
-      stateStore._set('gh', 'pr-1', 'accepted');
-      stateStore._setVersion('gh', 'pr-1', 'sha-old');
-
-      provider.fireItems([
-        { externalId: 'pr-1', title: 'PR 1', version: 'sha-new' },
-      ]);
-
-      await vi.waitFor(() => expect(stateStore.setStates).toHaveBeenCalled());
-      expect(stateStore.setStates).toHaveBeenCalledWith([
-        { providerId: 'gh', externalId: 'pr-1', state: 'unseen', version: 'sha-new' },
-      ]);
-
-      reg.dispose();
-    });
-
-    it('resurfaces when version changes and no work item exists', async () => {
-      const getWorkItemState = vi.fn().mockReturnValue(undefined);
-      const reg = new ProviderRegistry(stateStore, undefined, getWorkItemState);
-      const provider = createMockProvider('gh');
-      reg.register(provider);
-
-      stateStore._set('gh', 'pr-1', 'accepted');
-      stateStore._setVersion('gh', 'pr-1', 'sha-old');
-
-      provider.fireItems([
-        { externalId: 'pr-1', title: 'PR 1', version: 'sha-new' },
-      ]);
-
-      await vi.waitFor(() => expect(stateStore.setStates).toHaveBeenCalled());
-      expect(stateStore.setStates).toHaveBeenCalledWith([
-        { providerId: 'gh', externalId: 'pr-1', state: 'unseen', version: 'sha-new' },
-      ]);
-
-      reg.dispose();
-    });
-
-    it('resurfaceVersion always resurfaces even when work item is InProgress', async () => {
-      const getWorkItemState = vi.fn().mockReturnValue(WorkItemState.InProgress);
-      const reg = new ProviderRegistry(stateStore, undefined, getWorkItemState);
-      const provider = createMockProvider('gh');
-      reg.register(provider);
-
-      stateStore._set('gh', 'pr-1', 'accepted');
-      stateStore._setResurfaceVersion('gh', 'pr-1', 'rr-old');
-
-      const listener = vi.fn();
-      reg.onDidAddNewUnseenItems(listener);
-
-      provider.fireItems([
-        { externalId: 'pr-1', title: 'PR 1', resurfaceVersion: 'rr-new' },
-      ]);
-
-      await vi.waitFor(() => expect(stateStore.setStates).toHaveBeenCalled());
-      expect(stateStore.setStates).toHaveBeenCalledWith([
-        { providerId: 'gh', externalId: 'pr-1', state: 'unseen', resurfaceVersion: 'rr-new' },
-      ]);
-      await vi.waitFor(() => expect(listener).toHaveBeenCalledWith(1));
-
-      reg.dispose();
-    });
-
-    it('resurfaceVersion overrides suppressed version change', async () => {
-      const getWorkItemState = vi.fn().mockReturnValue(WorkItemState.InProgress);
-      const addActivityFn = vi.fn().mockResolvedValue(undefined);
-      const reg = new ProviderRegistry(stateStore, undefined, getWorkItemState, addActivityFn);
-      const provider = createMockProvider('gh');
-      reg.register(provider);
-
-      stateStore._set('gh', 'pr-1', 'accepted');
-      stateStore._setVersion('gh', 'pr-1', 'sha-old');
-      stateStore._setResurfaceVersion('gh', 'pr-1', 'rr-old');
-
-      provider.fireItems([
-        { externalId: 'pr-1', title: 'PR 1', version: 'sha-new', resurfaceVersion: 'rr-new' },
-      ]);
-
-      await vi.waitFor(() => expect(stateStore.setStates).toHaveBeenCalled());
-      // resurfaceVersion change should trigger full resurface
-      expect(stateStore.setStates).toHaveBeenCalledWith([
-        { providerId: 'gh', externalId: 'pr-1', state: 'unseen', version: 'sha-new', resurfaceVersion: 'rr-new' },
-      ]);
-      // No activity logged — item resurfaced, not suppressed
       expect(addActivityFn).not.toHaveBeenCalled();
+      expect(getWorkItemState).toHaveBeenCalledWith('gh', 'pr-1');
 
       reg.dispose();
     });
 
-    it('still works without getWorkItemState callback (backward compatible)', async () => {
-      // No callback provided — behaves as before (version change resurfaces)
+    it.each(completedOrMissingWorkItemStates)('resurfaces accepted item on version change when work item is %s', async (workItemState) => {
+      const getWorkItemState = vi.fn().mockReturnValue(workItemState);
+      const reg = new ProviderRegistry(stateStore, undefined, getWorkItemState);
+      const provider = createMockProvider('gh');
+      reg.register(provider);
+
+      stateStore._set('gh', 'pr-1', 'accepted');
+      stateStore._setVersion('gh', 'pr-1', 'sha-old');
+
+      const listener = vi.fn();
+      reg.onDidAddNewUnseenItems(listener);
+
+      provider.fireItems([
+        { externalId: 'pr-1', title: 'PR 1', version: 'sha-new' },
+      ]);
+
+      await vi.waitFor(() => expect(stateStore.setStates).toHaveBeenCalled());
+      expect(stateStore.setStates).toHaveBeenCalledWith([
+        { providerId: 'gh', externalId: 'pr-1', state: 'unseen', version: 'sha-new' },
+      ]);
+      await vi.waitFor(() => expect(listener).toHaveBeenCalledWith(1));
+      expect(getWorkItemState).toHaveBeenCalledWith('gh', 'pr-1');
+
+      reg.dispose();
+    });
+
+    it.each(activeWorkItemStates)('suppresses accepted resurfaceVersion resurfacing when work item is %s', async (workItemState) => {
+      const getWorkItemState = vi.fn().mockReturnValue(workItemState);
+      const addActivityFn = vi.fn().mockResolvedValue(undefined);
+      const reg = new ProviderRegistry(stateStore, undefined, getWorkItemState, addActivityFn);
+      const provider = createMockProvider('gh');
+      reg.register(provider);
+
+      stateStore._set('gh', 'pr-1', 'accepted');
+      stateStore._setVersion('gh', 'pr-1', 'sha-same');
+      stateStore._setResurfaceVersion('gh', 'pr-1', 'rr-old');
+
+      const listener = vi.fn();
+      reg.onDidAddNewUnseenItems(listener);
+
+      provider.fireItems([
+        { externalId: 'pr-1', title: 'PR 1', version: 'sha-same', resurfaceVersion: 'rr-new' },
+      ]);
+
+      await vi.waitFor(() => expect(stateStore.setStates).toHaveBeenCalled());
+      expect(stateStore.setStates).toHaveBeenCalledWith([
+        { providerId: 'gh', externalId: 'pr-1', state: 'accepted', version: 'sha-same', resurfaceVersion: 'rr-new' },
+      ]);
+      expect(stateStore.getResurfaceVersion('gh', 'pr-1')).toBe('rr-new');
+      expect(listener).not.toHaveBeenCalled();
+      expect(addActivityFn).not.toHaveBeenCalled();
+      expect(getWorkItemState).toHaveBeenCalledWith('gh', 'pr-1');
+
+      reg.dispose();
+    });
+
+    it.each(completedOrMissingWorkItemStates)('resurfaces accepted item on resurfaceVersion change when work item is %s', async (workItemState) => {
+      const getWorkItemState = vi.fn().mockReturnValue(workItemState);
+      const reg = new ProviderRegistry(stateStore, undefined, getWorkItemState);
+      const provider = createMockProvider('gh');
+      reg.register(provider);
+
+      stateStore._set('gh', 'pr-1', 'accepted');
+      stateStore._setVersion('gh', 'pr-1', 'sha-same');
+      stateStore._setResurfaceVersion('gh', 'pr-1', 'rr-old');
+
+      const listener = vi.fn();
+      reg.onDidAddNewUnseenItems(listener);
+
+      provider.fireItems([
+        { externalId: 'pr-1', title: 'PR 1', version: 'sha-same', resurfaceVersion: 'rr-new' },
+      ]);
+
+      await vi.waitFor(() => expect(stateStore.setStates).toHaveBeenCalled());
+      expect(stateStore.setStates).toHaveBeenCalledWith([
+        { providerId: 'gh', externalId: 'pr-1', state: 'unseen', version: 'sha-same', resurfaceVersion: 'rr-new' },
+      ]);
+      await vi.waitFor(() => expect(listener).toHaveBeenCalledWith(1));
+      expect(getWorkItemState).toHaveBeenCalledWith('gh', 'pr-1');
+
+      reg.dispose();
+    });
+
+    it.each(activeWorkItemStates)('suppresses dismissed resurfaceVersion resurfacing when work item is %s', async (workItemState) => {
+      const getWorkItemState = vi.fn().mockReturnValue(workItemState);
+      const addActivityFn = vi.fn().mockResolvedValue(undefined);
+      const reg = new ProviderRegistry(stateStore, undefined, getWorkItemState, addActivityFn);
+      const provider = createMockProvider('gh');
+      reg.register(provider);
+
+      stateStore._set('gh', 'pr-1', 'dismissed');
+      stateStore._setVersion('gh', 'pr-1', 'sha-same');
+      stateStore._setResurfaceVersion('gh', 'pr-1', 'rr-old');
+
+      const listener = vi.fn();
+      reg.onDidAddNewUnseenItems(listener);
+
+      provider.fireItems([
+        { externalId: 'pr-1', title: 'PR 1', version: 'sha-same', resurfaceVersion: 'rr-new' },
+      ]);
+
+      await vi.waitFor(() => expect(stateStore.setStates).toHaveBeenCalled());
+      expect(stateStore.setStates).toHaveBeenCalledWith([
+        { providerId: 'gh', externalId: 'pr-1', state: 'dismissed', resurfaceVersion: 'rr-new' },
+      ]);
+      expect(stateStore.getResurfaceVersion('gh', 'pr-1')).toBe('rr-new');
+      expect(listener).not.toHaveBeenCalled();
+      expect(addActivityFn).not.toHaveBeenCalled();
+      expect(getWorkItemState).toHaveBeenCalledWith('gh', 'pr-1');
+
+      reg.dispose();
+    });
+
+    it.each(completedOrMissingWorkItemStates)('resurfaces dismissed item on resurfaceVersion change when work item is %s', async (workItemState) => {
+      const getWorkItemState = vi.fn().mockReturnValue(workItemState);
+      const reg = new ProviderRegistry(stateStore, undefined, getWorkItemState);
+      const provider = createMockProvider('gh');
+      reg.register(provider);
+
+      stateStore._set('gh', 'pr-1', 'dismissed');
+      stateStore._setVersion('gh', 'pr-1', 'sha-same');
+      stateStore._setResurfaceVersion('gh', 'pr-1', 'rr-old');
+
+      const listener = vi.fn();
+      reg.onDidAddNewUnseenItems(listener);
+
+      provider.fireItems([
+        { externalId: 'pr-1', title: 'PR 1', version: 'sha-same', resurfaceVersion: 'rr-new' },
+      ]);
+
+      await vi.waitFor(() => expect(stateStore.setStates).toHaveBeenCalled());
+      expect(stateStore.setStates).toHaveBeenCalledWith([
+        { providerId: 'gh', externalId: 'pr-1', state: 'unseen', version: 'sha-same', resurfaceVersion: 'rr-new' },
+      ]);
+      await vi.waitFor(() => expect(listener).toHaveBeenCalledWith(1));
+      expect(getWorkItemState).toHaveBeenCalledWith('gh', 'pr-1');
+
+      reg.dispose();
+    });
+
+    it('still resurfaces accepted version changes without getWorkItemState callback', async () => {
       const reg = new ProviderRegistry(stateStore);
       const provider = createMockProvider('gh');
       reg.register(provider);
@@ -1640,31 +1792,7 @@ describe('ProviderRegistry', () => {
 
       reg.dispose();
     });
-
-    it('logs activity error gracefully without breaking flow', async () => {
-      const getWorkItemState = vi.fn().mockReturnValue(WorkItemState.InProgress);
-      const addActivityFn = vi.fn().mockRejectedValue(new Error('activity fail'));
-      const reg = new ProviderRegistry(stateStore, undefined, getWorkItemState, addActivityFn);
-      const provider = createMockProvider('gh');
-      reg.register(provider);
-
-      stateStore._set('gh', 'pr-1', 'accepted');
-      stateStore._setVersion('gh', 'pr-1', 'sha-old');
-
-      provider.fireItems([
-        { externalId: 'pr-1', title: 'PR 1', version: 'sha-new' },
-      ]);
-
-      await vi.waitFor(() => expect(stateStore.setStates).toHaveBeenCalled());
-      // Should still backfill version even though activity fails
-      expect(stateStore.setStates).toHaveBeenCalledWith([
-        { providerId: 'gh', externalId: 'pr-1', state: 'accepted', version: 'sha-new' },
-      ]);
-
-      reg.dispose();
-    });
   });
-
   describe('accepted items without version fields', () => {
     it('does not resurface accepted item re-emitted with no version or resurfaceVersion', async () => {
       const getWorkItemState = vi.fn().mockReturnValue(WorkItemState.Done);
@@ -1681,8 +1809,8 @@ describe('ProviderRegistry', () => {
         { externalId: 'pr-1', title: 'PR 1' },
       ]);
 
-      // Allow handleDiscoveredItems to process
-      await vi.waitFor(() => expect(reg.getDiscoveredItems('gh')).toHaveLength(1));
+      // Allow handleProviderItems to process
+      await vi.waitFor(() => expect(reg.getProviderItems('gh')).toHaveLength(1));
       // No state updates should have been made
       expect(stateStore.setStates).not.toHaveBeenCalled();
       expect(listener).not.toHaveBeenCalled();
@@ -1703,10 +1831,10 @@ describe('ProviderRegistry', () => {
 
       // Re-emit same item multiple times (simulating repeated refreshes with no version)
       provider.fireItems([{ externalId: 'pr-1', title: 'PR 1' }]);
-      await vi.waitFor(() => expect(reg.getDiscoveredItems('gh')).toHaveLength(1));
+      await vi.waitFor(() => expect(reg.getProviderItems('gh')).toHaveLength(1));
 
       provider.fireItems([{ externalId: 'pr-1', title: 'PR 1' }]);
-      await vi.waitFor(() => expect(reg.getDiscoveredItems('gh')).toHaveLength(1));
+      await vi.waitFor(() => expect(reg.getProviderItems('gh')).toHaveLength(1));
 
       expect(stateStore.setStates).not.toHaveBeenCalled();
       expect(listener).not.toHaveBeenCalled();
@@ -1729,7 +1857,7 @@ describe('ProviderRegistry', () => {
         { externalId: 'pr-1', title: 'PR 1' },
       ]);
 
-      await vi.waitFor(() => expect(reg.getDiscoveredItems('gh')).toHaveLength(1));
+      await vi.waitFor(() => expect(reg.getProviderItems('gh')).toHaveLength(1));
       expect(stateStore.setStates).not.toHaveBeenCalled();
       expect(listener).not.toHaveBeenCalled();
 
@@ -1752,11 +1880,47 @@ describe('ProviderRegistry', () => {
         { externalId: 'pr-1', title: 'PR 1' },
       ]);
 
-      await vi.waitFor(() => expect(reg.getDiscoveredItems('gh')).toHaveLength(1));
+      await vi.waitFor(() => expect(reg.getProviderItems('gh')).toHaveLength(1));
       expect(stateStore.setStates).not.toHaveBeenCalled();
       expect(listener).not.toHaveBeenCalled();
 
       reg.dispose();
+    });
+
+    it('serializes back-to-back onDidDiscoverItems emissions per provider', async () => {
+      // Regression test: two rapid emissions used to interleave their async
+      // bodies, mixing up the previous-snapshot bookkeeping. Since we now
+      // queue per-provider, the second emission's handleProviderItems
+      // can't start until the first one's awaits have all settled, so the
+      // final state must reflect ONLY the second emission's items.
+      const pendingResolvers: Array<() => void> = [];
+      stateStore.setStates = vi.fn(() => new Promise<void>(resolve => {
+        pendingResolvers.push(resolve);
+      }));
+
+      const provider = createMockProvider('gh');
+      registry.register(provider);
+
+      // First emission: synchronous prefix runs immediately.
+      provider.fireItems([{ externalId: 'a', title: 'A' }]);
+      expect(registry.getProviderItems('gh').map(i => i.externalId)).toEqual(['a']);
+      expect(pendingResolvers).toHaveLength(1);
+
+      // Second emission while the first's setStates is still in-flight.
+      provider.fireItems([{ externalId: 'b', title: 'B' }]);
+      // Synchronous portion of the second emission must NOT have run yet —
+      // it's queued behind the unresolved first invocation, so the second
+      // setStates hasn't been called yet either.
+      expect(registry.getProviderItems('gh').map(i => i.externalId)).toEqual(['a']);
+      expect(pendingResolvers).toHaveLength(1);
+
+      // Resolve the first's setStates so the queue can drain.
+      pendingResolvers[0]();
+      await vi.waitFor(() => expect(registry.getProviderItems('gh').map(i => i.externalId)).toEqual(['b']));
+
+      // Drain the second one's setStates so the test doesn't leak a pending promise.
+      await vi.waitFor(() => expect(pendingResolvers).toHaveLength(2));
+      pendingResolvers[1]();
     });
   });
 

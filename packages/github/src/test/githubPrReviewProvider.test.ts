@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
 import { authentication, window, workspace } from 'vscode';
 import { GitHubPrReviewProvider } from '../githubPrReviewProvider';
-import { initLogger, LogLevel } from '../logger';
+import { setLogger } from '../logger';
 
 const mockFetch = vi.fn();
 
@@ -25,15 +25,16 @@ function createMockPrWithApi(number: number, title: string, repo = 'owner/repo')
 describe('GitHubPrReviewProvider', () => {
   let provider: GitHubPrReviewProvider;
 
-  let mockChannel: { appendLine: ReturnType<typeof vi.fn> };
+  let mockChannel: any;
 
   beforeEach(() => {
     vi.clearAllMocks();
     vi.stubGlobal('fetch', mockFetch);
     provider = new GitHubPrReviewProvider();
+    vi.spyOn(provider as any, 'fetchRelatedItemsForPRs').mockResolvedValue(new Map());
 
-    mockChannel = { appendLine: vi.fn() };
-    initLogger(mockChannel as any, LogLevel.Debug);
+    mockChannel = { info: vi.fn(), debug: vi.fn(), warn: vi.fn(), error: vi.fn(), appendLine: vi.fn() };
+    setLogger(mockChannel);
 
     // Disable resurfacing features by default so existing tests aren't affected
     // by extra API calls. Tests for resurfacing override this.
@@ -87,13 +88,14 @@ describe('GitHubPrReviewProvider', () => {
 
     expect(window.showWarningMessage).toHaveBeenCalledWith(
       expect.stringContaining('Authentication failed'),
+      'Sign in',
     );
     expect(listener).not.toHaveBeenCalled();
     expect(mockFetch).not.toHaveBeenCalled();
 
-    const logged = mockChannel.appendLine.mock.calls.some(
-      (call: string[]) => call[0].includes('[ERROR]') && call[0].includes('GitHub authentication failed'),
-    );
+    const logged = mockChannel.error.mock.calls.some(
+      (call: unknown[]) => String(call[0]).includes('GitHub authentication failed'),
+      );
     expect(logged).toBe(true);
   });
 
@@ -108,9 +110,9 @@ describe('GitHubPrReviewProvider', () => {
     expect(window.showWarningMessage).not.toHaveBeenCalled();
     expect(mockFetch).not.toHaveBeenCalled();
 
-    const logged = mockChannel.appendLine.mock.calls.some(
-      (call: string[]) => call[0].includes('[WARN]') && call[0].includes('background refresh'),
-    );
+    const logged = mockChannel.warn.mock.calls.some(
+      (call: unknown[]) => String(call[0]).includes('background refresh'),
+      );
     expect(logged).toBe(true);
   });
 
@@ -119,9 +121,9 @@ describe('GitHubPrReviewProvider', () => {
 
     await provider.refresh();
 
-    const logged = mockChannel.appendLine.mock.calls.some(
-      (call: string[]) => call[0].includes('User cancelled GitHub authentication'),
-    );
+    const logged = mockChannel.info.mock.calls.some(
+      (call: unknown[]) => String(call[0]).includes('User cancelled GitHub authentication'),
+      );
     expect(logged).toBe(true);
   });
 
@@ -131,9 +133,9 @@ describe('GitHubPrReviewProvider', () => {
     const refreshBg = (provider as any).refreshInBackground.bind(provider);
     await refreshBg();
 
-    const logged = mockChannel.appendLine.mock.calls.some(
-      (call: string[]) => call[0].includes('No GitHub session available'),
-    );
+    const logged = mockChannel.debug.mock.calls.some(
+      (call: unknown[]) => String(call[0]).includes('No GitHub session available'),
+      );
     expect(logged).toBe(true);
   });
 
@@ -159,11 +161,54 @@ describe('GitHubPrReviewProvider', () => {
     );
   });
 
-  it('fires onDidDiscoverItems with correctly mapped DiscoveredItems', async () => {
+  it('excludes merged PRs by fetching details for closed search results before publishing', async () => {
+    const openPr = { ...createMockPrWithApi(42, 'Add feature', 'org/myrepo'), state: 'open' };
+    const mergedPr = {
+      ...createMockPrWithApi(43, 'Already merged', 'org/myrepo'),
+      state: 'closed',
+    };
+    const closedUnmergedPr = {
+      ...createMockPrWithApi(44, 'Closed without merge', 'org/myrepo'),
+      state: 'closed',
+    };
+
+    mockFetch.mockImplementation(async (url: string) => {
+      if (url.includes('search/issues')) {
+        return {
+          ok: true,
+          json: async () => ({ items: [openPr, mergedPr, closedUnmergedPr] }),
+        };
+      }
+      if (url.endsWith('/pulls/43')) {
+        return { ok: true, json: async () => ({ state: 'closed', merged: true, merged_at: '2025-01-01T00:00:00Z' }) };
+      }
+      if (url.endsWith('/pulls/44')) {
+        return { ok: true, json: async () => ({ state: 'closed', merged: false, merged_at: null }) };
+      }
+      return { ok: false, status: 404, statusText: 'Not Found' };
+    });
+
+    const listener = vi.fn();
+    provider.onDidDiscoverItems(listener);
+    await provider.refresh();
+
+    const items = listener.mock.calls[0][0];
+    expect(items.map((item: any) => item.externalId)).toEqual(['org/myrepo#42', 'org/myrepo#44']);
+    expect(items.map((item: any) => item.externalId)).not.toContain('org/myrepo#43');
+  });
+
+  it('fires onDidDiscoverItems with correctly mapped ProviderItems', async () => {
     mockFetch.mockResolvedValueOnce({
       ok: true,
       json: async () => ({
-        items: [createMockPr(42, 'Add feature', 'org/myrepo')],
+        items: [{
+          ...createMockPr(42, 'Add feature', 'org/myrepo'),
+          user: {
+            login: 'octocat',
+            avatar_url: 'https://avatars.githubusercontent.com/u/1?v=4',
+            html_url: 'https://github.com/octocat',
+          },
+        }],
       }),
     });
 
@@ -178,10 +223,50 @@ describe('GitHubPrReviewProvider', () => {
       title: '#42: Add feature',
       description: 'Body for PR 42',
       url: 'https://github.com/org/myrepo/pull/42',
+      author: {
+        displayName: 'octocat',
+        handle: 'octocat',
+        avatarUrl: 'https://avatars.githubusercontent.com/u/1?v=4',
+        profileUrl: 'https://github.com/octocat',
+      },
       group: 'org/myrepo',
       reason: 'review_requested',
       canonicalId: 'github:pull:org/myrepo#42',
+      itemType: 'pr',
+      capabilities: { gitWork: expect.any(Function) },
+      badges: [{ label: 'Review requested', variant: 'warning' }],
     });
+  });
+
+  it('attaches relatedItems from PR enrichment before publishing', async () => {
+    vi.mocked(workspace.getConfiguration).mockReturnValue({
+      get: vi.fn((key: string, defaultValue?: any) => {
+        if (key === 'filteredRepos') { return 'unrelated/repo'; }
+        if (key === 'resurfaceOnNewVersion' || key === 'resurfaceOnReRequestedReview') { return false; }
+        return defaultValue;
+      }),
+    } as any);
+    vi.mocked((provider as any).fetchRelatedItemsForPRs).mockResolvedValue(new Map([
+      ['org/myrepo#42', [{ externalId: 'other/repo#7', itemType: 'issue', relation: 'linked' }]],
+    ]));
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({
+        items: [createMockPr(42, 'Add feature', 'org/myrepo')],
+      }),
+    });
+
+    const listener = vi.fn();
+    provider.onDidDiscoverItems(listener);
+    await provider.refresh();
+
+    expect((provider as any).fetchRelatedItemsForPRs).toHaveBeenCalledWith([
+      { externalId: 'org/myrepo#42', repoOwner: 'org', repoName: 'myrepo', number: 42 },
+    ], 'test-token', expect.any(AbortSignal));
+    expect(listener.mock.calls[0][0][0]).toEqual(expect.objectContaining({
+      externalId: 'org/myrepo#42',
+      relatedItems: [{ externalId: 'other/repo#7', itemType: 'issue', relation: 'linked' }],
+    }));
   });
 
   it('maps multiple PRs from different repos correctly', async () => {
@@ -258,6 +343,7 @@ describe('GitHubPrReviewProvider', () => {
 
     expect(window.showWarningMessage).toHaveBeenCalledWith(
       expect.stringContaining('Failed to fetch PR review requests'),
+      'Open Settings',
     );
   });
 
@@ -269,10 +355,7 @@ describe('GitHubPrReviewProvider', () => {
     await refreshBg();
 
     expect(window.showWarningMessage).not.toHaveBeenCalled();
-    const logged = mockChannel.appendLine.mock.calls.some(
-      (call: string[]) => call[0].includes('[WARN]'),
-    );
-    expect(logged).toBe(true);
+    expect(mockChannel.warn).toHaveBeenCalled();
   });
 
   it('handles fetch error gracefully', async () => {
@@ -284,10 +367,7 @@ describe('GitHubPrReviewProvider', () => {
     await expect(provider.refresh()).resolves.toBeUndefined();
     expect(listener).not.toHaveBeenCalled();
 
-    const logged = mockChannel.appendLine.mock.calls.some(
-      (call: string[]) => call[0].includes('[ERROR]'),
-    );
-    expect(logged).toBe(true);
+    expect(mockChannel.error).toHaveBeenCalled();
   });
 
   it('fires empty items array when search returns no results', async () => {
@@ -512,6 +592,7 @@ describe('GitHubPrReviewProvider', () => {
       expect(listener).toHaveBeenCalledWith([]);
       expect(window.showWarningMessage).toHaveBeenCalledWith(
         expect.stringContaining('Failed to fetch PR review requests'),
+        'Open Settings',
       );
     });
   });

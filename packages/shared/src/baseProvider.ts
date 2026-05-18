@@ -11,10 +11,89 @@ export interface Event<T> {
 }
 
 /**
+ * A reference from one ProviderItem to another, supplied by the provider.
+ * Used by the core to render navigable "Related" links.
+ *
+ * Resolution is live (no persistence): when provider data no longer contains
+ * the reference, the affordance disappears on the next render.
+ */
+export interface RelatedItemRef {
+  /** Provider-scoped identifier of the related item, e.g. "owner/repo#123". */
+  externalId: string;
+  /** Whether the relationship is a closing reference or a plain mention. */
+  relation: 'closes' | 'linked';
+  /** What kind of item the reference points to. */
+  itemType: 'issue' | 'pr';
+}
+
+
+/**
+ * Information a provider supplies so that the Start Git Work action (or any
+ * other git-aware action) can do its job without knowing anything about the
+ * provider's host or URL shape.
+ *
+ * Providers are responsible for fetching all underlying data (e.g. PR head
+ * ref via the host's API). Returning a function defers that work until the
+ * action actually runs.
+ */
+export interface GitWorkInfo {
+  /** 'issue' = create a new branch; 'pr' = check out an existing branch. */
+  kind: 'issue' | 'pr';
+  /**
+   * URL to clone the repo containing this work item (or its base for a PR).
+   * Must be a clone-style URL (https or git@host:owner/repo.git).
+   */
+  cloneUrl: string;
+  /**
+   * For 'issue': suggested branch name to create.
+   * For 'pr': the head ref (branch name) to check out.
+   */
+  ref: string;
+  /**
+   * For 'pr' from a fork: the head repository's clone URL when it differs
+   * from `cloneUrl`. When set, the action will fetch the head ref from this
+   * remote rather than from `cloneUrl`.
+   */
+  headCloneUrl?: string;
+  /** For 'pr': base ref the PR is targeting (informational, optional). */
+  baseRef?: string;
+  /**
+   * Optional human-readable label for the source repo, used in prompts.
+   * E.g. "owner/repo" or "ProjectName / repoName".
+   */
+  repoLabel?: string;
+}
+
+/**
+ * Capabilities a provider attaches to a provider item to opt into
+ * cross-cutting actions (e.g. Start Git Work). All capabilities are optional.
+ */
+export interface ProviderItemCapabilities {
+  /**
+   * Indicates this item can be the basis for git-based development work.
+   * Either a literal {@link GitWorkInfo} (when all data is known upfront)
+   * or a thunk that resolves it lazily (when an API call is needed).
+   * Returning `undefined` from the thunk means "not currently resolvable".
+   */
+  gitWork?: GitWorkInfo | (() => Promise<GitWorkInfo | undefined>);
+}
+
+export interface ProviderItemAuthor {
+  /** Display name preferred for UI, e.g. "Octocat" or "Jane Doe". */
+  displayName: string;
+  /** Optional stable handle, e.g. GitHub login or ADO uniqueName. */
+  handle?: string;
+  /** Optional avatar URL for future richer rendering. */
+  avatarUrl?: string;
+  /** Optional URL to the author's source-system profile. */
+  profileUrl?: string;
+}
+
+/**
  * An item discovered by a provider.
  * Provider data is kept in memory and read live — only the inbox state is persisted.
  */
-export interface DiscoveredItem {
+export interface ProviderItem {
   /** Provider-scoped unique identifier (e.g. GitHub issue number). */
   externalId: string;
   /** Short display title shown in Inbox and Sources views. */
@@ -23,6 +102,10 @@ export interface DiscoveredItem {
   description?: string;
   /** Optional URL linking back to the item in its source system. */
   url?: string;
+  /** Optional flag indicating the current user authored the item. */
+  authored?: boolean;
+  /** Optional metadata about who created the underlying item upstream. */
+  author?: ProviderItemAuthor;
   /** Optional grouping key used to organize items in the UI (for example, in the Inbox and Sources views). */
   group?: string;
   /** Optional notification reason explaining why this item was surfaced (e.g. `"assigned"`, `"review_requested"`). */
@@ -30,18 +113,36 @@ export interface DiscoveredItem {
   /** Optional upstream state from the provider (e.g. `"open"`, `"closed"`, `"Active"`). */
   state?: string;
   /**
-   * Optional version identifier for "soft" resurfacing.
+   * Optional classification of the item kind ("issue" or "pr"). Providers set
+   * this so the UI can render a distinct type badge without inferring from URL
+   * patterns or state strings.
+   */
+  itemType?: 'issue' | 'pr';
+  /** Optional refs to other discovered items (e.g. issues a PR closes/mentions). */
+  relatedItems?: RelatedItemRef[];
+  /**
+   * Optional provider-declared badges to render alongside the core-managed
+   * Provider / Type / CI badges. Use these to surface state-like information
+   * (e.g. "Approved", "Changes requested", "Mentioned") in a way the core
+   * extension does not have to know about. The core never infers badges from
+   * the {@link state} or {@link reason} strings — only what's listed here is
+   * rendered.
+   */
+  badges?: ProviderBadge[];
+  /**
+   * Optional version identifier for accepted-item resurfacing.
    * When a previously accepted item reappears with a different version,
-   * it is resurfaced in the Inbox as unseen **unless** the linked work item
-   * is currently in Queue or Focus (New, InProgress, Paused), in which case
-   * the version is silently updated and a `version-updated` activity is logged.
+   * it is resurfaced in Incoming as unseen only if no linked work item exists
+   * or the linked work item is Done/Archived. For linked work items in
+   * New/InProgress/Paused, the version is silently updated.
    */
   version?: string;
   /**
-   * Optional secondary version for "hard" resurfacing.
-   * When a previously accepted item reappears with a different
-   * resurfaceVersion, it is **always** resurfaced in the Inbox as unseen,
-   * regardless of the linked work item's state.
+   * Optional secondary version for accepted and dismissed item resurfacing.
+   * After the core records an item's first seen resurfaceVersion, later
+   * changes resurface the item in Incoming as unseen only if no linked work
+   * item exists or the linked work item is Done/Archived. For linked work
+   * items in New/InProgress/Paused, the resurfaceVersion is silently updated.
    */
   resurfaceVersion?: string;
   /**
@@ -52,6 +153,37 @@ export interface DiscoveredItem {
    * Items without `canonicalId` always show individually (backward compatible).
    */
   canonicalId?: string;
+  /** Optional provider-supplied capabilities for cross-cutting actions. */
+  capabilities?: ProviderItemCapabilities;
+}
+
+
+/**
+ * A badge rendered alongside the core-managed Provider / Type / CI badges.
+ * Providers declare these explicitly — the core extension never infers badges
+ * from {@link ProviderItem.state} or {@link ProviderItem.reason}.
+ */
+export interface ProviderBadge {
+  /** Display text. Keep short — sidebar badges compete with the title. */
+  label: string;
+  /**
+   * Severity hint that drives the badge's color and visual treatment. The core
+   * maps each variant to a theme-aware palette so providers don't have to
+   * pick raw colors.
+   *
+   * - `neutral` — outlined, no fill. Use for category labels.
+   * - `info`    — blue. Use for informational state (e.g. "Open").
+   * - `success` — green. Use for positive state (e.g. "Approved").
+   * - `warning` — amber. Use for pending action (e.g. "Review requested").
+   * - `danger`  — red. Use for action needed (e.g. "Changes requested").
+   */
+  variant: 'neutral' | 'info' | 'success' | 'warning' | 'danger';
+  /**
+   * Where to render. Defaults to `'both'`. Use `'editor'` for verbose detail
+   * badges that would clutter the sidebar; use `'sidebar'` for the rare case
+   * where the badge is only useful in the inbox triage flow.
+   */
+  show?: 'sidebar' | 'editor' | 'both';
 }
 
 /**
@@ -79,8 +211,8 @@ export interface EventEmitterLike<T> {
  * Owns the EventEmitter lifecycle, refresh timer, concurrency guard, and dispose logic.
  */
 export abstract class BaseProvider {
-  protected readonly _onDidDiscoverItems: EventEmitterLike<DiscoveredItem[]>;
-  readonly onDidDiscoverItems: Event<DiscoveredItem[]>;
+  protected readonly _onDidDiscoverItems: EventEmitterLike<ProviderItem[]>;
+  readonly onDidDiscoverItems: Event<ProviderItem[]>;
 
   private refreshTimer: ReturnType<typeof setInterval> | undefined;
   protected _isRefreshing = false;
@@ -89,7 +221,7 @@ export abstract class BaseProvider {
   /** Optional error handler for background refresh failures. Override to add logging. */
   protected onBackgroundRefreshError: (error: unknown) => void = () => {};
 
-  constructor(emitter: EventEmitterLike<DiscoveredItem[]>) {
+  constructor(emitter: EventEmitterLike<ProviderItem[]>) {
     this._onDidDiscoverItems = emitter;
     this.onDidDiscoverItems = emitter.event;
   }

@@ -1,0 +1,65 @@
+name: Weekly Performance Review
+
+# Authentication: this workflow runs GitHub Copilot CLI in programmatic mode.
+# Configure the shared COPILOT_CLI_PAT repository secret with a licensed Copilot
+# user's PAT that can make Copilot requests and create issues. Rotate that one
+# secret when the service identity changes; both COPILOT_GITHUB_TOKEN and GH_TOKEN
+# are sourced from it so Copilot CLI and gh authenticate as the same identity.
+on:
+  # Run every Thursday at 10:00 AM UTC (offset from implementation and UX reviews)
+  schedule:
+    - cron: '0 10 * * 4'
+  # Manual trigger for testing
+  workflow_dispatch:
+
+concurrency:
+  group: weekly-performance-review
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  weekly-performance-review:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Node.js environment
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      - name: Install Copilot CLI
+        run: npm install -g @github/copilot
+
+      - name: Run weekly performance review
+        env:
+          # Shared PAT for both Copilot CLI and gh. Rotate COPILOT_CLI_PAT instead
+          # of configuring workflow-specific tokens.
+          COPILOT_GITHUB_TOKEN: ${{ secrets.COPILOT_CLI_PAT }}
+          GH_TOKEN: ${{ secrets.COPILOT_CLI_PAT }}
+        run: |
+          set -o pipefail
+          copilot -p "$(cat .github/prompts/weekly-performance-review.md)" \
+            --model claude-opus-4.7 \
+            --allow-tool='shell(gh issue:*)' \
+            --allow-tool=read \
+            --allow-tool=create \
+            --allow-tool=write \
+            --no-ask-user | tee weekly-performance-review.log
+
+      - name: Summary
+        if: always()
+        run: |
+          count="$(grep -Eo 'WEEKLY_PERFORMANCE_REVIEW_ISSUES_CREATED=[0-8]' weekly-performance-review.log 2>/dev/null | tail -n 1 | cut -d= -f2 || true)"
+          if [ -z "$count" ]; then
+            echo "⚠️ Weekly performance review completed, but no issue-count marker was found." >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "Weekly performance review issues created: $count" >> "$GITHUB_STEP_SUMMARY"
+          fi

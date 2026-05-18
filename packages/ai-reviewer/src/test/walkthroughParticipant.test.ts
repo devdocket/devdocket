@@ -39,6 +39,7 @@ describe('WalkthroughParticipant', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    lm.tools = [];
     mockRepoManager = createMockRepoManager();
     participant = new WalkthroughParticipant(mockRepoManager, mockLogOutputChannel as never);
   });
@@ -73,11 +74,11 @@ describe('WalkthroughParticipant', () => {
       await handler(request, context, response, token);
 
       expect(response.markdown).toHaveBeenCalledWith(
-        expect.stringContaining('Please provide a GitHub PR URL'),
+        expect.stringContaining('Please provide a GitHub or Azure DevOps PR URL'),
       );
     });
 
-    it('calls repoManager.ensureWorktree for PR URL in prompt', async () => {
+    it('calls repoManager.ensureWorktree for GitHub PR URL in prompt', async () => {
       participant.register();
       const handler = vi.mocked(chat.createChatParticipant).mock.calls[0][1];
 
@@ -90,6 +91,22 @@ describe('WalkthroughParticipant', () => {
 
       expect(mockRepoManager.ensureWorktree).toHaveBeenCalledWith(
         'https://github.com/owner/repo/pull/42',
+      );
+    });
+
+    it('calls repoManager.ensureWorktree for Azure DevOps PR URL in prompt', async () => {
+      participant.register();
+      const handler = vi.mocked(chat.createChatParticipant).mock.calls[0][1];
+
+      const request = createMockRequest('Walk me through this PR: https://dev.azure.com/org/project/_git/repo/pullrequest/42');
+      const context = createMockContext();
+      const response = createMockResponse();
+      const token = { isCancellationRequested: false };
+
+      await handler(request, context, response, token);
+
+      expect(mockRepoManager.ensureWorktree).toHaveBeenCalledWith(
+        'https://dev.azure.com/org/project/_git/repo/pullrequest/42',
       );
     });
 
@@ -210,6 +227,45 @@ describe('WalkthroughParticipant', () => {
       );
     });
 
+    it('does not pass GitHub diff-anchor tool to the model for Azure DevOps PRs', async () => {
+      lm.tools = [
+        { name: 'devdocket-readFile', description: 'Read', inputSchema: { type: 'object' } },
+        { name: 'devdocket-diffAnchor', description: 'Anchor', inputSchema: { type: 'object' } },
+      ];
+      const mockModel = {
+        sendRequest: vi.fn().mockResolvedValue({
+          stream: (async function* () {
+            yield new LanguageModelTextPart('ADO walkthrough.');
+          })(),
+        }),
+      };
+      vi.mocked(mockRepoManager.ensureWorktree).mockResolvedValue({
+        worktreePath: '/mock/worktrees/pr-42',
+        clonePath: '/mock/repos/ado-org-project-repo/clone',
+        org: 'org/project',
+        repo: 'repo',
+        prNumber: '42',
+        headRef: 'refs/devdocket/ado/pr-42-head',
+        baseRef: 'refs/devdocket/ado/pr-42-base',
+        prUrl: 'https://dev.azure.com/org/project/_git/repo/pullrequest/42',
+        provider: 'ado',
+      });
+
+      participant.register();
+      const handler = vi.mocked(chat.createChatParticipant).mock.calls[0][1];
+
+      const request = createMockRequest('Walk me through https://dev.azure.com/org/project/_git/repo/pullrequest/42', mockModel);
+      const context = createMockContext();
+      const response = createMockResponse();
+      const token = { isCancellationRequested: false };
+
+      await handler(request, context, response, token);
+
+      const tools = mockModel.sendRequest.mock.calls[0][1].tools as Array<{ name: string }>;
+      expect(tools.some(tool => tool.name === 'devdocket-readFile')).toBe(true);
+      expect(tools.some(tool => tool.name === 'devdocket-diffAnchor')).toBe(false);
+    });
+
     it('invokes real tools via lm.invokeTool and continues the loop', async () => {
       const mockModel = {
         sendRequest: vi.fn()
@@ -246,6 +302,91 @@ describe('WalkthroughParticipant', () => {
       );
       expect(mockModel.sendRequest).toHaveBeenCalledTimes(2);
       expect(response.markdown).toHaveBeenCalledWith('File contents analyzed.');
+    });
+
+    it('continues when a model emits only signalPhase before walkthrough text', async () => {
+      const mockModel = {
+        sendRequest: vi.fn()
+          .mockResolvedValueOnce({
+            stream: (async function* () {
+              yield new LanguageModelTextPart('\n');
+              yield new LanguageModelToolCallPart('phase-1', 'devdocket-signalPhase', { phase: 'summary' });
+            })(),
+          })
+          .mockResolvedValueOnce({
+            stream: (async function* () {
+              yield new LanguageModelTextPart('Summary after phase acknowledgement.');
+            })(),
+          }),
+      };
+
+      participant.register();
+      const handler = vi.mocked(chat.createChatParticipant).mock.calls[0][1];
+
+      const request = createMockRequest('Walk me through https://github.com/owner/repo/pull/42', mockModel);
+      const context = createMockContext();
+      const response = createMockResponse();
+      const token = { isCancellationRequested: false };
+
+      const result = await handler(request, context, response, token);
+
+      expect(lm.invokeTool).not.toHaveBeenCalled();
+      expect(mockModel.sendRequest).toHaveBeenCalledTimes(2);
+      expect(response.markdown).toHaveBeenCalledWith('Summary after phase acknowledgement.');
+      expect((result as { metadata?: Record<string, unknown> }).metadata?.phase).toBe('summary');
+    });
+
+    it('stops retrying after repeated phase-only responses without walkthrough text', async () => {
+      const mockModel = {
+        sendRequest: vi.fn().mockImplementation(() => ({
+          stream: (async function* () {
+            yield new LanguageModelTextPart('\n');
+            yield new LanguageModelToolCallPart('phase-1', 'devdocket-signalPhase', { phase: 'summary' });
+          })(),
+        })),
+      };
+
+      participant.register();
+      const handler = vi.mocked(chat.createChatParticipant).mock.calls[0][1];
+
+      const request = createMockRequest('Walk me through https://github.com/owner/repo/pull/42', mockModel);
+      const context = createMockContext();
+      const response = createMockResponse();
+      const token = { isCancellationRequested: false };
+
+      await handler(request, context, response, token);
+
+      expect(lm.invokeTool).not.toHaveBeenCalled();
+      expect(mockModel.sendRequest).toHaveBeenCalledTimes(2);
+      expect(response.markdown).toHaveBeenCalledWith(
+        '⚠️ The model did not produce walkthrough text. Please try again.',
+      );
+    });
+
+    it('warns when the model finishes without visible walkthrough text', async () => {
+      const mockModel = {
+        sendRequest: vi.fn().mockResolvedValue({
+          stream: (async function* () {
+            yield new LanguageModelTextPart('\n  \t');
+          })(),
+        }),
+      };
+
+      participant.register();
+      const handler = vi.mocked(chat.createChatParticipant).mock.calls[0][1];
+
+      const request = createMockRequest('Walk me through https://github.com/owner/repo/pull/42', mockModel);
+      const context = createMockContext();
+      const response = createMockResponse();
+      const token = { isCancellationRequested: false };
+
+      await handler(request, context, response, token);
+
+      expect(mockModel.sendRequest).toHaveBeenCalledTimes(1);
+      expect(response.markdown).toHaveBeenCalledWith('\n  \t');
+      expect(response.markdown).toHaveBeenCalledWith(
+        '⚠️ The model did not produce walkthrough text. Please try again.',
+      );
     });
 
     it('signalPhase with lastFile updates ChatResult metadata', async () => {

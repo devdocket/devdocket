@@ -1,9 +1,8 @@
 import * as vscode from 'vscode';
 import { WorkItemState } from '../models/workItem';
 import { WorkGraph } from '../services/workGraph';
-import { DiscoveredStateStore, type InboxState } from '../storage/discoveredStateStore';
+import { InboxStateStore, type InboxState } from '../storage/inboxStateStore';
 import { logger } from '../services/logger';
-import type { ViewRevealer } from '../services/viewRevealer';
 
 /**
  * Resolves item IDs from VS Code multi-select args for WorkItem-based views.
@@ -23,10 +22,8 @@ export function resolveItemIds(item?: { id?: string }, selectedItems?: { id?: st
   return [];
 }
 
-/** Builds a work-item title, optionally prefixed with the provider group. */
 export function formatItemTitle(item: { group?: string; title: string }): string {
-  const trimmedGroup = item.group?.trim();
-  return trimmedGroup ? `${trimmedGroup} ${item.title}` : item.title;
+  return item.title;
 }
 
 /** Log the error and show a user-facing message. */
@@ -74,11 +71,9 @@ export async function batchTransition(
   ids: string[],
   targetState: WorkItemState,
   successMessage: (count: number) => string,
-  revealer?: ViewRevealer,
 ): Promise<void> {
   if (ids.length === 1) {
     await workGraph.transitionState(ids[0], targetState);
-    void revealer?.revealByState(ids[0]);
     return;
   }
   const failedIds: string[] = [];
@@ -107,17 +102,19 @@ export interface AcceptableItem {
   externalId: string;
   title: string;
   description?: string;
+  itemType?: 'issue' | 'pr';
   url?: string;
   group?: string;
 }
 
-export async function batchAcceptItems(
+export async function batchAcceptItems<T extends AcceptableItem>(
   workGraph: WorkGraph,
-  stateStore: DiscoveredStateStore,
-  items: AcceptableItem[],
+  stateStore: InboxStateStore,
+  items: T[],
   logLabel: string,
-): Promise<void> {
+): Promise<T[]> {
   const stateUpdates: Array<{ providerId: string; externalId: string; state: InboxState }> = [];
+  const acceptedItems: T[] = [];
   const createdIds: string[] = [];
   // Track re-opened items so we can roll back on setStates failure
   const reopenedItems: Array<{ id: string; originalState: WorkItemState }> = [];
@@ -126,7 +123,7 @@ export async function batchAcceptItems(
   for (const item of items) {
     const existing = workGraph.findItemByProvenance(item.providerId, item.externalId);
     if (existing) {
-      // Re-open items in terminal states so resurfaced items return to Queue
+      // Re-open items in terminal states so resurfaced items return to Ready to Start
       if (existing.state === WorkItemState.Done || existing.state === WorkItemState.Archived) {
         const originalState = existing.state;
         try {
@@ -139,15 +136,17 @@ export async function batchAcceptItems(
         }
       }
       stateUpdates.push({ providerId: item.providerId, externalId: item.externalId, state: 'accepted' });
+      acceptedItems.push(item);
       continue;
     }
     try {
       const createdItem = await workGraph.createItem(
         { title: formatItemTitle(item), description: item.description },
-        { providerId: item.providerId, externalId: item.externalId, url: item.url, group: item.group?.trim() || undefined },
+        { providerId: item.providerId, externalId: item.externalId, itemType: item.itemType, url: item.url, group: item.group?.trim() || undefined },
       );
       createdIds.push(createdItem.id);
       stateUpdates.push({ providerId: item.providerId, externalId: item.externalId, state: 'accepted' });
+      acceptedItems.push(item);
     } catch (err: unknown) {
       failed++;
       logger.error(`Failed to accept ${logLabel} "${item.title}"`, err);
@@ -169,15 +168,15 @@ export async function batchAcceptItems(
         }
       }
       handleCommandError('Failed to update states after accepting items', err);
-      return;
+      return [];
     }
   }
 
   const total = stateUpdates.length;
   if (total > 0) {
     const msg = failed > 0
-      ? `Accepted ${total} of ${total + failed} items to Queue`
-      : `Accepted ${total} item${total === 1 ? '' : 's'} to Queue`;
+      ? `Accepted ${total} of ${total + failed} items to Ready to Start`
+      : `Accepted ${total} item${total === 1 ? '' : 's'} to Ready to Start`;
     void vscode.window.showInformationMessage(msg);
   }
   if (failed > 0) {
@@ -185,4 +184,6 @@ export async function batchAcceptItems(
       `DevDocket: Failed to accept ${failed} item(s); see Output for details`,
     );
   }
+
+  return acceptedItems;
 }

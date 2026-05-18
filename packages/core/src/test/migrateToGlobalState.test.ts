@@ -83,7 +83,7 @@ describe('migrateToGlobalState', () => {
     await migrateToGlobalState(memento, storagePath);
 
     expect(memento.get('devdocket.workitems')).toEqual([{ id: 'w1' }]);
-    expect(memento.get('devdocket.discovered-state')).toBeUndefined();
+    expect(memento.get('devdocket.inbox-state')).toBeUndefined();
     expect(memento.get(MIGRATED_KEY)).toBe(true);
   });
 
@@ -127,7 +127,7 @@ describe('migrateToGlobalState', () => {
   });
 
   it('does not overwrite already-populated globalState keys on retry', async () => {
-    // Simulate: workitems migrated on first attempt, discovered-state failed
+    // Simulate: workitems migrated on first attempt, inbox-state failed
     await memento.update('devdocket.workitems', [{ id: 'newer-data' }]);
 
     readFileMock.mockImplementation(async (filePath: string) => {

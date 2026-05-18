@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
 import { authentication, window } from 'vscode';
 import { GitHubPrReviewProvider } from '../githubPrReviewProvider';
-import { initLogger, LogLevel } from '../logger';
+import { setLogger } from '../logger';
 
 const mockFetch = vi.fn();
 
@@ -17,15 +17,15 @@ function createMockPr(number: number, title: string, repo = 'owner/repo') {
 
 describe('GitHubPrReviewProvider — error handling', () => {
   let provider: GitHubPrReviewProvider;
-  let mockChannel: { appendLine: ReturnType<typeof vi.fn> };
+  let mockChannel: any;
 
   beforeEach(() => {
     vi.clearAllMocks();
     vi.stubGlobal('fetch', mockFetch);
     provider = new GitHubPrReviewProvider();
 
-    mockChannel = { appendLine: vi.fn() };
-    initLogger(mockChannel as any, LogLevel.Debug);
+    mockChannel = { info: vi.fn(), debug: vi.fn(), warn: vi.fn(), error: vi.fn(), appendLine: vi.fn() };
+    setLogger(mockChannel);
 
     vi.mocked(authentication.getSession).mockResolvedValue({
       accessToken: 'test-token',
@@ -77,10 +77,7 @@ describe('GitHubPrReviewProvider — error handling', () => {
 
       await provider.refresh();
 
-      const logged = mockChannel.appendLine.mock.calls.some(
-        (call: string[]) => call[0].includes('[ERROR]'),
-      );
-      expect(logged).toBe(true);
+      expect(mockChannel.error).toHaveBeenCalled();
     });
   });
 
@@ -130,6 +127,7 @@ describe('GitHubPrReviewProvider — error handling', () => {
 
       expect(window.showWarningMessage).toHaveBeenCalledWith(
         expect.stringContaining('Failed to fetch PR review requests'),
+        'Open Settings',
       );
     });
 
@@ -140,6 +138,7 @@ describe('GitHubPrReviewProvider — error handling', () => {
 
       expect(window.showWarningMessage).toHaveBeenCalledWith(
         expect.stringContaining('Failed to fetch PR review requests'),
+        'Open Settings',
       );
     });
 
@@ -150,6 +149,7 @@ describe('GitHubPrReviewProvider — error handling', () => {
 
       expect(window.showWarningMessage).toHaveBeenCalledWith(
         expect.stringContaining('Failed to fetch PR review requests'),
+        'Open Settings',
       );
     });
 
@@ -160,10 +160,7 @@ describe('GitHubPrReviewProvider — error handling', () => {
       await refreshBg();
 
       expect(window.showWarningMessage).not.toHaveBeenCalled();
-      const logged = mockChannel.appendLine.mock.calls.some(
-        (call: string[]) => call[0].includes('[WARN]'),
-      );
-      expect(logged).toBe(true);
+      expect(mockChannel.warn).toHaveBeenCalled();
     });
 
     it('logs warning for background refresh on 403 without showing UI', async () => {
@@ -173,10 +170,8 @@ describe('GitHubPrReviewProvider — error handling', () => {
       await refreshBg();
 
       expect(window.showWarningMessage).not.toHaveBeenCalled();
-      const logged = mockChannel.appendLine.mock.calls.some(
-        (call: string[]) => call[0].includes('403'),
-      );
-      expect(logged).toBe(true);
+      expect(mockChannel.warn).toHaveBeenCalledWith('Failed to fetch PR review requests');
+      expect(mockChannel.error).toHaveBeenCalledWith(expect.stringContaining('403'));
     });
   });
 

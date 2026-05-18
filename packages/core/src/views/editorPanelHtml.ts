@@ -1,481 +1,722 @@
 import * as crypto from 'crypto';
 import { marked } from 'marked';
 import sanitizeHtml from 'sanitize-html';
-import { WorkItem, WorkItemState } from '../models/workItem';
-import type { ActivityLogEntry } from '../models/activityLog';
-import { isSafeUrl } from '../utils/url';
+import { getSerializedEditorState } from '../webview/shared/editorState';
+import type { EditorItemData } from './mainTypes';
 
 export interface EditorHtmlOptions {
   cspSource: string;
-  item: WorkItem;
-  /** Display label for the provider, shown only when item.providerId is set. */
-  providerLabel?: string;
-  /** Read-only description from the provider. Rendered as markdown. */
-  providerDescription?: string;
-  /** Upstream state from the provider (e.g. "open", "closed", "Active"). Will be HTML-escaped. */
-  providerState?: string;
-  /** When true, the title field is read-only (managed by a live provider). */
-  titleReadonly?: boolean;
+  scriptUri: string;
+  initialItem: EditorItemData;
 }
 
-export function getEditorPanelHtml({ cspSource, item, providerLabel, providerDescription, providerState, titleReadonly }: EditorHtmlOptions): string {
+export function getEditorPanelHtml({ cspSource, scriptUri, initialItem }: EditorHtmlOptions): string {
   const nonce = getNonce();
-  const descriptionSection = providerDescription
-    ? `    <div class="field">
-      <label id="provider-desc-label">Provider Description</label>
-      <div class="provider-description" role="note" aria-labelledby="provider-desc-label">${renderMarkdown(providerDescription)}</div>
-    </div>`
+  const initialState = getSerializedEditorState(initialItem);
+  const initialStateScript = initialState
+    ? `\n    window.__DEVDOCKET_VSCODE_API__ = window.__DEVDOCKET_VSCODE_API__ || acquireVsCodeApi();\n    window.__DEVDOCKET_VSCODE_API__.setState(${serializeForScript(initialState)});`
     : '';
-  return /*html*/ `<!DOCTYPE html>
+
+  return /* html */ `<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src ${cspSource} 'nonce-${nonce}'; script-src 'nonce-${nonce}'; img-src https: http:;">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src ${cspSource} https: http: data:; style-src 'nonce-${nonce}'; script-src 'nonce-${nonce}';">
+  <title>DevDocket Editor</title>
   <style nonce="${nonce}">
     :root {
-      --input-bg: var(--vscode-input-background);
-      --input-fg: var(--vscode-input-foreground);
-      --input-border: var(--vscode-input-border, transparent);
-      --font: var(--vscode-font-family, sans-serif);
-      --font-size: var(--vscode-font-size, 13px);
+      color-scheme: var(--vscode-editor-background);
     }
-    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    html,
+    body,
+    #root {
+      margin: 0;
+      min-height: 100vh;
+    }
+
     body {
-      font-family: var(--font);
-      font-size: var(--font-size);
-      color: var(--vscode-foreground);
       background: var(--vscode-editor-background);
-      padding: 20px min(5%, 24px);
-      max-width: min(560px, 100%);
-      margin: 0 auto;
+      color: var(--vscode-foreground);
+      font-family: var(--vscode-font-family, sans-serif);
+      font-size: var(--vscode-font-size, 13px);
+      line-height: 1.5;
     }
-    h2 {
-      font-size: 1.2em;
-      font-weight: 600;
-      margin-bottom: 16px;
-    }
-    .field {
-      margin-bottom: 14px;
-    }
-    label {
-      display: block;
-      font-weight: 600;
-      margin-bottom: 4px;
-      font-size: 0.9em;
-    }
-    input, textarea {
-      width: 100%;
-      padding: 6px 8px;
-      background: var(--input-bg);
-      color: var(--input-fg);
-      border: 1px solid var(--input-border);
-      border-radius: 3px;
-      font-family: var(--font);
-      font-size: var(--font-size);
-      outline: none;
-    }
-    input:focus, textarea:focus {
-      border-color: var(--vscode-focusBorder);
-    }
+
+    button,
+    input,
     textarea {
-      min-height: 80px;
-      resize: vertical;
+      font: inherit;
     }
-    .row {
+
+    button {
+      cursor: pointer;
+    }
+
+    .editor-app {
+      max-width: 980px;
+      margin: 0 auto;
+      padding: 24px;
       display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+
+    .editor-empty-state {
+      padding: 32px 24px;
+      color: var(--vscode-descriptionForeground);
+    }
+
+    .editor-header,
+    .editor-section {
+      border: 1px solid var(--vscode-panel-border, var(--vscode-widget-border, rgba(128, 128, 128, 0.35)));
+      border-radius: 10px;
+      background: var(--vscode-sideBar-background, var(--vscode-editorWidget-background, rgba(128, 128, 128, 0.08)));
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.08);
+    }
+
+    .editor-header {
+      padding: 20px;
+      display: flex;
+      flex-direction: column;
       gap: 12px;
     }
-    .row .field {
-      flex: 1;
+
+    .editor-title-row,
+    .editor-title-actions,
+    .badge-row,
+    .meta-row,
+    .action-bar,
+    .related-item-header,
+    .activity-entry,
+    .activity-entry-main {
+      display: flex;
+      gap: 10px;
+      align-items: center;
+      flex-wrap: wrap;
     }
-    input[readonly], textarea[readonly] {
-      color: var(--vscode-disabledForeground, var(--vscode-foreground));
-      cursor: text;
-      border-style: dashed;
-      background-color: var(--vscode-editor-inactiveSelectionBackground, rgba(128,128,128,0.15));
+
+    .editor-title-row {
+      justify-content: space-between;
+      align-items: flex-start;
     }
-    .hint {
-      font-size: 0.8em;
-      opacity: 0.6;
-      margin-top: 2px;
-      display: block;
-    }
-    .metadata {
-      margin-top: 24px;
-      padding-top: 16px;
-      border-top: 1px solid var(--input-border);
-    }
-    .metadata-heading {
-      font-size: 0.8em;
-      font-weight: 600;
+
+    .editor-eyebrow,
+    .editor-section-heading {
       text-transform: uppercase;
-      letter-spacing: 0.05em;
-      opacity: 0.7;
-      margin-bottom: 10px;
+      letter-spacing: 0.08em;
+      font-size: 11px;
+      font-weight: 700;
+      color: var(--vscode-descriptionForeground);
     }
-    .metadata dl {
-      display: grid;
-      grid-template-columns: auto 1fr;
-      gap: 6px 16px;
-      align-items: baseline;
-      margin: 0;
+
+    button.editor-section-heading--toggle {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      background: transparent;
+      border: none;
+      padding: 0;
+      cursor: pointer;
+      font-family: inherit;
     }
-    .metadata dt {
-      font-size: 0.85em;
-      opacity: 0.7;
+
+    button.editor-section-heading--toggle:hover {
+      color: var(--vscode-foreground);
     }
-    .metadata dd {
-      font-size: 0.85em;
-      margin: 0;
-    }
-    .badge {
+
+    .editor-section-toggle {
       display: inline-block;
-      padding: 1px 8px;
-      border-radius: 10px;
-      font-size: 0.85em;
-      font-weight: 500;
+      width: 0.8em;
+      text-align: center;
     }
-    .badge-new {
+
+    .editor-section-count {
+      font-weight: 400;
+      opacity: 0.75;
+    }
+
+    .editor-title {
+      margin: 0;
+      font-size: 22px;
+      line-height: 1.2;
+      font-weight: 700;
+      color: var(--vscode-foreground);
+      word-break: break-word;
+      display: inline;
+    }
+    .editor-title--visually-hidden {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      padding: 0;
+      margin: -1px;
+      overflow: hidden;
+      clip: rect(0 0 0 0);
+      white-space: nowrap;
+      border: 0;
+    }
+    .editor-title-input {
+      box-sizing: border-box;
+      width: min(100%, 720px);
+      border: 1px solid var(--vscode-input-border, transparent);
+      border-radius: 6px;
+      background: var(--vscode-input-background);
+      color: var(--vscode-input-foreground);
+      font: inherit;
+      font-size: 22px;
+      font-weight: 700;
+      line-height: 1.2;
+      padding: 6px 8px;
+    }
+    /*
+     * When the heading wraps an anchor (item has a URL) the anchor
+     * inherits the heading's font but takes its own link colors so it
+     * still reads as a clickable title.
+     */
+    .editor-title-link {
+      color: inherit;
+      text-decoration: none;
+      cursor: pointer;
+    }
+    .editor-title-link:hover {
+      color: var(--vscode-textLink-activeForeground, var(--vscode-textLink-foreground));
+      text-decoration: underline;
+    }
+    .editor-title-block {
+      flex: 1;
+      min-width: 0;
+    }
+    .editor-repo-annotation {
+      font-weight: 400;
+      font-size: 0.95em;
+      color: var(--vscode-descriptionForeground);
+      opacity: 0.85;
+      word-break: break-all;
+      margin-top: 4px;
+    }
+    .editor-url-field {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+      margin-top: 8px;
+      color: var(--vscode-descriptionForeground);
+    }
+    .editor-url-label {
+      font-size: 12px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+    }
+    .editor-url-input {
+      flex: 1 1 260px;
+      max-width: 520px;
+      min-width: 180px;
+    }
+    .editor-url-link {
+      color: var(--vscode-textLink-foreground);
+      text-decoration: none;
+      white-space: nowrap;
+    }
+    .editor-url-link:hover {
+      color: var(--vscode-textLink-activeForeground, var(--vscode-textLink-foreground));
+      text-decoration: underline;
+    }
+    .icon-button--inline {
+      width: 22px;
+      height: 22px;
+      font-size: 13px;
+      vertical-align: middle;
+      margin-left: 4px;
+    }
+
+    .badge-pill,
+    .editor-status,
+    .meta-pill,
+    .meta-badge {
+      display: inline-flex;
+      align-items: center;
+      border-radius: 999px;
+      padding: 4px 10px;
+      font-size: 12px;
+      line-height: 1.2;
+    }
+
+    .badge-pill {
+      font-weight: 600;
+    }
+
+    .editor-status {
+      font-weight: 700;
       background: var(--vscode-badge-background);
       color: var(--vscode-badge-foreground);
     }
-    .badge-inprogress {
-      background: var(--vscode-terminal-ansiGreen, #388a34);
-      color: #fff;
+
+    .editor-status--in-progress {
+      background: rgba(56, 138, 52, 0.16);
+      color: var(--vscode-terminal-ansiGreen, #388a34);
     }
-    .badge-paused {
-      background: var(--vscode-editorWarning-foreground, #cca700);
-      color: #000;
+
+    .editor-status--paused {
+      background: rgba(204, 167, 0, 0.18);
+      color: var(--vscode-editorWarning-foreground, #cca700);
     }
-    .badge-done {
-      background: var(--vscode-testing-iconPassed, #73c991);
-      color: #000;
+
+    .editor-status--done {
+      background: rgba(115, 201, 145, 0.18);
+      color: var(--vscode-testing-iconPassed, #73c991);
     }
-    .badge-archived {
-      background: var(--vscode-disabledForeground, #888);
-      color: #fff;
+
+    .editor-status--archived,
+    .editor-status--new {
+      background: rgba(128, 128, 128, 0.16);
+      color: var(--vscode-descriptionForeground);
     }
-    .provider-description {
-      padding: 8px 10px;
-      border-left: 3px solid var(--vscode-textBlockQuote-border, var(--vscode-focusBorder));
-      background: var(--vscode-textBlockQuote-background, var(--vscode-editor-inactiveSelectionBackground, rgba(128,128,128,0.08)));
-      margin-top: 2px;
-      line-height: 1.5;
+
+    .icon-button,
+    .editor-button {
+      border: 1px solid transparent;
+      border-radius: 6px;
+      transition: background 120ms ease, border-color 120ms ease, color 120ms ease;
     }
-    .provider-description h1,
-    .provider-description h2,
-    .provider-description h3,
-    .provider-description h4,
-    .provider-description h5,
-    .provider-description h6 {
-      margin-top: 12px;
-      margin-bottom: 6px;
+
+    .icon-button {
+      width: 32px;
+      height: 32px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      background: transparent;
+      color: var(--vscode-textLink-foreground);
+    }
+
+    .icon-button:hover,
+    .editor-button:hover {
+      background: var(--vscode-toolbar-hoverBackground, rgba(127, 127, 127, 0.12));
+    }
+
+    .icon-button:focus-visible,
+    .editor-button:focus-visible,
+    .editor-title-input:focus-visible,
+    .editor-input:focus-visible,
+    .related-item:focus-visible {
+      outline: 1px solid var(--vscode-focusBorder);
+      outline-offset: 2px;
+    }
+
+    .badge-pill,
+    .meta-badge {
+      font-size: 12px;
+    }
+
+    .meta-pill,
+    .meta-badge {
+      background: transparent;
+      color: var(--vscode-descriptionForeground);
+      border: 1px solid var(--vscode-widget-border, rgba(127, 127, 127, 0.3));
+      font-weight: 400;
+    }
+
+    .editor-section {
+      padding: 18px 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+    }
+
+    .editor-title-actions {
+      flex-wrap: wrap;
+      align-items: center;
+    }
+
+    .editor-pills-actions {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      flex-wrap: wrap;
+    }
+
+    .editor-pills-stack {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      flex: 1;
+      min-width: 0;
+    }
+
+    .editor-header-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      justify-content: flex-end;
+    }
+
+    .action-bar {
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    .editor-button {
+      min-height: 34px;
+      padding: 0 14px;
+      color: var(--vscode-button-foreground);
+      background: var(--vscode-button-background);
+    }
+
+    .editor-button--secondary,
+    .editor-button--ghost {
+      background: transparent;
+      color: var(--vscode-foreground);
+      border-color: var(--vscode-panel-border, var(--vscode-widget-border, rgba(128, 128, 128, 0.35)));
+    }
+
+    .editor-button--danger {
+      background: transparent;
+      color: var(--vscode-errorForeground, #f14c4c);
+      border-color: rgba(241, 76, 76, 0.35);
+    }
+
+    .editor-fields-grid {
+      display: grid;
+      gap: 14px;
+      grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+    }
+
+    .editor-field {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .editor-field:last-child {
+      grid-column: 1 / -1;
+    }
+
+    .editor-field-label {
       font-weight: 600;
     }
-    .provider-description h1 { font-size: 1.3em; }
-    .provider-description h2 { font-size: 1.15em; }
-    .provider-description h3 { font-size: 1.05em; }
-    .provider-description p {
-      margin: 6px 0;
+
+    .editor-input {
+      width: 100%;
+      border: 1px solid var(--vscode-input-border, transparent);
+      border-radius: 6px;
+      background: var(--vscode-input-background);
+      color: var(--vscode-input-foreground);
+      padding: 9px 10px;
+      min-height: 38px;
     }
-    .provider-description ul,
-    .provider-description ol {
-      padding-left: 24px;
-      margin: 6px 0;
+
+    .editor-input[readonly] {
+      border-style: dashed;
+      background: var(--vscode-editor-inactiveSelectionBackground, rgba(128, 128, 128, 0.12));
+      color: var(--vscode-disabledForeground, var(--vscode-foreground));
     }
-    .provider-description li {
-      margin: 2px 0;
+
+    .editor-textarea {
+      resize: none;
+      line-height: 1.5;
+      overflow: hidden;
+      min-height: 120px;
     }
-    .provider-description pre {
-      background: var(--vscode-textCodeBlock-background, rgba(128,128,128,0.15));
-      padding: 8px 10px;
-      border-radius: 3px;
-      overflow-x: auto;
-      margin: 6px 0;
+
+    .editor-field-hint {
+      color: var(--vscode-descriptionForeground);
+      font-size: 12px;
     }
-    .provider-description code {
-      background: var(--vscode-textCodeBlock-background, rgba(128,128,128,0.15));
-      padding: 1px 4px;
-      border-radius: 3px;
-      font-size: 0.9em;
+
+    .editor-description {
+      color: var(--vscode-foreground);
+      overflow-wrap: anywhere;
     }
-    .provider-description pre code {
-      background: none;
-      padding: 0;
-    }
-    .provider-description a {
+
+    .editor-description a {
       color: var(--vscode-textLink-foreground);
       text-decoration: none;
     }
-    .provider-description a:hover {
+
+    .editor-description a:hover {
       color: var(--vscode-textLink-activeForeground);
       text-decoration: underline;
     }
-    .provider-description blockquote {
-      border-left: 3px solid var(--vscode-textBlockQuote-border, var(--vscode-focusBorder));
-      padding: 4px 12px;
-      margin: 6px 0;
-      opacity: 0.85;
+
+    .editor-description h1,
+    .editor-description h2,
+    .editor-description h3,
+    .editor-description h4,
+    .editor-description h5,
+    .editor-description h6 {
+      margin: 18px 0 8px;
+      line-height: 1.25;
     }
-    .provider-description img {
+
+    .editor-description h1:first-child,
+    .editor-description h2:first-child,
+    .editor-description h3:first-child,
+    .editor-description p:first-child {
+      margin-top: 0;
+    }
+
+    .editor-description p,
+    .editor-description ul,
+    .editor-description ol,
+    .editor-description pre,
+    .editor-description blockquote,
+    .editor-description table {
+      margin: 8px 0;
+    }
+
+    .editor-description ul,
+    .editor-description ol {
+      padding-left: 24px;
+    }
+
+    .editor-description code,
+    .editor-description pre {
+      font-family: var(--vscode-editor-font-family, var(--vscode-font-family, monospace));
+      background: var(--vscode-textCodeBlock-background, rgba(128, 128, 128, 0.15));
+      border-radius: 6px;
+    }
+
+    .editor-description code {
+      padding: 1px 4px;
+    }
+
+    .editor-description pre {
+      padding: 10px 12px;
+      overflow-x: auto;
+    }
+
+    .editor-description pre code {
+      padding: 0;
+      background: transparent;
+    }
+
+    .editor-description blockquote {
+      padding: 10px 14px;
+      border-left: 3px solid var(--vscode-textBlockQuote-border, var(--vscode-focusBorder));
+      background: var(--vscode-textBlockQuote-background, rgba(128, 128, 128, 0.08));
+    }
+
+    .editor-description img {
       max-width: 100%;
       height: auto;
     }
-    .provider-description table {
-      border-collapse: collapse;
-      margin: 6px 0;
+
+    .editor-description table {
       width: 100%;
+      border-collapse: collapse;
     }
-    .provider-description th,
-    .provider-description td {
-      border: 1px solid var(--vscode-widget-border, rgba(128,128,128,0.35));
-      padding: 4px 8px;
+
+    .editor-description th,
+    .editor-description td {
+      border: 1px solid var(--vscode-widget-border, rgba(128, 128, 128, 0.35));
+      padding: 6px 8px;
       text-align: left;
     }
-    .provider-description th {
-      font-weight: 600;
-    }
-    .provider-description hr {
-      border: none;
-      border-top: 1px solid var(--vscode-widget-border, rgba(128,128,128,0.35));
-      margin: 10px 0;
-    }
-    .title-link {
-      color: var(--vscode-textLink-foreground);
-      cursor: pointer;
-      text-decoration: none;
-    }
-    .title-link:hover {
-      color: var(--vscode-textLink-activeForeground);
-      text-decoration: underline;
-    }
-    .title-link:focus,
-    .title-link:focus-visible {
-      color: var(--vscode-textLink-activeForeground);
-      text-decoration: underline;
-      outline: 1px solid var(--vscode-focusBorder);
-      outline-offset: 2px;
-    }
+
+    .related-items,
+    .related-item-group,
     .activity-log {
-      margin-top: 24px;
-      padding-top: 16px;
-      border-top: 1px solid var(--input-border);
-    }
-    .activity-entry {
       display: flex;
+      flex-direction: column;
       gap: 10px;
-      align-items: baseline;
-      font-size: 0.85em;
-      padding: 4px 0;
     }
-    .activity-entry + .activity-entry {
-      border-top: 1px solid var(--vscode-widget-border, rgba(128,128,128,0.2));
-    }
-    .activity-time {
-      flex-shrink: 0;
-      opacity: 0.6;
-      white-space: nowrap;
-    }
-    .activity-type {
-      flex-shrink: 0;
-      font-weight: 500;
-    }
-    .activity-detail {
-      opacity: 0.8;
-    }
-    .url-row {
+
+    .ci-watch-heading-row {
       display: flex;
-      gap: 6px;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+
+    .ci-watch-open-button {
+      min-height: 28px;
+      padding: 0 10px;
+      font-size: 12px;
+    }
+
+    .ci-watch-run-summary {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
       align-items: center;
     }
-    .url-row input {
-      flex: 1;
-    }
-    .url-open-link {
-      flex-shrink: 0;
-      color: var(--vscode-textLink-foreground);
-      cursor: pointer;
-      font-size: 1em;
-      text-decoration: none;
-      padding: 4px;
-      border-radius: 3px;
+
+    .ci-watch-chip,
+    .ci-watch-more {
       display: inline-flex;
       align-items: center;
+      gap: 5px;
+      border-radius: 999px;
+      padding: 4px 9px;
+      font-size: 12px;
+      font-weight: 600;
+      border: 1px solid transparent;
+      background: var(--vscode-editorWidget-background, rgba(128, 128, 128, 0.08));
     }
-    .url-open-link:hover {
-      color: var(--vscode-textLink-activeForeground);
+
+    .ci-watch-chip--pass {
+      color: var(--vscode-testing-iconPassed, #73c991);
+      border-color: rgba(115, 201, 145, 0.35);
+      background: rgba(115, 201, 145, 0.12);
     }
-    .url-open-link:focus,
-    .url-open-link:focus-visible {
-      outline: 1px solid var(--vscode-focusBorder);
-      outline-offset: 2px;
+
+    .ci-watch-chip--fail {
+      color: var(--vscode-testing-iconFailed, var(--vscode-errorForeground, #f14c4c));
+      border-color: rgba(241, 76, 76, 0.35);
+      background: rgba(241, 76, 76, 0.12);
     }
-    .url-open-link.hidden {
-      display: none;
+
+    .ci-watch-chip--warn {
+      color: var(--vscode-editorWarning-foreground, #CCA700);
+      border-color: rgba(204, 167, 0, 0.35);
+      background: rgba(204, 167, 0, 0.12);
+    }
+
+    body.vscode-light .ci-watch-chip--warn,
+    body.vscode-high-contrast-light .ci-watch-chip--warn {
+      color: var(--vscode-editorWarning-foreground, #8A6100);
+      border-color: rgba(138, 97, 0, 0.35);
+      background: rgba(138, 97, 0, 0.10);
+    }
+
+    .ci-watch-chip--running {
+      color: var(--vscode-progressBar-background, var(--vscode-textLink-foreground));
+      border-color: rgba(0, 122, 204, 0.35);
+      background: rgba(0, 122, 204, 0.12);
+    }
+
+    .ci-watch-chip--neutral,
+    .ci-watch-more {
+      color: var(--vscode-descriptionForeground);
+      border-color: var(--vscode-widget-border, rgba(127, 127, 127, 0.3));
+    }
+
+    .ci-watch-empty-runs,
+    .ci-watch-aggregate {
+      color: var(--vscode-descriptionForeground);
+      font-size: 12px;
+    }
+
+    .related-item-group-heading {
+      color: var(--vscode-descriptionForeground);
+      font-size: 12px;
+      font-weight: 700;
+    }
+
+    .related-item {
+      border: 1px solid var(--vscode-panel-border, var(--vscode-widget-border, rgba(128, 128, 128, 0.35)));
+      border-radius: 8px;
+      background: var(--vscode-editorWidget-background, rgba(128, 128, 128, 0.04));
+      width: 100%;
+      padding: 10px 12px;
+      text-align: left;
+      color: inherit;
+    }
+
+    .related-item:hover {
+      background: var(--vscode-list-hoverBackground, rgba(128, 128, 128, 0.12));
+    }
+
+    .related-item-title {
+      font-weight: 600;
+      line-height: 1.35;
+    }
+
+    .badge-row--compact {
+      gap: 6px;
+      margin-top: 8px;
+    }
+
+    .activity-entry {
+      justify-content: space-between;
+      align-items: flex-start;
+      padding: 6px 0;
+      gap: 12px;
+    }
+
+    .activity-entry + .activity-entry {
+      border-top: 1px solid var(--vscode-panel-border, var(--vscode-widget-border, rgba(128, 128, 128, 0.18)));
+    }
+
+    .activity-entry-main {
+      flex: 1;
+      align-items: baseline;
+    }
+
+    .activity-entry-type {
+      font-weight: 600;
+    }
+
+    .activity-entry-detail {
+      color: var(--vscode-descriptionForeground);
+    }
+
+    .activity-entry-detail--structured {
+      display: grid;
+      grid-template-columns: max-content minmax(0, 1fr);
+      column-gap: 8px;
+      row-gap: 2px;
+      margin: 2px 0 0;
+      align-self: flex-start;
+    }
+
+    .activity-detail-row {
+      display: contents;
+    }
+
+    .activity-detail-label {
+      font-weight: 600;
+      color: var(--vscode-foreground);
+    }
+
+    .activity-detail-value {
+      margin: 0;
+      word-break: break-all;
+    }
+
+    .activity-entry-time {
+      flex-shrink: 0;
+      color: var(--vscode-descriptionForeground);
+      font-size: 12px;
+      white-space: nowrap;
+    }
+
+    @media (max-width: 720px) {
+      .editor-app {
+        padding: 16px;
+      }
+
+      .editor-title {
+        font-size: 19px;
+      }
+
+      .editor-section,
+      .editor-header {
+        padding-left: 16px;
+        padding-right: 16px;
+      }
+
+      .activity-entry {
+        flex-direction: column;
+      }
     }
   </style>
 </head>
 <body>
-  <h2 id="editor-heading">${item.url && isSafeUrl(item.url) ? `<a href="${escapeAttr(item.url)}" class="title-link" id="title-link" data-url="${escapeAttr(item.url)}" title="Open in browser">${escapeHtml(item.title)}</a>` : escapeHtml(item.title)}</h2>
-  <div id="form" role="form" aria-labelledby="editor-heading">
-    <div class="field">
-      <label for="title">Title</label>
-      <input type="text" id="title" value="${escapeAttr(item.title)}" ${titleReadonly ? 'readonly aria-readonly="true" aria-describedby="readonly-title-hint"' : ''} />
-${titleReadonly ? '      <span id="readonly-title-hint" class="hint">Title is managed by the provider</span>' : ''}
-    </div>
-    <div class="field">
-      <label for="url">URL</label>
-      <div class="url-row">
-        <input type="url" id="url" value="${escapeAttr(item.url ?? '')}" placeholder="https://..." ${titleReadonly ? 'readonly aria-readonly="true" aria-describedby="readonly-url-hint"' : ''} />
-        <a href="#" class="url-open-link${item.url && isSafeUrl(item.url) ? '' : ' hidden'}" id="url-open-link" title="Open in Browser" aria-label="Open URL in browser">&#x2197;</a>
-      </div>
-${titleReadonly ? '      <span id="readonly-url-hint" class="hint">URL is managed by the provider</span>' : ''}
-    </div>
-${descriptionSection}
-    <div class="field">
-      <label for="notes">Notes</label>
-      <textarea id="notes" placeholder="Add notes...">${escapeHtml(item.notes ?? '')}</textarea>
-    </div>
-  </div>
-  <div class="metadata" aria-label="Item metadata">
-    <div class="metadata-heading">Details</div>
-    <dl>
-      <dt>State</dt>
-      <dd><span class="badge ${stateBadgeClass(item.state)}">${escapeHtml(stateLabel(item.state))}</span></dd>
-${item.providerId && providerLabel ? `      <dt>Provider</dt>
-      <dd>${escapeHtml(providerLabel)}</dd>` : ''}
-${providerState && item.providerId ? `      <dt>Provider State</dt>
-      <dd>${escapeHtml(providerState)}</dd>` : ''}
-      <dt>Created</dt>
-      <dd>${escapeHtml(formatTimestamp(item.createdAt))}</dd>
-      <dt>Updated</dt>
-      <dd>${escapeHtml(formatTimestamp(item.updatedAt))}</dd>
-    </dl>
-  </div>
-${renderActivityLog(item.activityLog)}
-  <script nonce="${nonce}">
-    const vscode = acquireVsCodeApi();
-    const fields = ['title', 'notes', 'url'];
-    let debounceTimer = null;
-
-    function isSafeUrlClient(str) {
-      try {
-        const u = new URL(str);
-        return u.protocol === 'http:' || u.protocol === 'https:';
-      } catch { return false; }
-    }
-
-    function updateUrlLinkVisibility() {
-      const urlEl = document.getElementById('url');
-      const linkEl = document.getElementById('url-open-link');
-      if (!urlEl || !linkEl) return;
-      const val = urlEl.value.trim();
-      if (val && isSafeUrlClient(val)) {
-        linkEl.classList.remove('hidden');
-      } else {
-        linkEl.classList.add('hidden');
-      }
-    }
-
-    function getData() {
-      return {
-        title: document.getElementById('title').value.trim(),
-        notes: document.getElementById('notes').value.trim(),
-        url: document.getElementById('url').value.trim(),
-      };
-    }
-
-    function scheduleAutosave() {
-      if (debounceTimer) clearTimeout(debounceTimer);
-      debounceTimer = setTimeout(() => {
-        const data = getData();
-        const titleEl = document.getElementById('title');
-        if (!data.title && titleEl instanceof HTMLInputElement && !titleEl.readOnly) return;
-        vscode.postMessage({ type: 'autosave', data });
-      }, 500);
-    }
-
-    fields.forEach(f => {
-      const el = document.getElementById(f);
-      if (el instanceof HTMLInputElement || el instanceof HTMLTextAreaElement) {
-        if (!el.readOnly) {
-          el.addEventListener('input', scheduleAutosave);
-        }
-      }
-    });
-
-    const urlInput = document.getElementById('url');
-    if (urlInput instanceof HTMLInputElement && !urlInput.readOnly) {
-      urlInput.addEventListener('input', updateUrlLinkVisibility);
-    }
-
-    const urlOpenLink = document.getElementById('url-open-link');
-    if (urlOpenLink) {
-      urlOpenLink.addEventListener('click', (e) => {
-        e.preventDefault();
-        const urlEl = document.getElementById('url');
-        if (urlEl instanceof HTMLInputElement) {
-          const val = urlEl.value.trim();
-          if (val && isSafeUrlClient(val)) {
-            vscode.postMessage({ type: 'openUrl', url: val });
-          }
-        }
-      });
-    }
-
-    const titleLink = document.getElementById('title-link');
-    if (titleLink) {
-      titleLink.addEventListener('click', (e) => {
-        e.preventDefault();
-        vscode.postMessage({ type: 'openUrl', url: titleLink.dataset.url });
-      });
-    }
-
-    function isExternalUrl(href) {
-      if (!href) return false;
-      try {
-        const url = new URL(href, window.location.href);
-        return url.protocol === 'http:' || url.protocol === 'https:';
-      } catch {
-        return false;
-      }
-    }
-
-    const descEl = document.querySelector('.provider-description');
-    if (descEl) {
-      descEl.addEventListener('click', (e) => {
-        if (!(e.target instanceof Element)) return;
-        const anchor = e.target.closest('a');
-        if (!anchor) return;
-        // Always prevent default to avoid unintended webview navigation
-        e.preventDefault();
-        const href = anchor.getAttribute('href');
-        if (href && isExternalUrl(href)) {
-          vscode.postMessage({ type: 'openUrl', url: href });
-        }
-      });
-    }
-
-    window.addEventListener('message', event => {
-      const msg = event.data;
-      if (msg && msg.type === 'updateTitle' && typeof msg.title === 'string') {
-        const heading = document.getElementById('editor-heading');
-        if (heading) {
-          const link = heading.querySelector('#title-link');
-          if (link) {
-            link.textContent = msg.title;
-          } else {
-            heading.textContent = msg.title;
-          }
-        }
-        const titleInput = document.getElementById('title');
-        if (titleInput instanceof HTMLInputElement && titleInput.readOnly) {
-          titleInput.value = msg.title;
-        }
-      }
-    });
+  <div id="root"></div>
+  <script nonce="${nonce}">${initialStateScript}
+    window.__DEVDOCKET_EDITOR_BOOTSTRAP__ = ${serializeForScript(initialItem)};
   </script>
+  <script nonce="${nonce}" type="module" src="${escapeAttr(scriptUri)}"></script>
 </body>
 </html>`;
 }
@@ -507,60 +748,19 @@ function getNonce(): string {
   return crypto.randomBytes(16).toString('hex');
 }
 
-function renderActivityLog(log: ActivityLogEntry[] | undefined): string {
-  if (!log || log.length === 0) { return ''; }
-  // Show newest entries first
-  const entries = [...log].reverse();
-  const rows = entries.map(e =>
-    `    <div class="activity-entry">
-      <span class="activity-time">${escapeHtml(formatTimestamp(e.timestamp))}</span>
-      <span class="activity-type">${escapeHtml(activityTypeLabel(e.type))}</span>
-${e.detail !== undefined ? `      <span class="activity-detail">${escapeHtml(e.detail)}</span>` : ''}
-    </div>`
-  ).join('\n');
-  return `  <div class="activity-log" aria-label="Activity log">
-    <div class="metadata-heading">Activity</div>
-${rows}
-  </div>`;
+function serializeForScript(value: unknown): string {
+  return JSON.stringify(value)
+    .replace(/</g, '\\u003c')
+    .replace(/>/g, '\\u003e')
+    .replace(/&/g, '\\u0026')
+    .replace(/\u2028/g, '\\u2028')
+    .replace(/\u2029/g, '\\u2029');
 }
 
-function activityTypeLabel(type: ActivityLogEntry['type']): string {
-  switch (type) {
-    case 'created': return 'Created';
-    case 'state-changed': return 'State changed';
-    case 'updated': return 'Updated';
-    case 'action-executed': return 'Action executed';
-    case 'auto-completed': return 'Auto-completed';
-    default: return type;
-  }
-}
-
-function formatTimestamp(epoch: number): string {
-  const d = new Date(epoch);
-  return d.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' }) +
-    ' ' + d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
-}
-
-function stateLabel(state: WorkItemState): string {
-  if (state === WorkItemState.InProgress) { return 'In Progress'; }
-  return state;
-}
-
-function stateBadgeClass(state: WorkItemState): string {
-  switch (state) {
-    case WorkItemState.New: return 'badge-new';
-    case WorkItemState.InProgress: return 'badge-inprogress';
-    case WorkItemState.Paused: return 'badge-paused';
-    case WorkItemState.Done: return 'badge-done';
-    case WorkItemState.Archived: return 'badge-archived';
-    default: return 'badge-new';
-  }
-}
-
-function escapeHtml(s: string): string {
-  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-}
-
-function escapeAttr(s: string): string {
-  return escapeHtml(s).replace(/"/g, '&quot;');
+function escapeAttr(value: string): string {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
 }

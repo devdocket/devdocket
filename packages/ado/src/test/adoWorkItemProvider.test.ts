@@ -116,6 +116,8 @@ describe('AdoWorkItemProvider', () => {
       group: 'myorg/MyProject',
       reason: 'assigned',
       state: 'Active',
+      itemType: 'issue',
+      badges: [{ label: 'Active', variant: 'info', show: 'editor' }],
     });
     expect(items[1]).toEqual({
       externalId: 'myorg/MyProject/2',
@@ -125,6 +127,78 @@ describe('AdoWorkItemProvider', () => {
       group: 'myorg/MyProject',
       reason: 'assigned',
       state: 'Active',
+      itemType: 'issue',
+      badges: [{ label: 'Active', variant: 'info', show: 'editor' }],
+    });
+  });
+
+  it('populates author from ADO System.CreatedBy', async () => {
+    mockFetch
+      .mockResolvedValueOnce({ ok: true, json: async () => createWiqlResponse([1]) })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          value: [{
+            ...createWorkItemDetail(1, 'Fix login bug'),
+            fields: {
+              ...createWorkItemDetail(1, 'Fix login bug').fields,
+              'System.CreatedBy': {
+                displayName: 'Jane Doe',
+                uniqueName: 'jane@example.com',
+              },
+            },
+          }],
+        }),
+      });
+
+    const listener = vi.fn();
+    provider.onDidDiscoverItems(listener);
+    await provider.refresh();
+
+    expect(listener.mock.calls[0][0][0].author).toEqual({
+      displayName: 'Jane Doe',
+      handle: 'jane@example.com',
+    });
+  });
+
+  it('populates gitWork when a work item has an associated Git repo relation', async () => {
+    mockFetch
+      .mockResolvedValueOnce({ ok: true, json: async () => createWiqlResponse([1]) })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          value: [{
+            ...createWorkItemDetail(1, 'Fix login bug'),
+            relations: [{
+              rel: 'ArtifactLink',
+              url: 'vstfs:///Git/Ref/project-guid%2Frepo-guid%2FGBmain',
+              attributes: { name: 'Branch' },
+            }],
+          }],
+        }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ value: [{ name: 'Active', category: 'InProgress' }] }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          name: 'myrepo',
+          remoteUrl: 'https://dev.azure.com/myorg/MyProject/_git/myrepo',
+        }),
+      });
+
+    const listener = vi.fn();
+    provider.onDidDiscoverItems(listener);
+    await provider.refresh();
+
+    expect(listener).toHaveBeenCalledTimes(1);
+    expect(listener.mock.calls[0][0][0].capabilities.gitWork).toEqual({
+      kind: 'issue',
+      cloneUrl: 'https://dev.azure.com/myorg/MyProject/_git/myrepo',
+      ref: 'issue1',
+      repoLabel: 'myorg/MyProject/myrepo',
     });
   });
 
@@ -228,19 +302,18 @@ describe('AdoWorkItemProvider', () => {
     expect(window.showWarningMessage).not.toHaveBeenCalled();
   });
 
-  it('fires empty items when cancellation is requested before auth', async () => {
+  it('does not clear items when cancellation is requested before auth', async () => {
     const token = { isCancellationRequested: true } as any;
 
     const listener = vi.fn();
     provider.onDidDiscoverItems(listener);
     await provider.refresh(token);
 
-    expect(listener).toHaveBeenCalledTimes(1);
-    expect(listener).toHaveBeenCalledWith([]);
+    expect(listener).not.toHaveBeenCalled();
     expect(mockFetch).not.toHaveBeenCalled();
   });
 
-  it('fires empty items when cancellation is requested after auth', async () => {
+  it('does not clear items when cancellation is requested after auth', async () => {
     const token = { isCancellationRequested: false } as any;
     vi.mocked(authentication.getSession).mockImplementation(async () => {
       token.isCancellationRequested = true;
@@ -256,8 +329,7 @@ describe('AdoWorkItemProvider', () => {
     provider.onDidDiscoverItems(listener);
     await provider.refresh(token);
 
-    expect(listener).toHaveBeenCalledTimes(1);
-    expect(listener).toHaveBeenCalledWith([]);
+    expect(listener).not.toHaveBeenCalled();
     expect(mockFetch).not.toHaveBeenCalled();
   });
 

@@ -59,12 +59,19 @@ const ProgressLocation = {
   Notification: 15,
 };
 
+const InputBoxValidationSeverity = {
+  Info: 1,
+  Warning: 2,
+  Error: 3,
+};
+
 const window = {
   showInputBox: vi.fn(),
   showInformationMessage: vi.fn().mockResolvedValue(undefined),
   showWarningMessage: vi.fn(),
   showErrorMessage: vi.fn(),
   showQuickPick: vi.fn(),
+  setStatusBarMessage: vi.fn(() => ({ dispose: vi.fn() })),
   withProgress: vi.fn((_options: any, task: (progress: any, token: any) => Promise<any>) => {
     const cancellationEmitter = new MockEventEmitter();
     return task(
@@ -88,7 +95,14 @@ const window = {
     };
   }),
   createWebviewPanel: vi.fn(),
+  registerWebviewPanelSerializer: vi.fn(() => ({ dispose: vi.fn() })),
+  registerWebviewViewProvider: vi.fn(() => ({ dispose: vi.fn() })),
   createOutputChannel: vi.fn(() => ({
+    info: vi.fn(),
+    debug: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
+    trace: vi.fn(),
     appendLine: vi.fn(),
     append: vi.fn(),
     clear: vi.fn(),
@@ -97,6 +111,8 @@ const window = {
     dispose: vi.fn(),
     name: 'DevDocket',
     replace: vi.fn(),
+    logLevel: 2,
+    onDidChangeLogLevel: vi.fn(),
   })),
   createStatusBarItem: vi.fn((alignment?: number, priority?: number) => new MockStatusBarItem()),
 };
@@ -108,12 +124,21 @@ const commands = {
 
 const env = {
   openExternal: vi.fn(),
+  clipboard: {
+    writeText: vi.fn().mockResolvedValue(undefined),
+  },
 };
 
 const Uri = {
   parse: vi.fn((s: string) => {
     const m = s.match(/^(\w+):/);
-    return { toString: () => s, scheme: m ? m[1] : '' };
+    return { toString: () => s, scheme: m ? m[1] : '', path: s, fsPath: s };
+  }),
+  file: vi.fn((s: string) => ({ toString: () => s, scheme: 'file', path: s, fsPath: s })),
+  joinPath: vi.fn((base: { path?: string; fsPath?: string; toString?: () => string }, ...paths: string[]) => {
+    const root = base.fsPath ?? base.path ?? base.toString?.() ?? '';
+    const joined = [root, ...paths].join('\\').replace(/\\+/g, '\\');
+    return { toString: () => joined, scheme: 'file', path: joined, fsPath: joined };
   }),
 };
 
@@ -209,7 +234,9 @@ const StatusBarAlignment = {
 class MockStatusBarItem {
   text = '';
   tooltip: string | undefined;
-  command: string | undefined;
+  command: string | { command: string; title: string } | undefined;
+  color: any;
+  backgroundColor: any;
   show = vi.fn();
   hide = vi.fn();
   dispose = vi.fn();
@@ -237,6 +264,7 @@ export {
   ConfigurationTarget,
   StatusBarAlignment,
   ProgressLocation,
+  InputBoxValidationSeverity,
   window,
   commands,
   env,

@@ -1,10 +1,11 @@
 import * as vscode from 'vscode';
-import { DiscoveredItem, combineSignals, createAbortError, runWorkerPool, safeDecodeComponent, type ResolvedItem } from '@devdocket/shared';
+import { ProviderItem, combineSignals, createAbortError, runWorkerPool, safeDecodeComponent, type RelatedItemRef, type ResolvedItem } from '@devdocket/shared';
 import { BaseGitHubProvider } from './baseGithubProvider';
 import { logger } from './logger';
 import { parseRepoFromUrls } from './parseRepo';
-import { getHeaders, getGitHubAuthHeaders, retryWithAuth, throwApiError, parseCanonicalRepo, fetchClosedGitHubItems, type GitHubIssue, type GitHubSearchResponse } from './githubApiHelpers';
+import { getHeaders, getGitHubAuthHeaders, retryWithAuth, throwApiError, looksLikeRateLimited403, parseCanonicalRepo, fetchClosedGitHubItems, buildIssueStateBadge, filterMergedGitHubPrs, type GitHubIssue, type GitHubSearchResponse } from './githubApiHelpers';
 import { matchesRepoPatterns } from './repoPattern';
+import { createGitHubPrGitWork } from './gitWorkCapabilities';
 
 interface TimelineEvent {
   event?: string;
@@ -30,16 +31,17 @@ export class GitHubPrReviewProvider extends BaseGitHubProvider {
     const patterns = this.getConfiguredPatterns();
 
     const { prs, failed } = await this.fetchAllPrReviews(accessToken, signal);
+    const activePrs = await filterMergedGitHubPrs(accessToken, prs, signal);
 
     // Parse repo name once per PR
-    const repoNameMap = new Map(prs.map(pr =>
+    const repoNameMap = new Map(activePrs.map(pr =>
       [pr.html_url, parseRepoFromUrls(pr.html_url, pr.repository_url)]
     ));
 
     // Post-filter when patterns are configured
     const filteredPrs = patterns.length > 0
-      ? prs.filter(pr => matchesRepoPatterns(repoNameMap.get(pr.html_url)!, patterns))
-      : prs;
+      ? activePrs.filter(pr => matchesRepoPatterns(repoNameMap.get(pr.html_url)!, patterns))
+      : activePrs;
 
     logger.info(`Discovered ${filteredPrs.length} PR review requests`);
 
@@ -61,16 +63,46 @@ export class GitHubPrReviewProvider extends BaseGitHubProvider {
       }
     }
 
-    const items: DiscoveredItem[] = filteredPrs.map((pr) => {
+    const relatedItemsMap = filteredPrs.length > 0
+      ? await this.fetchRelatedItemsForPRs(filteredPrs.map(pr => {
+        const repoName = repoNameMap.get(pr.html_url)!;
+        const [repoOwner, repoNameOnly] = repoName.split('/');
+        return {
+          externalId: `${repoName}#${pr.number}`,
+          repoOwner,
+          repoName: repoNameOnly,
+          number: pr.number,
+        };
+      }).filter(pr => pr.repoOwner && pr.repoName), accessToken, signal)
+      : new Map<string, RelatedItemRef[]>();
+
+    const items: ProviderItem[] = filteredPrs.map((pr) => {
       const repoName = repoNameMap.get(pr.html_url)!;
-      const item: DiscoveredItem = {
-        externalId: `${repoName}#${pr.number}`,
+      const externalId = `${repoName}#${pr.number}`;
+      const relatedItems = relatedItemsMap.get(externalId);
+      const item: ProviderItem = {
+        externalId,
         title: `#${pr.number}: ${pr.title}`,
         description: pr.body ?? undefined,
         url: pr.html_url,
+        ...(pr.user?.login ? {
+          author: {
+            displayName: pr.user.login,
+            handle: pr.user.login,
+            avatarUrl: pr.user.avatar_url,
+            profileUrl: pr.user.html_url,
+          },
+        } : {}),
         group: repoName,
         reason: 'review_requested',
         canonicalId: `github:pull:${repoName}#${pr.number}`,
+        itemType: 'pr',
+        capabilities: { gitWork: createGitHubPrGitWork(repoName, pr.number, pr.pull_request?.url) },
+        ...(relatedItems ? { relatedItems } : {}),
+        badges: [
+          { label: 'Review requested', variant: 'warning' },
+          ...buildIssueStateBadge(pr.state),
+        ],
       };
       if (pr.state) { item.state = pr.state; }
       // Head SHA uses soft resurfacing (version) — resurfaces from
@@ -84,15 +116,10 @@ export class GitHubPrReviewProvider extends BaseGitHubProvider {
       return item;
     });
 
-    this._onDidDiscoverItems.fire(items);
+    this.publishProviderItems(items, patterns);
 
     if (failed) {
-      const message = 'Failed to fetch PR review requests';
-      if (isUserTriggered) {
-        vscode.window.showWarningMessage(`DevDocket GitHub: ${message}`);
-      } else {
-        logger.warn(message);
-      }
+      this.warnOnFetchFailure('Failed to fetch PR review requests', isUserTriggered);
     }
   }
 
@@ -112,13 +139,14 @@ export class GitHubPrReviewProvider extends BaseGitHubProvider {
 
     let response = await fetch(apiUrl, { headers, signal });
 
-    if (response.status === 404 && !wasAuthenticated && !signal?.aborted) {
+    if (!response.ok && !wasAuthenticated && !signal?.aborted &&
+        (response.status === 404 || looksLikeRateLimited403(response))) {
       const retryResponse = await retryWithAuth(apiUrl, signal);
       if (retryResponse) { response = retryResponse; }
     }
 
     if (!response.ok) {
-      throwApiError(response, `GitHub PR ${owner}/${repo}#${number}`);
+      await throwApiError(response, `GitHub PR ${owner}/${repo}#${number}`);
     }
 
     const data = await response.json() as { title: string; body: string | null; html_url: string };

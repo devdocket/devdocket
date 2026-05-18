@@ -9,7 +9,7 @@
  * - `work-started` — a branch and/or worktree was created for this item.
  * - `cleanup` — git branch and/or worktree was cleaned up.
  * - `cleanup-dismissed` — user declined cleanup prompt for this item.
- * - `version-updated` — a provider version change was suppressed because the item is in Queue or Focus.
+ * - `version-updated` — legacy activity for a suppressed provider version change; retained for older logs.
  */
 export type ActivityType = 'created' | 'state-changed' | 'updated' | 'action-executed' | 'auto-completed' | 'work-started' | 'cleanup' | 'cleanup-dismissed' | 'version-updated';
 
@@ -57,15 +57,15 @@ export interface ActivityLogEntry {
  * (for abandoned or no-longer-relevant work).
  */
 export enum WorkItemState {
-  /** Freshly created or accepted from the Inbox; sits in the Queue. */
+  /** Freshly created or accepted from a provider; appears in the Ready to Start tier. */
   New = 'New',
-  /** Actively being worked on; shown in the Focus view. */
+  /** Actively being worked on; appears in the In Progress tier. */
   InProgress = 'InProgress',
-  /** Work is temporarily on hold; shown in the Focus view. */
+  /** Work is temporarily on hold; appears in the Paused tier. */
   Paused = 'Paused',
-  /** Work is complete; shown in History. */
+  /** Work is complete; appears in the Done tier. */
   Done = 'Done',
-  /** Removed from active views; retained in History for reference. */
+  /** Removed from active tiers; retained in the Done tier for reference. */
   Archived = 'Archived',
 }
 
@@ -79,7 +79,7 @@ export enum WorkItemState {
 export interface WorkItem {
   /** Unique identifier (auto-generated on creation). */
   id: string;
-  /** Short human-readable title displayed in tree views. */
+  /** Short human-readable title displayed on the item card and editor header. */
   title: string;
   /** Optional free-form notes (user-editable). */
   notes?: string;
@@ -91,9 +91,11 @@ export interface WorkItem {
   providerId?: string;
   /** Provider-scoped identifier used to correlate with the provider's discovered item. */
   externalId?: string;
+  /** Provider-declared kind of external item, retained for relation lookups after the item leaves provider discovery. */
+  itemType?: 'issue' | 'pr';
   /** URL to the item in its source system (e.g. GitHub issue page). */
   url?: string;
-  /** Optional grouping key for organizing items within a provider in tree views. */
+  /** Optional grouping key (e.g. repository name) shown as the repo annotation under the title and used to nest items in the Sources tab. */
   group?: string;
   /** Ordering key within items of the same state. Lower values sort first. */
   sortOrder?: number;

@@ -2,19 +2,20 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { authentication } from 'vscode';
 import { GitHubIssueProvider } from '../githubProvider';
 import { GitHubPrReviewProvider } from '../githubPrReviewProvider';
-import { initLogger, LogLevel } from '../logger';
+import { setLogger } from '../logger';
+import { makeErrorResponse } from './responseMocks';
 
 // Mock global fetch
 const mockFetch = vi.fn();
 
 describe('resolveUrl', () => {
-  let mockChannel: { appendLine: ReturnType<typeof vi.fn> };
+  let mockChannel: any;
 
   beforeEach(() => {
     vi.clearAllMocks();
     vi.stubGlobal('fetch', mockFetch);
-    mockChannel = { appendLine: vi.fn() };
-    initLogger(mockChannel as any, LogLevel.Debug);
+    mockChannel = { info: vi.fn(), debug: vi.fn(), warn: vi.fn(), error: vi.fn(), appendLine: vi.fn() };
+    setLogger(mockChannel);
 
     // Default: no auth session (silent returns undefined)
     vi.mocked(authentication.getSession).mockResolvedValue(undefined as any);
@@ -117,10 +118,7 @@ describe('resolveUrl', () => {
 
     it('retries with auth on 404 when initially unauthenticated', async () => {
       // First call (unauthenticated): 404
-      mockFetch.mockResolvedValueOnce({
-        ok: false,
-        status: 404,
-      });
+      mockFetch.mockResolvedValueOnce(makeErrorResponse({ status: 404 }));
 
       // Second call (with auth): 200
       mockFetch.mockResolvedValueOnce({
@@ -150,16 +148,177 @@ describe('resolveUrl', () => {
       expect(mockFetch).toHaveBeenCalledTimes(2);
     });
 
-    it('throws on non-404 errors', async () => {
-      mockFetch.mockResolvedValueOnce({
-        ok: false,
+    it('retries with auth on 403 when initially unauthenticated', async () => {
+      // First call (unauthenticated): 403 (likely IP-based rate limit)
+      mockFetch.mockResolvedValueOnce(makeErrorResponse({
         status: 403,
         statusText: 'Forbidden',
+        headers: { 'x-ratelimit-remaining': '0' },
+        bodyJson: { message: 'API rate limit exceeded for 1.2.3.4.' },
+      }));
+
+      // Second call (with auth): 200
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => ({
+          title: 'Public issue',
+          body: 'Now accessible',
+          html_url: 'https://github.com/owner/repo/issues/888',
+        }),
       });
+
+      vi.mocked(authentication.getSession)
+        .mockResolvedValueOnce(undefined)
+        .mockResolvedValueOnce({
+          accessToken: 'retry-token',
+          id: 'session-1',
+          scopes: ['repo'],
+          account: { id: '1', label: 'testuser' },
+        } as any);
+
+      const result = await provider.resolveUrl('https://github.com/owner/repo/issues/888');
+
+      expect(result).toBeDefined();
+      expect(result?.title).toBe('#888: Public issue');
+      expect(mockFetch).toHaveBeenCalledTimes(2);
+    });
+
+    it('does NOT retry with auth on a generic 403 (no rate-limit signal)', async () => {
+      // Unauthenticated 403 without rate-limit headers — e.g., a permission
+      // policy denial. Prompting the user to sign in would be unhelpful here.
+      mockFetch.mockResolvedValueOnce(makeErrorResponse({
+        status: 403,
+        statusText: 'Forbidden',
+        bodyJson: { message: 'Must have admin rights to Repository.' },
+      }));
 
       await expect(
         provider.resolveUrl('https://github.com/owner/repo/issues/123'),
-      ).rejects.toThrow();
+      ).rejects.toThrow(/GitHub denied access.*Must have admin rights/);
+
+      expect(mockFetch).toHaveBeenCalledTimes(1);
+      // Only the initial silent session lookup should be made — no createIfNone prompt.
+      expect(vi.mocked(authentication.getSession)).toHaveBeenCalledTimes(1);
+    });
+
+    it('surfaces the retried response error when auth retry also fails', async () => {
+      // First (unauthenticated) request: 403 rate-limit-shaped → triggers retry.
+      mockFetch.mockResolvedValueOnce(makeErrorResponse({
+        status: 403,
+        headers: { 'x-ratelimit-remaining': '0' },
+        bodyJson: { message: 'API rate limit exceeded for 1.2.3.4.' },
+      }));
+      // Second (authenticated) request: 404 → distinct error from the retried
+      // response, not from the original 403.
+      mockFetch.mockResolvedValueOnce(makeErrorResponse({
+        status: 404,
+        bodyJson: { message: 'Not Found' },
+      }));
+
+      vi.mocked(authentication.getSession)
+        .mockResolvedValueOnce(undefined)
+        .mockResolvedValueOnce({
+          accessToken: 'retry-token',
+          id: 'session-1',
+          scopes: ['repo'],
+          account: { id: '1', label: 'testuser' },
+        } as any);
+
+      let caught: unknown;
+      try {
+        await provider.resolveUrl('https://github.com/owner/repo/issues/123');
+      } catch (err) {
+        caught = err;
+      }
+      expect(caught).toBeInstanceOf(Error);
+      const message = (caught as Error).message;
+      expect(message).toMatch(/not found/i);
+      // Make sure we don't surface the original 403 rate-limit message.
+      expect(message).not.toMatch(/rate limit/i);
+      expect(mockFetch).toHaveBeenCalledTimes(2);
+    });
+
+    it('throws rate-limit error on 403 when already authenticated and limit is hit', async () => {
+      vi.mocked(authentication.getSession).mockResolvedValueOnce({
+        accessToken: 'existing-token',
+        id: 'session-1',
+        scopes: ['repo'],
+        account: { id: '1', label: 'testuser' },
+      } as any);
+
+      const resetEpoch = Math.floor(Date.now() / 1000) + 1800; // 30 minutes from now
+      mockFetch.mockResolvedValueOnce(makeErrorResponse({
+        status: 403,
+        statusText: 'Forbidden',
+        headers: {
+          'x-ratelimit-remaining': '0',
+          'x-ratelimit-reset': String(resetEpoch),
+        },
+        bodyJson: { message: 'API rate limit exceeded for user ID 1.' },
+      }));
+
+      await expect(
+        provider.resolveUrl('https://github.com/owner/repo/issues/123'),
+      ).rejects.toThrow(/rate limit exceeded/i);
+    });
+
+    it('throws SSO error on 403 with x-github-sso header', async () => {
+      vi.mocked(authentication.getSession).mockResolvedValueOnce({
+        accessToken: 'existing-token',
+        id: 'session-1',
+        scopes: ['repo'],
+        account: { id: '1', label: 'testuser' },
+      } as any);
+
+      mockFetch.mockResolvedValueOnce(makeErrorResponse({
+        status: 403,
+        statusText: 'Forbidden',
+        headers: { 'x-github-sso': 'required; url=https://github.com/orgs/example/sso' },
+        bodyJson: { message: 'Resource protected by organization SAML enforcement.' },
+      }));
+
+      await expect(
+        provider.resolveUrl('https://github.com/owner/repo/issues/123'),
+      ).rejects.toThrow(/SSO authorization required/i);
+    });
+
+    it('throws generic 403 error (not rate limit / SSO) with API message', async () => {
+      vi.mocked(authentication.getSession).mockResolvedValueOnce({
+        accessToken: 'existing-token',
+        id: 'session-1',
+        scopes: ['repo'],
+        account: { id: '1', label: 'testuser' },
+      } as any);
+
+      mockFetch.mockResolvedValueOnce(makeErrorResponse({
+        status: 403,
+        statusText: 'Forbidden',
+        bodyJson: { message: 'Must have admin rights to Repository.' },
+      }));
+
+      await expect(
+        provider.resolveUrl('https://github.com/owner/repo/issues/123'),
+      ).rejects.toThrow(/Must have admin rights to Repository/);
+    });
+
+    it('throws auth error on 401 (does not blame "private repo")', async () => {
+      vi.mocked(authentication.getSession).mockResolvedValueOnce({
+        accessToken: 'existing-token',
+        id: 'session-1',
+        scopes: ['repo'],
+        account: { id: '1', label: 'testuser' },
+      } as any);
+
+      mockFetch.mockResolvedValueOnce(makeErrorResponse({
+        status: 401,
+        statusText: 'Unauthorized',
+        bodyJson: { message: 'Bad credentials' },
+      }));
+
+      await expect(
+        provider.resolveUrl('https://github.com/owner/repo/issues/123'),
+      ).rejects.toThrow(/authentication failed/i);
     });
 
     it('throws on 404 when already authenticated', async () => {
@@ -171,10 +330,7 @@ describe('resolveUrl', () => {
         account: { id: '1', label: 'testuser' },
       } as any);
 
-      mockFetch.mockResolvedValueOnce({
-        ok: false,
-        status: 404,
-      });
+      mockFetch.mockResolvedValueOnce(makeErrorResponse({ status: 404 }));
 
       await expect(
         provider.resolveUrl('https://github.com/owner/repo/issues/123'),
@@ -290,10 +446,7 @@ describe('resolveUrl', () => {
 
     it('retries with auth on 404 when initially unauthenticated', async () => {
       // First call (unauthenticated): 404
-      mockFetch.mockResolvedValueOnce({
-        ok: false,
-        status: 404,
-      });
+      mockFetch.mockResolvedValueOnce(makeErrorResponse({ status: 404 }));
 
       // Second call (with auth): 200
       mockFetch.mockResolvedValueOnce({
@@ -323,6 +476,39 @@ describe('resolveUrl', () => {
       expect(mockFetch).toHaveBeenCalledTimes(2);
     });
 
+    it('retries with auth on 403 when initially unauthenticated', async () => {
+      mockFetch.mockResolvedValueOnce(makeErrorResponse({
+        status: 403,
+        headers: { 'x-ratelimit-remaining': '0' },
+        bodyJson: { message: 'API rate limit exceeded for 1.2.3.4.' },
+      }));
+
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: async () => ({
+          title: 'Public PR',
+          body: 'Now accessible',
+          html_url: 'https://github.com/owner/repo/pull/777',
+        }),
+      });
+
+      vi.mocked(authentication.getSession)
+        .mockResolvedValueOnce(undefined)
+        .mockResolvedValueOnce({
+          accessToken: 'retry-token',
+          id: 'session-1',
+          scopes: ['repo'],
+          account: { id: '1', label: 'testuser' },
+        } as any);
+
+      const result = await provider.resolveUrl('https://github.com/owner/repo/pull/777');
+
+      expect(result).toBeDefined();
+      expect(result?.title).toBe('#777: Public PR');
+      expect(mockFetch).toHaveBeenCalledTimes(2);
+    });
+
     it('throws on 404 when already authenticated', async () => {
       // Mock silent auth to return a session (authenticated)
       vi.mocked(authentication.getSession).mockResolvedValueOnce({
@@ -332,10 +518,7 @@ describe('resolveUrl', () => {
         account: { id: '1', label: 'testuser' },
       } as any);
 
-      mockFetch.mockResolvedValueOnce({
-        ok: false,
-        status: 404,
-      });
+      mockFetch.mockResolvedValueOnce(makeErrorResponse({ status: 404 }));
 
       await expect(
         provider.resolveUrl('https://github.com/owner/repo/pull/123'),
@@ -346,28 +529,43 @@ describe('resolveUrl', () => {
       expect(vi.mocked(authentication.getSession)).toHaveBeenCalledTimes(1);
     });
 
-    it('throws on 403 Forbidden', async () => {
-      mockFetch.mockResolvedValueOnce({
-        ok: false,
+    it('throws rate-limit error on 403 Forbidden with rate-limit signature', async () => {
+      vi.mocked(authentication.getSession).mockResolvedValueOnce({
+        accessToken: 'existing-token',
+        id: 'session-1',
+        scopes: ['repo'],
+        account: { id: '1', label: 'testuser' },
+      } as any);
+
+      mockFetch.mockResolvedValueOnce(makeErrorResponse({
         status: 403,
         statusText: 'Forbidden',
-      });
+        headers: { 'x-ratelimit-remaining': '0' },
+        bodyJson: { message: 'API rate limit exceeded' },
+      }));
 
       await expect(
         provider.resolveUrl('https://github.com/owner/repo/pull/123'),
-      ).rejects.toThrow();
+      ).rejects.toThrow(/rate limit exceeded/i);
     });
 
-    it('throws on 401 Unauthorized', async () => {
-      mockFetch.mockResolvedValueOnce({
-        ok: false,
+    it('throws auth error on 401 Unauthorized', async () => {
+      vi.mocked(authentication.getSession).mockResolvedValueOnce({
+        accessToken: 'existing-token',
+        id: 'session-1',
+        scopes: ['repo'],
+        account: { id: '1', label: 'testuser' },
+      } as any);
+
+      mockFetch.mockResolvedValueOnce(makeErrorResponse({
         status: 401,
         statusText: 'Unauthorized',
-      });
+        bodyJson: { message: 'Bad credentials' },
+      }));
 
       await expect(
         provider.resolveUrl('https://github.com/owner/repo/pull/123'),
-      ).rejects.toThrow();
+      ).rejects.toThrow(/authentication failed/i);
     });
 
     it('handles case-insensitive URLs', async () => {

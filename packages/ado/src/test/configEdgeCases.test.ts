@@ -250,7 +250,7 @@ describe('ADO provider config edge cases', () => {
 
     it('unrelated config changes do not trigger reconfiguration', () => {
       const unrelatedKeys = [
-        'devDocket.logLevel',
+        'devDocket.showInboxNotifications',
         'devDocketGithub.repos',
         'editor.fontSize',
       ];
@@ -327,14 +327,14 @@ describe('ADO provider config edge cases', () => {
       const { activate } = await import('../extension');
       await activate(context);
 
-      expect(mockRegisterProvider).toHaveBeenCalledTimes(2);
+      expect(mockRegisterProvider).toHaveBeenCalledTimes(3);
     });
 
     it('reconfigures providers on projects change', async () => {
       const { activate } = await import('../extension');
       await activate(context);
 
-      expect(mockRegisterProvider).toHaveBeenCalledTimes(2);
+      expect(mockRegisterProvider).toHaveBeenCalledTimes(3);
 
       // Change projects
       configValues.projects = ['myorg/NewProject'];
@@ -343,14 +343,14 @@ describe('ADO provider config edge cases', () => {
       }
 
       // New providers registered
-      expect(mockRegisterProvider).toHaveBeenCalledTimes(4);
+      expect(mockRegisterProvider).toHaveBeenCalledTimes(6);
     });
 
     it('reconfigures providers on refreshInterval change', async () => {
       const { activate } = await import('../extension');
       await activate(context);
 
-      expect(mockRegisterProvider).toHaveBeenCalledTimes(2);
+      expect(mockRegisterProvider).toHaveBeenCalledTimes(3);
 
       configValues.refreshIntervalSeconds = 0;
       for (const listener of configChangeListeners) {
@@ -359,7 +359,7 @@ describe('ADO provider config edge cases', () => {
         });
       }
 
-      expect(mockRegisterProvider).toHaveBeenCalledTimes(4);
+      expect(mockRegisterProvider).toHaveBeenCalledTimes(6);
     });
   });
 });

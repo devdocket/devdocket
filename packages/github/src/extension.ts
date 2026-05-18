@@ -2,65 +2,28 @@ import * as vscode from 'vscode';
 import { GitHubIssueProvider } from './githubProvider';
 import { GitHubPrReviewProvider } from './githubPrReviewProvider';
 import { GitHubActionsWatcher } from './githubActionsWatcher';
+import { GitHubAdvancedSecurityWatcher } from './githubAdvancedSecurityWatcher';
 import { GitHubPRWatcher } from './githubPRWatcher';
 import { GitHubMyPrsProvider } from './githubMyPrsProvider';
 import { GitHubMentionsProvider } from './githubMentionsProvider';
-import { validateRefreshInterval } from '@devdocket/shared';
-import { initLogger, setLogLevel, logger, resolveLogLevel } from './logger';
+import { validateRefreshInterval, type DevDocketApi } from '@devdocket/shared';
+import { logger, setLogger } from './logger';
 
-let issueProvider: GitHubIssueProvider | undefined;
-let prReviewProvider: GitHubPrReviewProvider | undefined;
-let myPrsProvider: GitHubMyPrsProvider | undefined;
-let mentionsProvider: GitHubMentionsProvider | undefined;
-let providerRegistration: vscode.Disposable | undefined;
-let prReviewRegistration: vscode.Disposable | undefined;
-let watcherRegistration: vscode.Disposable | undefined;
-let prWatcherRegistration: vscode.Disposable | undefined;
-let myPrsRegistration: vscode.Disposable | undefined;
-let mentionsRegistration: vscode.Disposable | undefined;
+export async function activate(context: vscode.ExtensionContext): Promise<void> {
+  const log = vscode.window.createOutputChannel('DevDocket GitHub', { log: true });
+  context.subscriptions.push(log);
+  setLogger(log);
 
-export async function activate(_context: vscode.ExtensionContext): Promise<void> {
-  const outputChannel = vscode.window.createOutputChannel('DevDocket GitHub');
-  _context.subscriptions.push(outputChannel);
-
-  const logLevelConfig = vscode.workspace.getConfiguration('devDocket').get<string>('logLevel', 'info');
-  initLogger(outputChannel, resolveLogLevel(logLevelConfig));
-  if (!['debug', 'info', 'warn', 'error'].includes(logLevelConfig)) {
-    logger.warn(`Invalid log level '${logLevelConfig}', falling back to 'info'. Valid values: debug, info, warn, error`);
-  }
-
-  _context.subscriptions.push(
-    vscode.workspace.onDidChangeConfiguration(e => {
-      if (e.affectsConfiguration('devDocket.logLevel')) {
-        const newLevel = vscode.workspace.getConfiguration('devDocket').get<string>('logLevel', 'info');
-        setLogLevel(resolveLogLevel(newLevel));
-        if (!['debug', 'info', 'warn', 'error'].includes(newLevel)) {
-          logger.warn(`Invalid log level '${newLevel}', falling back to 'info'. Valid values: debug, info, warn, error`);
-        }
-      }
-    }),
-  );
-
-  logger.info('DevDocket GitHub activating...');
+  log.info('DevDocket GitHub activating...');
 
   // Acquire the DevDocket API from the core extension
-  const coreExtension = vscode.extensions.getExtension('mthalman.devdocket');
+  const coreExtension = vscode.extensions.getExtension('devdocket.devdocket');
   if (!coreExtension) {
-    logger.error('Core extension not found');
+    logger.error('Core extension devdocket.devdocket not found. Install or enable DevDocket.');
     return;
   }
 
-  let api;
-  try {
-    api = coreExtension.isActive
-      ? coreExtension.exports
-      : await coreExtension.activate();
-  } catch (err: unknown) {
-    const message = err instanceof Error ? err.message : String(err);
-    logger.error(`Failed to activate core extension — ${message}`);
-    void vscode.window.showErrorMessage(`DevDocket GitHub: Failed to activate core extension — ${message}`);
-    return;
-  }
+  const api = coreExtension.exports as DevDocketApi;
 
   if (!api || typeof api.registerProvider !== 'function') {
     logger.error('Core extension API not available');
@@ -68,57 +31,66 @@ export async function activate(_context: vscode.ExtensionContext): Promise<void>
   }
 
   // Register the GitHub issue provider
-  issueProvider = new GitHubIssueProvider();
-  const config = vscode.workspace.getConfiguration('devDocketGithub');
-  const intervalSeconds = validateRefreshInterval(
-    config.get<number>('refreshIntervalSeconds', 300), logger,
-  );
-  issueProvider.startPeriodicRefresh(intervalSeconds);
-
-  providerRegistration = api.registerProvider(issueProvider);
+  const issueProvider = new GitHubIssueProvider();
 
   // Register the GitHub PR review provider
-  prReviewProvider = new GitHubPrReviewProvider();
-  prReviewProvider.startPeriodicRefresh(intervalSeconds);
-  prReviewRegistration = api.registerProvider(prReviewProvider);
+  const prReviewProvider = new GitHubPrReviewProvider();
 
   // Register the My PRs provider (authored PRs with status tracking)
-  myPrsProvider = new GitHubMyPrsProvider();
-  myPrsProvider.startPeriodicRefresh(intervalSeconds);
-  myPrsRegistration = api.registerProvider(myPrsProvider);
+  const myPrsProvider = new GitHubMyPrsProvider();
 
   // Register the GitHub Mentions provider (@mentioned issues and PRs)
-  mentionsProvider = new GitHubMentionsProvider(_context);
-  mentionsProvider.startPeriodicRefresh(intervalSeconds);
-  mentionsRegistration = api.registerProvider(mentionsProvider);
+  const mentionsProvider = new GitHubMentionsProvider(context);
 
-  // Register the GitHub Actions watcher
+  const providers = [issueProvider, prReviewProvider, myPrsProvider, mentionsProvider];
+  const configureProviders = () => {
+    const config = vscode.workspace.getConfiguration('devDocketGithub');
+    const intervalSeconds = validateRefreshInterval(
+      config.get<number>('refreshIntervalSeconds', 300), logger,
+    );
+    for (const provider of providers) {
+      provider.startPeriodicRefresh(intervalSeconds);
+    }
+  };
+
+  configureProviders();
+
+  context.subscriptions.push(
+    api.registerProvider(issueProvider), issueProvider,
+    api.registerProvider(prReviewProvider), prReviewProvider,
+    api.registerProvider(myPrsProvider), myPrsProvider,
+    api.registerProvider(mentionsProvider), mentionsProvider,
+  );
+
+  let watcherCount = 0;
   if (typeof api.registerRunWatcher === 'function') {
-    watcherRegistration = api.registerRunWatcher(new GitHubActionsWatcher());
+    context.subscriptions.push(
+      api.registerRunWatcher(new GitHubActionsWatcher()),
+      api.registerRunWatcher(new GitHubAdvancedSecurityWatcher()),
+    );
+    watcherCount = 2;
   }
 
-  // Register the GitHub PR watcher
+  let prWatcherRegistered = false;
   if (typeof api.registerPRWatcher === 'function') {
-    prWatcherRegistration = api.registerPRWatcher(new GitHubPRWatcher());
+    context.subscriptions.push(api.registerPRWatcher(new GitHubPRWatcher()));
+    prWatcherRegistered = true;
   }
+
+  context.subscriptions.push(
+    vscode.workspace.onDidChangeConfiguration(e => {
+      if (e.affectsConfiguration('devDocketGithub.refreshIntervalSeconds')) {
+        configureProviders();
+      }
+    }),
+  );
 
   const parts = ['4 providers'];
-  if (watcherRegistration) { parts.push('1 watcher'); }
-  if (prWatcherRegistration) { parts.push('1 PR watcher'); }
+  if (watcherCount > 0) { parts.push(`${watcherCount} watcher${watcherCount === 1 ? '' : 's'}`); }
+  if (prWatcherRegistered) { parts.push('1 PR watcher'); }
   logger.info(`DevDocket GitHub activated, registered ${parts.join(' + ')}`);
 }
 
 export function deactivate(): void {
-  logger.info('DevDocket GitHub deactivating...');
-  providerRegistration?.dispose();
-  prReviewRegistration?.dispose();
-  watcherRegistration?.dispose();
-  prWatcherRegistration?.dispose();
-  myPrsRegistration?.dispose();
-  mentionsRegistration?.dispose();
-  issueProvider?.dispose();
-  prReviewProvider?.dispose();
-  myPrsProvider?.dispose();
-  mentionsProvider?.dispose();
-  logger.info('DevDocket GitHub deactivated');
+  // Resources disposed via subscriptions
 }

@@ -1,6 +1,6 @@
 import * as vscode from 'vscode';
-import { DevDocketProvider, DiscoveredItem, type ResolvedItem } from '../api/types';
-import { DiscoveredStateStore, InboxState } from '../storage/discoveredStateStore';
+import { DevDocketProvider, ProviderItem, type ResolvedItem } from '../api/types';
+import { InboxStateStore, InboxState } from '../storage/inboxStateStore';
 import { ProviderLabelCache } from '../storage/providerLabelCache';
 import { logger } from './logger';
 import { WorkItemState } from '../models/workItem';
@@ -16,26 +16,41 @@ export interface ProviderHealthStatus {
   lastError?: string;
 }
 
+export type ProviderRefreshOutcome = 'success' | 'failed' | 'timedOut' | 'cancelled';
+
+export interface ProviderRefreshProgress {
+  providerId: string;
+  providerLabel: string;
+  completed: number;
+  total: number;
+  pendingProviders: Array<{ id: string; label: string }>;
+  outcome: ProviderRefreshOutcome;
+}
+
+function isActiveWorkItemState(state: WorkItemState | undefined): boolean {
+  return state === WorkItemState.New || state === WorkItemState.InProgress || state === WorkItemState.Paused;
+}
+
 /**
  * Central registry for {@link DevDocketProvider} instances.
  *
- * Manages provider lifecycle, tracks discovered items from each provider,
- * and coordinates inbox state persistence through the {@link DiscoveredStateStore}.
- * Fires events when providers are registered or when their discovered items change.
+ * Manages provider lifecycle, tracks provider items from each provider,
+ * and coordinates inbox state persistence through the {@link InboxStateStore}.
+ * Fires events when providers are registered or when their provider items change.
  */
 export class ProviderRegistry {
   static readonly REFRESH_TIMEOUT_MS = 30_000;
   /**
-   * Maximum number of discovered items accepted from a single provider per refresh.
+   * Maximum number of provider items accepted from a single provider per refresh.
    * Excess items are truncated after logging a warning.
    */
   static readonly MAX_ITEMS_PER_PROVIDER = 10_000;
   private readonly providers = new Map<string, DevDocketProvider>();
   private readonly subscriptions = new Map<string, { dispose(): void }>();
-  private readonly discoveredItems = new Map<string, DiscoveredItem[]>();
-  private readonly _onDidChangeDiscoveredItems = new vscode.EventEmitter<void>();
-  /** Fired whenever any provider's discovered items change. */
-  readonly onDidChangeDiscoveredItems = this._onDidChangeDiscoveredItems.event;
+  private readonly providerItems = new Map<string, ProviderItem[]>();
+  private readonly _onDidChangeProviderItems = new vscode.EventEmitter<void>();
+  /** Fired whenever any provider's provider items change. */
+  readonly onDidChangeProviderItems = this._onDidChangeProviderItems.event;
   private readonly _onDidRegisterProvider = new vscode.EventEmitter<void>();
   /** Fired when a new provider is registered. */
   readonly onDidRegisterProvider = this._onDidRegisterProvider.event;
@@ -45,12 +60,15 @@ export class ProviderRegistry {
   private readonly _onDidChangeProviderHealth = new vscode.EventEmitter<string>();
   /** Fired when a provider's health info changes (status, lastError, or lastRefreshTime), with the provider ID. */
   readonly onDidChangeProviderHealth = this._onDidChangeProviderHealth.event;
+  private readonly _onDidChangeProviderRefreshState = new vscode.EventEmitter<string>();
+  /** Fired when a provider starts or stops refreshing, with the provider ID. */
+  readonly onDidChangeProviderRefreshState = this._onDidChangeProviderRefreshState.event;
   private readonly _onDidRefreshProvider = new vscode.EventEmitter<string>();
   /**
-   * Fired after a provider's discovered items have been processed, carrying the
+   * Fired after a provider's provider items have been processed, carrying the
    * provider ID. Listeners can use this to run cross-cutting checks (e.g.
    * auto-complete) against the full WorkGraph rather than just the provider's
-   * own discovered-items list.
+   * own provider-items list.
    */
   readonly onDidRefreshProvider = this._onDidRefreshProvider.event;
   /** Previous discovered-item external IDs per provider, for fallback disappearance detection. */
@@ -60,6 +78,14 @@ export class ProviderRegistry {
   private readonly healthStatus = new Map<string, ProviderHealthStatus>();
   private readonly _loadingProviders = new Set<string>();
   private readonly _pendingRefreshes = new Map<string, { cts: vscode.CancellationTokenSource; timeoutId: ReturnType<typeof setTimeout> }>();
+  /**
+   * Per-provider serialization queue for handleProviderItems. A provider that
+   * fires onDidDiscoverItems twice in rapid succession would otherwise have two
+   * async handlers interleave their reads/writes against the state store and
+   * the providerItems map. Chaining each new invocation onto the previous
+   * one's promise guarantees ordered, atomic processing per provider.
+   */
+  private readonly _handleQueues = new Map<string, Promise<void>>();
   private _disposed = false;
 
   /** Whether any provider is currently performing its initial refresh. */
@@ -73,10 +99,11 @@ export class ProviderRegistry {
   }
 
   constructor(
-    private readonly stateStore: DiscoveredStateStore,
+    private readonly stateStore: InboxStateStore,
     private readonly labelCache?: ProviderLabelCache,
     private readonly getWorkItemState?: (providerId: string, externalId: string) => WorkItemState | undefined,
-    private readonly addActivity?: (providerId: string, externalId: string, type: ActivityType, detail?: string) => Promise<void>,
+    // Kept for constructor compatibility; suppressed version bumps no longer log activity.
+    _addActivity?: (providerId: string, externalId: string, type: ActivityType, detail?: string) => Promise<void>,
   ) {}
 
   /**
@@ -100,24 +127,47 @@ export class ProviderRegistry {
         logger.debug(`Failed to cache provider label for provider ${provider.id} (label: ${provider.label})`, err);
       });
     }
-    if (!this.discoveredItems.has(provider.id)) {
-      this.discoveredItems.set(provider.id, []);
+    if (!this.providerItems.has(provider.id)) {
+      this.providerItems.set(provider.id, []);
     }
     logger.info(`Registered provider: ${provider.id} (${provider.label})`);
 
     const sub = provider.onDidDiscoverItems((items) => {
-      void this.handleDiscoveredItems(provider.id, items).catch(err => logger.error('handleDiscoveredItems failed', err));
+      // Serialize per-provider so two emissions in rapid succession don't
+      // interleave their reads of stateStore / writes to providerItems.
+      // When nothing is in flight we invoke synchronously so the handler's
+      // sync prefix (setting providerItems, queueing setStates) runs
+      // before the listener returns — preserving the contract that callers
+      // can observe the updated provider-items map immediately after a
+      // synchronous fire-and-forget event emission.
+      const tail = this._handleQueues.get(provider.id);
+      const startNext = (): Promise<void> =>
+        this.handleProviderItems(provider.id, items)
+          .catch(err => logger.error('handleProviderItems failed', err));
+      const next = tail
+        ? tail.catch(() => undefined).then(startNext)
+        : startNext();
+      const tracked = next.finally(() => {
+        // Drop our queue slot if we're still the tail. Skipping this is
+        // safe (it just means a stale resolved promise hangs around until
+        // the next emission replaces it) but cleaning up keeps the map
+        // bounded for providers that only ever emit once.
+        if (this._handleQueues.get(provider.id) === tracked) {
+          this._handleQueues.delete(provider.id);
+        }
+      });
+      this._handleQueues.set(provider.id, tracked);
     });
     this.subscriptions.set(provider.id, sub);
 
     this._loadingProviders.add(provider.id);
     this._onDidRegisterProvider.fire();
-    this._onDidChangeDiscoveredItems.fire();
+    this._onDidChangeProviderItems.fire();
     this.refreshWithTimeout(provider)
       .finally(() => {
         this._loadingProviders.delete(provider.id);
         if (!this._disposed) {
-          this._onDidChangeDiscoveredItems.fire();
+          this._onDidChangeProviderItems.fire();
         }
       });
 
@@ -126,13 +176,14 @@ export class ProviderRegistry {
       this.providers.delete(provider.id);
       this.subscriptions.get(provider.id)?.dispose();
       this.subscriptions.delete(provider.id);
-      this.discoveredItems.delete(provider.id);
+      this.providerItems.delete(provider.id);
       this.previousDiscoveredIds.delete(provider.id);
       this.lastRefreshTruncated.delete(provider.id);
       this.healthStatus.delete(provider.id);
       this._loadingProviders.delete(provider.id);
+      this._handleQueues.delete(provider.id);
       if (!this._disposed) {
-        this._onDidChangeDiscoveredItems.fire();
+        this._onDidChangeProviderItems.fire();
       }
     });
   }
@@ -176,27 +227,39 @@ export class ProviderRegistry {
     return this.healthStatus.get(providerId) ?? { status: 'unknown' };
   }
 
+  /** Whether a provider refresh is currently in flight. */
+  isProviderRefreshing(providerId: string): boolean {
+    return this._pendingRefreshes.has(providerId);
+  }
+
   /**
-   * Get the discovered items for a specific provider.
+   * Get the provider items for a specific provider.
    *
    * @param providerId - The provider identifier.
-   * @returns The array of discovered items, or an empty array if the provider has none.
+   * @returns The array of provider items, or an empty array if the provider has none.
    */
-  getDiscoveredItems(providerId: string): DiscoveredItem[] {
-    return this.discoveredItems.get(providerId) ?? [];
+  getProviderItems(providerId: string): ProviderItem[] {
+    return this.providerItems.get(providerId) ?? [];
   }
 
   /**
-   * Get all discovered items across every registered provider.
+   * Get all provider items across every registered provider.
    *
-   * @returns A map keyed by provider ID, with each value being the provider's discovered items.
+   * @returns A map keyed by provider ID, with each value being the provider's provider items.
    */
-  getAllDiscoveredItems(): Map<string, DiscoveredItem[]> {
-    return this.discoveredItems;
+  getAllProviderItems(): Map<string, ProviderItem[]> {
+    return this.providerItems;
   }
 
   /**
-   * Check whether an item was in the provider's discovered-items list before
+   * Find one live provider item by provider and external id.
+   */
+  findProviderItem(providerId: string, externalId: string): ProviderItem | undefined {
+    return this.getProviderItems(providerId).find(item => item.externalId === externalId);
+  }
+
+  /**
+   * Check whether an item was in the provider's provider-items list before
    * the most recent refresh. Used as a fallback for auto-complete when the
    * provider does not implement `getClosedItems`.
    */
@@ -239,23 +302,58 @@ export class ProviderRegistry {
    * Errors from individual providers are logged but do not reject the
    * returned promise, so one failing provider does not block others.
    */
-  async refreshAll(): Promise<void> {
+  async refreshAll(
+    token?: vscode.CancellationToken,
+    onProgress?: (progress: ProviderRefreshProgress) => void,
+  ): Promise<void> {
     const providers = Array.from(this.providers.values());
-    const results = await Promise.allSettled(
-      providers.map((p) => {
-        logger.debug(`Provider ${p.id} refreshing...`);
-        return this.refreshWithTimeout(p);
-      }),
-    );
-    for (let i = 0; i < results.length; i++) {
-      const result = results[i];
-      if (result.status === 'rejected') {
-        logger.error(`Provider "${providers[i].id}" refresh failed`, result.reason);
+    const completedProviderIds = new Set<string>();
+    let completed = 0;
+
+    await Promise.all(providers.map(async (provider) => {
+      let outcome: ProviderRefreshOutcome;
+      if (token?.isCancellationRequested) {
+        outcome = 'cancelled';
+      } else {
+        logger.debug(`Provider ${provider.id} refreshing...`);
+        outcome = await this.refreshWithTimeout(provider, token);
       }
-    }
+
+      completedProviderIds.add(provider.id);
+      completed++;
+      const progressEvent: ProviderRefreshProgress = {
+        providerId: provider.id,
+        providerLabel: provider.label,
+        completed,
+        total: providers.length,
+        pendingProviders: providers
+          .filter(p => !completedProviderIds.has(p.id))
+          .map(p => ({ id: p.id, label: p.label })),
+        outcome,
+      };
+      try {
+        onProgress?.(progressEvent);
+      } catch (err) {
+        logger.warn('Provider refresh progress callback failed', err);
+      }
+    }));
   }
 
-  private refreshWithTimeout(provider: DevDocketProvider): Promise<void> {
+  /** Refresh a single registered provider by ID. */
+  async refreshProvider(providerId: string, token?: vscode.CancellationToken): Promise<ProviderRefreshOutcome> {
+    const provider = this.providers.get(providerId);
+    if (!provider) {
+      logger.warn(`Provider not registered: ${providerId}`);
+      return 'cancelled';
+    }
+    if (token?.isCancellationRequested) {
+      return 'cancelled';
+    }
+    logger.debug(`Provider ${provider.id} refreshing...`);
+    return this.refreshWithTimeout(provider, token);
+  }
+
+  private refreshWithTimeout(provider: DevDocketProvider, parentToken?: vscode.CancellationToken): Promise<ProviderRefreshOutcome> {
     this.cancelPendingRefresh(provider.id);
     const cts = new vscode.CancellationTokenSource();
     let timedOut = false;
@@ -266,38 +364,65 @@ export class ProviderRegistry {
       }
       cts.cancel();
     }, ProviderRegistry.REFRESH_TIMEOUT_MS);
+    const parentSub = parentToken?.onCancellationRequested?.(() => cts.cancel());
+    if (parentToken?.isCancellationRequested) {
+      cts.cancel();
+    }
     const entry = { cts, timeoutId };
     this._pendingRefreshes.set(provider.id, entry);
+    this._onDidChangeProviderRefreshState.fire(provider.id);
 
-    const refreshPromise = provider.refresh(cts.token)
-      .then(() => {
-        if (!cts.token.isCancellationRequested) {
-          this.updateHealth(provider.id, 'healthy');
+    let providerRefreshPromise: Promise<void>;
+    try {
+      providerRefreshPromise = Promise.resolve(provider.refresh(cts.token));
+    } catch (err) {
+      providerRefreshPromise = Promise.reject(err);
+    }
+
+    const refreshPromise = providerRefreshPromise
+      .then<ProviderRefreshOutcome>(() => {
+        if (timedOut) {
+          return 'timedOut';
         }
+        if (cts.token.isCancellationRequested) {
+          return 'cancelled';
+        }
+        this.updateHealth(provider.id, 'healthy');
+        return 'success';
       })
-      .catch((err: unknown) => {
-        if (!cts.token.isCancellationRequested) {
-          logger.error(`Provider "${provider.id}" refresh failed`, err);
-          const message = err instanceof Error ? err.message : String(err);
-          this.updateHealth(provider.id, 'unhealthy', message);
+      .catch<ProviderRefreshOutcome>((err: unknown) => {
+        if (timedOut) {
+          return 'timedOut';
         }
+        if (cts.token.isCancellationRequested) {
+          logger.debug(`Provider "${provider.id}" refresh cancelled`, err);
+          return 'cancelled';
+        }
+        logger.error(`Provider "${provider.id}" refresh failed`, err);
+        const message = err instanceof Error ? err.message : String(err);
+        this.updateHealth(provider.id, 'unhealthy', message);
+        return 'failed';
       });
 
-    const cancelledPromise = new Promise<void>((resolve) => {
+    const cancelledPromise = new Promise<ProviderRefreshOutcome>((resolve) => {
       cts.token.onCancellationRequested(() => {
         if (timedOut) {
           this.updateHealth(provider.id, 'unhealthy', 'Refresh timed out');
+          resolve('timedOut');
+          return;
         }
-        resolve();
+        resolve('cancelled');
       });
     });
 
     return Promise.race([refreshPromise, cancelledPromise])
       .finally(() => {
         clearTimeout(timeoutId);
+        parentSub?.dispose();
         // Only clean up if this entry is still the current one for this provider
         if (this._pendingRefreshes.get(provider.id) === entry) {
           this._pendingRefreshes.delete(provider.id);
+          this._onDidChangeProviderRefreshState.fire(provider.id);
         }
         cts.dispose();
       });
@@ -310,10 +435,14 @@ export class ProviderRegistry {
       pending.cts.cancel();
       // CTS is disposed in refreshWithTimeout's finally block
       this._pendingRefreshes.delete(providerId);
+      this._onDidChangeProviderRefreshState.fire(providerId);
     }
   }
 
   private updateHealth(providerId: string, status: 'healthy' | 'unhealthy', lastError?: string): void {
+    if (this._disposed || !this.providers.has(providerId)) {
+      return;
+    }
     const prev = this.healthStatus.get(providerId);
     const next: ProviderHealthStatus = {
       status,
@@ -333,10 +462,27 @@ export class ProviderRegistry {
     }
   }
 
-  private async handleDiscoveredItems(providerId: string, items: DiscoveredItem[]): Promise<void> {
-    if (this._disposed) {
+  private async handleProviderItems(providerId: string, items: ProviderItem[]): Promise<void> {
+    if (this._disposed || !this.providers.has(providerId)) {
       return;
     }
+    // Receiving items via onDidDiscoverItems is a "successful refresh" signal.
+    // Providers extending BaseProvider drive their own periodic refresh via
+    // setInterval, which calls doBackgroundRefresh() directly and bypasses
+    // refreshWithTimeout(), so this is the only place we learn about those
+    // background successes. Without this, a provider that went unhealthy
+    // (e.g. initial-refresh timeout) would never recover until the next
+    // user-triggered refreshAll(). updateHealth is a no-op when status is
+    // unchanged, so calling it on every emission is cheap.
+    //
+    // Ordering with refreshWithTimeout: VS Code EventEmitter.fire is
+    // synchronous, so a provider that fires items mid-refresh and then
+    // throws will see "healthy" set first (here) followed by "unhealthy"
+    // set in refreshWithTimeout's .catch(). Net state is correctly
+    // unhealthy. The only way an error could be masked is if the provider
+    // catches its own errors and only logs them — exactly the anti-pattern
+    // that providers.instructions.md warns against.
+    this.updateHealth(providerId, 'healthy');
     let wasTruncated = false;
     if (items.length > ProviderRegistry.MAX_ITEMS_PER_PROVIDER) {
       logger.warn(
@@ -352,14 +498,13 @@ export class ProviderRegistry {
     // Snapshot previous IDs before replacing, for fallback disappearance detection.
     // Always update — even when prevItems is empty — to avoid stale snapshots from
     // an earlier non-empty refresh persisting across an empty intermediate refresh.
-    const prevItems = this.discoveredItems.get(providerId) ?? [];
+    const prevItems = this.providerItems.get(providerId) ?? [];
     this.previousDiscoveredIds.set(providerId, new Set(prevItems.map(i => i.externalId)));
     this.lastRefreshTruncated.set(providerId, wasTruncated);
-    this.discoveredItems.set(providerId, items);
+    this.providerItems.set(providerId, items);
 
     const newUnseenUpdates: Array<{ providerId: string; externalId: string; state: 'unseen'; version?: string; resurfaceVersion?: string }> = [];
     const versionBackfills: Array<{ providerId: string; externalId: string; state: InboxState; version?: string; resurfaceVersion?: string }> = [];
-    const activityEntries: Array<{ providerId: string; externalId: string }> = [];
 
     for (const item of items) {
       const existing = this.stateStore.getState(providerId, item.externalId);
@@ -368,17 +513,18 @@ export class ProviderRegistry {
         if (item.version !== undefined) { update.version = item.version; }
         if (item.resurfaceVersion !== undefined) { update.resurfaceVersion = item.resurfaceVersion; }
         newUnseenUpdates.push(update);
-      } else if (existing === 'accepted') {
+      } else if (existing === 'accepted' || existing === 'dismissed') {
         let versionTriggered = false;
         let resurfaceVersionTriggered = false;
-        let needsBackfill = false;
+        let needsAcceptedBackfill = false;
+        let needsDismissedResurfaceVersionBackfill = false;
 
-        if (item.version !== undefined) {
+        if (existing === 'accepted' && item.version !== undefined) {
           const storedVersion = this.stateStore.getVersion(providerId, item.externalId);
           if (storedVersion !== undefined && storedVersion !== item.version) {
             versionTriggered = true;
           } else if (storedVersion === undefined) {
-            needsBackfill = true;
+            needsAcceptedBackfill = true;
           }
         }
 
@@ -387,36 +533,42 @@ export class ProviderRegistry {
           if (storedRV !== undefined && storedRV !== item.resurfaceVersion) {
             resurfaceVersionTriggered = true;
           } else if (storedRV === undefined) {
-            needsBackfill = true;
+            if (existing === 'accepted') {
+              needsAcceptedBackfill = true;
+            } else {
+              needsDismissedResurfaceVersionBackfill = true;
+            }
           }
         }
 
-        // resurfaceVersion always resurfaces (hard); version checks work item state (soft)
-        let shouldResurface = resurfaceVersionTriggered;
-        let suppressedVersionChange = false;
-        if (versionTriggered && !shouldResurface) {
-          const wiState = this.getWorkItemState?.(providerId, item.externalId);
-          if (wiState === WorkItemState.New || wiState === WorkItemState.InProgress || wiState === WorkItemState.Paused) {
-            // Suppress: backfill version instead of resurfacing
-            suppressedVersionChange = true;
-          } else {
-            shouldResurface = true;
-          }
-        }
+        const hasTrigger = versionTriggered || resurfaceVersionTriggered;
+        const suppressForActiveWorkItem = hasTrigger && isActiveWorkItemState(this.getWorkItemState?.(providerId, item.externalId));
+        const shouldResurface = hasTrigger && !suppressForActiveWorkItem;
 
         if (shouldResurface) {
           const update: typeof newUnseenUpdates[number] = { providerId, externalId: item.externalId, state: 'unseen' };
           if (item.version !== undefined) { update.version = item.version; }
           if (item.resurfaceVersion !== undefined) { update.resurfaceVersion = item.resurfaceVersion; }
           newUnseenUpdates.push(update);
-        } else if (suppressedVersionChange || needsBackfill) {
+        } else if (existing === 'accepted' && (suppressForActiveWorkItem || needsAcceptedBackfill)) {
           const update: typeof versionBackfills[number] = { providerId, externalId: item.externalId, state: 'accepted' };
           if (item.version !== undefined) { update.version = item.version; }
           if (item.resurfaceVersion !== undefined) { update.resurfaceVersion = item.resurfaceVersion; }
           versionBackfills.push(update);
-          if (suppressedVersionChange) {
-            activityEntries.push({ providerId, externalId: item.externalId });
-          }
+        } else if (existing === 'dismissed' && suppressForActiveWorkItem) {
+          versionBackfills.push({
+            providerId,
+            externalId: item.externalId,
+            state: 'dismissed',
+            resurfaceVersion: item.resurfaceVersion,
+          });
+        } else if (needsDismissedResurfaceVersionBackfill) {
+          versionBackfills.push({
+            providerId,
+            externalId: item.externalId,
+            state: 'dismissed',
+            resurfaceVersion: item.resurfaceVersion,
+          });
         }
       } else if (existing === 'unseen') {
         if (item.version !== undefined || item.resurfaceVersion !== undefined) {
@@ -441,26 +593,12 @@ export class ProviderRegistry {
         if (!this._disposed && newUnseenUpdates.length > 0) {
           this._onDidAddNewUnseenItems.fire(newUnseenUpdates.length);
         }
-
-        // Log activity only after state was successfully persisted
-        if (!this._disposed && this.addActivity && activityEntries.length > 0) {
-          const results = await Promise.allSettled(
-            activityEntries.map(entry =>
-              this.addActivity!(entry.providerId, entry.externalId, 'version-updated'),
-            ),
-          );
-          for (const result of results) {
-            if (result.status === 'rejected') {
-              logger.error('Failed to log version-updated activity', result.reason);
-            }
-          }
-        }
       } catch (err) {
-        logger.error('Failed to persist discovered states', err);
+        logger.error('Failed to persist inbox states', err);
       }
     }
     if (!this._disposed) {
-      this._onDidChangeDiscoveredItems.fire();
+      this._onDidChangeProviderItems.fire();
       this._onDidRefreshProvider.fire(providerId);
     }
   }
@@ -476,14 +614,16 @@ export class ProviderRegistry {
       // CTS is disposed in refreshWithTimeout's finally block
     }
     this._pendingRefreshes.clear();
+    this._handleQueues.clear();
     for (const sub of this.subscriptions.values()) {
       sub.dispose();
     }
     this.subscriptions.clear();
-    this._onDidChangeDiscoveredItems.dispose();
+    this._onDidChangeProviderItems.dispose();
     this._onDidRegisterProvider.dispose();
     this._onDidAddNewUnseenItems.dispose();
     this._onDidChangeProviderHealth.dispose();
+    this._onDidChangeProviderRefreshState.dispose();
     this._onDidRefreshProvider.dispose();
   }
 }

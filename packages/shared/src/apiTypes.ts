@@ -1,7 +1,37 @@
 import type { CancellationTokenLike, DevDocketRunWatcher } from './runWatcher';
 import type { DevDocketPRWatcher } from './prWatcher';
-import type { Disposable, Event, DiscoveredItem, ResolvedItem } from './baseProvider';
+import type { Disposable, Event, ProviderItem, ResolvedItem } from './baseProvider';
 import type { WorkItem, ActivityType } from './workItem';
+
+/**
+ * Rendered representation of an activity log entry's `detail` field,
+ * returned by an {@link ActivityDetailRenderer}.
+ *
+ * The shape is plain JSON so it can be serialised across the webview
+ * boundary.
+ *
+ * - `text` — a single string rendered verbatim where the raw detail
+ *   would otherwise appear.
+ * - `fields` — an ordered set of label/value rows rendered as a
+ *   definition list. Use this for structured payloads that benefit
+ *   from labelled per-field display.
+ */
+export type ActivityDetailRender =
+  | { readonly kind: 'text'; readonly text: string }
+  | { readonly kind: 'fields'; readonly rows: ReadonlyArray<{ readonly label: string; readonly value: string }> };
+
+/**
+ * Renders the `detail` payload of an activity log entry into a
+ * display-ready representation. Called by the core extension when
+ * serialising activity entries for the editor webview.
+ *
+ * Extensions that write structured `detail` payloads (e.g. JSON) own
+ * the schema and should register a renderer so the core extension can
+ * display the data without parsing the schema itself. Returning
+ * `undefined` (or throwing) falls back to the default rendering, which
+ * shows the raw `detail` string verbatim.
+ */
+export type ActivityDetailRenderer = (detail: string | undefined) => ActivityDetailRender | undefined;
 
 /**
  * Event payload emitted when a work item changes lifecycle state.
@@ -26,13 +56,13 @@ export interface StateTransitionEvent {
  * A provider that discovers work items from an external source.
  *
  * Providers are registered via {@link DevDocketApi.registerProvider} and emit
- * {@link DiscoveredItem} arrays when new items are found. The core extension
+ * {@link ProviderItem} arrays when new items are found. The core extension
  * reads discovered item metadata live from the provider and does not persist it;
  * only inbox state is persisted.
  *
  * @example
  * ```ts
- * const emitter = new vscode.EventEmitter<DiscoveredItem[]>();
+ * const emitter = new vscode.EventEmitter<ProviderItem[]>();
  * const provider: DevDocketProvider = {
  *   id: 'github',
  *   label: 'GitHub Issues',
@@ -51,7 +81,7 @@ export interface DevDocketProvider {
   /** Human-readable display name shown in the UI. */
   readonly label: string;
   /** Event fired when the provider discovers or refreshes its item list. */
-  readonly onDidDiscoverItems: Event<DiscoveredItem[]>;
+  readonly onDidDiscoverItems: Event<ProviderItem[]>;
   /**
    * Re-fetch items from the external source.
    * Implementations should fire {@link onDidDiscoverItems} with the results.
@@ -135,12 +165,12 @@ export interface DevDocketAction {
  * Public API surface of the DevDocket extension.
  *
  * Obtain this API from the core extension by getting its extension wrapper via
- * `vscode.extensions.getExtension('mthalman.devdocket')`, then activating it
+ * `vscode.extensions.getExtension('devdocket.devdocket')`, then activating it
  * with `await extension.activate()` (or reading `extension.exports` after activation).
  *
  * @example
  * ```ts
- * const ext = vscode.extensions.getExtension<DevDocketApi>('mthalman.devdocket');
+ * const ext = vscode.extensions.getExtension<DevDocketApi>('devdocket.devdocket');
  * const api = await ext?.activate();
  * if (api) {
  *   api.registerProvider(myProvider);
@@ -172,10 +202,24 @@ export interface DevDocketApi {
    */
   registerAction(action: DevDocketAction): Disposable;
   /**
+   * Look up the live {@link ProviderItem} for a given (providerId, externalId)
+   * pair. Returns `undefined` if the provider has not (yet) emitted a matching
+   * item — for example because the provider is still loading or the item has
+   * been removed upstream.
+   *
+   * Actions use this to read provider-supplied capabilities (e.g. {@link
+   * ProviderItemCapabilities.gitWork}) when running against a {@link WorkItem}
+   * that was previously accepted from this provider.
+   *
+   * @param providerId - The id of the provider that emitted the item.
+   * @param externalId - The provider-scoped external id (e.g. `owner/repo#123`).
+   */
+  getProviderItem?(providerId: string, externalId: string): ProviderItem | undefined;
+  /**
    * Register a pipeline run watcher.
    *
    * Run watchers provide status polling for CI/CD pipelines (GitHub Actions, ADO Pipelines, etc.).
-   * Once registered, users can watch runs by pasting URLs into the "Watch Pipeline Run" command.
+   * Once registered, users can watch runs by pasting URLs into the "Watch URL" command.
    *
    * @param watcher - The run watcher to register.
    * @returns A {@link Disposable} that unregisters the watcher when disposed.
@@ -192,6 +236,26 @@ export interface DevDocketApi {
    * @param detail - Optional human-readable detail string.
    */
   addActivity?(itemId: string, type: ActivityType, detail?: string): Promise<void>;
+  /**
+   * Register a renderer that converts an activity log entry's raw
+   * `detail` string into a display-ready representation.
+   *
+   * Extensions that write structured `detail` payloads (e.g. JSON
+   * encoded by the writer) should register a renderer for their
+   * activity types so the core extension can render entries without
+   * having to understand the writer's schema. The core extension
+   * always falls back to plain-text rendering of the raw `detail`
+   * when no renderer is registered or the renderer returns
+   * `undefined`.
+   *
+   * Only one renderer may be registered per activity type. Attempting
+   * to register a second renderer for the same type throws.
+   *
+   * @param type - The activity type this renderer handles.
+   * @param render - The rendering function.
+   * @returns A {@link Disposable} that unregisters the renderer.
+   */
+  registerActivityDetailRenderer?(type: ActivityType, render: ActivityDetailRenderer): Disposable;
   /**
    * Register a PR watcher for tracking pull request pipelines.
    *

@@ -3,6 +3,8 @@ import { RepoManager, type WorktreeInfo } from './repoManager';
 import { buildWalkthroughPrompt } from './walkthroughPrompt';
 import { truncateToolContent } from './toolUtils';
 
+const PR_URL_PATTERN = /https?:\/\/(?:github\.com\/[^/\s]+\/[^/\s]+\/pull\/\d+|dev\.azure\.com\/[^/\s]+\/[^/\s]+\/_git\/[^/\s]+\/pullrequest\/\d+)/;
+
 export class WalkthroughParticipant {
   private sessions = new Map<string, WorktreeInfo>();
 
@@ -74,8 +76,9 @@ export class WalkthroughParticipant {
     if (!prUrl) {
       this.log.warn('No PR URL found in prompt or history');
       response.markdown(
-        'Please provide a GitHub PR URL to walk through. For example:\n\n' +
-        '> Walk me through this PR: https://github.com/owner/repo/pull/42',
+        'Please provide a GitHub or Azure DevOps PR URL to walk through. For example:\n\n' +
+        '> Walk me through this PR: https://github.com/owner/repo/pull/42\n\n' +
+        '> Walk me through this PR: https://dev.azure.com/org/project/_git/repo/pullrequest/42',
       );
       return { metadata: { phase: 'no-url' } };
     }
@@ -155,7 +158,11 @@ export class WalkthroughParticipant {
 
     // Gather devdocket tools + the phase-signaling tool
     const registeredTools = vscode.lm.tools
-      .filter((t: vscode.LanguageModelToolInformation) => t.name.startsWith('devdocket-') && t.inputSchema);
+      .filter((t: vscode.LanguageModelToolInformation) =>
+        t.name.startsWith('devdocket-')
+        && t.inputSchema
+        && !(info.provider === 'ado' && t.name === 'devdocket-diffAnchor'),
+      );
     this.log.info(`Found ${registeredTools.length} devdocket-* LM tools: ${registeredTools.map(t => t.name).join(', ')}`);
 
     const tools = [
@@ -186,8 +193,11 @@ export class WalkthroughParticipant {
     // Tool-use loop
     const loopMessages = [...messages];
     const maxIterations = 20;
+    const maxPhaseOnlyRetries = 1;
     let iterations = 0;
     let phase = context.history.length === 0 ? 'summary' : 'walkthrough';
+    let streamedAnyText = false;
+    let phaseOnlyNoTextIterations = 0;
     this.log.info(`Starting tool-use loop — initial phase: ${phase}, maxIterations: ${maxIterations}`);
 
     while (!token.isCancellationRequested && iterations < maxIterations) {
@@ -205,17 +215,22 @@ export class WalkthroughParticipant {
       }
 
       let hasToolCalls = false;
+      let streamedTextThisIteration = false;
       const assistantParts: (vscode.LanguageModelTextPart | vscode.LanguageModelToolCallPart)[] = [];
       const toolResults: Array<{ callId: string; content: (vscode.LanguageModelTextPart | vscode.LanguageModelToolResultPart)[] }> = [];
 
       for await (const part of chatResponse.stream) {
         if (part instanceof vscode.LanguageModelTextPart) {
           response.markdown(part.value);
+          if (part.value.trim().length > 0) {
+            streamedTextThisIteration = true;
+            streamedAnyText = true;
+          }
           assistantParts.push(part);
         } else if (part instanceof vscode.LanguageModelToolCallPart) {
           assistantParts.push(part);
 
-          // Handle phase signal locally — not a real tool call, don't trigger another loop
+          // Handle phase signals locally; only loop again for them if no text was streamed.
           if (part.name === 'devdocket-signalPhase') {
             const input = part.input as { phase?: string };
             this.log.debug(`Phase signal: ${input.phase}`);
@@ -272,8 +287,16 @@ export class WalkthroughParticipant {
         }
       }
 
-      if (!hasToolCalls) {
-        this.log.info(`No tool calls in iteration ${iterations} — exiting loop`);
+      const phaseSignalWithoutText = !hasToolCalls && toolResults.length > 0 && !streamedTextThisIteration;
+      if (phaseSignalWithoutText) {
+        phaseOnlyNoTextIterations++;
+      } else {
+        phaseOnlyNoTextIterations = 0;
+      }
+      const shouldRetryForPhaseSignal = phaseSignalWithoutText && phaseOnlyNoTextIterations <= maxPhaseOnlyRetries;
+
+      if (!hasToolCalls && !shouldRetryForPhaseSignal) {
+        this.log.info(`No tool calls requiring another model request in iteration ${iterations} — exiting loop`);
         break;
       }
     }
@@ -284,6 +307,9 @@ export class WalkthroughParticipant {
     if (iterations >= maxIterations) {
       this.log.warn(`Reached max iterations (${maxIterations})`);
     }
+    if (!streamedAnyText && !token.isCancellationRequested) {
+      response.markdown('⚠️ The model did not produce walkthrough text. Please try again.');
+    }
     this.log.info(`handleRequest complete — final phase: ${phase}, total iterations: ${iterations}`);
     return { metadata: { phase } };
   }
@@ -293,17 +319,13 @@ export class WalkthroughParticipant {
     context: vscode.ChatContext,
   ): string | undefined {
     // Try current prompt first
-    const urlMatch = prompt.match(
-      /https?:\/\/github\.com\/[^/]+\/[^/]+\/pull\/\d+/,
-    );
+    const urlMatch = prompt.match(PR_URL_PATTERN);
     if (urlMatch) return urlMatch[0];
 
     // Check previous turns in history
     for (const turn of context.history) {
       if (turn instanceof vscode.ChatRequestTurn) {
-        const historyMatch = turn.prompt.match(
-          /https?:\/\/github\.com\/[^/]+\/[^/]+\/pull\/\d+/,
-        );
+        const historyMatch = turn.prompt.match(PR_URL_PATTERN);
         if (historyMatch) return historyMatch[0];
       }
     }

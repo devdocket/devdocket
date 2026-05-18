@@ -1,12 +1,25 @@
-import * as vscode from 'vscode';
-import { DiscoveredItem, combineSignals, createAbortError, runWorkerPool } from '@devdocket/shared';
+import { ProviderItem, ProviderBadge, combineSignals, createAbortError, runWorkerPool, type RelatedItemRef } from '@devdocket/shared';
 import { BaseGitHubProvider } from './baseGithubProvider';
 import { logger } from './logger';
 import { parseRepoFromUrls } from './parseRepo';
-import { getGitHubAuthHeaders, type GitHubIssue, type GitHubSearchResponse } from './githubApiHelpers';
+import { getGitHubAuthHeaders, filterMergedGitHubPrs, type GitHubIssue, type GitHubPrMergeFields, type GitHubSearchResponse } from './githubApiHelpers';
 import { matchesRepoPatterns } from './repoPattern';
+import { createGitHubPrGitWork } from './gitWorkCapabilities';
 
-export interface PrDetail {
+/** Map a PR status string from {@link GitHubMyPrsProvider.determinePrStatus} to its UI badge. */
+function statusToBadge(status: string): ProviderBadge | undefined {
+  switch (status) {
+    case 'Draft':                return { label: 'Draft', variant: 'neutral' };
+    case 'Changes requested':    return { label: 'Changes requested', variant: 'danger' };
+    case 'Approved':             return { label: 'Approved', variant: 'success' };
+    case 'Ready to merge':       return { label: 'Ready to merge', variant: 'success' };
+    case 'Review received':      return { label: 'Review received', variant: 'info' };
+    case 'Waiting on reviews':   return { label: 'Waiting on reviews', variant: 'info' };
+    default:                     return undefined;
+  }
+}
+
+export interface PrDetail extends GitHubPrMergeFields {
   draft?: boolean;
   head?: { sha?: string };
   mergeable_state?: string;
@@ -67,12 +80,17 @@ export class GitHubMyPrsProvider extends BaseGitHubProvider {
       logger.error('Failed to fetch assigned PRs', err);
     }
 
+    const [authoredPrs, assignedPrs] = await Promise.all([
+      filterMergedGitHubPrs(accessToken, authoredResult.prs, signal),
+      filterMergedGitHubPrs(accessToken, assignedResult.prs, signal),
+    ]);
+
     // Filter out self-authored PRs from assigned results to avoid duplicates
-    const authoredUrls = new Set(authoredResult.prs.map(pr => pr.html_url));
-    const uniqueAssignedPrs = assignedResult.prs.filter(pr => !authoredUrls.has(pr.html_url));
+    const authoredUrls = new Set(authoredPrs.map(pr => pr.html_url));
+    const uniqueAssignedPrs = assignedPrs.filter(pr => !authoredUrls.has(pr.html_url));
 
     // Parse repo name once per PR
-    const allPrsList = [...authoredResult.prs, ...uniqueAssignedPrs];
+    const allPrsList = [...authoredPrs, ...uniqueAssignedPrs];
     const repoNameMap = new Map(allPrsList.map(pr =>
       [pr.html_url, parseRepoFromUrls(pr.html_url, pr.repository_url)]
     ));
@@ -80,8 +98,8 @@ export class GitHubMyPrsProvider extends BaseGitHubProvider {
     // Post-filter when patterns are configured
     const repoFilter = (pr: GitHubIssue) => matchesRepoPatterns(repoNameMap.get(pr.html_url)!, patterns);
     const filteredAuthored = patterns.length > 0
-      ? authoredResult.prs.filter(repoFilter)
-      : authoredResult.prs;
+      ? authoredPrs.filter(repoFilter)
+      : authoredPrs;
     const filteredAssigned = patterns.length > 0
       ? uniqueAssignedPrs.filter(repoFilter)
       : uniqueAssignedPrs;
@@ -93,47 +111,85 @@ export class GitHubMyPrsProvider extends BaseGitHubProvider {
     const statusMap = allPrs.length > 0
       ? await this.fetchPrStatuses(accessToken, allPrs, signal)
       : new Map<string, string>();
+    const relatedItemsMap = allPrs.length > 0
+      ? await this.fetchRelatedItemsForPRs(allPrs.map(pr => {
+        const repoName = repoNameMap.get(pr.html_url)!;
+        const [repoOwner, repoNameOnly] = repoName.split('/');
+        return {
+          externalId: `${repoName}#${pr.number}`,
+          repoOwner,
+          repoName: repoNameOnly,
+          number: pr.number,
+        };
+      }).filter(pr => pr.repoOwner && pr.repoName), accessToken, signal)
+      : new Map<string, RelatedItemRef[]>();
 
-    const items: DiscoveredItem[] = [];
+    const items: ProviderItem[] = [];
     for (const pr of filteredAuthored) {
       const repoName = repoNameMap.get(pr.html_url)!;
+      const externalId = `${repoName}#${pr.number}`;
       const status = statusMap.get(pr.html_url) ?? 'Open';
+      const statusBadge = statusToBadge(status);
+      const relatedItems = relatedItemsMap.get(externalId);
       items.push({
-        externalId: `${repoName}#${pr.number}`,
+        externalId,
         title: `#${pr.number}: ${pr.title}`,
         description: pr.body ?? undefined,
         url: pr.html_url,
+        ...(pr.user?.login ? {
+          author: {
+            displayName: pr.user.login,
+            handle: pr.user.login,
+            avatarUrl: pr.user.avatar_url,
+            profileUrl: pr.user.html_url,
+          },
+        } : {}),
+        authored: true,
         group: repoName,
         reason: 'You authored this PR',
         state: status,
         canonicalId: `github:pull:${repoName}#${pr.number}`,
+        itemType: 'pr',
+        capabilities: { gitWork: createGitHubPrGitWork(repoName, pr.number, pr.pull_request?.url) },
+        ...(relatedItems ? { relatedItems } : {}),
+        ...(statusBadge ? { badges: [statusBadge] } : {}),
       });
     }
     for (const pr of filteredAssigned) {
       const repoName = repoNameMap.get(pr.html_url)!;
+      const externalId = `${repoName}#${pr.number}`;
       const status = statusMap.get(pr.html_url) ?? 'Open';
+      const statusBadge = statusToBadge(status);
+      const relatedItems = relatedItemsMap.get(externalId);
       items.push({
-        externalId: `${repoName}#${pr.number}`,
+        externalId,
         title: `#${pr.number}: ${pr.title}`,
         description: pr.body ?? undefined,
         url: pr.html_url,
+        ...(pr.user?.login ? {
+          author: {
+            displayName: pr.user.login,
+            handle: pr.user.login,
+            avatarUrl: pr.user.avatar_url,
+            profileUrl: pr.user.html_url,
+          },
+        } : {}),
         group: repoName,
         reason: 'You are assigned to this PR',
         state: status,
         canonicalId: `github:pull:${repoName}#${pr.number}`,
+        itemType: 'pr',
+        capabilities: { gitWork: createGitHubPrGitWork(repoName, pr.number, pr.pull_request?.url) },
+        ...(relatedItems ? { relatedItems } : {}),
+        ...(statusBadge ? { badges: [statusBadge] } : {}),
       });
     }
 
-    this._onDidDiscoverItems.fire(items);
+    this.publishProviderItems(items, patterns);
 
     const failures = [...new Set([...authoredResult.failures, ...assignedResult.failures])];
     if (failures.length > 0) {
-      const message = 'Failed to fetch PRs';
-      if (isUserTriggered) {
-        void vscode.window.showWarningMessage(`DevDocket GitHub: ${message}`);
-      } else {
-        logger.warn(message);
-      }
+      this.warnOnFetchFailure('Failed to fetch PRs', isUserTriggered);
     }
   }
 

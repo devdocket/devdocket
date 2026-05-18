@@ -3,16 +3,16 @@
   "displayName": "DevDocket — Azure DevOps",
   "description": "Azure DevOps provider for DevDocket — discovers assigned work items and PR reviews.",
   "version": "0.1.0",
-  "publisher": "mthalman",
+  "publisher": "devdocket",
   "license": "MIT",
   "engines": {
-    "vscode": "^1.85.0"
+    "vscode": "^1.92.0"
   },
   "categories": [
     "Other"
   ],
   "extensionDependencies": [
-    "mthalman.devdocket"
+    "devdocket.devdocket"
   ],
   "activationEvents": [
     "onStartupFinished"
@@ -58,7 +58,7 @@
   },
   "devDependencies": {
     "@types/node": "^20.11.0",
-    "@types/vscode": "^1.85.0",
+    "@types/vscode": "^1.92.0",
     "@typescript-eslint/eslint-plugin": "^7.0.0",
     "@typescript-eslint/parser": "^7.0.0",
     "esbuild": "^0.25.0",

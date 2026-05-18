@@ -1,11 +1,11 @@
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
 import { authentication, workspace } from 'vscode';
 import { GitHubMyPrsProvider, type PrDetail, type PrReview } from '../githubMyPrsProvider';
-import { initLogger, LogLevel } from '../logger';
+import { setLogger } from '../logger';
 
 const mockFetch = vi.fn();
 
-function createMockPr(number: number, title: string, repo = 'owner/repo') {
+function createMockPr(number: number, title: string, repo = 'owner/repo', extra: Record<string, unknown> = {}) {
   return {
     number,
     title,
@@ -14,6 +14,7 @@ function createMockPr(number: number, title: string, repo = 'owner/repo') {
     html_url: `https://github.com/${repo}/pull/${number}`,
     repository_url: `https://api.github.com/repos/${repo}`,
     pull_request: { url: `https://api.github.com/repos/${repo}/pulls/${number}` },
+    ...extra,
   };
 }
 
@@ -44,15 +45,16 @@ function mockFailedResponse(status = 500) {
 
 describe('GitHubMyPrsProvider', () => {
   let provider: GitHubMyPrsProvider;
-  let mockChannel: { appendLine: ReturnType<typeof vi.fn> };
+  let mockChannel: any;
 
   beforeEach(() => {
     vi.resetAllMocks();
     vi.stubGlobal('fetch', mockFetch);
     provider = new GitHubMyPrsProvider();
+    vi.spyOn(provider as any, 'fetchRelatedItemsForPRs').mockResolvedValue(new Map());
 
-    mockChannel = { appendLine: vi.fn() };
-    initLogger(mockChannel as any, LogLevel.Debug);
+    mockChannel = { info: vi.fn(), debug: vi.fn(), warn: vi.fn(), error: vi.fn(), appendLine: vi.fn() };
+    setLogger(mockChannel);
 
     vi.mocked(workspace.getConfiguration).mockReturnValue({
       get: vi.fn((_key: string, defaultValue?: any) => defaultValue),
@@ -85,6 +87,53 @@ describe('GitHubMyPrsProvider', () => {
 
     expect(listener).not.toHaveBeenCalled();
     expect(mockFetch).not.toHaveBeenCalled();
+  });
+
+  it('excludes merged PRs by fetching details for closed authored and assigned search results', async () => {
+    const openPr = createMockPr(1, 'Open PR');
+    const mergedAuthoredPr = {
+      ...createMockPr(2, 'Merged authored PR'),
+      state: 'closed',
+    };
+    const mergedAssignedPr = {
+      ...createMockPr(3, 'Merged assigned PR', 'other/repo'),
+      state: 'closed',
+    };
+
+    mockFetch.mockImplementation(async (url: string) => {
+      if (url.includes('search/issues') && url.includes('author:@me')) {
+        return mockSearchResponse([openPr, mergedAuthoredPr]);
+      }
+      if (url.includes('search/issues') && url.includes('assignee:@me')) {
+        return mockSearchResponse([mergedAssignedPr]);
+      }
+      if (url.endsWith('/pulls/1')) {
+        return mockPrDetailResponse({ draft: false });
+      }
+      if (url.endsWith('/pulls/1/reviews')) {
+        return mockReviewsResponse([]);
+      }
+      if (url.endsWith('/pulls/2')) {
+        return mockPrDetailResponse({ state: 'closed', merged: true, merged_at: '2025-01-01T00:00:00Z' });
+      }
+      if (url.endsWith('/pulls/3')) {
+        return mockPrDetailResponse({ state: 'closed', merged: true, merged_at: '2025-01-02T00:00:00Z' });
+      }
+      return mockFailedResponse(404);
+    });
+
+    const listener = vi.fn();
+    provider.onDidDiscoverItems(listener);
+    await provider.refresh();
+
+    const items = listener.mock.calls[0][0];
+    expect(items).toHaveLength(1);
+    expect(items[0].externalId).toBe('owner/repo#1');
+    expect(items.map((item: any) => item.externalId)).not.toContain('owner/repo#2');
+    expect(items.map((item: any) => item.externalId)).not.toContain('other/repo#3');
+    expect((provider as any).fetchRelatedItemsForPRs).toHaveBeenCalledWith([
+      { externalId: 'owner/repo#1', repoOwner: 'owner', repoName: 'repo', number: 1 },
+    ], 'test-token', expect.any(AbortSignal));
   });
 
   it('discovers open authored PRs with status', async () => {
@@ -127,12 +176,103 @@ describe('GitHubMyPrsProvider', () => {
     expect(items[0].state).toBe('Waiting on reviews');
     expect(items[0].group).toBe('owner/repo');
     expect(items[0].reason).toBe('You authored this PR');
+    expect(items[0].authored).toBe(true);
     expect(items[0].canonicalId).toBe('github:pull:owner/repo#1');
 
     expect(items[1].externalId).toBe('owner/repo#2');
     expect(items[1].state).toBe('Draft');
     expect(items[1].reason).toBe('You authored this PR');
+    expect(items[1].authored).toBe(true);
     expect(items[1].canonicalId).toBe('github:pull:owner/repo#2');
+  });
+
+  it('populates lazy gitWork for fork PRs', async () => {
+    const pr = createMockPr(7, 'Fork PR');
+    mockFetch.mockImplementation(async (url: string) => {
+      if (url.includes('search/issues') && url.includes('author:@me')) {
+        return mockSearchResponse([pr]);
+      }
+      if (url.includes('search/issues') && url.includes('assignee:@me')) {
+        return mockSearchResponse([]);
+      }
+      if (url.endsWith('/pulls/7/reviews')) {
+        return mockReviewsResponse([]);
+      }
+      if (url.endsWith('/pulls/7')) {
+        return {
+          ok: true,
+          json: async () => ({
+            draft: false,
+            mergeable_state: 'clean',
+            head: {
+              ref: 'contributor/topic',
+              repo: { full_name: 'contributor/repo', clone_url: 'https://github.com/contributor/repo.git' },
+            },
+            base: {
+              ref: 'dev',
+              repo: { full_name: 'owner/repo', clone_url: 'https://github.com/owner/repo.git' },
+            },
+          }),
+        };
+      }
+      return mockFailedResponse(404);
+    });
+
+    const listener = vi.fn();
+    provider.onDidDiscoverItems(listener);
+    await provider.refresh();
+
+    const gitWork = await listener.mock.calls[0][0][0].capabilities.gitWork();
+    expect(gitWork).toEqual({
+      kind: 'pr',
+      cloneUrl: 'https://github.com/owner/repo.git',
+      ref: 'contributor/topic',
+      headCloneUrl: 'https://github.com/contributor/repo.git',
+      baseRef: 'dev',
+      repoLabel: 'owner/repo',
+    });
+  });
+
+  it('attaches relatedItems from PR enrichment before publishing', async () => {
+    vi.mocked(workspace.getConfiguration).mockReturnValue({
+      get: vi.fn((key: string, defaultValue?: any) => {
+        if (key === 'filteredRepos') { return 'unrelated/repo'; }
+        return defaultValue;
+      }),
+    } as any);
+    const pr = createMockPr(1, 'Fix linked issue');
+    vi.mocked((provider as any).fetchRelatedItemsForPRs).mockResolvedValue(new Map([
+      ['owner/repo#1', [{ externalId: 'other/repo#99', itemType: 'issue', relation: 'closes' }]],
+    ]));
+
+    mockFetch.mockImplementation(async (url: string) => {
+      if (url.includes('search/issues') && url.includes('author:@me')) {
+        return mockSearchResponse([pr]);
+      }
+      if (url.includes('search/issues') && url.includes('assignee:@me')) {
+        return mockSearchResponse([]);
+      }
+      if (url.endsWith('/pulls/1')) {
+        return mockPrDetailResponse({ draft: false });
+      }
+      if (url.endsWith('/pulls/1/reviews')) {
+        return mockReviewsResponse([]);
+      }
+      return mockFailedResponse(404);
+    });
+
+    const listener = vi.fn();
+    provider.onDidDiscoverItems(listener);
+    await provider.refresh();
+
+    expect((provider as any).fetchRelatedItemsForPRs).toHaveBeenCalledWith([
+      { externalId: 'owner/repo#1', repoOwner: 'owner', repoName: 'repo', number: 1 },
+    ], 'test-token', expect.any(AbortSignal));
+    expect(listener).toHaveBeenCalledTimes(1);
+    expect(listener.mock.calls[0][0][0]).toEqual(expect.objectContaining({
+      externalId: 'owner/repo#1',
+      relatedItems: [{ externalId: 'other/repo#99', itemType: 'issue', relation: 'closes' }],
+    }));
   });
 
   it('uses global search and filters when repos configured', async () => {
@@ -294,8 +434,12 @@ describe('GitHubMyPrsProvider', () => {
   });
 
   it('discovers assigned PRs alongside authored PRs', async () => {
-    const authoredPr = createMockPr(1, 'My PR');
-    const assignedPr = createMockPr(2, 'Assigned to me', 'other/repo');
+    const authoredPr = createMockPr(1, 'My PR', 'owner/repo', {
+      user: { login: 'me', avatar_url: 'https://avatars.githubusercontent.com/u/2?v=4', html_url: 'https://github.com/me' },
+    });
+    const assignedPr = createMockPr(2, 'Assigned to me', 'other/repo', {
+      user: { login: 'teammate', avatar_url: 'https://avatars.githubusercontent.com/u/3?v=4', html_url: 'https://github.com/teammate' },
+    });
 
     mockFetch.mockImplementation(async (url: string) => {
       if (url.includes('search/issues') && url.includes('author:@me')) {
@@ -329,9 +473,23 @@ describe('GitHubMyPrsProvider', () => {
 
     expect(items[0].externalId).toBe('owner/repo#1');
     expect(items[0].reason).toBe('You authored this PR');
+    expect(items[0].authored).toBe(true);
+    expect(items[0].author).toEqual({
+      displayName: 'me',
+      handle: 'me',
+      avatarUrl: 'https://avatars.githubusercontent.com/u/2?v=4',
+      profileUrl: 'https://github.com/me',
+    });
 
     expect(items[1].externalId).toBe('other/repo#2');
     expect(items[1].reason).toBe('You are assigned to this PR');
+    expect(items[1].authored).toBeUndefined();
+    expect(items[1].author).toEqual({
+      displayName: 'teammate',
+      handle: 'teammate',
+      avatarUrl: 'https://avatars.githubusercontent.com/u/3?v=4',
+      profileUrl: 'https://github.com/teammate',
+    });
   });
 
   it('excludes self-authored PRs from assigned results', async () => {

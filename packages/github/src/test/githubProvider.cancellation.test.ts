@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
 import { authentication, workspace } from 'vscode';
 import { GitHubIssueProvider } from '../githubProvider';
-import { initLogger, LogLevel } from '../logger';
+import { setLogger } from '../logger';
 
 const mockFetch = vi.fn();
 const noLinkHeaders = { get: () => null };
@@ -54,15 +54,15 @@ function configureRepos(repos: string[]) {
 
 describe('GitHubIssueProvider — cancellation (AbortSignal wiring)', () => {
   let provider: GitHubIssueProvider;
-  let mockChannel: { appendLine: ReturnType<typeof vi.fn> };
+  let mockChannel: any;
 
   beforeEach(() => {
     vi.clearAllMocks();
     vi.stubGlobal('fetch', mockFetch);
     provider = new GitHubIssueProvider();
 
-    mockChannel = { appendLine: vi.fn() };
-    initLogger(mockChannel as any, LogLevel.Debug);
+    mockChannel = { info: vi.fn(), debug: vi.fn(), warn: vi.fn(), error: vi.fn(), appendLine: vi.fn() };
+    setLogger(mockChannel);
 
     vi.mocked(authentication.getSession).mockResolvedValue({
       accessToken: 'test-token',
@@ -180,14 +180,14 @@ describe('GitHubIssueProvider — cancellation (AbortSignal wiring)', () => {
       await provider.refresh(token);
 
       // Should log "fetch aborted" at debug level
-      const debugLogged = mockChannel.appendLine.mock.calls.some(
-        (call: string[]) => call[0].includes('[DEBUG]') && call[0].includes('fetch aborted'),
+      const debugLogged = mockChannel.debug.mock.calls.some(
+        (call: unknown[]) => String(call[0]).includes('fetch aborted'),
       );
       expect(debugLogged).toBe(true);
 
       // Should NOT log at error level
-      const errorLogged = mockChannel.appendLine.mock.calls.some(
-        (call: string[]) => call[0].includes('[ERROR]') && call[0].includes('Failed to fetch'),
+      const errorLogged = mockChannel.error.mock.calls.some(
+        (call: unknown[]) => String(call[0]).includes('Failed to fetch'),
       );
       expect(errorLogged).toBe(false);
     });

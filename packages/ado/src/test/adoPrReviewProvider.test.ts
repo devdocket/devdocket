@@ -4,7 +4,7 @@ import { AdoPrReviewProvider } from '../adoPrReviewProvider';
 
 const mockFetch = vi.fn();
 
-function createMockPr(id: number, title: string, project = 'MyProject', repo = 'myrepo') {
+function createMockPr(id: number, title: string, project = 'MyProject', repo = 'myrepo', extra: Record<string, unknown> = {}) {
   return {
     pullRequestId: id,
     title,
@@ -14,6 +14,37 @@ function createMockPr(id: number, title: string, project = 'MyProject', repo = '
       project: { name: project },
       webUrl: `https://dev.azure.com/myorg/${project}/_git/${repo}`,
     },
+    ...extra,
+  };
+}
+
+function mockPrList(prs: ReturnType<typeof createMockPr>[]) {
+  return {
+    ok: true,
+    json: async () => ({ value: prs }),
+  };
+}
+
+function mockGraphDescriptor(descriptor = 'user-descriptor') {
+  return {
+    ok: true,
+    json: async () => ({ value: descriptor }),
+  };
+}
+
+function mockMemberships(groupDescriptors: string[]) {
+  return {
+    ok: true,
+    json: async () => ({
+      value: groupDescriptors.map(containerDescriptor => ({ containerDescriptor })),
+    }),
+  };
+}
+
+function mockStorageKey(id: string) {
+  return {
+    ok: true,
+    json: async () => ({ value: id }),
   };
 }
 
@@ -55,19 +86,18 @@ describe('AdoPrReviewProvider', () => {
     expect(mockFetch).not.toHaveBeenCalled();
   });
 
-  it('fires empty items when cancellation is requested before auth', async () => {
+  it('does not clear items when cancellation is requested before auth', async () => {
     const token = { isCancellationRequested: true } as any;
 
     const listener = vi.fn();
     provider.onDidDiscoverItems(listener);
     await provider.refresh(token);
 
-    expect(listener).toHaveBeenCalledTimes(1);
-    expect(listener).toHaveBeenCalledWith([]);
+    expect(listener).not.toHaveBeenCalled();
     expect(mockFetch).not.toHaveBeenCalled();
   });
 
-  it('fires empty items when cancellation is requested after auth', async () => {
+  it('does not clear items when cancellation is requested after auth', async () => {
     const token = { isCancellationRequested: false } as any;
     vi.mocked(authentication.getSession).mockImplementation(async () => {
       token.isCancellationRequested = true;
@@ -83,8 +113,7 @@ describe('AdoPrReviewProvider', () => {
     provider.onDidDiscoverItems(listener);
     await provider.refresh(token);
 
-    expect(listener).toHaveBeenCalledTimes(1);
-    expect(listener).toHaveBeenCalledWith([]);
+    expect(listener).not.toHaveBeenCalled();
     expect(mockFetch).not.toHaveBeenCalled();
   });
 
@@ -113,15 +142,19 @@ describe('AdoPrReviewProvider', () => {
       .mockResolvedValueOnce({
         ok: true,
         json: async () => ({
-          value: [createMockPr(101, 'Fix bug')],
+          value: [createMockPr(101, 'Fix bug', 'MyProject', 'myrepo', {
+            createdBy: { displayName: 'Jane Doe', uniqueName: 'jane@example.com' },
+          })],
         }),
-      });
+      })
+      .mockResolvedValueOnce(mockGraphDescriptor())
+      .mockResolvedValueOnce(mockMemberships([]));
 
     const listener = vi.fn();
     provider.onDidDiscoverItems(listener);
     await provider.refresh();
 
-    expect(mockFetch).toHaveBeenCalledTimes(2);
+    expect(mockFetch).toHaveBeenCalledTimes(4);
 
     // First call: connection data to get user ID
     expect(mockFetch).toHaveBeenCalledWith(
@@ -151,13 +184,229 @@ describe('AdoPrReviewProvider', () => {
       title: 'PR 101: Fix bug',
       description: 'Description for PR 101',
       url: 'https://dev.azure.com/myorg/MyProject/_git/myrepo/pullrequest/101',
+      author: {
+        displayName: 'Jane Doe',
+        handle: 'jane@example.com',
+      },
       group: 'MyProject/myrepo',
       reason: 'review_requested',
+      itemType: 'pr',
+      capabilities: { gitWork: expect.any(Function) },
+    });
+
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({
+        sourceRefName: 'refs/heads/users/me/fix',
+        targetRefName: 'refs/heads/dev',
+        repository: { remoteUrl: 'https://dev.azure.com/myorg/MyProject/_git/myrepo' },
+      }),
+    });
+    await expect(items[0].capabilities.gitWork()).resolves.toEqual({
+      kind: 'pr',
+      cloneUrl: 'https://dev.azure.com/myorg/MyProject/_git/myrepo',
+      ref: 'users/me/fix',
+      baseRef: 'dev',
+      repoLabel: 'MyProject/myrepo',
     });
   });
 
+  it('keeps direct reviewer PRs when no group memberships exist', async () => {
+    mockFetch
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ authenticatedUser: { id: 'user-uuid-123' } }),
+      })
+      .mockResolvedValueOnce(mockPrList([createMockPr(101, 'Direct review')]))
+      .mockResolvedValueOnce(mockGraphDescriptor())
+      .mockResolvedValueOnce(mockMemberships([]));
+
+    const listener = vi.fn();
+    provider.onDidDiscoverItems(listener);
+    await provider.refresh();
+
+    const items = listener.mock.calls[0][0];
+    expect(items).toHaveLength(1);
+    expect(items[0].externalId).toBe('myorg/MyProject/myrepo/101');
+    expect(mockFetch).toHaveBeenCalledWith(
+      'https://dev.azure.com/myorg/MyProject/_apis/git/pullrequests?searchCriteria.reviewerId=user-uuid-123&searchCriteria.status=active&api-version=7.1',
+      expect.any(Object),
+    );
+  });
+
+  it('discovers PRs requested through ADO group membership', async () => {
+    mockFetch
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ authenticatedUser: { id: 'user-uuid-123' } }),
+      })
+      .mockResolvedValueOnce(mockPrList([]))
+      .mockResolvedValueOnce(mockGraphDescriptor())
+      .mockResolvedValueOnce(mockMemberships(['vssgp.group-descriptor']))
+      .mockResolvedValueOnce(mockStorageKey('group-uuid-456'))
+      .mockResolvedValueOnce(mockPrList([createMockPr(202, 'Group review')]));
+
+    const listener = vi.fn();
+    provider.onDidDiscoverItems(listener);
+    await provider.refresh();
+
+    const items = listener.mock.calls[0][0];
+    expect(items).toHaveLength(1);
+    expect(items[0].externalId).toBe('myorg/MyProject/myrepo/202');
+    expect(mockFetch).toHaveBeenCalledWith(
+      'https://dev.azure.com/myorg/MyProject/_apis/git/pullrequests?searchCriteria.reviewerId=group-uuid-456&searchCriteria.status=active&api-version=7.1',
+      expect.any(Object),
+    );
+  });
+
+  it('uses successfully resolved group reviewers when another group storage key lookup fails', async () => {
+    mockFetch
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ authenticatedUser: { id: 'user-uuid-123' } }),
+      })
+      .mockResolvedValueOnce(mockPrList([]))
+      .mockResolvedValueOnce(mockGraphDescriptor())
+      .mockResolvedValueOnce(mockMemberships(['vssgp.group-a', 'vssgp.group-b']))
+      .mockResolvedValueOnce(mockStorageKey('group-a-uuid'))
+      .mockResolvedValueOnce({ ok: false, status: 500 })
+      .mockResolvedValueOnce(mockPrList([createMockPr(203, 'Partial group review')]));
+
+    const listener = vi.fn();
+    provider.onDidDiscoverItems(listener);
+    await provider.refresh();
+
+    const items = listener.mock.calls[0][0];
+    expect(items).toHaveLength(1);
+    expect(items[0].externalId).toBe('myorg/MyProject/myrepo/203');
+    expect(mockFetch).toHaveBeenCalledWith(
+      'https://dev.azure.com/myorg/MyProject/_apis/git/pullrequests?searchCriteria.reviewerId=group-a-uuid&searchCriteria.status=active&api-version=7.1',
+      expect.any(Object),
+    );
+  });
+
+  it('deduplicates PRs returned for both direct and group reviewers', async () => {
+    const pr = createMockPr(303, 'Direct and group review');
+    mockFetch
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ authenticatedUser: { id: 'user-uuid-123' } }),
+      })
+      .mockResolvedValueOnce(mockPrList([pr]))
+      .mockResolvedValueOnce(mockGraphDescriptor())
+      .mockResolvedValueOnce(mockMemberships(['vssgp.group-descriptor']))
+      .mockResolvedValueOnce(mockStorageKey('group-uuid-456'))
+      .mockResolvedValueOnce(mockPrList([pr]));
+
+    const listener = vi.fn();
+    provider.onDidDiscoverItems(listener);
+    await provider.refresh();
+
+    const items = listener.mock.calls[0][0];
+    expect(items).toHaveLength(1);
+    expect(items[0].externalId).toBe('myorg/MyProject/myrepo/303');
+  });
+
+  it('refreshes cached group memberships after the membership cache expires', async () => {
+    let now = 1_700_000_000_000;
+    const nowSpy = vi.spyOn(Date, 'now').mockImplementation(() => now);
+
+    try {
+      mockFetch
+        .mockResolvedValueOnce({
+          ok: true,
+          json: async () => ({ authenticatedUser: { id: 'user-uuid-123' } }),
+        })
+        .mockResolvedValueOnce(mockPrList([]))
+        .mockResolvedValueOnce(mockGraphDescriptor())
+        .mockResolvedValueOnce(mockMemberships(['vssgp.group-a']))
+        .mockResolvedValueOnce(mockStorageKey('group-a-uuid'))
+        .mockResolvedValueOnce(mockPrList([createMockPr(401, 'Group A review')]))
+        .mockResolvedValueOnce(mockPrList([]))
+        .mockResolvedValueOnce(mockPrList([]))
+        .mockResolvedValueOnce(mockPrList([]))
+        .mockResolvedValueOnce(mockGraphDescriptor())
+        .mockResolvedValueOnce(mockMemberships(['vssgp.group-b']))
+        .mockResolvedValueOnce(mockStorageKey('group-b-uuid'))
+        .mockResolvedValueOnce(mockPrList([createMockPr(402, 'Group B review')]));
+
+      const listener = vi.fn();
+      provider.onDidDiscoverItems(listener);
+
+      await provider.refresh();
+      expect(listener.mock.calls[0][0].map((item: any) => item.externalId)).toEqual(['myorg/MyProject/myrepo/401']);
+
+      await provider.refresh();
+      expect(listener.mock.calls[1][0]).toEqual([]);
+      expect(mockFetch).toHaveBeenCalledWith(
+        'https://dev.azure.com/myorg/MyProject/_apis/git/pullrequests?searchCriteria.reviewerId=group-a-uuid&searchCriteria.status=active&api-version=7.1',
+        expect.any(Object),
+      );
+
+      now += 31 * 60 * 1000;
+      await provider.refresh();
+      expect(listener.mock.calls[2][0].map((item: any) => item.externalId)).toEqual(['myorg/MyProject/myrepo/402']);
+      expect(mockFetch).toHaveBeenCalledWith(
+        'https://dev.azure.com/myorg/MyProject/_apis/git/pullrequests?searchCriteria.reviewerId=group-b-uuid&searchCriteria.status=active&api-version=7.1',
+        expect.any(Object),
+      );
+    } finally {
+      nowSpy.mockRestore();
+    }
+  });
+
+  it('does not cache transient group membership lookup failures', async () => {
+    mockFetch
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ authenticatedUser: { id: 'user-uuid-123' } }),
+      })
+      .mockResolvedValueOnce(mockPrList([]))
+      .mockResolvedValueOnce({ ok: false, status: 500 })
+      .mockResolvedValueOnce(mockPrList([]))
+      .mockResolvedValueOnce(mockGraphDescriptor())
+      .mockResolvedValueOnce(mockMemberships(['vssgp.group-descriptor']))
+      .mockResolvedValueOnce(mockStorageKey('group-uuid-456'))
+      .mockResolvedValueOnce(mockPrList([createMockPr(501, 'Group after retry')]));
+
+    const listener = vi.fn();
+    provider.onDidDiscoverItems(listener);
+
+    await provider.refresh();
+    expect(listener.mock.calls[0][0]).toEqual([]);
+    expect(window.showWarningMessage).toHaveBeenCalledWith(
+      expect.stringContaining('group reviewer lookup failed'),
+    );
+
+    await provider.refresh();
+    expect(listener.mock.calls[1][0].map((item: any) => item.externalId)).toEqual(['myorg/MyProject/myrepo/501']);
+  });
+
+  it('does not query group reviewers when the user has no group memberships', async () => {
+    mockFetch
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ authenticatedUser: { id: 'user-uuid-123' } }),
+      })
+      .mockResolvedValueOnce(mockPrList([]))
+      .mockResolvedValueOnce(mockGraphDescriptor())
+      .mockResolvedValueOnce(mockMemberships([]));
+
+    const listener = vi.fn();
+    provider.onDidDiscoverItems(listener);
+    await provider.refresh();
+
+    expect(listener).toHaveBeenCalledWith([]);
+    const prSearchUrls = mockFetch.mock.calls
+      .map(call => call[0])
+      .filter((url): url is string => typeof url === 'string' && url.includes('/pullrequests'));
+    expect(prSearchUrls).toEqual([
+      'https://dev.azure.com/myorg/MyProject/_apis/git/pullrequests?searchCriteria.reviewerId=user-uuid-123&searchCriteria.status=active&api-version=7.1',
+    ]);
+  });
+
   it('caches user ID after first successful fetch', async () => {
-    // First refresh: connection data + PR list
+    // First refresh: connection data + PR list + empty group memberships
     mockFetch
       .mockResolvedValueOnce({
         ok: true,
@@ -166,21 +415,22 @@ describe('AdoPrReviewProvider', () => {
       .mockResolvedValueOnce({
         ok: true,
         json: async () => ({ value: [] }),
-      });
+      })
+      .mockResolvedValueOnce(mockGraphDescriptor())
+      .mockResolvedValueOnce(mockMemberships([]));
 
     await provider.refresh();
-    expect(mockFetch).toHaveBeenCalledTimes(2);
+    expect(mockFetch).toHaveBeenCalledTimes(4);
 
     mockFetch.mockClear();
 
-    // Second refresh: should skip connection data call
+    // Second refresh: should skip connection data and use cached empty group memberships
     mockFetch.mockResolvedValueOnce({
       ok: true,
       json: async () => ({ value: [] }),
     });
 
     await provider.refresh();
-    // Only PR list call, no connection data
     expect(mockFetch).toHaveBeenCalledTimes(1);
     expect(mockFetch).toHaveBeenCalledWith(
       expect.stringContaining('pullrequests'),
@@ -198,10 +448,12 @@ describe('AdoPrReviewProvider', () => {
       .mockResolvedValueOnce({
         ok: true,
         json: async () => ({ value: [] }),
-      });
+      })
+      .mockResolvedValueOnce(mockGraphDescriptor())
+      .mockResolvedValueOnce(mockMemberships([]));
 
     await provider.refresh();
-    expect(mockFetch).toHaveBeenCalledTimes(2);
+    expect(mockFetch).toHaveBeenCalledTimes(4);
 
     mockFetch.mockClear();
 
@@ -222,11 +474,13 @@ describe('AdoPrReviewProvider', () => {
       .mockResolvedValueOnce({
         ok: true,
         json: async () => ({ value: [] }),
-      });
+      })
+      .mockResolvedValueOnce(mockGraphDescriptor())
+      .mockResolvedValueOnce(mockMemberships([]));
 
     await provider.refresh();
-    // Both connection data AND PR list calls
-    expect(mockFetch).toHaveBeenCalledTimes(2);
+    // Connection data, PR list, descriptor, and memberships after account change
+    expect(mockFetch).toHaveBeenCalledTimes(4);
     expect(mockFetch).toHaveBeenCalledWith(
       expect.stringContaining('connectiondata'),
       expect.any(Object),
@@ -314,25 +568,26 @@ describe('AdoPrReviewProvider', () => {
     );
   });
 
-  it('fires empty items when refresh catch block is hit', async () => {
+  it('fires empty items and rethrows when refresh catch block is hit', async () => {
     vi.spyOn(provider as any, 'fetchAndPublishPrs').mockRejectedValue(new Error('unexpected'));
 
     const listener = vi.fn();
     provider.onDidDiscoverItems(listener);
-    await provider.refresh();
+
+    await expect(provider.refresh()).rejects.toThrow('unexpected');
 
     expect(listener).toHaveBeenCalledTimes(1);
     expect(listener).toHaveBeenCalledWith([]);
   });
 
-  it('fires empty items when doBackgroundRefresh catch block is hit', async () => {
+  it('fires empty items and rethrows when doBackgroundRefresh catch block is hit', async () => {
     vi.spyOn(provider as any, 'fetchAndPublishPrs').mockRejectedValue(new Error('unexpected'));
 
     const listener = vi.fn();
     provider.onDidDiscoverItems(listener);
 
     const refreshBg = (provider as any).refreshInBackground.bind(provider);
-    await refreshBg();
+    await expect(refreshBg()).rejects.toThrow('unexpected');
 
     expect(listener).toHaveBeenCalledTimes(1);
     expect(listener).toHaveBeenCalledWith([]);
@@ -505,21 +760,23 @@ describe('AdoPrReviewProvider', () => {
     provider.dispose();
     provider = new AdoPrReviewProvider([{ org: 'myorg', projects: ['ValidProject', '../bad', 'AlsoValid'] }]);
 
-    // Connection data + 2 valid project PR fetches
+    // Connection data + 2 valid project PR fetches + empty group memberships
     mockFetch
       .mockResolvedValueOnce({
         ok: true,
         json: async () => ({ authenticatedUser: { id: 'user-123' } }),
       })
       .mockResolvedValueOnce({ ok: true, json: async () => ({ value: [] }) })
-      .mockResolvedValueOnce({ ok: true, json: async () => ({ value: [] }) });
+      .mockResolvedValueOnce({ ok: true, json: async () => ({ value: [] }) })
+      .mockResolvedValueOnce(mockGraphDescriptor())
+      .mockResolvedValueOnce(mockMemberships([]));
 
     const listener = vi.fn();
     provider.onDidDiscoverItems(listener);
     await provider.refresh();
 
-    // 1 connection data + 2 valid project fetches = 3
-    expect(mockFetch).toHaveBeenCalledTimes(3);
+    // 1 connection data + 2 valid project fetches + descriptor + memberships = 5
+    expect(mockFetch).toHaveBeenCalledTimes(5);
   });
 
   it('fires empty items when all configured projects are invalid', async () => {
@@ -594,6 +851,27 @@ describe('AdoPrReviewProvider', () => {
 
       expect(result).toEqual([]);
       expect(mockFetch).not.toHaveBeenCalled();
+    });
+
+    it('throws AbortError when cancellation is already requested', async () => {
+      const controller = new AbortController();
+      controller.abort();
+
+      await expect(
+        provider.getClosedItems(['myorg/MyProject/myrepo/101'], controller.signal),
+      ).rejects.toMatchObject({ name: 'AbortError' });
+      expect(mockFetch).not.toHaveBeenCalled();
+    });
+
+    it('passes a combined timeout signal to PR status fetches', async () => {
+      const controller = new AbortController();
+      mockFetch.mockResolvedValueOnce({ ok: true, json: async () => ({ status: 'completed' }) });
+
+      await provider.getClosedItems(['myorg/MyProject/myrepo/101'], controller.signal);
+
+      const fetchCall = mockFetch.mock.calls[0];
+      expect(fetchCall[1].signal).toBeInstanceOf(AbortSignal);
+      expect(fetchCall[1].signal).not.toBe(controller.signal);
     });
 
     it('returns empty array for empty input', async () => {
