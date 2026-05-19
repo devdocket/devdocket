@@ -123,6 +123,8 @@ packages/
 
 The default branch is **`dev`** — all work should be based from and merged back to `dev`.
 
+**Maintainers:** see [RELEASING.md](RELEASING.md) for the release process, Changesets workflow, and infrastructure setup.
+
 ## License
 
 [MIT](LICENSE) © Matt Thalman
