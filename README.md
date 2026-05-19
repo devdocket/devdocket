@@ -42,7 +42,15 @@ For detailed view behavior, keyboard shortcuts, and configuration options, see t
 
 DevDocket's core, provider, and git-worktree extensions require VS Code 1.92.0 or later. The AI reviewer extension requires VS Code 1.96.0 or later.
 
-> ⚠️ **Pre-release:** DevDocket is not yet available on the VS Code Marketplace. To run it today, build from source — see [CONTRIBUTING.md](CONTRIBUTING.md#quick-start).
+Install the extensions you need from the VS Code Marketplace:
+
+- [DevDocket](https://marketplace.visualstudio.com/items?itemName=devdocket.devdocket) — core sidebar and work-item hub.
+- [DevDocket GitHub](https://marketplace.visualstudio.com/items?itemName=devdocket.devdocket-github) — GitHub provider and watcher.
+- [DevDocket — Azure DevOps](https://marketplace.visualstudio.com/items?itemName=devdocket.devdocket-ado) — Azure DevOps provider and watcher.
+- [DevDocket Start Git Work](https://marketplace.visualstudio.com/items?itemName=devdocket.devdocket-start-git-work) — branch and worktree action.
+- [DevDocket — AI Actions](https://marketplace.visualstudio.com/items?itemName=devdocket.devdocket-ai-reviewer) — AI review and walkthrough actions.
+
+To build from source instead, see [CONTRIBUTING.md](CONTRIBUTING.md#quick-start).
 
 ## Plugin Ecosystem
 
