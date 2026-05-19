@@ -48,8 +48,13 @@ function packageShouldBeTagged(packageDirectory, version) {
   const packageHasPublishWorkflow = hasPublishWorkflow(packageDirectory);
 
   if (!existsSync(changelogPath)) {
+    // CHANGELOG.md is created by `changeset version` on the first release. Its
+    // absence means the package has never been versioned through Changesets yet
+    // (bootstrap state, or a newly added package). Skip without failing; a future
+    // run that includes a real changeset for this package will create the
+    // changelog, and the package can be tagged then.
     if (packageHasPublishWorkflow) {
-      throw new Error(`Cannot determine release status for ${packageDirectory}: missing CHANGELOG.md at ${changelogPath}`);
+      console.warn(`Skipping ${packageDirectory}: no CHANGELOG.md yet (package has not been versioned through Changesets).`);
     }
 
     return false;
@@ -59,21 +64,13 @@ function packageShouldBeTagged(packageDirectory, version) {
     const latestEntry = extractLatestChangelogEntry(changelogPath);
 
     if (typeof latestEntry.version !== 'string' || latestEntry.version.length === 0) {
-      if (packageHasPublishWorkflow) {
-        throw new Error('latest changelog entry is missing a readable version');
-      }
-
+      console.warn(`Skipping ${packageDirectory}: latest CHANGELOG.md entry is missing a readable version.`);
       return false;
     }
 
     return latestEntry.version === version;
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-
-    if (packageHasPublishWorkflow) {
-      throw new Error(`Cannot determine release status for ${packageDirectory}: ${message}`);
-    }
-
     console.warn(`Skipping ${packageDirectory}: ${message}`);
     return false;
   }
