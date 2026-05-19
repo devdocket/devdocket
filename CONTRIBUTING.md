@@ -69,16 +69,6 @@ npx vitest run src/test/workGraph.test.ts
 ## Branching and pull request conventions
 
 - **Default branch is `dev`.** All feature branches branch *from* `dev` and PR back *to* `dev`. The `main` branch is managed by the release pipeline and tracks the latest released state — do not push to it directly.
-- **Use git worktrees** for feature branches instead of `git checkout`-ing in your main clone. This keeps the main working tree on `dev` and avoids disrupting other in-flight work.
-
-  ```bash
-  git worktree add ../devdocket-my-feature -b my-feature dev
-  cd ../devdocket-my-feature
-  # ... work ...
-  # After merge:
-  git worktree remove ../devdocket-my-feature
-  ```
-
 - **Use merge commits, not rebase,** when syncing with `dev`: `git merge origin/dev` (not `git rebase origin/dev`). Preserves history and avoids force-push issues.
 - **Commit messages and PR titles** should describe the change, not the issue. Never include the issue number in either — references go in the PR description (`Closes #N`).
 - **Include a `.changeset/*.md` file** when your PR changes user-facing behavior of a publishable package. See [Releases & Changesets in AGENTS.md](AGENTS.md#releases--changesets) for the format, exact package names to use, and when a changeset is and isn't required.
