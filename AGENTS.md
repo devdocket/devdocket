@@ -192,9 +192,112 @@ Key rules:
 - **Invoke the `create-pr` skill before creating any PR.** The skill must be loaded and its phases followed in order. Never hand-roll `gh pr create` or `git push` without the skill orchestrating it.
 - **Any code change re-triggers the local loop** — whether from code review, Copilot feedback, CI fix, or conflict resolution.
 - **Use `superpowers:code-reviewer` agent** for code review, not a generic code-review agent.
+- **Add a `.changeset/*.md` file when the PR changes user-facing behavior of a publishable package.** See [Releases & Changesets](#releases--changesets) for the required format, when a changeset is and isn't needed, and the exact package names to use.
 - When working on multiple issues in parallel, each issue goes through this full cycle independently in its own worktree.
 
 > **Without Copilot CLI:** Manually rebase on `dev`, run `npm run build && npm run test`, open a PR with `gh pr create --base dev`, and request review from `copilot-pull-request-reviewer`.
+
+## Releases & Changesets
+
+This repo uses [Changesets](https://github.com/changesets/changesets) for per-package versioning, changelog generation, and automated VS Code Marketplace / GitHub Packages publishing. **Every PR that changes user-facing behavior of a publishable package MUST include a `.changeset/*.md` file** describing the change.
+
+### When a changeset is required
+
+**Required** for any change to one of the following packages that is user-facing — a new feature, bug fix, behavior change, performance improvement, deprecation, or API change:
+
+| Directory | Package name to use in changeset |
+|-----------|----------------------------------|
+| `packages/shared` | `@devdocket/shared` |
+| `packages/core` | `devdocket` |
+| `packages/github` | `devdocket-github` |
+| `packages/ado` | `devdocket-ado` |
+| `packages/start-git-work` | `devdocket-start-git-work` |
+| `packages/ai-reviewer` | `devdocket-ai-reviewer` |
+
+Do not include `devdocket-monorepo` — it's ignored in `.changeset/config.json`.
+
+**Not required** for:
+- Documentation-only changes (README, AGENTS.md, `.github/instructions/*`, `docs/*`)
+- CI / workflow / changeset config changes (`.github/workflows/*`, `.changeset/config.json`, scripts under `scripts/`)
+- Pure refactors with zero behavior change
+- Test-only changes
+- Internal-only changes that don't affect any consumer of the package
+
+CI emits a non-blocking warning if no changeset is present — the warning is fine for the legitimately changeset-less cases above. Don't add a changeset just to silence the warning.
+
+### How to add a changeset (agents)
+
+Agents must NOT use the interactive `npx changeset` CLI — it prompts for package selection, bump types, and a summary. Create the changeset file directly instead:
+
+1. **Pick a unique filename** under `.changeset/`. Use a short kebab-case description of the change (e.g., `.changeset/fix-pr-watch-grouping.md`, `.changeset/add-walkthrough-anchor.md`). Before writing, check that no other open PR is using the same filename — collisions cause merge conflicts in `.changeset/`.
+2. **Write the file** with this exact format:
+
+   ```md
+   ---
+   "<package-name-1>": <bump-type>
+   "<package-name-2>": <bump-type>
+   ---
+
+   <One- or two-sentence user-facing description of the change. This text becomes the CHANGELOG entry and the GitHub Release note.>
+   ```
+
+3. **Commit the file as part of the feature PR** (same branch, any commit — typically the final commit of the work). Do not open a separate PR just for the changeset.
+
+### Bump types
+
+- `patch` — bug fixes, internal improvements, dependency bumps that don't change observable behavior
+- `minor` — new features, new APIs, deprecations (still backward compatible)
+- `major` — breaking changes to the public API (see `.github/instructions/api-surface.instructions.md` for what counts as breaking for `@devdocket/shared` and `devdocket`)
+
+When in doubt, choose the smaller bump.
+
+### Internal dependencies are auto-bumped
+
+`.changeset/config.json` sets `updateInternalDependencies: patch`, so if you bump `@devdocket/shared`, every extension that depends on it receives a `patch` bump automatically. **Do not list the dependents in the changeset just to bump them** — Changesets handles this. Only list a dependent package if the change has its own user-facing behavior change in that package.
+
+### Example changesets
+
+Bug fix in core only:
+
+```md
+---
+"devdocket": patch
+---
+
+Fix PR watch cards being grouped into the wrong section when a PR has multiple recent runs.
+```
+
+New feature touching two extensions and the shared library, where the shared change is user-facing for both extensions:
+
+```md
+---
+"@devdocket/shared": minor
+"devdocket-github": minor
+"devdocket-ado": minor
+---
+
+Add `RelatedItemRef.kind` so providers can distinguish issues from pull requests in related-item links.
+```
+
+Breaking API change:
+
+```md
+---
+"@devdocket/shared": major
+---
+
+Remove the deprecated `DiscoveredItem` interface. Provider extensions must now emit `ProviderItem`. See the PR description for migration notes.
+```
+
+### What happens after the PR merges
+
+You do NOT bump versions or edit `CHANGELOG.md` files manually — Changesets owns both. After your PR with a `.changeset/*.md` merges to `dev`:
+
+1. The Changesets bot detects pending changesets and opens (or updates) a single **Version Packages** PR against `dev` that bumps versions in each affected `package.json` and writes per-package `CHANGELOG.md` entries.
+2. When a maintainer merges that Version Packages PR, the bot fast-forwards `main` to `dev` and creates per-package release tags (e.g., `shared-v0.2.0`, `core-v1.1.0`).
+3. Those tags trigger the per-package publish workflows (`publish-*.yml`) which publish to the VS Code Marketplace / GitHub Packages and create GitHub Releases.
+
+If you ever find yourself manually editing a `package.json` `version` field or a `CHANGELOG.md` file, stop — that's almost certainly the wrong action. Use a changeset instead.
 
 ## Design Conventions
 
