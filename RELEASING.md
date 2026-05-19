@@ -6,7 +6,7 @@ For the contributor / agent perspective on how to add a `.changeset/*.md` file t
 
 ## Overview
 
-DevDocket uses [Changesets](https://github.com/changesets/changesets) for per-package versioning and an automated tag-driven publish pipeline. Once the underlying infrastructure is configured (see [One-time setup](#one-time-setup)), the maintainer's day-to-day responsibility is to:
+DevDocket uses [Changesets](https://github.com/changesets/changesets) for per-package versioning and an automated tag-driven publish pipeline. The maintainer's day-to-day responsibility is to:
 
 1. Review and merge PRs that contain a `.changeset/*.md` file describing their user-facing change.
 2. Periodically review and merge the **Version Packages** PR that the Changesets bot keeps up to date on `dev`.
@@ -92,7 +92,7 @@ The moment that PR merges, the publish path of `changesets.yml` runs:
 
 ### 4. Approve each per-package publish (if you enabled required reviewers)
 
-Each tag push triggers a separate publish workflow run. If you configured **Required reviewers** on the `marketplace-publish` GitHub Environment (recommended — see [Environment setup](#github-environment-marketplace-publish)), each extension publish workflow pauses at the Azure login step waiting for an approval click.
+Each tag push triggers a separate publish workflow run. If you configured **Required reviewers** on the `marketplace-publish` GitHub Environment (recommended), each extension publish workflow pauses at the Azure login step waiting for an approval click.
 
 Approve each one in the GitHub Actions UI:
 
@@ -114,16 +114,6 @@ After the cascade settles, verify:
 | `git tag -l '*-v*' --sort=-v:refname` (local) | New tags exist for every bumped package |
 
 ## Common scenarios
-
-### Bootstrap release (first time only)
-
-Before any package has been published, run a one-time "Initial public release" PR:
-
-1. Set every `packages/*/package.json` `version` field to `0.0.0` directly (this is the **only** time direct version editing is permitted).
-2. Add `.changeset/initial-release.md` with `minor` bumps for all six publishable packages and a description like `Initial public release.`
-3. Merge. The Version PR will bump everything `0.0.0 → 0.1.0` (or use `major` if you want to start at `1.0.0`).
-
-After this PR ships, version edits go exclusively through changesets.
 
 ### Routine release
 
@@ -147,77 +137,6 @@ This is uncommon but supported. In the Version Packages PR's diff:
 4. Merge.
 
 The Changesets bot will then re-open a new Version Packages PR containing the changes you removed, ready for the next release.
-
-## One-time setup
-
-Before the first release can succeed, the maintainer must configure several pieces of infrastructure. None of these are automatable through PRs — they all live in external service UIs (Azure Portal, Marketplace, GitHub Settings).
-
-### Changesets GitHub App
-
-**Why:** Tag pushes made with the default `GITHUB_TOKEN` don't trigger downstream workflows (GitHub blocks this to prevent loops). The publish step needs to push tags that trigger `publish-*.yml`, so it uses a GitHub App's installation token instead.
-
-**Steps:**
-
-1. Create the App at https://github.com/organizations/devdocket/settings/apps/new
-   - **Name:** `devdocket-changesets-bot`
-   - **Homepage URL:** `https://github.com/devdocket/devdocket`
-   - **Webhook → Active:** unchecked
-   - **Repository permissions:**
-     - **Contents:** Read & write
-     - **Pull requests:** Read & write
-     - **Workflows:** Read & write
-     - **Metadata:** Read-only (default)
-   - **Where can this GitHub App be installed?:** Only on this account
-2. Generate a private key (settings page → Private keys → Generate a private key) — a `.pem` file downloads.
-3. Note the App ID (top of the settings page, numeric).
-4. Install the App on `devdocket/devdocket` (settings page → Install App → select repo).
-5. Add repository secrets at https://github.com/devdocket/devdocket/settings/secrets/actions:
-   - `CHANGESETS_APP_ID` — the numeric App ID
-   - `CHANGESETS_APP_PRIVATE_KEY` — the full `.pem` contents, including `-----BEGIN…` and `-----END…` lines
-6. Add the App to `main` branch protection bypass at https://github.com/devdocket/devdocket/settings/branches — edit the `main` rule → add `devdocket-changesets-bot` to the bypass / push-allow list. (The publish script does `git push origin main`, which branch protection would otherwise block.)
-
-### Entra ID app for VS Code Marketplace publishing
-
-**Why:** PAT-based marketplace authentication is being deprecated by Microsoft (global PATs decommissioned Dec 1, 2026 — see https://aka.ms/GlobalPATDeprecation). The reusable publish workflow (`_publish-vscode-extension.yml`) uses Microsoft Entra ID via GitHub Actions OIDC instead — no long-lived secrets.
-
-**Steps:**
-
-1. Create an Entra ID **App registration** at https://portal.azure.com → Microsoft Entra ID → App registrations → New registration.
-   - **Name:** `devdocket-vsce-publish`
-   - **Supported account types:** Accounts in this organizational directory only
-   - **Redirect URI:** leave blank
-2. Add a **federated credential** (App's Certificates & secrets → Federated credentials → Add credential):
-   - **Federated credential scenario:** GitHub Actions deploying Azure resources
-   - **Issuer:** `https://token.actions.githubusercontent.com`
-   - **Subject identifier:** `repo:devdocket/devdocket:environment:marketplace-publish`
-   - **Audience:** `api://AzureADTokenExchange`
-3. Add the App's service principal as a member of the `devdocket` Marketplace publisher at https://marketplace.visualstudio.com/manage/publishers/devdocket with **Contributor** role (or higher). The portal accepts the SP by its Application (client) ID.
-4. Add repository variables at https://github.com/devdocket/devdocket/settings/variables/actions:
-   - `AZURE_PUBLISH_CLIENT_ID` — the App's Application (client) ID
-   - `AZURE_PUBLISH_TENANT_ID` — the Directory (tenant) ID
-
-These are variables, not secrets, because they're identifiers (not credentials). The actual auth token is minted on-demand by GitHub OIDC and expires in minutes.
-
-### GitHub Environment `marketplace-publish`
-
-**Why:** The federated credential subject in step 2 above includes `environment:marketplace-publish` — Entra ID will only mint a token for workflow runs that are scoped to that environment. This is the security chokepoint that controls who can publish.
-
-**Steps at https://github.com/devdocket/devdocket/settings/environments:**
-
-1. Create environment named exactly `marketplace-publish` (the publish workflows hardcode this name).
-2. **Required reviewers (strongly recommended):** add at least one maintainer. Each per-package publish run will pause for an approval click — your last line of defense against an unintended release.
-3. **Deployment branches and tags (recommended):** restrict to tag patterns matching the release tag prefixes:
-   - `shared-v*`
-   - `core-v*`
-   - `github-v*`
-   - `ado-v*`
-   - `start-git-work-v*`
-   - `ai-reviewer-v*`
-   This prevents any branch / arbitrary tag from acquiring the publish identity, even if a workflow was accidentally configured to use the environment.
-
-### GitHub Packages (for `@devdocket/shared`)
-
-`publish-shared.yml` uses the auto-issued `GITHUB_TOKEN` with `packages: write` permission — no extra setup needed. It publishes to https://npm.pkg.github.com under the `@devdocket` scope.
 
 ## Troubleshooting
 
@@ -264,7 +183,7 @@ Common causes:
 
 - **`.changeset/config.json` validation error.** If `ignore`, `linked`, `fixed`, etc. reference packages not in `workspaces`, `npx changeset version` throws. Fix the config, push to `dev`, the workflow re-runs.
 - **No `.changeset/*.md` files were present** (only `config.json` and `README.md`). The workflow correctly took the publish path instead — see next item.
-- **`CHANGELOG.md` missing for a package with a publish workflow.** Pre-fix-#591 behavior. The bootstrap fix in #591 makes the script warn and skip instead of throwing.
+- **`CHANGELOG.md` missing for a package with a publish workflow.** Fixed in #591 — the script now warns and skips instead of throwing.
 
 ### The bot couldn't push tags
 
@@ -312,7 +231,7 @@ The App ID stays the same; in-flight workflow runs continue with the old key unt
 
 If you need to retire the federated credential (e.g., suspected compromise of the App):
 
-1. Add a new App + federated credential following [Entra ID app setup](#entra-id-app-for-vs-code-marketplace-publishing).
+1. Register a new Entra ID App with a federated credential whose subject is `repo:devdocket/devdocket:environment:marketplace-publish`.
 2. Add the new SP as a Marketplace publisher member.
 3. Update repository variables `AZURE_PUBLISH_CLIENT_ID` and `AZURE_PUBLISH_TENANT_ID` to point at the new App.
 4. Remove the old SP from the Marketplace publisher.
