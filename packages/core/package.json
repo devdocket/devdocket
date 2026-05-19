@@ -9,8 +9,35 @@
     "vscode": "^1.92.0"
   },
   "categories": [
+    "SCM Providers",
     "Other"
   ],
+  "keywords": [
+    "work items",
+    "tasks",
+    "todo",
+    "github",
+    "azure devops",
+    "pull requests",
+    "issues",
+    "productivity",
+    "hub",
+    "inbox"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/devdocket/devdocket.git",
+    "directory": "packages/core"
+  },
+  "bugs": {
+    "url": "https://github.com/devdocket/devdocket/issues"
+  },
+  "homepage": "https://github.com/devdocket/devdocket#readme",
+  "galleryBanner": {
+    "color": "#1F2937",
+    "theme": "dark"
+  },
+  "preview": true,
   "activationEvents": [
     "onView:devdocket.main",
     "onWebviewPanel:devdocket.editItem",

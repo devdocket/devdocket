@@ -9,8 +9,35 @@
     "vscode": "^1.96.0"
   },
   "categories": [
-    "Other"
+    "AI",
+    "Chat",
+    "SCM Providers"
   ],
+  "keywords": [
+    "ai",
+    "code review",
+    "pull request",
+    "github",
+    "azure devops",
+    "copilot",
+    "walkthrough",
+    "chat participant",
+    "devdocket"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/devdocket/devdocket.git",
+    "directory": "packages/ai-reviewer"
+  },
+  "bugs": {
+    "url": "https://github.com/devdocket/devdocket/issues"
+  },
+  "homepage": "https://github.com/devdocket/devdocket#readme",
+  "galleryBanner": {
+    "color": "#1F2937",
+    "theme": "dark"
+  },
+  "preview": true,
   "extensionDependencies": [
     "devdocket.devdocket"
   ],

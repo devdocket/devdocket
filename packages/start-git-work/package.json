@@ -9,8 +9,31 @@
     "vscode": "^1.92.0"
   },
   "categories": [
+    "SCM Providers",
     "Other"
   ],
+  "keywords": [
+    "git",
+    "worktree",
+    "branch",
+    "git workflow",
+    "devdocket",
+    "action"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/devdocket/devdocket.git",
+    "directory": "packages/start-git-work"
+  },
+  "bugs": {
+    "url": "https://github.com/devdocket/devdocket/issues"
+  },
+  "homepage": "https://github.com/devdocket/devdocket#readme",
+  "galleryBanner": {
+    "color": "#1F2937",
+    "theme": "dark"
+  },
+  "preview": true,
   "extensionDependencies": [
     "devdocket.devdocket"
   ],
